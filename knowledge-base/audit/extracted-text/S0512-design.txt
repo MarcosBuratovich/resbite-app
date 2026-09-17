@@ -1,0 +1,42 @@
+E61 - Doing a resbite with othersUS065
+As a user that just picked-up a resbite, 
+I want to invite contacts from outside the app to join the activity
+Invite resbite-outsiders to join the chosen resbite
+Offer to invite people to the app (from the SN contacts and from the phone contacts).
+Invitation message is visible.
+Additionally offer to copy invitation txt and link
+Choose a specific source
+where to add contacts from
+go back 
+(to select contacts
+from another source
+or to copy invitation mssg.)
+go back and choose another contacts src or finish inviting?
+Choose a contacts src or copy the invitation to send it manually?
+Choose a contacts src
+or finish inviting?
+not on the MVP
+finish
+example:
+example: invitation
+received in whatsapp
+Selects contacts (from a specific chosen source) to whom invite to join on RB 
+The message sent is specific to this activity. "Come walking to the park with me, join me on Resbite". 
+create
+a date poll?
+Copy invitation
+user sends invitation manually outside of the app.
+the user is done, there won't be a way to provide feedback like "invitation sent" since that happened outside the app.
+warn the user that due to covid-9 social distancing only the first 6 to accept the invitation will be able to attend
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen

@@ -1,0 +1,179 @@
+FAVORITE RESBITES
+E137 - User Profile
+
+User Profile
+Maria's favorites
+USER PROFILE
+FAVORITE RESBITES 
+If the main goal is still not set, ecourage to do it.
+explain benefits for the user if e-mail is verified
+profile completion progress indicator
+If any stats are gonna be shown, this is the place.
+shall we add an encouraging phrase here?
+Details
+US083
+
+As a user, I can see the details of a chosen resbite so that I can do it alone
+US 050
+
+As a user that has just got signed-in I want to invite contacts to use Resbite
+DISCOVER
+SETTINGS
+BALANCE
+ACHIEVE
+GO PREMIUM
+US 096
+As a non-premium user, I want to check what other Resbite features I could enjoy if I went premium
+VERIFY YOUR E-MAIL ADDRESS?
+You're doing great! The experience could be better if you go on completing your profile
+USER MAIN GOAL 
+Maria,
+invite others
+Resbites get better with others
+MY RESBITES
+MARIA
+E90
+
+Modifying the settings
+How do you identify
+your gender?
+Female
+Non binary
+I identify as:
+Prefer not to answer
+Male
+GENDER
+E) Include options upfront and together (avoid using "male/female/other"). It gives the impression that identities among "others" are less important or socially recognized.
+
+F) Let the user type "other" gender.
+
+G) Allow not to provide this information if it is not really necessary for Resbite user experience.
+Best practices to be gender inclusive :
+
+A) It's good to keep the verb "identify". It makes this step more user centric, since it makes reference to the gender the user identifies with, not to the gender assigned at birth or to the gender other people might assume.
+
+B) If I was told to delete one of these options I would leave out the option "I identify as:"
+
+C) ie: "Circle CI" (IT company) requires the gender in this way to users applying to open job positions:
+D) Inform users how their information will be used
+Fishing weekend
+Household
+Add  a group
+Buddies
+Groups
+Your buddies
+Quit group
+Silence group chats
+Search in the conversation
+Group administrator
+Emoji
+Stephen Gray
+Rabia Nuzha
+Imogen Adams
+Add member
+Settings
+Sun
+Peter: do you guys think it'll rain when we get there?
+12
+Quit chat
+Silence group chat
+Add members
+Any children at home?
+Add them here and bring the whole family on board with parental control security
+Household is a special group, dedicated to those living under the same roof
+Group members
+Francis Matzkin
+Peter Wells
+John McCunningham
+Amber Lager
+Sophie Lee
+Robert Murdoc
+Anne McMillan
+Martin Garrix
+Marlene Pablov
+Search
+Personal information
+Date of birth
+Chats
+Maria
+Maria Ruiz
+Noel Gallagher
+Search buddie
+User Profile
+Add to group
+Add from phone contacts
+Find who among your phone contacts is on Resbite or invite others to join
+E-mail a friend link
+Group name
+Members
+Fishing weekend
+Peter: do you guys think it'll rain when we get there?
+20:30
+Mon
+9th Nov
+2th Nov
+Household
+Peter: do you guys think it'll rain when we get there?
+Pictionary night
+Peter: do you guys think it'll rain when we get there?
+Veggie gangsters
+Anna: Shall I bring that Indian curry we used the last time we cooked together?
+Ping pong
+Peter: do you guys think it'll rain when we get there?
+Volleyball at the beach
+Peter: do you guys think it'll rain when we get there?
+John Mahler
+Tony Sorensen
++ Invite
+Bob Bagheart
+Andrea Mendez
+Search contact
+9:41
+BUDDIES
+GROUP DETAILS
+GROUP MEMBERS
+(for groups with more than 10 members)
+Group name
+This group was created when the resbite owner finished setting up the "Fishing weekend" resbite, so the group was automatically named after that corresponding resbite. 
+
+However, the group administrator (by default the resbite owner) can modify the name of the group. All the users involved in this resbite can add this group. 
+more than 7 members?
+When the group has more than 7 members, these appear listed in another screen, and in the group details screen there is ony this row that links to that listing screen.
+Ok
+When the user starts using the app, "Household" is a group that's already created although it doesn't have contacts added to it.
+All the group members can add an emoji to the group name. Only one emoji can be displayed at the same time.
+The icon in this access to the chat is not the group emoji, it is always a chat icon, no matter what the group emoji is.
+All the group members can add/modify an emoji to the group name. Only one emoji can be displayed at the same time.
+Thomas Perthson + 11 others
+Send message
+Remove from group
+Block Martin Garrix
+Has the user provided permission to access phone contacts before?
+The chat name matches the group name.
+Then a user is removed from a group, this user won't be included among the invitees if the resbite is repeated.
+Resbite
+Don't worry, we won't automatically send any invitation or message to your contacts. 
+Only the ones you pick up will receive an invitation.
+Disconnect
+Disconnect and block
+PROFILE
+Skip this for now
+Active Challenge:
+In case there's a challenge ongoing a card like this appears in firs place.
+A card for every ongoing challenge.
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen
+Continue
++ Add
+Skip
+Share a friend link

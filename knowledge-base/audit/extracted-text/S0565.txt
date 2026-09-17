@@ -1,0 +1,60 @@
+MVP flowchart
+
+
+                                                                                                                                                                             User decides to do any of
+                                                                                                                                                                               those resbites again?
+
+
+                                                                            The user checks general                             The user checks the
+                                                                            progress done - E28                                 history of activities done
+                                                                                                                                - US089
+
+
+                                                                                                                                The user checks the
+                                                                                                                                goals achieved
+
+
+                                                                                                                                                                                                                       checks stats
+
+
+                                                                                                                                The user decides to
+                                                                                                                                balance the progress done
+                                                Or should the                                                                   different to the ones the
+                                                user arrive to                                                                  user has been doing - E55
+          User opens                            a HOME screen
+           the app                              with more                   The user modifies
+                                                diverse                     app settings - E90
+                                                content?
+                                                                                                                                                                              User provides
+                                                                                                                                               practice a resbite             feedback about                      receives feedback
+                                                                                                          Will the user
+                                                                                                                                                                              activity just done -                of progress done
+                                                                                                      invite others to join
+                                                                                                        on this resbite?                                                      E26
+is the user
+                                                         The user arrives   The user chooses a
+already                          Log-in - E58
+registered?                                              at resbites list   resbite - E79
+
+
+                                                                                                                                              The user chooses to invite                                 goes back to Home or RB list
+                                                                                                                                              others (only up to 6 will
+                                                                                                                                              be allowed) - E61
+
+
+
+
+       Registration - E27                                                                                                                                     User connects
+                                                                                                                              friends list                    to others in Resbite
+                                                                                                                                                              E63
+                                                                            user checks
+                                                                            profile
+                                                                                                                        user modifies
+                                                                                                                        personal data
+
+
+
+
+Note:
+Numbers indicate the specific epic.
+

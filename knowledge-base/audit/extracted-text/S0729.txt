@@ -1,0 +1,118 @@
+
+### ppt/notesSlides/notesSlide1.xml
+
+### ppt/notesSlides/notesSlide2.xml
+This is where you clearly state the problem. Particulars of how this problem impacts real world people/businesses are valuable.
+### ppt/notesSlides/notesSlide3.xml
+This is the solution. You want to explain what you do very clearly, in as few words as possible. Describe the concrete benefits you provide
+### ppt/notesSlides/notesSlide4.xml
+Tell the investor what makes you so special, what makes this work, what your insights are. This might take more than one slide.
+### ppt/notesSlides/notesSlide5.xml
+Business model is important. You probably don’t know all the details yet, but you should know a lot of them. Lay it out. If you need more space to dig into something complicated, add slides.
+### ppt/notesSlides/notesSlide6.xml
+What’s the market here? Is it going to be big? Will you make it big? How much money are you going to make off this thing? Convince the investor that they’re going to make lots of money with you
+### ppt/notesSlides/notesSlide7.xml
+Team! So important at seed. Talk about what makes your team particularly well suited to the problem. This should be about founders. Nobody cares about your advisors.
+### ppt/notesSlides/notesSlide8.xml
+Got more metrics? Awesome! Add them!
+Trick slide! Revenue would be better here, but this is ok.
+### ppt/notesSlides/notesSlide9.xml
+Tell the investor how much money you need, and what it gets you. If you can lay out where you’ll be inside of a year, which should make you Series A ready, that’s powerful.  It does *not* include your valuation, cap, or other fundraising terms.
+### ppt/slides/slide1.xml
+Resbite
+Keeping it real by enabling digital wellness
+### ppt/slides/slide2.xml
+The overuse of tech is damaging relationships
+The overuse and misuse of tech and social media is impacting our wellbeing
+We’re turning to devices to conduct conversations and relationships, avoiding human interaction and real life experiences
+This digital isolation leads to increased feelings of loneliness, depression and 
+anxiety
+This results in tangible knock-on effects for health agencies and services, globally
+2
+### ppt/slides/slide3.xml
+Resbite encourages people to take digital breaks
+Families 
+and
+ 
+individuals schedule in ‘Resbites’ from tech and social media
+Resbite’s algorithm recommends 
+activities
+ to take during these 
+Resbites
+ 
+that 
+are designed to 
+improve 
+your 
+wellbeing
+Our user generated data matches you with an ideal programme of activities
+Users 
+get rewarded for taking 
+breaks
+, 
+working towards
+ and achieving
+ 
+their goals
+3
+### ppt/slides/slide4.xml
+We’re using technology to reduce tech usage
+Innovation in the healthtech sector is linked to new technology that pulls users away from reality
+This is short-termism and counter-intuitive
+We use technology to rebalance our experience of tech
+Our empowering tech and use of data delivers sustainable wellbeing 
+4
+### ppt/slides/slide5.xml
+Resbite is a subscription+ model
+Resbite adopts a freemium business model
+A $9.99 / £7.99 monthly subscription unlocks full features and benefits
+Our target is 5,000 individuals and 10,000 family subscribers by end 2021
+This will result in monthly revenue of $150,000 by December 
+2021
+A supplementary revenue stream will be built in phase 2 
+Selected partners will provide tailored 
+Resbite
+ activities for users
+T
+hese will be paid activities, or breaks, with 
+Resbite
+ receiving 
+a commission
+5
+### ppt/slides/slide6.xml
+Future growth
+We will launch in the UK with partnerships across health agencies and 
+L
+ocal
+ Education Authorities 
+We will grow 
+user acquisition 
+through 
+the English speaking 
+world
+, targeting the US, Canada and Australia
+6
+### ppt/slides/slide7.xml
+The team
+Geoff Ainsworth, CTO
+Geoff is an experienced senior technology leader with a proven track record of leading teams to success in start up, scale up and technology transformation scenarios. 
+Geoff’s got the perfect balance of experience covering leadership, development, delivery, architecture and DevOps combined with commercial product understanding.  
+Stephen Gray, CEO
+Stephen conceived the idea for the app after working in a previous business, 'Real Social Tech'. This was set up to raise awareness and fix the issues that anti-social technologies were having on humanity.
+Stephen has been a serial entrepreneur since he first left university and has spent the last 20 years producing digital projects for large brand owners from his first creative agency 'Stickee,' which he sold in 2016 to his current digital agency 'Creamos,' which he runs alongside Resbyte. 
+Damian Carvill, COO
+Previously the founder and Managing Director of Just Say Please, a digital agency that specialised in comparison systems, used by the likes of MoneySuperMarket, GoCompare and Compare the Market. 
+Damian has built teams and successfully taken products  to market across publishing, telecoms, and insurance industries. 
+7
+### ppt/slides/slide8.xml
+We’re winning multiple grants
+Since March, we’ve secured £19,000 in grants
+We’ve partnered with Keele University for a dedicated research programme
+We’ve partnered with Staffordshire University to secure student and professor resource
+8
+### ppt/slides/slide9.xml
+What we need
+£500,000
+This is for engineers and to support launch partnerships
+This investment will enable Resbite to launch in January 2021
+9

@@ -1,0 +1,49 @@
+E79 - Choosing a resbite
+
+US083
+
+As a user, I can see the details of a chosen resbite so that I
+can do it alone
+        GO TO
+       RESBITES
+         LIST                            mark it as
+                                         favorite?
+
+
+
+
+  Resbites can easily be
+  filtered by categories                          mark it as favorite
+
+
+                                                                                                                                                          Does
+                                                                                                                                                       this resbite
+                                      See resbite details:                                                                                            allow others
+                                      Title                                                                                                              to join?
+                                                                                                       provide date picker to set
+ tap on a visible                     Description                                                      date and let the user set
+ resbite                              Main image                                                       the time as well.
+                                      Duration
+                                      possibility to invite others      Can the user set a day and
+                                                                        time to do the resbite?
+
+
+
+                                                                                                                                                                          US062
+                                                                                                     US064
+                           Has this resbite                                                                                               Offer the user to invite        As a user that has just picked-
+                            a gallery of                                                             As a user that just picked-up a      others to join                  up a resbite, I want to invite
+                             pictures?                                                               resbite, I want to invite people                                     Resbite friends to join
+                                                                                                     that are Resbite users but not
+                                                                                                     Resbite friends.
+
+
+
+
+                                                                                                                                        US065
+                                     Offer the user to see the
+                                     gallery in a different                                                                             As a user that has just picked-
+                                     screen if the user taps on                                                                         up a resbite, I want to invite
+                                     the link                                                                                           contacts from outside the app
+                                                                                                                                        to join
+

@@ -1,0 +1,73 @@
+D) Log in
+
+                                                                                                                                                                                       The sender should be clear for the
+                                                                                                                                                                                       user, like in the following example
+                                                                                                                                                                                       from "OBC Bank":
+
+
+                                              +44 Enter phone number
+
+
+
+
+                                                                                                                                              Active Challenge:
+                                                                                                                                              In case there's a challenge ongoing
+                                                                                                                                              a card like this appears in ﬁrs place.
+                                                                                                                                              A card for every ongoing challenge.
+
+
+
+
+                                                                           D.1 - LOGIN PHONE
+        B.1 - REGISTRATION, LOG-IN                                                                                                                         D.2 - LOGIN PHONE
+        OR RECOVERY DISTRIBUTOR
+
+
+ 9:41                                                        9:41                                                                                 9:41
+
+
+
+                                                                                  Log in
+
+
+                                                                                                                                                                   My code is
+
+
+
+
+                                                                     +44 Enter phone number
+
+
+                                     The country code                                                                                             code sent to:
+                                     should be pre-set              Send veriﬁcation code                                                         +54 224 564 748
+                                     by geolocation.
+
+
+                                                                                                                                                  Verify through a phone call
+                                                             By continuing with the process you accept the
+                                                             Terms of Service and Privacy Policy
+
+
+                  Log in                                                                                     Rabia's suggestion:
+                                                                                                             we could have a
+                                                                                                             checkbox in here.
+                                                                                                                                                                   Continue
+        Create a new account                                                                                                                                                                                    is there an account
+                                                                                                                                                                                                               already active for this
+                                                                                                                                                                                                                  phone number ?
+              Trouble signing in?
+                                                                                                                                                                                                                                           USER IS
+                                                                                                                                                                                                                                          LOGGED IN
+
+
+
+
+                                                                                                                                                                                                               US 037
+
+                                                                                                                                                                                                               The user can register on
+                                                                                                                                                                                                               RB using phone number
+                                                                                                                   should be disabled by                                                                       Screen 037.C
+                                                                                                                   default, and enabled once
+                                                                                                                   the user has entered a valid
+                                                                                                                   value in the input.
+

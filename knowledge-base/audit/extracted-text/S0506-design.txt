@@ -1,0 +1,68 @@
+E27 - User wants to start using the app for the first time once downloaded
+
+US037
+The user can register on RB with phone number
+
+send SMS verification code to provided phone number 
+the user submits verification code
+let the user know it's not valid and request to check the verification code.
+Offer to have a new verification code sent
+let the user know it's expired, and offer to resend verification code to the already indicated phone number
+Request further personal information from the user :Name (will be user for profile)E-mail address
+gender
+User's phone
+number is verified
+request the user to type the received verification code, always reminding the number to which the code has been sent.
+Offer the user to verify phone number through a phone call in case SMS verification code hasn't been received.
+the user decides to modify the phone number?
+the user decides to receive a phonecall?
+is verification code expired?
+send a new verification code or re-type phone number?
+user decides to go to LOGIN or proceeds to register?
+is verification
+code valid?
+Prefill country code based on user geolocation data.
+Auto focus on the phone number input field.
+the user chooses country code for the phone number
+the user types phone number 
+User arrives at registration step
+REGISTRATION COMPLETE
+US166
+
+As a user that has just completed the registration process, I can verify my e-mail address
+US165
+
+As a user that is trying to register, I can receive a phone call in order to verify my phone number
+US188
+
+As a newbie user, I can indicate my motivation to take more breaks from digital technology during the on-boarding experience
+type phone nuber again
+Note
+Let the user cancel this process and go back to choose e-mail registration
+submits new
+verification code
+type phone
+number again
+log in
+US0122
+
+The user can log-in typing access credentials 
+Provide the user an easy way to accept Terms of service and Privacy Policy. Two options:
+a) Require the user to accept manually .
+b) Do no require any action from the user, but explain that continuing with the process means accepting Terms and Privacy Policy.
+US181
+
+As a user that has just verified phone number I can provide additional personal information in order to complete the registration process.
+User can do this in two ways:1) Typing the code.2) An API listens from the verification code on the SMS and it places it as either predictive text (as in Tinders case). The user can tap this predictive text to complete the code field.
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen

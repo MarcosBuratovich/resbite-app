@@ -1,0 +1,123 @@
+Received
+Resbite: “launching in USA in 2023”
+Unsubscribe
+Info@scoop.com
+Scoop
+for me
+Translate this message
+(2 hours ago)
+of
+articles
+Resbite app design avoids 
+#harmfulFeatures
+Premium Resbite app features
+7 Oct
+Category 22
+notes
+shouts
+Check our #ValentinesDay 
+collection
+Manage subscriptions
+Powered by
+Resbite app
+Brand B
+#ValentinesDay
+Unsubscribe from Resbite posts
+Scoop International Company
+Marble 2, Fenian Street
+London, D02 AX07  UK
+Help  |  Privacy  |  Reset password  |  Download app
+of 5.000
+User sends a personal sign-up link referrals
+PROS:
+- Typeform sends the info to Google Sheets and we cannot take the info from there.
+- The user can invite through email or social networks (WhatsApp, IG, etc) and no SMS.
+- We don’t need to explain the referrals program inside a Typeform step.
+
+CONS:
+- The user can only invite at this stage unless we send an email.
+- Without email automation, emails confirming the subscription need to be sent manually
+ 
+You are now registered as a founding member and you’ll have early access to the app once we launch. 
+Become founding member
+Invite others to join and get more benefits
+Use the code:
+www.resbite.com/join?dh9Xdgg
+Invite 2 refferals and get these rewards.
+Invite 5 refferals and get these rewards.
+Invite 8 refferals and get these rewards.
+(Award is given once the referral sings up to become a founding member)
+Typeform submission redirects to URL that includes the person email or an identifier
+The referral link identifier is sent to Google Sheets by Typeform  when the referral signs-up
+Referral link (Unique tracking URL) is generated using the identifier parameter of the browsed URL and populated in the message.
+Typeform plan should be paid in order to use this redirect feature. 
+It’s mentioned here: https://support.referralhero.com/integrate/integrations/typeform
+
+www.resbite.com/product.html
+www.resbite.com/join?dh9Xdgg
+www.resbite.com/product.html?4758593773
+The new info is saved into Google Sheets
+Founding member shares link through any media (social networks, email, SMS).
+
+The referral clicks on link.
+Source
+123
+Founders-list - inviting others
+idea: numbers of a future year could appear one by one.
+email
+Referral email (received by the invitee)
+Please confirm your membership and become a founding member.
+Please click on the following link to confirm your membership as a founding member.
+Subject: Stephen is inviting you to become a founding member of Resbite app
+The 
+Typeform  + Mailchimp
+Typeform with a source code in the embed code that is generated dynamically (maybe with javascript) every time the Early access section in the product page is browsed.
+
+That source code is then tracked by Google Analytics
+
+But how do we trigger an email immediately to the referrals???
+
+
+
+
+
+SOLUTIONS
+Explain about Resbite
+
+- The new founding member indicates emails in the Typeform  sing-up form 
+- We send a mailchimp email to that referral to ask that person to confirm the subscription with a unique link (CTA)
+- The invitee would then use that unique link to sign up on the website, where we can get that person’s name 
+- If the invitee sign-s up the founding member receives an email confirming the benefits for getting certain amount of invitees, and being reminded about the invitees milestones, so inviting more would mean getting more benefits.
+Confirm my membership
+Google Sheets
+User indicates referrals in a Typeform field
+PROS:
+…
+
+CONS:
+- Typeform email input doesn’t support several emails added at the same time. The user needs to add all referrals emails on a simple text field.
+- We can’t design much the information that explains the benefits and referrals milestones.
+- The user can only invite through an email (that we would need to send manually after retrieving the email addresses from the Google Sheet), no social networks (WhatsApp, IG, etc) and no SMS.
+- The user can only invite at this stage, while completing the type form. If the user later wants to invite another referral this won’t be possible unless a new application is submitted .
+An email is manually sent to these referrals offering them to sign-up:
+
+‘Subject: Stephen is inviting you to become a founding member of Resbite app’
+The referral signs-up
+Early access: 
+referrals receive a sharing link that’s unique to the inviting founding member
+Features:
+- Email Automation
+- Sorting founding members by amount of referrals that signed-up 
+Small reward
+Medium reward
+Big reward
+Founding member shares link through any media (social networks, email, SMS)
+Referral link (Unique tracking URL) is generated and populated in the message.
+Typeform is submited
+And an integration between Typeform and Zapier triggers a Mailchimp email
+This text could be some text like:1) explaining benefits of making balance.
+
+2) motivating the user to make balance, mentioning what this user is being great at and what could be done to make balance.
+article
+Subscribe
+splash screen

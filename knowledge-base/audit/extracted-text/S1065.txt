@@ -1,0 +1,43 @@
+User indicates referrals in a Typeform ﬁeld
+
+PROS:
+…
+
+CONS:
+- Typeform email input doesn’t support several emails added at the same
+time. The user needs to add all referrals emails on a simple text ﬁeld.
+- We can’t design much the information that explains the beneﬁts and
+referrals milestones.
+- The user can only invite through an email (that we would need to send
+manually after retrieving the email addresses from the Google Sheet), no
+social networks (WhatsApp, IG, etc) and no SMS.
+- The user can only invite at this stage, while completing the type form. If
+the user later wants to invite another referral this won’t be possible unless
+a new application is submitted .
+
+
+
+
+                                                                                The new info is saved into
+                                                                                     Google Sheets
+
+
+
+
+                                                                                                             An email is manually sent to these
+                                                                                                             referrals offering them to sign-up:
+
+                                                                                                             ‘Subject: Stephen is inviting you to
+                                                                                                               become a founding member of
+                                                                                                                        Resbite app’
+
+
+
+
+                                                                                                             The referral signs-up
+
+
+
+
+                                                                                                                   The referral signs-up
+

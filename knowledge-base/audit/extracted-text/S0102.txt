@@ -1,0 +1,578 @@
+Brand Guidelines
+
+
+          Prepared for Resbite
+by Imogen Adams, Visual Creative Director
+
+            6 August 2020
+Contents
+3    Main Brand Identity
+
+
+8    Fonts
+
+
+5    Colours
+
+
+6    The app
+
+
+7    The website
+
+
+8    Iconography
+
+
+9    Copy & tone of voice
+
+
+17   Characters & animations
+
+
+22   Backgrounds & graphic devices
+
+
+
+
+                                     Conntents   2
+Main visual identity
+Overview
+
+
+Intro to the Resbite brand goes here. A number of logo variations and layout combinations to ensure the correct usage for each
+
+individual medium of design for print and digital.
+
+
+
+Logo variations
+
+
+We have created a number of logo variations and layout combinations to ensure the correct usage for each individual medium of
+
+design for print and digital.
+
+
+
+Source files
+
+
+All source files for our visual identity including all fonts are located in our Dropbox folders. In each section of this document, the
+
+source files will be referenced with links provided. Access to all f iles will be granted on request.
+
+
+
+
+                                                                                                        Main visual identity    3
+Graphic mark
+
+
+The Resbite icon may be used alone as a device or combined
+
+with the logotype in select layouts, as seen in the folowing
+
+collection. The master files for all of the following logos
+
+can be found in the dropbox folder and exports can be
+
+found here: https://www.dropbox.com/sh/ti3zexxgy2h8u10/
+
+AADrVGRGznz55uPvB9v6W5Gla?dl=0
+
+
+
+Note: This main graphic mark should not be used at less
+
+than 100px in width. It creates problems with the pixels
+
+between the strokes. For smaller versions of the icon. Please
+
+refer to page 5 for the filled shape icon uses.
+
+                                                                100px             400px
+
+
+
+
+                                                                        Main Brand Identity   4
+The app icons
+
+
+The Resbite app icon may be used alone as a device for the
+
+app or in other select situations when authorised.
+
+                                                                     16px       32px
+Note: Please use the provided master files when resizing the icons
+
+for various platforms.
+
+
+
+
+                                                                       64px
+                                                                                       100px
+
+
+
+
+                 200px
+
+
+
+
+                                                                              Main Brand Identity   5
+                                                                Yin Yang square             Flat square
+App icon variations
+
+
+The Resbite wordmark may be used alone as a device in various
+
+select situations as seen in the folowing collection.
+                                                                           100px
+
+Note: Do not change the dimensions of the rounded corners.
+
+When re-sizing the app icons, ensure the shape dimensions
+
+are constrained and the corner width is fixed.
+                                                                Yin yang circle             Flat circle
+
+
+
+
+                                                                           100px
+
+
+
+
+                                                                                   Main Brand Identity    6
+Wordmark & graphic mark combination
+
+The Resbite icon should also be used alongside the Resbite wordmark. The wordmark should not be used without the icon unless
+
+authorised. The wordmark and icon combination can be used alone or combined with the tag-line, ‘Tech-free wellness’.
+
+
+
+
+      100px                                 200px                                                    400px
+
+
+
+
+                                                                                                 Main Brand Identity    7
+Wordmark, graphic mark & tagline combination
+
+
+
+
+            200px                              400px
+
+
+
+
+                                                       Main Brand Identity   8
+Fonts
+                                              Resbite Content Font Weights
+
+
+
+The Resbite font used for content is
+
+Montserrat. Each letterform is nearly
+                                              Header 1
+                                              Font: Montserrat | Font weight: Bold
+
+
+                                              Header 2
+mono-linear, with optical corrections
+
+applied to stroke joints where necessary to
+
+maintain an even typographic colour.
+                                              Font: Montserrat | Font weight: Semi-bold
+
+There are a total of 9 weights in the
+
+Montserrat typeface family, however for the
+                                              Body 1
+visual identity, as standard we use only 3    Font: Montserrat | Font weight: Semi-bold
+
+
+                                              Body 2
+weight unless otherwise authorised; Light,
+
+Semibold & Bold.
+
+                                              Font: Montserrat | Font weight: Light
+The entire Montserrat typeface family are
+
+Google Open Fonts and can be
+
+downloaded for free use here.
+
+.
+
+
+
+
+                                                                                          Fonts   9
+Colours
+                                                 Main Resbite Brand Hue
+
+Overview
+                                                        Main Resbite Aqua-Green = #89cac7
+The Resbite brand colours comprise of the main
+
+Resbite brand aqua-green and its 5
+                                                 Main Hue Complimentary Shades
+complimantary shades and the 5 supporting
+
+colours; cream, pink, green and purple.                 Complimentary Shade 01 = #59a6a6
+
+
+                                                        Complimentary Shade 02 = #6ebfbd
+Note: The main Resbite colours, shades and
+
+complimentary colours should not be
+                                                        Complimentary Shade 03 = #a8ded9
+
+
+                                                        Complimentary Shade 04 = #b5ebe3
+
+
+                                                        Complimentary Shade 05 = #d9faf5
+
+
+
+
+                                                                                            Colours   10
+Supporting colours                            Main Supporting Colours     Supporting Grey Scale
+
+
+The supporting brand colours have been                                            black = #333333
+                                                      cream = #faf5f0
+carfeully selected to compliment the main
+
+Resbite aqua-green hue.                                                           grey = #a8a7a7
+                                                      yellow = #8ac9c7
+
+
+Note: The main Resbite colours, shades and                                        white = #fefefe
+                                                      pink = #f2adb2
+complimentary colours should not be
+
+altered unless authorised. Only the                   purple = #bfb5bf
+supporting colours seen here should be used
+
+within the Resbite brand.                             purple = #8ac9c7
+
+
+                                                      green05 = #a8ded9
+
+
+
+
+					
+
+
+
+
+                                                                                 Colours     11
+Website
+Overview
+
+
+The Resbite website and social spaces showcase the brand, helps communicate areas such as news, jobs, the app’s key
+
+
+
+Resbite.app desktop                       Resbite.app mobile
+
+
+
+
+                                                                                             The resbite website      12
+Button styles and states
+                                                                    Inactive - coloured           Active & rollover on colour-
+                                                                    background                    ed background
+The resbite button styles and interaction states should be
+
+adhered to when designing any content for the site : https://
+
+www.resbite.app/
+
+
+
+Note: As the app is still in development, button styles and
+                                                                    •   Border size of 2px        •   Filled shape no border
+interactive states will still need to be updated in this guide at   •   Equal spacing around      •   Equal spacing around
+                                                                        copy                          copy
+Buttons on coloured backgrounds                                     •   Resbite white #fefefe     •   Resbite white #fefefe
+                                                                    •   Rounded shape height      •   Rounded shape height
+                                                                        of 50px                       of 50px
+Inactive buttons on coloured backgrounds should always have
+
+a 2px border stroke, with no fill in the resbite white #fefefe.
+                                                                    Alternative colour examples
+The rollover states and active states must always be f illed
+
+with the resbite white: #fefefe. See the live site for reference:
+
+Buttons on white backgrounds
+
+
+Note: As the app is still in development, styles and
+
+interactive states for white backgrounds will still need to be
+
+updated in this guide.
+
+
+
+
+                                                                                                        Website         13
+Social Spaces
+
+                                                                   Example of our Linkedin page
+The social spaces comprise of 3 key spaces that include Twitter,
+
+Facebook and Linkedin. The social space designs and customised
+
+posts can be viewed at the following locations:
+
+
+
+Twitter:
+
+twitter.com/CreamosWeCreate
+
+Facebook:
+
+facebook.com/resbiteapp
+
+Linkedin:
+
+linkedin.com/company/64771522/admin/
+
+
+
+
+                                                                                                  Website   14
+Social Posts
+
+
+Social space design templates have been
+created for marketing and communication use within the vari-
+ous social spaces. The templates can be found here:
+https://www.dropbox.com/sh/ypx13pfe4xdhuk8/AAD27FOh-
+4ToxGBLgl_VAZO jpa?dl=0
+
+Examples of the social posts on the live spaces can be viewed
+at these locations:
+
+
+Twitter:
+
+twitter.com/CreamosWeCreate
+
+Facebook:
+
+facebook.com/resbiteapp
+
+Linkedin:
+
+linkedin.com/company/64771522/admin/
+
+Note: Please ensure the font guidelines on Page 5 of this docu-
+ment are adhered to when creating any design or
+content for social spaces or the website. For iconography,
+please refer to page 13 of this document.
+
+
+
+
+                                                                  Website   15
+Iconography                                                    News catagory        Opinions catagory
+
+
+Overview
+
+
+The Resbite iconography is to be used within in all areas of
+
+the brand, both digital and print based media.
+
+
+
+Master Files
+                                                                                          64px
+                                                                    100px
+The icons have been created in Adobe Illustrator and the
+
+master file can be downloaded here: Icon Master Files
+                                                                Products catagory   Jobs catagory
+Note: When designing new icons, ensure careful at-
+tention is paid to size, line widths, curve ratio, spacing
+and colour to keep a consistant set of icons across all
+media. Do not use icons at less than 16pt as fine detail
+is lost.
+
+                                                                      32px              16px
+
+
+
+
+                                                                                        Iconography     16
+Characters &
+animations
+Overview
+
+
+The Resbite characters are centred around groups in social
+scenes. Each scene or vignette illustrates the Resbite brand
+ethos - ‘An app that optimises health and wellbeing by
+facilitating respite fromcdigital technology, reconnecting
+
+with our sense of self, humanity and the natural world.’
+
+
+Illustration Style
+
+
+The style is a combination of up-beat, lifestyle illustrations
+and playful, free-flowing sketches, intended to envoke
+feelings of wellbeing, full-filled and healthy lifestyles.
+
+
+
+Master Files
+
+
+The individual scenarios can be downloaded here:
+
+Character Master Files
+
+
+
+
+                                                                 Characters & animations   17
+Style
+
+
+The style is a combination of up-beat lifestyle and wellness illustrations and playful, free-flowing sketches, intended to envoke
+
+feelings of wellbeing, full-filled and healthy lifestyles whilst highlighting the opposing negative scenarios that involve the overuse
+
+
+
+Scene: example 01:                     Scene example 02:                       Scene example 03::
+
+
+
+
+                                                                                                        Characters & Animation           18
+Colours                                             Main Character Colours           Character Skin Tones
+
+
+
+The colours in each character’s skin, hair,                 cream = #faf5f0                   dark tone = #b88f80
+
+clothing and backgrounds have been
+                                                            yellow = #8ac9c7
+carfeully selected to compliment the main                                                     medium tone = #8ac9c7
+
+Resbite aqua-blue hue.
+                                                            pink = #f2adb2
+                                                                                              light tone = #8ac9c7
+
+Skin tone                                                   light purple = #bfb5bf
+
+
+Three skin tones for the characters have been               dark purple = #8ac9c7
+sensitively selected to include multi-race shades
+
+and tones whilst complimenting the supporting               blue = #8ac9c7
+
+Resbite hues.
+
+
+
+
+                                                                                         Characters & Animation      19
+Strokes, Highlights & Shadows
+                                                           No highlights or shading
+
+Strokes
+                                                                                                       Dark purple
+
+The stroke is a free-hand, 2px stroke. The stroke should                                               2px stroke
+
+be the Resbite dark purple: #8ac9c7, never black.
+
+
+Highlights & Shadows
+
+
+The highlight is a subtle stroke of light on the left
+
+side and the Resbite dark purple with an opacity of 15%
+
+creates the shadow on the right,
+
+
+
+Note: When creating new characters, do no alter the
+colours or stroke width of each individual character
+
+scene unless otherwise instructed.
+
+
+                                                            50% dark purple pacity
+
+                                                            for shadows
+
+
+
+
+                                                                                      Characters & Animation        20
+Character Backgrounds                                               Background frame
+                                               Detail shades        shade: 05
+                                               to compliment
+The backgrounds in each vignette have been
+                                               the scenario
+designed to act as a simple backdrop to the
+
+scene. There are 6 shades to choose f rom to
+
+create the detail in the backgrounds.
+
+6 Background Shades
+
+
+
+         Main Resbite Aqua-Green = #89cac7
+
+                                                                                Detail can
+         BGShade 01 = #59a8a8
+                                                                                include all 6
+
+         BGShade 02 = #6ebfbd                                                   shades
+
+
+
+         BGShade 03 = #a8ded9
+
+
+         BGShade 04 = #b5ebe3
+                                               Character base
+         BGShade 05 = #d9faf5                  shade: 03
+
+
+
+
+                                                                Characters & Animation       21
+

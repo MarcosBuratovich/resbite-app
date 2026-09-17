@@ -1,0 +1,39 @@
+Onboarding slideshow
+
+
+                                                                                                                                    swipe left
+
+
+
+
+       SPLASH SCREEN          SLIDE 1                         SLIDE 2                         SLIDE 3                          SLIDE 4
+
+
+9:41                   9:41                            9:41                            9:41                            9:41
+
+
+
+
+                              Feature 1                       Feature 2                       Feature 2                       Feature 2
+
+
+
+
+                                          swipe left                      swipe left                      swipe left
+
+
+
+
+                                                                                                                                                                                   US 037
+
+                                                                                                                                                                                   The user can REGISTER on
+                                                                                                                              Continue                                             Resbite using phone number
+
+
+
+
+                                                                                                                                                 Appears once the user has
+                                                                                                                                                 gone through all the slides and
+                                                                                                                                                 stays active even if the user
+                                                                                                                                                 goes back to the ﬁrst slide.
+

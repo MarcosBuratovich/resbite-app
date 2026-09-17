@@ -1,0 +1,53 @@
+E27 - As a user that has just downloaded the app I want to start using it for the first time
+USs involved: 029
+
+The user opens the app on first-run
+and passes the slideshow
+ALL
+SPLASH SCREEN
+SLIDE 1
+SLIDE 2
+SLIDE 3
+SLIDE 4
+US 037
+
+The user can REGISTER on
+Resbite using phone number
+Appears once the user has gone through all the slides and stays active even if the user goes back to the first slide.
+swipe left
+Feature 1
+Feature 2
+9:41
+Skip for now
+The sender should be clear for the user, like in the following example from "OBC Bank":
+This text could be some text like:1) explaining benefits of making balance.
+
+2) motivating the user to make balance, mentioning what this user is being great at and what could be done to make balance.
+Continue
+Or should the user arrive to a HOME screen with more diverse content?
+reduces stress
+see stats
+US083
+
+As a user, I can see the details of a chosen resbite so that I can do it alone
+Skip this for now
+Explain why it is useful for the user to provide this information. Smth like "Verifying your e-mail address will allow you to  invite other users to join you on resbites.".
+
+ie: Tinder says "Don't loose access to your account. Verify your e-mail". Resbite will also need e-mail address to help th user recover access to the account.
+
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen
+DISCOVER
+SETTINGS
+BALANCE
+ACHIEVE

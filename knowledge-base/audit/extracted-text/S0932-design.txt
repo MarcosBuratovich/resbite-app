@@ -1,0 +1,90 @@
+FAVORITE RESBITES
+E137 - User Profile
+
+User Profile
+Maria's favorites
+USER PROFILE
+SETTING MAIN GOAL
+FAVORITE RESBITES 
+If the main goal is still not set, ecourage to do it.
+explain benefits for the user if e-mail is verified
+profile completion progress indicator
+If any stats are gonna be shown, this is the place.
+ 
+Let's tailor the resbites according to your goals
+Which is the best way you can enjoy taking healthy breaks from digital devices?
+these could be:
+"spending more time with friends"
+"having more quality time with my family"
+"having fun with workmates"
+"going out with my couple"
+
+See more details in wireflow US188
+the choice triggers a microinteraction. The result could be the background chancging and matching every different choice with a specific background for each one of them.
+shall we add an encouraging phrase here?
+Details
+If a goal has been set before it should be shown as already active
+
+US083
+
+As a user, I can see the details of a chosen resbite so that I can do it alone
+US 050
+
+As a user that has just got signed-in I want to invite contacts to use Resbite
+DISCOVER
+SETTINGS
+BALANCE
+ACHIEVE
+GO PREMIUM
+US 096
+As a non-premium user, I want to check what other Resbite features I could enjoy if I went premium
+VERIFY YOUR E-MAIL ADDRESS?
+You're doing great! The experience could be better if you go on completing your profile
+USER MAIN GOAL 
+Maria,
+invite others
+Resbites get better with others
+MY RESBITES
+MARIA
+E90
+
+Modifying the settings
+How do you identify
+your gender?
+Female
+Non binary
+I identify as:
+Prefer not to answer
+Male
+GENDER
+E) Include options upfront and together (avoid using "male/female/other"). It gives the impression that identities among "others" are less important or socially recognized.
+
+F) Let the user type "other" gender.
+
+G) Allow not to provide this information if it is not really necessary for Resbite user experience.
+Best practices to be gender inclusive :
+
+A) It's good to keep the verb "identify". It makes this step more user centric, since it makes reference to the gender the user identifies with, not to the gender assigned at birth or to the gender other people might assume.
+
+B) If I was told to delete one of these options I would leave out the option "I identify as:"
+
+C) ie: "Circle CI" (IT company) requires the gender in this way to users applying to open job positions:
+D) Inform users how their information will be used
+9:41
+Skip this for now
+Active Challenge:
+In case there's a challenge ongoing a card like this appears in firs place.
+A card for every ongoing challenge.
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen
+Continue

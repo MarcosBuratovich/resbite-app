@@ -1,0 +1,677 @@
+[
+  {
+    "member": "artwork/artboard-4bc9ce56-24f6-4765-9939-8e9a9257be8b/graphics/graphicContent.agc",
+    "note": {
+      "text": "Not a priority if we don\u2019t clasify \ncontacts at this stage",
+      "x": -19127,
+      "y": -18623
+    },
+    "nearest": [
+      {
+        "text": "Tony Sorensen",
+        "x": -19116.0,
+        "y": -18779.0
+      },
+      {
+        "text": "Done!",
+        "x": -18999,
+        "y": -18798
+      },
+      {
+        "text": "Andrea Mendez",
+        "x": -19116.0,
+        "y": -18878.0
+      },
+      {
+        "text": "Bob Bagheart",
+        "x": -19116.0,
+        "y": -18889.0
+      },
+      {
+        "text": "+ Invite",
+        "x": -18852.99997138977,
+        "y": -18759.5
+      },
+      {
+        "text": "Bob Bagheart",
+        "x": -19116.0,
+        "y": -18951.0
+      },
+      {
+        "text": "+ Connect",
+        "x": -18853.999977111816,
+        "y": -18858.5
+      }
+    ]
+  },
+  {
+    "member": "artwork/artboard-4bc9ce56-24f6-4765-9939-8e9a9257be8b/graphics/graphicContent.agc",
+    "note": {
+      "text": "Not a priority",
+      "x": -14033,
+      "y": -18908
+    },
+    "nearest": [
+      {
+        "text": "4 new connection requests \nThomas Perthson + 3 others",
+        "x": -14015.466796875,
+        "y": -19147.0
+      },
+      {
+        "text": "When the user has only one connection request the possibility to dismiss the invitation or Add as a friend is shown in the notifications screen.\n\nWhen there is more than one connection request the notification screen shows this as a single notification: \n\n\n\n\nTapping on this notification the user can manage these connection requests in another screen.",
+        "x": -14088.999816894531,
+        "y": -19345.0
+      },
+      {
+        "text": "+ Approve",
+        "x": -14356.999982833862,
+        "y": -19296.000003814697
+      },
+      {
+        "text": "Dismiss",
+        "x": -14444.464834213257,
+        "y": -19296.000003814697
+      },
+      {
+        "text": "4 new connection requests \nThomas Perthson + 3 others",
+        "x": -13618.466796875,
+        "y": -19332.8828125
+      },
+      {
+        "text": "C.5 - CONNECTION REQUEST NOTIFICATION",
+        "x": -13729.0,
+        "y": -19501.7509765625
+      },
+      {
+        "text": "Maria Ruiz",
+        "x": -14575.466796875,
+        "y": -19310.5
+      }
+    ]
+  },
+  {
+    "member": "artwork/artboard-5f706148-77f5-48a2-9f17-815f4529306e/graphics/graphicContent.agc",
+    "note": {
+      "text": "Not a priority",
+      "x": -17633,
+      "y": -7502
+    },
+    "nearest": [
+      {
+        "text": "This row should not appear in case the user hasn't completed resbites before",
+        "x": -17598.5009765625,
+        "y": -7482.9208984375
+      },
+      {
+        "text": "This row should not appear in case the user hasn't completed resbites before",
+        "x": -17598.5009765625,
+        "y": -7685.1572265625
+      },
+      {
+        "text": "Fishing Weekend",
+        "x": -17711.999992370605,
+        "y": -7734.999994277954
+      },
+      {
+        "text": "Have you got suggestions for new resbites?\nIf there's an activity you would like to suggest, we'll be glat to read you thoughts on it.",
+        "x": -18000.75,
+        "y": -7562.5
+      },
+      {
+        "text": "Walk in\nthe park",
+        "x": -17940.999504089355,
+        "y": -7738.999994277954
+      },
+      {
+        "text": "Fishing Weekend",
+        "x": -17711.999992370605,
+        "y": -7955.687494277954
+      },
+      {
+        "text": "See 144 results",
+        "x": -17183,
+        "y": -7762
+      }
+    ]
+  },
+  {
+    "member": "artwork/artboard-5f706148-77f5-48a2-9f17-815f4529306e/graphics/graphicContent.agc",
+    "note": {
+      "text": "Activities are a priority ",
+      "x": -18551,
+      "y": -8628
+    },
+    "nearest": [
+      {
+        "text": "Outdoors",
+        "x": -18080.0,
+        "y": -8692.65625
+      },
+      {
+        "text": "Suggested for you",
+        "x": -18080.0,
+        "y": -8515.65625
+      },
+      {
+        "text": "Games",
+        "x": -18080.0,
+        "y": -8846.65625
+      },
+      {
+        "text": "Meals & Drinks",
+        "x": -18080.0,
+        "y": -8307.34375
+      },
+      {
+        "text": "Star gazing",
+        "x": -17950.999504089355,
+        "y": -8648.999994277954
+      },
+      {
+        "text": "Adventure",
+        "x": -18080.0,
+        "y": -9000.65625
+      },
+      {
+        "text": "Karaoke",
+        "x": -17954.999504089355,
+        "y": -8799.999994277954
+      }
+    ]
+  },
+  {
+    "member": "artwork/artboard-5f706148-77f5-48a2-9f17-815f4529306e/graphics/graphicContent.agc",
+    "note": {
+      "text": "Favorites are not\na priority",
+      "x": -17627,
+      "y": -9178
+    },
+    "nearest": [
+      {
+        "text": "Fishing Weekend",
+        "x": -17711.999992370605,
+        "y": -9142.999994277954
+      },
+      {
+        "text": "This row should not appear in case the user doesn't have favorites",
+        "x": -17635.431640625,
+        "y": -9011.1572265625
+      },
+      {
+        "text": "Fishing Weekend",
+        "x": -17711.999992370605,
+        "y": -8956.999994277954
+      },
+      {
+        "text": "Walk in\nthe park",
+        "x": -17940.999504089355,
+        "y": -9146.999994277954
+      },
+      {
+        "text": "Fishing\nweekend",
+        "x": -17931.999504089355,
+        "y": -8964.999994277954
+      },
+      {
+        "text": "Fishing Weekend",
+        "x": -17711.999992370605,
+        "y": -8802.999994277954
+      },
+      {
+        "text": "Search resbite",
+        "x": -18033.666015625,
+        "y": -9288.964599609375
+      }
+    ]
+  },
+  {
+    "member": "artwork/artboard-5f706148-77f5-48a2-9f17-815f4529306e/graphics/graphicContent.agc",
+    "note": {
+      "text": "Maybe these are too many\nFilters for an MVP",
+      "x": -16928,
+      "y": -8772
+    },
+    "nearest": [
+      {
+        "text": "2 h +",
+        "x": -16954,
+        "y": -8601
+      },
+      {
+        "text": "2 h",
+        "x": -17007,
+        "y": -8601
+      },
+      {
+        "text": "Filters",
+        "x": -17141.0,
+        "y": -8740.000427246094
+      },
+      {
+        "text": "1,5 hours",
+        "x": -17104,
+        "y": -8601
+      },
+      {
+        "text": "2 days +",
+        "x": -17055,
+        "y": -8557
+      },
+      {
+        "text": "1 h",
+        "x": -17162,
+        "y": -8601
+      },
+      {
+        "text": "2 days",
+        "x": -17135,
+        "y": -8557
+      }
+    ]
+  },
+  {
+    "member": "artwork/artboard-5f706148-77f5-48a2-9f17-815f4529306e/graphics/graphicContent.agc",
+    "note": {
+      "text": "maybe it's too much\nhaving similar resbite",
+      "x": -15078,
+      "y": -8431
+    },
+    "nearest": [
+      {
+        "text": "Similar resbites :",
+        "x": -14637.5,
+        "y": -8522.5
+      },
+      {
+        "text": "relieves body tension",
+        "x": -14604.000045776367,
+        "y": -8605.500056266785
+      },
+      {
+        "text": "reduces stress",
+        "x": -14603.999942779541,
+        "y": -8650.499963283539
+      },
+      {
+        "text": "According to others :",
+        "x": -14637.5,
+        "y": -8717.15625
+      },
+      {
+        "text": "Tips :",
+        "x": -14636.5,
+        "y": -8825.65625
+      },
+      {
+        "text": "Long description",
+        "x": -14850.74609375,
+        "y": -9004.3984375
+      },
+      {
+        "text": "connects to nature",
+        "x": -14441.000038146973,
+        "y": -8650.500009059906
+      }
+    ]
+  },
+  {
+    "member": "artwork/artboard-5f706148-77f5-48a2-9f17-815f4529306e/graphics/graphicContent.agc",
+    "note": {
+      "text": "Should hosted resbites\nBe part of the MVP?",
+      "x": -16623,
+      "y": -9193
+    },
+    "nearest": [
+      {
+        "text": "Randomizer\nEach time this icon is excecuted, the resbites list are populated with different resbites.",
+        "x": -16742,
+        "y": -9672
+      },
+      {
+        "text": "Maybe these are too many\nFilters for an MVP",
+        "x": -16928,
+        "y": -8772
+      },
+      {
+        "text": "F.4 -  FILTERED RESBITES / FILTERS APPLIED",
+        "x": -16213,
+        "y": -8728
+      },
+      {
+        "text": "Featured resbite",
+        "x": -17183.15000152588,
+        "y": -9506.891845703125
+      },
+      {
+        "text": "2 h +",
+        "x": -16954,
+        "y": -8601
+      },
+      {
+        "text": "Filters",
+        "x": -17141.0,
+        "y": -8740.000427246094
+      },
+      {
+        "text": "2 h",
+        "x": -17007,
+        "y": -8601
+      }
+    ]
+  },
+  {
+    "member": "artwork/artboard-6d514d63-ec97-44d6-908a-a22c54324c43/graphics/graphicContent.agc",
+    "note": {
+      "text": "Maybe Invitees\ndon't need to create an account \nand they can just enter their name as guests",
+      "x": -14967,
+      "y": -3115
+    },
+    "nearest": [
+      {
+        "text": "K.12 - RESBITE SET-UP  - OVERVIEW",
+        "x": -15117.9990234375,
+        "y": -2868.5
+      },
+      {
+        "text": "Fishing Weekend",
+        "x": -15004.5,
+        "y": -2797.5
+      },
+      {
+        "text": "Monday\u000bApril the 28th\n3:13PM",
+        "x": -14999.5,
+        "y": -2702.000030517578
+      },
+      {
+        "text": "28 Mulberry Court road\nWokingham\nRG2 7YS",
+        "x": -14994.0,
+        "y": -2549.5
+      },
+      {
+        "text": "Once the user starts de-selecting connectios from the group the text in the button appears",
+        "x": -15578.0,
+        "y": -3086.215087890625
+      },
+      {
+        "text": "Multi-day date overview:",
+        "x": -14579.9990234375,
+        "y": -2623.5
+      },
+      {
+        "text": "Group details screen",
+        "x": -15416,
+        "y": -3644
+      }
+    ]
+  },
+  {
+    "member": "artwork/artboard-83f00f13-1b1b-4976-8ce5-026529b8d4fa/graphics/graphicContent.agc",
+    "note": {
+      "text": "Child account not part of MTV",
+      "x": -13757,
+      "y": 1636
+    },
+    "nearest": [
+      {
+        "text": "Inviting parent and child",
+        "x": -13768.2509765625,
+        "y": 1460.5
+      },
+      {
+        "text": "G.10 - INVITING TO RESBITE\nNOTIFICATION\nParent + child",
+        "x": -13768.7509765625,
+        "y": 1815.5
+      },
+      {
+        "text": "Mark is inviting Peter and you to the Fishing Weekend resbite",
+        "x": -13679.0361328125,
+        "y": 2040.25
+      },
+      {
+        "text": "22 mins",
+        "x": -13440.0361328125,
+        "y": 2083.25
+      },
+      {
+        "text": "G.11 - INVITING TO RESBITE\nOVERVIEW (INVITEE VIEW)\nParent + child",
+        "x": -13131.7509765625,
+        "y": 1629.5
+      },
+      {
+        "text": "Fishing Weekend",
+        "x": -13019.7509765625,
+        "y": 1739.5
+      },
+      {
+        "text": "Maria Ruiz is inviting you and Peter",
+        "x": -13050.751953125,
+        "y": 1952.5
+      }
+    ]
+  },
+  {
+    "member": "artwork/artboard-c9fad584-5a8b-411d-8f14-333e76c11b71/graphics/graphicContent.agc",
+    "note": {
+      "text": "Not a priority\n\nAt the moment invitations \nwill be done manually by the user",
+      "x": -20965,
+      "y": 12294
+    },
+    "nearest": [
+      {
+        "text": "Notifications",
+        "x": -20774.0,
+        "y": 12377.25
+      },
+      {
+        "text": "I) Notifications and settings",
+        "x": -20774,
+        "y": 12110
+      },
+      {
+        "text": "I.1 - NOTIFICATIONS",
+        "x": -20774.0,
+        "y": 12523.25
+      },
+      {
+        "text": "4 new connection requests \nThomas Perthson + 3 others",
+        "x": -20659.0,
+        "y": 12690.25
+      },
+      {
+        "text": "Maria is inviting you to this Costumes Party",
+        "x": -20684.0,
+        "y": 12769.25
+      },
+      {
+        "text": "Rabia is inviting you to Star Gazing",
+        "x": -20684.0,
+        "y": 12850.25
+      },
+      {
+        "text": "16 new messages on the Camping resbite",
+        "x": -20684.0,
+        "y": 12924.25
+      }
+    ]
+  },
+  {
+    "member": "artwork/artboard-d897e66f-79e2-40cd-b00f-39663fcccd65/graphics/graphicContent.agc",
+    "note": {
+      "text": "Not for MVP",
+      "x": -11567,
+      "y": -23553
+    },
+    "nearest": [
+      {
+        "text": " B.5.4  -  REGISTRATION PROFILE 3",
+        "x": -11411.0,
+        "y": -23451.5
+      },
+      {
+        "text": " B.5.3  -  REGISTRATION PROFILE 2",
+        "x": -11936.0,
+        "y": -23451.5
+      },
+      {
+        "text": "Let's create a\ngreat profile\npicture",
+        "x": -11920.0,
+        "y": -23157.5
+      },
+      {
+        "text": "Resbite",
+        "x": -11823.0,
+        "y": -23080.5
+      },
+      {
+        "text": "Yo are more likely to be invited to resbites if you can be easily identified with a clear photo of your face.",
+        "x": -11880.0,
+        "y": -23041.5
+      },
+      {
+        "text": "Why a photo of my face?",
+        "x": -11367.0,
+        "y": -22919.5
+      },
+      {
+        "text": "Why a photo of my face?",
+        "x": -11917.0,
+        "y": -22915.5
+      }
+    ]
+  },
+  {
+    "member": "artwork/artboard-e5122a91-0578-453a-95f4-28294199c3f1/graphics/graphicContent.agc",
+    "note": {
+      "text": "Not a priority to \nAssign other invitees as owners",
+      "x": -16793,
+      "y": 8872
+    },
+    "nearest": [
+      {
+        "text": "H.15 - LEAVING A RESBITE\nconfirmation",
+        "x": -16804.0,
+        "y": 9229.5
+      },
+      {
+        "text": "Sure you can't\nmake it?",
+        "x": -16758.0,
+        "y": 9314.5
+      },
+      {
+        "text": "12",
+        "x": -17263.00048828125,
+        "y": 9021.84829711914
+      },
+      {
+        "text": "This resbite will continue with the rest of the invitees if you set up a new admin.",
+        "x": -16745.0,
+        "y": 9396.5
+      },
+      {
+        "text": "Yes, leave resbite",
+        "x": -16716.000106811523,
+        "y": 9536.19596862793
+      },
+      {
+        "text": "Fishing Weekend",
+        "x": -17512.0,
+        "y": 9009.84765625
+      },
+      {
+        "text": "H.16 - LEAVING A RESBITE\nconfirmation 2",
+        "x": -16823.0,
+        "y": 9660.5
+      }
+    ]
+  },
+  {
+    "member": "artwork/artboard-fc5366d8-7886-4eac-b8fa-00136629cdf4/graphics/graphicContent.agc",
+    "note": {
+      "text": "Not a priority",
+      "x": -9368,
+      "y": 6470
+    },
+    "nearest": [
+      {
+        "text": "Frequency\nThis feedback shouldn't be asked after every single resbite if the user is setting up resbites frequently. For example, if the user is doing more than a resbite a week this feedback shouldn't appear for every case.",
+        "x": -9925,
+        "y": 6859
+      },
+      {
+        "text": "L.2 - DONE RESBITE DETAIL\n(resbite owner view)",
+        "x": -9261,
+        "y": 7303
+      },
+      {
+        "text": "Fishing weekend",
+        "x": -9138,
+        "y": 7383
+      },
+      {
+        "text": "calm",
+        "x": -10069.000051498413,
+        "y": 7138.0
+      },
+      {
+        "text": "L) After the resbite",
+        "x": -10381,
+        "y": 6463
+      },
+      {
+        "text": "Closed chat\nChats are closed three days after the resbites are finished",
+        "x": -8738,
+        "y": 7272
+      },
+      {
+        "text": "self-confident",
+        "x": -10113.99996471405,
+        "y": 7176.0
+      }
+    ]
+  },
+  {
+    "member": "resources/graphics/graphicContent.agc",
+    "note": {
+      "text": "Open to possibility to sign-up\nwith Apple or Google account",
+      "x": 84,
+      "y": 104
+    },
+    "nearest": [
+      {
+        "text": "Active",
+        "x": 63,
+        "y": 97
+      },
+      {
+        "text": "Hover",
+        "x": 63,
+        "y": 97
+      },
+      {
+        "text": "Focused",
+        "x": 63,
+        "y": 97
+      },
+      {
+        "text": "Pressed",
+        "x": 63,
+        "y": 97
+      },
+      {
+        "text": "Disabled",
+        "x": 63,
+        "y": 97
+      },
+      {
+        "text": "Active",
+        "x": 63,
+        "y": 97
+      },
+      {
+        "text": "Hover",
+        "x": 63,
+        "y": 97
+      }
+    ]
+  }
+]

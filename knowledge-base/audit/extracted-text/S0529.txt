@@ -1,0 +1,49 @@
+E27 - User wants to start using the app for the first time once downloaded
+
+US181
+
+As a user that has just verified phone number I can provide additional
+personal information in order to complete the registration process
+Previously, the user verified phone number during the registration process.
+
+
+
+
+                                                                                                                                                                                                                                      US188
+                                           USER NEEDS            Require the user to
+  US037                                    TO PROVIDE                                                offer the user to define if       Require the user to indicate
+                                                                 type e-mail address                                                                                           require location through                REGISTRATION   As a user I can indicate my
+                                              MORE                                                   Resbite can send user-            gender                                  country and postcode                       PROCESS     motivation to take more
+  The user can register on RB               PERSONAL                                                 tailored content to this                                                                                            COMPLETE     breaks from digital
+  using phone number                          INFO                                                   address.
+                                                                                                                                                                                                                                      technology
+
+
+
+
+                                                            Explain why it is useful for the user to
+                                                            provide this information. Smth like "we                                Be gender inclusive
+                                                            need to know your w-mail address to
+                                                            manage your invitations to other                                       ie: Circle CI requires the gender in this way to applicants applying to open job
+                                                            users".                                                                positions
+
+                                                            ie: Tinder says "Don't loose access to
+                                                            your account. Verify your e-mail"
+
+
+
+
+                                                                                                                                   Inform users how their information will be used
+
+
+
+
+                                                                                                                                    Include options upfront & together (avoid using "male/female/other"). It gives
+                                                                                                                                    the impression that those identities are less than those society formally
+                                                                                                                                    recognizes.
+
+                                                                                                                                    Let the user type "other" gender.
+Note
+Let the user cancel this process and go                                                                                             Allow not to provide this information if it is not really necessary for Resbite user
+back to choose e-mail registration                                                                                                  experience.
+

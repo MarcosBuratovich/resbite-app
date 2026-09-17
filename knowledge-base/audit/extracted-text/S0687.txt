@@ -1,0 +1,132 @@
+R.1) Miscellaneous: rate in app
+
+Rating app request
+
+
+                                                                                                                                                                      G.7 - UPCOMING RESBITE
+                                                                                             G . 5 - I N V I T I N G TO R ES B I T E
+                                                                                                                                                                           (INVITEE VIEW)
+                                                                                             OVERVIEW (INVITEE VIEW )
+
+
+
+                                                                                                         Fishing Weekend                                                      Fishing Weekend                           12
+
+Rate request tips:
+
+Trigger this bottom sheet after few conditions so that the user will be more likely to
+leave a positive rating and provide more informed feedback :
+
+a) The user must have been using the app for a few weeks. Avoid interrupting users
+with this when they’ve only recently downloaded it or only used it a few times.
+                                                                                                                                                                                                                                                                                                             R 1 . 2 - R AT E R E Q U E S T                                               R 1 . 4 - R AT E R E Q U E S T
+                                                                                                                                                                                                                                                                                                          Good rating - send to store?                                                         (INVITEE VIEW)
+b) Ask for a rating only after the user has demonstrated some engagement. For                      Maria is inviting you
+example, prompt the user upon the completion of a game level or productivity task.                                                                                     Maria is inviting you
+Don’t ask for review during the launch and try not to bother users when they’re in
+the middle of something. Look for logical pauses.                                                I'm in                         not now                                                                                                                                                                        Do you like Resbite?                                                             Thanks a lot
+                                                                                                                                                                             Monday, april the 28th                                                                                                                                                                                         for your comments
+c) Allow at least a week or two between rating requests. Using the latest SDK,                                                                                               3:13PM
+"SKStoreReviewController requestReview" limits to 3 times a year. Using older                                                                                                                                                                                                                                     Let's send your rate                                               You can also write a review if you are
+methods, allows to customize the limit.                                                                 Monday, april the 28th                                                                                                                                                                                     to the App Store                                                            feeling inspired :)
+                                                                                                                                                                             28 Mulberry Court road
+                                                                                                        3:13PM
+d) Don't request for a rate again if the user chooses "Never ask again". At east for a
+                                                                                                                                                                             Wokingham
+long, long time.                                                                                                                                                             RG2 7YS                                                                                                                                                             The rate can still be modiﬁed
+                                                                                                                                                                                                                                 R 1 . 1 - R AT E R E Q U E S T
+                                                                                                                                                                                                                                                                                                                                                 in this instance of the rating
+                                                                                                        28 Mulberry Court road                                                                                                        (INVITEE VIEW)
+                                                                                                                                                                                                                                                                                                                                                 dialog bottom sheet.
+                                                                                                        Wokingham                                                            Imogen, Rabia + 7 others
+Proper Moment To Ask For Review (when users have completed a task and are more
+                                                                                                        RG2 7YS
+likely to be happy about it) :                                                                                                                                                                                                                                                                                    Send feedback                                                                Write review
+                                                                                                                                                                       Attendance quota limit: 4
+                                                                                                                                                                                                                                  Do you like Resbite?                                                                Rabia Nuzha                                                                 Rabia Nuzha
+1) After accepting an invitation, but not until the user has left the screen and                                                                                 Ony the ﬁrst 4 invitees to conﬁrm
+navigates somewhere else in the app.
+                                                                                                        Imogen, Rabia + 7 others                                 attendance will have a place at this resbite.
+                                                                                                                                                                                                                             We would greatly appreciate it if you
+                                                                                                  Attendance quota limit: 4                                                                                                  could rate the app on the App Store.                                                      Not now
+                                                                                                                                                                                                                                                                                                                      Maria Ruiz                                                                   Not now
+                                                                                                                                                                                                                                                                                                                                                                                                  Maria Ruiz
+2) After completing a resbite, but only in cases when the feedback request for that                                                                                                                                                                                                       Is the rating
+speciﬁc resbite is not being triggered.                                                     Ony the ﬁrst 4 invitees to conﬁrm                                                                                                               Thanks!                                           good?
+                                                                                            attendance will have a place at this resbite.                     "In front of The Courtyard cafe"
+3) After sending invitations to do a resbite.
+
+
+                                                                                         "In front of The Courtyard cafe"                                              I won't be attending
+                                                                                                                                                                                                                                                                                                              R 1 . 3 - R AT E R E Q U E S T
+Sources:                                                                                                                                                                                                                                   Not Now
+                                                                                                                                                                                                                                          Rabia Nuzha                                                      Bad rating - send feedback?
+
+https://developer.apple.com/design/human-interface-guidelines/ios/system-
+capabilities/ratings-and-reviews/                                                        D IS COV E R    M Y RE S B IT ES   W EL LN E S S   PR O FI L E
+                                                                                                                                                                                                                                      Never ask
+                                                                                                                                                                                                                                        Maria   again
+                                                                                                                                                                                                                                              Ruiz
+                                                                                                                                                              D IS COV E R    M Y RE S B IT ES W EL LN E S S   PR O FI L E                                                                                        Help us improve
+https://developer.apple.com/forums/thread/115193
+
+
+                                                                                                                                                                                                                                                                        Close this bottom sheet           We are a small team and we'd like to
+                                                                                                                                                                                                                                                                       and don't request this user          know what you think could be
+                                                                                                                                                                                                                                                                       for a rating again, at least                   improved
+                                                                                                                                                                                                                                                                        not for a long long time.
+
+
+                                                                                                                                                                                                                                     Pease note that the font weight                                                                                      Email app opens with a
+                                                                                                                                                                                                                                     is lighter in comparison to the                                                                                            draft email.
+                                                                                                                                                                                                                                     other two options.
+                                                                                                                                                                                                                                                                                                                  Send feedback                          Subject is pre-populated.
+
+                                                                                                                                                             K . 1 2 - R E S B I T E S E T- U P - O V E R V I E W
+                                                                                                                                                                      (resbite owner overview)
+
+
+                                                                                                                                                                                                                                                                                                                       Not now
+                                                                                                                                                                                                                                                                                                                      Maria Ruiz
+                                                                                                                                                                               Fishing Weekend
+
+
+
+                                                                                                                                                                               Monday
+                                                                                                                                                                               April the 28th
+                                                                                                                                                                               3:13PM
+
+
+
+
+                                                                                                                                                                               28 Mulberry Court road
+                                                                                                                                                                               Wokingham
+                                                                                                                                                                               RG2 7YS
+
+
+
+
+                                                                                                                                                                              Imogen, Rabia + 7 others
+
+                                                                                                                                                                        Attendance quota limit: 4
+                                                                                                                                                                  Ony the ﬁrst 4 invitees to conﬁrm
+                                                                                                                                                                  attendance will have a place at this resbite.
+
+
+
+                                                                                                                                                               Add a note:
+
+                                                                                                                                                               ie: "In front of The Courtyard cafe"
+
+
+
+                                                                                                                                                                      Done! send invitations
+
+
+
+
+                                                                                                                                                          If the user is not accepting an invitation for a long time,
+                                                                                                                                                          the rate request can be triggered in another case:
+                                                                                                                                                          Just after ﬁnishing setting up a resbite and sending
+                                                                                                                                                          invitations.
+

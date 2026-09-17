@@ -1,0 +1,86 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2513
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica-Bold;\f1\fswiss\fcharset0 Helvetica-BoldOblique;\f2\fswiss\fcharset0 Helvetica-LightOblique;
+\f3\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;\red217\green11\blue5;\red217\green11\blue5;}
+{\*\expandedcolortbl;;\cssrgb\c88946\c14202\c0;\cssrgb\c88946\c14202\c0;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww12820\viewh13120\viewkind0
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural\partightenfactor0
+
+\f0\b\fs28 \cf0 \ul \ulc0 5 Resbites for website header gifs
+\fs24 \ulnone \
+\
+
+\f1\i Note:\
+ - Only use ones where there is no forward movement like walking or skating\
+ - Only use ones with more than one person - no single characters\
+ - Try to use as many variations of demographics/character sets as possible (i.e Whole family, mum & daughter, father and son, couple, friends)
+\f0\i0 \
+\
+
+\fs28 \ul Activities/Resbites
+\fs24 \ulnone \
+\
+
+\fs26 \ul 1. Respite 04 - Bake off (Mum & Daughter)
+\fs24 \ulnone \
+\
+\ul Illustration: Mum and daughter in kitchen baking \ulnone \
+\
+Animation guide: 5 - 6 second clip (no loop)\
+
+\f2\i\b0 Mum stirs with spoon in bowl. Looks up from bowl and smiles at daughter. Daughter lifts arm up to show mum ball of dough and looks happy. Mum\'92s expression changes to \'91oooh\'92, she nods with a big smile, to show she\'92s encouraging daughter
+\f0\i0\b\fs26 \ul \ulc0 \
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural\partightenfactor0
+\cf0 \
+2. Resbite 44  - Go star gazing (A couple)\
+
+\fs24 \ulnone \
+Illustration: Couple lying down on the grass looking up at the stars \cf2 (NEED NEW ASSET)\cf0 \
+\
+Animation guide: 5 - 6 second clip (no loop)\
+
+\f2\i\b0 Girl\'92s hand points upwards to the stars above and looks joyful/happy. Guy looks happy and looks towards where she\'92s pointing and mouths \'91oooh!\'92 \
+\
+
+\f0\i0\b\fs26 \ul 3. Resbite 80  - Playing a board game (Whole family)\
+
+\fs24 \ulnone \
+Illustration: Family of 4 playing a board game on the floor \
+\
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural\partightenfactor0
+\cf0 Animation guide: 5 - 6 second clip (no loop)\
+
+\f2\i\b0 Dad shakes hand as if shaking dice. Throws dice to the mat and mouths ooooh. Daughter cheers and puts hands in the air, congratulating/cheering. Next son waves his playing piece as if to say \'91my turn\'92! Mum looks left to dad then to daughter then to son, happy and content smile on her face.\
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural\partightenfactor0
+\cf0 \
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural\partightenfactor0
+
+\f0\i0\b\fs26 \cf0 \ul 4. Resbite 07 - Baseball (Father & Son)
+\fs24 \ulnone \
+\
+Illustration: Father and son playing baseball \
+\
+Animation guide: 5 - 6 second clip (no loop)\
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural\partightenfactor0
+
+\f2\i\b0 \cf0 Dad on one knee, throws ball at son, gets ready to catch the ball. Son hits the ball and looks happy/joyful. Dad catches ball and they both cheer\
+\
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural\partightenfactor0
+
+\f0\i0\b\fs26 \cf0 \ul 5. Resbite 30 - Fishing (Friends - males) 
+\fs24 \cf3 \ulnone (NEED NEW ASSET)\cf0 \
+\
+Illustration: 2 male friends fishing - 
+\f2\i\b0 Facing on a diagonal, slightly towards each other over a small pond between them with fishing rods both in water
+\f0\i0\b \ul \ulc0 \
+\ulnone \
+Animation guide: 5 - 6 second clip (no loop)\
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural\partightenfactor0
+
+\f2\i\b0 \cf0 Sitting waiting for one second staring into pond. Man 1\'92s rod starts to pull. Pulls rid up, he\'92s caught a fish! Looks happy/joyful. Man 2 looks up at fish and exclaims \'91ooooh\'92 and looks joyful\
+\
+\
+\
+
+\f3\i0 \
+}

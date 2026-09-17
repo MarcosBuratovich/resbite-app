@@ -1,0 +1,87 @@
+E27 - User wants to start using the app for the first time once downloaded
+
+US037
+
+The user can register on RB with phone number
+Previously, the user chose to use phone number to register in stead of e-mail address.
+
+
+
+
+                        US0122
+
+                        The user can log-in typing
+                        access credentials
+
+
+
+                                                                                                                                                                                                  request the user to type the received
+                                 log in                                                                                                                                                           verification code, always reminding the
+                                                                                                            the user types                                send SMS verification                   number to which the code has been sent.
+                                                                                                            phone number                                  code to provided                        Offer the user to verify phone number
+                                                                                                                                                          phone number                            through a phone call in case SMS
+                                                     Prefill country code                                                                                                                         verification code hasn't been received.
+ User arrives at
+  registration                                       based on user
+      step                                           geolocation data.
+                        user decides to go to                                                                                                                                                                      the user decides to
+                        LOGIN or proceeds to                                                                                                                             type phone nuber again                     modify the phone
+                              register?                                                                                                                                                                                 number?
+
+
+
+                                                     Auto focus on the
+                                                     phone number input
+                                                     field.                                                                                                                                                                                                              US165
+                                                                                                                                                                                                                   the user decides to
+                                                                                                                                                                                                                  receive a phonecall?                                   As a user that is trying to
+                                                                                                             type phone                                                                                                                                                  register, I can receive a phone
+                                                                                                            number again                                                                                                                                                 call in order to verify my
+                                                                                                                                                                                                                                                                         phone number
+                                                                                         the user chooses
+                                          Provide the user an easy way to accept
+                                                                                         country code for
+                                          Terms of service and Privacy Policy. Two                                                   submits new
+                                                                                         the phone number
+                                          options:                                                                                 verification code
+                                          a) Require the user to accept manually .
+                                          b) Do no require any action from the user,                                                                                                                  the user submits                   User can do this in two ways:
+                                          but explain that continuing with the process                                                                                                                verification code
+                                                                                                                                                                                                                                         1) Typing the code.
+                                          means accepting Terms and Privacy Policy.                                                                                                                                                      2) An API listens from the
+                                                                                                                                                                                                                                         verification code on the SMS and
+                                                                                                                                                                                                                                         it places it as either predictive
+                                                                                                                                                                                                                                         text (as in Tinders case). The
+                                                                                                                                                       let the user know it's not valid
+                                                                                                                                                       and request to check the
+                                                                                                                                                                                                                                         user can tap this predictive text
+                                                                                                                                                                                                                    is verification
+                                                                                                                                                       verification code.                                                                to complete the code field.
+                                                                                                                                                                                                                     code valid?
+                                                                                                                                                       Offer to have a new verification
+                                                                                                              send a new verification                  code sent
+                                                                                                              code or re-type phone
+                                                                                                                     number?                                                                                                                                                                  US054
+
+
+                                                                                                                                                                                                                                                      REGISTRATION                            As a newbie user that has just
+                                                                                                                                                       let the user know it's expired,                                                                   PROCESS                              signed-in for the 1st time, I
+                                                                                                                                                                                                                 is verification code
+                                                                                                                                                       and offer to resend verification                                                                 COMPLETE                              want to follow the onboarding
+                                                                                                                                                                                                                       expired?
+                                                                                                                                                       code to the already indicated                                                                                                          UI tour
+                                                                                                                                                       phone number
+
+
+
+
+                                                                                                                                                                                                                                                                                             US166
+                                                                                                                                                                                                                                            Ask the user to indicate :
+                                                                                                                                                                                                      User's phone                          Name (will be user for                           As a user that has just
+                                                                                                                                                                                                      number is verified                    profile)                                         completed the registration
+                                                                                                                                                                                                                                            E-mail address                                   process, I can verify my e-mail
+Note
+                                                                                                                                                                                                                                                                                             address
+Let the user cancel this process and go
+back to choose e-mail registration
+

@@ -1,0 +1,52 @@
+E79 - Choosing a resbiteUS082
+As a user, I can choose a resbite to do
+GO TO
+RESBITES
+LIST
+tap on a visible resbite
+Resbites can easily be filtered by categories
+Feedback:"invitation sent"
+Show the user a list of friends as soon as the user indicates that wants to invite others to join a resbite.
+Offer to search for other resbite users (might not be friends), and offer to invite contacts from outside the app.
+Search for a friend
+Choose friends from the list or search for a friend?
+Choose another contacts src or finish inviting?
+Did the user invite more than 6 people?
+not on the MVP
+selects one or more contacts
+from the results
+provide results as the user types letters
+create
+a date poll?
+choose friends from the list
+send invitation to users letting them know that only the first 6 to accept will be able to join
+warn the user that due to covid-9 social distancing only the first 6 to accept the invitation will be able to attend
+Results show resbite users sorted in a way that friends appear first, and resbite users that are not friends appear after those.
+user cancels the search or picks up contacts?
+cancel
+search
+finish inviting
+Does
+this resbite allow others
+to join?
+US002
+
+The user can login
+to the app
+
+details of the
+chosen resbite
+mark it as favorite?
+mark it as favorite
+Can the user set a day and time to do the resbite?
+Resbite friends appear as the first source of people to invite
+NOTE:
+There's a different user story to invite people that is on the app but is not a resbite friend.
+And another one related to inviting contacts not using resbite at all.
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+splash screen

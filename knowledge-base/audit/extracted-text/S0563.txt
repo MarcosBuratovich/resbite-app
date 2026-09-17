@@ -1,0 +1,156 @@
+MVP flowchart
+
+
+                                                                                                                                                                                                 My resbites:                                                                                                                    Upcomming resbite details
+                                                                                                                                                                                                 Default view: upcomming                                                                                                         wfl H - screen H.11.1
+                                                                                                                                                                                                 resbites
+                                                                                                                                                                                                 wfl H - screen H.10
+
+
+
+                                                                                                                                                                                                                                               My resbites:
+                                                                                                                                                                                                                                                                                                                                                                   Cancel resbite
+                                                                                                                                                                                                                                               Done resbite list
+                                                                                                                                                                                                                                                                                                                                                                   wfl H - screen H.15/H.16
+                                                                                                                                                                                                                                               wfl L - screen L.10 - us089
+
+
+
+                                                                                                                                                                                                                                                                                                                                                                   Leave resbite
+                                                                                                                                                                                                                                                                                                                                                                   wfl H - screen J.19
+
+
+
+                                                                                                                                                                                                                                                                                                                                                                   Chatting
+                                                                                                                                                                                                                                               Done resbites details                                                                                               wfl H - screen H.7
+                                                                                                                                                                                                                                               wfl L - screen L.2
+
+
+                                                                                                                                                                                                                                                                                                                                                                   Managing invitees
+                                                                                                                                                                                                                                                                                                                                                                   wfl H - screen H.7
+
+
+
+                                                                                                                                                                                                                                                                User decides to do
+                                                                                                                                                                                                                                                                  resbite again?
+
+
+
+
+            User opens
+             the app
+                                                                                                                                                                                                                                                                                                   The resbite                          Feedback about the
+                                                                                                                                                                                                                                                                                                   take place                           done resbite
+                                                                                                                                                                                                                                                                                                                                        wfl L - screen L.1 - e26
+                                                                                                                                                                                                 Search a resbite
+                                                                                                                                                                                                 wfl F - screen F.10
+                    is the user already
+                    logged-in?
+
+
+
+
+                                                                                          is there an account
+                                               Recover the account or                     already active for this
+                    Is it 1st run                     log-in?                             phone number ?
+                                                                                                                                                                   Discover:
+                    experience?                                                                                                                                                                  Pick up a resbite                               Choose time for resbite                             Choose place for resbite                            Choose invitees for resbite          Send invitations for resbite
+                                                                        Log in                                                                                     the user arrives at the
+                                                                                                                                                                                                 from the list                                   wfl K - screen K.4                                  wfl K - screen K-1.1                                wfl K - screen K-1.2                 wfl K - screen K.12
+                                                                        wfl D - e58                                                                                resbites list
+                                                                                                                                                                                                 wfl F - e79
+                                                                                                                                                                   wfl F
+
+                                                                                                                    proceeds to log-in
+
+
+                                                                                      proceeds to registration
+
+         Onboarding
+                                                     Account recovery
+         slideshow
+         wfl A - US029                               wfl e
+
+
+                                                                                                                                                                                                 Filtering resbites lists
+                                                                                                                                                                                                 wfl F - screen F.3
+          Registration (1st steps)
+          wfl B -US037
+                                                                                                                               Has it been too long since the
+                                                                                                                               user invited others to connect
+                                                                                                                               in the app for the last time ?
+
+
+
+
+                     is there an account
+                     already active for this
+                     phone number ?
+
+
+
+
+                                                                                                                                                                Inviting to connect in the app
+                                                                                                                                                                wfl C - us050
+
+
+
+                                                                                                                                                                                                                                                           Being invited to a resbite
+                                                                                                                                                                                                 Notifications                                             Dismissing or accepting
+                                                                                                                                                                                                 wfl i - screen i.1                                        the invitation
+        Registration:
+                                                                                                                                                                                                                                                           wfl G - screen G.5
+        provide additional personal
+        information
+        wfl B - US181
+
+
+
+
+        Congratulations message
+        wfl B
+                                                                                                                                                                                                                                                                                        Profile:
+                                                                                                                                                                                                                                                                                        main screen
+                                                                                                                                                                                                                                                                                        wfl J - sceen J.1
+
+
+
+
+                                                                                                                                                                                                           Settings:
+                                                                                                                                                                                                           main categories
+                                                                                                                                                                                                           wfl I - sceen i.3                                                                                      Saved places
+                                                                                                                                                                                                                                                                                                                  screen J.8
+
+
+
+                                                                                                                                                                                                                                                                                                                  Children sub-account
+                                                                                                                                                                                                                                                                                                                  screen J.25
+                                                                                                                                                                                                                               Log out
+                                                                                                                                                                                                                               screen i.10
+
+                                                                                                                                                                                                                                                                                                                  Edit profile
+                                                                                                                                                                                                                                                                                                                  screen J.36
+                                                                                                                                                                                                                               Notifications
+                                                                                                                                                                                                                               screen i.4
+
+                                                                                                                                                                                                                                                                                                                  My groups
+                                                                                                                                                                                                                                                                                                                  screen J.2
+                                                                                                                                                                                                                               Privacy
+                                                                                                                                                                                                                               screen i.5
+
+                                                                                                                                                                                                                                                                                                                  My connections
+                                                                                                                                                                                                                                                                                                                  screen J.19
+                                                                                                                                                                                                                               Help
+                                                                                                                                                                                                                               screen i.6
+
+
+
+                                                                                                                                                                                                                               Delete account
+                                                                                                                                                                                                                               screen i.7
+
+
+
+                                                                                                                                                                                                                               Email address
+                                                                                                                                                                                                                               + phone number
+                                                                                                                                                                                                                               screen i.9
+

@@ -1,0 +1,38 @@
+US137
+
+The user can REGISTER on Resbite using phone number
+1st-run features slideshow
+slide 1
+slideshow: slide 2
+slideshow: slide 3
+slideshow: slide 4
+Continue 
+with slideshow or skip?
+register or login?
+Continue slideshow
+or skip?
+SPLASH
+SCREEN
+US029
+The user opens the app on first-run and passes the slideshow
+The user opens the app for the first time and goes through the features slideshow.
+skip
+continue
+log in
+swipe right
+register
+US0122
+
+The user can log-in typing access credentials 
+E27 - User wants to start using the app for the first time once downloaded
+
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen

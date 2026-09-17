@@ -1,0 +1,33 @@
+E79 - Choosing a resbiteUS084
+As a user I can do a resbite I have previously saved in favorites
+DO FAVORITE RESBITE
+US083
+
+As a user, I can see the details of a chosen resbite so that I can do it alone
+List of activities done indicating for each of them :
+Name Last date it was done
+Order by putting first the ones that were lately added to favorites
+See resbite details or go straight and start doing it?
+see details
+go straight to do it
+BROWSE
+FAVORITES FILTERING THE GENERAL RESBITE LIST
+BROWSE
+FAVORITES FROM THE USER
+SECTION
+Resbite friends appear as the first source of people to invite
+NOTE:
+There's a different user story to invite people that is on the app but is not a resbite friend.
+And another one related to inviting contacts not using resbite at all.
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen

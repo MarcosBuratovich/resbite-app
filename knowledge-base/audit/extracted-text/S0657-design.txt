@@ -1,0 +1,917 @@
+A) Onboarding slideshow
+A.1 - SPLASH SCREEN
+A.2 - SLIDE 1
+A.3 - SLIDE 2
+ A.4 - SLIDE 3
+A.5 - SLIDE 4
+US 037
+
+The user can REGISTER on
+Resbite using phone number
+Appears once the user has gone through all the slides and stays active even if the user goes back to the first slide.
+swipe left
+Feature 1
+Feature 2
+Sure you want to quit
+this resbite?
+Yes, quit resbite
+Only the invitees that have accepted the invitation will be notified about this.
+You can assign the ownership of this resbite to other person.
+No
+Trouble signing in?
+Log in
+Create a new account
+Rabia Nuzha
+Maria Ruiz
+Imogen Adams
+Stephen Gray
+Noel Gallagher
+Add member
+Fermin Lira
+A Fishing weekend
+Imogen Adams                              
+Save all invitees in a group
+Invite
+Schedule
+Place it
+Fishing Weekend
+Continue
+Finishes
+-
+Starts
+3:13    PM
+November the 17th
+Monday
+John Mahler
+Tony Sorensen
++ Invite
+Bob Bagheart
+Andrea Mendez
+Search contact
+E-mail a friend link
+Add to group
+Set a day
+Add from phone contacts
+Connect
+Find who among your phone contacts is on Resbite or invite others to join
+or share a friend link
+Resbite
+Don't worry, we won't automatically send any invitation or message to your contacts. 
+Only the ones you pick up will receive an invitation.
+MondayApril the 28th
+3:13PM
+Meeting point:28 Mulberry Court road
+Wokingham
+ie: "In front of The Courtyard cafe"
+Add a note:
+Imogen, Rabia + 7 others
+Monday, april the 28th
+3:13PM
+28 Mulberry Court road
+Wokingham
+Recycle resbite
+You canceled  this resbite. 
+12
+Find place
+Set by address
+B) Registration
+ALL
+Why a photo of my face?
+Let's create a
+great profile
+picture
+Ok
+Yo are 80% more likely to be added to friend's and family's resbites if you can be easily identified with a clear and up-to-date profile photo of your face. 
+You will be able to enjoy resbites more relevant to your location
+Let's start with your phone number
+My code is
+What's your e-mail address?
+Where is your home location?
+Where is your work location?
+Keep the cities being searched within the country indicated on the left only, reducing the overall complexity of the search algorithm
+Question for Rabia:What about pre-populating both fields (country and city) with IP geolocation? It might be less accurate, but you don't need user permission for it
+Rabia's suggestion:
+we could have a checkbox in here.
+By continuing with the process you accept the Terms of Service and Privacy Policy
+Resbite suggestions, advice about staying healthy and Resbite news.
+Skip for now
+The user can reposition the picture to fit the face in the face shape.
+REGISTRATION PROCESS COMPLETE
+is there an account already active for this phone number ?
+US 122
+
+The user can log-in typing access credentials.Step 122.D
+US 220
+
+As a user that has changed the phone number, I can recover my Resbite account with my e-mail addressStep 220 .A
+Boost your experience 
+By granting access to your location you will enjoy better resbites suggestions
+Boost your experience 
+By granting access to your location you will enjoy better resbites suggestions and you'll find friends near you.
+Select your country code
+countries where the app is  available should appear first.
+Already have an account? Log in
++44
+Enter phone number
+Send verification code
+Verify through a phone call
+code sent to: +54 224 564 748
+I would like to receive e-mails regarding:
+Important account information and 
+invitations from another Resbite friends
+Enter e-mail
+Enter city
+US050
+
+As a user that has just got signed-in I want to invite contacts to use Resbite
+It would be good to explain to the user why this information is required, indicating what benefits would the user have with this.
+ie: "Resbites will be better tailored for you with this information"
+US 122
+
+The user can log-in typing access credentials
+This text should explain why it is useful for the user to provide this information
+Set work location as well
+Yo are more likely to be invited to resbites if you can be easily identified with a clear photo of your face.
+US 122
+
+The user can log-in typing access credentials.Step 122.A
+What's your full name?
+First name
+Last name
+Don't need to show this if this checkbox was already checked in the previous screen.
+Resbites are memorable experiences to share with others
+ B.1  -  REGISTRATION, LOG-IN
+OR RECOVERY DISTRIBUTOR
+ B.2.1  -  REGISTRATION PHONE
+ B.2.2  -  REGISTRATION PHONE 2
+ B.3  -  REGISTRATION PHONE CODE
+ B.4  -  REGISTRATION NAME
+ B.5  -  REGISTRATION EMAIL
+ B.5.1  -  REGISTRATION PROFILE
+ B.5.2  -  REGISTRATION PROFILE 2
+ B.5.3  -  REGISTRATION PROFILE 3
+ B.5.5  -  REGISTRATION PROFILE 5
+ B.5.4  -  REGISTRATION PROFILE CAMERA ROLL
+ B.5.6  -  REGISTRATION PROFILE MODAL EXPLANATION
+ B.6  -  REGISTRATION HOME LOCATION
+ B.7  -  REGISTRATION WORK LOCATION
+ B.8  -  REGISTRATION WORK LOCATION
+Meeting point (address or place)
+Saved
+Work
+Canary Wharf
+Home
+Recent
+address
+find
+Vauxhall Joe's bar
+Tottenham Court Station
+Any suggestion before meeting your companions for this resbite?
+Share it with the group
+In front of The Courtyard cafe
+Note:
+READ MORE
+Mental health gurus
+Sarah Mc Alastair
+Mental heath expert, Mind, Bristol
+David Hine
+CEO, Nature for life
+Wellness experts
+Guru stories
+Watch and listen to experts in wellness, mental health, fitness and other related topics 
+My resbites
+Settings
+Profile
+Discover
+Imogen Adams                              admin
+36 Factory LaneIlkeston, DE7 8HQ
+Save location
+Name of this place
+Change the place
+How was the
+Cooking Veggie event?
+How did you feel after it?
+relieved from stress
+greatful
+self-confident
+more focused
+more relaxed
+none of the above
+energized
+calm
+happier
+healthier
+Comments:
+Totten
+Totterloo Gardens
+Tottenham Court Road
+You're doing great! The experience could be better if you go on completing your profile
+Connections
+Favorite places
+GO PREMIUM
+invite others
+Resbites get better with others
+Groups
+Maria
+VERIFY YOUR E-MAIL ADDRESS?
+Imogen, Rabia + 8 others
+Fishing buddies
+Imogen, Rabia + 3 others
+Household
+Search contact or group
+2
+10
+LAST MONTH
+28 apr - 3:13pm
+Maria is inviting you
+to Chess Game
+28 Mulberry Court road
+Done
+Upcoming
+Favs
++ Connect
+Your phone contacts
+Done!
+Already in resbite
+Invite to resbite
+C.3 - INVITE OTHERS TO USE APP
+Option 2
+Invite friends to join you and reconnect to what matters while getting together.
+Find who among your phone contacts is on Resbiteand invite others to join
+C.1 - INVITE OTHERS TO USE APP
+Option 2
+C) Receiving an invitation to use the app
+Resbiters in your contacts
+US 082
+
+As a user, I can choose a resbite to do
+FRIENDS INVITED
+Maria is inviting you to share resbites. Download Resbite app and check it out.
+https://appstore.com/resbite
+The invitee receives a notification through SMS
+The user searches among phone contacts
+The invited user downloads the app and launches it, and ges through registration process.
+MY RESBITES
+PROFILE
+Connection request
++ Add
+Dismiss
+When the user has only one connection request the possibility to dismiss the invitation or Add as a friend is shown in the notifications screen.
+
+When there is more than one connection request the notification screen shows this as a single notification: 
+
+
+
+
+Tapping on this notification the user can manage these connection requests in another screen.
+4 new connection requests 
+Thomas Perthson + 3 others
+pending
+USER 1
+USER 2
+Join Resbite today
+Join me on resbite
+Cancel
+example: invitation
+received in whatsapp
+Resbites are memorable experiences to share with others. Click here and add me as a buddy:
+Join me on resbite
+resbite.app
+E-mail
+Whatsapp
+C.2 - INVITE OTHERS TO USE APP
+Option 2
+Notes:
+Contacts can only be imported from phone contacts, 
+not from social networks.
+The invitee receives a notification in-app and through other media according to the user settings
+C.4 - INVITE OTHERS TO USE APP
+Option 2
+Fishing weekend
+Star gazing
+Near your work
+Featured resbite
+Fishing
+weekend
+Karaoke
+30 minutes coffee
+Otdoors
+Family
+Friends
+Couple
+Adventure
+Games
+Meals & Drinks
+Suggested for you
+Walk in the park
+see more
+Walk through old underground city tunnels
+Walking 3 parks
+challenge
+Walking lady 
+museum visit
+Walking on ice
+Walking around the lake
+Tabs
+Resbites
+Walk
+Filters:
+2 hours
+nov 17, mon
+nov 18, tue
+O) Guru stories
+F.5 - RESBITE DETAIL
+According to others :
+reduces stress
+connects to nature
+relieves body tension
+Tips :
+30 mins
+Let's do this
+Guru story of the day
+more suggestions
+more guru stories
+F.1 - DISCOVER (RESBITES LIST)
+      
+Pulling the rod
+Our guide Martin Dilhood shares his fishing stories
+Our guide Sarah Mc Alastair shares his fishing stories
+Sarah is an expert in wellness, mental health, fitness and other related topics people talking about resbites, testimonials etc… 
+
+More like this
+Brian Towers
+Wellness expert, London
+Videos of experts in wellness, mental health, fitness and other related topics people talking about resbites, testimonials etc… 
+
+Testimonials
+Sarah is an expert in wellness, mental health, fitness and other related topics people talking about resbites, testimonials etc… 
+
+Lorem ipsum, or lipsum as it is sometimes known, is dummy text used in laying out print, graphic or web designs. 
+
+The passage is attributed to an unknown typesetter in the 15th century who is thought to have scrambled parts of Cicero’s De Finibus Bonorum et Malorum for use in a type specimen book.
+
+READ Less
+
+Join Sarah on the Fishing weekend resbite
+    Guru stories
+    Hosted resbites
+    Weather checker
+    Photo collection
+    Flexible invitations
+view more
+O.2 - GO PREMIUM - feature-oriented
+O.3 - GO PREMIUM - General Details
+Try free and subscribe
+Enjoy experts guidance with
+Resbite Premium
+Take it to the next level with
+Resbite Premium
+first 14 days free
+£30 Annual (£2,5/month)
+first 7 days free
+£5 monthly
+Premium details
+Premium features are fully explained in here. The content in this screen is not oriented to any specific premium feature
+Go Premium
+Content could be premium-feature-oriented in this screen (ie: Headspace), or just a list of all the features that premium users enjoy.
+lock icon 
+Premium features appear with this icon for non premium users.
+weather forecast
+Sunny with some clouds eventually
+23°C
+Done! send invitations
+17 Nov  -  26 Nov
+Monday  -  Wednesday
+3:13PM
+monday
+February the 10th
+22
+15°C  /  23°C
+°C
+Along the day
+10         11         12         13         14         15         16
+17°        18°       20°       22°        22°        21°        21°
+resbite time
+At your resbite time
+At resbite time
+N.1) Weather forecast - while setting up a resbite
+N.2) Weather forecast - upcoming resbite overview
+Multi day 
+Weather forecast
+K.4 - RESBITE SET-UP  -  SCHEDULE
+Resend invitations
+I won't be attending
+cancel resbite
+UPCOMING RESBITE OVERVIEW
+UPCOMING RESBITE OVERVIEW
+(good weather)
+RESBITE WEATHER FORECAST
+Setting up a resbite - premium user
+Premium user
+Free-account  user
+Hourly forecast
+
+Swiping to the side the user can see the weather forecast hour by hour for the resbite day.
+
+The hour that appears in the center of the screen should be the hour when the resbite starts
+Lucas Proust apologies for not being able to attend: "Would love to but can't that day"
+Charly Fourbolough apologies for not being able to attend: "Would love to but can't that day"
+Imogen Adams apologies for not being able to attend: "Would love to but can't that day"
+Imogen Adams is now a new admin for this resbite
+Maria Ruiz: Seems it will rain during the resbite
+The weather icon is specific for the weather conditions that day.
+Weather forecast
+This type of warning appears when there is bad weather for the upcoming resbite. 
+
+On the other hand, as long as weather is fine for the rebite day and time, the following content will take place in here. It will link to the weather forecast in the same way.
+Let the others know
+Share it in the resbite chat
+UPCOMING RESBITE OVERVIEW
+(bad weather)
+rainy weather during resbite
+check the weather forecast
+Be forecast aware for your resbite day
+N.22 - GO PREMIUM 
+weather feature-oriented
+Be weather awared with
+Resbite Premium
+see details
+Set as admin
+Remove from resbite
+Resend invitation
+Meet your guide fo this resbite: Summit Rhadish
+resbite name
+see stats
+Eton Ballroom
+Mon, 18 Apr
+3PM
+Tue, 19 Apr
+3 PM
+Similar resbites :
+increases hapinnes
+reduces anxiety
+reduces insomnia
+walking
+walking outdoors
+walking afternoon
+Tags
+P) Hosted resbites
+O.1 - HOSTED RESBITE DETAIL
+theatre play
+UPCOMING RESBITE
+(resbite admin view)
+Your ticket
+two-days ticket
+type: general entry
+£40
+By tickets
+starting at
+Glastnbury Weekend
+Buy a ticket
+This is a hosted resbite and 
+you will need a ticket to be allowed in it
+Weather forecast for this resbite
+Ticket warning
+When the user hasn't bought a ticket yet this warning will appear.
+
+Warnings about the resbite should always appear on top.
+Glastonbury
+weekend
+ENjoy hosted resbites with
+Resbite Premium
+Theatre play
+Setting up a hosted resbite
+Filters
+Now you just need to buy the tickets before the resbite
+Everything set up
+F3 - RESBITES LIST FILTERS
+30 min
+whole day
+2 days
+2 days +
+1 h
+2 h
+2 h +
+1,5 hours
+Anywhere
+Near work
+Saved place 1
+Saved place 2
+Place
+Duration
+Daytime
+Morning
+Evening
+Afternoon
+Moment
+Sports
+Food & Drinks
+Arts
+Categories
+Workmates
+Companion
+Leisure
+See 144 results
+reset filters
+More tags
+Cooking
+Spring
+Place / Moment  filters
+These filters are only shown to premium-account users
+23         24        25        26
+17         18         19        20         21        22    
+Nov 17
+Contact us
+Topic 2
+Topic 4
+Topic 1
+Topic 3
+Help
+FAQ
+Support
+You quitted this resbite
+Shall we transfer the ownership of this resbite to someone else?
+Yes, transfer ownership
+No, and cancel the resbite
+Francis Matzkin
+johndoe@aol.com
+Phone number
+44 234 222 394
+Account
+Verify your e-mail to protect your account
+Dark mode
+Notifications
+Privacy
+Privacy policy
+and Terms of Service
+Delete account
+Sign Out
+v3.11.2
+Rate us in App Store
+Sure you want to delete the "Fishing buddies" group?
+Yes, delete group
+No one will be
+notified about this.
+Peter Wells
+John McCunningham
+Amber Lager
+Sophie Lee
+Robert Murdoc
+Anne McMillan
+Martin Garrix
+Marlene Pablov
+Search
+Delete  group
+E) Account recovery
+Update your e-mail address, type it again
+Account recovery
+We'll send you a link so that you can quickly recover your account
+If an account for example@example.com exists, we've already sent a recovery link.
+In case you haven't received the link:
+Send link
+button should be disabled by default, and enabled once the user has entered a valid value in the input.
+By not promising the user that an email will be sent and not disclosing whether the email/username even exists in the database, we :1) encourage them to double check their credentials (in case they don’t get the link) and 2) prevent phishing attacks.
+The user receives an e-mail with a text that says "Log in to your account" and provides a LOG-IN button and an alternative link to copy and paste on browser.
+See Tinder example screenshot on ClubHouse US 220
+LOG IN button clicked by the user
+Let's verify your
+phone number
+ E.1  -  ACCOUNT RECOVERY EMAIL
+ E.2  -  ACCOUNT RECOVERY CONFIRMATION
+ E.3  -  ACCOUNT RECOVERY PHONE NUMBER VERIFICATION
+Invite group
+E-mail me invitations from another resbiteers
+Turn phone notifications off during this resbite
+Send me invitations from other resbiteers through SMS
+Remind me before an upcoming resbite starts
+Notify me when resbiteers  decline my invitations
+App notifications 
+Invitations
+Connection requests
+Sure you want to cancel
+this resbite?
+Yes, cancel resbite
+Remove from group
+Block Martin Garrix
+Maria is inviting you to this Costumes Party
+22 mins
+4 h
+1 d
+3 d
+6 d
+2 w
+Rabia is inviting you to Star Gazing
+Rabia has changed the meeting point for Camping
+Stephen has accepted your invitation for Camping
+16 new messages on the Camping resbite
+Lucas has removed you from the Fishing Weekend event
+cinema
+City tunnels
+Recently searched
+Uni
+Add  a group
+Tagged as "walking outdoors"
+Dismiss as admin
+mon, nov 17
+wed, nov 26
+How did you feel after this? 
+Providing feedback helps us
+tailor your experience.
+or search near somewhere else
+nearby fishing spots
+Address
+36 Factory Lane
+36 Factory LaneHuddersfield, HD3 4LY
+36 Factory LaneWidnes, WA8 9FW
+Set place by address
+Upps, sorry, no results for your search
+D) Log in
+D.1  -  LOGIN PHONE
+D.2  -  LOGIN PHONE
+D.3  -  LOGIN EMAIL
+122.C
+122.D
+The country code should be pre-set by geolocation.
+US 050
+
+As a user that has just got signed-in I want to invite contacts to use Resbite
+should be disabled by default, and enabled once the user has entered a valid value in the input.
+USER IS LOGGED IN
+Has the user indicated an e-mail address for this account before?
+US 037
+
+The user can register on RB using phone number
+Screen 037.C
+Has it been too long since the user invited friends to join the app for the last time ?
+Silence group chat
+Search in the conversation
+Group administrator
+Emoji
+Add members
+Any children at home?
+Add them here and bring the whole family on board with parental control security
+Household is a special group, dedicated to those living under the same roof
+Sure you want to remove Noel from this event?
+Yes
+We'll need to notify Noel about this.
+Paul Rosendal
+Mary Garth
+Danny De Vito
+Phillip Featherston
+Sumit Radish
+Gunter Weber
+This resbite was cancelled
+H) Before the resbite
+Note:
+"Resend invitations" button appears only if there is a modification on the resbite.
+Only the resbite admins can see it.
+If nothing has changed since the invitees received the last invitation, the button should not appear visible.
+Admins
+Every resbite member who is also an admin should have that indicated in this way.
+There can be multiple admins for a single resbite.
+Emoji
+It is possible to change the emoji, but not the title of the chat since it matches the resbite name
+Search in the chat
+Dragging down the screen the search bar appears from behind the top bar.
+UPCOMING RESBITE
+(invitee view)
+General screen notes:
+- There is no "resend invitations" button.
+- Settings cannot be changed
+- There is a card that encourages the invitee to use the chat in order to suggest modifications.
+SETTING UP A NEW ADMIN BEFORE QUITTING
+(resbite owner view)
+List of invitees
+- The user can scroll through the list and pick up only one.
+- Invitees that have already declined the invitation are excluded from here.
+The button is enabled only once the user has selected someone in the list
+CANCELLED RESBITE DETAIL
+(former resbite owner view)
+Only the invitees that have accepted the invitation will be notified about this.
+The resbite 
+has been cancelled
+You quitted
+the resbite
+Set another admin if you wish the rest of the invitees to go on with this resbite
+Set new admin and quit
+or cancel the resbite completely
+UPCOMING RESBITE
+(resbite owner view)
+Cancelling or Quitting a resbite
+The rest of the invitees 
+will be able to go on with it
+
+This resbite will continue with the rest of the invitees if you set up a new admin.
+You can go back and choose "I won't be attending" if you want the rest of the invitees to go on with it.
+Is there another admin for this resbite?
+Maria has assigned you as the admin of the resbite Fishing Weekend
+US 256
+
+As a guest I can be notified that I have been turned into a resbite admin.
+QUITTED RESBITE DETAIL
+(former resbite owner view)
+You quitted this resbite. 
+The ownership was assigned to Francis Matzkin
+Cancelled resbite:
+a) No invitee will be abe to go on with this resbite.
+b) Invitees that confirmed will receive a notification about this.
+c) Invitees that haven't confirmed won't receive a notification and will stop seeing this invitation on MY RESBITES screen.
+d) This resbite is now part of the DONE resbites for everyone.
+Quitted resbite:
+a) Invitees that haven't confirmed assistance won't receive a notification and will stop seeing this invitation on MY RESBITES screen.
+
+b) For the original resbite admin, this resbite is now part of the DONE resbites.
+
+c) The new resbite admin can now see the resbite details screen not as an invitee anymore, but as the previous admin could.
+DISCOVER
+screen
+Resbite Photobook 
+Choose the pics and every one on the resbite receives the printed book.
+Closed chat
+Resbite chats are closed once the resbite is finished.
+Choose yours
+Photo poll
+Vote
+per copy
+£8
+After the photo poll has finished you can pay your copy and have it shipped to you.
+M) Photo Collection
+How did you feel after this? 
+Providing feedback helps us 
+tailor your experience
+Plain, not actionable data
+Difference between the Details screen of an upcoming resbite and resbite details screen of a resbite that has already finished is that in here (already done one) the location, invitees and date are not details that resbite owner can change.
+DONE RESBITE DETAIL
+(resbite owner view)
+PHOTO COLLECTION
+PHOTO COLLECTION - single photo
+iOS camera roll selection
+Delete
+Shared resbite pictures
+Maria, Stephen and Imogen have shared pictures
+The chat will be closed in 3 days
+Would you leave some final words?
+Maria Ruiz has just uploaded some photos of the resbite.
+The chat icon should appear on every screen that is under the specific resbite hierarchy, even when the chat has already been closed.
+Progress bar
+Shows the progress done while uploading photos from the phone
+Name of the person that shared the photo
+38 photos
+select
+2/49 photos uploaded
+save
+share
+share
+in chat
+CHOOSING A RESBITE
+SEARCH A RESBITE
+RESBITE DETAIL WITH DATE AND PLACE
+MY RESBITES: LISTS
+SETTINGS
+NOTIFICATIONS
+MY RESBITES: Upcoming resbite overview (resbite owner view)
+MY RESBITES: UPCOMING RESBITE (invitee view)
+Rate
+This card is only available if the user hasn't provided feedback bfore.
+Do you want
+to sync with iCal ?
+Never miss a resbite
+Not now
+Has the user denied permission to sync with iCal or Google Calendar before?
+has the invitee set a preference to receive invitations through SMS or e-mail?
+If the user has already added a resbite to calendar this checkbox should be already checked.
+The same should happen if the user has set all resbites to be saved in calendar from Settings screen.
+
+If the user is on Android we should not include iCal checkbox
+
+If the user chooses YES then request permission to access the calendar through system dialog
+Suggested
+US 
+
+As a user I can receive the
+invitation to do a resbite
+The invitee receives a notification through e-mail and app notification
+The invitee only receives an app notification
+Does this resbite have a specific place and time?
+To the invitee it appears as sent from resbite owner e-mail address. Would look much more personalized like this.
+
+Removing an invitee from the list
+The removed invitee only receives a notification if he/she confirmed the assistance before.
+Range date-picker:a) https://material.io/components/date-pickers#specs
+See "mobile range picker" there
+
+b) https://v4-0-0-alpha-12.material-ui-pickers.dev/demo/daterangepicker
+The user can scroll down to see upcoming months, or up to see previous months.
+While scrolling down the contacts list, the button block on the bottom could hide sliding down, and the top bar hide on top so that the user can concentrate on the list better. 
+
+When the user stops scrolling those blocks could slide into the screen again.
+NOTE:
+When a tag is used to filter results, or when a filter is applied, the results listed are not organized by categories anymore.
+Groups appear listes in the first place
+"Send invitations" should be replaced by "Resend invitations" if the user has previously sent invitations.
+
+There should be a limit for the times a resbite owner can send invitations.
+RESBITE DETAIL
+DONE RESBITE CHAT
+After the resbite
+Button becomes active once the user chose at least a friend and at least a resbite.
+List of friends invited to this resbite, regardless they accepted the invitation or not.
+Group details screen
+The tapped row should have an "active mode" style
+Reference:https://www.royalmail.com/find-a-postcode
+RANDOMIZE RESBITES
+Receiving an invitation to use the app
+Onboarding slideshow
+SPLASH SCREEN
+Registration
+PROFILE PIC
+Before the resbite
+Setting up a resbite
+Choosing a resbite
+ 
+Note:Search results are shown not only with text, but with an image as well. This can also be seen in apps like YouTube.
+Note:Search results are shown only with text,.This can also be seen in apps like Spotify .
+"Recently searched" content disappears only when the user has started typing search content.
+The cross only appears once the user has started typing on the field and when tapped it clears the text in the field and loads the "recently searched" content on the body of the screen.
+Tags
+
+Swiping to the side the user can see more tags
+
+
+The tags shown could be chosen on the ground of data analysis and insights. Outdoors tag could for example, be shown in the first position of the row during the summer.
+Randomizer
+Each time this icon is excecuted, the resbites list are populated with different resbites.
+When scrolling down, the search+filter bar gets fixed when it reaches the top. It stays fixed on top together with the top bar.
+
+In this way, the search and filters are available always in the screen.
+F.2 - RANDOMIZE RESBITES
+F7 - RESBITES LIST FILTERS
+F8 - CATEGORY LIST
+F10 - SEARCH
+F11 - SEARCH RESULTS
+USER TYPING
+F12 - SEARCH RESULTS
+RESBITES
+F13 - SEARCH RESULTS
+FILTERS APPLIED
+F9 - TAG LIST
+F14 - SEARCH RESULTS
+TAGS
+(a couple o days before the resbite)Is the weather going to be bad during the upcomming resbite resbite?
+It seems it might rain during the Fishing Weekend resbite accosring to the weather forecast
+US 256
+
+As a user I can be warned through a notification that the weather is going to be bad during an upcoming resbite.
+E-mail me warnings about the weather not going to be good during the resbite
+Notify me when the weather is not going to be fine during a resbite
+Weather
+Manage weather notifications
+Both screens show content that the user wouldn't be able to see if he/she hadn't gone premium
+MY RESBITES: UPCOMING RESBITE
+(invitee view)
+DISCOVER
+invitation sent
+Pending
+Or should the user arrive to a HOME screen with more diverse content?
+MARIA
+In case the previous step is incomplete, the indicator should show that
+9:41
+Only day and starting time should be mandatory this screen  in order to continue
+Skip
+US083
+
+As a user, I can see the details of a chosen resbite
+Skip this for now
+Active Challenge:
+In case there's a challenge ongoing a card like this appears in firs place.
+A card for every ongoing challenge.
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen
+BALANCE
+ACHIEVE
+This text could be some text like:1) explaining benefits of making balance.
+
+2) motivating the user to make balance, mentioning what this user is being great at and what could be done to make balance.
+Share a friend link
+The sender should be clear for the user, like in the following example from "OBC Bank":
+Nice to have:
+showing some empathy with a sentence under the title saying smth like "Don’t worry, happens to the best of us."
+P2
+HOVERED
+Focused
+pressed
+dragged
+disabled
+Enabled
+H3
+H2

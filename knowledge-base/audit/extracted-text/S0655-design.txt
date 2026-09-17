@@ -1,0 +1,531 @@
+Featured resbite
+PART OF YOUR CHALLENGE
+Choosing a resbite
+Receiving an invitation to join resbite
+Setting up a resbite
+DISCOVER (RESBITES LIST)
+ONGOING RESBITE
+USER FEEDBACK
+FIND NEW RESBITE FOR GROUP
+RESBITES SEARCH
+US 197
+
+As a user, I can search a resbite
+US 062
+
+As a user that just picked up a resbite, I want to invite others to join.
+30 MINS
+SPORTS
+OUTDOORS
+Details
+Shall we set a new
+resbite forthis team?
+resbite name
+45:00
+12:30
+Suggest resbite
+Maybe later
+Rule of Six
+Ok
+During covid-19 social distancing rules only the first 6 to accept the invitation will be admitted in the resbite.
+Sure you want to quit?
+Stay on this resbite
+You will need to set up this resbite again if you want to do it later.
+is the user inviting more than 6 people ?
+Imogen Adams
+Maria Ruiz
+Rabia Nuzha
+List of friends invited to this resbite, regardless they accepted the invitation or not.
+Button becomes active once the user chose at least a friend and at least a resbite.
+SUGGESTED FOR THIS TEAM
+Quit
+There is no need to notify a user that has not accepted the invitation when the resbite owner turns the invitation down.
+ALL
+RESBITE DETAIL
+US 
+
+As a user I can share a resbite with a resbite friend through resbite chat
+Before the resbite
+Profile
+Notifications
+Settings
+After the resbite
+Doing a resbite
+According to others :
+reduces stress
+connects to nature
+relieves body tension
+see stats
+Meet your guide fo this resbite: Summit Rhadish
+Tips :
+30 mins
+Let's do this
+Eton Ballroom
+Mon, 18 Apr
+3PM
+Does this resbite have a specific place and time?
+Tue, 19 Apr
+3 PM
+Invite
+Schedule
+Place it
+Stephen Gray
+Noel Gallagher
+Tony Sorensen
++ Invite
+Bob Bagheart
+Search contact
+Continue
+While scrolling down the contacts list the buttons block on the bottom could hide sliding down, and the top bar hide on top so that the user can concentrate on the list better. 
+
+When the user stops scrolling those blocks could slide into the screen again.
+Meeting point (address or place)
+Saved
+Recent
+Work
+Canary Wharf
+Home
+Finishes
+-
+Starts
+3:13    PM
+Totten
+Totterloo Gardens
+Tottenham Court Road
+Tottenham Court Station
+Is there a pre-set (by system) location for this resbite?
+Done! send invitations
+MondayApril the 28th
+3:13PM
+Meeting point:28 Mulberry Court road
+Wokingham
+Send invitation later
+Imogen, Rabia, Maria ...
+10
+ie: "In front of The Courtyard cafe"
+Add a note:
+US 
+
+As a user I can receive the
+invitation to do a resbite
+2
+LAST MONTH
+28 apr - 3:13pm
+Maria is inviting you
+to Chess Game
+28 Mulberry Court road
+12
+Monday, april the 28th
+3:13PM
+28 Mulberry Court road
+Wokingham
+Repeat resbite
+10 invitees
+How did you feel after this? 
+Provide feedback helps us tailor your experience with resbites.
+Plain, not actionable data
+Difference between the Details screen of an upcoming resbite and resbite details screen of a resbite that has already finished is that in here (already done one) the location, invitees and date are not details that resbite owner can change.
+Rate
+This card is only available if the user hasn't provided feedback bfore.
+Rabia
+Stephen
+Martin
+Imogen
+Tony
+DONE RESBITE DETAIL
+(resbite owner view)
+REPEATING RESBITE
+Selecting Invitees
+DONE RESBITES LIST
+Resend invitations
+This button appears only if there is a modification on the resbite.
+Only the resbite owner can see it.
+If nothing has changed since the invitees received the last invitation, the button should not appear visible.
+Removing an invitee from the list
+The removed invitee only receives a notification if he/she confirmed the assistance before.
+Sure you want to remove Maria from this event?
+Yes
+We'll need to notify Maria about this.
+No
+US 241
+
+As a guest that has acepted an invitation to do a resbite, I can be notified that the resbite owner has removed me from the resbite
+UPCOMING RESBITE
+(resbite owner view)
+UPCOMING RESBITE
+(invitee view)
+Any suggestion before meeting your companions for this resbite?
+Share it with the group
+General screen notes:
+- There is no "resend invitations" button.
+- Settings cannot be changed
+- There is a card that encourages the invitee to use the chat in order to suggest modifications.
+Resbites list
+How was the
+Cooking Veggie event?
+How did you feel after it?
+relieved from stress
+greatful
+self-confident
+more focused
+more relaxed
+none of the above
+energized
+calm
+happier
+healthier
+Comments:
+Done
+Upcoming
+Favs
+MY RESBITES
+PROFILE
++ Add
+Dismiss
+Paul Rosendal
+Mary Garth
+Danny De Vito
+Phillip Featherston
+Sumit Radish
+Gunter Weber
+Connection requests
+Maria is inviting you to this resbite.
+Check it out.
+22 mins
+4 h
+1 d
+3 d
+6 d
+2 w
+Rabia is inviting you to this resbite.
+Check it out.
+Rabia has changed the meeting point for Camping
+Stephen has accepted your invitation for Camping
+16 new messages on the camping group
+Lucas has removed you from the Fishing Weekend event
+4 new connection requests 
+Thomas Perthson + 3 others
+E-mail
+johndoe@aol.com
+Phone number
+44 234 222 394
+Account
+Verify your e-mail to protect your account
+Dark mode
+Privacy
+Help
+Privacy policy
+and Terms of Service
+Delete account
+Sign Out
+E-mail me invitations from another resbiteers
+Turn phone notifications off during this resbite
+Send me invitations from other resbiteers through SMS
+Remind me before an upcoming resbite starts
+Notify me when resbiteers  decline my invitations
+App notifications 
+Resbites
+Invitations
+Onboarding slideshow
+Log in
+Account recovery
+Registration
+Resbites are memorable experiences to share with others
+Invite friends to join you and reconnect to what matters while getting together.
+Add from phone contacts
+Find who among your phone contacts is on Resbite or invite others to join
+E-mail a friend link
+Join Resbite today
+Resbiters in your contacts
+Resbite
+Don't worry, we won't automatically send any invitation or message to your contacts. 
+Only the ones you pick up will receive an invitation.
+John Mahler
+Andrea Mendez
+From your phone contacts
+Invitation sent
+pending
+US 082
+
+As a user, I can choose a resbite to do
+FRIENDS INVITED
+Done!
+Join me on resbite
+Maria is inviting you to share resbites. Download Resbite app and check it out.
+https://appstore.com/resbite
+The invitee receives a notification through SMS
+The user searches among phone contacts
+The invited user downloads the app and launches it, and ges through registration process.
+Connection request
+When the user has only one connection request the possibility to dismiss the invitation or Add as a friend is shown in the notifications screen.
+
+When there is more than one connection request the notification screen shows this as a single notification: 
+
+
+
+
+Tapping on this notification the user can manage these connection requests in another screen.
+USER 1
+USER 2
+SPLASH SCREEN
+SLIDE 1
+SLIDE 2
+SLIDE 3
+SLIDE 4
+US 037
+
+The user can REGISTER on
+Resbite using phone number
+Appears once the user has gone through all the slides and stays active even if the user goes back to the first slide.
+swipe left
+Feature 1
+Feature 2
+INDICATING CODE 037.B
+E-MAIL ADDRESS 037.D
+NAME  037.C
+PROFILE PIC
+LOCATION
+Why a photo of my face?
+Let's create a
+great profile
+picture
+Yo are 80% more likely to be added to friend's and family's resbites if you can be easily identified with a clear and up-to-date profile photo of your face. 
+You will be able to enjoy resbites more relevant to your location
+Let's start with your phone number
+My code is
+What's your e-mail address?
+What's your name?
+Where is your home location?
+Where is your work location?
+Keep the cities being searched within the country indicated on the left only, reducing the overall complexity of the search algorithm
+Question for Rabia:What about pre-populating both fields (country and city) with IP geolocation? It might be less accurate, but you don't need user permission for it
+Skip for now
+CAMERA ROLL
+Rabia's suggestion:
+we could have a checkbox in here.
+By continuing with the process you accept the Terms of Service and Privacy Policy
+Resbite suggestions, advice about staying healthy and Resbite news.
+The user can reposition the picture to fit the face in the face shape.
+REGISTRATION PROCESS COMPLETE
+is there an account already active for this phone number ?
+US 122
+
+The user can log-in typing access credentials.Step 122.D
+Trouble signing in?
+Create a new account
+US 220
+
+As a user that has changed the phone number, I can recover my Resbite account with my e-mail addressStep 220 .A
+Boost your experience 
+By granting access to your location you will enjoy better resbites suggestions
+Boost your experience 
+By granting access to your location you will enjoy better resbites suggestions and you'll find friends near you.
+Select your country code
+countries where the app is  available should appear first.
+Already have an account? Log in
++44
+Enter phone number
+Send verification code
+Verify through a phone call
+code sent to: +54 224 564 748
+I would like to receive e-mails regarding:
+Important account information and 
+invitations from another Resbite friends
+Enter e-mail
+Name
+Surname
+Enter city
+US050
+
+As a user that has just got signed-in I want to invite contacts to use Resbite
+It would be good to explain to the user why this information is required, indicating what benefits would the user have with this.
+ie: "Resbites will be better tailored for you with this information"
+US 122
+
+The user can log-in typing access credentials
+This text should explain why it is useful for the user to provide this information
+Set work location as well
+Yo are more likely to be invited to resbites if you can be easily identified with a clear photo of your face.
+US 122
+
+The user can log-in typing access credentials.Step 122.A
+Update your e-mail address, type it again
+We'll send you a link so that you can quickly recover your account
+If an account for example@example.com exists, we've already sent a recovery link.
+In case you haven't received the link:
+Send link
+button should be disabled by default, and enabled once the user has entered a valid value in the input.
+By not promising the user that an email will be sent and not disclosing whether the email/username even exists in the database, we :1) encourage them to double check their credentials (in case they don’t get the link) and 2) prevent phishing attacks.
+REGISTRATION, LOG-IN
+OR RECOVERY DISTRIBUTOR
+The user receives an e-mail with a text that says "Log in to your account" and provides a LOG-IN button and an alternative link to copy and paste on browser.
+See Tinder example screenshot on ClubHouse US 220
+LOG IN button clicked by the user
+Let's verify your
+phone number
+You're doing great! The experience could be better if you go on completing your profile
+Buddies
+GO PREMIUM
+invite others
+Resbites get better with others
+Chats
+Maria
+VERIFY YOUR E-MAIL ADDRESS?
+Fishing weekend
+Household
+Add  a group
+Groups
+Your buddies
+When the user starts using the app, "Household" is a group that's already created although it doesn't have contacts added to it.
+Search buddie
+Send message
+Disconnect
+Disconnect and block
+Quit group
+Silence group chats
+Search in the conversation
+Group administrator
+Emoji
+Add member
+Sun
+Peter: do you guys think it'll rain when we get there?
+Group members
+Francis Matzkin
+Peter Wells
+John McCunningham
+Amber Lager
+Sophie Lee
+Robert Murdoc
+Anne McMillan
+Martin Garrix
+Marlene Pablov
+Search
+Group name
+This group was created when the resbite owner finished setting up the "Fishing weekend" resbite, so the group was automatically named after that corresponding resbite. 
+
+However, the group administrator (by default the resbite owner) can modify the name of the group. All the users involved in this resbite can add this group. 
+more than 7 members?
+When the group has more than 7 members, these appear listed in another screen, and in the group details screen there is ony this row that links to that listing screen.
+All the group members can add an emoji to the group name. Only one emoji can be displayed at the same time.
+The icon in this access to the chat is not the group emoji, it is always a chat icon, no matter what the group emoji is.
+All the group members can add/modify an emoji to the group name. Only one emoji can be displayed at the same time.
+Thomas Perthson + 11 others
+Remove from group
+Block Martin Garrix
+Fishing weekend
+Peter: do you guys think it'll rain when we get there?
+20:30
+Mon
+9th Nov
+2th Nov
+Household
+Peter: do you guys think it'll rain when we get there?
+Pictionary night
+Peter: do you guys think it'll rain when we get there?
+Veggie gangsters
+Anna: Shall I bring that Indian curry we used the last time we cooked together?
+Ping pong
+Peter: do you guys think it'll rain when we get there?
+Volleyball at the beach
+Peter: do you guys think it'll rain when we get there?
+Group name
+Members
+The chat name matches the group name.
+Then a user is removed from a group, this user won't be included among the invitees if the resbite is repeated.
+Quit chat
+Silence group chat
+Add members
+Any children at home?
+Add them here and bring the whole family on board with parental control security
+Household is a special group, dedicated to those living under the same roof
+Add to group
+Has the user provided permission to access phone contacts before?
+INDICATING CODE 122.B
+122.C
+122.D
+E-MAIL ADDRESS
+The country code should be pre-set by geolocation.
+Sign in
+US 050
+
+As a user that has just got signed-in I want to invite contacts to use Resbite
+should be disabled by default, and enabled once the user has entered a valid value in the input.
+USER IS LOGGED IN
+Has the user indicated an e-mail address for this account before?
+US 037
+
+The user can register on RB using phone number
+Screen 037.C
+Has it been too long since the user invited friends to join the app for the last time ?
+Search contact or group
+Where's the meeting point?
+Address or place name
+Boost your experience 
+Grant access to your location to enjoy better resbites suggestions and to find friends near you.
+Sync with iCal
+and never miss a resbite
+CHOOSING A RESBITE
+RESBITE DETAIL WITH DATE AND PLACE
+SHARING A RESBITE
+MY RESBITES: LISTS
+SETTINGS
+NOTIFICATIONS
+MY RESBITES: ALREADY DONE RESBITE DETAILS
+MY RESBITES: UPCOMING RESBITE (resbite owner view)
+MY RESBITES: UPCOMING RESBITE
+(invitee view)
+Do you want
+to sync with iCal ?
+Never miss a resbite
+Not now
+Has the user denied permission to sync with iCal or Google Calendar before?
+has the invitee set a preference to receive invitations through SMS or e-mail?
+If the user has already added a resbite to calendar this checkbox should be already checked.
+The same should happen if the user has set all resbites to be saved in calendar from Settings screen.
+
+If the user is on Android we should not include iCal checkbox
+
+If the user chooses YES then request permission to access the calendar through system dialog
+Suggested
+The invitee receives a notification through e-mail and app notification
+The invitee only receives an app notification
+To the invitee it appears as sent from resbite owner e-mail address. Would look much more personalized like this.
+
+"Send invitations" should be replaced by "Resend invitations" if the user has previously sent invitations.
+
+There should be a limit for the times a resbite owner can send invitations.
+DISCOVER
+MARIA
+Or should the user arrive to a HOME screen with more diverse content?
+In case the previous step is incomplete, the indicator should show that
+9:41
+Only day should be mandatory this screen  in order to continue
+Skip
+US083
+
+As a user, I can see the details of a chosen resbite
+Skip this for now
+Active Challenge:
+In case there's a challenge ongoing a card like this appears in firs place.
+A card for every ongoing challenge.
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen
+BALANCE
+ACHIEVE
+This text could be some text like:1) explaining benefits of making balance.
+
+2) motivating the user to make balance, mentioning what this user is being great at and what could be done to make balance.
+Share a friend link
+The sender should be clear for the user, like in the following example from "OBC Bank":
+Nice to have:
+showing some empathy with a sentence under the title saying smth like "Don’t worry, happens to the best of us."

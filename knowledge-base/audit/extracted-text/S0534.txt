@@ -1,0 +1,61 @@
+US002
+
+The user can register on RB with e-mail address
+The user shouldn't be stopped from accessing the account just because the e-mail is unverified.
+
+
+
+
+ US001                                                                                                                                                                                                                                 US016
+                                                                                                                                                                                                               USER IS
+ The user opens the app                                                                                                                                                                                      REGISTERED                The user receives a "welcome
+ on first-run                                                                                                                                                                                                                          to RB" e-mail after verifying e-
+                                                                                                                                                                                                                                       mail address.
+
+                                                                                                                                                   US018
+
+
+                                 US003                                                                                                             The user can easily create a
+                                                                                                                                                   password to continue with the
+                                 The user can register on RB                                                                                       registration process
+      START                      using phone number
+   REGISTRATION                                                                                                                                                                             Does additional data                      provide feedback to the user
+                                                                                                                                                                                              pass validation?                        indicating how to fix it
+
+
+                                                                                                            Does the user verify
+                                                                                                          e-mail address or leaves
+                                                                                                          the verification for later
+                                                                                                         and continues on the app?
+ request the user to provide                                      send verification e-mail to
+                                                                  provided e-mail address                                                             request the user to                                  request the user to
+ e-mail address. Provide the
+                                                                  reminding the user the                                                              create a strong                                      provide minimum required
+ possibility to register with                                                                                                  will verify later
+                                                                  address to which the e-mail                                                         password.                                            additional info.
+ phone number
+                                       user prefers to            has been sent
+                                     register with phone
+                                                                                                     user tries to verify e-mail address
+                                           number?
+
+
+
+
+                                                                                                          On the verification e-mail,                               did verification link
+                                                                                                          the user taps on the "verify                                e-mail expire?
+                                                                       send new verification              e-mail address" link/button
+                                                                      e-mail to same account
+
+
+
+
+                                                                                                                                                   let the user know it expired
+                                provide new                                                                                                        and offer to re-send
+                                e-mail address                                                                                                     verification e-mail or to
+                                                                                                                                                   indicate e-mail address again.
+                                                                    user wants to have a new
+                                                               verification e-mail sent to same e-
+                                                               mail account or provide new e-mail
+                                                                             address?
+

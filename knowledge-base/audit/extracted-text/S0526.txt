@@ -1,0 +1,52 @@
+E27 - User wants to start using the app for the first time once downloaded
+
+US029
+
+The user opens the app on first-run
+and passes the slideshow
+The user opens the app for the first time and goes through the features slideshow.
+
+
+
+
+    SPLASH                                      1st-run features slideshow
+    SCREEN                                      slide 1
+
+
+
+
+                                                                 swipe left
+
+
+
+
+                                                   slideshow: slide 2
+
+
+
+                                                                 swipe left
+
+
+
+
+                                                   slideshow: slide 3
+
+
+
+                                                                 swipe left
+
+
+                                                   slideshow: slide 4
+
+
+
+                                                         swipe left
+
+
+                                              US037
+Terms and abbreviations
+                                              The user can REGISTER on
+RB: Resbite                                   Resbite using phone number
+first-run experience: the first interaction
+that the user has with the app.
+

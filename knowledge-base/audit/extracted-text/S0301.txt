@@ -1,0 +1,33 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2513
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww10800\viewh8400\viewkind0
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 tag box\
+No like - zoom in to button on screen \
+line 0 in yoga pose\
+\
+pink tint on boys arm - \
+take out flash on cafe\
+hand on girl\
+lamp on ceiling  - looks suspended\
+circle of light on girl\
+girl - shadow\
+girl reflection, mirror\
+\
+Time warp asset\
+\
+1. All scenes - Pink tint on some highlights?\
+2. Family - Dad, remove line in arm \
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural\partightenfactor0
+\cf0 3. Family - Daughter, shadow on face looks odd (wrong way up? Looks like stubble!) should be same as other characters \
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural\partightenfactor0
+\cf0 4. Cafe - Make a highlight round girls face when flashes - a light circle, to light up face\
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural\partightenfactor0
+\cf0 5. Cafe - Girl is not holding phone, hand looks behind phone\
+6. Cafe - Lamp layer is wrong around 15:00, it appears over top of girl \
+4. Bedroom - Make a highlight round girls face when flashes - a light circle, to light up face\
+\pard\tx566\tx1133\tx1700\tx2267\tx2834\tx3401\tx3968\tx4535\tx5102\tx5669\tx6236\tx6803\pardirnatural\partightenfactor0
+\cf0 7. Bedroom - Girl to have reflection in mirror (nice to have, not priority)}

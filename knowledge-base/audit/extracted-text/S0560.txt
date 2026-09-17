@@ -1,0 +1,50 @@
+E79- Choosing a resbite
+
+US109
+
+As a user that is doing a resbite,
+I can check the progress of it
+
+                                                                                                                      remove resbite
+                                                                  Include names of                                   friends from this   update resbite
+                                                                  resbite friends doing                                   resbite?
+                                                                                                                                         mates list for this
+                                                                  this with user                                                         ongoing resbite
+
+
+
+
+ US083
+
+                                                    Is this resbite set to
+ As a user, I can see the details
+                                                   do with other resbite
+ of a chosen resbite so that I                             friends?
+ can do it alone
+
+
+
+
+          ONGOING                               Provide:
+           RESBITE                              1) resbite name                                                                                       pause progress
+                                                2) animated progress indicator                                                                        indicator and timmer
+                                                3) timmer                                                                                             until the user plays it
+                                                                                                   User pauses the                                    again
+                                                                                                      resbite?
+
+
+
+
+                                                                                 User quits this ongoing
+                                    Resbite finishes when the
+                                                                                 resbite
+                                    set duration for it is over
+
+
+
+
+                                    E26
+
+                                    Providing feedback about a
+                                    just finished resbite
+

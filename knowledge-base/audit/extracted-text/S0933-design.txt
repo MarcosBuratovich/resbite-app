@@ -1,0 +1,135 @@
+E27 - As a user that has just downloaded the app I want to start using it for the first time
+USs involved: 037, 181
+
+Registration process
+PROVIDING PHONE NUMBER 037.A
+REGISTRATION, LOG-IN
+OR RECOVERY DISTRIBUTOR
+COUNTRY SELECTION
+US 165
+
+As a user that is trying to
+register, I can receive a phone
+call in order to verify my
+phone number
+ALL
+The button should appear disabled until the user inserts the verification code completely.
+
+User can do this in two ways:
+1) Typing the code.
+2.a) iOS: An API listens from the verification code on the SMS and it places it as either predictive text (as in Tinders case). The user can tap this predictive text to complete the code field. 
+2.b) Android: The user should be able to copy the code from the SMS notification
+Source:https://medium.com/better-experience-design/better-experience-3-one-time-password-8891f1700b44
+INDICATING CODE 037.B
+E-MAIL ADDRESS 037.D
+NAME  037.C
+GENDER
+LOCATION
+Rabia's suggestion:
+we could have a checkbox in here.
+Let's start with your phone number
+By continuing with the process you accept the Terms of Service and Privacy Policy
+Already have an account? Log in
++44
+Enter phone number
+Send verification code
+My code is
+Verify through a phone call
+code sent to: +54 224 564 748
+What's your e-mail address?
+What's your name?
+I would like to receive e-mails regarding:
+Important account information and 
+invitations from another Resbite friends
+Resbite suggestions, advice about staying healthy and Resbite news.
+Skip for now
+Enter e-mail
+Name
+Surname
+How do you identify
+your gender?
+Female
+Non binary
+I identify as:
+Prefer not to answer
+Male
+What's your postcode?
+What's your location?
+Reading, United Kingdom
+Note
+A) For every step, the "Continue" buttons should be disabled by default, and enabled once the user has entered a valid value in the input.
+
+B) If gender, location or e-mail address is not something necessary to obtain from the user from the beginning, it would be good to take it out from here and let the user complete it in the Profile later.
+
+C) Don’t navigate your users to Log In after verification because they are already registered.
+alternative version for user location
+Best practices to be gender inclusive :
+
+A) It's good to keep the verb "identify". It makes this step more user centric, since it makes reference to the gender the user identifies with, not to the gender assigned at birth or to the gender other people might assume.
+
+B) If I was told to delete one of these options I would leave out the option "I identify as:"
+
+C) ie: "Circle CI" (IT company) requires the gender in this way to users applying to open job positions:
+D) Inform users how their information will be used
+E) Include options upfront and together (avoid using "male/female/other"). It gives the impression that identities among "others" are less important or socially recognized.
+
+F) Let the user type "other" gender.
+
+G) Allow not to provide this information if it is not really necessary for Resbite user experience.
+US050
+
+As a user that has just got signed-in I want to invite contacts to use Resbite
+It would be good to explain to the user why this information is required, indicating what benefits would the user have with this.
+REGISTRATION PROCESS COMPLETE
+US 122
+
+The user can log-in typing access credentials
+is there an account already active for this phone number ?
+US 122
+
+The user can log-in typing access credentials.Step 122.D
+Trouble signing in?
+Log in
+Create a new account
+US 122
+
+The user can log-in typing access credentials.Step 122.A
+US 220
+
+As a user that has changed the phone number, I can recover my Resbite account with my e-mail addressStep 220 .A
+Have a B option
+with the city already suggested for the user.
+We could have a checkbox in here.
+The sender should be clear for the user, like in the following example from "OBC Bank":
+This text could be some text like:1) explaining benefits of making balance.
+
+2) motivating the user to make balance, mentioning what this user is being great at and what could be done to make balance.
+Continue
+Or should the user arrive to a HOME screen with more diverse content?
+reduces stress
+see stats
+9:41
+US083
+
+As a user, I can see the details of a chosen resbite so that I can do it alone
+Skip this for now
+Explain why it is useful for the user to provide this information. Smth like "Verifying your e-mail address will allow you to  invite other users to join you on resbites.".
+
+ie: Tinder says "Don't loose access to your account. Verify your e-mail". Resbite will also need e-mail address to help th user recover access to the account.
+
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen
+DISCOVER
+SETTINGS
+BALANCE
+ACHIEVE

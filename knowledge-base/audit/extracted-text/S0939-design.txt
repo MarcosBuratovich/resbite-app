@@ -1,0 +1,41 @@
+E28 - Challenges
+
+Choosing a resbite
+RESBITES 
+Details
+US083
+
+As a user, I can see the details of a chosen resbite so that I can do it alone
+DISCOVER
+MARIA
+ACHIEVE
+Featured resbite
+PART OF YOUR CHALLENGE
+E79
+
+The user chooses a resbite
+US132
+
+As a user that is opening the app for the first time, I can set an initial goal during the on-boarding experience
+badges / trophies not achieved yet :
+
+1) Available challenges ready to be taken.
+2) Swiping down the user can see "non revealed" challenges still not available that will be unlocked when the user makes more progress. Having a generic icon  with a lock on it could give that idea of "still locked" budge.
+
+Achieved:
+Skip this for now
+Active Challenge:
+In case there's a challenge ongoing a card like this appears in firs place.
+A card for every ongoing challenge.
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen

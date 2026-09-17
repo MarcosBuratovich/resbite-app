@@ -1,0 +1,73 @@
+E63 - Connecting to others in resbite
+USs involved: 050
+
+As a user that has just got signed-in I want to invite contacts to use Resbite
+ALL
+Note
+bla bla bla
+
+example: invitation
+received in whatsapp
+user sends invitation manually outside of the app.
+Resbites are memorable experiences to share with others
+Invite friends to join you and reconnect to what matters while getting together.
+Add from phone contacts
+Find who among your phone contacts is on Resbite or invite others to join
+Resbiters in your contacts
+Resbite
+Don't worry, we won't automatically send any invitation or message to your contacts. 
+Only the ones you pick up will receive an invitation.
+Maria Ruiz
+Stephen Gray
+Rabia Nuzha
+John Mahler
+Noel Gallagher
+Tony Sorensen
++ Invite
+Bob Bagheart
+Andrea Mendez
+Search contact
+Invitation sent
+INVITE FRIENDS
+PROVIDING PHONE NUMBER 037.A
+US 082
+
+As a user, I can choose a resbite to do
+FRIENDS INVITED
+Done!
+Share a friend link
++ Add
+Skip for now
+9:41
+The sender should be clear for the user, like in the following example from "OBC Bank":
+This text could be some text like:1) explaining benefits of making balance.
+
+2) motivating the user to make balance, mentioning what this user is being great at and what could be done to make balance.
+Continue
+Or should the user arrive to a HOME screen with more diverse content?
+reduces stress
+see stats
+US083
+
+As a user, I can see the details of a chosen resbite so that I can do it alone
+Skip this for now
+Explain why it is useful for the user to provide this information. Smth like "Verifying your e-mail address will allow you to  invite other users to join you on resbites.".
+
+ie: Tinder says "Don't loose access to your account. Verify your e-mail". Resbite will also need e-mail address to help th user recover access to the account.
+
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen
+DISCOVER
+SETTINGS
+BALANCE
+ACHIEVE

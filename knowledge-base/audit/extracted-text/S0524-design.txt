@@ -1,0 +1,26 @@
+
+As a logged-in user, I can log-out
+Go to Settings
+user LOGGS OUT
+USER
+PROFILE
+USER IS
+LOGGED OUT
+
+US119
+US122
+
+The user can log-in typing access credentials 
+text near the log out button indicates "logged in as useremail@example.com"
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen

@@ -1,0 +1,50 @@
+E58 - Not-logged-in user opens the app and needs to log-in (2nd-run)US088
+The user can reset the password to login
+User choosses
+a recovery link
+Clearly show the user the possibility to type an e-mail address and a CTA "email me a recovery link"
+SMS
+e-mail
+user chooses to recover pssword using email or SMS?`
+confirmation message: "If an account exists, an email with further instructions" is beeing sent.
+The user clicks the create new password button, or just copies and pastes the "magic link" in the browser.
+The user is taken to a browser windows where to create a new password.
+After this, log the user in right away, so there’s no need for the user to re-authenticate and enter credentials again. 
+By not promising the user that an email will be sent and not disclosing whether the email/username even exists in the database, we :1) encourage them to double check their credentials (in case they don’t get the link) and 2) prevent phishing attacks.
+Related UX reads: https://blog.prototypr.io/ux-guide-password-reset-user-flow-bfa35a16e527
+US140
+
+The user can reset the password through an SMS
+to login
+Password strengh meter shows the level of security to the user in real time..
+Do not allow the user to submit password
+The user types a password (only once).
+typed password complies with security rules?
+Request the user to comply with only two of these rules, making the password requirements clear at the same time:
+
+Password must contain numbers;
+Password must contain uppercase letters;
+Password must have at least one @#$ symbol;
+Length must be greater than 8 characters;
+Password should not contain strings;
+Password must not contain repetitions.
+example:
+Show password constraints upfront and update it in real time.
+example: Mailchimp
+
+NEW PASSWORD CREATED
+The user can hide/show the created password.
+Nice to have:
+showing some empathy with a sentence under the title saying smth like "Don’t worry, happens to the best of us."
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen

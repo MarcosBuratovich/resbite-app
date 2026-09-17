@@ -1,0 +1,43 @@
+register with email
+login with email
+warn user and request to check e-mail provided
+warn user and request to check credentials
+Selects SN contacts to whom invite to use RB
+Selects contacts to whom invite using RB
+Show the user the invitation message. Allow to modify it.
+Show "invitations sent" message and offer to invite people from the phone contacts 
+Show "invitations sent" message 
+register 
+using SN
+is user registered?
+Social 
+login?
+register with social login?
+e-mail verification success
+Do
+credentials pass
+validation?
+CONTINUE?
+Send
+invitation?
+user 
+provides access to phone contacts
+"skip this"
+"next step"
+"send"
+user 
+provides access to SN contacts?
+SPLASH
+SCREEN
+ACTIVITIES 
+(or RESBITES)
+Offer to invite people from the SN contacts 
+ABBREVIATIONS
+SN = Social Networks
+RB = Resbite
+The user is not logged in and browses the app.
+Once logged in, arrives to the "Resbites" (or activities)
+Launching the app
+Offer to invite people from the phone contacts 
+login success
+splash screen

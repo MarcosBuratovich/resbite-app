@@ -1,0 +1,58 @@
+E27 - User wants to start using the app for the first time once downloaded
+
+US034
+The user can register on RB with e-mail address
+The user shouldn't be stopped from accessing the account just because the e-mail is unverified.
+
+
+US037
+
+The user can register on RB using phone number 
+US047
+
+The user receives a "welcome to RB" e-mail after verifying e-mail address.
+US044
+
+The user can easily create a password to continue with the registration process
+send verification e-mail to provided e-mail address reminding the user the address to which the e-mail has been sent
+let the user know it expired and offer to re-send verification e-mail or to indicate e-mail address again.
+user prefers to register with phone number?
+Does the user verify 
+e-mail address or leaves the verification for later and continues on the app?
+Does additional data pass validation?
+request the user to provide e-mail address. Provide the possibility to register with phone number
+request the user to create a strong password.
+request the user to provide minimum required additional info.
+Provide the user an easy way to accept Terms of service and Privacy Policy.
+Required step in order to allow the user to go on.
+provide feedback to the user indicating how to fix it 
+START
+REGISTRATION
+USER IS
+REGISTERED
+ 
+On the verification e-mail, 
+the user taps on the "verify e-mail address" link/button
+did verification link
+e-mail expire?
+user wants to have a new verification e-mail sent to same e-mail account or provide new e-mail address?
+will verify later
+provide new
+e-mail address
+send new verification
+e-mail to same account
+user tries to verify e-mail address
+        
+  
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen

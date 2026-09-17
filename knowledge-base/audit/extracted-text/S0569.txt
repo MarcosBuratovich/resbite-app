@@ -1,0 +1,102 @@
+MVP flowchart
+                                                                                                                                                                                                                                                                                       User decides to do any of
+                                                                                                                                                                                                                               The user checks the                                       those resbites again?
+
+                                                                                                                                                                             The user checks general                           history of activities done
+                                                                                                                                                                             progress done - E28                               - US089
+
+
+
+
+                                                                                                                                                                                                                                                                                                                        checks stats
+
+
+
+
+       User opens
+        the app
+
+
+
+
+                 is the user already
+                 logged-in?
+
+
+
+
+                                                                          is there an account
+                                                                          already active for this
+                                                                                                                                                                                                                                                                          User provides
+                                                                          phone number ?                                                                                                                                                      practice a resbite                                                   receives feedback
+                                                                                                                                                                                                                                                                          feedback about
+                                                                                                                                                                                                                                              US109                       activity just done -                     of progress done
+                 Is it 1st run
+                 experience?                                                                                                                                                                                                                                              E26
+                                                                                                                                                          The user arrives   The user chooses a        The user chooses to invite
+                                           Log-in - E58
+                                                                                                                                                          at resbites list   resbite - E79             others (only up to 6 will
+                                                                                                                                                                                                       be allowed) - E61
+                                                                                       proceeds to log-in
+                                                                                                                                                                                                                                                                                                         goes back to Home or RB list
+
+
+                                                          proceeds to registration
+
+    1st run slideshow
+    - US029
+
+
+
+
+      Registration
+      US037                                                                                                                                                                                                                                        User connects
+                                                                                                                                                                                                                friends list                       to others in Resbite
+                                                                                                                                                                                                                                                   E63
+                                                                                                    Has it been too long since the
+                 is there an account                                                                                                                                         user checks
+                 already active for this                                                            user invited friends to join the
+                                                                                                    app for the last time ?                                                  profile
+                 phone number ?
+                                                                                                                                                                                                            Modifying personal
+                                                                                                                                                                                                            information
+                                                                                                                                                                                                            E137
+
+
+                                                                                                                                                                                                                                                   The user modifies
+                                                                                                                                       As a user that has just got                                                                                 app settings - E90
+                                                                                                                                       signed-in I want to invite
+                                                                                                                                       contacts to use Resbite -
+                                                                                                                                       US050                                                                                                       Log Out - US119
+                                                                                                                                                                                                                Settings
+
+
+
+                                                                                                                                                                                                                                                   app notifications
+provide additional                                                                                                                                                                                                                                 US121
+personal information
+- US181
+
+
+
+
+Indicate motivation to stay out
+of digital technology (set goal)
+- US188
+
+
+
+
+Offer to set an initial small
+goal - US132
+
+
+
+
+                                                                             Provide a user a WELCOME
+User sets the type of                                                        MESSAGE. smth like "here
+notifications to be received                                                 we go, you have just did a
+from the app - US192                                                         first step into a healthier life
+                                                                             full of resbites"
+                                                                             ie: Headspace on-boarding
+

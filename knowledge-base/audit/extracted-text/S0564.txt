@@ -1,0 +1,77 @@
+MVP flowchart
+                                                                                                                                                                                                User decides to do any of
+                                                                                                                                        The user checks the                                       those resbites again?
+
+                                                                            The user checks general                                     history of activities done
+                                                                            progress done - E28                                         - US089
+
+
+
+
+                                                                                                                                        The user checks the
+                                                                                                                                        goals achieved
+
+
+                                                                                                                                                                                                                                 checks stats
+
+
+                                                                                                                                        The user decides to
+                                                                                                                                        balance the progress done
+                                                                                                                                        different to the ones the
+                                                                                                                                        user has been doing - E55
+
+
+
+
+                                                Or should the
+                                                user arrive to
+          User opens                            a HOME screen
+           the app                              with more
+                                                diverse
+                                                content?
+                                                                                                                                                                                   User provides
+                                                                                                                                                       practice a resbite          feedback about                           receives feedback
+                                                                                                          Will the user                                US109                       activity just done -                     of progress done
+                                                                                                      invite others to join
+                                                                                                        on this resbite?                                                           E26
+is the user
+                                                         The user arrives   The user chooses a
+already                          Log-in - E58
+registered?                                              at resbites list   resbite - E79
+
+
+                                                                                                                                                      The user chooses to invite                                  goes back to Home or RB list
+                                                                                                                                                      others (only up to 6 will
+                                                                                                                                                      be allowed) - E61
+
+
+
+
+       Registration - E27
+
+
+
+
+                                                                                                                                                            User connects
+                                                                                                                         friends list                       to others in Resbite
+                                                                                                                                                            E63
+                                                                            user checks
+                                                                            profile
+                                                                                                                       user modifies
+                                                                                                                       personal data
+Note:
+Numbers indicate the specific epic.
+
+                                                                                                                                                            The user modifies
+                                                                                                                                                            app settings - E90
+
+
+
+                                                                                                                                                            Log Out - US119
+                                                                                                                         Settings
+
+
+
+                                                                                                                                                            app notifications
+                                                                                                                                                            US121
+

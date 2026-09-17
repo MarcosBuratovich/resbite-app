@@ -1,0 +1,91 @@
+
+### ppt/slides/slide1.xml
+
+### ppt/slides/slide10.xml
+This text should be 
+shorter, simpler, and more dynamic
+ to draw attention to Relate. If the user has reached this screen, it’s because they’ve already 
+explored enough on the homepage
+. We should jump right into the features
+### ppt/slides/slide11.xml
+his part should go at the end,
+ after 
+presenting the product.
+First, we showcase it, then
+ offer early access.
+### ppt/slides/slide12.xml
+This text should be 
+much shorter
+ since there’s an 
+explanatory video alongside it
+. Anything covered in the video should be omitted.
+The text should complement the video,
+ not the other way around.
+### ppt/slides/slide13.xml
+Should this be in the product section? I think it makes more sense in 
+investors
+,
+ as it’s 
+not part of the product 
+itself but rather its 
+development.
+Also, maybe we can talk about GU here?
+### ppt/slides/slide14.xml
+2025 
+maybe?
+### ppt/slides/slide15.xml
+This looks great. Maybe we could 
+reduce it 
+by one line of text and make it a bit smaller, 
+spread across
+ two rows. Right now, it looks quite large since there are
+ 9 features.
+### ppt/slides/slide16.xml
+There is a lot of text here.
+Also, It's hard to read because of the 
+colour.
+### ppt/slides/slide17.xml
+Research
+### ppt/slides/slide18.xml
+This text should be shorter
+### ppt/slides/slide19.xml
+This text should be shorter. 
+Colour
+ not helping as well.
+Does the partners email work?
+### ppt/slides/slide2.xml
+Colours
+While the branding is solid, the colors used lack good contrast at every level in terms of accessibility.
+The text is difficult to read, and this issue occurs multiple times throughout the website. The best option would be to edit the primary color.
+### ppt/slides/slide20.xml
+Jobs
+### ppt/slides/slide21.xml
+This one is really good, but can be shorter
+and straight to the point
+### ppt/slides/slide22.xml
+Is this updated?
+### ppt/slides/slide3.xml
+Copywritting
+Instead of saying races, we could use “
+ethnicities
+.” While the rest of the website is fine in terms of information, it would be better to review it with a copywriter and also update the tone slightly to make it more modern.
+### ppt/slides/slide4.xml
+Footer
+London or Stoke-on-Trent?
+Is contact 
+correct
+?
+Same with R&D Office
+### ppt/slides/slide5.xml
+Home
+### ppt/slides/slide6.xml
+Maybe here we can talk about Good Unicorn, 
+Creamos
+ 
+and 'Tech for good'
+### ppt/slides/slide7.xml
+Real Social Tech or Good Unicorn?
+### ppt/slides/slide8.xml
+Broken links, also we should use 'X' icon instead of Twitter
+### ppt/slides/slide9.xml
+Product

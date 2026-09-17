@@ -1,0 +1,64 @@
+E1 - User wants to start using the app for the first time once downloaded
+
+US018
+
+As a user I want to easily create a password
+to continue with the registration process
+
+
+
+
+ US002
+
+ The user can register on RB
+ with e-mail address
+
+
+
+
+                                        Offer the user a pre-set
+      "CREATE                           password already loaded on
+    PASSWORD"
+                                        the input
+     REQUEST
+
+
+
+
+                                       the pre-set password is visible
+                                       and the user can hide/show it.
+
+
+
+
+ US003
+                                 user prefers to                                                                     SUBMIT
+ The user can register on RB    type a password                                                                      CREATED
+ using phone number                in stead?                                                                        PASSWORD
+
+
+
+
+                                      The user types a password                                                                                Do not allow the user to
+                                                                         Password strengh meter
+                                      (only once).                                                                                             submit password
+                                                                         shows the level of security
+                                                                         to the user in real time..
+                                                                                                                typed password complies
+                                                                                                                   with security rules?
+
+
+
+
+                     example:                                                                                                             Show password constraints upfront and update it in real time.
+                                                                                                                                          example: Mailchimp
+
+                                                                                     use only two or these rules:
+
+                                                                                     Password must contain numbers;
+                                                                                     Password must contain uppercase letters;
+                                                                                     Password must have at least one @#$ symbol;
+                                                                                     Length must be greater than 8 characters;
+                                                                                     Password should not contain strings;
+                                                                                     Password must not contain repetitions.
+

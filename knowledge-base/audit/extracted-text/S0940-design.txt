@@ -1,0 +1,132 @@
+E79 - Choosing a resbite
+USs involved: 083, 197
+
+Choosing a resbite
+RESBITES 
+RESBITE DETAIL
+ONGOING RESBITE
+USER FEEDBACK
+ACHIEVEMENT
+FIND NEW RESBITE FOR GROUP
+RESBITES SEARCH
+Featured resbite
+US 197
+
+As a user, I can search a resbite
+US 062
+
+As a user that just picked up a resbite, I want to invite others to join.
+30 MINS
+SPORTS
+OUTDOORS
+ALL
+PART OF YOUR CHALLENGE
+Details
+ACHIEVE
+CHAT
+resbite name
+How do you feel
+after this resbite?
+Congratulations,
+you have won the
+challenge
+Shall we set a new
+resbite forthis team?
+A green week
+45:00
+12:30
+Set a date
+START RESBITE
+Turn phone notifications off during this resbite
+relieved from stress
+greatful
+self-confident
+more focused
+more relaxed
+none of the above
+energized
+calm
+happier
+healthier
+Check your progress
+Suggest resbite
+Create a poll
+Other :
+Maybe later
+According to others :
+reduces stress
+connects to nature
+relieves body tension
+see stats
+Challenges for this resbite.
+Meet your guide fo this resbite: Summit Rhadish
+Rabia
+Stephen
+Imogen
+Martin
+Tony Sorensen
+Rabia Nuzha
+Stephen Gray
+Imogen Adams
+Maria Ruiz
+- Remove
+Noel Gallagher
++ Invite
+Bob Bagheart
+Andrea Mendez
+invited friends
+Search contact
+Rule of Six
+Ok
+During covid-19 social distancing rules only the first 6 to accept the invitation will be admitted in the resbite.
+Sure you want to quit?
+Stay on this resbite
+You will be able to restart this resbite later anyway.
+is the user inviting more than 6 people ?
+2 confirmed
+12
+when a chat has already been sarted
+List of friends invited to this resbite, regardless they accepted the invitation or not.
+Button becomes active once the user chose at least a friend and at least a resbite.
+US 123
+
+As a user I can pick up
+another challenge
+SUGGESTED FOR THIS TEAM
+Quit
+You can invite others to this resbite
+Set this resbite for later
+8
+1
+4
+According to others, this resbite:
+Skip
+Done
+9:41
+US083
+
+As a user, I can see the details of a chosen resbite so that I can do it alone
+Skip this for now
+Active Challenge:
+In case there's a challenge ongoing a card like this appears in firs place.
+A card for every ongoing challenge.
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen
+DISCOVER
+SETTINGS
+BALANCE
++ Add
+Continue
+This text could be some text like:1) explaining benefits of making balance.
+
+2) motivating the user to make balance, mentioning what this user is being great at and what could be done to make balance.

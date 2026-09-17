@@ -1,0 +1,3713 @@
+{
+  "audit_date": "2026-09-17",
+  "original_files": 1070,
+  "unique_contents": 912,
+  "visual_survey": {
+    "method": "Contact sheets reviewed; raster assets, embedded AI PDF first pages, selected native previews and PDF pages. Does not certify every native artboard/layer.",
+    "rendered_items": 728,
+    "sources": [
+      {
+        "source_id": "S0002",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0003",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0004",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0005",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0006",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0007",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0042",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0043",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0044",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0045",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0046",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0047",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0048",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0049",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0050",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0051",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0052",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0053",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0054",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0055",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0056",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0057",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0060",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0061",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0062",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0063",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0064",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0065",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0094",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0095",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0096",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0097",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0098",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0102",
+        "pages_or_previews": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21
+        ]
+      },
+      {
+        "source_id": "S0103",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0104",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0105",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0106",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0107",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0108",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0109",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0110",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0111",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0112",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0113",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0114",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0115",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0116",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0117",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0118",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0119",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0128",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0129",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0131",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0132",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0133",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0134",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0135",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0136",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0137",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0138",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0139",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0140",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0141",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0142",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0143",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0144",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0145",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0146",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0147",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0148",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0149",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0150",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0151",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0152",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0153",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0154",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0155",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0156",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0157",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0158",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0159",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0160",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0161",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0162",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0163",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0164",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0165",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0166",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0167",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0168",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0169",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0170",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0171",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0172",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0173",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0174",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0190",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0191",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0192",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0193",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0194",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0195",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0196",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0197",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0198",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0199",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0200",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0201",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0202",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0203",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0204",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0205",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0206",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0208",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0209",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0210",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0211",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0213",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0215",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0216",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0217",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0218",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0219",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0220",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0221",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0222",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0223",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0224",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0225",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0226",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0227",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0228",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0229",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0230",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0231",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0232",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0233",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0234",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0235",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0236",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0237",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0238",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0239",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0240",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0241",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0242",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0243",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0244",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0245",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0246",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0247",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0248",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0249",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0250",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0251",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0252",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0253",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0254",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0255",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0256",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0257",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0258",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0259",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0260",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0261",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0262",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0263",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0264",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0265",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0266",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0267",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0268",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0269",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0270",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0272",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0273",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0274",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0275",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0276",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0277",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0278",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0279",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0280",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0281",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0282",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0283",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0284",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0285",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0286",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0287",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0288",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0289",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0320",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0321",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0325",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0326",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0327",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0328",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0329",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0331",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0332",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0333",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0335",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0336",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0337",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0338",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0339",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0340",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0341",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0342",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0343",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0344",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0345",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0346",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0347",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0348",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0349",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0350",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0351",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0352",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0353",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0354",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0355",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0356",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0357",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0358",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0359",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0360",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0361",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0362",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0363",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0364",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0365",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0366",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0367",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0368",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0369",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0370",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0371",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0373",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0374",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0375",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0376",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0377",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0378",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0379",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0380",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0381",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0382",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0383",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0384",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0385",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0386",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0387",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0388",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0389",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0390",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0391",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0392",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0393",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0394",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0395",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0396",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0397",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0398",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0399",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0400",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0401",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0402",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0403",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0404",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0405",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0406",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0407",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0408",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0409",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0410",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0412",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0413",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0414",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0415",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0416",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0417",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0418",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0419",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0420",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0421",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0422",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0423",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0424",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0425",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0426",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0427",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0428",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0429",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0430",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0431",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0432",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0433",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0434",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0435",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0436",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0437",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0438",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0439",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0440",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0441",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0442",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0443",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0444",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0445",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0446",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0447",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0449",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0450",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0451",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0452",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0453",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0454",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0455",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0456",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0457",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0459",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0460",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0461",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0462",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0463",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0464",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0465",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0466",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0468",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0469",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0470",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0471",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0472",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0473",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0474",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0475",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0476",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0477",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0478",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0479",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0499",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0500",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0501",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0502",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0503",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0504",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0505",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0506",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0507",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0508",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0509",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0510",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0511",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0512",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0513",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0514",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0515",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0516",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0517",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0518",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0520",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0521",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0522",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0523",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0524",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0571",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0576",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0577",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0578",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0579",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0580",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0581",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0582",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0583",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0584",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0585",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0586",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0587",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0588",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0589",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0590",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0591",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0592",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0593",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0594",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0595",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0596",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0597",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0598",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0599",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0600",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0601",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0602",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0603",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0604",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0605",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0606",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0607",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0608",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0609",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0610",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0611",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0612",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0613",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0614",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0616",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0617",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0618",
+        "pages_or_previews": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33,
+          34,
+          35,
+          36,
+          37,
+          38,
+          39,
+          40,
+          41,
+          42,
+          43,
+          44,
+          45,
+          46,
+          47,
+          48,
+          49,
+          50,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57,
+          58,
+          59,
+          60,
+          61,
+          62,
+          63,
+          64,
+          65,
+          66,
+          67,
+          68,
+          69,
+          70,
+          71,
+          72,
+          73,
+          74,
+          75,
+          76,
+          77,
+          78,
+          79,
+          80,
+          81,
+          82,
+          83,
+          84,
+          85
+        ]
+      },
+      {
+        "source_id": "S0619",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0628",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0629",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0630",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0631",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0632",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0633",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0634",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0635",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0636",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0637",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0638",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0639",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0640",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0641",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0642",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0643",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0644",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0645",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0646",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0647",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0648",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0649",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0650",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0651",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0652",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0653",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0655",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0656",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0657",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0658",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0660",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0661",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0662",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0663",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0664",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0665",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0666",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0667",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0668",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0669",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0672",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0677",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0684",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0689",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0717",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0718",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0719",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0720",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0721",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0722",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0723",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0724",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0725",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0731",
+        "pages_or_previews": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ]
+      },
+      {
+        "source_id": "S0732",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0733",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0743",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0744",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0752",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0753",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0757",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0767",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0778",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0801",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0805",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0806",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0807",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0809",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0812",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0814",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0815",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0816",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0817",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0818",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0819",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0820",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0822",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0823",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0826",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0828",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0830",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0831",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0832",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0833",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0834",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0835",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0837",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0838",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0840",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0845",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0849",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0850",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0851",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0852",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0853",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0854",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0855",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0856",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0857",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0858",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0859",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0860",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0861",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0864",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0865",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0866",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0867",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0868",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0869",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0870",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0871",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0872",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0873",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0876",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0877",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0878",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0879",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0880",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0881",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0885",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0886",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0893",
+        "pages_or_previews": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22
+        ]
+      },
+      {
+        "source_id": "S0907",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0908",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0909",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0911",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0914",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0915",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0916",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0917",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0918",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0921",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0922",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0923",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0924",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0925",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0926",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0929",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0932",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0933",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0934",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0936",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0937",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0938",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0939",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0940",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0941",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0942",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0943",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0944",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0945",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0954",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0955",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0956",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0957",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S0958",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S1063",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S1064",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S1067",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S1068",
+        "pages_or_previews": [
+          1
+        ]
+      },
+      {
+        "source_id": "S1069",
+        "pages_or_previews": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23
+        ]
+      }
+    ]
+  },
+  "video_frame_sampling": [
+    {
+      "id": "S0184",
+      "samples": 5,
+      "duration": 117.012
+    },
+    {
+      "id": "S0185",
+      "samples": 5,
+      "duration": 117.012
+    },
+    {
+      "id": "S0290",
+      "samples": 5,
+      "duration": 117.0
+    },
+    {
+      "id": "S0291",
+      "samples": 5,
+      "duration": 117.0
+    },
+    {
+      "id": "S0292",
+      "samples": 5,
+      "duration": 23.266667
+    },
+    {
+      "id": "S0293",
+      "samples": 5,
+      "duration": 46.2
+    },
+    {
+      "id": "S0294",
+      "samples": 5,
+      "duration": 76.436
+    },
+    {
+      "id": "S0295",
+      "samples": 5,
+      "duration": 46.2
+    },
+    {
+      "id": "S0296",
+      "samples": 5,
+      "duration": 22.484
+    },
+    {
+      "id": "S0297",
+      "samples": 5,
+      "duration": 39.764
+    },
+    {
+      "id": "S0298",
+      "samples": 5,
+      "duration": 117.0
+    },
+    {
+      "id": "S0299",
+      "samples": 5,
+      "duration": 117.0
+    },
+    {
+      "id": "S0300",
+      "samples": 5,
+      "duration": 19.5
+    },
+    {
+      "id": "S0481",
+      "samples": 5,
+      "duration": 129.166667
+    },
+    {
+      "id": "S0482",
+      "samples": 5,
+      "duration": 130.833333
+    },
+    {
+      "id": "S0621",
+      "samples": 12,
+      "duration": 442.489138
+    },
+    {
+      "id": "S0622",
+      "samples": 12,
+      "duration": 299.502812
+    },
+    {
+      "id": "S0623",
+      "samples": 12,
+      "duration": 393.61195
+    },
+    {
+      "id": "S0624",
+      "samples": 12,
+      "duration": 85.416667
+    },
+    {
+      "id": "S0906",
+      "samples": 12,
+      "duration": 2716.08
+    }
+  ],
+  "limitations": [
+    "Audio not fully listened to or transcribed (including the 2020 briefing and nine WAV files).",
+    "S0890 is encrypted; slides unreadable.",
+    "INDD/AEP/PSD native editing and linked-project completeness not validated.",
+    "Text extraction and archive listing are not equivalent to semantic review of every item."
+  ],
+  "detailed_report": "../07-audit-report.md"
+}

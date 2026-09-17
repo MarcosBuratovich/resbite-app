@@ -1,0 +1,46 @@
+E27 - User wants to start using the app for the first time once downloadedUS044
+As a user I want to easily create a password
+to continue with the registration process
+US034
+
+The user can register on RB with e-mail address
+US037
+
+The user can register on RB using phone number 
+Offer the user a pre-set password already loaded on the input
+the pre-set password is visible and the user can hide/show it.
+Password strengh meter shows the level of security to the user in real time..
+Do not allow the user to submit password
+The user types a password (only once).
+user prefers to
+type a password
+in stead?
+typed password complies with security rules?
+Request the user to comply with only two of these rules, making the password requirements clear at the same time:
+
+Password must contain numbers;
+Password must contain uppercase letters;
+Password must have at least one @#$ symbol;
+Length must be greater than 8 characters;
+Password should not contain strings;
+Password must not contain repetitions.
+"CREATE PASSWORD"
+REQUEST
+SUBMIT CREATED
+PASSWORD
+ 
+example:
+Show password constraints upfront and update it in real time.
+example: Mailchimp
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen

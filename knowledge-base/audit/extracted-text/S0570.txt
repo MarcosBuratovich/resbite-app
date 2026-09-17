@@ -1,0 +1,83 @@
+MVP flowchart
+                                                                                                                                                                                                                                                                      User decides to do any of
+                                                                                                                                                                                                              The user checks the                                       those resbites again?
+
+                                                                                                                                                  The user checks general                                     history of activities done
+                                                                                                                                                  progress done - E28                                         - US089
+
+
+
+
+                                                                                                                                                                                                              The user checks the
+                                                                                                                                                                                                              goals achieved
+
+
+                                                                                                                                                                                                                                                                                                       checks stats
+
+
+                                                                                                                                                                                                              The user decides to
+                                                                                                                                                                                                              balance the progress done
+                                                                                                                                                                                                              different to the ones the
+                                                                                                                                                                                                              user has been doing - E55
+
+
+
+
+           User opens
+            the app
+
+
+
+
+                                                                                                                                                                                                                                                         User provides
+                                                                                                                                                                                                                             practice a resbite          feedback about                           receives feedback
+                                                                                                                                                                                Will the user                                US109                       activity just done -                     of progress done
+                                                  is the user already                  The user prefers                                                                     invite others to join
+Is it 1st run                                     logged-in?                           to register or                                                                         on this resbite?                                                           E26
+                                                                                       logs-in?
+experience?
+                                                                        Log-in - E58                                           The user arrives   The user chooses a
+                                                                                                                               at resbites list   resbite - E79
+                                                                                                          proceeds to log-in
+
+                                                                                                                                                                                                                            The user chooses to invite                                  goes back to Home or RB list
+                                                                                                                                                                                                                            others (only up to 6 will
+                                                                                                                                                                                                                            be allowed) - E61
+                                                                                        proceeds to register
+       1st run slideshow
+       - US029
+
+
+
+
+         Registration                                                                                                                                                                                                             User connects
+         US037                                                                                                                                                                                 friends list                       to others in Resbite
+                                                                                                                                                                                                                                  E63
+                                                                                                                                                  user checks
+                   does the user continue with registration                                                                                       profile
+                   or is the user already registered and                                                                                                                                   Modifying personal
+                   prefers to login in stead?                                                                                                                                              information
+                                                                                                                                                                                           E137
+                                prefers to log-in
+
+
+                                                                                                                                                                                                                                  The user modifies
+    proceeds to register                                                                                                                                                                                                          app settings - E90
+
+
+
+        onboarding UI                                                                                                                                                                                                             Log Out - US119
+                                                                                                                                                                                               Settings
+        tour - US054
+
+
+
+                                                                                                                                                                                                                                  app notifications
+                                                                                                                                                                                                                                  US121
+
+
+
+
+Note:
+Numbers indicate the specific epic.
+

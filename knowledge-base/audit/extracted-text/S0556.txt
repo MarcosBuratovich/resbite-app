@@ -1,0 +1,45 @@
+not belonging to any epic so far
+
+US008
+
+The user that has just got signed-in
+wants to invite contacts to use Resbite
+
+                                                                  go back                         go back or finish
+                                                     (to select contacts from another                 inviting?
+                                                    source or to copy invitation mssg.)
+                                                                                                                                     feedback:           CONTACTS
+                                                                                                                            finish
+                                                                                                                                     "Invitation sent"    INVITED
+
+ US004
+
+ The user can log-in typing
+ access credentials
+                                                                                          Selects contacts to whom
+                                                                                          invite to use RB from a
+                                                                                          specific chosen source
+
+
+
+                                                                                                          Choose contacts
+         INVITING              Offer to invite people to the app (from the                                from a specific source
+         CONTACTS              SN contacts and from the phone contacts).
+           to RB               Invitation message. is visible.
+                                                                                                               select a contacts
+                               Additionally offer to copy invitation txt and
+                                                                                                                source or skip?
+                               link
+
+
+                                                                                                       skip
+
+
+ US002
+
+ The user can register on RB
+ using e-mail address                                                                     US009
+
+                                                                                          The signed-in user arrives at
+                                                                                          the Resbites list
+

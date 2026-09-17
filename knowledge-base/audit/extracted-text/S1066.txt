@@ -1,0 +1,63 @@
+User sends a personal sign-up link referrals
+
+PROS:                                                www.resbite.com/product.html
+                                                                                                                                                             www.resbite.com/product.html?4758593773                                                                      www.resbite.com/join?dh9Xdgg
+- Typeform sends the info to Google Sheets and
+we cannot take the info from there.
+- The user can invite through email or social
+networks (WhatsApp, IG, etc) and no SMS.
+- We don’t need to explain the referrals program
+inside a Typeform step.
+
+CONS:
+- The user can only invite at this stage unless we
+send an email.                                                                                                                                                           You are now registered as a founding member and
+- Without email automation, emails conﬁrming                                                                                                                             you’ll have early access to the app once we launch.
+the subscription need to be sent manually                                           Typeform submission redirects to
+                                                                                    URL that includes the person
+                                                                                    email or an identiﬁer                                                                       Become founding member
+
+
+
+                                                                                           Typeform plan should be paid in order to use this
+                                                                                           redirect feature.
+                                                                                           It’s mentioned here: https://support.referralhero.com/
+                                                                                                                                                                                Invite others to join and get more
+                                                                                           integrate/integrations/typeform                                                      beneﬁts                                                    Founding member shares link
+                                                                                                                                                                                                                                           through any media (social
+                                                                                                                                                                                                                                           networks, email, SMS).
+
+                                                                                                                                                                                                                                           The referral clicks on link.
+                                                                                                                                                                                Invite 2 refferals and get these rewards.
+
+
+
+                                                                                                                                                                                Invite 5 refferals and get these rewards.
+
+
+                                                                                                                                                                                Invite 8 refferals and get these rewards.
+
+
+
+
+                                                                                                   Referral link (Unique tracking URL) is generated
+                                                                                                                                                                         Use the code:                                                                                                              The referral link identiﬁer is sent
+                                                                                                   using the identiﬁer parameter of the browsed
+                                                                                                   URL and populated in the message.
+                                                                                                                                                                         www.resbite.com/join?dh9Xdgg                                                                                               to Google Sheets by Typeform
+                                                                                                                                                                                                                                                                                                    when the referral signs-up
+
+
+                                                                                                                                                                         (Award is given once the referral sings up to become a founding
+                                                                                                                                                                         member)
+
+
+
+
+                                                                                                                                            The new info is saved into
+                                                                                                                                                 Google Sheets
+                                                                                                                                                                                                                                                                                     Source
+
+                                                                                                                                                                                                                                                                                     123
+                                                                                                                                                                                                                                                                                                                      123
+

@@ -1,0 +1,266 @@
+
+### ppt/notesSlides/notesSlide1.xml
+Resbite is a real social network. It’s a mobile phone app that helps you to connect and socialize with the people you know in the real, physical world.
+### ppt/notesSlides/notesSlide10.xml
+5: 
+Review and confirm your resbite and you're done.
+All user-created 
+resbite's
+ are free to create.
+### ppt/notesSlides/notesSlide11.xml
+There are a number of features in the app that enhance the human experience. 
+Standard features include location suggestions, flexible invitations, groups, favourites and resbite chat. 
+Premium features include guru stories, weather checking, photo collections and COVID compliance.
+### ppt/notesSlides/notesSlide12.xml
+To access the premium features, you'll need a premium subscription.
+A subscription costs £6.99 a month or £39.99 a year
+Premium subscriptions will account for 100% of our revenue in the first version of the app but then reduce to 25
+% in 
+the second version.
+### ppt/notesSlides/notesSlide13.xml
+The second version of the app will include hosted resbites. This will make up the vast majority of our future revenues.
+Hosted resbites are pre-completed with an activity, time and place from a host, where all you need to do is add your friends and then purchase your ticket.
+Examples of a hosted resbite could be a national event such as Glastonbury or a hyper-local event such as a yoga class in a village hall.
+We would look to take a 15% commission of hosted resbite sales.
+### ppt/notesSlides/notesSlide14.xml
+The global COVID lockdowns have given us an opportunity to research the human health and wellbeing effects of the virtual vs the real. We partnered with Staffordshire university for this research.
+In the UK, the top 4 wants identified for people who had all their basic needs met were (1) to be outside, (2) to be reconnected to family and friends, (3) to take a holiday and (4) to take up a new hobby or interest. Our app caters for all of these things.
+A post COVID launch for us is perfect timing.
+### ppt/notesSlides/notesSlide15.xml
+The key team is made up of seasoned professionals, each averaging 20 years experience in their relevant field , either as part of a high-growth tech startup or with established big tech brands such as 
+Asos
+ and Expedia.
+### ppt/notesSlides/notesSlide16.xml
+We have already achieved a lot over the last year. We have completed the product creative, branding, UX and app design.
+We are currently working on a prototype and building a react native front-end, both which will be finished in the next couple of months.
+Post pre-seed funding, we are planning to complete the MVP for public testing in October and to launch the public beta before the 
+xmas
+ holidays.
+### ppt/notesSlides/notesSlide17.xml
+To continue development, we need a pre-seed investment of ½ million pounds from either an early-stage VC fund, angel investment or a mix of the two.
+### ppt/notesSlides/notesSlide18.xml
+For the full investors deck or for more information please visit our website 
+resbite.app
+Thank you
+---------
+This presentation is an abbreviated public version of the full Resbite investors deck and does not include:
+POSTIONING
+MARKET SIZE
+TARGET AUDIENCE
+DETAILED ROADMAP
+DETAILED FINANCIALS
+----------
+### ppt/notesSlides/notesSlide2.xml
+Good afternoon, I’m Stephen Gray, CEO of Resbite
+I’ve an entrepreneurial background having run my own companies in the digital space since leaving university.
+I’m now trying to create a platform that brings us together in the real world. Our mission is to be the go-to app for arranging real-world activities. Our vision for the future is to take on silicon valley’s big social tech firms with a UK based ethical alternative.
+We‘re hoping to create an app that is world changing. An app that re-unites family, friends and society. 
+### ppt/notesSlides/notesSlide3.xml
+So, the problem starts with…
+The ever-increasing use of devices to conduct our conversations and therefore the avoidance of human interaction and real-life experiences.
+Existing big social tech business models 
+need people to stay and interact with their platform to make more money which leads to addictive design.
+And any new innovations in social technology normally pulls people further away from reality which 
+is counter-intuitive to the very purpose of social. 
+Human to human relationships are either being replaced with human to tech relationships or having the tech placed in-between them. 
+### ppt/notesSlides/notesSlide4.xml
+At resbite...
+We encourage human-to-human connection and the removal of technology wherever possible.
+ 
+Resbite is a closed private network so there is no purpose for bots or fake profiles, no connections to trolling strangers, no way to compare the way you look with manipulated identities and no confidence harming features such as like buttons.
+We’re removing any addictive design which includes 
+unnecessary notifications, user tagging of photos or posts, virtual gamification and any non-stop scrolling.
+We enable better privacy by not running 
+ads, so are not dependent on detailed user data for revenue. 
+Overall, we believe that in order to make a sustainable business we need to align our business model with helping people. The happier and healthier our customers are, the more financially successful we’ll be.
+### ppt/notesSlides/notesSlide5.xml
+TO CREATE A RESBITE you..
+### ppt/notesSlides/notesSlide6.xml
+1: 
+Choose from more than 100 social activities with detailed descriptions of each one.
+### ppt/notesSlides/notesSlide7.xml
+2: 
+Choose when you want the activity to take place
+### ppt/notesSlides/notesSlide8.xml
+3: 
+Choose where you’d like the activity to take place
+### ppt/notesSlides/notesSlide9.xml
+4: 
+Choose the number of people you’d like to attend and then invite a shortlist of your connections.
+### ppt/slides/slide1.xml
+ 
+The real 
+social network
+Public  presentation (
+5 min
+) deck v5.0 
+| January 2021
+### ppt/slides/slide10.xml
+Discover activity ideas
+Choose a date
+Choose a place
+Invite connections
+Confirm your resbite
+To create a 
+resbite
+ you… 
+PRODUCT
+5
+### ppt/slides/slide11.xml
+Features
+Product
+6
+Location Suggestions
+Flexible Invitations
+Guru Stories
+Groups & 
+Favourites
+Resbite Chat
+Photo Collections
+COVID Compliance
+Weather Checker
+PRODUCT
+### ppt/slides/slide12.xml
+A premium subscription gives the user a set of premium features.
+£6.99 per month or £39.99 per year.
+To be implemented in v1.0
+Accounts for 100% of revenue in v1.0
+Premium
+subscription 
+BUSINESS MODEL
+7
+### ppt/slides/slide13.xml
+Hosted resbite’s are ones that have been pre-created from a host.
+A host charges for attendance (in-app) and we will take a 15%.
+To be implemented in v2.0
+Accounts for 75% of revenue in v2.0
+Hosted resbites
+BUSINESS MODEL
+8
+### ppt/slides/slide14.xml
+COVID lockdowns have presented a unique  opportunity to validate our business case.
+UK wants during lockdown:
+to be outside.
+time with family and friends.
+to take a holiday.
+pursue a hobby or interest.
+Opportunity
+MARKET
+9
+### ppt/slides/slide15.xml
+t
+TEAM
+Geoff Ainsworth
+CTO
+Key people
+Stephen Gray
+CEO
+Damian 
+Carvill
+COO
+Elena 
+Cerchia
+Lead Developer
+Kate Linder
+Head of Product
+Ian Morton
+Head of Comms
+10
+### ppt/slides/slide16.xml
+Completed
+Product creative, branding, website, explainer video, investor assets, UX and app design.
+In progress
+Prototype: Mar 21
+Front-end: Apr 21
+Back-end: Q3 21
+MVP public alpha: Q4 21
+v 1.0 public beta:  20 Dec 21
+Roadmap
+11
+### ppt/slides/slide17.xml
+We want to raise a pre-seed round of £500K made up of:
+To launch a public beta
+12
+Operating salaries
+£100K
+Marketing & research
+£50K
+Seed round 
+contingency
+£50K
+Legal & professional
+£25K
+Product development
+£150K
+Launch promotion
+£125K
+### ppt/slides/slide18.xml
+ 
+Thank you for your time!
+www.resbite.app
+### ppt/slides/slide2.xml
+Our Founder & CEO: Stephen Gray
+Our mission: to be the go-to app for arranging real-life activities.
+Our vision: to take on silicon valley’s social tech giants with a UK  based ethical alternative.
+Background 
+& purpose
+2
+### ppt/slides/slide3.xml
+3
+The problem…
+The overuse and misuse of tech is impacting our health and wellbeing.
+Existing big social tech business models are based on the attention economy.
+Innovation in social technology tends to pull people further away from reality.
+### ppt/slides/slide4.xml
+3
+The solution…
+4
+Design better tech to rebalance people’s experience with tech.
+Design for wellness.
+Remove addictive design.
+Design for privacy.
+Design for business sustainability.
+### ppt/slides/slide5.xml
+To create a 
+resbite
+ you… 
+PRODUCT
+5
+Explore a range of
+different art topics
+from charcoal drawing 
+to fine art .
+### ppt/slides/slide6.xml
+Discover activity ideas
+To create a 
+resbite
+ you… 
+PRODUCT
+5
+### ppt/slides/slide7.xml
+Discover activity ideas
+Choose a date
+To create a 
+resbite
+ you… 
+PRODUCT
+5
+### ppt/slides/slide8.xml
+Discover activity ideas
+Choose a date
+Choose a place
+To create a 
+resbite
+ you… 
+PRODUCT
+5
+### ppt/slides/slide9.xml
+Discover activity ideas
+Choose a date
+Choose a place
+Invite connections
+To create a 
+resbite
+ you… 
+PRODUCT
+5

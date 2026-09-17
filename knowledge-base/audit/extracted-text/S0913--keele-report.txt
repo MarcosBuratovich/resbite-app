@@ -1,0 +1,853 @@
+Keele University SMART Innovation Hub
+Research and Innovation Support Programme
+Company Report for
+Resbite
+March 2021
+Associate: Inga Partlova
+Academic Support: Dr Colin Rigby & Professor
+Nicola Edelstyn
+Research & Innovation Advisor: Emma Bonfiglio1
+Social media: Benefit vs harm
+Table of contents
+Introduction 2
+Social media use 3
+Social media and neuronal systems 5
+Social media addiction 7
+Social media and cell phone addiction 9
+Sociodemographic differences in cell phone dependency 10
+Social media use in dating 16
+Conclusion 20
+References 21
+Appendix 302
+Introduction
+Social media is a relatively inexpensive and readily available electronic resource that
+allows anyone to publish and access content and cooperate on a collective effort,
+becoming an essential part of modern culture, affecting all races, sexes, socioeconomic
+backgrounds, and people all over the world. It is becoming apparent that social
+networking websites have become an integral part of people’s lives. As a result, there is
+a need for people to adjust their lifestyles as emerging technologies evolve. These
+platforms have been a part of people’s daily lives, with many applications ranging from
+education to corporate contact, marketing, healthcare, and even dating.
+Social media is a form of web-based data communication where users may hold
+discussions, exchange information, and generate web material. Individually, allowing
+people to connect with our friends and families, learn new knowledge, cultivate our
+passions, and be entertained (Akram & Kumar, 2017). On a professional level, it can
+extend or deepen expertise in a specific field and develop a professional network by
+engaging with other professionals within the industry (Ji et al., 2010). Social media is a
+new concept with tremendous growth potential. Similarly, people no longer need to
+depend on the newspapers or television to get their regular news consumption; it can all
+be accessed on a social networking site (Bolier et al., 2013). As a result, studying all the
+possible dangers and advantages is critical because it will offer a well-rounded solution
+to improving our present position in an environment where social networking can cause
+harms such as addiction or cyberbullying.
+The objective of this study is to focus on literature from both small and large studies
+examining the harms and advantages of the online environment, to identify the line at
+which point casual social media use may become dangerous and to highlight possible
+avoidance techniques to enable the virtual world to become less harmful.
+Figure 1. Illustrating the aims and objectives of the report3
+Social media use
+In the 2006 Parents and Teens survey, a random sample of 935 participants
+demonstrated that 55% of youths used SNSs (social networking sites) in that year.
+Furthermore, they also investigated that 91% used social media to stay in touch with
+friends and 49% to make new friends (more common in boys than girls) (Lenhart &
+Madden, 2007). The most common activities on SNSs were reading, responding to
+comments (60%) and posting comments, links, responding to messages (14%), and
+browsing profiles (13%) (Pempek et al., 2009).
+In another study discussing how people interact with SNSs using psychophysiological
+measures (skin conductance and facial electromyography), media scanning (extracting
+material from profiles) was found to be more rewarding than social surfing (passive
+reading of news feeds) (Bolls et al., 2009). Consequently, the results indicate that goal-
+directed social seeking can activate the appetitive system rather than the aversive system
+due to a genetic defect in the addict’s neurochemical reward system (Uylings et al., 2000).
+According to the gratification hypothesis, media is seen as a goal-directed means of
+gratification and need fulfilment and is comparable to addiction. People with higher social
+identity (i.e., collective solidarity/conformity), altruism, and telepresence are more likely
+to use SNSs because they perceive support for social network participation (Kwon & Wen,
+2010). A survey of 170 university students found that social influences were more
+important motivators for SNS use than human factors (Kim et al., 2010).
+Another study found that collective self-esteem and group identification positively
+correlated with peer group communication via SNSs, suggesting that people being part
+of the same virtual realm, the support of group values, the preservation of interpersonal
+interconnectivity, and social change were some of the reasons for SNS usage (Cheung
+et al., 2011).
+The participating university student sample endorsed the following motivations:
+● To keep in contact with friends they do not often see. (81%)
+● To conform to other people/friends who have them be part of a group. (61%)
+● To keep in contact with relatives and family. (48%)
+● To make plans with friends they often see. (35%)
+Overall, it appears that the advantages of bridging social capital created by engagement
+in SNSs were especially beneficial for people with low self-esteem (Kujath, 2011).
+Furthermore, due to many possible low social links between participants, which are
+allowed by digital media’s structural features, SNSs are thought to increase a potential4
+networks’ size (Donath & Boyd, 2004). Specifically, maintaining social capital via
+participation in SNSs is more beneficial to students regarding potential employment
+opportunities and sustaining ties with old friends. Thus, one explanation why people with
+low self-esteem are attracted to using SNSs in a potentially excessive way is the ease of
+creating and retaining bridging social capital and, in combination with lower self-esteem,
+has been demonstrated to be related to Internet addiction (Armstrong et al., 2000).
+A study on SNS usage between different cultures (the USA vs Korea vs China) has
+demonstrated that using different Facebook functions was associated with creating and
+maintaining either bridging or bonding social capital. For example, people in the US used
+SNSs for communication, whereas Koreans and Chinese used SNSs for expert search
+(i.e., searching for professionals online) and ‘Connection’ (i.e., maintaining offline
+relationships) (Ji et al., 2010).
+A student survey study of 387 participants found the predictive factors were: playfulness
+(i.e., enjoyment and pleasure), the critical mass of the users who endorsed the
+technology, trust in the site, perceived ease of use, and perceived usefulness
+(Sledgianowski & Kulviwat, 2009).
+The studies contained small convenience samples, teenagers, or university students as
+participants, therefore severely limiting the generalisability of findings.
+Using the gratification theory demonstrates how popular social media is in today’s world
+and how social media as a whole is tailored to our social needs. It is especially important
+now to stay in touch online for the evolution of friendships, not just one-on-one friendships,
+but also as a group and for personal and business purposes worldwide. As a result, 81%
+of social media users use it to communicate with current friends they do not see very
+much. SNSs also provide introverted individuals with the opportunity for better self-
+expression.5
+Social media and neuronal systems
+According to the study by Meshi et al. (2015), social media serves as an online platform
+for meeting basic social needs via five critical strategies. These five behaviours: Users
+broadcasting information, receiving feedback, observing, providing feedback and
+engaging in social comparison, depend on three domains. The three domains are
+cognitive processing (mentalising), self-referential cognition, and social reward
+processing. According to the mentalising network, social media allows one to consider
+other people’s emotional states/motivations. The self-referential cognition network
+provides and embraces input expressing self-evaluation and social distinction. Finally, the
+incentive network implies that social media offers a consistent supply of social incentives
+and reinforcement in positive feedback or suggestions, resulting in credibility
+enhancement. Because of the minimalistic cue of social performance, both stimuli
+stimulate the reward system (Meshi et al., 2015).
+Social rewards activate a network of brain regions, including the ventromedial prefrontal
+cortex (VMPFC), the ventral striatum, and the ventral tegmental lobe (Fareri & Delgado,
+2014). This knowledge has been extended to practical values by connecting social media
+stimuli and brain activation regions to observe the social values people have outside of
+social media. Exchanging information with others stimulates the VMPFC and ventral
+striatum. Receiving positive social reinforcement (e.g., signals that people understand
+you, agree with you or like you) and providing others with the same social incentives (e.g.,
+offering a ‘like’) is a form of prosocial behaviour triggering the reward mechanism (such
+as donating to charity). Reading other people’s posts offers the same reward activity as
+acquiring information and is followed by activity in the ventral striatum. According to
+analysis, the ventral striatum also underpins social comparison, which suggests that
+behaviour in this area shows the comparison between one’s reward and that of another,
+which could suggest an explanation to the form of jealousy people experience whilst on
+social media (Fareri & Delgado, 2014).
+Social media’s main advantages are that it allows communication not constrained by
+spatial and temporal distance. However, people are likely to be deprived of social cues
+such as close interaction, e.g., seeing micro-expressions and feeling physical contact. It
+was observed that individuals with more extensive online social networks have a larger
+amygdala than individuals with smaller social networks, which suggests a physiological
+reason for the attraction of humans to the use of social media (Meshi et al., 2015).
+A study examining the relationship between online social media use and the neural
+processing of offline credibility benefits showed that the nucleus accumbent reaction to
+reputation enhancement predicted participants’ social media use intensity. These findings
+support these processes’ role in the sustainability of social networks and add to our6
+knowledge of the factors that influence social behaviour. More specifically, they
+demonstrate the feasibility of studying social neurocognitive processes using metrics
+created by social media use (Meshi et al., 2013).
+Collectively, these findings exhibit how social media is tailored and adapted to the human
+evolutionary urge to socialise, learn, and communicate with groups of people. Thus,
+neuropsychology data explains how people are programmed to communicate and how
+social media networks are designed to satisfy and even exceed those needs, providing
+the backbone to both potential harms research and social networks’ overall usefulness
+and functionality.7
+Social media addiction
+In recent years, with the development of information technology, especially the rapid
+spread of internet-based social media (e.g., Facebook, WeChat, or Instagram), the ways
+of interpersonal communication have dramatically changed (Anderson & Smith, 2018).
+The ubiquitous social media platforms and easy access to the internet give rise to the
+potential for social media addiction, i.e., the irrational and excessive use of social media
+to the extent that it interferes with other daily aspects of life (Griffiths, 2009). There is
+considerable evidence demonstrating a connection between social media addiction and
+a range of emotional, interpersonal, health, and performance problems (Griffiths, 2000).
+Social media addiction is a type of internet addiction in which people feel compelled to
+use social media in excessive amounts (Griffiths, 2000). Individuals addicted to social
+media are often unnecessarily worried and are motivated by an uncontrollable compulsion
+to log in to utilise it (Andreassen & Pallesen, 2014). According to studies, mood, cognition,
+physical and emotional reactions, and interpersonal and psychological problems are all
+social media addiction symptoms (Błachnio et al., 2017). According to reports,
+approximately 12% of social networking sites users suffer from social media addiction
+(Wu et al., 2013).
+Recent literature on social media usage and mental wellbeing has shown that long-term
+use of social media platforms like Facebook is positively correlated with mental health
+problems like stress, anxiety, and depression while negatively associated with long-term
+wellbeing (Eraslan-Capan, 2015). Time spent on social media, for example, was linked
+to depressive symptoms in high school students in Central Serbia (Pantic et al., 2012)
+and young adults in the United States (Lin et al., 2016).
+The argument about whether so-called internet addiction should be accepted as a
+disease in the Diagnostic and Statistical Manual of Mental Disorders, Fifth Edition is
+ongoing. The correlation between “addiction” and various compulsive or impulsive
+activities is often a source of misunderstanding. Some psychologists claim that internet
+addiction has the same traits as many other substance use disorders, such as heavy use,
+withdrawal effects, tolerance, and harmful consequences; however, there is no
+physiological research to support these arguments. Thus, it is uncertain if internet
+addiction is a symptom of an underlying condition or a different illness category. In
+addition, the recurrent emergence of internet addiction in the sense of a wide range of
+comorbidities poses difficult causality questions (Pies, 2009).
+A more generic model of what qualifies as “disease” is required and as a particular
+disease to make nosological conclusions on internet addiction. It remains premature to
+recognise internet addiction as a distinct disease category, based on a model addressing
+intrinsic distress and incapacity and evidence on course, prognosis, temporal8
+consistency, and recovery response. However, recent evidence shows that certain people
+addicted to the internet are at severe risk and need immediate support. To overcome
+these disputes, closely conducted studies are needed (Pies, 2009).9
+Social media and cell phone addiction
+Addiction can be anything if there is a possibility of negative consequences and physical
+and psychological reinforcements in a specific context – cell phone and social media
+addiction would be classed as a behavioural addiction. In the case of behaviour, it is
+difficult to determine whether problems result from problematic behaviour, personality
+traits, or psychiatric comorbidities (De-Sola Gutiérrez et al., 2016). Young, (1999) studied
+five different forms of addictive behaviour on the internet: firstly, the computer itself, the
+act of searching for information, interaction compulsions, such as contact with the web
+through online games, shopping, etc., cyber sexuality, and cyber contacts (Young, 1999).
+In general, it is noted that addiction entails abuse without control, alterations in mood,
+tolerance, abstinence, personal harm or conflicts in the environment, and a tendency to
+relapse (Griffiths, 1996). The Cell Age Telephone initiation is getting younger as about
+30% of 10-year-old Spanish children have a mobile phone, 70% of 12-year-olds and 83%
+have a cell phone by the age of 14, causing behavioural problems and disorders in teens.
+As in general, the youngest group, mainly adolescents, are the most highly affected by
+and at risk for substance and behavioural addictions (Protégeles, 2014). Furthermore,
+this has become more evident within the communications media, inspiring new
+pathologies, such as “Nomophobia” (No-Mobile-Phobia), “FOMO” (Fear Of Missing Out),
+the fear of being deprived of a cell phone, disconnected or off the internet. It is further
+extending to false sensations such as “Textaphrenia” and “Ringxiety” – which is thinking
+that one has received a text message or a phone call when they have not, causing them
+to be continually checking the device (Taneja, 2014). Moreover, “Textiety” – the anxiety
+of receiving and responding immediately to text messages. Compared to and
+corroborated by the diagnostic criteria of the DSM, problematic manifestations have
+suggested that when in unsafe circumstances or forbidden contexts, problematic and
+deliberate use is a sign of an arising addiction (Billieux, 2008).
+In behavioural terms, these problematic behaviours have been highlighted, compared to
+and commonly validated by the diagnostic criteria of the DSM: Social and familial conflicts
+and confrontations and the loss of interest in other activities (Griffiths, 2000), harm
+repeated physical, mental, social, work, or familial interruptions, preferring the cell phone
+to personal contact (Chesley, 2005), other addiction-like behaviours such as excessive
+use, urgency, tolerance, dependence, difficulty controlling, craving, increasing use to
+achieve satisfaction or relaxation, or counteracting a dysphoric mood (Kwon et al., 2013),
+anxiety and loneliness when unable to send a message or receive immediate response
+stress (Ha et al., 2008) and mood changes due to the need to respond immediately to
+messages (Sansone & Sansone, 2013).10
+Sociodemographic differences in cell phone dependency
+Age
+The data suggest that the average time spent on mobile phones declines with age, with
+people younger than 20 years of age showing the highest hours, mainly teens under 14
+(Lopez-Fernandez et al., 2014). This phenomenon has been suggested to be due to
+decreased self-control observed at that age, due to underdeveloped structures in the
+brain which affect self-control (Bianchi & Phillips, 2005). The most frequent use of the
+mobile phone is in the applications which allow text messaging (Lu et al., 2011).
+Cell phones have been observed to be so vital in an adolescent’s life that between the
+ages of 13-14, one out of three never turns off their phone (Protégeles, 2014).
+Unfortunately, this has been found to link with other problematic addictions in the future,
+especially when the first phone was obtained before the age of 13 years (Sahın et al.,
+2013).
+Gender
+Most research suggests that women have higher levels of dependency and problematic
+usage than men (Jenaro et al., 2007). Where usually, female cell phone usage is
+connected to sociability (Bianchi & Phillips, 2005).
+There were differences observed between female and male usage time rather than
+utilisation. Females have been observed to spend more time on applications that increase
+intimacy with other people, orientated towards intense and close relationships. In
+comparison, males tend to spend more time on applications for practical and instrumental
+reasons (Roberts et al., 2014).
+The formation and management of connections, interpersonal relationships, indirect
+communication, and texting are the most frequently used applications for both sexes.
+However, there was a difference observed in cell phone and internet usage. Whilst
+females use cell phones as a means of social contact; they have less frequent internet
+usage. Hence, problematic internet behaviour is more frequently observed in males (Ruiz-
+Olivares et al., 2010).
+Education, Cultural and Economic
+Effects of culture and economic status on the dependence on social media were observed
+in students. It was found that students from higher cultural and economic levels showed
+higher levels of dependence. This was suggested to be due to more frequent isolation
+due to studying, where a cell phone is a tool for contact (Amidi Mazaheri & Karbasi, 2014).
+A significant association was observed between parents’ abuse and dependence on cell11
+phones and children’s addiction to the internet and other technologies. The correlation
+has been suggested to be due to emotional abandonment (Zhou et al., 2014).
+Personality and Psychological Variables
+The studies regarding problematic cell phone and internet usage focus on the five-factor
+model (FFM) of personality, self-esteem, self-concept, self-identity and impulsivity.
+Personality characteristic studies have observed that extroverts use social media
+networks to form new and improve old relationships. In contrast, introverts use social
+networks to compensate for human interaction. Both introverts and extroverts have the
+potential to become dependent. However, it has been found that extroverts with low
+scores in conscientiousness and introverts with high scores in neuroticism and narcissism
+have the highest potential to become addicted (Kuss & Griffiths, 2011). Neuroticism was
+a significant factor as it results in high levels of anxiety and insecurity (Correa et al., 2010).
+Problems derived from cell phone abuse
+The research focuses on sleep disruption and its coexistence with the use of substances
+such as alcohol and tobacco and with symptomatology and psychiatric comorbidities,
+particularly anxiety, stress, and depression, concerning the psychological problems
+resulting from cell phone misuse.
+It was found that problematic student cell phone usage, especially in females, correlated
+with high levels of both anxiety and insomnia (Jenaro et al., 2007). A link was observed
+between the number of phone calls and messages with sleep difficulties and a tendency
+to use cell phones at night (Thomée et al., 2007). Cell phone abuse has been linked with
+personal stress as it maintains a constant state of alertness hence interferes with sleep
+(Sansone & Sansone, 2013). Similarly, with social networks, excessive Facebook usage
+has been associated with interruption of sleep during the week and decreasing the
+number of hours slept (Andreassen et al., 2012).
+Overall, it is evident how social media can easily and quickly grasp people across all
+ages, genders, socioeconomic groups and cultures. Furthermore, it also demonstrates
+how they can become dependent and what effects it can cause (as observed in figure 2).12
+Figure 2. Taxonomy of online harm, illustrating how, for most people, it is a beneficial
+relationship reaching symbiosis and with a clear benefit for the user. However, per so
+many beneficial interactions, there will be a harmful one. A person’s range of
+environmental and genetic factors directly impacts the level of potential harm and the
+exposure time needed to cause harm.13
+Social media use in healthcare
+The first research on social media impact was focused on experiences with patients and
+healthcare providers and the effect of social media on their wellbeing. Seven types of
+effects on patients were identified: improved self-management and control, enhanced
+psychological and subjective wellbeing, diminished subjective wellbeing, addiction to
+social media, loss of privacy, and being targeted for promotion. The findings revealed that
+the primary motive for using social media was for social support. Furthermore, it led to
+equal communication between the patient and healthcare professional, increased
+doctors’ switching, harmonious relationships, and suboptimal interaction between the
+patient and healthcare professional (Smailhodzic et al., 2016).
+The social media support was defined as “the process of interaction in relationships which
+is intended to improve coping, esteem, belonging, and competence through actual or
+perceived exchanges of psychosocial resources” (Cohen et al., 2000) as it was observed
+that within the social media support it covered four different areas: emotional support,
+esteem support, information support, and network support. Patients who used social
+media during their illness had more opportunities to connect with others in a similar
+situation, reducing loneliness (Colineau & Paris, 2010). Moreover, social media provided
+an opportunity for patients to discuss the sensitive characteristics of their condition as
+using online communities reduces the inhibitions felt during sharing experiences face-to-
+face (Broom, 2005). Thus, patients who used social media for network support exhibited
+enhanced psychological wellbeing. Despite this, it was revealed that social media could
+also harm a patient’s wellbeing. It was observed that social media could trigger
+unnecessary jealousy and anxiety when patients took a ‘lurker’ role on social media, only
+using it to read stories and compare, therefore illustrating how social media’s effects are
+highly dependent on the participant rather than the platform. It can be a haven for the
+patient to unload their problems and develop coping strategies, or it can be a source of
+anxiety and potential triggers (Smailhodzic et al., 2016).
+The study provides some critical points to determine how vital social media can be and
+how it can produce a positively transformative medium when used correctly. However, it
+also demonstrates how damaging it can also be for individuals when misused. Therefore,
+supplying a platform where various patients can discuss and advise each other whilst
+minimising potential damage by preventing lurking will be an important development
+within the social media realm.14
+Social media use with students
+The research looked at how social media and social media multitasking (SMM) affect the
+academic success of university students. The research comprised a group of 348
+undergraduate students at Hong Kong’s comprehensive university. The research
+revealed that social media use and SMM are two main variables that detrimentally affect
+university students’ academic success, specifically student learning (Lau, 2017). Cheever
+et al. (2015) proposed strategies such as technology breaks, self-monitoring, teaching
+metacognitive skills, and encouraging technology awareness to help students navigate
+their use of technology, allowing social media to reach its full beneficiary potential.
+Social media is said to have a detrimental academic performance effect (Jacobsen &
+Forste, 2011) but can also improve student learning and ‘cognitive capacity’ within the
+social context (Bell, 2011). For example, in students engaging in forums, it is assumed
+that since students are engaged and interested in such forums, these channels would
+encourage students to think more critically and objectively (Jones 2011).
+Furthermore, social networking facilitates collaborative learning (such as peer-to-peer
+and lecturer-to-many students). Since social media forums produce a long-lasting public
+message, discussions should be more constructive and thoughtful (Hsiao et al., 2013).
+As evidence suggests that more critical thinking occurs, online communities deliver more
+significant interaction, informative points, and personal reflection on both theory and
+practice (Meyer 2004). Despite this, the findings indicate that less social learning exists
+through online conversations compared to face-to-face discussions.
+In the world of adolescents, social media and learning do not seem to go hand in hand,
+likely due to the apparent element of imminent distraction. However, an opportunity might
+exist for introverted students who lack the courage to speak up in class or for more
+extroverted personalities who could not do enough critical thinking before speaking up if
+the risk of distraction was eliminated and there is enough incentive to engage. A site with
+the ability to cater to both could revolutionise online education.15
+Social media effects on welfare
+Bolier et al. (2013) produced research that looked at the implications of turning off
+Facebook for four weeks. A sample of 2,743 people and their willingness to agree (WTA)
+to get their Facebook accounts deactivated for four weeks was observed.
+The sample was split into two groups: a recovery group paid $102 and a monitoring group
+not paid to deactivate. It was observed that those who reduced online contact, thereby
+increasing offline activities such as watching TV alone and socialising with family and
+friends, demonstrated behaviours that: reduced both objective news and political
+polarisation, improved subjective wellbeing and resulted in a significant and lasting
+decrease in Facebook post-experiment usage. In addition, deactivation resulted in small
+but important wellbeing improvements such as self-reported happiness, personal
+satisfaction, and less depression and anxiety. The overall index of subjective wellbeing
+improved by 0.09 standard deviations – point of comparison used about 25–40% of the
+effect of psychological interventions including self-help therapy, group training, and
+individual therapy, as reported in a meta-analysis by (Bolier et al., 2013).
+Facebook’s deactivation increased subjective wellbeing, and 80% of the Recovery
+Community said the deactivation phase was successful for them. However, the
+participants could not give up Facebook unless they received reasonably significant sums
+of money: even after being deactivated for four weeks, which should have facilitated at
+least some learning or “detox” from addiction (Bolier et al., 2013). According to the results
+on the usage of Facebook, Facebook is a significant source of news and knowledge. In
+interviews, it was clear that Facebook would affect people’s lives in various ways, either
+as a source of entertainment, a way to coordinate a charity or activist group, or a vital
+social lifeline for those who are otherwise alone. Despite the drawbacks of social media,
+it seems to satisfy essential and universal needs (Bolier et al., 2013).
+It offers some critical insights into the advantages of avoiding social media and
+concentrating on other activities such as spending time with friends and relatives and
+improving general wellbeing. Despite this, the four-week cleanse demonstrates its impact
+on people’s lives, as shown by the vast number of people returning to social media.16
+Social media use in dating
+The dating industry has over 2 billion users, with the first domain coming into existence
+in 1995 and being studied systematically from 2005 (Wiederhold, 2015). There have been
+multiple advantages observed in using online platforms to find a prospective partner, such
+as broader prospects to meet potential partners, less intimidation to initiate contact, and
+the possibility that the questions/criteria can open someone’s mind to more
+possibilities/criteria out of their comfort zones. However, there are also disadvantages
+such as objectifying nature, the possibility that the domain users may form bad decisions
+based on many choices, the potential to delay face-to-face contact for too long, and
+misinterpretation of messages (Finkel et al., 2012).
+Ultimately, the dating domains should only be used as a tool to find a potential partner,
+as genuine relationships can only begin after face-to-face contact. Research into online
+dating has demonstrated that eventually, it will reside at the intersection of experiential
+attributes, chemistry, and gut-level evaluations. Specific emotional reactions are based
+on sensory experiences such as olfaction, which cannot be obtained any other way. In-
+person meeting acts as a reality check before intimacy can progress further, as people
+are less likely to misrepresent observable attributes in real-life settings (Finkel et al.,
+2012).
+The goal of using these domains can vary. Daters looking for a temporary relationship
+often increase their expectations, whereas those looking to move the relationship
+permanently offline tend to decrease their expectations. In addition, daters who initiate
+communication are more likely to find suitable partners than those waiting to be asked
+(Kreager et al., 2014). Even though there are not many studies following daters long-term,
+the results from one large US national study (N = 19,131) demonstrated that one-third of
+marriages now begin online. It was also observed that those marriages which began
+online were less likely to result in divorce and were associated with slightly higher marital
+satisfaction than those that started in traditional offline venues. This data demonstrates
+that the internet alters the dynamics and outcomes of marriage (Cacioppo et al., 2013).
+There are now multiple domains offering different types of relationship support. Apps such
+as Nayana are used to predict seven years of romantic outlook. The app predicts that
+someone who has remained in the same location for five years or is an introvert is less
+likely to meet people than someone who has just moved or is an extrovert. Another app,
+The Grade, gives grades to users based on their dating behaviour, giving them letter
+grades and suggestions for improvements. Those who ignore their advice get kicked out.
+There is a gap in research on online dating behaviour in different cultures, such as in
+India. Lastly, technological advances in online dating cannot replace the actual work
+required for an intimate relationship to advance (Wiederhold, 2015).17
+Study on Tinder
+Tinder is currently the most popular dating app with certain advantages over traditional
+dating methods, such as enhanced portability of access (being an app) and the
+geolocalisation capacity (Schrock, 2015). Due to its high popularity, it enables increased
+access to potential matches. It is best in class for its simple and user-friendly interface
+design, with the most popular feature being the ‘swipe’ matching characteristic. It entices
+users by providing the stimulation of localised likes, making it easy for a potential meeting.
+However, compared to apps outside of the dating sphere, these features have an
+increased potential for a behavioural addiction due to this added element of romance
+associated with the use of an artificial domain (Orosz et al., 2016). The Uses and
+Gratifications Theory has shown the reason for the popularity of Tinder is because it fulfils
+physical (e.g. sexual desire), social (e.g. finding a partner or a friend) and psychosocial
+needs (e.g., validating one’s physical attractiveness). Studies also suggest that tinder
+consumption may be used as a coping mechanism to regulate depressive effects and
+improve self-esteem (Orosz et al., 2018) with variable other motives depending on gender
+(Ranzini & Lutz, 2016).
+The study consisted of 1,697 subjects, of whom 46.59% were females. All subjects
+completed all questionnaires and reported a heterosexual orientation and were thus
+retained in the final analysis. Subjects’ age ranged from 18 to 74 years old (M = 30.02,
+SD = 9.19). In the study, four clusters were formed. Cluster 1, “regulated,” was the largest
+group and showed low impulsivity and high self-esteem with a secure attachment, low
+depressive mood and problematic use. Cluster 2, “regulated with low desire,” was the
+smallest group that exhibited low/medium impulsivity, low self-esteem, anxious
+attachment, low motives, more depressive mood but low problematic use. Cluster 3 was
+“unregulated and highly motivated” and exhibited: high level of motives to use Tinder and
+a high level of anxious attachment, a high level of urgency and sensation-seeking, and a
+moderate level of self-esteem. This cluster had the highest level of problematic use and
+the greater number of current matches whilst reporting an intermediate level of depressive
+mood (Rochat et al., 2019). Tinder use in Cluster 3 subjects was prompted by a
+combination of solid motivations (social, enhancement, and coping) and lacking self-
+control, especially urgency, attributed to weak inhibitory control and poor decision-making
+(Rochat et al., 2018).
+They also have trouble overcoming the immediate gratification provided by the app, for
+example, the excitement associated with potential sexual activity and reinforcement
+resulting from frequent offline contacts, as indicated by their high sensation-seeking
+levels. Accordingly, users with diminished self-control seem to be at higher risk for
+developing problematic Tinder use, perhaps because of an interaction between poor self-
+control and strong motives incentivising app use. People who had low self-esteem and a18
+high level of avoidant attachment could be more inclined to use social networking sites
+as these online environments seem safer to express themselves or meet potential
+partners. Furthermore, the app can satisfy a need for social or sexual communication
+without spatial (e.g., proximity) and social (e.g., possibility to unilaterally swipe left on a
+potential match without consequences) constraints (Sumter et al., 2017). In addition, it
+has been demonstrated that this subgroup has low conscientiousness, and it has been
+observed that Tinder use has been associated with alleviating boredom (Orosz et al.,
+2018).
+There were limitations to this study, such as its cross-sectionalism. Research is required
+to confirm the validity of the clusters longitudinally. In addition, the sample was self-
+selected, hence limiting generalisability. It also relied on self-reports creating various
+biases (e.g., social desirability and lack of insight). Also, the sample contained only
+heterosexual-identifying subjects hence cannot be applied to non-heterosexual
+participants (Rochat et al., 2019). Corroborating prior studies on internet gaming
+depression (Billieux et al., 2015), the observations show that the dysfunctional use of
+Tinder is heterogeneous and requires a wide variety of psychological variables that
+interact. Further studies are needed to disentangle the role of these variables in problem
+use growth, perpetuation, and recurrence and explain the very socially impactful appeal
+this and similar dating apps have (Rochat et al., 2019).
+Dispositional factors predicting use of online dating sites and behaviours related to online
+dating
+The use of online dating sites was investigated concerning many dispositional
+considerations. The theory was that people who scored higher on extraversion,
+neuroticism, self-esteem, and rejection sensitivity were more inclined to over-use a dating
+site. Specifically, rejection sensitivity was a significant factor in predicting the use of online
+dating sites, where personalities with higher rejection sensitivity were more likely to use
+a dating site (Blackhart et al., 2014).
+This is suggested to be due to the ease of avoiding potential rejection in an online dating
+environment rather than in traditional dating environments. For example, online dating
+platforms provide better opportunities for self-representations as users tend only to
+present the pleasant side of themselves, therefore, reducing potential rejection.
+Furthermore, it is easier to manage communication when communicating online, and
+rejection online is less salient than face-to-face rejection (Blackhart et al., 2014).
+The collective data offers some positive validation since traditionally, partnerships that
+have been formed online have been frowned upon due to societal stigma. With recent
+statistics showing cell phones becoming more popular and people’s lives becoming more
+hectic than before, it is becoming a more appealing choice than meeting people19
+organically. As with previous studies, it is proposed in this paper that the use of such
+media can be healthy but has the potential to become harmful in the wrong hands, such
+as those with dysfunctional attachment issues. In addition, if also potentially struggling
+with specific mental health problems such as depression, a dating site can become a
+coping mechanism and therefore has the propensity to cause further long-term harm by
+deferring the real problem. Despite this, evidence indicates that a small group of
+individuals, and, more importantly, the use of such websites, will typically form a long-
+lasting and happy partnership.20
+Conclusion
+It is clear from the research that social networking is now important for humanity, from
+running a business to finding a spouse to connecting with friends and family. The
+neuropsychology research shows how well adapted social media suits our evolutionary
+needs to keep up our reputation, observe and compare ourselves to other people and
+feed our desire to be liked. This is reflected in the supply of such features on all the most
+visited sites. The research shows that the combination of immediate gratification and relief
+from loneliness and young age and genetic factors may result in potentially harmful
+consequences such as dependence and addiction.
+There are clear benefits of using social networking, primarily to offer worldwide social and
+emotional support to people. With knowledge of the possibility of substantial damage to
+more vulnerable individuals and awareness of the harmful functional properties of social
+media features, several cautionary steps in an ethical direction could provide a well-
+rounded, desirable platform.
+To gain real social benefits and avoid the pitfalls of technology taking over genuine
+relationships, a network that allows initial connectivity but quickly leads to face-to-face
+contact would be an apparent alternative solution. In terms of amending what is already
+there, this could be achieved by several approaches, including a focus on social and
+emotional encouragement without the possibility of lurking other public accounts or
+providing hollow validations with strategies such as liking.
+Since all similar research has been conducted on a small scale, this article contains data
+to justify a more extensive scale analysis into the usage and value of various social media
+facets.21
+References
+Akram, W., & Kumar, R. (2017). A Study on Positive and Negative Effects of Social
+Media on Society. International Journal Of Computer Sciences And Engineering, 5(10),
+351-354. https://doi.org/10.26438/ijcse/v5i10.351354
+Amidi Mazaheri, M., & Karbasi, M. (2014). The Use of Mobile Phone Features Among
+Students in Isfahan University of Medical Sciences in Iran. Scimetr, 2(3).
+https://doi.org/10.5812/scimetr.18760
+ANDERSON, M., & SMITH, A. (2018). Social Media Use 2018: Demographics and
+Statistics. Pew Research Center: Internet, Science & Tech. Retrieved 15 January 2021,
+from https://www.pewresearch.org/internet/2018/03/01/social-media-use-in-2018/.
+Andreassen, C., & Pallesen, S. (2014). Social Network Site Addiction - An Overview.
+Current Pharmaceutical Design, 20(25), 4053-4061.
+https://doi.org/10.2174/13816128113199990616
+Andreassen, C., Torsheim, T., Brunborg, G., & Pallesen, S. (2012). Development of a
+Facebook Addiction Scale. Psychological Reports, 110(2), 501-517.
+https://doi.org/10.2466/02.09.18.pr0.110.2.501-517
+ARMSTRONG, L., PHILLIPS, J., & SALING, L. (2000). Potential determinants of
+heavier internet usage. International Journal Of Human-Computer Studies, 53(4), 537-
+550. https://doi.org/10.1006/ijhc.2000.0400
+Bell, F. (2011). Connectivism: Its place in theory-informed research and innovation in
+technology-enabled learning. The International Review Of Research In Open And
+Distributed Learning, 12(3), 98. https://doi.org/10.19173/irrodl.v12i3.902
+Bianchi, A., & Phillips, J. (2005). Psychological Predictors of Problem Mobile Phone
+Use. Cyberpsychology & Behavior, 8(1), 39-51. https://doi.org/10.1089/cpb.2005.8.39
+Billieux, J., Thorens, G., Khazaal, Y., Zullino, D., Achab, S., & Van der Linden, M.
+(2015). Problematic involvement in online games: A cluster analytic approach.
+Computers In Human Behavior, 43, 242-250. https://doi.org/10.1016/j.chb.2014.10.055
+Billieux, J., Van der Linden, M., & Rochat, L. (2008). The role of impulsivity in actual and
+problematic use of the mobile phone. Applied Cognitive Psychology, 22(9), 1195-1210.
+https://doi.org/10.1002/acp.142922
+Błachnio, A., Przepiorka, A., Senol-Durak, E., Durak, M., & Sherstyuk, L. (2017). The
+role of personality traits in Facebook and Internet addictions: A study on Polish, Turkish,
+and Ukrainian samples. Computers In Human Behavior, 68, 269-275.
+https://doi.org/10.1016/j.chb.2016.11.037
+Blackhart, G., Fitzpatrick, J., & Williamson, J. (2014). Dispositional factors predicting
+use of online dating sites and behaviors related to online dating. Computers In Human
+Behavior, 33, 113-118. https://doi.org/10.1016/j.chb.2014.01.022
+Bolier, L., Haverman, M., Westerhof, G., Riper, H., Smit, F., & Bohlmeijer, E. (2013).
+Positive psychology interventions: a meta-analysis of randomised controlled studies.
+BMC Public Health, 13(1), 119. https://doi.org/10.1186/1471-2458-13-119
+Bolls, P., Weber, R., Lang, A., & Potter, R. (2009). Media effects: Where
+psychophysiology meets the media: Taking the effects out of mass communication
+research (pp. 185–206). Routledge Taylor and Francis Group.
+Broom, A. (2005). Prostate cancer, masculinity, and online support as a challenge to
+medical expertise. Journal Of Sociology, 41(1), 87-104.
+https://doi.org/10.1177/1440783305050965
+Cacioppo, J., Cacioppo, S., Gonzaga, G., Ogburn, E., & VanderWeele, T. (2013).
+Marital satisfaction and break-ups differ across online and offline meeting venues.
+Proceedings Of The National Academy Of Sciences, 110(25), 10135-10140.
+https://doi.org/10.1073/pnas.1222447110
+Cheever, N., Rosen, L., & Carrier, L. (2015). The Wiley handbook of psychology,
+technology and society (pp. 388-403). John Wiley & Sons.
+Chesley, N. (2005). Blurring Boundaries? Linking Technology Use, Spillover, Individual
+Distress, and Family Satisfaction. Journal Of Marriage And Family, 67(5), 1237-1248.
+https://doi.org/10.1111/j.1741-3737.2005.00213.x
+Cheung, C., Chiu, P., & Lee, M. (2011). Online social networks: Why do students use
+facebook?. Computers In Human Behavior, 27(4), 1337-1343.
+https://doi.org/10.1016/j.chb.2010.07.028
+Cohen, S., Underwood, L., & Gottlieb, B. (2000). Social Support Measurement and
+Intervention. https://doi.org/10.1093/med:psych/9780195126709.001.000123
+Colineau, N., & Paris, C. (2010). Talking about your health to strangers: understanding
+the use of online social networks by patients. New Review Of Hypermedia And
+Multimedia, 16(1-2), 141-160. https://doi.org/10.1080/13614568.2010.496131
+Correa, T., Hinsley, A., & de Zúñiga, H. (2010). Who interacts on the web?: The
+intersection of users’ personality and social media use. Computers In Human Behavior,
+26(2), 247-253. https://doi.org/10.1016/j.chb.2009.09.003
+De-Sola Gutiérrez, J., Rodríguez de Fonseca, F., & Rubio, G. (2016). Cell-Phone
+Addiction: A Review. Frontiers In Psychiatry, 7. https://doi.org/10.3389/fpsyt.2016.00175
+Donath, J., & Boyd, D. (2004). Public Displays of Connection. BT Technology Journal,
+22(4), 71-82. https://doi.org/10.1023/b:bttj.0000047585.06264.cc
+Eraslan-Capan, B. (2015). Interpersonal Sensitivity and Problematic Facebook Use in
+Turkish University Students. The Anthropologist, 21(3), 395-403.
+https://doi.org/10.1080/09720073.2015.11891829
+Fareri, D., & Delgado, M. (2014). Social Rewards and Social Networks in the Human
+Brain. The Neuroscientist, 20(4), 387-402. https://doi.org/10.1177/1073858414521869
+Finkel, E., Eastwick, P., Karney, B., Reis, H., & Sprecher, S. (2012). Online Dating.
+Psychological Science In The Public Interest, 13(1), 3-66.
+https://doi.org/10.1177/1529100612436522
+Fundación Telefónica (Madrid). (2015). La sociedad de la información en España 2014.
+Editorial Ariel.
+Griffiths, M. (1996). Nicotine, tobacco and addiction. Nature, 384(6604), 18-18.
+https://doi.org/10.1038/384018a0
+Griffiths, M. (2000). Does Internet and Computer “Addiction” Exist? Some Case Study
+Evidence. Cyberpsychology & Behavior, 3(2), 211-218.
+https://doi.org/10.1089/109493100316067
+Griffiths, M. (2000). Internet Addiction - Time to be Taken Seriously?. Addiction
+Research, 8(5), 413-418. https://doi.org/10.3109/1606635000900558724
+Griffiths, M. (2009). The Role of Context in Online Gaming Excess and Addiction: Some
+Case Study Evidence. International Journal Of Mental Health And Addiction, 8(1), 119-
+125. https://doi.org/10.1007/s11469-009-9229-x
+Ha, J., Chin, B., Park, D., Ryu, S., & Yu, J. (2008). Characteristics of Excessive Cellular
+Phone Use in Korean Adolescents. Cyberpsychology & Behavior, 11(6), 783-784.
+https://doi.org/10.1089/cpb.2008.0096
+Hsiao, W., Chen, M., & Hu, H. (2013). Assessing Online Discussion: Adoption of Critical
+Thinking as a Grading Criterion. The International Journal Of Technology, Knowledge,
+And Society, 9(3), 15-25. https://doi.org/10.18848/1832-3669/cgp/v09i03/56370
+Jacobsen, W., & Forste, R. (2011). The Wired Generation: Academic and Social
+Outcomes of Electronic Media Use Among University Students. Cyberpsychology,
+Behavior, And Social Networking, 14(5), 275-280.
+https://doi.org/10.1089/cyber.2010.0135
+Jenaro, C., Flores, N., Gómez-Vela, M., González-Gil, F., & Caballo, C. (2007).
+Problematic internet and cell-phone use: Psychological, behavioral, and health
+correlates. Addiction Research & Theory, 15(3), 309-320.
+https://doi.org/10.1080/16066350701350247
+Jenaro, C., Flores, N., Gómez-Vela, M., González-Gil, F., & Caballo, C. (2007).
+Problematic internet and cell-phone use: Psychological, behavioral, and health
+correlates. Addiction Research & Theory, 15(3), 309-320.
+https://doi.org/10.1080/16066350701350247
+Ji, Y., Hwangbo, H., Yi, J., Rau, P., Fang, X., & Ling, C. (2010). The Influence of
+Cultural Differences on the Use of Social Network Services and the Formation of Social
+Capital. International Journal Of Human-Computer Interaction, 26(11-12), 1100-1121.
+https://doi.org/10.1080/10447318.2010.516727
+Jones, J. (2011). Social media and social movements • International Socialism.
+International Socialism. Retrieved 2 December 2020, from
+http://www.isj.org.uk/index.php4?id=722.
+Kim, J., Kim, M., & Nam, Y. (2010). An Analysis of Self-Construals, Motivations,
+Facebook Use, and User Satisfaction. International Journal Of Human-Computer
+Interaction, 26(11-12), 1077-1099. https://doi.org/10.1080/10447318.2010.51672625
+Kreager, D., Cavanagh, S., Yen, J., & Yu, M. (2014). “Where Have All the Good Men
+Gone?” Gendered Interactions in Online Dating. Journal Of Marriage And Family, 76(2),
+387-410. https://doi.org/10.1111/jomf.12072
+Kujath, C. (2011). Facebook and MySpace: Complement or Substitute for Face-to-Face
+Interaction?. Cyberpsychology, Behavior, And Social Networking, 14(1-2), 75-78.
+https://doi.org/10.1089/cyber.2009.0311
+Kuss, D., & Griffiths, M. (2011). Online Social Networking and Addiction—A Review of
+the Psychological Literature. International Journal Of Environmental Research And
+Public Health, 8(9), 3528-3552. https://doi.org/10.3390/ijerph8093528
+Kwon, M., Lee, J., Won, W., Park, J., Min, J., & Hahn, C. et al. (2013). Development
+and Validation of a Smartphone Addiction Scale (SAS). Plos ONE, 8(2), e56936.
+https://doi.org/10.1371/journal.pone.0056936
+Kwon, O., & Wen, Y. (2010). An empirical study of the factors affecting social network
+service use. Computers In Human Behavior, 26(2), 254-263.
+https://doi.org/10.1016/j.chb.2009.04.011
+Lau, W. (2017). Effects of social media usage and social media multitasking on the
+academic performance of university students. Computers In Human Behavior, 68, 286-
+291. https://doi.org/10.1016/j.chb.2016.11.043
+Lenhart, A., & Madden, M. (2007). Social Networking Websites and Teens. Pew
+Research Center: Internet, Science & Tech. Retrieved 10 December 2020, from
+https://www.pewresearch.org/internet/2007/01/07/social-networking-websites-and-
+teens/.
+Lin, L., Sidani, J., Shensa, A., Radovic, A., Miller, E., & Colditz, J. et al. (2016).
+ASSOCIATION BETWEEN SOCIAL MEDIA USE AND DEPRESSION AMONG US
+YOUNG ADULTS. Depression And Anxiety, 33(4), 323-331.
+https://doi.org/10.1002/da.22466
+Lopez-Fernandez, O., Honrubia-Serrano, L., Freixa-Blanxart, M., & Gibson, W. (2014).
+Prevalence of Problematic Mobile Phone Use in British Adolescents. Cyberpsychology,
+Behavior, And Social Networking, 17(2), 91-98. https://doi.org/10.1089/cyber.2012.026026
+Lu, X., Watanabe, J., Liu, Q., Uji, M., Shono, M., & Kitamura, T. (2011). Internet and
+mobile phone text-messaging dependency: Factor structure and correlation with
+dysphoric mood among Japanese adults. Computers In Human Behavior, 27(5), 1702-
+1709. https://doi.org/10.1016/j.chb.2011.02.009
+Meshi, D., Morawetz, C., & Heekeren, H. (2013). Nucleus accumbens response to gains
+in reputation for the self relative to gains for others predicts social media use. Frontiers
+In Human Neuroscience, 7. https://doi.org/10.3389/fnhum.2013.00439
+Meshi, D., Tamir, D., & Heekeren, H. (2015). The Emerging Neuroscience of Social
+Media. Trends In Cognitive Sciences, 19(12), 771-782.
+https://doi.org/10.1016/j.tics.2015.09.004
+Meyer, K. (2004). EVALUATING ONLINE DISCUSSIONS: FOUR DIFFERENT
+FRAMES OF ANALYSIS. Journal Of Asynchronous Learning Networks, 8(2), 101–114.
+https://doi.org/10.24059/olj.v8i2.1830
+Orosz, G., Benyó, M., Berkes, B., Nikoletti, E., Gál, É., Tóth-Király, I., & Bőthe, B.
+(2018). The personality, motivational, and need-based background of problematic
+Tinder use. Journal Of Behavioral Addictions, 7(2), 301-316.
+https://doi.org/10.1556/2006.7.2018.21
+Orosz, G., Tóth-Király, I., Bőthe, B., & Melher, D. (2016). Too many swipes for today:
+The development of the Problematic Tinder Use Scale (PTUS). Journal Of Behavioral
+Addictions, 5(3), 518-523. https://doi.org/10.1556/2006.5.2016.016
+Pantic, I., Damjanovic, A., Todorovic, J., Topalovic, D., Bojovic-Jovic, D., Ristic, S., &
+Pantic, S. (2012). ASSOCIATION BETWEEN ONLINE SOCIAL NETWORKING AND
+DEPRESSION IN HIGH SCHOOL STUDENTS: BEHAVIORAL PHYSIOLOGY
+VIEWPOINT. Psychiatria Danubina, 24(1), 90-93. Retrieved 2 March 2021, from.
+Pedrero Pérez, E., Rodríguez Monje, M., & Ruiz Sánchez De León, J. (2012). Adicción
+o abuso del teléfono móvil. Revisión de la literatura. Adicciones, 24(2), 139.
+https://doi.org/10.20882/adicciones.107
+Pempek, T., Yermolayeva, Y., & Calvert, S. (2009). College students’ social networking
+experiences on Facebook. Journal Of Applied Developmental Psychology, 30(3), 227-
+238. https://doi.org/10.1016/j.appdev.2008.12.01027
+Pies, R. (2009). Should DSM-V Designate “Internet Addiction” a Mental Disorder?.
+Psychiatry (Edgmont)., 6(2), 31–37. Retrieved 2 March 2021, from.
+Protégeles, O. (2014). Menores de Edad y Conectividad Móvil en España: Tablets y
+Smartphones. Dependiente Del Safer Internet Programme De La Comisión Europea..
+Retrieved 21 February 2021, from.
+Ranzini, G., & Lutz, C. (2016). Love at first swipe? Explaining Tinder self-presentation
+and motives. Mobile Media & Communication, 5(1), 80-101.
+https://doi.org/10.1177/2050157916664559
+Roberts, J., Yaya, L., & Manolis, C. (2014). The invisible addiction: Cell-phone activities
+and addiction among male and female college students. Journal Of Behavioral
+Addictions, 3(4), 254-265. https://doi.org/10.1556/jba.3.2014.015
+Rochat, L., Bianchi-Demicheli, F., Aboujaoude, E., & Khazaal, Y. (2019). The
+psychology of “swiping”: A cluster analysis of the mobile dating app Tinder. Journal Of
+Behavioral Addictions, 8(4), 804-813. https://doi.org/10.1556/2006.8.2019.58
+Rochat, L., Billieux, J., Gagnon, J., & Van der Linden, M. (2018). A multifactorial and
+integrative approach to impulsivity in neuropsychology: insights from the UPPS model of
+impulsivity. Journal Of Clinical And Experimental Neuropsychology, 40(1), 45-61.
+https://doi.org/10.1080/13803395.2017.1313393
+Ruiz-Olivares, R., Lucena, V., Pino, M., & Herruzo, J. (2010). Análisis de
+comportamientos relacionados con el uso/abuso de Internet, teléfono móvil, compras y
+juego en estudiantes universitarios. Adicciones, 22(4), 301.
+https://doi.org/10.20882/adicciones.171
+Sahın, S., Ozdemir, K., Unsal, A., & Temiz, N. (2013). Evaluation of mobile phone
+addiction level and sleep quality in university students. Pakistan Journal Of Medical
+Sciences, 29(4). https://doi.org/10.12669/pjms.294.3686
+Sansone, R., & Sansone, L. (2013). Cell phones: the psychosocial risks. Innovations In
+Clinical Neuroscience, 10(1), 33-37. Retrieved 21 February 2021, from.
+Schrock, A. (2015). Communicative affordances of mobile media: Portability, availability,
+locatability, and multimediality. International Journal Of Communication, 9(8), 1229–
+1246. https://doi.org/1932–8036/2015000528
+Sledgianowski, D., & Kulviwat, S. (2009). Using social network sites: The effects of
+playfulness, critical mass and trust in a hedonic context. Journal Of Computer
+Information Systems, 49(4), 74-83. https://doi.org/DOI:
+10.1080/08874417.2009.11645342
+Smailhodzic, E., Hooijsma, W., Boonstra, A., & Langley, D. (2016). Social media use in
+healthcare: A systematic review of effects on patients and on their relationship with
+healthcare professionals. BMC Health Services Research, 16(1).
+https://doi.org/10.1186/s12913-016-1691-0
+Steinfield, C., Ellison, N., & Lampe, C. (2008). Social capital, self-esteem, and use of
+online social network sites: A longitudinal analysis. Journal Of Applied Developmental
+Psychology, 29(6), 434-445. https://doi.org/10.1016/j.appdev.2008.07.002
+Sumter, S., Vandenbosch, L., & Ligtenberg, L. (2017). Love me Tinder: Untangling
+emerging adults’ motivations for using the dating application Tinder. Telematics And
+Informatics, 34(1), 67-78. https://doi.org/10.1016/j.tele.2016.04.009
+Taneja, C. (2014). The psychology of excessive cellular phone use. Delhi Psychiatry
+Journal, 17(2), 448-451. Retrieved 20 February 2021, from.
+Thomée, S., Eklöf, M., Gustafsson, E., Nilsson, R., & Hagberg, M. (2007). Prevalence of
+perceived stress, symptoms of depression and sleep disturbances in relation to
+information and communication technology (ICT) use among young adults – an
+explorative prospective study. Computers In Human Behavior, 23(3), 1300-1321.
+https://doi.org/10.1016/j.chb.2004.12.007
+Uylings, H., Van Eden, C., De Bruin, J., Feenstra, M., & Pennartz, C. (2000). Preface
+Cognition, emotion and automatic responses. Progress In Brain Research, 126, 325–
+341. https://doi.org/10.1016/s0079-6123(00)26001-9
+Wiederhold, B. (2015). Twenty Years of Online Dating: Current Psychology and Future
+Prospects. Cyberpsychology, Behavior, And Social Networking, 18(12), 695-696.
+https://doi.org/10.1089/cyber.2015.29017.bkw
+Wu, A., Cheung, V., Ku, L., & Hung, E. (2013). Psychological risk factors of addiction to
+social networking sites among Chinese smartphone users. Journal Of Behavioral
+Addictions, 2(3), 160-166. https://doi.org/10.1556/jba.2.2013.00629
+Young, K. (1999). Internet addiction: evaluation and treatment. BMJ, 319(Suppl S4),
+9910351. https://doi.org/10.1136/sbmj.9910351
+Zhou, Y., Zhang, X., Liang, J., & Tsai, C. (2014). The relationship between parents
+addicted to mobile phone and adolescent addicted to internet. Proceedings Of The
+22Nd International Conference On Computers In Education, 484-488. Retrieved 1
+December 2020, from http://icce2014.jaist.ac.jp/icce2014/wp-
+content/uploads/2014/11/ICCE2014-workshop-proceedings-lite-2.pdf.30
+Appendix
+Negatives of social
+media use
+Mechanisms of how
+social media works
+Positives of social
+media use
+Applications
+People reliant on
+validation – addition &
+high levels of anxiety
+linked to social media
+use
+Dopamine release linked
+to giving likes & receiving
+likes & lurking
+Social, emotional and
+self-esteem support
+Providing social and
+emotional support
+without the option to
+give or receive likes &
+no personal
+information provided
+Often misleading or
+inaccurate without any
+solid evidence
+Anyone has access to
+make blogs/ spread
+information
+Factual information
+worldwide availability of
+quick information spread
+All information
+provided evidence-
+based
+Misused due to the
+anonymity it provides,
+freedom to overuse
+Providing platform/ forums
+for discussion
+Allows communication
+despite spatial/ social
+and temporal distance
+Time limits on usage
+and verified profiles
+whilst providing
+platforms
+Misused often to social
+interaction face-to-face,
+an increase of anxiety
+due to fear of missing
+out, comparison to other
+people
+The constant input of
+information about new
+and people/ continuously
+new content provided
+regarding everything and
+anything
+Keeps occupied/
+diminishes boredom/ but
+also can be used for
+education to learn
+something new or
+motivate
+Education and
+communication part
+only
+Anonymity/ reliance Easy to access platforms
+that everyone has makes
+it easy to contact and
+arrange
+Allows people to make
+plans/ arrange
+gatherings
+Providing the platform
+without the possibility
+of anonymity and
+reliance by having
+verified accounts only
+and usage limits

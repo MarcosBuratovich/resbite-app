@@ -1,0 +1,64 @@
+MVP flowchart
+User opens
+the app
+Is it 1st run
+experience?
+is there an account already active for this phone number ?
+Has it been too long since the user invited friends to join the app for the last time ?
+is the user already logged-in?
+Will the user
+invite others to join
+on this resbite?
+User decides to do any of
+those resbites again?
+Log-in - E58
+The user arrives
+at resbites list
+Registration US037
+1st run slideshow - US029
+Indicate motivation to stay out of digital technology (set goal) - US188
+provide additional personal information - US181
+Offer to set an initial small goal  - US132
+User sets the type of notifications to be received from the app  - US192
+Provide a user a WELCOME MESSAGE. smth like "here we go, you have just did a first step into a healthier life full of resbites" ie: Headspace on-boarding
+​
+                               
+The user chooses a resbite - E79
+Settings
+The user modifies app settings - E90
+app notifications  US121
+Log Out - US119
+The user checks general progress done - E28
+The user checks the history of activities done - US089
+The user checks the goals achieved
+The user decides to balance the progress done different to the ones the user has been doing - E55
+user checks profile
+friends list
+Modifying personal information
+E137
+The user chooses to invite others (only up to 6 will be allowed) - E61
+practice a resbite
+US109
+User provides  feedback about activity just done - E26
+User connects 
+to others in Resbite
+E63
+receives feedback of progress done
+checks stats
+goes back to Home or RB list
+proceeds to registration
+proceeds to log-in
+As a user that has just got signed-in I want to invite contacts to use Resbite - US050
+Or should the user arrive to a HOME screen with more diverse content?
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen

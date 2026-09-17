@@ -1,0 +1,26 @@
+US047
+The user receives a "welcome to RB"
+e-mail after verifying e-mail address.
+
+US037
+
+The user can register on
+RB using phone number
+The e-mail sent explains specific features with certain detail, since the user is already familiar with the app after interacting with it
+The e-mail sent is a "welcome to RB" e-mail that explains a general idea of what can the user do with the app.
+z
+Has the user been using the app for some time before validating e-mail address?
+E-mail is sent to the user's just verified e-mail address
+ 
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen

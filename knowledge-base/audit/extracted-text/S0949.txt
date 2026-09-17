@@ -1,0 +1,20 @@
+Premium Screens/
+__MACOSX/._Premium Screens
+Premium Screens/.DS_Store
+__MACOSX/Premium Screens/._.DS_Store
+Premium Screens/older versions/
+__MACOSX/Premium Screens/._older versions
+Premium Screens/N - Weather checker V1-2.pdf
+__MACOSX/Premium Screens/._N - Weather checker V1-2.pdf
+Premium Screens/O - Guru Stories V1-2.pdf
+__MACOSX/Premium Screens/._O - Guru Stories V1-2.pdf
+Premium Screens/P - Hosted resbites V1-2.pdf
+__MACOSX/Premium Screens/._P - Hosted resbites V1-2.pdf
+Premium Screens/M - Photo Collections V1-2.pdf
+__MACOSX/Premium Screens/._M - Photo Collections V1-2.pdf
+Premium Screens/older versions/O - Hosted resbites V1-1.pdf
+__MACOSX/Premium Screens/older versions/._O - Hosted resbites V1-1.pdf
+Premium Screens/older versions/N - Weather forecast V1-1.pdf
+__MACOSX/Premium Screens/older versions/._N - Weather forecast V1-1.pdf
+Premium Screens/older versions/P - Hosted resbites V1-1.pdf
+__MACOSX/Premium Screens/older versions/._P - Hosted resbites V1-1.pdf

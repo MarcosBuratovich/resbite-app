@@ -1,0 +1,41 @@
+
+### ppt/slides/slide1.xml
+
+### ppt/slides/slide10.xml
+Let’s remove all the social media and text, leaving only the section on the left with the email. Let’s look at a way to balance it—perhaps it should be split into two columns for text and form.
+### ppt/slides/slide2.xml
+The Resbite app helps you 
+to
+ connect
+### ppt/slides/slide3.xml
+Many modern technologies have stopped us 
+from
+ being present, diminished human relationships
+, 
+and distanced us from reality.
+### ppt/slides/slide4.xml
+This space is a bit weird; perhaps we should align the illustration with the text and reduce this space a little.
+### ppt/slides/slide5.xml
+Apply for Early Access
+Become a founding member and gain exclusive access to new releases before regular members, along with the option to contribute to the app’s future development.
+Apply
+### ppt/slides/slide6.xml
+The email
+isn’t 
+hyperlikable
+.
+### ppt/slides/slide7.xml
+Footer needs to be 4 columns
+### ppt/slides/slide8.xml
+Update 
+topbar
+:
+Powered by Scoop:
+1
+. Welcome to the multi-award-winning site for the Resbite app!
+2. 
+Apply for early access to the app and become a founding member.
+3. 
+Request our full report to explore our research insights.
+### ppt/slides/slide9.xml
+This item should be the standard since it's our actual step.

@@ -1,0 +1,152 @@
+Let's create a
+great profile
+picture
+E27 - As a user that has just downloaded the app I want to start using it for the first time
+USs involved: 037, 181
+
+Registration process
+PROVIDING PHONE NUMBER 037.A
+REGISTRATION, LOG-IN
+OR RECOVERY DISTRIBUTOR
+COUNTRY SELECTION
+US 165
+
+As a user that is trying to
+register, I can receive a phone
+call in order to verify my
+phone number
+ALL
+The button should appear disabled until the user inserts the verification code completely.
+
+User can do this in two ways:
+1) Typing the code.
+2.a) iOS: An API listens from the verification code on the SMS and it places it as either predictive text (as in Tinders case). The user can tap this predictive text to complete the code field. 
+2.b) Android: The user should be able to copy the code from the SMS notification
+Source:https://medium.com/better-experience-design/better-experience-3-one-time-password-8891f1700b44
+INDICATING CODE 037.B
+E-MAIL ADDRESS 037.D
+CAMERA ROLL
+NAME  037.C
+PROFILE PIC
+LOCATION
+Rabia's suggestion:
+we could have a checkbox in here.
+Let's start with your phone number
+By continuing with the process you accept the Terms of Service and Privacy Policy
+Already have an account? Log in
++44
+Enter phone number
+Send verification code
+My code is
+Verify through a phone call
+code sent to: +54 224 564 748
+What's your e-mail address?
+What's your full name?
+I would like to receive e-mails regarding:
+Important account information and 
+invitations from another Resbite friends
+Resbite suggestions, advice about staying healthy and Resbite news.
+Skip for now
+Enter e-mail
+First name
+Last name
+Where is your home location?
+Where is your work location?
+Enter city
+Note
+A) For every step, the "Continue" buttons should be disabled by default, and enabled once the user has entered a valid value in the input.
+
+B) If gender, location or e-mail address is not something necessary to obtain from the user from the beginning, it would be good to take it out from here and let the user complete it in the Profile later.
+
+C) Don’t navigate your users to Log In after verification because they are already registered.
+
+D) Requesting for permissions best practices:https://techcrunch.com/2014/04/04/the-right-way-to-ask-users-for-ios-permissions/
+
+US050
+
+As a user that has just got signed-in I want to invite contacts to use Resbite
+It would be good to explain to the user why this information is required, indicating what benefits would the user have with this.
+ie: "Resbites will be better tailored for you with this information"
+Keep the cities being searched within the country indicated on the left only, reducing the overall complexity of the search algorithm
+Question for Rabia:What about pre-populating both fields (country and city) with IP geolocation? It might be less accurate, but you don't need user permission for it
+The user can reposition the picture to fit the face in the face shape.
+REGISTRATION PROCESS COMPLETE
+US 122
+
+The user can log-in typing access credentials
+is there an account already active for this phone number ?
+US 122
+
+The user can log-in typing access credentials.Step 122.D
+Trouble signing in?
+Log in
+Create a new account
+US 122
+
+The user can log-in typing access credentials.Step 122.A
+US 220
+
+As a user that has changed the phone number, I can recover my Resbite account with my e-mail addressStep 220 .A
+Resbite
+This text should explain why it is useful for the user to provide this information
+Why a photo of my face?
+Set work location as well
+Ok
+Yo are 80% more likely to be added to friend's and family's resbites if you can be easily identified with a clear and up-to-date profile photo of your face. 
+Yo are more likely to be invited to resbites if you can be easily identified with a clear photo of your face.
+Boost your experience 
+By granting access to your location you will enjoy better resbites suggestions
+Boost your experience 
+By granting access to your location you will enjoy better resbites suggestions and you'll find friends near you.
+You will be able to enjoy resbites more relevant to your location
+Select your country code
+countries where the app is  available should appear first.
+Don't need to show this if this checkbox was already checked in the previous screen.
+Please upload
+a great profile picture
+What's your postcode?
+Have a B option
+with the city already suggested for the user.
+What's your location?
+Reading, United Kingdom
+How do you identify
+your gender?
+Female
+Non binary
+I identify as:
+Prefer not to answer
+Male
+We could have a checkbox in here.
+9:41
+The sender should be clear for the user, like in the following example from "OBC Bank":
+This text could be some text like:1) explaining benefits of making balance.
+
+2) motivating the user to make balance, mentioning what this user is being great at and what could be done to make balance.
+Continue
+Or should the user arrive to a HOME screen with more diverse content?
+reduces stress
+see stats
+US083
+
+As a user, I can see the details of a chosen resbite so that I can do it alone
+Skip this for now
+Explain why it is useful for the user to provide this information. Smth like "Verifying your e-mail address will allow you to  invite other users to join you on resbites.".
+
+ie: Tinder says "Don't loose access to your account. Verify your e-mail". Resbite will also need e-mail address to help th user recover access to the account.
+
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen
+DISCOVER
+SETTINGS
+BALANCE
+ACHIEVE

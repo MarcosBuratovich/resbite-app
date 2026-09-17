@@ -1,0 +1,185 @@
+
+### xl/sharedStrings.xml
+reported by
+Issue
+Comments
+owner
+priority
+status
+status references
+on hold
+Fermin
+News Ticker at the top is missing
+El contenido debe ser el de fabri?  Linkear el early access
+High
+disregarded
+Footer - desktop + mobile - reduce line-height, the spaces between lines need to be reduced (please have the original site as a reference)
+solved
+Home - Keep in Touch - please add the paragraph "If you’re already on social media, ..." and the social icons
+medium
+in progress
+Can you please increase the section titles a little bit?
+Se cambio de 3rem a 3.75rem
+meta <title> : please use the same as the one in the previous website
+Home - We Design Ethical Tech - please style the pagination rounded dots like in the original website 
+Paragraphs (desktop) - font-size: podemos probar incrementar la tipografia un toke? ayudaria a que no haya tantas palabras por linea en parrafos que ocupan todo el ancho de pantalla
+se incremento de 1rem a 1.15
+footer desktop - Terms and Conditions link quedaria mejor en 1 sola linea?
+Esta en una linea pero depende del ancho de pantalla si necesita ajustarse
+footer desktop - Los copyrights estan en 1 linea pero quedan mejor en 2 como en el stio original. Porfa revisar como responde a distintos anchos de pantalla tambien
+no entiendo a que refiere
+Accesbilizar el sitio 
+low
+Footer - agregar linea que diga algo como 'ADA compliant' (lo mismo que pusimos en Choc, noe stoy seguro de si era ese el texto)
+Home - We Design Ethical Tech - el slider no tiene autoplay, podrias porfa agregarselo?
+Agregar legal pages (Terms & Conditions, etc)
+Revisar contenido
+Product page - porfa cambiar <title> a este: 'Resbite app | a product that enhances real social connections'
+Research page - porf cambiar el <title> a 'Resbite app | backed with academic independent research'
+Home - Overview mission - can we remove the 'resbite' username in Vimeo Settings? Lo mismo aplica al video de Product page
+https://prnt.sc/uSAsbwEALSjH 
+Necesitaria acceso al vimeo de resbite
+
+Product - Creating a resbite section - el titulo es Sentence Case porque se hace referencia a 1 resbite, no a Resbite como nombre de la app.
+El boton de back-to-top que esta en el sitio productivo no esta en el nuevo. Al aplicarlo porfa tener en cuenta que en mobile es mas chico
+Desktop - secciones - los titulos de las secciones quedarian mejor en un tamanio mas grande como en el sitio original
+Investors page - el boton de contacto no me lleva a ningun lado. Se podria abrir un pop-up con un form de webflow, o por ahi directamente ofrecer el form en la pagina (en ese caso habria que removr el boton)
+Validar con fer. Hacer como en otras paginas que cambia de color y acercarlo al texto de arriba
+Home - interview section - el ultimo parrafo tine un link en el sitio original ('posted a blog')
+mobile
+Fer
+Homepage - please reduce H1 font-size to 2.5 or 2rem
+Se redujo a 2.5rem
+menu mobile - las 3 lineas del menu quedarian mejor un toke mas gruesas, en su momento Imogen me pidio que pusiera esas lineas del mismo grosor que los bordes de los botones de la web
+Les doble el grueso
+All pages - can we have paragraphs aligned to the left? (this is also inconsistent int he original site)
+Review
+mobile menu icon: podria estar alineado junto al contenido? 
+mobile menu - podemos evitar que el link se ponga en verde en el lapso de tiempo entre que se presiona una opcion y cambia la pagina?
+Investors page - header - cuando se hace sticky el icono de menu en ve de verse blanco como en las otras paginas, se ve color oscuro (violeta creo)
+Product Page - App Features section - deberia ser un slider como en el sitio original
+El H1 de cada pagina quedaria mejor con un font-size mas chico
+Product Page - Apply for Early Access - la ilustracion de la copa en mobile se ubica debajo del texto de la seccion, no por encima como ahora
+Product - Roadmap section - al interactuar haciendo slide para avanzar o retroceder, el marcador del paso activo tarda en aparecer, esto creo que funciona mejor en el sitio original. Si hago tap sobre el marcador en vez de hacer slide en el crousel funcionan mejr porque se marca el paso activo al toke y aparece en un mejor tamaño.
+Review- hay un problema de performance con estas animaciones, puede ser debido a que cada slide tiene su animacion personalizada.
+Product Roadmap section - ver si se puede acomodar para que en celulares chicos el texto no se superponga con la imagen de fondo (ya sea reduciendo el line-height, reduciendo font-size del titulo de cada paso, o de otra forma)
+pedirle un screen a fer
+post-launch (despues de que se publique en el dominio productivo)
+Cookie widget - pasar del sitio viejo al nuevo
+Validar en Google Search Console
+Implementar Microsoft Clarity
+Implementar Google Analytics (a traves de Google Tag Manager si es posible)
+### xl/worksheets/sheet1.xml
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+7
+12
+13
+14
+14
+15
+16
+7
+17
+18
+19
+14
+20
+11
+14
+21
+14
+22
+23
+14
+24
+25
+12
+26
+27
+28
+29
+30
+29
+31
+14
+32
+33
+11
+34
+16
+14
+35
+14
+36
+37
+14
+38
+29
+14
+39
+16
+14
+40
+16
+14
+41
+42
+14
+43
+16
+7
+44
+45
+46
+47
+14
+48
+49
+14
+50
+51
+11
+17
+52
+16
+14
+53
+14
+54
+29
+14
+55
+16
+14
+56
+14
+57
+29
+14
+58
+59
+16
+60
+61
+7
+62
+45
+63
+11
+64
+11
+65
+29
+66
+29

@@ -1,0 +1,117 @@
+E58 - Not-logged-in user opens the app and needs to log-in (2nd-run)
+USs involved: 122, 220
+
+Logging in
+There are 2 main paths on this flow:
+a) Logging in (upper row)
+b) Account recovery (lower row)
+PROVIDING PHONE NUMBER 122.A
+ACCOUNT RECOVERY 220.A
+COUNTRY SELECTION
+US 165
+
+As a user that is trying to
+register, I can receive a phone
+call in order to verify my
+phone number
+ALL
+The button should appear disabled until the user inserts the verification code completely.
+
+User can do this in two ways:
+1) Typing the code.
+2.a) iOS: An API listens from the verification code on the SMS and it places it as either predictive text (as in Tinders case). The user can tap this predictive text to complete the code field. 
+2.b) Android: The user should be able to copy the code from the SMS notification
+Source:https://medium.com/better-experience-design/better-experience-3-one-time-password-8891f1700b44
+INDICATING CODE 122.B
+122.C
+122.D
+E-MAIL ADDRESS
+Rabia's suggestion:
+we could have a checkbox in here.
+The country code should be pre-set by geolocation.
+Sign in
+By continuing with the process you accept the Terms of Service and Privacy Policy
+Proceed to Log in
+Proceed to recover account
++44
+Enter phone number
+Send verification code
+My code is
+Verify through a phone call
+Update your e-mail address, type it again
+code sent to: +54 224 564 748
+What's your e-mail address?
+I would like to receive e-mails regarding:
+Important account information and 
+invitations from another Resbite friends
+Resbite suggestions, advice about staying healthy and Resbite news.
+Skip for now
+Enter e-mail
+US 050
+
+As a user that has just got signed-in I want to invite contacts to use Resbite
+US 082
+
+As a user, I can choose a resbite to do
+should be disabled by default, and enabled once the user has entered a valid value in the input.
+USER IS LOGGED IN
+is there an account already active for this phone number ?
+Has the user indicated an e-mail address for this account before?
+US 037
+
+The user can register on RB using phone number
+Screen 037.C
+Trouble signing in?
+Log in
+Create a new account
+Account recovery
+We'll send you a link so that you can quickly recover your account
+If an account for example@example.com exists, we've already sent a recovery link.
+In case you haven't received the link:
+Send link
+button should be disabled by default, and enabled once the user has entered a valid value in the input.
+By not promising the user that an email will be sent and not disclosing whether the email/username even exists in the database, we :1) encourage them to double check their credentials (in case they don’t get the link) and 2) prevent phishing attacks.
+REGISTRATION, LOG-IN
+OR RECOVERY DISTRIBUTOR
+Related UX reads: https://blog.prototypr.io/ux-guide-password-reset-user-flow-bfa35a16e527
+The user receives an e-mail with a text that says "Log in to your account" and provides a LOG-IN button and an alternative link to copy and paste on browser.
+See Tinder example screenshot on ClubHouse US 220
+LOG IN button clicked by the user
+Let's verify your
+phone number
+Has it been too long since the user invited friends to join the app for the last time ?
+The sender should be clear for the user, like in the following example from "OBC Bank":
+This text could be some text like:1) explaining benefits of making balance.
+
+2) motivating the user to make balance, mentioning what this user is being great at and what could be done to make balance.
+Continue
+Or should the user arrive to a HOME screen with more diverse content?
+reduces stress
+see stats
+9:41
+US083
+
+As a user, I can see the details of a chosen resbite so that I can do it alone
+Skip this for now
+Explain why it is useful for the user to provide this information. Smth like "Verifying your e-mail address will allow you to  invite other users to join you on resbites.".
+
+ie: Tinder says "Don't loose access to your account. Verify your e-mail". Resbite will also need e-mail address to help th user recover access to the account.
+
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen
+DISCOVER
+SETTINGS
+BALANCE
+ACHIEVE
+Nice to have:
+showing some empathy with a sentence under the title saying smth like "Don’t worry, happens to the best of us."

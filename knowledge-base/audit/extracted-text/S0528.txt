@@ -1,0 +1,32 @@
+US047
+
+The user receives a "welcome to RB"
+e-mail after verifying e-mail address.
+
+
+        US037
+
+        The user can register on
+        RB using phone number
+
+
+
+
+                                       Has the user been using the
+                                        app for some time before
+                                        validating e-mail address?
+                                                                         The e-mail sent is a "welcome to
+           E-mail is sent
+                                                                         RB" e-mail that explains a general
+           to the user's
+          just verified e-                                               idea of what can the user do with
+           mail address                                                  the app.
+
+
+
+
+                                   The e-mail sent explains specific
+                                   features with certain detail, since
+                                   the user is already familiar with
+                                   the app after interacting with it
+

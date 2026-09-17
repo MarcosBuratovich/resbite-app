@@ -1,0 +1,36 @@
+
+As a user that is doing a resbite, 
+I can check the progress of it
+US083
+
+As a user, I can see the details of a chosen resbite so that I can do it alone
+E26
+
+Providing feedback about a just finished resbite
+Provide:
+1) resbite name
+2) animated progress indicator 
+3) timmer
+ONGOING
+RESBITE
+remove resbite friends from this resbite?
+User pauses the resbite?
+Is this resbite set to do with other resbite friends?
+E79- Choosing a resbiteUS109
+Include names of resbite friends doing this with user
+User quits this ongoing resbite
+Resbite finishes when the set duration for it is over
+update resbite mates list for this ongoing resbite
+pause progress indicator and timmer until the user plays it again
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen

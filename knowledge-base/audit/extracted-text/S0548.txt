@@ -1,0 +1,38 @@
+E28 - Checking the general progress done with Resbite
+
+US089
+
+As a user that's been using Resbite for a while, I can see a
+timeline/history of the resbites I've done.
+
+                            GO TO
+                            USER'S
+                         HISTORY LINE
+
+
+
+
+              Timeline:
+              List where activities done and goals/                        See resbite details:                                US083
+              milestones achieved are ordered by                           Title
+              "latest first"                                               Description                                         As a user, I can see the details
+              If a resbite has been done more than      select a resbite   Main image                                          of a chosen resbite so that I
+              once it should be shown repeated.                            Duration                                            can do it alone
+                                                                           possibility to invite others   User decides to do
+                                                                                                          the resbite again?
+
+
+
+
+                   Each resbite shows:
+
+                   Name
+
+                   Date it was done.
+
+                   If it's been added to
+                   favorites in case it was
+
+                   Possibility to be added to
+                   favorites
+

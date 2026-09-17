@@ -1,0 +1,7 @@
+{
+  "documents_checked": 16,
+  "links_checked": 1840,
+  "errors": [],
+  "stack": "React Native/Expo/TypeScript recommendation; Supabase selected",
+  "status": "documentation only; no app built or deployed"
+}

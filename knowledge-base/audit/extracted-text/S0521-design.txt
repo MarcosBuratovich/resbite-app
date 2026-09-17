@@ -1,0 +1,54 @@
+MVP flowchart
+User opens
+the app
+Is it 1st run
+experience?
+is the user already registered and
+prefers to login in stead?
+Will the user
+invite others to join
+on this resbite?
+User decides to do any of
+those resbites again?
+Log-in - E58
+The user arrives
+at resbites list
+Registration - E27
+The user chooses a resbite - E79
+Settings
+The user modifies app settings - E90
+app notifications  US121
+Log Out - US119
+The user checks general progress done - E28
+The user checks the history of activities done - US089
+The user checks the goals achieved
+The user decides to balance the progress done different to the ones the user has been doing - E55
+user checks profile
+friends list
+Modifying personal information
+E137
+The user chooses to invite others (only up to 6 will be allowed) - E61
+practice a resbite
+US109
+User provides  feedback about activity just done - E26
+User connects 
+to others in Resbite
+E63
+receives feedback of progress done
+Note:
+Numbers indicate the specific epic.
+checks stats
+goes back to Home or RB list
+Or should the user arrive to a HOME screen with more diverse content?
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen

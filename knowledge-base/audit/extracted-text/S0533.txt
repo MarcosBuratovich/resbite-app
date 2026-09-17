@@ -1,0 +1,65 @@
+US001
+
+The user opens the app on first-run and passes the slideshow
+The user opens the app for the first time and goes through the features slideshow.
+
+
+
+
+                                                                                                                        US004
+
+                                                                                                                        The user can login
+                                                                                                                        to the app
+
+
+
+
+                                                                                            Continue                             log in
+                                                                                         with slideshow
+                                                                                            or skip?                                                           US002
+                                                                                                                                      register or
+    SPLASH
+     SPLASH                                   1st-run features slideshow                                    skip                          login?    register   The user can REGISTER
+    SCREEN
+     SCREEN                                   slide 1                                                                                                          completing only required
+                                                                                                                                                               fields
+                                                                                                                                                               (e-mail , pass and basic info)
+
+                                                                                            continue
+
+
+
+
+                                                                                       slideshow: slide 2
+
+
+
+
+                                                                           Continue slideshow
+                                                                                                            skip
+                                                                                or skip?
+
+
+
+                                                                                            continue
+
+
+
+
+                                                                                       slideshow: slide 3
+
+
+
+
+                                                                           Continue slideshow               skip
+                                                                                or skip?
+
+
+
+                                                                                            continue
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction
+that the user has with the app.                                                        slideshow: slide 4          swipe right
+

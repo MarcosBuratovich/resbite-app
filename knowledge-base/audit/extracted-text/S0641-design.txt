@@ -1,0 +1,62 @@
+Details
+E55 - Balancing progress
+USs involved:
+
+Balancing progress
+level of progress :
+
+This could show a different illustration depending on the level of progress achieved by the user in this area.
+
+Illustrating a metaphor for every different level of progress achieved could make the experience stronger and more meaningful.
+Progress indicator for each area :
+
+This could be expressed in terms of points achieved, or in categories.
+
+This text could be some text like:1) explaining benefits of making balance.
+
+2) motivating the user to make balance, mentioning what this user is being great at and what could be done to make balance.
+Balance
+Milestone 1
+Nature status progress level
+go for more
+Socializing progress level
+Personal wellness progress level
+US 050
+
+As a user that has just got signed-in I want to invite contacts to use Resbite
+BALANCE
+SPECIFIC AREA TO BALANCE
+- ROADMAP -
+SPECIFIC AREA TO BALANCE
+- MILESTONE (resbites) -
+564
+NATURE
+MILESTONE 1
+Milestone 2
+Milestone 3
+OR CHOOSE BETWEEN THE FOLLOWING ONES
+Featured resbite
+ALL
+30 MINS
+SPORTS
+milestone completion progress indicator
+ACHIEVE
+DISCOVER
+SETTINGS
+9:41
+Skip this for now
+Active Challenge:
+In case there's a challenge ongoing a card like this appears in firs place.
+A card for every ongoing challenge.
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen

@@ -1,0 +1,61 @@
+US003
+
+The user can register on RB with phone number
+Previously, the user chose to use phone number to register in stead of e-mail address.
+
+
+
+
+  US002
+
+  The user can register on RB
+  with e-mail address
+
+
+
+
+                                                                                                                                                      request the user to type the
+     User chooses                   the user chooses    the user types                                        send SMS verification                   received verification code,
+   to register with                 country code for    phone number                                          code to provided
+    phone number
+                                                                                                                                                      always reminding the
+                                    the phone number                                                          phone number                            number to which the code
+                                                                               send verification code or                                              has been sent
+                                                                                  go back to e-mail
+                                                                                     registration?
+
+
+                                                                                                                                                                           the user verifies a code or
+                                                                                                                                      type phone nuber again
+                                                                                                                                                                             decides to modify the
+                                                                                                                                                                                phone number?
+
+
+                                                                                                                                                         submits verification code
+
+
+                                                                              submits new
+                                                                            verification code                                                                                                                   US007
+
+                                                                                                           let the user know it's expired,                                is verification code
+                                                        type phone                                                                                                                                              The signed-in user arrives at
+                                                                                                           and offer to resend verification                                     expired?
+                                                       number again                                                                                                                                             the Resbites list for the 1st
+                                                                                                           code to the already indicated
+                                                                                                                                                                                                                time and follows the UI
+                                                                                                           phone number
+                                                                                                                                                                                                                explanation
+
+                                                              send a new verification
+                                                              code or re-type phone
+                                                                     number?
+                                                                                                           let the user know it's expired,
+                                                                                                           and offer to resend verification                                                      User's phone
+                                                                                                                                                                                                   number
+                                                                                                           code to the already indicated
+Note                                                                                                                                                                                               verified
+                                                                                                           phone number
+Let the user cancel this process and go
+back to choose e-mail registration                                                                                                                             is verification
+                                                                                                                                                                code valid?
+

@@ -1,0 +1,121 @@
+E63 - Connecting to others in resbite
+USs involved: 050
+
+As a user that has just got signed-in I want to invite contacts to use Resbite
+ALL
+Note
+bla bla bla
+
+Resbites are memorable experiences to share with others
+Invite friends to join you and reconnect to what matters while getting together.
+Add from phone contacts
+Find who among your phone contacts is on Resbite or invite others to join
+Resbiters in your contacts
+Resbite
+Don't worry, we won't automatically send any invitation or message to your contacts. 
+Only the ones you pick up will receive an invitation.
+Maria Ruiz
++ Connect
+Stephen Gray
+Rabia Nuzha
+John Mahler
+Noel Gallagher
+Tony Sorensen
+Bob Bagheart
++ Invite
+Andrea Mendez
+From your phone contacts
+Search contact
+Invitation sent
+pending
+INVITE FRIENDS
+PERMISSION REQUEST TO ACCESS PHONE CONTACTS
+INVITE FROM PHONE CONTACTS
+US 082
+
+As a user, I can choose a resbite to do
+FRIENDS INVITED
+Done!
+Join Resbite today
+Join me on resbite
+Maria is inviting you to share resbites. Download Resbite app and check it out.
+https://appstore.com/resbite
+The invitee receives a notification through SMS
+The user searches among phone contacts
+The invited user downloads the app and launches it, and ges through registration process.
+MY RESBITES
+PROFILE
+Connection request
++ Add
+Dismiss
+When the user has only one connection request the possibility to dismiss the invitation or Add as a friend is shown in the notifications screen.
+
+When there is more than one connection request the notification screen shows this as a single notification: 
+
+
+
+
+Tapping on this notification the user can manage these connection requests in another screen.
+4 new connection requests 
+Thomas Perthson + 3 others
+USER 1
+USER 2
+Are you sure you want to Cancel the connection request with Rabia?
+Yes, cancel request
+No
+example: invitation
+received in whatsapp
+user sends invitation manually outside of the app.
+Resbites are memorable experiences to share with others. Click here and add me as a buddy:
+Join me on resbite
+resbite.app
+E-mail
+Whatsapp
+Phone contacts
+E-mail a friend link
+Paul Rosendal
+Mary Garth
+Danny De Vito
+Phillip Featherston
+Sumit Radish
+Gunter Weber
+Connection requests
+To the invitee it appears as sent from resbite owner e-mail address. Would look much more personalized like this.
+
+Share a friend link
+Skip for now
+9:41
+The sender should be clear for the user, like in the following example from "OBC Bank":
+This text could be some text like:1) explaining benefits of making balance.
+
+2) motivating the user to make balance, mentioning what this user is being great at and what could be done to make balance.
+Continue
+Or should the user arrive to a HOME screen with more diverse content?
+reduces stress
+see stats
+US083
+
+As a user, I can see the details of a chosen resbite so that I can do it alone
+Skip this for now
+Explain why it is useful for the user to provide this information. Smth like "Verifying your e-mail address will allow you to  invite other users to join you on resbites.".
+
+ie: Tinder says "Don't loose access to your account. Verify your e-mail". Resbite will also need e-mail address to help th user recover access to the account.
+
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen
+DISCOVER
+SETTINGS
+BALANCE
+ACHIEVE
+Only day should be mandatory this screen  in order to continue
+Skip

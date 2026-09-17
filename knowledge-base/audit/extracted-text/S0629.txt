@@ -1,0 +1,15 @@
+mimetype
+manifest
+META-INF/metadata.xml
+artwork/artboard-0799ac1e-67eb-4387-ac76-4688c18b8b9b/graphics/graphicContent.agc
+artwork/pasteboard/graphics/graphicContent.agc
+interactions/interactions.json
+preview.png
+renditions/image-2048-1462.png
+renditions/image-512-366.png
+resources/4e1008de1f598160b33f070c214cc381
+resources/52e2119bd22e865ac41148c52908dc0c
+resources/5f17d14e7c3c5ba97caf47703a7c5772
+resources/graphics/graphicContent.agc
+sharing/sharing.json
+thumbnail.png

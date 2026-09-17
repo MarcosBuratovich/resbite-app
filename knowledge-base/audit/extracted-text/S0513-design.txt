@@ -1,0 +1,48 @@
+
+As a user that has just got signed-in 
+I want to invite contacts to use Resbite
+US122
+
+The user can log-in typing access credentials 
+US034
+
+The user can register on RB using e-mail address
+US
+
+The signed-in user arrives at the Resbites list
+Go to social network and select contacts to whom invite to use RB there.
+INVITING CONTACTS
+to RB
+CONTACTS INVITED
+go back or finish
+inviting?
+Offer to invite people to the app (from the SN contacts and from the phone contacts).
+Invitation message. is visible.
+Additionally offer to copy invitation link
+go back 
+(to select contacts from another
+source or to copy invitation mssg.)
+finish
+skip (do not invite)
+E63- Connecting to others in ResbiteUS050
+Choose a specific source
+where to add contacts from
+Copy invitation
+user sends invitation manually outside of the app.
+The message sent is specific to this activity. "Come walking to the park with me, join me on Resbite". 
+example:
+the user is done, there won't be a way to provide feedback like "invitation sent" since that took place outside the app.
+example: invitation
+received in whatsapp
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen

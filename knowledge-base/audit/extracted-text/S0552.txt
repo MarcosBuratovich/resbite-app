@@ -1,0 +1,55 @@
+E61 - Doing a resbite with others
+
+US062
+
+As a user that just picked-up a resbite,
+I want to invite Resbite friends to join
+Resbite friends appear as the first source of people to invite
+NOTE:
+There's a different user story to invite people that is on the app but is not a resbite friend.
+And another one related to inviting contacts not using resbite at all.
+
+
+
+                                                                  Choose friends from the                                                              Did the user invite more         Choose another contacts
+                                                                 list or search for a friend?                                                               than 6 people?                src or finish inviting?
+
+  Invite resbite
+                       Show the user a list of friends                                   choose friends from the list           provide feedback
+ friends to join       as soon as the user indicates                                                                            indicating all the
+   the chosen          that wants to invite others to                                                                           resbite users chosen
+     resbite           join a resbite.                                                                                          to be invited
+                       Offer to search for other resbite
+                                                                                 Search for a friend
+                       users (might not be friends),                                                                                                                                       finish inviting
+                       and offer to invite contacts
+                       from outside the app.
+
+                                                                 provide results as the                                 selects one or more contacts
+                                                                 user types letters                                            from the results                                         send invitation to
+                                                                                                                                                                                        users letting them
+                                                                                                                                                       warn the user that due to
+                                                                                                                                                                                        know that only the
+                                                                                                                                                       covid-9 social distancing
+                                                                                                                                                                                        first 6 to accept will
+                                                                                                                                                       only the first 6 to accept the
+                                                                                                                                                                                        be able to join
+                                                                                                                                                       invitation will be able to
+                                                                                                                                                       attend
+                                                                                                                 user cancels the search or
+                                                       Results show resbite users sorted in
+                                                                                                                    picks up contacts?
+                                                       a way that friends appear first, and
+                                                                                                                                                                                                                       create
+                                                       resbite users that are not friends
+                                                                                                                                                                                                                    a date poll?
+                                                       appear after those.
+                                                                                                                                                                                            Feedback :
+                                                                                                                                                                                            "invitation
+                                                                                                                                                                                               sent"
+                                                                                                    cancel
+                                                                                                    search
+
+
+                                                                                                                                                                                                                     not on the MVP
+

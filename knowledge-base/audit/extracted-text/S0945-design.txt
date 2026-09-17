@@ -1,0 +1,2222 @@
+A) Onboarding slideshow
+A.1 - SPLASH SCREEN
+A.2 - SLIDE 1
+A.3 - SLIDE 2
+ A.4 - SLIDE 3
+A.5 - SLIDE 4
+US 037
+
+The user can REGISTER on
+Resbite using phone number
+Appears once the user has gone through all the slides and stays active even if the user goes back to the first slide.
+swipe left
+Feature 1
+Feature 2
+Sure you want to quit
+this resbite?
+Yes, quit resbite
+Only the invitees that have accepted the invitation will be notified about this.
+You can assign the ownership of this resbite to other person.
+No
+Trouble signing in?
+Log in
+Create a new account
+Star gazing
+Near your work
+Fishing Weekend
+Featured resbite
+Karaoke
+30 minutes coffee
+Otdoors
+Family
+Friends
+Couple
+Adventure
+Games
+Meals & Drinks
+Suggested for you
+Walk in the park
+see more
+Rabia Nuzha
+Maria Ruiz
+Imogen Adams
+Stephen Gray
+Noel Gallagher
+Add member
+Fermin Lira
+A Fishing weekend
+Imogen Adams                              
+Save all invitees in a group
+Sure you want to delete
+this place?
+Yes
+You won't see it anymore in the Saved places list while setting up a resbite
+Cancel
+Sure you can't
+make it?
+Yes, leave resbite
+The rest of the invitees 
+will be able to go on with it
+
+Not so safe
+Safer
+Delete "Uni" group?
+Yes, delete group
+No one will be
+notified about this.
+Delete "Gym"?
+Yes, delete
+Invite
+Schedule
+Place it
+Continue
+Finishes
+-
+Starts
+3:13    PM
+November the 17th
+Monday
+John Mahler
+Tony Sorensen
++ Invite
+Bob Bagheart
+Andrea Mendez
+Search contact
+E-mail a friend link
+Add to group
+Set a day
+Add from phone contacts
+Connect
+Find who among your phone contacts is on Resbite or invite others to join
+or share a friend link
+Resbite
+Don't worry, we won't automatically send any invitation or message to your contacts. 
+Only the ones you pick up will receive an invitation.
+MondayApril the 28th
+3:13PM
+Meeting point:28 Mulberry Court road
+Wokingham
+ie: "In front of The Courtyard cafe"
+Add a note:
+Imogen, Rabia + 7 others
+Monday, april the 28th
+3:13PM
+28 Mulberry Court road
+Wokingham
+Recycle resbite
+You canceled  this resbite. 
+12
+Find place
+Set by address
+Meeting point (address or place)
+Saved
+Work
+Canary Wharf
+Home
+Recent
+address
+find
+Vauxhall Joe's bar
+Tottenham Court Station
+Enter city
+Where is your work location?
+Skip for now
+Boost your experience 
+By granting access to your location you will enjoy better resbites suggestions and you'll find friends near you.
+Any suggestion before meeting your companions for this resbite?
+Share it with the group
+In front of The Courtyard cafe
+Note:
+S) Attendance limit
+Done! send invitations
+28 Mulberry Court road
+Wokingham
+RG2 7YS
+Attendance limit: 4
+Ony the first 4 invitees to confirm attendance will have a place at this resbite.
+K.12 - RESBITE SET-UP  - OVERVIEW
+Fixed block
+Both the Attendance quota limit and the "Continue" buttonstay fixed while the user scrolls through the invitees list.
+Attendance limit
+The attendance limit should be at least 1/3 of the total number of invitees.
+The “attendance limit” checkbox appears as disabled until the user starts selecting invitees. 
+
+Only once the when the user selects the checkbox the input field is displayed through a toggle animation.
+
+This limit should be at least 1/3 of the total number of invitees, so that the waiting list is never more than double of the attendance limit.
+
+The number set by default is 1/3 of the total number of invitees. And the value can be increased or decreased by using the “+” or “-“ buttons, or typing another value with the numeric keyboard as well. The keyboard is however not displayed until the user has tapped on the input field.
+Limit warning
+It only appears in case the user has set an attendance quota limit.
+Maria is inviting you to Costume Party resbite. There are only 4 places available.
+22 mins
+4 new connection requests 
+Thomas Perthson + 3 others
+I’m out
+I'm in
+"In front of The Courtyard cafe"
+MY RESBITES
+PROFILE
+I won't be attending
+Maria Ruiz is inviting you
+G.5 - INVITING TO RESBITE
+OVERVIEW (INVITEE VIEW)
+G.7 - UPCOMING RESBITE
+(INVITEE VIEW)
+If the resbite admin has set up a attendance quota limit the notification indicates it.
+The warning only appears here if the quota limit hasn't been reached yet. If it's been reached it will only appear in the invitees list screen.
+The invitation can be dismissed regardless if the attendance limit has been reached or not.
+The user will be notified about released places only if this switch is ON. This notification won't be triggered again if a second pace is released. As long as there is a free space available there is no need to send new notifications.
+A place has been released at 
+the Fishing Weekend resbite
+H. - ATTENDANCE LIMIT
+(Notification)
+Sorry, you can no longer attend to this resbite.
+The attendance limit set by Maria has been reached. Only the first 4 invitees who confirmed attendance got a place at this resbite.
+Put me
+on the waiting list
+If any of the lucky ones cancels, you'll be notified that a place has ben released.
+
+G.14 - RESBITE VERVIEW W/ ATTENDANCE QUOTALIMIT REACHED
+(invitee view)
+1) Setting up the resbite
+3) Before the resbite (admin view)
+2) Receiving an invitation
+cancel resbite
+Note:
+"Resend invitations" button appears only if there is a modification on the resbite.
+Only the resbite admins can see it.
+If nothing has changed since the invitees received the last invitation, the button should not appear visible.
+H.1 - UPCOMING RESBITE
+(resbite admin view)
+H.20.2 - MORE THAN 25 INVITEES LIST
+(attendance quota limit reached)
+H.20.3 - MORE THAN 25 INVITEES LIST
+(Waiting list)
+Has any invitee already confirmed attendance ?
+Has the attendance limit been reached ?
+Attendance
+Attending                                          4
+Waiting list                                       10
+Not confirmed yet                           19
+A Fishing Weekend
+Attendance limit reached
+Francis Matzkin
+Peter Wells
+John McCunningham
+Amber Lager
+Sophie Lee
+Robert Murdoc
+Anne McMillan
+Martin Garrix
+Marlene Pablov
+Search group member
+If any of the lucky ones cancels, the invitees on the waiting list will be notified that a place has been released.
+Prioritize invitees by dragging them up or down in the waiting list
+Waiting list:
+Quota warning
+If the attendance quota is reached the following warning appears:
+Attendance limit reached: 4 invitees
+Attendance not confirmed yet
+No invitee as accepted 
+the invitation yet
+Rabia Nuzha                          
+Imogen Adams            
+General screen notes:
+- There is no "resend invitations" button.
+- Settings cannot be changed
+- There is a card that encourages the invitee to use the chat in order to suggest modifications.
+Imogen, Rabia + 3 others
+4) Before the resbite (admin view)
+H.11.1 - UPCOMING RESBITE
+(invitee view)
+H.11.2 - UPCOMING RESBITE
+(invitee view) - invitees
+Attendance confirmed
+Rabia Nuzha                               admin
+You
+Imogen Adams                              admin
+NOTES:a) The invitee doesn't have the chance to "add all invitees in a group" like the resbite owner has. Neither do the other admins that the resbite owner could have set among the invitees.
+Has the attendance limit been reached?
+K.1 - RESBITE SET-UP  -  INVITE
+Peter Ruiz
+Imogen, Rabia + 8 others
+Fishing buddies
+Household
+Search contact or group
+Invite to resbite
+Invite friends to the activity
+Is the “attendance limit” lower than 1/3 of the total number of invitees?
+K.1.2 - RESBITE SET-UP  -  INVITE
+When the attendance quota
+K.1.3 - RESBITE SET-UP  -  INVITE
+When the attendance quota
+If the value is decreased under 1/3 of the total number of invitees, the number appears in red, and a warning appears above the field.
+
+The “continue” button is disabled, so that the user can’t continue to the next step until this number is valid back again.
+
+The invitees that took part in the resbite that is being repeated should appear pre-selected in here.
+S.1 - INVITING TO A RESBITE
+Reaching the limit of invitees
+Fishing weekend
+5 invitees
+Invitees limit
+reached
+Ok
+You can increase the attendance limit if you wish to add more invitees to the list.
+Reaching the limit
+Once an “Attendance limit” has been set, when the number of total invitees reaches 2/3 of the “attendance limit” value, as soon as the user adds one more invitee a warning is triggered.
+6
+S.1 - INVITEES LISTS
+(Limit not reached)
+Confirmed                                         5
+S.1 - INVITEES LISTS
+(Limit + no confirmation)
+Let's start with your phone number
+By continuing with the process you accept the Terms of Service and Privacy Policy
+Already have an account? Log in
++44
+Enter phone number
+Send verification code
+What's your full name?
+First name
+Last name
+My code is
+Verify through a phone call
+code sent to: +54 224 564 748
+36 Factory LaneIlkeston, DE7 8HQ
+Save location
+Name of this place
+Change the place
+How was the
+Cooking Veggie event?
+How did you feel after it?
+relieved from stress
+greatful
+self-confident
+more focused
+more relaxed
+none of the above
+energized
+calm
+happier
+healthier
+Comments:
+MY RESBITES: UPCOMING RESBITE
+(invitee view)
+Totten
+Totterloo Gardens
+Tottenham Court Road
+You're doing great! The experience could be better if you go on completing your profile
+Connections
+Favorite places
+GO PREMIUM
+invite others
+Resbites get better with others
+Groups
+Maria
+VERIFY YOUR E-MAIL ADDRESS?
+2
+10
+LAST MONTH
+28 apr - 3:13pm
+Maria is inviting you
+to Chess Game
+28 Mulberry Court road
+Done
+Upcoming
+Favs
+Where is your home location?
+Boost your experience 
+By granting access to your location you will enjoy better resbites suggestions
+Set work location as well
+Resbites are memorable experiences to share with others
+Maria Ruiz is inviting you to share resbites. Download Resbite app and check it out.
+https://appstore.com/resbite
+resbite >
++ Connect
+Your phone contacts
+Done!
+Already using Resbite
+Invite to use Resbite
+C.3 - INVITE OTHERS TO USE APP
+Option 2
+Share link via apps
+Find who among your phone contacts is on Resbite and invite others to join
+Invite friends to join you and reconnect to what matters while getting together.
+C.1 - INVITE OTHERS TO USE APP
+Option 2
+Add through QR code
+C) Receiving an invitation to use the app
+ALL
+Resbiters in your contacts
+The invitee receives a notification through SMS
+The invited user downloads the app and launches it, and ges through registration process.
+WELLNESS
+Connection request
++ Approve
+Dismiss
+When the user has only one connection request the possibility to dismiss the invitation or Add as a friend is shown in the notifications screen.
+
+When there is more than one connection request the notification screen shows this as a single notification: 
+
+
+
+
+Tapping on this notification the user can manage these connection requests in another screen.
+pending
+USER 1
+USER 2
+Join Resbite today
+Join me on resbite
+example: invitation
+received in whatsapp
+Resbites are memorable experiences to share with others. Click here and add me as a buddy:
+Join me on resbite
+resbite.app
+E-mail
+Whatsapp
+C.2 - INVITE OTHERS TO USE APP
+Option 2
+Notes:
+Contacts can only be imported from phone contacts, 
+not from social networks.
+C-1) Connecting through QR code
+Notes:
+This flow is based in the way that WhatsApp allows to add a contact through QR code.
+
+Connecting through QR code could be a quick way for the user to connect with someone without searching that person in another social media or in the phone contacts.
+
+The QR code could be scanned in person (one of the users scan and the other one provides the code to be scanned) or could be scanned from a picture in the photo gallery. This last option allows users to connect through QR code screenshot sent through other social media.
+
+Disadvantage: this solution could not be so useful to the user until the app has reached a certain amount of users within a demographic segment. In the beginning it is very likely that the user needs to invite friends and family to join the app before connecting, and the invitation to use the app is already sending a connection request at the same time.
+The invitee receives a notification in-app and through other media according to the user settings
+C.4 - CONNECTION REQUEST NOTIFICATION
+C.5 - CONNECTION REQUEST NOTIFICATION
+C.6 - CONNECTION REQUEST NOTIFICATION
+C.8 - WHATSAPP INVITATION
+C.9 - EMAIL  INVITATION
+C.9 - SMS  INVITATION
+Only one SMS. Depending on the OS the URL in the message would appear as an appendix of the main message like shown in this  iOS Messages screenshot.
+Once the user has sent a connection request, the "pending” connection stays there when the user arrives to this screen in the future.
+Paul Rosendal
+Mary Garth
+Danny De Vito
+Phillip Featherston
+Sumit Radish
+Gunter Weber
+Connection requests
+C10 - SEARCH CONTACT
+Before typing
+C11 - SEARCH CONTACT
+Search results
+Mary Poppins
+Mary Naggles
+Mary Featherstone
+Mary Thomason
+Mary Bugatti
+Mary
+The searchbar changes style when being active.
+Until the user starts typing the contacts listed remain being the same ones.
+the user types a name
+C12 - CONNECT 
+THROUGH QR CODE
+C13 - CONNECT 
+THROUGH QR CODE
+Connect to others
+Scan a Resbite QR code
+The newest pictures from the phone photo gallery appear here just in case the user has provided access to the photo gallery before.
+NOTES:
+The camera is on, ready to scan
+Request connection
+As soon as the camera scans the QR code, if it belongs to another Resbite user the details name and photo of that user appear on the screen
+Access to the photo gallery. If the user hasn't provided permission to access the gallery before it is requested at this stage.
+Connection request sent to  Maria 
+C14 - CONNECT 
+THROUGH QR CODE
+This feedback snackbar appears for some seconds on the following screen
+Manage my connections
+My groups
+Saved places
+Have children?Add them here so you can include them in your resbites.
+J.1 - PROFILE
+edit profile
+Share QR code
+Resbite QRHelp others connect with you by letting them scan this  QR code 
+Scan a code
+USER 1: scans the code
+USER 2: provides the code to be scanned
+The contacts are sorted by alphabetical order, A to Z.
+User's profile photo
+Sort list by the date the connection request was received. The newest appears first on top.
+Not a priority if we don’t clasify 
+contacts at this stage
+Not a priority
+Fishing
+weekend
+Walk through old underground city tunnels
+Walking 3 parks
+challenge
+Walking lady 
+museum visit
+Walking on ice
+Walking around the lake
+Tabs
+Resbites
+Walk
+Filters:
+2 hours
+What's your e-mail address?
+Resbite suggestions, advice about staying healthy and Resbite news.
+I would like to receive e-mails regarding:
+Important account information and 
+invitations from another Resbite friends
+Enter e-mail
+nov 17, mon
+nov 18, tue
+Walk in
+the park
+Costume party
+Outdoors
+Previously completed
+Your favorites
+Search resbite
+F) Choosing a resbite
+F.1 - DISCOVER (RESBITES LIST)
+Randomizer
+Each time this icon is excecuted, the resbites list are populated with different resbites.
+When scrolling down, the search+filter bar gets fixed when it reaches the top. It stays fixed on top together with the top bar.
+
+In this way, the search and filters are available always in the screen.
+This featured resbite should be editorial based i.e. we could eventually charge money to be listed in this place
+Long description
+This row should not appear in case the user hasn't completed resbites before
+This row should not appear in case the user doesn't have favorites
+F.5 - RESBITE DETAIL
+F.15 - EXTENDED TAG CLOUD
+F.16 - WHATSAPP
+Tips :
+30 mins
+Let's do this
+According to others :
+Similar resbites :
+reduces stress
+connects to nature
+relieves body tension
+example: specific resbite
+received in whatsapp
+Resbites are memorable experiences to share with others. Check this one out :
+F.2 - RANDOMIZE RESBITES
+F10 - SEARCH
+F11 - SEARCH RESULTS
+USER TYPING
+F12 - SEARCH RESULTS
+RESBITES
+F13 - SEARCH RESULTS
+FILTERS APPLIED
+SEARCH A RESBITE
+Note:Search results are shown not only with text, but with an image as well. This can also be seen in apps like YouTube.
+Limit suggestions to less than 10 list items
+In the input search field, add autocomplete as the top suggested item.
+Assist with typos.
+
+
+Note:Provide users with an option to clear their search results in the search bar and equip them to remove their previous searches.
+"Recently searched" content disappears only when the user has started typing search content.
+The cross only appears once the user has started typing on the field and when tapped it clears the text in the field and loads the "recently searched" content on the body of the screen.
+Walk  to Tower Bridge
+cinema
+City tunnels
+Search
+Recently searched
+increases hapinnes
+reduces anxiety
+reduces insomnia
+see less
+Note:The "see more" button toggles the content to a complete view.
+The keyboard is displayed as soon as the user gets to this screen regardless if the user tapped on the searchfield or not.
+F.4 -  FILTERED RESBITES / FILTERS APPLIED
+NOTE:
+When a tag is used to filter results, or when a filter is applied, the results listed are not organized by categories anymore.
+When the user removes all filters, the screen goes back to the main view of DISCOVER
+The search results match the query typed by the user not only with resbite titles, but also with the tags associated with them.
+
+Example: the user searches "outdoor" and the search results show resbites associated with thatt word. The word "outdoor" doesn't necessarily have to be part of the resbite name, but the resbite could have that word as an associated tag in the back-end logic.
+Have you got suggestions for new resbites?
+If there's an activity you would like to suggest, we'll be glat to read you thoughts on it.
+F13.2 - SEARCH RESULTS
+NO RESULTS FOUND
+
+Crocket
+Ups...
+We can't find what you are looking for
+Have you got suggestions 
+for new resbites?
+If there's an activity you would like to suggest, we'll be glat to read you thoughts on it.
+SUGGEST RESBITES
+F14.1 - SUGGEST RESBITE
+Suggest a new resbite
+Description
+Suggestion description
+Send suggestion
+Title
+Suggestion title
+If there's an activity you would like to suggest, we'll be glat to read you thoughts on it.
+F14.2 - SUGGEST RESBITE
+Suggest a resbite
+Discover resbites
+Suggestion sent
+We’ll contact you if your suggestion becomes available as a new resbite.
+
+Resbite is built on our users’ real experience. Your feedback is important to us.
+Thanks!
+F3 - RESBITES LIST FILTERS
+Filters
+30 min
+whole day
+2 days
+2 days +
+1 h
+2 h
+2 h +
+1,5 hours
+Duration
+Sports
+Food & Drinks
+Arts
+Categories
+Workmates
+Companion
+Morning
+Night
+Before down
+Afternoon
+Evening
+Moment of day
+
+Leisure
+See 144 results
+reset filters
+More tags
+Cooking
+Spring
+The user selects and applies filters (screen F3)
+The button is enabled only once the user has types a title and a description.
+The search flow should include these stats:
+Default State
+Hover — Search bar lights up
+Click for Zero State — Dropdown containing recent searches.
+Start Typing Query — Dropdown containing autosuggestions.
+Hover on autosuggestions — Contextual Actions may be shown.
+Activities are a priority 
+Favorites are not
+a priority
+Maybe these are too many
+Filters for an MVP
+maybe it's too much
+having similar resbite
+Should hosted resbites
+Be part of the MVP?
+U) Doing good to others
+Stress Relief
+Improves Memory
+Increase Concentration
+Creative Growth
+Optimistic Attitude
+Emotional Growth
+Helping others can boost your inner energy and make you feel better.
+Resbites for doing good
+Give some help
+With these resbites
+
+Helping others can boost your inner energy and make you feel better.
+Benefits of the resbites you’ve done:
+In total
+This month
+T.1 WELLNESS
+T.2 WELLNESS
+resbites
+OPTION B
+Salvation Army donation
+Donations: Collecting school supplies
+Covid-19: 
+helping those in self-isolation to get some food
+Visiting orphan kids
+K) Setting up a resbite
+Multi day 
+Range date-picker:a) https://material.io/components/date-pickers#specs
+See "mobile range picker" there
+
+b) https://v4-0-0-alpha-12.material-ui-pickers.dev/demo/daterangepicker
+The user can scroll down to see upcoming months, or up to see previous months.
+All fields are mandatory in this screen  in order to continue
+When the "multi-day" checkbox is selected, the user needs to choose both start and finish days before the "continue" button is enabled.For single-day setting, choosing a day is enough to have the "continue" button enabled."
+Progress tracker icons link to the corresponding step once that step has been completed.
+ie: on this "Schedule" step the invite icon would link to the invite step, but the "place it" icon won't link to it's corresponding step.
+US 
+
+As a user I can receive the
+invitation to do a resbite
+Did the user choose
+a date range or a single date?
+Date range
+Single date
+Monday  -  Wednesday
+17 Nov  -  26 Nov
+3:13PM
+11:13am
+Multi-day date overview:
+K.8 - RESBITE SET-UP  -  INVITE  (no connections and no access to phone contacts yet)
+Inviting when the user has no connections
+Note that there is no  "continue" button here
+Connect to others so you can start enjoying resbites.
+K.4 - RESBITE SET-UP  -  SCHEDULE
+K.5 - RESBITE SET-UP  -  SCHEDULE(Multi day)
+Cancel setting up this resbite?
+Yes, cancel
+The settings you've done for it so far will be lost.
+No, keep it
+Start and end time to your activity
+K.6 - RESBITE SET-UP  -  SCHEDULE
+(Single day)
+K.2 - RESBITE SET-UP  -  INVITEES
+K.3 - RESBITE SET-UP  -  INVITEES
+Vicky Rogers
+While scrolling down the contacts list, the button block on the bottom could hide sliding down, and the top bar hide on top so that the user can concentrate on the list better. 
+
+When the user stops scrolling those blocks could slide into the screen again.
+This indication appears only if the user hasn't started and completed setting up a resbite before.
+Groups appear listed in the first place
+A child can be invited without the parent being necessarily invited as well.
+Mark is inviting Peter to the Fishing Weekend resbite
+If a connection has been selected inside a group (screen k.2), it appears selected in here as well.
+As soon as the user starts selecting invitees, the number appears in here.
+If the user has previously provided permission to access phone contacts, those who are still not Resbite friends appear without a profile picture, after those who are connections.
+Fixed block
+Both the Attendance limit and the "Continue" button stay fixed while the user scrolls through the invitees list.
+Group details screen
+Invite all
+Invite 3
+All invitees are selected by default
+Once the user starts de-selecting connectios from the group the text in the button appears
+Quota warning
+It only appears in case the user has set an attendance quota limit.
+Group members appear sorted by alphabetical order, from A to Z.
+The user sets the place where the resbite will take place.(See wireflow K-1).
+1 invitee
+Sort order:
+a) Firstly, the contacts appear sorted first by group (first the ones already using the app and then the ones not using the app).
+b) Inside the group of  the contacts using the app, the ones  already connected to the user appear first.
+c) Among those that are already connected to the user (connections), the order puts first the children the user could have added on a sub-account, then the groups, and then the individual connections.
+d) Then, the sort order that applies to the list inside each of those mentioned groups is by alphabetical order, from A to Z.
+Parent receiving notification that the child is being invited to a resbite
+Maybe Invitees
+don't need to create an account 
+and they can just enter their name as guests
+Set as admin
+Remove from resbite
+Resend invitation
+Meet your guide fo this resbite: Summit Rhadish
+resbite name
+see stats
+Eton Ballroom
+Mon, 18 Apr
+3PM
+Tue, 19 Apr
+3 PM
+walking
+walking outdoors
+walking afternoon
+Tags
+23         24        25        26
+17         18         19        20         21        22    
+Nov 17
+Contact us
+Topic 2
+Topic 4
+Topic 1
+Topic 3
+Help
+FAQ
+Support
+G) Inviting to do a resbite
+Material UI component: Bottom Sheet
+https://material.io/components/sheets-bottom#usage
+INVITATION
+TO RESBITE IS SENT
+has the invitee set a preference to receive invitations through SMS?
+has the invitee set a preference to receive invitations through e-mail?
+Is the invitee a resbite user?
+The invitee receives a notification through e-mail
+The invitee receives an app notification
+Resbite owner 
+is notified
+The invitee can see the chat only once the invitation is accepted
+Maria Ruiz is inviting you to the following event: [event name] on [date]. RSVP by installing the Resbite app at :
+Maria Ruiz is inviting you to the following event: [event name] on [date]. RSVP with this link :
+link.resbite
+Maria is inviting you to Fishing Weekend resbite.
+4 h
+1 d
+3 d
+6 d
+2 w
+Rabia is inviting you to the Board Games Night resbite.
+Check it out.
+Rabia has changed the meeting point for Coffee Break
+Stephen has accepted your invitation for Camping
+16 new messages on the Camping chat
+Lucas has removed you from the Playing Chess event
+Maria is inviting you to this activity.
+Check it out.
+Join me on this resbite
+I'm out
+RSVP
+US 241
+
+As a guest that has acepted an invitation to do a resbite, I can be notified that the resbite owner has removed me from the resbite
+How was the Cooking Veggie event?
+3 w
+Shall we add a message?
+Would love to but can't that day
+Not my type of thing, but let's do something else soon
+Would love to but I won't be able 
+to be nearby that day
+Write a note
+close
+Lucas Proust + 3 others apology for not being able to attend to the Fishing Weekend resbite
+Fermin Lira + 3 others accepted your invitation for the Fishing Weekend resbite
+G.9 - ACCEPTED + DECLINED INVITATION NOTIFICATIONS
+(resbite owner view)
+G.4 - INVITING TO RESBITE
+NOTIFICATION
+G.1 - INVITING TO RESBITE SMS
+(no resbite user)
+G.2 - INVITING TO RESBITE SMS
+(resbite user)
+G.3 - INVITING TO RESBITE EMAIL
+G.6 - DECLINING INVITATION
+(INVITEE VIEW)
+G.8 - UPCOMING RESBITE
+DECLINING INVITATION
+not now
+I'm in with Peter
+G.11 - INVITING TO RESBITE
+OVERVIEW (INVITEE VIEW)
+Parent + child
+Maria Ruiz is inviting you and Peter
+This is a note that the resbite admin previously  added on the "notes" field
+Name of the child invited together with the parent.
+Inviting parent and child
+Mark is inviting Peter and you to the Fishing Weekend resbite
+Peter won't be attending
+G.12 - UPCOMING RESBITE
+(INVITEE VIEW)
+G.13 - UPCOMING RESBITE
+invitee apology
+Done, neither you or Peter will keep on appearing as invitees
+The resbite admin will be notified that Peter won't be attending
+Confirmation snackbar
+It appears on the following screen.Snackbars are the Material design component used along the app to provide feedback to the user after taking certain actions.
+material.io/components/snackbars
+G.10 - INVITING TO RESBITE
+NOTIFICATION
+Parent + child
+Sorry, I was just asked to be at a work meeting at that time and can't attend today.
+Apologies, I'm having a last minute issue, but let's do something else soon
+Sorry, I am not feeling well today and 
+I'm afraid I am not able to attend
+Maria Ruiz is inviting you to the following event: [event name] on [date].
+now
+RESBITE
+Child account not part of MTV
+You quitted this resbite
+Shall we transfer the ownership of this resbite to someone else?
+Yes, transfer ownership
+No, and cancel the resbite
+johndoe@aol.com
+Phone number
+44 234 222 394
+Settings
+Account
+Verify your e-mail to protect your account
+Dark mode
+Notifications
+Privacy
+Privacy policy
+and Terms of Service
+Delete account
+Sign Out
+v3.11.2
+Rate us in App Store
+Sure you want to delete the "Fishing buddies" group?
+Delete  group
+17 Nov  -  26 Nov
+Monday  -  Wednesday
+E) Account recovery
+Account recovery
+We'll send you a verification code so that you can quickly recover your account
+We've already sent a verification code 
+to example@example.com. 
+Try with a different email address?
+Send link
+button should be disabled by default, and enabled once the user has entered a valid value in the input.
+The user receives an e-mail with a text that says "Log in to your account" and provides a LOG-IN button and an alternative link to copy and paste on browser.
+Rabia's suggestion:
+we could have a checkbox in here.
+As soon as the verification code is recognized as a valid one, the user is taken to the next step
+ B.1  -  REGISTRATION, LOG-IN
+OR RECOVERY DISTRIBUTOR
+ E.1  -  ACCOUNT RECOVERY EMAIL
+ E.2  -  ACCOUNT RECOVERY CONFIRMATION
+ E.3  -  ACCOUNT RECOVERY PHONE NUMBER VERIFICATION
+A countdown of some seconds is shown. When the countdown is finished the button "send a new code" is enabled.
+available in 30 seconds
+send a new code
+My e-mail verification code is :
+Email validation
+Verification code validation
+Is there a Resbite account associated to this email address?
+example@example.com
+We couldn't find a Resbite account associated to this email address. 
+Could you try with a different one?
+D
+L
+4
+E
+The verification code is not valid. Retype it or have a new code sent.
+Tinder example
+Invite group
+E-mail me invitations from another resbiteers
+Turn phone notifications off during this resbite
+Send me invitations from other resbiteers through SMS
+Remind me before an upcoming resbite starts
+Notify me when resbiteers  decline my invitations
+App notifications 
+Invitations
+We'll send you a link so that you can quickly recover your account
+Sure you want to cancel
+this resbite?
+Yes, cancel resbite
+Remove from group
+Block Martin Garrix
+Maria is inviting you to this Costumes Party
+Rabia is inviting you to Star Gazing
+Rabia has changed the meeting point for Camping
+16 new messages on the Camping resbite
+Lucas has removed you from the Fishing Weekend event
+Why a photo of my face?
+Uni
+Add  a group
+Tagged as "walking outdoors"
+INTERACTIVE DATA
+Interactions
+Socializing resbites time
+jan
+feb
+mar
+jun
+jul
+1h
+0h
+2h
+Fishing weekend
+2 days
+Coffe together
+2 hours
+The chart displays more detailed data about the month or week tapped by the user.
+Natural
+Creative
+Stephen
+Child1
+Child2
+Lucas Proust apologies for not being able to attend: "Would love to but can't that day"
+Charly Fourbolough apologies for not being able to attend: "Would love to but can't that day"
+Imogen Adams apologies for not being able to attend: "Would love to but can't that day"
+Dismiss as admin
+mon, nov 17
+wed, nov 26
+How did you feel after this? 
+Providing feedback helps us
+tailor your experience.
+or search near somewhere else
+nearby fishing spots
+K-1 .8 - PLACE IT
+Several search results
+Choose the location of your activity
+Search a place or address
+Pret a manger
+255 Ruby road, Wokingham, 
+RT3 2LY
+Choose this one
+Pret a Manger
+432 Manniload LaneHuddersfield, 
+OD5 L7Y
+Pret a manger
+Marvin's office
+View List
+Has the user provided access to location before?
+Navigating
+Across the map
+Notes : 
+The extended map view is displayed, showing the chosen place.
+Favorites within this area are also marked in the map.
+36 Factory LaneHuddersfield, HD3 4LY
+Gym
+Bookfields bookshop, Nottingham
+Wallmart, Lexington
+Kempisky Stadium, Reading
+search
+Notes : 
+Until the user starts typing on the search field, recent and Saved locations are shown as suggestions.
+Notes : 
+Back in the expanded list view after searching: a) As long as the user has provided access to current location, the “Near” category is added to the list, showing the search results that are located nearby.
+Totte
+Tottenham Stadium
+Tottenham Stadium parking
+"Totte"
+K-1 .5 - PLACE IT - EXTENDED MAP VIEW
+search initial screen
+Autocomplete suggestions
+As soon as the user starts typing the "recent" list disappears and a list of autocomplete search suggestions is shown.
+Two different ways to trigger the Search with the query typed in the searchfield. (reference: Foursquare)
+X
+This sign appears on the search field, it allows the typed text to be deleted all at once.
+The hidden list appears available again so that the user can display it again and recover easily from this no-results issue
+show me suggestions here
+Save
+In case the chosen place is an address with no title like a bar, square or supermarket; this modal appears offering the user the chance to name the place.
+
+Naming the place is , however, not a required action in order to have it added to saved places.
+36 Factory Lane
+36 Factory LaneWidnes, WA8 9FW
+Marker
+The marker does not show any title when the place is an address
+Are there search results
+for this query?
+K-1 .6 - PLACE IT - EXTENDED MAP VIEW
+autocomplete suggestions
+K-1 .7 - PLACE IT - EXTENDED MAP VIEW
+autocomplete suggestions
+K-1 .10 - PLACE IT - SEARCH
+address search result in map
+K-1) Setting up a resbite - Place it (expanded flow)
+K-1 .8 - PLACE IT - EXTENDED MAP VIEW
+place search result in map
+K-1 .9 - PLACE IT - SEARCH
+no results found
+Search address
+Several search results
+The user can search both an address (street name with number, postcode, etc.) or a place (ie: "Swindon market, Reading")
+Save place
+The place is added to Saved places by tapping on the star icon.
+Pret a manger, Wokingham
+K-1 .7.2 - PLACE IT
+Search with no autocomplete suggestions
+Every search result is shown as a card.
+As the user slides to the side, the selection is passed from one item to the following one.
+Markers 
+            Saved places
+
+            Location pin, used for 
+            any other place that is 
+            not fav or suggested.
+Notes : 
+The new search results are shown and the “show me results here” button disappears until the user moves to another area.
+Pret a manger express
+Pret a manger express
+5 Mollywalk, 
+Wokingham, 
+9OP 1KO
+Current position button 
+Is revealed when switching to the Expanded map view.
+
+In case the user has denied permission to access the current location before, a dialog modal is shown indicating the user that permission must be provided in order to use this feature.
+We need help to find where you are
+Go to settings
+Allow Resbite access your location from the Settings of your phone
+Favorite places are pre-populated in the map and are visible without needing to trigger a search.
+Location permission
+The permission request OS dialog appears on the extended map view screen.
+
+If the user rejects permission the map can still be used to search, but there won’t be a way of showing user’s current position.
+location
+Search results are more relevant to you if you get location powered.
+show me results here
+Pret a manger
+255 Ruby road, Wokingham, 
+NM1 22O
+K-1 .3 - PLACE IT - EXTENDED MAP VIEW
+moving to another map area
+Whenever the user has moved to a new area on the map, this button appears and a new search for the already typed query can be triggered for this area.
+Notes : 
+The map view is displayed, showing the search results.
+Favorites within this area are also marked in the map.
+Best result
+Despite having several search results, one of them is selected. 
+It appears with a different style (both in the marker over the map and on the card)
+The user might be searching terms that might surely result in several points in the map. Some examples can be:
+- “tea house”
+- “pub”
+- “park”
+Ups…
+We can’t find what you are looking for.
+You could try searching 
+something more general
+Is the user typing something that could be compatible with an address? (ie: steet name or postal code).
+
+Then the autocomplete suggestions could be relevant to that address.
+Near
+Collapsed menu
+These menu categories appear collapsed when the user displays the bottom sheet.
+Back to the map view
+
+The user can drag down the bottom sheet that contains the list elements and expands the map. The bottom sheet slides down to the bottom of the screen till it is hidden completely.
+
+The switch is performed like a screen transformation, not like a transition from one screen to another one. Google, City Mapper and iOS Maps apps use this patter of interaction to switch from a map to a list view and vice-versa.
+
+Material UI component: Bottom Sheet
+https://material.io/components/sheets-bottom#usage
+Tap on the map
+iPhone 11 screen edge
+Coffee together
+<    THIS WEEK    >
+3 resbites
+Want to keep connecting to nature?
+Have a look at these resbites:
+Want to keep getting creative?
+Have a look at these resbites:
+T) Wellness
+T.2.1 WELLNESS
+Creative category
+T.2.2 WELLNESS
+Creative category
+T.2.3 WELLNESS
+Category > changing user
+50%
+12%
+20%
+23%
+of your resbites time hold this benefit
+of your resbites time connects to nature
+of your connections’ resbites time hold this benefit
+of your connections’ resbites time connects to nature
+of your done resbites 
+are spent with your household
+Data leads to a clear action in case the user is interested in this benefit
+
+Each resbite could have one or two key benefits (ie: Fishing weekend could have ‘’connect to nature’ and ‘socialize’ as key benefits). 
+
+Note that these resbitecards do not hold the benefit icons as they do in the Discover lists.
+Household
+This information should only appear if the user has Household connections.
+
+We could consider using a graphic that shows the evolution of the resbites done with household over time in cases where the user has been sharing resbites constantly with Household connections for a considerable time.
+User
+Only if the user has child-accounts created, this select drop down allows him/her switch to view children data.
+
+The button triggers the select options.
+Time scale
+If the user is not doing more than just 4 resbites a month, the time scale should be a monthly one.
+This week
+This month
+Last month
+month/year
+Only in case the user has 
+a Household created
+Connections you usually share resbites with
+Version 1
+Wellness categories in another  flows
+Disregarded version
+T.1 WELLNESS
+Dashboard
+Your time doing resbites
+Only the user’s line includes dots that represent the resbites done.
+3h
+Categories
+Creative
+Intelectual
+Mindful
+Natural
+Physical
+Community
+Uplifting
+
+Note: ‘Socializing’ is very important for wellness, but since this is a social network, socializing becomes a variable that is present in all wellness categories.
+All categories will hold data related to socializing.
+Examples of key benefits for different resbites
+Fishing weekend: Natural and mindful
+Reading a book: Intelectual and mindful
+Wine tasting: Intelectual
+Camping: Natural
+Painting: Intelectual, mindful
+Ice-skating: Physical
+Building a snowman: creative
+Star Gazing: Natural
+
+Natural
+Physical
+Community
+
+Resbites with no category, could be ‘Have fun’?
+Coffee together, out with bykes, going to cinema/theatre, BBQ, Karaoke Time 
+User’s goals
+- Improve different wellness areas
+- See who can help him/her to develop specific areas (seeing who is doing resbites the most with).
+- 
+Mindful  15% - 12 hours
+Intelectual  5% - 2 hour
+Uplifting  1% - 1 hour
+Creative  50% - 40 hours
+Natural 12% - 3 hours
+Community 2% - 1,5 hours
+Physical  20% - 22 hours
+Wellness
+Your time on resbites
+Top connections
+Privacy note
+Only you can see this data.
+Top places
+West-door Station, Cardiff
+8 resbites
+Birdsfield park, Bristol
+1 resbites
+Courtyard cafe, Wokingham
+See all places
+Search filters
+Physical
+Uplifting
+Building a snowman
+Wine tasting
+BBQ
+Karaoke time
+Ice
+skating
+Get out with bikes
+Painting
+Intelectual
+Camping
+Have you got suggestions for
+new resbites?
+
+If there’s an activity you would liketo suggest, we’ll be glat to read your thoughts on it.
+Discover
+1h - 2h
+Wellness categories
+ + duration
+Key benefit
+Your time connecting to nature
+Your time releasing stress
+resbite users (average)
+Everyone
+Community
+Mindful
+Day time
+Work mates
+RESET
+SEE 144 results
+Key benefit
+Each resbite has one or two key benefits 
+Wellness filters
+
+Disadvantages
+
+This version was disregarded because:
+- there are too many icons and having all of the available like that at the same time may not be something super important for the user if he/she is only interested in checking a specific category.
+
+The user can always go back to the previous screen and select another category from the Wellness Dashboard.
+
+As a plus, the screen already has another icons (main menu in the bottom).
+Child 1
+Child 2
+Paint an image or an abstract design using different painting techniques, tools and canvases. 
+Select a scenery or an object you like as an inspiration, or simply close your eyes and let your intuition guide your brush.
+LET’S DO THIS
+Tips:
+Search painting styles for inspiration
+Have fun mixing different colours
+Don't forget to bring paint, brushes and a canvas
+Be ready to unleash your creativity
+30 m
+Similar resbites
+Enjoy painting with friends and family. This artistic resbite will free your imagination and increase your creativity.
+Activity details
+READ more
+Benefits according to others:
+My resbites
+Try a new restaurant with friends
+Try A New Restaurant With Friends
+Address
+Set place by address
+Have children under-16?Add them here so you can include them in your resbites.
+J) Profile
+Your conections
+Search connection
+      Home
+36 Factory LaneWidnes, WA8 9FW
+      Work
+16 Redhill road, QQ3 9LL
+Marvin's office
+44 Mulberry Court, ER2 7YU
+Gym
+36 Guinness Factory, PE8 9FW
+Disconnect
+The disconnect button slides into the screen from right to left as the user swipes into that direction.
+
+If the user is performing a long swipe, reaching the left edge of the screen, then the "disconnect" function would be submitted, and the confirmation dialog box above appears (distructive actions requiere confirmation from the user usually).
+
+When the user arrives to a list screen like this one for the 1st time, display an animation that shows these hidden gestures for a second in one of the rows, like Payoneer app does in its notifications screen.
+Disconnect from Maria?
+Yes, disconnect
+You will need to send a connection request when you want to connect with her again
+The "disconnect and block" button slides into the screen from left to right as the user swipes into that direction.
+
+If the user is performing a long swipe, reaching the right  edge of the screen, then the "disconnect and block" function would be submitted, and the confirmation dialog box above appears (usually destructive actions requiere confirmation from the user).
+Disconnect
+and block
+Disconnect and block Maria?
+Maria won’t be able to send you invitations. Also, if by chance she is invited to a resbite you are attending to, we’ll let you know about that,
+
+You will need to send a connection request when you want to connect with her again.
+Edit
+Disconnect and block
+Managing connections
+44 Mulberry Court, ER2 7YU
+Set new location for this place
+Change to current location
+Marvin's new office
+Search place
+My under-16 children
+Nina Ruiz
+My children
+Children
+Child-account
+What's the date of birth?
+DD
+MM
+YYYY
+Trasfer resbites history
+What's the full name?
+Transfer Nina's data
+to her new account
+J.31  -  MY CHILDREN
+CHILD GOT 16 YEARS OLD
+J.32  -  MY CHILDREN
+CHILD GOT 16 YEARS OLD
+J.33  -  MY CHILDREN
+CHILD  GOT 16 YEARS OLD
+J.34  -  MY CHILDREN
+CHILD  GOT 16 YEARS OLD
+J.35  -  MY CHILDREN
+CHILD GOT 16 YEARS OLD
+J.29  -  CREATE Child-account
+J.27  -  Create child-account
+J.28  -  Create child-account
+J.27.1  -  Create child-account
+J.25  - Create child-account
+(no children added yet)
+J.30  - Create child-account
+(children account created already)
+Delete child-account
+User's children always appear first in the different lists of connections in the app. The visual style should differenciate it from the connections.
+This card changes depending if the user has already added children here.
+Your connections will be able to invite your under-16 child together with you (and only with you at the same time) while setting up a resbite.
+
+You can change this in the Privacy Settings
+Nina is over 16 years old and can have her own Resbite account now.
+
+Send her the Done resbites history so she can use them in her own account when she creates it.
+The e-mail address or phone number should be the one used by Nina to create her Resbite account.
+Add a child
+J.26  -  Create child-account
+NOTE:
+In the future we might add the possibility to create sub-accounts for elderly people.
+has any of the children in these subaccounts become 16 years old already
+Nina Ruiz can now 
+have her own account
+You can transfer her Done resbites history to her new account when she creates it
+Add another child
+Once the 1st child has been added, the "add another child" button appears here.
+Nina's phone number
+Nina's e-mail address
++44 0 234 111345
+email
+Note:When the input field is active, the label behaves in accordance to Material Design suggestions:material.io/components/text-fields#anatomy
+Is the transference done through email or phone number?
+Since you are over 16years old now you can create your own Resbite account. Maria Ruiz has transferred your resbites history. Your account should be  created under this phone number.
+Since you are over 16years old now you can create your own Resbite account. Maria Ruiz has transferred your resbites history. 
+
+Your account should be  created under this email addres.
+Join resbite at its full
+Join Resbite
+phone number
+You've created Peter Ruiz's sub-account
+A connection request is sent together with the transference.
+Yes, that's right
+Your child is
+12
+years old
+Delete
+The delete button slides into the screen from right to left as the user swipes into that direction.
+
+The Home and Work items can't be deleted from the list. Those can only be edited.
+New name
+The OS keyboard slides-in as soon as the user types on the place's name to edit it
+Any modification on the place makes the "Save" button appear
+Any edits done are
+not saved
+DE7 8HQ
+set new location
+Updated address
+The visual style highlights the address to show it is an updated information that is ready to be saved.
+Suggestions
+As soon as the user starts typing the "recent" list disappears and a list of autocomplete search suggestions is shown.
+J.8 - SAVED PLACES
+J.9 - EDIT SAVED PLACE
+J.10 - DELETE SAVED PLACE
+J.12 - MANAGE SAVED PLACE
+J.13 - VIEW SAVED PLACE IN MAP
+J.14 - EDIT SAVED PLACE NAME
+J.15 - EDIT SAVED PLACE NAME
+J.16 - EDIT SAVED PLACE LOCATION
+J.17 - EDIT SAVED PLACE LOCATION
+J.18 - SAVED PLACE
+UPDATED LOCATION
+J.11 - DELETE SAVED PLACE CONFIRMATION
+J.19 - MANAGING CONNECTIONS
+LIST
+J.20 - DISCONNECT FROM A CONNECTION (swiping)
+J.21 - DISCONNECT FROM A CONNECTION AND BLOCK- CONFIRMATION
+J.22 - MANAGING CONNECTIONS
+Manage a connection
+J.23 - DISCONNECT FROM A CONNECTION
+(swiping)
+J.24 - DISCONNECT FROM A CONNECTION
+(confirmation)
+Use "Cancel" in stead of "NO"
+Having in mind that many users don't read modal windows, or these Yes/No questions is better to use "Cancel" in stead of "No". 
+That way, the user doesn't have to read all the text in this modal pop-up dialog if he/she doesn't want to and can go straight to "cancel". Cancelling is perceived as a safer option on its own.
+Edit profile
+J.36 - EDIT PROFILE
+J.37 - EDIT PROFILE PHOTO
+J.38 - EDIT PROFILE NAME
+Gray
+29
+04
+1979
+Date of birth:
+Is disabled until the user has done anmodification
+The user needs to delete the name typing in order to modify it.
+Choose from gallery
+Change profile picture
+Take a picture
+Microinteraction:
+The connection disappears from the list through an animation
+
+It's better to indicate the name of the place in stead of asking this in the less precise way "Delete this place?".
+NOTE:
+The transference of the child-account data can be triggered as many times as the user wants.
+A notification about this is triggered
+Profile has been updated
+J.36.2 - UPDATED PROFILE
+Upps, sorry, no results for your search
+Rating app request
+R.1) Miscellaneous: rate in app
+Not Now
+Never ask again
+Do you like Resbite?
+We would greatly appreciate it if you could rate the app on the App Store. Thanks!
+Not now
+Let's send your rate 
+to the App Store
+Send feedback
+Thanks a lot
+for your comments
+You can also write a review if you are feeling inspired :)
+Write  review
+Help us improve
+We are a small team and we'd like to know what you think could be improved
+Attendance quota limit: 4
+Maria is inviting you
+Rate request tips: 
+
+Trigger this bottom sheet after few conditions so that the user will be more likely to leave a positive rating and provide more informed feedback :
+
+a) The user must have been using the app for a few weeks. Avoid interrupting users with this when they’ve only recently downloaded it or only used it a few times.
+
+b) Ask for a rating only after the user has demonstrated some engagement. For example, prompt the user upon the completion of a game level or productivity task. Don’t ask for review during the launch and try not to bother users when they’re in the middle of something. Look for logical pauses.
+
+c) Allow at least a week or two between rating requests. Using the latest SDK, "SKStoreReviewController requestReview" limits to 3 times a year. Using older methods, allows to customize the limit.
+
+d) Don't request for a rate again if the user chooses "Never ask again". At east for a long, long time.
+
+Proper Moment To Ask For Review (when users have completed a task and are more likely to be  happy about it) :1) After accepting an invitation, but not until the user has left the screen and navigates somewhere else in the app.
+
+2) After completing a resbite, but only in cases when the feedback request for that specific resbite is not being triggered.
+
+3) After sending invitations to do a resbite.
+
+
+
+
+Sources:
+
+https://developer.apple.com/design/human-interface-guidelines/ios/system-capabilities/ratings-and-reviews/
+
+https://developer.apple.com/forums/thread/115193
+If the user is not accepting an invitation for a long time, the rate request can be triggered in another case:Just after finishing setting up a resbite and sending invitations.
+
+R1.1 - RATE REQUEST
+(INVITEE VIEW)
+R1.2 - RATE REQUEST
+Good rating - send to store?
+R1.4 - RATE REQUEST
+(INVITEE VIEW)
+R1.3 - RATE REQUEST
+Bad rating - send feedback?
+Is the rating
+good?
+Email app opens with a draft email. 
+Subject is pre-populated.
+Close this bottom sheet and don't request this user for a rating again, at least not for a long long time.
+The rate can still be modified in this instance of the rating dialog bottom sheet.
+Pease note that the font weight is lighter in comparison to the other two options.
+K.12 - RESBITE SET-UP  - OVERVIEW
+(resbite owner overview)
+D) Log in
+D.1  -  LOGIN PHONE
+D.2  -  LOGIN PHONE
+The country code should be pre-set by geolocation.
+USER IS LOGGED IN
+US 037
+
+The user can register on RB using phone number
+Screen 037.C
+is there an account already active for this phone number ?
+should be disabled by default, and enabled once the user has entered a valid value in the input.
+Select your country code
+countries where the app is  available should appear first.
+ B.2.2  -  REGISTRATION PHONE 2
+Help > FAQs
+What do you need help with?
+Chats
+Connections
+and groups
+Technical issues
+I.6.1 - SETTINGSHELP
+I.6.1.2 - SETTINGSHELP
+Report an issue 
+with a resbite
+I.6.4 - SETTINGS > HELP
+Help >
+Resbites
+Recommendations to make the most out of the app
+Understanding invitations to do a resbite and invitation confirmations
+I have chosen a resbite to do but me and the invitees need to define altogether when to do it. What can I do in this case?
+How does Resbite work?
+I want to invite someone to a resbite but I can't find this person in my list
+Understanding a resbite admins
+I.9.1 - SETTINGS > PHONE NUMBER UPDATE
+I.9.3 - SETTINGS > EMAIL
+ UPDATE
+E-mail
+
+I.9.4 - SETTINGS > EMAIL
+ UPDATE
+I.9.2 - SETTINGS > PHONE NUMBER UPDATE
+Help >
+Account
+Can I associate a new e-mail address with my account?
+How can I recover my account
+Can I transfer my account to another phone number?
+What private information is shown to other resbite users
+Report an issue with my account
+I.6.2 - SETTINGS > HELP > ACCOUNT
+Yes, you can transfer your account with all the data of it using the e-mail address associated to your Resbite account. Launch the app once you have installed a new sim card, then go to "Account recovery" and follow the steps. 
+I.6.3 - SETTINGS > HELP
+(FAQ displayed)
+I) Notifications and settings
+Settings > Notifications
+Settings > Privacy
+Settings > Delete account
+Connections can see my
+children sub-accounts
+My connections
+Blocked
+4 users
+Blocked users
+Add
+Rabia has changed the meeting point for Board Games Night resbite
+I.1 - NOTIFICATIONS
+I.2 - NOTIFICATIONSCONNECTION REQUESTS
+I.3 - SETTINGS
+I.5.1 - SETTINGS
+PRIVACY
+I.5.2 - BLOCKED USERS
+I.5.3 - BLOCKED USERS
+(manage a blocked user)
+Push notifications
+Notify me when resbiteers  decline or accept my invitations
+Turn all phone notifications 
+off during resbites
+Invitations to do a resbite from another connections
+Connection requests from another resbite users
+Place or date updates on a resbite I'm attending to
+Support assistance activity
+New resbites available
+Notification sounds
+Bell
+Ding
+Hey resbite!
+Drum
+None
+Bongo
+E-mail notifications
+SMS notifications
+Email app opens
+Subject is pre-populated with an enquiry number
+The user can choose a current connection and block it as well
+I.4.2 - SETTINGS >PUSH NOTIFICATIONS
+I.4.3 - SETTINGS >
+PUSH NOTIFICATIONS SOUNDS
+I.4.4 - SETTINGS >EMAIL  NOTIFICATIONS
+I.4.5 - SETTINGS >SMS NOTIFICATIONS
+I.4.1 - SETTINGSNOTIFICATIONS
+Chatbot:In a future version, the user could receive help from a chatbot
+Note:The settings shown should be the default ones.
+Accordion format
+The user taps on a question and the answer is displayed.
+Ticketing system
+Might need to evetually integrate this with a ticketing system.
+Help Contextual illustration
+Search help
+If the number of FAQs increases a search should be considered.
++44 234 222 394
+update
+Email address
+hello@stephengray.uk
+Account deletion is final. There will be no way to restore your account.
+
+If you close your account you'll lose your "Done resbites" list, connections, favorites, saved places, messages and photo collections.
+We're sorry to see you go
+Delete acount
+Could you tell us why you are leaving?
+I'm getting too many notifications
+I have a privacy concern
+I haven't found interesting resbites
+I've had a bad experience during a resbite
+Your feedback matters. Would you like to tell us something more?
+I.7 - SETTINGSDELETE ACCOUNT
+I.7.2 - SETTINGSDELETE ACCOUNT
+I.7.3 - SETTINGSDELETE ACCOUNT
+Research sources:https://uxplanet.org/offboarding-the-way-to-say-goodbye-to-your-users-26bf45b5bf4a
+The button is enabled only once the user has chosen a reason for leaving.
+Proceed and delete account?
+Delete your account
+Type DELETE to confirm:
+Did you know you can choose which emails you receive from Resbite and how often? Visit your Notifications settings to control what you are getting.
+NOTE:Additional information is shown when the user selects this option.
+I haven’t found interesting resbites
+I’ve had a bad experience during a resbite
+Could tell us more?
+We thank you for the time you were part of our Resbite community.
+
+We'll be glad to see you around again in the future in case you want to.
+Your acount
+has been deleted
+Delete my account
+Is the cancelling user an important one?(ie: the user has been an active user for many years, it's a premium-account user or has made a lot of connections).
+The user that left receives an email of the CEO 
+Obviously this doesn’t scale but for important accounts we can log an alert and send a short personalized email.
+
+The ex-user will have a human point-of-reference and be more willing to share feedback. This will help us understand why churn is happening and prevent it in future.
+
+Example from Pigeon app:
+Settings > Help
+Settings > phone number and email
+When the user has previously submitted a support request while reporting an issue and the customer support has answered, this icon shows an exclamation sign.
+!
+234 222 394
+My e-mail verification  code is
+send a verification code
+We've already sent a verification code to newemail@example.uk exists.
+The user needs to overwrite the current email typing the new one.
+Unlike what happens in the previous screen, there is a back arrow here in case the user needs to modify the phone number indicated in the previous step.
+As soon as the user types a valid verification code the app goes back to the main Settings screen
+Your e-mail address has been successfully updated
+The confirmation snackbar appears for some seconds on the bottom, over the main Settings screen.
+Sign out?
+Yes, sign out
+It is a good practice to specify the actions in the buttons and avoiding providing plain "Yes/No" answers to the user.
+Some users are accustomed to continue asap without reading the main question at the title of these confirmation dialogs; and sometimes they choose based on a fast paced intuition in stead of thinking what is the real decision they are requested to take on these points. 
+Unblock
+Unblocked Amber.
+UNDO
+I.5.5 - UNBLOCK USER
+Report an issue
+Support requests
+FAQs
+Technical issues FAQs
+
+- Why can't I see a specific resbite I had added to favorites?
+- I want to log in but I am not receiving the login code through SMS
+Connections and groups FAQs
+
+- What happens when I send a connection request to another person?
+- I want to stop receiving unwanted connection requests or invitations from another user
+- Child sub-account
+
+Blocking people you don't want to come across
+Add notifications as another group of FAQs
+E-mails
+SMS
+Sound
+This one can be the branding sound of Resbite.
+Pause all notifications
+Not a priority
+
+At the moment invitations 
+will be done manually by the user
+Anywhere
+Near work
+Saved place 1
+Saved place 2
+Place
+Daytime
+Moment
+Silence group chat
+Search in the conversation
+Group administrator
+Emoji
+Add members
+Any children at home?
+Add them here and bring the whole family on board with parental control security
+Household is a special group, dedicated to those living under the same roof
+Sure you want to remove Noel from this event?
+We'll need to notify Noel about this.
++ Add
+Update your e-mail address, type it again
+If an account for example@example.com exists, we've already sent a recovery link.
+In case you haven't received the link:
+This resbite was cancelled
+Enter address
+B) Registration
+US 165
+
+As a user, I can receive a phonecall in order to verify my phone number
+Let's create a
+great profile
+picture
+You are 80% more likely to be added to friend's and family's resbites if you can be easily identified with a clear and up-to-date profile photo of your face. 
+Keep the cities being searched within the country indicated on the left only, reducing the overall complexity of the search algorithm
+Question for Rabia:What about pre-populating both fields (country and city) with IP geolocation? It might be less accurate, but you don't need user permission for it
+The user can reposition the picture to fit the face in the face shape.
+US 122
+
+The user can log-in typing access credentials.Step 122.D
+US 220
+
+As a user that has changed the phone number, I can recover my Resbite account with my e-mail addressStep 220 .A
+US050
+
+As a user that has just got signed-in I want to invite contacts to use Resbite
+It would be good to explain to the user why this information is required, indicating what benefits would the user have with this.
+ie: "Resbites will be better tailored for you with this information"
+US 122
+
+The user can log-in typing access credentials
+This text should explain why it is useful for the user to provide this information
+Yo are more likely to be invited to resbites if you can be easily identified with a clear photo of your face.
+US 122
+
+The user can log-in typing access credentials.Step 122.A
+First name        Last name
+ B.2.1  -  REGISTRATION PHONE
+ B.3  -  REGISTRATION PHONE CODE
+ B.5.1  -  REGISTRATION PHONE CODE
+ B.4  -  REGISTRATION NAME
+ B.5  -  REGISTRATION EMAIL
+ B.5.2  -  REGISTRATION PROFILE
+ B.5.3  -  REGISTRATION PROFILE 2
+ B.5.4  -  REGISTRATION PROFILE 3
+ B.5.6  -  REGISTRATION PROFILE 5
+ B.5.5  -  REGISTRATION PROFILE CAMERA ROLL
+ B.5.7  -  REGISTRATION PROFILE MODAL EXPLANATION
+ B.7.1  -  REGISTRATION HOME LOCATION
+ B.7.2  -  REGISTRATION HOME LOCATION
+Search
+REGISTRATION PROCESS COMPLETE
+Don't need to show this if this checkbox was already checked in the previous screen.
+ B.8  -  REGISTRATION WORK LOCATION
+Explain that this is important . smth like "so we can recover the account if you change your phone number in the future."
+If an account for example@example.com exists, we've already sent a code.
+You will be able to enjoy resbites more relevant to your location
+You are
+28
+years old
+ B.9.2  -  DATE OF BIRTH
+Is the user younger than 16 years old ?
+What's your date of birth?
+ B.9.1  -  DATE OF BIRTH
+We're sorry but you won't be able to create an account until you are 16 years old.
+
+But hey!... you can always ask your parents to create an adult account for them and add you there as an under age user.
+visit our website
+See all we have to offer when you're old enough to join our community:
+ B.9.3  -  DATE OF BIRTH
+B.9 - Reistration process complete
+Congratulations!
+
+You've just finished setting everything up and now you are ready to go
+The keyboard is displayed as soon as the user arrives to this screen. This applies to all screens that have keyboards in this registration flow.
+If it is technically possible, as soon as the user finishes typing the code the system should check if it is valid or not. 
+In case it is valid the user should be taken to the next screen with no need to tap on any Continue button. And the continue button should be taken out.
+Cancel the registration process?
+From this step on (after validating the phone number), during the registration process the cancellation will need a confirmation pop-up.
+There is only one input text field for the name, but in the back-end the name typed by the user will be split into two strings: the first word will be used as the name, and the rest of the string as the last name.
+B.4.1 - CANCELLATION CONFIRMATION
+44 Mulberry Co
+44 Mulberry Coastfields, HD6 3YO
+44 Mulberry Couttuns, B77 8HQ
+44 Mulberry Cotton Yard, WA8 9FW
+Home location
+Search button triggers the search on the next screen.
+Is the address typed found on the database?
+44 Mulberry Cottage, ER2 7YU
+Add address:There is a problem with the address provided, we have marked our suggestions in red. Please choose the option you want to use.
+Suggested address:41 Mulberry Cottage, ER2 7RU
+Original address:44 Mulberry Cottage, ER2 7YU
+ B.7.3  -  REGISTRATION HOME LOCATION
+ B.7.4  -  REGISTRATION HOME LOCATION
+44 Mulberry Court, ER2 7YU,
+United Kingdom
+ B.7.4  -  REGISTRATION HOME LOCATION
+(unidentified address)
+The address is not shown in a map because it doesn't match any address in the database.
+11 Berrychamp
+11 Berrychamp, L17 TRY
+11 Berrychamp, K27 0RY
+11 Berrychamp, K27 22D
+11 Berrychamp, L00 44F
+Not for MVP
+Already in resbite
+Amber Lager                                  admin
+Confirmed:
+Remove Stephen Gray
+ from this event?
+Yes, remove
+We'll need to notify Stephen about this.
+H) Before the resbite
+Note:
+Only the resbite admins can apply modifications.
+
+When the place or date are modified, in-app notifications are triggered for all the invitees.
+Emoji
+It is possible to change the emoji, but not the title of the chat since it matches the resbite name
+Removing an invitee from the list
+The removed invitee only receives a notification if he/she confirmed the assistance before.
+Search in the chat
+Dragging down the screen the search bar appears from behind the top bar.
+Note:
+The removed invitee only receives a notification if he/she confirmed the assistance before.
+Imogen Adams is now a new admin for this resbite
+The "send" icon appears only once the user has tapped on the text input field
+H.20.2 - INVITEES LISTS
+(Confirmed attendance and not confirmed)
+H.20.3 - MORE THAN 25 INVITEES LIST
+(Invitees that confirmed attendance)
+H.20.4 - INVITEES LISTS
+(Attendance not confirmed)
+H.4 - UPCOMING RESBITE INVITEES
+TAPPING ON AN INVITEE
+H.5 - UPCOMING RESBITE INVITEES
+REMOVING AN INVITEE
+H.6 - UPCOMING RESBITE INVITEES
+DISMISSING INVITEE AS ADMIN
+H.7 - UPCOMING RESBITE
+ CHAT
+H.8 - UPCOMING RESBITE
+ CHAT - TYPING
+H.9 - UPCOMING RESBITE
+ CHAT - SEARCHFIELD REVEALED
+H.16 - SETTING UP A NEW ADMIN BEFORE QUITTING
+(resbite owner view)
+List of invitees
+- Invitees that haven't confirmed attendance or that have already declined the invitation are excluded from here.
+-More than one invitee can be set as admin.
+- When the user taps on the row of an invitee, the word "admin" appears on the right :
+The button is enabled only once the user has selected someone in the list
+This button will only appear if at least one of the invitees has confirmed attendance to the event.
+Only the invitees that have accepted the invitation will be notified about this.
+The resbite 
+has been cancelled
+You left
+the resbite
+Set another admin if you wish the rest of the invitees to go on with this resbite
+Set new admin and leave
+Cancel the resbite for all
+or cancel the resbite completely
+Cancelling or leaving a resbite
+This resbite will continue with the rest of the invitees if you set up a new admin.
+Cancel this resbite?
+Yes, cancel it
+You can go back and choose "I won't be attending" if you want the rest of the invitees to go on with it.
+Is there another admin for this resbite?
+Maria left the Fishing Weekend resbite and has assigned you as the admin of it
+US 256
+
+As a guest I can be notified that I have been turned into a resbite admin.
+H.18 - LEAVING A RESBITE
+notification
+Maria left the Fishing Weekend resbite
+US 258
+
+As a resbite guest I can be notified that the admin has left the event
+Cancelled resbite:
+a) No invitee will be abe to go on with this resbite.
+b) Invitees will receive a notification about this. The invitees that haven't confirmed attendance will also stop seeing this invitation on MY RESBITES screen.
+c) Invitees that declined the invitation won't receive a notification.
+Quitted resbite:
+a) Invitees that haven't confirmed attendance won't receive a notification and will stop seeing this invitation on MY RESBITES screen.
+
+b) The new resbite admin can now see the resbite details screen not as an invitee anymore, but as the previous admin could.
+DISCOVER
+screen
+Maria has cancelled the Fishing Weekend resbite
+US 259
+
+
+As a guest of a resbite I can be notified that it has been cancelled
+H.12 - CANCELING A RESBITE
+confirmation
+H.13 - CANCELING A RESBITE
+notification
+H.14 - CANCELING A RESBITE
+feedback screen
+H.15 - LEAVING A RESBITE
+confirmation
+H.16 - LEAVING A RESBITE
+confirmation 2
+H.17 - LEAVING A RESBITE
+notification
+H.19 - LEAVING A RESBITE
+notification
+H.10 - UPCOMING RESBITES TAB
+(invitee view)
+Invitee view
+Invitation:
+a) If the resbite has an attendance limit, and if that limit has been reached, all the invitees that haven't accepted the invitation won't see the invitation on this screen anymore.
+
+b) The user won't see this invitation card anymore after dismissing or accepting the invitation.
+Confirmed
+Not confirmed yet
+Maria Ruiz                                      admin
+Imogen Adams                      
+Amber Lager                             
+Audrey Abbot
+Attendance not confirmed yet:
+Darken the screen behind the overlay component (this applies to bottom sheet, modal, pop-up dialog, etc).
+
+This does two jobs. Firstly it draws attention to the overlay and secondly it lets the user know that the page isn’t currently active. Be careful with that tinting though.
+
+Allow users to tap away to close the bottom sheet.
+Admin:
+Maria Ruiz            
+Avoid using introductory words like "Sure you want to ..."
+H.3.3 - MANAGING GROUP MEMBER
+Add an emoji to the group name. Only one emoji can be displayed at the same time.
+New group
+This button is fixed on the bottom of the screen while the user scrolls down the list.
+Note:
+"Disconnect" and "Disconnect and block" both require a confirmation pop-up dialog in order to be completed.
+
+The bottom sheet hides sliding down.
+H.3 - MAKE NEW GROUP
+FROM INVITEES LIST
+Removed Marlene  from group.
+J.7.1 - MANAGE GROUP MEMBER(Undo snackbar)
+For snackbars and notifications it will be better to use only the first name of the connection.
+Group name
+Managing invitees
+Chatting
+The admin users should be able to see him/her-self added on the list
+The admins appear on a separate group when there is no invitee that confirmed attendance (apart from the ones that are admins).
+
+As soon as there are invitees that confirmed attendance the admins appear in the list "Confirmed attendance:"
+Admins
+Every resbite member who is also an admin should have the crown icon indicating this state.
+There can be multiple admins for a single resbite.
+H.20 - INVITEE’S LIST
+No invitee confirmed attendance
+The search field is visible only if the group has more than 10 members
+Not a priority to 
+Assign other invitees as owners
+Is it better to have a title in the header and complete the name in an input field in the body of the screen??
+Closed chat
+Resbite chats are closed once the resbite is finished.
+Choose yours
+Photo poll
+Vote
+per copy
+£8
+After the photo poll has finished you can pay your copy and have it shipped to you.
+J-1) Profile > My groups
+When the user starts using the app, "Household" is a group that's already created although it doesn't have contacts added to it.
+J.5 - CHANGING GROUP NAME
+Removed Sophie from group.
+In this case a pop-up confirmation dialog can be avoided (less interruption for the user). This is because this action is neither irreversible, severe nor complex.
+It's a better instead to have a snackbar (that's how Material Design calls this component) or "undo toast" appearing for a few seconds at the bottom on the screen, on the view that appears after taking this action.
+
+Sources:
+a) uxdesign.cc/are-you-sure-you-want-to-do-this-microcopy-for-confirmation-dialogues-1d94a0f73ac6
+
+b) https://uxdesign.cc/delete-models-in-products-because-sometimes-cats-walk-on-keyboards-6f886b767f6d
+J.4 - GROUP MEMBERS
+J.6 - DELETE GROUP
+J.7 - MANAGE GROUP MEMBER
+Delete "Fishing buddies" group?
+Household can't be deleted like the other groups.
+Your connections won't be able to see who is in your household.
+Your connections will be able to invite you and everyone in your household.
+
+You can change this in Privacy settings.
+J.2 - MY GROUPS
+J.3 - HOUSEHOLD
+J.3.1 - HOUSEHOLD W/ CONNECTIONS
+Create group
+This button is fixed on the bottom of the screen while the user scrolls down the list. It is disabled until the user has selected at least a person and has indicated a group name.
+J.39 - NEW GROUP
+J.40 - NEW GROUP
+Cycling Tribe group has been created.
+Group icon
+Remove
+J.40.1 - NEW GROUP - ICON
+It's normally better to have the "Cancel" button on the left.
+
+But when there is not enough horizontal space to have both buttons in line, the button needs to be in the bottom and the size should be smaller than the affirmative one in order to avoid the user accidentally tapping on it.
+Add to Household
+J.42 - ADD TO GROUP
+Has the Household group members previously added?
+This block stays fixed on the bottom of the screen while the list on the back is scrollable.
+Delete group
+J.2.1 - GROUP DELETION
+(swiping)
+Joss Ruiz
+The user chooses an emoji (only one) that will always appear next to the group's name
+The "remove" icon appears only in case an icon had already been set for the group before.
+J.40.2 - NEW GROUP
+(with chosen icon)
+When choosing an icon, the user is taken back to the main group screen and the icon appears next to the group icon.
+Have children under-16?Add them so you can include them in your resbites.
+This card disappears once the user has already added an under-16 child
+Wireflow J  >  Screen J.26 
+(Create child-account)
+Let's verify your
+phone number
+Remove this resbite
+from My Resbites list?
+Yes, delete it
+L.1 - USER FEEDBACK
+L) After the resbite
+How did you feel after this? 
+Providing feedback helps us 
+tailor your experience
+Plain, not actionable data
+Difference between the Details screen of an upcoming resbite and resbite details screen of a resbite that has already finished is that in here (already done one) the location, invitees and date are not details that resbite owner can change.
+Frequency
+This feedback shouldn't be asked after every single resbite if the user is setting up resbites frequently. For example, if the user is doing more than a resbite a week this feedback shouldn't appear for every case.
+The date of the already done resbite should not appear here as a pre-set setting.
+
+The "Continue" button is disabled until there is a date there.
+Rate
+This card is only available if the user hasn't provided feedback bfore.
+Chat with countdown
+For 3 days, starting from the moment the resbite has finished, the chat shows a countdown.
+Closed chat
+Chats are closed three days after the resbites are finished
+L.2 - DONE RESBITE DETAIL
+(resbite owner view)
+L.10 - DONE RESBITES LIST
+Closed chat
+Resbite chats are closed 3 days after the resbite is finished.
+Repeat resbite
+You can leave a message before the Cooking Veggie resbite chat closes in 3 days.
+Notification received just after finishing a resbite
+The chat will be closed in 3 days
+Would you leave some final words?
+this chat will be closed in
+2 days    14 hours    03 mins
+3 days pass by and the resbite chat is closed
+L.4 - REPEATING RESBITE
+Selecting date
+L.6 - DONE RESBITE
+Chat closing countdown
+L.7- DONE RESBITE
+Closed chat
+L.8- DONE RESBITE
+INVITEES
+L.9- CHAT WILL CLOSE
+NOTIFICATION
+L.5 - REPEATING RESBITE
+Selecting place
+Notes : 
+The map view is displayed, showing the chosen place.
+Favorites within this area are also marked in the map.
+L.3 - REPEATING RESBITE
+Selecting Invitees
+3 invitees
+Zander Klein
+Veronica Bloom
+The user sets
+ day and time
+Resend invitations
+CHOOSING A RESBITE
+RESBITE DETAIL WITH DATE AND PLACE
+MY RESBITES: LISTS
+SETTINGS
+NOTIFICATIONS
+MY RESBITES: Upcoming resbite overview (resbite owner view)
+MY RESBITES: UPCOMING RESBITE (invitee view)
+Do you want
+to sync with iCal ?
+Never miss a resbite
+Has the user denied permission to sync with iCal or Google Calendar before?
+has the invitee set a preference to receive invitations through SMS or e-mail?
+If the user has already added a resbite to calendar this checkbox should be already checked.
+The same should happen if the user has set all resbites to be saved in calendar from Settings screen.
+
+If the user is on Android we should not include iCal checkbox
+
+If the user chooses YES then request permission to access the calendar through system dialog
+Suggested
+The invitee receives a notification through e-mail and app notification
+The invitee only receives an app notification
+Does this resbite have a specific place and time?
+To the invitee it appears as sent from resbite owner e-mail address. Would look much more personalized like this.
+
+Groups appear listes in the first place
+"Send invitations" should be replaced by "Resend invitations" if the user has previously sent invitations.
+
+There should be a limit for the times a resbite owner can send invitations.
+RESBITE DETAIL
+DONE RESBITE CHAT
+Button becomes active once the user chose at least a friend and at least a resbite.
+List of friends invited to this resbite, regardless they accepted the invitation or not.
+The tapped row should have an "active mode" style
+Reference:https://www.royalmail.com/find-a-postcode
+RANDOMIZE RESBITES
+Resbite Photobook 
+Choose the pics and every one on the resbite receives the printed book.
+Receiving an invitation to use the app
+Onboarding slideshow
+SPLASH SCREEN
+Registration
+PROFILE PIC
+Setting up a resbite
+Choosing a resbite
+ 
+Note:Search results are shown not only with text, but with an image as well. This can also be seen in apps like YouTube.
+Note:Search results are shown only with text,.This can also be seen in apps like Spotify .
+After the resbite
+Before the resbite
+Want to get to know more places?
+Have a look at these resbites:
+3%
+of your done resbites hold this benefit
+Far from home or from work,
+visiting new places opens your mind
+You’ve discovered
+New places this month
+of your connections’ done resbites hold this benefit
+Travel around
+
+Connections you usually travel with
+Your time on resbites that require travelling
+402
+Miles away is the furthest you’ve travelled  from home to do a resbite.
+Royal Mile, Edinburgh
+<               >
+Connect
+to nature
+Other possible categories
+- Intelectual
+- Spiritual Wellness (meditation, charity, practicing a religion with others?)
+- Material wellness (putting finances in order, recycling furniture, )
+- Helping Others / “Social responsibility” 
+- Mindfulness
+Relief from stress
+Connect to nature
+Travel somewhere new
+Physical exercise
+Key benefit + duration
+Open to possibility to sign-up
+with Apple or Google account
+Seabass spot
+DISCOVER
+invitation sent
+Pending
+Or should the user arrive to a HOME screen with more diverse content?
+MARIA
+In case the previous step is incomplete, the indicator should show that
+9:41
+Only day and starting time should be mandatory this screen  in order to continue
+Skip
+US083
+
+As a user, I can see the details of a chosen resbite
+Skip this for now
+Active Challenge:
+In case there's a challenge ongoing a card like this appears in firs place.
+A card for every ongoing challenge.
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen
+BALANCE
+ACHIEVE
+This text could be some text like:1) explaining benefits of making balance.
+
+2) motivating the user to make balance, mentioning what this user is being great at and what could be done to make balance.
+Share a friend link
+The sender should be clear for the user, like in the following example from "OBC Bank":
+Nice to have:
+showing some empathy with a sentence under the title saying smth like "Don’t worry, happens to the best of us."
+HOVERED
+Focused
+pressed
+dragged
+disabled
+Enabled
+ACTION
+Body 2: Lorem ipsum dolor sit 
+amet, consectetur adipiscing elit, 
+sed do eiusmod tempor incididunt 
+ut labore et dolore magna aliqua. Ut 
+enim ad minim veniam,
+Subtitle 1
+Discard draft?
+H3
+Profile
+P2
+see LESS
+Spa day
+H2
+Active
+Hover
+Pressed
+Disabled
+Dragged
+Selected
+30 mins +
+Whole day
+1.5 hours
+  Leisure   
+Food & drinks

@@ -1,0 +1,69 @@
+E79 - Choosing a resbiteUS083
+As a user, I can see the details of a chosen resbite
+so that I can do it alone
+GO TO
+RESBITES
+LIST
+DO
+RESBITE
+ALONE
+tap on a visible resbite
+US062
+
+As a user that has just picked-up a resbite, I want to invite Resbite friends to join
+
+US065
+
+As a user that has just picked-up a resbite, I want to invite contacts from outside the app to join
+
+US064
+
+As a user that just picked-up a resbite, I want to invite people that are Resbite users but not Resbite friends.
+
+US101
+
+As a user I can see details of a resbite guide (ie: guru of meditation)
+
+Has this resbite
+a master guide?
+ie: Guru of meditation
+mark it as favorite?
+Does
+this resbite allow others
+to join?
+Resbites can easily be filtered by categories
+Can the user set a day and time to do the resbite?
+Do resbite with
+others or alone?
+Turn notifications off during this activities?
+Offer the user to see content about this master guide (text, picture video)
+Turn notifications off for the whole phone during the time this resbite is ongoing.
+Offer the user to invite others to join
+See resbite details:
+Title
+Description
+Main image
+Duration
+possibility to invite others
+provide date picker to set date and let the user set the time as well.
+mark it as favorite
+with others
+alone
+Is this possible?
+Flipd offers this
+Resbite friends appear as the first source of people to invite
+NOTE:
+There's a different user story to invite people that is on the app but is not a resbite friend.
+And another one related to inviting contacts not using resbite at all.
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen

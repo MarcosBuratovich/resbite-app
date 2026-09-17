@@ -1,0 +1,518 @@
+[
+  {
+    "artboard": "C - Receiving an invitation to use the app V",
+    "bounds": {
+      "x": -21220,
+      "y": -20712,
+      "width": 9060,
+      "height": 5912
+    },
+    "member": "artwork/artboard-4bc9ce56-24f6-4765-9939-8e9a9257be8b/graphics/graphicContent.agc",
+    "notes": [
+      {
+        "text": "Not a priority if we don\u2019t clasify \ncontacts at this stage",
+        "transform": {
+          "a": 1,
+          "b": 0,
+          "c": 0,
+          "d": 1,
+          "tx": 84,
+          "ty": 104
+        },
+        "style": {
+          "fill": {
+            "type": "solid",
+            "color": {
+              "mode": "RGB",
+              "value": {
+                "r": 232,
+                "g": 172,
+                "b": 9
+              }
+            }
+          },
+          "font": {
+            "postscriptName": "HelveticaNeue",
+            "family": "Helvetica Neue",
+            "style": "Regular",
+            "size": 36
+          }
+        }
+      },
+      {
+        "text": "Not a priority",
+        "transform": {
+          "a": 1,
+          "b": 0,
+          "c": 0,
+          "d": 1,
+          "tx": 71,
+          "ty": 68
+        },
+        "style": {
+          "fill": {
+            "type": "solid",
+            "color": {
+              "mode": "RGB",
+              "value": {
+                "r": 232,
+                "g": 172,
+                "b": 9
+              }
+            }
+          },
+          "font": {
+            "postscriptName": "HelveticaNeue",
+            "family": "Helvetica Neue",
+            "style": "Regular",
+            "size": 36
+          }
+        }
+      }
+    ]
+  },
+  {
+    "artboard": "F - Choosing Up a resbite V",
+    "bounds": {
+      "x": -19053,
+      "y": -10413,
+      "width": 7123,
+      "height": 5275
+    },
+    "member": "artwork/artboard-5f706148-77f5-48a2-9f17-815f4529306e/graphics/graphicContent.agc",
+    "notes": [
+      {
+        "text": "Not a priority",
+        "transform": {
+          "a": 1,
+          "b": 0,
+          "c": 0,
+          "d": 1,
+          "tx": 1420,
+          "ty": 2911
+        },
+        "style": {
+          "fill": {
+            "type": "solid",
+            "color": {
+              "mode": "RGB",
+              "value": {
+                "r": 112,
+                "g": 112,
+                "b": 112
+              }
+            }
+          },
+          "font": {
+            "postscriptName": "HelveticaNeue-Bold",
+            "family": "Helvetica Neue",
+            "style": "Bold",
+            "size": 36
+          }
+        }
+      },
+      {
+        "text": "Activities are a priority ",
+        "transform": {
+          "a": 1,
+          "b": 0,
+          "c": 0,
+          "d": 1,
+          "tx": 71,
+          "ty": 90
+        },
+        "style": {
+          "fill": {
+            "type": "solid",
+            "color": {
+              "mode": "RGB",
+              "value": {
+                "r": 232,
+                "g": 172,
+                "b": 9
+              }
+            }
+          },
+          "font": {
+            "postscriptName": "HelveticaNeue",
+            "family": "Helvetica Neue",
+            "style": "Regular",
+            "size": 36
+          }
+        }
+      },
+      {
+        "text": "Favorites are not\na priority",
+        "transform": {
+          "a": 1,
+          "b": 0,
+          "c": 0,
+          "d": 1,
+          "tx": 1401,
+          "ty": 2918
+        },
+        "style": {
+          "fill": {
+            "type": "solid",
+            "color": {
+              "mode": "RGB",
+              "value": {
+                "r": 112,
+                "g": 112,
+                "b": 112
+              }
+            }
+          },
+          "font": {
+            "postscriptName": "HelveticaNeue-Bold",
+            "family": "Helvetica Neue",
+            "style": "Bold",
+            "size": 36
+          }
+        }
+      },
+      {
+        "text": "Maybe these are too many\nFilters for an MVP",
+        "transform": {
+          "a": 1,
+          "b": 0,
+          "c": 0,
+          "d": 1,
+          "tx": 1401,
+          "ty": 2918
+        },
+        "style": {
+          "fill": {
+            "type": "solid",
+            "color": {
+              "mode": "RGB",
+              "value": {
+                "r": 112,
+                "g": 112,
+                "b": 112
+              }
+            }
+          },
+          "font": {
+            "postscriptName": "HelveticaNeue-Bold",
+            "family": "Helvetica Neue",
+            "style": "Bold",
+            "size": 36
+          }
+        }
+      },
+      {
+        "text": "maybe it's too much\nhaving similar resbite",
+        "transform": {
+          "a": 1,
+          "b": 0,
+          "c": 0,
+          "d": 1,
+          "tx": 1401,
+          "ty": 2918
+        },
+        "style": {
+          "fill": {
+            "type": "solid",
+            "color": {
+              "mode": "RGB",
+              "value": {
+                "r": 112,
+                "g": 112,
+                "b": 112
+              }
+            }
+          },
+          "font": {
+            "postscriptName": "HelveticaNeue-Bold",
+            "family": "Helvetica Neue",
+            "style": "Bold",
+            "size": 36
+          }
+        }
+      },
+      {
+        "text": "Should hosted resbites\nBe part of the MVP?",
+        "transform": {
+          "a": 1,
+          "b": 0,
+          "c": 0,
+          "d": 1,
+          "tx": 1401,
+          "ty": 2918
+        },
+        "style": {
+          "fill": {
+            "type": "solid",
+            "color": {
+              "mode": "RGB",
+              "value": {
+                "r": 112,
+                "g": 112,
+                "b": 112
+              }
+            }
+          },
+          "font": {
+            "postscriptName": "HelveticaNeue-Bold",
+            "family": "Helvetica Neue",
+            "style": "Bold",
+            "size": 36
+          }
+        }
+      }
+    ]
+  },
+  {
+    "artboard": "G - Inviting to do a resbite V",
+    "bounds": {
+      "x": -21185,
+      "y": 926,
+      "width": 10825,
+      "height": 2771
+    },
+    "member": "artwork/artboard-83f00f13-1b1b-4976-8ce5-026529b8d4fa/graphics/graphicContent.agc",
+    "notes": [
+      {
+        "text": "Child account not part of MTV",
+        "transform": {
+          "a": 1,
+          "b": 0,
+          "c": 0,
+          "d": 1,
+          "tx": 1420,
+          "ty": 2911
+        },
+        "style": {
+          "fill": {
+            "type": "solid",
+            "color": {
+              "mode": "RGB",
+              "value": {
+                "r": 112,
+                "g": 112,
+                "b": 112
+              }
+            }
+          },
+          "font": {
+            "postscriptName": "HelveticaNeue-Bold",
+            "family": "Helvetica Neue",
+            "style": "Bold",
+            "size": 36
+          }
+        }
+      }
+    ]
+  },
+  {
+    "artboard": "I -  Notifications + Settings V",
+    "bounds": {
+      "x": -21134,
+      "y": 11922,
+      "width": 11565,
+      "height": 5118
+    },
+    "member": "artwork/artboard-c9fad584-5a8b-411d-8f14-333e76c11b71/graphics/graphicContent.agc",
+    "notes": [
+      {
+        "text": "Not a priority\n\nAt the moment invitations \nwill be done manually by the user",
+        "transform": {
+          "a": 1,
+          "b": 0,
+          "c": 0,
+          "d": 1,
+          "tx": 1440,
+          "ty": 2883
+        },
+        "style": {
+          "fill": {
+            "type": "solid",
+            "color": {
+              "mode": "RGB",
+              "value": {
+                "r": 112,
+                "g": 112,
+                "b": 112
+              }
+            }
+          },
+          "font": {
+            "postscriptName": "HelveticaNeue-Bold",
+            "family": "Helvetica Neue",
+            "style": "Bold",
+            "size": 36
+          }
+        }
+      }
+    ]
+  },
+  {
+    "artboard": "H - Before a resbite V",
+    "bounds": {
+      "x": -21190,
+      "y": 4499,
+      "width": 9240,
+      "height": 6801
+    },
+    "member": "artwork/artboard-e5122a91-0578-453a-95f4-28294199c3f1/graphics/graphicContent.agc",
+    "notes": [
+      {
+        "text": "Not a priority to \nAssign other invitees as owners",
+        "transform": {
+          "a": 1,
+          "b": 0,
+          "c": 0,
+          "d": 1,
+          "tx": 1420,
+          "ty": 2911
+        },
+        "style": {
+          "fill": {
+            "type": "solid",
+            "color": {
+              "mode": "RGB",
+              "value": {
+                "r": 112,
+                "g": 112,
+                "b": 112
+              }
+            }
+          },
+          "font": {
+            "postscriptName": "HelveticaNeue-Bold",
+            "family": "Helvetica Neue",
+            "style": "Bold",
+            "size": 36
+          }
+        }
+      }
+    ]
+  },
+  {
+    "artboard": "K - Setting Up a resbite V",
+    "bounds": {
+      "x": -21190,
+      "y": -4168,
+      "width": 7283,
+      "height": 4888
+    },
+    "member": "artwork/artboard-6d514d63-ec97-44d6-908a-a22c54324c43/graphics/graphicContent.agc",
+    "notes": [
+      {
+        "text": "Maybe Invitees\ndon't need to create an account \nand they can just enter their name as guests",
+        "transform": {
+          "a": 1,
+          "b": 0,
+          "c": 0,
+          "d": 1,
+          "tx": 1420,
+          "ty": 2911
+        },
+        "style": {
+          "fill": {
+            "type": "solid",
+            "color": {
+              "mode": "RGB",
+              "value": {
+                "r": 112,
+                "g": 112,
+                "b": 112
+              }
+            }
+          },
+          "font": {
+            "postscriptName": "HelveticaNeue-Bold",
+            "family": "Helvetica Neue",
+            "style": "Bold",
+            "size": 36
+          }
+        }
+      }
+    ]
+  },
+  {
+    "artboard": "L - After a resbite V",
+    "bounds": {
+      "x": -10666,
+      "y": 6241,
+      "width": 6140,
+      "height": 3378
+    },
+    "member": "artwork/artboard-fc5366d8-7886-4eac-b8fa-00136629cdf4/graphics/graphicContent.agc",
+    "notes": [
+      {
+        "text": "Not a priority",
+        "transform": {
+          "a": 1,
+          "b": 0,
+          "c": 0,
+          "d": 1,
+          "tx": 1420,
+          "ty": 2911
+        },
+        "style": {
+          "fill": {
+            "type": "solid",
+            "color": {
+              "mode": "RGB",
+              "value": {
+                "r": 112,
+                "g": 112,
+                "b": 112
+              }
+            }
+          },
+          "font": {
+            "postscriptName": "HelveticaNeue-Bold",
+            "family": "Helvetica Neue",
+            "style": "Bold",
+            "size": 36
+          }
+        }
+      }
+    ]
+  },
+  {
+    "artboard": "B - Registration V",
+    "bounds": {
+      "x": -19702,
+      "y": -24887,
+      "width": 14407,
+      "height": 3930
+    },
+    "member": "artwork/artboard-d897e66f-79e2-40cd-b00f-39663fcccd65/graphics/graphicContent.agc",
+    "notes": [
+      {
+        "text": "Not for MVP",
+        "transform": {
+          "a": 1,
+          "b": 0,
+          "c": 0,
+          "d": 1,
+          "tx": 1404,
+          "ty": 2945
+        },
+        "style": {
+          "fill": {
+            "type": "solid",
+            "color": {
+              "mode": "RGB",
+              "value": {
+                "r": 112,
+                "g": 112,
+                "b": 112
+              }
+            }
+          },
+          "font": {
+            "postscriptName": "HelveticaNeue-Bold",
+            "family": "Helvetica Neue",
+            "style": "Bold",
+            "size": 36
+          }
+        }
+      }
+    ]
+  }
+]

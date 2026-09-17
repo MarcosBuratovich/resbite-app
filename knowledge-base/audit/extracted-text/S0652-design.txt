@@ -1,0 +1,45 @@
+E27 - User wants to start using the app for the first time once downloaded
+
+US188
+As a newbie user I can indicate my motivation to take more breaks from digital technology during the on-boarding experience
+In this step, the user is choosing a group of goals even if it is not put in that way on the UI.
+Require the user to type e-mail address 
+offer the user to define if Resbite can send user-tailored content to this address.
+USER SETS GOALS
+Note
+Let the user cancel this process and go back to choose e-mail registration
+US037
+
+The user can register on RB using phone number
+US188
+
+As a user I can indicate my motivation to take more breaks from digital technology
+How would you like to start taking healthy breaks from digital devices?
+Contact Us
+Submit 
+Call us
+Home
+Basket
+Notifications
+Setting
+ 
+Add your inquary 
+Description 
+eg: Jaison Justus
+Name
+Alternative UX writing:
+
+"which is your first goal now?"
+"Let's tailor resbites according to your main goals"
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen

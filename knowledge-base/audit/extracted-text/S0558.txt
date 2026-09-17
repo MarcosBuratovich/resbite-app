@@ -1,0 +1,64 @@
+E79 - Choosing a resbite
+
+US083
+
+As a user, I can see the details of a chosen resbite
+so that I can do it alone
+        GO TO
+       RESBITES
+         LIST                                 mark it as
+                                              favorite?
+
+
+
+
+  Resbites can easily be
+  filtered by categories                              mark it as favorite
+
+
+                                                                                                                                                                                           Does
+                                                                             Turn notifications off                                                                              this resbite allow others
+                                         See resbite details:                during this activities?     Can the user set a day and                                                       to join?
+                                         Title                                                           time to do the resbite?        provide date picker to set                                                                   DO
+ tap on a visible                        Description                                                                                    date and let the user set                                                                  RESBITE
+ resbite                                 Main image                                                                                     the time as well.                                                                          ALONE
+                                         Duration
+                                         possibility to invite others
+
+
+
+
+                                                                            Turn notifications off for
+                                                                            the whole phone during                                                                                Offer the user to invite
+                                                                            the time this resbite is                                                                              others to join
+                         Has this resbite
+                                                                            ongoing.
+                         a master guide?
+                     ie: Guru of meditation
+
+
+
+                                                                                                                                                                         Do resbite with
+                                                                                                                                                                                                                  alone
+                                                                                                                                                                         others or alone?
+                                                                            Is this
+                                    Offer the user to see                   possible?
+                                    content about this master                                                                                                                            with others
+                                                                            Flipd offers
+                                    guide (text, picture video)             this                                                                                                                                          US062
+                                                                                                                                      US064
+                                                                                                                                                                                  Offer the user to invite                As a user that has just picked-
+                                                                                                                                      As a user that just picked-up a             others to join                          up a resbite, I want to invite
+                                                                                                                                      resbite, I want to invite people                                                    Resbite friends to join
+                                                                                                                                      that are Resbite users but not
+                                                                                                                                      Resbite friends.
+
+                                   US101
+
+                                   As a user I can see details of a                                                                                                             US065
+                                   resbite guide (ie: guru of
+                                   meditation)                                                                                                                                  As a user that has just picked-
+                                                                                                                                                                                up a resbite, I want to invite
+                                                                                                                                                                                contacts from outside the app
+                                                                                                                                                                                to join
+

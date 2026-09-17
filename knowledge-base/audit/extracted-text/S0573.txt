@@ -1,0 +1,18 @@
+US119
+
+As a logged-in user, I can log-out
+
+
+                                                                      US122
+   USER
+  PROFILE                                                   USER IS
+            Go to Settings   user LOGGS OUT                 LOGGED    The user can log-in typing
+                                                              OUT     access credentials
+
+
+
+
+                             text near the log out button
+                             indicates "logged in as
+                             useremail@example.com"
+

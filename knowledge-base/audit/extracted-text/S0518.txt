@@ -1,0 +1,11 @@
+mimetype
+manifest
+META-INF/metadata.xml
+artwork/pasteboard/graphics/graphicContent.agc
+interactions/interactions.json
+preview.png
+renditions/image-2048-606.png
+renditions/image-512-152.png
+resources/graphics/graphicContent.agc
+sharing/sharing.json
+thumbnail.png

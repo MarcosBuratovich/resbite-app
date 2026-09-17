@@ -1,0 +1,83 @@
+MVP flowchart
+
+
+
+
+       User opens
+        the app
+
+
+
+
+                 is the user already
+                 logged-in?
+
+
+
+
+                                                                          is there an account
+                 Is it 1st run
+                                                                          already active for this
+                 experience?
+                                                                          phone number ?
+                                           Log-in - E58                                                                                                                          The user arrives
+                                                                                                                                                                                 at resbites list
+
+                                                                                       proceeds to log-in
+
+
+
+                                                          proceeds to registration
+
+    1st run slideshow
+    - US029
+
+
+
+
+      Registration
+      US037
+
+
+
+                 is there an account                                                                                            Has it been too long
+                 already active for this                                                            Has the user set a main     since the user used the   As a user that has just got
+                 phone number ?                                                                     goal before ?               app for the last time ?   signed-in I want to invite
+                                                                                                                                                          contacts to use Resbite -
+                                                                                                                                                          US050
+
+
+
+
+                                                                                             Indicate motivation to stay out
+                                                                                             of digital technology (set goal)
+                                                                                             - US188
+
+
+provide additional
+personal information
+- US181
+
+
+
+
+Indicate motivation to stay out
+of digital technology (set goal)
+- US188
+
+
+
+
+Offer to set an initial small
+goal - US132
+
+
+
+
+                                                                             Provide a user a WELCOME
+User sets the type of                                                        MESSAGE. smth like "here
+notifications to be received                                                 we go, you have just did a
+from the app - US192                                                         first step into a healthier life
+                                                                             full of resbites"
+                                                                             ie: Headspace on-boarding
+

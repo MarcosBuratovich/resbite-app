@@ -1,0 +1,8 @@
+README.txt
+OFL.txt
+static/Quicksand-Light.ttf
+static/Quicksand-Regular.ttf
+static/Quicksand-Medium.ttf
+static/Quicksand-SemiBold.ttf
+static/Quicksand-Bold.ttf
+Quicksand-VariableFont_wght.ttf

@@ -1,0 +1,17 @@
+mimetype
+manifest
+META-INF/metadata.xml
+artwork/artboard-1991345c-09b2-4805-a98e-af730b214ace/graphics/graphicContent.agc
+artwork/artboard-72771bdc-8257-499d-805f-1e918faa48bf/graphics/graphicContent.agc
+artwork/artboard-8f23caad-f5f4-403c-90e6-6a847b41c0ad/graphics/graphicContent.agc
+artwork/artboard-ad5ab0e0-2cf1-45d3-995b-06f407588a06/graphics/graphicContent.agc
+artwork/artboard-ba0bdede-11ab-4c84-b433-b6fcda0ecdd5/graphics/graphicContent.agc
+artwork/artboard-fafd149c-fd08-4874-a3a3-4c1ec8469c70/graphics/graphicContent.agc
+artwork/pasteboard/graphics/graphicContent.agc
+interactions/interactions.json
+preview.png
+renditions/image-1854-1424.png
+renditions/image-512-394.png
+resources/graphics/graphicContent.agc
+sharing/sharing.json
+thumbnail.png

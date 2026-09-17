@@ -1,0 +1,71 @@
+ E58 - Not-logged-in user opens the app and needs to log-in (2nd-run)
+
+ US088
+
+ The user can reset the password to login
+
+
+          User choosses
+          a recover y link
+                                     Nice to have:
+                                     showing some empathy
+                                     with a sentence under
+                                     the title saying smth like
+                                     "Don’t worry, happens to
+                                     the best of us."
+
+    Clearly show the user the
+    possibility to type an e-mail
+    address and a CTA "email me a
+    recovery link"
+
+
+
+
+user chooses to
+recover pssword                     confirmation message:                      The user clicks the create new
+ using email or                                                                                                                     The user is taken to a browser
+                                    "If an account exists, an email            password button, or just
+     SMS?`
+                                    with further instructions" is              copies and pastes the "magic                         windows where to create a
+                         e-mail
+                                    beeing sent.                               link" in the browser.                                new password.
+
+
+
+
+            SMS
+                                                                                                                                                                                                                     NEW
+                                       By not promising the user that an                                                                                                                                          PASSWORD
+                                       email will be sent and not disclosing                                                                                                                                       CREATED
+                                                                                                                                    The user can hide/show the
+                                       whether the email/username even                                                              created password.
+                                       exists in the database, we :
+   US140                               1) encourage them to double check
+                                       their credentials (in case they don’t
+   The user can reset the              get the link) and
+   password through an SMS
+                                       2) prevent phishing attacks.
+   to login                                                                                                                                                                                                                                  Do not allow the user to
+                                                                                                                                    The user types a password                   Password strengh meter
+                                                                                                                                    (only once).                                                                                             submit password
+                                                                                                                                                                                shows the level of security
+                                                                                                                                                                                to the user in real time..
+                                                                                                                                                                                                              typed password complies
+                                                                                                                                                                                                                 with security rules?
+
+
+
+ Related UX reads:                                                                                                                                                   example:
+                                                                                                     Request the user to comply with only two of                                                                                        Show password constraints upfront and update it in real time.
+ https://blog.prototypr.io/ux-guide-password-reset-user-flow-bfa35a16e527
+                                                                                                     these rules, making the password                                                                                                   example: Mailchimp
+                                                                                                     requirements clear at the same time:
+
+                                                                                                     Password must contain numbers;
+                                                                                                     Password must contain uppercase letters;
+                                                                                                     Password must have at least one @#$ symbol;
+                                                                                                     Length must be greater than 8 characters;
+                                                                                                     Password should not contain strings;
+                                                                                                     Password must not contain repetitions.
+

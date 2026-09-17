@@ -1,0 +1,43 @@
+E27 - User wants to start using the app for the first time once downloaded
+
+US188
+As a newbie user I can indicate my motivation to take more breaks from digital technology during the on-boarding experience
+In this step, the user is choosing a group of goals even if it is not put in that way on the UI.
+US037
+
+The user can register on RB using phone number
+US132
+
+As a user that is opening the app for the first time, I can set an initial goal during the on-boarding experience
+these coud be:
+
+"improving my body general health"
+"reconnecting with nature"
+"socializing more out of social networks"
+"feel more relaxed"
+
+they could have an icon
+gets enabled once the user has made a choice
+the choice triggers a microinteraction. The result could be the background chancging and matching every different choice with a specific background for each one of them.
+Both buttons go to the same next step.
+Some apps do not allow the user to continue without setting this (Calm, Headspace), some others do (SPACE).
+Continue
+ 
+Let's tailor the resbites according to your goals
+How would you like to start taking healthy breaks from digital devices?
+Skip this for now
+Alternative UX writing:
+"which is your first goal now?"
+"Let's tailor resbites according to your main goals"
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen

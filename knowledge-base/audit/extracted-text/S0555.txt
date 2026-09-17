@@ -1,0 +1,56 @@
+E63- Connecting to others in Resbite
+
+US050
+
+As a user that has just got signed-in
+I want to invite contacts to use Resbite
+                                                                                                                                           the user is done,
+                                                                                          go back or finish                                there won't be a way
+                                                 go back
+                                                                                              inviting?                                    to provide feedback      CONTACTS
+                                    (to select contacts from another
+                                                                                                                                           like "invitation sent"    INVITED
+                                   source or to copy invitation mssg.)
+                                                                                                                       finish              since that took place
+                                                                                                                                           outside the app.
+
+
+
+
+                                                                               The message sent is specific to this
+                                                                               activity. "Come walking to the park
+                                                                               with me, join me on Resbite".
+ US122
+
+ The user can log-in typing
+ access credentials
+                                                                                   Go to social network and
+                                                                                   select contacts to whom
+                                                                                   invite to use RB there.
+
+
+                                                                                                  Choose a specific source
+                                                                                                  where to add contacts from
+         INVITING              Offer to invite people to the app (from the
+                                                                                                                                                                        example: invitation
+         CONTACTS              SN contacts and from the phone contacts).                                                                   user sends invitation       received in whatsapp
+           to RB               Invitation message. is visible.                                                                             manually outside of
+                               Additionally offer to copy invitation link                                     Copy invitation              the app.
+
+
+
+
+ US034                                                                                                                          example:
+
+
+ The user can register on RB                         skip (do not invite)
+ using e-mail address
+
+
+
+
+                                               US
+
+                                               The signed-in user arrives at
+                                               the Resbites list
+

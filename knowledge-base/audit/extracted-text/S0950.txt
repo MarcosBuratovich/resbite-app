@@ -1,0 +1,142 @@
+
+### ppt/notesSlides/notesSlide1.xml
+
+### ppt/notesSlides/notesSlide10.xml
+
+### ppt/notesSlides/notesSlide11.xml
+
+### ppt/notesSlides/notesSlide2.xml
+
+### ppt/notesSlides/notesSlide3.xml
+
+### ppt/notesSlides/notesSlide4.xml
+
+### ppt/notesSlides/notesSlide5.xml
+
+### ppt/notesSlides/notesSlide6.xml
+
+### ppt/notesSlides/notesSlide7.xml
+
+### ppt/notesSlides/notesSlide8.xml
+
+### ppt/notesSlides/notesSlide9.xml
+
+### ppt/slides/slide1.xml
+for
+### ppt/slides/slide10.xml
+Program Achievements
+Understand the infrastructure architecture that would be best for us
+Validate the lead developer we need to hire
+Improve our app development plan so that we can optimize the technical and human resources we need to do so.
+Nurture Resbite with other entrepreneurs experience
+Make Resbite even more attractive for investors and talented developers wanting to work with us.
+Find solutions that can help us concentrate better on adding value to Resbite and enhancing it
+### ppt/slides/slide11.xml
+Questions!
+Given our situation, which AWS architecture model would help us build easier and faster?
+Would that involve any of the following? 
+- AWS Amplify
+- Containers
+- AWS Lightsail
+- A serverless architecture
+Is there some consideration we should have in mind if we aim to develop our MVP in Flutter?
+Is it worth setting AWS tools that help us retrieve data from users interaction with the app from the very beginning in the MPV?
+Rec engine / AI to suggest 
+events
+ on like-for-like (
+don't
+ know what they 
+don't
+ know)
+Do we need to start and finish the program in 10 weeks? If so, can we delay the start to a point after pre-seed investment?
+Are there investors in the AWS network and is there a way of introduction?
+### ppt/slides/slide2.xml
+People are more emotionally disconnected with feelings of 
+loneliness
+ now than ever before despite the rise in digital comms and social media use.
+Gen Z and future Alpha have significant less empathy for other humans than Gen X and M
+illennials
+.
+People are less 
+likely
+ to be outside and experience nature and other physical social activities post COVID.
+The problem
+### ppt/slides/slide3.xml
+Create a real social network of friends and 
+family
+ that is closed and private
+Help people with ideas of real social activities to do including connecting to nature
+Handle all logistics of 
+meeting
+ friends and 
+family
+ to make the experience easier
+Track mental health, 
+wellness
+ and 
+relationship
+ 
+quality relating to social inclusion.
+The solution
+### ppt/slides/slide4.xml
+We have used social insight and purpose to create a product that provides a fundamentally and significantly better social outcome than existing social tech.
+Can’t see the 
+video? Click 
+here
+Product
+### ppt/slides/slide5.xml
+Business Model
+V0 - Premium 
+feature
+ subscription
+V1 - 10% c
+ommission on Hosted Resbites (our marketplace)
+ 
+### ppt/slides/slide6.xml
+The Market
+TAM = £237B: number of people in English speaking countries who use social media in 20-55 age group x amount they spend on leisure activities x our commission percentage
+SAM = £152B: number of people in English speaking countries who use social media in 20-55 age group who show concern about the negative impact of social media X amount they spend on leisure activities X our commission percentage
+SOM = £11.7B: number of people in UK who use social media in 20-55 age group who purposely cut back on social media X amount they spend on leisure activities X our commission percentage
+### ppt/slides/slide7.xml
+Completed:
+• Core team recruitment. product creative, code of ethics
+• Branding, website, investor assets, UX and 
+• App design
+• Front-end prototype
+Still to complete:
+• Decide techstack and recruit dev team
+• Build/launch MVP
+• Seed funding - Denise Coates Foundation
+So where are we on 
+this journey? 
+### ppt/slides/slide8.xml
+Stephen Gray
+CEO
+Fermin Lira
+CPO
+Imogen Adams
+Lead Design
+Jane Fisher
+Lead Content
+The leadership team
+The team are all members of digital agency Creamos. www.creamos.com
+Creamos has completed over 700 digital projects for large brand owners.
+### ppt/slides/slide9.xml
+Data
+App downloads and sign-ups per operating system (iOS and Android)
+Average Visit Time, App Usage Frequency (‘Stickiness’) and Screen Views per Visit
+Most visited / most active screens
+The frequency users do resbites with
+Share of invited users that sign up and then share an activity (‘resbite’) with the person that invited them
+App ‘Abandonment Rate’ vs ‘Retention Rate’ ()
+Most searched terms in the resbite's text searchfield
+Share of users paying for premium features and ‘Customer Lifetime Value’ (how much value can be generated from the average user)
+ROI (Return on Investment)
+What we would ideally like to understand with data
+The dynamics of users inviting another users, how many do they invite? At what stage of their engagement with the app What is the share of invited users that sign up for the app?
+Popular resbites according to users activity? 
+How can we avoid users cancelling scheduled resbites?
+Drop-offs: which user tasks are abandoned and at what point of the process? is there something we can do to avoid users dropping off forever during their 1st interaction with the app? What interaction did these users have before dropping-off?
+How satisfied are users after completing a specific resbite?
+What features are users interested in the most?
+How different communication channels perform when trying to get the user back to the app (push notifications, SMSs, emails).

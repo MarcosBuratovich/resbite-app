@@ -1,0 +1,100 @@
+E) Account recovery
+
+
+
+         B.1 - REGISTRATION, LOG-IN
+                                                                                                              E.1 - ACCOUNT RECOVERY EMAIL                                                                                      E.2 - ACCOUNT RECOVERY CONFIRMATION                                                                                                  E.3 - ACCOUNT RECOVERY PHONE NUMBER
+         OR RECOVERY DISTRIBUTOR
+                                                                                                                                                                                                                                                                                                                                                                                 VERIFICATION
+
+
+ 9:41                                                                                                  9:41                                                                                                                     9:41                                                                                                                                9:41
+
+                                                                                                                                                              Nice to have:
+                                                                                                                                                              showing some empathy
+                                                                                                                   Account recovery                                                                                                         Account recovery
+                                                                                                                                                              with a sentence under
+                                                                                                                                                              the title saying smth like
+                                                                                                                                                              "Don’t worry, happens to
+                                                                                                                                                                                                                                                                                                                                                                                         Log in
+                                                                                                                                                              the best of us."
+                                                                                                                                                                                                                                My e-mail veriﬁcation code is :
+
+
+
+                                                                                                                                                                                                                                                                                                      As soon as the veriﬁcation code
+                                                                                                       Enter e-mail                                                                                                                                                                                   is recognized as a valid one, the                                      +44 Enter phone number
+                                                                                                                                                                                                                                                                                                      user is taken to the next step
+
+                                                                                                       We'll send you a veriﬁcation code so that you
+                                                                                                       can quickly recover your account
+                                                                                                                                                                                                                                We've already sent a veriﬁcation code
+                                                                                                                                                                                                                                to example@example.com.                        A countdown of some seconds                                                                 Send veriﬁcation code
+                                                                                                                                                                                                                                Try with a different email address?            is shown. When the countdown
+                                                                                                                                                                                                                                                                               is ﬁnished the button "send a
+                                                                                                                                                                                                                                                                               new code" is enabled.
+                                                                         button should be disabled                                                                                                                                                                                                                                                                  By continuing with the process you accept the
+                                                                         by default, and enabled                                                                                           The user receives an e-mail with a
+                                                                                                                                                                                                                                           available in 30 seconds                                                                                                  Terms of Service and Privacy Policy
+                    Log in                                               once the user has entered
+                                                                                                                       Send link                                                           text that says "Log in to your
+                                                                                                                                                                                           account" and provides a LOG-IN
+                                                                         a valid value in the input.
+                                                                                                                                                                                           button and an alternative link to
+                                                                                                                                                                                                                                           send a new code
+                                                                                                                                                                                           copy and paste on browser.
+                                                                                                                                                                                                                                                                                                                                                                                                                    Rabia's suggestion:
+                                                                                                                                                                                                                                                                                                                                                                                                                    we could have a checkbox in here.
+        Create a new account
+
+              Trouble signing in?                                                                                                                                                     Tinder example
+
+
+
+
+Email validation                                                                                                                                                                                                                Veriﬁcation code validation
+
+
+
+        E.1 - ACCOUNT RECOVERY EMAIL                                                                                E.1 - ACCOUNT RECOVERY EMAIL                                                                                       E.2 - ACCOUNT RECOVERY CONFIRMATION                                                                E.2 - ACCOUNT RECOVERY CONFIRMATION
+
+
+
+             Account recovery                                                                                             Account recovery                                                                                                     Account recovery                                                                                      Account recovery
+
+
+
+                                                     Is there a Resbite account                                                                                                                                                                                                          Is there a Resbite account
+                                                       associated to this email                                                                                                                                                    My e-mail veriﬁcation code is :                         associated to this email                       My e-mail veriﬁcation code is :
+                                                              address?                                                                                                                                                                                                                            address?
+
+
+ example@example.com                                                                                          example@example.com                                                                                                      D      L        4          E     E                                                                  D         L        4         E         E
+
+ We'll send you a veriﬁcation code so that you                                                                We'll send you a veriﬁcation code so that you
+ can quickly recover your account                                                                             can quickly recover your account
+
+
+
+
+                                                      E.1 - ACCOUNT RECOVERY EMAIL
+                                                                                                                                                                                                                                                                              E.2 - ACCOUNT RECOVERY CONFIRMATION
+
+
+                                                             Account recovery                                                                                                                                                                                                             Account recovery
+
+
+
+
+                                                                                                                                                                                                                                                                             My e-mail veriﬁcation code is :
+
+
+                                                 example@example.com                                                                                                                                                                                                           D         L           4         E           E
+                                                 We couldn't ﬁnd a Resbite account associated
+                                                 to this email address.                                                                                                                                                                                                      The veriﬁcation code is not valid. Retype it or have
+                                                 Could you try with a different one?                                                                                                                                                                                         a new code sent.
+
+
+                                                 We'll send you a veriﬁcation code so that you
+                                                 can quickly recover your account
+

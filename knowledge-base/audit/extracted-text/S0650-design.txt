@@ -1,0 +1,92 @@
+E28 - Challenges
+USs involved: 083, 197
+
+Choosing a resbite
+RESBITES 
+RESBITE DETAIL
+ONGOING RESBITE
+USER FEEDBACK
+ACHIEVEMENT
+RESBITES SEARCH
+Featured resbite
+US 197
+
+As a user, I can search a resbite
+E 55
+
+As a user that already achieved
+some goals using Resbite for a
+while, I want to balance my
+progress doing resbites different to
+the ones I've been doing
+US 123
+
+As a user I can pick up
+another challenge
+30 MINS
+SPORTS
+OUTDOORS
+ALL
+PART OF YOUR CHALLENGE
+Details
+ACHIEVE
+resbite name
+How do you feel
+after this resbite?
+Congratulations,
+you have won the
+challenge
+A green week
+45:00
+12:30
+You can invite others to this resbite
+Set this resbite for later
+START RESBITE
+8
+1
+4
+Turn phone notifications off during this resbite
+According to others, this resbite:
+relieved from stress
+greatful
+self-confident
+more focused
+more relaxed
+none of the above
+energized
+calm
+happier
+healthier
+connects to nature
+relieves body tension
+Check your progress
+Balance your progress
+Other :
+Meet your guide fo this resbite: Summit Rhadish
+Skip
+Done
+reduces stress
+see stats
+9:41
+US083
+
+As a user, I can see the details of a chosen resbite so that I can do it alone
+Skip this for now
+Active Challenge:
+In case there's a challenge ongoing a card like this appears in firs place.
+A card for every ongoing challenge.
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen
+DISCOVER
+SETTINGS
+BALANCE

@@ -1,0 +1,58 @@
+               E61 - Doing a resbite with others
+
+               US065
+
+               As a user that just picked-up a resbite,
+               I want to invite contacts from outside the app to join the activity
+                                  Invite resbite-
+                                   outsiders to
+                                 join the chosen
+                                      resbite
+
+
+
+
+                                                                  Choose a contacts src or                                                                                                            the user is done,           create
+                                                                 copy the invitation to send                                                                                  Choose a contacts src   there won't be a way     a date poll?
+                   Offer to invite people to the app                    it manually?                                                                                            or finish inviting?
+                                                                                                                                          warn the user that due to                                   to provide feedback
+                   (from the SN contacts and from the                                                             user sends invitation
+                                                                                               Copy invitation                            covid-9 social distancing                                   like "invitation sent"
+                   phone contacts).                                                                               manually outside of     only the first 6 to accept                                  since that happened
+                   Invitation message is visible.                                                                 the app.                the invitation will be able                                 outside the app.
+                   Additionally offer to copy invitation
+                                                                                                                                          to attend
+                   txt and link
+                                                                                Choose a specific source
+                                                                                where to add contacts from
+                                                                                                                                                                                                                                not on the MVP
+
+
+                                                                                                                                                           Choose a specific source
+                                                                                                                                                           where to add contacts from
+                                                           Selects contacts (from a specific
+                                                           chosen source) to whom invite to join
+                                                           on RB
+
+
+
+                      go back
+           (to select contacts                             The message sent is specific to this
+        from another source                                activity. "Come walking to the park
+or to copy invitation mssg.)
+                                                           with me, join me on Resbite".
+
+
+
+
+                                                                                                                                                                   finish
+
+
+                                                                   go back and choose                            example:
+                                                                  another contacts src or
+                                                                      finish inviting?
+
+
+                       example: invitation
+                      received in whatsapp
+

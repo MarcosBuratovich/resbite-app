@@ -1,0 +1,199 @@
+E79 - Choosing a resbite
+USs involved: 083, 197
+
+Choosing a resbite
+RESBITES 
+RESBITE DETAIL
+ONGOING RESBITE
+USER FEEDBACK
+ACHIEVEMENT
+FIND NEW RESBITE FOR GROUP
+RESBITES SEARCH
+Featured resbite
+US 197
+
+As a user, I can search a resbite
+US 062
+
+As a user that just picked up a resbite, I want to invite others to join.
+30 MINS
+SPORTS
+OUTDOORS
+PART OF YOUR CHALLENGE
+Details
+MY RESBITES
+MARIA
+resbite name
+How do you feel
+after this resbite?
+Congratulations,
+you have won the
+challenge
+Shall we set a new
+resbite forthis team?
+A green week
+45:00
+12:30
+Set a date
+START RESBITE
+Turn phone notifications off during this resbite
+relieved from stress
+greatful
+self-confident
+more focused
+more relaxed
+none of the above
+energized
+calm
+happier
+healthier
+Check your progress
+Suggest resbite
+Create a poll
+Other :
+Maybe later
+Challenges for this resbite.
+Rabia
+Stephen
+Imogen
+Martin
+Tony Sorensen
+Maria Ruiz
+- Remove
+Imogen Adams
+Rabia Nuzha
+Stephen Gray
+Noel Gallagher
++ Invite
+Bob Bagheart
+Andrea Mendez
+invited friends
+Search contact
+Rule of Six
+Ok
+During covid-19 social distancing rules only the first 6 to accept the invitation will be admitted in the resbite.
+Sure you want to quit?
+Stay on this resbite
+You will be able to restart this resbite later anyway.
+is the user inviting more than 6 people ?
+List of friends invited to this resbite, regardless they accepted the invitation or not.
+Button becomes active once the user chose at least a friend and at least a resbite.
+US 123
+
+As a user I can pick up
+another challenge
+SUGGESTED FOR THIS TEAM
+Quit
+There is no need to notify a user that has not accepted the invitation when the resbite owner turns the invitation down.
+ALL
+According to others :
+reduces stress
+connects to nature
+relieves body tension
+see stats
+Meet your guide fo this resbite: Summit Rhadish
+30 mins
+Let's do this
+Invite
+Schedule
+Place it
+US 241
+
+As a guest that has acepted an invitation to do a resbite, I can be notified that the resbite owner has removed me from the resbite
+2 confirmed
+when a chat has already been sarted
+12
+Upcomming
+Favorites
+30m
+Taken
+Continue
+Monday, april the 28th
+3:13PM
+28 Mulberry Court road
+Wokingham
+Tony
+10
+2
+28 apr - 3:13pm
+Complete settings
+Save as draft
+Done! send invitations
+Mondayapril the 28th
+3:13PM
+Meeting point:28 Mulberry Court road
+Wokingham
+Tips :
+Finishes
+-
+Duration
+Starts
+3:13    PM
+april
+may
+june
+july
+august
+S
+M
+T
+W
+F
+23
+24
+25
+26
+27
+28
+29
+45m
+1h
+2h
+Sync with iCal
+and never miss a resbite
+Where's the meeting point?
+Decide it later
+Address or place name
+ie: "In front of The Courtyard cafe"
+Add a note:
+RESBITE OVERVIEW, READY TO SEND
+SCHEDULE
+RESBITE OVERVIEW
+RESBITE CHAT
+PLACE IT
+INVITE
+PRE SET RESBITE DETAILS
+MY RESBITES 
+Boost your experience 
+Grant access to your location to enjoy better resbites suggestions and to find friends near you.
+Only day should be mandatory this screen  in order to continue
+Skip
+Done
+9:41
+US083
+
+As a user, I can see the details of a chosen resbite
+Skip this for now
+Active Challenge:
+In case there's a challenge ongoing a card like this appears in firs place.
+A card for every ongoing challenge.
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen
+DISCOVER
+SETTINGS
+BALANCE
+ACHIEVE
++ Add
+This text could be some text like:1) explaining benefits of making balance.
+
+2) motivating the user to make balance, mentioning what this user is being great at and what could be done to make balance.

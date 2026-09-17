@@ -1,0 +1,48 @@
+E27 - User wants to start using the app for the first time once downloaded
+
+US181
+As a user that has just verified phone number I can provide additional personal information in order to complete the registration process
+Previously, the user verified phone number during the registration process. 
+Require the user to type e-mail address 
+offer the user to define if Resbite can send user-tailored content to this address.
+require location through country and postcode
+Require the user to indicate gender
+USER NEEDS
+TO PROVIDE
+MORE PERSONAL INFO
+REGISTRATION PROCESS COMPLETE
+Note
+Let the user cancel this process and go back to choose e-mail registration
+US037
+
+The user can register on RB using phone number
+US188
+
+As a user I can indicate my motivation to take more breaks from digital technology
+Use a progress indicator or progress tracker to show the user the level of completion of the whole registration process.
+
+ie:  Duolingo
+Be gender inclusive 
+
+ie: Circle CI requires the gender in this way to applicants applying to open job positions
+Inform users how their information will be used
+Include options upfront & together (avoid using "male/female/other"). It gives the impression that those identities are less than those society formally recognizes.
+
+Let the user type "other" gender.
+
+Allow not to provide this information if it is not really necessary for Resbite user experience.
+Explain why it is useful for the user to provide this information. Smth like "we need to know your w-mail address to manage your invitations to other users".
+
+ie: Tinder says "Don't loose access to your account. Verify your e-mail"
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen

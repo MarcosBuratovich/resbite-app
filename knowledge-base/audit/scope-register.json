@@ -1,0 +1,492 @@
+[
+  {
+    "id": "M01",
+    "capability": "Activity catalogue / Discover",
+    "status": "Core",
+    "evidence": "Browse activity ideas with names and illustrations; preserve activity focus.",
+    "sources": "S0677 F.1; S0945 F; S0913 product.html",
+    "open_rule": "Owner selected 8–12 documented activities with suitable existing artwork; actual pairs pending.",
+    "first_test_decision": "8–12 documented activities using existing artwork; exact set pending."
+  },
+  {
+    "id": "M02",
+    "capability": "Activity detail",
+    "status": "Core",
+    "evidence": "Description, duration, practical details/tips and action to arrange it.",
+    "sources": "S0677 F.5; S0618; S0913 product.html",
+    "open_rule": "Sample content is not final copy."
+  },
+  {
+    "id": "M03",
+    "capability": "Basic activity search",
+    "status": "Core",
+    "evidence": "Find a relevant activity; legacy search matches titles and tags and handles no results.",
+    "sources": "S0677 F10–F13.2; S0945 F",
+    "open_rule": "Exact search fields/ranking and zero state need definition.",
+    "first_test_decision": "Search and categories selected; no extra filters."
+  },
+  {
+    "id": "M04",
+    "capability": "Date/time and place selection",
+    "status": "Core",
+    "evidence": "Set a meeting time and place for an activity.",
+    "sources": "S0684 K; S0685 K-1; S0913 product.html",
+    "open_rule": "Step order, end-time requirement and multi-day depth unresolved."
+  },
+  {
+    "id": "M05",
+    "capability": "Invitation overview and manual sharing",
+    "status": "Core",
+    "evidence": "Review activity/time/place/people and let the user send invitations manually.",
+    "sources": "S0945 I/K; S0673 C; S0913 product.html",
+    "open_rule": "Owner requires real invitations between testers; manual sharing channel and notification triggers pending.",
+    "first_test_decision": "Working invitation links manually shared; invitation/RSVP/plan-change notifications only."
+  },
+  {
+    "id": "M06",
+    "capability": "RSVP and attendee state",
+    "status": "Core",
+    "evidence": "Know who is joining; historical flow includes accept/decline.",
+    "sources": "S0678 G; S0913 product.html",
+    "open_rule": "Real RSVP between testers; accounts required through Google or email/password with email confirmation.",
+    "first_test_decision": "Real RSVP; accounts required; no guest RSVP."
+  },
+  {
+    "id": "M07",
+    "capability": "My resbites / upcoming plan",
+    "status": "Core",
+    "evidence": "Find arranged activities and their date/place/participants.",
+    "sources": "S0679 H.10/H.11; S0945",
+    "open_rule": "Lifecycle and cancellation rules need final detail."
+  },
+  {
+    "id": "M08",
+    "capability": "Owner management and cancellation",
+    "status": "Core",
+    "evidence": "Owner can manage the plan; attendees can decline or withdraw.",
+    "sources": "S0679 H; S0945 H",
+    "open_rule": "Do not add ownership transfer; owner-leaves case unresolved.",
+    "first_test_decision": "Owner cancels if unable to attend; no transfer."
+  },
+  {
+    "id": "M09",
+    "capability": "Event-specific chat",
+    "status": "Core",
+    "evidence": "Coordination attached to an arranged resbite.",
+    "sources": "S0679 H.7; S0913 product.html",
+    "open_rule": "Pre-RSVP/guest access and closure rules unresolved.",
+    "first_test_decision": "Sample conversation after RSVP only; live chat deferred."
+  },
+  {
+    "id": "M10",
+    "capability": "Wellness overview",
+    "status": "Core",
+    "evidence": "Review time spent on resbites and activity benefits.",
+    "sources": "S0689 T; S0913 product.html v0",
+    "open_rule": "Data collection, formulas and comparison depth unresolved.",
+    "first_test_decision": "Clearly labelled sample time/category wellness overview; real calculations deferred."
+  },
+  {
+    "id": "M11",
+    "capability": "Private identity and account access",
+    "status": "Core",
+    "evidence": "Private user identity sufficient for the chosen organizer/attendee flow.",
+    "sources": "S0672 B; S0945; S0913 index.html",
+    "open_rule": "Google or email/password with email confirmation for organizers and invitees; additional profile fields remain to define.",
+    "first_test_decision": "Google plus email/password with email confirmation; optional profile photo."
+  },
+  {
+    "id": "M12",
+    "capability": "Account/privacy controls",
+    "status": "Core",
+    "evidence": "A user can manage their account and understand relevant privacy choices.",
+    "sources": "S0680 I; S0913 index.html",
+    "open_rule": "Specific settings inventory depends on final MVP data/features.",
+    "first_test_decision": "Define minimum data, visibility, contacts, deletion and retention before real testing."
+  },
+  {
+    "id": "U01",
+    "capability": "Guest participation without account",
+    "status": "Deferred",
+    "evidence": "Newer explicit possibility: invitee enters a name as guest.",
+    "sources": "S0945 K note",
+    "open_rule": "Guest RSVP excluded by D15/D17; testers use Google or email/password with email confirmation.",
+    "first_test_decision": "Guest RSVP excluded; account required."
+  },
+  {
+    "id": "U02",
+    "capability": "Phone authentication vs Apple/Google",
+    "status": "Decision needed",
+    "evidence": "Phone code flows exist; V3 considers Apple/Google.",
+    "sources": "S0672; S0675; S0945 pasteboard",
+    "open_rule": "D17 selects Google plus email/password with email confirmation. Phone verification and Apple sign-in not selected.",
+    "first_test_decision": "Two selected methods: Google and email/password with email confirmation."
+  },
+  {
+    "id": "U03",
+    "capability": "Recovery codes vs email links",
+    "status": "Decision needed",
+    "evidence": "Recovery screen and notes describe different mechanisms.",
+    "sources": "S0676 E",
+    "open_rule": "Email/password recovery details remain to define; do not inherit historical phone recovery automatically.",
+    "first_test_decision": "Define password recovery for the selected email/password method; no phone recovery selected."
+  },
+  {
+    "id": "U04",
+    "capability": "Full discovery filters",
+    "status": "Decision needed",
+    "evidence": "Duration/category/companion/time/tags; V3 questions quantity.",
+    "sources": "S0677 F3; S0945 F",
+    "open_rule": "Q04; no final filter subset.",
+    "first_test_decision": "Extra discovery filters deferred; search/categories only."
+  },
+  {
+    "id": "U05",
+    "capability": "Similar activities / personalized recommendations",
+    "status": "Decision needed",
+    "evidence": "Similar and suggested activities appear; newer note questions similar items.",
+    "sources": "S0677; S0945 F; S0733",
+    "open_rule": "No approved AI/recommendation engine.",
+    "first_test_decision": "Similar activities deferred; no recommendation engine selected."
+  },
+  {
+    "id": "U06",
+    "capability": "Randomize displayed activities",
+    "status": "Decision needed",
+    "evidence": "A randomizer refreshes Discover selections.",
+    "sources": "S0677 F.2; S0945",
+    "open_rule": "Documented detail, not necessary to assume for minimum catalogue."
+  },
+  {
+    "id": "U07",
+    "capability": "Suggest a new activity",
+    "status": "Decision needed",
+    "evidence": "Submit title/description; source promises later contact if published.",
+    "sources": "S0677 F14.1/F14.2",
+    "open_rule": "Content-review ownership/workflow missing.",
+    "first_test_decision": "Suggestion form deferred."
+  },
+  {
+    "id": "U08",
+    "capability": "Groups and Household",
+    "status": "Decision needed",
+    "evidence": "Reusable groups; special non-deletable Household in old flow.",
+    "sources": "S0683; S0945 C; S0913 product.html",
+    "open_rule": "Contacts simplification may change this; Q05.",
+    "first_test_decision": "Reusable groups selected; special Household behaviour not selected."
+  },
+  {
+    "id": "U09",
+    "capability": "Phone contacts and QR connections",
+    "status": "Decision needed",
+    "evidence": "Import phone contacts, share links and scan QR. No social-network import in old notes.",
+    "sources": "S0673 C; S0945 C",
+    "open_rule": "Contact import selected by owner D14; QR and grouping remain undecided; no automatic bulk invitations.",
+    "first_test_decision": "Contact import selected; QR not selected; no automatic bulk invitations."
+  },
+  {
+    "id": "U10",
+    "capability": "Saved places / home and work addresses",
+    "status": "Decision needed",
+    "evidence": "Search/save/rename places and edit home/work.",
+    "sources": "S0682 J.8–J.18; S0685",
+    "open_rule": "Do not assume all location conveniences needed for MVP."
+  },
+  {
+    "id": "U11",
+    "capability": "Multi-day events and end times",
+    "status": "Decision needed",
+    "evidence": "Rich schedule picker exists; another fragment only requires day/start.",
+    "sources": "S0684; S0945",
+    "open_rule": "Resolve required inputs and duration for wellness."
+  },
+  {
+    "id": "U12",
+    "capability": "Attendance cap and waiting list",
+    "status": "Decision needed",
+    "evidence": "First-to-confirm capacity, waitlist, released-place notice and admin ordering.",
+    "sources": "S0688 S",
+    "open_rule": "Formula, priority and race conditions unspecified/conflicting; Q09.",
+    "first_test_decision": "Attendance caps and waiting lists deferred."
+  },
+  {
+    "id": "U13",
+    "capability": "Block/disconnect and shared-event warning",
+    "status": "Decision needed",
+    "evidence": "Private connection controls and warning if a blocked user shares a resbite.",
+    "sources": "S0682 J.19–J.24; S0680 I.5",
+    "open_rule": "Exact behaviour depends on guest/connections decisions."
+  },
+  {
+    "id": "U14",
+    "capability": "Chat search, system messages and closure",
+    "status": "Decision needed",
+    "evidence": "Historical event chat search; closing three days after end.",
+    "sources": "S0679 H.7–H.9; S0686 L.6–L.9",
+    "open_rule": "Core chat supported; detailed retention/access rules not settled.",
+    "first_test_decision": "Live chat, search and closure behaviour deferred; sample conversation only."
+  },
+  {
+    "id": "U15",
+    "capability": "Wellness comparisons and relationship indicators",
+    "status": "Decision needed",
+    "evidence": "Self, connections, household and all-user comparisons; top connections/places.",
+    "sources": "S0689 T; S0913 product.html",
+    "open_rule": "Meaning, privacy and aggregation unresolved.",
+    "first_test_decision": "Real wellness comparisons/relationship metrics deferred; sample time/categories only."
+  },
+  {
+    "id": "U16",
+    "capability": "Real-social vs virtual-social time",
+    "status": "Decision needed",
+    "evidence": "Website and decks describe comparing time spent in both.",
+    "sources": "S0913 product.html; S0893 p13",
+    "open_rule": "No collection method, OS integration or manual-entry specification found.",
+    "first_test_decision": "Real virtual/physical time tracking deferred; sample overview only."
+  },
+  {
+    "id": "U17",
+    "capability": "Calendar synchronization",
+    "status": "Decision needed",
+    "evidence": "Retained master-board content mentions iCal/Google Calendar.",
+    "sources": "S0945 retained calendar fragments",
+    "open_rule": "Not in the core website journey; provenance/priority and sync rules unresolved."
+  },
+  {
+    "id": "U18",
+    "capability": "Settings/help/deletion details",
+    "status": "Decision needed",
+    "evidence": "FAQs, support email, sign out, account updates and deletion screens.",
+    "sources": "S0680 I",
+    "open_rule": "No final support workflow; adapt only to actual MVP account capabilities."
+  },
+  {
+    "id": "U19",
+    "capability": "Dark mode and notification preferences",
+    "status": "Decision needed",
+    "evidence": "Legacy settings show dark mode and per-channel preferences.",
+    "sources": "S0680; S0945 I",
+    "open_rule": "Notifications selected by owner D14; exact triggers and settings remain undecided; dark mode remains undecided.",
+    "first_test_decision": "Notifications only for invitations, RSVP and plan changes; dark mode not selected."
+  },
+  {
+    "id": "D01",
+    "capability": "Child subaccounts and child wellness",
+    "status": "Deferred",
+    "evidence": "Parent-managed children and history transfer appear in old design.",
+    "sources": "S0945 G; S0682 J.25–J.35; S0913",
+    "open_rule": "Latest child exclusion controls; under-13/16 conflict preserved for later."
+  },
+  {
+    "id": "D02",
+    "capability": "Activity favourites",
+    "status": "Deferred",
+    "evidence": "Explicitly marked not a priority in V3.",
+    "sources": "S0945 F",
+    "open_rule": "Do not restore from older polished screens or a general pitch feature list."
+  },
+  {
+    "id": "D03",
+    "capability": "Previously completed Discover row",
+    "status": "Deferred",
+    "evidence": "V3 places not-a-priority note beside that row.",
+    "sources": "S0945 F",
+    "open_rule": "Does not remove completion records required by wellness."
+  },
+  {
+    "id": "D04",
+    "capability": "Additional admins / ownership transfer",
+    "status": "Deferred",
+    "evidence": "V3 deprioritizes assigning invitees as owners.",
+    "sources": "S0945 H",
+    "open_rule": "Owner-leaves rule needs another explicit decision.",
+    "first_test_decision": "Extra admins and ownership transfer deferred."
+  },
+  {
+    "id": "D05",
+    "capability": "Elaborate automatic invitation notifications",
+    "status": "Deferred",
+    "evidence": "V3 prioritizes invitations sent manually by the user.",
+    "sources": "S0945 I/C",
+    "open_rule": "Essential coordination updates still require a decision; not a ban on all notifications.",
+    "first_test_decision": "Essential invitation/RSVP/change notifications selected; broad notification centre and automated delivery remain deferred."
+  },
+  {
+    "id": "D06",
+    "capability": "Mandatory profile-photo onboarding",
+    "status": "Deferred",
+    "evidence": "Not-for-MVP annotation near B profile-photo screens.",
+    "sources": "S0945 B",
+    "open_rule": "Provisional interpretation; exact coverage Q12.",
+    "first_test_decision": "Optional profile photo selected; mandatory photo onboarding excluded."
+  },
+  {
+    "id": "D07",
+    "capability": "Post-event feedback and repeat extras",
+    "status": "Deferred",
+    "evidence": "V3 marks after-event area not a priority.",
+    "sources": "S0945 L; S0686",
+    "open_rule": "Exact extent Q12; maintain necessary completed-event data.",
+    "first_test_decision": "Post-event extras deferred."
+  },
+  {
+    "id": "D08",
+    "capability": "App-store rating funnel",
+    "status": "Deferred",
+    "evidence": "Historical R1 branch requests ratings/reviews or email feedback.",
+    "sources": "S0687 R1",
+    "open_rule": "No essential MVP need established; do not inherit old platform assumptions."
+  },
+  {
+    "id": "P01",
+    "capability": "Flexible invitation polls",
+    "status": "Later features",
+    "evidence": "Poll invitees to find a common time.",
+    "sources": "S0913 product.html v1; S0692/S0693 premium lists",
+    "open_rule": "Poll mechanics and final tier entitlements not defined."
+  },
+  {
+    "id": "P02",
+    "capability": "Photo collections",
+    "status": "Later features",
+    "evidence": "Attendees contribute event photos for viewing/downloading.",
+    "sources": "S0691 M; S0913 product.html v1",
+    "open_rule": "Ownership, deletion and retention not finalized."
+  },
+  {
+    "id": "P03",
+    "capability": "Weather checker",
+    "status": "Later features",
+    "evidence": "Event-location/date forecast and weather warning.",
+    "sources": "S0692 N; S0913 product.html v1",
+    "open_rule": "Provider, forecast horizon and entitlements unresolved."
+  },
+  {
+    "id": "P04",
+    "capability": "Guru stories",
+    "status": "Later features",
+    "evidence": "Expert stories/testimonials related to activities.",
+    "sources": "S0693 O; S0913 product.html v1",
+    "open_rule": "Example experts and stories are not a production content library."
+  },
+  {
+    "id": "P05",
+    "capability": "Premium subscriptions/trials",
+    "status": "Later features",
+    "evidence": "Freemium business direction and upgrade screens.",
+    "sources": "S0733; S0893; S0692; S0913",
+    "open_rule": "Prices/trials conflict; no MVP payment implementation implied."
+  },
+  {
+    "id": "P06",
+    "capability": "Printed photobook",
+    "status": "Later concept",
+    "evidence": "Photo poll/printed book/shipping appears in master boards.",
+    "sources": "S0945 retained photobook fragments",
+    "open_rule": "Not in latest v1 summary; treat as unapproved later concept."
+  },
+  {
+    "id": "X01",
+    "capability": "Hosted paid events and tickets",
+    "status": "Marketplace",
+    "evidence": "Provider-created premium events and purchase tickets.",
+    "sources": "S0694 P; S0913 product.html v2",
+    "open_rule": "Explicitly outside MVP per owner."
+  },
+  {
+    "id": "X02",
+    "capability": "Activity-provider web portal",
+    "status": "Marketplace",
+    "evidence": "Providers create hosted events and offer them to relevant users.",
+    "sources": "S0913 product.html v2",
+    "open_rule": "Roadmap only; no complete provider flow located."
+  },
+  {
+    "id": "X03",
+    "capability": "Hosted-event commission",
+    "status": "Marketplace",
+    "evidence": "Business model charges a share of paid attendance.",
+    "sources": "S0950; S0893 p15",
+    "open_rule": "10% vs 15% conflict; undated source cannot settle it."
+  },
+  {
+    "id": "E01",
+    "capability": "Virtual rewards / badges / challenge unlocks",
+    "status": "Excluded",
+    "evidence": "Old challenges, points, milestones and rewards appear.",
+    "sources": "S0639/S0641; S0733 versus S0913 index.html",
+    "open_rule": "Newer removing-gamification principle wins."
+  },
+  {
+    "id": "E02",
+    "capability": "In-app ads / paid featured slots",
+    "status": "Excluded",
+    "evidence": "Old F note considers charging for editorial placement.",
+    "sources": "S0677 F.1 versus S0913 index.html",
+    "open_rule": "Newer no-ads principle wins."
+  },
+  {
+    "id": "E03",
+    "capability": "Public profiles / wall posts / likes / photo tagging",
+    "status": "Excluded",
+    "evidence": "Explicitly rejected in explainer and private-network principles.",
+    "sources": "S0183; S0913 index.html",
+    "open_rule": "Do not infer conventional social feed functionality."
+  },
+  {
+    "id": "E04",
+    "capability": "User-data sales / ad targeting",
+    "status": "Excluded",
+    "evidence": "Explicit newer privacy principle.",
+    "sources": "S0913 index.html",
+    "open_rule": "Not a monetization mechanism for Resbite."
+  },
+  {
+    "id": "B01",
+    "capability": "Founders/referral programme",
+    "status": "Marketing only",
+    "evidence": "Early-access forms, referral links and invitation incentives.",
+    "sources": "S1063–S1066; S0913 product.html",
+    "open_rule": "Keep acquisition website programme separate from in-app MVP."
+  },
+  {
+    "id": "B02",
+    "capability": "Marketing/social media content",
+    "status": "Marketing only",
+    "evidence": "Social media proposal, post assets and content calendar planning.",
+    "sources": "S0898; social assets",
+    "open_rule": "Does not authorize a public social feed inside the app."
+  },
+  {
+    "id": "B03",
+    "capability": "Support chatbot / elderly subaccounts",
+    "status": "Later concept",
+    "evidence": "Explicit future possibilities in help/profile notes.",
+    "sources": "S0680 I; S0682 J",
+    "open_rule": "Do not convert speculative notes into mandatory backlog."
+  },
+  {
+    "id": "B04",
+    "capability": "AI recommendation engine",
+    "status": "Later concept",
+    "evidence": "Algorithm language in early one-pager; AWS deck asks about a recommendation engine.",
+    "sources": "S0733; S0950",
+    "open_rule": "No selected AI system, training data or decision to build one."
+  },
+  {
+    "id": "B05",
+    "capability": "Friends-of-friends expansion",
+    "status": "Decision needed",
+    "evidence": "Newer product page mentions safely expanding the social circle.",
+    "sources": "S0913 product.html",
+    "open_rule": "No complete MVP flow/permissions; do not invent stranger discovery."
+  },
+  {
+    "id": "B06",
+    "capability": "COVID compliance",
+    "status": "Historical",
+    "evidence": "Appears in 2021/2022 decks.",
+    "sources": "S0975; S0893 p12",
+    "open_rule": "Not carried into the newer product feature list; no current implementation requirement."
+  }
+]

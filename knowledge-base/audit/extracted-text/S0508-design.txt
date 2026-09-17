@@ -1,0 +1,55 @@
+LOG in fields, 
+offer to REGISTER as a 2d option
+REGISTER
+(request e-mail , pass and basic  info)
+every slide of 1st-run features slideshow
+warn user and request to check e-mail provided
+warn user and request to check credentials
+Selects contacts to whom invite to use RB from a specific chosen source
+feedback: "Invitation sent"
+first-run
+experience?
+register or login?
+login or register
+Continue 
+with sideshow or skip?
+e-mail verification success
+Do
+credentials pass
+validation?
+select 
+a contacts source or
+skip?
+go back
+or finish
+inviting?
+SPLASH
+SCREEN
+ACTIVITIES 
+(or RESBITES)
+ACTIVITIES  (or RESBITES)
+including first-run on boarding guiding
+Offer to invite people to the app (from the SN contacts and from the phone contacts).
+Invitation message. is visible.
+Additionally offer to copy invitation txt and link
+The user main intention is not adding contacts, but the user considers this possibility since this suggestion suddenly appears while opening the app.
+
+
+057 - As a user that has just signed-up or signed-in, I consider the suggestion inviting other contacts to use Resbite.
+login success
+skip
+register
+continue
+login
+go back 
+(to select contacts
+from another source
+or to copy invitation mssg.)
+Choose contacts
+from a specific source
+finish
+splash screen
+US002
+
+The user can login
+to the app

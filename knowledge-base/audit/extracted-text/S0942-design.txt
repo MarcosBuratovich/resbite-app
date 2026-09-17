@@ -1,0 +1,223 @@
+E79 - Choosing a resbite
+USs involved: 083, 197
+
+Choosing a resbite
+RESBITES 
+RESBITE DETAIL
+ONGOING RESBITE
+USER FEEDBACK
+ACHIEVEMENT
+FIND NEW RESBITE FOR GROUP
+RESBITES SEARCH
+Featured resbite
+US 197
+
+As a user, I can search a resbite
+US 062
+
+As a user that just picked up a resbite, I want to invite others to join.
+30 MINS
+SPORTS
+OUTDOORS
+PART OF YOUR CHALLENGE
+Details
+MY RESBITES
+MARIA
+resbite name
+How do you feel
+after this resbite?
+Congratulations,
+you have won the
+challenge
+Shall we set a new
+resbite forthis team?
+A green week
+45:00
+12:30
+Set a date
+START RESBITE
+Turn phone notifications off during this resbite
+relieved from stress
+greatful
+self-confident
+more focused
+more relaxed
+none of the above
+energized
+calm
+happier
+healthier
+Check your progress
+Suggest resbite
+Create a poll
+Other :
+Maybe later
+Challenges for this resbite.
+Rabia
+Stephen
+Imogen
+Martin
+Tony Sorensen
+Maria Ruiz
+- Remove
+Imogen Adams
+Rabia Nuzha
+Stephen Gray
+Noel Gallagher
++ Invite
+Bob Bagheart
+Andrea Mendez
+invited friends
+Search contact
+Rule of Six
+Ok
+During covid-19 social distancing rules only the first 6 to accept the invitation will be admitted in the resbite.
+Sure you want to quit?
+Stay on this resbite
+You will be able to restart this resbite later anyway.
+is the user inviting more than 6 people ?
+List of friends invited to this resbite, regardless they accepted the invitation or not.
+Button becomes active once the user chose at least a friend and at least a resbite.
+US 123
+
+As a user I can pick up
+another challenge
+SUGGESTED FOR THIS TEAM
+Quit
+There is no need to notify a user that has not accepted the invitation when the resbite owner turns the invitation down.
+ALL
+According to others :
+reduces stress
+connects to nature
+relieves body tension
+see stats
+Meet your guide fo this resbite: Summit Rhadish
+30 mins
+Let's do this
+Invite
+Schedule
+Place it
+US 241
+
+As a guest that has acepted an invitation to do a resbite, I can be notified that the resbite owner has removed me from the resbite
+2 confirmed
+when a chat has already been sarted
+12
+Upcomming
+Favorites
+30m
+Meeting point:28 Mulberry Court road
+Wokingham
+PROFILE
+MondayApril the 28th
+3:13PM
+Imogen, Rabia, Maria ...
+10
+ie: "In front of The Courtyard cafe"
+Add a note:
+Continue
+2
+Done
+LAST MONTH
+Complete settings
+28 apr - 3:13pm
+Meeting point (address or place)
+Tottenham Court Station
+Monday, april the 28th
+3:13PM
+28 Mulberry Court road
+Wokingham
+Repeat resbite
+10 invitees
+Resend invitations
+Tony
+Plain, not actionable data
+Difference between the Details screen of a resbite that has already been done, and the one from a resbite draft, is that in here (already done one) the location, invitees and date are plain information. Not actionable cards.
+Only if there is a modification, and only the resbite ower can see it.
+If nothing has changed since the invitees received the last invitation, the button should not appear visible.
+"Send invitations" should be replaced by "Resend invitations" if the user has previously sent invitations.
+
+There should be a limit for the times a resbite owner can send invitations.
+MY RESBITES: LISTS
+MY RESBITES: ALREADY DONE RESBITE DETAILS
+MY RESBITES: UPCOMMING RESBITE
+Tips :
+Finishes
+-
+Starts
+3:13    PM
+Saved
+Recent
+Work
+Canary Wharf
+Home
+Totten
+Totterloo Gardens
+Tottenham Court Road
+Done! send invitations
+While scrolling down the contacts list the buttons block on the bottom could hide sliding down, and the top bar hide on top so that the user can concentrate on the list better. 
+
+When the user stops scrolling those blocks could slide into the screen again.
+has the invitee set a preference to receive invitations through SMS or e-mail?
+US 
+
+As a user I can receive the
+invitation to do a resbite
+The invitee receives a notification through e-mail and app notification
+The invitee only receives an app notification
+CHOOSING A RESBITE
+Send invitation later
+Where's the meeting point?
+Address or place name
+Location poll
+Decide together with confirmed invitees
+Boost your experience 
+Grant access to your location to enjoy better resbites suggestions and to find friends near you.
+Sync with iCal
+and never miss a resbite
+CREATING A POLL
+Is there a pre-set (by system) location for this resbite?
+Do you want
+to sync with iCal ?
+Yes
+Never miss a resbite
+Not now
+Has the user denied permission to sync with iCal or Google Calendar before?
+If the user has already added a resbite to calendar this checkbox should be already checked.
+The same should happen if the user has set all resbites to be saved in calendar from Settings screen.
+
+If the user is on Android we should not include iCal checkbox
+
+If the user chooses YES then request permission to access the calendar through system dialog
+Suggested
+DISCOVER
+SETTINGS
+In case the previous step is incomplete, the indicator should show that
+9:41
+Only day should be mandatory this screen  in order to continue
+Skip
+US083
+
+As a user, I can see the details of a chosen resbite
+Skip this for now
+Active Challenge:
+In case there's a challenge ongoing a card like this appears in firs place.
+A card for every ongoing challenge.
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen
+BALANCE
+ACHIEVE
++ Add
+This text could be some text like:1) explaining benefits of making balance.
+
+2) motivating the user to make balance, mentioning what this user is being great at and what could be done to make balance.

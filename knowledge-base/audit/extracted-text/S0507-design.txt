@@ -1,0 +1,59 @@
+US057
+As a user that has just signed-up or signed-in, I consider the suggestion inviting other contacts to use Resbite.
+The user main intention is not adding contacts, but the user considers this possibility since this suggestion suddenly appears while opening the app.
+
+
+US004
+
+The user can log-in typing access credentials 
+US002
+
+The user can register on RB using e-mail address
+US009
+
+The signed-in user arrives at the Resbites list
+Selects contacts to whom invite to use RB from a specific chosen source
+SUGGEST INVITING CONTACTS
+CONTACTS INVITED
+select a contacts source or skip?
+go back or finish
+inviting?
+Offer to invite people to the app (from the SN contacts and from the phone contacts).
+Invitation message. is visible.
+Additionally offer to copy invitation txt and link
+go back 
+(to select contacts from another
+source or to copy invitation mssg.)
+Choose contacts
+from a specific source
+finish
+skip
+feedback: "Invitation sent"
+ACTIVITIES 
+(or RESBITES)
+first-run
+experience?
+select 
+a contacts source or
+skip?
+go back
+or finish
+inviting?
+ACTIVITIES  (or RESBITES)
+including first-run on boarding guiding
+go back 
+(to select contacts
+from another source
+or to copy invitation mssg.)
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen

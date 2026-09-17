@@ -1,0 +1,70 @@
+MVP flowchart
+User opens
+the app
+Is it 1st run
+experience?
+is there an account already active for this phone number ?
+Has it been too long since the user invited others to connect in the app for the last time ?
+is the user already logged-in?
+Recover the account or log-in?
+User decides to do
+ resbite again?
+Registration (1st steps)wfl B -US037
+Onboarding slideshowwfl A -  US029
+
+proceeds to registration
+proceeds to log-in
+Log inwfl D - e58
+Account recoverywfl e
+Registration: provide additional personal information wfl B - US181
+Inviting to connect in the appwfl C - us050
+Pick up a resbite from the listwfl F - e79
+Filtering resbites listswfl F - screen F.3
+Notificationswfl i - screen i.1
+Being invited to a resbite
+Dismissing or accepting the invitationwfl G - screen G.5
+Discover: the user arrives at the resbites listwfl F
+Settings: main categorieswfl I - sceen i.3
+Search a resbitewfl F - screen F.10
+Choose time for resbitewfl K - screen K.4
+Choose place for resbitewfl K - screen K-1.1
+Choose invitees for resbitewfl K - screen K-1.2
+Send invitations for resbitewfl K - screen K.12
+My resbites: Default view: upcomming resbiteswfl H - screen H.10
+My resbites: Done resbite listwfl L - screen L.10 - us089
+Done resbites detailswfl L - screen L.2
+Upcomming resbite detailswfl H - screen H.11.1
+Congratulations messagewfl B
+Log outscreen i.10
+Notificationsscreen i.4
+Privacyscreen i.5
+Helpscreen i.6
+Delete accountscreen i.7
+Email address
++ phone numberscreen i.9
+Profile: main screenwfl J - sceen J.1
+Saved placesscreen J.8
+Children sub-accountscreen J.25
+Edit profilescreen J.36
+My groupsscreen J.2
+My connectionsscreen J.19
+Cancel resbitewfl H - screen H.15/H.16
+Leave resbitewfl H - screen J.19
+Chattingwfl H - screen H.7
+Managing inviteeswfl H - screen H.7
+The resbite take place
+Feedback about the done resbitewfl L - screen L.1 - e26
+goes back to Home or RB list
+Or should the user arrive to a HOME screen with more diverse content?
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen

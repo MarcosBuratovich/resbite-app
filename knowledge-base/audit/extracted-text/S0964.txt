@@ -1,0 +1,387 @@
+                       The real
+                       social network
+
+
+
+
+Abbreviated deck v4 ( 5 min )
+        March 2021
+Background
+& purpose
+• Our Founder & CEO:
+  Stephen Gray (entrepreneur &         Watch a 2-min explainer
+  social tech futurist).               video at www.resbite.app
+
+
+
+• Our mission: to be the go-to app
+  for arranging real-life activities
+  whilst helping human wellness.
+
+
+• Our vision: to take on silicon
+  valley’s social tech giants with a
+  UK based ethical alternative.
+
+
+
+                                                                  2
+ The problem…
+• The overuse and misuse of tech is
+  impacting our health and wellbeing.
+
+
+• Existing big social tech business
+  models are based on the attention
+  economy and can’t change.
+
+
+• Innovation in social technology tends
+  to pull people further away from
+  reality i.e. antisocial
+
+
+
+
+                                        3
+The solution…
+• Design better tech to rebalance
+  people’s experience with tech.
+
+
+• Design for wellness.
+
+
+• Remove addictive design.
+
+
+• Design for privacy.
+
+
+• Design for business sustainability.
+
+
+
+
+                                        3
+                                        4
+                                                                         PRODUCT
+
+
+
+
+                              To create a
+                              resbite you…
+Explore a range of
+different art topics
+from charcoal drawing
+to fine art .
+
+
+
+
+Get access to videos of our MVP in action at www.resbite.app/investors   5
+                                                                         PRODUCT
+
+
+
+
+                              To create a
+                              resbite you…
+                              1.   Discover activity ideas
+
+
+
+
+Get access to videos of our MVP in action at www.resbite.app/investors   6
+                                                                         PRODUCT
+
+
+
+
+                              To create a
+                              resbite you…
+                              1.   Discover activity ideas
+
+
+                              2. Choose a date
+
+
+
+
+Get access to videos of our MVP in action at www.resbite.app/investors   7
+                                                                         PRODUCT
+
+
+
+
+                              To create a
+                              resbite you…
+                              1.   Discover activity ideas
+
+
+                              2. Choose a date
+
+
+                              3. Choose a place
+
+
+
+
+Get access to videos of our MVP in action at www.resbite.app/investors   8
+                                                                         PRODUCT
+
+
+
+
+                              To create a
+                              resbite you…
+                              1.   Discover activity ideas
+
+
+                              2. Choose a date
+
+
+                              3. Choose a place
+
+
+                              4. Invite connections
+
+
+
+
+Get access to videos of our MVP in action at www.resbite.app/investors   9
+                                                                         PRODUCT
+
+
+
+
+                              To create a
+                              resbite you…
+                              1.   Discover activity ideas
+
+
+                              2. Choose a date
+
+
+                              3. Choose a place
+
+
+                              4. Invite connections
+
+
+                              5. Confirm your resbite
+
+
+
+
+Get access to videos of our MVP in action at www.resbite.app/investors   10
+                                                                                 PRODUCT
+
+
+                                 Features
+
+
+
+
+Location Suggestions   Flexible Invitations      Guru Stories     COVID Compliance
+
+
+
+
+Groups & Favourites     Resbite Chat          Photo Collections    Weather Checker
+
+
+
+
+                                                                                 11
+                                       PRODUCT
+
+
+
+
+ Wellness
+• Manage personal and family
+  wellbeing.
+
+
+• See how you compare with others in
+  specific wellness categories.
+
+
+• Monitor tech vs tech-free time.
+
+
+• Check on relationship quality of
+  connections.
+
+
+
+
+                                     12
+                                         BUSINESS
+                                           MODEL
+
+
+Premium
+subscription
+• A premium subscription gives the
+  user a set of premium features.
+
+
+• £6.99 per month or £39.99 per year.
+
+
+• To be implemented in v1.0
+
+
+• Accounts for 100% of revenue in v1.0
+
+
+
+
+                                         13
+                                        BUSINESS
+                                          MODEL
+
+
+
+
+Hosted resbites
+• Hosted resbite’s are ones that have
+  been pre-created from a host.
+
+
+• A host charges for attendance (in-
+  app) and we will take a 15%
+  commission.
+
+
+• To be implemented in v2.0
+
+
+• Accounts for 75% of revenue in v2.0
+
+
+
+
+                                        14
+Opportunity
+• COVID lockdowns have
+     presented a unique opportunity
+     to validate our business case.
+
+
+• Research shows UK wants (after
+     all basic needs satisfied) during
+     lockdown:
+1.   to be outside.
+2. time with family and friends.
+3. to take a holiday.
+4. pursue a hobby or interest.
+
+
+
+
+                                         15
+Primary audience
+• Age: 30-50 (young enough to be
+  digital native, old enough to feel
+  nostalgic about a time socialising
+  pre-social media)
+• Sex: Female Bias
+• Family: Children between 12 - 20
+• Education: Graduate
+• Income: Above average
+
+
+
+
+                                       16
+                       Management Team
+t
+
+
+
+
+    Geoff Ainsworth         Stephen Gray        Damian Carvill
+           CTO                   CEO                  COO
+
+
+
+
+     Elena Cerchia          Dan Ranson            Ian Morton
+      Lead Developer        Head of Product   Head of Comms & Culture
+
+
+
+                                                                   17
+Other key people
+•   Maria Ruiz
+    Project Manager
+
+
+•   Imogen Adams
+    Visual Creative
+
+
+•   Lisandro Natale
+    Visual Creative
+
+
+•   Fermin Lira
+    Human Experience
+
+
+•   Rabia Nuzha
+    Front-end Developer
+
+
+
+
+                          18
+Roadmap
+Completed
+Core team recruitment. product
+creative, code of ethics, branding,
+website, investor assets, UX and app
+design, react native front-end.
+
+
+Still to complete
+• Back-end: Q3 21
+• MVP public alpha: Q4 21
+• v 1.0 public beta: 20 Dec 21
+
+
+
+
+                                       19
+To launch a
+public beta
+We want to raise a pre-seed
+round of £600K made up of:                           £120K
+                                                     Operating salaries
+
+
+  £180K
+  Product development
+                              £600K                     £60K
+                                                        Marketing & research
+
+
+
+
+        £150K
+        Launch promotion                             £60K
+                              £30K                   Seed round contingency
+
+
+                              Legal & professional
+                                                                               20
+Thank you for your time!
+
+   For the full investor deck and to see
+    videos of the MVP in action visit:
+      www.resbite.app/investors
+

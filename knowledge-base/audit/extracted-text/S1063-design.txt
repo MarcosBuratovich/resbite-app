@@ -1,0 +1,103 @@
+Received
+Resbite: “launching in USA in 2023”
+Unsubscribe
+Info@scoop.com
+Scoop
+for me
+Translate this message
+(2 hours ago)
+of
+articles
+Resbite app design avoids 
+#harmfulFeatures
+Premium Resbite app features
+7 Oct
+Category 22
+notes
+shouts
+Check our #ValentinesDay 
+collection
+Manage subscriptions
+Powered by
+Resbite app
+Brand B
+#ValentinesDay
+Unsubscribe from Resbite posts
+Scoop International Company
+Marble 2, Fenian Street
+London, D02 AX07  UK
+Help  |  Privacy  |  Reset password  |  Download app
+of 5.000
+Old early-access subscribers
+300 odd people that have already signed up an email to start them on this journey
+You are now registered as a founding member and you’ll have early access to the app once we launch. 
+Invite others to join and get more benefits
+Use the code:
+www.resbite.com/join?dh9Xdgg
+Invite 2 refferals and get these rewards.
+Invite 5 refferals and get these rewards.
+Invite 8 refferals and get these rewards.
+(Award is given once the referral sings up to become a founding member)
+Referral link (Unique tracking URL) is generated using the identifier parameter of the browsed URL and populated in the message.
+An email is sent to them through Mailchimp letting them know about the referrals program and providing them with a sharing link they can use to invite others.
+Once in a while an email should be sent to the founding members letting them know hoe the project is going
+User sends a personal sign-up link referrals
+Become founding member
+Typeform submission redirects to URL that includes the person email or an identifier
+Typeform form is submitted
+The referral link identifier is saved in Typeform and Firebase when the referral signs-up
+The referral link identifier is searched in Firebase and the number of invitees that signed up is increased +1
+Referral link (Unique tracking URL) is generated using the identifier parameter of the browsed URL and populated in the message.
+This should also be passed to Mailchimp
+Typeform plan should be paid in order to use this redirect feature. 
+It’s mentioned here: https://support.referralhero.com/integrate/integrations/typeform
+
+www.resbite.com/product.html
+www.resbite.com/join?dh9Xdgg
+www.resbite.com/product.html?4758593773
+The new subscription info is saved in:
+- Firebase
+- Typeform form responses
+A confirmation email is sent to the new subscriber through Mailchimp that shows similar content and the same sharing link to the ‘Welcome to Resbite’ webpage
+Founding member shares link through any media (social networks, email, SMS).
+
+The referral clicks on link.
+Is the user that referred in the 1st instance falling into a higher category in the scale of the referral program?
+An email is sent to the user informing the award and encouraging the user to get more friends onboard to get more benefits.
+
+This email could have a milestone diagram that shows the achieved and pending goals
+
+Depending on the category…
+3 friends confirmed: a 12 months premium membership is awarded. 
+
+The database saves the ‘premium status’ as ‘true’ and exports as ‘12 months’.
+
+This period of time starts when the user creates an account under the same email used to sign-up for Early Access.
+
+When the 12 months are close to finish a notification (email, in-app, push notification) warns the user about this. 
+
+6 friends confirmed: a Resbite t-shirt is awarded. 
+The user is asked to provide an address to receive the t-shirt (responding to the email? maybe filling up an online form?).
+An email is sent to the Resbite admin to prepare and send the t-shirt.
+9 friends confirmed: lifetime premium membership is awarded.
+
+The database saves the ‘premium status’ as ‘true’ and exports as never.
+
+Summary
+
+Every Early Access form submission saves the information in Firebase.
+
+If the user has used a referral link to sign-up: 
+A) the referral link identifier is saved together with the user information
+B) a function searches in the database who does that referral link belongs to.
+C) the function updates the information for the referral link owner
+D) if that referral link owner has reached a new referral tier (ie: 3 sign-ups) an email is sent to that user.
+email
+Please confirm your membership and become a founding member.
+Confirm my membership
+This text could be some text like:1) explaining benefits of making balance.
+
+2) motivating the user to make balance, mentioning what this user is being great at and what could be done to make balance.
+article
+Subscribe
+splash screen

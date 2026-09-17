@@ -1,0 +1,38 @@
+E28 - Checking the general progress done with ResbiteUS089
+As a user that's been using Resbite for a while, I can see a timeline/history of the resbites I've done.
+GO TO
+USER'S HISTORY LINE
+US083
+
+As a user, I can see the details of a chosen resbite so that I can do it alone
+Timeline:
+List where activities done and goals/milestones achieved are ordered by "latest first"
+If a resbite has been done more than once it should be shown repeated.
+select a resbite
+User decides to do
+the resbite again?
+See resbite details:
+Title
+Description
+Main image
+Duration
+possibility to invite others
+Each resbite shows:
+NameDate it was done.
+If it's been added to favorites in case it wasPossibility to be added to favorites
+Resbite friends appear as the first source of people to invite
+NOTE:
+There's a different user story to invite people that is on the app but is not a resbite friend.
+And another one related to inviting contacts not using resbite at all.
+SPLASH
+SCREEN
+Terms and abbreviations
+
+RB: Resbite
+first-run experience: the first interaction that the user has with the app.
+US002
+
+The user can login
+to the app
+
+splash screen
