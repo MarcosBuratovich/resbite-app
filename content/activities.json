@@ -1,0 +1,152 @@
+[
+  {
+    "id": "coffee-together",
+    "title": "Coffee together",
+    "category": "Meals & Drinks",
+    "description": "Make time for a drink and a catch-up with people you know.",
+    "tips": [
+      "Choose a place where everyone can sit together.",
+      "Agree a time that works for the group."
+    ],
+    "durationMinutes": null,
+    "sourceIds": [
+      "S0618",
+      "S0945",
+      "S0716"
+    ],
+    "artwork": "coffee-together.png",
+    "contentStatus": "editorial-draft",
+    "categoryStatus": "editorial-assignment-for-review"
+  },
+  {
+    "id": "painting",
+    "title": "Painting",
+    "category": "Creative",
+    "description": "Paint a scene, an object or an abstract design together. Try different colours and let everyone take their own approach.",
+    "tips": [
+      "Bring paints, brushes and something to paint on.",
+      "Look at painting styles for inspiration."
+    ],
+    "durationMinutes": 30,
+    "sourceIds": [
+      "S0618",
+      "S0713"
+    ],
+    "artwork": "painting.png",
+    "contentStatus": "editorial-draft",
+    "categoryStatus": "editorial-assignment-for-review"
+  },
+  {
+    "id": "get-out-with-bikes",
+    "title": "Get out with bikes",
+    "category": "Adventure",
+    "description": "Get together for a bicycle ride and enjoy some time outside.",
+    "tips": [
+      "Agree the route and meeting place in advance.",
+      "Choose a route everyone in the group is comfortable with."
+    ],
+    "durationMinutes": null,
+    "sourceIds": [
+      "S0618",
+      "S0945",
+      "S0714"
+    ],
+    "artwork": "get-out-with-bikes.png",
+    "contentStatus": "editorial-draft",
+    "categoryStatus": "editorial-assignment-for-review"
+  },
+  {
+    "id": "building-a-snowman",
+    "title": "Building a snowman",
+    "category": "Creative",
+    "description": "When there is enough snow, get together to build and decorate a snowman.",
+    "tips": [
+      "Choose a suitable outdoor spot.",
+      "Bring warm clothes and simple decorations."
+    ],
+    "durationMinutes": null,
+    "sourceIds": [
+      "S0945",
+      "S0705"
+    ],
+    "artwork": "building-a-snowman.png",
+    "contentStatus": "editorial-draft",
+    "categoryStatus": "editorial-assignment-for-review"
+  },
+  {
+    "id": "bbq",
+    "title": "BBQ",
+    "category": "Meals & Drinks",
+    "description": "Share a barbecue and spend time together over food.",
+    "tips": [
+      "Agree who is bringing the food and equipment.",
+      "Check dietary preferences with your guests."
+    ],
+    "durationMinutes": null,
+    "sourceIds": [
+      "S0618",
+      "S0945",
+      "S0706"
+    ],
+    "artwork": "bbq.png",
+    "contentStatus": "editorial-draft",
+    "categoryStatus": "editorial-assignment-for-review"
+  },
+  {
+    "id": "wine-tasting",
+    "title": "Wine tasting",
+    "category": "Meals & Drinks",
+    "description": "Get together to compare wines and talk about what you notice.",
+    "tips": [
+      "Choose a suitable place and agree what to bring.",
+      "Have water and alcohol-free options available."
+    ],
+    "durationMinutes": null,
+    "sourceIds": [
+      "S0618",
+      "S0945",
+      "S0710"
+    ],
+    "artwork": "wine-tasting.png",
+    "contentStatus": "editorial-draft",
+    "categoryStatus": "editorial-assignment-for-review"
+  },
+  {
+    "id": "spa-day",
+    "title": "Spa day",
+    "category": "Leisure",
+    "description": "Set aside time to relax together at a spa.",
+    "tips": [
+      "Choose the place together.",
+      "Check availability before confirming your plan."
+    ],
+    "durationMinutes": null,
+    "sourceIds": [
+      "S0618",
+      "S0619",
+      "S0711"
+    ],
+    "artwork": "spa-day.png",
+    "contentStatus": "editorial-draft",
+    "categoryStatus": "editorial-assignment-for-review"
+  },
+  {
+    "id": "book-club",
+    "title": "Book Club",
+    "category": "Intellectual",
+    "description": "Meet to talk about a book you have chosen together.",
+    "tips": [
+      "Agree the book before the meeting.",
+      "Bring a question or a favourite passage to discuss."
+    ],
+    "durationMinutes": null,
+    "sourceIds": [
+      "S0619",
+      "S0945",
+      "S0707"
+    ],
+    "artwork": "book-club.png",
+    "contentStatus": "editorial-draft",
+    "categoryStatus": "editorial-assignment-for-review"
+  }
+]

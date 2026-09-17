@@ -1,0 +1,182 @@
+{
+  "status": "First-test review assets; not a published catalogue.",
+  "activities": [
+    {
+      "activityId": "coffee-together",
+      "artwork": "assets/activities/coffee-together.png",
+      "sourceId": "S0716",
+      "sourcePath": "source-materials/main-archive/RES - Resbite/RES005 - Product/Visual/Resbites Illustrations/SVGs/Artboard 9.svg",
+      "sourceSha256": "5548e27619db0e6572d9f8b6423b018849d75c835c2c568abd59c6a6e9f6f14c",
+      "transformation": "Rendered complete original SVG to 1200px-wide transparent PNG; no artwork additions or edits.",
+      "titleEvidence": [
+        "S0618",
+        "S0945"
+      ],
+      "copyStatus": "Editorial draft: description and tips are newly written from the documented activity, for review before publishing.",
+      "categoryStatus": "Editorial assignment using labels present in source materials; categories combine source catalogue and wellness labels and need a single approved taxonomy.",
+      "durationEvidence": "No approved duration established; null retained."
+    },
+    {
+      "activityId": "painting",
+      "artwork": "assets/activities/painting.png",
+      "sourceId": "S0713",
+      "sourcePath": "source-materials/main-archive/RES - Resbite/RES005 - Product/Visual/Resbites Illustrations/SVGs/Artboard 5 copy.svg",
+      "sourceSha256": "208239b41b260da26da6bf2959f571026c23fb629c5891cf1aa4536b827ba6e8",
+      "transformation": "Rendered complete original SVG to 1200px-wide transparent PNG; no artwork additions or edits.",
+      "titleEvidence": [
+        "S0618"
+      ],
+      "copyStatus": "Editorial draft: description and tips are newly written from the documented activity, for review before publishing.",
+      "categoryStatus": "Editorial assignment using labels present in source materials; categories combine source catalogue and wellness labels and need a single approved taxonomy.",
+      "durationEvidence": "S0618 painting detail displays 30 m; prototype suggestion only."
+    },
+    {
+      "activityId": "get-out-with-bikes",
+      "artwork": "assets/activities/get-out-with-bikes.png",
+      "sourceId": "S0714",
+      "sourcePath": "source-materials/main-archive/RES - Resbite/RES005 - Product/Visual/Resbites Illustrations/SVGs/Artboard 5.svg",
+      "sourceSha256": "c3a7800ecb2b584b653013618980acbe05a03858452482fb11b3077eacf09cd3",
+      "transformation": "Rendered complete original SVG to 1200px-wide transparent PNG; no artwork additions or edits.",
+      "titleEvidence": [
+        "S0618",
+        "S0945"
+      ],
+      "copyStatus": "Editorial draft: description and tips are newly written from the documented activity, for review before publishing.",
+      "categoryStatus": "Editorial assignment using labels present in source materials; categories combine source catalogue and wellness labels and need a single approved taxonomy.",
+      "durationEvidence": "No approved duration established; null retained."
+    },
+    {
+      "activityId": "building-a-snowman",
+      "artwork": "assets/activities/building-a-snowman.png",
+      "sourceId": "S0705",
+      "sourcePath": "source-materials/main-archive/RES - Resbite/RES005 - Product/Visual/Resbites Illustrations/SVGs/Artboard 1 copy.svg",
+      "sourceSha256": "b1ce1973c633d5adc9cf90099f2ea5ae31e0493d079739150b79eaf65bec236c",
+      "transformation": "Rendered complete original SVG to 1200px-wide transparent PNG; no artwork additions or edits.",
+      "titleEvidence": [
+        "S0945"
+      ],
+      "copyStatus": "Editorial draft: description and tips are newly written from the documented activity, for review before publishing.",
+      "categoryStatus": "Editorial assignment using labels present in source materials; categories combine source catalogue and wellness labels and need a single approved taxonomy.",
+      "durationEvidence": "No approved duration established; null retained."
+    },
+    {
+      "activityId": "bbq",
+      "artwork": "assets/activities/bbq.png",
+      "sourceId": "S0706",
+      "sourcePath": "source-materials/main-archive/RES - Resbite/RES005 - Product/Visual/Resbites Illustrations/SVGs/Artboard 1.svg",
+      "sourceSha256": "b27aef012f95cd6bc0e0e8e16686affe981ba4272711495832e8be386a362f5b",
+      "transformation": "Rendered complete original SVG to 1200px-wide transparent PNG; no artwork additions or edits.",
+      "titleEvidence": [
+        "S0618",
+        "S0945"
+      ],
+      "copyStatus": "Editorial draft: description and tips are newly written from the documented activity, for review before publishing.",
+      "categoryStatus": "Editorial assignment using labels present in source materials; categories combine source catalogue and wellness labels and need a single approved taxonomy.",
+      "durationEvidence": "No approved duration established; null retained."
+    },
+    {
+      "activityId": "wine-tasting",
+      "artwork": "assets/activities/wine-tasting.png",
+      "sourceId": "S0710",
+      "sourcePath": "source-materials/main-archive/RES - Resbite/RES005 - Product/Visual/Resbites Illustrations/SVGs/Artboard 3.svg",
+      "sourceSha256": "9b5ae002ffe8fc4ef2a24f67bc0ac55131ddf3b3ee5a5c1b88ba7fc8e29680ac",
+      "transformation": "Rendered complete original SVG to 1200px-wide transparent PNG; no artwork additions or edits.",
+      "titleEvidence": [
+        "S0618",
+        "S0945"
+      ],
+      "copyStatus": "Editorial draft: description and tips are newly written from the documented activity, for review before publishing.",
+      "categoryStatus": "Editorial assignment using labels present in source materials; categories combine source catalogue and wellness labels and need a single approved taxonomy.",
+      "durationEvidence": "No approved duration established; null retained."
+    },
+    {
+      "activityId": "spa-day",
+      "artwork": "assets/activities/spa-day.png",
+      "sourceId": "S0711",
+      "sourcePath": "source-materials/main-archive/RES - Resbite/RES005 - Product/Visual/Resbites Illustrations/SVGs/Artboard 5 copy 2.svg",
+      "sourceSha256": "e629396d9e28dbac2985009f480ee0d6b167ac29bf5ff22c4ba9884b50c0abe8",
+      "transformation": "Rendered complete original SVG to 1200px-wide transparent PNG; no artwork additions or edits.",
+      "titleEvidence": [
+        "S0618",
+        "S0619"
+      ],
+      "copyStatus": "Editorial draft: description and tips are newly written from the documented activity, for review before publishing.",
+      "categoryStatus": "Editorial assignment using labels present in source materials; categories combine source catalogue and wellness labels and need a single approved taxonomy.",
+      "durationEvidence": "No approved duration established; null retained."
+    },
+    {
+      "activityId": "book-club",
+      "artwork": "assets/activities/book-club.png",
+      "sourceId": "S0707",
+      "sourcePath": "source-materials/main-archive/RES - Resbite/RES005 - Product/Visual/Resbites Illustrations/SVGs/Artboard 11.svg",
+      "sourceSha256": "4b8df8aaacfe249a8376d4be225b07be576b1742d1f4ea38b9555c5d1cb487c0",
+      "transformation": "Rendered complete original SVG to 1200px-wide transparent PNG; no artwork additions or edits.",
+      "titleEvidence": [
+        "S0619",
+        "S0945"
+      ],
+      "copyStatus": "Editorial draft: description and tips are newly written from the documented activity, for review before publishing.",
+      "categoryStatus": "Editorial assignment using labels present in source materials; categories combine source catalogue and wellness labels and need a single approved taxonomy.",
+      "durationEvidence": "No approved duration established; null retained."
+    }
+  ],
+  "otherAssets": [
+    {
+      "path": "assets/fonts/Montserrat-Regular.ttf",
+      "sourceId": "S0026",
+      "sourcePath": "source-materials/main-archive/RES - Resbite/RES003 - Brand Identity/3 - Design/RES003 Design WIP/Fonts/Content Font/Montserrat/Montserrat-Regular.ttf",
+      "sha256": "077cdab15161232a9ba7124d2ddd7a9425145750788e9a966c156cc66274f525",
+      "transformation": "Unchanged copy"
+    },
+    {
+      "path": "assets/fonts/Montserrat-SemiBold.ttf",
+      "sourceId": "S0027",
+      "sourcePath": "source-materials/main-archive/RES - Resbite/RES003 - Brand Identity/3 - Design/RES003 Design WIP/Fonts/Content Font/Montserrat/Montserrat-SemiBold.ttf",
+      "sha256": "f227901ef48ac4d1fe4cc6ed0dbce99e6b38969babe5e05da2dfb33521b02944",
+      "transformation": "Unchanged copy"
+    },
+    {
+      "path": "assets/fonts/Montserrat-Bold.ttf",
+      "sourceId": "S0015",
+      "sourcePath": "source-materials/main-archive/RES - Resbite/RES003 - Brand Identity/3 - Design/RES003 Design WIP/Fonts/Content Font/Montserrat/Montserrat-Bold.ttf",
+      "sha256": "c8289a870d238aa042bdfd09364fe6dea524bcd1ea485341878d8c75a32ab444",
+      "transformation": "Unchanged copy"
+    },
+    {
+      "path": "assets/fonts/Quicksand-SemiBold.ttf",
+      "sourceId": "S0040",
+      "sourcePath": "source-materials/main-archive/RES - Resbite/RES003 - Brand Identity/3 - Design/RES003 Design WIP/Fonts/Main Brand Font/Quicksand/static/Quicksand-SemiBold.ttf",
+      "sha256": "88edfec68af329b5e22a52f8656d521fd95db5d70a17b1776d8c8be2144e3fec",
+      "transformation": "Unchanged copy"
+    },
+    {
+      "path": "assets/fonts/Montserrat-OFL.txt",
+      "sourceId": "S0031",
+      "sourcePath": "source-materials/main-archive/RES - Resbite/RES003 - Brand Identity/3 - Design/RES003 Design WIP/Fonts/Content Font/Montserrat/OFL.txt",
+      "sha256": "c376dd6b498c6886fe5a43db3c48cf83ef05cac6846ec4010e535d48e43a29b0",
+      "transformation": "Unchanged copy"
+    },
+    {
+      "path": "assets/fonts/Quicksand-OFL.txt",
+      "sourceId": "S0033",
+      "sourcePath": "source-materials/main-archive/RES - Resbite/RES003 - Brand Identity/3 - Design/RES003 Design WIP/Fonts/Main Brand Font/Quicksand/OFL.txt",
+      "sha256": "9750efe721688e6a270520d5b88be6057faa589368a6592ea0d543e2d7c746cc",
+      "transformation": "Unchanged copy"
+    },
+    {
+      "path": "assets/brand/resbite-mark.png",
+      "sourceId": "S0095",
+      "sourcePath": "source-materials/main-archive/RES - Resbite/RES003 - Brand Identity/4 - Build/Output Stages/3 - Live Version/Visual Identity/blue-mark-trans-bg_02.ai",
+      "sourceSha256": "02ab55bfe9069e748273148dcf545e0c80f399d929a575d5936b5caf7d2ab738",
+      "transformation": "Complete first page of original AI embedded PDF rendered to 1024px PNG. Original rounded app mark retained; not a finalized platform icon export."
+    }
+  ],
+  "notes": [
+    "Eight distinct documented activities paired with original standalone illustrations.",
+    "Book Club appears in the S0619 notification copy; S0945 also names reading a book. S0707 depicts a group with books.",
+    "Wine tasting is a documented activity for adult testers; no child-account scope added.",
+    "No generative images or plugins used.",
+    "Fonts retain their original SIL Open Font License files.",
+    "Artwork is supplied project material; this manifest records provenance, not separate licence clearance."
+  ]
+}
