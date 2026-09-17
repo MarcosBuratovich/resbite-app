@@ -25,6 +25,6 @@ The development-only “Preview the design” entry uses memory-only plans, has 
 
 ## Current limits
 
-Profile save, plan creation, cancellation, invitation claim and RSVP have client integration and protected database operations. Real end-to-end auth/share/RSVP remains untested. Date/time and location require device validation. Editing, contacts/groups, push dispatch, photo upload, sample chat, deletion/retention workflows and offline retry UX remain to implement. SecureStore sessions are chunked and native device storage still needs validation. Draft content is bundled for design review only.
+Profile save, plan creation/editing/cancellation, invitation claim and RSVP have client integration and protected database operations. Real end-to-end auth/share/RSVP remains untested. Date/time and location require device validation. Contacts/groups, push dispatch, photo upload, sample chat, deletion/retention workflows and offline retry UX remain to implement. SecureStore sessions are chunked and native device storage still needs validation. Draft content is bundled for design review only.
 
 See `../docs/implementation-status.md` for evidence and remaining milestones.

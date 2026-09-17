@@ -1,17 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase, storage } from "../services/supabase";
-export type LocalPlan = {
-  id: string;
-  activity_id: string;
-  starts_at: string;
-  place_label: string;
-  note: string;
-  status: string;
-  version: number;
-  owner_id?: string;
-  time_zone?: string;
-};
+export type { PlanRecord as LocalPlan } from "../domain/plans";
+import type { PlanRecord as LocalPlan } from "../domain/plans";
 const State = createContext<{
   session: Session | null;
   restoring: boolean;

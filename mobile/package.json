@@ -46,7 +46,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx src/domain/rules.test.ts && node --import tsx src/services/secureChunks.test.ts",
+    "test": "node --import tsx src/domain/rules.test.ts && node --import tsx src/services/secureChunks.test.ts && node --import tsx src/domain/plans.test.ts",
     "check": "npm run typecheck && npm test && node scripts/validate-content.mjs"
   },
   "private": true

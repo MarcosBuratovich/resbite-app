@@ -5,11 +5,13 @@ import {
   Image,
   RefreshControl,
   Share,
-  Alert,
+  AppState,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import * as Crypto from "expo-crypto";
+import { canEditPlan, latestRequest } from "../src/domain/plans";
 import { activities, artwork } from "../src/services/catalogue";
 import { supabase } from "../src/services/supabase";
 import { useApp, LocalPlan } from "../src/state/AppState";
@@ -17,7 +19,7 @@ import { Button, Copy, Title, ErrorNote, Reveal, s } from "../src/design/ui";
 import { colors as c } from "../src/design/tokens";
 import { BottomNav, PreviewNotice } from "../src/design/Chrome";
 export default function Plans() {
-  const { created } = useLocalSearchParams(),
+  const { saved } = useLocalSearchParams(),
     { preview, localPlans, setLocalPlans, session } = useApp(),
     [plans, setPlans] = useState<LocalPlan[]>([]),
     [busy, setBusy] = useState(false),
@@ -33,12 +35,17 @@ export default function Plans() {
         profiles: { display_name: string } | null;
       }[]
     >([]);
+  const requests = useRef(latestRequest());
   const identity = useRef(session?.user.id);
   identity.current = session?.user.id;
   const refresh = useCallback(async () => {
+    const current = requests.current.start();
     setPlans([]);
     setAttendees([]);
-    if (preview || !session) return;
+    if (preview || !session) {
+      setBusy(false);
+      return;
+    }
     const uid = session.user.id;
     setBusy(true);
     setError(null);
@@ -49,21 +56,28 @@ export default function Plans() {
           .from("attendees")
           .select("plan_id,user_id,response,profiles(display_name)"),
       ]);
-      if (identity.current !== uid) return;
+      if (!current() || identity.current !== uid) return;
       if (p.error) throw p.error;
       if (a.error) throw a.error;
       setPlans(p.data || []);
       setAttendees((a.data || []) as unknown as typeof attendees);
     } catch (e) {
-      if (identity.current === uid)
+      if (current() && identity.current === uid)
         setError(e instanceof Error ? e.message : "Unable to load your plans.");
     } finally {
-      if (identity.current === uid) setBusy(false);
+      if (current() && identity.current === uid) setBusy(false);
     }
   }, [preview, session?.user.id]);
   useFocusEffect(
     useCallback(() => {
       void refresh();
+      const sub = AppState.addEventListener("change", (state) => {
+        if (state === "active") void refresh();
+      });
+      return () => {
+        sub.remove();
+        requests.current.invalidate();
+      };
     }, [refresh]),
   );
   async function share(p: LocalPlan) {
@@ -118,7 +132,15 @@ export default function Plans() {
           p_note: p.note,
           p_cancel: true,
         });
-        if (error) throw error;
+        if (error) {
+          if (error.code === "40001") {
+            await refresh();
+            throw new Error(
+              "This plan changed elsewhere. Review the latest details before cancelling.",
+            );
+          }
+          throw new Error(error.message);
+        }
         await refresh();
       }
     } catch (e) {
@@ -144,21 +166,33 @@ export default function Plans() {
         <Copy style={{ color: c.aquaDark }}>TIME WELL SPENT</Copy>
         <Title>Something to look forward to.</Title>
         <Copy style={s.muted}>Your plans, all in one place.</Copy>
-        {created === "1" && (
+        {(saved === "created" || saved === "edited") && (
           <Reveal>
             <View
               style={[s.card, { padding: 18, backgroundColor: c.aquaSoft }]}
             >
               <Copy>
-                {preview ? "Preview plan saved." : "Your plan is saved."} Time
-                to get together.
+                {preview ? "Preview plan" : "Your plan"}{" "}
+                {saved === "edited" ? "updated." : "saved."} Time to get
+                together.
               </Copy>
             </View>
           </Reveal>
         )}
         <ErrorNote message={error} />
+        {error && (
+          <Button
+            title="Refresh plans"
+            secondary
+            onPress={() => void refresh()}
+            loading={busy}
+          />
+        )}
+        {busy && (
+          <ActivityIndicator accessibilityLabel="Refreshing plans and responses" />
+        )}
         {Boolean(notice) && <Copy style={s.muted}>{notice}</Copy>}
-        {list.length === 0 && !busy ? (
+        {list.length === 0 && !busy && !error ? (
           <View style={{ gap: 20, paddingVertical: 24 }}>
             <Image
               source={artwork["get-out-with-bikes"]}
@@ -220,7 +254,10 @@ export default function Plans() {
                       {a.profiles?.display_name || "Tester"} · {a.response}
                     </Copy>
                   ))}
-                {p.status === "active" && owner && (
+                {canEditPlan(
+                  { ...p, owner_id: preview ? "preview" : p.owner_id },
+                  preview ? "preview" : session?.user.id || "",
+                ) && (
                   <>
                     <Button
                       title="Invite someone"
@@ -228,8 +265,20 @@ export default function Plans() {
                       loading={working === p.id}
                     />
                     <Button
+                      title="Edit plan"
+                      secondary
+                      disabled={working !== null}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/arrange",
+                          params: { edit: p.id },
+                        })
+                      }
+                    />
+                    <Button
                       title="Cancel plan"
                       secondary
+                      disabled={working !== null}
                       onPress={() => setConfirmCancel(p.id)}
                     />
                   </>

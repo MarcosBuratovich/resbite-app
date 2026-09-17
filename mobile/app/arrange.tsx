@@ -1,5 +1,5 @@
-import React, { useState, useRef } from "react";
-import { ScrollView, View, Platform } from "react-native";
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import { ScrollView, View, Platform, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -18,19 +18,95 @@ import {
   s,
 } from "../src/design/ui";
 import { PreviewNotice } from "../src/design/Chrome";
+import {
+  canEditPlan,
+  preparePlanEdit,
+  type PlanRecord,
+} from "../src/domain/plans";
 import { validatePlan } from "../src/domain/rules";
 export default function Arrange() {
-  const { activity } = useLocalSearchParams<{ activity: string }>(),
-    a = activities.find((x) => x.id === activity),
-    { preview, session, setLocalPlans } = useApp(),
-    requestId = useRef(Crypto.randomUUID()),
-    [date, setDate] = useState(new Date(Date.now() + 86400000)),
+  const { activity, edit } = useLocalSearchParams<{
+    activity?: string;
+    edit?: string;
+  }>();
+  const { preview, session, localPlans, setLocalPlans } = useApp();
+  const requestId = useRef(Crypto.randomUUID()),
+    saving = useRef(false);
+  const [original, setOriginal] = useState<PlanRecord | null>(null),
+    [loading, setLoading] = useState(Boolean(edit)),
+    [conflict, setConflict] = useState(false);
+  const [date, setDate] = useState(new Date(Date.now() + 86400000)),
+    [dateText, setDateText] = useState(""),
     [show, setShow] = useState<"date" | "time" | null>(null),
     [place, setPlace] = useState(""),
     [note, setNote] = useState(""),
     [busy, setBusy] = useState(false),
     [locating, setLocating] = useState(false),
     [error, setError] = useState<string | null>(null);
+  const deviceZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const a = activities.find(
+    (x) => x.id === (original?.activity_id || activity),
+  );
+  const localPlansRef = useRef(localPlans);
+  localPlansRef.current = localPlans;
+  const initialDate = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const load = useCallback(
+    async (isCurrent: () => boolean = () => true) => {
+      if (!edit) return;
+      setLoading(true);
+      setError(null);
+      try {
+        let found: PlanRecord | null = null;
+        if (preview) {
+          const p = localPlansRef.current.find((x) => x.id === edit);
+          found = p ? { ...p, owner_id: "preview" } : null;
+        } else {
+          const { data, error } = await supabase
+            .from("plans")
+            .select("*")
+            .eq("id", edit)
+            .single();
+          if (error) throw error;
+          found = data;
+        }
+        if (
+          !found ||
+          !canEditPlan(found, preview ? "preview" : session?.user.id || "")
+        )
+          throw new Error("This plan can no longer be edited.");
+        if (!isCurrent()) return;
+        setOriginal(found);
+        setDate(new Date(found.starts_at));
+        setDateText(initialDate(new Date(found.starts_at)));
+        setPlace(found.place_label);
+        setNote(found.note);
+        setConflict(false);
+      } catch (e) {
+        if (isCurrent()) {
+          setOriginal(null);
+          setError(
+            e instanceof Error
+              ? e.message
+              : "Unable to load this plan. Try again.",
+          );
+        }
+      } finally {
+        if (isCurrent()) setLoading(false);
+      }
+    },
+    [edit, preview, session?.user.id],
+  );
+  useEffect(() => {
+    let active = true;
+    void load(() => active);
+    return () => {
+      active = false;
+    };
+  }, [load]);
+  useEffect(() => {
+    if (!edit) setDateText(initialDate(date));
+  }, []);
   async function locate() {
     setLocating(true);
     setError(null);
@@ -62,42 +138,94 @@ export default function Arrange() {
     }
   }
   async function save() {
-    if (!a) return;
-    const invalid = validatePlan(date.toISOString(), place);
+    if (!a || saving.current || conflict) return;
+    const chosen =
+      Platform.OS === "web" ? new Date(dateText.replace(" ", "T")) : date;
+    const invalid = validatePlan(
+      Number.isFinite(chosen.getTime()) ? chosen.toISOString() : "",
+      place,
+    );
     if (invalid) {
       setError(invalid);
       return;
     }
+    saving.current = true;
     setBusy(true);
     setError(null);
-    const plan = {
-      id: requestId.current,
-      activity_id: a.id,
-      starts_at: date.toISOString(),
-      time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    const draft = {
+      starts_at: chosen.toISOString(),
+      time_zone:
+        original && chosen.getTime() === Date.parse(original.starts_at)
+          ? original.time_zone
+          : deviceZone,
       place_label: place.trim(),
       note,
-      status: "active",
-      version: 1,
-      owner_id: session?.user.id,
     };
     try {
-      if (preview) {
-        setLocalPlans((p) =>
-          p.some((x) => x.id === plan.id) ? p : [plan, ...p],
+      if (edit && original) {
+        const payload = preparePlanEdit(
+          original,
+          draft,
+          preview ? "preview" : session?.user.id || "",
         );
+        if (preview) {
+          const latest = localPlansRef.current.find((x) => x.id === edit);
+          if (
+            !latest ||
+            latest.version !== original.version ||
+            latest.status !== "active"
+          ) {
+            setConflict(true);
+            throw new Error(
+              "This plan changed. Reload it before saving again.",
+            );
+          }
+          setLocalPlans((all) =>
+            all.map((x) =>
+              x.id === edit ? { ...x, ...draft, version: x.version + 1 } : x,
+            ),
+          );
+        } else {
+          const { error } = await supabase.rpc("change_plan", payload);
+          if (error) {
+            if (error.code === "40001") {
+              setConflict(true);
+              throw new Error(
+                "This plan changed elsewhere. Your draft is still here. Reload the latest plan before saving again.",
+              );
+            }
+            throw new Error(error.message);
+          }
+        }
       } else {
-        const { error } = await supabase.rpc("create_plan", {
-          p_id: plan.id,
-          p_activity: plan.activity_id,
-          p_start: plan.starts_at,
-          p_zone: plan.time_zone,
-          p_place: plan.place_label,
-          p_note: note,
-        });
-        if (error) throw error;
+        const plan = {
+          id: requestId.current,
+          activity_id: a.id,
+          ...draft,
+          status: "active",
+          version: 1,
+          owner_id: preview ? "preview" : session?.user.id,
+        };
+        if (preview)
+          setLocalPlans((all) =>
+            all.some((x) => x.id === plan.id) ? all : [plan, ...all],
+          );
+        else {
+          const { error } = await supabase.rpc("create_plan", {
+            p_id: plan.id,
+            p_activity: plan.activity_id,
+            p_start: plan.starts_at,
+            p_zone: plan.time_zone,
+            p_place: plan.place_label,
+            p_note: plan.note,
+          });
+          if (error) throw new Error(error.message);
+        }
       }
-      router.replace({ pathname: "/plans", params: { created: "1" } });
+      router.replace({
+        pathname: "/plans",
+        params: { saved: edit ? "edited" : "created" },
+      });
     } catch (e) {
       setError(
         e instanceof Error
@@ -105,9 +233,28 @@ export default function Arrange() {
           : "Your plan could not be saved. Check your connection and try again.",
       );
     } finally {
+      saving.current = false;
       setBusy(false);
     }
   }
+  if (edit && (loading || !original))
+    return (
+      <SafeAreaView style={s.page}>
+        <PreviewNotice />
+        <View style={s.body}>
+          <Back />
+          <Title>Edit your plan.</Title>
+          {loading ? (
+            <ActivityIndicator accessibilityLabel="Loading your plan" />
+          ) : (
+            <>
+              <ErrorNote message={error} />
+              <Button title="Try again" onPress={() => void load()} />
+            </>
+          )}
+        </View>
+      </SafeAreaView>
+    );
   if (!a)
     return (
       <SafeAreaView style={s.page}>
@@ -124,9 +271,13 @@ export default function Arrange() {
       >
         <Back />
         <Copy style={s.muted}>{a.title}</Copy>
-        <Title>A little plan. A good time.</Title>
+        <Title>
+          {edit ? "A little change of plan." : "A little plan. A good time."}
+        </Title>
         <Copy>
-          Choose when and where. You can invite people once your plan is saved.
+          {edit
+            ? "Update the time, meeting place or note. Existing RSVPs are kept."
+            : "Choose when and where. You can invite people once your plan is saved."}
         </Copy>
         <View style={{ gap: 10 }}>
           <Copy>When</Copy>
@@ -134,11 +285,9 @@ export default function Arrange() {
             <>
               <Field
                 label="Date and time (local)"
-                value={`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`}
-                onChangeText={(value) => {
-                  const d = new Date(value.replace(" ", "T"));
-                  if (Number.isFinite(d.getTime())) setDate(d);
-                }}
+                value={dateText}
+                onChangeText={setDateText}
+                editable={!busy}
               />
               <Copy style={s.muted}>
                 The mobile build uses the phone’s date and time picker.
@@ -176,9 +325,7 @@ export default function Arrange() {
               )}
             </>
           )}
-          <Copy style={s.muted}>
-            {Intl.DateTimeFormat().resolvedOptions().timeZone}
-          </Copy>
+          <Copy style={s.muted}>{deviceZone} · times shown on this device</Copy>
         </View>
         <Field
           label="Meeting place"
@@ -202,8 +349,23 @@ export default function Arrange() {
           maxLength={2000}
         />
         <ErrorNote message={error} />
+        {conflict && (
+          <>
+            <Copy style={s.muted}>
+              Reloading replaces the draft above with the latest saved version.
+            </Copy>
+            <Button
+              secondary
+              title="Reload latest plan"
+              onPress={() => void load()}
+            />
+          </>
+        )}
         <Button
-          title={preview ? "Save preview plan" : "Save plan"}
+          title={
+            edit ? "Save changes" : preview ? "Save preview plan" : "Save plan"
+          }
+          disabled={conflict || locating}
           onPress={save}
           loading={busy}
         />
