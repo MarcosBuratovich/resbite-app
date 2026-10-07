@@ -175,6 +175,7 @@ try {
       }
       return reply({ cover_path: plan.cover_path, cover_revision: plan.cover_revision });
     }
+    if (path === "/auth/v1/logout") return reply({});
     return reply({ message: `Unexpected ${req.method()} ${path}` }, 400);
   });
   await page.goto(`${baseURL}/plans`);
@@ -216,8 +217,34 @@ try {
   await page.getByRole("button", { name: "My resbites", exact: true }).click();
   await expect(page.locator('img[src*="/object/sign/plan-covers/fixture.jpg"]').first()).toBeAttached();
   await expect(page.getByText("Your resbite is saved, but its cover photo hasn’t uploaded yet. Open Edit plan to retry.", { exact: true })).toHaveCount(0);
-  await page.context().close();
   console.log("PASS: signed-in cover uploads after save, retries from Edit, removes and re-adds.");
+
+  // 3. A pending cover change is cleared from the device by sign-out.
+  const coverKeys = () =>
+    page.evaluate(() =>
+      ["sessionStorage", "localStorage"].flatMap((area) =>
+        Object.keys(window[area]).filter(
+          (k) => k.startsWith("resbite.cover.v1.") || k.startsWith("resbite.cover-bytes."),
+        ),
+      ),
+    );
+  assert.deepEqual(await coverKeys(), [], "A confirmed cover leaves nothing behind");
+  failNextLink = true;
+  await page.getByRole("button", { name: "Edit plan", exact: true }).click();
+  const leftover = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Change cover photo", exact: true }).click();
+  await (await leftover).setFiles({ name: "left.png", mimeType: "image/png", buffer: await syntheticPng(page, 1200, 800) });
+  await expect(page.getByRole("button", { name: "Retry cover", exact: true })).toBeVisible();
+  const before = await coverKeys();
+  assert.ok(before.includes(`resbite.cover.v1.${user.id}.${plan.id}`), "Journal is on the device");
+  assert.ok(before.includes(`resbite.cover.v1.index.${user.id}`), "Index lists the plan");
+  assert.ok(before.includes(`resbite.cover-bytes.${user.id}.${plan.id}`), "Prepared bytes are on the device");
+  await page.goto(`${baseURL}/profile`);
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await expect(page.getByText("Preview the design", { exact: true })).toBeVisible();
+  assert.deepEqual(await coverKeys(), [], "Sign-out removed cover journal, index and bytes");
+  await page.context().close();
+  console.log("PASS: sign-out clears pending cover journal, index and bytes.");
   assert.deepEqual(errors, []);
 } finally {
   await browser.close();

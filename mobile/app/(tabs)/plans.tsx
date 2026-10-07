@@ -29,6 +29,7 @@ import { colors as c } from "../../src/design/tokens";
 import { PreviewNotice } from "../../src/design/Chrome";
 import { drafts, type PlanDraft } from "../../src/services/drafts";
 import { planGateway } from "../../src/services/plans";
+import { planCoverStore } from "../../src/services/planCovers";
 import { canEditPlan, cancelPlan, PlanSaveError } from "../../src/domain/plans";
 import { Pencil, Users, X, CalendarDays, MapPin } from "lucide-react-native";
 export default function Plans() {
@@ -118,6 +119,10 @@ export default function Plans() {
       if (a.error) throw a.error;
       setLoadedFor(uid);
       setPlans(p.data || []);
+      // Cover changes for cancelled or started plans can never complete; drop them quietly.
+      void planCoverStore
+        .discardStaleCoverJournals(uid, p.data || [])
+        .catch(() => {});
       setAttendees((a.data || []) as unknown as typeof attendees);
     } catch (e) {
       if (isCurrent())

@@ -110,6 +110,9 @@ function lifecycleHarness() {
       await people.clear(scope);
     },
     clearPhoto: () => photo(),
+    clearCovers: async (scope) => {
+      events.push(`covers:${scope}`);
+    },
     blockPending: () => {
       events.push("block");
       return () => {
@@ -172,6 +175,41 @@ test("preview exit never signs out a real session or clears its pending invitati
     "finish:true",
     "busy:false",
   ]);
+});
+test("sign-out clears cover journals for the account after the photo; preview does not", async () => {
+  const h = lifecycleHarness();
+  h.life.update({ account: "owner", preview: false });
+  await h.life.signOut();
+  const photo = h.events.indexOf("photo"),
+    covers = h.events.indexOf("covers:owner");
+  assert(photo >= 0 && covers > photo);
+  assert(covers < h.events.indexOf("pending"));
+  const p = lifecycleHarness();
+  p.life.update({ account: "owner", preview: true });
+  await p.life.signOut();
+  assert(!p.events.some((e) => e.startsWith("covers")));
+});
+test("a failed cover clear fails sign-out before auth sign-out", async () => {
+  const events: string[] = [];
+  const life = createSessionLifecycle({
+    suspend: () => {},
+    resume: () => {},
+    clearPeople: async () => {},
+    clearPhoto: async () => {},
+    clearCovers: async () => {
+      throw Error("disk");
+    },
+    blockPending: () => () => {},
+    clearPending: async () => {},
+    authSignOut: async () => {
+      events.push("auth");
+    },
+    finish: () => {},
+    busy: () => {},
+  });
+  life.update({ account: "owner", preview: false });
+  await assert.rejects(life.signOut(), /disk/);
+  assert.deepEqual(events, []);
 });
 test("account switch during cleanup prevents auth sign-out and completion for the new account", async () => {
   const h = lifecycleHarness(),

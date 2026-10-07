@@ -11,6 +11,7 @@ import type { Session } from "@supabase/supabase-js";
 import { createPendingInviteStore } from "../services/pendingInviteStore";
 import { createSessionLifecycle } from "../services/sessionLifecycle";
 import { profilePhotoStore } from "../services/profile";
+import { planCoverStore } from "../services/planCovers";
 import { peopleStore } from "../services/people";
 import { supabase, storage } from "../services/supabase";
 import type { Plan } from "../domain/plans";
@@ -99,6 +100,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       resume: peopleStore.resume,
       clearPeople: peopleStore.clear,
       clearPhoto: (scope) => profilePhotoStore.clear(scope),
+      clearCovers: (scope) => planCoverStore.clearCoverJournals(scope),
       blockPending: pendingStore.beginCleanup,
       clearPending: pendingStore.clear,
       clearDrafts: drafts.clearScope,

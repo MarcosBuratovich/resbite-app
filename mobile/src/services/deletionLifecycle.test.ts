@@ -21,6 +21,9 @@ function setup() {
     clearPhoto: async (s) => {
       calls.push(`photo:${s}`);
     },
+    clearCovers: async (s) => {
+      calls.push(`covers:${s}`);
+    },
     blockPending: () => () => {},
     clearPending: async () => {
       calls.push("pending");
@@ -55,6 +58,7 @@ test("deletion clears drafts as well as scoped data before local-only signout", 
     "drafts:a",
     "people:a",
     "photo:a",
+    "covers:a",
     "pending",
     "auth:true",
     "suspend:a",
@@ -107,6 +111,7 @@ test("ordinary signout failure cannot resume a deletion-blocked account", async 
       throw Error("storage locked");
     },
     clearPhoto: async () => {},
+    clearCovers: async () => {},
     blockPending: () => () => {},
     clearPending: async () => {},
     authSignOut: async () => {},

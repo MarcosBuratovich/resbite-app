@@ -4,6 +4,7 @@ type Dependencies = {
   resume: (scope: string) => void;
   clearPeople: (scope: string) => Promise<void>;
   clearPhoto: (scope: string) => Promise<void>;
+  clearCovers: (scope: string) => Promise<void>;
   blockPending: () => () => void;
   clearPending: () => Promise<void>;
   clearDrafts?: (scope: string) => Promise<void>;
@@ -80,6 +81,8 @@ export function createSessionLifecycle(deps: Dependencies) {
             await deps.clearPeople(scope);
             current();
             if (!original.preview) await deps.clearPhoto(scope);
+            current();
+            if (!original.preview) await deps.clearCovers(scope);
             current();
           }
           if (!original.preview) {

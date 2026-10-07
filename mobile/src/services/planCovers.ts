@@ -7,6 +7,7 @@ import {
   type VersionedPhotoGateway,
 } from "./profilePhotoStore";
 import { fromBase64, toBase64, MAX_PHOTO_BYTES } from "./photo";
+import { createCoverJournalIndex, createIndexedCoverStore } from "./coverJournalIndex";
 import { createSignedUrlCache } from "./signedUrlCache";
 import { COVER_BUCKET, coverPhotoLayout } from "../domain/covers";
 
@@ -18,7 +19,7 @@ async function coverFile(scope: string) {
 const webKey = (scope: string) => `resbite.cover-bytes.${scope.replace("/", ".")}`;
 
 /** Device journal for unconfirmed cover changes, one per owner and plan. */
-export const planCoverStore = createPhotoChangeStore(
+const baseCoverStore = createPhotoChangeStore(
   storage,
   {
     async write(scope, bytes) {
@@ -43,6 +44,12 @@ export const planCoverStore = createPhotoChangeStore(
     },
   },
   coverPhotoLayout,
+);
+
+/** The journal store plus a per-owner index, so sign-out can find every leftover. */
+export const planCoverStore = createIndexedCoverStore(
+  baseCoverStore,
+  createCoverJournalIndex(storage),
 );
 
 /** 300-second signed links, reused for 240 seconds. */
