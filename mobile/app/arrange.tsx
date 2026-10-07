@@ -299,23 +299,48 @@ export default function Arrange() {
       : null;
   async function keepDraft(snapshot = draftSnapshot.current) {
     if (!snapshot) throw new Error("Draft unavailable");
-    await drafts.put(snapshot);
+    // Marked when issued: the store is FIFO, so a later removal is ordered after this put.
     persisted.current = true;
     draftWrites.current += 1;
+    await drafts.put(snapshot);
   }
+  // Removes this session's draft; a newer put keeps the persisted flag set.
+  async function removeDraft(target = { scope, key: draftKey }) {
+    if (!target.scope) throw new Error("Draft unavailable");
+    const writes = draftWrites.current;
+    await drafts.remove(target.scope, target.key);
+    if (draftWrites.current === writes) persisted.current = false;
+  }
+  // A removal waiting on the debounce, flushed if the screen unmounts first.
+  const dueRemoval = useRef<{ scope: string | undefined; key: string } | null>(null);
+  useEffect(
+    () => () => {
+      const due = dueRemoval.current;
+      dueRemoval.current = null;
+      if (due && !saving.current && !stopped.current && !savedRef.current)
+        void removeDraft(due).catch(() => {});
+    },
+    [],
+  );
+  const savedRef = useRef(false);
+  savedRef.current = saved;
   useEffect(() => {
     if (initial === null || !draftReady || saved || busy || stopped.current) return;
     const action = draftAutosaveAction({ dirty, pending, persisted: persisted.current });
-    if (action === "skip") return;
+    dueRemoval.current = null;
+    if (action === "skip") {
+      setDraftStatus("");
+      setDraftError(null);
+      return;
+    }
     let active = true;
     if (action === "remove") {
+      dueRemoval.current = { scope, key: draftKey };
       const timer = setTimeout(() => {
+        dueRemoval.current = null;
         if (saving.current || stopped.current || !scope) return;
-        const writes = draftWrites.current;
-        void drafts
-          .remove(scope, draftKey)
+        void removeDraft()
           .then(() => {
-            if (draftWrites.current === writes) persisted.current = false;
             if (active) {
               setDraftStatus("");
               setDraftError(null);
@@ -830,15 +855,19 @@ export default function Arrange() {
               title="Retry keeping draft"
               secondary
               onPress={() => {
-                if (
-                  scope &&
-                  draftAutosaveAction({ dirty, pending, persisted: persisted.current }) === "remove"
-                ) {
-                  const writes = draftWrites.current;
-                  void drafts
-                    .remove(scope, draftKey)
+                const action = draftAutosaveAction({
+                  dirty,
+                  pending,
+                  persisted: persisted.current,
+                });
+                if (action === "skip") {
+                  setDraftError(null);
+                  setDraftStatus("");
+                  return;
+                }
+                if (action === "remove") {
+                  void removeDraft()
                     .then(() => {
-                      if (draftWrites.current === writes) persisted.current = false;
                       setDraftError(null);
                       setDraftStatus("");
                     })

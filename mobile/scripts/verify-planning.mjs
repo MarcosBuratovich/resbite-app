@@ -238,10 +238,54 @@ try {
     await reverted.waitForTimeout(600);
     await reverted.getByLabel("Name", { exact: true }).fill("");
     await reverted.waitForTimeout(1200);
+    await expect(reverted.getByText("Draft saved on this device.", { exact: true })).toHaveCount(0);
     await back(reverted); // untouched again: no leave prompt expected
     await noDraft(reverted);
     await reverted.context().close();
     console.log("PASS: an edit that is undone removes its stale draft.");
+
+    // Typing and undoing inside the autosave delay must not claim a draft is being saved.
+    const quick = await open();
+    await quick.getByLabel("Name", { exact: true }).fill("G");
+    await quick.getByLabel("Name", { exact: true }).fill("");
+    await quick.waitForTimeout(1200);
+    await expect(quick.getByText("Saving draft on this device…", { exact: true })).toHaveCount(0);
+    await back(quick);
+    await noDraft(quick);
+    await quick.context().close();
+    console.log("PASS: a quick edit-and-undo shows no saving status and leaves no draft.");
+
+    // Leaving right after undoing a saved edit still removes the stale draft.
+    const hasty = await open();
+    await hasty.getByLabel("Name", { exact: true }).fill("Garden picnic");
+    await expect(hasty.getByText("Draft saved on this device.", { exact: true })).toBeVisible();
+    await hasty.getByLabel("Name", { exact: true }).fill("");
+    await back(hasty);
+    await noDraft(hasty);
+    await hasty.context().close();
+    console.log("PASS: leaving right after undoing an edit removes the stale draft.");
+
+    // A truly empty draft (as older builds could leave) is removed once opened and left untouched.
+    const seeded = await open();
+    await seeded.getByLabel("Name", { exact: true }).fill("Garden picnic");
+    await expect(seeded.getByText("Draft saved on this device.", { exact: true })).toBeVisible();
+    await seeded.evaluate(() => {
+      const k = "resbite.drafts.v1.preview";
+      const all = JSON.parse(sessionStorage.getItem(k));
+      sessionStorage.setItem(k, JSON.stringify(all.map((d) => ({ ...d, title: "" }))));
+    });
+    await seeded.getByLabel("Name", { exact: true }).fill("");
+    await seeded.waitForTimeout(100);
+    await seeded.reload();
+    await seeded.getByText("Preview the design", { exact: true }).click();
+    await seeded.getByRole("tab", { name: "My resbites", exact: true }).click();
+    await seeded.getByRole("button", { name: "Continue draft", exact: true }).click();
+    await expect(seeded.getByLabel("Name", { exact: true })).toHaveValue("");
+    await seeded.waitForTimeout(1200);
+    await back(seeded);
+    await noDraft(seeded);
+    await seeded.context().close();
+    console.log("PASS: an empty existing draft is removed when opened and left untouched.");
 
     const kept = await open();
     await kept.getByLabel("Name", { exact: true }).fill("Garden picnic");
