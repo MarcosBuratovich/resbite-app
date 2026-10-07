@@ -1,7 +1,7 @@
 import type { KeyStore } from "./secureChunks";
 import type { LocalPlan } from "../state/AppState";
 import type { PlanWrite } from "../domain/plans";
-import type { CategoryKey } from "../domain/categories";
+import { isCategoryKey, type CategoryKey } from "../domain/categories";
 
 export type PlanDraft = {
   schema: 1;
@@ -59,7 +59,12 @@ export function createDraftStore(storage: KeyStore) {
           !(typeof d.activityId === "string" || d.activityId === null) ||
           (d.title !== undefined && typeof d.title !== "string") ||
           (d.description !== undefined && typeof d.description !== "string") ||
-          (d.categories !== undefined && !Array.isArray(d.categories)) ||
+          (d.categories !== undefined &&
+            !(
+              Array.isArray(d.categories) &&
+              d.categories.length <= 2 &&
+              d.categories.every(isCategoryKey)
+            )) ||
           (d.pending &&
             (d.pending.id !== (d.original?.id ?? d.requestId) ||
               d.pending.activityId !== d.activityId)),

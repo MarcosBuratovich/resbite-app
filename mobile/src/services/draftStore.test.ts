@@ -192,10 +192,27 @@ test("a blank event draft has no idea and keeps its event fields", async () => {
   assert.equal(blank.activityId, null);
   assert.equal(blank.title, "Garden picnic");
   assert.deepEqual(blank.categories, ["natural", "community"]);
+  await drafts.put({
+    ...fixture(),
+    key: "new",
+    activityId: null,
+    title: "Garden picnic",
+    categories: [],
+  });
+  const [cleared] = await createDraftStore(storage).list("account-a");
+  assert.deepEqual(cleared.categories, []);
 });
 
 test("corrupt event fields are rejected rather than half-restored", async () => {
-  for (const corrupt of [{ activityId: 5 }, { categories: "natural" }, { title: 3 }]) {
+  for (const corrupt of [
+    { activityId: 5 },
+    { categories: "natural" },
+    { title: 3 },
+    { categories: [5] },
+    { categories: ["bogus"] },
+    { categories: ["creative", "mindful", "natural"] },
+    { description: 7 },
+  ]) {
     const { storage, values } = memory();
     values.set("resbite.drafts.v1.account-a", JSON.stringify([{ ...fixture(), ...corrupt }]));
     await assert.rejects(createDraftStore(storage).list("account-a"), /Could not read saved drafts/);
