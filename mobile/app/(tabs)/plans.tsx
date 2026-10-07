@@ -173,12 +173,13 @@ export default function Plans() {
         preview ? "Preview plan cancelled." : "Your plan is cancelled.",
       );
     } catch (e) {
+      // A definite failure reloads first: refresh() clears the error line.
+      if (e instanceof PlanSaveError && !e.uncertain) await refresh();
       setError(
         e instanceof PlanSaveError
           ? e.message
           : "Could not cancel. Refresh and try again.",
       );
-      if (e instanceof PlanSaveError && !e.uncertain) void refresh();
     } finally {
       setWorking(null);
     }

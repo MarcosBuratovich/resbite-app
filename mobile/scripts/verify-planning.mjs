@@ -131,6 +131,57 @@ try {
   );
   await page.context().close();
 
+  {
+    const legacy = await newPage();
+    await legacy.route("**/*.supabase.co/**", (route) => route.abort());
+    // A draft saved before custom events: no title, description or categories anywhere.
+    await legacy.addInitScript(() => {
+      sessionStorage.setItem(
+        "resbite.drafts.v1.preview",
+        JSON.stringify([
+          {
+            schema: 1,
+            scope: "preview",
+            key: "edit-legacy-1",
+            activityId: "coffee-together",
+            planId: "legacy-1",
+            requestId: "legacy-1",
+            original: {
+              id: "legacy-1",
+              activity_id: "coffee-together",
+              starts_at: "2099-03-01T15:00:00Z",
+              time_zone: "UTC",
+              place_label: "Old café",
+              note: "",
+              status: "active",
+              version: 1,
+            },
+            initial: "[]",
+            start: "2099-03-01 15:00",
+            place: "Old café",
+            note: "",
+            zone: "UTC",
+            pending: null,
+            updatedAt: new Date().toISOString(),
+          },
+        ]),
+      );
+    });
+    await legacy.goto(baseURL);
+    await legacy.getByText("Preview the design", { exact: true }).click();
+    await legacy.getByRole("tab", { name: "My resbites", exact: true }).click();
+    await legacy.getByRole("button", { name: "Continue draft", exact: true }).click();
+    await legacy.getByRole("button", { name: "Save changes", exact: true }).click();
+    // Scoped to the plan card: the same idea name also appears under Discover.
+    await expect(
+      legacy
+        .getByText("YOU’RE ORGANISING", { exact: true })
+        .locator("xpath=following-sibling::*[1]"),
+    ).toHaveText("Coffee together");
+    console.log("PASS: legacy preview edit draft restores event fields from its idea.");
+    await legacy.context().close();
+  }
+
   const user = {
     id: "11111111-1111-4111-8111-111111111111",
     aud: "authenticated",

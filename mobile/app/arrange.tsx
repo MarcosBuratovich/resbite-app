@@ -141,7 +141,16 @@ export default function Arrange() {
         if (!active) return;
         if (stored) {
           requestId.current = stored.requestId;
-          setOriginal(stored.original);
+          // Saves recorded before custom events lack event fields; fill them from the idea.
+          const legacy = stored.activityId
+            ? activities.find((x) => x.id === stored.activityId)
+            : undefined;
+          const fallback = legacy ? fieldsFromActivity(legacy) : null;
+          const restoredOriginal = stored.original && {
+            ...stored.original,
+            ...completeEventFields(stored.original, fallback),
+          };
+          setOriginal(restoredOriginal);
           const currentZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
           setStart(
             stored.zone !== currentZone && stored.startInstant
@@ -152,11 +161,6 @@ export default function Arrange() {
           setNote(stored.note);
           setZone(currentZone);
           setInitial(stored.initial);
-          // Saves recorded before custom events lack event fields; fill them from the idea.
-          const legacy = stored.activityId
-            ? activities.find((x) => x.id === stored.activityId)
-            : undefined;
-          const fallback = legacy ? fieldsFromActivity(legacy) : null;
           setPending(
             stored.pending && {
               ...stored.pending,
@@ -172,11 +176,11 @@ export default function Arrange() {
               : "Draft restored from this device.",
           );
           // Preview plans are temporary; restore the editing baseline with its draft.
-          if (preview && stored.original)
+          if (preview && restoredOriginal)
             setLocalPlans((all) =>
-              all.some((p) => p.id === stored.original!.id)
+              all.some((p) => p.id === restoredOriginal.id)
                 ? all
-                : [...all, stored.original!],
+                : [...all, restoredOriginal],
             );
         } else if (planId) {
           const plan = preview
