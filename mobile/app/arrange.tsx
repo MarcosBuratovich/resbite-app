@@ -852,7 +852,12 @@ export default function Arrange() {
           <ErrorNote message={draftError} />
           {draftError && (
             <Button
-              title="Retry keeping draft"
+              title={
+                draftAutosaveAction({ dirty, pending, persisted: persisted.current }) ===
+                "write"
+                  ? "Retry keeping draft"
+                  : "Try again"
+              }
               secondary
               onPress={() => {
                 const action = draftAutosaveAction({

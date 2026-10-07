@@ -10,6 +10,11 @@ insert into private.tester_roster(email) values
 do $$ begin
  if has_function_privilege('anon','public.claim_invite(text)','execute') then raise exception 'anon can execute claim_invite'; end if;
  if not has_function_privilege('authenticated','public.claim_invite(text)','execute') then raise exception 'authenticated cannot execute claim_invite'; end if;
+ -- The replaced private function keeps its definer rights, search path and grants.
+ if has_function_privilege('anon','private.claim_invite(text)','execute') then raise exception 'anon can execute private claim_invite'; end if;
+ if not has_function_privilege('authenticated','private.claim_invite(text)','execute') then raise exception 'authenticated cannot execute private claim_invite'; end if;
+ if has_function_privilege('service_role','private.claim_invite(text)','execute') then raise exception 'service_role can execute private claim_invite'; end if;
+ if not (select prosecdef and proconfig = array['search_path=""'] from pg_proc where oid='private.claim_invite(text)'::regprocedure) then raise exception 'private claim_invite lost definer rights or search path'; end if;
 end $$;
 
 set local role authenticated;
