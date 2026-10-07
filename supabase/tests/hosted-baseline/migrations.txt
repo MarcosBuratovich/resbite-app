@@ -7,3 +7,4 @@
 20260924150135_avatar_revision_compare_and_swap.sql    20260924150824
 20261007150000_custom_events.sql                       20261007154825
 20261007200000_plan_covers.sql                         20261007175855
+20261007210000_claim_notifies_owner.sql                20261007193235

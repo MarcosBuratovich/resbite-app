@@ -1,0 +1,28 @@
+{
+  "project": "ewcsgvhuojxdpaspwsrx",
+  "captured_at": "2026-10-07T19:12:35.619628+00:00",
+  "captured_by": "read-only Supabase MCP queries (role postgres)",
+  "migrations": [
+    "20260917191323 resbite_private_tester_foundation",
+    "20260923151512 account_access_status",
+    "20260923151515 atomic_registration_details",
+    "20260923154040 activity_catalogue_details",
+    "20260924150824 avatar_revision_compare_and_swap",
+    "20261007154825 custom_events",
+    "20261007175855 plan_covers"
+  ],
+  "private.claim_invite(text)": {
+    "owner": "postgres",
+    "security_definer": true,
+    "config": ["search_path=\"\""],
+    "definition_md5": "fc0d8663f7286ca9c935a90baaff86be",
+    "notifies_claimer": true,
+    "execute": {"anon": false, "authenticated": true, "service_role": false}
+  },
+  "public.claim_invite(text) execute": {"anon": false, "authenticated": true, "service_role": true},
+  "notification_outbox_by_kind": {},
+  "invitations": 0,
+  "claimed_invitations": 0,
+  "plans": 4,
+  "roster_enabled": 1
+}

@@ -1,0 +1,33 @@
+{
+  "project": "ewcsgvhuojxdpaspwsrx",
+  "captured_at": "2026-10-07T19:32:45.956386+00:00",
+  "captured_by": "read-only Supabase MCP queries (role postgres) immediately after apply_migration",
+  "applied": {
+    "local_file": "supabase/migrations/20261007210000_claim_notifies_owner.sql",
+    "sha256": "0abc430fd5c26ce946a51fbfb455b800deca84f816e1f2a48c0c21ab4a6a3e50",
+    "mcp_name": "claim_notifies_owner",
+    "hosted_version": "20261007193235"
+  },
+  "migrations_last": "20261007193235 claim_notifies_owner (8 total)",
+  "private.claim_invite(text)": {
+    "owner": "postgres",
+    "security_definer": true,
+    "config": ["search_path=\"\""],
+    "acl": "{postgres=X/postgres,authenticated=X/postgres}",
+    "definition_md5": "e76c015ad54ce574d375fb19957d9d57",
+    "definition_md5_expected_from_local_rehearsal": "e76c015ad54ce574d375fb19957d9d57",
+    "notifies_owner": true,
+    "notifies_claimer": false,
+    "execute": {"anon": false, "authenticated": true, "service_role": false}
+  },
+  "public.claim_invite(text) execute": {"anon": false, "authenticated": true, "service_role": true},
+  "notification_outbox_by_kind": {},
+  "invitations": 0,
+  "plans": 4,
+  "roster_enabled": 1,
+  "advisors": {
+    "security": "INFO rls_enabled_no_policy x4 (device_endpoints, invitations, notification_outbox, tester_roster) - unchanged",
+    "performance": "INFO unused_index x3 (device_endpoints_user_idx, notification_outbox_pending_idx, notification_outbox_recipient_idx; plans_owner_idx no longer listed because it has now been used); INFO auth_db_connections_absolute - unchanged",
+    "new_warn_or_error": false
+  }
+}
