@@ -16,7 +16,6 @@ import {
   ErrorNote,
   s,
 } from "../src/design/ui";
-import { activities } from "../src/services/catalogue";
 import {
   canReadSample,
   canRespond,
@@ -317,10 +316,10 @@ export default function Invite() {
         )}
         {snapshot && (
           <>
-            <Title style={{ fontSize: 24 }}>
-              {activities.find((a) => a.id === snapshot.plan.activity_id)
-                ?.title ?? "Your resbite"}
-            </Title>
+            <Title style={{ fontSize: 24 }}>{snapshot.plan.title}</Title>
+            {!!snapshot.plan.description && (
+              <Copy>{snapshot.plan.description}</Copy>
+            )}
             <Copy>{new Date(snapshot.plan.starts_at).toLocaleString()}</Copy>
             <Copy>{snapshot.plan.place_label}</Copy>
             {!!snapshot.plan.note && <Copy>{snapshot.plan.note}</Copy>}

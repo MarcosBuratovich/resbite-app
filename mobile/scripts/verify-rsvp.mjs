@@ -172,6 +172,9 @@ try {
   await expect(
     page.getByText("Your response: declined", { exact: true }),
   ).toBeVisible();
+  // The invitation shows the plan's own text, not the bundled idea title.
+  await expect(page.getByText("Coffee evening", { exact: true })).toBeVisible();
+  await expect(page.getByText("Bring a book", { exact: true })).toBeVisible();
   conflict = false;
   failWithoutCommit = true;
   await page

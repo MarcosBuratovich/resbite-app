@@ -9,6 +9,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { activities, artwork } from "../../src/services/catalogue";
+import { EventPictureView, categoryText } from "../../src/design/categories";
+import { eventPicture } from "../../src/domain/events";
 import { supabase } from "../../src/services/supabase";
 import { useApp, LocalPlan } from "../../src/state/AppState";
 import {
@@ -284,16 +286,20 @@ export default function Plans() {
               resizeMode="contain"
             />
             <Title style={{ fontSize: 24 }}>Make room for a first plan.</Title>
-            <Copy>Pick something you’d enjoy doing together.</Copy>
+            <Copy>Start your own resbite, or borrow an idea.</Copy>
             <Button
-              title="Explore activities"
+              title="Start your own resbite"
+              onPress={() => router.push("/arrange")}
+            />
+            <Button
+              title="Browse ideas"
+              secondary
               onPress={() => router.navigate("/create")}
             />
           </View>
         ) : (
           list.map((p) => {
-            const a = activities.find((x) => x.id === p.activity_id),
-              owner = preview || p.owner_id === session?.user.id;
+            const owner = preview || p.owner_id === session?.user.id;
             return (
               <View key={p.id} style={[s.card, { padding: 20, gap: 14 }]}>
                 <View
@@ -303,11 +309,7 @@ export default function Plans() {
                     gap: 12,
                   }}
                 >
-                  <Image
-                    source={artwork[p.activity_id ?? ""]}
-                    style={{ width: 70, height: 70 }}
-                    resizeMode="contain"
-                  />
+                  <EventPictureView picture={eventPicture(p)} size={70} />
                   <View style={{ flex: largeText ? undefined : 1 }}>
                     <Copy style={{ color: c.aquaDark, fontSize: 12 }}>
                       {p.status === "cancelled"
@@ -319,6 +321,9 @@ export default function Plans() {
                     <Title style={{ fontSize: 23, lineHeight: 29 }}>
                       {p.title}
                     </Title>
+                    <Copy style={{ ...s.muted, fontSize: 12 }}>
+                      {categoryText(p.categories)}
+                    </Copy>
                   </View>
                 </View>
                 <View

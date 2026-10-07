@@ -200,6 +200,7 @@ try {
   await blank.getByLabel("Meeting place", { exact: true }).fill("Riverside park");
   await blank.getByRole("button", { name: "Save preview plan", exact: true }).click();
   await expect(blank.getByText("Garden picnic", { exact: true })).toBeVisible();
+  await expect(blank.getByText("Natural · Community", { exact: true }).last()).toBeVisible();
   await blank.context().close();
   console.log("PASS: preview blank custom event needs a name and one or two categories.");
 
