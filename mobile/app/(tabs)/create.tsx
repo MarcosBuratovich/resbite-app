@@ -17,6 +17,7 @@ import {
   SlidersHorizontal,
   LayoutGrid,
   Sparkles,
+  Plus,
 } from "lucide-react-native";
 import {
   Button,
@@ -34,15 +35,12 @@ import { filterActivities } from "../../src/domain/rules";
 import { categoryKeys, categoryLabels, type CategoryKey } from "../../src/domain/categories";
 import { CategoryFilterTile, categoryIcons, categoryText } from "../../src/design/categories";
 import { useApp } from "../../src/state/AppState";
-export default function Discover() {
+export default function Create() {
   const largeText = useLargeText();
   const { preview, session } = useApp(),
     [query, setQuery] = useState(""),
     [category, setCategory] = useState<CategoryKey | "all">("all");
   const catalogue = useCatalogue();
-  const featured = catalogue.items.find(
-    (item) => item.id === "coffee-together",
-  );
   const results = useMemo(
     () => filterActivities(catalogue.items, query, category),
     [catalogue.items, query, category],
@@ -105,18 +103,50 @@ export default function Discover() {
             </Pressable>
           </View>
           <View style={{ gap: 8 }}>
-            <Title>Make room for{"\n"}a good time.</Title>
+            <Title>What shall we{"\n"}do together?</Title>
             <Copy style={{ color: c.muted }}>
-              A little inspiration for your next get-together.
+              Plan anything with your people, or borrow an idea.
+            </Copy>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Start your own resbite"
+            accessibilityHint="Opens a new plan you name yourself"
+            onPress={() => router.push("/arrange")}
+            style={[
+              styles.start,
+              largeText && { flexDirection: "column", alignItems: "flex-start" },
+            ]}
+          >
+            <View style={styles.startIcon}>
+              <Plus size={24} strokeWidth={2} color="#963F58" />
+            </View>
+            <View style={{ flex: largeText ? undefined : 1, gap: 4 }}>
+              <Title style={{ fontSize: 23, lineHeight: 28 }}>
+                Start your own resbite
+              </Title>
+              <Copy style={{ color: c.ink }}>
+                Dinner, a walk, a birthday — anything you’d enjoy together.
+              </Copy>
+            </View>
+          </Pressable>
+          <View style={{ gap: 4 }}>
+            <Title style={{ fontSize: 23 }}>Or start from an idea</Title>
+            <Copy style={{ fontSize: 11, color: c.muted }}>
+              {catalogue.loading
+                ? "Loading…"
+                : catalogue.error
+                  ? ""
+                  : `${results.length} ideas`}
             </Copy>
           </View>
           <View style={styles.search}>
             <Search size={20} color={c.muted} />
             <TextInput
-              accessibilityLabel="Search activities"
+              accessibilityLabel="Search ideas"
               value={query}
               onChangeText={setQuery}
-              placeholder="What would you like to do?"
+              placeholder="Search ideas"
               placeholderTextColor={c.muted}
               style={{
                 flex: 1,
@@ -153,75 +183,7 @@ export default function Discover() {
             />
           ))}
         </ScrollView>
-        {!query && category === "all" && featured && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Explore ${featured.title.toLowerCase()}`}
-            onPress={() =>
-              router.push({
-                pathname: "/activity/[id]",
-                params: { id: featured.id },
-              })
-            }
-            style={styles.feature}
-          >
-            <View
-              style={{
-                padding: 22,
-                paddingRight: largeText ? 22 : 0,
-                width: largeText ? "100%" : "51%",
-                gap: 10,
-              }}
-            >
-              <Copy
-                style={{
-                  fontSize: 11,
-                  color: c.aquaDark,
-                  fontFamily: fonts.bold,
-                }}
-              >
-                Better together
-              </Copy>
-              <Title style={{ fontSize: 26, lineHeight: 31 }}>
-                {preview ? "A catch-up,\nover a cuppa." : featured.title}
-              </Title>
-              <View style={styles.smallArrow}>
-                <ArrowUpRight size={20} color={c.aquaDark} />
-              </View>
-            </View>
-            <Image
-              source={activityArtwork(featured)}
-              style={{
-                width: largeText ? "100%" : "53%",
-                height: 185,
-                position: largeText ? "relative" : "absolute",
-                right: largeText ? 0 : -4,
-                bottom: 0,
-              }}
-              resizeMode="contain"
-            />
-          </Pressable>
-        )}
-        <View style={{ paddingHorizontal: 24, paddingTop: 23, gap: 17 }}>
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: largeText ? "stretch" : "baseline",
-              flexWrap: "wrap",
-              gap: 8,
-              ...(largeText && { flexDirection: "column" }),
-            }}
-          >
-            <Title style={{ fontSize: 23 }}>Find your next resbite</Title>
-            <Copy style={{ fontSize: 11, color: c.muted }}>
-              {catalogue.loading
-                ? "Loading…"
-                : catalogue.error
-                  ? ""
-                  : `${results.length} ideas`}
-            </Copy>
-          </View>
+        <View style={{ paddingHorizontal: 24, paddingTop: 4, gap: 17 }}>
           {catalogue.loading ? (
             <View style={{ paddingVertical: 30, gap: 14 }}>
               <ActivityIndicator
@@ -234,7 +196,7 @@ export default function Discover() {
             <View style={{ paddingVertical: 20, gap: 14 }}>
               <ErrorNote message={catalogue.error} />
               <Button
-                title="Try activities again"
+                title="Try ideas again"
                 onPress={catalogue.refresh}
               />
             </View>
@@ -244,16 +206,16 @@ export default function Discover() {
               <Title style={{ fontSize: 23 }}>
                 A little inspiration is on its way.
               </Title>
-              <Copy>No activities are available yet. Check again soon.</Copy>
+              <Copy>No ideas are available yet. You can still start your own.</Copy>
               <Button
-                title="Check for activities"
+                title="Check for ideas"
                 onPress={catalogue.refresh}
                 secondary
               />
             </View>
           ) : results.length === 0 ? (
             <View style={{ paddingVertical: 30, gap: 14 }}>
-              <Copy>No activities match that search.</Copy>
+              <Copy>No ideas match that search.</Copy>
               <Pressable
                 onPress={() => {
                   setQuery("");
@@ -346,23 +308,22 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     paddingHorizontal: 15,
   },
-  feature: {
-    marginHorizontal: 24,
-    minHeight: 198,
-    boxShadow: depth.card,
-    backgroundColor: c.aquaSoft,
-    borderRadius: 25,
-    overflow: "hidden",
+  start: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    padding: 18,
+    borderRadius: 24,
+    backgroundColor: c.pink,
+    boxShadow: depth.button,
   },
-  smallArrow: {
-    height: 33,
-    width: 33,
-    borderRadius: 18,
+  startIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: c.paper,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 4,
-    boxShadow: depth.small,
   },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 14 },
   card: {

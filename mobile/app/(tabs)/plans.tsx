@@ -287,7 +287,7 @@ export default function Plans() {
             <Copy>Pick something you’d enjoy doing together.</Copy>
             <Button
               title="Explore activities"
-              onPress={() => router.navigate("/discover")}
+              onPress={() => router.navigate("/create")}
             />
           </View>
         ) : (

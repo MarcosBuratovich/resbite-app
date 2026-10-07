@@ -50,12 +50,12 @@ try {
     .click();
   await page.getByRole("button", { name: "Save group", exact: true }).click();
   await page.getByRole("button", { name: "Profile", exact: true }).click();
-  await page.getByRole("tab", { name: "Discover", exact: true }).click();
+  await page.getByRole("tab", { name: "Create", exact: true }).click();
   await page
-    .getByRole("button", { name: "Explore coffee together", exact: true })
+    .getByRole("button", { name: "Coffee together", exact: true })
     .click();
   await page
-    .getByRole("button", { name: "Let’s make a plan", exact: true })
+    .getByRole("button", { name: "Use this idea", exact: true })
     .click();
   await page.getByLabel("Meeting place", { exact: true }).fill("Test café");
   await page

@@ -22,10 +22,10 @@ try {
   await page.goto(baseURL);
   await page.getByText("Preview the design", { exact: true }).click();
   await page
-    .getByRole("button", { name: "Explore coffee together", exact: true })
+    .getByRole("button", { name: "Coffee together", exact: true })
     .click();
   await page
-    .getByRole("button", { name: "Let’s make a plan", exact: true })
+    .getByRole("button", { name: "Use this idea", exact: true })
     .click();
   await page
     .getByRole("button", { name: "Save preview plan", exact: true })
@@ -172,7 +172,7 @@ try {
     await legacy.getByRole("tab", { name: "My resbites", exact: true }).click();
     await legacy.getByRole("button", { name: "Continue draft", exact: true }).click();
     await legacy.getByRole("button", { name: "Save changes", exact: true }).click();
-    // Scoped to the plan card: the same idea name also appears under Discover.
+    // Scoped to the plan card: the same idea name also appears under Create.
     await expect(
       legacy
         .getByText("YOU’RE ORGANISING", { exact: true })
@@ -435,7 +435,7 @@ try {
       await expect(
         fixture.getByText("Newest café", { exact: true }),
       ).toBeVisible();
-      await fixture.getByRole("tab", { name: "Discover", exact: true }).click();
+      await fixture.getByRole("tab", { name: "Create", exact: true }).click();
       const readsBefore = planReads;
       await foreground();
       await fixture.waitForTimeout(250);

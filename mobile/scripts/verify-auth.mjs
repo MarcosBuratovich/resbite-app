@@ -172,7 +172,7 @@ try {
   await page
     .getByRole("button", { name: "Save password", exact: true })
     .dblclick();
-  await expect(page).toHaveURL(/\/discover$/);
+  await expect(page).toHaveURL(/\/create$/);
   assert.equal(updates, 1);
   assert.deepEqual(errors, []);
   console.log(

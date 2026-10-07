@@ -484,9 +484,9 @@ export default function Profile() {
             />
           )}
           <ActionRow
-            title="Explore activities"
+            title="Browse ideas"
             icon={Compass}
-            onPress={() => router.navigate("/discover")}
+            onPress={() => router.navigate("/create")}
           />
         </ActionGroup>
         <TextAction

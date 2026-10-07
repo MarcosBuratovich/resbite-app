@@ -4,7 +4,7 @@ import { NativeTabs } from "expo-router/unstable-native-tabs";
 import * as Haptics from "expo-haptics";
 import { colors as c } from "../../src/design/tokens";
 
-export const unstable_settings = { initialRouteName: "discover" };
+export const unstable_settings = { initialRouteName: "create" };
 
 // Let iOS render its native glass, selection motion and accessibility behavior.
 // Keeping the navigator mounted also preserves each tab's search and form state.
@@ -30,11 +30,11 @@ export default function TabLayout() {
         },
       }}
     >
-      <NativeTabs.Trigger name="discover">
-        <NativeTabs.Trigger.Label>Discover</NativeTabs.Trigger.Label>
+      <NativeTabs.Trigger name="create">
+        <NativeTabs.Trigger.Label>Create</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
-          sf={{ default: "safari", selected: "safari.fill" }}
-          md="explore"
+          sf={{ default: "plus.circle", selected: "plus.circle.fill" }}
+          md="add_circle"
         />
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="plans">

@@ -14,7 +14,7 @@ try {
     await page.route("**/*.supabase.co/**", (r) => r.abort());
     await page.goto("http://localhost:8081");
     await page.getByText("Preview the design", { exact: true }).click();
-    await page.screenshot({ path: `${out}/discover-${width}.png` });
+    await page.screenshot({ path: `${out}/create-${width}.png` });
     await page.getByRole("tab", { name: "Profile", exact: true }).click();
     await page.screenshot({ path: `${out}/profile-${width}.png` });
     await page

@@ -106,7 +106,7 @@ export default function Welcome() {
             accessibilityRole="button"
             onPress={() => {
               setPreview(true);
-              router.push("/discover");
+              router.push("/create");
             }}
             style={{
               paddingTop: 18,

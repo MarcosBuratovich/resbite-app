@@ -30,7 +30,7 @@ export default function Detail() {
       <SafeAreaView style={s.page}>
         <PreviewNotice />
         <ScrollView contentContainerStyle={s.body}>
-          <Back label="Discover" />
+          <Back label="Create" />
           <Title>
             {catalogue.loading
               ? "Getting your activity…"
@@ -47,8 +47,8 @@ export default function Detail() {
                 <ErrorNote message={catalogue.error} />
               ) : (
                 <Copy>
-                  This activity is not available to plan right now. Explore the
-                  catalogue for another idea.
+                  This activity is not available to plan right now. Browse the
+                  other ideas, or start your own.
                 </Copy>
               )}
               <Button
@@ -57,8 +57,8 @@ export default function Detail() {
                 secondary
               />
               <Button
-                title="Explore activities"
-                onPress={() => router.replace("/discover")}
+                title="Browse ideas"
+                onPress={() => router.replace("/create")}
               />
             </>
           )}
@@ -68,13 +68,13 @@ export default function Detail() {
   const planAction = (
     <View style={s.actionFooter}>
       <Button
-        title="Let’s make a plan"
+        title="Use this idea"
         onPress={() =>
           router.push({ pathname: "/arrange", params: { activity: a.id } })
         }
       />
       <Copy style={{ ...s.muted, fontSize: 11, textAlign: "center" }}>
-        Choose a time and place next
+        You can change anything next
       </Copy>
     </View>
   );
@@ -82,7 +82,7 @@ export default function Detail() {
     <SafeAreaView style={s.page}>
       <PreviewNotice />
       <ScrollView contentContainerStyle={[s.body, { paddingBottom: 28 }]}>
-        <Back label="Discover" />
+        <Back label="Create" />
         <Reveal>
           <View
             style={{

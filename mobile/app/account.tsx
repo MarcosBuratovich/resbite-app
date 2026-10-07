@@ -28,7 +28,7 @@ export default function Account() {
     restoreInvite,
   } = useApp();
   const { status, reviewed, profileReady, error, refresh } = useAccount();
-  if (preview) return <Redirect href="/discover" />;
+  if (preview) return <Redirect href="/create" />;
   if (!session && !restoring) return <Redirect href="/auth" />;
   if (session && status === "approved") {
     if (!inviteRestored)
@@ -60,7 +60,7 @@ export default function Account() {
           href={{ pathname: "/invite", params: { token: pendingInvite } }}
         />
       );
-    return <Redirect href="/discover" />;
+    return <Redirect href="/create" />;
   }
   const checking = restoring || status === "checking";
   return (

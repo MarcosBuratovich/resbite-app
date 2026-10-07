@@ -138,9 +138,12 @@ try {
   await mkdir("/private/tmp/resbite-catalogue", { recursive: true });
   for (const width of [320, 390]) {
     const f = await fixture(width);
-    await f.page.goto(`${baseURL}/discover`);
+    await f.page.goto(`${baseURL}/create`);
     await expect(
-      f.page.getByText("No activities are available yet. Check again soon."),
+      f.page.getByRole("button", { name: "Start your own resbite", exact: true }),
+    ).toBeVisible();
+    await expect(
+      f.page.getByText("No ideas are available yet. You can still start your own."),
     ).toBeVisible();
     await expect(
       f.page.getByRole("button", { name: "Coffee together", exact: true }),
@@ -151,7 +154,7 @@ try {
     });
     f.state.offline = true;
     await f.page
-      .getByRole("button", { name: "Check for activities", exact: true })
+      .getByRole("button", { name: "Check for ideas", exact: true })
       .click();
     await expect(
       f.page.getByText(
@@ -159,12 +162,12 @@ try {
       ),
     ).toBeVisible({ timeout: 20000 });
     await expect(
-      f.page.getByText("No activities are available yet. Check again soon."),
+      f.page.getByText("No ideas are available yet. You can still start your own."),
     ).toHaveCount(0);
     f.state.offline = false;
     f.state.rows = [live];
     await f.page
-      .getByRole("button", { name: "Try activities again", exact: true })
+      .getByRole("button", { name: "Try ideas again", exact: true })
       .click();
     await f.page
       .getByRole("button", { name: "Published coffee", exact: true })
@@ -204,7 +207,7 @@ try {
       fullPage: true,
     });
     await f.page
-      .getByRole("button", { name: "Let’s make a plan", exact: true })
+      .getByRole("button", { name: "Use this idea", exact: true })
       .click();
     await expect(
       f.page.getByLabel("Meeting place", { exact: true }),
@@ -225,7 +228,7 @@ try {
       f.page.getByText("Activity unavailable", { exact: true }),
     ).toBeVisible();
     await expect(
-      f.page.getByRole("button", { name: "Let’s make a plan", exact: true }),
+      f.page.getByRole("button", { name: "Use this idea", exact: true }),
     ).toHaveCount(0);
     await f.page.goto(`${baseURL}/arrange?activity=painting`);
     await expect(
@@ -239,7 +242,7 @@ try {
   const delayed = await fixture();
   delayed.state.rows = [live];
   delayed.state.hold = true;
-  await delayed.page.goto(`${baseURL}/discover`);
+  await delayed.page.goto(`${baseURL}/create`);
   await expect.poll(() => Boolean(delayed.state.release)).toBe(true);
   await delayed.page.getByRole("tab", { name: "Profile", exact: true }).click();
   delayed.state.release();
@@ -248,11 +251,11 @@ try {
   ).toBeVisible();
   delayed.state.rows = [];
   await delayed.page
-    .getByRole("tab", { name: "Discover", exact: true })
+    .getByRole("tab", { name: "Create", exact: true })
     .click();
   await expect(
     delayed.page.getByText(
-      "No activities are available yet. Check again soon.",
+      "No ideas are available yet. You can still start your own.",
     ),
   ).toBeVisible();
   await expect(
@@ -266,7 +269,7 @@ try {
     preview.page.getByText("11 ideas", { exact: true }),
   ).toBeVisible();
   await preview.page
-    .getByRole("button", { name: "Explore coffee together", exact: true })
+    .getByRole("button", { name: "Coffee together", exact: true })
     .click();
   await expect(
     preview.page.getByText(
@@ -278,16 +281,16 @@ try {
   ).toBeVisible();
   await expect(
     preview.page.getByRole("button", {
-      name: "Let’s make a plan",
+      name: "Use this idea",
       exact: true,
     }),
   ).toBeVisible();
   await preview.page
-    .getByRole("button", { name: "Discover", exact: true })
+    .getByRole("button", { name: "Create", exact: true })
     .click();
   for (const item of additions) {
     await preview.page
-      .getByLabel("Search activities", { exact: true })
+      .getByLabel("Search ideas", { exact: true })
       .fill(item.title);
     await expect(
       preview.page.getByText("1 ideas", { exact: true }),
@@ -311,7 +314,7 @@ try {
       )
       .toBe(true);
     await preview.page
-      .getByRole("button", { name: "Let’s make a plan", exact: true })
+      .getByRole("button", { name: "Use this idea", exact: true })
       .click();
     await preview.page
       .getByLabel("Meeting place", { exact: true })
@@ -341,10 +344,10 @@ try {
       .getByRole("button", { name: "My resbites", exact: true })
       .click();
     await preview.page
-      .getByRole("tab", { name: "Discover", exact: true })
+      .getByRole("tab", { name: "Create", exact: true })
       .click();
   }
-  await preview.page.getByLabel("Search activities", { exact: true }).fill("");
+  await preview.page.getByLabel("Search ideas", { exact: true }).fill("");
   await expect(
     preview.page.getByText("11 ideas", { exact: true }),
   ).toBeVisible();
