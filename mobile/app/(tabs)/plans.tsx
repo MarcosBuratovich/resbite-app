@@ -33,7 +33,7 @@ import { canEditPlan, cancelPlan, PlanSaveError } from "../../src/domain/plans";
 import { Pencil, Users, X, CalendarDays, MapPin } from "lucide-react-native";
 export default function Plans() {
   const largeText = useLargeText();
-  const { created, updated } = useLocalSearchParams(),
+  const { created, updated, cover } = useLocalSearchParams(),
     { preview, localPlans, setLocalPlans, session } = useApp(),
     [plans, setPlans] = useState<LocalPlan[]>([]),
     [busy, setBusy] = useState(false),
@@ -170,7 +170,7 @@ export default function Plans() {
         await cancelPlan(planGateway, { id: p.id, version: p.version });
         await refresh();
       }
-      router.setParams({ created: "0", updated: "0" });
+      router.setParams({ created: "0", updated: "0", cover: "none" });
       setNotice(
         preview ? "Preview plan cancelled." : "Your plan is cancelled.",
       );
@@ -223,6 +223,13 @@ export default function Plans() {
               </Copy>
             </View>
           </Reveal>
+        )}
+        {(cover === "pending" || cover === "failed") && (
+          <Copy style={{ color: c.error }}>
+            {cover === "pending"
+              ? "Your resbite is saved, but its cover photo hasn’t uploaded yet. Open Edit plan to retry."
+              : "Your resbite is saved, but its cover photo couldn’t be prepared. Open Edit plan to add it again."}
+          </Copy>
         )}
         {draftLoadError && (
           <ErrorNote message="Couldn’t load drafts from this device. Reopen this tab to try again." />

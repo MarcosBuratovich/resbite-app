@@ -35,6 +35,8 @@ import {
 import { PreviewNotice } from "../src/design/Chrome";
 import { EventDetailsFields } from "../src/design/EventDetailsFields";
 import { EventPictureView } from "../src/design/categories";
+import { CoverPicker } from "../src/design/CoverPicker";
+import { useCoverPhoto, type CoverOutcome } from "../src/state/useCoverPhoto";
 import {
   completeEventFields,
   eventPicture,
@@ -85,6 +87,16 @@ export default function Arrange() {
     categories: [],
   });
   const needsPrefill = useRef(false);
+  const coverOutcome = useRef<CoverOutcome>("none");
+  const cover = useCoverPhoto({
+    planId: planId ?? null,
+    preview,
+    previewUri: preview && planId ? (localPlans.find((p) => p.id === planId)?.cover_path ?? null) : null,
+    onPreviewChange: (uri) => {
+      if (planId)
+        setLocalPlans((all) => all.map((p) => (p.id === planId ? { ...p, cover_path: uri } : p)));
+    },
+  });
   const [initial, setInitial] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [locating, setLocating] = useState(false);
@@ -369,6 +381,7 @@ export default function Arrange() {
         params: {
           created: !discarded.current && !planId ? "1" : "0",
           updated: !discarded.current && planId ? "1" : "0",
+          cover: coverOutcome.current,
         },
       });
   }, [saved, planId]);
@@ -515,6 +528,7 @@ export default function Arrange() {
           const newPlan: LocalPlan = {
             id: write.id,
             activity_id: write.activityId,
+            cover_path: cover.uri,
             ...write.details,
             status: "active",
             version: 1,
@@ -525,6 +539,7 @@ export default function Arrange() {
         }
       } else if (pending) await reconcilePlan(planGateway, write);
       else await writePlan(planGateway, write);
+      if (!preview && !original) coverOutcome.current = await cover.commitAfterCreate(write.id);
       stopped.current = true;
       await drafts.remove(scope!, draftKey);
       if (mounted.current) {
@@ -701,6 +716,13 @@ export default function Arrange() {
             value={fields}
             onChange={setFields}
             disabled={locked}
+            cover={
+              <CoverPicker
+                cover={cover}
+                disabled={locked}
+                fallback={eventPicture({ activity_id: sourceId, categories: fields.categories })}
+              />
+            }
             sourceTitle={
               sourceId ? (idea?.title ?? historicalActivity?.title) : undefined
             }

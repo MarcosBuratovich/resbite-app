@@ -12,11 +12,13 @@ export function EventDetailsFields({
   onChange,
   disabled,
   sourceTitle,
+  cover,
 }: {
   value: EventFields;
   onChange: (next: EventFields) => void;
   disabled?: boolean;
   sourceTitle?: string;
+  cover?: React.ReactNode;
 }) {
   return (
     <View style={styles.section}>
@@ -24,6 +26,7 @@ export function EventDetailsFields({
         <Sparkles size={19} color={c.aquaDark} />
         <Title style={styles.title}>What are we doing?</Title>
       </View>
+      {cover}
       {sourceTitle ? (
         <Copy style={styles.tag}>From the idea: {sourceTitle}</Copy>
       ) : null}
