@@ -105,7 +105,6 @@ export default function Arrange() {
   const [draftReady, setDraftReady] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
   const stopped = useRef(false);
-  const restoredDraft = useRef(false);
   const discarded = useRef(false);
   const draftSnapshot = useRef<PlanDraft | null>(null);
   const mode: "edit" | "idea" | "blank" = planId
@@ -165,7 +164,6 @@ export default function Arrange() {
     setDraftReady(false);
     setError(null);
     stopped.current = false;
-    restoredDraft.current = false;
     void (async () => {
       try {
         if (!scope) throw new Error("Sign in to resume your draft.");
@@ -174,7 +172,6 @@ export default function Arrange() {
         );
         if (!active) return;
         if (stored) {
-          restoredDraft.current = true;
           requestId.current = stored.requestId;
           // Saves recorded before custom events lack event fields; fill them from the idea.
           const legacy = stored.activityId
@@ -286,8 +283,6 @@ export default function Arrange() {
   }
   useEffect(() => {
     if (initial === null || !draftReady || saved || busy || stopped.current) return;
-    // An untouched editor leaves no draft behind.
-    if (!dirty && pending === null && !restoredDraft.current) return;
     setDraftStatus("Saving draft on this device…");
     let active = true;
     const timer = setTimeout(() => {
