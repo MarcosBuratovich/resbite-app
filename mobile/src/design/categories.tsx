@@ -23,8 +23,8 @@ export const categoryIcons: Record<CategoryKey, CategoryIcon> = {
   uplifting: Sun,
 };
 
-export function categoryText(keys: readonly CategoryKey[]) {
-  return keys.map((key) => categoryLabels[key]).join(" · ");
+export function categoryText(keys: readonly CategoryKey[] | undefined) {
+  return (keys ?? []).map((key) => categoryLabels[key]).join(" · ");
 }
 
 /** A single-choice filter tile for browsing ideas. */
