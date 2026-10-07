@@ -1,5 +1,7 @@
 # First iPhone test — acceptance script
 
+**23 September 2026:** this script remains the baseline for the first two-person build. The [expanded-beta acceptance matrix](../docs/milestones/2026-09-23-expanded-private-beta.md#beta-acceptance-and-learning) adds shared groups, live chat, polls/recurrence/calendar, real wellness and photos. Sample-only expectations below must not be used to certify that expanded beta.
+
 Use two registered physical iPhones and distinct tester accounts. At least one uses Google; another uses email/password and real email confirmation. Use fictional contact fixtures except where a tester explicitly consents to selecting a real contact. Proposed detailed rules follow the [development specification](../docs/superpowers/specs/2026-09-17-resbite-first-test.md).
 
 ## Main demonstration

@@ -1,0 +1,5 @@
+Use case: background-extraction and style refinement.
+Image 1 is the EDIT TARGET, one new Resbite activity illustration. Image 2 is the ORIGINAL STYLE REFERENCE.
+Preserve every figure, face, pose, prop, expression and the exact scene composition of Image 1. Keep the plum outlines and pastel palette.
+Change only the rendering treatment: REMOVE THE ENTIRE blurry glow/halo/haze around people and props. REMOVE ALL GRADIENTS and textured/noisy fills within the artwork. Match Image 2's crisp, uniform, flat, fully opaque colour fills and thin clean plum outline. Only a single flat muted-lilac ground ellipse may remain, with a sharp outline-free edge and no blur.
+The final artwork is a clean isolated cutout on GENUINELY TRANSPARENT ALPHA. Everything outside the figures, props and small ground ellipse must be fully transparent including spaces between limbs and objects. No black background, no white background, no glow or semi-transparent bloom. Crisp antialiasing only at silhouette edges. No new objects, no text, no changes to anatomy or layout. Return same landscape framing.

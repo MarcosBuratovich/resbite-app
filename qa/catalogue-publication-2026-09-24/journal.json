@@ -1,0 +1,647 @@
+{
+  "publicationId": "resbite-catalogue-2026-09-24-148bebe1a58c",
+  "projectRef": "ewcsgvhuojxdpaspwsrx",
+  "status": "published-and-exact-readback-verified",
+  "approval": {
+    "recordedDate": "2026-09-24",
+    "source": "Owner response in development conversation, conveyed by coordinator",
+    "scopeSha256": "148bebe1a58c48abe12a2fcd763c73c0f51e6067b7d095a328f4d5377c1c2df9",
+    "scope": "Exact eight entries for owner-only beta; displayed labels are temporary discovery filters; Painting suggested 30 minutes and other durations null; Wine tasting adult activity; no wider age/access/wellness policy approval."
+  },
+  "preflightObservedAt": "2026-09-24T12:53:12.427764+00:00",
+  "preflightBeforeImage": [
+    {
+      "id": "coffee-together",
+      "row": null
+    },
+    {
+      "id": "painting",
+      "row": null
+    },
+    {
+      "id": "get-out-with-bikes",
+      "row": null
+    },
+    {
+      "id": "building-a-snowman",
+      "row": null
+    },
+    {
+      "id": "bbq",
+      "row": null
+    },
+    {
+      "id": "wine-tasting",
+      "row": null
+    },
+    {
+      "id": "spa-day",
+      "row": null
+    },
+    {
+      "id": "book-club",
+      "row": null
+    }
+  ],
+  "intendedAfterImage": [
+    {
+      "id": "coffee-together",
+      "title": "Coffee together",
+      "description": "Make time for a drink and a catch-up with people you know.",
+      "category": "Meals & Drinks",
+      "artwork_key": "coffee-together",
+      "source_ids": [
+        "S0618",
+        "S0945",
+        "S0716"
+      ],
+      "published": true,
+      "duration_minutes": null,
+      "tips": [
+        "Choose a place where everyone can sit together.",
+        "Agree a time that works for the group."
+      ]
+    },
+    {
+      "id": "painting",
+      "title": "Painting",
+      "description": "Paint a scene, an object or an abstract design together. Try different colours and let everyone take their own approach.",
+      "category": "Creative",
+      "artwork_key": "painting",
+      "source_ids": [
+        "S0618",
+        "S0713"
+      ],
+      "published": true,
+      "duration_minutes": 30,
+      "tips": [
+        "Bring paints, brushes and something to paint on.",
+        "Look at painting styles for inspiration."
+      ]
+    },
+    {
+      "id": "get-out-with-bikes",
+      "title": "Get out with bikes",
+      "description": "Get together for a bicycle ride and enjoy some time outside.",
+      "category": "Adventure",
+      "artwork_key": "get-out-with-bikes",
+      "source_ids": [
+        "S0618",
+        "S0945",
+        "S0714"
+      ],
+      "published": true,
+      "duration_minutes": null,
+      "tips": [
+        "Agree the route and meeting place in advance.",
+        "Choose a route everyone in the group is comfortable with."
+      ]
+    },
+    {
+      "id": "building-a-snowman",
+      "title": "Building a snowman",
+      "description": "When there is enough snow, get together to build and decorate a snowman.",
+      "category": "Creative",
+      "artwork_key": "building-a-snowman",
+      "source_ids": [
+        "S0945",
+        "S0705"
+      ],
+      "published": true,
+      "duration_minutes": null,
+      "tips": [
+        "Choose a suitable outdoor spot.",
+        "Bring warm clothes and simple decorations."
+      ]
+    },
+    {
+      "id": "bbq",
+      "title": "BBQ",
+      "description": "Share a barbecue and spend time together over food.",
+      "category": "Meals & Drinks",
+      "artwork_key": "bbq",
+      "source_ids": [
+        "S0618",
+        "S0945",
+        "S0706"
+      ],
+      "published": true,
+      "duration_minutes": null,
+      "tips": [
+        "Agree who is bringing the food and equipment.",
+        "Check dietary preferences with your guests."
+      ]
+    },
+    {
+      "id": "wine-tasting",
+      "title": "Wine tasting",
+      "description": "Get together to compare wines and talk about what you notice.",
+      "category": "Meals & Drinks",
+      "artwork_key": "wine-tasting",
+      "source_ids": [
+        "S0618",
+        "S0945",
+        "S0710"
+      ],
+      "published": true,
+      "duration_minutes": null,
+      "tips": [
+        "Choose a suitable place and agree what to bring.",
+        "Have water and alcohol-free options available."
+      ]
+    },
+    {
+      "id": "spa-day",
+      "title": "Spa day",
+      "description": "Set aside time to relax together at a spa.",
+      "category": "Leisure",
+      "artwork_key": "spa-day",
+      "source_ids": [
+        "S0618",
+        "S0619",
+        "S0711"
+      ],
+      "published": true,
+      "duration_minutes": null,
+      "tips": [
+        "Choose the place together.",
+        "Check availability before confirming your plan."
+      ]
+    },
+    {
+      "id": "book-club",
+      "title": "Book Club",
+      "description": "Meet to talk about a book you have chosen together.",
+      "category": "Intellectual",
+      "artwork_key": "book-club",
+      "source_ids": [
+        "S0619",
+        "S0945",
+        "S0707"
+      ],
+      "published": true,
+      "duration_minutes": null,
+      "tips": [
+        "Agree the book before the meeting.",
+        "Bring a question or a favourite passage to discuss."
+      ]
+    }
+  ],
+  "originalPublishedIds": [],
+  "publicationReceipt": {
+    "note": "Receipt describes this attempt. Preserve the initial journal before-image on a retry.",
+    "database": "postgres",
+    "operation": "publish",
+    "after_image": [
+      {
+        "id": "bbq",
+        "tips": [
+          "Agree who is bringing the food and equipment.",
+          "Check dietary preferences with your guests."
+        ],
+        "title": "BBQ",
+        "category": "Meals & Drinks",
+        "published": true,
+        "source_ids": [
+          "S0618",
+          "S0945",
+          "S0706"
+        ],
+        "artwork_key": "bbq",
+        "description": "Share a barbecue and spend time together over food.",
+        "duration_minutes": null
+      },
+      {
+        "id": "book-club",
+        "tips": [
+          "Agree the book before the meeting.",
+          "Bring a question or a favourite passage to discuss."
+        ],
+        "title": "Book Club",
+        "category": "Intellectual",
+        "published": true,
+        "source_ids": [
+          "S0619",
+          "S0945",
+          "S0707"
+        ],
+        "artwork_key": "book-club",
+        "description": "Meet to talk about a book you have chosen together.",
+        "duration_minutes": null
+      },
+      {
+        "id": "building-a-snowman",
+        "tips": [
+          "Choose a suitable outdoor spot.",
+          "Bring warm clothes and simple decorations."
+        ],
+        "title": "Building a snowman",
+        "category": "Creative",
+        "published": true,
+        "source_ids": [
+          "S0945",
+          "S0705"
+        ],
+        "artwork_key": "building-a-snowman",
+        "description": "When there is enough snow, get together to build and decorate a snowman.",
+        "duration_minutes": null
+      },
+      {
+        "id": "coffee-together",
+        "tips": [
+          "Choose a place where everyone can sit together.",
+          "Agree a time that works for the group."
+        ],
+        "title": "Coffee together",
+        "category": "Meals & Drinks",
+        "published": true,
+        "source_ids": [
+          "S0618",
+          "S0945",
+          "S0716"
+        ],
+        "artwork_key": "coffee-together",
+        "description": "Make time for a drink and a catch-up with people you know.",
+        "duration_minutes": null
+      },
+      {
+        "id": "get-out-with-bikes",
+        "tips": [
+          "Agree the route and meeting place in advance.",
+          "Choose a route everyone in the group is comfortable with."
+        ],
+        "title": "Get out with bikes",
+        "category": "Adventure",
+        "published": true,
+        "source_ids": [
+          "S0618",
+          "S0945",
+          "S0714"
+        ],
+        "artwork_key": "get-out-with-bikes",
+        "description": "Get together for a bicycle ride and enjoy some time outside.",
+        "duration_minutes": null
+      },
+      {
+        "id": "painting",
+        "tips": [
+          "Bring paints, brushes and something to paint on.",
+          "Look at painting styles for inspiration."
+        ],
+        "title": "Painting",
+        "category": "Creative",
+        "published": true,
+        "source_ids": [
+          "S0618",
+          "S0713"
+        ],
+        "artwork_key": "painting",
+        "description": "Paint a scene, an object or an abstract design together. Try different colours and let everyone take their own approach.",
+        "duration_minutes": 30
+      },
+      {
+        "id": "spa-day",
+        "tips": [
+          "Choose the place together.",
+          "Check availability before confirming your plan."
+        ],
+        "title": "Spa day",
+        "category": "Leisure",
+        "published": true,
+        "source_ids": [
+          "S0618",
+          "S0619",
+          "S0711"
+        ],
+        "artwork_key": "spa-day",
+        "description": "Set aside time to relax together at a spa.",
+        "duration_minutes": null
+      },
+      {
+        "id": "wine-tasting",
+        "tips": [
+          "Choose a suitable place and agree what to bring.",
+          "Have water and alcohol-free options available."
+        ],
+        "title": "Wine tasting",
+        "category": "Meals & Drinks",
+        "published": true,
+        "source_ids": [
+          "S0618",
+          "S0945",
+          "S0710"
+        ],
+        "artwork_key": "wine-tasting",
+        "description": "Get together to compare wines and talk about what you notice.",
+        "duration_minutes": null
+      }
+    ],
+    "project_ref": "ewcsgvhuojxdpaspwsrx",
+    "before_image": [
+      {
+        "id": "bbq",
+        "row": null
+      },
+      {
+        "id": "book-club",
+        "row": null
+      },
+      {
+        "id": "building-a-snowman",
+        "row": null
+      },
+      {
+        "id": "coffee-together",
+        "row": null
+      },
+      {
+        "id": "get-out-with-bikes",
+        "row": null
+      },
+      {
+        "id": "painting",
+        "row": null
+      },
+      {
+        "id": "spa-day",
+        "row": null
+      },
+      {
+        "id": "wine-tasting",
+        "row": null
+      }
+    ],
+    "scope_sha256": "148bebe1a58c48abe12a2fcd763c73c0f51e6067b7d095a328f4d5377c1c2df9",
+    "inserted_count": 8,
+    "publication_id": "resbite-catalogue-2026-09-24-148bebe1a58c",
+    "transaction_id": 1300,
+    "commit_returned": true,
+    "unchanged_count": 0,
+    "receipt_returned_at": "2026-09-24T12:58:29.614798+00:00",
+    "transaction_started_at": "2026-09-24T12:58:29.588334+00:00",
+    "enabled_tester_count_observed": 1
+  },
+  "postCommitVerification": {
+    "rows": [
+      {
+        "id": "bbq",
+        "tips": [
+          "Agree who is bringing the food and equipment.",
+          "Check dietary preferences with your guests."
+        ],
+        "title": "BBQ",
+        "category": "Meals & Drinks",
+        "published": true,
+        "source_ids": [
+          "S0618",
+          "S0945",
+          "S0706"
+        ],
+        "artwork_key": "bbq",
+        "description": "Share a barbecue and spend time together over food.",
+        "duration_minutes": null
+      },
+      {
+        "id": "book-club",
+        "tips": [
+          "Agree the book before the meeting.",
+          "Bring a question or a favourite passage to discuss."
+        ],
+        "title": "Book Club",
+        "category": "Intellectual",
+        "published": true,
+        "source_ids": [
+          "S0619",
+          "S0945",
+          "S0707"
+        ],
+        "artwork_key": "book-club",
+        "description": "Meet to talk about a book you have chosen together.",
+        "duration_minutes": null
+      },
+      {
+        "id": "building-a-snowman",
+        "tips": [
+          "Choose a suitable outdoor spot.",
+          "Bring warm clothes and simple decorations."
+        ],
+        "title": "Building a snowman",
+        "category": "Creative",
+        "published": true,
+        "source_ids": [
+          "S0945",
+          "S0705"
+        ],
+        "artwork_key": "building-a-snowman",
+        "description": "When there is enough snow, get together to build and decorate a snowman.",
+        "duration_minutes": null
+      },
+      {
+        "id": "coffee-together",
+        "tips": [
+          "Choose a place where everyone can sit together.",
+          "Agree a time that works for the group."
+        ],
+        "title": "Coffee together",
+        "category": "Meals & Drinks",
+        "published": true,
+        "source_ids": [
+          "S0618",
+          "S0945",
+          "S0716"
+        ],
+        "artwork_key": "coffee-together",
+        "description": "Make time for a drink and a catch-up with people you know.",
+        "duration_minutes": null
+      },
+      {
+        "id": "get-out-with-bikes",
+        "tips": [
+          "Agree the route and meeting place in advance.",
+          "Choose a route everyone in the group is comfortable with."
+        ],
+        "title": "Get out with bikes",
+        "category": "Adventure",
+        "published": true,
+        "source_ids": [
+          "S0618",
+          "S0945",
+          "S0714"
+        ],
+        "artwork_key": "get-out-with-bikes",
+        "description": "Get together for a bicycle ride and enjoy some time outside.",
+        "duration_minutes": null
+      },
+      {
+        "id": "painting",
+        "tips": [
+          "Bring paints, brushes and something to paint on.",
+          "Look at painting styles for inspiration."
+        ],
+        "title": "Painting",
+        "category": "Creative",
+        "published": true,
+        "source_ids": [
+          "S0618",
+          "S0713"
+        ],
+        "artwork_key": "painting",
+        "description": "Paint a scene, an object or an abstract design together. Try different colours and let everyone take their own approach.",
+        "duration_minutes": 30
+      },
+      {
+        "id": "spa-day",
+        "tips": [
+          "Choose the place together.",
+          "Check availability before confirming your plan."
+        ],
+        "title": "Spa day",
+        "category": "Leisure",
+        "published": true,
+        "source_ids": [
+          "S0618",
+          "S0619",
+          "S0711"
+        ],
+        "artwork_key": "spa-day",
+        "description": "Set aside time to relax together at a spa.",
+        "duration_minutes": null
+      },
+      {
+        "id": "wine-tasting",
+        "tips": [
+          "Choose a suitable place and agree what to bring.",
+          "Have water and alcohol-free options available."
+        ],
+        "title": "Wine tasting",
+        "category": "Meals & Drinks",
+        "published": true,
+        "source_ids": [
+          "S0618",
+          "S0945",
+          "S0710"
+        ],
+        "artwork_key": "wine-tasting",
+        "description": "Get together to compare wines and talk about what you notice.",
+        "duration_minutes": null
+      }
+    ],
+    "grants": [
+      {
+        "grantee": "authenticated",
+        "privilege": "SELECT"
+      },
+      {
+        "grantee": "postgres",
+        "privilege": "DELETE"
+      },
+      {
+        "grantee": "postgres",
+        "privilege": "INSERT"
+      },
+      {
+        "grantee": "postgres",
+        "privilege": "REFERENCES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege": "SELECT"
+      },
+      {
+        "grantee": "postgres",
+        "privilege": "TRIGGER"
+      },
+      {
+        "grantee": "postgres",
+        "privilege": "TRUNCATE"
+      },
+      {
+        "grantee": "postgres",
+        "privilege": "UPDATE"
+      },
+      {
+        "grantee": "service_role",
+        "privilege": "DELETE"
+      },
+      {
+        "grantee": "service_role",
+        "privilege": "INSERT"
+      },
+      {
+        "grantee": "service_role",
+        "privilege": "REFERENCES"
+      },
+      {
+        "grantee": "service_role",
+        "privilege": "SELECT"
+      },
+      {
+        "grantee": "service_role",
+        "privilege": "TRIGGER"
+      },
+      {
+        "grantee": "service_role",
+        "privilege": "TRUNCATE"
+      },
+      {
+        "grantee": "service_role",
+        "privilege": "UPDATE"
+      }
+    ],
+    "policies": [
+      {
+        "cmd": "SELECT",
+        "qual": "(( SELECT private.eligible() AS eligible) AND published)",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "activities",
+        "permissive": "PERMISSIVE",
+        "policyname": "activity_read",
+        "schemaname": "public",
+        "with_check": null
+      }
+    ],
+    "observed_at": "2026-09-24T12:59:30.62793+00:00",
+    "rls_enabled": true,
+    "total_count": 8,
+    "candidate_count": 8,
+    "enabled_tester_count": 1,
+    "candidate_published_count": 8
+  },
+  "rollbackReceipt": null,
+  "nativeAcceptance": {
+    "date": "2026-09-24",
+    "status": "accepted-for-catalogue-loading",
+    "source": "Owner reply in development conversation, conveyed by coordinator",
+    "ownerReply": "All eight load correctly",
+    "checked": "Signed-in Discover refresh and opening the published activities with artwork/details on the iPhone.",
+    "notEstablished": [
+      "New-plan creation for these live activities",
+      "Offline behavior",
+      "New Larger Text verification",
+      "VoiceOver or Reduce Motion verification"
+    ]
+  },
+  "note": "Publication receipt and independent exact hosted read-back are attached. Preserve the original absent-row before-image on any replay. Native acceptance covers catalogue loading only; role checks and remaining limits are recorded separately.",
+  "preparedSqlSha256": {
+    "publish.sql": "64a732b55acc2b4f207b3d781bf68c0c2ca32d6de4c70edfb7986e2994d07d22",
+    "rollback.sql": "c90d8b0a6d8477e83baf95e303bdb95b7baceabef11f6987e4204ff1835fbcc5",
+    "verify.sql": "3a2848c2e70c5db45eacfb05dfd5bdee56a59b2d51c5787ada6e80d9dc0058b3"
+  },
+  "localValidation": {
+    "completedAtUtc": "2026-09-24T12:59:10.233726+00:00",
+    "resultFile": "local-validation.json",
+    "resultSha256": "37742960bf97fb1d842ff5ee8b8251d9c2d5f1b790a00ec0f0316cfd4ad1eafb",
+    "hostedWrites": false
+  },
+  "hostedRoleChecks": {
+    "date": "2026-09-24",
+    "reportedBy": "Coordinator after hosted SQL role simulations",
+    "approvedOwnerVisibleRows": 8,
+    "unapprovedNonexistentPrincipalVisibleRows": 0,
+    "anonymousRead": "privilege denied",
+    "authUsersCreated": false,
+    "limitation": "Hosted SQL role simulations; this does not replace registration/sign-in with a designated real unapproved account."
+  }
+}

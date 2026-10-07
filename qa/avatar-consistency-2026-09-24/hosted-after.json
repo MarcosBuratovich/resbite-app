@@ -1,0 +1,73 @@
+{
+  "migration": {
+    "name": "avatar_revision_compare_and_swap",
+    "version": "20260924150824"
+  },
+  "observed_at": "2026-09-24T15:08:44.430574+00:00",
+  "photo_policies": [
+    {
+      "cmd": "DELETE",
+      "qual": "false",
+      "roles": [
+        "authenticated"
+      ],
+      "tablename": "objects",
+      "permissive": "PERMISSIVE",
+      "policyname": "resbite_avatar_delete",
+      "schemaname": "storage",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "qual": null,
+      "roles": [
+        "authenticated"
+      ],
+      "tablename": "objects",
+      "permissive": "PERMISSIVE",
+      "policyname": "resbite_avatar_insert",
+      "schemaname": "storage",
+      "with_check": "((bucket_id = 'profile-photos'::text) AND ( SELECT private.eligible() AS eligible) AND ((storage.foldername(name))[1] = (( SELECT auth.uid() AS uid))::text))"
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "((bucket_id = 'profile-photos'::text) AND ( SELECT private.eligible() AS eligible) AND (EXISTS ( SELECT 1\n   FROM profiles p\n  WHERE (((p.id)::text = (storage.foldername(objects.name))[1]) AND private.can_read_profile(p.id) AND ((p.id = ( SELECT auth.uid() AS uid)) OR (p.avatar_path = objects.name))))))",
+      "roles": [
+        "authenticated"
+      ],
+      "tablename": "objects",
+      "permissive": "PERMISSIVE",
+      "policyname": "resbite_avatar_read",
+      "schemaname": "storage",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "qual": "((bucket_id = 'profile-photos'::text) AND ( SELECT private.eligible() AS eligible) AND ((storage.foldername(name))[1] = (( SELECT auth.uid() AS uid))::text))",
+      "roles": [
+        "authenticated"
+      ],
+      "tablename": "objects",
+      "permissive": "PERMISSIVE",
+      "policyname": "resbite_avatar_update",
+      "schemaname": "storage",
+      "with_check": "((bucket_id = 'profile-photos'::text) AND ( SELECT private.eligible() AS eligible) AND ((storage.foldername(name))[1] = (( SELECT auth.uid() AS uid))::text))"
+    }
+  ],
+  "rpc_privileges": {
+    "anon": false,
+    "service_role": false,
+    "authenticated": true,
+    "public_wrapper_definer": false
+  },
+  "enabled_testers": 1,
+  "revision_column": {
+    "type": "bigint",
+    "default": "0",
+    "nullable": "NO"
+  },
+  "revision_trigger": true,
+  "published_activities": 11,
+  "deletion_jobs_deployed": false,
+  "photo_cleanup_jobs_deployed": false
+}

@@ -1,0 +1,12 @@
+{
+  "environment": "Disposable local PostgreSQL 17; no hosted writes",
+  "passed": [
+    "Reviewed manifest and three PNG hashes match provenance; both SQL payloads and original-eight guards match exact records.",
+    "Publish inserts exactly three alongside original eight; replay writes zero; all old rows, unrelated row, RLS/ACL/roster and exact receipts preserved.",
+    "Rollback unpublishes only three and preserves original eight plus real new-activity plan FK; replay zero; republish after rollback stops.",
+    "Partial addition batch, conflicting existing addition and rollback after later addition edit abort atomically.",
+    "Any change to the preserved original-eight before-image blocks publication and rollback without new writes.",
+    "Concurrent duplicate addition publishes serialize to one three-row insert and one zero-write replay.",
+    "Wrong owner, additional enabled tester or changed RLS blocks both operations; unrelated records remain untouched."
+  ]
+}

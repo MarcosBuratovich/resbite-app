@@ -1,0 +1,9 @@
+{
+  "publish.sql": "64a732b55acc2b4f207b3d781bf68c0c2ca32d6de4c70edfb7986e2994d07d22",
+  "rollback.sql": "c90d8b0a6d8477e83baf95e303bdb95b7baceabef11f6987e4204ff1835fbcc5",
+  "verify.sql": "3a2848c2e70c5db45eacfb05dfd5bdee56a59b2d51c5787ada6e80d9dc0058b3",
+  "approved-payload.json": "ffa492a7f0c7db450eee8574bceb2aab26e5bac521b5f0ca3d369a7e29da28df",
+  "approved-scope.json": "4c615485e0f1544a5f93a5eba33571a31c247c33cd0fc59490fc4b40991d4aa3",
+  "verify-local.py": "1bbfd407e81f28acc093dd0f8ca5af54e8a1b653a45d8b9a2d075d89439e6c4d",
+  "local-validation.json": "37742960bf97fb1d842ff5ee8b8251d9c2d5f1b790a00ec0f0316cfd4ad1eafb"
+}

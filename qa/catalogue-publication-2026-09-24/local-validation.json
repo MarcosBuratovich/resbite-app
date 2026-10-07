@@ -1,0 +1,13 @@
+{
+  "environment": "disposable local PostgreSQL 17; no hosted writes",
+  "passed": [
+    "Approved source, PNG and combined hashes match; both SQL payloads exactly match approved rows.",
+    "First publish inserts exactly eight; replay writes zero; exact before/after receipts; unrelated row, RLS, ACL and roster unchanged.",
+    "Rollback unpublishes eight without deletion or broken plan FK; replay writes zero; republishing a rolled-back batch fails for review.",
+    "Partial batch, conflicting existing copy and rollback after later edits all abort atomically without row changes.",
+    "Concurrent exact publication attempts serialize to one eight-row insert and one zero-write replay.",
+    "Eligible local owner reads the published batch plus unrelated row; unapproved user sees zero; anonymous reads denied.",
+    "Wrong sole roster identity or additional enabled tester blocks publication and rollback.",
+    "Changed RLS contract blocks publication and rollback."
+  ]
+}

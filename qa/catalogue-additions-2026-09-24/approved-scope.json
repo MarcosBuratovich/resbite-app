@@ -1,0 +1,25 @@
+{
+  "approvedManifestSha256": "8b077f214b5cf42a446f88f47dc36f6bb0ee41e18b08eea60fc18d6307f7d6bf",
+  "sourceManifest": "qa/activity-concepts-2026-09-24/activities.json",
+  "provenanceSha256Observed": "7d8f42386089e122c651be57bbdead43ff14bc1bf6cb903313323b751d4ee1c7",
+  "artwork": [
+    {
+      "activityId": "picnic-in-the-park",
+      "reviewedPath": "qa/activity-concepts-2026-09-24/picnic-in-the-park-v2.png",
+      "mobilePath": "mobile/assets/activities/picnic-in-the-park.png",
+      "sha256": "17a350c79e368329b14fcd899a48e1988bd05e0c5a179b40013940e4f7dabd8c"
+    },
+    {
+      "activityId": "walk-and-talk",
+      "reviewedPath": "qa/activity-concepts-2026-09-24/walk-and-talk-v2.png",
+      "mobilePath": "mobile/assets/activities/walk-and-talk.png",
+      "sha256": "ac12aa8687ff7c804f70d01b74f670746f4fc024a60da6a4284395fc63bda13f"
+    },
+    {
+      "activityId": "board-game-night",
+      "reviewedPath": "qa/activity-concepts-2026-09-24/board-game-night-v2.png",
+      "mobilePath": "mobile/assets/activities/board-game-night.png",
+      "sha256": "afd6289f9fd6027b99a9ca90373121cbbc8eb7d62715d0e8bfdbdce29a9d3f00"
+    }
+  ]
+}

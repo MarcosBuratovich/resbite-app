@@ -1,0 +1,170 @@
+{
+  "projectRef": "ewcsgvhuojxdpaspwsrx",
+  "readOnly": true,
+  "observation": {
+    "rls": {
+      "forced": false,
+      "enabled": true
+    },
+    "rows": [],
+    "grants": [
+      {
+        "grantee": "authenticated",
+        "privilege": "SELECT"
+      },
+      {
+        "grantee": "postgres",
+        "privilege": "DELETE"
+      },
+      {
+        "grantee": "postgres",
+        "privilege": "INSERT"
+      },
+      {
+        "grantee": "postgres",
+        "privilege": "REFERENCES"
+      },
+      {
+        "grantee": "postgres",
+        "privilege": "SELECT"
+      },
+      {
+        "grantee": "postgres",
+        "privilege": "TRIGGER"
+      },
+      {
+        "grantee": "postgres",
+        "privilege": "TRUNCATE"
+      },
+      {
+        "grantee": "postgres",
+        "privilege": "UPDATE"
+      },
+      {
+        "grantee": "service_role",
+        "privilege": "DELETE"
+      },
+      {
+        "grantee": "service_role",
+        "privilege": "INSERT"
+      },
+      {
+        "grantee": "service_role",
+        "privilege": "REFERENCES"
+      },
+      {
+        "grantee": "service_role",
+        "privilege": "SELECT"
+      },
+      {
+        "grantee": "service_role",
+        "privilege": "TRIGGER"
+      },
+      {
+        "grantee": "service_role",
+        "privilege": "TRUNCATE"
+      },
+      {
+        "grantee": "service_role",
+        "privilege": "UPDATE"
+      }
+    ],
+    "schema": [
+      {
+        "name": "id",
+        "type": "text",
+        "default": null,
+        "nullable": "NO",
+        "udt_name": "text"
+      },
+      {
+        "name": "title",
+        "type": "text",
+        "default": null,
+        "nullable": "NO",
+        "udt_name": "text"
+      },
+      {
+        "name": "description",
+        "type": "text",
+        "default": null,
+        "nullable": "NO",
+        "udt_name": "text"
+      },
+      {
+        "name": "category",
+        "type": "text",
+        "default": null,
+        "nullable": "NO",
+        "udt_name": "text"
+      },
+      {
+        "name": "artwork_key",
+        "type": "text",
+        "default": null,
+        "nullable": "NO",
+        "udt_name": "text"
+      },
+      {
+        "name": "source_ids",
+        "type": "ARRAY",
+        "default": null,
+        "nullable": "NO",
+        "udt_name": "_text"
+      },
+      {
+        "name": "published",
+        "type": "boolean",
+        "default": "false",
+        "nullable": "NO",
+        "udt_name": "bool"
+      },
+      {
+        "name": "duration_minutes",
+        "type": "integer",
+        "default": null,
+        "nullable": "YES",
+        "udt_name": "int4"
+      },
+      {
+        "name": "tips",
+        "type": "ARRAY",
+        "default": "'{}'::text[]",
+        "nullable": "NO",
+        "udt_name": "_text"
+      }
+    ],
+    "database": "postgres",
+    "policies": [
+      {
+        "cmd": "SELECT",
+        "name": "activity_read",
+        "qual": "(( SELECT private.eligible() AS eligible) AND published)",
+        "roles": [
+          "authenticated"
+        ],
+        "with_check": null
+      }
+    ],
+    "constraints": [
+      {
+        "name": "activities_duration_minutes_check",
+        "definition": "CHECK (((duration_minutes >= 1) AND (duration_minutes <= 1440)))"
+      },
+      {
+        "name": "activities_pkey",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "name": "activities_tips_check",
+        "definition": "CHECK (((cardinality(tips) <= 12) AND (array_position(tips, NULL::text) IS NULL)))"
+      }
+    ],
+    "observed_at": "2026-09-24T12:53:12.427764+00:00",
+    "owner_gate_count": 1
+  },
+  "ownerScopeReadBack": {
+    "observedAt": "2026-09-24T12:57:53.692727+00:00",
+    "enabledRosterIsExactApprovedOwner": true
+  }
+}

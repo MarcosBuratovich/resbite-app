@@ -1,5 +1,7 @@
 # Which sources control scope
 
+**23 September 2026 owner update:** the request for a more complete MVP and explicit follow-up selections authorize the [expanded private beta](13-expanded-beta-scope.md). These current selections override the older demo cuts for the named capabilities, including polls/photos previously classified as later features. They do not reinstate the entire legacy backlog or approve payments/marketplace. Preserve original evidence and distinguish proposed operating rules from owner decisions.
+
 ## Owner decisions
 
 On 17 September 2026 the owner specified:

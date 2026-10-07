@@ -1,5 +1,7 @@
 # Brand, assets and content audit
 
+**Scope update — 23 September 2026:** use the [expanded beta plan](../docs/milestones/2026-09-23-expanded-private-beta.md) for the current feature/content target. The brand evidence below remains useful; its repeated first-test limitations are historical. Preserve the owner's subsequently accepted compact cards, depth, coloured icons and regular-weight button labels.
+
 ## Selected first-test scope
 
 The owner selected manual sharing of real invitation links and notifications limited to invitations, RSVP and plan changes; search and categories; contact import plus reusable groups; optional profile photo; and owner cancellation without transfer. Attendance caps, waiting lists, extra filters, similar activities, suggestion forms and post-event extras are deferred.

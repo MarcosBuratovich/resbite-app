@@ -1,5 +1,7 @@
 # User journeys and documented rules
 
+**Current journey update — 23 September 2026:** [MVP 2](../docs/milestones/2026-09-23-expanded-private-beta.md) extends the loop to shared groups → time selection/poll → explicit RSVP → live event conversation → shared photos → self-confirmed attendance/duration → private history/wellness → repeat or recurring plan. The feature direction is owner-selected; that plan labels proposed detailed rules. The original journeys and conflicting legacy rules below remain evidence, not the current feature ceiling.
+
 ## Selected first-test scope
 
 The owner selected manual sharing of real invitation links and notifications limited to invitations, RSVP and plan changes; search and categories; contact import plus reusable groups; optional profile photo; and owner cancellation without transfer. Attendance caps, waiting lists, extra filters, similar activities, suggestion forms and post-event extras are deferred.
@@ -91,3 +93,7 @@ Child views belong to the deferred child subsystem. User/household/all-user comp
 | Hosted resbite | Provider-created paid event | Marketplace, outside MVP |
 
 This table is a vocabulary guide, not a backend schema or a commitment to create every listed entity.
+
+### Registration implementation update — 18 September 2026
+
+The owner requested the introduction and full data-entry flow and selected date of birth, phone, city and interests. The implemented email path is introduction → name/optional birth date → optional phone/city/interests → email/password → confirmation → existing profile/photo setup. Extra fields are optional until mandatory rules are specified. This supersedes the earlier minimum-field recommendation; it does not reinstate SMS/phone-call verification, precise addresses or child accounts. Google remains on the sign-in path. See the decision log and implementation status for test evidence and remaining native acceptance.

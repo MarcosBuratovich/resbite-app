@@ -1,0 +1,144 @@
+[
+  {
+    "id": "coffee-together",
+    "title": "Coffee together",
+    "description": "Make time for a drink and a catch-up with people you know.",
+    "category": "Meals & Drinks",
+    "artwork_key": "coffee-together",
+    "source_ids": [
+      "S0618",
+      "S0945",
+      "S0716"
+    ],
+    "published": true,
+    "duration_minutes": null,
+    "tips": [
+      "Choose a place where everyone can sit together.",
+      "Agree a time that works for the group."
+    ]
+  },
+  {
+    "id": "painting",
+    "title": "Painting",
+    "description": "Paint a scene, an object or an abstract design together. Try different colours and let everyone take their own approach.",
+    "category": "Creative",
+    "artwork_key": "painting",
+    "source_ids": [
+      "S0618",
+      "S0713"
+    ],
+    "published": true,
+    "duration_minutes": 30,
+    "tips": [
+      "Bring paints, brushes and something to paint on.",
+      "Look at painting styles for inspiration."
+    ]
+  },
+  {
+    "id": "get-out-with-bikes",
+    "title": "Get out with bikes",
+    "description": "Get together for a bicycle ride and enjoy some time outside.",
+    "category": "Adventure",
+    "artwork_key": "get-out-with-bikes",
+    "source_ids": [
+      "S0618",
+      "S0945",
+      "S0714"
+    ],
+    "published": true,
+    "duration_minutes": null,
+    "tips": [
+      "Agree the route and meeting place in advance.",
+      "Choose a route everyone in the group is comfortable with."
+    ]
+  },
+  {
+    "id": "building-a-snowman",
+    "title": "Building a snowman",
+    "description": "When there is enough snow, get together to build and decorate a snowman.",
+    "category": "Creative",
+    "artwork_key": "building-a-snowman",
+    "source_ids": [
+      "S0945",
+      "S0705"
+    ],
+    "published": true,
+    "duration_minutes": null,
+    "tips": [
+      "Choose a suitable outdoor spot.",
+      "Bring warm clothes and simple decorations."
+    ]
+  },
+  {
+    "id": "bbq",
+    "title": "BBQ",
+    "description": "Share a barbecue and spend time together over food.",
+    "category": "Meals & Drinks",
+    "artwork_key": "bbq",
+    "source_ids": [
+      "S0618",
+      "S0945",
+      "S0706"
+    ],
+    "published": true,
+    "duration_minutes": null,
+    "tips": [
+      "Agree who is bringing the food and equipment.",
+      "Check dietary preferences with your guests."
+    ]
+  },
+  {
+    "id": "wine-tasting",
+    "title": "Wine tasting",
+    "description": "Get together to compare wines and talk about what you notice.",
+    "category": "Meals & Drinks",
+    "artwork_key": "wine-tasting",
+    "source_ids": [
+      "S0618",
+      "S0945",
+      "S0710"
+    ],
+    "published": true,
+    "duration_minutes": null,
+    "tips": [
+      "Choose a suitable place and agree what to bring.",
+      "Have water and alcohol-free options available."
+    ]
+  },
+  {
+    "id": "spa-day",
+    "title": "Spa day",
+    "description": "Set aside time to relax together at a spa.",
+    "category": "Leisure",
+    "artwork_key": "spa-day",
+    "source_ids": [
+      "S0618",
+      "S0619",
+      "S0711"
+    ],
+    "published": true,
+    "duration_minutes": null,
+    "tips": [
+      "Choose the place together.",
+      "Check availability before confirming your plan."
+    ]
+  },
+  {
+    "id": "book-club",
+    "title": "Book Club",
+    "description": "Meet to talk about a book you have chosen together.",
+    "category": "Intellectual",
+    "artwork_key": "book-club",
+    "source_ids": [
+      "S0619",
+      "S0945",
+      "S0707"
+    ],
+    "published": true,
+    "duration_minutes": null,
+    "tips": [
+      "Agree the book before the meeting.",
+      "Bring a question or a favourite passage to discuss."
+    ]
+  }
+]

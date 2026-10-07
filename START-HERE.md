@@ -1,5 +1,9 @@
 # Resbite — project foundation
 
+**Current implementation handoff — 7 October 2026:** [completed work and remaining milestones](docs/development-handoff-2026-10-07.md). The first-test planning sections below are historical; use the handoff and expanded plan for current development.
+
+**Current direction — 23 September 2026:** the owner selected a complete private beta with live event chat, real personal wellness/history, saved activities, better planning/calendar, time polls, shared photos, recurring plans and shared groups. iPhone first; Android immediately afterward. Start with the [expanded development plan](docs/milestones/2026-09-23-expanded-private-beta.md) and [58-item scope mapping](knowledge-base/13-expanded-beta-scope.md). The first-test scope below is preserved history, superseded where the new plan explicitly expands it. See [implementation status](docs/implementation-status.md) for what actually exists; the broader beta is not yet built. Tester access remains owner-only.
+
 Resbite is a private social app for finding real-world activities, arranging them with people you know, and reflecting on time spent together. This knowledge base consolidates the supplied archive into a bounded starting point for the new project.
 
 **Scope decisions:** newer substantive information wins when sources conflict; **MVP first**, with premium and marketplace capabilities kept separate. A feature appearing in an old screen does not automatically put it into the first release.

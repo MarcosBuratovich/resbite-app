@@ -1,0 +1,95 @@
+{
+  "observed_at": "2026-09-24T15:04:02.142048+00:00",
+  "photo_policies": [
+    {
+      "cmd": "DELETE",
+      "qual": "((bucket_id = 'profile-photos'::text) AND ( SELECT private.eligible() AS eligible) AND ((storage.foldername(name))[1] = (( SELECT auth.uid() AS uid))::text))",
+      "roles": [
+        "authenticated"
+      ],
+      "tablename": "objects",
+      "permissive": "PERMISSIVE",
+      "policyname": "resbite_avatar_delete",
+      "schemaname": "storage",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "qual": null,
+      "roles": [
+        "authenticated"
+      ],
+      "tablename": "objects",
+      "permissive": "PERMISSIVE",
+      "policyname": "resbite_avatar_insert",
+      "schemaname": "storage",
+      "with_check": "((bucket_id = 'profile-photos'::text) AND ( SELECT private.eligible() AS eligible) AND ((storage.foldername(name))[1] = (( SELECT auth.uid() AS uid))::text))"
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "((bucket_id = 'profile-photos'::text) AND ( SELECT private.eligible() AS eligible) AND (EXISTS ( SELECT 1\n   FROM profiles p\n  WHERE (((p.id)::text = (storage.foldername(objects.name))[1]) AND private.can_read_profile(p.id)))))",
+      "roles": [
+        "authenticated"
+      ],
+      "tablename": "objects",
+      "permissive": "PERMISSIVE",
+      "policyname": "resbite_avatar_read",
+      "schemaname": "storage",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "qual": "((bucket_id = 'profile-photos'::text) AND ( SELECT private.eligible() AS eligible) AND ((storage.foldername(name))[1] = (( SELECT auth.uid() AS uid))::text))",
+      "roles": [
+        "authenticated"
+      ],
+      "tablename": "objects",
+      "permissive": "PERMISSIVE",
+      "policyname": "resbite_avatar_update",
+      "schemaname": "storage",
+      "with_check": "((bucket_id = 'profile-photos'::text) AND ( SELECT private.eligible() AS eligible) AND ((storage.foldername(name))[1] = (( SELECT auth.uid() AS uid))::text))"
+    }
+  ],
+  "enabled_testers": 1,
+  "profile_columns": [
+    {
+      "name": "id",
+      "type": "uuid"
+    },
+    {
+      "name": "display_name",
+      "type": "text"
+    },
+    {
+      "name": "avatar_path",
+      "type": "text"
+    },
+    {
+      "name": "deletion_requested_at",
+      "type": "timestamp with time zone"
+    },
+    {
+      "name": "created_at",
+      "type": "timestamp with time zone"
+    }
+  ],
+  "migration_versions": [
+    {
+      "name": "resbite_private_tester_foundation",
+      "version": "20260917191323"
+    },
+    {
+      "name": "account_access_status",
+      "version": "20260923151512"
+    },
+    {
+      "name": "atomic_registration_details",
+      "version": "20260923151515"
+    },
+    {
+      "name": "activity_catalogue_details",
+      "version": "20260923154040"
+    }
+  ],
+  "published_activities": 11
+}

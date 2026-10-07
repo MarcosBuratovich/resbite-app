@@ -1,4 +1,8 @@
-import React from "react";
+import {
+  accountDeletionEnabled,
+  loadRecentDeletionReceipt,
+} from "../src/services/accountDeletion";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Image,
@@ -15,7 +19,20 @@ import { colors as c, fonts } from "../src/design/tokens";
 import { useApp } from "../src/state/AppState";
 export default function Welcome() {
   const { session, restoring, setPreview } = useApp();
-  if (session && !restoring) return <Redirect href="/discover" />;
+  const [hasDeletionReceipt, setHasDeletionReceipt] = useState(false);
+  useEffect(() => {
+    let active = true;
+    if (accountDeletionEnabled)
+      void loadRecentDeletionReceipt()
+        .then((value) => {
+          if (active) setHasDeletionReceipt(Boolean(value));
+        })
+        .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+  if (session && !restoring) return <Redirect href="/account" />;
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.cream }}>
       <ScrollView
@@ -58,7 +75,7 @@ export default function Welcome() {
           <View style={{ gap: 12, marginTop: 12 }}>
             <Button
               title="Let’s get together"
-              onPress={() => router.push("/auth")}
+              onPress={() => router.push("/introduction")}
               loading={restoring}
             />
             <Pressable
@@ -70,13 +87,20 @@ export default function Welcome() {
             >
               <Copy style={{ fontSize: 13 }}>
                 Already have an account?{" "}
-                <Copy style={{ fontSize: 13, fontFamily: fonts.bold }}>
+                <Copy style={{ fontSize: 13, fontFamily: fonts.body }}>
                   Sign in
                 </Copy>
               </Copy>
             </Pressable>
           </View>
         </Reveal>
+        {hasDeletionReceipt && (
+          <Button
+            title="Check account deletion"
+            secondary
+            onPress={() => router.push("/delete-account")}
+          />
+        )}
         {__DEV__ && (
           <Pressable
             accessibilityRole="button"

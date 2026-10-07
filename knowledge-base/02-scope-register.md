@@ -1,5 +1,7 @@
 # Feature scope register
 
+**Current scope — 23 September 2026:** use the [expanded-beta overlay](13-expanded-beta-scope.md) for the latest disposition of all 58 rows. The owner selected live chat, real personal wellness/history, saved activities, better planning/calendar, polls, photos, recurrence and shared groups. This register preserves the audited evidence and original first-test choices; sample-only and deferred labels below do not override that later selection. Detailed new behavior is proposed in the [development plan](../docs/milestones/2026-09-23-expanded-private-beta.md).
+
 ## Selected first-test scope
 
 The owner selected manual sharing of real invitation links and notifications limited to invitations, RSVP and plan changes; search and categories; contact import plus reusable groups; optional profile photo; and owner cancellation without transfer. Attendance caps, waiting lists, extra filters, similar activities, suggestion forms and post-event extras are deferred.
@@ -91,3 +93,7 @@ The register deliberately avoids inventing deadlines, effort estimates, implemen
 ## Gate for adding an item to implementation
 
 A feature needs a source, a current scope status and enough resolved behaviour to implement it without guessing. A later decision must explicitly move an undecided/deferred item into MVP. A feature illustrated only in an old mockup does not pass this gate automatically.
+
+### Owner update — 18 September 2026: registration
+
+Registration scope now includes information slides and date of birth, phone number, city and interests in addition to name/email/password and optional profile photo. Additional fields are implemented as optional; required-field rules beyond name/email/password were not specified. Historical SMS verification, precise home/work addresses and child accounts remain outside the implemented scope. See [decision log](08-decisions.md) and [implementation status](../docs/implementation-status.md).

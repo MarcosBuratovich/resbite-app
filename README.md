@@ -1,6 +1,8 @@
 # Resbite
 
-Private development repository for the Resbite mobile app: React Native, Expo, TypeScript and Supabase. iPhone first, with Android planned. This is an initial foundation, not a tester-ready release.
+Private development repository for the Resbite mobile app: React Native, Expo, TypeScript and Supabase. iPhone first, with Android planned. The owner-only iPhone development app is working; B0 account/data foundation is still in progress, and the expanded private beta is not yet release-ready.
+
+Start with the [7 October development handoff](docs/development-handoff-2026-10-07.md) for completed work, live versus local changes, verification and the remaining B0–B8 roadmap.
 
 ## Start on your Mac
 
@@ -11,10 +13,11 @@ Private development repository for the Resbite mobile app: React Native, Expo, T
 5. Run `npm run check` inside `mobile`.
 6. Connect Apple signing and a development iPhone before running `npx expo run:ios --device`.
 
-The existing hosted Supabase database is shared across computers. Do not create another project or reapply the initial migration manually. Tester access remains closed until approved emails are supplied.
+The existing hosted Supabase database is shared across computers. Do not create another project or reapply the initial migration manually. Tester access is limited to the explicitly approved owner account; broader tester access remains closed.
 
 ## Project contents
 
+- [Expanded private-beta development plan](docs/milestones/2026-09-23-expanded-private-beta.md) — current owner-selected MVP direction, milestones and proposed operating rules.
 - [Mobile app and run instructions](mobile/README.md)
 - [Implementation status and remaining work](docs/implementation-status.md)
 - [Product knowledge base](START-HERE.md)

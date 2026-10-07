@@ -1,0 +1,52 @@
+:root {
+  color-scheme: light;
+  font-family: system-ui, sans-serif;
+  color: #322f35;
+  background: #faf5f0;
+}
+body {
+  margin: 0;
+  padding: 32px 20px;
+}
+main {
+  max-width: 440px;
+  margin: 8vh auto;
+  background: #fff;
+  border: 1px solid #eee5e9;
+  border-radius: 24px;
+  padding: 28px;
+  box-shadow: 0 12px 35px #56384d12;
+}
+.brand {
+  color: #816779;
+  letter-spacing: 0.08em;
+}
+h1 {
+  font-size: 2rem;
+  line-height: 1.12;
+  font-weight: 500;
+}
+p {
+  line-height: 1.6;
+}
+a {
+  display: inline-block;
+  padding: 14px 24px;
+  border: 1px solid #f3c9df;
+  border-radius: 99px;
+  background: #f7d0e3;
+  color: #44333d;
+  box-shadow: 0 4px 8px #70334a16;
+  text-decoration: none;
+}
+a:focus-visible {
+  outline: 3px solid #44333d;
+  outline-offset: 4px;
+}
+[hidden] {
+  display: none;
+}
+.note {
+  font-size: 0.9rem;
+  color: #675963;
+}

@@ -1,0 +1,62 @@
+[
+  {
+    "id": "picnic-in-the-park",
+    "title": "Picnic in the park",
+    "category": "Meals & Drinks",
+    "description": "Bring a few simple things to share and make time for a relaxed picnic together.",
+    "tips": [
+      "Choose a spot with seating or room for a blanket, and agree what everyone will bring.",
+      "Check food preferences and the weather, then leave the place as you found it."
+    ],
+    "durationMinutes": null,
+    "artwork": "picnic-in-the-park-v2.png",
+    "contentStatus": "new-concept-awaiting-owner-review",
+    "categoryStatus": "proposed-temporary-discovery-label",
+    "generationProvider": "OpenAI built-in image generation",
+    "referenceArt": [
+      "coffee-together.png",
+      "get-out-with-bikes.png"
+    ],
+    "artworkSha256": "17a350c79e368329b14fcd899a48e1988bd05e0c5a179b40013940e4f7dabd8c"
+  },
+  {
+    "id": "walk-and-talk",
+    "title": "Walk and talk",
+    "category": "Leisure",
+    "description": "Take an easy walk with someone you know. Choose a comfortable pace and enjoy a little time to catch up.",
+    "tips": [
+      "Agree a route and pace that suit everyone, including places to pause.",
+      "Choose a clear meeting point and check the weather before setting off."
+    ],
+    "durationMinutes": null,
+    "artwork": "walk-and-talk-v2.png",
+    "contentStatus": "new-concept-awaiting-owner-review",
+    "categoryStatus": "proposed-temporary-discovery-label",
+    "generationProvider": "OpenAI built-in image generation",
+    "referenceArt": [
+      "coffee-together.png",
+      "get-out-with-bikes.png"
+    ],
+    "artworkSha256": "ac12aa8687ff7c804f70d01b74f670746f4fc024a60da6a4284395fc63bda13f"
+  },
+  {
+    "id": "board-game-night",
+    "title": "Board game night",
+    "category": "Leisure",
+    "description": "Gather around a game, learn the rules together and enjoy a friendly evening of play.",
+    "tips": [
+      "Pick a game that suits the number of people and explain the rules before you start.",
+      "Make room for everyone around the table and keep the atmosphere relaxed."
+    ],
+    "durationMinutes": null,
+    "artwork": "board-game-night-v2.png",
+    "contentStatus": "new-concept-awaiting-owner-review",
+    "categoryStatus": "proposed-temporary-discovery-label",
+    "generationProvider": "OpenAI built-in image generation",
+    "referenceArt": [
+      "coffee-together.png",
+      "get-out-with-bikes.png"
+    ],
+    "artworkSha256": "afd6289f9fd6027b99a9ca90373121cbbc8eb7d62715d0e8bfdbdce29a9d3f00"
+  }
+]

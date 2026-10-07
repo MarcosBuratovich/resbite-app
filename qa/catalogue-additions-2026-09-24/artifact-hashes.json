@@ -1,0 +1,10 @@
+{
+  "publish.sql": "92715a647b8737eab68a1c36928f9c49de7dda933e365c4035021480ae65c4ce",
+  "rollback.sql": "f12fa58f1652a0521fdd51ac85904e08b9f980b703827059bb6a33437eddd15d",
+  "verify.sql": "59fbf14b70606bf3a10147f91f2cb0c301d828085f2441dc09c59416ed2177f9",
+  "approved-payload.json": "f0424931a7c6f890c420aca6aa5c68caa521264b2b8adfc9ffa69ec7053bf796",
+  "approved-scope.json": "10a2e6220b2f521664374d01d1f70aa05a104a27617f8eea724ed0a758c3bd86",
+  "original-eight-before-image.json": "ffa492a7f0c7db450eee8574bceb2aab26e5bac521b5f0ca3d369a7e29da28df",
+  "verify-local.py": "af89af4b68757c10c751f2544b9e451903398530ca8da906d8cd5ac8a56614ec",
+  "local-validation.json": "1698932b80dc5f8d20f0956276d3d3568556d87b1e2deee2e593650f2f255f00"
+}

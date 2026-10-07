@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "status": "approved-for-owner-only-beta",
+  "approvedOn": "2026-09-24",
+  "approvedBy": "owner",
+  "approvalQuote": "love it, keep them",
+  "scopeSha256": "373069328e846e8344a73a4a0d5e970ca521bfe700504a570a02b20056ec0f73",
+  "manifestSha256": "cfb123f42146dbacbc3861887a8252f121ee98e14680528d4f2d3af9c84f9b80",
+  "reviewManifestSha256": "8b077f214b5cf42a446f88f47dc36f6bb0ee41e18b08eea60fc18d6307f7d6bf",
+  "reviewProvenanceSha256": "7d8f42386089e122c651be57bbdead43ff14bc1bf6cb903313323b751d4ee1c7",
+  "artwork": [
+    {
+      "activityId": "picnic-in-the-park",
+      "sourcePath": "qa/activity-concepts-2026-09-24/picnic-in-the-park-v2.png",
+      "path": "mobile/assets/activities/picnic-in-the-park.png",
+      "sha256": "17a350c79e368329b14fcd899a48e1988bd05e0c5a179b40013940e4f7dabd8c"
+    },
+    {
+      "activityId": "walk-and-talk",
+      "sourcePath": "qa/activity-concepts-2026-09-24/walk-and-talk-v2.png",
+      "path": "mobile/assets/activities/walk-and-talk.png",
+      "sha256": "ac12aa8687ff7c804f70d01b74f670746f4fc024a60da6a4284395fc63bda13f"
+    },
+    {
+      "activityId": "board-game-night",
+      "sourcePath": "qa/activity-concepts-2026-09-24/board-game-night-v2.png",
+      "path": "mobile/assets/activities/board-game-night.png",
+      "sha256": "afd6289f9fd6027b99a9ca90373121cbbc8eb7d62715d0e8bfdbdce29a9d3f00"
+    }
+  ],
+  "originalCatalogueScopeSha256": "148bebe1a58c48abe12a2fcd763c73c0f51e6067b7d095a328f4d5377c1c2df9",
+  "reviewManifest": "qa/activity-concepts-2026-09-24/activities.json",
+  "reviewProvenance": "qa/activity-concepts-2026-09-24/provenance.json",
+  "review": "qa/new-activities-review.html",
+  "approvedActivityIds": [
+    "picnic-in-the-park",
+    "walk-and-talk",
+    "board-game-night"
+  ],
+  "approvedFields": [
+    "title",
+    "description",
+    "tips",
+    "artwork",
+    "category",
+    "durationMinutes"
+  ],
+  "categoryTreatment": "existing-temporary-discovery-filters",
+  "durationTreatment": "Unspecified for all three; no default or wellness time assigned.",
+  "generationProvider": "OpenAI built-in image generation",
+  "sourceIdMeaning": "R20260924 identifiers refer to these newly reviewed concepts, not the original agency archive.",
+  "policyExtensionApproved": false,
+  "additionalTesterAccessApproved": false,
+  "publicationEvidence": "Tracked separately; this file records content approval and byte-exact mobile copies only."
+}

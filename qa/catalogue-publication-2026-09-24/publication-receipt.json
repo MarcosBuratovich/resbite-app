@@ -1,0 +1,193 @@
+{
+  "note": "Receipt describes this attempt. Preserve the initial journal before-image on a retry.",
+  "database": "postgres",
+  "operation": "publish",
+  "after_image": [
+    {
+      "id": "bbq",
+      "tips": [
+        "Agree who is bringing the food and equipment.",
+        "Check dietary preferences with your guests."
+      ],
+      "title": "BBQ",
+      "category": "Meals & Drinks",
+      "published": true,
+      "source_ids": [
+        "S0618",
+        "S0945",
+        "S0706"
+      ],
+      "artwork_key": "bbq",
+      "description": "Share a barbecue and spend time together over food.",
+      "duration_minutes": null
+    },
+    {
+      "id": "book-club",
+      "tips": [
+        "Agree the book before the meeting.",
+        "Bring a question or a favourite passage to discuss."
+      ],
+      "title": "Book Club",
+      "category": "Intellectual",
+      "published": true,
+      "source_ids": [
+        "S0619",
+        "S0945",
+        "S0707"
+      ],
+      "artwork_key": "book-club",
+      "description": "Meet to talk about a book you have chosen together.",
+      "duration_minutes": null
+    },
+    {
+      "id": "building-a-snowman",
+      "tips": [
+        "Choose a suitable outdoor spot.",
+        "Bring warm clothes and simple decorations."
+      ],
+      "title": "Building a snowman",
+      "category": "Creative",
+      "published": true,
+      "source_ids": [
+        "S0945",
+        "S0705"
+      ],
+      "artwork_key": "building-a-snowman",
+      "description": "When there is enough snow, get together to build and decorate a snowman.",
+      "duration_minutes": null
+    },
+    {
+      "id": "coffee-together",
+      "tips": [
+        "Choose a place where everyone can sit together.",
+        "Agree a time that works for the group."
+      ],
+      "title": "Coffee together",
+      "category": "Meals & Drinks",
+      "published": true,
+      "source_ids": [
+        "S0618",
+        "S0945",
+        "S0716"
+      ],
+      "artwork_key": "coffee-together",
+      "description": "Make time for a drink and a catch-up with people you know.",
+      "duration_minutes": null
+    },
+    {
+      "id": "get-out-with-bikes",
+      "tips": [
+        "Agree the route and meeting place in advance.",
+        "Choose a route everyone in the group is comfortable with."
+      ],
+      "title": "Get out with bikes",
+      "category": "Adventure",
+      "published": true,
+      "source_ids": [
+        "S0618",
+        "S0945",
+        "S0714"
+      ],
+      "artwork_key": "get-out-with-bikes",
+      "description": "Get together for a bicycle ride and enjoy some time outside.",
+      "duration_minutes": null
+    },
+    {
+      "id": "painting",
+      "tips": [
+        "Bring paints, brushes and something to paint on.",
+        "Look at painting styles for inspiration."
+      ],
+      "title": "Painting",
+      "category": "Creative",
+      "published": true,
+      "source_ids": [
+        "S0618",
+        "S0713"
+      ],
+      "artwork_key": "painting",
+      "description": "Paint a scene, an object or an abstract design together. Try different colours and let everyone take their own approach.",
+      "duration_minutes": 30
+    },
+    {
+      "id": "spa-day",
+      "tips": [
+        "Choose the place together.",
+        "Check availability before confirming your plan."
+      ],
+      "title": "Spa day",
+      "category": "Leisure",
+      "published": true,
+      "source_ids": [
+        "S0618",
+        "S0619",
+        "S0711"
+      ],
+      "artwork_key": "spa-day",
+      "description": "Set aside time to relax together at a spa.",
+      "duration_minutes": null
+    },
+    {
+      "id": "wine-tasting",
+      "tips": [
+        "Choose a suitable place and agree what to bring.",
+        "Have water and alcohol-free options available."
+      ],
+      "title": "Wine tasting",
+      "category": "Meals & Drinks",
+      "published": true,
+      "source_ids": [
+        "S0618",
+        "S0945",
+        "S0710"
+      ],
+      "artwork_key": "wine-tasting",
+      "description": "Get together to compare wines and talk about what you notice.",
+      "duration_minutes": null
+    }
+  ],
+  "project_ref": "ewcsgvhuojxdpaspwsrx",
+  "before_image": [
+    {
+      "id": "bbq",
+      "row": null
+    },
+    {
+      "id": "book-club",
+      "row": null
+    },
+    {
+      "id": "building-a-snowman",
+      "row": null
+    },
+    {
+      "id": "coffee-together",
+      "row": null
+    },
+    {
+      "id": "get-out-with-bikes",
+      "row": null
+    },
+    {
+      "id": "painting",
+      "row": null
+    },
+    {
+      "id": "spa-day",
+      "row": null
+    },
+    {
+      "id": "wine-tasting",
+      "row": null
+    }
+  ],
+  "scope_sha256": "148bebe1a58c48abe12a2fcd763c73c0f51e6067b7d095a328f4d5377c1c2df9",
+  "inserted_count": 8,
+  "publication_id": "resbite-catalogue-2026-09-24-148bebe1a58c",
+  "transaction_id": 1300,
+  "commit_returned": true,
+  "unchanged_count": 0,
+  "receipt_returned_at": "2026-09-24T12:58:29.614798+00:00",
+  "transaction_started_at": "2026-09-24T12:58:29.588334+00:00",
+  "enabled_tester_count_observed": 1
+}

@@ -1,5 +1,7 @@
 # Selectable decisions for the first demonstration
 
+**23 September 2026:** the first-demonstration answers below are historical. Current owner selections and remaining detailed decisions are in the [expanded scope](13-expanded-beta-scope.md) and [MVP 2 plan](../docs/milestones/2026-09-23-expanded-private-beta.md). Do not ask the owner to select the new feature set, shared-group model or self-confirmed attendance again; those are now answered.
+
 You do not need an answer to everything. Choose an option, use the recommended default, or leave it for later. **Recommendations below are proposals, not accepted requirements.** You can reply with codes such as “Q01 A, Q04 A, Q06 C” or simply select the options shown in the conversation.
 
 The owner has confirmed: newer information wins; MVP first with premium/marketplace separate; the agency never implemented the app; the immediate goal is a product the boss can view and test; neither 100 activities nor multiple registration methods is needed; illustrations for 100 activities do not exist. See the [decision log](08-decisions.md).

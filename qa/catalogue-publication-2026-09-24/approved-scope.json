@@ -1,0 +1,49 @@
+{
+  "scopeSha256": "148bebe1a58c48abe12a2fcd763c73c0f51e6067b7d095a328f4d5377c1c2df9",
+  "scope": {
+    "manifestSha256": "2ac2eeb2a1a954fe1e175af60359cb01efa8dd8d3e9dac15d4b8689984d62dc7",
+    "provenanceSha256": "f33125428afd407e0a3e953a6b05e243edae265026fa0a8d4733cbd4843bd983",
+    "artwork": [
+      {
+        "activityId": "coffee-together",
+        "path": "mobile/assets/activities/coffee-together.png",
+        "sha256": "a7e20e2d713cd7d08e0d0cb3c71e4b1d7d6af3ca996edb142211884ed92326e2"
+      },
+      {
+        "activityId": "painting",
+        "path": "mobile/assets/activities/painting.png",
+        "sha256": "1abb41711560349c640dc8ca095a2f3fb426d9794000b875501157069db1b186"
+      },
+      {
+        "activityId": "get-out-with-bikes",
+        "path": "mobile/assets/activities/get-out-with-bikes.png",
+        "sha256": "435c450437f5178af6533968fb8f759a6d9ee446b99ffccad6d7240c0cf541d5"
+      },
+      {
+        "activityId": "building-a-snowman",
+        "path": "mobile/assets/activities/building-a-snowman.png",
+        "sha256": "eda6a258bc26b74add4437fda3fc77846d1ceefc664ef41b5a69791ccb0b3457"
+      },
+      {
+        "activityId": "bbq",
+        "path": "mobile/assets/activities/bbq.png",
+        "sha256": "ebb6bb518a88c8e1092298127e018eee8eaa1fde155ed24b1bdf952b37e0a84f"
+      },
+      {
+        "activityId": "wine-tasting",
+        "path": "mobile/assets/activities/wine-tasting.png",
+        "sha256": "e3d9d1dcee3e5d327285b0b640743a52160ebc3f9171261b47401134acdd648f"
+      },
+      {
+        "activityId": "spa-day",
+        "path": "mobile/assets/activities/spa-day.png",
+        "sha256": "79ca341072a7b446a000310b7fe7ed644e6089e3b287284e28aa780f243b2e21"
+      },
+      {
+        "activityId": "book-club",
+        "path": "mobile/assets/activities/book-club.png",
+        "sha256": "067407c0b67dbf1e25d76dc0220f2ada242dd4b0a8de44dfb65dd71dea8552f1"
+      }
+    ]
+  }
+}

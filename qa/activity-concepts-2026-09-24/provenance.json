@@ -1,0 +1,59 @@
+{
+  "createdOn": "2026-09-24",
+  "status": "draft-not-published",
+  "provider": "OpenAI built-in image generation",
+  "requestedAlternative": "ElevenLabs Creative Studio skills present but generation tools not exposed; directory search returned no ElevenLabs entry. No ElevenLabs call or generation occurred.",
+  "initialPrompts": "prompts.json",
+  "refinementPrompt": "refinement-prompt.txt",
+  "references": [
+    {
+      "file": "mobile/assets/activities/coffee-together.png",
+      "sha256": "a7e20e2d713cd7d08e0d0cb3c71e4b1d7d6af3ca996edb142211884ed92326e2",
+      "role": "style reference, original unchanged"
+    },
+    {
+      "file": "mobile/assets/activities/get-out-with-bikes.png",
+      "sha256": "435c450437f5178af6533968fb8f759a6d9ee446b99ffccad6d7240c0cf541d5",
+      "role": "style reference, original unchanged"
+    }
+  ],
+  "outputs": [
+    {
+      "activityId": "picnic-in-the-park",
+      "file": "picnic-in-the-park-v2.png",
+      "width": 1536,
+      "height": 1024,
+      "mode": "RGBA",
+      "sha256": "17a350c79e368329b14fcd899a48e1988bd05e0c5a179b40013940e4f7dabd8c"
+    },
+    {
+      "activityId": "walk-and-talk",
+      "file": "walk-and-talk-v2.png",
+      "width": 1536,
+      "height": 1024,
+      "mode": "RGBA",
+      "sha256": "ac12aa8687ff7c804f70d01b74f670746f4fc024a60da6a4284395fc63bda13f"
+    },
+    {
+      "activityId": "board-game-night",
+      "file": "board-game-night-v2.png",
+      "width": 1536,
+      "height": 1024,
+      "mode": "RGBA",
+      "sha256": "afd6289f9fd6027b99a9ca90373121cbbc8eb7d62715d0e8bfdbdce29a9d3f00"
+    }
+  ],
+  "review": "../new-activities-review.html",
+  "notes": [
+    "Generated raster PNGs with alpha; original vector/source illustrations are unchanged.",
+    "All new wording, labels and artwork require separate owner selection before adding to live app.",
+    "No suggested duration, wellness mapping or general age rule has been assigned."
+  ],
+  "draftScopeSha256": "8b077f214b5cf42a446f88f47dc36f6bb0ee41e18b08eea60fc18d6307f7d6bf",
+  "reviewChecks": [
+    "Five illustration files and all review links resolve locally.",
+    "Selected 1536x1024 RGBA outputs have transparent pixels and match stored SHA-256.",
+    "Default-width in-app browser renders all three cards with legible illustration/copy and no observed overlap.",
+    "No activity database row or mobile artwork registration created for these drafts."
+  ]
+}

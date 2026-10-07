@@ -1,0 +1,23 @@
+{
+  "date": "2026-09-28",
+  "recordedAtUtc": "2026-09-28T14:05:19Z",
+  "device": "Owner iPhone 14",
+  "connection": "available (paired)",
+  "bundleIdentifier": "com.resbite.preview",
+  "launch": "Succeeded after terminating the previous app process",
+  "delivery": {
+    "metroPort": 8081,
+    "entryBundle": "iOS Bundled 1087ms node_modules/expo-router/entry.js (3866 modules)",
+    "supabaseBundle": "iOS Bundled 163ms src/services/supabase.ts (543 modules)"
+  },
+  "nativeRebuildRequired": false,
+  "dataCleared": false,
+  "nativeAcceptance": "accepted-upload-persistence-profile-removal",
+  "requestedCheck": "Signed-in Profile: choose a photo, wait for save, close/reopen Resbite, and remove the photo from the profile.",
+  "limitation": "Does not establish physical deletion of retained Storage files, picker cancellation, interrupted retry, cross-account Storage authorization or destructive lifecycle acceptance.",
+  "ownerConfirmation": {
+    "date": "2026-09-28",
+    "reply": "It works perfectly",
+    "scope": "Signed-in photo upload, persistence after closing/reopening Resbite, and removal from the profile."
+  }
+}

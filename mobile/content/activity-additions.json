@@ -1,0 +1,53 @@
+[
+  {
+    "id": "picnic-in-the-park",
+    "title": "Picnic in the park",
+    "category": "Meals & Drinks",
+    "description": "Bring a few simple things to share and make time for a relaxed picnic together.",
+    "tips": [
+      "Choose a spot with seating or room for a blanket, and agree what everyone will bring.",
+      "Check food preferences and the weather, then leave the place as you found it."
+    ],
+    "durationMinutes": null,
+    "sourceIds": [
+      "R20260924-picnic-in-the-park"
+    ],
+    "artwork": "picnic-in-the-park.png",
+    "contentStatus": "owner-approved",
+    "categoryStatus": "approved-temporary-discovery-filter"
+  },
+  {
+    "id": "walk-and-talk",
+    "title": "Walk and talk",
+    "category": "Leisure",
+    "description": "Take an easy walk with someone you know. Choose a comfortable pace and enjoy a little time to catch up.",
+    "tips": [
+      "Agree a route and pace that suit everyone, including places to pause.",
+      "Choose a clear meeting point and check the weather before setting off."
+    ],
+    "durationMinutes": null,
+    "sourceIds": [
+      "R20260924-walk-and-talk"
+    ],
+    "artwork": "walk-and-talk.png",
+    "contentStatus": "owner-approved",
+    "categoryStatus": "approved-temporary-discovery-filter"
+  },
+  {
+    "id": "board-game-night",
+    "title": "Board game night",
+    "category": "Leisure",
+    "description": "Gather around a game, learn the rules together and enjoy a friendly evening of play.",
+    "tips": [
+      "Pick a game that suits the number of people and explain the rules before you start.",
+      "Make room for everyone around the table and keep the atmosphere relaxed."
+    ],
+    "durationMinutes": null,
+    "sourceIds": [
+      "R20260924-board-game-night"
+    ],
+    "artwork": "board-game-night.png",
+    "contentStatus": "owner-approved",
+    "categoryStatus": "approved-temporary-discovery-filter"
+  }
+]

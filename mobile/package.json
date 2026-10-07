@@ -2,16 +2,30 @@
   "name": "resbite",
   "version": "1.0.0",
   "main": "expo-router/entry",
+  "expo": {
+    "autolinking": {
+      "ios": {
+        "buildFromSource": [
+          "expo-contacts"
+        ]
+      }
+    }
+  },
   "dependencies": {
+    "@gluestack-ui/core": "5.0.15",
+    "@gluestack-ui/utils": "5.0.6",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "9.1.0",
     "@supabase/supabase-js": "2.116.0",
     "expo": "57.0.23",
     "expo-auth-session": "57.0.12",
+    "expo-build-properties": "57.0.20",
     "expo-contacts": "57.0.5",
     "expo-crypto": "57.0.3",
+    "expo-file-system": "57.0.7",
     "expo-font": "57.0.4",
     "expo-haptics": "57.0.3",
+    "expo-image-manipulator": "57.0.18",
     "expo-image-picker": "57.0.18",
     "expo-linear-gradient": "57.0.2",
     "expo-linking": "57.0.10",
@@ -42,11 +56,11 @@
   },
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx src/domain/rules.test.ts && node --import tsx src/services/secureChunks.test.ts",
+    "test": "node --import tsx src/domain/rules.test.ts && node --import tsx src/services/secureChunks.test.ts && node --import tsx src/services/draftStore.test.ts && node --import tsx src/services/peopleStore.test.ts && node --import tsx src/services/contacts.test.ts && node --import tsx src/domain/rsvp.test.ts && node --import tsx src/services/notifications.test.ts && node --import tsx src/services/sessionLifecycle.test.ts && node --import tsx src/services/profilePhotoStore.test.ts && node --import tsx src/services/nativeImports.test.ts && node --import tsx src/services/accountDeletionFlow.test.ts && node --import tsx src/domain/appLinks.test.ts && node --import tsx src/services/deletionLifecycle.test.ts && node --import tsx src/services/pushRegistration.test.ts && node --import tsx src/domain/authCallbackParams.test.ts && node --import tsx src/domain/registration.test.ts && node --import tsx src/services/accountAccess.test.ts && node --import tsx src/services/accountDetails.test.ts && node --import tsx src/services/confirmationFlow.test.ts && node --import tsx src/services/liveCatalogue.test.ts",
     "check": "npm run typecheck && npm test && node scripts/validate-content.mjs"
   },
   "private": true

@@ -1,0 +1,278 @@
+{
+  "rows": [
+    {
+      "id": "board-game-night",
+      "tips": [
+        "Pick a game that suits the number of people and explain the rules before you start.",
+        "Make room for everyone around the table and keep the atmosphere relaxed."
+      ],
+      "title": "Board game night",
+      "category": "Leisure",
+      "published": true,
+      "source_ids": [
+        "R20260924-board-game-night"
+      ],
+      "artwork_key": "board-game-night",
+      "description": "Gather around a game, learn the rules together and enjoy a friendly evening of play.",
+      "duration_minutes": null
+    },
+    {
+      "id": "picnic-in-the-park",
+      "tips": [
+        "Choose a spot with seating or room for a blanket, and agree what everyone will bring.",
+        "Check food preferences and the weather, then leave the place as you found it."
+      ],
+      "title": "Picnic in the park",
+      "category": "Meals & Drinks",
+      "published": true,
+      "source_ids": [
+        "R20260924-picnic-in-the-park"
+      ],
+      "artwork_key": "picnic-in-the-park",
+      "description": "Bring a few simple things to share and make time for a relaxed picnic together.",
+      "duration_minutes": null
+    },
+    {
+      "id": "walk-and-talk",
+      "tips": [
+        "Agree a route and pace that suit everyone, including places to pause.",
+        "Choose a clear meeting point and check the weather before setting off."
+      ],
+      "title": "Walk and talk",
+      "category": "Leisure",
+      "published": true,
+      "source_ids": [
+        "R20260924-walk-and-talk"
+      ],
+      "artwork_key": "walk-and-talk",
+      "description": "Take an easy walk with someone you know. Choose a comfortable pace and enjoy a little time to catch up.",
+      "duration_minutes": null
+    }
+  ],
+  "grants": [
+    {
+      "grantee": "authenticated",
+      "privilege": "SELECT"
+    },
+    {
+      "grantee": "postgres",
+      "privilege": "DELETE"
+    },
+    {
+      "grantee": "postgres",
+      "privilege": "INSERT"
+    },
+    {
+      "grantee": "postgres",
+      "privilege": "REFERENCES"
+    },
+    {
+      "grantee": "postgres",
+      "privilege": "SELECT"
+    },
+    {
+      "grantee": "postgres",
+      "privilege": "TRIGGER"
+    },
+    {
+      "grantee": "postgres",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "grantee": "postgres",
+      "privilege": "UPDATE"
+    },
+    {
+      "grantee": "service_role",
+      "privilege": "DELETE"
+    },
+    {
+      "grantee": "service_role",
+      "privilege": "INSERT"
+    },
+    {
+      "grantee": "service_role",
+      "privilege": "REFERENCES"
+    },
+    {
+      "grantee": "service_role",
+      "privilege": "SELECT"
+    },
+    {
+      "grantee": "service_role",
+      "privilege": "TRIGGER"
+    },
+    {
+      "grantee": "service_role",
+      "privilege": "TRUNCATE"
+    },
+    {
+      "grantee": "service_role",
+      "privilege": "UPDATE"
+    }
+  ],
+  "policies": [
+    {
+      "cmd": "SELECT",
+      "qual": "(( SELECT private.eligible() AS eligible) AND published)",
+      "roles": [
+        "authenticated"
+      ],
+      "tablename": "activities",
+      "permissive": "PERMISSIVE",
+      "policyname": "activity_read",
+      "schemaname": "public",
+      "with_check": null
+    }
+  ],
+  "observed_at": "2026-09-24T13:17:56.403351+00:00",
+  "rls_enabled": true,
+  "total_count": 11,
+  "original_rows": [
+    {
+      "id": "bbq",
+      "tips": [
+        "Agree who is bringing the food and equipment.",
+        "Check dietary preferences with your guests."
+      ],
+      "title": "BBQ",
+      "category": "Meals & Drinks",
+      "published": true,
+      "source_ids": [
+        "S0618",
+        "S0945",
+        "S0706"
+      ],
+      "artwork_key": "bbq",
+      "description": "Share a barbecue and spend time together over food.",
+      "duration_minutes": null
+    },
+    {
+      "id": "book-club",
+      "tips": [
+        "Agree the book before the meeting.",
+        "Bring a question or a favourite passage to discuss."
+      ],
+      "title": "Book Club",
+      "category": "Intellectual",
+      "published": true,
+      "source_ids": [
+        "S0619",
+        "S0945",
+        "S0707"
+      ],
+      "artwork_key": "book-club",
+      "description": "Meet to talk about a book you have chosen together.",
+      "duration_minutes": null
+    },
+    {
+      "id": "building-a-snowman",
+      "tips": [
+        "Choose a suitable outdoor spot.",
+        "Bring warm clothes and simple decorations."
+      ],
+      "title": "Building a snowman",
+      "category": "Creative",
+      "published": true,
+      "source_ids": [
+        "S0945",
+        "S0705"
+      ],
+      "artwork_key": "building-a-snowman",
+      "description": "When there is enough snow, get together to build and decorate a snowman.",
+      "duration_minutes": null
+    },
+    {
+      "id": "coffee-together",
+      "tips": [
+        "Choose a place where everyone can sit together.",
+        "Agree a time that works for the group."
+      ],
+      "title": "Coffee together",
+      "category": "Meals & Drinks",
+      "published": true,
+      "source_ids": [
+        "S0618",
+        "S0945",
+        "S0716"
+      ],
+      "artwork_key": "coffee-together",
+      "description": "Make time for a drink and a catch-up with people you know.",
+      "duration_minutes": null
+    },
+    {
+      "id": "get-out-with-bikes",
+      "tips": [
+        "Agree the route and meeting place in advance.",
+        "Choose a route everyone in the group is comfortable with."
+      ],
+      "title": "Get out with bikes",
+      "category": "Adventure",
+      "published": true,
+      "source_ids": [
+        "S0618",
+        "S0945",
+        "S0714"
+      ],
+      "artwork_key": "get-out-with-bikes",
+      "description": "Get together for a bicycle ride and enjoy some time outside.",
+      "duration_minutes": null
+    },
+    {
+      "id": "painting",
+      "tips": [
+        "Bring paints, brushes and something to paint on.",
+        "Look at painting styles for inspiration."
+      ],
+      "title": "Painting",
+      "category": "Creative",
+      "published": true,
+      "source_ids": [
+        "S0618",
+        "S0713"
+      ],
+      "artwork_key": "painting",
+      "description": "Paint a scene, an object or an abstract design together. Try different colours and let everyone take their own approach.",
+      "duration_minutes": 30
+    },
+    {
+      "id": "spa-day",
+      "tips": [
+        "Choose the place together.",
+        "Check availability before confirming your plan."
+      ],
+      "title": "Spa day",
+      "category": "Leisure",
+      "published": true,
+      "source_ids": [
+        "S0618",
+        "S0619",
+        "S0711"
+      ],
+      "artwork_key": "spa-day",
+      "description": "Set aside time to relax together at a spa.",
+      "duration_minutes": null
+    },
+    {
+      "id": "wine-tasting",
+      "tips": [
+        "Choose a suitable place and agree what to bring.",
+        "Have water and alcohol-free options available."
+      ],
+      "title": "Wine tasting",
+      "category": "Meals & Drinks",
+      "published": true,
+      "source_ids": [
+        "S0618",
+        "S0945",
+        "S0710"
+      ],
+      "artwork_key": "wine-tasting",
+      "description": "Get together to compare wines and talk about what you notice.",
+      "duration_minutes": null
+    }
+  ],
+  "candidate_count": 3,
+  "enabled_tester_count": 1,
+  "candidate_published_count": 3
+}

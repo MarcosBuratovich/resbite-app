@@ -1,5 +1,7 @@
 # Decision log
 
+**Current development target:** [complete private beta](13-expanded-beta-scope.md), selected 23 September 2026. Read the dated additions at the end for later decisions that supersede the original first-test limits.
+
 | ID | Date | Decision | Authority | Consequence |
 |---|---|---|---|---|
 | D01 | 2026-09-17 | Limit the foundation to supplied information; do not invent features | Owner request | Every feature must have evidence and a scope status |
@@ -95,3 +97,29 @@ Prior SwiftUI/Firebase references in this chronological log describe superseded 
 - First testers are primarily **UK / Europe**; project region selected: London (`eu-west-2`).
 - Owner chose **leave tester access for later**. No tester email addresses have been assumed or added.
 - These setup choices do not expand the MVP scope. See [implementation status](../docs/implementation-status.md) for completed work and outstanding acceptance checks.
+
+## Registration expansion — 18 September 2026
+
+Owner requested the complete registration and information/onboarding screens, then explicitly selected additional date of birth, phone number, city and interests. This supersedes the earlier minimum-fields recommendation for the client registration flow. Implementation treats these additional fields as optional pending a specific required-field decision; display name, email and password are required for email registration. Optional photo remains after confirmation. Historical S0671/S0672 text supports the introductory sequence and name/birth/phone/location/photo concepts; interests and city-level collection follow the current owner request. Legacy SMS/phone-call verification, precise home/work addresses and child-account behavior are not reinstated. Tester access remains closed.
+
+## Owner-only access — 23 September 2026
+
+The owner explicitly approved the single account recorded in the private tester roster. Broader access remains closed; this supersedes historical empty-roster statements. See implementation status for the verified hosted change. No additional account is authorized by the expanded-beta planning request.
+
+## D21 — Complete private beta and expanded feature set
+
+On 23 September 2026 the owner requested a complete development plan and a much more complete MVP, then selected **Complete private beta**. Asked to prioritize live event chat, real wellness/history, saved activities, better planning/calendar, time polls, event photos, recurring plans and richer groups, the owner answered **all of them**. Those capabilities enter the new beta target. This supersedes sample-only chat/wellness and the relevant earlier deferrals. It does not select every archived feature, payments, subscriptions or marketplace. Scope mapping: [expanded beta](13-expanded-beta-scope.md).
+
+## D22 — iPhone first, Android immediately afterward
+
+The owner selected **iPhone first, Android next** for the expanded MVP. Deliver a complete private iPhone beta, then a distinct Android build/integration/acceptance milestone using the shared codebase. No calendar deadline or public App Store launch was selected.
+
+## D23 — Shared groups
+
+The owner selected shared groups that members can join and leave, with a group page and upcoming plans. Event conversations remain attached to individual plans. This expands the earlier device-local private-list scope. It does not authorize uploading existing address books/lists or silently granting group membership. Detailed membership, visibility, ownership and exit rules are proposals in the development plan.
+
+## D24 — Self-confirmed wellness inputs
+
+The owner selected each person's confirmation of attendance and duration, followed by private time/category summaries. Merely scheduling or accepting a plan must not count as completed participation. Category allocation, period boundaries and retention still need the proposed implementation rules finalized; no clinical, relationship or screen-time score was selected.
+
+The [MVP 2 development plan](../docs/milestones/2026-09-23-expanded-private-beta.md) records B0–B8, dependencies, acceptance and outstanding defaults. These decisions authorize the feature direction; this turn produced planning/documentation, not live feature implementation or wider tester access.

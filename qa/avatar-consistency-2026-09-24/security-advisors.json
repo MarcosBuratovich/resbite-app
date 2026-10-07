@@ -1,0 +1,75 @@
+{
+  "lints": [
+    {
+      "name": "rls_enabled_no_policy",
+      "title": "RLS Enabled No Policy",
+      "level": "INFO",
+      "facing": "EXTERNAL",
+      "categories": [
+        "SECURITY"
+      ],
+      "description": "Detects cases where row level security (RLS) has been enabled on a table but no RLS policies have been created.",
+      "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+      "count": 4,
+      "findings": [
+        {
+          "detail": "Table \\`private.device_endpoints\\` has RLS enabled, but no policies exist",
+          "metadata": {
+            "name": "device_endpoints",
+            "type": "table",
+            "schema": "private"
+          },
+          "observed_at": "2026-09-24T15:08:45.873Z"
+        },
+        {
+          "detail": "Table \\`private.invitations\\` has RLS enabled, but no policies exist",
+          "metadata": {
+            "name": "invitations",
+            "type": "table",
+            "schema": "private"
+          },
+          "observed_at": "2026-09-24T15:08:45.873Z"
+        },
+        {
+          "detail": "Table \\`private.notification_outbox\\` has RLS enabled, but no policies exist",
+          "metadata": {
+            "name": "notification_outbox",
+            "type": "table",
+            "schema": "private"
+          },
+          "observed_at": "2026-09-24T15:08:45.873Z"
+        },
+        {
+          "detail": "Table \\`private.tester_roster\\` has RLS enabled, but no policies exist",
+          "metadata": {
+            "name": "tester_roster",
+            "type": "table",
+            "schema": "private"
+          },
+          "observed_at": "2026-09-24T15:08:45.873Z"
+        }
+      ]
+    },
+    {
+      "name": "auth_leaked_password_protection",
+      "title": "Leaked Password Protection Disabled",
+      "level": "WARN",
+      "facing": "EXTERNAL",
+      "categories": [
+        "SECURITY"
+      ],
+      "description": "Leaked password protection is currently disabled.",
+      "remediation": "https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection",
+      "count": 1,
+      "findings": [
+        {
+          "detail": "Supabase Auth prevents the use of compromised passwords by checking against HaveIBeenPwned.org. Enable this feature to enhance security.",
+          "metadata": {
+            "type": "auth",
+            "entity": "Auth"
+          }
+        }
+      ]
+    }
+  ]
+}

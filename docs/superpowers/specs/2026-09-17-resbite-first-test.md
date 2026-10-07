@@ -120,3 +120,7 @@ Trusted mutations use authenticated PostgreSQL RPC functions. Edge Functions ver
 ## Done means
 
 Two real iPhones pass the [acceptance script](../../../knowledge-base/11-first-test-acceptance.md); real invitations/RSVP, denied permissions and account recovery/deletion are tested. Sample areas remain labelled. All 8–12 published activities have reviewed copy and artwork. There are no silent offline writes or unauthorized plan reads. A signed install and reproducible build instructions exist. This is completion of an internal test build, not public-launch readiness.
+
+### Owner registration update — 18 September 2026
+
+The owner explicitly requested date of birth, phone, city and interests in registration. These optional account details supersede the earlier minimum-data exclusion above; name and email/password remain required. The phone is not a verified identity and none of these user-editable details authorizes tester access. No precise home/work address, SMS authentication, child account or personalized recommendation engine is included. Information screens precede registration and can be skipped. Photo remains optional after confirmation.

@@ -1,99 +1,299 @@
-import React, { useEffect, useState } from "react";
-import { View, ActivityIndicator } from "react-native";
+import { Check, X, MessageCircle, Undo2 } from "lucide-react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { AppState, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router, useLocalSearchParams } from "expo-router";
-import { useApp, LocalPlan } from "../src/state/AppState";
-import { supabase } from "../src/services/supabase";
-import { Back, Button, Copy, Title, ErrorNote, s } from "../src/design/ui";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useAccount } from "../src/state/AccountState";
+import { useApp } from "../src/state/AppState";
+import {
+  Back,
+  Button,
+  ActionRow,
+  TextAction,
+  ActionGroup,
+  Copy,
+  Title,
+  ErrorNote,
+  s,
+} from "../src/design/ui";
 import { activities } from "../src/services/catalogue";
+import {
+  canReadSample,
+  canRespond,
+  reconcileRsvp,
+  type Response,
+  type RsvpAttempt,
+  type RsvpSnapshot,
+} from "../src/domain/rsvp";
+import { claimInvitation, readRsvp, writeRsvp } from "../src/services/rsvp";
 export default function Invite() {
   const { token, plan } = useLocalSearchParams<{
-      token?: string;
-      plan?: string;
-    }>(),
-    { session, restoring, rememberInvite } = useApp(),
-    [details, setDetails] = useState<LocalPlan | null>(null),
-    [version, setVersion] = useState(1),
-    [response, setResponse] = useState("pending"),
-    [error, setError] = useState<string | null>(null),
-    [busy, setBusy] = useState(true);
+    token?: string;
+    plan?: string;
+  }>();
+  const {
+    session,
+    restoring,
+    preview,
+    rememberInvite,
+    captureSession,
+    signingOut,
+  } = useApp();
+  const account = useAccount();
+  const accountReady =
+    account.status === "approved" && account.reviewed && account.profileReady;
+  const userId = session?.user.id;
+  const identity = `${userId}:${token}:${plan}:${preview}`;
+  const currentIdentity = useRef(identity);
+  currentIdentity.current = identity;
+  const focused = useRef(false),
+    generation = useRef(0),
+    working = useRef(false);
+  const resolved = useRef<{ identity: string; id: string } | null>(null);
+  const [snapshot, setSnapshot] = useState<RsvpSnapshot | null>(null);
+  const [error, setError] = useState<string | null>(null),
+    [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false),
+    [fresh, setFresh] = useState(false);
+  const [pending, setPending] = useState<RsvpAttempt | null>(null);
+  const remember = useRef(rememberInvite);
+  remember.current = rememberInvite;
+  const retained = useRef<{ identity: string; promise: Promise<void> } | null>(
+    null,
+  );
+  function retainToken() {
+    if (retained.current?.identity === identity)
+      return retained.current.promise;
+    const promise =
+      currentIdentity.current === identity
+        ? remember.current(token!)
+        : Promise.resolve();
+    retained.current = { identity, promise };
+    void promise.catch(() => {
+      if (retained.current?.promise === promise) retained.current = null;
+    });
+    return promise;
+  }
   useEffect(() => {
-    setDetails(null);
+    setSnapshot(null);
+    setPending(null);
+    setNotice(null);
     setError(null);
-    if (token && /^[a-f0-9]{64}$/.test(token)) void rememberInvite(token);
-    if (!session) {
-      setBusy(false);
+    setFresh(false);
+    working.current = false;
+    if (signingOut) {
+      retained.current = null;
       return;
     }
+    if (!preview && token && /^[a-f0-9]{64}$/.test(token))
+      void retainToken().catch(() => {
+        if (currentIdentity.current === identity)
+          setError(
+            "We could not keep this invitation on this device. Keep the original link.",
+          );
+      });
+  }, [identity, token, signingOut]);
+  useEffect(() => {
+    if (
+      !session ||
+      preview ||
+      signingOut ||
+      accountReady ||
+      account.status === "checking"
+    )
+      return;
     let active = true;
-    async function load() {
-      try {
-        let id = plan;
-        if (token) {
-          if (!/^[a-f0-9]{64}$/.test(token))
-            throw new Error("This invitation link is incomplete.");
-          const { data, error } = await supabase.rpc("claim_invite", {
-            p_token: token,
-          });
-          if (error) throw error;
-          id = data;
-          await rememberInvite(null);
-        }
-        if (!id) throw new Error("Invitation unavailable.");
-        const { data, error } = await supabase
-          .from("plans")
-          .select("*")
-          .eq("id", id)
-          .single();
-        if (error) throw error;
-        const result = await supabase
-          .from("attendees")
-          .select("version,response")
-          .eq("plan_id", id)
-          .eq("user_id", session!.user.id)
-          .single();
-        if (result.error) throw result.error;
-        if (active) {
-          setDetails(data);
-          setVersion(result.data.version);
-          setResponse(result.data.response);
-        }
-      } catch (e) {
+    const preserve =
+      token && /^[a-f0-9]{64}$/.test(token) ? retainToken() : Promise.resolve();
+    void preserve
+      .then(() => {
+        if (active) router.replace("/account");
+      })
+      .catch(() => {
         if (active)
-          setError(e instanceof Error ? e.message : "Invitation unavailable.");
-      } finally {
-        if (active) setBusy(false);
-      }
-    }
-    void load();
+          setError(
+            "We could not keep this invitation. Keep the original link and try again.",
+          );
+      });
     return () => {
       active = false;
     };
-  }, [session, token, plan]);
-  async function respond(value: string) {
-    if (!details) return;
+  }, [identity, accountReady, account.status, signingOut]);
+  const load = useCallback(async () => {
+    if (!userId || preview || signingOut || working.current || !accountReady)
+      return;
+    const assertSession = captureSession();
+    const run = ++generation.current;
+    const valid = () => {
+      try {
+        assertSession();
+      } catch {
+        return false;
+      }
+      return (
+        focused.current &&
+        currentIdentity.current === identity &&
+        generation.current === run
+      );
+    };
+    setBusy(true);
+    setFresh(false);
+    setError(null);
+    try {
+      if (token) {
+        if (!/^[a-f0-9]{64}$/.test(token))
+          throw new Error("This invitation link is incomplete.");
+        await retainToken();
+        if (!valid()) return;
+      }
+      let id =
+        resolved.current?.identity === identity
+          ? resolved.current.id
+          : token
+            ? undefined
+            : plan;
+      if (!id && token) {
+        assertSession();
+        id = await claimInvitation(token);
+        if (!valid()) return;
+        resolved.current = { identity, id };
+      }
+      if (token && id) {
+        if (valid()) await remember.current(null, token);
+        if (!valid()) return;
+      }
+      if (!id)
+        throw new Error(
+          "Invitation unavailable. Open the original invitation link.",
+        );
+      const next = await readRsvp(id, userId);
+      if (valid()) {
+        setSnapshot(next);
+        setFresh(true);
+      }
+    } catch (e) {
+      if (valid()) {
+        setSnapshot(null);
+        setError(e instanceof Error ? e.message : "Invitation unavailable.");
+      }
+    } finally {
+      if (valid()) setBusy(false);
+    }
+  }, [
+    identity,
+    plan,
+    token,
+    userId,
+    preview,
+    signingOut,
+    captureSession,
+    accountReady,
+  ]);
+  useFocusEffect(
+    useCallback(() => {
+      focused.current = true;
+      void load();
+      const sub = AppState.addEventListener("change", (state) => {
+        if (state === "active") void load();
+        else {
+          setFresh(false);
+          ++generation.current;
+        }
+      });
+      return () => {
+        focused.current = false;
+        ++generation.current;
+        sub.remove();
+      };
+    }, [load]),
+  );
+  async function respond(value: Response, retry?: RsvpAttempt) {
+    if (
+      !snapshot ||
+      !userId ||
+      preview ||
+      !accountReady ||
+      working.current ||
+      !focused.current
+    )
+      return;
+    working.current = true;
+    const assertSession = captureSession();
+    const operation = ++generation.current;
     setBusy(true);
     setError(null);
-    const { data, error } = await supabase.rpc("respond", {
-      p_plan: details.id,
-      p_response: value,
-      p_version: version,
-    });
-    if (error) setError(error.message);
-    else {
-      setVersion(data);
-      setResponse(value);
+    setNotice(null);
+    setFresh(false);
+    const valid = () => {
+      try {
+        assertSession();
+      } catch {
+        return false;
+      }
+      return (
+        focused.current &&
+        currentIdentity.current === identity &&
+        generation.current === operation
+      );
+    };
+    const attempt = retry ?? {
+      planId: snapshot.plan.id,
+      planVersion: snapshot.plan.version,
+      version: snapshot.attendee.version,
+      response: value,
+    };
+    setPending(attempt);
+    try {
+      let next = await readRsvp(attempt.planId, userId);
+      if (!valid()) return;
+      const decision = reconcileRsvp(attempt, next);
+      if (decision === "retry") {
+        try {
+          assertSession();
+          await writeRsvp(attempt);
+        } catch {
+          /* Confirm saved state before offering an identical retry. */
+        }
+        if (!valid()) return;
+        next = await readRsvp(attempt.planId, userId);
+        if (!valid()) return;
+      }
+      setSnapshot(next);
+      setFresh(true);
+      const result = reconcileRsvp(attempt, next);
+      if (result === "confirmed") {
+        setPending(null);
+        setNotice("Your response is saved.");
+      } else if (result === "review" || result === "unavailable") {
+        setPending(null);
+        setError(
+          result === "review"
+            ? "The plan or your response changed. Review the latest details before choosing again."
+            : "This plan is cancelled or has already started. Responses are closed.",
+        );
+      } else
+        setError(
+          "Your response is not confirmed. Retry checks the saved response before trying the same choice again.",
+        );
+    } catch {
+      if (valid())
+        setError(
+          "We could not confirm your response. Check your connection, then retry.",
+        );
+    } finally {
+      if (currentIdentity.current === identity) {
+        working.current = false;
+        setBusy(false);
+      }
     }
-    setBusy(false);
   }
+  const allowed = snapshot && canRespond(snapshot);
   return (
     <SafeAreaView style={s.page}>
-      <View style={s.body}>
+      <ScrollView contentContainerStyle={s.body}>
         <Back />
         <Title>You’re invited.</Title>
-        {restoring || busy ? (
-          <ActivityIndicator />
-        ) : !session ? (
+        {!session && !restoring && (
           <>
             <Copy>
               Sign in with your tester account. We’ll keep this invitation ready
@@ -101,43 +301,88 @@ export default function Invite() {
             </Copy>
             <Button title="Sign in" onPress={() => router.push("/auth")} />
           </>
-        ) : null}
+        )}
+        {preview && (
+          <Copy>Preview cannot claim invitations or send an RSVP.</Copy>
+        )}
         <ErrorNote message={error} />
-        {session && details && (
+        {notice && <Copy accessibilityLiveRegion="polite">{notice}</Copy>}
+        {session && !preview && (
+          <Button
+            title="Refresh invitation"
+            secondary
+            loading={busy}
+            onPress={() => void load()}
+          />
+        )}
+        {snapshot && (
           <>
             <Title style={{ fontSize: 24 }}>
-              {activities.find((a) => a.id === details.activity_id)?.title}
+              {activities.find((a) => a.id === snapshot.plan.activity_id)
+                ?.title ?? "Your resbite"}
             </Title>
-            <Copy>{new Date(details.starts_at).toLocaleString()}</Copy>
-            <Copy>{details.place_label}</Copy>
-            <Copy>{details.note}</Copy>
-            <Copy>Your response: {response}</Copy>
-            {details.status === "active" && (
-              <>
-                <Button
-                  title="I’ll be there"
-                  onPress={() => respond("accepted")}
-                  loading={busy}
-                />
-                <Button
-                  title="Can’t make it"
-                  secondary
-                  onPress={() => respond("declined")}
-                  disabled={busy}
-                />
-                {response === "accepted" && (
-                  <Button
-                    title="Withdraw my RSVP"
-                    secondary
-                    onPress={() => respond("withdrawn")}
-                    disabled={busy}
-                  />
-                )}
-              </>
+            <Copy>{new Date(snapshot.plan.starts_at).toLocaleString()}</Copy>
+            <Copy>{snapshot.plan.place_label}</Copy>
+            {!!snapshot.plan.note && <Copy>{snapshot.plan.note}</Copy>}
+            <Copy>Your response: {snapshot.attendee.response}</Copy>
+            {!allowed && (
+              <Copy>
+                This plan is cancelled or has already started. Responses are
+                closed.
+              </Copy>
+            )}
+            {pending ? (
+              <Button
+                title="Retry my response"
+                loading={busy}
+                onPress={() => void respond(pending.response, pending)}
+              />
+            ) : (
+              allowed && (
+                <>
+                  <ActionGroup>
+                    <ActionRow
+                      icon={Check}
+                      title="I’ll be there"
+                      disabled={busy || !fresh}
+                      onPress={() => void respond("accepted")}
+                    />
+                    <ActionRow
+                      icon={X}
+                      tone="rose"
+                      title="Can’t make it"
+                      disabled={busy || !fresh}
+                      onPress={() => void respond("declined")}
+                    />
+                  </ActionGroup>
+                  {snapshot.attendee.response === "accepted" && (
+                    <TextAction
+                      icon={Undo2}
+                      title="Withdraw my RSVP"
+                      disabled={busy || !fresh}
+                      onPress={() => void respond("withdrawn")}
+                    />
+                  )}
+                </>
+              )
+            )}
+            {fresh && !pending && canReadSample(snapshot) && (
+              <ActionRow
+                icon={MessageCircle}
+                tone="violet"
+                title="View sample conversation"
+                disabled={busy}
+                onPress={() =>
+                  router.push({
+                    pathname: "/sample-chat",
+                    params: { plan: snapshot.plan.id },
+                  })
+                }
+              />
             )}
           </>
         )}
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }

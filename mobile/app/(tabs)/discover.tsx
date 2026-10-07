@@ -6,6 +6,8 @@ import {
   Pressable,
   TextInput,
   StyleSheet,
+  ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Redirect, router } from "expo-router";
@@ -14,29 +16,63 @@ import {
   ArrowUpRight,
   Sun,
   SlidersHorizontal,
+  LayoutGrid,
+  Palette,
+  Mountain,
+  Coffee,
+  Leaf,
+  Sparkles,
 } from "lucide-react-native";
-import { Copy, Title, Reveal, s } from "../src/design/ui";
-import { colors as c, fonts } from "../src/design/tokens";
-import { PreviewNotice, BottomNav } from "../src/design/Chrome";
-import { activities, artwork, categories } from "../src/services/catalogue";
-import { filterActivities } from "../src/domain/rules";
-import { useApp } from "../src/state/AppState";
+import {
+  Button,
+  Copy,
+  ErrorNote,
+  Title,
+  s,
+  useLargeText,
+} from "../../src/design/ui";
+import { colors as c, fonts, depth } from "../../src/design/tokens";
+import { PreviewNotice } from "../../src/design/Chrome";
+import { activityArtwork } from "../../src/services/catalogue";
+import { useCatalogue } from "../../src/state/useCatalogue";
+import { filterActivities } from "../../src/domain/rules";
+import { useApp } from "../../src/state/AppState";
 export default function Discover() {
+  const largeText = useLargeText();
   const { preview, session } = useApp(),
     [query, setQuery] = useState(""),
     [category, setCategory] = useState("All");
+  const catalogue = useCatalogue();
+  const categories = [
+    "All",
+    ...new Set(catalogue.items.map((item) => item.category)),
+  ];
+  const selectedCategory = categories.includes(category) ? category : "All";
+  const featured = catalogue.items.find(
+    (item) => item.id === "coffee-together",
+  );
   const results = useMemo(
-    () => filterActivities(activities, query, category),
-    [query, category],
+    () => filterActivities(catalogue.items, query, selectedCategory),
+    [catalogue.items, query, selectedCategory],
   );
   if (!preview && !session) return <Redirect href="/" />;
   return (
     <SafeAreaView edges={["top", "left", "right"]} style={s.page}>
-      <PreviewNotice />
       <ScrollView
-        contentContainerStyle={{ paddingBottom: 115 }}
+        contentContainerStyle={{ paddingBottom: 28 }}
+        keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
+        refreshControl={
+          !preview ? (
+            <RefreshControl
+              refreshing={catalogue.loading}
+              onRefresh={catalogue.refresh}
+              tintColor={c.aquaDark}
+            />
+          ) : undefined
+        }
       >
+        <PreviewNotice />
         <View style={{ padding: 24, gap: 20 }}>
           <View
             style={{
@@ -49,7 +85,7 @@ export default function Discover() {
               style={{ flexDirection: "row", alignItems: "center", gap: 7 }}
             >
               <Image
-                source={require("../assets/brand/resbite-mark.png")}
+                source={require("../../assets/brand/resbite-mark.png")}
                 style={{ width: 25, height: 25 }}
               />
               <Copy style={{ fontFamily: fonts.display, fontSize: 23 }}>
@@ -59,8 +95,17 @@ export default function Discover() {
             <Pressable
               accessibilityLabel="Your profile"
               accessibilityRole="button"
-              onPress={() => router.push("/profile")}
-              style={styles.avatar}
+              onPress={() => router.navigate("/profile")}
+              style={[
+                styles.avatar,
+                largeText && {
+                  width: undefined,
+                  height: undefined,
+                  minWidth: 44,
+                  minHeight: 44,
+                  padding: 10,
+                },
+              ]}
             >
               <Copy style={{ fontFamily: fonts.bold, color: c.aquaDark }}>
                 R
@@ -84,7 +129,7 @@ export default function Discover() {
               style={{
                 flex: 1,
                 fontFamily: fonts.body,
-                fontSize: 13,
+                fontSize: 14,
                 color: c.ink,
                 paddingVertical: 15,
               }}
@@ -104,18 +149,46 @@ export default function Discover() {
             <Pressable
               key={cat}
               accessibilityRole="button"
-              accessibilityState={{ selected: cat === category }}
+              accessibilityState={{ selected: cat === selectedCategory }}
               onPress={() => setCategory(cat)}
               style={[
-                s.chip,
-                { backgroundColor: cat === category ? c.ink : c.cream },
+                {
+                  minHeight: 64,
+                  minWidth: 76,
+                  paddingHorizontal: 12,
+                  paddingVertical: 10,
+                  borderRadius: 14,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
+                  borderWidth: 1,
+                  borderColor: cat === selectedCategory ? c.aquaDark : c.line,
+                  backgroundColor:
+                    cat === selectedCategory ? c.aquaSoft : c.paper,
+                },
               ]}
             >
+              {React.createElement(
+                (
+                  {
+                    All: LayoutGrid,
+                    Creative: Palette,
+                    Adventure: Mountain,
+                    "Meals & Drinks": Coffee,
+                    Wellness: Leaf,
+                  } as Record<string, typeof Sun>
+                )[cat] || Sparkles,
+                {
+                  size: 20,
+                  strokeWidth: 1.7,
+                  color: cat === selectedCategory ? c.aquaDark : "#665381",
+                },
+              )}
               <Copy
                 style={{
                   fontSize: 12,
-                  fontFamily: fonts.medium,
-                  color: cat === category ? "white" : c.ink,
+                  fontFamily: fonts.body,
+                  color: cat === selectedCategory ? c.aquaDark : c.ink,
                 }}
               >
                 {cat}
@@ -123,15 +196,25 @@ export default function Discover() {
             </Pressable>
           ))}
         </ScrollView>
-        {!query && category === "All" && (
+        {!query && selectedCategory === "All" && featured && (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Explore coffee together"
-            onPress={() => router.push("/activity/coffee-together")}
+            accessibilityLabel={`Explore ${featured.title.toLowerCase()}`}
+            onPress={() =>
+              router.push({
+                pathname: "/activity/[id]",
+                params: { id: featured.id },
+              })
+            }
             style={styles.feature}
           >
             <View
-              style={{ padding: 22, paddingRight: 0, width: "51%", gap: 10 }}
+              style={{
+                padding: 22,
+                paddingRight: largeText ? 22 : 0,
+                width: largeText ? "100%" : "51%",
+                gap: 10,
+              }}
             >
               <Copy
                 style={{
@@ -143,19 +226,19 @@ export default function Discover() {
                 Better together
               </Copy>
               <Title style={{ fontSize: 26, lineHeight: 31 }}>
-                A catch-up,{"\n"}over a cuppa.
+                {preview ? "A catch-up,\nover a cuppa." : featured.title}
               </Title>
               <View style={styles.smallArrow}>
                 <ArrowUpRight size={20} color={c.aquaDark} />
               </View>
             </View>
             <Image
-              source={artwork["coffee-together"]}
+              source={activityArtwork(featured)}
               style={{
-                width: "53%",
+                width: largeText ? "100%" : "53%",
                 height: 185,
-                position: "absolute",
-                right: -4,
+                position: largeText ? "relative" : "absolute",
+                right: largeText ? 0 : -4,
                 bottom: 0,
               }}
               resizeMode="contain"
@@ -167,15 +250,51 @@ export default function Discover() {
             style={{
               flexDirection: "row",
               justifyContent: "space-between",
-              alignItems: "baseline",
+              alignItems: largeText ? "stretch" : "baseline",
+              flexWrap: "wrap",
+              gap: 8,
+              ...(largeText && { flexDirection: "column" }),
             }}
           >
             <Title style={{ fontSize: 23 }}>Find your next resbite</Title>
             <Copy style={{ fontSize: 11, color: c.muted }}>
-              {results.length} ideas
+              {catalogue.loading
+                ? "Loading…"
+                : catalogue.error
+                  ? ""
+                  : `${results.length} ideas`}
             </Copy>
           </View>
-          {results.length === 0 ? (
+          {catalogue.loading ? (
+            <View style={{ paddingVertical: 30, gap: 14 }}>
+              <ActivityIndicator
+                accessibilityLabel="Loading activities"
+                color={c.aquaDark}
+              />
+              <Copy>Finding a little inspiration…</Copy>
+            </View>
+          ) : catalogue.error ? (
+            <View style={{ paddingVertical: 20, gap: 14 }}>
+              <ErrorNote message={catalogue.error} />
+              <Button
+                title="Try activities again"
+                onPress={catalogue.refresh}
+              />
+            </View>
+          ) : catalogue.items.length === 0 ? (
+            <View style={[s.card, { padding: 22, gap: 14 }]}>
+              <Sparkles size={26} color={c.aquaDark} />
+              <Title style={{ fontSize: 23 }}>
+                A little inspiration is on its way.
+              </Title>
+              <Copy>No activities are available yet. Check again soon.</Copy>
+              <Button
+                title="Check for activities"
+                onPress={catalogue.refresh}
+                secondary
+              />
+            </View>
+          ) : results.length === 0 ? (
             <View style={{ paddingVertical: 30, gap: 14 }}>
               <Copy>No activities match that search.</Copy>
               <Pressable
@@ -202,7 +321,7 @@ export default function Discover() {
                       params: { id: a.id },
                     })
                   }
-                  style={styles.card}
+                  style={[styles.card, largeText && { width: "100%" }]}
                 >
                   <View
                     style={[
@@ -218,7 +337,7 @@ export default function Discover() {
                     ]}
                   >
                     <Image
-                      source={artwork[a.id]}
+                      source={activityArtwork(a)}
                       resizeMode="contain"
                       style={{ width: "100%", height: 134 }}
                     />
@@ -232,8 +351,8 @@ export default function Discover() {
                     </Copy>
                     <Copy
                       style={{
-                        fontFamily: fonts.bold,
-                        fontSize: 13,
+                        fontFamily: fonts.medium,
+                        fontSize: 14,
                         lineHeight: 19,
                       }}
                     >
@@ -249,7 +368,6 @@ export default function Discover() {
           </Copy>
         </View>
       </ScrollView>
-      <BottomNav />
     </SafeAreaView>
   );
 }
@@ -274,6 +392,7 @@ const styles = StyleSheet.create({
   feature: {
     marginHorizontal: 24,
     minHeight: 198,
+    boxShadow: depth.card,
     backgroundColor: c.aquaSoft,
     borderRadius: 25,
     overflow: "hidden",
@@ -286,10 +405,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginTop: 4,
+    boxShadow: depth.small,
   },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 14 },
   card: {
     width: "47.8%",
+    boxShadow: depth.card,
     borderWidth: 1,
     borderColor: c.line,
     borderRadius: 20,
