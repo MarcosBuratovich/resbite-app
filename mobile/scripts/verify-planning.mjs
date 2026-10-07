@@ -206,6 +206,22 @@ try {
   await blank.context().close();
   console.log("PASS: preview blank custom event needs a name and one or two categories.");
 
+  // An untouched editor must not leave a "Pick up where you left off" draft behind.
+  const untouched = await newPage();
+  await untouched.route("**/*.supabase.co/**", (route) => route.abort());
+  await untouched.goto(baseURL);
+  await untouched.getByText("Preview the design", { exact: true }).click();
+  await untouched.getByRole("tab", { name: "My resbites", exact: true }).click();
+  await untouched.getByRole("button", { name: "New resbite", exact: true }).click();
+  await expect(untouched.getByLabel("Name", { exact: true })).toBeVisible();
+  await untouched.waitForTimeout(1200); // longer than the autosave delay
+  await untouched.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(untouched.getByRole("button", { name: "New resbite", exact: true })).toBeVisible();
+  await untouched.waitForTimeout(500);
+  await expect(untouched.getByRole("button", { name: "Continue draft", exact: true })).toHaveCount(0);
+  await untouched.context().close();
+  console.log("PASS: an untouched editor leaves no draft.");
+
   const user = {
     id: "11111111-1111-4111-8111-111111111111",
     aud: "authenticated",
