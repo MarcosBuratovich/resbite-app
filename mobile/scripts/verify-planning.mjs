@@ -182,6 +182,27 @@ try {
     await legacy.context().close();
   }
 
+  // Blank custom event (CE1): a name and one or two categories are required.
+  const blank = await newPage();
+  await blank.route("**/*.supabase.co/**", (route) => route.abort());
+  await blank.goto(baseURL);
+  await blank.getByText("Preview the design", { exact: true }).click();
+  await blank.getByRole("tab", { name: "My resbites", exact: true }).click();
+  await blank.getByRole("button", { name: "New resbite", exact: true }).click();
+  await blank.getByRole("button", { name: "Save preview plan", exact: true }).click();
+  await expect(blank.getByText("Give your resbite a name.", { exact: true })).toBeVisible();
+  await blank.getByLabel("Name", { exact: true }).fill("Garden picnic");
+  await blank.getByRole("button", { name: "Save preview plan", exact: true }).click();
+  await expect(blank.getByText("Choose one or two categories.", { exact: true })).toBeVisible();
+  await blank.getByRole("checkbox", { name: "Natural", exact: true }).click();
+  await blank.getByRole("checkbox", { name: "Community", exact: true }).click();
+  await expect(blank.getByRole("checkbox", { name: "Creative", exact: true })).toBeDisabled();
+  await blank.getByLabel("Meeting place", { exact: true }).fill("Riverside park");
+  await blank.getByRole("button", { name: "Save preview plan", exact: true }).click();
+  await expect(blank.getByText("Garden picnic", { exact: true })).toBeVisible();
+  await blank.context().close();
+  console.log("PASS: preview blank custom event needs a name and one or two categories.");
+
   const user = {
     id: "11111111-1111-4111-8111-111111111111",
     aud: "authenticated",

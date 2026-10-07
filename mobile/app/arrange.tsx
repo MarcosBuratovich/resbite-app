@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   AppState,
   Alert,
-  Image,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -18,7 +17,7 @@ import { useNavigation, usePreventRemove } from "expo-router/react-navigation";
 import * as Location from "expo-location";
 import * as Crypto from "expo-crypto";
 import { MapPin, MessageCircle, CalendarDays } from "lucide-react-native";
-import { activities, activityArtwork } from "../src/services/catalogue";
+import { activities } from "../src/services/catalogue";
 import { useCatalogue } from "../src/state/useCatalogue";
 import { drafts, type PlanDraft } from "../src/services/drafts";
 import { planGateway } from "../src/services/plans";
@@ -34,7 +33,15 @@ import {
   s,
 } from "../src/design/ui";
 import { PreviewNotice } from "../src/design/Chrome";
-import { completeEventFields, fieldsFromActivity } from "../src/domain/events";
+import { EventDetailsFields } from "../src/design/EventDetailsFields";
+import { EventPictureView } from "../src/design/categories";
+import {
+  completeEventFields,
+  eventPicture,
+  fieldsFromActivity,
+  validateEventFields,
+  type EventFields,
+} from "../src/domain/events";
 import { PlanSchedule } from "../src/design/PlanSchedule";
 import { colors as c } from "../src/design/tokens";
 import { validatePlan } from "../src/domain/rules";
@@ -71,6 +78,12 @@ export default function Arrange() {
   );
   const [place, setPlace] = useState("");
   const [note, setNote] = useState("");
+  const [fields, setFields] = useState<EventFields>({
+    title: "",
+    description: "",
+    categories: [],
+  });
+  const needsPrefill = useRef(false);
   const [initial, setInitial] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [locating, setLocating] = useState(false);
@@ -82,24 +95,36 @@ export default function Arrange() {
     Intl.DateTimeFormat().resolvedOptions().timeZone,
   );
   const scope = preview ? "preview" : session?.user.id;
-  const draftKey = planId ? `edit-${planId}` : `new-${activity}`;
+  const draftKey = planId
+    ? `edit-${planId}`
+    : activity
+      ? `new-${activity}`
+      : "new";
   const [draftStatus, setDraftStatus] = useState("");
   const [draftReady, setDraftReady] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
   const stopped = useRef(false);
   const discarded = useRef(false);
   const draftSnapshot = useRef<PlanDraft | null>(null);
-  const catalogue = useCatalogue(activity ?? "", !planId);
-  const historicalActivity = activities.find(
-    (x) => x.id === (original?.activity_id ?? activity),
-  );
-  // Pending creates still need reconciliation if publication changed after a lost reply.
-  const a =
-    preview || planId || pending
-      ? (catalogue.items[0] ?? historicalActivity)
-      : catalogue.items[0];
+  const mode: "edit" | "idea" | "blank" = planId
+    ? "edit"
+    : activity
+      ? "idea"
+      : "blank";
+  const catalogue = useCatalogue(activity ?? "", mode === "idea");
+  const sourceId = original ? original.activity_id : (activity ?? null);
+  const historicalActivity = sourceId
+    ? activities.find((x) => x.id === sourceId)
+    : undefined;
+  // A new event from an idea needs its current publication; edits and unconfirmed saves do not.
+  const idea =
+    mode === "idea" && !preview && !pending
+      ? catalogue.items[0]
+      : (catalogue.items[0] ?? historicalActivity);
+  const snapshotOf = (f: EventFields, s: string, p: string, n: string) =>
+    JSON.stringify([f.title, f.description, f.categories, s, p, n]);
   const dirty =
-    initial !== null && initial !== JSON.stringify([start, place, note]);
+    initial !== null && initial !== snapshotOf(fields, start, place, note);
   const locked = busy || pending !== null;
 
   useEffect(() => {
@@ -117,11 +142,17 @@ export default function Arrange() {
   }, [error, latest, reduceMotion]);
   function applyPlan(plan: LocalPlan) {
     const text = localDateTime(new Date(plan.starts_at));
+    const planFields = {
+      title: plan.title,
+      description: plan.description,
+      categories: plan.categories,
+    };
     setOriginal(plan);
+    setFields(planFields);
     setStart(text);
     setPlace(plan.place_label);
     setNote(plan.note);
-    setInitial(JSON.stringify([text, plan.place_label, plan.note]));
+    setInitial(snapshotOf(planFields, text, plan.place_label, plan.note));
     setLatest(undefined);
     setError(null);
     setPending(null);
@@ -151,6 +182,7 @@ export default function Arrange() {
             ...completeEventFields(stored.original, fallback),
           };
           setOriginal(restoredOriginal);
+          setFields(completeEventFields(stored, fallback));
           const currentZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
           setStart(
             stored.zone !== currentZone && stored.startInstant
@@ -192,8 +224,11 @@ export default function Arrange() {
               "Only the organizer can edit an upcoming, active plan.",
             );
           applyPlan(plan);
+        } else if (mode === "blank") {
+          setInitial(snapshotOf(fields, start, place, note));
         } else {
-          setInitial(JSON.stringify([start, place, note]));
+          // An idea prefills once it is available (effect below).
+          needsPrefill.current = true;
         }
         if (active) setDraftReady(true);
       } catch {
@@ -210,18 +245,28 @@ export default function Arrange() {
     };
     // Draft restoration runs once per route/account, not when context refreshes.
   }, [planId, activity, scope, loadAttempt]);
+  useEffect(() => {
+    if (!needsPrefill.current || !draftReady || !idea) return;
+    needsPrefill.current = false;
+    const prefilled = fieldsFromActivity(idea);
+    setFields(prefilled);
+    setInitial(snapshotOf(prefilled, start, place, note));
+  }, [draftReady, idea]);
 
   draftSnapshot.current =
-    scope && (original ? original.activity_id : activity) && initial !== null
+    scope && initial !== null
       ? {
           schema: 1,
           scope,
           key: draftKey,
-          activityId: (original ? original.activity_id : activity) ?? null,
+          activityId: sourceId,
           planId,
           requestId: requestId.current,
           original,
           initial,
+          title: fields.title,
+          description: fields.description,
+          categories: fields.categories,
           start,
           place,
           note,
@@ -236,7 +281,7 @@ export default function Arrange() {
     await drafts.put(snapshot);
   }
   useEffect(() => {
-    if (!a || !draftReady || saved || busy || stopped.current) return;
+    if (initial === null || !draftReady || saved || busy || stopped.current) return;
     setDraftStatus("Saving draft on this device…");
     let active = true;
     const timer = setTimeout(() => {
@@ -270,7 +315,8 @@ export default function Arrange() {
     dirty,
     busy,
     saved,
-    Boolean(a),
+    initial,
+    fields,
   ]);
   useEffect(() => {
     const sub = AppState.addEventListener("change", (next) => {
@@ -390,16 +436,21 @@ export default function Arrange() {
   }
 
   async function save() {
-    if (saving.current || !a || locating) return;
+    if (saving.current || locating) return;
     if (
       !preview &&
-      !planId &&
+      mode === "idea" &&
       !pending &&
-      (catalogue.loading || catalogue.error || !catalogue.items.length)
+      (catalogue.loading || catalogue.error || !idea)
     )
       return;
     let write = pending;
     if (!write) {
+      const invalidEvent = validateEventFields(fields);
+      if (invalidEvent) {
+        setError(invalidEvent);
+        return;
+      }
       const date = parseLocalDateTime(start);
       const invalid = validatePlan(date?.toISOString() ?? "", place);
       if (invalid) {
@@ -410,19 +461,14 @@ export default function Arrange() {
         setError("This plan is no longer editable. Your draft is unchanged.");
         return;
       }
-      const fields = original
-        ? {
-            title: original.title,
-            description: original.description,
-            categories: original.categories,
-          }
-        : fieldsFromActivity(a);
       write = {
         id: original?.id ?? requestId.current,
-        activityId: original ? original.activity_id : a.id,
+        activityId: sourceId,
         version: original?.version,
         details: {
-          ...fields,
+          title: fields.title.trim(),
+          description: fields.description,
+          categories: fields.categories,
           starts_at: date!.toISOString(),
           time_zone: zone,
           place_label: place.trim(),
@@ -513,10 +559,10 @@ export default function Arrange() {
   }
 
   if (
+    mode === "idea" &&
     !preview &&
-    !planId &&
     !pending &&
-    (catalogue.loading || catalogue.error || !a)
+    (catalogue.loading || catalogue.error || !idea)
   )
     return (
       <SafeAreaView style={s.page}>
@@ -549,7 +595,7 @@ export default function Arrange() {
         </ScrollView>
       </SafeAreaView>
     );
-  if (loading || !draftReady || !a || (planId && !original))
+  if (loading || !draftReady || initial === null || (planId && !original))
     return (
       <SafeAreaView style={s.page}>
         <View style={s.body}>
@@ -564,7 +610,7 @@ export default function Arrange() {
             />
           ) : (
             <>
-              <ErrorNote message={error ?? "Choose an activity first."} />
+              <ErrorNote message={error ?? "We couldn’t open this plan. Try again."} />
               {
                 <Button
                   title="Try loading again"
@@ -619,18 +665,24 @@ export default function Arrange() {
           contentContainerStyle={[s.body, { paddingBottom: 28 }]}
         >
           {largeText && <PreviewNotice dismissible={false} />}
-          <Back label={planId ? "My resbites" : "Activity"} />
+          <Back
+            label={planId ? "My resbites" : mode === "idea" ? "Idea" : "Back"}
+          />
           <View style={styles.activity}>
-            <Image
-              source={activityArtwork(a)}
-              style={{ width: 66, height: 66 }}
-              resizeMode="contain"
+            <EventPictureView
+              picture={eventPicture({
+                activity_id: sourceId,
+                categories: fields.categories,
+              })}
+              size={66}
             />
             <View style={{ flex: 1, gap: 3 }}>
               <Copy style={s.muted}>
                 {planId ? "YOUR PLAN" : "LET’S GET TOGETHER"}
               </Copy>
-              <Title style={{ fontSize: 22, lineHeight: 28 }}>{a.title}</Title>
+              <Title style={{ fontSize: 22, lineHeight: 28 }}>
+                {fields.title.trim() || "Your resbite"}
+              </Title>
             </View>
           </View>
           <View style={{ gap: 8 }}>
@@ -643,6 +695,14 @@ export default function Arrange() {
                 : "A time, a place, and something to look forward to."}
             </Copy>
           </View>
+          <EventDetailsFields
+            value={fields}
+            onChange={setFields}
+            disabled={locked}
+            sourceTitle={
+              sourceId ? (idea?.title ?? historicalActivity?.title) : undefined
+            }
+          />
           <View style={styles.section}>
             <View style={styles.sectionHeading}>
               <CalendarDays size={19} color={c.aquaDark} />
@@ -723,6 +783,7 @@ export default function Arrange() {
               <Title style={styles.sectionTitle}>Latest saved plan</Title>
               {latest ? (
                 <>
+                  <Copy>{latest.title}</Copy>
                   <Copy>{new Date(latest.starts_at).toLocaleString()}</Copy>
                   <Copy>{latest.place_label}</Copy>
                   <Copy>{latest.note || "No note"}</Copy>

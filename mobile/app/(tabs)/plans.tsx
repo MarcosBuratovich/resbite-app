@@ -203,6 +203,7 @@ export default function Plans() {
         <Copy style={{ color: c.aquaDark }}>TIME WELL SPENT</Copy>
         <Title>Something to look forward to.</Title>
         <Copy style={s.muted}>Your plans, all in one place.</Copy>
+        <Button title="New resbite" onPress={() => router.push("/arrange")} />
         {(created === "1" || updated === "1") && (
           <Reveal>
             <View
