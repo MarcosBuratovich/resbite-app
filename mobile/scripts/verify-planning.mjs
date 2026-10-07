@@ -206,6 +206,66 @@ try {
   await blank.context().close();
   console.log("PASS: preview blank custom event needs a name and one or two categories.");
 
+  // An untouched editor must not leave a "Continue draft" card behind.
+  {
+    const noDraft = async (page) => {
+      await expect(page.getByRole("button", { name: "New resbite", exact: true })).toBeVisible();
+      await page.waitForTimeout(500);
+      await expect(page.getByRole("button", { name: "Continue draft", exact: true })).toHaveCount(0);
+    };
+    const open = async () => {
+      const page = await newPage();
+      await page.route("**/*.supabase.co/**", (route) => route.abort());
+      await page.goto(baseURL);
+      await page.getByText("Preview the design", { exact: true }).click();
+      await page.getByRole("tab", { name: "My resbites", exact: true }).click();
+      await page.getByRole("button", { name: "New resbite", exact: true }).click();
+      await expect(page.getByLabel("Name", { exact: true })).toBeVisible();
+      return page;
+    };
+    const back = (page) => page.getByRole("button", { name: "Back", exact: true }).click();
+
+    const untouched = await open();
+    await untouched.waitForTimeout(1200); // longer than the autosave delay
+    await back(untouched);
+    await noDraft(untouched);
+    await untouched.context().close();
+    console.log("PASS: an untouched editor leaves no draft.");
+
+    const reverted = await open();
+    await reverted.getByLabel("Name", { exact: true }).fill("Garden picnic");
+    await expect(reverted.getByText("Draft saved on this device.", { exact: true })).toBeVisible();
+    await reverted.waitForTimeout(600);
+    await reverted.getByLabel("Name", { exact: true }).fill("");
+    await reverted.waitForTimeout(1200);
+    await back(reverted); // untouched again: no leave prompt expected
+    await noDraft(reverted);
+    await reverted.context().close();
+    console.log("PASS: an edit that is undone removes its stale draft.");
+
+    const kept = await open();
+    await kept.getByLabel("Name", { exact: true }).fill("Garden picnic");
+    await expect(kept.getByText("Draft saved on this device.", { exact: true })).toBeVisible();
+    kept.once("dialog", (dialog) => dialog.accept());
+    await back(kept);
+    await expect(kept.getByRole("button", { name: "Continue draft", exact: true })).toBeVisible();
+    await kept.getByRole("button", { name: "Continue draft", exact: true }).click();
+    await expect(kept.getByLabel("Name", { exact: true })).toHaveValue("Garden picnic");
+    await kept.waitForTimeout(1200);
+    // The resumed draft still differs from its baseline, so it is kept when left unchanged.
+    kept.once("dialog", (dialog) => dialog.accept());
+    await back(kept);
+    await expect(kept.getByRole("button", { name: "Continue draft", exact: true })).toBeVisible();
+    await kept.getByRole("button", { name: "Continue draft", exact: true }).click();
+    // Returning a restored draft to its baseline removes it.
+    await kept.getByLabel("Name", { exact: true }).fill("");
+    await kept.waitForTimeout(1200);
+    await back(kept);
+    await noDraft(kept);
+    await kept.context().close();
+    console.log("PASS: a kept draft resumes and survives unchanged; reverting it removes the card.");
+  }
+
   const user = {
     id: "11111111-1111-4111-8111-111111111111",
     aud: "authenticated",

@@ -47,6 +47,7 @@ import {
 } from "../src/domain/events";
 import { PlanSchedule } from "../src/design/PlanSchedule";
 import { colors as c } from "../src/design/tokens";
+import { draftAutosaveAction } from "../src/domain/draftAutosave";
 import { validatePlan } from "../src/domain/rules";
 import {
   canEditPlan,
@@ -119,6 +120,9 @@ export default function Arrange() {
   const stopped = useRef(false);
   const discarded = useRef(false);
   const draftSnapshot = useRef<PlanDraft | null>(null);
+  // A draft was written or restored in this editor session; counts writes so a removal never outlives a newer put.
+  const persisted = useRef(false);
+  const draftWrites = useRef(0);
   const mode: "edit" | "idea" | "blank" = planId
     ? "edit"
     : activity
@@ -176,6 +180,7 @@ export default function Arrange() {
     setDraftReady(false);
     setError(null);
     stopped.current = false;
+    persisted.current = false;
     void (async () => {
       try {
         if (!scope) throw new Error("Sign in to resume your draft.");
@@ -184,6 +189,7 @@ export default function Arrange() {
         );
         if (!active) return;
         if (stored) {
+          persisted.current = true;
           requestId.current = stored.requestId;
           // Saves recorded before custom events lack event fields; fill them from the idea.
           const legacy = stored.activityId
@@ -294,11 +300,40 @@ export default function Arrange() {
   async function keepDraft(snapshot = draftSnapshot.current) {
     if (!snapshot) throw new Error("Draft unavailable");
     await drafts.put(snapshot);
+    persisted.current = true;
+    draftWrites.current += 1;
   }
   useEffect(() => {
     if (initial === null || !draftReady || saved || busy || stopped.current) return;
-    setDraftStatus("Saving draft on this device…");
+    const action = draftAutosaveAction({ dirty, pending, persisted: persisted.current });
+    if (action === "skip") return;
     let active = true;
+    if (action === "remove") {
+      const timer = setTimeout(() => {
+        if (saving.current || stopped.current || !scope) return;
+        const writes = draftWrites.current;
+        void drafts
+          .remove(scope, draftKey)
+          .then(() => {
+            if (draftWrites.current === writes) persisted.current = false;
+            if (active) {
+              setDraftStatus("");
+              setDraftError(null);
+            }
+          })
+          .catch(() => {
+            if (active)
+              setDraftError(
+                "Couldn’t update your draft on this device. Keep this screen open and try again.",
+              );
+          });
+      }, 350);
+      return () => {
+        active = false;
+        clearTimeout(timer);
+      };
+    }
+    setDraftStatus("Saving draft on this device…");
     const timer = setTimeout(() => {
       if (saving.current || stopped.current) return;
       void keepDraft()
@@ -795,6 +830,21 @@ export default function Arrange() {
               title="Retry keeping draft"
               secondary
               onPress={() => {
+                if (
+                  scope &&
+                  draftAutosaveAction({ dirty, pending, persisted: persisted.current }) === "remove"
+                ) {
+                  const writes = draftWrites.current;
+                  void drafts
+                    .remove(scope, draftKey)
+                    .then(() => {
+                      if (draftWrites.current === writes) persisted.current = false;
+                      setDraftError(null);
+                      setDraftStatus("");
+                    })
+                    .catch(() => {});
+                  return;
+                }
                 void keepDraft()
                   .then(() => {
                     setDraftError(null);
