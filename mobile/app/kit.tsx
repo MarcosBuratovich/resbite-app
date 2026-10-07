@@ -135,6 +135,12 @@ function Gallery() {
             now,
           )}
         />
+        <CoverCard
+          picture={{ kind: "placeholder", category: "uplifting" }}
+          title="It’s on!"
+          startsAt={startsAt}
+          place="Riverside park"
+        />
         <AvatarStack names={["Alex", "Bea", "Cai", "Dee"]} label="4 going" onPress={() => setPressed("guests")} />
         <Segmented
           label="Show"

@@ -33,6 +33,7 @@ import { motionPolicy } from "../domain/rules";
 import type { CategoryKey } from "../domain/categories";
 import type { EventPicture } from "../domain/events";
 import { dateBadgeParts, timeText, type CoverCardPart } from "../domain/eventView";
+import { spokenDateTime } from "../domain/schedule";
 import { progressLabel } from "../domain/steps";
 
 // UX1 component kit (spec "Component kit"). States use aria-* props: react-native-web
@@ -332,8 +333,9 @@ export function CoverCard({
   heading?: boolean;
 }) {
   const largeText = useLargeText();
+  const [focused, setFocused] = React.useState(false);
   const parts = Boolean(onPressPart && partLabels);
-  const part = (key: CoverCardPart, children: React.ReactNode, style?: StyleProp<ViewStyle>) =>
+  const part = (key: CoverCardPart, children: React.ReactNode, style?: StyleProp<ViewStyle>, spoken?: string) =>
     parts ? (
       <Pressable
         key={key}
@@ -345,7 +347,7 @@ export function CoverCard({
         {children}
       </Pressable>
     ) : (
-      <View key={key} style={style}>
+      <View key={key} accessible={spoken !== undefined} accessibilityLabel={spoken} aria-label={spoken} style={style}>
         {children}
       </View>
     );
@@ -375,6 +377,11 @@ export function CoverCard({
             <Copy style={styles.cardLine}>{time || "Date to choose"}</Copy>
           </>,
           [styles.dateRow, largeText && styles.stacked],
+          // The badge is hidden from assistive tech. Pressable and Review modes say the date in
+          // their labels; the static (heading) card says it here.
+          !onPress && startsAt && !Number.isNaN(new Date(startsAt).getTime())
+            ? spokenDateTime(new Date(startsAt), new Date())
+            : undefined,
         )}
         {part(
           "place",
@@ -402,8 +409,21 @@ export function CoverCard({
   );
   if (onPress)
     return (
-      <ScalePressable outerStyle={styles.card} accessibilityRole="button" accessibilityLabel={label} onPress={onPress}>
+      <ScalePressable
+        outerStyle={styles.card}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        onPress={onPress}
+        onFocus={(e) => {
+          // Keyboard focus only (focus-visible); the ring sits inside the card so overflow cannot clip it.
+          const node = e.target as unknown as { matches?: (selector: string) => boolean };
+          setFocused(Platform.OS === "web" ? Boolean(node.matches?.(":focus-visible")) : false);
+        }}
+        onBlur={() => setFocused(false)}
+        style={({ pressed }) => [pressed && { opacity: 0.9 }]}
+      >
         {content}
+        {focused && <View testID="card-focus" style={styles.cardFocus} />}
       </ScalePressable>
     );
   return <View style={styles.card}>{content}</View>;
@@ -495,6 +515,7 @@ function Progress({ step, total }: { step: number; total: number }) {
       aria-valuemin={1}
       aria-valuemax={total}
       aria-valuenow={step}
+      aria-valuetext={progressLabel(step, total)}
       style={styles.progress}
     >
       {Array.from({ length: total }, (_, i) => (
@@ -700,6 +721,7 @@ const styles = StyleSheet.create({
     borderColor: "#EFEAF0",
     boxShadow: depth.card,
   },
+  cardFocus: { ...StyleSheet.absoluteFill, pointerEvents: "none", borderRadius: r.card, borderWidth: 3, borderColor: c.aquaDark },
   picture: { width: "100%", overflow: "hidden" },
   panel: { padding: space.l, gap: space.s },
   part: { minHeight: 44, borderRadius: 12, justifyContent: "center" },

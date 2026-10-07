@@ -75,6 +75,15 @@ try {
       "Edit vibe, Natural and Community",
     ])
       await expect(page.getByRole("button", { name, exact: true })).toBeVisible();
+    // Static CoverCard (heading mode): the badge is hidden, so the date row says the date.
+    await expect(page.getByRole("heading", { name: "It’s on!", exact: true })).toBeVisible();
+    await expect(page.getByLabel("Saturday 10 October 2099 at 10:00", { exact: true })).toHaveCount(1);
+    // CoverCard focus: keyboard focus draws an in-card ring that overflow cannot clip.
+    await page.keyboard.press("Tab");
+    await card.focus();
+    await page.keyboard.press("Shift+Tab");
+    await page.keyboard.press("Tab");
+    await expect(card.getByTestId("card-focus")).toHaveCount(1);
     // AvatarStack: up to three initials, then a count.
     await expect(page.getByRole("button", { name: "4 going", exact: true })).toContainText("+1");
     // Segmented: a radio group with one checked option.
@@ -93,6 +102,10 @@ try {
     // StepScreen: progress, a big question title, Previous step and Close, and the pinned pill.
     await page.getByRole("button", { name: "Show step screen", exact: true }).click();
     await expect(page.getByRole("progressbar", { name: "Step 2 of 4", exact: true })).toBeVisible();
+    await expect(page.getByRole("progressbar", { name: "Step 2 of 4", exact: true })).toHaveAttribute(
+      "aria-valuetext",
+      "Step 2 of 4",
+    );
     await expect(page.getByRole("heading", { name: "When?", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Previous step", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Next", exact: true })).toBeVisible();
