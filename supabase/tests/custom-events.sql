@@ -56,6 +56,8 @@ do $$ begin
  begin perform public.create_plan_v2('a2000000-0000-4000-8000-000000000004','Walk','',array['wellness'],null,now()+interval '1 day','UTC','Park',''); raise exception 'Unknown category accepted'; exception when check_violation then null; end;
  begin perform public.create_plan_v2('a2000000-0000-4000-8000-000000000004','Walk','',array['creative',null],null,now()+interval '1 day','UTC','Park',''); raise exception 'Null category accepted'; exception when check_violation then null; end;
  begin perform public.create_plan_v2('a2000000-0000-4000-8000-000000000004','Walk','',null,null,now()+interval '1 day','UTC','Park',''); raise exception 'Missing categories accepted'; exception when not_null_violation then null; end;
+ begin perform public.create_plan_v2('a2000000-0000-4000-8000-000000000004',null,'',array['creative'],'ce-idea',now()+interval '1 day','UTC','Park',''); raise exception 'Idea filled a missing title'; exception when not_null_violation then null; end;
+ begin perform public.create_plan_v2('a2000000-0000-4000-8000-000000000004','Walk','',null,'ce-idea',now()+interval '1 day','UTC','Park',''); raise exception 'Idea filled missing categories'; exception when not_null_violation then null; end;
  begin perform public.create_plan_v2('a2000000-0000-4000-8000-000000000004','Walk','',array['creative'],null,now()-interval '1 hour','UTC','Park',''); raise exception 'Past start accepted'; exception when invalid_parameter_value then null; end;
 end $$;
 -- The legacy create_plan keeps working: title and categories come from its idea.

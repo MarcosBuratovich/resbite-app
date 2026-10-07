@@ -110,6 +110,7 @@ begin
   end if;
   return p_id;
  end if;
+ if p_title is null or p_categories is null then raise exception 'Title and categories required' using errcode='23502'; end if;
  if p_start is null or p_start<=now() or not exists(select 1 from pg_catalog.pg_timezone_names where name=p_zone) then raise exception 'Invalid future schedule' using errcode='22023'; end if;
  if p_activity is not null and not exists(select 1 from public.activities where id=p_activity and published) then raise exception 'Activity unavailable' using errcode='22023'; end if;
  insert into public.plans(id,owner_id,activity_id,title,description,categories,starts_at,time_zone,place_label,note,latitude,longitude)
