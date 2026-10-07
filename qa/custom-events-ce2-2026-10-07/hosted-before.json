@@ -1,0 +1,31 @@
+{
+  "project": "ewcsgvhuojxdpaspwsrx",
+  "captured_at": "2026-10-07T17:30:57.215287+00:00",
+  "captured_by": "read-only Supabase MCP queries (role postgres)",
+  "migrations": [
+    "20260917191323 resbite_private_tester_foundation",
+    "20260923151512 account_access_status",
+    "20260923151515 atomic_registration_details",
+    "20260923154040 activity_catalogue_details",
+    "20260924150824 avatar_revision_compare_and_swap",
+    "20261007154825 custom_events"
+  ],
+  "plans": 2,
+  "plans_started_from_scratch": 1,
+  "plan_cover_columns": null,
+  "buckets": [{"id": "profile-photos", "public": false, "file_size_limit": 2097152, "allowed_mime_types": ["image/jpeg", "image/png", "image/webp"]}],
+  "storage_object_policies": {
+    "resbite_avatar_delete": "DELETE to authenticated using false",
+    "resbite_avatar_insert": "INSERT, bucket profile-photos, own uid folder, eligible",
+    "resbite_avatar_read": "SELECT, bucket profile-photos, readable profile, own or current avatar",
+    "resbite_avatar_update": "UPDATE, bucket profile-photos, own uid folder, eligible",
+    "all_bucket_scoped": true
+  },
+  "owners": {"public.plans": "postgres", "storage.objects": "supabase_storage_admin"},
+  "roster_enabled": 1,
+  "advisors": {
+    "security": "INFO rls_enabled_no_policy x4 (intentional default-deny private tables)",
+    "performance": "INFO unused_index x4 (plans_owner_idx, device_endpoints_user_idx, notification_outbox_pending_idx, notification_outbox_recipient_idx); INFO auth_db_connections_absolute"
+  },
+  "note": "CE1 schema rollback no longer applies: a plan with a null activity_id exists (owner acceptance testing)."
+}

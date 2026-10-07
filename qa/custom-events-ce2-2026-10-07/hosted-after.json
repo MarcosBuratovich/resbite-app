@@ -1,0 +1,54 @@
+{
+  "project": "ewcsgvhuojxdpaspwsrx",
+  "captured_at": "2026-10-07T17:59:11Z",
+  "captured_by": "read-only Supabase MCP queries (role postgres) immediately after apply_migration",
+  "applied": {
+    "local_file": "supabase/migrations/20261007200000_plan_covers.sql",
+    "sha256": "4d0bc9e2d4ddabf70b31bc6e87bd795b755399e72b81ada338643a21a2ba8086",
+    "mcp_name": "plan_covers",
+    "hosted_version": "20261007175855"
+  },
+  "migrations": [
+    "20260917191323 resbite_private_tester_foundation",
+    "20260923151512 account_access_status",
+    "20260923151515 atomic_registration_details",
+    "20260923154040 activity_catalogue_details",
+    "20260924150824 avatar_revision_compare_and_swap",
+    "20261007154825 custom_events",
+    "20261007175855 plan_covers"
+  ],
+  "plans": {"count": 2, "with_cover": 0, "max_cover_revision": 0},
+  "plan_cover_columns": [
+    {"name": "cover_path", "type": "text", "nullable": true, "default": null, "check": "cover_path IS NULL OR length(cover_path) <= 300"},
+    {"name": "cover_revision", "type": "bigint", "nullable": false, "default": "0", "check": "cover_revision >= 0"}
+  ],
+  "buckets_added": [{"id": "plan-covers", "public": false, "file_size_limit": 2097152, "allowed_mime_types": ["image/jpeg"]}],
+  "plan_cover_objects": 0,
+  "storage_object_policies": {
+    "all": ["resbite_avatar_delete", "resbite_avatar_insert", "resbite_avatar_read", "resbite_avatar_update", "resbite_cover_insert", "resbite_cover_read", "resbite_cover_update"],
+    "resbite_cover_insert": "INSERT to authenticated",
+    "resbite_cover_read": "SELECT to authenticated",
+    "resbite_cover_update": "UPDATE to authenticated",
+    "cover_delete_policy": "none (clients only detach)"
+  },
+  "function_execute": {
+    "public.set_plan_cover_if_current(uuid,text,text,bigint)": {"anon": false, "authenticated": true, "service_role": false},
+    "private.set_plan_cover_if_current(uuid,text,text,bigint)": {"anon": false, "authenticated": true, "service_role": false},
+    "private.track_cover_revision()": {"anon": false, "authenticated": false, "service_role": false},
+    "private.redact_deleting_owner_plan()": {"authenticated": false}
+  },
+  "function_settings": {
+    "public.set_plan_cover_if_current": "security invoker, search_path=''",
+    "private.set_plan_cover_if_current": "security definer, search_path=''",
+    "private.track_cover_revision": "security invoker, search_path=''",
+    "private.redact_deleting_owner_plan": "security invoker, search_path=''"
+  },
+  "plans_triggers": ["plans_fill_from_activity", "plans_redact_deleting_owner", "plans_track_cover_revision"],
+  "redact_deleting_owner_plan_detaches_cover": true,
+  "roster_enabled": 1,
+  "advisors": {
+    "security": "INFO rls_enabled_no_policy x4 (device_endpoints, invitations, notification_outbox, tester_roster) - unchanged",
+    "performance": "INFO unused_index x4 (plans_owner_idx, device_endpoints_user_idx, notification_outbox_pending_idx, notification_outbox_recipient_idx); INFO auth_db_connections_absolute - unchanged",
+    "new_warn_or_error": false
+  }
+}
