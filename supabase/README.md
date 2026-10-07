@@ -74,7 +74,7 @@ Review [photo cleanup readiness](../qa/photo-cleanup-readiness.md), [retention a
 
 Two triggers on `plans` replace copying function bodies:
 
-- `plans_fill_from_activity` fills title, description and categories from the idea, so the legacy `create_plan` keeps working.
+- `plans_fill_from_activity` fills the title and categories from the idea and leaves the description empty (the column default), so the legacy `create_plan` keeps working.
 - `plans_redact_deleting_owner` blanks event text (title `Resbite`, empty description) while the owner is being deleted.
 
 `activities.categories` holds one or two keys for each idea. A published idea must have valid categories (`activities_published_categories`), so published rows cannot be inserted without them. The historical scripts `qa/catalogue-*/verify-local.py` and `publish.sql` replay migrations and then publish; they now fail against the full migration set for that reason.
