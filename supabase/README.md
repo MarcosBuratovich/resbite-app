@@ -79,6 +79,8 @@ Two triggers on `plans` replace copying function bodies:
 
 `activities.categories` holds one or two keys for each idea. A published idea must have valid categories (`activities_published_categories`), so published rows cannot be inserted without them. The historical scripts `qa/catalogue-*/verify-local.py` and `publish.sql` replay migrations and then publish; they now fail against the full migration set for that reason.
 
+Run `../scripts/test-database.sh --hosted-baseline` before applying a migration to the hosted project. It applies only the migrations listed in `tests/hosted-baseline/migrations.txt`, which is the record of which local files are on the hosted project and their hosted versions.
+
 ## Custom events (CE2) — deployed 7 October 2026
 
 `20261007200000_plan_covers.sql` is deployed (hosted version `20261007175855`) and owner-accepted on the iPhone. See the [rollout record](../qa/custom-events-ce2-2026-10-07/README.md) for approval, after-state and rollback SQL.
@@ -91,5 +93,3 @@ Two triggers on `plans` replace copying function bodies:
 - `set_plan_cover_if_current(p_plan, p_path, p_expected_path, p_expected_revision)` returns jsonb `{cover_path, cover_revision}`. `p_path` null removes the cover. It is `private` SECURITY DEFINER with a `public` SECURITY INVOKER façade, executable by `authenticated` only. It compares path and revision with the current plan (compare-and-swap) and attaches. An exact retry of the same path at the exact next revision is acknowledged (a lost reply); any other mismatch is stale. Error codes: `22023` invalid revision (null or negative) or plan not active or not in the future; `42501` not the owner, or the path is not the caller's own uploaded `<uid>/<plan>/<name>.jpg` object that exists in the bucket; `40001` stale change.
 - `plans_track_cover_revision` (BEFORE INSERT OR UPDATE, `private.track_cover_revision`) owns the counter: it is 0 on insert, increases by one whenever `cover_path` changes, and otherwise stays as it was.
 - `redact_deleting_owner_plan` (the `plans_redact_deleting_owner` trigger) now also sets `cover_path` to null while the owner is being deleted. Removing the owner's `plan-covers` objects is still the deletion worker's job; see the [recovery ledger](../qa/deletion-recovery-ledger.md).
-
-Run `../scripts/test-database.sh --hosted-baseline` before applying a migration to the hosted project. It applies only the migrations listed in `tests/hosted-baseline/migrations.txt`, which is the record of which local files are on the hosted project and their hosted versions.
