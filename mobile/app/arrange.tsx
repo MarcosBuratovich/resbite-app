@@ -595,15 +595,16 @@ export default function Arrange() {
         </ScrollView>
       </SafeAreaView>
     );
+  const preparing = loading || (initial === null && needsPrefill.current);
   if (loading || !draftReady || initial === null || (planId && !original))
     return (
       <SafeAreaView style={s.page}>
         <View style={s.body}>
           <Back />
           <Title>
-            {loading ? "Getting your plan…" : "Let’s take another look."}
+            {preparing ? "Getting your plan…" : "Let’s take another look."}
           </Title>
-          {loading ? (
+          {preparing ? (
             <ActivityIndicator
               accessibilityLabel="Loading plan"
               color={c.aquaDark}
