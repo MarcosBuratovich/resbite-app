@@ -1,6 +1,6 @@
 # UX refresh: cover cards, step-by-step creation and event-app ideas
 
-Date: 7 October 2026. Status: **draft for owner review.** Inputs:
+Date: 7 October 2026. Status: **approved by the owner on 7 October 2026**, including UX-P1 to UX-P6. Inputs:
 - the owner's choices in the visual-companion mockups (7 October 2026);
 - the [event creation app benchmark](../../../reports/Event%20creation%20app%20benchmark.md), which compares Apple Invites, Luma and WhatsApp events;
 - a map of the current event-screen code.
@@ -20,7 +20,7 @@ The owner finds today's screens wordy and form-like: "too many text and button t
 | UX-D3 | Starting from an idea pre-fills the steps and **opens on the Review card**. Editing a saved resbite also opens on the Review card. |
 | UX-D4 | The benchmark's recommendations are folded into this work (owner: "with all the new info from the other event apps"). |
 
-**Proposed defaults.** The owner asked for the plan before these were settled. Each is the recommended option, and each can be changed in the spec review:
+**Approved defaults.** The owner approved these with the spec on 7 October 2026 ("approved … and also aprove the 6 choices"):
 
 | # | Proposal |
 |---|---|
