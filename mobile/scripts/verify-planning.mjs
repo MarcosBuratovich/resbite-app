@@ -170,6 +170,9 @@ try {
     let savedPlan = {
       id: "22222222-2222-4222-8222-222222222222",
       activity_id: "coffee-together",
+      title: "Coffee evening",
+      description: "",
+      categories: ["community", "uplifting"],
       owner_id: user.id,
       starts_at: "2099-03-01T15:00:00Z",
       time_zone: "UTC",
@@ -260,13 +263,16 @@ try {
             : [savedPlan],
         );
       }
-      if (url.pathname === "/rest/v1/rpc/change_plan") {
+      if (url.pathname === "/rest/v1/rpc/change_plan_v2") {
         const write = request.postDataJSON();
         writes.push(write);
         if (writes.length === 1) {
           if (scenario === "lost_reply") {
             savedPlan = {
               ...savedPlan,
+              title: write.p_title,
+              description: write.p_description,
+              categories: write.p_categories,
               starts_at: write.p_start,
               time_zone: write.p_zone,
               place_label: write.p_place,
@@ -291,6 +297,9 @@ try {
         assert.equal(write.p_version, savedPlan.version);
         savedPlan = {
           ...savedPlan,
+          title: write.p_title,
+          description: write.p_description,
+          categories: write.p_categories,
           starts_at: write.p_start,
           time_zone: write.p_zone,
           place_label: write.p_place,
@@ -306,6 +315,7 @@ try {
       await expect(
         fixture.getByText("Original café", { exact: true }),
       ).toBeVisible();
+      await expect(fixture.getByText("Coffee evening", { exact: true })).toBeVisible();
       await expect(
         fixture.getByText("Alex · pending", { exact: true }),
       ).toBeVisible();

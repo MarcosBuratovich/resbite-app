@@ -116,6 +116,9 @@ async function fixture(
       return reply({
         id: "22222222-2222-4222-8222-222222222222",
         activity_id: "coffee-together",
+        title: "Coffee evening",
+        description: "Bring a book",
+        categories: ["community", "uplifting"],
         owner_id: "other",
         starts_at: "2099-03-01T15:00:00Z",
         status: "active",

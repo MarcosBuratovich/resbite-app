@@ -10,6 +10,9 @@ const snapshot: RsvpSnapshot = {
   plan: {
     id: "plan",
     activity_id: "walk",
+    title: "Walk and talk",
+    description: "",
+    categories: ["physical", "community"],
     starts_at: "2099-01-01T00:00:00Z",
     place_label: "Park",
     note: "",

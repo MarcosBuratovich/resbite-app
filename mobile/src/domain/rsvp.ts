@@ -1,4 +1,4 @@
-import type { LocalPlan } from "../state/AppState";
+import type { Plan as LocalPlan } from "./plans";
 export type Response = "accepted" | "declined" | "withdrawn";
 export type RsvpSnapshot = {
   plan: LocalPlan;

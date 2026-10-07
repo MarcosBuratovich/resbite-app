@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createDraftStore, type PlanDraft } from "./draftStore";
-import { reconcilePlan, PlanSaveError } from "../domain/plans";
+import { reconcilePlan, PlanSaveError, type Plan, type PlanWrite } from "../domain/plans";
 const fixture = (scope = "account-a"): PlanDraft => ({
   schema: 1,
   scope,
@@ -72,17 +72,20 @@ test("failed persistence rejects and a later retry can succeed", async () => {
   await drafts.put(fixture());
   assert.equal((await drafts.list("account-a")).length, 1);
 });
-const write = {
+const write: PlanWrite = {
   id: "request-1",
   activityId: "coffee",
   details: {
+    title: "Coffee together",
+    description: "",
+    categories: ["community", "uplifting"],
     starts_at: "2099-01-01T12:00:00Z",
     time_zone: "UTC",
     place_label: "Café",
     note: "By the window",
   },
 };
-const plan = {
+const plan: Plan = {
   id: write.id,
   activity_id: "coffee",
   ...write.details,
@@ -94,7 +97,7 @@ test("restart recovery acknowledges a committed create or edit without another w
     throw Error("Must not write");
   };
   await reconcilePlan(
-    { read: async () => plan, create: unexpected, update: unexpected },
+    { read: async () => plan, create: unexpected, update: unexpected, cancel: unexpected },
     write,
   );
   await reconcilePlan(
@@ -102,6 +105,7 @@ test("restart recovery acknowledges a committed create or edit without another w
       read: async () => ({ ...plan, version: 3 }),
       create: unexpected,
       update: unexpected,
+      cancel: unexpected,
     },
     { ...write, version: 2 },
   );
@@ -115,6 +119,9 @@ test("restart recovery retries an absent create with the same identifier and pay
         sent = w;
       },
       update: async () => {
+        throw Error("wrong operation");
+      },
+      cancel: async () => {
         throw Error("wrong operation");
       },
     },
@@ -133,6 +140,7 @@ test("restart recovery preserves conflicts and cannot write when reconciliation 
         read: async () => ({ ...plan, version: 3, note: "Changed" }),
         create: mutate,
         update: mutate,
+        cancel: mutate,
       },
       write,
     ),
@@ -146,6 +154,7 @@ test("restart recovery preserves conflicts and cannot write when reconciliation 
         },
         create: mutate,
         update: mutate,
+        cancel: mutate,
       },
       write,
     ),
@@ -217,4 +226,24 @@ test("corrupt event fields are rejected rather than half-restored", async () => 
     values.set("resbite.drafts.v1.account-a", JSON.stringify([{ ...fixture(), ...corrupt }]));
     await assert.rejects(createDraftStore(storage).list("account-a"), /Could not read saved drafts/);
   }
+});
+
+test("an unconfirmed save from scratch survives restart with its event fields", async () => {
+  const { storage } = memory();
+  const pending: PlanWrite = {
+    id: "request-1",
+    activityId: null,
+    details: {
+      title: "Garden picnic",
+      description: "Bring a blanket",
+      categories: ["natural", "community"],
+      starts_at: "2099-01-01T12:00:00.000Z",
+      time_zone: "UTC",
+      place_label: "Park",
+      note: "",
+    },
+  };
+  await createDraftStore(storage).put({ ...fixture(), key: "new", activityId: null, pending });
+  const [restored] = await createDraftStore(storage).list("account-a");
+  assert.deepEqual(restored.pending, pending);
 });

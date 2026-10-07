@@ -5,6 +5,7 @@ import {
   parseLocalDateTime,
   PlanSaveError,
   writePlan,
+  type Plan,
   type PlanGateway,
   type PlanWrite,
 } from "./plans.ts";
@@ -72,9 +73,12 @@ test("reduce motion removes displacement and scaling but retains feedback", () =
   assert.ok(motionPolicy(true).duration <= 150);
 });
 
-const plan = {
+const plan: Plan = {
   id: "plan-1",
   activity_id: "coffee-together",
+  title: "Coffee together",
+  description: "",
+  categories: ["community", "uplifting"],
   owner_id: "owner",
   status: "active",
   version: 3,
@@ -88,6 +92,9 @@ const change: PlanWrite = {
   activityId: plan.activity_id,
   version: plan.version,
   details: {
+    title: "Coffee together",
+    description: "",
+    categories: ["community", "uplifting"],
     starts_at: plan.starts_at,
     time_zone: "UTC",
     place_label: "The park",
@@ -120,6 +127,7 @@ test("a lost edit response is confirmed by matching saved details and version", 
     create: async () => {
       throw new Error("must not create");
     },
+    cancel: async () => {},
     update: async () => {
       updates++;
       throw { code: "40001" };
@@ -136,6 +144,7 @@ test("conflicting or cancelled plans cannot be silently overwritten or acknowled
   ]) {
     const gateway: PlanGateway = {
       create: async () => {},
+      cancel: async () => {},
       update: async () => {
         throw { code: "40001" };
       },
@@ -161,6 +170,7 @@ test("unknown save failures remain uncertain; denied access is a definite failur
           create: async () => {
             throw error;
           },
+          cancel: async () => {},
           update: async () => {},
           read: async () => null,
         },

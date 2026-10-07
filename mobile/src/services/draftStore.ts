@@ -1,5 +1,5 @@
 import type { KeyStore } from "./secureChunks";
-import type { LocalPlan } from "../state/AppState";
+import type { Plan as LocalPlan } from "../domain/plans";
 import type { PlanWrite } from "../domain/plans";
 import { isCategoryKey, type CategoryKey } from "../domain/categories";
 

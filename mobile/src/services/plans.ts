@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import type { LocalPlan } from "../state/AppState";
+import type { Plan } from "../domain/plans";
 import type { PlanGateway } from "../domain/plans";
 
 export async function withDeadline<T>(
@@ -14,26 +14,30 @@ export async function withDeadline<T>(
   }
 }
 
+const planColumns =
+  "id,activity_id,title,description,categories,starts_at,time_zone,place_label,note,status,version,owner_id";
+
 export const planGateway: PlanGateway = {
   async read(id) {
     const { data, error } = await withDeadline((signal) =>
       supabase
         .from("plans")
-        .select(
-          "id,activity_id,starts_at,time_zone,place_label,note,status,version,owner_id",
-        )
+        .select(planColumns)
         .eq("id", id)
         .abortSignal(signal)
         .maybeSingle(),
     );
     if (error) throw error;
-    return data as LocalPlan | null;
+    return data as Plan | null;
   },
   async create({ id, activityId, details }) {
     const { error } = await withDeadline((signal) =>
       supabase
-        .rpc("create_plan", {
+        .rpc("create_plan_v2", {
           p_id: id,
+          p_title: details.title,
+          p_description: details.description,
+          p_categories: details.categories,
           p_activity: activityId,
           p_start: details.starts_at,
           p_zone: details.time_zone,
@@ -47,14 +51,36 @@ export const planGateway: PlanGateway = {
   async update({ id, version, details }) {
     const { error } = await withDeadline((signal) =>
       supabase
-        .rpc("change_plan", {
+        .rpc("change_plan_v2", {
           p_plan: id,
           p_version: version,
+          p_title: details.title,
+          p_description: details.description,
+          p_categories: details.categories,
           p_start: details.starts_at,
           p_zone: details.time_zone,
           p_place: details.place_label,
           p_note: details.note,
           p_cancel: false,
+        })
+        .abortSignal(signal),
+    );
+    if (error) throw error;
+  },
+  async cancel({ id, version }) {
+    const { error } = await withDeadline((signal) =>
+      supabase
+        .rpc("change_plan_v2", {
+          p_plan: id,
+          p_version: version,
+          p_title: null,
+          p_description: null,
+          p_categories: null,
+          p_start: null,
+          p_zone: null,
+          p_place: null,
+          p_note: null,
+          p_cancel: true,
         })
         .abortSignal(signal),
     );

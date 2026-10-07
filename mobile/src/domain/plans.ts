@@ -1,14 +1,27 @@
-import type { LocalPlan } from "../state/AppState";
+import type { CategoryKey } from "./categories";
+import type { EventFields } from "./events";
 
-export type PlanDetails = Pick<
-  LocalPlan,
-  "starts_at" | "place_label" | "note"
-> & {
-  time_zone: string;
+/** A resbite as stored on the server (CE1: it carries its own event text). */
+export type Plan = {
+  id: string;
+  activity_id: string | null;
+  title: string;
+  description: string;
+  categories: CategoryKey[];
+  starts_at: string;
+  place_label: string;
+  note: string;
+  status: string;
+  version: number;
+  owner_id?: string;
+  time_zone?: string;
 };
 
+export type PlanDetails = EventFields &
+  Pick<Plan, "starts_at" | "place_label" | "note"> & { time_zone: string };
+
 export function canEditPlan(
-  plan: LocalPlan,
+  plan: Plan,
   userId?: string,
   preview = false,
   now = Date.now(),
@@ -34,11 +47,14 @@ export function parseLocalDateTime(text: string): Date | null {
     : null;
 }
 
-export function samePlanDetails(
-  plan: LocalPlan,
-  details: PlanDetails,
-): boolean {
+const sameCategories = (a: readonly string[], b: readonly string[]) =>
+  a.length === b.length && a.every((key, i) => key === b[i]);
+
+export function samePlanDetails(plan: Plan, details: PlanDetails): boolean {
   return (
+    plan.title === details.title.trim() &&
+    plan.description === details.description &&
+    sameCategories(plan.categories, details.categories) &&
     Date.parse(plan.starts_at) === Date.parse(details.starts_at) &&
     plan.time_zone === details.time_zone &&
     plan.place_label.trim() === details.place_label.trim() &&
@@ -48,26 +64,33 @@ export function samePlanDetails(
 
 export type PlanWrite = {
   id: string;
-  activityId: string;
+  /** The idea this event started from, or null when it was started from scratch. */
+  activityId: string | null;
   details: PlanDetails;
   version?: number;
 };
 
 export type PlanGateway = {
-  read: (id: string) => Promise<LocalPlan | null>;
+  read: (id: string) => Promise<Plan | null>;
   create: (write: PlanWrite) => Promise<void>;
   update: (write: PlanWrite) => Promise<void>;
+  cancel: (plan: { id: string; version: number }) => Promise<void>;
 };
 
 export class PlanSaveError extends Error {
   constructor(
     message: string,
     public uncertain = false,
-    public latest?: LocalPlan | null,
+    public latest?: Plan | null,
   ) {
     super(message);
   }
 }
+
+const errorCode = (error: unknown) =>
+  typeof error === "object" && error !== null && "code" in error
+    ? String(error.code)
+    : "";
 
 // A conflict never silently overwrites somebody else's newer plan. A lost reply
 // can be acknowledged only when a read confirms precisely the attempted edit.
@@ -79,12 +102,9 @@ export async function writePlan(
     if (write.version === undefined) await gateway.create(write);
     else await gateway.update(write);
   } catch (error) {
-    const code =
-      typeof error === "object" && error !== null && "code" in error
-        ? String(error.code)
-        : "";
+    const code = errorCode(error);
     if (code === "40001") {
-      let latest: LocalPlan | null;
+      let latest: Plan | null;
       try {
         latest = await gateway.read(write.id);
       } catch {
@@ -112,12 +132,12 @@ export async function writePlan(
     }
     if (code === "22023") {
       throw new PlanSaveError(
-        "This plan or activity is no longer available for these changes. Your draft is unchanged; check My resbites before trying again.",
+        "This plan or idea is no longer available for these changes. Your draft is unchanged; check My resbites before trying again.",
       );
     }
     if (/^(22|23)/.test(code)) {
       throw new PlanSaveError(
-        "Check the date, meeting place and note, then try again. Your draft is unchanged.",
+        "Check the name, categories, date, meeting place and note, then try again. Your draft is unchanged.",
       );
     }
     throw new PlanSaveError(
@@ -132,7 +152,7 @@ export async function reconcilePlan(
   gateway: PlanGateway,
   write: PlanWrite,
 ): Promise<void> {
-  let current: LocalPlan | null;
+  let current: Plan | null;
   try {
     current = await gateway.read(write.id);
   } catch {
@@ -160,5 +180,50 @@ export async function reconcilePlan(
     "The saved plan has changed. Review its current details before making another change.",
     false,
     current,
+  );
+}
+
+// Cancelling is terminal. Any failure is followed by a read: an already cancelled
+// plan is success, so a lost or repeated reply never shows a false error.
+export async function cancelPlan(
+  gateway: PlanGateway,
+  plan: { id: string; version: number },
+): Promise<void> {
+  let failure: unknown;
+  try {
+    await gateway.cancel(plan);
+    return;
+  } catch (error) {
+    failure = error;
+  }
+  let latest: Plan | null;
+  try {
+    latest = await gateway.read(plan.id);
+  } catch {
+    throw new PlanSaveError(
+      "We couldn’t confirm the cancellation. Check your connection and refresh before trying again.",
+      true,
+    );
+  }
+  if (latest?.status === "cancelled") return;
+  const code = errorCode(failure);
+  if (code === "42501" || code === "PGRST301")
+    throw new PlanSaveError("Your account can’t cancel this plan.", false, latest);
+  if (code === "40001")
+    throw new PlanSaveError(
+      "This plan changed since it loaded. Refresh and review it before cancelling.",
+      false,
+      latest,
+    );
+  if (code === "22023")
+    throw new PlanSaveError(
+      "This plan has already started or is no longer available.",
+      false,
+      latest,
+    );
+  throw new PlanSaveError(
+    "We couldn’t confirm the cancellation. Check your connection and try again.",
+    true,
+    latest,
   );
 }

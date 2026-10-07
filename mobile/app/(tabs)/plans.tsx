@@ -26,7 +26,8 @@ import {
 import { colors as c } from "../../src/design/tokens";
 import { PreviewNotice } from "../../src/design/Chrome";
 import { drafts, type PlanDraft } from "../../src/services/drafts";
-import { canEditPlan } from "../../src/domain/plans";
+import { planGateway } from "../../src/services/plans";
+import { canEditPlan, cancelPlan, PlanSaveError } from "../../src/domain/plans";
 import { Pencil, Users, X, CalendarDays, MapPin } from "lucide-react-native";
 export default function Plans() {
   const largeText = useLargeText();
@@ -164,16 +165,7 @@ export default function Plans() {
           ),
         );
       else {
-        const { error } = await supabase.rpc("change_plan", {
-          p_plan: p.id,
-          p_version: p.version,
-          p_start: p.starts_at,
-          p_zone: p.time_zone,
-          p_place: p.place_label,
-          p_note: p.note,
-          p_cancel: true,
-        });
-        if (error) throw error;
+        await cancelPlan(planGateway, { id: p.id, version: p.version });
         await refresh();
       }
       router.setParams({ created: "0", updated: "0" });
@@ -182,10 +174,11 @@ export default function Plans() {
       );
     } catch (e) {
       setError(
-        e instanceof Error
+        e instanceof PlanSaveError
           ? e.message
           : "Could not cancel. Refresh and try again.",
       );
+      if (e instanceof PlanSaveError && !e.uncertain) void refresh();
     } finally {
       setWorking(null);
     }
@@ -309,7 +302,7 @@ export default function Plans() {
                   }}
                 >
                   <Image
-                    source={artwork[p.activity_id]}
+                    source={artwork[p.activity_id ?? ""]}
                     style={{ width: 70, height: 70 }}
                     resizeMode="contain"
                   />
@@ -322,7 +315,7 @@ export default function Plans() {
                           : "YOU’RE INVITED"}
                     </Copy>
                     <Title style={{ fontSize: 23, lineHeight: 29 }}>
-                      {a?.title || "Your plan"}
+                      {p.title}
                     </Title>
                   </View>
                 </View>

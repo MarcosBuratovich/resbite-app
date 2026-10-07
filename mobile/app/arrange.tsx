@@ -34,6 +34,7 @@ import {
   s,
 } from "../src/design/ui";
 import { PreviewNotice } from "../src/design/Chrome";
+import { completeEventFields, fieldsFromActivity } from "../src/domain/events";
 import { PlanSchedule } from "../src/design/PlanSchedule";
 import { colors as c } from "../src/design/tokens";
 import { validatePlan } from "../src/domain/rules";
@@ -151,7 +152,20 @@ export default function Arrange() {
           setNote(stored.note);
           setZone(currentZone);
           setInitial(stored.initial);
-          setPending(stored.pending);
+          // Saves recorded before custom events lack event fields; fill them from the idea.
+          const legacy = stored.activityId
+            ? activities.find((x) => x.id === stored.activityId)
+            : undefined;
+          const fallback = legacy ? fieldsFromActivity(legacy) : null;
+          setPending(
+            stored.pending && {
+              ...stored.pending,
+              details: {
+                ...stored.pending.details,
+                ...completeEventFields(stored.pending.details, fallback),
+              },
+            },
+          );
           setDraftStatus(
             stored.pending
               ? "Unconfirmed save restored. Check and retry to finish."
@@ -194,12 +208,12 @@ export default function Arrange() {
   }, [planId, activity, scope, loadAttempt]);
 
   draftSnapshot.current =
-    scope && (original?.activity_id ?? activity) && initial !== null
+    scope && (original ? original.activity_id : activity) && initial !== null
       ? {
           schema: 1,
           scope,
           key: draftKey,
-          activityId: (original?.activity_id ?? activity)!,
+          activityId: (original ? original.activity_id : activity) ?? null,
           planId,
           requestId: requestId.current,
           original,
@@ -392,11 +406,19 @@ export default function Arrange() {
         setError("This plan is no longer editable. Your draft is unchanged.");
         return;
       }
+      const fields = original
+        ? {
+            title: original.title,
+            description: original.description,
+            categories: original.categories,
+          }
+        : fieldsFromActivity(a);
       write = {
         id: original?.id ?? requestId.current,
-        activityId: a.id,
+        activityId: original ? original.activity_id : a.id,
         version: original?.version,
         details: {
+          ...fields,
           starts_at: date!.toISOString(),
           time_zone: zone,
           place_label: place.trim(),
@@ -441,7 +463,7 @@ export default function Arrange() {
         } else {
           const newPlan: LocalPlan = {
             id: write.id,
-            activity_id: a.id,
+            activity_id: write.activityId,
             ...write.details,
             status: "active",
             version: 1,

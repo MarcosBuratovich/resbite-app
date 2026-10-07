@@ -13,17 +13,9 @@ import { createSessionLifecycle } from "../services/sessionLifecycle";
 import { profilePhotoStore } from "../services/profile";
 import { peopleStore } from "../services/people";
 import { supabase, storage } from "../services/supabase";
-export type LocalPlan = {
-  id: string;
-  activity_id: string;
-  starts_at: string;
-  place_label: string;
-  note: string;
-  status: string;
-  version: number;
-  owner_id?: string;
-  time_zone?: string;
-};
+import type { Plan } from "../domain/plans";
+/** Kept as an alias for existing screens; the type lives in the domain layer. */
+export type LocalPlan = Plan;
 const State = createContext<{
   session: Session | null;
   restoring: boolean;
