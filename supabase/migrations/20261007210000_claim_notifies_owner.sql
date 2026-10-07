@@ -18,4 +18,3 @@ begin
  insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key) values(v_inv.plan_id,v_plan.owner_id,'invitation','invite:'||v_inv.id) on conflict do nothing;
  return v_inv.plan_id;
 end $$;
-
