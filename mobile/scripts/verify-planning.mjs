@@ -200,7 +200,9 @@ try {
   await blank.getByLabel("Meeting place", { exact: true }).fill("Riverside park");
   await blank.getByRole("button", { name: "Save preview plan", exact: true }).click();
   await expect(blank.getByText("Garden picnic", { exact: true })).toBeVisible();
-  await expect(blank.getByText("Natural · Community", { exact: true }).last()).toBeVisible();
+  // Scope to the plan card: the Create tab stays mounted with its own category text.
+  const planCard = blank.getByText("Garden picnic", { exact: true }).locator('xpath=ancestor::div[contains(., "YOU’RE ORGANISING")][1]');
+  await expect(planCard.getByText("Natural · Community", { exact: true })).toBeVisible();
   await blank.context().close();
   console.log("PASS: preview blank custom event needs a name and one or two categories.");
 
