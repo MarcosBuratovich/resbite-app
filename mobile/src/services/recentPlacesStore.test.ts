@@ -61,3 +61,19 @@ test("unreadable saved places read as none and the next save replaces them", asy
   disk.data.set("resbite.recent-places.v1.owner", JSON.stringify(["Old mill", 7, ""]));
   assert.deepEqual(await store.list("owner"), ["Old mill"]);
 });
+
+test("an assert captured before a session change keeps the place off the device", async () => {
+  const disk = memory();
+  const store = createRecentPlacesStore(disk);
+  let epoch = 0;
+  const capture = () => {
+    const version = epoch;
+    return () => {
+      if (version !== epoch) throw Error("Session changed. Please try again.");
+    };
+  };
+  const assertSession = capture();
+  epoch++; // sign-out completes while the save is still in flight
+  await assert.rejects(store.remember("owner", "Riverside park", assertSession), /Session changed/);
+  assert.equal(disk.data.size, 0);
+});

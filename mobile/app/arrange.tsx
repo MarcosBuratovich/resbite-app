@@ -521,6 +521,8 @@ export default function Arrange() {
       (catalogue.loading || catalogue.error || !idea)
     )
       return;
+    // Captured before the first await so a sign-out during the save is detected (UX-P6).
+    const assertSession = captureSession();
     let write = pending;
     if (!write) {
       const invalidEvent = validateEventFields(fields);
@@ -607,7 +609,7 @@ export default function Arrange() {
       await drafts.remove(scope!, draftKey);
       // Recent places (UX-P6) are a convenience on this device; they never fail the save.
       void recentPlaces
-        .remember(scope!, write.details.place_label, captureSession())
+        .remember(scope!, write.details.place_label, assertSession)
         .catch(() => {});
       if (mounted.current) {
         setPending(null);
