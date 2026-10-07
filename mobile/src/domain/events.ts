@@ -50,16 +50,22 @@ export function completeEventFields(
   };
 }
 
-export type EventPicture =
+type BasicPicture =
   | { kind: "artwork"; key: string }
   | { kind: "placeholder"; category: CategoryKey };
+export type EventPicture =
+  | BasicPicture
+  | { kind: "cover"; path: string; fallback: BasicPicture };
 
-/** Cover photos arrive in CE2. Until then: the idea's bundled artwork, else the primary category. */
+/** Cover photo first (CE2), then the idea's bundled artwork, else the primary category. */
 export function eventPicture(plan: {
   activity_id: string | null;
-  categories: readonly CategoryKey[];
+  categories?: readonly CategoryKey[];
+  cover_path?: string | null;
 }): EventPicture {
-  if (plan.activity_id && (artworkKeys as readonly string[]).includes(plan.activity_id))
-    return { kind: "artwork", key: plan.activity_id };
-  return { kind: "placeholder", category: plan.categories[0] ?? "community" };
+  const basic: BasicPicture =
+    plan.activity_id && (artworkKeys as readonly string[]).includes(plan.activity_id)
+      ? { kind: "artwork", key: plan.activity_id }
+      : { kind: "placeholder", category: plan.categories?.[0] ?? "community" };
+  return plan.cover_path ? { kind: "cover", path: plan.cover_path, fallback: basic } : basic;
 }

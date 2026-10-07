@@ -132,3 +132,16 @@ test("a pre-custom-events pending create that never landed is retried with an em
   assert.equal(sent.length, 1);
   assert.deepEqual(sent[0], { ...legacyDetails, title: "Painting", categories: ["creative", "mindful"], description: "" });
 });
+
+test("a cover is the first choice, with the idea art or category placeholder as its fallback", () => {
+  assert.deepEqual(
+    eventPicture({ activity_id: "painting", categories: ["creative"], cover_path: "o/p/c.jpg" }),
+    { kind: "cover", path: "o/p/c.jpg", fallback: { kind: "artwork", key: "painting" } },
+  );
+  assert.deepEqual(
+    eventPicture({ activity_id: null, categories: ["natural"], cover_path: null }),
+    { kind: "placeholder", category: "natural" },
+  );
+  // Plans loaded without categories (e.g. a database rollback) still get a picture.
+  assert.deepEqual(eventPicture({ activity_id: null }), { kind: "placeholder", category: "community" });
+});

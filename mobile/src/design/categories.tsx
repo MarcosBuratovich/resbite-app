@@ -9,6 +9,7 @@ import {
 } from "../domain/categories";
 import type { EventPicture } from "../domain/events";
 import { artwork } from "../services/catalogue";
+import { useCoverUri } from "../state/useCoverUri";
 import { categoryPalette, colors as c, fonts } from "./tokens";
 import { Copy } from "./ui";
 
@@ -121,6 +122,7 @@ export function EventPictureView({
   picture: EventPicture;
   size?: number;
 }) {
+  if (picture.kind === "cover") return <CoverThumb picture={picture} size={size} />;
   if (picture.kind === "artwork")
     return (
       <Image
@@ -173,3 +175,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
 });
+
+/** A cover thumbnail; until its signed link loads, or if it fails, the fallback picture shows. */
+function CoverThumb({
+  picture,
+  size,
+}: {
+  picture: Extract<EventPicture, { kind: "cover" }>;
+  size: number;
+}) {
+  const uri = useCoverUri(picture.path);
+  if (!uri) return <EventPictureView picture={picture.fallback} size={size} />;
+  return (
+    <Image
+      source={{ uri }}
+      style={{ width: size, height: size, borderRadius: size / 4 }}
+      resizeMode="cover"
+      accessibilityIgnoresInvertColors
+    />
+  );
+}
