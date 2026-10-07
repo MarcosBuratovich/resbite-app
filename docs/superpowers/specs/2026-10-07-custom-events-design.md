@@ -51,7 +51,7 @@ Additive, applied on top of the five hosted migrations; it must not reference ob
 | `activity_id` | becomes **nullable**: "started from this idea"; FK unchanged |
 | `cover_path text`, `cover_revision bigint not null default 0` | CE2 only; revision maintained by trigger as for avatars |
 
-Existing rows are backfilled from their activity (`title`, `categories`) before `not null` is applied.
+Existing rows are backfilled from their activity (`title`, `categories`) before `not null` is applied. A `BEFORE INSERT` trigger fills `title` and `categories` from the activity whenever a caller omits them (the legacy `create_plan`, maintainer and fixture inserts), so older callers keep working without copying their function bodies.
 
 ### Category keys
 
@@ -63,7 +63,7 @@ All follow the house pattern: `private` SECURITY DEFINER implementation with `se
 
 - **`create_plan_v2(p_id, p_title, p_description, p_categories, p_activity, p_start, p_zone, p_place, p_note, p_lat, p_lon)`** — `p_activity` may be null; if present it must be a published activity. Same advisory lock and exact-retry rule as `create_plan`: an identical payload for an existing ID returns it, any difference raises `22023 Creation identifier already used`. Future start and valid zone as today.
 - **`change_plan_v2(p_plan, p_version, p_title, p_description, p_categories, p_start, p_zone, p_place, p_note, p_cancel default false)`** — owner only; active future plan; version CAS (`40001`); edits all event fields; with `p_cancel` true the other field arguments are ignored, cancellation is terminal and revokes invitations; queues `plan_changed`/`plan_cancelled` exactly as `change_plan`.
-- **Compatibility:** `create_plan` is redefined (same signature) to copy title/categories from its activity; `change_plan` already leaves the new columns untouched. Both are retired after the new app is accepted.
+- **Compatibility:** `create_plan` is unchanged; the insert trigger supplies title/categories from its activity. `change_plan` already leaves the new columns untouched. Both are retired after the new app is accepted.
 - **CE2 — `set_plan_cover_if_current(p_plan, p_path, p_expected_path, p_expected_revision)`** — owner only; active future plan; `p_path` null removes; otherwise it must be `<owner uid>/<plan id>/<name>.jpg` and the object must exist. Compare-and-swap on path and revision, exact retry acknowledged, stale change `40001`. Returns the new revision.
 
 Validation failures use `22023` or check-constraint `23514`, which the app already maps to a validation message.
@@ -77,7 +77,7 @@ Validation failures use `22023` or check-constraint `23514`, which the app alrea
 
 ## Deletion (prepared, still disabled)
 
-A deleted organizer's events must lose title and description (set to `Resbite` / `''`) and cover, alongside the existing place/note redaction. The migration redefines `private.activate_deletion_intent` and `private.request_account_deletion` only when they exist (local preparation), and SQL tests enforce the redaction. The deletion release checklist gains: verify deployed activation redacts title/description/cover and the worker removes `plan-covers` objects. Account deletion stays gated until its existing prerequisites pass.
+A deleted organizer's events must lose title and description (set to `Resbite` / `''`) and, in CE2, cover, alongside the existing place/note redaction. Both prepared deletion functions set `profiles.deletion_requested_at` before updating every owned plan, so a `BEFORE UPDATE` trigger on `plans` enforces the invariant: while the owner's profile is marked for deletion, any update leaves the title as `Resbite` and the description empty. It depends only on the deployed `profiles` table, ships in the hosted-compatible migration, needs no copy of the local-only deletion functions and also covers any future code path. SQL tests enforce it, including through the real deletion functions in the full local suite. The deletion release checklist gains: verify the deployed redaction and that the worker removes `plan-covers` objects. Account deletion stays gated until its existing prerequisites pass.
 
 ## App
 
@@ -155,7 +155,7 @@ Approved mapping (CE-D7):
 - New `custom-events.sql`: blank and from-idea creation; unpublished idea refused; title/description/category limits; duplicate or unknown keys; exact retry versus conflicting retry; edit CAS and notification queueing; cancel; invitee reads title/description, outsider and anonymous cannot; existing-plan backfill; old `create_plan`/`change_plan` still work; published activity without categories refused.
 - New `plan-covers.sql` (CE2): owner-only upload paths, wrong plan or user folder refused, current-cover-only reads for invitees, no client delete, compare-and-swap, stale and exact retries.
 - Extended deletion tests: a deleted organizer's events lose title, description and cover.
-- New **hosted-baseline mode**: apply bootstrap, the five hosted migrations, then `custom_events` only, and run the custom-event assertions, proving the migration does not depend on local-only objects.
+- New **hosted-baseline mode**: apply bootstrap and the five hosted migrations, seed a legacy plan, apply `custom_events` only, verify the backfill, then run the hosted-compatible tests (`foundation`, `catalogue`, `avatar-revision`, `security-review`, `custom-events`). This proves the migration does not depend on local-only objects.
 
 **Mobile unit tests:** event validation and category rules; draft upgrade of old drafts; live-catalogue decoding of `categories`; `writePlan` reconciliation including new fields; cancel through the gateway; cover journal and compare-and-swap (CE2). New test files are appended to the `npm test` chain.
 
