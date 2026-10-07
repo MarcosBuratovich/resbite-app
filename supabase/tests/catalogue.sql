@@ -4,9 +4,9 @@ insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data) values
  ('83000000-0000-4000-8000-000000000001','catalogue-owner@resbite-test.invalid',now(),'{}'),
  ('83000000-0000-4000-8000-000000000002','catalogue-outside@resbite-test.invalid',now(),'{}');
 insert into private.tester_roster(email) values ('catalogue-owner@resbite-test.invalid');
-insert into public.activities(id,title,description,category,artwork_key,source_ids,published,tips,duration_minutes) values
- ('catalogue-live','Live fixture','Server wording','Creative','painting',array['fixture'],true,array['Reviewed suggestion'],30),
- ('catalogue-draft','Draft fixture','Unapproved wording','Creative','painting',array['fixture'],false,array['Draft suggestion'],null);
+insert into public.activities(id,title,description,category,artwork_key,source_ids,published,tips,duration_minutes,categories) values
+ ('catalogue-live','Live fixture','Server wording','Creative','painting',array['fixture'],true,array['Reviewed suggestion'],30,array['creative']),
+ ('catalogue-draft','Draft fixture','Unapproved wording','Creative','painting',array['fixture'],false,array['Draft suggestion'],null,null);
 do $$ begin
  begin update public.activities set duration_minutes=0 where id='catalogue-live'; raise exception 'Invalid duration accepted'; exception when check_violation then null; end;
  begin update public.activities set tips=array[null]::text[] where id='catalogue-live'; raise exception 'Null tip accepted'; exception when check_violation then null; end;

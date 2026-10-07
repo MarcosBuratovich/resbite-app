@@ -9,7 +9,7 @@ insert into public.profiles(id,display_name,avatar_path) values
  ('81000000-0000-4000-8000-000000000001','Photo owner','81000000-0000-4000-8000-000000000001/attached.jpg'),
  ('81000000-0000-4000-8000-000000000002','Photo peer',null);
 insert into storage.objects(bucket_id,name) select 'profile-photos','81000000-0000-4000-8000-000000000001/'||name from unnest(array['attached.jpg','orphan.jpg','fresh.jpg','changed.jpg','late.jpg']) name;
-insert into public.activities values('photo-test','Test','Test','Creative','test',array['test'],true);
+insert into public.activities(id,title,description,category,artwork_key,source_ids,published,categories) values('photo-test','Test','Test','Creative','test',array['test'],true,array['creative']);
 insert into public.plans(id,owner_id,activity_id,starts_at,time_zone,place_label,note) values('83000000-0000-4000-8000-000000000001','81000000-0000-4000-8000-000000000001','photo-test',now()+interval '1 day','UTC','Test','');
 insert into public.attendees(plan_id,user_id,response) values('83000000-0000-4000-8000-000000000001','81000000-0000-4000-8000-000000000002','accepted');
 

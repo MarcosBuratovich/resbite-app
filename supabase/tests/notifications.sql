@@ -5,7 +5,7 @@ insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data) values
 ('91000000-0000-4000-8000-000000000002','push2@resbite-test.invalid',now(),'{}');
 insert into private.tester_roster(email) values('push1@resbite-test.invalid'),('push2@resbite-test.invalid');
 insert into public.profiles(id,display_name) values('91000000-0000-4000-8000-000000000001','Synthetic'),('91000000-0000-4000-8000-000000000002','Other');
-insert into public.activities values('push-fixture','Synthetic','Synthetic','Creative','synthetic',array['test'],true);
+insert into public.activities(id,title,description,category,artwork_key,source_ids,published,categories) values('push-fixture','Synthetic','Synthetic','Creative','synthetic',array['test'],true,array['creative']);
 insert into public.plans(id,owner_id,activity_id,starts_at,time_zone,place_label) values('92000000-0000-4000-8000-000000000001','91000000-0000-4000-8000-000000000001','push-fixture',now()+interval '1 day','UTC','Synthetic');
 insert into private.device_endpoints(token,user_id,platform) values('ExpoPushToken[synthetic]','91000000-0000-4000-8000-000000000001','ios');
 insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key) values('92000000-0000-4000-8000-000000000001','91000000-0000-4000-8000-000000000001','rsvp','synthetic-push-1');

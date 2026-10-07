@@ -21,7 +21,7 @@ insert into storage.objects(bucket_id,name,owner) values
  ('profile-photos','86000000-0000-4000-8000-000000000001/b.jpg','86000000-0000-4000-8000-000000000001'),
  ('profile-photos','86000000-0000-4000-8000-000000000001/c.jpg','86000000-0000-4000-8000-000000000001'),
  ('profile-photos','86000000-0000-4000-8000-000000000002/own.jpg','86000000-0000-4000-8000-000000000002');
-insert into public.activities(id,title,description,category,artwork_key,source_ids) values('avatar-fixture','Fixture','Fixture','Creative','fixture',array['fixture']);
+insert into public.activities(id,title,description,category,artwork_key,source_ids,categories) values('avatar-fixture','Fixture','Fixture','Creative','fixture',array['fixture'],array['creative']);
 insert into public.plans(id,owner_id,activity_id,starts_at,time_zone,place_label)
  values('87000000-0000-4000-8000-000000000001','86000000-0000-4000-8000-000000000001','avatar-fixture',now()+interval '1 day','Europe/London','Fixture');
 insert into public.attendees(plan_id,user_id,response)
