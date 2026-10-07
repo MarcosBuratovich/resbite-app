@@ -1,0 +1,7 @@
+# Local migration files applied on hosted project ewcsgvhuojxdpaspwsrx, in order.
+# Hosted versions differ from the filenames; the hosted version follows each name.
+20260917190517_resbite_private_tester_foundation.sql   20260917191323
+20260923150059_account_access_status.sql               20260923151512
+20260923150902_atomic_registration_details.sql         20260923151515
+20260923152900_activity_catalogue_details.sql          20260923154040
+20260924150135_avatar_revision_compare_and_swap.sql    20260924150824

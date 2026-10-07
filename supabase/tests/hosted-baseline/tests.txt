@@ -1,0 +1,6 @@
+# SQL tests that only use objects present on the hosted baseline.
+foundation.sql
+catalogue.sql
+avatar-revision.sql
+security-review.sql
+custom-events.sql
