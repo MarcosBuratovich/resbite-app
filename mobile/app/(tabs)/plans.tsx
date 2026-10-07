@@ -244,8 +244,9 @@ export default function Plans() {
                 Pick up where you left off.
               </Title>
               <Copy>
-                {activities.find((a) => a.id === d.activityId)?.title ??
-                  "Your plan"}
+                {d.title?.trim() ||
+                  activities.find((a) => a.id === d.activityId)?.title ||
+                  "Your resbite"}
               </Copy>
               <Copy style={s.muted}>
                 {d.pending
@@ -259,7 +260,9 @@ export default function Plans() {
                     pathname: "/arrange",
                     params: d.planId
                       ? { plan: d.planId }
-                      : { activity: d.activityId },
+                      : d.activityId
+                        ? { activity: d.activityId }
+                        : {},
                   })
                 }
               />

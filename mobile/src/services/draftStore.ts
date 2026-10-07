@@ -1,16 +1,21 @@
 import type { KeyStore } from "./secureChunks";
 import type { LocalPlan } from "../state/AppState";
 import type { PlanWrite } from "../domain/plans";
+import type { CategoryKey } from "../domain/categories";
 
 export type PlanDraft = {
   schema: 1;
   scope: string;
   key: string;
-  activityId: string;
+  activityId: string | null;
   planId?: string;
   requestId: string;
   original: LocalPlan | null;
   initial: string;
+  // Absent in drafts saved before custom events; the editor fills them from the idea.
+  title?: string;
+  description?: string;
+  categories?: CategoryKey[];
   start: string;
   place: string;
   note: string;
@@ -43,7 +48,6 @@ export function createDraftStore(storage: KeyStore) {
           d.scope !== scope ||
           ![
             "key",
-            "activityId",
             "requestId",
             "initial",
             "start",
@@ -52,6 +56,10 @@ export function createDraftStore(storage: KeyStore) {
             "zone",
             "updatedAt",
           ].every((k) => typeof d[k] === "string") ||
+          !(typeof d.activityId === "string" || d.activityId === null) ||
+          (d.title !== undefined && typeof d.title !== "string") ||
+          (d.description !== undefined && typeof d.description !== "string") ||
+          (d.categories !== undefined && !Array.isArray(d.categories)) ||
           (d.pending &&
             (d.pending.id !== (d.original?.id ?? d.requestId) ||
               d.pending.activityId !== d.activityId)),

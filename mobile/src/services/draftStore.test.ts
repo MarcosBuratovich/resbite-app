@@ -167,3 +167,37 @@ test("account deletion clears all drafts and rejects delayed writes without touc
   assert.deepEqual(await drafts.list("account-a"), []);
   assert.equal((await drafts.list("account-b")).length, 1);
 });
+
+test("drafts saved before custom events still load without event fields", async () => {
+  const { storage } = memory();
+  const drafts = createDraftStore(storage);
+  await drafts.put(fixture());
+  const [legacy] = await drafts.list("account-a");
+  assert.equal(legacy.title, undefined);
+  assert.equal(legacy.activityId, "coffee");
+});
+
+test("a blank event draft has no idea and keeps its event fields", async () => {
+  const { storage } = memory();
+  const drafts = createDraftStore(storage);
+  await drafts.put({
+    ...fixture(),
+    key: "new",
+    activityId: null,
+    title: "Garden picnic",
+    description: "Bring a blanket",
+    categories: ["natural", "community"],
+  });
+  const [blank] = await createDraftStore(storage).list("account-a");
+  assert.equal(blank.activityId, null);
+  assert.equal(blank.title, "Garden picnic");
+  assert.deepEqual(blank.categories, ["natural", "community"]);
+});
+
+test("corrupt event fields are rejected rather than half-restored", async () => {
+  for (const corrupt of [{ activityId: 5 }, { categories: "natural" }, { title: 3 }]) {
+    const { storage, values } = memory();
+    values.set("resbite.drafts.v1.account-a", JSON.stringify([{ ...fixture(), ...corrupt }]));
+    await assert.rejects(createDraftStore(storage).list("account-a"), /Could not read saved drafts/);
+  }
+});
