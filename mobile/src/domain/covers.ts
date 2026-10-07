@@ -1,7 +1,8 @@
 // Event cover photos (CE2): a private bucket with one folder per owner and plan.
 export const COVER_BUCKET = "plan-covers";
 export const COVER_MAX_DIMENSION = 1600;
-const id = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+export const UUID_PATTERN = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+const id = UUID_PATTERN;
 const scopePattern = new RegExp(`^${id}/${id}$`, "i");
 
 /** Journal scope and storage folder for one plan's cover: `<owner id>/<plan id>`. */

@@ -184,3 +184,113 @@ test("discardStaleCoverJournals clears cancelled, started and not-owned plans on
   );
   assert.deepEqual((await index.list(owner)).sort(), [ids[3], ids[4]].sort());
 });
+
+function realisticStore(log: string[]) {
+  // Mirrors the generic store: epoch captured at call time, journal written after check().
+  const journals = new Set<string>();
+  let epoch = 0;
+  return {
+    journals,
+    store: {
+      read: async () => null,
+      bytes: async () => new Uint8Array(),
+      begin: async (scope: string, _c: unknown, _b: unknown, assertCurrent: () => void) => {
+        const at = epoch;
+        await Promise.resolve();
+        assertCurrent();
+        if (at !== epoch) throw Error("Photo operation cancelled.");
+        journals.add(scope);
+        log.push(`journal:${scope}`);
+      },
+      clear: async (scope: string) => {
+        epoch++;
+        journals.delete(scope);
+      },
+    },
+  };
+}
+const change = { previous: null, target: null, expectedRevision: 0 };
+
+test("a clear issued while the index write is pending cancels the begin and leaves nothing", async () => {
+  const { storage, values } = memory();
+  const slow = {
+    ...storage,
+    setItem: async (k: string, v: string) => {
+      await new Promise((r) => setTimeout(r, 10));
+      await storage.setItem(k, v);
+    },
+  };
+  const { store, journals } = realisticStore([]);
+  const indexed = createIndexedCoverStore(store, createCoverJournalIndex(slow));
+  const scope = coverScope(owner, p1);
+  const begin = indexed.begin(scope, change, null, () => {});
+  const clear = indexed.clear(scope);
+  await assert.rejects(begin, /cancelled/i);
+  await clear;
+  assert.equal(journals.size, 0);
+  assert.equal(values.has(coverIndexKey(owner)), false);
+  // sign-out style clear while pending
+  const begin2 = indexed.begin(scope, change, null, () => {});
+  const all = indexed.clearCoverJournals(owner);
+  await assert.rejects(begin2, /cancelled/i);
+  await all;
+  assert.equal(journals.size, 0);
+  assert.equal(values.has(coverIndexKey(owner)), false);
+});
+
+test("begin checks the session before touching the index", async () => {
+  const { storage, values } = memory();
+  const { store } = realisticStore([]);
+  const indexed = createIndexedCoverStore(store, createCoverJournalIndex(storage));
+  await assert.rejects(
+    indexed.begin(coverScope(owner, p1), change, null, () => {
+      throw Error("Session changed.");
+    }),
+    /Session changed/,
+  );
+  assert.equal(values.size, 0);
+});
+
+test("scopes with extra segments are rejected without touching the index", async () => {
+  const log: string[] = [];
+  const { storage } = memory(log);
+  const indexed = createIndexedCoverStore(fakeStore(log), createCoverJournalIndex(storage));
+  await assert.rejects(indexed.begin(`${owner}/${p1}/x`, change, null, () => {}), /Invalid/);
+  await assert.rejects(indexed.clear(`${owner}/${p1}/x`), /Invalid/);
+  assert.deepEqual(log, []);
+});
+
+test("an id added while clearCoverJournals runs is not dropped from the index", async () => {
+  const { storage } = memory();
+  const index = createCoverJournalIndex(storage);
+  const log: string[] = [];
+  const base = fakeStore(log);
+  const slowClear = {
+    ...base,
+    clear: async (scope: string) => {
+      await new Promise((r) => setTimeout(r, 10));
+      return base.clear(scope);
+    },
+  };
+  const indexed = createIndexedCoverStore(slowClear, index);
+  await index.add(owner, p1);
+  const all = indexed.clearCoverJournals(owner);
+  await new Promise((r) => setTimeout(r, 1));
+  await index.add(owner, p2);
+  await all;
+  assert.deepEqual(await index.list(owner), [p2]);
+});
+
+test("a plan starting exactly now is stale", async () => {
+  const { storage } = memory();
+  const index = createCoverJournalIndex(storage);
+  const indexed = createIndexedCoverStore(fakeStore([]), index);
+  await index.add(owner, p1);
+  const now = new Date("2026-06-01T12:00:00Z");
+  await indexed.discardStaleCoverJournals(
+    owner,
+    [{ id: p1, owner_id: owner, status: "active", starts_at: now.toISOString() }],
+    now,
+  );
+  assert.deepEqual(await index.list(owner), []);
+});

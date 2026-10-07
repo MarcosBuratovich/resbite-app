@@ -1,9 +1,9 @@
 import type { KeyStore } from "./secureChunks";
-import { coverScope } from "../domain/covers";
+import { UUID_PATTERN, coverPhotoLayout, coverScope } from "../domain/covers";
+import { canEditPlan, type Plan } from "../domain/plans";
 import type { createPhotoChangeStore } from "./profilePhotoStore";
 
-const uuid = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
-const idPattern = new RegExp(`^${uuid}$`, "i");
+const idPattern = new RegExp(`^${UUID_PATTERN}$`, "i");
 
 export const coverIndexKey = (owner: string) => `resbite.cover.v1.index.${owner}`;
 
@@ -55,6 +55,13 @@ export function createCoverJournalIndex(storage: KeyStore) {
         const ids = await load(owner);
         if (ids.includes(planId)) await save(owner, ids.filter((id) => id !== planId));
       }),
+    /** Remove several ids in one queued operation. */
+    removeMany: (owner: string, planIds: string[]) =>
+      run(owner, async () => {
+        const ids = await load(owner);
+        const kept = ids.filter((id) => !planIds.includes(id));
+        await save(owner, kept);
+      }),
     /** Replace the index with exactly these ids (empty removes the key). */
     replace: (owner: string, ids: string[]) => run(owner, () => save(owner, ids)),
     clearKey: (owner: string) => run(owner, () => storage.removeItem(coverIndexKey(owner))),
@@ -76,13 +83,17 @@ export function createIndexedCoverStore(
   store: JournalStore,
   index: CoverJournalIndex,
 ) {
+  const scopeGen = new Map<string, number>();
+  const ownerGen = new Map<string, number>();
+  const bump = (map: Map<string, number>, key: string) => map.set(key, (map.get(key) ?? 0) + 1);
   const split = (scope: string) => {
-    coverScope(scope.split("/")[0] ?? "", scope.split("/")[1] ?? "");
+    if (!coverPhotoLayout.validScope(scope)) throw Error("Invalid cover owner.");
     const [owner, planId] = scope.split("/");
     return { owner, planId };
   };
   async function clear(scope: string) {
     const { owner, planId } = split(scope);
+    bump(scopeGen, scope);
     await store.clear(scope);
     await index.remove(owner, planId);
   }
@@ -103,17 +114,27 @@ export function createIndexedCoverStore(
     read: store.read,
     bytes: store.bytes,
     begin: async (...args: Parameters<JournalStore["begin"]>) => {
-      const { owner, planId } = split(args[0]);
+      const [scope, , , assertCurrent] = args;
+      const { owner, planId } = split(scope);
+      const scopeAt = scopeGen.get(scope) ?? 0;
+      const ownerAt = ownerGen.get(owner) ?? 0;
+      const check = () => {
+        assertCurrent();
+        if ((scopeGen.get(scope) ?? 0) !== scopeAt || (ownerGen.get(owner) ?? 0) !== ownerAt)
+          throw Error("Cover change cancelled.");
+      };
+      check();
       await index.add(owner, planId);
-      return store.begin(...args);
+      return store.begin(args[0], args[1], args[2], check);
     },
     clear,
     /** Sign-out and deletion: clear every indexed journal, then the index. */
     async clearCoverJournals(owner: string) {
+      bump(ownerGen, owner);
       const ids = await index.list(owner);
+      for (const id of ids) bump(scopeGen, coverScope(owner, id));
       const { failed, failure } = await clearList(owner, ids);
-      if (failed.length) await index.replace(owner, failed);
-      else await index.clearKey(owner);
+      await index.removeMany(owner, ids.filter((id) => !failed.includes(id)));
       if (failed.length) throw failure;
     },
     /** Drop journals of listed plans that can never complete. Unlisted ids are kept. */
@@ -127,11 +148,10 @@ export function createIndexedCoverStore(
         .filter(
           (p) =>
             indexed.has(p.id) &&
-            (p.status !== "active" ||
-              p.owner_id !== owner ||
-              !(new Date(p.starts_at).getTime() > now.getTime())),
+            !canEditPlan(p as unknown as Plan, owner, false, now.getTime()),
         )
         .map((p) => p.id);
+      for (const planId of stale) bump(scopeGen, coverScope(owner, planId));
       for (const planId of stale) {
         const { failed } = await clearList(owner, [planId]);
         if (!failed.length) await index.remove(owner, planId);
