@@ -80,7 +80,7 @@ Before Git integration, these checks passed on this Mac:
 - `node --experimental-transform-types --test supabase/functions/_shared/*.test.ts`: 51 backend tests, including ledger/admission and disabled-release behavior.
 - `./scripts/test-database.sh`: eleven SQL assertion files and four real concurrency scripts; no synthetic tester roster entries retained.
 
-These checks cover local logic and isolated database behavior. HTTP mocks are not live provider verification. No new iPhone acceptance, standalone build, push delivery or destructive hosted test was performed for this handoff. Final Git integration checks are recorded below when complete.
+These checks cover local logic and isolated database behavior. HTTP mocks are not live provider verification. No new iPhone acceptance, standalone build, push delivery or destructive hosted test was performed for this handoff. After Git integration, `npm run check` passed again with all 119 mobile tests and eleven approved content pairs; the complete SQL suite passed again with all eleven assertion files and four concurrency scripts, including the preserved remote edit/RSVP assertions. Backend source was unchanged by the merge, so its 51-test result remains applicable. `git diff --check` and a tracked-file secret-pattern scan passed. Local environment files and generated builds were excluded.
 
 ## Running and continuing development
 
@@ -110,4 +110,4 @@ Useful entry points:
 
 ## Git integration
 
-GitHub had an earlier owner-plan-editing/guarded-refresh commit not yet present in this working copy. Preserve its history and useful SQL assertions while retaining the newer local planning/recovery implementation. The remote's old planning helper tests need reconciliation with the current interfaces; do not restore obsolete helpers simply to satisfy an old test. No hosted deployment or access change is part of this commit-and-push task.
+GitHub’s earlier owner-plan-editing/guarded-refresh commit (`8577e61`) is integrated with its history and SQL assertions retained. The newer local planning/recovery implementation remains in place. Old helper tests are superseded by the current planning/reconciliation cases in `rules.test.ts` and planning/RSVP browser QA; the obsolete helper exports and old non-tab route are not restored. No hosted deployment or access change is part of this commit-and-push task.

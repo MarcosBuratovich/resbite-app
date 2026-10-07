@@ -12,3 +12,5 @@ dist-ios/
 *.pem
 *.mobileprovision
 source-materials/
+
+supabase/.temp/

@@ -6,7 +6,7 @@ This document records the mobile foundation and successive implementation milest
 
 ## Created and verified
 
-- `mobile/`: React Native/Expo 57 + TypeScript, with pinned dependencies and lockfile; future Android shares this code. Branch `feat/resbite-foundation` in the nested mobile repository.
+- `mobile/`: React Native/Expo 57 + TypeScript, with pinned dependencies and lockfile; future Android shares this code. The app lives under `mobile/` in the private `MarcosBuratovich/resbite-app` repository (one Git repository).
 - Original Resbite illustrations exported to eight high-resolution activity images, with original-file hashes/source IDs and font licence files. Descriptions, tips and combined category assignments are explicitly editorial drafts, not approved source quotations.
 - Welcome, login/registration/reset, profile, catalogue/search/category, activity detail, planning, plans, invitation/RSVP and labelled sample wellness screens.
 - Reanimated press feedback, fades, native screen transitions, haptics, splash configuration, loading/error/empty/success states. Reduced motion removes button scaling and changes navigation to fades. Owner has verified Larger Text on the main tabs and plan editor; physical-device motion and VoiceOver remain unverified.
@@ -346,3 +346,7 @@ No recovery project/bucket was created, no real record was exported and no delet
 Implemented the prepare → verified independent ledger → activate coordinator, a private reservation/activation migration and its server RPC adapter. The unconfigured deletion gateway now refuses requests instead of calling the legacy raw deletion RPC. Reservation creation preserves current access/profile data; verified-intent activation uses the prior redaction/cancellation/job behavior and supports stable retries after proof expiry at the service layer.
 
 All 51 backend tests, focused TypeScript checks, 11 disposable SQL assertion files and four existing concurrency scripts pass. Nine admission tests cover failure ordering, mismatches and lost replies; the SQL checks cover service-only permissions, stable reservations, no premature mutation and matching activation. No hosted migration or worker was enabled. Full inventory/checkpoint verification, background reconciliation, restore replay and provider setup remain outstanding; this is local preparation, not live deletion readiness. [Detailed recovery status](../qa/deletion-recovery-ledger.md).
+
+## Git handoff — 7 October 2026
+
+The accumulated app, backend, artwork, QA and planning work is packaged with a [detailed development handoff](development-handoff-2026-10-07.md). GitHub’s earlier `8577e61` planning commit is integrated without replacing the newer planning editor, tabs, draft recovery or request cancellation guards. Its SQL assertions for successful edits, unchanged RSVPs, stale-version rejection and queued change notifications are retained. The obsolete helper test file is superseded by current `rules.test.ts` planning/reconciliation tests and planning/RSVP browser QA; obsolete helper exports and the old non-tab route are not restored. No hosted deployment or roster change is included.
