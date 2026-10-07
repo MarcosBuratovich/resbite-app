@@ -62,7 +62,7 @@ export async function saveProfile(name: string, expectedAccountId: string) {
   );
   if (error) throw error;
 }
-async function capturedProfileClient(expectedAccountId: string) {
+export async function capturedProfileClient(expectedAccountId: string) {
   const { data, error } = await bounded(supabase.auth.getSession());
   if (error) throw error;
   if (!expectedAccountId || data.session?.user.id !== expectedAccountId || !data.session.access_token)
@@ -76,7 +76,7 @@ async function capturedProfileClient(expectedAccountId: string) {
     { accessToken: async () => token },
   );
 }
-async function bounded<T>(promise: Promise<T>): Promise<T> {
+export async function bounded<T>(promise: Promise<T>): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
   try {
     return await Promise.race([

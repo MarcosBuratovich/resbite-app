@@ -15,7 +15,7 @@ export async function withDeadline<T>(
 }
 
 const planColumns =
-  "id,activity_id,title,description,categories,starts_at,time_zone,place_label,note,status,version,owner_id";
+  "id,activity_id,title,description,categories,starts_at,time_zone,place_label,note,status,version,owner_id,cover_path,cover_revision";
 
 export const planGateway: PlanGateway = {
   async read(id) {

@@ -48,7 +48,7 @@ export function toBase64(value: Uint8Array): string {
     binary += String.fromCharCode(...value.slice(i, i + 8192));
   return btoa(binary);
 }
-export async function chooseNormalizedPhoto(): Promise<{
+export async function chooseNormalizedPhoto(maxDimension = 1024): Promise<{
   bytes: Uint8Array;
   uri: string;
 } | null> {
@@ -72,11 +72,11 @@ export async function chooseNormalizedPhoto(): Promise<{
   try {
     context.resize(
       asset.width >= asset.height
-        ? { width: Math.min(asset.width, 1024) }
-        : { height: Math.min(asset.height, 1024) },
+        ? { width: Math.min(asset.width, maxDimension) }
+        : { height: Math.min(asset.height, maxDimension) },
     );
     image = await context.renderAsync();
-    if (image.width > 1024 || image.height > 1024)
+    if (image.width > maxDimension || image.height > maxDimension)
       throw Error("The resized photo is too large. Choose another image.");
     const normalized = await image.saveAsync({
       format: SaveFormat.JPEG,

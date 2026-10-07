@@ -15,6 +15,9 @@ export type Plan = {
   version: number;
   owner_id?: string;
   time_zone?: string;
+  /** CE2 cover photo; absent on preview plans and on plans loaded before CE2. */
+  cover_path?: string | null;
+  cover_revision?: number;
 };
 
 export type PlanDetails = EventFields &
