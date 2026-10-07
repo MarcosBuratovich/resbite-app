@@ -4,3 +4,4 @@ catalogue.sql
 avatar-revision.sql
 security-review.sql
 custom-events.sql
+plan-covers.sql
