@@ -42,8 +42,15 @@ export function useReduceMotion() {
   }, []);
   return reduce;
 }
+// Browser QA can force the Larger Text layouts with ?largeText=1 (development web builds only).
+const forcedLargeText =
+  __DEV__ &&
+  Platform.OS === "web" &&
+  typeof location !== "undefined" &&
+  new URLSearchParams(location.search).has("largeText");
 export function useLargeText() {
-  return useWindowDimensions().fontScale >= 1.4;
+  const { fontScale } = useWindowDimensions();
+  return forcedLargeText || fontScale >= 1.4;
 }
 
 export function Copy({

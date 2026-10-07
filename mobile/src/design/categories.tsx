@@ -118,22 +118,31 @@ export function CategoryChoices({
 export function EventPictureView({
   picture,
   size = 66,
+  fill = false,
 }: {
   picture: EventPicture;
   size?: number;
+  /** Fill the parent (cover cards) instead of a size × size square. */
+  fill?: boolean;
 }) {
-  if (picture.kind === "cover") return <CoverThumb picture={picture} size={size} />;
+  if (picture.kind === "cover") return <CoverThumb picture={picture} size={size} fill={fill} />;
   if (picture.kind === "artwork")
     return (
       <Image
         source={artwork[picture.key]}
-        style={{ width: size, height: size }}
+        style={fill ? styles.fill : { width: size, height: size }}
         resizeMode="contain"
         accessibilityIgnoresInvertColors
       />
     );
   const Icon = categoryIcons[picture.category];
   const { tint, ink } = categoryPalette[picture.category];
+  if (fill)
+    return (
+      <View accessible={false} style={[styles.fill, { alignItems: "center", justifyContent: "center" }]}>
+        <Icon size={64} strokeWidth={1.4} color={ink} />
+      </View>
+    );
   return (
     <View
       accessible={false}
@@ -152,6 +161,7 @@ export function EventPictureView({
 }
 
 const styles = StyleSheet.create({
+  fill: { width: "100%", height: "100%" },
   choices: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   choice: {
     flexDirection: "row",
@@ -180,16 +190,18 @@ const styles = StyleSheet.create({
 function CoverThumb({
   picture,
   size,
+  fill,
 }: {
   picture: Extract<EventPicture, { kind: "cover" }>;
   size: number;
+  fill: boolean;
 }) {
   const uri = useCoverUri(picture.path);
-  if (!uri) return <EventPictureView picture={picture.fallback} size={size} />;
+  if (!uri) return <EventPictureView picture={picture.fallback} size={size} fill={fill} />;
   return (
     <Image
       source={{ uri }}
-      style={{ width: size, height: size, borderRadius: size / 4 }}
+      style={fill ? styles.fill : { width: size, height: size, borderRadius: size / 4 }}
       resizeMode="cover"
       accessibilityIgnoresInvertColors
     />

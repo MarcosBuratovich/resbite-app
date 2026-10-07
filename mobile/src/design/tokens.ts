@@ -10,6 +10,7 @@ export const colors = {
   pinkSoft: "#FCEAEC",
   purple: "#BFB5BF",
   purpleSoft: "#F0EDF4",
+  surface: "#F7F4F7",
   line: "#E9E5E9",
   error: "#A33142",
 };
@@ -39,3 +40,7 @@ export const categoryPalette = {
   community: { tint: "#FAF5F0", ink: "#7A4E2D" },
   uplifting: { tint: "#FFF7DC", ink: "#7A6012" },
 } as const;
+
+// UX1 component kit (spec "Component kit"): radii and a spacing scale.
+export const r = { card: 28, tile: 22, chip: 999 } as const;
+export const space = { xs: 4, s: 8, m: 12, l: 16, xl: 24, xxl: 32 } as const;

@@ -123,6 +123,7 @@ function Navigation() {
           <Stack.Screen name="introduction" />
           <Stack.Screen name="invite" />
           <Stack.Screen name="delete-account" />
+          <Stack.Screen name="kit" />
           <Stack.Protected guard={Boolean(session)}>
             <Stack.Screen name="account" />
             <Stack.Screen name="account-details" />
