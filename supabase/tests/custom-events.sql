@@ -21,6 +21,22 @@ do $$ begin
  exception when check_violation then null; end;
 end $$;
 
+-- Grants: the v2 functions are for signed-in testers only; the CHECK predicate stays callable.
+do $$
+declare f text;
+begin
+ foreach f in array array[
+  'public.create_plan_v2(uuid,text,text,text[],text,timestamptz,text,text,text,double precision,double precision)',
+  'public.change_plan_v2(uuid,integer,text,text,text[],timestamptz,text,text,text,boolean)'] loop
+  if has_function_privilege('anon', f, 'execute') then raise exception 'anon can execute %', f; end if;
+  if has_function_privilege('service_role', f, 'execute') then raise exception 'service_role can execute %', f; end if;
+  if not has_function_privilege('authenticated', f, 'execute') then raise exception 'authenticated cannot execute %', f; end if;
+ end loop;
+ if not has_function_privilege('authenticated', 'private.valid_categories(text[])', 'execute') then
+  raise exception 'authenticated cannot execute private.valid_categories';
+ end if;
+end $$;
+
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"a1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 select public.save_profile('Owner');

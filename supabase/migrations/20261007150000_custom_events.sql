@@ -148,14 +148,16 @@ returns uuid language sql security invoker set search_path='' as $$ select priva
 create function public.change_plan_v2(p_plan uuid,p_version integer,p_title text,p_description text,p_categories text[],p_start timestamptz,p_zone text,p_place text,p_note text,p_cancel boolean default false)
 returns integer language sql security invoker set search_path='' as $$ select private.change_plan_v2(p_plan,p_version,p_title,p_description,p_categories,p_start,p_zone,p_place,p_note,p_cancel) $$;
 
-revoke all on function private.valid_categories(text[]), private.fill_plan_from_activity(), private.redact_deleting_owner_plan()
+-- valid_categories is a pure immutable predicate used by CHECK constraints; PostgreSQL checks EXECUTE
+-- against the writing role, so it keeps its default public EXECUTE.
+revoke all on function private.fill_plan_from_activity(), private.redact_deleting_owner_plan()
  from public, anon, authenticated;
 revoke all on function
  private.create_plan_v2(uuid,text,text,text[],text,timestamptz,text,text,text,double precision,double precision),
  public.create_plan_v2(uuid,text,text,text[],text,timestamptz,text,text,text,double precision,double precision),
  private.change_plan_v2(uuid,integer,text,text,text[],timestamptz,text,text,text,boolean),
  public.change_plan_v2(uuid,integer,text,text,text[],timestamptz,text,text,text,boolean)
- from public, anon, authenticated;
+ from public, anon, authenticated, service_role;
 grant execute on function
  private.create_plan_v2(uuid,text,text,text[],text,timestamptz,text,text,text,double precision,double precision),
  public.create_plan_v2(uuid,text,text,text[],text,timestamptz,text,text,text,double precision,double precision),
