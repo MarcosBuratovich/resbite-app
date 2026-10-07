@@ -1,5 +1,7 @@
 # Resbite development handoff — 7 October 2026
 
+**Update:** custom events (CE) now precede the remaining B0 work — see the [CE1 record](../qa/custom-events-2026-10-07/README.md).
+
 ## Release position
 
 Resbite is in **B0: account and data foundation for the expanded private beta**. The owner can use the signed iPhone development app and approved live catalogue. This is not yet an accepted standalone two-person beta, TestFlight release or public launch. A screen, local test or prepared worker is not evidence of live deployment.

@@ -306,3 +306,7 @@ Continue with the reconnected iPhone's photo acceptance and a separately designa
 ## B0 native photo acceptance — 28 September 2026
 
 The reconnected iPhone received the photo consistency update. The owner confirmed “It works perfectly” after signed-in upload, closing/reopening and profile-photo removal. These behaviors are accepted; file cleanup, interrupted retry and cross-account Storage authorization remain separate. Next: the remaining signup-confirmation/closed-access and provider edge-case checks, followed by the existing deletion/retention/restore gates. B0 remains open.
+
+## CE — Custom events (7 October 2026)
+
+The owner re-prioritized: custom events come before the remaining B0 work and B1 ([design](../superpowers/specs/2026-10-07-custom-events-design.md), [CE1 plan](../superpowers/plans/2026-10-07-custom-events-ce1.md)). CE1 delivers event title/description/categories, the Create tab and idea templates; CE2 delivers organizer cover photos. B1's two-person acceptance now exercises custom events. B2–B8 scope is unchanged.

@@ -350,3 +350,17 @@ All 51 backend tests, focused TypeScript checks, 11 disposable SQL assertion fil
 ## Git handoff — 7 October 2026
 
 The accumulated app, backend, artwork, QA and planning work is packaged with a [detailed development handoff](development-handoff-2026-10-07.md). GitHub’s earlier `8577e61` planning commit is integrated without replacing the newer planning editor, tabs, draft recovery or request cancellation guards. Its SQL assertions for successful edits, unchanged RSVPs, stale-version rejection and queued change notifications are retained. The obsolete helper test file is superseded by current `rules.test.ts` planning/reconciliation tests and planning/RSVP browser QA; obsolete helper exports and the old non-tab route are not restored. No hosted deployment or roster change is included.
+
+## Custom events CE1 — 7 October 2026
+
+**Shipped and owner-accepted on the iPhone.** Resbite events now have a required title, a description of up to 1,000 characters and one or two of the seven wellness categories. Discover became the Create tab, with a "New resbite" start card, the ideas as editable templates (each event remembers its source idea) and category filters. Published ideas carry categories from the approved mapping (`mobile/content/activity-categories.json`). The invite screen and draft cards show event pictures. Drafts and unconfirmed saves from the earlier app are upgraded with the idea's title and categories and an empty description, mirroring the migration backfill. Two `plans` triggers keep the legacy `create_plan` working and blank event text while the owner is being deleted. Invitations, RSVP and the two-person flow are unchanged.
+
+**Hosted migration.** `custom_events` (local `supabase/migrations/20261007150000_custom_events.sql`) was applied to project `ewcsgvhuojxdpaspwsrx` as hosted version `20261007154825`, after explicit owner approval of that single migration. Advisors were unchanged (INFO only). `supabase/tests/hosted-baseline/migrations.txt` records it.
+
+**Verification before rollout.** `npm run check`: 140 tests, 0 failures. Backend tests: 51/51. SQL suite: full and hosted-baseline modes pass. All 16 browser QA scripts pass. iOS JavaScript export passes. The update reached the installed development build as JavaScript only, with no native rebuild.
+
+**Acceptance.** The owner ran the eight CE1 checks on 7 October 2026 and replied "all good, everything works on the iPhone". Full record, rollback SQL and approval wording: [CE1 rollout record](../qa/custom-events-2026-10-07/README.md).
+
+**Known limitation.** Opening "New resbite" and leaving without typing leaves an empty draft card. A guard was reverted because it suppressed autosave after an undone edit.
+
+**Remaining.** CE2 (organizer cover photo) gets its own plan next, followed by the remaining B0 work and B1. Tester access is still owner-only. Deletion is not enabled; its release sequence now includes the custom-event checks in the [recovery ledger](../qa/deletion-recovery-ledger.md).

@@ -60,3 +60,23 @@ The additive `activity_catalogue_details` migration is also deployed (hosted ver
 `20260923152816_orphan_profile_photo_cleanup.sql` depends on the account-deletion lock migration. It adds service-only observation/retirement/lease/prune APIs, fences Storage writes and profile references, and narrows participant reads to the current avatar. `20260923152943_deletion_receipt_retention.sql` depends on both lifecycle and photo cleanup; it removes old completed receipts only after all referenced data and cleanup proof dependencies are gone. The photo worker is source-hard-disabled; receipt purge requires separate server flags/secret. Neither has a schedule.
 
 Review [photo cleanup readiness](../qa/photo-cleanup-readiness.md), [retention and restore proposal](../qa/b0-retention-proposal.md) and [receipt worker setup](functions/purge-deletion-receipts/README.md) before deployment. Owner policy approval, isolated real Auth/Storage race tests, protected deletion-ledger recovery and operational monitoring remain prerequisites. Do not deploy all local migrations implicitly when applying another additive change.
+
+## Custom events (CE1) — deployed 7 October 2026
+
+`20261007150000_custom_events.sql` is deployed (hosted version `20261007154825`) and owner-accepted on the iPhone. See the [rollout record](../qa/custom-events-2026-10-07/README.md) for approval, after-state and rollback SQL.
+
+- `create_plan_v2(p_id, p_title, p_description, p_categories, p_activity, p_start, p_zone, p_place, p_note='', p_lat=null, p_lon=null)` returns the plan UUID. `p_id` is the retry key; a changed retry fails. `p_activity` is optional and records the idea used as a template. Title and categories are always required, even when an idea is given.
+- `change_plan_v2(p_plan, p_version, p_title, p_description, p_categories, p_start, p_zone, p_place, p_note, p_cancel=false)` returns the plan version. Owner only; future active plans only; cancellation is terminal.
+- Both are `private` SECURITY DEFINER with a `public` SECURITY INVOKER façade, executable by `authenticated` only (revoked from `anon` and `service_role`).
+- Field rules: title trimmed, 1–80 characters; description at most 1,000 characters; categories one or two distinct keys from `creative`, `intellectual`, `mindful`, `natural`, `physical`, `community`, `uplifting`, in the organizer's order. `private.valid_categories` keeps public EXECUTE because CHECK constraints call it.
+- Error codes: `22023` validation or availability (past start, invalid zone, unpublished idea, plan unavailable, changed retry); `23502` missing title or categories; `23514` check constraint (title length or blank, description over 1,000 characters, invalid categories); `40001` version conflict; `42501` not the owner, or not eligible.
+- `plans.title`, `description` and `categories` are NOT NULL; `plans.activity_id` is nullable.
+
+Two triggers on `plans` replace copying function bodies:
+
+- `plans_fill_from_activity` fills title, description and categories from the idea, so the legacy `create_plan` keeps working.
+- `plans_redact_deleting_owner` blanks event text (title `Resbite`, empty description) while the owner is being deleted.
+
+`activities.categories` holds one or two keys for each idea. A published idea must have valid categories (`activities_published_categories`), so published rows cannot be inserted without them. The historical scripts `qa/catalogue-*/verify-local.py` and `publish.sql` replay migrations and then publish; they now fail against the full migration set for that reason.
+
+Run `../scripts/test-database.sh --hosted-baseline` before applying a migration to the hosted project. It applies only the migrations listed in `tests/hosted-baseline/migrations.txt`, which is the record of which local files are on the hosted project and their hosted versions.

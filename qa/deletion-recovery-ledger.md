@@ -27,6 +27,7 @@ This primitive is intentionally not connected to the current deletion handler. C
 5. Reapply verified intents through a restricted, idempotent restore path and reconcile actual Auth and Storage state. Never run the ordinary fresh-session admission RPC as the restore implementation. Keep access fenced if any inventory, key, replay or provider check is unresolved.
 6. Rehearse with explicitly disposable identities and an older isolated database snapshot. Show that deleted accounts cannot regain access and partial cleanup resumes. Record the checkpoint, aggregate results and operator sign-off before reopening.
 7. Decide ledger retention across every recoverable backup/export window. No ledger pruning API exists yet. A 30-day operational receipt window does not automatically authorize deleting recovery evidence.
+8. Custom events (CE1, 7 October 2026): before enabling deletion, verify on the deployed database that activation leaves a deleted organizer's events titled `Resbite` with an empty description (`plans_redact_deleting_owner` trigger), and, once CE2 ships, that the worker removes their `plan-covers` objects.
 
 Source release gates remain false until this sequence, retention approval and live provider acceptance are complete. The signup-test identity has not been designated disposable.
 

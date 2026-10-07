@@ -123,3 +123,18 @@ The owner selected shared groups that members can join and leave, with a group p
 The owner selected each person's confirmation of attendance and duration, followed by private time/category summaries. Merely scheduling or accepting a plan must not count as completed participation. Category allocation, period boundaries and retention still need the proposed implementation rules finalized; no clinical, relationship or screen-time score was selected.
 
 The [MVP 2 development plan](../docs/milestones/2026-09-23-expanded-private-beta.md) records B0–B8, dependencies, acceptance and outstanding defaults. These decisions authorize the feature direction; this turn produced planning/documentation, not live feature implementation or wider tester access.
+
+## Custom events — 7 October 2026
+
+Owner decisions from the custom-events design session ([spec](../docs/superpowers/specs/2026-10-07-custom-events-design.md)):
+
+| # | Decision |
+| --- | --- |
+| CE-D1 | Custom events are the primary creation flow; catalogue ideas are optional templates. |
+| CE-D2 | An event has a required title, date/time and place, plus a description, an uploaded cover photo (CE2) and categories. |
+| CE-D3 | Choosing an idea is an editable template that remembers which idea it came from. |
+| CE-D4 | Discover becomes the Create tab; My resbites gains "New resbite". |
+| CE-D5 | Categories are the seven wellness categories: Creative, Intellectual, Mindful, Natural, Physical, Community, Uplifting. The wellness formula remains a B5 decision. |
+| CE-D6 | Each event and idea has one or two categories. |
+| CE-D7 | Approved category mapping for the 11 published ideas (see `mobile/content/activity-categories.json`). |
+| CE-D8 | CE comes before the remaining B0 work and B1, in two parts: CE1 events, CE2 cover photo. |

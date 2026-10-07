@@ -2,6 +2,8 @@
 
 23 September 2026. **Owner-selected feature direction, with implementation details proposed in the [MVP 2 development plan](../docs/milestones/2026-09-23-expanded-private-beta.md).** This is the current scope overlay on the original 58-item audit; the original evidence and first-test decisions remain preserved.
 
+**7 October 2026 update:** the owner made custom events the primary creation flow (CE milestone, decisions CE-D1–D8 in the [decision log](08-decisions.md)). M01–M04 now mean "create your own resbite, optionally from an idea"; the seven wellness categories are approved as the shared taxonomy, while the wellness formula remains B5.
+
 The owner chose a complete private beta, iPhone first and Android immediately afterward, and selected all additions presented: live event chat, real wellness/history, saved activities, better planning/calendar, time polls, shared event photos, recurring plans and richer groups. Follow-up answers specifically selected shared groups and self-confirmed attendance/duration. “All” refers to this presented set, not every concept in the archive.
 
 Source IDs and original locators are in the [original register](02-scope-register.md) and [source catalogue](sources.md). F1–F11 refer to feature contracts in the new development plan. A proposed subset, rule or operating limit is not an additional owner decision.
