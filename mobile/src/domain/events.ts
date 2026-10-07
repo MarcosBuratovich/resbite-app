@@ -33,6 +33,11 @@ export function fieldsFromActivity(activity: Activity): EventFields {
   };
 }
 
+/** Pre-custom-events plans were backfilled with the idea's title and categories and an empty description; drafts from that app upgrade the same way. */
+export function legacyEventFields(activity: Activity): EventFields {
+  return { ...fieldsFromActivity(activity), description: "" };
+}
+
 /** Drafts from before custom events lack event fields; saved values always win. */
 export function completeEventFields(
   saved: Partial<EventFields>,

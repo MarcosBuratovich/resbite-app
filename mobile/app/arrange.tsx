@@ -39,6 +39,7 @@ import {
   completeEventFields,
   eventPicture,
   fieldsFromActivity,
+  legacyEventFields,
   validateEventFields,
   type EventFields,
 } from "../src/domain/events";
@@ -176,7 +177,7 @@ export default function Arrange() {
           const legacy = stored.activityId
             ? activities.find((x) => x.id === stored.activityId)
             : undefined;
-          const fallback = legacy ? fieldsFromActivity(legacy) : null;
+          const fallback = legacy ? legacyEventFields(legacy) : null;
           const restoredOriginal = stored.original && {
             ...stored.original,
             ...completeEventFields(stored.original, fallback),

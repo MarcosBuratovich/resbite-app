@@ -4,8 +4,10 @@ import {
   completeEventFields,
   eventPicture,
   fieldsFromActivity,
+  legacyEventFields,
   validateEventFields,
 } from "./events.ts";
+import { reconcilePlan, type PlanGateway } from "./plans.ts";
 import type { Activity } from "./rules.ts";
 
 const fields = { title: "Garden picnic", description: "", categories: ["natural" as const] };
@@ -72,4 +74,61 @@ test("pictures use bundled idea artwork, otherwise the primary category", () => 
     kind: "placeholder",
     category: "uplifting",
   });
+});
+
+test("legacyEventFields keeps the idea's title and categories with an empty description", () => {
+  assert.deepEqual(legacyEventFields(idea), {
+    title: "Painting",
+    description: "",
+    categories: ["creative", "mindful"],
+  });
+});
+
+const legacyDetails = {
+  starts_at: "2099-01-01T15:00:00Z",
+  time_zone: "UTC",
+  place_label: "Riverside park",
+  note: "Bring paint",
+};
+const legacyGateway = (
+  read: PlanGateway["read"],
+  onCreate: (details: unknown) => void,
+): PlanGateway => ({
+  read,
+  create: async (write) => onCreate(write.details),
+  update: async () => {},
+  cancel: async () => {},
+});
+
+test("a landed pre-custom-events pending create is acknowledged, not a conflict", async () => {
+  let creates = 0;
+  const details = { ...legacyDetails, ...completeEventFields({}, legacyEventFields(idea)) };
+  await reconcilePlan(
+    legacyGateway(
+      async () => ({
+        id: "p1",
+        activity_id: "painting",
+        title: "Painting",
+        description: "",
+        categories: ["creative", "mindful"],
+        version: 1,
+        status: "active",
+        ...legacyDetails,
+      }),
+      () => creates++,
+    ),
+    { id: "p1", activityId: "painting", details },
+  );
+  assert.equal(creates, 0);
+});
+
+test("a pre-custom-events pending create that never landed is retried with an empty description", async () => {
+  const sent: unknown[] = [];
+  const details = { ...legacyDetails, ...completeEventFields({}, legacyEventFields(idea)) };
+  await reconcilePlan(
+    legacyGateway(async () => null, (d) => sent.push(d)),
+    { id: "p1", activityId: "painting", details },
+  );
+  assert.equal(sent.length, 1);
+  assert.deepEqual(sent[0], { ...legacyDetails, title: "Painting", categories: ["creative", "mindful"], description: "" });
 });
