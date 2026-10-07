@@ -95,7 +95,8 @@ test("failed pending persistence reports failure and can be retried", async () =
 function lifecycleHarness() {
   const disk = storage(),
     people = createPeopleStore(disk),
-    events: string[] = [];
+    events: string[] = [],
+    places: string[] = [];
   let auth = async () => {
       events.push("auth");
     },
@@ -108,6 +109,9 @@ function lifecycleHarness() {
     clearPeople: async (scope) => {
       events.push(`clear:${scope}`);
       await people.clear(scope);
+    },
+    clearRecentPlaces: async (scope) => {
+      places.push(scope);
     },
     clearPhoto: () => photo(),
     clearCovers: async (scope) => {
@@ -134,6 +138,7 @@ function lifecycleHarness() {
     life,
     people,
     events,
+    places,
     setAuth: (fn: () => Promise<void>) => {
       auth = fn;
     },
@@ -195,6 +200,7 @@ test("a failed cover clear fails sign-out before auth sign-out", async () => {
     suspend: () => {},
     resume: () => {},
     clearPeople: async () => {},
+    clearRecentPlaces: async () => {},
     clearPhoto: async () => {},
     clearCovers: async () => {
       throw Error("disk");
@@ -284,4 +290,39 @@ test("cleanup waits for an in-flight pending write and failed removal can be ret
   unblock();
   assert.deepEqual(seen, [null]);
   assert.equal(disk.data.size, 0);
+});
+test("sign-out clears recent places for the account and for preview", async () => {
+  const h = lifecycleHarness();
+  h.life.update({ account: "owner", preview: false });
+  await h.life.signOut();
+  assert.deepEqual(h.places, ["owner"]);
+  const p = lifecycleHarness();
+  p.life.update({ account: "owner", preview: true });
+  await p.life.signOut();
+  assert.deepEqual(p.places, ["preview"]);
+});
+test("a failed recent-places clear fails sign-out before auth sign-out", async () => {
+  const events: string[] = [];
+  const life = createSessionLifecycle({
+    suspend: () => {},
+    resume: () => {},
+    clearPeople: async () => {},
+    clearRecentPlaces: async () => {
+      throw Error("disk");
+    },
+    clearPhoto: async () => {
+      events.push("photo");
+    },
+    clearCovers: async () => {},
+    blockPending: () => () => {},
+    clearPending: async () => {},
+    authSignOut: async () => {
+      events.push("auth");
+    },
+    finish: () => {},
+    busy: () => {},
+  });
+  life.update({ account: "owner", preview: false });
+  await assert.rejects(life.signOut(), /disk/);
+  assert.deepEqual(events, []);
 });

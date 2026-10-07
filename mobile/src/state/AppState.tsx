@@ -13,6 +13,7 @@ import { createSessionLifecycle } from "../services/sessionLifecycle";
 import { profilePhotoStore } from "../services/profile";
 import { planCoverStore } from "../services/planCovers";
 import { peopleStore } from "../services/people";
+import { recentPlaces } from "../services/recentPlaces";
 import { supabase, storage } from "../services/supabase";
 import type { Plan } from "../domain/plans";
 /** Kept as an alias for existing screens; the type lives in the domain layer. */
@@ -99,6 +100,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       suspend: peopleStore.suspend,
       resume: peopleStore.resume,
       clearPeople: peopleStore.clear,
+      clearRecentPlaces: (scope) => recentPlaces.clear(scope),
       clearPhoto: (scope) => profilePhotoStore.clear(scope),
       clearCovers: (scope) => planCoverStore.clearCoverJournals(scope),
       blockPending: pendingStore.beginCleanup,

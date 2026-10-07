@@ -75,6 +75,10 @@ try {
   await expect(
     page.getByText("The garden café", { exact: true }),
   ).toBeVisible();
+  // Recent places (UX-P6): a successful save remembers its place on this device.
+  const recent = () =>
+    page.evaluate(() => sessionStorage.getItem("resbite.recent-places.v1.preview"));
+  await expect.poll(recent).toBe(JSON.stringify(["The garden café"]));
   await page.getByRole("button", { name: "Edit plan", exact: true }).click();
   await expect(page.getByLabel("Meeting place", { exact: true })).toHaveValue(
     "The garden café",
@@ -94,6 +98,7 @@ try {
   await expect(
     page.getByText("The riverside café", { exact: true }),
   ).toBeVisible();
+  await expect.poll(recent).toBe(JSON.stringify(["The riverside café", "The garden café"]));
   await expect(page.getByText("The garden café", { exact: true })).toHaveCount(
     0,
   );

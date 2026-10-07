@@ -107,6 +107,10 @@ try {
   ).toBeChecked();
   await page.getByRole("button", { name: "My resbites", exact: true }).click();
   await page.getByRole("tab", { name: "Profile", exact: true }).click();
+  assert.equal(
+    await page.evaluate(() => sessionStorage.getItem("resbite.recent-places.v1.preview")),
+    JSON.stringify(["Test café"]),
+  );
   await page
     .getByRole("button", { name: "Leave preview", exact: true })
     .click();
@@ -115,6 +119,11 @@ try {
       sessionStorage.getItem("resbite.people.v1.preview"),
     ),
     null,
+  );
+  assert.equal(
+    await page.evaluate(() => sessionStorage.getItem("resbite.recent-places.v1.preview")),
+    null,
+    "Leaving preview clears recent places",
   );
   assert.deepEqual(errors, []);
   console.log(

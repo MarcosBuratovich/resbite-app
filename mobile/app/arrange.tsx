@@ -21,6 +21,7 @@ import { activities } from "../src/services/catalogue";
 import { useCatalogue } from "../src/state/useCatalogue";
 import { drafts, type PlanDraft } from "../src/services/drafts";
 import { planGateway } from "../src/services/plans";
+import { recentPlaces } from "../src/services/recentPlaces";
 import { useApp, type LocalPlan } from "../src/state/AppState";
 import {
   Back,
@@ -64,7 +65,7 @@ export default function Arrange() {
     activity?: string;
     plan?: string;
   }>();
-  const { preview, session, localPlans, setLocalPlans } = useApp();
+  const { preview, session, localPlans, setLocalPlans, captureSession } = useApp();
   const navigation = useNavigation();
   const { fontScale } = useWindowDimensions();
   const largeText = fontScale >= 1.4;
@@ -604,6 +605,10 @@ export default function Arrange() {
       if (!preview && !original) coverOutcome.current = await cover.commitAfterCreate(write.id);
       stopped.current = true;
       await drafts.remove(scope!, draftKey);
+      // Recent places (UX-P6) are a convenience on this device; they never fail the save.
+      void recentPlaces
+        .remember(scope!, write.details.place_label, captureSession())
+        .catch(() => {});
       if (mounted.current) {
         setPending(null);
         setSaved(true);
