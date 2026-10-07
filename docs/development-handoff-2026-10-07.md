@@ -1,6 +1,6 @@
 # Resbite development handoff — 7 October 2026
 
-**Update:** custom events (CE) now precede the remaining B0 work — see the [CE1 record](../qa/custom-events-2026-10-07/README.md).
+**Update:** custom events (CE) now precede the remaining B0 work — see the [CE1 record](../qa/custom-events-2026-10-07/README.md) and the [CE2 record](../qa/custom-events-ce2-2026-10-07/README.md).
 
 ## Release position
 

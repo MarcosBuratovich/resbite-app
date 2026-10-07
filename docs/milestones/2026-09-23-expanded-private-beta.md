@@ -310,3 +310,5 @@ The reconnected iPhone received the photo consistency update. The owner confirme
 ## CE — Custom events (7 October 2026)
 
 The owner re-prioritized: custom events come before the remaining B0 work and B1 ([design](../superpowers/specs/2026-10-07-custom-events-design.md), [CE1 plan](../superpowers/plans/2026-10-07-custom-events-ce1.md)). CE1 delivers event title/description/categories, the Create tab and idea templates; CE2 delivers organizer cover photos. B1's two-person acceptance now exercises custom events. B2–B8 scope is unchanged.
+
+CE2 (organizer cover photos) shipped on 7 October 2026; see the [implementation status](../implementation-status.md).

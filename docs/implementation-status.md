@@ -364,3 +364,20 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
 **Known limitation.** Opening "New resbite" and leaving without typing leaves an empty draft card. A guard was reverted because it suppressed autosave after an undone edit.
 
 **Remaining.** CE2 (organizer cover photo) gets its own plan next, followed by the remaining B0 work and B1. Tester access is still owner-only. Deletion is not enabled; its release sequence now includes the custom-event checks in the [recovery ledger](../qa/deletion-recovery-ledger.md).
+
+## Custom events CE2 — 7 October 2026
+
+**Shipped and owner-accepted on the iPhone.** Organizers can add, replace and remove a cover photo for an event they own while it is active and in the future. The picker normalizes the photo on the phone (JPEG, longest side 1600 px, metadata stripped, at most 2 MB). A new event saves first and its cover then uploads and attaches; if that step fails, the event still exists and Edit offers "Retry cover". Cancelling the picker changes nothing. Readers see covers through 5-minute signed links, and only the current cover. Attach, replace and remove go through `set_plan_cover_if_current`, a compare-and-swap on path and revision. Account deletion detaches the cover. Preview covers are never saved in drafts, and cover work blocks Save and leaving the editor until it finishes.
+
+**Hosted migration.** `plan_covers` (local `supabase/migrations/20261007200000_plan_covers.sql`) was applied to project `ewcsgvhuojxdpaspwsrx` as hosted version `20261007175855`, after the owner's explicit approval ("Yes, apply it") of that single migration. Advisors were unchanged. `supabase/tests/hosted-baseline/migrations.txt` records it.
+
+**Verification (Task 6, before the final review fixes F1 `9e1da8e` and F2 `49f2410`; their scoped re-review was clean).** 148 mobile tests, 51 backend tests, SQL suite in full and hosted-baseline modes, 17/17 browser QA scripts, iOS JavaScript export, `git diff --check` clean. The update reached the installed development build as JavaScript only, with no native rebuild.
+
+**Acceptance.** The owner's first reply ("all good, everything works on the iPhone") was not recorded as acceptance: no bundle had been served and nothing had reached the database. After reloading, the owner replied "done, reloaded and ran all four checks" on 7 October 2026, corroborated by Metro and hosted data. Evidence, rollback SQL and approval wording: [CE2 rollout record](../qa/custom-events-ce2-2026-10-07/README.md).
+
+**Rulings.**
+- The storage UPDATE policy lets the owner rename or move objects within their own folders (needed for upsert retries), as for profile photos. An organizer can only break their own cover link.
+- A signed cover link (300 s) a reader already holds keeps working after replace or remove until it expires. This is inherent to Supabase signed URLs and is the same for profile photos.
+- Acceptance check 4 (offline) was narrowed with the owner's approval: cover actions on an existing event are disabled when its cover can't be loaded; a change after the connection drops fails safely and offers Retry cover; choosing a cover for a new event is local and uploads after save.
+
+**Remaining.** Cover cleanup in the cleanup and deletion workers (item 8 of the [recovery ledger](../qa/deletion-recovery-ledger.md)); invitee viewing, verified in B1 with a second tester; then the remaining B0 work and B1. Deferred known limitations (header and draft cards without the cover, no thumbnail re-signing, stranded pending changes and the like) are listed in the [CE2 record](../qa/custom-events-ce2-2026-10-07/README.md#known-limitations-deferred). Tester access is still owner-only. Deletion is not enabled.
