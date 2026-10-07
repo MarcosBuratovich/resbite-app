@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  answerKey,
   canReadSample,
+  cantMakeItResponse,
   reconcileRsvp,
   type RsvpSnapshot,
   type RsvpAttempt,
@@ -89,4 +91,15 @@ test("sample access requires accepted response and future active plan", () => {
     canReadSample(accepted, Date.parse("2099-01-01T00:00:00Z")),
     false,
   );
+});
+
+test("Can’t make it withdraws after Going and declines before ever accepting; the control reads stored answers", () => {
+  assert.equal(cantMakeItResponse("accepted"), "withdrawn");
+  assert.equal(cantMakeItResponse("withdrawn"), "withdrawn");
+  assert.equal(cantMakeItResponse("pending"), "declined");
+  assert.equal(cantMakeItResponse("declined"), "declined");
+  assert.equal(answerKey("accepted"), "going");
+  assert.equal(answerKey("declined"), "cant");
+  assert.equal(answerKey("withdrawn"), "cant");
+  assert.equal(answerKey("pending"), null);
 });

@@ -35,3 +35,14 @@ export function reconcileRsvp(
     return "confirmed";
   return snapshot.attendee.version === attempt.version ? "retry" : "review";
 }
+
+/** The answer control's selected option for a stored response (UX1: Going / Can’t make it). */
+export function answerKey(response: string): "going" | "cant" | null {
+  if (response === "accepted") return "going";
+  return response === "declined" || response === "withdrawn" ? "cant" : null;
+}
+
+/** Can’t make it withdraws after Going (today’s "Withdraw my RSVP"); before ever accepting, it declines. */
+export function cantMakeItResponse(current: string): Response {
+  return current === "accepted" || current === "withdrawn" ? "withdrawn" : "declined";
+}
