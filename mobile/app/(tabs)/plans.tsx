@@ -240,6 +240,13 @@ export default function Plans() {
               <Title style={{ fontSize: 23 }}>
                 Pick up where you left off.
               </Title>
+              <EventPictureView
+                picture={eventPicture({
+                  activity_id: d.activityId,
+                  categories: d.categories ?? [],
+                })}
+                size={56}
+              />
               <Copy>
                 {d.title?.trim() ||
                   activities.find((a) => a.id === d.activityId)?.title ||

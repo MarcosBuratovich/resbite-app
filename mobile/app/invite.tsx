@@ -24,6 +24,8 @@ import {
   type RsvpAttempt,
   type RsvpSnapshot,
 } from "../src/domain/rsvp";
+import { EventPictureView } from "../src/design/categories";
+import { eventPicture } from "../src/domain/events";
 import { claimInvitation, readRsvp, writeRsvp } from "../src/services/rsvp";
 export default function Invite() {
   const { token, plan } = useLocalSearchParams<{
@@ -316,6 +318,7 @@ export default function Invite() {
         )}
         {snapshot && (
           <>
+            <EventPictureView picture={eventPicture(snapshot.plan)} size={70} />
             <Title style={{ fontSize: 24 }}>{snapshot.plan.title}</Title>
             {!!snapshot.plan.description && (
               <Copy>{snapshot.plan.description}</Copy>
