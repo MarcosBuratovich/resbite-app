@@ -45,12 +45,12 @@ export function useCoverPhoto(options: {
   const chosen = useRef<{ bytes: Uint8Array; uri: string } | null>(null);
   const working = useRef(false);
   const mounted = useRef(true);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
       mounted.current = false;
-    },
-    [],
-  );
+    };
+  }, []);
   const guard = useCallback(() => {
     const assertSession = captureSession();
     return () => {

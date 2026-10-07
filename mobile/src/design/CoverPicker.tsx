@@ -35,7 +35,7 @@ export function CoverPicker({
         <>
           <Copy>A cover change needs confirmation. Retry checks the saved cover before changing anything.</Copy>
           <Button title="Keep saved cover" secondary onPress={() => void cover.keep()} disabled={blocked} />
-          <Button title="Retry cover" onPress={() => void cover.retry()} disabled={blocked} loading={cover.busy} />
+          <Button title="Retry cover" secondary onPress={() => void cover.retry()} disabled={blocked} loading={cover.busy} />
         </>
       ) : (
         <>

@@ -383,12 +383,13 @@ export default function Plans() {
                         tone="violet"
                         title="Edit plan"
                         disabled={working === p.id}
-                        onPress={() =>
+                        onPress={() => {
+                          router.setParams({ cover: "none" });
                           router.push({
                             pathname: "/arrange",
                             params: { plan: p.id },
-                          })
-                        }
+                          });
+                        }}
                       />
                       <ActionRow
                         icon={Users}

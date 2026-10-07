@@ -201,6 +201,7 @@ try {
   assert.equal(plan.cover_path, uploads[0]);
   assert.equal(plan.cover_revision, 1);
   assert.equal(uploads.at(-1), uploads[0], "Retry uploads to the same path");
+  assert.equal(uploads.length, 2, "Retry uploaded the journaled bytes once more to the same path");
   await page.getByRole("button", { name: "Remove cover photo", exact: true }).click();
   await expect(
     page.getByText("Cover photo removed. The previous file stays in private storage until cleanup is available.", { exact: true }),
@@ -214,6 +215,7 @@ try {
   assert.equal(plan.cover_revision, 3);
   await page.getByRole("button", { name: "My resbites", exact: true }).click();
   await expect(page.locator('img[src*="/object/sign/plan-covers/fixture.jpg"]').first()).toBeAttached();
+  await expect(page.getByText("Your resbite is saved, but its cover photo hasn’t uploaded yet. Open Edit plan to retry.", { exact: true })).toHaveCount(0);
   await page.context().close();
   console.log("PASS: signed-in cover uploads after save, retries from Edit, removes and re-adds.");
   assert.deepEqual(errors, []);

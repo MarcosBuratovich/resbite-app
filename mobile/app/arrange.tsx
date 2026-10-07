@@ -275,7 +275,9 @@ export default function Arrange() {
           activityId: sourceId,
           planId,
           requestId: requestId.current,
-          original,
+          original:
+            original &&
+            (({ cover_path: _cover, cover_revision: _revision, ...rest }) => rest)(original),
           initial,
           title: fields.title,
           description: fields.description,
@@ -348,9 +350,9 @@ export default function Arrange() {
   }, [draftReady, dirty, pending]);
 
   usePreventRemove(
-    (dirty || busy || pending !== null) && !saved,
+    (dirty || busy || cover.busy || pending !== null) && !saved,
     ({ data }) => {
-      if (busy) return;
+      if (busy || cover.busy) return;
       const message =
         "Keep this draft on this device and leave? You can resume it from My resbites.";
       const leave = async () => {
@@ -450,7 +452,7 @@ export default function Arrange() {
   }
 
   async function save() {
-    if (saving.current || locating) return;
+    if (saving.current || locating || cover.busy) return;
     if (
       !preview &&
       mode === "idea" &&
@@ -655,6 +657,7 @@ export default function Arrange() {
         loading={busy}
         disabled={
           locating ||
+          cover.busy ||
           latest !== undefined ||
           (Boolean(planId) && !dirty && !pending)
         }
