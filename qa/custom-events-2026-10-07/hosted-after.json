@@ -1,0 +1,52 @@
+{
+  "project": "ewcsgvhuojxdpaspwsrx",
+  "captured_at": "2026-10-07T15:48:35.656694+00:00",
+  "applied": {
+    "local_file": "supabase/migrations/20261007150000_custom_events.sql",
+    "file_sha256": "c96540a6f4ab2ed5225f4b6b1d8b23cd58959559d2c330aa8acd1a79dd9750b8",
+    "hosted_version": "20261007154825",
+    "hosted_name": "custom_events",
+    "method": "Supabase MCP apply_migration (single named migration; no db push)"
+  },
+  "migrations": [
+    "20260917191323 resbite_private_tester_foundation",
+    "20260923151512 account_access_status",
+    "20260923151515 atomic_registration_details",
+    "20260923154040 activity_catalogue_details",
+    "20260924150824 avatar_revision_compare_and_swap",
+    "20261007154825 custom_events"
+  ],
+  "activities_categories": {
+    "bbq": ["community","natural"],
+    "board-game-night": ["intellectual","community"],
+    "book-club": ["intellectual","community"],
+    "building-a-snowman": ["creative","natural"],
+    "coffee-together": ["community","uplifting"],
+    "get-out-with-bikes": ["physical","natural"],
+    "painting": ["creative","mindful"],
+    "picnic-in-the-park": ["natural","community"],
+    "spa-day": ["mindful","uplifting"],
+    "walk-and-talk": ["physical","community"],
+    "wine-tasting": ["community","intellectual"]
+  },
+  "matches_mobile_overlay": true,
+  "plan_columns": ["id:NO","owner_id:NO","activity_id:YES","starts_at:NO","time_zone:NO","place_label:NO","latitude:YES","longitude:YES","note:NO","status:NO","version:NO","created_at:NO","title:NO","description:NO","categories:NO"],
+  "activity_columns_added": ["categories:YES"],
+  "function_privileges": {
+    "public.create_plan_v2": "anon=false authenticated=true service_role=false (invoker)",
+    "public.change_plan_v2": "anon=false authenticated=true service_role=false (invoker)",
+    "private.create_plan_v2": "definer, owner postgres, search_path=''",
+    "private.change_plan_v2": "definer, owner postgres, search_path=''",
+    "private.valid_categories": "public EXECUTE kept by design (pure predicate used by CHECK constraints)",
+    "private.fill_plan_from_activity / redact_deleting_owner_plan": "no EXECUTE for anon/authenticated/service_role (trigger-only)",
+    "legacy public.create_plan / change_plan": "unchanged (anon=false authenticated=true; service_role=true pre-existing)"
+  },
+  "triggers": ["plans_fill_from_activity","plans_redact_deleting_owner"],
+  "constraints_added": ["activities_categories_valid","activities_published_categories","plans_title_valid","plans_description_valid","plans_categories_valid"],
+  "roster_enabled": 1,
+  "plans": 0,
+  "advisors": {
+    "security": "unchanged — INFO rls_enabled_no_policy x4 (intentional default-deny private tables)",
+    "performance": "unchanged — INFO unused_index x5, INFO auth_db_connections_absolute"
+  }
+}

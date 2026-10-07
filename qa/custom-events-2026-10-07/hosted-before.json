@@ -1,0 +1,38 @@
+{
+  "project": "ewcsgvhuojxdpaspwsrx",
+  "captured_at": "2026-10-07T13:53:50.56277+00:00",
+  "captured_by": "read-only Supabase MCP queries (role postgres)",
+  "migrations": [
+    "20260917191323 resbite_private_tester_foundation",
+    "20260923151512 account_access_status",
+    "20260923151515 atomic_registration_details",
+    "20260923154040 activity_catalogue_details",
+    "20260924150824 avatar_revision_compare_and_swap"
+  ],
+  "prechecks": {
+    "published_outside_mapping": null,
+    "plans_outside_mapping": 0,
+    "plans": 0,
+    "roster_enabled": 1,
+    "owners": "tables plans/activities/profiles and private.create_plan/change_plan/require_tester owned by postgres"
+  },
+  "activities": [
+    {"id":"bbq","published":true,"category":"Meals & Drinks"},
+    {"id":"board-game-night","published":true,"category":"Leisure"},
+    {"id":"book-club","published":true,"category":"Intellectual"},
+    {"id":"building-a-snowman","published":true,"category":"Creative"},
+    {"id":"coffee-together","published":true,"category":"Meals & Drinks"},
+    {"id":"get-out-with-bikes","published":true,"category":"Adventure"},
+    {"id":"painting","published":true,"category":"Creative"},
+    {"id":"picnic-in-the-park","published":true,"category":"Meals & Drinks"},
+    {"id":"spa-day","published":true,"category":"Leisure"},
+    {"id":"walk-and-talk","published":true,"category":"Leisure"},
+    {"id":"wine-tasting","published":true,"category":"Meals & Drinks"}
+  ],
+  "plan_columns": ["id","owner_id","activity_id","starts_at","time_zone","place_label","latitude","longitude","note","status","version","created_at"],
+  "activity_columns": ["id","title","description","category","artwork_key","source_ids","published","duration_minutes","tips"],
+  "advisors": {
+    "security": "INFO rls_enabled_no_policy x4 (private.device_endpoints, invitations, notification_outbox, tester_roster) — intentional default-deny",
+    "performance": "INFO unused_index x5 (plans_owner_idx, plans_activity_idx, device_endpoints_user_idx, notification_outbox_pending_idx, notification_outbox_recipient_idx); INFO auth_db_connections_absolute"
+  }
+}

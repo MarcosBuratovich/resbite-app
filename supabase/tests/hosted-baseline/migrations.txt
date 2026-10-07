@@ -5,3 +5,4 @@
 20260923150902_atomic_registration_details.sql         20260923151515
 20260923152900_activity_catalogue_details.sql          20260923154040
 20260924150135_avatar_revision_compare_and_swap.sql    20260924150824
+20261007150000_custom_events.sql                       20261007154825
