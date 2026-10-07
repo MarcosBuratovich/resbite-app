@@ -35,7 +35,14 @@ export function useCoverPhoto(options: {
   const { planId, preview, onPreviewChange } = options;
   const { session, captureSession } = useApp();
   const ownerId = session?.user.id ?? null;
-  const scope = !preview && ownerId && planId ? coverScope(ownerId, planId) : null;
+  const scope = (() => {
+    if (preview || !ownerId || !planId) return null;
+    try {
+      return coverScope(ownerId, planId);
+    } catch {
+      return null;
+    }
+  })();
   const [uri, setUri] = useState<string | null>(preview ? (options.previewUri ?? null) : null);
   const [pending, setPending] = useState<PhotoChange | null>(null);
   const [busy, setBusy] = useState(false);
