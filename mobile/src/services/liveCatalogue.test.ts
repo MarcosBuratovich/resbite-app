@@ -5,25 +5,27 @@ import { readPublishedCatalogue, type CatalogueAdapter } from "./liveCatalogue";
 import { decodePublishedActivities } from "../domain/catalogue";
 import { filterActivities } from "../domain/rules";
 
-test("three owner-approved additions decode with reviewed content and intersect search with existing categories", async () => {
+test("three owner-approved additions decode with reviewed content and intersect search with approved categories", async () => {
   const additions = JSON.parse(
     await readFile(
       new URL("../../content/activity-additions.json", import.meta.url),
       "utf8",
     ),
   );
+  const overlay = JSON.parse(
+    await readFile(new URL("../../content/activity-categories.json", import.meta.url), "utf8"),
+  );
   const rows = additions.map(
     (item: {
       id: string;
       title: string;
-      category: string;
       description: string;
       tips: string[];
       sourceIds: string[];
     }) => ({
       id: item.id,
       title: item.title,
-      category: item.category,
+      categories: overlay.activities.find((entry: { id: string }) => entry.id === item.id).categories,
       description: item.description,
       artwork_key: item.id,
       source_ids: item.sourceIds,
@@ -45,15 +47,13 @@ test("three owner-approved additions decode with reviewed content and intersect 
     assert.equal(item.durationMinutes, null);
   }
   assert.deepEqual(
-    filterActivities(decoded, " PICNIC ", "Meals & Drinks").map(
-      (item) => item.id,
-    ),
+    filterActivities(decoded, " PICNIC ", "natural").map((item) => item.id),
     ["picnic-in-the-park"],
   );
-  assert.deepEqual(filterActivities(decoded, "picnic", "Leisure"), []);
+  assert.deepEqual(filterActivities(decoded, "picnic", "physical"), []);
   assert.deepEqual(
-    filterActivities(decoded, "", "Leisure").map((item) => item.id),
-    ["walk-and-talk", "board-game-night"],
+    filterActivities(decoded, "", "community").map((item) => item.id),
+    ["picnic-in-the-park", "walk-and-talk", "board-game-night"],
   );
 });
 
@@ -61,7 +61,7 @@ const published = {
   id: "coffee-together",
   title: "Reviewed title",
   description: "Only server copy",
-  category: "Meals & Drinks",
+  categories: ["community", "uplifting"],
   artwork_key: "coffee-together",
   source_ids: ["review"],
   published: true,
@@ -104,7 +104,7 @@ test("published catalogue uses complete server copy; empty response stays empty"
       id: published.id,
       title: "Reviewed title",
       description: "Only server copy",
-      category: published.category,
+      categories: published.categories,
       artwork: "coffee-together.png",
       sourceIds: ["review"],
       durationMinutes: 45,
@@ -217,4 +217,15 @@ test("a hung account/catalogue read has a finite retryable deadline", async () =
     readPublishedCatalogue({ ...live.options, timeoutMs: 5 }, live.adapter),
     /interrupted/,
   );
+});
+
+test("a server without approved categories is reported, not shown with guessed labels", () => {
+  const legacy: Record<string, unknown> = { ...published, category: "Meals & Drinks" };
+  delete legacy.categories;
+  assert.throws(() => decodePublishedActivities([legacy]), /could not be read/);
+  assert.throws(
+    () => decodePublishedActivities([{ ...published, categories: ["community", "community"] }]),
+    /could not be read/,
+  );
+  assert.deepEqual(decodePublishedActivities([published])[0].categories, ["community", "uplifting"]);
 });

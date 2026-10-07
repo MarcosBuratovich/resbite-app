@@ -48,7 +48,7 @@ const session = {
 const live = {
   id: "coffee-together",
   title: "Published coffee",
-  category: "Meals & Drinks",
+  categories: ["community", "uplifting"],
   description: "Reviewed server description.",
   artwork_key: "coffee-together",
   source_ids: ["fixture"],

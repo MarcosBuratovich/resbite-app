@@ -1,7 +1,8 @@
+import type { CategoryKey } from "./categories";
 export type Activity = {
   id: string;
   title: string;
-  category: string;
+  categories: CategoryKey[];
   description: string;
   tips: string[];
   durationMinutes: number | null;
@@ -11,12 +12,12 @@ export type Activity = {
 export function filterActivities(
   items: Activity[],
   query: string,
-  category: string,
+  category: CategoryKey | "all",
 ): Activity[] {
   const term = query.trim().toLocaleLowerCase();
   return items.filter(
     (x) =>
-      (category === "All" || x.category === category) &&
+      (category === "all" || x.categories.includes(category)) &&
       x.title.toLocaleLowerCase().includes(term),
   );
 }

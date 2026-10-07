@@ -245,6 +245,36 @@ assert.equal(
 );
 assert.equal(additionsApproval.policyExtensionApproved, false);
 assert.equal(additionsApproval.additionalTesterAccessApproved, false);
+// Categories (CE-D5/D7) live in their own approved overlay; the snapshots above stay untouched.
+const taxonomy = ["creative", "intellectual", "mindful", "natural", "physical", "community", "uplifting"];
+const overlayBytes = await readFile(new URL("../content/activity-categories.json", import.meta.url));
+const overlay = JSON.parse(overlayBytes.toString("utf8"));
+const overlayApproval = JSON.parse(
+  await readFile(new URL("../content/activity-categories-approval.json", import.meta.url), "utf8"),
+);
+assert.equal(overlay.schemaVersion, 1);
+assert.deepEqual(
+  overlay.activities.map((entry) => entry.id),
+  [...items, ...additions].map((item) => item.id),
+  "Every bundled idea needs exactly one approved category entry.",
+);
+for (const entry of overlay.activities) {
+  assert.ok(
+    Array.isArray(entry.categories) && entry.categories.length >= 1 && entry.categories.length <= 2,
+    `${entry.id} needs one or two categories.`,
+  );
+  assert.equal(new Set(entry.categories).size, entry.categories.length, `${entry.id} repeats a category.`);
+  assert.ok(entry.categories.every((key) => taxonomy.includes(key)), `${entry.id} uses an unapproved category.`);
+}
+assert.equal(overlayApproval.schemaVersion, 1);
+assert.equal(overlayApproval.status, "approved-for-owner-only-beta");
+assert.equal(overlayApproval.approvedBy, "owner");
+assert.equal(overlayApproval.decision, "CE-D7");
+assert.deepEqual(overlayApproval.taxonomy, taxonomy);
+assert.deepEqual(overlayApproval.approvedActivityIds, overlay.activities.map((entry) => entry.id));
+assert.equal(overlayApproval.mappingSha256, sha256(overlayBytes), "Category mapping changed; approval needs review.");
+assert.equal(overlayApproval.wellnessFormulaApproved, false);
+assert.equal(overlayApproval.additionalTesterAccessApproved, false);
 console.log(
-  `${items.length} original and ${additions.length} separately approved owner-only beta activity/artwork pairs validated against their complete review scopes. Original snapshots preserved; live publication is tracked separately.`,
+  `${items.length} original and ${additions.length} separately approved owner-only beta activity/artwork pairs validated against their complete review scopes; ${overlay.activities.length} approved category assignments validated. Original snapshots preserved; live publication is tracked separately.`,
 );

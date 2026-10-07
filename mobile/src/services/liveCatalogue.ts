@@ -17,7 +17,7 @@ const adapter: CatalogueAdapter = {
     let query = supabase
       .from("activities")
       .select(
-        "id,title,category,description,artwork_key,source_ids,published,duration_minutes,tips",
+        "id,title,categories,description,artwork_key,source_ids,published,duration_minutes,tips",
       )
       .eq("published", true);
     if (activityId !== undefined) query = query.eq("id", activityId);

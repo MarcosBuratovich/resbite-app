@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "decision": "CE-D7",
+  "note": "Approved categories for the bundled ideas. The approved content snapshots keep their temporary discovery labels as history.",
+  "activities": [
+    { "id": "coffee-together", "categories": ["community", "uplifting"] },
+    { "id": "painting", "categories": ["creative", "mindful"] },
+    { "id": "get-out-with-bikes", "categories": ["physical", "natural"] },
+    { "id": "building-a-snowman", "categories": ["creative", "natural"] },
+    { "id": "bbq", "categories": ["community", "natural"] },
+    { "id": "wine-tasting", "categories": ["community", "intellectual"] },
+    { "id": "spa-day", "categories": ["mindful", "uplifting"] },
+    { "id": "book-club", "categories": ["intellectual", "community"] },
+    { "id": "picnic-in-the-park", "categories": ["natural", "community"] },
+    { "id": "walk-and-talk", "categories": ["physical", "community"] },
+    { "id": "board-game-night", "categories": ["intellectual", "community"] }
+  ]
+}

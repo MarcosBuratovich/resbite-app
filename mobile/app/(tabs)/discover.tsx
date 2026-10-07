@@ -14,13 +14,8 @@ import { Redirect, router } from "expo-router";
 import {
   Search,
   ArrowUpRight,
-  Sun,
   SlidersHorizontal,
   LayoutGrid,
-  Palette,
-  Mountain,
-  Coffee,
-  Leaf,
   Sparkles,
 } from "lucide-react-native";
 import {
@@ -36,24 +31,21 @@ import { PreviewNotice } from "../../src/design/Chrome";
 import { activityArtwork } from "../../src/services/catalogue";
 import { useCatalogue } from "../../src/state/useCatalogue";
 import { filterActivities } from "../../src/domain/rules";
+import { categoryKeys, categoryLabels, type CategoryKey } from "../../src/domain/categories";
+import { CategoryFilterTile, categoryIcons, categoryText } from "../../src/design/categories";
 import { useApp } from "../../src/state/AppState";
 export default function Discover() {
   const largeText = useLargeText();
   const { preview, session } = useApp(),
     [query, setQuery] = useState(""),
-    [category, setCategory] = useState("All");
+    [category, setCategory] = useState<CategoryKey | "all">("all");
   const catalogue = useCatalogue();
-  const categories = [
-    "All",
-    ...new Set(catalogue.items.map((item) => item.category)),
-  ];
-  const selectedCategory = categories.includes(category) ? category : "All";
   const featured = catalogue.items.find(
     (item) => item.id === "coffee-together",
   );
   const results = useMemo(
-    () => filterActivities(catalogue.items, query, selectedCategory),
-    [catalogue.items, query, selectedCategory],
+    () => filterActivities(catalogue.items, query, category),
+    [catalogue.items, query, category],
   );
   if (!preview && !session) return <Redirect href="/" />;
   return (
@@ -145,58 +137,23 @@ export default function Discover() {
             paddingBottom: 19,
           }}
         >
-          {categories.map((cat) => (
-            <Pressable
-              key={cat}
-              accessibilityRole="button"
-              accessibilityState={{ selected: cat === selectedCategory }}
-              onPress={() => setCategory(cat)}
-              style={[
-                {
-                  minHeight: 64,
-                  minWidth: 76,
-                  paddingHorizontal: 12,
-                  paddingVertical: 10,
-                  borderRadius: 14,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 6,
-                  borderWidth: 1,
-                  borderColor: cat === selectedCategory ? c.aquaDark : c.line,
-                  backgroundColor:
-                    cat === selectedCategory ? c.aquaSoft : c.paper,
-                },
-              ]}
-            >
-              {React.createElement(
-                (
-                  {
-                    All: LayoutGrid,
-                    Creative: Palette,
-                    Adventure: Mountain,
-                    "Meals & Drinks": Coffee,
-                    Wellness: Leaf,
-                  } as Record<string, typeof Sun>
-                )[cat] || Sparkles,
-                {
-                  size: 20,
-                  strokeWidth: 1.7,
-                  color: cat === selectedCategory ? c.aquaDark : "#665381",
-                },
-              )}
-              <Copy
-                style={{
-                  fontSize: 12,
-                  fontFamily: fonts.body,
-                  color: cat === selectedCategory ? c.aquaDark : c.ink,
-                }}
-              >
-                {cat}
-              </Copy>
-            </Pressable>
+          <CategoryFilterTile
+            label="All"
+            icon={LayoutGrid}
+            selected={category === "all"}
+            onPress={() => setCategory("all")}
+          />
+          {categoryKeys.map((key) => (
+            <CategoryFilterTile
+              key={key}
+              label={categoryLabels[key]}
+              icon={categoryIcons[key]}
+              selected={category === key}
+              onPress={() => setCategory(key)}
+            />
           ))}
         </ScrollView>
-        {!query && selectedCategory === "All" && featured && (
+        {!query && category === "all" && featured && (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Explore ${featured.title.toLowerCase()}`}
@@ -300,7 +257,7 @@ export default function Discover() {
               <Pressable
                 onPress={() => {
                   setQuery("");
-                  setCategory("All");
+                  setCategory("all");
                 }}
               >
                 <Copy style={{ color: c.aquaDark, fontFamily: fonts.bold }}>
@@ -347,7 +304,7 @@ export default function Discover() {
                   </View>
                   <View style={{ padding: 12, gap: 4 }}>
                     <Copy style={{ fontSize: 10, color: c.muted }}>
-                      {a.category}
+                      {categoryText(a.categories)}
                     </Copy>
                     <Copy
                       style={{

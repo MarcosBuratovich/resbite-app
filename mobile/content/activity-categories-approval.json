@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "status": "approved-for-owner-only-beta",
+  "approvedOn": "2026-10-07",
+  "approvedBy": "owner",
+  "decision": "CE-D7",
+  "spec": "docs/superpowers/specs/2026-10-07-custom-events-design.md",
+  "taxonomy": [
+    "creative",
+    "intellectual",
+    "mindful",
+    "natural",
+    "physical",
+    "community",
+    "uplifting"
+  ],
+  "approvedActivityIds": [
+    "coffee-together",
+    "painting",
+    "get-out-with-bikes",
+    "building-a-snowman",
+    "bbq",
+    "wine-tasting",
+    "spa-day",
+    "book-club",
+    "picnic-in-the-park",
+    "walk-and-talk",
+    "board-game-night"
+  ],
+  "mappingSha256": "daf25f68c20fc168878c91ad989948a7ab71d29dda88e5b5d4254192dffc728c",
+  "replacesTemporaryDiscoveryFilters": true,
+  "wellnessFormulaApproved": false,
+  "policyExtensionApproved": false,
+  "additionalTesterAccessApproved": false
+}

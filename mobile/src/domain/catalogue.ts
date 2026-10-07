@@ -1,4 +1,5 @@
 import type { Activity } from "./rules";
+import { validCategories } from "./categories";
 
 export const artworkKeys = [
   "coffee-together",
@@ -50,10 +51,13 @@ export function decodePublishedActivities(value: unknown): Activity[] {
           Number(row.duration_minutes) > 1440))
     )
       throw Error("An activity could not be read.");
+    const categories = row.categories;
+    if (!validCategories(categories))
+      throw Error("An activity could not be read.");
     return {
       id,
       title: text("title", 200),
-      category: text("category", 100),
+      categories: [...categories],
       description: text("description", 6000),
       artwork: `${artworkKey}.png`,
       tips: row.tips as string[],

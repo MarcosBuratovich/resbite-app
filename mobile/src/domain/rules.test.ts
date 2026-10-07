@@ -14,12 +14,13 @@ import {
   validatePlan,
   safeAuthCode,
   motionPolicy,
+  type Activity,
 } from "./rules.ts";
-const entries = [
+const entries: Activity[] = [
   {
     id: "paint",
     title: "Painting together",
-    category: "Creative",
+    categories: ["creative", "mindful"],
     description: "",
     tips: [],
     durationMinutes: null,
@@ -29,7 +30,7 @@ const entries = [
   {
     id: "cycle",
     title: "Cycling together",
-    category: "Physical",
+    categories: ["physical", "natural"],
     description: "",
     tips: [],
     durationMinutes: null,
@@ -37,13 +38,12 @@ const entries = [
     sourceIds: [],
   },
 ];
-test("search is case-insensitive and intersects category", () => {
-  assert.deepEqual(
-    filterActivities(entries, " PAINT ", "All").map((x) => x.id),
-    ["paint"],
-  );
-  assert.equal(filterActivities(entries, "paint", "Physical").length, 0);
-  assert.equal(filterActivities(entries, "", "All").length, 2);
+test("search is case-insensitive and intersects either category", () => {
+  assert.deepEqual(filterActivities(entries, " PAINT ", "all").map((x) => x.id), ["paint"]);
+  assert.equal(filterActivities(entries, "paint", "physical").length, 0);
+  assert.deepEqual(filterActivities(entries, "", "mindful").map((x) => x.id), ["paint"]);
+  assert.deepEqual(filterActivities(entries, "", "natural").map((x) => x.id), ["cycle"]);
+  assert.equal(filterActivities(entries, "", "all").length, 2);
 });
 test("registration rejects invalid email and short password without changing valid input", () => {
   assert.ok(validateRegistration("bad", "longpassword"));

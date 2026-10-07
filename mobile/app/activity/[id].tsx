@@ -17,6 +17,7 @@ import { useCatalogue } from "../../src/state/useCatalogue";
 import { useApp } from "../../src/state/AppState";
 import { colors as c } from "../../src/design/tokens";
 import { PreviewNotice } from "../../src/design/Chrome";
+import { categoryText } from "../../src/design/categories";
 import { Clock3, Sparkles } from "lucide-react-native";
 export default function Detail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -117,7 +118,7 @@ export default function Detail() {
               }}
             >
               <Copy style={{ color: c.aquaDark, fontSize: 12 }}>
-                {a.category}
+                {categoryText(a.categories)}
               </Copy>
             </View>
             {a.durationMinutes !== null && (
