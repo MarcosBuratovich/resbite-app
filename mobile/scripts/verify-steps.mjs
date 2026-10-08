@@ -89,7 +89,7 @@ try {
     await expect(page).toHaveURL(/\/invitations\?plan=/);
     // Back from invitations lands on My resbites with the created notice, as Later does.
     await button(page, "My resbites").click();
-    await expect(page.getByText("Preview plan saved. Time to get together.", { exact: true })).toBeVisible();
+    await expect(page.getByText("Preview saved", { exact: true })).toBeVisible();
     await page.context().close();
     console.log("PASS: Next with a missing answer, alerts, focus on step change, jump from Review, Invite screen.");
   }
@@ -105,7 +105,7 @@ try {
     await button(page, "Invite people").click();
     await expect(page).toHaveURL(/\/invitations\?plan=/);
     await button(page, "My resbites").click();
-    await expect(page.getByText("Preview plan saved. Time to get together.", { exact: true })).toBeVisible();
+    await expect(page.getByText("Preview saved", { exact: true })).toBeVisible();
     await expect(button(page, "New resbite")).toBeVisible();
     await page.context().close();
     console.log("PASS: Invite people from an idea comes back to My resbites with the created notice.");

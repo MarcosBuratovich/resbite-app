@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
-import { choosePeople, createFromIdea, later } from "./qa-helpers.mjs";
+import { button, choosePeople, createFromIdea, later } from "./qa-helpers.mjs";
 const browser = await chromium.launch({ channel: "chrome", headless: true });
 try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
@@ -78,6 +78,7 @@ try {
     ),
   ).toBeVisible();
   await page.getByRole("button", { name: "My resbites", exact: true }).click();
+  await button(page, "Back").click();
   await page.getByRole("tab", { name: "Profile", exact: true }).click();
   await page
     .getByRole("button", { name: "People & groups", exact: true })
@@ -101,6 +102,7 @@ try {
     }),
   ).toBeChecked();
   await page.getByRole("button", { name: "My resbites", exact: true }).click();
+  await button(page, "Back").click();
   await page.getByRole("tab", { name: "Profile", exact: true }).click();
   assert.equal(
     await page.evaluate(() => sessionStorage.getItem("resbite.recent-places.v1.preview")),

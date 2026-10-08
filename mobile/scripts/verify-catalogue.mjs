@@ -1,7 +1,7 @@
 // All Supabase calls are intercepted; no catalogue publication, users or plans are created.
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
-import { button, closeToList, createFromIdea, editEvent, heading, later } from "./qa-helpers.mjs";
+import { button, card, closeToList, createFromIdea, editEvent, heading, later } from "./qa-helpers.mjs";
 import { mkdir, readFile } from "node:fs/promises";
 
 const additions = JSON.parse(
@@ -316,9 +316,7 @@ try {
       .click();
     await createFromIdea(preview.page, `Fixture place for ${item.title}`);
     await later(preview.page);
-    await expect(
-      preview.page.getByRole("heading", { name: item.title, exact: true }),
-    ).toBeVisible();
+    await expect(card(preview.page, item.title).first()).toBeVisible();
     await expect(
       preview.page.getByText(`Fixture place for ${item.title}`, {
         exact: true,

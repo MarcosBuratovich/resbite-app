@@ -1,56 +1,37 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
-import {
-  ScrollView,
-  View,
-  Image,
-  RefreshControl,
-  AppState,
-} from "react-native";
+import { AppState, Image, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { Check, Lightbulb, Plus, RotateCcw, UserRound } from "lucide-react-native";
 import { activities, artwork } from "../../src/services/catalogue";
-import { EventPictureView, categoryText } from "../../src/design/categories";
+import { EventPictureView } from "../../src/design/categories";
 import { eventPicture } from "../../src/domain/events";
 import { supabase } from "../../src/services/supabase";
 import { useApp, LocalPlan } from "../../src/state/AppState";
-import {
-  ActionRow,
-  ActionGroup,
-  TextAction,
-  Button,
-  Copy,
-  Title,
-  ErrorNote,
-  Reveal,
-  s,
-  useLargeText,
-} from "../../src/design/ui";
-import { colors as c } from "../../src/design/tokens";
+import { Copy, Title, ErrorNote, Reveal, s, useLargeText } from "../../src/design/ui";
+import { Chip, chipToneFor, CoverCard, Fab, IconButton, Segmented, Tile } from "../../src/design/kit";
+import { colors as c, fonts, r } from "../../src/design/tokens";
 import { PreviewNotice } from "../../src/design/Chrome";
 import { drafts, type PlanDraft } from "../../src/services/drafts";
-import { planGateway } from "../../src/services/plans";
 import { planCoverStore } from "../../src/services/planCovers";
-import { canEditPlan, cancelPlan, PlanSaveError } from "../../src/domain/plans";
-import { draftRoute } from "../../src/domain/eventView";
-import { Pencil, Users, X, CalendarDays, MapPin } from "lucide-react-native";
+import { cardChips, cardLabel, coverNotice, draftRoute, groupPlans } from "../../src/domain/eventView";
+
+type Attendee = {
+  plan_id: string;
+  user_id: string;
+  response: string;
+  profiles: { display_name: string } | null;
+};
+
 export default function Plans() {
   const largeText = useLargeText();
   const { created, updated, cover } = useLocalSearchParams(),
-    { preview, localPlans, setLocalPlans, session } = useApp(),
+    { preview, localPlans, session } = useApp(),
     [plans, setPlans] = useState<LocalPlan[]>([]),
     [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null),
-    [working, setWorking] = useState<string | null>(null),
-    [confirmCancel, setConfirmCancel] = useState<string | null>(null),
-    [notice, setNotice] = useState(""),
-    [attendees, setAttendees] = useState<
-      {
-        plan_id: string;
-        user_id: string;
-        response: string;
-        profiles: { display_name: string } | null;
-      }[]
-    >([]);
+    [segment, setSegment] = useState<"upcoming" | "past">("upcoming"),
+    [attendees, setAttendees] = useState<Attendee[]>([]);
   const scope = preview ? "preview" : session?.user.id;
   const [savedDrafts, setSavedDrafts] = useState<PlanDraft[]>([]);
   const [draftLoadError, setDraftLoadError] = useState(false);
@@ -82,9 +63,6 @@ export default function Plans() {
     setAttendees([]);
     setLoadedFor(undefined);
     setError(null);
-    setNotice("");
-    setConfirmCancel(null);
-    setWorking(null);
     setBusy(false);
   }, [scope]);
   const refresh = useCallback(async () => {
@@ -98,18 +76,13 @@ export default function Plans() {
     const uid = session.user.id;
     const controller = new AbortController();
     request.current = controller;
-    const isCurrent = () =>
-      identity.current === uid && request.current === controller;
+    const isCurrent = () => identity.current === uid && request.current === controller;
     const timeout = setTimeout(() => controller.abort(), 15000);
     setBusy(true);
     setError(null);
     try {
       const [p, a] = await Promise.all([
-        supabase
-          .from("plans")
-          .select("*")
-          .order("starts_at")
-          .abortSignal(controller.signal),
+        supabase.from("plans").select("*").order("starts_at").abortSignal(controller.signal),
         supabase
           .from("attendees")
           .select("plan_id,user_id,response,profiles(display_name)")
@@ -121,10 +94,8 @@ export default function Plans() {
       setLoadedFor(uid);
       setPlans(p.data || []);
       // Cover changes for cancelled or started plans can never complete; drop them quietly.
-      void planCoverStore
-        .discardStaleCoverJournals(uid, p.data || [])
-        .catch(() => {});
-      setAttendees((a.data || []) as unknown as typeof attendees);
+      void planCoverStore.discardStaleCoverJournals(uid, p.data || []).catch(() => {});
+      setAttendees((a.data || []) as unknown as Attendee[]);
     } catch (e) {
       if (isCurrent())
         setError(
@@ -150,315 +121,165 @@ export default function Plans() {
       };
     }, [refresh]),
   );
-  async function share(p: LocalPlan) {
-    if (preview) {
-      setNotice(
-        "Invitations are disabled in design preview. Real invitations need an approved tester account.",
-      );
-      return;
-    }
-    router.push({ pathname: "/invitations", params: { plan: p.id } });
-  }
-
-  async function cancel(p: LocalPlan) {
-    setWorking(p.id);
-    setError(null);
-    try {
-      if (preview)
-        setLocalPlans((all) =>
-          all.map((x) =>
-            x.id === p.id
-              ? { ...x, status: "cancelled", version: x.version + 1 }
-              : x,
-          ),
-        );
-      else {
-        await cancelPlan(planGateway, { id: p.id, version: p.version });
-        await refresh();
-      }
-      router.setParams({ created: "0", updated: "0", cover: "none" });
-      setNotice(
-        preview ? "Preview plan cancelled." : "Your plan is cancelled.",
-      );
-    } catch (e) {
-      // A definite failure reloads first: refresh() clears the error line.
-      if (e instanceof PlanSaveError && !e.uncertain) await refresh();
-      setError(
-        e instanceof PlanSaveError
-          ? e.message
-          : "Could not cancel. Refresh and try again.",
-      );
-    } finally {
-      setWorking(null);
-    }
-  }
-  const list = preview
-    ? localPlans
-    : loadedFor === session?.user.id && session
-      ? plans
-      : [];
+  const list = preview ? localPlans : loadedFor === session?.user.id && session ? plans : [];
+  const now = Date.now();
+  const { upcoming, past } = groupPlans(list, now);
+  const shown = segment === "upcoming" ? upcoming : past;
+  const myDrafts = savedDrafts.filter((d) => d.scope === scope);
+  const start = () => router.push("/arrange");
+  const open = (p: LocalPlan) => {
+    router.setParams({ created: "0", updated: "0", cover: "none" });
+    router.push({ pathname: "/event", params: { plan: p.id } });
+  };
+  const toast =
+    updated === "1"
+      ? preview
+        ? "Preview changes saved"
+        : "Changes saved"
+      : created === "1"
+        ? preview
+          ? "Preview saved"
+          : "Resbite saved"
+        : null;
   return (
     <SafeAreaView edges={["top", "left", "right"]} style={s.page}>
       <ScrollView
-        contentContainerStyle={[s.body, { paddingBottom: 28 }]}
+        contentContainerStyle={[s.body, { paddingBottom: 110 }]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
-        refreshControl={
-          <RefreshControl refreshing={busy} onRefresh={refresh} />
-        }
+        refreshControl={<RefreshControl refreshing={busy} onRefresh={refresh} />}
       >
+        <View style={styles.header}>
+          <Title>{segment === "past" ? "Past" : "Upcoming"}</Title>
+          <IconButton icon={UserRound} label="Your profile" onPress={() => router.navigate("/profile")} />
+        </View>
         <PreviewNotice />
-        <Copy style={{ color: c.aquaDark }}>TIME WELL SPENT</Copy>
-        <Title>Something to look forward to.</Title>
-        <Copy style={s.muted}>Your plans, all in one place.</Copy>
-        <Button title="New resbite" onPress={() => router.push("/arrange")} />
-        {(created === "1" || updated === "1") && (
-          <Reveal>
-            <View
-              style={[s.card, { padding: 18, backgroundColor: c.aquaSoft }]}
-            >
-              <Copy>
-                {updated === "1"
-                  ? preview
-                    ? "Preview changes saved."
-                    : "Your changes are saved."
-                  : preview
-                    ? "Preview plan saved."
-                    : "Your plan is saved."}{" "}
-                Time to get together.
-              </Copy>
+        <Segmented
+          label="Show"
+          options={[
+            { key: "upcoming", text: "Upcoming" },
+            { key: "past", text: "Past" },
+          ] as const}
+          value={segment}
+          onChange={setSegment}
+        />
+        <Fab placement="inline" onPress={start} />
+        {toast && (
+          <Reveal style={{ alignSelf: "flex-start" }}>
+            <View accessibilityLiveRegion="polite">
+              <Chip icon={Check} tone="aqua" text={toast} />
             </View>
           </Reveal>
         )}
-        {(cover === "pending" || cover === "failed") && (
-          <Copy style={{ color: c.error }}>
-            {cover === "pending"
-              ? "Your resbite is saved, but its cover photo hasn’t uploaded yet. Open Edit plan to retry."
-              : "Your resbite is saved, but its cover photo couldn’t be prepared. Open Edit plan to add it again."}
-          </Copy>
-        )}
+        <ErrorNote message={coverNotice(cover)} />
         {draftLoadError && (
           <ErrorNote message="Couldn’t load drafts from this device. Reopen this tab to try again." />
         )}
-        {savedDrafts
-          .filter((d) => d.scope === scope)
-          .map((d) => (
-            <View
-              key={d.key}
-              style={[
-                s.card,
-                { padding: 20, gap: 14, backgroundColor: c.cream },
-              ]}
-            >
-              <Title style={{ fontSize: 23 }}>
-                Pick up where you left off.
-              </Title>
-              <EventPictureView
-                picture={eventPicture({
-                  activity_id: d.activityId,
-                  categories: d.categories ?? [],
-                })}
-                size={56}
-              />
-              <Copy>
-                {d.title?.trim() ||
-                  activities.find((a) => a.id === d.activityId)?.title ||
-                  "Your resbite"}
-              </Copy>
-              <Copy style={s.muted}>
-                {d.pending
-                  ? "A save needs checking before you continue."
-                  : "Draft saved on this device."}
-              </Copy>
-              <Button
-                title="Continue draft"
-                onPress={() =>
-                  router.push({
-                    pathname: "/arrange",
-                    params: draftRoute(d),
-                  })
-                }
-              />
-            </View>
-          ))}
+        {segment === "upcoming" && myDrafts.length > 0 && (
+          <ScrollView
+            horizontal={!largeText}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.drafts}
+          >
+            {myDrafts.map((d) => (
+              <DraftTile key={d.key} draft={d} />
+            ))}
+          </ScrollView>
+        )}
         <ErrorNote message={error} />
-        {error && (
-          <Button
-            title="Refresh plans"
-            secondary
-            loading={busy}
-            onPress={() => void refresh()}
-          />
-        )}
-        {busy && list.length === 0 && (
-          <Copy accessibilityLiveRegion="polite">Loading your plans…</Copy>
-        )}
-        {Boolean(notice) && <Copy style={s.muted}>{notice}</Copy>}
-        {list.length === 0 && !busy && !error ? (
-          <View style={{ gap: 20, paddingVertical: 24 }}>
-            <Image
-              source={artwork["get-out-with-bikes"]}
-              style={{ height: 180, width: "100%" }}
-              resizeMode="contain"
-            />
-            <Title style={{ fontSize: 24 }}>Make room for a first plan.</Title>
-            <Copy>Start your own resbite, or borrow an idea.</Copy>
-            <Button
-              title="Start your own resbite"
-              onPress={() => router.push("/arrange")}
-            />
-            <Button
-              title="Browse ideas"
-              secondary
-              onPress={() => router.navigate("/create")}
-            />
-          </View>
-        ) : (
-          list.map((p) => {
-            const owner = preview || p.owner_id === session?.user.id;
-            return (
-              <View key={p.id} style={[s.card, { padding: 20, gap: 14 }]}>
-                <View
-                  style={{
-                    flexDirection: largeText ? "column" : "row",
-                    alignItems: largeText ? "stretch" : "center",
-                    gap: 12,
-                  }}
-                >
-                  <EventPictureView picture={eventPicture(p)} size={70} />
-                  <View style={{ flex: largeText ? undefined : 1 }}>
-                    <Copy style={{ color: c.aquaDark, fontSize: 12 }}>
-                      {p.status === "cancelled"
-                        ? "CANCELLED"
-                        : owner
-                          ? "YOU’RE ORGANISING"
-                          : "YOU’RE INVITED"}
-                    </Copy>
-                    <Title style={{ fontSize: 23, lineHeight: 29 }}>
-                      {p.title}
-                    </Title>
-                    <Copy style={{ ...s.muted, fontSize: 12 }}>
-                      {categoryText(p.categories)}
-                    </Copy>
-                  </View>
+        {error && <IconButton icon={RotateCcw} label="Refresh plans" busy={busy} onPress={() => void refresh()} />}
+        {busy && list.length === 0 && <Copy accessibilityLiveRegion="polite">Loading your plans…</Copy>}
+        {shown.length === 0 && !busy && !error ? (
+          segment === "upcoming" ? (
+            <View style={styles.empty}>
+              <Image
+                source={artwork["get-out-with-bikes"]}
+                style={{ height: 180, width: "100%" }}
+                resizeMode="contain"
+              />
+              <Copy style={styles.emptyTitle}>Nothing planned</Copy>
+              <View style={[styles.emptyTiles, largeText && { flexDirection: "column" }]}>
+                <View style={styles.emptyTile}>
+                  <Tile icon={Plus} title="Start" label="Start a new resbite" onPress={start} />
                 </View>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 10,
-                  }}
-                >
-                  <CalendarDays size={18} color={c.aquaDark} />
-                  <Copy style={{ flex: 1 }}>
-                    {new Date(p.starts_at).toLocaleString(undefined, {
-                      day: "numeric",
-                      month: "short",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </Copy>
+                <View style={styles.emptyTile}>
+                  <Tile icon={Lightbulb} title="Ideas" label="Browse ideas" onPress={() => router.navigate("/create")} />
                 </View>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 10,
-                  }}
-                >
-                  <MapPin size={18} color="#963F58" />
-                  <Copy style={{ flex: 1 }}>{p.place_label}</Copy>
-                </View>
-                {Boolean(p.note) && <Copy style={s.muted}>{p.note}</Copy>}
-                {attendees
-                  .filter((a) => a.plan_id === p.id)
-                  .map((a) => (
-                    <Copy key={a.user_id} style={s.muted}>
-                      {a.profiles?.display_name || "Tester"} · {a.response}
-                    </Copy>
-                  ))}
-                {canEditPlan(p, session?.user.id, preview) && (
-                  <>
-                    <ActionGroup>
-                      <ActionRow
-                        icon={Pencil}
-                        tone="violet"
-                        title="Edit plan"
-                        disabled={working === p.id}
-                        onPress={() => {
-                          router.setParams({ cover: "none" });
-                          router.push({
-                            pathname: "/arrange",
-                            params: { plan: p.id },
-                          });
-                        }}
-                      />
-                      <ActionRow
-                        icon={Users}
-                        title="Choose people"
-                        disabled={working === p.id}
-                        onPress={() =>
-                          router.push({
-                            pathname: "/people",
-                            params: { plan: p.id },
-                          })
-                        }
-                      />
-                    </ActionGroup>
-                    <Button
-                      title="Invite someone"
-                      onPress={() => share(p)}
-                      loading={working === p.id}
-                    />
-                    <TextAction
-                      icon={X}
-                      destructive
-                      title="Cancel plan"
-                      disabled={working === p.id}
-                      onPress={() => setConfirmCancel(p.id)}
-                    />
-                  </>
-                )}
-                {confirmCancel === p.id && p.status === "active" && (
-                  <View
-                    style={{
-                      gap: 12,
-                      padding: 14,
-                      backgroundColor: c.pinkSoft,
-                      borderRadius: 16,
-                    }}
-                  >
-                    <Copy>Cancel this plan for everyone?</Copy>
-                    <Button
-                      title="Yes, cancel plan"
-                      onPress={() => {
-                        setConfirmCancel(null);
-                        void cancel(p);
-                      }}
-                    />
-                    <Button
-                      title="Keep plan"
-                      secondary
-                      onPress={() => setConfirmCancel(null)}
-                    />
-                  </View>
-                )}
-                {!owner && p.status === "active" && (
-                  <Button
-                    title="View invitation"
-                    onPress={() =>
-                      router.push({
-                        pathname: "/event",
-                        params: { plan: p.id },
-                      })
-                    }
-                  />
-                )}
               </View>
+            </View>
+          ) : (
+            <Copy style={s.muted}>Nothing here yet.</Copy>
+          )
+        ) : (
+          shown.map((p) => {
+            const owner = preview || p.owner_id === session?.user.id;
+            const mine = attendees.find((a) => a.plan_id === p.id && a.user_id === session?.user.id);
+            const going = attendees.filter((a) => a.plan_id === p.id && a.response === "accepted").length;
+            const chips = cardChips({ owner, status: p.status, response: mine?.response ?? "pending", going });
+            return (
+              <CoverCard
+                key={p.id}
+                picture={eventPicture(p)}
+                title={p.title}
+                startsAt={p.starts_at}
+                place={p.place_label}
+                dimmed={p.status === "cancelled"}
+                chips={chips.map((text) => ({ key: text, text, tone: chipToneFor(text) }))}
+                label={cardLabel({ title: p.title, startsAt: p.starts_at, place: p.place_label, chips }, new Date(now))}
+                onPress={() => open(p)}
+              />
             );
           })
         )}
       </ScrollView>
+      <SafeAreaView edges={["bottom"]} pointerEvents="box-none" style={styles.fabLayer}>
+        <Fab placement="float" onPress={start} />
+      </SafeAreaView>
     </SafeAreaView>
   );
 }
+
+/** A compact draft tile: "Draft" chip and title; tapping continues it. */
+function DraftTile({ draft }: { draft: PlanDraft }) {
+  const title =
+    draft.title?.trim() || activities.find((a) => a.id === draft.activityId)?.title || "Your resbite";
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={draft.pending ? `Continue draft, ${title}, a save needs checking` : `Continue draft, ${title}`}
+      onPress={() => router.push({ pathname: "/arrange", params: draftRoute(draft) })}
+      style={({ pressed }) => [styles.draft, pressed && { opacity: 0.85 }]}
+    >
+      <EventPictureView
+        picture={eventPicture({ activity_id: draft.activityId, categories: draft.categories ?? [] })}
+        size={44}
+      />
+      <View style={{ flexShrink: 1, gap: 6 }}>
+        <Chip text={draft.pending ? "Check save" : "Draft"} tone={draft.pending ? "pink" : "status"} />
+        <Copy style={{ fontFamily: fonts.medium, fontSize: 14 }} numberOfLines={2}>
+          {title}
+        </Copy>
+      </View>
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  drafts: { gap: 10 },
+  draft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    minHeight: 72,
+    maxWidth: 280,
+    padding: 12,
+    borderRadius: r.tile,
+    backgroundColor: c.cream,
+  },
+  empty: { gap: 20, paddingVertical: 24 },
+  emptyTitle: { fontFamily: fonts.display, fontSize: 24, textAlign: "center" },
+  emptyTiles: { flexDirection: "row", gap: 12 },
+  emptyTile: { flex: 1 },
+  fabLayer: { position: "absolute", right: 20, bottom: 20 },
+});

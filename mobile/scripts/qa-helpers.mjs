@@ -1,5 +1,4 @@
 // Shared browser QA steps for the UX1 creation flow and My resbites.
-// Task 7 swaps the list helpers below from the inline card actions to the event page.
 import { expect } from "@playwright/test";
 
 /** Ignores matches on screens hidden underneath in the stack. */
@@ -48,34 +47,54 @@ export async function later(page) {
   await button(page, "Later").click();
 }
 
-// --- My resbites helpers (inline card actions; Task 7 moves them to the event page) ---
+// --- My resbites helpers: cards open the event page, where the actions now live (UX1) ---
+/** A My resbites card, found by its composed label ("{title}, {date}, …"). */
+export function card(page, title) {
+  const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return visible(page.getByRole("button", { name: new RegExp(`^${escaped}, `) }));
+}
+export async function openEvent(page, title) {
+  await card(page, title).first().click();
+  await expect(heading(page, title)).toBeVisible();
+}
 export async function editEvent(page, title) {
-  await button(page, "Edit plan").first().click();
+  await openEvent(page, title);
+  await button(page, `Edit ${title}`).click();
   await expect(heading(page, "Looks good?")).toBeVisible();
 }
 export async function inviteFromList(page, title, notice) {
-  await button(page, "Invite someone").first().click();
+  await openEvent(page, title);
+  await button(page, "Invite someone").click();
   await expect(page.getByText(notice, { exact: false })).toBeVisible();
+  await button(page, "Back").click();
 }
 export async function cancelFromList(page, title) {
-  await button(page, "Cancel plan").first().click();
+  await openEvent(page, title);
+  await button(page, "More actions").click();
+  await button(page, "Cancel event").click();
   await button(page, "Yes, cancel plan").click();
+  await expect(page.getByText(/cancelled\.$/)).toBeVisible();
+  await button(page, "Back").click();
 }
+/** Cancelled events leave Upcoming and stay visible under Past with a Cancelled chip (benchmark row 15). */
 export async function expectCancelled(page, title) {
-  await expect(page.getByText("CANCELLED", { exact: true })).toBeVisible();
-  await expect(button(page, "Edit plan")).toHaveCount(0);
+  await expect(card(page, title)).toHaveCount(0);
+  await page.getByRole("radio", { name: "Past", exact: true }).click();
+  await expect(card(page, title)).toHaveAttribute("aria-label", /, Cancelled, /);
+  await page.getByRole("radio", { name: "Upcoming", exact: true }).click();
 }
 export async function choosePeople(page, title) {
-  await button(page, "Choose people").first().click();
+  await openEvent(page, title);
+  await button(page, "Choose people").click();
 }
-/** Leaves an unchanged editor and returns to My resbites. */
+/** Leaves an unchanged editor (opened from the event page) and returns to My resbites. */
 export async function closeToList(page) {
   await close(page);
+  await button(page, "Back").click();
 }
-/** The categories a card shows, for example "Natural · Community". */
+/** The categories an event shows, for example "Natural · Community", read on its event page. */
 export async function expectCategories(page, title, text) {
-  const card = page
-    .getByText(title, { exact: true })
-    .locator('xpath=ancestor::div[contains(., "YOU’RE ORGANISING")][1]');
-  await expect(card.getByText(text, { exact: true })).toBeVisible();
+  await openEvent(page, title);
+  for (const label of text.split(" · ")) await expect(visible(page.getByText(label, { exact: true }))).toBeVisible();
+  await button(page, "Back").click();
 }

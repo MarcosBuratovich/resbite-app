@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import {
   button,
+  card,
   cancelFromList,
   close,
   editEvent,
@@ -136,12 +137,7 @@ try {
     await legacy.getByRole("tab", { name: "My resbites", exact: true }).click();
     await button(legacy, /^Continue draft/).click();
     await button(legacy, "Save preview").click();
-    // Scoped to the plan card: the same idea name also appears under Create.
-    await expect(
-      legacy
-        .getByText("YOU’RE ORGANISING", { exact: true })
-        .locator("xpath=following-sibling::*[1]"),
-    ).toHaveText("Coffee together");
+    await expect(card(legacy, "Coffee together")).toBeVisible();
     console.log("PASS: legacy preview edit draft restores event fields from its idea.");
     await legacy.context().close();
   }
@@ -152,6 +148,10 @@ try {
   await blank.goto(baseURL);
   await blank.getByText("Preview the design", { exact: true }).click();
   await blank.getByRole("tab", { name: "My resbites", exact: true }).click();
+  // Empty state: an illustration, "Nothing planned" and two tiles.
+  await expect(blank.getByText("Nothing planned", { exact: true })).toBeVisible();
+  await expect(button(blank, "Start a new resbite")).toBeVisible();
+  await expect(button(blank, "Browse ideas")).toBeVisible();
   await blank.getByRole("button", { name: "New resbite", exact: true }).click();
   await next(blank);
   await expect(blank.getByText("Give your resbite a name.", { exact: true })).toBeVisible();
@@ -468,18 +468,14 @@ try {
         fixture.getByText("Original café", { exact: true }),
       ).toBeVisible();
       await expect(fixture.getByText("Coffee evening", { exact: true })).toBeVisible();
-      await expect(
-        fixture.getByText("Alex · pending", { exact: true }),
-      ).toBeVisible();
+      await expect(fixture.getByText("1 going", { exact: true })).toHaveCount(0);
       savedPlan = { ...savedPlan, place_label: "Updated while away" };
       attendeeResponse = "accepted";
       await foreground();
       await expect(
         fixture.getByText("Updated while away", { exact: true }),
       ).toBeVisible();
-      await expect(
-        fixture.getByText("Alex · accepted", { exact: true }),
-      ).toBeVisible();
+      await expect(fixture.getByText("1 going", { exact: true })).toBeVisible();
       readFailure = true;
       await foreground();
       await expect(
@@ -489,7 +485,7 @@ try {
         fixture.getByText("Updated while away", { exact: true }),
       ).toBeVisible();
       await expect(
-        fixture.getByText("Make room for a first plan.", { exact: true }),
+        fixture.getByText("Nothing planned", { exact: true }),
       ).toHaveCount(0);
       readFailure = false;
       savedPlan = { ...savedPlan, place_label: "Recovered café" };

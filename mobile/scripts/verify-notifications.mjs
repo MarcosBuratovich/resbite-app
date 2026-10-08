@@ -50,7 +50,7 @@ try {
     .click();
   await expect(
     page.getByRole("heading", {
-      name: "Something to look forward to.",
+      name: "Upcoming",
       exact: true,
     }),
   ).toBeVisible();
