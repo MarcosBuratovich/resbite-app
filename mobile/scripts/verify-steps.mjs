@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium, expect } from "@playwright/test";
-import { button, close, createFromIdea, createSteps, heading, later, next, typeDate } from "./qa-helpers.mjs";
+import { button, card, close, createFromIdea, createSteps, heading, later, next, typeDate } from "./qa-helpers.mjs";
 const baseURL = process.env.RESBITE_QA_URL || "http://localhost:8081";
 const shots = "/private/tmp/resbite-steps";
 await mkdir(shots, { recursive: true });
@@ -107,8 +107,41 @@ try {
     await button(page, "My resbites").click();
     await expect(page.getByText("Preview saved", { exact: true })).toBeVisible();
     await expect(button(page, "New resbite")).toBeVisible();
+    // The saved toast shows once: leaving the tab and returning clears it.
+    await page.getByRole("tab", { name: "Create", exact: true }).click();
+    await page.getByRole("tab", { name: "My resbites", exact: true }).click();
+    await expect(button(page, "New resbite")).toBeVisible();
+    await expect(page.getByText("Preview saved", { exact: true })).toHaveCount(0);
     await page.context().close();
     console.log("PASS: Invite people from an idea comes back to My resbites with the created notice.");
+  }
+
+  // 3c. A cover warning asks for action, so it outlasts leaving the tab; opening a card clears it.
+  {
+    const page = await preview();
+    await button(page, "New resbite").click();
+    await createSteps(page, { name: "Cover check", place: "Park", categories: ["Natural"] });
+    await button(page, "Create preview").click();
+    await expect(heading(page, "It’s on!")).toBeVisible();
+    await button(page, "Later").click();
+    await expect(page.getByText("Preview saved", { exact: true })).toBeVisible();
+    // Web preview has no cover journal, so set the outcome the way Later does.
+    await page.evaluate(() => {
+      history.replaceState(history.state, "", "/plans?created=1&updated=0&cover=failed");
+      dispatchEvent(new PopStateEvent("popstate", { state: history.state }));
+    });
+    const warning = page.getByText(/cover photo couldn’t be prepared/);
+    await expect(warning).toBeVisible();
+    await page.getByRole("tab", { name: "Create", exact: true }).click();
+    await page.getByRole("tab", { name: "My resbites", exact: true }).click();
+    await expect(button(page, "New resbite")).toBeVisible();
+    await expect(page.getByText("Preview saved", { exact: true })).toHaveCount(0);
+    await expect(warning).toBeVisible();
+    await card(page, "Cover check").first().click();
+    await button(page, "Back").click();
+    await expect(warning).toHaveCount(0);
+    await page.context().close();
+    console.log("PASS: the saved toast shows once; the cover warning stays until a card is opened.");
   }
 
   // 4. Quick tiles with a fixed clock: Friday 9 October 2026 at 10:30 in London.

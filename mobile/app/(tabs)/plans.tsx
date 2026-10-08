@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { AppState, Image, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams, useNavigation } from "expo-router";
 import { Check, Lightbulb, Plus, RotateCcw, UserRound } from "lucide-react-native";
 import { activities, artwork } from "../../src/services/catalogue";
 import { EventPictureView } from "../../src/design/categories";
@@ -25,6 +25,7 @@ type Attendee = {
 
 export default function Plans() {
   const largeText = useLargeText();
+  const navigation = useNavigation();
   const { created, updated, cover } = useLocalSearchParams(),
     { preview, localPlans, session } = useApp(),
     [plans, setPlans] = useState<LocalPlan[]>([]),
@@ -53,6 +54,17 @@ export default function Plans() {
         active = false;
       };
     }, [scope]),
+  );
+  // The saved toast shows once: leaving My resbites clears it. The cover notice stays until a card is opened.
+  useFocusEffect(
+    useCallback(
+      () => () => {
+        try {
+          navigation.setParams({ created: "0", updated: "0" } as never);
+        } catch {}
+      },
+      [navigation],
+    ),
   );
   const identity = useRef(scope);
   identity.current = scope;
