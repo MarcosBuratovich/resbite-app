@@ -14,9 +14,13 @@ export async function next(page) {
 export async function close(page) {
   await button(page, "Close").click();
 }
-/** Web QA types dates into "Date and time (local)", the When step's first card. */
+/** Web QA types dates into "Date and time (local)", the When step's first card ("Choose a day" first while unset). */
 export async function typeDate(page, value) {
-  await page.getByLabel("Date and time (local)", { exact: true }).fill(value);
+  const field = visible(page.getByLabel("Date and time (local)", { exact: true }));
+  const choose = button(page, "Choose a day");
+  await field.or(choose).first().waitFor();
+  if (await choose.count()) await choose.click();
+  await field.fill(value);
 }
 /** True when the locators' first matches appear in this order in the DOM (reading and VoiceOver order). */
 export async function inOrder(page, locators) {

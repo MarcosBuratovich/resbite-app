@@ -212,10 +212,19 @@ export function WhenStep({ editor }: { editor: PlanEditor }) {
     if (chosenDay) setStart(joinLocal(chosenDay, next));
   };
   // The picker first, full width, then its suggestions (steps v2); the web field covers both.
+  // An unchosen day or time reads "Choose a day" / "Choose a time", never a picker holding a value.
   return (
     <>
       <View style={styles.section}>
-        <PlanSchedule part="date" value={start} day={chosenDay} onChange={setStart} disabled={locked} />
+        <PlanSchedule
+          part="date"
+          value={start}
+          day={chosenDay}
+          set={chosenDay !== null}
+          onDay={chooseDay}
+          onChange={setStart}
+          disabled={locked}
+        />
         <View style={styles.chips}>
           {days.map((d) => (
             <StepChip
@@ -230,7 +239,15 @@ export function WhenStep({ editor }: { editor: PlanEditor }) {
         </View>
       </View>
       <View style={[styles.section, styles.timeSection]}>
-        <PlanSchedule part="time" value={start} day={chosenDay} onChange={setStart} disabled={locked} />
+        <PlanSchedule
+          part="time"
+          value={start}
+          day={chosenDay}
+          set={time !== null}
+          onDay={chooseDay}
+          onChange={setStart}
+          disabled={locked}
+        />
         {/* The four times share one row, as in the mockup; under Larger Text they wrap. */}
         <View style={largeText ? styles.chips : styles.timeRow}>
           {times.map((t) => (

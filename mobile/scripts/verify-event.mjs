@@ -192,6 +192,17 @@ try {
     [draft.title, draft.description, draft.categories, draft.place, draft.note, draft.start, draft.activityId, draft.pending],
     ["Coffee evening", "Bring a book", ["community", "uplifting"], "Fixture café", "Window table", "", null, null],
   );
+  // The start is unset, so When says "Choose a day" and no day chip is selected (never a picked-looking
+  // date that isn't set). Choosing Tomorrow and a time lets Next go on.
+  await expect(visible(page.getByRole("button", { name: "Choose a day", exact: true }))).toBeVisible();
+  await expect(visible(page.locator('[role="button"][aria-selected="true"]'))).toHaveCount(0);
+  await visible(page.getByRole("button", { name: /^Tomorrow, / })).click();
+  await expect(visible(page.getByRole("button", { name: "Choose a day", exact: true }))).toHaveCount(0);
+  await visible(page.getByRole("button", { name: / at 18:00$/ })).click();
+  await visible(page.getByRole("button", { name: "Next", exact: true })).click();
+  await expect(page.getByRole("heading", { name: "Where?", exact: true })).toBeVisible();
+  await visible(page.getByRole("button", { name: "Previous step", exact: true })).click();
+  await expect(page.getByRole("heading", { name: "When?", exact: true })).toBeVisible();
   await visible(page.getByRole("button", { name: "Previous step", exact: true })).click();
   await expect(page.getByLabel("Name", { exact: true })).toHaveValue("Coffee evening");
   page.once("dialog", (dialog) => dialog.accept());
