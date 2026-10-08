@@ -50,7 +50,7 @@ try {
     .locator("xpath=ancestor::label")
     .click();
   await page.getByRole("button", { name: "Save group", exact: true }).click();
-  await page.getByRole("button", { name: "Profile", exact: true }).click();
+  await button(page, "Back").click();
   await page.getByRole("tab", { name: "Create", exact: true }).click();
   await page
     .getByRole("button", { name: "Coffee together", exact: true })
@@ -77,7 +77,7 @@ try {
       { exact: true },
     ),
   ).toBeVisible();
-  await page.getByRole("button", { name: "My resbites", exact: true }).click();
+  await button(page, "Back").click();
   await button(page, "Back").click();
   await page.getByRole("tab", { name: "Profile", exact: true }).click();
   await page
@@ -92,7 +92,7 @@ try {
       exact: true,
     }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Profile", exact: true }).click();
+  await button(page, "Back").click();
   await page.getByRole("tab", { name: "My resbites", exact: true }).click();
   await choosePeople(page, "Coffee together");
   await expect(
@@ -101,7 +101,7 @@ try {
       exact: true,
     }),
   ).toBeChecked();
-  await page.getByRole("button", { name: "My resbites", exact: true }).click();
+  await button(page, "Back").click();
   await button(page, "Back").click();
   await page.getByRole("tab", { name: "Profile", exact: true }).click();
   assert.equal(

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
+import { button } from "./qa-helpers.mjs";
 const browser = await chromium.launch({
   channel: process.env.RESBITE_QA_BROWSER || "chrome",
   headless: true,
@@ -178,6 +179,12 @@ try {
     (await page.evaluate(() => window.fixtureShares))[0].text,
     `Join my Resbite plan: resbite://invite?token=${creates[0].p_token}`,
   );
+  // Row 14: the shared link reads "Shared", and "Invite another" stays on screen.
+  await expect(page.getByText("Shared", { exact: true })).toBeVisible();
+  const sharesBefore = await page.evaluate(() => window.fixtureShares.length);
+  await page.getByRole("button", { name: "Invite another", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.fixtureShares.length)).toBe(sharesBefore + 1);
+  await expect(page.getByRole("button", { name: "Share link for Invitation 1", exact: true })).toBeVisible();
   page.once("dialog", (d) => d.accept());
   await page
     .getByRole("button", { name: "Revoke link for Alex", exact: true })
@@ -210,7 +217,7 @@ try {
     .click();
   await expect(
     page.getByRole("button", {
-      name: "Share link for Invitation 1",
+      name: "Share link for Invitation 2",
       exact: true,
     }),
   ).toBeVisible();
@@ -235,10 +242,10 @@ try {
     .getByRole("button", { name: "Share link for Invitation 1", exact: true })
     .click();
   await expect.poll(() => typeof releaseCreate).toBe("function");
-  await page.getByRole("button", { name: "My resbites", exact: true }).click();
+  await button(page, "Back").click();
   releaseCreate();
   await expect(
-    page.getByRole("heading", { name: "A little invitation.", exact: true }),
+    page.getByRole("heading", { name: "Invitations", exact: true }),
   ).toHaveCount(0);
   await page.waitForTimeout(200);
   assert.equal(

@@ -7,37 +7,17 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  StyleSheet,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { useNavigation, usePreventRemove } from "expo-router/react-navigation";
 import * as Crypto from "expo-crypto";
-import {
-  Check,
-  Users,
-  ContactRound,
-  Settings2,
-  UserPlus,
-  Pencil,
-  Trash2,
-  Plus,
-  Mail,
-} from "lucide-react-native";
-import {
-  ActionRow,
-  ActionGroup,
-  TextAction,
-  IconBadge,
-  Back,
-  Button,
-  Copy,
-  ErrorNote,
-  Field,
-  Title,
-  s,
-} from "../src/design/ui";
-import { colors as c } from "../src/design/tokens";
+import { ArrowLeft, Check, ContactRound, Info, Mail, Pencil, Plus, Settings2, Trash2, UserPlus } from "lucide-react-native";
+import { Button, Copy, ErrorNote, Field, Title, s } from "../src/design/ui";
+import { Chip, IconButton, InfoSheet, Tile } from "../src/design/kit";
+import { colors as c, fonts, r } from "../src/design/tokens";
 import { PreviewNotice } from "../src/design/Chrome";
 import { useApp } from "../src/state/AppState";
 import { peopleStore } from "../src/services/people";
@@ -80,6 +60,7 @@ export default function People() {
   const [ready, setReady] = useState(false);
   const [retry, setRetry] = useState(0);
   const [dirty, setDirty] = useState(false);
+  const [about, setAbout] = useState(false);
   const mounted = useRef(true);
   const working = useRef(false);
   const contextKey = `${scope ?? "signed-out"}:${planId ?? "groups"}`;
@@ -328,30 +309,25 @@ export default function People() {
         setDirty(true);
       }}
       style={{
+        minHeight: 56,
         padding: 12,
         borderWidth: 1,
         borderColor: checked ? c.aquaDark : c.line,
-        borderRadius: 12,
+        borderRadius: r.tile,
         backgroundColor: checked ? c.aquaSoft : c.paper,
         flexDirection: "row",
         gap: 12,
         alignItems: "center",
       }}
     >
-      <View
-        style={{
-          width: 24,
-          height: 24,
-          borderWidth: 1,
-          borderColor: c.aquaDark,
-          borderRadius: 6,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        {checked && <Check size={18} color={c.aquaDark} />}
+      <View style={[styles.avatar, checked && { backgroundColor: c.aquaDark }]}>
+        {checked ? (
+          <Check size={18} color={c.paper} />
+        ) : (
+          <Copy style={styles.avatarText}>{(p.name.trim()[0] ?? "?").toLocaleUpperCase()}</Copy>
+        )}
       </View>
-      <View style={{ flex: 1, gap: 4 }}>
+      <View style={{ flex: 1, gap: 2 }}>
         <Copy>{p.name}</Copy>
         <Copy style={s.muted}>{p.address}</Copy>
       </View>
@@ -364,24 +340,19 @@ export default function People() {
         keyboardShouldPersistTaps="handled"
         automaticallyAdjustKeyboardInsets
       >
-        <PreviewNotice dismissible={false} />
-        <Back label={planId ? "My resbites" : "Profile"} />
-        <IconBadge icon={Users} tone="violet" />
-        <Title>
-          {planId
-            ? "Your kind of company."
-            : editing
-              ? "Your group."
-              : "People & groups."}
-        </Title>
-        <Copy style={s.muted}>
-          Contact details stay on this device. Nothing is sent automatically.
-        </Copy>
+        <View style={styles.top}>
+          <IconButton
+            icon={ArrowLeft}
+            label="Back"
+            onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))}
+          />
+          <PreviewNotice dismissible={false} />
+          <IconButton icon={Info} label="About people" onPress={() => setAbout(true)} />
+        </View>
+        <Title>{planId ? "Choose people" : editing ? "Your group" : "People & groups"}</Title>
         {loading && <Copy>Loading your people…</Copy>}
         <ErrorNote message={error} />
-        {!loading && !ready && (
-          <Button title="Try again" onPress={() => setRetry((n) => n + 1)} />
-        )}
+        {!loading && !ready && <Button title="Try again" onPress={() => setRetry((n) => n + 1)} />}
         {Boolean(notice) && (
           <Copy accessibilityLiveRegion="polite" style={{ color: c.aquaDark }}>
             {notice}
@@ -390,33 +361,19 @@ export default function People() {
         {ready && (
           <>
             {!choosing && (
-              <>
-                <ActionGroup>
-                  <ActionRow
-                    icon={Plus}
-                    title="Create a group"
-                    description="Keep your favourite people together"
-                    onPress={() => startGroup()}
-                  />
-                </ActionGroup>
-                <Copy style={s.muted}>
-                  Groups are private to this account and phone. Signing out
-                  removes them from this device.
-                </Copy>
-              </>
+              <Tile icon={Plus} title="Create a group" hint="Keep your favourite people together" onPress={() => startGroup()} />
             )}
             {!editing &&
               groups.map((g) => (
-                <View key={g.id} style={[s.card, { padding: 20, gap: 12 }]}>
-                  <Title style={{ fontSize: 23 }}>{g.name}</Title>
-                  <Copy style={s.muted}>
-                    {g.members.length}{" "}
-                    {g.members.length === 1 ? "person" : "people"}
-                  </Copy>
+                <View key={g.id} style={styles.group}>
+                  <View style={{ flex: 1, gap: 6 }}>
+                    <Copy style={{ fontFamily: fonts.medium, fontSize: 17 }}>{g.name}</Copy>
+                    <Chip text={`${g.members.length} ${g.members.length === 1 ? "person" : "people"}`} />
+                  </View>
                   {planId ? (
-                    <ActionRow
+                    <IconButton
                       icon={UserPlus}
-                      title={`Add ${g.name}`}
+                      label={`Add ${g.name}`}
                       disabled={busy}
                       onPress={() => {
                         setSelected((old) => mergePeople(old, g.members));
@@ -425,25 +382,13 @@ export default function People() {
                     />
                   ) : (
                     <>
-                      <ActionRow
-                        icon={Pencil}
-                        title={`Edit ${g.name}`}
-                        onPress={() => startGroup(g)}
-                      />
-                      <TextAction
-                        icon={Trash2}
-                        destructive
-                        title={`Delete ${g.name}`}
-                        disabled={busy}
-                        onPress={() => removeGroup(g)}
-                      />
+                      <IconButton icon={Pencil} label={`Edit ${g.name}`} onPress={() => startGroup(g)} />
+                      <IconButton icon={Trash2} label={`Delete ${g.name}`} disabled={busy} onPress={() => removeGroup(g)} />
                     </>
                   )}
                 </View>
               ))}
-            {!choosing && groups.length === 0 && (
-              <Copy>No groups yet. Start with the people you see most.</Copy>
-            )}
+            {!choosing && groups.length === 0 && <Copy>No groups yet. Start with the people you see most.</Copy>}
             {choosing && (
               <>
                 {editing && (
@@ -458,42 +403,25 @@ export default function People() {
                     editable={!busy}
                   />
                 )}
-                <Title style={{ fontSize: 23 }}>
-                  Selected · {selected.length}
-                </Title>
-                <View style={{ gap: 6 }}>
-                  {selected.map((p) => row(p, true))}
-                </View>
-                {selected.length === 0 && (
-                  <Copy style={s.muted}>
-                    Choose contacts or add someone below.
-                  </Copy>
-                )}
-                <ActionGroup>
-                  <ActionRow
-                    icon={ContactRound}
-                    title="Choose phone contacts"
-                    loading={busy}
-                    onPress={() => void loadContacts()}
-                  />
+                <Title style={{ fontSize: 23 }}>Selected · {selected.length}</Title>
+                <View style={{ gap: 6 }}>{selected.map((p) => row(p, true))}</View>
+                {selected.length === 0 && <Copy style={s.muted}>Choose contacts or add someone below.</Copy>}
+                <View style={styles.inline}>
+                  <View style={{ flex: 1 }}>
+                    <Tile icon={ContactRound} title="Choose phone contacts" disabled={busy} onPress={() => void loadContacts()} />
+                  </View>
                   {Platform.OS !== "web" && (
-                    <TextAction
+                    <IconButton
                       icon={Settings2}
-                      title="Contact access settings"
+                      label="Contact access settings"
                       disabled={busy}
-                      onPress={() =>
-                        void Linking.openSettings().catch(() =>
-                          setError("Could not open Settings."),
-                        )
-                      }
+                      onPress={() => void Linking.openSettings().catch(() => setError("Could not open Settings."))}
                     />
                   )}
-                </ActionGroup>
+                </View>
                 {limited && (
                   <>
-                    <Copy style={s.muted}>
-                      Only contacts you allowed are shown.
-                    </Copy>
+                    <Chip text="Limited access" label="Only contacts you allowed are shown." />
                     <Button
                       title="Allow more contacts"
                       secondary
@@ -503,46 +431,23 @@ export default function People() {
                   </>
                 )}
                 {missing > 0 && (
-                  <Copy style={s.muted}>
-                    {missing} contacts without a usable email or phone were
-                    skipped.
-                  </Copy>
-                )}
-                {contacts.length > 0 && (
-                  <Field
-                    label="Search loaded contacts"
-                    value={query}
-                    onChangeText={setQuery}
+                  <Chip
+                    text={`${missing} skipped`}
+                    label={`${missing} contacts without a usable email or phone were skipped.`}
                   />
                 )}
+                {contacts.length > 0 && <Field label="Search loaded contacts" value={query} onChangeText={setQuery} />}
                 {contacts
                   .filter(
                     (p) =>
                       !selected.some((x) => x.key === p.key) &&
-                      `${p.name} ${p.address}`
-                        .toLowerCase()
-                        .includes(query.toLowerCase()),
+                      `${p.name} ${p.address}`.toLowerCase().includes(query.toLowerCase()),
                   )
                   .map((p) => row(p, false))}
                 {more && (
-                  <Button
-                    title="Load more contacts"
-                    secondary
-                    disabled={busy}
-                    onPress={() => void loadContacts(offset)}
-                  />
+                  <Button title="Load more contacts" secondary disabled={busy} onPress={() => void loadContacts(offset)} />
                 )}
                 <View style={[s.card, { padding: 18, gap: 14 }]}>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 10,
-                    }}
-                  >
-                    <IconBadge icon={UserPlus} tone="rose" />
-                    <Copy style={{ flex: 1 }}>Add someone yourself.</Copy>
-                  </View>
                   <Field
                     label="Person’s name"
                     value={name}
@@ -565,47 +470,62 @@ export default function People() {
                     maxLength={254}
                     editable={!busy}
                   />
-                  <TextAction
-                    icon={Plus}
-                    title="Add person"
-                    disabled={busy}
-                    onPress={addManual}
-                  />
+                  <View style={{ alignItems: "flex-end" }}>
+                    <IconButton icon={Plus} label="Add person" tone="pink" disabled={busy} onPress={addManual} />
+                  </View>
                 </View>
-                <Copy style={s.muted}>
-                  People sharing the same email or phone appear once. Choose one
-                  contact detail for each person.
-                </Copy>
-                <Button
-                  title={editing ? "Save group" : "Save people"}
-                  onPress={save}
-                  loading={busy}
-                />
+                <Button title={editing ? "Save group" : "Save people"} onPress={save} loading={busy} />
                 {planId && !dirty && (
-                  <ActionRow
+                  <Tile
                     icon={Mail}
                     title="Review invitations"
                     disabled={busy}
-                    onPress={() =>
-                      router.navigate({
-                        pathname: "/invitations",
-                        params: { plan: planId },
-                      })
-                    }
+                    onPress={() => router.navigate({ pathname: "/invitations", params: { plan: planId } })}
                   />
-                )}
-                {planId && (
-                  <Copy style={s.muted}>
-                    {preview
-                      ? "Preview invitations remain disabled."
-                      : "Review invitations to prepare a separate link for each person. Nothing is sent automatically."}
-                  </Copy>
                 )}
               </>
             )}
           </>
         )}
       </ScrollView>
+      <InfoSheet visible={about} title="About people" onClose={() => setAbout(false)}>
+        <Copy>Contact details stay on this device. Nothing is sent automatically.</Copy>
+        <Copy style={s.muted}>Groups are private to this account and phone. Signing out removes them from this device.</Copy>
+        <Copy style={s.muted}>
+          People sharing the same email or phone appear once. Choose one contact detail for each person.
+        </Copy>
+        {planId && (
+          <Copy style={s.muted}>
+            {preview
+              ? "Preview invitations remain disabled."
+              : "Review invitations to prepare a separate link for each person. Nothing is sent automatically."}
+          </Copy>
+        )}
+      </InfoSheet>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  top: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  group: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 16,
+    borderRadius: r.tile,
+    borderWidth: 1,
+    borderColor: c.line,
+    backgroundColor: c.paper,
+  },
+  inline: { flexDirection: "row", alignItems: "center", gap: 10 },
+  avatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: c.aquaSoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarText: { fontFamily: fonts.bold, fontSize: 13, color: c.aquaDark },
+});

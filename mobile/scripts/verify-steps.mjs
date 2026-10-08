@@ -88,7 +88,7 @@ try {
     await button(page, "Invite people").click();
     await expect(page).toHaveURL(/\/invitations\?plan=/);
     // Back from invitations lands on My resbites with the created notice, as Later does.
-    await button(page, "My resbites").click();
+    await button(page, "Back").click();
     await expect(page.getByText("Preview saved", { exact: true })).toBeVisible();
     await page.context().close();
     console.log("PASS: Next with a missing answer, alerts, focus on step change, jump from Review, Invite screen.");
@@ -104,7 +104,7 @@ try {
     await expect(heading(page, "It’s on!")).toBeVisible();
     await button(page, "Invite people").click();
     await expect(page).toHaveURL(/\/invitations\?plan=/);
-    await button(page, "My resbites").click();
+    await button(page, "Back").click();
     await expect(page.getByText("Preview saved", { exact: true })).toBeVisible();
     await expect(button(page, "New resbite")).toBeVisible();
     // The saved toast shows once. Browser Back from the editor restores the same URL: no repeat.
