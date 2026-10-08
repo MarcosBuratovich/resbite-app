@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { AppState, Image, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router, useFocusEffect, useLocalSearchParams, useNavigation } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams, useNavigation, usePathname } from "expo-router";
 import { Check, Lightbulb, Plus, RotateCcw, UserRound } from "lucide-react-native";
 import { activities, artwork } from "../../src/services/catalogue";
 import { EventPictureView } from "../../src/design/categories";
@@ -55,17 +55,17 @@ export default function Plans() {
       };
     }, [scope]),
   );
-  // The saved toast shows once: leaving My resbites clears it. The cover notice stays until a card is opened.
-  useFocusEffect(
-    useCallback(
-      () => () => {
-        try {
-          navigation.setParams({ created: "0", updated: "0" } as never);
-        } catch {}
-      },
-      [navigation],
-    ),
-  );
+  // The saved toast shows once. A stack screen pushed over the tabs does not blur this screen,
+  // so leaving /plans (the path changes) clears it; the cover notice stays until a card is opened.
+  const pathname = usePathname();
+  const here = useRef(false);
+  useEffect(() => {
+    if (pathname === "/plans") here.current = true;
+    else if (here.current) {
+      here.current = false;
+      navigation.setParams({ created: "0", updated: "0" } as never);
+    }
+  }, [pathname, navigation]);
   const identity = useRef(scope);
   identity.current = scope;
   const [loadedFor, setLoadedFor] = useState<string>();

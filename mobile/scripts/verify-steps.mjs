@@ -107,9 +107,11 @@ try {
     await button(page, "My resbites").click();
     await expect(page.getByText("Preview saved", { exact: true })).toBeVisible();
     await expect(button(page, "New resbite")).toBeVisible();
-    // The saved toast shows once: leaving the tab and returning clears it.
-    await page.getByRole("tab", { name: "Create", exact: true }).click();
-    await page.getByRole("tab", { name: "My resbites", exact: true }).click();
+    // The saved toast shows once: opening the editor from the new button and closing it
+    // untouched returns to My resbites with the same route params, but no toast.
+    await button(page, "New resbite").click();
+    await expect(page.getByRole("progressbar", { name: "Step 1 of 4", exact: true })).toBeVisible();
+    await close(page);
     await expect(button(page, "New resbite")).toBeVisible();
     await expect(page.getByText("Preview saved", { exact: true })).toHaveCount(0);
     await page.context().close();
@@ -132,8 +134,9 @@ try {
     });
     const warning = page.getByText(/cover photo couldn’t be prepared/);
     await expect(warning).toBeVisible();
-    await page.getByRole("tab", { name: "Create", exact: true }).click();
-    await page.getByRole("tab", { name: "My resbites", exact: true }).click();
+    await button(page, "New resbite").click();
+    await expect(page.getByRole("progressbar", { name: "Step 1 of 4", exact: true })).toBeVisible();
+    await close(page);
     await expect(button(page, "New resbite")).toBeVisible();
     await expect(page.getByText("Preview saved", { exact: true })).toHaveCount(0);
     await expect(warning).toBeVisible();
