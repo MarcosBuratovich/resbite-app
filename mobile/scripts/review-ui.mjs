@@ -1,11 +1,18 @@
 // Captures every UX1 screen at 390 and 320 px in preview with no console or page errors,
 // and keeps the gluestack keyboard-selection check. Every Supabase request is aborted.
+import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium, expect } from "@playwright/test";
 import { button, heading, next } from "./qa-helpers.mjs";
 const base = process.env.RESBITE_QA_URL || "http://localhost:8081";
 const out = process.env.RESBITE_QA_SHOTS || "/private/tmp/resbite-ui-audit";
 await mkdir(out, { recursive: true });
+async function addPerson(page, name, address) {
+  await page.getByLabel("Person’s name", { exact: true }).fill(name);
+  await page.getByLabel("Email or phone", { exact: true }).fill(address);
+  await page.getByRole("button", { name: "Add person", exact: true }).click();
+  await expect(page.getByRole("checkbox", { name: `${name}, ${address}`, exact: true })).toBeChecked();
+}
 const browser = await chromium.launch({ channel: process.env.RESBITE_QA_BROWSER || "chrome" });
 try {
   for (const width of [390, 320]) {
@@ -59,11 +66,24 @@ try {
     await button(page, "Invite people").click();
     await expect(heading(page, "Invitations")).toBeVisible();
     await shot("invitations");
+    // Add two people to the plan, then capture the invitation rows.
+    await button(page, "Choose people").click();
+    await addPerson(page, "Alex Rivera", "alex@example.invalid");
+    await addPerson(page, "Bea", "bea@example.invalid");
+    await button(page, "Save people").click();
+    await button(page, "Review invitations").click();
+    await expect(heading(page, "Invitations")).toBeVisible();
+    await expect(button(page, "Prepare link for Alex Rivera")).toBeVisible();
+    await shot("invitations-rows");
     await button(page, "About invitation links").click();
     await expect(heading(page, "Invitation links")).toBeVisible();
     await shot("invitations-about", false);
     await button(page, "Close sheet").click();
-    await button(page, "Back").click();
+    // Back may pass through People (opened from here) before My resbites.
+    for (let i = 0; i < 3 && !(await button(page, /^Picnic in the park, /).isVisible()); i++) {
+      await button(page, "Back").click();
+      await page.waitForTimeout(300);
+    }
     // My resbites with a card, the event page, its More sheet and Choose people.
     const card = button(page, /^Picnic in the park, /);
     await expect(card).toBeVisible();
@@ -97,6 +117,70 @@ try {
     await page.keyboard.press("Space");
     await expect(page.getByRole("heading", { name: "Selected · 0", exact: true })).toBeVisible();
     await expect(page.locator("body")).not.toContainText("Uncaught Error");
+    // A saved group, then the plan selection with a group row and selected rows, and its sheet.
+    await addPerson(page, "Alex", "alex@example.invalid");
+    await page.getByLabel("Group name", { exact: true }).fill("Friends");
+    await button(page, "Save group").click();
+    await expect(button(page, "Edit Friends")).toBeVisible();
+    await shot("people-groups");
+    await button(page, "Back").click();
+    await page.getByRole("tab", { name: "My resbites", exact: true }).click();
+    await page.getByRole("radio", { name: "Upcoming", exact: true }).click();
+    await button(page, /^Picnic in the park, /).click();
+    await button(page, "Choose people").click();
+    await button(page, "Add Friends").click();
+    await shot("people-plan-selected");
+    await button(page, "About people").click();
+    await expect(heading(page, "About people")).toBeVisible();
+    await shot("people-about", false);
+    await button(page, "Close sheet").click();
+    if (errors.length) throw Error(errors.join("\n"));
+    await page.close();
+  }
+  // Larger Text at 320 px (forced layouts plus scaled text, as in verify-kit): rows, top row and sheets.
+  {
+    const page = await browser.newPage({ viewport: { width: 320, height: 844 }, reducedMotion: "reduce" });
+    const errors = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    page.on("console", (m) => {
+      if (m.type() === "error") errors.push(m.text());
+    });
+    const shot = async (name, fullPage = true) => {
+      await page.waitForTimeout(500);
+      return page.screenshot({ path: `${out}/${name}-large-320.png`, fullPage });
+    };
+    const fits = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+    await page.route("**/*.supabase.co/**", (r) => r.abort());
+    await page.goto(`${base}/?largeText=1`);
+    await page.addStyleTag({ content: '[dir="auto"] { zoom: 1.4; }' });
+    await page.getByText("Preview the design", { exact: true }).click();
+    await page.getByRole("tab", { name: "My resbites", exact: true }).click();
+    await button(page, "New resbite").click();
+    await page.getByLabel("Name", { exact: true }).fill("Picnic in the park");
+    await next(page);
+    await next(page);
+    await page.getByLabel("Meeting place", { exact: true }).fill("Riverside park");
+    await next(page);
+    await page.getByRole("checkbox", { name: "Natural", exact: true }).click();
+    await next(page);
+    await button(page, "Create preview").click();
+    await button(page, "Invite people").click();
+    await button(page, "Choose people").click();
+    await shot("people-empty");
+    assert.ok(await fits(), "People top row fits at 320 px under Larger Text");
+    await addPerson(page, "Alex Rivera", "alex@example.invalid");
+    await addPerson(page, "Bea", "bea@example.invalid");
+    await shot("people-selected");
+    await button(page, "About people").click();
+    await shot("people-about", false);
+    await button(page, "Close sheet").click();
+    await button(page, "Save people").click();
+    await button(page, "Review invitations").click();
+    await expect(button(page, "Prepare link for Alex Rivera")).toBeVisible();
+    await shot("invitations-rows");
+    assert.ok(await fits(), "Invitation rows fit at 320 px under Larger Text");
+    await button(page, "About invitation links").click();
+    await shot("invitations-about", false);
     if (errors.length) throw Error(errors.join("\n"));
     await page.close();
   }
