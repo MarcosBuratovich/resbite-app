@@ -475,6 +475,7 @@ export function usePlanEditor({
       pathname: "/plans",
       params: {
         created: "0",
+        notice: Date.now().toString(36),
         updated: !discarded.current && planId ? "1" : "0",
         cover: coverOutcome.current,
       },

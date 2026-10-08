@@ -107,13 +107,27 @@ try {
     await button(page, "My resbites").click();
     await expect(page.getByText("Preview saved", { exact: true })).toBeVisible();
     await expect(button(page, "New resbite")).toBeVisible();
-    // The saved toast shows once: opening the editor from the new button and closing it
-    // untouched returns to My resbites with the same route params, but no toast.
+    // The saved toast shows once. Browser Back from the editor restores the same URL: no repeat.
+    await button(page, "New resbite").click();
+    await expect(page.getByRole("progressbar", { name: "Step 1 of 4", exact: true })).toBeVisible();
+    await page.goBack();
+    await expect(page).toHaveURL(/\/plans\?created=1/);
+    await expect(button(page, "New resbite")).toBeVisible();
+    await page.waitForTimeout(800); // a repeated toast would appear within this settle time
+    await expect(page.getByText("Preview saved", { exact: true })).toHaveCount(0);
+    // Closing an untouched editor from the new button returns without the toast too.
     await button(page, "New resbite").click();
     await expect(page.getByRole("progressbar", { name: "Step 1 of 4", exact: true })).toBeVisible();
     await close(page);
     await expect(button(page, "New resbite")).toBeVisible();
+    await page.waitForTimeout(800);
     await expect(page.getByText("Preview saved", { exact: true })).toHaveCount(0);
+    // A second save carries a new notice id, so its toast shows again.
+    await button(page, "New resbite").click();
+    await createSteps(page, { name: "Second save", place: "Park", categories: ["Natural"] });
+    await button(page, "Create preview").click();
+    await later(page);
+    await expect(page.getByText("Preview saved", { exact: true })).toBeVisible();
     await page.context().close();
     console.log("PASS: Invite people from an idea comes back to My resbites with the created notice.");
   }

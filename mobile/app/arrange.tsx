@@ -135,7 +135,12 @@ export default function Arrange() {
   const later = () =>
     router.dismissTo({
       pathname: "/plans",
-      params: { created: "1", updated: "0", cover: editor.created?.cover ?? "none" },
+      params: {
+        created: "1",
+        updated: "0",
+        cover: editor.created?.cover ?? "none",
+        notice: Date.now().toString(36),
+      },
     });
   // My resbites first (exactly as Later, with its created and cover notices), then invitations
   // on top: Back from invitations always lands on My resbites, however the editor was opened.

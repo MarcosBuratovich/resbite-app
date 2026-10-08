@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { AppState, Image, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router, useFocusEffect, useLocalSearchParams, useNavigation, usePathname } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams, usePathname } from "expo-router";
 import { Check, Lightbulb, Plus, RotateCcw, UserRound } from "lucide-react-native";
 import { activities, artwork } from "../../src/services/catalogue";
 import { EventPictureView } from "../../src/design/categories";
@@ -16,6 +16,10 @@ import { drafts, type PlanDraft } from "../../src/services/drafts";
 import { planCoverStore } from "../../src/services/planCovers";
 import { cardChips, cardLabel, coverNotice, draftRoute, groupPlans } from "../../src/domain/eventView";
 
+// The last save notice already shown, so a remount or web history restoring the same URL never
+// repeats a saved toast. Each save passes a fresh `notice` id.
+let shownNotice: string | undefined;
+
 type Attendee = {
   plan_id: string;
   user_id: string;
@@ -25,8 +29,7 @@ type Attendee = {
 
 export default function Plans() {
   const largeText = useLargeText();
-  const navigation = useNavigation();
-  const { created, updated, cover } = useLocalSearchParams(),
+  const { created, updated, cover, notice } = useLocalSearchParams(),
     { preview, localPlans, session } = useApp(),
     [plans, setPlans] = useState<LocalPlan[]>([]),
     [busy, setBusy] = useState(false),
@@ -55,17 +58,6 @@ export default function Plans() {
       };
     }, [scope]),
   );
-  // The saved toast shows once. A stack screen pushed over the tabs does not blur this screen,
-  // so leaving /plans (the path changes) clears it; the cover notice stays until a card is opened.
-  const pathname = usePathname();
-  const here = useRef(false);
-  useEffect(() => {
-    if (pathname === "/plans") here.current = true;
-    else if (here.current) {
-      here.current = false;
-      navigation.setParams({ created: "0", updated: "0" } as never);
-    }
-  }, [pathname, navigation]);
   const identity = useRef(scope);
   identity.current = scope;
   const [loadedFor, setLoadedFor] = useState<string>();
@@ -143,8 +135,21 @@ export default function Plans() {
     router.setParams({ created: "0", updated: "0", cover: "none" });
     router.push({ pathname: "/event", params: { plan: p.id } });
   };
+  const noticeId = typeof notice === "string" ? notice : undefined;
+  const pathname = usePathname();
+  const [toastNotice, setToastNotice] = useState<string>();
+  useEffect(() => {
+    // Leaving /plans ends the toast; a notice id is shown at most once.
+    if (pathname !== "/plans") setToastNotice(undefined);
+    else if (noticeId && noticeId !== shownNotice) {
+      shownNotice = noticeId;
+      setToastNotice(noticeId);
+    }
+  }, [noticeId, pathname]);
   const toast =
-    updated === "1"
+    !noticeId || toastNotice !== noticeId
+      ? null
+      : updated === "1"
       ? preview
         ? "Preview changes saved"
         : "Changes saved"
