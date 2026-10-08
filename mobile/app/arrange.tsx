@@ -50,14 +50,28 @@ export default function Arrange() {
   // Set after a Review tap or a Review check: the pill reads "Done" and comes back to Review.
   const [returnTo, setReturnTo] = useState<"review" | null>(null);
   const [stepError, setStepError] = useState<string | null>(null);
+  // A reason for a jump to another step, said once VoiceOver focus has reached that step's heading.
+  const jumpReason = useRef<{ step: Step; problem: string } | null>(null);
   const [recent, setRecent] = useState<string[]>([]);
   const answers: StepAnswers = { ...editor.fields, start: editor.start, place: editor.place };
 
-  // VoiceOver focus follows the step (and the Invite screen).
+  // VoiceOver focus follows the step (and the Invite screen). Moving focus interrupts speech on
+  // iOS, so a jump's reason is announced after the heading focus has been posted; leaving the
+  // step again or the screen cancels it.
   useEffect(() => {
     if (step === null) return;
     const frame = requestAnimationFrame(() => focusHeading(heading.current));
-    return () => cancelAnimationFrame(frame);
+    const reason = !editor.created && jumpReason.current?.step === step ? jumpReason.current.problem : null;
+    const timer = reason
+      ? setTimeout(() => {
+          jumpReason.current = null;
+          announce(reason);
+        }, 500)
+      : undefined;
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer);
+    };
   }, [step, editor.created]);
   useEffect(() => {
     if (!editor.error && !stepError) return;
@@ -81,14 +95,17 @@ export default function Arrange() {
   }, [editor.scope]);
 
   function go(next: Step, dir: "forward" | "back" = "forward") {
+    jumpReason.current = null;
     setDirection(dir);
     setStepError(null);
     setStep(next);
   }
   function fail(at: Step, problem: string) {
-    if (at !== step) go(at);
+    if (at !== step) {
+      go(at);
+      jumpReason.current = { step: at, problem };
+    } else announce(problem);
     setStepError(problem);
-    announce(problem);
   }
   // Next stays enabled (benchmark row 2): a missing answer shows its message and is announced.
   function advance() {
@@ -244,7 +261,8 @@ export default function Arrange() {
     <StepScreen
       step={stepNumber(step)}
       title={STEP_TITLES[step]}
-      hint={STEP_HINTS[step]}
+      // While a step's problem is shown, its heading carries it, so focusing the heading says why.
+      hint={stepError ?? STEP_HINTS[step]}
       titleRef={heading}
       scrollRef={scroll}
       direction={direction}

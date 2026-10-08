@@ -2,13 +2,17 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   addDays,
+  defaultStart,
   joinLocal,
   localDay,
+  pickedValue,
+  pickerSeed,
   quickDays,
   quickTimes,
   splitLocal,
   spokenDateTime,
 } from "./schedule.ts";
+import { localDateTime } from "./plans.ts";
 
 // Day boundaries are the device's: every test pins a zone (Node applies TZ changes at runtime).
 function inZone<T>(zone: string, run: () => T): T {
@@ -91,4 +95,45 @@ test("values keep the editor's local YYYY-MM-DD HH:mm format", () =>
       spokenDateTime(new Date(2099, 2, 1, 15, 0), new Date("2026-10-07T12:00:00Z")),
       "Sunday 1 March 2099 at 15:00",
     );
+  }));
+
+test("a new resbite starts tomorrow at 10:00, a calendar day ahead in the device's zone", () =>
+  inZone("Europe/London", () => {
+    // Not "now + 24 hours" at the current minute (iPhone check: "Tomorrow" with a 22:56 chip).
+    assert.equal(defaultStart(new Date("2026-10-07T22:56:00+01:00")), "2026-10-08 10:00");
+    assert.equal(defaultStart(new Date("2026-10-07T00:01:00+01:00")), "2026-10-08 10:00");
+    // 23:30 the night the clocks go forward: now + 24 h would be Monday.
+    assert.equal(defaultStart(new Date("2027-03-27T23:30:00Z")), "2027-03-28 10:00");
+    // It is one of the quick chips on the Tomorrow tile, so both read as selected.
+    const now = new Date("2026-10-07T22:56:00+01:00");
+    const { day, time } = splitLocal(defaultStart(now));
+    assert.equal(day, quickDays(now)[1].day);
+    assert.ok(quickTimes(day, now).some((t) => t.time === time && !t.disabled));
+  }));
+
+test("the native picker opens on the chosen day, else on the current value, else tomorrow at 10:00", () =>
+  inZone("Europe/London", () => {
+    const now = new Date("2026-10-07T22:56:00+01:00");
+    const seed = (value: string, day: string | null) => localDateTime(pickerSeed(value, day, now));
+    // Do this again: the start is empty and a day tile is chosen, so "⋯" opens on that day.
+    assert.equal(seed("", "2026-10-10"), "2026-10-10 10:00");
+    // A chosen day keeps its chosen time.
+    assert.equal(seed("2026-10-10 18:00", "2026-10-10"), "2026-10-10 18:00");
+    assert.equal(seed("2099-02-30 12:00", "2026-10-10"), "2026-10-10 10:00");
+    // No chosen day: the current value, then tomorrow at 10:00 (never the current minute).
+    assert.equal(seed("2026-10-12 13:00", null), "2026-10-12 13:00");
+    assert.equal(seed("", null), "2026-10-08 10:00");
+    assert.equal(seed("2099-02-30 12:00", null), "2026-10-08 10:00");
+  }));
+
+test("a picked time never changes the chosen day, and a picked date keeps the chosen time", () =>
+  inZone("Europe/London", () => {
+    const seed = new Date(2026, 9, 10, 10, 0);
+    assert.equal(pickedValue("time", new Date(2026, 9, 10, 18, 30), seed), "2026-10-10 18:30");
+    // Even if a picker hands back the time on another day, the chosen day stays.
+    assert.equal(pickedValue("time", new Date(2026, 9, 8, 18, 30), seed), "2026-10-10 18:30");
+    assert.equal(pickedValue("date", new Date(2026, 9, 14, 10, 0), seed), "2026-10-14 10:00");
+    // A date picked with another time of day keeps the chosen time.
+    assert.equal(pickedValue("date", new Date(2026, 9, 14, 22, 56), seed), "2026-10-14 10:00");
+    assert.equal(pickedValue("date", new Date(2026, 9, 14, 7, 5), new Date(2026, 9, 10, 18, 0)), "2026-10-14 18:00");
   }));

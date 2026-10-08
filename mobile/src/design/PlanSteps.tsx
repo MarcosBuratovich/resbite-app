@@ -130,6 +130,7 @@ export function WhenStep({ editor }: { editor: PlanEditor }) {
           value={start}
           onChange={setStart}
           disabled={locked}
+          day={chosenDay}
           buttons={false}
           picker={picker}
           onPickerClose={() => setPicker(null)}

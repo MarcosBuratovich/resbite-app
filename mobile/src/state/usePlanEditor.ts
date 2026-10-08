@@ -19,6 +19,7 @@ import {
   type EventFields,
 } from "../domain/events";
 import { draftAutosaveAction } from "../domain/draftAutosave";
+import { defaultStart } from "../domain/schedule";
 import { validatePlan, type Activity } from "../domain/rules";
 import {
   canEditPlan,
@@ -105,9 +106,8 @@ export function usePlanEditor({
   const [original, setOriginal] = useState<LocalPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadAttempt, setLoadAttempt] = useState(0);
-  const [start, setStart] = useState(() =>
-    localDateTime(new Date(Date.now() + 86400000)),
-  );
+  // A new event starts tomorrow at 10:00; the blank and idea baselines are taken from it, so an untouched editor stays clean.
+  const [start, setStart] = useState(() => defaultStart(new Date()));
   const [place, setPlace] = useState("");
   const [note, setNote] = useState("");
   const [fields, setFields] = useState<EventFields>({

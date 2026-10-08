@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { Alert, Linking, Platform, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
@@ -40,6 +40,8 @@ export default function EventPage() {
   const [guestsOpen, setGuestsOpen] = useState(false);
   const [moreError, setMoreError] = useState<string | null>(null);
   const [mapsError, setMapsError] = useState<string | null>(null);
+  // One Do this again at a time: a quick double tap must not write two copies or stack two editors.
+  const againBusy = useRef(false);
   const { plan, role, attendee, guests, busy, fresh, pending } = event;
   const scope = preview ? "preview" : session?.user.id;
   const back = () => (router.canGoBack() ? router.back() : router.replace("/plans"));
@@ -80,9 +82,13 @@ export default function EventPage() {
   }
   // Do this again (benchmark row 5): never over an unconfirmed save, and only after asking over a draft.
   async function again() {
-    if (!scope) return;
+    if (!scope || againBusy.current) return;
+    againBusy.current = true;
     setMoreError(null);
+    // Held while the drafts are read, and by start() until the editor is pushed or the copy
+    // fails. start() takes it synchronously, so no tap gets in between the check and the copy.
     const start = async () => {
+      againBusy.current = true;
       try {
         await drafts.put(
           againDraft(current, {
@@ -96,18 +102,25 @@ export default function EventPage() {
         router.push("/arrange");
       } catch {
         setMoreError("Couldn’t start a copy on this device. Try again.");
+      } finally {
+        againBusy.current = false;
       }
     };
+    let conflict: ReturnType<typeof againConflict>;
     try {
-      const conflict = againConflict(await drafts.list(scope));
-      if (conflict === "blocked")
-        setMoreError("Finish the new resbite that’s waiting on this device first. Open it from My resbites.");
-      else if (conflict === "replace")
-        ask("Replace the unfinished resbite draft on this device?", "Replace", () => void start());
-      else await start();
+      conflict = againConflict(await drafts.list(scope));
     } catch {
+      againBusy.current = false;
       setMoreError("Couldn’t start a copy on this device. Try again.");
+      return;
     }
+    // Released while asking: the question is modal, and Replace runs start(), which takes it again.
+    againBusy.current = false;
+    if (conflict === "blocked")
+      setMoreError("Finish the new resbite that’s waiting on this device first. Open it from My resbites.");
+    else if (conflict === "replace")
+      ask("Replace the unfinished resbite draft on this device?", "Replace", () => void start());
+    else await start();
   }
   function invite() {
     if (preview) {

@@ -176,8 +176,14 @@ try {
   await expect(page.getByRole("heading", { name: "Coffee evening", exact: true })).toBeVisible();
   // Do this again: a new draft with the text, place and note, never the date or the idea; it opens at When.
   await page.getByRole("button", { name: "More actions", exact: true }).click();
-  await page.getByRole("button", { name: "Do this again", exact: true }).click();
+  // A quick double tap (both taps before the first copy is written) opens exactly one editor.
+  await page.getByRole("button", { name: "Do this again", exact: true }).evaluate((tile) => {
+    tile.click();
+    tile.click();
+  });
   await expect(page.getByRole("heading", { name: "When?", exact: true })).toBeVisible();
+  await page.waitForTimeout(500); // a second editor would be pushed within this settle time
+  await expect(page.getByTestId("step-screen")).toHaveCount(1);
   await expect(page.getByRole("progressbar", { name: "Step 2 of 4", exact: true })).toBeVisible();
   const draft = JSON.parse(
     await page.evaluate((key) => sessionStorage.getItem(key), `resbite.drafts.v1.${user.id}`),

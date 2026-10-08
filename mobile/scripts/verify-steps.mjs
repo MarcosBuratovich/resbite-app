@@ -161,6 +161,45 @@ try {
     console.log("PASS: the saved toast shows once; the cover warning stays until a card is opened.");
   }
 
+  // 4a. A blank event starts tomorrow at 10:00, not "now + 24 h" at the current minute (iPhone
+  //     checks 1 and 6), and Review says so. An untouched new editor is still not dirty and
+  //     leaves no draft. Wednesday 7 October 2026 at 22:56 in London.
+  {
+    const page = await preview({ time: new Date("2026-10-07T22:56:00+01:00") });
+    await button(page, "New resbite").click();
+    await expect(page.getByRole("progressbar", { name: "Step 1 of 4", exact: true })).toBeVisible();
+    await page.waitForTimeout(800); // longer than the 350 ms autosave debounce
+    const keys = () =>
+      page.evaluate(() => JSON.parse(sessionStorage.getItem("resbite.drafts.v1.preview") ?? "[]").map((d) => d.key));
+    assert.deepEqual(await keys(), [], "An untouched new editor leaves no draft");
+    let asked = false;
+    const onDialog = (dialog) => {
+      asked = true;
+      void dialog.dismiss();
+    };
+    page.on("dialog", onDialog);
+    await close(page);
+    await expect(button(page, "New resbite")).toBeVisible();
+    assert.equal(asked, false, "Closing an untouched new editor does not ask to keep a draft");
+    page.off("dialog", onDialog);
+    await button(page, "New resbite").click();
+    await page.getByLabel("Name", { exact: true }).fill("Late plan");
+    await next(page);
+    await expect(heading(page, "When?")).toBeVisible();
+    await expect(button(page, "Tomorrow, Thursday 8 October")).toHaveAttribute("aria-selected", "true");
+    await expect(button(page, "Thursday 8 October at 10:00")).toHaveAttribute("aria-selected", "true");
+    await expect(button(page, /^Other time/)).not.toHaveAttribute("aria-selected", "true");
+    await next(page);
+    await page.getByLabel("Meeting place", { exact: true }).fill("Riverside park");
+    await next(page);
+    await page.getByRole("checkbox", { name: "Natural", exact: true }).click();
+    await next(page);
+    await expect(heading(page, "Looks good?")).toBeVisible();
+    await expect(button(page, "Edit date and time, Thursday 8 October at 10:00")).toContainText("10:00");
+    await page.context().close();
+    console.log("PASS: a blank event preselects Tomorrow at 10:00 and Review shows 10:00; untouched, it leaves no draft.");
+  }
+
   // 4. Quick tiles with a fixed clock: Friday 9 October 2026 at 10:30 in London.
   {
     const page = await preview({ time: new Date("2026-10-09T10:30:00+01:00") });

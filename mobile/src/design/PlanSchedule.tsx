@@ -14,12 +14,14 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { CalendarDays, ChevronDown, Clock3 } from "lucide-react-native";
 import { Button, Copy, Field, Title, useReduceMotion } from "./ui";
 import { colors as c } from "./tokens";
-import { localDateTime, parseLocalDateTime } from "../domain/plans";
+import { parseLocalDateTime } from "../domain/plans";
+import { pickedValue, pickerSeed } from "../domain/schedule";
 
 export function PlanSchedule({
   value,
   onChange,
   disabled,
+  day = null,
   picker,
   onPickerClose,
   buttons = true,
@@ -27,6 +29,8 @@ export function PlanSchedule({
   value: string;
   onChange: (value: string) => void;
   disabled: boolean;
+  /** The day chosen on a tile, even before a time is: the picker opens on it. */
+  day?: string | null;
   /** Controlled mode (UX1 When step): the parent opens the picker sheet. */
   picker?: "date" | "time" | null;
   onPickerClose?: () => void;
@@ -41,18 +45,25 @@ export function PlanSchedule({
     else if (next === null) onPickerClose?.();
   };
   const [candidate, setCandidate] = useState(new Date());
+  // What the picker opened on: a picked time keeps its day, a picked date keeps its time.
+  const [seed, setSeed] = useState(new Date());
   const reduce = useReduceMotion();
   const { fontScale } = useWindowDimensions();
   const date = parseLocalDateTime(value);
-  // A parent-opened picker starts from the current value, as open() does.
+  const startFrom = () => {
+    const at = pickerSeed(value, day, new Date());
+    setSeed(at);
+    setCandidate(at);
+  };
+  // A parent-opened picker starts from the chosen day or the current value, as open() does.
   useEffect(() => {
     if (!controlled || !picker) return;
     Keyboard.dismiss();
-    setCandidate(parseLocalDateTime(value) ?? new Date(Date.now() + 86400000));
+    startFrom();
   }, [controlled, picker]);
   const open = (next: "date" | "time") => {
     Keyboard.dismiss();
-    setCandidate(date ?? new Date(Date.now() + 86400000));
+    startFrom();
     setMode(next);
   };
   if (Platform.OS === "web")
@@ -83,7 +94,7 @@ export function PlanSchedule({
       onValueChange={(_event, next) => {
         setCandidate(next);
         if (Platform.OS === "android") {
-          onChange(localDateTime(next));
+          onChange(pickedValue(mode, next, seed));
           setMode(null);
         }
       }}
@@ -172,7 +183,7 @@ export function PlanSchedule({
                   <Button
                     title="Done"
                     onPress={() => {
-                      onChange(localDateTime(candidate));
+                      if (mode) onChange(pickedValue(mode, candidate, seed));
                       setMode(null);
                     }}
                   />
