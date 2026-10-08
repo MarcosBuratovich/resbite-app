@@ -1,6 +1,7 @@
 // Browser QA for CE2 cover photos. Every Supabase request is intercepted; nothing is uploaded.
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
+import { button, closeToList, editEvent, later, next } from "./qa-helpers.mjs";
 const baseURL = process.env.RESBITE_QA_URL || "http://localhost:8081";
 const browser = await chromium.launch({
   channel: process.env.RESBITE_QA_BROWSER || "chrome",
@@ -77,8 +78,6 @@ try {
   await preview.getByRole("tab", { name: "My resbites", exact: true }).click();
   await preview.getByRole("button", { name: "New resbite", exact: true }).click();
   await preview.getByLabel("Name", { exact: true }).fill("Cover picnic");
-  await preview.getByRole("checkbox", { name: "Natural", exact: true }).click();
-  await preview.getByLabel("Meeting place", { exact: true }).fill("Riverside park");
   const previewChooser = preview.waitForEvent("filechooser");
   await preview.getByRole("button", { name: "Add cover photo", exact: true }).click();
   await (await previewChooser).setFiles({
@@ -87,7 +86,14 @@ try {
     buffer: await syntheticPng(preview, 3000, 1000),
   });
   await expect(preview.getByText("Preview cover stays in memory. Nothing is uploaded.", { exact: true })).toBeVisible();
-  await preview.getByRole("button", { name: "Save preview plan", exact: true }).click();
+  await next(preview);
+  await next(preview);
+  await preview.getByLabel("Meeting place", { exact: true }).fill("Riverside park");
+  await next(preview);
+  await preview.getByRole("checkbox", { name: "Natural", exact: true }).click();
+  await next(preview);
+  await button(preview, "Create preview").click();
+  await later(preview);
   await expect(preview.getByText("Cover picnic", { exact: true })).toBeVisible();
   await expect(preview.locator('img[src^="data:image/jpeg"]').first()).toBeAttached();
   await preview.context().close();
@@ -181,28 +187,36 @@ try {
   await page.goto(`${baseURL}/plans`);
   await page.getByRole("button", { name: "New resbite", exact: true }).click();
   await page.getByLabel("Name", { exact: true }).fill("Garden picnic");
-  await page.getByRole("checkbox", { name: "Natural", exact: true }).click();
-  await page.getByLabel("Meeting place", { exact: true }).fill("Riverside park");
   const chooser = page.waitForEvent("filechooser");
   await page.getByRole("button", { name: "Add cover photo", exact: true }).click();
   await (await chooser).setFiles({ name: "wide.png", mimeType: "image/png", buffer: await syntheticPng(page, 4000, 1200) });
   await expect(page.getByText("Your cover uploads after the resbite is saved.", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Save plan", exact: true }).click();
-  await expect(
-    page.getByText("Your resbite is saved, but its cover photo hasn’t uploaded yet. Open Edit plan to retry.", { exact: true }),
-  ).toBeVisible();
+  await next(page);
+  await next(page);
+  await page.getByLabel("Meeting place", { exact: true }).fill("Riverside park");
+  await next(page);
+  await page.getByRole("checkbox", { name: "Natural", exact: true }).click();
+  await next(page);
+  await button(page, "Create").click();
+  const coverPending = "Your resbite is saved, but its cover photo hasn’t uploaded yet. Open Edit plan to retry.";
+  // The Invite screen shows the cover notice; Later carries it to My resbites.
+  await expect(page.getByText(coverPending, { exact: true })).toBeVisible();
+  await later(page);
+  await expect(page.getByText(coverPending, { exact: true })).toBeVisible();
   assert.equal(plans.size, 1);
   const [plan] = plans.values();
   assert.equal(uploads.length, 1);
   assert.match(uploads[0], new RegExp(`^${user.id}/${plan.id}/[0-9a-f-]+\\.jpg$`));
   assert.equal(plan.cover_path, null);
-  await page.getByRole("button", { name: "Edit plan", exact: true }).click();
-  await page.getByRole("button", { name: "Retry cover", exact: true }).click();
+  // Edit opens at Review, which offers the pending-cover recovery.
+  await editEvent(page, "Garden picnic");
+  await button(page, "Retry cover").click();
   await expect(page.getByText("Cover photo saved.", { exact: true })).toBeVisible();
   assert.equal(plan.cover_path, uploads[0]);
   assert.equal(plan.cover_revision, 1);
   assert.equal(uploads.at(-1), uploads[0], "Retry uploads to the same path");
   assert.equal(uploads.length, 2, "Retry uploaded the journaled bytes once more to the same path");
+  await button(page, "Edit photo").click();
   await page.getByRole("button", { name: "Remove cover photo", exact: true }).click();
   await expect(
     page.getByText("Cover photo removed. The previous file stays in private storage until cleanup is available.", { exact: true }),
@@ -214,7 +228,7 @@ try {
   await (await again).setFiles({ name: "tall.png", mimeType: "image/png", buffer: await syntheticPng(page, 900, 3000) });
   await expect(page.getByText("Cover photo saved.", { exact: true })).toBeVisible();
   assert.equal(plan.cover_revision, 3);
-  await page.getByRole("button", { name: "My resbites", exact: true }).click();
+  await closeToList(page);
   await expect(page.locator('img[src*="/object/sign/plan-covers/fixture.jpg"]').first()).toBeAttached();
   await expect(page.getByText("Your resbite is saved, but its cover photo hasn’t uploaded yet. Open Edit plan to retry.", { exact: true })).toHaveCount(0);
   console.log("PASS: signed-in cover uploads after save, retries from Edit, removes and re-adds.");
@@ -230,7 +244,8 @@ try {
     );
   assert.deepEqual(await coverKeys(), [], "A confirmed cover leaves nothing behind");
   failNextLink = true;
-  await page.getByRole("button", { name: "Edit plan", exact: true }).click();
+  await editEvent(page, "Garden picnic");
+  await button(page, "Edit photo").click();
   const leftover = page.waitForEvent("filechooser");
   await page.getByRole("button", { name: "Change cover photo", exact: true }).click();
   await (await leftover).setFiles({ name: "left.png", mimeType: "image/png", buffer: await syntheticPng(page, 1200, 800) });

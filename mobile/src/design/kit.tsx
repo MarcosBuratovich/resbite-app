@@ -655,7 +655,17 @@ export function focusHeading(target: Text | null) {
   if (Platform.OS === "web") {
     const node = target as unknown as HTMLElement;
     node.setAttribute("tabindex", "-1");
-    node.focus();
+    // StepScreen's entering slide keeps the new title `visibility: hidden` (so unfocusable)
+    // until the animation starts a frame or two later. Retry each frame until focus lands,
+    // for at most about half a second, and stop if the person has focused something else.
+    const before = document.activeElement;
+    let frames = 0;
+    const attempt = () => {
+      if (!node.isConnected || (document.activeElement !== before && document.activeElement !== node)) return;
+      node.focus();
+      if (document.activeElement !== node && ++frames < 30) requestAnimationFrame(attempt);
+    };
+    attempt();
   } else AccessibilityInfo.sendAccessibilityEvent(target, "focus");
 }
 
@@ -727,8 +737,9 @@ const styles = StyleSheet.create({
   part: { minHeight: 44, borderRadius: 12, justifyContent: "center" },
   cardTitle: { fontFamily: fonts.display, fontSize: 22, lineHeight: 28, color: c.ink },
   cardTitleHero: { fontSize: 28, lineHeight: 34 },
-  dateRow: { flexDirection: "row", alignItems: "center", gap: space.m },
-  placeRow: { flexDirection: "row", alignItems: "center", gap: space.s },
+  // Start-aligned even inside a Review part button, so Review matches the card guests see.
+  dateRow: { flexDirection: "row", alignItems: "center", justifyContent: "flex-start", gap: space.m },
+  placeRow: { flexDirection: "row", alignItems: "center", justifyContent: "flex-start", gap: space.s },
   stacked: { flexDirection: "column", alignItems: "flex-start" },
   cardLine: { flexShrink: 1, fontSize: 15 },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: space.s },

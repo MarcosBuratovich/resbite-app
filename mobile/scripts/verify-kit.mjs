@@ -1,5 +1,6 @@
 // The UX1 component kit in its development-only gallery (/kit): roles, labels, selected
-// states and 44 pt targets at 390 and 320 px, and forced Larger Text at 320 px. Every Supabase request is aborted.
+// states and 44 pt targets at 390 and 320 px, forced Larger Text at 320 px, and the
+// Preview chip. Every Supabase request is aborted.
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium, expect } from "@playwright/test";
@@ -140,9 +141,22 @@ try {
     assert.equal(await fitsWidth(page, '[data-testid="step-screen"]'), true, "The step screen fits 320 px");
     await page.close();
   }
+  // Preview chip: a small header chip whose sheet explains preview and offers Exit preview.
+  {
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    page.on("pageerror", (e) => errors.push(e.message));
+    await page.route("**/*.supabase.co/**", (route) => route.abort());
+    await page.goto(base);
+    await page.getByText("Preview the design", { exact: true }).click();
+    await page.getByRole("button", { name: "Preview mode", exact: true }).filter({ visible: true }).click();
+    await expect(page.getByText("Actions stay on this device.", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Exit preview", exact: true }).click();
+    await expect(page.getByText("Preview the design", { exact: true })).toBeVisible();
+    await page.close();
+  }
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: kit roles, labels, selected states and 44 pt targets at 390/320; Larger Text at 320. Screenshots: " +
+    "PASS: kit roles, labels, selected states and 44 pt targets at 390/320; Larger Text at 320; Preview chip and sheet. Screenshots: " +
       out,
   );
 } finally {

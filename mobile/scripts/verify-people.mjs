@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
+import { choosePeople, createFromIdea, later } from "./qa-helpers.mjs";
 const browser = await chromium.launch({ channel: "chrome", headless: true });
 try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
@@ -57,13 +58,9 @@ try {
   await page
     .getByRole("button", { name: "Use this idea", exact: true })
     .click();
-  await page.getByLabel("Meeting place", { exact: true }).fill("Test café");
-  await page
-    .getByRole("button", { name: "Save preview plan", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "Choose people", exact: true })
-    .click();
+  await createFromIdea(page, "Test café");
+  await later(page);
+  await choosePeople(page, "Coffee together");
   await page
     .getByRole("button", { name: "Add Coffee friends", exact: true })
     .click();
@@ -96,9 +93,7 @@ try {
   ).toBeVisible();
   await page.getByRole("button", { name: "Profile", exact: true }).click();
   await page.getByRole("tab", { name: "My resbites", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Choose people", exact: true })
-    .click();
+  await choosePeople(page, "Coffee together");
   await expect(
     page.getByRole("checkbox", {
       name: "Alex, alex@example.invalid",

@@ -1,6 +1,7 @@
 // All Supabase calls are intercepted; no catalogue publication, users or plans are created.
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
+import { button, closeToList, createFromIdea, editEvent, heading, later } from "./qa-helpers.mjs";
 import { mkdir, readFile } from "node:fs/promises";
 
 const additions = JSON.parse(
@@ -209,19 +210,16 @@ try {
     await f.page
       .getByRole("button", { name: "Use this idea", exact: true })
       .click();
-    await expect(
-      f.page.getByLabel("Meeting place", { exact: true }),
-    ).toBeVisible();
-    await expect(
-      f.page.getByRole("heading", { name: "Published coffee", exact: true }),
-    ).toBeVisible();
+    // An idea opens at Review (UX-D3), showing the idea's own text.
+    await expect(heading(f.page, "Looks good?")).toBeVisible();
+    await expect(button(f.page, "Edit name, Published coffee")).toBeVisible();
     f.state.rows = [];
     await foreground(f.page);
     await expect(
       f.page.getByText("Activity unavailable", { exact: true }),
     ).toBeVisible();
     await expect(
-      f.page.getByRole("button", { name: "Save plan", exact: true }),
+      f.page.getByRole("button", { name: "Create", exact: true }),
     ).toHaveCount(0);
     await f.page.goto(`${baseURL}/activity/painting`);
     await expect(
@@ -316,12 +314,8 @@ try {
     await preview.page
       .getByRole("button", { name: "Use this idea", exact: true })
       .click();
-    await preview.page
-      .getByLabel("Meeting place", { exact: true })
-      .fill(`Fixture place for ${item.title}`);
-    await preview.page
-      .getByRole("button", { name: "Save preview plan", exact: true })
-      .click();
+    await createFromIdea(preview.page, `Fixture place for ${item.title}`);
+    await later(preview.page);
     await expect(
       preview.page.getByRole("heading", { name: item.title, exact: true }),
     ).toBeVisible();
@@ -330,19 +324,10 @@ try {
         exact: true,
       }),
     ).toBeVisible();
-    await preview.page
-      .getByRole("button", { name: "Edit plan", exact: true })
-      .first()
-      .click();
-    await expect(
-      preview.page.getByRole("heading", { name: item.title, exact: true }),
-    ).toBeVisible();
-    await expect(
-      preview.page.getByLabel("Meeting place", { exact: true }),
-    ).toHaveValue(`Fixture place for ${item.title}`);
-    await preview.page
-      .getByRole("button", { name: "My resbites", exact: true })
-      .click();
+    await editEvent(preview.page, item.title);
+    await expect(button(preview.page, `Edit name, ${item.title}`)).toBeVisible();
+    await expect(button(preview.page, `Edit place, Fixture place for ${item.title}`)).toBeVisible();
+    await closeToList(preview.page);
     await preview.page
       .getByRole("tab", { name: "Create", exact: true })
       .click();

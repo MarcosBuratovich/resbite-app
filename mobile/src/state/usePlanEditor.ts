@@ -67,6 +67,8 @@ export type PlanEditor = {
   busy: boolean;
   locating: boolean;
   saved: boolean;
+  /** Set when a new event is created; the editor then shows the Invite screen. */
+  created: { planId: string; cover: CoverOutcome } | null;
   error: string | null;
   latest: LocalPlan | null | undefined;
   latestEditable: boolean;
@@ -115,6 +117,8 @@ export function usePlanEditor({
   });
   const needsPrefill = useRef(false);
   const coverOutcome = useRef<CoverOutcome>("none");
+  const createdId = useRef<string | null>(null);
+  const [created, setCreated] = useState<{ planId: string; cover: CoverOutcome } | null>(null);
   const cover = useCoverPhoto({
     planId: planId ?? null,
     preview,
@@ -460,15 +464,21 @@ export function usePlanEditor({
     },
   );
   useEffect(() => {
-    if (saved)
-      router.dismissTo({
-        pathname: "/plans",
-        params: {
-          created: !discarded.current && !planId ? "1" : "0",
-          updated: !discarded.current && planId ? "1" : "0",
-          cover: coverOutcome.current,
-        },
-      });
+    if (!saved) return;
+    // UX1: a new event shows the Invite screen (benchmark row 1), whose "Later" dismisses
+    // to My resbites with created=1. Edits and discards route exactly as before.
+    if (!discarded.current && !planId && createdId.current) {
+      setCreated({ planId: createdId.current, cover: coverOutcome.current });
+      return;
+    }
+    router.dismissTo({
+      pathname: "/plans",
+      params: {
+        created: "0",
+        updated: !discarded.current && planId ? "1" : "0",
+        cover: coverOutcome.current,
+      },
+    });
   }, [saved, planId]);
 
   function discardDraft() {
@@ -627,6 +637,7 @@ export function usePlanEditor({
       } else if (pending) await reconcilePlan(planGateway, write);
       else await writePlan(planGateway, write);
       if (!preview && !original) coverOutcome.current = await cover.commitAfterCreate(write.id);
+      if (!original) createdId.current = write.id;
       stopped.current = true;
       await drafts.remove(scope!, draftKey);
       // Recent places (UX-P6) are a convenience on this device; they never fail the save.
@@ -729,6 +740,7 @@ export function usePlanEditor({
     busy,
     locating,
     saved,
+    created,
     error,
     latest,
     latestEditable,

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Keyboard,
   Modal,
@@ -20,16 +20,36 @@ export function PlanSchedule({
   value,
   onChange,
   disabled,
+  picker,
+  onPickerClose,
+  buttons = true,
 }: {
   value: string;
   onChange: (value: string) => void;
   disabled: boolean;
+  /** Controlled mode (UX1 When step): the parent opens the picker sheet. */
+  picker?: "date" | "time" | null;
+  onPickerClose?: () => void;
+  /** Show the Date and Time buttons (native only). */
+  buttons?: boolean;
 }) {
-  const [mode, setMode] = useState<"date" | "time" | null>(null);
+  const [ownMode, setOwnMode] = useState<"date" | "time" | null>(null);
+  const controlled = picker !== undefined;
+  const mode = controlled ? picker : ownMode;
+  const setMode = (next: "date" | "time" | null) => {
+    if (!controlled) setOwnMode(next);
+    else if (next === null) onPickerClose?.();
+  };
   const [candidate, setCandidate] = useState(new Date());
   const reduce = useReduceMotion();
   const { fontScale } = useWindowDimensions();
   const date = parseLocalDateTime(value);
+  // A parent-opened picker starts from the current value, as open() does.
+  useEffect(() => {
+    if (!controlled || !picker) return;
+    Keyboard.dismiss();
+    setCandidate(parseLocalDateTime(value) ?? new Date(Date.now() + 86400000));
+  }, [controlled, picker]);
   const open = (next: "date" | "time") => {
     Keyboard.dismiss();
     setCandidate(date ?? new Date(Date.now() + 86400000));
@@ -45,7 +65,7 @@ export function PlanSchedule({
         editable={!disabled}
       />
     );
-  const picker = mode && (
+  const nativePicker = mode && (
     <DateTimePicker
       value={candidate}
       mode={mode}
@@ -71,54 +91,56 @@ export function PlanSchedule({
   );
   return (
     <>
-      <View style={styles.controls}>
-        {(
-          [
+      {buttons && (
+        <View style={styles.controls}>
+          {(
             [
-              "date",
-              "Date",
-              CalendarDays,
-              date?.toLocaleDateString(undefined, {
-                weekday: "short",
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              }),
-            ],
-            [
-              "time",
-              "Time",
-              Clock3,
-              date?.toLocaleTimeString(undefined, {
-                hour: "numeric",
-                minute: "2-digit",
-              }),
-            ],
-          ] as const
-        ).map(([key, label, Icon, text]) => (
-          <Pressable
-            key={key}
-            accessibilityRole="button"
-            accessibilityLabel={`Change ${label.toLowerCase()}: ${text ?? "Choose"}`}
-            accessibilityState={{ disabled }}
-            disabled={disabled}
-            onPress={() => open(key)}
-            style={({ pressed }) => [
-              styles.control,
-              { backgroundColor: pressed ? c.aquaSoft : c.cream },
-            ]}
-          >
-            <Icon color={c.aquaDark} size={21} strokeWidth={1.6} />
-            <View style={{ flex: 1, gap: 2 }}>
-              <Copy style={{ fontSize: 11, color: c.muted }}>{label}</Copy>
-              <Copy>{text ?? "Choose"}</Copy>
-            </View>
-            <ChevronDown color={c.aquaDark} size={17} />
-          </Pressable>
-        ))}
-      </View>
+              [
+                "date",
+                "Date",
+                CalendarDays,
+                date?.toLocaleDateString(undefined, {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                }),
+              ],
+              [
+                "time",
+                "Time",
+                Clock3,
+                date?.toLocaleTimeString(undefined, {
+                  hour: "numeric",
+                  minute: "2-digit",
+                }),
+              ],
+            ] as const
+          ).map(([key, label, Icon, text]) => (
+            <Pressable
+              key={key}
+              accessibilityRole="button"
+              accessibilityLabel={`Change ${label.toLowerCase()}: ${text ?? "Choose"}`}
+              accessibilityState={{ disabled }}
+              disabled={disabled}
+              onPress={() => open(key)}
+              style={({ pressed }) => [
+                styles.control,
+                { backgroundColor: pressed ? c.aquaSoft : c.cream },
+              ]}
+            >
+              <Icon color={c.aquaDark} size={21} strokeWidth={1.6} />
+              <View style={{ flex: 1, gap: 2 }}>
+                <Copy style={{ fontSize: 11, color: c.muted }}>{label}</Copy>
+                <Copy>{text ?? "Choose"}</Copy>
+              </View>
+              <ChevronDown color={c.aquaDark} size={17} />
+            </Pressable>
+          ))}
+        </View>
+      )}
       {Platform.OS === "android" ? (
-        picker
+        nativePicker
       ) : (
         <Modal
           visible={mode !== null}
@@ -143,9 +165,9 @@ export function PlanSchedule({
               >
                 <View style={styles.handle} />
                 <Title style={{ fontSize: 27, marginHorizontal: 24 }}>
-                  {mode === "date" ? "Pick a day." : "Make time for it."}
+                  {mode === "date" ? "Pick a day." : "Pick a time."}
                 </Title>
-                {picker}
+                {nativePicker}
                 <View style={{ paddingHorizontal: 24, gap: 20 }}>
                   <Button
                     title="Done"

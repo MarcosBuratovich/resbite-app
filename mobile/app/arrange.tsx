@@ -1,361 +1,247 @@
-import React, { useEffect, useRef } from "react";
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  View,
-  useWindowDimensions,
-} from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useLocalSearchParams } from "expo-router";
-import { MapPin, MessageCircle, CalendarDays } from "lucide-react-native";
-import {
-  Back,
-  Button,
-  Copy,
-  Title,
-  Field,
-  ErrorNote,
-  useReduceMotion,
-  s,
-} from "../src/design/ui";
-import { PreviewNotice } from "../src/design/Chrome";
-import { EventDetailsFields } from "../src/design/EventDetailsFields";
-import { EventPictureView } from "../src/design/categories";
-import { CoverPicker } from "../src/design/CoverPicker";
-import { eventPicture } from "../src/domain/events";
-import { PlanSchedule } from "../src/design/PlanSchedule";
+import { router, useLocalSearchParams } from "expo-router";
+import { Back, Button, ErrorNote, Title, useReduceMotion, s } from "../src/design/ui";
 import { colors as c } from "../src/design/tokens";
+import { PreviewNotice } from "../src/design/Chrome";
+import { StepScreen, announce, focusHeading } from "../src/design/kit";
+import {
+  DraftProblems,
+  InviteNext,
+  ReviewStep,
+  STEP_HINTS,
+  STEP_TITLES,
+  VibeStep,
+  WhatStep,
+  WhenStep,
+  WhereStep,
+} from "../src/design/PlanSteps";
+import { recentPlaces } from "../src/services/recentPlaces";
 import { usePlanEditor } from "../src/state/usePlanEditor";
+import type { CoverCardPart } from "../src/domain/eventView";
+import {
+  entryStep,
+  firstMissingStep,
+  nextStep,
+  previousStep,
+  stepNumber,
+  stepProblem,
+  type Step,
+  type StepAnswers,
+} from "../src/domain/steps";
+
+const partSteps: Record<CoverCardPart, Step> = {
+  picture: "what",
+  title: "what",
+  date: "when",
+  place: "where",
+  chips: "vibe",
+};
 
 export default function Arrange() {
-  const { activity, plan: planId } = useLocalSearchParams<{
-    activity?: string;
-    plan?: string;
-  }>();
-  const {
-    mode,
-    preview,
-    catalogue,
-    idea,
-    historicalActivity,
-    sourceId,
-    ideaBlocked,
-    preparing,
-    ready,
-    retryLoad,
-    fields,
-    setFields,
-    start,
-    setStart,
-    place,
-    changePlace,
-    note,
-    setNote,
-    zone,
-    dirty,
-    locked,
-    busy,
-    locating,
-    error,
-    latest,
-    latestEditable,
-    pending,
-    draftStatus,
-    draftError,
-    draftRetryLabel,
-    cover,
-    save,
-    locate,
-    discardDraft,
-    retryDraft,
-    applyPlan,
-  } = usePlanEditor({ activity, plan: planId });
-  const { fontScale } = useWindowDimensions();
-  const largeText = fontScale >= 1.4;
-  const scroll = useRef<ScrollView>(null);
+  const { activity, plan: planId } = useLocalSearchParams<{ activity?: string; plan?: string }>();
+  const editor = usePlanEditor({ activity, plan: planId });
   const reduceMotion = useReduceMotion();
-  useEffect(() => {
-    if (!error) return;
-    const frame = requestAnimationFrame(() =>
-      scroll.current?.scrollToEnd({ animated: !reduceMotion }),
-    );
-    return () => cancelAnimationFrame(frame);
-  }, [error, latest, reduceMotion]);
+  const scroll = useRef<ScrollView>(null);
+  const heading = useRef<Text>(null);
+  const [step, setStep] = useState<Step | null>(null);
+  const [direction, setDirection] = useState<"forward" | "back">("forward");
+  // Set after a Review tap or a Review check: the pill reads "Done" and comes back to Review.
+  const [returnTo, setReturnTo] = useState<"review" | null>(null);
+  const [stepError, setStepError] = useState<string | null>(null);
+  const [recent, setRecent] = useState<string[]>([]);
+  const answers: StepAnswers = { ...editor.fields, start: editor.start, place: editor.place };
 
-  if (ideaBlocked)
+  // VoiceOver focus follows the step (and the Invite screen).
+  useEffect(() => {
+    if (step === null) return;
+    const frame = requestAnimationFrame(() => focusHeading(heading.current));
+    return () => cancelAnimationFrame(frame);
+  }, [step, editor.created]);
+  useEffect(() => {
+    if (!editor.error && !stepError) return;
+    const frame = requestAnimationFrame(() => scroll.current?.scrollToEnd({ animated: !reduceMotion }));
+    return () => cancelAnimationFrame(frame);
+  }, [editor.error, editor.latest, stepError, reduceMotion]);
+  useEffect(() => {
+    if (!editor.scope) return;
+    let active = true;
+    recentPlaces.list(editor.scope).then(
+      (items) => {
+        if (active) setRecent(items);
+      },
+      () => {
+        if (active) setRecent([]);
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [editor.scope]);
+
+  function go(next: Step, dir: "forward" | "back" = "forward") {
+    setDirection(dir);
+    setStepError(null);
+    setStep(next);
+  }
+  function fail(at: Step, problem: string) {
+    if (at !== step) go(at);
+    setStepError(problem);
+    announce(problem);
+  }
+  // Next stays enabled (benchmark row 2): a missing answer shows its message and is announced.
+  function advance() {
+    if (!step || step === "review") return;
+    const problem = stepProblem(step, answers);
+    if (problem) return fail(step, problem);
+    if (returnTo === "review") {
+      const missing = firstMissingStep(answers);
+      if (missing && missing !== "review") return go(missing);
+      setReturnTo(null);
+      return go("review");
+    }
+    go(nextStep(step));
+  }
+  function back() {
+    const previous = step && previousStep(step);
+    if (previous) go(previous, "back");
+  }
+  function jump(part: CoverCardPart) {
+    setReturnTo("review");
+    go(partSteps[part]);
+  }
+  // Review re-checks everything and jumps to the first incomplete step. A pending save
+  // is retried exactly as journaled, so it is not re-validated.
+  function submit() {
+    if (!editor.pending) {
+      const missing = firstMissingStep(answers);
+      if (missing) {
+        setReturnTo("review");
+        return fail(missing, stepProblem(missing, answers)!);
+      }
+    }
+    setStepError(null);
+    void editor.save();
+  }
+  const close = () => (router.canGoBack() ? router.back() : router.replace("/plans"));
+  const later = () =>
+    router.dismissTo({
+      pathname: "/plans",
+      params: { created: "1", updated: "0", cover: editor.created?.cover ?? "none" },
+    });
+  const invite = () => {
+    if (editor.created) router.replace({ pathname: "/invitations", params: { plan: editor.created.planId } });
+  };
+
+  if (editor.ideaBlocked)
     return (
       <SafeAreaView style={s.page}>
         <ScrollView contentContainerStyle={s.body}>
           <Back />
-          <Title>
-            {catalogue.loading
-              ? "Checking your activity…"
-              : "Activity unavailable"}
-          </Title>
-          {catalogue.loading ? (
-            <ActivityIndicator
-              accessibilityLabel="Checking activity"
-              color={c.aquaDark}
-            />
+          <Title>{editor.catalogue.loading ? "Checking your activity…" : "Activity unavailable"}</Title>
+          {editor.catalogue.loading ? (
+            <ActivityIndicator accessibilityLabel="Checking activity" color={c.aquaDark} />
           ) : (
             <>
               <ErrorNote
                 message={
-                  catalogue.error ??
+                  editor.catalogue.error ??
                   "This activity is not available to plan right now. Any saved draft stays on this device."
                 }
               />
-              <Button
-                title="Check activity again"
-                onPress={catalogue.refresh}
-              />
+              <Button title="Check activity again" onPress={editor.catalogue.refresh} />
             </>
           )}
         </ScrollView>
       </SafeAreaView>
     );
-  if (!ready)
+  if (!editor.ready)
     return (
       <SafeAreaView style={s.page}>
         <View style={s.body}>
           <Back />
-          <Title>
-            {preparing ? "Getting your plan…" : "Let’s take another look."}
-          </Title>
-          {preparing ? (
-            <ActivityIndicator
-              accessibilityLabel="Loading plan"
-              color={c.aquaDark}
-            />
+          <Title>{editor.preparing ? "Getting your plan…" : "Let’s take another look."}</Title>
+          {editor.preparing ? (
+            <ActivityIndicator accessibilityLabel="Loading plan" color={c.aquaDark} />
           ) : (
             <>
-              <ErrorNote message={error ?? "We couldn’t open this plan. Try again."} />
-              {
-                <Button
-                  title="Try loading again"
-                  onPress={retryLoad}
-                />
-              }
+              <ErrorNote message={editor.error ?? "We couldn’t open this plan. Try again."} />
+              <Button title="Try loading again" onPress={editor.retryLoad} />
             </>
           )}
         </View>
       </SafeAreaView>
     );
-  const saveAction = (
-    <View style={[s.actionFooter, largeText && { paddingHorizontal: 0 }]}>
+  if (editor.created)
+    return (
+      <StepScreen
+        step={null}
+        title="It’s on!"
+        titleRef={heading}
+        scrollRef={scroll}
+        onClose={later}
+        header={<PreviewNotice dismissible={false} />}
+        primary={<Button title="Later" secondary icon={false} onPress={later} />}
+      >
+        <InviteNext editor={editor} onInvite={invite} />
+      </StepScreen>
+    );
+  // The entry step is decided once, when the editor is ready (UX-D3). It is never stored in the draft.
+  // `ready` is only true after the restore (or plan or idea load) has finished, so `restored`,
+  // `pending` and the answers are final here; a failed or retried load never reaches this line.
+  if (step === null) {
+    setStep(
+      entryStep({ mode: editor.mode, restored: editor.restored, pending: editor.pending !== null, answers }),
+    );
+    return null;
+  }
+  const saveTitle = editor.pending
+    ? "Retry save"
+    : editor.mode === "edit"
+      ? editor.preview
+        ? "Save preview"
+        : "Save"
+      : editor.preview
+        ? "Create preview"
+        : "Create";
+  const primary =
+    step === "review" ? (
       <Button
-        title={
-          pending
-            ? "Retry save"
-            : planId
-              ? "Save changes"
-              : preview
-                ? "Save preview plan"
-                : "Save plan"
-        }
-        onPress={save}
-        loading={busy}
+        title={saveTitle}
+        onPress={submit}
+        loading={editor.busy}
         disabled={
-          locating ||
-          cover.busy ||
-          latest !== undefined ||
-          (Boolean(planId) && !dirty && !pending)
+          editor.locating ||
+          editor.cover.busy ||
+          editor.latest !== undefined ||
+          (editor.mode === "edit" && !editor.dirty && !editor.pending)
         }
       />
-      <Copy style={{ ...s.muted, fontSize: 11, textAlign: "center" }}>
-        {preview
-          ? "Preview only · no invitations are sent"
-          : planId
-            ? "Your changes appear after the save is confirmed"
-            : "Invite people after your plan is saved"}
-      </Copy>
-    </View>
-  );
+    ) : (
+      <Button title={returnTo === "review" ? "Done" : "Next"} onPress={advance} />
+    );
   return (
-    <SafeAreaView style={s.page}>
-      {!largeText && <PreviewNotice dismissible={false} />}
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        <ScrollView
-          ref={scroll}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          contentContainerStyle={[s.body, { paddingBottom: 28 }]}
-        >
-          {largeText && <PreviewNotice dismissible={false} />}
-          <Back
-            label={planId ? "My resbites" : mode === "idea" ? "Idea" : "Back"}
-          />
-          <View style={styles.activity}>
-            <EventPictureView
-              picture={eventPicture({
-                activity_id: sourceId,
-                categories: fields.categories,
-              })}
-              size={66}
-            />
-            <View style={{ flex: 1, gap: 3 }}>
-              <Copy style={s.muted}>
-                {planId ? "YOUR PLAN" : "LET’S GET TOGETHER"}
-              </Copy>
-              <Title style={{ fontSize: 22, lineHeight: 28 }}>
-                {fields.title.trim() || "Your resbite"}
-              </Title>
-            </View>
-          </View>
-          <View style={{ gap: 8 }}>
-            <Title>
-              {planId ? "A little change of plan." : "Make it a date."}
-            </Title>
-            <Copy style={s.muted}>
-              {planId
-                ? "Adjust the details. Existing RSVPs stay as they are."
-                : "A time, a place, and something to look forward to."}
-            </Copy>
-          </View>
-          <EventDetailsFields
-            value={fields}
-            onChange={setFields}
-            disabled={locked}
-            cover={
-              <CoverPicker
-                cover={cover}
-                disabled={locked}
-                fallback={eventPicture({ activity_id: sourceId, categories: fields.categories })}
-              />
-            }
-            sourceTitle={
-              sourceId ? (idea?.title ?? historicalActivity?.title) : undefined
-            }
-          />
-          <View style={styles.section}>
-            <View style={styles.sectionHeading}>
-              <CalendarDays size={19} color={c.aquaDark} />
-              <Title style={styles.sectionTitle}>When works?</Title>
-            </View>
-            <PlanSchedule value={start} onChange={setStart} disabled={locked} />
-            <Copy style={{ ...s.muted, fontSize: 12 }}>
-              Times shown in {zone.replaceAll("_", " ")}.
-            </Copy>
-          </View>
-          <View style={styles.section}>
-            <View style={styles.sectionHeading}>
-              <MapPin size={19} color={c.aquaDark} />
-              <Title style={styles.sectionTitle}>Meet you there.</Title>
-            </View>
-            <Field
-              label="Meeting place"
-              placeholder="A café, a park, your place…"
-              value={place}
-              onChangeText={changePlace}
-              maxLength={300}
-              editable={!locked}
-              returnKeyType="done"
-            />
-            <Button
-              title="Use my location"
-              secondary
-              icon={false}
-              onPress={locate}
-              loading={locating}
-              disabled={locked}
-            />
-            <Copy style={s.muted}>
-              A name or address is enough. Location is optional.
-            </Copy>
-          </View>
-          <View style={styles.section}>
-            <View style={styles.sectionHeading}>
-              <MessageCircle size={19} color={c.aquaDark} />
-              <Title style={styles.sectionTitle}>One more thing?</Title>
-            </View>
-            <Field
-              label="A note for everyone (optional)"
-              placeholder="What to bring, where to find you…"
-              value={note}
-              onChangeText={setNote}
-              multiline
-              textAlignVertical="top"
-              style={{ minHeight: 110 }}
-              maxLength={2000}
-              editable={!locked}
-            />
-          </View>
-          <Copy style={s.muted} accessibilityLiveRegion="polite">
-            {draftStatus}
-          </Copy>
-          <ErrorNote message={draftError} />
-          {draftError && (
-            <Button title={draftRetryLabel} secondary onPress={retryDraft} />
-          )}
-          <ErrorNote message={error} />
-          {latest !== undefined && (
-            <View style={[styles.section, { backgroundColor: c.pinkSoft }]}>
-              <Title style={styles.sectionTitle}>Latest saved plan</Title>
-              {latest ? (
-                <>
-                  <Copy>{latest.title}</Copy>
-                  <Copy>{new Date(latest.starts_at).toLocaleString()}</Copy>
-                  <Copy>{latest.place_label}</Copy>
-                  <Copy>{latest.note || "No note"}</Copy>
-                  {latestEditable ? (
-                    <>
-                      <Copy style={s.muted}>
-                        Using these details replaces your unsaved draft.
-                      </Copy>
-                      <Button
-                        title="Use latest saved details"
-                        secondary
-                        onPress={() => applyPlan(latest)}
-                      />
-                    </>
-                  ) : (
-                    <Copy>This plan is no longer editable.</Copy>
-                  )}
-                </>
-              ) : (
-                <Copy>This plan is no longer available to your account.</Copy>
-              )}
-            </View>
-          )}
-          {pending && (
-            <Copy style={s.muted}>
-              The fields are held while the save is unconfirmed, so retrying
-              sends exactly the same details.
-            </Copy>
-          )}
-          {!pending && !busy && (
-            <Button title="Discard draft" secondary onPress={discardDraft} />
-          )}
-          {largeText && saveAction}
-        </ScrollView>
-        {!largeText && saveAction}
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+    <StepScreen
+      step={stepNumber(step)}
+      title={STEP_TITLES[step]}
+      hint={STEP_HINTS[step]}
+      titleRef={heading}
+      scrollRef={scroll}
+      direction={direction}
+      onBack={previousStep(step) ? back : undefined}
+      onClose={close}
+      header={<PreviewNotice dismissible={false} />}
+      status={editor.draftStatus}
+      primary={primary}
+    >
+      {step === "what" && <WhatStep editor={editor} />}
+      {step === "when" && <WhenStep editor={editor} />}
+      {step === "where" && <WhereStep editor={editor} recent={recent} />}
+      {step === "vibe" && <VibeStep editor={editor} />}
+      {step === "review" && <ReviewStep editor={editor} onJump={jump} />}
+      <ErrorNote message={stepError} />
+      <DraftProblems editor={editor} />
+    </StepScreen>
   );
 }
-const styles = StyleSheet.create({
-  activity: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 13,
-    gap: 13,
-    borderRadius: 24,
-    backgroundColor: c.cream,
-  },
-  section: {
-    gap: 14,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: c.line,
-    borderRadius: 24,
-    backgroundColor: c.paper,
-  },
-  sectionHeading: { flexDirection: "row", gap: 10, alignItems: "center" },
-  sectionTitle: { fontSize: 23, lineHeight: 30, flexShrink: 1 },
-});
