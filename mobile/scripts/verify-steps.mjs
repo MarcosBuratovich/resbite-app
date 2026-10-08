@@ -94,12 +94,12 @@ try {
     console.log("PASS: Next with a missing answer, alerts, focus on step change, jump from Review, Invite screen.");
   }
 
-  // 3b. Opened from an idea (Create → idea → Use this idea), Invite people still comes back to My resbites.
+  // 3b. Opened from an idea (Create → idea → Use idea), Invite people still comes back to My resbites.
   {
     const page = await preview();
     await page.getByRole("tab", { name: "Create", exact: true }).click();
     await button(page, "Coffee together").click();
-    await button(page, "Use this idea").click();
+    await button(page, "Use idea").click();
     await createFromIdea(page, "Riverside park");
     await expect(heading(page, "It’s on!")).toBeVisible();
     await button(page, "Invite people").click();

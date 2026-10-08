@@ -141,7 +141,7 @@ try {
     const f = await fixture(width);
     await f.page.goto(`${baseURL}/create`);
     await expect(
-      f.page.getByRole("button", { name: "Start your own resbite", exact: true }),
+      f.page.getByRole("button", { name: "Start from scratch", exact: true }),
     ).toBeVisible();
     await expect(
       f.page.getByText("No ideas are available yet. You can still start your own."),
@@ -208,7 +208,7 @@ try {
       fullPage: true,
     });
     await f.page
-      .getByRole("button", { name: "Use this idea", exact: true })
+      .getByRole("button", { name: "Use idea", exact: true })
       .click();
     // An idea opens at Review (UX-D3), showing the idea's own text.
     await expect(heading(f.page, "Looks good?")).toBeVisible();
@@ -226,7 +226,7 @@ try {
       f.page.getByText("Activity unavailable", { exact: true }),
     ).toBeVisible();
     await expect(
-      f.page.getByRole("button", { name: "Use this idea", exact: true }),
+      f.page.getByRole("button", { name: "Use idea", exact: true }),
     ).toHaveCount(0);
     await f.page.goto(`${baseURL}/arrange?activity=painting`);
     await expect(
@@ -263,9 +263,7 @@ try {
   const preview = await fixture(390, true);
   await preview.page.goto(baseURL);
   await preview.page.getByText("Preview the design", { exact: true }).click();
-  await expect(
-    preview.page.getByText("11 ideas", { exact: true }),
-  ).toBeVisible();
+  await expect(preview.page.getByTestId("idea-grid").getByRole("button")).toHaveCount(11);
   await preview.page
     .getByRole("button", { name: "Coffee together", exact: true })
     .click();
@@ -279,20 +277,18 @@ try {
   ).toBeVisible();
   await expect(
     preview.page.getByRole("button", {
-      name: "Use this idea",
+      name: "Use idea",
       exact: true,
     }),
   ).toBeVisible();
-  await preview.page
-    .getByRole("button", { name: "Create", exact: true })
-    .click();
+  await button(preview.page, "Back").click();
+  // The search field sits behind the search icon (spec "Create tab").
+  await button(preview.page, "Search").click();
   for (const item of additions) {
     await preview.page
       .getByLabel("Search ideas", { exact: true })
       .fill(item.title);
-    await expect(
-      preview.page.getByText("1 ideas", { exact: true }),
-    ).toBeVisible();
+    await expect(preview.page.getByTestId("idea-grid").getByRole("button")).toHaveCount(1);
     await preview.page
       .getByRole("button", { name: item.title, exact: true })
       .click();
@@ -312,7 +308,7 @@ try {
       )
       .toBe(true);
     await preview.page
-      .getByRole("button", { name: "Use this idea", exact: true })
+      .getByRole("button", { name: "Use idea", exact: true })
       .click();
     await createFromIdea(preview.page, `Fixture place for ${item.title}`);
     await later(preview.page);
@@ -331,9 +327,7 @@ try {
       .click();
   }
   await preview.page.getByLabel("Search ideas", { exact: true }).fill("");
-  await expect(
-    preview.page.getByText("11 ideas", { exact: true }),
-  ).toBeVisible();
+  await expect(preview.page.getByTestId("idea-grid").getByRole("button")).toHaveCount(11);
   await preview.close();
   assert.deepEqual(unexpected, []);
   assert.deepEqual(errors, []);

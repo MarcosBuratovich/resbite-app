@@ -36,7 +36,7 @@ try {
   await page.goto(baseURL);
   await page.getByText("Preview the design", { exact: true }).click();
   await page.getByRole("button", { name: "Coffee together", exact: true }).click();
-  await page.getByRole("button", { name: "Use this idea", exact: true }).click();
+  await page.getByRole("button", { name: "Use idea", exact: true }).click();
   // An idea opens at Review (UX-D3). Create jumps to the first missing answer and says why.
   await expect(heading(page, "Looks good?")).toBeVisible();
   await button(page, "Create preview").click();

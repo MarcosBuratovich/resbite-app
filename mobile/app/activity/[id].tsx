@@ -1,97 +1,67 @@
 import React from "react";
-import { ActivityIndicator, Image, ScrollView, View } from "react-native";
+import { ActivityIndicator, Image, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
+import { ArrowLeft, Clock3 } from "lucide-react-native";
 import { activityArtwork } from "../../src/services/catalogue";
-import {
-  Back,
-  Button,
-  Copy,
-  ErrorNote,
-  Title,
-  Reveal,
-  s,
-  useLargeText,
-} from "../../src/design/ui";
+import { Button, Copy, ErrorNote, Title, Reveal, s, useLargeText } from "../../src/design/ui";
+import { Chip, IconButton } from "../../src/design/kit";
 import { useCatalogue } from "../../src/state/useCatalogue";
 import { useApp } from "../../src/state/AppState";
-import { colors as c } from "../../src/design/tokens";
+import { categoryPalette, colors as c, r } from "../../src/design/tokens";
 import { PreviewNotice } from "../../src/design/Chrome";
-import { categoryText } from "../../src/design/categories";
-import { Clock3, Sparkles } from "lucide-react-native";
+import { categoryIcons } from "../../src/design/categories";
+import { categoryLabels } from "../../src/domain/categories";
+
+/** Idea detail (spec "Create tab and idea detail"): picture, title, chips, description, numbered tips, "Use idea". */
 export default function Detail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { preview } = useApp();
   const largeText = useLargeText();
   const catalogue = useCatalogue(id ?? "");
   const a = catalogue.items[0];
+  const back = () => (router.canGoBack() ? router.back() : router.replace("/create"));
+  const top = (
+    <View style={styles.top}>
+      <IconButton icon={ArrowLeft} label="Back" onPress={back} />
+      <PreviewNotice />
+    </View>
+  );
   if (catalogue.loading || catalogue.error || !a)
     return (
       <SafeAreaView style={s.page}>
-        <PreviewNotice />
         <ScrollView contentContainerStyle={s.body}>
-          <Back label="Create" />
-          <Title>
-            {catalogue.loading
-              ? "Getting your activity…"
-              : "Activity unavailable"}
-          </Title>
+          {top}
+          <Title>{catalogue.loading ? "Getting your activity…" : "Activity unavailable"}</Title>
           {catalogue.loading ? (
-            <ActivityIndicator
-              accessibilityLabel="Loading activity"
-              color={c.aquaDark}
-            />
+            <ActivityIndicator accessibilityLabel="Loading activity" color={c.aquaDark} />
           ) : (
             <>
               {catalogue.error ? (
                 <ErrorNote message={catalogue.error} />
               ) : (
                 <Copy>
-                  This activity is not available to plan right now. Browse the
-                  other ideas, or start your own.
+                  This activity is not available to plan right now. Browse the other ideas, or start your own.
                 </Copy>
               )}
-              <Button
-                title="Check activity again"
-                onPress={catalogue.refresh}
-                secondary
-              />
-              <Button
-                title="Browse ideas"
-                onPress={() => router.replace("/create")}
-              />
+              <Button title="Check activity again" onPress={catalogue.refresh} secondary />
+              <Button title="Browse ideas" onPress={() => router.replace("/create")} />
             </>
           )}
         </ScrollView>
       </SafeAreaView>
     );
   const planAction = (
-    <View style={s.actionFooter}>
-      <Button
-        title="Use this idea"
-        onPress={() =>
-          router.push({ pathname: "/arrange", params: { activity: a.id } })
-        }
-      />
-      <Copy style={{ ...s.muted, fontSize: 11, textAlign: "center" }}>
-        You can change anything next
-      </Copy>
+    <View style={[s.actionFooter, largeText && { paddingHorizontal: 0, borderTopWidth: 0 }]}>
+      <Button title="Use idea" onPress={() => router.push({ pathname: "/arrange", params: { activity: a.id } })} />
     </View>
   );
   return (
     <SafeAreaView style={s.page}>
-      <PreviewNotice />
       <ScrollView contentContainerStyle={[s.body, { paddingBottom: 28 }]}>
-        <Back label="Create" />
+        {top}
         <Reveal>
-          <View
-            style={{
-              backgroundColor: c.cream,
-              borderRadius: 30,
-              alignItems: "center",
-              padding: 20,
-            }}
-          >
+          <View style={[styles.picture, { backgroundColor: categoryPalette[a.categories[0] ?? "community"].tint }]}>
             <Image
               accessibilityLabel={a.title}
               source={activityArtwork(a)}
@@ -100,90 +70,48 @@ export default function Detail() {
             />
           </View>
         </Reveal>
-        <View style={{ gap: 12 }}>
-          <View
-            style={{
-              flexDirection: "row",
-              flexWrap: "wrap",
-              gap: 10,
-              alignItems: "center",
-            }}
-          >
-            <View
-              style={{
-                backgroundColor: c.aquaSoft,
-                paddingHorizontal: 13,
-                paddingVertical: 6,
-                borderRadius: 18,
-              }}
-            >
-              <Copy style={{ color: c.aquaDark, fontSize: 12 }}>
-                {categoryText(a.categories)}
-              </Copy>
-            </View>
-            {a.durationMinutes !== null && (
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-              >
-                <Clock3 size={15} color={c.muted} />
-                <Copy style={s.muted}>{a.durationMinutes} minutes</Copy>
-              </View>
-            )}
-          </View>
-          <Title>{a.title}</Title>
-          <Copy>{a.description}</Copy>
+        <Title>{a.title}</Title>
+        <View style={styles.chips}>
+          {a.categories.map((key) => (
+            <Chip key={key} text={categoryLabels[key]} icon={categoryIcons[key]} category={key} />
+          ))}
+          {a.durationMinutes !== null && <Chip icon={Clock3} text={`${a.durationMinutes} minutes`} />}
         </View>
-        {a.tips.length > 0 && (
-          <View
-            style={[
-              s.card,
-              { padding: 20, gap: 14, backgroundColor: c.aquaSoft },
-            ]}
-          >
-            <View
-              style={{ flexDirection: "row", gap: 9, alignItems: "center" }}
-            >
-              <Sparkles size={19} color={c.aquaDark} />
-              <Title style={{ fontSize: 22, lineHeight: 28, flexShrink: 1 }}>
-                Make it your own
-              </Title>
+        <Copy>{a.description}</Copy>
+        {a.tips.map((tip, i) => (
+          <View key={i} style={styles.tip}>
+            <View style={styles.tipNumber}>
+              <Copy style={{ fontSize: 12, color: c.aquaDark }}>{i + 1}</Copy>
             </View>
-            {a.tips.map((tip, i) => (
-              <View
-                key={i}
-                style={{
-                  flexDirection: "row",
-                  gap: 12,
-                  alignItems: "flex-start",
-                }}
-              >
-                <View
-                  style={{
-                    minWidth: 27,
-                    minHeight: 27,
-                    borderRadius: 14,
-                    alignItems: "center",
-                    justifyContent: "center",
-                    backgroundColor: c.paper,
-                  }}
-                >
-                  <Copy style={{ fontSize: 12, color: c.aquaDark }}>
-                    {i + 1}
-                  </Copy>
-                </View>
-                <Copy style={{ flex: 1, fontSize: 14 }}>{tip}</Copy>
-              </View>
-            ))}
+            <Copy style={{ flex: 1, fontSize: 14 }}>{tip}</Copy>
           </View>
-        )}
-        {preview && (
-          <Copy style={s.muted}>
-            Activity content approved for the owner-only beta.
-          </Copy>
-        )}
+        ))}
+        {preview && <Copy style={s.muted}>Activity content approved for the owner-only beta.</Copy>}
         {largeText && planAction}
       </ScrollView>
       {!largeText && planAction}
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  top: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  picture: { borderRadius: r.card, alignItems: "center", padding: 20, overflow: "hidden" },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  tip: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "flex-start",
+    padding: 14,
+    borderRadius: r.tile,
+    backgroundColor: c.aquaSoft,
+  },
+  tipNumber: {
+    minWidth: 27,
+    minHeight: 27,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: c.paper,
+  },
+});

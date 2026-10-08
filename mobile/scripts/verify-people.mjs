@@ -56,7 +56,7 @@ try {
     .getByRole("button", { name: "Coffee together", exact: true })
     .click();
   await page
-    .getByRole("button", { name: "Use this idea", exact: true })
+    .getByRole("button", { name: "Use idea", exact: true })
     .click();
   await createFromIdea(page, "Test café");
   await later(page);

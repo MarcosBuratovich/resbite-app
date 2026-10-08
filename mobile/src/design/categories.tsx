@@ -1,12 +1,11 @@
 import React from "react";
-import { Image, Pressable, StyleSheet, View } from "react-native";
+import { Image, StyleSheet, View } from "react-native";
 import { Bike, Flower2, Lightbulb, Palette, Sun, Trees, Users } from "lucide-react-native";
-import { categoryLabels, type CategoryKey } from "../domain/categories";
+import type { CategoryKey } from "../domain/categories";
 import type { EventPicture } from "../domain/events";
 import { artwork } from "../services/catalogue";
 import { useCoverUri } from "../state/useCoverUri";
-import { categoryPalette, colors as c, fonts } from "./tokens";
-import { Copy } from "./ui";
+import { categoryPalette } from "./tokens";
 
 export type CategoryIcon = typeof Sun;
 export const categoryIcons: Record<CategoryKey, CategoryIcon> = {
@@ -18,50 +17,6 @@ export const categoryIcons: Record<CategoryKey, CategoryIcon> = {
   community: Users,
   uplifting: Sun,
 };
-
-export function categoryText(keys: readonly CategoryKey[] | undefined) {
-  return (keys ?? []).map((key) => categoryLabels[key]).join(" · ");
-}
-
-/** A single-choice filter tile for browsing ideas. */
-export function CategoryFilterTile({
-  label,
-  icon: Icon,
-  selected,
-  onPress,
-}: {
-  label: string;
-  icon: CategoryIcon;
-  selected: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      style={[
-        styles.filter,
-        {
-          borderColor: selected ? c.aquaDark : c.line,
-          backgroundColor: selected ? c.aquaSoft : c.paper,
-        },
-      ]}
-    >
-      <Icon size={20} strokeWidth={1.7} color={selected ? c.aquaDark : "#665381"} />
-      <Copy
-        style={{
-          fontSize: 12,
-          fontFamily: fonts.body,
-          color: selected ? c.aquaDark : c.ink,
-        }}
-      >
-        {label}
-      </Copy>
-    </Pressable>
-  );
-}
 
 /** Idea artwork when available, otherwise the primary category's tile. */
 export function EventPictureView({
@@ -111,17 +66,6 @@ export function EventPictureView({
 
 const styles = StyleSheet.create({
   fill: { width: "100%", height: "100%" },
-  filter: {
-    minHeight: 64,
-    minWidth: 76,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    borderWidth: 1,
-  },
 });
 
 /** A cover thumbnail; until its signed link loads, or if it fails, the fallback picture shows. */
