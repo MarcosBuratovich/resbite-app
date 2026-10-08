@@ -1,238 +1,149 @@
-import React, { useEffect, useState } from "react";
-import {
-  Keyboard,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-  useWindowDimensions,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import DateTimePicker from "@react-native-community/datetimepicker";
-import { CalendarDays, ChevronDown, Clock3 } from "lucide-react-native";
-import { Button, Copy, Field, Title, useReduceMotion } from "./ui";
-import { colors as c } from "./tokens";
+import React, { useMemo, useState } from "react";
+import { Platform, Pressable, StyleSheet, TextInput, View, useWindowDimensions } from "react-native";
+import DateTimePicker, { DateTimePickerAndroid } from "@react-native-community/datetimepicker";
+import { CalendarDays, Clock3, type LucideIcon } from "lucide-react-native";
+import { Copy } from "./ui";
+import { colors as c, depth, fonts, r } from "./tokens";
 import { parseLocalDateTime } from "../domain/plans";
-import { pickedValue, pickerSeed } from "../domain/schedule";
+import { addDays, localDay, pickedValue, pickerSeed, splitLocal, spokenDate } from "../domain/schedule";
 
+/**
+ * The When step's picker cards (steps v2): the picker comes first, full width, with the
+ * suggestions below it. iOS shows the date as an inline calendar (wheels under Larger Text)
+ * and the time as wheels, both inside their cards. Android has no inline picker, so each card
+ * shows its value in large type and opens the system dialog. The web keeps the typed
+ * "Date and time (local)" field in the date card's place; it covers the time as well.
+ *
+ * The pickers show `pickerSeed` (the chosen day, at the chosen time or 10:00) and every pick
+ * goes through `pickedValue`: a picked date keeps the chosen time, a picked time keeps the day.
+ */
 export function PlanSchedule({
+  part,
   value,
+  day,
   onChange,
   disabled,
-  day = null,
-  picker,
-  onPickerClose,
-  buttons = true,
 }: {
+  part: "date" | "time";
   value: string;
+  /** The day chosen on a chip, even before a time is: the pickers show it. */
+  day: string | null;
   onChange: (value: string) => void;
   disabled: boolean;
-  /** The day chosen on a tile, even before a time is: the picker opens on it. */
-  day?: string | null;
-  /** Controlled mode (UX1 When step): the parent opens the picker sheet. */
-  picker?: "date" | "time" | null;
-  onPickerClose?: () => void;
-  /** Show the Date and Time buttons (native only). */
-  buttons?: boolean;
 }) {
-  const [ownMode, setOwnMode] = useState<"date" | "time" | null>(null);
-  const controlled = picker !== undefined;
-  const mode = controlled ? picker : ownMode;
-  const setMode = (next: "date" | "time" | null) => {
-    if (!controlled) setOwnMode(next);
-    else if (next === null) onPickerClose?.();
-  };
-  const [candidate, setCandidate] = useState(new Date());
-  // What the picker opened on: a picked time keeps its day, a picked date keeps its time.
-  const [seed, setSeed] = useState(new Date());
-  const reduce = useReduceMotion();
   const { fontScale } = useWindowDimensions();
-  const date = parseLocalDateTime(value);
-  const startFrom = () => {
-    const at = pickerSeed(value, day, new Date());
-    setSeed(at);
-    setCandidate(at);
-  };
-  // A parent-opened picker starts from the chosen day or the current value, as open() does.
-  useEffect(() => {
-    if (!controlled || !picker) return;
-    Keyboard.dismiss();
-    startFrom();
-  }, [controlled, picker]);
-  const open = (next: "date" | "time") => {
-    Keyboard.dismiss();
-    startFrom();
-    setMode(next);
-  };
+  const now = new Date();
+  const today = localDay(now);
+  // Local midnight today, so the calendar keeps today choosable; the time itself is validated.
+  const minimumDate = useMemo(() => addDays(new Date(), 0), [today]);
   if (Platform.OS === "web")
+    return part === "date" ? <WebField value={value} onChange={onChange} disabled={disabled} /> : null;
+  const seed = pickerSeed(value, day, now);
+  const pick = (next: Date) => onChange(pickedValue(part, next, seed));
+  if (Platform.OS === "android") {
+    const chosen = day ? parseLocalDateTime(`${day} 12:00`) : null;
+    const time = splitLocal(value).time;
+    const text = part === "date" ? (chosen ? spokenDate(chosen, now) : "Choose a day") : (time ?? "Choose a time");
+    const Icon: LucideIcon = part === "date" ? CalendarDays : Clock3;
     return (
-      <Field
-        label="Date and time (local)"
-        value={value}
-        onChangeText={onChange}
-        placeholder="YYYY-MM-DD HH:mm"
-        editable={!disabled}
-      />
-    );
-  const nativePicker = mode && (
-    <DateTimePicker
-      value={candidate}
-      mode={mode}
-      display={
-        Platform.OS === "ios"
-          ? mode === "date" && fontScale < 1.4
-            ? "inline"
-            : "spinner"
-          : "default"
-      }
-      minimumDate={mode === "date" ? new Date() : undefined}
-      themeVariant="light"
-      accentColor={c.aquaDark}
-      onDismiss={() => setMode(null)}
-      onValueChange={(_event, next) => {
-        setCandidate(next);
-        if (Platform.OS === "android") {
-          onChange(pickedValue(mode, next, seed));
-          setMode(null);
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${part === "date" ? "Change date" : "Change time"}, ${text}`}
+        aria-disabled={disabled}
+        disabled={disabled}
+        onPress={() =>
+          DateTimePickerAndroid.open({
+            value: seed,
+            mode: part,
+            display: "default",
+            minimumDate: part === "date" ? minimumDate : undefined,
+            onValueChange: (_event, next) => pick(next),
+          })
         }
-      }}
-    />
-  );
-  return (
-    <>
-      {buttons && (
-        <View style={styles.controls}>
-          {(
-            [
-              [
-                "date",
-                "Date",
-                CalendarDays,
-                date?.toLocaleDateString(undefined, {
-                  weekday: "short",
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                }),
-              ],
-              [
-                "time",
-                "Time",
-                Clock3,
-                date?.toLocaleTimeString(undefined, {
-                  hour: "numeric",
-                  minute: "2-digit",
-                }),
-              ],
-            ] as const
-          ).map(([key, label, Icon, text]) => (
-            <Pressable
-              key={key}
-              accessibilityRole="button"
-              accessibilityLabel={`Change ${label.toLowerCase()}: ${text ?? "Choose"}`}
-              accessibilityState={{ disabled }}
-              disabled={disabled}
-              onPress={() => open(key)}
-              style={({ pressed }) => [
-                styles.control,
-                { backgroundColor: pressed ? c.aquaSoft : c.cream },
-              ]}
-            >
-              <Icon color={c.aquaDark} size={21} strokeWidth={1.6} />
-              <View style={{ flex: 1, gap: 2 }}>
-                <Copy style={{ fontSize: 11, color: c.muted }}>{label}</Copy>
-                <Copy>{text ?? "Choose"}</Copy>
-              </View>
-              <ChevronDown color={c.aquaDark} size={17} />
-            </Pressable>
-          ))}
+        style={({ pressed }) => [
+          styles.card,
+          styles.row,
+          { backgroundColor: pressed ? c.surface : c.paper, opacity: disabled ? 0.55 : 1 },
+        ]}
+      >
+        <View style={styles.circle}>
+          <Icon size={24} strokeWidth={2} color={c.aquaDark} />
         </View>
-      )}
-      {Platform.OS === "android" ? (
-        nativePicker
-      ) : (
-        <Modal
-          visible={mode !== null}
-          transparent
-          animationType={reduce ? "fade" : "slide"}
-          onRequestClose={() => setMode(null)}
-        >
-          <View style={styles.backdrop}>
-            <Pressable
-              accessibilityLabel="Close date picker"
-              accessibilityRole="button"
-              style={StyleSheet.absoluteFill}
-              onPress={() => setMode(null)}
-            />
-            <SafeAreaView
-              edges={["bottom"]}
-              style={styles.sheet}
-              accessibilityViewIsModal
-            >
-              <ScrollView
-                contentContainerStyle={{ paddingVertical: 24, gap: 20 }}
-              >
-                <View style={styles.handle} />
-                <Title style={{ fontSize: 27, marginHorizontal: 24 }}>
-                  {mode === "date" ? "Pick a day." : "Pick a time."}
-                </Title>
-                {nativePicker}
-                <View style={{ paddingHorizontal: 24, gap: 20 }}>
-                  <Button
-                    title="Done"
-                    onPress={() => {
-                      if (mode) onChange(pickedValue(mode, candidate, seed));
-                      setMode(null);
-                    }}
-                  />
-                  <Button
-                    title={
-                      mode === "date"
-                        ? "Keep previous date"
-                        : "Keep previous time"
-                    }
-                    secondary
-                    icon={false}
-                    onPress={() => setMode(null)}
-                  />
-                </View>
-              </ScrollView>
-            </SafeAreaView>
-          </View>
-        </Modal>
-      )}
-    </>
+        <View style={styles.text}>
+          <Copy style={styles.value}>{text}</Copy>
+          <Copy style={styles.change}>{part === "date" ? "Change date" : "Change time"}</Copy>
+        </View>
+      </Pressable>
+    );
+  }
+  return (
+    <View style={[styles.card, styles.picker]}>
+      <DateTimePicker
+        value={seed}
+        mode={part}
+        // Larger Text keeps the wheels for the date too: the inline calendar does not grow with it.
+        display={part === "date" && fontScale < 1.4 ? "inline" : "spinner"}
+        minimumDate={part === "date" ? minimumDate : undefined}
+        themeVariant="light"
+        accentColor={c.aquaDark}
+        disabled={disabled}
+        onValueChange={(_event, next) => pick(next)}
+      />
+    </View>
+  );
+}
+
+/** Web QA types into this field; it stands in for both native pickers. */
+function WebField({ value, onChange, disabled }: { value: string; onChange: (value: string) => void; disabled: boolean }) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <View style={[styles.card, styles.row, focused && styles.focused]}>
+      <View aria-hidden style={styles.circle}>
+        <CalendarDays size={24} strokeWidth={2} color={c.aquaDark} />
+      </View>
+      <View style={styles.text}>
+        <Copy style={styles.caption}>Date and time (local)</Copy>
+        <TextInput
+          accessibilityLabel="Date and time (local)"
+          value={value}
+          onChangeText={onChange}
+          placeholder="YYYY-MM-DD HH:mm"
+          placeholderTextColor={c.muted}
+          editable={!disabled}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          style={[styles.input, styles.noOutline]}
+        />
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  controls: { gap: 10 },
-  control: {
-    minHeight: 72,
-    borderRadius: 19,
-    padding: 15,
-    gap: 13,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  backdrop: {
-    flex: 1,
-    justifyContent: "flex-end",
-    backgroundColor: "rgba(34, 30, 45, 0.25)",
-  },
-  sheet: {
-    maxHeight: "90%",
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
+  card: {
+    borderRadius: r.panel,
     backgroundColor: c.paper,
+    borderWidth: 1,
+    borderColor: "#EFEAF0",
+    boxShadow: depth.card,
   },
-  handle: {
-    width: 38,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: c.line,
-    alignSelf: "center",
+  // The native picker sizes itself; it is centred, and clipped by the card's corners if wider.
+  picker: { alignItems: "center", overflow: "hidden", paddingVertical: 8 },
+  row: { minHeight: 78, flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 16, paddingVertical: 12 },
+  // The card draws the focus ring (2 pt aqua) in place of the browser outline.
+  focused: { borderColor: c.aquaDark, boxShadow: `0 0 0 1px ${c.aquaDark}` },
+  noOutline: { outlineStyle: "solid", outlineWidth: 0 },
+  circle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: c.aquaSoft,
+    alignItems: "center",
+    justifyContent: "center",
   },
+  text: { flex: 1, gap: 2 },
+  value: { fontFamily: fonts.display, fontSize: 24, lineHeight: 30 },
+  change: { fontFamily: fonts.medium, fontSize: 14, color: c.aquaDark },
+  caption: { fontFamily: fonts.medium, fontSize: 13, color: c.muted },
+  input: { fontFamily: fonts.display, fontSize: 22, color: c.ink, paddingVertical: 4, minHeight: 36 },
 });

@@ -26,7 +26,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ArrowLeft, MapPin, Plus, X, type LucideIcon } from "lucide-react-native";
+import { ChevronLeft, MapPin, Plus, X, type LucideIcon } from "lucide-react-native";
 import { Button, Copy, s, useLargeText, useReduceMotion } from "./ui";
 import { EventPictureView } from "./categories";
 import { categoryPalette, colors as c, depth, fonts, r, space } from "./tokens";
@@ -43,8 +43,9 @@ import { progressLabel } from "../domain/steps";
 /**
  * A Pressable that scales on press, like Button, and does not scale under Reduce Motion
  * (spec principle 8). `outerStyle` carries layout; `style` is the pressable's own look.
+ * Exported for the creation steps' own chips, tiles and cards (PlanSteps).
  */
-function ScalePressable({
+export function ScalePressable({
   outerStyle,
   onPressIn,
   onPressOut,
@@ -507,6 +508,20 @@ export function Segmented<K extends string>({
   );
 }
 
+/** StepScreen's 48 pt round Previous step and Close buttons (steps v2). The label is required. */
+function StepButton({ icon: Icon, label, onPress }: { icon: LucideIcon; label: string; onPress: () => void }) {
+  return (
+    <ScalePressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={({ pressed }) => [styles.stepButton, pressed && { backgroundColor: c.surface }]}
+    >
+      <Icon size={24} strokeWidth={2.2} color={c.ink} />
+    </ScalePressable>
+  );
+}
+
 function Progress({ step, total }: { step: number; total: number }) {
   return (
     <View
@@ -527,9 +542,11 @@ function Progress({ step, total }: { step: number; total: number }) {
 }
 
 /**
- * One question per screen: progress (read as "Step 2 of 4"), a big question title
- * (a header), the content and the pinned primary pill, which moves inline under Larger
- * Text. "Previous step" changes the step; "Close" leaves through the caller's guard.
+ * One question per screen: full-width progress (read as "Step 2 of 4"), a row with the
+ * round Previous step and Close buttons and the header (the Preview chip) between them, a
+ * big question title (a header), the content and the pinned primary pill, which moves
+ * inline under Larger Text. Without Previous step, Close takes its place on the left (steps
+ * v2 mockup). "Previous step" changes the step; "Close" leaves through the caller's guard.
  * Content slides in, or fades under Reduce Motion.
  */
 export function StepScreen({
@@ -569,7 +586,7 @@ export function StepScreen({
     ? FadeIn.duration(120).reduceMotion(ReduceMotion.Never)
     : (direction === "back" ? SlideInLeft : SlideInRight).duration(220);
   const footer = (
-    <View testID="step-primary" style={[s.actionFooter, largeText && styles.inlineFooter]}>
+    <View testID="step-primary" style={[styles.stepFooter, largeText && styles.inlineFooter]}>
       {primary}
       {status ? (
         <Copy accessibilityLiveRegion="polite" style={styles.status}>
@@ -580,17 +597,15 @@ export function StepScreen({
   );
   return (
     <SafeAreaView testID="step-screen" style={s.page}>
+      {step !== null && <Progress step={step} total={total} />}
       <View style={styles.stepTop}>
         {onBack ? (
-          <IconButton icon={ArrowLeft} label="Previous step" tone="plain" onPress={onBack} />
+          <StepButton icon={ChevronLeft} label="Previous step" onPress={onBack} />
         ) : (
-          <View style={styles.spacer} />
+          <StepButton icon={X} label="Close" onPress={onClose} />
         )}
-        <View style={styles.stepMiddle}>
-          {step !== null && <Progress step={step} total={total} />}
-          {header}
-        </View>
-        <IconButton icon={X} label="Close" tone="plain" onPress={onClose} />
+        <View style={styles.stepMiddle}>{header}</View>
+        {onBack ? <StepButton icon={X} label="Close" onPress={onClose} /> : <View style={styles.spacer} />}
       </View>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <ScrollView
@@ -598,14 +613,14 @@ export function StepScreen({
           testID="step-scroll"
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
-          contentContainerStyle={[s.body, { paddingBottom: 28 }]}
+          contentContainerStyle={styles.stepScroll}
         >
           <Animated.View key={title} entering={entering} style={styles.stepBody}>
             <Text
               ref={titleRef}
               accessibilityRole="header"
               accessibilityHint={hint}
-              style={[s.title, largeText && { lineHeight: undefined }]}
+              style={[s.title, styles.stepTitle, largeText && { lineHeight: undefined }]}
             >
               {title}
             </Text>
@@ -765,14 +780,28 @@ const styles = StyleSheet.create({
   segmentOn: { backgroundColor: c.paper, boxShadow: depth.small },
   segmentText: { fontSize: 14, color: c.muted, textAlign: "center" },
   segmentTextOn: { fontFamily: fonts.medium, color: c.ink },
-  stepTop: { flexDirection: "row", alignItems: "center", gap: space.s, paddingHorizontal: space.m, paddingTop: space.s },
-  stepMiddle: { flex: 1, alignItems: "center", gap: 6 },
-  spacer: { width: 44 },
-  stepBody: { gap: space.l },
-  progress: { flexDirection: "row", gap: 6, width: "100%", maxWidth: 220 },
-  bar: { flex: 1, height: 5, borderRadius: 3, backgroundColor: c.line },
+  // Steps v2 (owner-approved mockup): full-width bars, 48 pt round buttons, a 36 pt title.
+  progress: { flexDirection: "row", gap: 6, marginHorizontal: 20, paddingTop: space.m },
+  bar: { flex: 1, height: 6, borderRadius: 3, backgroundColor: c.line },
   barOn: { backgroundColor: c.aquaDark },
-  inlineFooter: { paddingHorizontal: 0, borderTopWidth: 0, backgroundColor: "transparent" },
+  stepTop: { flexDirection: "row", alignItems: "center", gap: space.s, paddingHorizontal: 20, paddingTop: 14, paddingBottom: 4 },
+  // The header (Preview chip) is centred; a row keeps its own alignSelf from pulling it left.
+  stepMiddle: { flex: 1, flexDirection: "row", justifyContent: "center" },
+  stepButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: c.paper,
+    boxShadow: depth.small,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  spacer: { width: 48 },
+  stepScroll: { paddingHorizontal: 20, paddingTop: space.s, paddingBottom: 28 },
+  stepBody: { gap: space.l },
+  stepTitle: { fontSize: 36, lineHeight: 42, marginTop: 6, marginBottom: 2 },
+  stepFooter: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 10, gap: 6 },
+  inlineFooter: { paddingHorizontal: 0, paddingTop: 20 },
   status: { fontSize: 11, color: c.muted, textAlign: "center" },
   backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(34, 30, 45, 0.25)" },
   sheet: { maxHeight: "85%", borderTopLeftRadius: r.card, borderTopRightRadius: r.card, backgroundColor: c.paper },

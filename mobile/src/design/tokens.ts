@@ -41,6 +41,7 @@ export const categoryPalette = {
   uplifting: { tint: "#FFF7DC", ink: "#7A6012" },
 } as const;
 
-// UX1 component kit (spec "Component kit"): radii and a spacing scale.
-export const r = { card: 28, tile: 22, chip: 999 } as const;
+// UX1 component kit (spec "Component kit"): radii and a spacing scale. `panel` is the creation
+// steps' field cards and vibe tiles (steps v2 mockup).
+export const r = { card: 28, tile: 22, chip: 999, panel: 24 } as const;
 export const space = { xs: 4, s: 8, m: 12, l: 16, xl: 24, xxl: 32 } as const;

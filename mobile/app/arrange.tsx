@@ -216,7 +216,7 @@ export default function Arrange() {
         scrollRef={scroll}
         onClose={later}
         header={<PreviewNotice dismissible={false} />}
-        primary={<Button title="Later" secondary icon={false} onPress={later} />}
+        primary={<Button title="Later" secondary icon={false} large onPress={later} />}
       >
         <InviteNext editor={editor} onInvite={invite} />
       </StepScreen>
@@ -242,6 +242,7 @@ export default function Arrange() {
   const primary =
     step === "review" ? (
       <Button
+        large
         title={saveTitle}
         // The old edit subtitle's meaning, kept as the Save pill's hint (spec "Removed text").
         hint={editor.mode === "edit" ? "Existing RSVPs stay as they are." : undefined}
@@ -255,7 +256,12 @@ export default function Arrange() {
         }
       />
     ) : (
-      <Button title={returnTo === "review" || editor.pending ? "Done" : "Next"} onPress={advance} />
+      // Vibe leads to Review, so its pill says so (steps v2); "Done" still returns to Review.
+      <Button
+        large
+        title={returnTo === "review" || editor.pending ? "Done" : step === "vibe" ? "Review" : "Next"}
+        onPress={advance}
+      />
     );
   return (
     <StepScreen

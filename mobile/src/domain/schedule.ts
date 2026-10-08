@@ -116,3 +116,9 @@ export function pickedValue(mode: "date" | "time", picked: Date, seed: Date): st
   const from = mode === "date" ? [picked, seed] : [seed, picked];
   return joinLocal(localDay(from[0]), localDateTime(from[1]).slice(11));
 }
+
+/** The When step's zone line: "Buenos Aires time" for "America/Argentina/Buenos_Aires" (the last part, with spaces). */
+export function zoneLabel(zone: string): string {
+  const city = (zone.split("/").pop() || zone).replaceAll("_", " ");
+  return `${city || "Local"} time`;
+}

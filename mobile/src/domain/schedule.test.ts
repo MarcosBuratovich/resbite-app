@@ -11,6 +11,7 @@ import {
   quickTimes,
   splitLocal,
   spokenDateTime,
+  zoneLabel,
 } from "./schedule.ts";
 import { localDateTime } from "./plans.ts";
 
@@ -137,3 +138,11 @@ test("a picked time never changes the chosen day, and a picked date keeps the ch
     assert.equal(pickedValue("date", new Date(2026, 9, 14, 22, 56), seed), "2026-10-14 10:00");
     assert.equal(pickedValue("date", new Date(2026, 9, 14, 7, 5), new Date(2026, 9, 10, 18, 0)), "2026-10-14 18:00");
   }));
+
+test("the zone line names the zone's city, with spaces for underscores", () => {
+  assert.equal(zoneLabel("America/Argentina/Buenos_Aires"), "Buenos Aires time");
+  assert.equal(zoneLabel("Europe/London"), "London time");
+  assert.equal(zoneLabel("America/Port_of_Spain"), "Port of Spain time");
+  assert.equal(zoneLabel("UTC"), "UTC time");
+  assert.equal(zoneLabel(""), "Local time");
+});

@@ -104,6 +104,7 @@ export function Button({
   disabled = false,
   icon = true,
   hint,
+  large = false,
 }: {
   title: string;
   onPress: () => void;
@@ -113,6 +114,8 @@ export function Button({
   icon?: boolean;
   /** What happens beyond the title, for VoiceOver (react-native-web does not render hints). */
   hint?: string;
+  /** The creation steps' pill (steps v2): 62 pt tall with a centred, bold label. */
+  large?: boolean;
 }) {
   const reduce = useReduceMotion(),
     scale = useSharedValue(1),
@@ -143,6 +146,7 @@ export function Button({
         }
         style={({ pressed }) => [
           s.button,
+          large && s.buttonLarge,
           secondary && s.secondary,
           (disabled || loading) && { opacity: 0.65, boxShadow: "none" },
           pressed && {
@@ -151,11 +155,17 @@ export function Button({
           },
         ]}
       >
-        <Copy style={s.buttonLabel}>{title}</Copy>
+        <Copy style={large ? [s.buttonLabel, s.buttonLabelLarge] : s.buttonLabel}>{title}</Copy>
         {loading ? (
           <ActivityIndicator color={c.ink} />
         ) : (
-          icon && <ArrowRight size={19} strokeWidth={1.6} color={c.ink} />
+          icon && (
+            <ArrowRight
+              size={large ? 22 : 19}
+              strokeWidth={large ? 2.2 : 1.6}
+              color={c.ink}
+            />
+          )
         )}
       </GluestackButton>
     </Animated.View>
@@ -388,6 +398,14 @@ export const s = StyleSheet.create({
     letterSpacing: 0.1,
     flexShrink: 1,
   },
+  buttonLarge: {
+    minHeight: 62,
+    borderRadius: 31,
+    paddingHorizontal: 24,
+    justifyContent: "center",
+    gap: 10,
+  },
+  buttonLabelLarge: { fontFamily: fonts.bold, fontSize: 18, lineHeight: 24 },
   field: {
     minHeight: 50,
     borderWidth: 1,

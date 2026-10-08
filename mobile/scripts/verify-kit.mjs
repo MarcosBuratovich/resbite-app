@@ -110,6 +110,13 @@ try {
     await expect(page.getByRole("heading", { name: "When?", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Previous step", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Next", exact: true })).toBeVisible();
+    // Steps v2: full-width progress on top, then 48 pt round Previous step and Close buttons.
+    for (const name of ["Previous step", "Close"]) {
+      const box = await size(page.getByRole("button", { name, exact: true }));
+      assert.ok(box.width >= 48 && box.height >= 48, `${name} is a 48 pt circle`);
+    }
+    const progress = await size(page.getByRole("progressbar", { name: "Step 2 of 4", exact: true }));
+    assert.ok(progress.width >= width - 48, "The progress bars span the screen");
     assert.equal(
       await page.evaluate(() =>
         document.querySelector('[data-testid="step-scroll"]').contains(document.querySelector('[data-testid="step-primary"]')),

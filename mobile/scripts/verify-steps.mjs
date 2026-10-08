@@ -1,10 +1,23 @@
 // UX1 creation steps in preview: Next with a missing answer, alerts and focus, quick day and
-// time tiles, jumping from Review, the Invite screen, leaving mid-flow, a restored
-// unconfirmed save, recent places, and Larger Text at 320 px. Every Supabase request is aborted.
+// time chips, jumping from Review, the Invite screen, leaving mid-flow, a restored
+// unconfirmed save, recent places, and Larger Text at 320 px. Steps v2: the order, placement
+// and sizes from the owner-approved mockup. Every Supabase request is aborted.
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium, expect } from "@playwright/test";
-import { button, card, close, createFromIdea, createSteps, heading, later, next, typeDate } from "./qa-helpers.mjs";
+import {
+  button,
+  card,
+  close,
+  createFromIdea,
+  createSteps,
+  heading,
+  heightOf,
+  inOrder,
+  later,
+  next,
+  typeDate,
+} from "./qa-helpers.mjs";
 const baseURL = process.env.RESBITE_QA_URL || "http://localhost:8081";
 const shots = "/private/tmp/resbite-steps";
 await mkdir(shots, { recursive: true });
@@ -41,10 +54,28 @@ try {
     const page = await preview();
     await button(page, "New resbite").click();
     await expect(page.getByRole("progressbar", { name: "Step 1 of 4", exact: true })).toBeVisible();
+    // Steps v2 (owner-approved mockup): the photo first, then the name, then the optional description.
+    assert.equal(
+      await inOrder(page, [
+        button(page, "Add cover photo"),
+        page.getByLabel("Name", { exact: true }),
+        page.getByLabel("Description (optional)", { exact: true }),
+      ]),
+      true,
+      "What shows the photo, then the name, then the description",
+    );
+    await expect(page.getByText("Add a photo", { exact: true })).toBeVisible();
+    await expect(page.getByPlaceholder("Name your resbite", { exact: true })).toBeVisible();
+    await expect(page.getByPlaceholder("What you’ll do together (optional)", { exact: true })).toBeVisible();
+    assert.ok((await heightOf(button(page, "Add cover photo"))) >= 236, "The photo area is about 240 pt tall");
+    assert.ok((await heightOf(page.getByLabel("Name", { exact: true }))) >= 76, "The name card is about 78 pt tall");
+    assert.ok((await heightOf(button(page, "Next"))) >= 62, "The pill is 62 pt tall");
+    assert.ok((await heightOf(button(page, "Close"))) >= 48, "Close is a 48 pt circle");
     await next(page);
     await expect(page.getByRole("alert")).toContainText("Give your resbite a name.");
     await expect(heading(page, "What’s the plan?")).toBeVisible();
     await page.getByLabel("Name", { exact: true }).fill("Garden picnic");
+    await page.getByLabel("Description (optional)", { exact: true }).fill("Bring a blanket");
     await next(page);
     await expect(heading(page, "When?")).toBeFocused();
     await expect(page.getByRole("alert")).toHaveCount(0);
@@ -58,10 +89,29 @@ try {
     await next(page);
     await next(page);
     await expect(heading(page, "Where?")).toBeFocused();
+    assert.equal(
+      await inOrder(page, [
+        page.getByLabel("Meeting place", { exact: true }),
+        button(page, "Use my location"),
+        page.getByLabel("A note for everyone (optional)", { exact: true }),
+      ]),
+      true,
+      "Where shows the place, Use my location, then the note",
+    );
+    await expect(page.getByPlaceholder("Note for guests (optional)", { exact: true })).toBeVisible();
+    assert.ok((await heightOf(button(page, "Use my location"))) >= 70, "Use my location is a 72 pt tile");
+    // With no recent places the Recent section is hidden.
+    await expect(page.getByText(/^recent$/i)).toHaveCount(0);
     await next(page);
     await expect(page.getByRole("alert")).toContainText("Add a meeting place.");
     await page.getByLabel("Meeting place", { exact: true }).fill("Riverside park");
     await next(page);
+    // The Vibe pill reads Review; vibe tiles are about 108 pt.
+    await expect(button(page, "Review")).toBeVisible();
+    assert.ok(
+      (await heightOf(page.getByRole("checkbox", { name: "Natural", exact: true }))) >= 104,
+      "Vibe tiles are about 108 pt tall",
+    );
     await next(page);
     await expect(page.getByRole("alert")).toContainText("Choose one or two categories.");
     await page.getByRole("checkbox", { name: "Natural", exact: true }).click();
@@ -73,6 +123,13 @@ try {
     await page.getByLabel("Meeting place", { exact: true }).fill("Old mill");
     await button(page, "Done").click();
     await expect(button(page, "Edit place, Old mill")).toBeVisible();
+    // The description is written on What; Review shows it, and tapping it goes back to What.
+    await expect(page.getByText("Bring a blanket", { exact: true })).toBeVisible();
+    await button(page, "Edit description, Bring a blanket").click();
+    await expect(heading(page, "What’s the plan?")).toBeVisible();
+    await expect(page.getByLabel("Description (optional)", { exact: true })).toHaveValue("Bring a blanket");
+    await button(page, "Done").click();
+    await expect(heading(page, "Looks good?")).toBeVisible();
     // A jump that finds another step incomplete says why instead of moving silently.
     await button(page, /^Edit date and time/).click();
     await typeDate(page, "2099-02-30 12:00");
@@ -91,7 +148,7 @@ try {
     await button(page, "Back").click();
     await expect(page.getByText("Preview saved", { exact: true })).toBeVisible();
     await page.context().close();
-    console.log("PASS: Next with a missing answer, alerts, focus on step change, jump from Review, Invite screen.");
+    console.log("PASS: Next with a missing answer, alerts, focus on step change, steps v2 order and sizes, the description on What, jump from Review, Invite screen.");
   }
 
   // 3b. Opened from an idea (Create → idea → Use idea), Invite people still comes back to My resbites.
@@ -188,7 +245,8 @@ try {
     await expect(heading(page, "When?")).toBeVisible();
     await expect(button(page, "Tomorrow, Thursday 8 October")).toHaveAttribute("aria-selected", "true");
     await expect(button(page, "Thursday 8 October at 10:00")).toHaveAttribute("aria-selected", "true");
-    await expect(button(page, /^Other time/)).not.toHaveAttribute("aria-selected", "true");
+    // The pickers are always shown now: there is no separate Pick tile or "Other time" chip.
+    await expect(button(page, /^(Pick a day|Other time)/)).toHaveCount(0);
     await next(page);
     await page.getByLabel("Meeting place", { exact: true }).fill("Riverside park");
     await next(page);
@@ -207,19 +265,32 @@ try {
     await page.getByLabel("Name", { exact: true }).fill("Brunch");
     await next(page);
     await expect(button(page, "Today, Friday 9 October")).toBeVisible();
+    // Picker first (steps v2): the date card, then the day chips, then the time chips, then the zone.
+    assert.equal(
+      await inOrder(page, [
+        page.getByLabel("Date and time (local)", { exact: true }),
+        button(page, "Today, Friday 9 October"),
+        button(page, "Saturday 10 October at 09:00"),
+        page.getByLabel("Times shown in Europe/London", { exact: true }),
+      ]),
+      true,
+      "When shows the date card, the day chips, the time chips, then the zone",
+    );
+    await expect(page.getByText("London time", { exact: true })).toBeVisible();
+    assert.ok((await heightOf(button(page, "Today, Friday 9 October"))) >= 52, "Day chips are 52 pt tall");
+    assert.ok((await heightOf(button(page, "Saturday 10 October at 09:00"))) >= 52, "Time chips are 52 pt tall");
     // Tomorrow is Saturday, so the weekend tile is Sunday.
     await expect(button(page, "Sunday 11 October")).toBeVisible();
     await button(page, "Today, Friday 9 October").click();
     await expect(button(page, "Friday 9 October at 10:00")).toBeDisabled();
     await expect(button(page, "Friday 9 October at 13:00")).toBeEnabled();
     await button(page, "Friday 9 October at 13:00").click();
-    await button(page, /^Pick a day/).click();
     await expect(page.getByLabel("Date and time (local)", { exact: true })).toHaveValue("2026-10-09 13:00");
     await button(page, "Tomorrow, Saturday 10 October").click();
     await expect(page.getByLabel("Date and time (local)", { exact: true })).toHaveValue("2026-10-10 13:00");
     await expect(button(page, "Saturday 10 October at 09:00")).toBeEnabled();
     await page.context().close();
-    console.log("PASS: quick day tiles, the weekend rule, past times disabled, local YYYY-MM-DD HH:mm value.");
+    console.log("PASS: the date card before the day and time chips, the weekend rule, past times disabled, local YYYY-MM-DD HH:mm value.");
   }
 
   // 5. Leaving mid-flow runs the existing keep-draft guard; a kept draft resumes at its first missing step.
@@ -317,10 +388,12 @@ try {
     await page.getByLabel("Name", { exact: true }).fill("Second picnic");
     await next(page);
     await next(page);
+    await expect(page.getByText(/^recent$/i)).toBeVisible();
+    assert.ok((await heightOf(button(page, "Use recent place Riverside park"))) >= 60, "Recent places are 64 pt rows");
     await button(page, "Use recent place Riverside park").click();
     await expect(page.getByLabel("Meeting place", { exact: true })).toHaveValue("Riverside park");
     await page.context().close();
-    console.log("PASS: a saved place is offered as a recent place chip.");
+    console.log("PASS: a saved place is offered as a recent place row.");
   }
 
   // 8. Larger Text at 320 px: every step fits without sideways scrolling and keeps its pill inline.
@@ -351,6 +424,7 @@ try {
       if (fill) await fill();
       assert.equal(await fits(), true, `${title} fits 320 px with Larger Text`);
       assert.equal(await inline(), true, `${title} keeps its pill inline under Larger Text`);
+      await page.waitForTimeout(300); // let the step's Reduce Motion fade finish before capturing
       await page.screenshot({ path: `${shots}/${steps.findIndex((s) => s[0] === title) + 1}-large-320.png`, fullPage: true });
       if (title !== "Looks good?") await next(page);
     }

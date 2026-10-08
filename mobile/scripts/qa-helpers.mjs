@@ -7,17 +7,31 @@ export const heading = (page, name) => visible(page.getByRole("heading", { name,
 export const button = (page, name) =>
   visible(page.getByRole("button", { name, exact: typeof name === "string" }));
 
-/** The step pill: "Next" going forward, "Done" when returning to Review. */
+/** The step pill: "Next" going forward ("Review" on Vibe), "Done" when returning to Review. */
 export async function next(page) {
-  await button(page, /^(Next|Done)$/).click();
+  await button(page, /^(Next|Review|Done)$/).click();
 }
 export async function close(page) {
   await button(page, "Close").click();
 }
-/** Web QA types dates into "Date and time (local)", behind the Pick tile. */
+/** Web QA types dates into "Date and time (local)", the When step's first card. */
 export async function typeDate(page, value) {
-  await button(page, /^Pick a day/).click();
   await page.getByLabel("Date and time (local)", { exact: true }).fill(value);
+}
+/** True when the locators' first matches appear in this order in the DOM (reading and VoiceOver order). */
+export async function inOrder(page, locators) {
+  const handles = [];
+  for (const locator of locators) handles.push(await locator.first().elementHandle());
+  return page.evaluate(
+    (els) => els.every((el, i) => i === 0 || Boolean(els[i - 1].compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING)),
+    handles,
+  );
+}
+/** The rendered height of a locator's first match, in CSS px (= pt at the test widths). */
+export async function heightOf(locator) {
+  const box = await locator.first().boundingBox();
+  if (!box) throw Error("The element is not rendered");
+  return box.height;
 }
 /** What → When → Where → Vibe → Review for a new event. */
 export async function createSteps(page, { name, when, place, note, categories = [] }) {
