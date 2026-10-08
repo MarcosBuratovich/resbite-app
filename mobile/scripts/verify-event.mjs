@@ -74,6 +74,10 @@ try {
   ]);
   let attendee = { version: 1, response: "pending" };
   let failGuests = false;
+  // An unconfirmed cancel: the RPC fails and so does the read that would confirm it.
+  let failCancel = false,
+    failPlanRead = false,
+    planReads = 0;
   const responses = [];
   const cancels = [];
   await page.route("**/*.supabase.co/**", async (route) => {
@@ -89,6 +93,11 @@ try {
       return reply({ id: user.id, display_name: "Fixture", avatar_path: null, avatar_revision: 0 });
     if (path === "/rest/v1/activities") return reply([]);
     if (path === "/rest/v1/plans") {
+      planReads++;
+      if (failPlanRead) {
+        failPlanRead = false;
+        return reply({ message: "Fixture: plan read unavailable" }, 500);
+      }
       const id = url.searchParams.get("id")?.replace(/^eq\./, "");
       const rows = [...plans.values()].filter((p) => !id || p.id === id);
       return reply(one ? (rows[0] ?? null) : rows);
@@ -117,6 +126,11 @@ try {
     if (path === "/rest/v1/rpc/change_plan_v2") {
       const body = req.postDataJSON();
       assert.equal(body.p_cancel, true);
+      if (failCancel) {
+        failCancel = false;
+        failPlanRead = true;
+        return reply({ message: "Fixture: cancel reply lost" }, 500);
+      }
       cancels.push(body.p_plan);
       const plan = plans.get(body.p_plan);
       plan.status = "cancelled";
@@ -187,6 +201,24 @@ try {
   await expect.poll(() => asked).toBe("Replace the unfinished resbite draft on this device?");
   await page.getByRole("button", { name: "Close sheet", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Coffee evening", exact: true })).toBeVisible();
+  // An unconfirmed cancel keeps what is shown and offers the organizer a refresh that reloads.
+  await expect(page.getByRole("button", { name: "Refresh event", exact: true })).toHaveCount(0);
+  failCancel = true;
+  await page.getByRole("button", { name: "More actions", exact: true }).click();
+  await page.getByRole("button", { name: "Cancel event", exact: true }).click();
+  await page.getByRole("button", { name: "Yes, cancel plan", exact: true }).click();
+  const unconfirmed =
+    "We couldn’t confirm the cancellation. Check your connection and refresh before trying again.";
+  await expect(page.getByText(unconfirmed, { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Edit Coffee evening", exact: true })).toBeVisible();
+  const readsBeforeRefresh = planReads;
+  await page.getByRole("button", { name: "Refresh event", exact: true }).click();
+  await expect(page.getByText(unconfirmed, { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Refresh event", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Coffee evening", exact: true })).toBeVisible();
+  assert.equal(failPlanRead, false);
+  assert.ok(planReads > readsBeforeRefresh, "Refresh event reloads the plan");
+  assert.deepEqual(cancels, []);
   // Cancel keeps its confirmation and semantics.
   await page.getByRole("button", { name: "More actions", exact: true }).click();
   await page.getByRole("button", { name: "Cancel event", exact: true }).click();
@@ -197,7 +229,7 @@ try {
   await expect(page.getByRole("button", { name: "Edit Coffee evening", exact: true })).toHaveCount(0);
   assert.deepEqual(cancels, [hosted.id]);
   console.log(
-    "PASS: organizer event page: guests, Open in Maps (and its failure note), Edit at Review, Do this again at When with a replace guard, cancel.",
+    "PASS: organizer event page: guests, Open in Maps (and its failure note), Edit at Review, Do this again at When with a replace guard, an unconfirmed cancel with Refresh event, cancel.",
   );
 
   // Invitee. A failed guest read makes the whole event unavailable, never a partial page; Refresh recovers.

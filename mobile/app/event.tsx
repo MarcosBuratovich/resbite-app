@@ -196,6 +196,10 @@ export default function EventPage() {
                 setMore(true);
               }}
             />
+            {/* Errors such as an unconfirmed cancel ask the organizer to refresh (as "Refresh plans" did on My resbites). */}
+            {!preview && !!event.error && (
+              <IconButton icon={RefreshCw} label="Refresh event" busy={busy} onPress={() => void event.load()} />
+            )}
           </View>
         ) : (
           attendee && (
