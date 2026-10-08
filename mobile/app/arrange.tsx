@@ -93,11 +93,18 @@ export default function Arrange() {
   // Next stays enabled (benchmark row 2): a missing answer shows its message and is announced.
   function advance() {
     if (!step || step === "review") return;
+    // An unconfirmed save is retried exactly as journaled (as submit() does), so its locked
+    // fields are not re-checked: every step goes straight back to Review, where Retry save is.
+    if (editor.pending) {
+      setReturnTo(null);
+      return go("review");
+    }
     const problem = stepProblem(step, answers);
     if (problem) return fail(step, problem);
     if (returnTo === "review") {
+      // A jump back that finds another step incomplete goes there and says why.
       const missing = firstMissingStep(answers);
-      if (missing && missing !== "review") return go(missing);
+      if (missing && missing !== "review") return fail(missing, stepProblem(missing, answers)!);
       setReturnTo(null);
       return go("review");
     }
@@ -130,8 +137,13 @@ export default function Arrange() {
       pathname: "/plans",
       params: { created: "1", updated: "0", cover: editor.created?.cover ?? "none" },
     });
+  // My resbites first (exactly as Later, with its created and cover notices), then invitations
+  // on top: Back from invitations always lands on My resbites, however the editor was opened.
   const invite = () => {
-    if (editor.created) router.replace({ pathname: "/invitations", params: { plan: editor.created.planId } });
+    const created = editor.created;
+    if (!created) return;
+    later();
+    router.push({ pathname: "/invitations", params: { plan: created.planId } });
   };
 
   if (editor.ideaBlocked)
@@ -209,6 +221,8 @@ export default function Arrange() {
     step === "review" ? (
       <Button
         title={saveTitle}
+        // The old edit subtitle's meaning, kept as the Save pill's hint (spec "Removed text").
+        hint={editor.mode === "edit" ? "Existing RSVPs stay as they are." : undefined}
         onPress={submit}
         loading={editor.busy}
         disabled={
@@ -219,7 +233,7 @@ export default function Arrange() {
         }
       />
     ) : (
-      <Button title={returnTo === "review" ? "Done" : "Next"} onPress={advance} />
+      <Button title={returnTo === "review" || editor.pending ? "Done" : "Next"} onPress={advance} />
     );
   return (
     <StepScreen

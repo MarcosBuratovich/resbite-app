@@ -103,6 +103,7 @@ export function Button({
   secondary = false,
   disabled = false,
   icon = true,
+  hint,
 }: {
   title: string;
   onPress: () => void;
@@ -110,6 +111,8 @@ export function Button({
   secondary?: boolean;
   disabled?: boolean;
   icon?: boolean;
+  /** What happens beyond the title, for VoiceOver (react-native-web does not render hints). */
+  hint?: string;
 }) {
   const reduce = useReduceMotion(),
     scale = useSharedValue(1),
@@ -122,6 +125,7 @@ export function Button({
       <GluestackButton
         accessibilityRole="button"
         accessibilityLabel={title}
+        accessibilityHint={hint}
         accessibilityState={{ disabled: disabled || loading, busy: loading }}
         isDisabled={disabled || loading}
         onPress={() => {

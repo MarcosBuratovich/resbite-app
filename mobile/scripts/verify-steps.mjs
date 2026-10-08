@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium, expect } from "@playwright/test";
-import { button, close, createSteps, heading, later, next } from "./qa-helpers.mjs";
+import { button, close, createFromIdea, createSteps, heading, later, next, typeDate } from "./qa-helpers.mjs";
 const baseURL = process.env.RESBITE_QA_URL || "http://localhost:8081";
 const shots = "/private/tmp/resbite-steps";
 await mkdir(shots, { recursive: true });
@@ -22,6 +22,11 @@ async function preview({ width = 390, query = "", time } = {}) {
   const page = await context.newPage();
   page.on("pageerror", (e) => errors.push(e.message));
   if (time) await page.clock.setFixedTime(time);
+  // Records which CSS animations start, to check how steps enter under Reduce Motion.
+  await page.addInitScript(() => {
+    window.__animations = [];
+    document.addEventListener("animationstart", (e) => window.__animations.push(e.animationName), true);
+  });
   await page.route("**/*.supabase.co/**", (route) => route.abort());
   await page.goto(`${baseURL}/${query}`);
   await page.getByText("Preview the design", { exact: true }).click();
@@ -43,6 +48,10 @@ try {
     await next(page);
     await expect(heading(page, "When?")).toBeFocused();
     await expect(page.getByRole("alert")).toHaveCount(0);
+    // Under Reduce Motion a step fades in and never slides (spec principle 8).
+    const animations = () => page.evaluate(() => window.__animations);
+    await expect.poll(async () => (await animations()).includes("FadeIn")).toBe(true);
+    assert.equal((await animations()).some((name) => name.startsWith("SlideIn")), false, "No slide under Reduce Motion");
     await button(page, "Previous step").click();
     await expect(heading(page, "What’s the plan?")).toBeFocused();
     await expect(page.getByLabel("Name", { exact: true })).toHaveValue("Garden picnic");
@@ -64,12 +73,42 @@ try {
     await page.getByLabel("Meeting place", { exact: true }).fill("Old mill");
     await button(page, "Done").click();
     await expect(button(page, "Edit place, Old mill")).toBeVisible();
+    // A jump that finds another step incomplete says why instead of moving silently.
+    await button(page, /^Edit date and time/).click();
+    await typeDate(page, "2099-02-30 12:00");
+    await button(page, "Previous step").click();
+    await button(page, "Done").click();
+    await expect(heading(page, "When?")).toBeVisible();
+    await expect(page.getByRole("alert")).toContainText("Choose a date and time in the future.");
+    await typeDate(page, "2099-03-01 12:00");
+    await button(page, "Done").click();
+    await expect(heading(page, "Looks good?")).toBeVisible();
     await button(page, "Create preview").click();
     await expect(heading(page, "It’s on!")).toBeFocused();
     await button(page, "Invite people").click();
     await expect(page).toHaveURL(/\/invitations\?plan=/);
+    // Back from invitations lands on My resbites with the created notice, as Later does.
+    await button(page, "My resbites").click();
+    await expect(page.getByText("Preview plan saved. Time to get together.", { exact: true })).toBeVisible();
     await page.context().close();
     console.log("PASS: Next with a missing answer, alerts, focus on step change, jump from Review, Invite screen.");
+  }
+
+  // 3b. Opened from an idea (Create → idea → Use this idea), Invite people still comes back to My resbites.
+  {
+    const page = await preview();
+    await page.getByRole("tab", { name: "Create", exact: true }).click();
+    await button(page, "Coffee together").click();
+    await button(page, "Use this idea").click();
+    await createFromIdea(page, "Riverside park");
+    await expect(heading(page, "It’s on!")).toBeVisible();
+    await button(page, "Invite people").click();
+    await expect(page).toHaveURL(/\/invitations\?plan=/);
+    await button(page, "My resbites").click();
+    await expect(page.getByText("Preview plan saved. Time to get together.", { exact: true })).toBeVisible();
+    await expect(button(page, "New resbite")).toBeVisible();
+    await page.context().close();
+    console.log("PASS: Invite people from an idea comes back to My resbites with the created notice.");
   }
 
   // 4. Quick tiles with a fixed clock: Friday 9 October 2026 at 10:30 in London.
@@ -170,6 +209,10 @@ try {
     ).toBeVisible();
     await button(page, "Edit name, Old picnic").click();
     await expect(page.getByLabel("Name", { exact: true })).not.toBeEditable();
+    // Done returns to Review without re-checking the held (past) time, so Retry save stays reachable.
+    await next(page);
+    await expect(heading(page, "Looks good?")).toBeVisible();
+    await expect(button(page, "Retry save")).toBeVisible();
     await context.close();
     console.log("PASS: a restored unconfirmed save opens at Review with fields locked and Retry save.");
   }

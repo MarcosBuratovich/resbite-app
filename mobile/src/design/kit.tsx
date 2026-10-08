@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import Animated, {
   FadeIn,
+  ReduceMotion,
   SlideInLeft,
   SlideInRight,
   useAnimatedStyle,
@@ -562,8 +563,10 @@ export function StepScreen({
 }) {
   const largeText = useLargeText();
   const reduce = useReduceMotion();
+  // Reanimated skips layout animations under the system Reduce Motion setting by default, so
+  // the fade opts out of that (spec: steps fade under Reduce Motion); the slide stays off.
   const entering = reduce
-    ? FadeIn.duration(120)
+    ? FadeIn.duration(120).reduceMotion(ReduceMotion.Never)
     : (direction === "back" ? SlideInLeft : SlideInRight).duration(220);
   const footer = (
     <View testID="step-primary" style={[s.actionFooter, largeText && styles.inlineFooter]}>
