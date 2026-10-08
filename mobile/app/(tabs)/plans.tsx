@@ -31,6 +31,7 @@ import { drafts, type PlanDraft } from "../../src/services/drafts";
 import { planGateway } from "../../src/services/plans";
 import { planCoverStore } from "../../src/services/planCovers";
 import { canEditPlan, cancelPlan, PlanSaveError } from "../../src/domain/plans";
+import { draftRoute } from "../../src/domain/eventView";
 import { Pencil, Users, X, CalendarDays, MapPin } from "lucide-react-native";
 export default function Plans() {
   const largeText = useLargeText();
@@ -274,11 +275,7 @@ export default function Plans() {
                 onPress={() =>
                   router.push({
                     pathname: "/arrange",
-                    params: d.planId
-                      ? { plan: d.planId }
-                      : d.activityId
-                        ? { activity: d.activityId }
-                        : {},
+                    params: draftRoute(d),
                   })
                 }
               />
@@ -451,7 +448,7 @@ export default function Plans() {
                     title="View invitation"
                     onPress={() =>
                       router.push({
-                        pathname: "/invite",
+                        pathname: "/event",
                         params: { plan: p.id },
                       })
                     }

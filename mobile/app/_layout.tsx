@@ -139,6 +139,7 @@ function Navigation() {
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="activity/[id]" />
             <Stack.Screen name="arrange" />
+            <Stack.Screen name="event" />
             <Stack.Screen name="people" />
             <Stack.Screen name="invitations" />
             <Stack.Screen name="notifications" />

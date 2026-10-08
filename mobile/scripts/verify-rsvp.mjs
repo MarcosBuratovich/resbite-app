@@ -132,10 +132,8 @@ try {
   await expect(page.getByText("Sam · fictional", { exact: true })).toHaveCount(
     0,
   );
-  await page.goto(`${base}/invite?plan=${plan.id}`);
-  await page
-    .getByRole("button", { name: "I’ll be there", exact: true })
-    .click();
+  await page.goto(`${base}/event?plan=${plan.id}`);
+  await page.getByRole("radio", { name: "Going", exact: true }).click();
   await expect(
     page.getByText("Your response is saved.", { exact: true }),
   ).toBeVisible();
@@ -158,34 +156,26 @@ try {
   await expect(page.getByText("Sam · fictional", { exact: true })).toHaveCount(
     0,
   );
-  await page.goto(`${base}/invite?plan=${plan.id}`);
+  await page.goto(`${base}/event?plan=${plan.id}`);
   conflict = true;
-  await page
-    .getByRole("button", { name: "I’ll be there", exact: true })
-    .click();
+  await page.getByRole("radio", { name: "Going", exact: true }).click();
   await expect(
     page.getByText(
       "The plan or your response changed. Review the latest details before choosing again.",
       { exact: true },
     ),
   ).toBeVisible();
-  await expect(
-    page.getByText("Your response: declined", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("radio", { name: "Can’t make it", exact: true })).toBeChecked();
   // The invitation shows the plan's own text, not the bundled idea title.
   await expect(page.getByText("Coffee evening", { exact: true })).toBeVisible();
   await expect(page.getByText("Bring a book", { exact: true })).toBeVisible();
   conflict = false;
   failWithoutCommit = true;
-  await page
-    .getByRole("button", { name: "I’ll be there", exact: true })
-    .click();
+  await page.getByRole("radio", { name: "Going", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Retry my response", exact: true }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Can’t make it", exact: true }),
-  ).toHaveCount(0);
+  await expect(page.getByRole("radio", { name: "Can’t make it", exact: true })).toBeDisabled();
   await page
     .getByRole("button", { name: "Retry my response", exact: true })
     .click();
@@ -202,9 +192,7 @@ try {
       { exact: true },
     ),
   ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "I’ll be there", exact: true }),
-  ).toHaveCount(0);
+  await expect(page.getByRole("radio", { name: "Going", exact: true })).toHaveCount(0);
   fixturePlan.status = "active";
   await page.goto(`${base}/invite?token=${"a".repeat(64)}`);
   await expect(
