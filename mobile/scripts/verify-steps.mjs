@@ -26,11 +26,11 @@ const browser = await chromium.launch({
   headless: true,
 });
 const errors = [];
-async function preview({ width = 390, query = "", time } = {}) {
+async function preview({ width = 390, query = "", time, reducedMotion = "reduce" } = {}) {
   const context = await browser.newContext({
     viewport: { width, height: 844 },
     timezoneId: "Europe/London",
-    reducedMotion: "reduce",
+    reducedMotion,
   });
   const page = await context.newPage();
   page.on("pageerror", (e) => errors.push(e.message));
@@ -45,7 +45,8 @@ async function preview({ width = 390, query = "", time } = {}) {
       const title = document.querySelector('[data-testid="step-scroll"] [role="heading"]');
       if (title) {
         const style = getComputedStyle(title.parentElement);
-        window.__stepMotion.push({ title: title.textContent, opacity: Number(style.opacity), transform: style.transform });
+        const x = new DOMMatrixReadOnly(style.transform).m41;
+        window.__stepMotion.push({ title: title.textContent, opacity: Number(style.opacity), x });
       }
       requestAnimationFrame(sample);
     };
@@ -96,7 +97,7 @@ try {
     const motion = () => page.evaluate(() => window.__stepMotion.filter((m) => m.title === "When?"));
     await expect.poll(async () => (await motion()).some((m) => m.opacity < 1)).toBe(true);
     await expect.poll(async () => (await motion()).at(-1)?.opacity).toBe(1);
-    assert.equal((await motion()).every((m) => m.transform === "none"), true, "No slide under Reduce Motion");
+    assert.equal((await motion()).every((m) => m.x === 0), true, "No slide under Reduce Motion");
     assert.deepEqual(
       await page.evaluate(() => window.__animations.filter((name) => /^(Fade|Slide)/.test(name))),
       [],
@@ -235,6 +236,28 @@ try {
     await expect(warning).toHaveCount(0);
     await page.context().close();
     console.log("PASS: the saved toast shows once; the cover warning stays until a card is opened.");
+  }
+
+  // 1a. Without Reduce Motion a step slides in, from the right going forward and from the left
+  //     going back, and never fades: its title stays opaque for VoiceOver focus.
+  {
+    const page = await preview({ reducedMotion: "no-preference" });
+    await button(page, "New resbite").click();
+    await page.getByLabel("Name", { exact: true }).fill("Slide check");
+    await next(page);
+    await expect(heading(page, "When?")).toBeVisible();
+    const samples = (title) => page.evaluate((t) => window.__stepMotion.filter((m) => m.title === t), title);
+    await expect.poll(async () => (await samples("When?")).some((m) => m.x > 0)).toBe(true);
+    await expect.poll(async () => (await samples("When?")).at(-1)?.x).toBe(0);
+    assert.equal((await samples("When?")).every((m) => m.opacity === 1), true, "A step slides without fading");
+    await page.evaluate(() => (window.__stepMotion = []));
+    await button(page, "Previous step").click();
+    await expect(heading(page, "What’s the plan?")).toBeFocused();
+    await expect.poll(async () => (await samples("What’s the plan?")).some((m) => m.x < 0)).toBe(true);
+    await expect.poll(async () => (await samples("What’s the plan?")).at(-1)?.x).toBe(0);
+    assert.equal((await samples("What’s the plan?")).every((m) => m.opacity === 1), true, "Going back slides without fading");
+    await page.context().close();
+    console.log("PASS: without Reduce Motion, steps slide in from the right (forward) or left (back) and stay opaque.");
   }
 
   // 4a. A blank event starts tomorrow at 10:00, not "now + 24 h" at the current minute (iPhone

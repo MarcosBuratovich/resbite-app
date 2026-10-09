@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Platform, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { Back, Button, ErrorNote, Title, useReduceMotion, s } from "../src/design/ui";
 import { colors as c } from "../src/design/tokens";
 import { PreviewNotice } from "../src/design/Chrome";
-import { StepScreen, announce, focusHeading } from "../src/design/kit";
+import { STEP_SETTLED_MS, StepScreen, announce, focusHeading } from "../src/design/kit";
 import {
   DraftProblems,
   InviteNext,
@@ -55,21 +55,30 @@ export default function Arrange() {
   const [recent, setRecent] = useState<string[]>([]);
   const answers: StepAnswers = { ...editor.fields, start: editor.start, place: editor.place };
 
-  // VoiceOver focus follows the step (and the Invite screen). Moving focus interrupts speech on
-  // iOS, so a jump's reason is announced after the heading focus has been posted; leaving the
-  // step again or the screen cancels it.
+  // VoiceOver focus follows the step (and the Invite screen). On iOS it is posted once the step's
+  // slide or fade has finished, so the title is in place and fully opaque; the web focuses on the
+  // next frame and retries each frame. Moving focus interrupts speech on iOS, so a jump's reason
+  // is announced 500 ms after the heading focus has been posted. Leaving the step again or the
+  // screen cancels both.
   useEffect(() => {
     if (step === null) return;
-    const frame = requestAnimationFrame(() => focusHeading(heading.current));
+    const web = Platform.OS === "web";
+    const focus = () => focusHeading(heading.current);
+    const frame = web ? requestAnimationFrame(focus) : undefined;
+    const settled = web ? undefined : setTimeout(focus, STEP_SETTLED_MS);
     const reason = !editor.created && jumpReason.current?.step === step ? jumpReason.current.problem : null;
     const timer = reason
-      ? setTimeout(() => {
-          jumpReason.current = null;
-          announce(reason);
-        }, 500)
+      ? setTimeout(
+          () => {
+            jumpReason.current = null;
+            announce(reason);
+          },
+          (web ? 0 : STEP_SETTLED_MS) + 500,
+        )
       : undefined;
     return () => {
-      cancelAnimationFrame(frame);
+      if (frame !== undefined) cancelAnimationFrame(frame);
+      clearTimeout(settled);
       clearTimeout(timer);
     };
   }, [step, editor.created]);

@@ -544,7 +544,7 @@ function Progress({ step, total }: { step: number; total: number }) {
  * big question title (a header), the content and the pinned primary pill, which moves
  * inline under Larger Text. Without Previous step, Close takes its place on the left (steps
  * v2 mockup). "Previous step" changes the step; "Close" leaves through the caller's guard.
- * Content slides in with a fade, or only fades under Reduce Motion (StepBody).
+ * Content slides in, or fades under Reduce Motion (StepBody).
  */
 export function StepScreen({
   step,
@@ -626,9 +626,13 @@ export function StepScreen({
   );
 }
 
+/** How long after a step change its title can take VoiceOver focus: StepBody's slide or fade has finished. */
+export const STEP_SETTLED_MS = 250;
+
 /**
  * A step's content, remounted for each step (`key={title}`): it slides in from the right going
- * forward (from the left going back) with a fade, or only fades under Reduce Motion.
+ * forward (from the left going back), fully opaque, or only fades under Reduce Motion (spec:
+ * "Steps slide (and fade under Reduce Motion)"). It settles within STEP_SETTLED_MS.
  *
  * Shared values only, never Reanimated layout animations (`entering`, `exiting` or `layout`):
  * on the new architecture a layout animation leaves the native view at its first-layout frame,
@@ -651,10 +655,11 @@ function StepBody({
     progress.value = withTiming(1, { duration: reduce ? 120 : 220, reduceMotion: ReduceMotion.Never });
   }, [progress, reduce]);
   const shift = direction === "back" ? -60 : 60;
+  // Both branches set opacity and translateX, so a Reduce Motion change never leaves a stale value.
   const motion = useAnimatedStyle(() =>
     reduce
-      ? { opacity: progress.value }
-      : { opacity: progress.value, transform: [{ translateX: (1 - progress.value) * shift }] },
+      ? { opacity: progress.value, transform: [{ translateX: 0 }] }
+      : { opacity: 1, transform: [{ translateX: (1 - progress.value) * shift }] },
   );
   return <Animated.View style={[styles.stepBody, motion]}>{children}</Animated.View>;
 }
@@ -699,7 +704,7 @@ export function focusHeading(target: Text | null) {
     const node = target as unknown as HTMLElement;
     node.setAttribute("tabindex", "-1");
     // A layout animation used to keep the new title `visibility: hidden` (so unfocusable) for a
-    // frame or two; StepBody's shared-value fade leaves it focusable, and the retry stays as a
+    // frame or two; StepBody's shared-value animation leaves it focusable, and the retry stays as a
     // guard. Retry each frame until focus lands, for at most about half a second, and stop if
     // the person has focused something else.
     const before = document.activeElement;
