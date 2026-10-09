@@ -19,8 +19,6 @@ import Animated, {
   useSharedValue,
   withTiming,
   withSpring,
-  FadeIn,
-  FadeOut,
 } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
 import {
@@ -346,6 +344,13 @@ export function Back({ label = "Back" }: { label?: string }) {
     </Pressable>
   );
 }
+/**
+ * Fades its content in once, on mount. Shared values only, never Reanimated layout animations
+ * (`entering`, `exiting` or `layout`): on the new architecture a layout animation leaves the
+ * native view at its first-layout frame, so content that grows afterwards can't be tapped on
+ * iPhone (see StepBody in kit.tsx). Like the old entering fade, it is skipped under the system
+ * Reduce Motion setting; there is no exit fade.
+ */
 export function Reveal({
   children,
   style,
@@ -354,15 +359,12 @@ export function Reveal({
   style?: ViewStyle;
 }) {
   const reduce = useReduceMotion();
-  return (
-    <Animated.View
-      entering={FadeIn.duration(reduce ? 120 : 240)}
-      exiting={FadeOut.duration(100)}
-      style={style}
-    >
-      {children}
-    </Animated.View>
-  );
+  const opacity = useSharedValue(0);
+  useEffect(() => {
+    opacity.value = withTiming(1, { duration: reduce ? 120 : 240 });
+  }, [opacity, reduce]);
+  const fade = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  return <Animated.View style={[style, fade]}>{children}</Animated.View>;
 }
 export const s = StyleSheet.create({
   copy: { fontFamily: fonts.body, fontSize: 15, lineHeight: 23, color: c.ink },

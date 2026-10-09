@@ -35,10 +35,21 @@ async function preview({ width = 390, query = "", time } = {}) {
   const page = await context.newPage();
   page.on("pageerror", (e) => errors.push(e.message));
   if (time) await page.clock.setFixedTime(time);
-  // Records which CSS animations start, to check how steps enter under Reduce Motion.
+  // Records which CSS animations start and, every frame, the step body's opacity and transform,
+  // to check how steps enter under Reduce Motion.
   await page.addInitScript(() => {
     window.__animations = [];
     document.addEventListener("animationstart", (e) => window.__animations.push(e.animationName), true);
+    window.__stepMotion = [];
+    const sample = () => {
+      const title = document.querySelector('[data-testid="step-scroll"] [role="heading"]');
+      if (title) {
+        const style = getComputedStyle(title.parentElement);
+        window.__stepMotion.push({ title: title.textContent, opacity: Number(style.opacity), transform: style.transform });
+      }
+      requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
   });
   await page.route("**/*.supabase.co/**", (route) => route.abort());
   await page.goto(`${baseURL}/${query}`);
@@ -79,10 +90,18 @@ try {
     await next(page);
     await expect(heading(page, "When?")).toBeFocused();
     await expect(page.getByRole("alert")).toHaveCount(0);
-    // Under Reduce Motion a step fades in and never slides (spec principle 8).
-    const animations = () => page.evaluate(() => window.__animations);
-    await expect.poll(async () => (await animations()).includes("FadeIn")).toBe(true);
-    assert.equal((await animations()).some((name) => name.startsWith("SlideIn")), false, "No slide under Reduce Motion");
+    // Under Reduce Motion a step fades in and never slides (spec principle 8). It animates with
+    // shared values, never a Reanimated layout animation (a CSS animation on the web): on iPhone
+    // those keep the native frame from growing, so controls revealed later can't be tapped.
+    const motion = () => page.evaluate(() => window.__stepMotion.filter((m) => m.title === "When?"));
+    await expect.poll(async () => (await motion()).some((m) => m.opacity < 1)).toBe(true);
+    await expect.poll(async () => (await motion()).at(-1)?.opacity).toBe(1);
+    assert.equal((await motion()).every((m) => m.transform === "none"), true, "No slide under Reduce Motion");
+    assert.deepEqual(
+      await page.evaluate(() => window.__animations.filter((name) => /^(Fade|Slide)/.test(name))),
+      [],
+      "Steps use no layout (entering) animations",
+    );
     await button(page, "Previous step").click();
     await expect(heading(page, "What’s the plan?")).toBeFocused();
     await expect(page.getByLabel("Name", { exact: true })).toHaveValue("Garden picnic");

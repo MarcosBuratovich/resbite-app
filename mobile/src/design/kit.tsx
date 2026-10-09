@@ -16,10 +16,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import Animated, {
-  FadeIn,
   ReduceMotion,
-  SlideInLeft,
-  SlideInRight,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
@@ -547,7 +544,7 @@ function Progress({ step, total }: { step: number; total: number }) {
  * big question title (a header), the content and the pinned primary pill, which moves
  * inline under Larger Text. Without Previous step, Close takes its place on the left (steps
  * v2 mockup). "Previous step" changes the step; "Close" leaves through the caller's guard.
- * Content slides in, or fades under Reduce Motion.
+ * Content slides in with a fade, or only fades under Reduce Motion (StepBody).
  */
 export function StepScreen({
   step,
@@ -580,11 +577,6 @@ export function StepScreen({
 }) {
   const largeText = useLargeText();
   const reduce = useReduceMotion();
-  // Reanimated skips layout animations under the system Reduce Motion setting by default, so
-  // the fade opts out of that (spec: steps fade under Reduce Motion); the slide stays off.
-  const entering = reduce
-    ? FadeIn.duration(120).reduceMotion(ReduceMotion.Never)
-    : (direction === "back" ? SlideInLeft : SlideInRight).duration(220);
   const footer = (
     <View testID="step-primary" style={[styles.stepFooter, largeText && styles.inlineFooter]}>
       {primary}
@@ -615,7 +607,7 @@ export function StepScreen({
           keyboardDismissMode="on-drag"
           contentContainerStyle={styles.stepScroll}
         >
-          <Animated.View key={title} entering={entering} style={styles.stepBody}>
+          <StepBody key={title} reduce={reduce} direction={direction}>
             <Text
               ref={titleRef}
               accessibilityRole="header"
@@ -625,13 +617,46 @@ export function StepScreen({
               {title}
             </Text>
             {children}
-          </Animated.View>
+          </StepBody>
           {largeText && footer}
         </ScrollView>
         {!largeText && footer}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
+}
+
+/**
+ * A step's content, remounted for each step (`key={title}`): it slides in from the right going
+ * forward (from the left going back) with a fade, or only fades under Reduce Motion.
+ *
+ * Shared values only, never Reanimated layout animations (`entering`, `exiting` or `layout`):
+ * on the new architecture a layout animation leaves the native view at its first-layout frame,
+ * so content that grows afterwards (the When pickers) falls outside it and can't be tapped on
+ * iPhone, though the JS layout is right. Confirmed on the owner's iPhone, 9 October 2026.
+ */
+function StepBody({
+  reduce,
+  direction,
+  children,
+}: {
+  reduce: boolean;
+  direction: "forward" | "back";
+  children: React.ReactNode;
+}) {
+  const progress = useSharedValue(0);
+  // The fade opts out of Reanimated's system Reduce Motion skip (spec: steps fade under Reduce
+  // Motion); the slide stays off then.
+  React.useEffect(() => {
+    progress.value = withTiming(1, { duration: reduce ? 120 : 220, reduceMotion: ReduceMotion.Never });
+  }, [progress, reduce]);
+  const shift = direction === "back" ? -60 : 60;
+  const motion = useAnimatedStyle(() =>
+    reduce
+      ? { opacity: progress.value }
+      : { opacity: progress.value, transform: [{ translateX: (1 - progress.value) * shift }] },
+  );
+  return <Animated.View style={[styles.stepBody, motion]}>{children}</Animated.View>;
 }
 
 /** A bottom sheet for ⓘ explanations and short pickers. */
@@ -673,9 +698,10 @@ export function focusHeading(target: Text | null) {
   if (Platform.OS === "web") {
     const node = target as unknown as HTMLElement;
     node.setAttribute("tabindex", "-1");
-    // StepScreen's entering slide keeps the new title `visibility: hidden` (so unfocusable)
-    // until the animation starts a frame or two later. Retry each frame until focus lands,
-    // for at most about half a second, and stop if the person has focused something else.
+    // A layout animation used to keep the new title `visibility: hidden` (so unfocusable) for a
+    // frame or two; StepBody's shared-value fade leaves it focusable, and the retry stays as a
+    // guard. Retry each frame until focus lands, for at most about half a second, and stop if
+    // the person has focused something else.
     const before = document.activeElement;
     let frames = 0;
     const attempt = () => {
