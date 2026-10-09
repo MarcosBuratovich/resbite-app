@@ -22,6 +22,7 @@ import { PlanSchedule } from "./PlanSchedule";
 import { categoryIcons } from "./categories";
 import { categoryPalette, colors as c, depth, fonts, r } from "./tokens";
 import { categoryKeys, categoryLabels, toggleCategory, type CategoryKey } from "../domain/categories";
+import { canDiscardDraft } from "../domain/draftAutosave";
 import { DESCRIPTION_MAX, TITLE_MAX, eventPicture } from "../domain/events";
 import { coverNotice, reviewLabels, type CoverCardPart } from "../domain/eventView";
 import { parseLocalDateTime } from "../domain/plans";
@@ -480,7 +481,7 @@ export function ReviewStep({ editor, onJump }: { editor: PlanEditor; onJump: (pa
           The fields are held while the save is unconfirmed, so retrying sends exactly the same details.
         </Copy>
       )}
-      {!editor.pending && !editor.busy && (
+      {canDiscardDraft(editor) && (
         <TextAction icon={Trash2} destructive title="Discard draft" onPress={editor.discardDraft} />
       )}
     </>

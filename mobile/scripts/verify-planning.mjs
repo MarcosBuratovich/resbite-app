@@ -7,10 +7,12 @@ import {
   card,
   cancelFromList,
   close,
+  createSteps,
   editEvent,
   expectCancelled,
   expectCategories,
   heading,
+  heightOf,
   inviteFromList,
   later,
   next,
@@ -281,6 +283,117 @@ try {
     await noDraft(kept);
     await kept.context().close();
     console.log("PASS: a kept draft resumes and survives unchanged; reverting it removes the card.");
+
+    // Discarding is reachable from every step (Task 5c). On the web the leave prompt stays a
+    // two-choice window.confirm (the iPhone's also offers Discard draft), so a draft that reopens
+    // on an incomplete step is kept by Close and removed from its My resbites tile, after confirming.
+    const tossed = await open();
+    await tossed.getByLabel("Name", { exact: true }).fill("Picnic to discard");
+    await expect(tossed.getByText("Draft saved on this device.", { exact: true })).toBeVisible();
+    tossed.once("dialog", (dialog) => dialog.accept());
+    await back(tossed);
+    await button(tossed, "Continue draft, Picnic to discard").click();
+    await expect(heading(tossed, "Where?")).toBeVisible();
+    let asked;
+    tossed.once("dialog", (dialog) => {
+      asked = dialog.message();
+      void dialog.accept();
+    });
+    await back(tossed);
+    await expect.poll(() => asked).toBe("Keep this draft on this device and leave? You can resume it from My resbites.");
+    const remove = button(tossed, "Remove draft, Picnic to discard");
+    await expect(remove).toBeVisible();
+    assert.ok((await heightOf(remove)) >= 44, "Remove draft is at least 44 pt");
+    // Declining keeps the draft.
+    tossed.once("dialog", (dialog) => dialog.dismiss());
+    await remove.click();
+    await expect(button(tossed, "Continue draft, Picnic to discard")).toBeVisible();
+    tossed.once("dialog", (dialog) => {
+      asked = dialog.message();
+      void dialog.accept();
+    });
+    await remove.click();
+    await noDraft(tossed);
+    assert.equal(asked, "Delete this draft from this device?");
+    assert.equal(await tossed.evaluate(() => sessionStorage.getItem("resbite.drafts.v1.preview")), null);
+    await tossed.context().close();
+    console.log("PASS: a draft reopened on an incomplete step is removed from its tile after confirming.");
+
+    // On the web, the Review card's Discard draft is the editor's way to discard.
+    const reviewed = await open();
+    await createSteps(reviewed, { name: "Picnic on review", place: "Riverside park", categories: ["Natural"] });
+    reviewed.once("dialog", (dialog) => dialog.accept());
+    await button(reviewed, "Discard draft").click();
+    await noDraft(reviewed);
+    await reviewed.context().close();
+    console.log("PASS: Review still discards the draft.");
+
+    // A draft holding an unconfirmed save ("Check save") has no remove control: its write needs checking.
+    const held = await newPage();
+    await held.route("**/*.supabase.co/**", (route) => route.abort());
+    await held.addInitScript(() => {
+      const id = "33333333-3333-4333-8333-333333333333";
+      const base = { schema: 1, scope: "preview", original: null, description: "", note: "", zone: "UTC" };
+      sessionStorage.setItem(
+        "resbite.drafts.v1.preview",
+        JSON.stringify([
+          {
+            ...base,
+            key: "new",
+            activityId: null,
+            requestId: id,
+            initial: JSON.stringify(["", "", [], "", "", ""]),
+            title: "Old picnic",
+            categories: ["natural"],
+            start: "2099-01-01 09:00",
+            place: "Old park",
+            pending: {
+              id,
+              activityId: null,
+              details: {
+                title: "Old picnic",
+                description: "",
+                categories: ["natural"],
+                starts_at: "2099-01-01T09:00:00.000Z",
+                time_zone: "UTC",
+                place_label: "Old park",
+                note: "",
+              },
+            },
+            updatedAt: new Date().toISOString(),
+          },
+          {
+            ...base,
+            key: "new-coffee-together",
+            activityId: "coffee-together",
+            requestId: "44444444-4444-4444-8444-444444444444",
+            initial: JSON.stringify(["Coffee together", "", ["community"], "2099-01-02 10:00", "", ""]),
+            title: "Coffee together",
+            categories: ["community"],
+            start: "2099-01-02 10:00",
+            place: "The corner café",
+            pending: null,
+            updatedAt: new Date().toISOString(),
+          },
+        ]),
+      );
+    });
+    await held.goto(baseURL);
+    await held.getByText("Preview the design", { exact: true }).click();
+    await held.getByRole("tab", { name: "My resbites", exact: true }).click();
+    await expect(button(held, "Continue draft, Old picnic, a save needs checking")).toBeVisible();
+    await expect(button(held, "Remove draft, Coffee together")).toBeVisible();
+    await expect(button(held, /^Remove draft, Old picnic/)).toHaveCount(0);
+    held.once("dialog", (dialog) => dialog.accept());
+    await button(held, "Remove draft, Coffee together").click();
+    await expect(button(held, "Continue draft, Coffee together")).toHaveCount(0);
+    await expect(button(held, "Continue draft, Old picnic, a save needs checking")).toBeVisible();
+    assert.deepEqual(
+      await held.evaluate(() => JSON.parse(sessionStorage.getItem("resbite.drafts.v1.preview")).map((d) => d.key)),
+      ["new"],
+    );
+    await held.context().close();
+    console.log("PASS: a Check save draft has no remove control; another draft's tile removes only that draft.");
   }
 
   const user = {

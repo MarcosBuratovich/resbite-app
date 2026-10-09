@@ -18,7 +18,7 @@ import {
   validateEventFields,
   type EventFields,
 } from "../domain/events";
-import { draftAutosaveAction } from "../domain/draftAutosave";
+import { canDiscardDraft, draftAutosaveAction } from "../domain/draftAutosave";
 import { defaultStart } from "../domain/schedule";
 import { validatePlan, type Activity } from "../domain/rules";
 import {
@@ -84,6 +84,22 @@ export type PlanEditor = {
   retryDraft: () => void;
   applyPlan: (plan: LocalPlan) => void;
 };
+
+/** Asks before deleting a draft from this device, then calls `discard` (the editor and My resbites). */
+export function confirmDiscardDraft(discard: () => void) {
+  const message = "Delete this draft from this device?";
+  if (Platform.OS === "web") {
+    if (window.confirm(message)) discard();
+  } else
+    Alert.alert("Discard draft?", message, [
+      { text: "Keep draft", style: "cancel" },
+      {
+        text: "Discard",
+        style: "destructive",
+        onPress: discard,
+      },
+    ]);
+}
 
 /**
  * All of the plan editor's state and behaviour: draft restore and autosave, the
@@ -459,6 +475,12 @@ export function usePlanEditor({
             text: "Leave",
             onPress: () => void leave(),
           },
+          // Discarding is reachable from every step, not only Review, under the same condition
+          // as Review's button; it asks "Discard draft?" first. On the web, Review's button and
+          // the My resbites tile discard instead.
+          ...(canDiscardDraft({ pending, busy })
+            ? [{ text: "Discard draft", style: "destructive" as const, onPress: discardDraft }]
+            : []),
         ]);
       }
     },
@@ -494,18 +516,7 @@ export function usePlanEditor({
         setDraftError("Couldn’t discard the draft. Try again.");
       }
     };
-    const message = "Delete this draft from this device?";
-    if (Platform.OS === "web") {
-      if (window.confirm(message)) void discard();
-    } else
-      Alert.alert("Discard draft?", message, [
-        { text: "Keep draft", style: "cancel" },
-        {
-          text: "Discard",
-          style: "destructive",
-          onPress: () => void discard(),
-        },
-      ]);
+    confirmDiscardDraft(() => void discard());
   }
 
   async function locate() {

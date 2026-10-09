@@ -2,7 +2,7 @@ import React, { useState, useCallback, useRef, useEffect } from "react";
 import { AppState, Image, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useFocusEffect, useLocalSearchParams, usePathname } from "expo-router";
-import { Check, Lightbulb, Plus, RotateCcw, UserRound } from "lucide-react-native";
+import { Check, Lightbulb, Plus, RotateCcw, Trash2, UserRound } from "lucide-react-native";
 import { activities, artwork } from "../../src/services/catalogue";
 import { EventPictureView } from "../../src/design/categories";
 import { eventPicture } from "../../src/domain/events";
@@ -15,6 +15,8 @@ import { PreviewNotice } from "../../src/design/Chrome";
 import { drafts, type PlanDraft } from "../../src/services/drafts";
 import { planCoverStore } from "../../src/services/planCovers";
 import { cardChips, cardLabel, coverNotice, draftRoute, groupPlans } from "../../src/domain/eventView";
+import { canDiscardDraft } from "../../src/domain/draftAutosave";
+import { confirmDiscardDraft } from "../../src/state/usePlanEditor";
 
 // The last save notice already shown, so a remount or web history restoring the same URL never
 // repeats a saved toast. Each save passes a fresh `notice` id.
@@ -39,11 +41,13 @@ export default function Plans() {
   const scope = preview ? "preview" : session?.user.id;
   const [savedDrafts, setSavedDrafts] = useState<PlanDraft[]>([]);
   const [draftLoadError, setDraftLoadError] = useState(false);
+  const [draftRemoveError, setDraftRemoveError] = useState(false);
   useFocusEffect(
     useCallback(() => {
       let active = true;
       setSavedDrafts([]);
       setDraftLoadError(false);
+      setDraftRemoveError(false);
       if (scope)
         void drafts
           .list(scope)
@@ -130,6 +134,15 @@ export default function Plans() {
   const { upcoming, past } = groupPlans(list, now);
   const shown = segment === "upcoming" ? upcoming : past;
   const myDrafts = savedDrafts.filter((d) => d.scope === scope);
+  // Removes a draft from this device after "Discard draft?", exactly as the editor's Discard draft.
+  const removeDraft = (draft: PlanDraft) =>
+    confirmDiscardDraft(() => {
+      setDraftRemoveError(false);
+      drafts.remove(draft.scope, draft.key).then(
+        () => setSavedDrafts((all) => all.filter((d) => !(d.scope === draft.scope && d.key === draft.key))),
+        () => setDraftRemoveError(true),
+      );
+    });
   const start = () => router.push("/arrange");
   const open = (p: LocalPlan) => {
     router.setParams({ created: "0", updated: "0", cover: "none" });
@@ -199,10 +212,11 @@ export default function Plans() {
             contentContainerStyle={styles.drafts}
           >
             {myDrafts.map((d) => (
-              <DraftTile key={d.key} draft={d} />
+              <DraftTile key={d.key} draft={d} onRemove={() => removeDraft(d)} />
             ))}
           </ScrollView>
         )}
+        {draftRemoveError && <ErrorNote message="Couldn’t discard the draft. Try again." />}
         <ErrorNote message={error} />
         {error && <IconButton icon={RotateCcw} label="Refresh plans" busy={busy} onPress={() => void refresh()} />}
         {busy && list.length === 0 && <Copy accessibilityLiveRegion="polite">Loading your plans…</Copy>}
@@ -256,28 +270,37 @@ export default function Plans() {
   );
 }
 
-/** A compact draft tile: "Draft" chip and title; tapping continues it. */
-function DraftTile({ draft }: { draft: PlanDraft }) {
+/**
+ * A compact draft tile: "Draft" chip and title; tapping continues it. Its remove button
+ * discards the draft after confirming; a "Check save" draft has none, as its write needs checking.
+ */
+function DraftTile({ draft, onRemove }: { draft: PlanDraft; onRemove: () => void }) {
   const title =
     draft.title?.trim() || activities.find((a) => a.id === draft.activityId)?.title || "Your resbite";
+  const removable = canDiscardDraft(draft);
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={draft.pending ? `Continue draft, ${title}, a save needs checking` : `Continue draft, ${title}`}
-      onPress={() => router.push({ pathname: "/arrange", params: draftRoute(draft) })}
-      style={({ pressed }) => [styles.draft, pressed && { opacity: 0.85 }]}
-    >
-      <EventPictureView
-        picture={eventPicture({ activity_id: draft.activityId, categories: draft.categories ?? [] })}
-        size={44}
-      />
-      <View style={{ flexShrink: 1, gap: 6 }}>
-        <Chip text={draft.pending ? "Check save" : "Draft"} tone={draft.pending ? "pink" : "status"} />
-        <Copy style={{ fontFamily: fonts.medium, fontSize: 14 }} numberOfLines={2}>
-          {title}
-        </Copy>
-      </View>
-    </Pressable>
+    <View style={[styles.draft, removable && { paddingRight: 6 }]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={draft.pending ? `Continue draft, ${title}, a save needs checking` : `Continue draft, ${title}`}
+        onPress={() => router.push({ pathname: "/arrange", params: draftRoute(draft) })}
+        style={({ pressed }) => [styles.draftOpen, pressed && { opacity: 0.85 }]}
+      >
+        <EventPictureView
+          picture={eventPicture({ activity_id: draft.activityId, categories: draft.categories ?? [] })}
+          size={44}
+        />
+        <View style={{ flexShrink: 1, gap: 6 }}>
+          <Chip text={draft.pending ? "Check save" : "Draft"} tone={draft.pending ? "pink" : "status"} />
+          <Copy style={{ fontFamily: fonts.medium, fontSize: 14 }} numberOfLines={2}>
+            {title}
+          </Copy>
+        </View>
+      </Pressable>
+      {removable && (
+        <IconButton icon={Trash2} tone="plain" label={`Remove draft, ${title}`} onPress={onRemove} />
+      )}
+    </View>
   );
 }
 
@@ -287,12 +310,18 @@ const styles = StyleSheet.create({
   draft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    minHeight: 72,
-    maxWidth: 280,
-    padding: 12,
+    maxWidth: 320,
     borderRadius: r.tile,
     backgroundColor: c.cream,
+  },
+  draftOpen: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexShrink: 1,
+    gap: 12,
+    minHeight: 72,
+    padding: 12,
+    borderRadius: r.tile,
   },
   empty: { gap: 20, paddingVertical: 24 },
   emptyTitle: { fontFamily: fonts.display, fontSize: 24, textAlign: "center" },

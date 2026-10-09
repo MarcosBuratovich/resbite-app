@@ -12,3 +12,10 @@ export function draftAutosaveAction(state: {
   if (state.pending !== null || state.dirty) return "write";
   return state.persisted ? "remove" : "skip";
 }
+
+// Whether "Discard draft" is offered: on Review, in the leave prompt and on a My resbites
+// draft tile. Never while a save runs, and never for a draft holding an unconfirmed save
+// ("Check save"): that write needs checking first.
+export function canDiscardDraft(state: { pending: unknown | null; busy?: boolean }): boolean {
+  return !state.pending && !state.busy;
+}
