@@ -20,12 +20,12 @@ import { Button, Copy, ErrorNote, s } from "../src/design/ui";
 import { AvatarStack, Chip, chipToneFor, CoverCard, IconButton, InfoSheet, Segmented, Tile } from "../src/design/kit";
 import { PreviewNotice } from "../src/design/Chrome";
 import { categoryIcons } from "../src/design/categories";
-import { colors as c } from "../src/design/tokens";
+import { colors as c, fonts } from "../src/design/tokens";
 import { categoryLabels } from "../src/domain/categories";
 import { eventPicture } from "../src/domain/events";
-import { againConflict, againDraft, cardChips, mapsUrl, responseText } from "../src/domain/eventView";
+import { againConflict, againDraft, cardChips, guestArea, guestGroups, mapsUrl } from "../src/domain/eventView";
 import { canEditPlan } from "../src/domain/plans";
-import { answerKey, canReadSample, canRespond, cantMakeItResponse } from "../src/domain/rsvp";
+import { answerKey, canReadSample, canRespond, responseFor } from "../src/domain/rsvp";
 import { drafts } from "../src/services/drafts";
 import { useApp } from "../src/state/AppState";
 import { useEvent } from "../src/state/useEvent";
@@ -67,7 +67,7 @@ export default function EventPage() {
   const owner = role === "owner";
   const editable = owner && canEditPlan(current, session?.user.id, preview);
   const allowed = attendee ? canRespond({ plan: current, attendee }) : false;
-  const going = guests.filter((g) => g.response === "accepted");
+  const area = guestArea({ owner, response: attendee?.response ?? null, organizer: event.organizer, guests });
   const url = mapsUrl(current);
   const chips = cardChips({ owner, status: current.status, response: attendee?.response });
 
@@ -149,6 +149,7 @@ export default function EventPage() {
           startsAt={current.starts_at}
           place={current.place_label}
           dimmed={current.status === "cancelled"}
+          pictureLabel={current.cover_description}
           chips={[
             ...chips.map((text) => ({ key: text, text, tone: chipToneFor(text) })),
             ...current.categories.map((key) => ({
@@ -171,8 +172,15 @@ export default function EventPage() {
         <ErrorNote message={mapsError} />
         {!!current.description && <Copy>{current.description}</Copy>}
         {!!current.note && <Copy style={s.muted}>{current.note}</Copy>}
-        {guests.length > 0 && (
-          <AvatarStack names={going.map((g) => g.name)} label={`${going.length} going`} onPress={() => setGuestsOpen(true)} />
+        {area.kind === "hidden" ? (
+          <View style={{ gap: 6 }}>
+            <AvatarStack names={[area.organizer]} label={`${area.organizer} is organizing`} />
+            <Copy style={s.muted}>Answer to see who’s coming</Copy>
+          </View>
+        ) : (
+          area.kind === "list" && (
+            <AvatarStack names={area.names} label={area.label} onPress={() => setGuestsOpen(true)} />
+          )
         )}
         <ErrorNote message={event.error} />
         {!!event.notice && (
@@ -222,12 +230,11 @@ export default function EventPage() {
                   label="Your answer"
                   options={[
                     { key: "going", text: "Going" },
+                    { key: "maybe", text: "Maybe" },
                     { key: "cant", text: "Can’t make it" },
                   ] as const}
                   value={answerKey(attendee.response)}
-                  onChange={(key) =>
-                    void event.respond(key === "going" ? "accepted" : cantMakeItResponse(attendee.response))
-                  }
+                  onChange={(key) => void event.respond(responseFor(key, attendee.response))}
                   disabled={busy || !fresh || pending !== null}
                 />
               ) : (
@@ -258,10 +265,17 @@ export default function EventPage() {
         )}
       </ScrollView>
       <InfoSheet visible={guestsOpen} title="Guests" onClose={() => setGuestsOpen(false)}>
-        {guests.map((g) => (
-          <View key={g.userId} style={styles.guest}>
-            <Copy style={{ flex: 1 }}>{g.name}</Copy>
-            <Chip text={responseText(g.response)} tone={g.response === "accepted" ? "aqua" : "neutral"} />
+        {guestGroups(guests).map((group) => (
+          <View key={group.title} style={{ gap: 2 }}>
+            <Copy accessibilityRole="header" style={styles.group}>
+              {group.title}
+            </Copy>
+            {group.guests.map((g) => (
+              <View key={g.userId} style={styles.guest}>
+                <Copy style={{ flex: 1 }}>{g.name}</Copy>
+                {g.note && <Chip text={g.note} />}
+              </View>
+            ))}
           </View>
         ))}
       </InfoSheet>
@@ -299,5 +313,6 @@ const styles = StyleSheet.create({
   top: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   actions: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 10 },
   guest: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 44 },
+  group: { fontFamily: fonts.bold, fontSize: 15, marginTop: 8 },
   confirm: { gap: 12, padding: 14, backgroundColor: c.pinkSoft, borderRadius: 16 },
 });

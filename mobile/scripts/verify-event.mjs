@@ -46,6 +46,7 @@ const hosted = {
   version: 1,
   cover_path: null,
   cover_revision: 0,
+  cover_description: "",
 };
 const invited = {
   ...hosted,
@@ -54,6 +55,9 @@ const invited = {
   owner_id: "33333333-3333-4333-8333-333333333333",
   place_label: "Games room",
   note: "",
+  cover_path: "33333333-3333-4333-8333-333333333333/44444444-4444-4444-8444-444444444444/a.jpg",
+  cover_revision: 1,
+  cover_description: "Two mugs on a window sill",
 };
 const errors = [];
 try {
@@ -74,6 +78,7 @@ try {
   ]);
   let attendee = { version: 1, response: "pending" };
   let failGuests = false;
+  let failNextGuestList = false;
   // An unconfirmed cancel: the RPC fails and so does the read that would confirm it.
   let failCancel = false,
     failPlanRead = false,
@@ -89,8 +94,13 @@ try {
       route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
     if (path === "/auth/v1/user") return reply(user);
     if (path === "/rest/v1/rpc/account_access_status") return reply({ account_id: user.id, status: "approved" });
-    if (path === "/rest/v1/profiles")
+    if (path === "/rest/v1/profiles") {
+      // The invited event's organizer; any other read is the signed-in fixture's own profile.
+      if (url.searchParams.get("id") === `eq.${invited.owner_id}`) return reply({ display_name: "Jo" });
       return reply({ id: user.id, display_name: "Fixture", avatar_path: null, avatar_revision: 0 });
+    }
+    // Cover links are not under test here; the picture falls back while its label stays.
+    if (path.startsWith("/storage/v1/object/sign/")) return reply({ message: "Fixture: no signed links" }, 400);
     if (path === "/rest/v1/activities") return reply([]);
     if (path === "/rest/v1/plans") {
       planReads++;
@@ -106,14 +116,24 @@ try {
       if (one) return reply(attendee);
       // 500, not 503: postgrest-js retries a 503 GET with backoff.
       if (failGuests) return reply({ message: "Fixture: guest list unavailable" }, 500);
+      if (failNextGuestList) {
+        failNextGuestList = false;
+        return reply({ message: "Fixture: guest list unavailable" }, 500);
+      }
       const planId = url.searchParams.get("plan_id")?.replace(/^eq\./, "");
+      const own = { user_id: user.id, response: attendee.response, profiles: { display_name: "Fixture" } };
+      // The server shows an unanswered invitee only their own row (UX-P5).
       return reply(
         planId === hosted.id
           ? [
               { user_id: "g1", response: "accepted", profiles: { display_name: "Alex" } },
               { user_id: "g2", response: "pending", profiles: { display_name: "Bea" } },
+              { user_id: "g3", response: "maybe", profiles: { display_name: "Cy" } },
+              { user_id: "g4", response: "withdrawn", profiles: { display_name: "Di" } },
             ]
-          : [{ user_id: user.id, response: attendee.response, profiles: { display_name: "Fixture" } }],
+          : attendee.response === "pending"
+            ? [own]
+            : [own, { user_id: "g1", response: "accepted", profiles: { display_name: "Alex" } }],
       );
     }
     if (path === "/rest/v1/rpc/respond") {
@@ -145,10 +165,13 @@ try {
   await expect(page.getByRole("heading", { name: "Coffee evening", exact: true })).toBeVisible();
   await expect(page.getByText("Hosting", { exact: true })).toBeVisible();
   await expect(page.getByText("Bring a book", { exact: true })).toBeVisible();
-  // Guests: an avatar stack and its list sheet (the visibility rule is unchanged in UX1).
-  await page.getByRole("button", { name: "1 going", exact: true }).click();
+  // Guests (UX2): the stack counts Going and Maybe; the sheet groups every answer.
+  await page.getByRole("button", { name: "1 going, 1 maybe", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Guests", exact: true })).toBeVisible();
+  for (const group of ["Going", "Maybe", "Can’t make it", "Not answered yet"])
+    await expect(page.getByRole("heading", { name: group, exact: true })).toBeVisible();
   await expect(page.getByText("Bea", { exact: true })).toBeVisible();
+  await expect(page.getByText("Can’t make it now", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Close sheet", exact: true }).click();
   // Open in Maps opens only when tapped, here with the place name.
   assert.equal(await page.evaluate(() => window.__opened ?? null), null);
@@ -263,25 +286,45 @@ try {
   await page.getByRole("button", { name: "Refresh invitation", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Board games", exact: true })).toBeVisible();
   await expect(page.getByText("Invited", { exact: true })).toBeVisible();
+  // Before answering (UX-P5): the organizer only, never other guests or counts.
+  await expect(page.getByText("Answer to see who’s coming", { exact: true })).toBeVisible();
+  await expect(page.getByText("Jo is organizing", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /going/ })).toHaveCount(0);
+  // The organizer's photo description labels the picture.
+  await expect(page.getByRole("img", { name: "Two mugs on a window sill", exact: true })).toBeVisible();
   await expect(page.getByRole("radiogroup", { name: "Your answer", exact: true })).toBeVisible();
   const going = page.getByRole("radio", { name: "Going", exact: true });
+  const maybe = page.getByRole("radio", { name: "Maybe", exact: true });
   const cant = page.getByRole("radio", { name: "Can’t make it", exact: true });
-  await expect(going).not.toBeChecked();
-  await expect(cant).not.toBeChecked();
-  await cant.click();
+  for (const option of [going, maybe, cant]) await expect(option).not.toBeChecked();
+  // The answer saves, but who's coming fails to load: the answer stays, Refresh recovers.
+  failNextGuestList = true;
+  await maybe.click();
   await expect(page.getByText("Your response is saved.", { exact: true })).toBeVisible();
-  await expect(cant).toBeChecked();
+  await expect(
+    page.getByText("Your answer is saved, but who’s coming couldn’t load. Refresh to try again.", { exact: true }),
+  ).toBeVisible();
+  await expect(maybe).toBeChecked();
+  await page.getByRole("button", { name: "Refresh invitation", exact: true }).click();
+  await expect(page.getByRole("button", { name: "1 going, 1 maybe", exact: true })).toBeVisible();
+  await expect(page.getByText("Answer to see who’s coming", { exact: true })).toHaveCount(0);
+  // Going opens the sample chat; backing out after Going reads "Can’t make it now".
   await going.click();
   await expect(going).toBeChecked();
   await expect(page.getByRole("button", { name: "View sample conversation", exact: true })).toBeVisible();
   await cant.click();
   await expect(cant).toBeChecked();
-  assert.deepEqual(responses, ["declined", "accepted", "withdrawn"]);
-  await expect(page.getByRole("button", { name: "Refresh invitation", exact: true })).toBeVisible();
+  await expect(page.getByText("Can’t make it now", { exact: true })).toBeVisible();
+  // After Maybe, Can’t make it is a plain decline.
+  await maybe.click();
+  await expect(maybe).toBeChecked();
+  await cant.click();
+  await expect(cant).toBeChecked();
+  assert.deepEqual(responses, ["maybe", "accepted", "withdrawn", "maybe", "declined"]);
   await context.close();
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: invitee answer control: Can’t make it declines before Going and withdraws after it; a failed guest read is unavailable until Refresh.",
+    "PASS: invitee: the organizer only before answering, Maybe, the list after answering (and its load failure), Can’t make it now after Going, the photo label.",
   );
 } finally {
   await browser.close();

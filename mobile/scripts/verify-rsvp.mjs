@@ -133,6 +133,8 @@ try {
     0,
   );
   await page.goto(`${base}/event?plan=${plan.id}`);
+  await expect(page.getByText("Answer to see who’s coming", { exact: true })).toBeVisible();
+  await expect(page.getByRole("radio", { name: "Maybe", exact: true })).toBeVisible();
   await page.getByRole("radio", { name: "Going", exact: true }).click();
   await expect(
     page.getByText("Your response is saved.", { exact: true }),

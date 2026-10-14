@@ -5,13 +5,14 @@ import { useFocusedRefresh, type Run } from "./useFocusedRefresh";
 import { cancelPlan, PlanSaveError } from "../domain/plans";
 import { reconcileRsvp, type Response, type RsvpAttempt } from "../domain/rsvp";
 import { planGateway } from "../services/plans";
-import { readEvent, readRsvp, writeRsvp, type EventSnapshot, type Guest } from "../services/rsvp";
+import { readEvent, readGuests, readRsvp, writeRsvp, type EventSnapshot, type Guest } from "../services/rsvp";
 
 export type EventRole = "owner" | "invitee";
 export type EventPage = {
   plan: LocalPlan | null;
   role: EventRole | null;
   attendee: EventSnapshot["attendee"];
+  organizer: string | null;
   guests: Guest[];
   busy: boolean;
   fresh: boolean;
@@ -118,6 +119,7 @@ export function useEvent(planId: string | undefined): EventPage {
       setSnapshot((old) => ({
         plan: confirmed.plan,
         attendee: confirmed.attendee,
+        organizer: old?.organizer ?? null,
         guests: (old?.guests ?? []).map((g) =>
           g.userId === userId ? { ...g, response: confirmed.attendee.response } : g,
         ),
@@ -127,6 +129,13 @@ export function useEvent(planId: string | undefined): EventPage {
       if (result === "confirmed") {
         setPending(null);
         setNotice("Your response is saved.");
+        // UX-P5: answering reveals who's coming; the server now returns the whole list.
+        try {
+          const list = await readGuests(attempt.planId);
+          if (valid()) setSnapshot((old) => (old ? { ...old, guests: list } : old));
+        } catch {
+          if (valid()) setError("Your answer is saved, but who’s coming couldn’t load. Refresh to try again.");
+        }
       } else if (result === "review" || result === "unavailable") {
         setPending(null);
         setError(
@@ -177,6 +186,7 @@ export function useEvent(planId: string | undefined): EventPage {
     plan,
     role,
     attendee: snapshot?.attendee ?? null,
+    organizer: snapshot?.organizer ?? null,
     guests: snapshot?.guests ?? [],
     busy,
     fresh: preview || fresh,

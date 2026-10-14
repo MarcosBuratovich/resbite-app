@@ -301,6 +301,7 @@ function CoverArt({ picture, uri }: { picture: EventPicture; uri?: string | null
  * - `onPress`: the whole card is one button with the composed `label`; nothing inside is focusable.
  * - `onPressPart` + `partLabels`: Review. Each part is its own button that jumps to its step.
  * - Otherwise the title is the screen's heading, unless `heading={false}`.
+ * - `pictureLabel`: the organizer's photo description; on a static card the picture is an image with this label.
  */
 export function CoverCard({
   picture,
@@ -316,6 +317,7 @@ export function CoverCard({
   dimmed = false,
   hero = false,
   heading = true,
+  pictureLabel,
 }: {
   picture: EventPicture;
   uri?: string | null;
@@ -330,6 +332,7 @@ export function CoverCard({
   dimmed?: boolean;
   hero?: boolean;
   heading?: boolean;
+  pictureLabel?: string;
 }) {
   const largeText = useLargeText();
   const [focused, setFocused] = React.useState(false);
@@ -355,7 +358,18 @@ export function CoverCard({
     <>
       {part(
         "picture",
-        <View style={[styles.picture, { height: hero ? 220 : 168 }, dimmed && { opacity: 0.5 }]}>
+        <View
+          style={[styles.picture, { height: hero ? 220 : 168 }, dimmed && { opacity: 0.5 }]}
+          // A static card reads the photo description; pressable cards and Review say it in their labels.
+          {...(!onPress && !parts && pictureLabel?.trim()
+            ? {
+                accessible: true,
+                accessibilityRole: "image" as const,
+                accessibilityLabel: pictureLabel.trim(),
+                "aria-label": pictureLabel.trim(),
+              }
+            : {})}
+        >
           <CoverArt picture={picture} uri={uri} />
         </View>,
       )}
