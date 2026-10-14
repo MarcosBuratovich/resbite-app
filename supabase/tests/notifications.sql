@@ -83,11 +83,9 @@ do $$ declare jobs jsonb; rsvp jsonb; joined jsonb; begin
  jobs := public.claim_notification_deliveries();
  select j into rsvp from jsonb_array_elements(jobs) j where j->>'kind'='rsvp';
  select j into joined from jsonb_array_elements(jobs) j where j->>'kind'='invitation';
- if rsvp->>'detail'<>'maybe' or rsvp->>'actor_name'<>'Sam' or rsvp->>'title'<>'Picnic in the park'
-    or rsvp->>'time_zone'<>'Europe/London' or (rsvp->>'starts_at')::timestamptz<>'2099-10-17 09:00+00' then
-  raise exception 'RSVP job lacks wording inputs: %', rsvp;
- end if;
- if joined->>'actor_name'<>'Sam' or joined ? 'detail' and joined->>'detail' is not null then raise exception 'Invitation job wrong: %', joined; end if;
+ if rsvp is null or joined is null then raise exception 'Missing rsvp or invitation job: %', jobs; end if;
+ if rsvp->>'detail' is distinct from 'maybe' or rsvp->>'actor_name' is distinct from 'Sam' or rsvp->>'title' is distinct from 'Picnic in the park' or rsvp->>'time_zone' is distinct from 'Europe/London' or (rsvp->>'starts_at')::timestamptz is distinct from '2099-10-17 09:00+00'::timestamptz then raise exception 'RSVP job lacks wording inputs: %', rsvp; end if;
+ if joined->>'actor_name' is distinct from 'Sam' or joined->>'detail' is not null then raise exception 'Invitation job wrong: %', joined; end if;
  if jobs::text like '%Secret%' then raise exception 'A job carries the place, note or description'; end if;
  if rsvp ? 'place_label' or rsvp ? 'note' or rsvp ? 'description' or rsvp ? 'cover_description' then raise exception 'A job names a private field'; end if;
 end $$;
