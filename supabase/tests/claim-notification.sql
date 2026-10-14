@@ -37,6 +37,7 @@ reset role;
 do $$ begin
  if (select count(*) from private.notification_outbox where kind='invitation' and dedupe_key='invite:a5200000-0000-4000-8000-000000000001')<>1 then raise exception 'Expected exactly one invitation notification'; end if;
  if not exists(select 1 from private.notification_outbox where dedupe_key='invite:a5200000-0000-4000-8000-000000000001' and plan_id='a5100000-0000-4000-8000-000000000001' and recipient_id='a5000000-0000-4000-8000-000000000001') then raise exception 'Organizer not notified of the claim'; end if;
+ if (select actor_id from private.notification_outbox where dedupe_key='invite:a5200000-0000-4000-8000-000000000001')<>'a5000000-0000-4000-8000-000000000002' then raise exception 'Claim notice does not name the claimer'; end if;
  if exists(select 1 from private.notification_outbox where plan_id='a5100000-0000-4000-8000-000000000001' and recipient_id='a5000000-0000-4000-8000-000000000002') then raise exception 'Claimer notified of own claim'; end if;
  if not exists(select 1 from public.attendees where plan_id='a5100000-0000-4000-8000-000000000001' and user_id='a5000000-0000-4000-8000-000000000002') then raise exception 'Attendee row missing'; end if;
 end $$;

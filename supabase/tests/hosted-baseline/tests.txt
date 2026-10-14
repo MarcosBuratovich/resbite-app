@@ -6,3 +6,4 @@ security-review.sql
 custom-events.sql
 plan-covers.sql
 claim-notification.sql
+ux2.sql
