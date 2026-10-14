@@ -1,6 +1,6 @@
 # UX refresh: cover cards, step-by-step creation and event-app ideas
 
-Date: 7 October 2026. Status: **approved by the owner on 7 October 2026**, including UX-P1 to UX-P6. Inputs:
+Date: 7 October 2026. Status: **approved by the owner on 7 October 2026**, including UX-P1 to UX-P6. UX1 delivered and owner-accepted on 14 October 2026 (see [qa/ux1-2026-10-07/README.md](../../../qa/ux1-2026-10-07/README.md)); one owner-approved refinement: the optional description moved onto the What step (steps v2). Inputs:
 - the owner's choices in the visual-companion mockups (7 October 2026);
 - the [event creation app benchmark](../../../reports/Event%20creation%20app%20benchmark.md), which compares Apple Invites, Luma and WhatsApp events;
 - a map of the current event-screen code.

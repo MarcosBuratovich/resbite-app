@@ -138,3 +138,22 @@ Owner decisions from the custom-events design session ([spec](../docs/superpower
 | CE-D6 | Each event and idea has one or two categories. |
 | CE-D7 | Approved category mapping for the 11 published ideas (see `mobile/content/activity-categories.json`). |
 | CE-D8 | CE comes before the remaining B0 work and B1, in two parts: CE1 events, CE2 cover photo. |
+
+## UX refresh — 7 October 2026
+
+Owner decisions from the UX refresh design session ([spec](../docs/superpowers/specs/2026-10-07-ux-refresh-design.md)); UX1 shipped and was accepted on 14 October 2026:
+
+| # | Decision |
+| --- | --- |
+| UX-D1 | Visual direction "Cover cards", in the style of Apple Invites: each resbite is a large picture card with its details on a solid panel below the picture (never text over a photo). A single floating + creates. |
+| UX-D2 | Creation is step cards, one question per screen: What, When, Where, Vibe, Review, then Invite. |
+| UX-D3 | Starting from an idea pre-fills the steps and opens on the Review card. Editing a saved resbite also opens on Review. |
+| UX-D4 | The event-app benchmark's recommendations are folded into this work. |
+| UX-P1 | Scope: event screens first (UX1). Profile, settings and auth adopt the new components later (UX4). |
+| UX-P2 | Keep the four tabs (Create, My resbites, Wellness, Profile) with short labels; the tab bar stays native. |
+| UX-P3 | Add Maybe to RSVP, and show the stored `withdrawn` state as "Can't make it now" (UX2, before B1 testers). |
+| UX-P4 | Narrow notifications: only a change of time or place notifies, and only accepted, Maybe and not-yet-answered invitees; cancellation notifies everyone; text says what happened and never shows the place or note on the lock screen (UX2). |
+| UX-P5 | Guest list after you answer: an invitee sees who else is coming only after responding; the organizer always sees everyone; enforced on the server (UX2). |
+| UX-P6 | "Recent places" are the account's last five places, kept on the device only and cleared at sign-out. |
+
+Account deletion split (owner, 7 October 2026: "Split deletion out"): deletion is its own track and is required before any wider beta. B1 may start with one explicitly approved tester. UX2's database migrations each need explicit owner approval and must land before the second tester joins.
