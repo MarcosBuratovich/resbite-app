@@ -10,6 +10,8 @@ import {
   dateBadgeParts,
   draftRoute,
   groupPlans,
+  guestArea,
+  guestGroups,
   mapsUrl,
   responseText,
   reviewLabels,
@@ -48,7 +50,7 @@ test("card chips: Cancelled, then the role, then guests or the invitee's answer"
   assert.deepEqual(cardChips({ owner: true, status: "active", going: 2 }), ["Hosting", "2 going"]);
   assert.deepEqual(cardChips({ owner: false, status: "active", response: "accepted" }), ["Invited", "Going"]);
   assert.deepEqual(cardChips({ owner: false, status: "active", response: "pending" }), ["Invited", "Not answered"]);
-  assert.deepEqual(cardChips({ owner: false, status: "active", response: "withdrawn" }), ["Invited", "Can’t make it"]);
+  assert.deepEqual(cardChips({ owner: false, status: "active", response: "withdrawn" }), ["Invited", "Can’t make it now"]);
   assert.deepEqual(cardChips({ owner: true, status: "cancelled", going: 3 }), ["Cancelled", "Hosting"]);
   assert.equal(responseText("declined"), "Can’t make it");
   assert.equal(responseText(undefined), "Not answered");
@@ -201,4 +203,83 @@ test("cover outcomes keep their action wording", () => {
   assert.equal(coverNotice("saved"), null);
   assert.equal(coverNotice(undefined), null);
   assert.equal(coverNotice(["pending"]), null);
+});
+
+test("UX2 answer labels: Maybe, and Can’t make it now after Going", () => {
+  assert.equal(responseText("maybe"), "Maybe");
+  assert.equal(responseText("withdrawn"), "Can’t make it now");
+  assert.equal(responseText("declined"), "Can’t make it");
+  assert.equal(responseText("pending"), "Not answered");
+  assert.deepEqual(cardChips({ owner: false, status: "active", response: "maybe" }), ["Invited", "Maybe"]);
+});
+
+test("guest area: only the organizer until an invitee answers (UX-P5)", () => {
+  const guests = [
+    { userId: "me", name: "Fixture", response: "maybe" },
+    { userId: "g1", name: "Alex", response: "accepted" },
+    { userId: "g2", name: "Bea", response: "pending" },
+  ];
+  assert.deepEqual(guestArea({ owner: false, response: "pending", organizer: " Jo ", guests: guests.slice(0, 1) }), {
+    kind: "hidden",
+    organizer: "Jo",
+  });
+  assert.deepEqual(guestArea({ owner: false, response: null, organizer: null, guests: [] }), {
+    kind: "hidden",
+    organizer: "Tester",
+  });
+  assert.deepEqual(guestArea({ owner: false, response: "maybe", organizer: "Jo", guests }), {
+    kind: "list",
+    names: ["Alex"],
+    label: "1 going, 1 maybe",
+  });
+  assert.deepEqual(guestArea({ owner: false, response: "declined", organizer: "Jo", guests: guests.slice(1) }), {
+    kind: "list",
+    names: ["Alex"],
+    label: "1 going",
+  });
+  assert.deepEqual(guestArea({ owner: true, response: null, organizer: null, guests: [] }), { kind: "none" });
+  assert.deepEqual(guestArea({ owner: true, response: null, organizer: null, guests: guests.slice(2) }), {
+    kind: "list",
+    names: [],
+    label: "0 going",
+  });
+});
+
+test("guest groups: Going, Maybe, Can’t make it, Not answered yet; empty groups hidden", () => {
+  assert.deepEqual(
+    guestGroups([
+      { userId: "a", name: "Ana", response: "pending" },
+      { userId: "b", name: "Ben", response: "withdrawn" },
+      { userId: "c", name: "Cy", response: "accepted" },
+      { userId: "d", name: "Di", response: "declined" },
+    ]),
+    [
+      { title: "Going", guests: [{ userId: "c", name: "Cy", note: null }] },
+      {
+        title: "Can’t make it",
+        guests: [
+          { userId: "b", name: "Ben", note: "Can’t make it now" },
+          { userId: "d", name: "Di", note: null },
+        ],
+      },
+      { title: "Not answered yet", guests: [{ userId: "a", name: "Ana", note: null }] },
+    ],
+  );
+  assert.deepEqual(guestGroups([]), []);
+});
+
+test("photo descriptions are read with cards and the Review picture; a failed description save is said", () => {
+  const now = new Date("2026-10-14T12:00:00Z");
+  assert.equal(
+    cardLabel({ title: "Picnic", startsAt: null, place: "Park", chips: ["Hosting"], photo: " Two mugs " }, now),
+    "Picnic, date not set, Park, Hosting, Photo: Two mugs",
+  );
+  assert.equal(cardLabel({ title: "Picnic", startsAt: null, place: "Park", chips: [], photo: "  " }, now), "Picnic, date not set, Park");
+  const picture = (photo?: string) => reviewLabels({ title: "Picnic", startsAt: null, place: "Park", categories: [], photo }, now).picture;
+  assert.equal(picture("Two mugs"), "Edit photo, Two mugs");
+  assert.equal(picture(undefined), "Edit photo");
+  assert.equal(
+    coverNotice("description"),
+    "Your resbite is saved, but the photo description didn’t save. Open Edit to add it again.",
+  );
 });

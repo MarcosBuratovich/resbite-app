@@ -1,5 +1,5 @@
 import type { Plan as LocalPlan } from "./plans";
-export type Response = "accepted" | "declined" | "withdrawn";
+export type Response = "accepted" | "maybe" | "declined" | "withdrawn";
 export type RsvpSnapshot = {
   plan: LocalPlan;
   attendee: { version: number; response: string };
@@ -36,13 +36,21 @@ export function reconcileRsvp(
   return snapshot.attendee.version === attempt.version ? "retry" : "review";
 }
 
-/** The answer control's selected option for a stored response (UX1: Going / Can’t make it). */
-export function answerKey(response: string): "going" | "cant" | null {
+export type AnswerKey = "going" | "maybe" | "cant";
+
+/** The answer control's selected option for a stored response (UX2: Going / Maybe / Can’t make it). */
+export function answerKey(response: string): AnswerKey | null {
   if (response === "accepted") return "going";
+  if (response === "maybe") return "maybe";
   return response === "declined" || response === "withdrawn" ? "cant" : null;
 }
 
-/** Can’t make it withdraws after Going (today’s "Withdraw my RSVP"); before ever accepting, it declines. */
+/** Can’t make it withdraws after Going ("Can’t make it now"); before Going, or after Maybe, it declines. */
 export function cantMakeItResponse(current: string): Response {
   return current === "accepted" || current === "withdrawn" ? "withdrawn" : "declined";
+}
+
+/** The response a tap on the answer control saves. */
+export function responseFor(key: AnswerKey, current: string): Response {
+  return key === "going" ? "accepted" : key === "maybe" ? "maybe" : cantMakeItResponse(current);
 }

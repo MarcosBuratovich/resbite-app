@@ -24,11 +24,59 @@ export function timeText(iso: string | null): string {
   return date ? `${pad(date.getHours())}:${pad(date.getMinutes())}` : "";
 }
 
-/** An invitee's stored answer as a status chip. UX2 adds Maybe and "Can’t make it now". */
+/** An invitee's stored answer as a status chip (UX2: Maybe, and "Can’t make it now" after Going). */
 export function responseText(response: string | null | undefined): string {
   if (response === "accepted") return "Going";
-  if (response === "declined" || response === "withdrawn") return "Can’t make it";
+  if (response === "maybe") return "Maybe";
+  if (response === "declined") return "Can’t make it";
+  if (response === "withdrawn") return "Can’t make it now";
   return "Not answered";
+}
+
+export type GuestRow = { userId: string; name: string; response: string };
+export type GuestArea =
+  | { kind: "none" }
+  | { kind: "hidden"; organizer: string }
+  | { kind: "list"; names: string[]; label: string };
+
+/**
+ * The event page's guest area (UX-P5). The server already returns only an unanswered invitee's own row;
+ * this says what to show: the organizer and "Answer to see who’s coming" until they answer, then the list.
+ */
+export function guestArea(view: {
+  owner: boolean;
+  response: string | null;
+  organizer: string | null;
+  guests: readonly GuestRow[];
+}): GuestArea {
+  if (!view.owner && (view.response === null || view.response === "pending"))
+    return { kind: "hidden", organizer: view.organizer?.trim() || "Tester" };
+  if (view.guests.length === 0) return { kind: "none" };
+  const going = view.guests.filter((g) => g.response === "accepted");
+  const maybe = view.guests.filter((g) => g.response === "maybe").length;
+  return {
+    kind: "list",
+    names: going.map((g) => g.name),
+    label: maybe > 0 ? `${going.length} going, ${maybe} maybe` : `${going.length} going`,
+  };
+}
+
+export type GuestGroup = { title: string; guests: { userId: string; name: string; note: string | null }[] };
+const GUEST_GROUPS: readonly { title: string; responses: readonly string[] }[] = [
+  { title: "Going", responses: ["accepted"] },
+  { title: "Maybe", responses: ["maybe"] },
+  { title: "Can’t make it", responses: ["declined", "withdrawn"] },
+  { title: "Not answered yet", responses: ["pending"] },
+];
+
+/** The guest sheet, grouped by answer; "Can’t make it now" marks someone who backed out after Going. */
+export function guestGroups(guests: readonly GuestRow[]): GuestGroup[] {
+  return GUEST_GROUPS.map(({ title, responses }) => ({
+    title,
+    guests: guests
+      .filter((g) => responses.includes(g.response))
+      .map((g) => ({ userId: g.userId, name: g.name, note: g.response === "withdrawn" ? "Can’t make it now" : null })),
+  })).filter((group) => group.guests.length > 0);
 }
 
 /** Chips on a My resbites card: Cancelled first, then the role, then guests (host) or the answer (invitee). */
@@ -44,7 +92,7 @@ export function cardChips(card: { owner: boolean; status: string; response?: str
 
 /** The single label a pressable card reads as: title, full date and time, place, chips. */
 export function cardLabel(
-  card: { title: string; startsAt: string | null; place: string; chips: readonly string[] },
+  card: { title: string; startsAt: string | null; place: string; chips: readonly string[]; photo?: string },
   now: Date,
 ): string {
   const date = parse(card.startsAt);
@@ -53,6 +101,7 @@ export function cardLabel(
     date ? spokenDateTime(date, now) : "date not set",
     card.place.trim(),
     ...card.chips,
+    card.photo?.trim() ? `Photo: ${card.photo.trim()}` : "",
   ]
     .filter(Boolean)
     .join(", ");
@@ -67,13 +116,13 @@ export type CoverCardPart = "picture" | "title" | "date" | "place" | "chips";
 
 /** Review card parts: each is a button that jumps to its step (benchmark row 4). */
 export function reviewLabels(
-  event: { title: string; startsAt: string | null; place: string; categories: readonly CategoryKey[] },
+  event: { title: string; startsAt: string | null; place: string; categories: readonly CategoryKey[]; photo?: string },
   now: Date,
 ): Record<CoverCardPart, string> {
   const date = parse(event.startsAt);
   const orNotSet = (value: string) => value.trim() || "not set";
   return {
-    picture: "Edit photo",
+    picture: event.photo?.trim() ? `Edit photo, ${event.photo.trim()}` : "Edit photo",
     title: `Edit name, ${orNotSet(event.title)}`,
     date: `Edit date and time, ${date ? spokenDateTime(date, now) : "not set"}`,
     place: `Edit place, ${orNotSet(event.place)}`,
@@ -162,5 +211,7 @@ export function coverNotice(outcome: string | string[] | undefined): string | nu
     return "Your resbite is saved, but its cover photo hasn’t uploaded yet. Open Edit plan to retry.";
   if (outcome === "failed")
     return "Your resbite is saved, but its cover photo couldn’t be prepared. Open Edit plan to add it again.";
+  if (outcome === "description")
+    return "Your resbite is saved, but the photo description didn’t save. Open Edit to add it again.";
   return null;
 }

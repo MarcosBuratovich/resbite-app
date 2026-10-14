@@ -18,6 +18,8 @@ export type Plan = {
   /** CE2 cover photo; absent on preview plans and on plans loaded before CE2. */
   cover_path?: string | null;
   cover_revision?: number;
+  /** UX2 photo description, read aloud by VoiceOver; "" when none, absent on plans loaded before UX2. */
+  cover_description?: string;
   /** Saved coordinates. The app does not set them yet; Open in Maps prefers them when present. */
   latitude?: number | null;
   longitude?: number | null;

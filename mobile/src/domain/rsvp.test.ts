@@ -5,6 +5,7 @@ import {
   canReadSample,
   cantMakeItResponse,
   reconcileRsvp,
+  responseFor,
   type RsvpSnapshot,
   type RsvpAttempt,
 } from "./rsvp";
@@ -102,4 +103,17 @@ test("Can’t make it withdraws after Going and declines before ever accepting; 
   assert.equal(answerKey("declined"), "cant");
   assert.equal(answerKey("withdrawn"), "cant");
   assert.equal(answerKey("pending"), null);
+});
+
+test("UX2: Maybe is its own answer; Can’t make it after Maybe declines", () => {
+  assert.equal(answerKey("maybe"), "maybe");
+  assert.equal(cantMakeItResponse("maybe"), "declined");
+  assert.equal(responseFor("going", "pending"), "accepted");
+  assert.equal(responseFor("maybe", "accepted"), "maybe");
+  assert.equal(responseFor("cant", "accepted"), "withdrawn");
+  assert.equal(responseFor("cant", "withdrawn"), "withdrawn");
+  assert.equal(responseFor("cant", "maybe"), "declined");
+  assert.equal(responseFor("cant", "pending"), "declined");
+  // Only Going opens the sample chat.
+  assert.equal(canReadSample({ ...snapshot, attendee: { response: "maybe", version: 2 } }), false);
 });
