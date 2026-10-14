@@ -1,0 +1,30 @@
+{
+  "project": "ewcsgvhuojxdpaspwsrx",
+  "taken_at": "2026-10-14T16:29:51.028864+00:00",
+  "read_only": true,
+  "migrations": ["20260917191323 resbite_private_tester_foundation", "20260923151512 account_access_status", "20260923151515 atomic_registration_details", "20260923154040 activity_catalogue_details", "20260924150824 avatar_revision_compare_and_swap", "20261007154825 custom_events", "20261007175855 plan_covers", "20261007193235 claim_notifies_owner"],
+  "attendee_checks": [{"name": "attendees_response_check", "def": "CHECK ((response = ANY (ARRAY['pending'::text, 'accepted'::text, 'declined'::text, 'withdrawn'::text])))"}],
+  "function_md5": {
+    "private.can_read_profile(uuid)": "7b83e3d54bc8fb09c5a77a1b6bbdb941",
+    "private.change_plan_v2(uuid,integer,text,text,text[],timestamp with time zone,text,text,text,boolean)": "c72178bdb98162b26538236f76b1f96d",
+    "private.claim_invite(text)": "e76c015ad54ce574d375fb19957d9d57",
+    "private.redact_deleting_owner_plan()": "7200e875106b8666e243e51ee92c3d59",
+    "private.respond(uuid,text,integer)": "d9e2cd4fd7e6bb14d422550e830ba3f3",
+    "private.track_cover_revision()": "1122e07cc6d76bac8bf15bab766084c7"
+  },
+  "function_md5_matches_local_hosted_baseline": true,
+  "attendee_policies": [{"name": "attendee_read", "cmd": "r", "roles": "{authenticated}", "qual": "private.can_read_plan(plan_id)"}],
+  "attendee_responses": {},
+  "outbox_kinds": {},
+  "outbox_columns": ["id", "plan_id", "recipient_id", "kind", "dedupe_key", "created_at", "delivered_at", "attempts"],
+  "plans": {"total": 8, "active": 7, "with_cover": 3},
+  "plans_has_cover_description": false,
+  "old_edit_on": true,
+  "ux2_objects_present": 0,
+  "enabled_testers": 1,
+  "advisors_before": {
+    "security": ["INFO rls_enabled_no_policy x4: private.device_endpoints, private.invitations, private.notification_outbox, private.tester_roster"],
+    "performance": ["INFO unused_index x3: device_endpoints_user_idx, notification_outbox_pending_idx, notification_outbox_recipient_idx", "INFO auth_db_connections_absolute (Auth max 10 connections)"]
+  },
+  "candidate": {"file": "supabase/migrations/20261014120000_ux2_rules.sql", "sha256": "57471e0e229b51866bf27d60b2eca009a93886d6835214f4632312ccda288dea", "local_rehearsal": "PASS (hosted-baseline + rollback proof, main 0882a84)"}
+}

@@ -1,0 +1,33 @@
+{
+  "project": "ewcsgvhuojxdpaspwsrx",
+  "approved": "Owner chose \"Yes, apply it\" for ux2_rules (sha256 57471e0e229b51866bf27d60b2eca009a93886d6835214f4632312ccda288dea) on 2026-10-14",
+  "applied_with": "Supabase MCP apply_migration, name ux2_rules (no db push)",
+  "hosted_version": "20261014163459",
+  "taken_at": "2026-10-14T16:35:14.780577+00:00",
+  "read_only": true,
+  "attendee_checks": [{"name": "attendees_response_check", "def": "CHECK ((response = ANY (ARRAY['pending'::text, 'accepted'::text, 'maybe'::text, 'declined'::text, 'withdrawn'::text])))"}],
+  "function_md5": {
+    "private.can_read_profile(uuid)": "71aa5234e2a289c908124acb60cbc887",
+    "private.can_see_guests(uuid)": "2e1809f32eff76579a4b4c88d7c48e8b",
+    "private.change_plan_v2(uuid,integer,text,text,text[],timestamp with time zone,text,text,text,boolean)": "cb59aece2b59dda7215555aad1c6c40f",
+    "private.claim_invite(text)": "171e0acfc9e58d3bcdb1662b419d3037",
+    "private.redact_deleting_owner_plan()": "db51d2aa7417e9f9447d204a2e312c26",
+    "private.respond(uuid,text,integer)": "01f2c5daaff39c0f4b1b405ce045e427",
+    "private.set_plan_cover_description(uuid,text,bigint)": "d73a1c0de4334b7f587d295145e6db5b",
+    "public.set_plan_cover_description(uuid,text,bigint)": "2ea1b6f6e10644378d06cc2ecf0914a6",
+    "private.track_cover_revision()": "8928d46e275d22d7d89d8a9bc624dec7"
+  },
+  "function_md5_matches_local_candidate": true,
+  "attendee_policies": [{"name": "attendee_read", "cmd": "r", "roles": "{authenticated}", "qual": "(private.can_read_plan(plan_id) AND ((user_id = ( SELECT auth.uid() AS uid)) OR private.can_see_guests(plan_id)))"}],
+  "grants": {"old_edit_public_authenticated": false, "old_edit_private_authenticated": false, "describe_authenticated": true, "describe_anon": false, "describe_service_role": false, "can_see_guests_authenticated": true, "can_see_guests_anon": false, "respond_authenticated": true, "change_plan_v2_authenticated": true},
+  "outbox_columns": ["id", "plan_id", "recipient_id", "kind", "dedupe_key", "created_at", "delivered_at", "attempts", "actor_id", "detail"],
+  "plans": {"total": 8, "active": 7, "with_cover": 3, "with_description": 0},
+  "attendees": 0,
+  "outbox_rows": 0,
+  "enabled_testers": 1,
+  "advisors_after": {
+    "security": ["INFO rls_enabled_no_policy x4 (unchanged)"],
+    "performance": ["INFO unused_index x4: the 3 from before plus notification_outbox_actor_idx (new, expected on an empty queue; supports on delete set null)", "INFO auth_db_connections_absolute (unchanged)"],
+    "new_security_warnings": 0
+  }
+}
