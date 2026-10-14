@@ -693,10 +693,10 @@ export function InfoSheet({
   const reduce = useReduceMotion();
   return (
     <Modal visible={visible} transparent animationType={reduce ? "fade" : "slide"} onRequestClose={onClose}>
-      <View style={styles.backdrop}>
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.backdrop}>
         <Pressable accessible={false} focusable={false} style={StyleSheet.absoluteFill} onPress={onClose} />
         <SafeAreaView edges={["bottom"]} style={styles.sheet} accessibilityViewIsModal aria-modal>
-          <ScrollView contentContainerStyle={styles.sheetBody}>
+          <ScrollView contentContainerStyle={styles.sheetBody} keyboardShouldPersistTaps="handled">
             <View style={styles.sheetHeader}>
               <Text accessibilityRole="header" style={[s.title, styles.sheetTitle]}>
                 {title}
@@ -706,7 +706,7 @@ export function InfoSheet({
             {children}
           </ScrollView>
         </SafeAreaView>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
