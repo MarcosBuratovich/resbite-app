@@ -12,6 +12,7 @@ insert into storage.objects(bucket_id,name) values
  ('profile-photos','41000000-0000-4000-8000-000000000001/a.jpg'),
  ('plan-covers','41000000-0000-4000-8000-000000000001/43000000-0000-4000-8000-000000000001/c.jpg');
 update public.plans set cover_path='41000000-0000-4000-8000-000000000001/43000000-0000-4000-8000-000000000001/c.jpg' where id='43000000-0000-4000-8000-000000000001';
+update public.plans set cover_description='A red kite over the hill' where id='43000000-0000-4000-8000-000000000001';
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"41000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 do $$ begin
@@ -34,6 +35,7 @@ do $$ begin
  if (select title||'|'||description from public.plans where id='43000000-0000-4000-8000-000000000001')<>'Resbite|' then raise exception 'Event text not redacted'; end if;
  if (select display_name from public.profiles where id='41000000-0000-4000-8000-000000000001')<>'Deleted member' then raise exception 'Name not redacted'; end if;
  if (select cover_path from public.plans where id='43000000-0000-4000-8000-000000000001') is not null then raise exception 'Cover not detached by deletion'; end if;
+ if (select cover_description from public.plans where id='43000000-0000-4000-8000-000000000001')<>'' then raise exception 'Cover description not redacted by deletion'; end if;
 end $$;
 set local role authenticated;
 do $$ begin

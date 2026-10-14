@@ -119,3 +119,76 @@ create or replace function private.can_read_profile(p_id uuid) returns boolean l
  select 1 from public.plans p where private.can_read_plan(p.id) and
  (p.owner_id=p_id or (private.can_see_guests(p.id) and exists(select 1 from public.attendees a where a.plan_id=p.id and a.user_id=p_id)))))
 $$;
+
+-- Cover description (spec "Cover description", amended): read aloud by VoiceOver; saved on its own,
+-- after the photo; cleared by the database whenever the photo changes.
+alter table public.plans add column cover_description text not null default '',
+ add constraint plans_cover_description_valid check (
+  cover_description=btrim(cover_description) and char_length(cover_description)<=200
+  and (cover_path is not null or cover_description=''));
+
+-- The revision now moves for the photo or its description, once per change. A new or removed photo never
+-- keeps the previous photo's description, whichever function or trigger changed it.
+-- Otherwise the 20261007200000_plan_covers body.
+create or replace function private.track_cover_revision() returns trigger
+language plpgsql security invoker set search_path='' as $$
+begin
+ if tg_op='INSERT' then
+  new.cover_revision := 0;
+ else
+  if new.cover_path is distinct from old.cover_path then
+   new.cover_description := '';
+  end if;
+  if new.cover_path is distinct from old.cover_path or new.cover_description is distinct from old.cover_description then
+   new.cover_revision := old.cover_revision + 1;
+  else
+   new.cover_revision := old.cover_revision;
+  end if;
+ end if;
+ return new;
+end $$;
+
+-- Deletion redaction also blanks the description (create or replace keeps its privileges).
+create or replace function private.redact_deleting_owner_plan() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+ if new.owner_id is not null and exists(
+  select 1 from public.profiles as p where p.id = new.owner_id and p.deletion_requested_at is not null) then
+  new.title := 'Resbite';
+  new.description := '';
+  new.cover_path := null;
+  new.cover_description := '';
+ end if;
+ return new;
+end $$;
+
+create function private.set_plan_cover_description(p_plan uuid,p_description text,p_expected_revision bigint)
+returns jsonb language plpgsql security definer set search_path='' as $$
+declare v_uid uuid := private.require_tester(); v_plan public.plans; v_text text := btrim(coalesce(p_description,''));
+begin
+ if p_expected_revision is null or p_expected_revision<0 then raise exception 'Invalid cover revision' using errcode='22023'; end if;
+ if char_length(v_text)>200 then raise exception 'Photo description too long' using errcode='22023'; end if;
+ select * into v_plan from public.plans where id=p_plan for update;
+ if not found or v_plan.owner_id<>v_uid then raise exception 'Owner required' using errcode='42501'; end if;
+ if v_plan.status<>'active' or v_plan.starts_at<=now() then raise exception 'Plan unavailable' using errcode='22023'; end if;
+ if v_plan.cover_revision=p_expected_revision then
+  if v_plan.cover_path is null and v_text<>'' then raise exception 'Add a cover photo first' using errcode='22023'; end if;
+  if v_plan.cover_description<>v_text then
+   update public.plans set cover_description=v_text where id=p_plan returning * into v_plan;
+  end if;
+ elsif v_plan.cover_description=v_text and v_plan.cover_revision-1=p_expected_revision then
+  -- Only the exact next revision acknowledges a lost successful reply (no ABA replay).
+  null;
+ else
+  raise exception 'The cover changed elsewhere; reload before saving' using errcode='40001';
+ end if;
+ return jsonb_build_object('cover_path',v_plan.cover_path,'cover_description',v_plan.cover_description,'cover_revision',v_plan.cover_revision);
+end $$;
+create function public.set_plan_cover_description(p_plan uuid,p_description text,p_expected_revision bigint)
+returns jsonb language sql security invoker set search_path='' as $$
+ select private.set_plan_cover_description(p_plan,p_description,p_expected_revision)
+$$;
+revoke all on function private.set_plan_cover_description(uuid,text,bigint), public.set_plan_cover_description(uuid,text,bigint)
+ from public, anon, authenticated, service_role;
+grant execute on function private.set_plan_cover_description(uuid,text,bigint), public.set_plan_cover_description(uuid,text,bigint)
+ to authenticated;

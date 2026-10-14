@@ -238,3 +238,91 @@ do $$ begin
  if not (select prosecdef from pg_proc where oid='private.can_read_profile(uuid)'::regprocedure) then raise exception 'can_read_profile lost definer rights'; end if;
 end $$;
 rollback;
+-- Block 4: the cover photo description (Task 4).
+begin;
+insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data) values
+ ('e4000000-0000-4000-8000-000000000001','ux2-4-owner@resbite-test.invalid',now(),'{}'),
+ ('e4000000-0000-4000-8000-000000000002','ux2-4-guest@resbite-test.invalid',now(),'{}');
+insert into private.tester_roster(email) values('ux2-4-owner@resbite-test.invalid'),('ux2-4-guest@resbite-test.invalid');
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e4000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.save_profile('Owner four');
+select public.create_plan_v2('e4100000-0000-4000-8000-000000000001','Lake swim','',array['natural'],null,'2099-06-01 10:00+00','UTC','Lake','');
+select public.create_plan_v2('e4100000-0000-4000-8000-000000000002','No photo','',array['natural'],null,'2099-06-01 10:00+00','UTC','Lake','');
+select public.create_invite('e4200000-0000-4000-8000-000000000001','e4100000-0000-4000-8000-000000000001',repeat('a',64));
+select set_config('request.jwt.claims','{"sub":"e4000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+select public.save_profile('Guest four'); select public.claim_invite(repeat('a',64));
+reset role;
+insert into storage.objects(bucket_id,name,owner) values
+ ('plan-covers','e4000000-0000-4000-8000-000000000001/e4100000-0000-4000-8000-000000000001/a.jpg','e4000000-0000-4000-8000-000000000001'),
+ ('plan-covers','e4000000-0000-4000-8000-000000000001/e4100000-0000-4000-8000-000000000001/b.jpg','e4000000-0000-4000-8000-000000000001');
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e4000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+do $$ declare
+ p uuid := 'e4100000-0000-4000-8000-000000000001';
+ a text := 'e4000000-0000-4000-8000-000000000001/e4100000-0000-4000-8000-000000000001/a.jpg';
+ b text := 'e4000000-0000-4000-8000-000000000001/e4100000-0000-4000-8000-000000000001/b.jpg';
+ r jsonb;
+begin
+ -- Nothing to describe without a photo; clearing is a no-op.
+ begin perform public.set_plan_cover_description('e4100000-0000-4000-8000-000000000002','A view',0); raise exception 'Described a missing photo'; exception when invalid_parameter_value then null; end;
+ if public.set_plan_cover_description('e4100000-0000-4000-8000-000000000002','',0)<>jsonb_build_object('cover_path',null,'cover_description','','cover_revision',0) then raise exception 'Clearing without a photo changed something'; end if;
+ perform public.set_plan_cover_if_current(p,a,null,0);
+ -- Saved trimmed; the revision moves once.
+ r := public.set_plan_cover_description(p,'  Two mugs on a sill  ',1);
+ if r<>jsonb_build_object('cover_path',a,'cover_description','Two mugs on a sill','cover_revision',2) then raise exception 'Description not saved: %', r; end if;
+ -- A lost reply is acknowledged only with the same text at the exact next revision.
+ if public.set_plan_cover_description(p,'Two mugs on a sill',1)<>r then raise exception 'Lost reply not acknowledged'; end if;
+ begin perform public.set_plan_cover_description(p,'Three mugs',1); raise exception 'Stale description accepted'; exception when serialization_failure then null; end;
+ begin perform public.set_plan_cover_description(p,'Three mugs',0); raise exception 'Older stale description accepted'; exception when serialization_failure then null; end;
+ -- 200 characters after trimming, no more.
+ begin perform public.set_plan_cover_description(p,repeat('x',201),2); raise exception 'Long description accepted'; exception when invalid_parameter_value then null; end;
+ r := public.set_plan_cover_description(p,'  '||repeat('y',200)||'  ',2);
+ if (r->>'cover_revision')::bigint<>3 or char_length(r->>'cover_description')<>200 then raise exception 'Trimmed 200 characters not saved'; end if;
+ -- The same text again changes nothing.
+ if public.set_plan_cover_description(p,repeat('y',200),3)<>r then raise exception 'Unchanged description moved the revision'; end if;
+ -- Editing the event's text leaves the cover alone and notifies nobody.
+ perform public.change_plan_v2(p,1,'Lake swim at dawn','',array['natural'],'2099-06-01 10:00+00','UTC','Lake','');
+ -- A new photo clears the description; describing it again works at the new revision.
+ r := public.set_plan_cover_if_current(p,b,a,3);
+ if (select cover_description||':'||cover_revision from public.plans where id=p)<>':4' then raise exception 'New photo kept the old description'; end if;
+ r := public.set_plan_cover_description(p,'A red kite',4);
+ if r<>jsonb_build_object('cover_path',b,'cover_description','A red kite','cover_revision',5) then raise exception 'Describing the new photo failed: %', r; end if;
+ -- Removing the photo removes the description.
+ perform public.set_plan_cover_if_current(p,null,b,5);
+ if (select cover_description||':'||cover_revision from public.plans where id=p)<>':6' then raise exception 'Removed photo kept its description'; end if;
+end $$;
+reset role;
+do $$ begin
+ if (select cover_revision from public.plans where id='e4100000-0000-4000-8000-000000000001')<>6 then raise exception 'Text edit moved the cover revision'; end if;
+ if exists(select 1 from private.notification_outbox where plan_id='e4100000-0000-4000-8000-000000000001' and kind='plan_changed') then raise exception 'A text edit notified the guest'; end if;
+ -- Stored values stay valid.
+ begin update public.plans set cover_description='x' where id='e4100000-0000-4000-8000-000000000002'; raise exception 'Description without photo stored'; exception when check_violation then null; end;
+ update public.plans set cover_path='e4000000-0000-4000-8000-000000000001/e4100000-0000-4000-8000-000000000001/a.jpg' where id='e4100000-0000-4000-8000-000000000001';
+ begin update public.plans set cover_description=' padded' where id='e4100000-0000-4000-8000-000000000001'; raise exception 'Untrimmed description stored'; exception when check_violation then null; end;
+ update public.plans set cover_description='A heron' where id='e4100000-0000-4000-8000-000000000001';
+ if has_function_privilege('anon','public.set_plan_cover_description(uuid,text,bigint)','execute') then raise exception 'anon can describe covers'; end if;
+ if has_function_privilege('service_role','public.set_plan_cover_description(uuid,text,bigint)','execute') then raise exception 'service_role can describe covers'; end if;
+ if not has_function_privilege('authenticated','public.set_plan_cover_description(uuid,text,bigint)','execute') then raise exception 'Organizers cannot describe covers'; end if;
+end $$;
+set local role authenticated;
+-- Only the organizer describes; guests read the description with the event.
+select set_config('request.jwt.claims','{"sub":"e4000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+do $$ begin
+ begin perform public.set_plan_cover_description('e4100000-0000-4000-8000-000000000001','Mine now',8); raise exception 'Guest described the cover'; exception when insufficient_privilege then null; end;
+ if (select cover_description from public.plans where id='e4100000-0000-4000-8000-000000000001')<>'A heron' then raise exception 'Guest cannot read the description'; end if;
+end $$;
+-- A cancelled event can't be described.
+select set_config('request.jwt.claims','{"sub":"e4000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.change_plan_v2('e4100000-0000-4000-8000-000000000001',2,null,null,null,null,null,null,null,true);
+do $$ begin
+ begin perform public.set_plan_cover_description('e4100000-0000-4000-8000-000000000001','Too late',8); raise exception 'Cancelled event described'; exception when invalid_parameter_value then null; end;
+end $$;
+reset role;
+-- Account deletion blanks the description with the photo.
+update public.profiles set deletion_requested_at=now() where id='e4000000-0000-4000-8000-000000000001';
+update public.plans set note='' where id='e4100000-0000-4000-8000-000000000001';
+do $$ begin
+ if (select coalesce(cover_path,'none')||':'||cover_description from public.plans where id='e4100000-0000-4000-8000-000000000001')<>'none:' then raise exception 'Deleting owner kept the photo description'; end if;
+end $$;
+rollback;
