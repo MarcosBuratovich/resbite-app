@@ -157,3 +157,25 @@ Owner decisions from the UX refresh design session ([spec](../docs/superpowers/s
 | UX-P6 | "Recent places" are the account's last five places, kept on the device only and cleared at sign-out. |
 
 Account deletion split (owner, 7 October 2026: "Split deletion out"): deletion is its own track and is required before any wider beta. B1 may start with one explicitly approved tester. UX2's database migrations each need explicit owner approval and must land before the second tester joins.
+
+## UX2 — 14 October 2026
+
+Owner decisions from the UX2 design session ([spec](../docs/superpowers/specs/2026-10-14-ux2-design.md), [plan](../docs/superpowers/plans/2026-10-14-ux2.md)). UX2 covers the items the UX refresh deferred before B1 testers: Maybe, the guest list after answering, narrower notifications and the cover description.
+
+| # | Decision |
+| --- | --- |
+| UX2-D1 | Saving an edit returns to the event page with a short "Changes saved" note, shown once. |
+| UX2-D2 | Organizer actions on the event page stay icon-only. |
+| UX2-D3 | The My resbites heading says "My resbites". The tabs stay Upcoming and Past. |
+| UX2-D4 | What a notification may show on a locked iPhone: the event title, what happened, and who did it, for example "Sam is going." under the heading "Picnic in the park". It never shows the place, the note, the description or the cover description. |
+| UX2-D5 | Before answering, an invitee sees only the organizer: no names, photos or counts of other guests. |
+| UX2-D6 | The invitee side is accepted with coworkers on TestFlight (owner: "I will push this app to testflight so we can test with my coworkers"). This replaces the beta plan’s registered-device installs for B1 (distribution row of the [expanded private beta plan](../docs/milestones/2026-09-23-expanded-private-beta.md)). |
+| UX2-D7 | One coworker first. The rest join after the account deletion track. This keeps the 7 October rule ("Split deletion out"). |
+
+**Planning amendment (14 October 2026).**
+- The cover description has its own small save, `set_plan_cover_description`, instead of riding on the photo-change function. Threading it through the photo machinery would also have changed the live profile-photo code. The behaviour people see is unchanged.
+- The database clears the description whenever the photo changes (a new photo, a removed photo, the old app, account deletion), so no app code is involved.
+- Preview mode keeps a cover description in memory, as it does the photo. Preview only has the organizer’s view, so the invitee cases (a Maybe answer, an unanswered invitation with the guest list hidden) are covered by the browser checks’ stubbed server data.
+- The migrations are fixed as `20261014120000_ux2_rules.sql` (hosted-compatible) and `20261014130000_ux2_notification_wording.sql` (local-only, ships with the notification sender).
+
+Each UX2 database migration needs the owner’s explicit approval, and the rules migration must land before the second tester joins. Notification sending stays switched off.
