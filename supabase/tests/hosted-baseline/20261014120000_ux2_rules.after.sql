@@ -7,6 +7,7 @@ do $$ begin
 end $$;
 -- 2. The rollback restores every replaced definition and grant exactly; rehearsed, then undone.
 begin;
+update public.plans set cover_description='Rehearsal photo' where id='e9100000-0000-4000-8000-000000000001';
 \ir ../../rollback/20261014120000_ux2_rules.rollback.sql
 do $$ declare item record; begin
  for item in

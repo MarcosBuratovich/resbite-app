@@ -29,12 +29,12 @@ do $$ begin
 end $$;
 reset role;
 do $$ begin
- if (select response from public.attendees where plan_id='e1100000-0000-4000-8000-000000000001')<>'withdrawn' then raise exception 'Answer not stored'; end if;
+ if (select response from public.attendees where plan_id='e1100000-0000-4000-8000-000000000001') is distinct from 'withdrawn' then raise exception 'Answer not stored'; end if;
  -- Each answer notifies the organizer and records who answered and what.
  if (select string_agg(detail,',' order by id) from private.notification_outbox
      where plan_id='e1100000-0000-4000-8000-000000000001' and kind='rsvp'
        and recipient_id='e1000000-0000-4000-8000-000000000001'
-       and actor_id='e1000000-0000-4000-8000-000000000002')<>'maybe,accepted,withdrawn' then
+       and actor_id='e1000000-0000-4000-8000-000000000002') is distinct from 'maybe,accepted,withdrawn' then
   raise exception 'RSVP notices do not record actor and answer';
  end if;
  -- A claim records the person claiming.
@@ -121,9 +121,11 @@ select public.change_plan_v2('e2100000-0000-4000-8000-000000000001',2,'Big picni
 select public.change_plan_v2('e2100000-0000-4000-8000-000000000001',3,'Big picnic','Bring two rugs',array['natural','community'],'2099-06-01 10:00+00','Europe/London','Lake','Gate C');
 -- v5: new time and new place.
 select public.change_plan_v2('e2100000-0000-4000-8000-000000000001',4,'Big picnic','Bring two rugs',array['natural','community'],'2099-06-02 10:00+00','Europe/London','Hill','Gate C');
+-- v6: new instant only; same zone, same place.
+select public.change_plan_v2('e2100000-0000-4000-8000-000000000001',5,'Big picnic','Bring two rugs',array['natural','community'],'2099-06-03 10:00+00','Europe/London','Hill','Gate C');
 reset role;
 do $$ declare v integer; d text; begin
- for v, d in select * from (values (3,'time'),(4,'place'),(5,'time_place')) as t(v,d) loop
+ for v, d in select * from (values (3,'time'),(4,'place'),(5,'time_place'),(6,'time')) as t(v,d) loop
   -- Going, Maybe and not-yet-answered invitees only; never the organizer, never Can't make it.
   if (select string_agg(recipient_id::text,',' order by recipient_id) from private.notification_outbox
       where kind='plan_changed' and dedupe_key like 'plan:e2100000-0000-4000-8000-000000000001:'||v||':%'
@@ -137,10 +139,10 @@ set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"e2000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 -- The old edit function is switched off.
 do $$ begin
- begin perform public.change_plan('e2100000-0000-4000-8000-000000000001',5,'2099-06-03 10:00+00','UTC','Elsewhere','',false); raise exception 'Old edit function still callable'; exception when insufficient_privilege then null; end;
+ begin perform public.change_plan('e2100000-0000-4000-8000-000000000001',6,'2099-06-03 10:00+00','UTC','Elsewhere','',false); raise exception 'Old edit function still callable'; exception when insufficient_privilege then null; end;
 end $$;
--- v6: cancel tells every invitee, whatever they answered.
-select public.change_plan_v2('e2100000-0000-4000-8000-000000000001',5,null,null,null,null,null,null,null,true);
+-- v7: cancel tells every invitee, whatever they answered.
+select public.change_plan_v2('e2100000-0000-4000-8000-000000000001',6,null,null,null,null,null,null,null,true);
 reset role;
 do $$ begin
  if (select count(*) from private.notification_outbox where kind='plan_cancelled' and plan_id='e2100000-0000-4000-8000-000000000001'
@@ -191,38 +193,56 @@ set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"e3000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 do $$ begin
  if (select count(*) from public.plans)<>1 then raise exception 'Unanswered invitee lost the event'; end if;
- if (select string_agg(user_id::text,',') from public.attendees)<>'e3000000-0000-4000-8000-000000000002' then raise exception 'Unanswered invitee sees other guests'; end if;
+ if (select string_agg(user_id::text,',') from public.attendees) is distinct from 'e3000000-0000-4000-8000-000000000002' then raise exception 'Unanswered invitee sees other guests'; end if;
  if exists(select 1 from public.attendees where user_id='e3000000-0000-4000-8000-000000000003') then raise exception 'Unanswered invitee found a guest by id'; end if;
- if (select string_agg(display_name,',' order by display_name) from public.profiles)<>'Ana,Owner three' then raise exception 'Unanswered invitee sees other names'; end if;
+ if (select string_agg(display_name,',' order by display_name) from public.profiles) is distinct from 'Ana,Owner three' then raise exception 'Unanswered invitee sees other names'; end if;
  if exists(select 1 from storage.objects where bucket_id='profile-photos' and name='e3000000-0000-4000-8000-000000000003/ben.jpg') then raise exception 'Unanswered invitee sees a guest photo'; end if;
+end $$;
+-- Per-plan gate: answering a second plan opens only that plan's guests, never the first plan's.
+select set_config('request.jwt.claims','{"sub":"e3000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.create_plan_v2('e3100000-0000-4000-8000-000000000005','Book club','',array['community'],null,'2099-06-02 10:00+00','UTC','Library','');
+select public.create_invite('e3200000-0000-4000-8000-000000000005','e3100000-0000-4000-8000-000000000005',repeat('a',64));
+select public.create_invite('e3200000-0000-4000-8000-000000000006','e3100000-0000-4000-8000-000000000005',repeat('b',64));
+select set_config('request.jwt.claims','{"sub":"e3000000-0000-4000-8000-000000000004","role":"authenticated"}',true);
+select public.claim_invite(repeat('a',64));
+select set_config('request.jwt.claims','{"sub":"e3000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+select public.claim_invite(repeat('b',64));
+select public.respond('e3100000-0000-4000-8000-000000000005','accepted',1);
+do $$ begin
+ if not exists(select 1 from public.profiles where id='e3000000-0000-4000-8000-000000000004') then raise exception 'Answering the second plan did not show its guest'; end if;
+ if exists(select 1 from public.profiles where id='e3000000-0000-4000-8000-000000000003') then raise exception 'Answering another plan exposed a first-plan guest profile'; end if;
+ if exists(select 1 from storage.objects where bucket_id='profile-photos' and name='e3000000-0000-4000-8000-000000000003/ben.jpg') then raise exception 'Answering another plan exposed a first-plan guest photo'; end if;
+ if (select string_agg(user_id::text,',') from public.attendees where plan_id='e3100000-0000-4000-8000-000000000001') is distinct from 'e3000000-0000-4000-8000-000000000002' then raise exception 'Answering another plan exposed first-plan attendee rows'; end if;
+ if exists(select 1 from public.attendees where plan_id='e3100000-0000-4000-8000-000000000001' and user_id='e3000000-0000-4000-8000-000000000004') then raise exception 'Shared guest visible on the unanswered plan'; end if;
+ if not exists(select 1 from public.attendees where plan_id='e3100000-0000-4000-8000-000000000005' and user_id='e3000000-0000-4000-8000-000000000004') then raise exception 'Second-plan guest list not opened'; end if;
 end $$;
 -- Any answer opens the list, Can't make it included.
 select public.respond('e3100000-0000-4000-8000-000000000001','declined',1);
 do $$ begin
- if (select count(*) from public.attendees)<>3 then raise exception 'Answered invitee does not see the guest list'; end if;
- if (select string_agg(display_name,',' order by display_name) from public.profiles)<>'Ana,Ben,Cy,Owner three' then raise exception 'Answered invitee does not see guest names'; end if;
+ if (select count(*) from public.attendees where plan_id='e3100000-0000-4000-8000-000000000001')<>3 then raise exception 'Answered invitee does not see the guest list'; end if;
+ if (select string_agg(display_name,',' order by display_name) from public.profiles) is distinct from 'Ana,Ben,Cy,Owner three' then raise exception 'Answered invitee does not see guest names'; end if;
  if not exists(select 1 from storage.objects where bucket_id='profile-photos' and name='e3000000-0000-4000-8000-000000000003/ben.jpg') then raise exception 'Answered invitee cannot see a guest photo'; end if;
 end $$;
 -- Cy has not answered: still only herself and the organizer, although others have.
 select set_config('request.jwt.claims','{"sub":"e3000000-0000-4000-8000-000000000004","role":"authenticated"}',true);
 do $$ begin
- if (select count(*) from public.attendees)<>1 then raise exception 'Unanswered invitee sees answered guests'; end if;
- if (select string_agg(display_name,',' order by display_name) from public.profiles)<>'Cy,Owner three' then raise exception 'Unanswered invitee sees answered names'; end if;
+ if (select count(*) from public.attendees where plan_id='e3100000-0000-4000-8000-000000000001')<>1 then raise exception 'Unanswered invitee sees answered guests'; end if;
+ if (select string_agg(display_name,',' order by display_name) from public.profiles) is distinct from 'Cy,Owner three' then raise exception 'Unanswered invitee sees answered names'; end if;
 end $$;
 select public.respond('e3100000-0000-4000-8000-000000000001','maybe',1);
 do $$ begin
- if (select count(*) from public.attendees)<>3 then raise exception 'Maybe does not open the guest list'; end if;
+ if (select count(*) from public.attendees where plan_id='e3100000-0000-4000-8000-000000000001')<>3 then raise exception 'Maybe does not open the guest list'; end if;
 end $$;
 -- Ben backs out after Going: still answered.
 select set_config('request.jwt.claims','{"sub":"e3000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
 select public.respond('e3100000-0000-4000-8000-000000000001','withdrawn',2);
 do $$ begin
- if (select count(*) from public.attendees)<>3 then raise exception 'Withdrawn guest lost the list'; end if;
+ if (select count(*) from public.attendees where plan_id='e3100000-0000-4000-8000-000000000001')<>3 then raise exception 'Withdrawn guest lost the list'; end if;
 end $$;
 -- The organizer always sees everyone; an outsider sees nothing.
 select set_config('request.jwt.claims','{"sub":"e3000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 do $$ begin
- if (select count(*) from public.attendees)<>3 then raise exception 'Organizer does not see every guest'; end if;
+ if (select count(*) from public.attendees where plan_id='e3100000-0000-4000-8000-000000000001')<>3 then raise exception 'Organizer does not see every guest'; end if;
  if (select count(*) from public.profiles)<>4 then raise exception 'Organizer does not see every guest name'; end if;
 end $$;
 select set_config('request.jwt.claims','{"sub":"e3000000-0000-4000-8000-000000000005","role":"authenticated"}',true);
@@ -285,16 +305,16 @@ begin
  perform public.change_plan_v2(p,1,'Lake swim at dawn','',array['natural'],'2099-06-01 10:00+00','UTC','Lake','');
  -- A new photo clears the description; describing it again works at the new revision.
  r := public.set_plan_cover_if_current(p,b,a,3);
- if (select cover_description||':'||cover_revision from public.plans where id=p)<>':4' then raise exception 'New photo kept the old description'; end if;
+ if (select cover_description||':'||cover_revision from public.plans where id=p) is distinct from ':4' then raise exception 'New photo kept the old description'; end if;
  r := public.set_plan_cover_description(p,'A red kite',4);
  if r<>jsonb_build_object('cover_path',b,'cover_description','A red kite','cover_revision',5) then raise exception 'Describing the new photo failed: %', r; end if;
  -- Removing the photo removes the description.
  perform public.set_plan_cover_if_current(p,null,b,5);
- if (select cover_description||':'||cover_revision from public.plans where id=p)<>':6' then raise exception 'Removed photo kept its description'; end if;
+ if (select cover_description||':'||cover_revision from public.plans where id=p) is distinct from ':6' then raise exception 'Removed photo kept its description'; end if;
 end $$;
 reset role;
 do $$ begin
- if (select cover_revision from public.plans where id='e4100000-0000-4000-8000-000000000001')<>6 then raise exception 'Text edit moved the cover revision'; end if;
+ if (select cover_revision from public.plans where id='e4100000-0000-4000-8000-000000000001') is distinct from 6 then raise exception 'Text edit moved the cover revision'; end if;
  if exists(select 1 from private.notification_outbox where plan_id='e4100000-0000-4000-8000-000000000001' and kind='plan_changed') then raise exception 'A text edit notified the guest'; end if;
  -- Stored values stay valid.
  begin update public.plans set cover_description='x' where id='e4100000-0000-4000-8000-000000000002'; raise exception 'Description without photo stored'; exception when check_violation then null; end;
@@ -310,7 +330,7 @@ set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"e4000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 do $$ begin
  begin perform public.set_plan_cover_description('e4100000-0000-4000-8000-000000000001','Mine now',8); raise exception 'Guest described the cover'; exception when insufficient_privilege then null; end;
- if (select cover_description from public.plans where id='e4100000-0000-4000-8000-000000000001')<>'A heron' then raise exception 'Guest cannot read the description'; end if;
+ if (select cover_description from public.plans where id='e4100000-0000-4000-8000-000000000001') is distinct from 'A heron' then raise exception 'Guest cannot read the description'; end if;
 end $$;
 -- A cancelled event can't be described.
 select set_config('request.jwt.claims','{"sub":"e4000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
@@ -323,6 +343,6 @@ reset role;
 update public.profiles set deletion_requested_at=now() where id='e4000000-0000-4000-8000-000000000001';
 update public.plans set note='' where id='e4100000-0000-4000-8000-000000000001';
 do $$ begin
- if (select coalesce(cover_path,'none')||':'||cover_description from public.plans where id='e4100000-0000-4000-8000-000000000001')<>'none:' then raise exception 'Deleting owner kept the photo description'; end if;
+ if (select coalesce(cover_path,'none')||':'||cover_description from public.plans where id='e4100000-0000-4000-8000-000000000001') is distinct from 'none:' then raise exception 'Deleting owner kept the photo description'; end if;
 end $$;
 rollback;
