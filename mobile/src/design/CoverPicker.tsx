@@ -1,10 +1,11 @@
-import React, { useState } from "react";
-import { Image, Pressable, StyleSheet, View } from "react-native";
-import { Camera, Info, Trash2 } from "lucide-react-native";
-import { Button, Copy } from "./ui";
-import { IconButton, InfoSheet } from "./kit";
+import React, { useEffect, useState } from "react";
+import { Image, Pressable, StyleSheet, TextInput, View } from "react-native";
+import { Camera, Info, TextAlignStart, Trash2 } from "lucide-react-native";
+import { Button, Copy, ErrorNote } from "./ui";
+import { Chip, IconButton, InfoSheet } from "./kit";
 import { EventPictureView } from "./categories";
 import { colors as c, depth, fonts, r } from "./tokens";
+import { COVER_DESCRIPTION_MAX } from "../domain/covers";
 import type { EventPicture } from "../domain/events";
 import type { CoverControls } from "../state/useCoverPhoto";
 
@@ -15,7 +16,8 @@ const ROSE = "#963F58";
  * The What step's photo area (CE2 actions, steps v2 look): full width, first on the step.
  * Empty, it invites "Add a photo"; with a cover (or the idea's artwork) the picture fills it,
  * with no text over it. Add and Change open the system picker directly, so iOS never presents
- * it from a closing sheet; Remove and ⓘ (privacy) sit in the corner.
+ * it from a closing sheet; Remove and ⓘ (privacy) sit in the corner. A real photo gets a
+ * "Describe photo" chip just below it, never over it (UX2).
  */
 export function CoverPicker({
   cover,
@@ -27,6 +29,7 @@ export function CoverPicker({
   disabled?: boolean;
 }) {
   const [about, setAbout] = useState(false);
+  const [describing, setDescribing] = useState(false);
   const blocked = Boolean(disabled) || cover.busy || !cover.ready;
   const artwork = fallback.kind === "artwork";
   return (
@@ -81,6 +84,18 @@ export function CoverPicker({
           </View>
         </View>
       )}
+      {!cover.pending && !!cover.uri && (
+        <View style={{ alignSelf: "flex-start" }}>
+          <Chip
+            icon={TextAlignStart}
+            text={cover.description ? "Edit description" : "Describe photo"}
+            label={cover.description ? `Edit photo description, ${cover.description}` : "Describe photo"}
+            onPress={() => {
+              if (!blocked) setDescribing(true);
+            }}
+          />
+        </View>
+      )}
       {!!cover.message && (
         <Copy style={styles.hint} accessibilityLiveRegion="polite">
           {cover.message}
@@ -89,7 +104,44 @@ export function CoverPicker({
       <InfoSheet visible={about} title="Cover photos" onClose={() => setAbout(false)}>
         <Copy>{PRIVACY}</Copy>
       </InfoSheet>
+      <DescribeSheet visible={describing} cover={cover} onClose={() => setDescribing(false)} />
     </View>
+  );
+}
+
+/** One optional field, read aloud by VoiceOver. A failed or conflicting save keeps the sheet and the text. */
+function DescribeSheet({ visible, cover, onClose }: { visible: boolean; cover: CoverControls; onClose: () => void }) {
+  const [text, setText] = useState(cover.description);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (visible) {
+      setText(cover.description);
+      setError(null);
+    }
+    // Only on opening: later description changes must not overwrite what is being typed.
+  }, [visible]);
+  async function save() {
+    const failure = await cover.describe(text);
+    if (failure) setError(failure);
+    else onClose();
+  }
+  return (
+    <InfoSheet visible={visible} title="Describe photo" onClose={onClose}>
+      <TextInput
+        accessibilityLabel="Photo description"
+        placeholder="Two friends sharing a picnic by the lake"
+        placeholderTextColor={c.muted}
+        value={text}
+        onChangeText={setText}
+        maxLength={COVER_DESCRIPTION_MAX}
+        multiline
+        editable={!cover.busy}
+        style={styles.describe}
+      />
+      <Copy style={styles.hint}>VoiceOver reads this aloud for people who can’t see the photo.</Copy>
+      <ErrorNote message={error} />
+      <Button title="Save" onPress={() => void save()} loading={cover.busy} disabled={cover.busy} />
+    </InfoSheet>
   );
 }
 
@@ -140,4 +192,14 @@ const styles = StyleSheet.create({
   },
   corner: { position: "absolute", top: 12, right: 12, flexDirection: "row", gap: 8 },
   hint: { fontSize: 12, color: c.muted },
+  describe: {
+    minHeight: 96,
+    borderRadius: r.tile,
+    backgroundColor: c.surface,
+    padding: 14,
+    fontFamily: fonts.body,
+    fontSize: 16,
+    color: c.ink,
+    textAlignVertical: "top",
+  },
 });

@@ -86,6 +86,10 @@ try {
     buffer: await syntheticPng(preview, 3000, 1000),
   });
   await expect(preview.getByText("Preview cover stays in memory. Nothing is uploaded.", { exact: true })).toBeVisible();
+  await preview.getByRole("button", { name: "Describe photo", exact: true }).click();
+  await preview.getByLabel("Photo description", { exact: true }).fill("  Two mugs on a sill  ");
+  await preview.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(preview.getByRole("button", { name: "Edit photo description, Two mugs on a sill", exact: true })).toBeVisible();
   await next(preview);
   await next(preview);
   await preview.getByLabel("Meeting place", { exact: true }).fill("Riverside park");
@@ -96,6 +100,7 @@ try {
   await later(preview);
   await expect(preview.getByText("Cover picnic", { exact: true })).toBeVisible();
   await expect(preview.locator('img[src^="data:image/jpeg"]').first()).toBeAttached();
+  await expect(preview.getByRole("button", { name: /, Photo: Two mugs on a sill$/ })).toBeVisible();
   await preview.context().close();
   console.log("PASS: preview cover stays in memory and shows on the plan card.");
 
@@ -111,6 +116,7 @@ try {
   }, session);
   const plans = new Map();
   const uploads = [];
+  const descriptionCalls = [];
   let failNextLink = true;
   let coverBytes = Buffer.alloc(0);
   await page.route("**/*.supabase.co/**", async (route) => {
@@ -133,6 +139,7 @@ try {
     if (path === "/rest/v1/rpc/create_plan_v2") {
       const b = req.postDataJSON();
       plans.set(b.p_id, {
+        cover_description: "",
         id: b.p_id,
         owner_id: user.id,
         activity_id: b.p_activity,
@@ -176,10 +183,28 @@ try {
         return reply({ code: "40001", message: "The cover changed elsewhere" }, 409);
       }
       if (plan.cover_path !== p_path) {
+        plan.cover_description = "";
         plan.cover_path = p_path;
         plan.cover_revision++;
       }
       return reply({ cover_path: plan.cover_path, cover_revision: plan.cover_revision });
+    }
+    if (path === "/rest/v1/rpc/set_plan_cover_description") {
+      assert.equal(req.headers().authorization, `Bearer ${token}`);
+      const { p_plan, p_description, p_expected_revision } = req.postDataJSON();
+      const plan = plans.get(p_plan);
+      descriptionCalls.push({ p_description, p_expected_revision });
+      const text = p_description.trim();
+      const state = () => ({ cover_path: plan.cover_path, cover_description: plan.cover_description, cover_revision: plan.cover_revision });
+      if (plan.cover_revision !== p_expected_revision) {
+        if (plan.cover_description === text && plan.cover_revision === p_expected_revision + 1) return reply(state());
+        return reply({ code: "40001", message: "The cover changed elsewhere; reload before saving" }, 409);
+      }
+      if (plan.cover_description !== text) {
+        plan.cover_description = text;
+        plan.cover_revision++;
+      }
+      return reply(state());
     }
     if (path === "/auth/v1/logout") return reply({});
     return reply({ message: `Unexpected ${req.method()} ${path}` }, 400);
@@ -232,6 +257,61 @@ try {
   await expect(page.locator('img[src*="/object/sign/plan-covers/fixture.jpg"]').first()).toBeAttached();
   await expect(page.getByText("Your resbite is saved, but its cover photo hasn’t uploaded yet. Open Edit plan to retry.", { exact: true })).toHaveCount(0);
   console.log("PASS: signed-in cover uploads after save, retries from Edit, removes and re-adds.");
+
+  // UX2 photo description: held with a new event's photo and saved right after it; edited at once on a
+  // saved event; cleared by a new photo; a conflict keeps the sheet and the typed text.
+  await page.getByRole("button", { name: "New resbite", exact: true }).click();
+  await page.getByLabel("Name", { exact: true }).fill("Lake swim");
+  const swim = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Add cover photo", exact: true }).click();
+  await (await swim).setFiles({ name: "swim.png", mimeType: "image/png", buffer: await syntheticPng(page, 1600, 900) });
+  await page.getByRole("button", { name: "Describe photo", exact: true }).click();
+  await page.getByLabel("Photo description", { exact: true }).fill("Two swimmers at the jetty");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  assert.equal(descriptionCalls.length, 0, "Nothing is sent before the resbite exists");
+  await next(page);
+  await next(page);
+  await page.getByLabel("Meeting place", { exact: true }).fill("Lake");
+  await next(page);
+  await page.getByRole("checkbox", { name: "Natural", exact: true }).click();
+  await next(page);
+  await button(page, "Create").click();
+  await later(page);
+  const swimPlan = [...plans.values()].find((p) => p.title === "Lake swim");
+  assert.deepEqual(descriptionCalls, [{ p_description: "Two swimmers at the jetty", p_expected_revision: 1 }]);
+  assert.equal(swimPlan.cover_description, "Two swimmers at the jetty");
+  await expect(page.getByRole("button", { name: /, Photo: Two swimmers at the jetty$/ })).toBeVisible();
+  // A saved event: Review reads the description; editing it saves at once against the current revision.
+  await editEvent(page, "Lake swim");
+  await button(page, "Edit photo, Two swimmers at the jetty").click();
+  await page.getByRole("button", { name: "Edit photo description, Two swimmers at the jetty", exact: true }).click();
+  await page.getByLabel("Photo description", { exact: true }).fill("Three swimmers at the jetty");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByText("Photo description saved.", { exact: true })).toBeVisible();
+  assert.deepEqual(descriptionCalls.at(-1), { p_description: "Three swimmers at the jetty", p_expected_revision: 2 });
+  assert.equal(swimPlan.cover_revision, 3);
+  // A new photo clears the description.
+  const replace = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Change cover photo", exact: true }).click();
+  await (await replace).setFiles({ name: "swim2.png", mimeType: "image/png", buffer: await syntheticPng(page, 1600, 900) });
+  await expect(
+    page.getByText("Cover photo saved. The previous file stays in private storage until cleanup is available.", { exact: true }),
+  ).toBeVisible();
+  assert.equal(swimPlan.cover_description, "");
+  await expect(page.getByRole("button", { name: "Describe photo", exact: true })).toBeVisible();
+  // Another device changes the photo: the save is refused and the sheet keeps the typed text.
+  swimPlan.cover_revision++;
+  await page.getByRole("button", { name: "Describe photo", exact: true }).click();
+  await page.getByLabel("Photo description", { exact: true }).fill("Four swimmers");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(
+    page.getByText("The photo changed elsewhere. Reopen this resbite, then describe it again.", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Photo description", { exact: true })).toHaveValue("Four swimmers");
+  assert.equal(swimPlan.cover_description, "");
+  await page.getByRole("button", { name: "Close sheet", exact: true }).click();
+  await closeToList(page);
+  console.log("PASS: photo description: saved after a new event's photo, edited at once, cleared by a new photo, conflict kept in the sheet.");
 
   // 3. A pending cover change is cleared from the device by sign-out.
   const coverKeys = () =>

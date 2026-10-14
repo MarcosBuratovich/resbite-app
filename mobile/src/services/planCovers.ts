@@ -108,3 +108,48 @@ export function coverGateway(ownerId: string, planId: string): VersionedPhotoGat
     },
   };
 }
+
+export type CoverDescription = { path: string | null; description: string; revision: number };
+/** The photo changed elsewhere (40001); the description must be reopened, not retried. */
+export class CoverDescriptionConflict extends Error {}
+
+/**
+ * The organizer's photo description (UX2), bound to their captured session. It's saved on its own after
+ * the photo, against the cover revision; the database clears it whenever the photo changes.
+ */
+export function coverDescriptionGateway(ownerId: string, planId: string) {
+  let captured: ReturnType<typeof capturedProfileClient> | undefined;
+  const client = () => (captured ??= capturedProfileClient(ownerId));
+  return {
+    async read(): Promise<CoverDescription | null> {
+      const bound = await client();
+      const { data, error } = await withDeadline((signal) =>
+        bound
+          .from("plans")
+          .select("cover_path,cover_description,cover_revision")
+          .eq("id", planId)
+          .abortSignal(signal)
+          .maybeSingle(),
+      );
+      if (error) throw error;
+      return data
+        ? { path: data.cover_path, description: data.cover_description ?? "", revision: data.cover_revision }
+        : null;
+    },
+    async save(description: string, expectedRevision: number): Promise<CoverDescription> {
+      const bound = await client();
+      const { data, error } = await withDeadline((signal) =>
+        bound
+          .rpc("set_plan_cover_description", {
+            p_plan: planId,
+            p_description: description,
+            p_expected_revision: expectedRevision,
+          })
+          .abortSignal(signal),
+      );
+      if (error) throw error.code === "40001" ? new CoverDescriptionConflict(error.message) : error;
+      const row = data as { cover_path: string | null; cover_description: string; cover_revision: number };
+      return { path: row.cover_path, description: row.cover_description, revision: row.cover_revision };
+    },
+  };
+}

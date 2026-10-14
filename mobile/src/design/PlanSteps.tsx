@@ -451,7 +451,7 @@ export function ReviewStep({ editor, onJump }: { editor: PlanEditor; onJump: (pa
         place={place}
         chips={vibeChips(editor)}
         onPressPart={onJump}
-        partLabels={reviewLabels({ title: fields.title, startsAt: at, place, categories: fields.categories }, new Date())}
+        partLabels={reviewLabels({ title: fields.title, startsAt: at, place, categories: fields.categories, photo: cover.description }, new Date())}
       />
       {sourceTitle ? <Chip icon={Sparkles} tone="aqua" text={sourceTitle} label={`From the idea ${sourceTitle}`} /> : null}
       {/* The description is written on What (steps v2); here it shows, and a tap goes to What like the name. */}
@@ -524,6 +524,7 @@ export function InviteNext({ editor, onInvite }: { editor: PlanEditor; onInvite:
         heading={false}
         picture={pictureOf(editor)}
         uri={editor.cover.uri}
+        pictureLabel={editor.cover.description}
         title={editor.fields.title.trim()}
         startsAt={startIso(editor.start)}
         place={editor.place}

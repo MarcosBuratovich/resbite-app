@@ -1,6 +1,8 @@
 // Event cover photos (CE2): a private bucket with one folder per owner and plan.
 export const COVER_BUCKET = "plan-covers";
 export const COVER_MAX_DIMENSION = 1600;
+/** UX2: a cover photo description is at most 200 characters (the database checks the same). */
+export const COVER_DESCRIPTION_MAX = 200;
 export const UUID_PATTERN = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 const id = UUID_PATTERN;
 const scopePattern = new RegExp(`^${id}/${id}$`, "i");

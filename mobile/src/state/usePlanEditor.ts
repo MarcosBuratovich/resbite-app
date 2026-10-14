@@ -139,6 +139,11 @@ export function usePlanEditor({
     planId: planId ?? null,
     preview,
     previewUri: preview && planId ? (localPlans.find((p) => p.id === planId)?.cover_path ?? null) : null,
+    previewDescription: preview && planId ? (localPlans.find((p) => p.id === planId)?.cover_description ?? "") : "",
+    onPreviewDescribe: (text) => {
+      if (planId)
+        setLocalPlans((all) => all.map((p) => (p.id === planId ? { ...p, cover_description: text } : p)));
+    },
     onPreviewChange: (uri) => {
       if (planId)
         setLocalPlans((all) => all.map((p) => (p.id === planId ? { ...p, cover_path: uri } : p)));
@@ -326,7 +331,7 @@ export function usePlanEditor({
           requestId: requestId.current,
           original:
             original &&
-            (({ cover_path: _cover, cover_revision: _revision, ...rest }) => rest)(original),
+            (({ cover_path: _cover, cover_revision: _revision, cover_description: _description, ...rest }) => rest)(original),
           initial,
           title: fields.title,
           description: fields.description,
@@ -634,6 +639,7 @@ export function usePlanEditor({
             id: write.id,
             activity_id: write.activityId,
             cover_path: cover.uri,
+            cover_description: cover.description,
             ...write.details,
             status: "active",
             version: 1,
