@@ -62,3 +62,59 @@ select public.unregister_device('ExpoPushToken[synthetic]');
 reset role;
 do $$ begin if exists(select 1 from private.device_endpoints) then raise exception 'Own cleanup failed';end if;end $$;
 rollback;
+-- UX2: what the sender may say, and the send-time audience (20261014130000_ux2_notification_wording).
+begin;
+insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data) values
+ ('95000000-0000-4000-8000-000000000001','ux2w-owner@resbite-test.invalid',now(),'{}'),
+ ('95000000-0000-4000-8000-000000000002','ux2w-guest@resbite-test.invalid',now(),'{}');
+insert into private.tester_roster(email) values('ux2w-owner@resbite-test.invalid'),('ux2w-guest@resbite-test.invalid');
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"95000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.save_profile('Alex');
+select public.create_plan_v2('95100000-0000-4000-8000-000000000001','Picnic in the park','Secret description',array['natural'],null,'2099-10-17 09:00+00','Europe/London','Secret café','Secret note');
+select public.create_invite('95200000-0000-4000-8000-000000000001','95100000-0000-4000-8000-000000000001',repeat('c',64));
+select set_config('request.jwt.claims','{"sub":"95000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+select public.save_profile('Sam');
+select public.claim_invite(repeat('c',64));
+select public.respond('95100000-0000-4000-8000-000000000001','maybe',1);
+reset role;
+insert into private.device_endpoints(token,user_id,platform) values('ExpoPushToken[ux2owner]','95000000-0000-4000-8000-000000000001','ios');
+do $$ declare jobs jsonb; rsvp jsonb; joined jsonb; begin
+ jobs := public.claim_notification_deliveries();
+ select j into rsvp from jsonb_array_elements(jobs) j where j->>'kind'='rsvp';
+ select j into joined from jsonb_array_elements(jobs) j where j->>'kind'='invitation';
+ if rsvp->>'detail'<>'maybe' or rsvp->>'actor_name'<>'Sam' or rsvp->>'title'<>'Picnic in the park'
+    or rsvp->>'time_zone'<>'Europe/London' or (rsvp->>'starts_at')::timestamptz<>'2099-10-17 09:00+00' then
+  raise exception 'RSVP job lacks wording inputs: %', rsvp;
+ end if;
+ if joined->>'actor_name'<>'Sam' or joined ? 'detail' and joined->>'detail' is not null then raise exception 'Invitation job wrong: %', joined; end if;
+ if jobs::text like '%Secret%' then raise exception 'A job carries the place, note or description'; end if;
+ if rsvp ? 'place_label' or rsvp ? 'note' or rsvp ? 'description' or rsvp ? 'cover_description' then raise exception 'A job names a private field'; end if;
+end $$;
+-- A deleted actor is never named.
+insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,detail)
+ values('95100000-0000-4000-8000-000000000001','95000000-0000-4000-8000-000000000001','rsvp','ux2w-deleted','95000000-0000-4000-8000-000000000002','accepted');
+update public.profiles set deletion_requested_at=now() where id='95000000-0000-4000-8000-000000000002';
+do $$ declare j jsonb; begin
+ select x into j from jsonb_array_elements(public.claim_notification_deliveries()) x where x->>'outbox_id'=(select id::text from private.notification_outbox where dedupe_key='ux2w-deleted');
+ if j is null or j->>'actor_name' is not null then raise exception 'Deleted actor named or job missing: %', j; end if;
+end $$;
+update public.profiles set deletion_requested_at=null where id='95000000-0000-4000-8000-000000000002';
+-- The send-time audience: a change notice reaches Sam only while Sam may still come.
+insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,detail)
+ values('95100000-0000-4000-8000-000000000001','95000000-0000-4000-8000-000000000002','plan_changed','ux2w-change','95000000-0000-4000-8000-000000000001','time');
+do $$ declare o bigint := (select id from private.notification_outbox where dedupe_key='ux2w-change'); begin
+ if not private.notification_recipient_eligible(o) then raise exception 'Maybe guest not eligible for a change notice'; end if;
+ update public.attendees set response='declined' where user_id='95000000-0000-4000-8000-000000000002';
+ if private.notification_recipient_eligible(o) then raise exception 'Declined guest still eligible for a change notice'; end if;
+ update public.attendees set response='pending' where user_id='95000000-0000-4000-8000-000000000002';
+ if not private.notification_recipient_eligible(o) then raise exception 'Unanswered guest not eligible for a change notice'; end if;
+end $$;
+-- A cancellation still reaches someone who said Can't make it.
+insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id)
+ values('95100000-0000-4000-8000-000000000001','95000000-0000-4000-8000-000000000002','plan_cancelled','ux2w-cancel','95000000-0000-4000-8000-000000000001');
+update public.attendees set response='declined' where user_id='95000000-0000-4000-8000-000000000002';
+do $$ begin
+ if not private.notification_recipient_eligible((select id from private.notification_outbox where dedupe_key='ux2w-cancel')) then raise exception 'Declined guest not told about the cancellation'; end if;
+end $$;
+rollback;
