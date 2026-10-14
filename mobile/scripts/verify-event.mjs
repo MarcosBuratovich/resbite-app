@@ -72,14 +72,15 @@ try {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
   const page = await context.newPage();
   page.on("pageerror", (e) => errors.push(e.message));
-  await page.addInitScript((s) => {
+  const init = (s) => {
     sessionStorage.setItem("sb-ewcsgvhuojxdpaspwsrx-auth-token", JSON.stringify(s));
     window.open = (url) => {
       if (window.__blockOpen) throw new Error("Fixture: Maps blocked");
       window.__opened = String(url);
       return null;
     };
-  }, session);
+  };
+  await page.addInitScript(init, session);
   const plans = new Map([
     [hosted.id, { ...hosted }],
     [invited.id, { ...invited }],
@@ -95,7 +96,8 @@ try {
   const responses = [];
   const cancels = [];
   const edits = [];
-  await page.route("**/*.supabase.co/**", async (route) => {
+  const editBodies = [];
+  const stub = async (route) => {
     const req = route.request();
     const url = new URL(req.url());
     const path = url.pathname;
@@ -169,6 +171,7 @@ try {
       }
       assert.equal(body.p_version, plan.version);
       edits.push(body.p_plan);
+      editBodies.push(body);
       Object.assign(plan, {
         title: body.p_title.trim(),
         description: body.p_description,
@@ -182,7 +185,8 @@ try {
       return reply(plan.version);
     }
     return reply({ message: `Unexpected ${req.method()} ${path}` }, 400);
-  });
+  };
+  await page.route("**/*.supabase.co/**", stub);
 
   // Organizer.
   await page.goto(`${base}/event?plan=${hosted.id}`);
@@ -297,23 +301,36 @@ try {
   );
 
   // UX2-D1: a saved edit returns to its event page with "Changes saved"; Back then leaves for My resbites.
-  await page.goto(`${base}/event?plan=${edited.id}`);
-  await expect(page.getByRole("heading", { name: "Picnic", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Edit Picnic", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Looks good?", exact: true })).toBeVisible();
-  await visible(page.getByRole("button", { name: "Edit name, Picnic", exact: true })).click();
-  await visible(page.getByLabel("Name", { exact: true })).fill("Picnic by the lake");
-  await visible(page.getByRole("button", { name: "Done", exact: true })).click();
-  await expect(page.getByRole("heading", { name: "Looks good?", exact: true })).toBeVisible();
-  await visible(page.getByRole("button", { name: "Save", exact: true })).click();
-  await expect(page.getByRole("heading", { name: "Picnic by the lake", exact: true })).toBeVisible();
-  await expect(page.getByText("Changes saved", { exact: true })).toBeVisible();
-  await expect(page).toHaveURL(new RegExp(`/event\\?plan=${edited.id}`));
+  // Edited from a device in another zone: a title-only edit must keep the event's stored zone and instant.
+  const tokyo = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    reducedMotion: "reduce",
+    timezoneId: "Asia/Tokyo",
+  });
+  const tPage = await tokyo.newPage();
+  tPage.on("pageerror", (e) => errors.push(e.message));
+  await tPage.addInitScript(init, session);
+  await tPage.route("**/*.supabase.co/**", stub);
+  await tPage.goto(`${base}/event?plan=${edited.id}`);
+  await expect(tPage.getByRole("heading", { name: "Picnic", exact: true })).toBeVisible();
+  await tPage.getByRole("button", { name: "Edit Picnic", exact: true }).click();
+  await expect(tPage.getByRole("heading", { name: "Looks good?", exact: true })).toBeVisible();
+  await visible(tPage.getByRole("button", { name: "Edit name, Picnic", exact: true })).click();
+  await visible(tPage.getByLabel("Name", { exact: true })).fill("Picnic by the lake");
+  await visible(tPage.getByRole("button", { name: "Done", exact: true })).click();
+  await expect(tPage.getByRole("heading", { name: "Looks good?", exact: true })).toBeVisible();
+  await visible(tPage.getByRole("button", { name: "Save", exact: true })).click();
+  await expect(tPage.getByRole("heading", { name: "Picnic by the lake", exact: true })).toBeVisible();
+  await expect(tPage.getByText("Changes saved", { exact: true })).toBeVisible();
+  await expect(tPage).toHaveURL(new RegExp(`/event\\?plan=${edited.id}`));
   assert.deepEqual(edits, [edited.id]);
-  await page.getByRole("button", { name: "Back", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "My resbites", exact: true })).toBeVisible();
-  await expect(page.getByText("Changes saved", { exact: true })).toHaveCount(0);
-  console.log("PASS: a saved edit returns to its event page with Changes saved; Back goes to My resbites.");
+  assert.equal(editBodies[0].p_zone, "UTC");
+  assert.equal(Date.parse(editBodies[0].p_start), Date.parse(edited.starts_at));
+  await tPage.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(tPage.getByRole("heading", { name: "My resbites", exact: true })).toBeVisible();
+  await expect(tPage.getByText("Changes saved", { exact: true })).toHaveCount(0);
+  await tokyo.close();
+  console.log("PASS: a saved edit returns to its event page with Changes saved; Back goes to My resbites; a title-only edit from another time zone keeps the stored zone and instant.");
 
   // Invitee. A failed guest read makes the whole event unavailable, never a partial page; Refresh recovers.
   failGuests = true;
