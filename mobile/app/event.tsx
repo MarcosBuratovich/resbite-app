@@ -1,10 +1,11 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Alert, Linking, Platform, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams, usePathname } from "expo-router";
 import * as Crypto from "expo-crypto";
 import {
   ArrowLeft,
+  Check,
   Ellipsis,
   MapPin,
   MessageCircle,
@@ -16,25 +17,39 @@ import {
   Trash2,
   Users,
 } from "lucide-react-native";
-import { Button, Copy, ErrorNote, s } from "../src/design/ui";
+import { Button, Copy, ErrorNote, Reveal, s } from "../src/design/ui";
 import { AvatarStack, Chip, chipToneFor, CoverCard, IconButton, InfoSheet, Segmented, Tile } from "../src/design/kit";
 import { PreviewNotice } from "../src/design/Chrome";
 import { categoryIcons } from "../src/design/categories";
 import { colors as c, fonts } from "../src/design/tokens";
 import { categoryLabels } from "../src/domain/categories";
 import { eventPicture } from "../src/domain/events";
-import { againConflict, againDraft, cardChips, guestArea, guestGroups, mapsUrl } from "../src/domain/eventView";
+import { againConflict, againDraft, cardChips, coverNotice, guestArea, guestGroups, mapsUrl } from "../src/domain/eventView";
 import { canEditPlan } from "../src/domain/plans";
 import { answerKey, canReadSample, canRespond, responseFor } from "../src/domain/rsvp";
 import { drafts } from "../src/services/drafts";
 import { useApp } from "../src/state/AppState";
 import { useEvent } from "../src/state/useEvent";
 
+// The last saved-edit notice already shown, so a remount or web history restoring the same URL never
+// repeats it (as on My resbites). Each save passes a fresh `notice` id (UX2-D1).
+let shownNotice: string | undefined;
+
 /** One page for both roles (spec "Event page"): /event?plan=<id>. */
 export default function EventPage() {
-  const { plan: planId } = useLocalSearchParams<{ plan?: string }>();
+  const { plan: planId, notice, cover } = useLocalSearchParams<{ plan?: string; notice?: string; cover?: string }>();
   const { session, preview } = useApp();
   const event = useEvent(planId);
+  const pathname = usePathname();
+  const [toast, setToast] = useState<string>();
+  useEffect(() => {
+    // Leaving the event page ends the toast; a notice id is shown at most once.
+    if (pathname !== "/event") setToast(undefined);
+    else if (notice && notice !== shownNotice) {
+      shownNotice = notice;
+      setToast(notice);
+    }
+  }, [notice, pathname]);
   const [more, setMore] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [guestsOpen, setGuestsOpen] = useState(false);
@@ -142,6 +157,14 @@ export default function EventPage() {
           <IconButton icon={ArrowLeft} label="Back" onPress={back} />
           <PreviewNotice dismissible={false} />
         </View>
+        {!!notice && toast === notice && (
+          <Reveal style={{ alignSelf: "flex-start" }}>
+            <View accessibilityLiveRegion="polite">
+              <Chip icon={Check} tone="aqua" text={preview ? "Preview changes saved" : "Changes saved"} />
+            </View>
+          </Reveal>
+        )}
+        <ErrorNote message={coverNotice(cover)} />
         <CoverCard
           hero
           picture={eventPicture(current)}

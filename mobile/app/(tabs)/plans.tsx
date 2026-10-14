@@ -31,7 +31,7 @@ type Attendee = {
 
 export default function Plans() {
   const largeText = useLargeText();
-  const { created, updated, cover, notice } = useLocalSearchParams(),
+  const { created, cover, notice } = useLocalSearchParams(),
     { preview, localPlans, session } = useApp(),
     [plans, setPlans] = useState<LocalPlan[]>([]),
     [busy, setBusy] = useState(false),
@@ -145,7 +145,7 @@ export default function Plans() {
     });
   const start = () => router.push("/arrange");
   const open = (p: LocalPlan) => {
-    router.setParams({ created: "0", updated: "0", cover: "none" });
+    router.setParams({ created: "0", cover: "none" });
     router.push({ pathname: "/event", params: { plan: p.id } });
   };
   const noticeId = typeof notice === "string" ? notice : undefined;
@@ -162,10 +162,6 @@ export default function Plans() {
   const toast =
     !noticeId || toastNotice !== noticeId
       ? null
-      : updated === "1"
-      ? preview
-        ? "Preview changes saved"
-        : "Changes saved"
       : created === "1"
         ? preview
           ? "Preview saved"
@@ -180,7 +176,7 @@ export default function Plans() {
         refreshControl={<RefreshControl refreshing={busy} onRefresh={refresh} />}
       >
         <View style={styles.header}>
-          <Title>{segment === "past" ? "Past" : "Upcoming"}</Title>
+          <Title>My resbites</Title>
           <IconButton icon={UserRound} label="Your profile" onPress={() => router.navigate("/profile")} />
         </View>
         <PreviewNotice />

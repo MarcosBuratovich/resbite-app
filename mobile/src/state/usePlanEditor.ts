@@ -488,20 +488,16 @@ export function usePlanEditor({
   useEffect(() => {
     if (!saved) return;
     // UX1: a new event shows the Invite screen (benchmark row 1), whose "Later" dismisses
-    // to My resbites with created=1. Edits and discards route exactly as before.
+    // to My resbites with created=1. Edits return to the event page (UX2-D1), discards to My resbites.
     if (!discarded.current && !planId && createdId.current) {
       setCreated({ planId: createdId.current, cover: coverOutcome.current });
       return;
     }
-    router.dismissTo({
-      pathname: "/plans",
-      params: {
-        created: "0",
-        notice: Date.now().toString(36),
-        updated: !discarded.current && planId ? "1" : "0",
-        cover: coverOutcome.current,
-      },
-    });
+    const notice = Date.now().toString(36);
+    // UX2-D1: a saved edit returns to its event page; a discard returns to My resbites.
+    if (!discarded.current && planId)
+      router.dismissTo({ pathname: "/event", params: { plan: planId, notice, cover: coverOutcome.current } });
+    else router.dismissTo({ pathname: "/plans", params: { created: "0", notice, cover: coverOutcome.current } });
   }, [saved, planId]);
 
   function discardDraft() {

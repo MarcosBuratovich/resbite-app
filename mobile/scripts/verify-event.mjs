@@ -59,6 +59,14 @@ const invited = {
   cover_revision: 1,
   cover_description: "Two mugs on a window sill",
 };
+const edited = {
+  ...hosted,
+  id: "55555555-5555-4555-8555-555555555555",
+  title: "Picnic",
+  description: "",
+  place_label: "Park",
+  note: "",
+};
 const errors = [];
 try {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
@@ -75,6 +83,7 @@ try {
   const plans = new Map([
     [hosted.id, { ...hosted }],
     [invited.id, { ...invited }],
+    [edited.id, { ...edited }],
   ]);
   let attendee = { version: 1, response: "pending" };
   let failGuests = false;
@@ -85,6 +94,7 @@ try {
     planReads = 0;
   const responses = [];
   const cancels = [];
+  const edits = [];
   await page.route("**/*.supabase.co/**", async (route) => {
     const req = route.request();
     const url = new URL(req.url());
@@ -145,16 +155,30 @@ try {
     }
     if (path === "/rest/v1/rpc/change_plan_v2") {
       const body = req.postDataJSON();
-      assert.equal(body.p_cancel, true);
-      if (failCancel) {
-        failCancel = false;
-        failPlanRead = true;
-        return reply({ message: "Fixture: cancel reply lost" }, 500);
-      }
-      cancels.push(body.p_plan);
       const plan = plans.get(body.p_plan);
-      plan.status = "cancelled";
-      plan.version++;
+      if (body.p_cancel) {
+        if (failCancel) {
+          failCancel = false;
+          failPlanRead = true;
+          return reply({ message: "Fixture: cancel reply lost" }, 500);
+        }
+        cancels.push(body.p_plan);
+        plan.status = "cancelled";
+        plan.version++;
+        return reply(plan.version);
+      }
+      assert.equal(body.p_version, plan.version);
+      edits.push(body.p_plan);
+      Object.assign(plan, {
+        title: body.p_title.trim(),
+        description: body.p_description,
+        categories: body.p_categories,
+        starts_at: body.p_start,
+        time_zone: body.p_zone,
+        place_label: body.p_place.trim(),
+        note: body.p_note,
+        version: plan.version + 1,
+      });
       return reply(plan.version);
     }
     return reply({ message: `Unexpected ${req.method()} ${path}` }, 400);
@@ -271,6 +295,25 @@ try {
   console.log(
     "PASS: organizer event page: guests, Open in Maps (and its failure note), Edit at Review, Do this again at When with a replace guard, an unconfirmed cancel with Refresh event, cancel.",
   );
+
+  // UX2-D1: a saved edit returns to its event page with "Changes saved"; Back then leaves for My resbites.
+  await page.goto(`${base}/event?plan=${edited.id}`);
+  await expect(page.getByRole("heading", { name: "Picnic", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Edit Picnic", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Looks good?", exact: true })).toBeVisible();
+  await visible(page.getByRole("button", { name: "Edit name, Picnic", exact: true })).click();
+  await visible(page.getByLabel("Name", { exact: true })).fill("Picnic by the lake");
+  await visible(page.getByRole("button", { name: "Done", exact: true })).click();
+  await expect(page.getByRole("heading", { name: "Looks good?", exact: true })).toBeVisible();
+  await visible(page.getByRole("button", { name: "Save", exact: true })).click();
+  await expect(page.getByRole("heading", { name: "Picnic by the lake", exact: true })).toBeVisible();
+  await expect(page.getByText("Changes saved", { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`/event\\?plan=${edited.id}`));
+  assert.deepEqual(edits, [edited.id]);
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "My resbites", exact: true })).toBeVisible();
+  await expect(page.getByText("Changes saved", { exact: true })).toHaveCount(0);
+  console.log("PASS: a saved edit returns to its event page with Changes saved; Back goes to My resbites.");
 
   // Invitee. A failed guest read makes the whole event unavailable, never a partial page; Refresh recovers.
   failGuests = true;

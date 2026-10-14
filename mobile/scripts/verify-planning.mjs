@@ -74,6 +74,9 @@ try {
   await expect(page.getByLabel("Meeting place", { exact: true })).toHaveValue("The riverside café");
   await next(page);
   await button(page, "Save preview").click();
+  // UX2-D1: a saved edit returns to its event page; Back leads on to My resbites.
+  await expect(page.getByText("Preview changes saved", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
   await expect(page.getByText("The riverside café", { exact: true })).toBeVisible();
   await expect(page.getByText("The garden café", { exact: true })).toHaveCount(0);
   await expect.poll(recent).toBe(JSON.stringify(["The riverside café", "The garden café"]));
@@ -139,6 +142,7 @@ try {
     await legacy.getByRole("tab", { name: "My resbites", exact: true }).click();
     await button(legacy, /^Continue draft/).click();
     await button(legacy, "Save preview").click();
+    await legacy.getByRole("button", { name: "Back", exact: true }).click();
     await expect(card(legacy, "Coffee together")).toBeVisible();
     console.log("PASS: legacy preview edit draft restores event fields from its idea.");
     await legacy.context().close();

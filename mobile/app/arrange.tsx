@@ -163,7 +163,6 @@ export default function Arrange() {
       pathname: "/plans",
       params: {
         created: "1",
-        updated: "0",
         cover: editor.created?.cover ?? "none",
         notice: Date.now().toString(36),
       },
