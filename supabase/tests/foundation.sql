@@ -49,7 +49,7 @@ do $$ begin
  if (select version from public.attendees)<>2 then raise exception 'Retry changed version'; end if;
  if (select count(*) from public.plans)<>1 then raise exception 'Invitee cannot read plan'; end if;
  begin perform public.respond('20000000-0000-4000-8000-000000000001','declined',1); raise exception 'Stale write allowed'; exception when serialization_failure then null; end;
- begin perform public.change_plan('20000000-0000-4000-8000-000000000001',1,now()+interval '2 days','Europe/London','Other','',false); raise exception 'Nonowner edit allowed'; exception when insufficient_privilege then null; end;
+ begin perform public.change_plan_v2('20000000-0000-4000-8000-000000000001',1,'Test activity','',array['creative'],now()+interval '2 days','Europe/London','Other','',false); raise exception 'Nonowner edit allowed'; exception when insufficient_privilege then null; end;
 end $$;
 select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000005","role":"authenticated"}',true);
 do $$ begin
@@ -64,13 +64,13 @@ do $$ begin
  begin perform public.claim_invite(repeat('b',64)); raise exception 'Revoked token claimed'; exception when insufficient_privilege then null; end;
 end $$;
 select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
-select public.change_plan('20000000-0000-4000-8000-000000000001',1,now()+interval '3 days','Europe/London','Updated studio','Bring paper',false);
+select public.change_plan_v2('20000000-0000-4000-8000-000000000001',1,'Test activity','',array['creative'],now()+interval '3 days','Europe/London','Updated studio','Bring paper',false);
 do $$ begin
  if (select place_label from public.plans where id='20000000-0000-4000-8000-000000000001')<>'Updated studio' then raise exception 'Owner edit did not save'; end if;
  if (select response from public.attendees where user_id='10000000-0000-4000-8000-000000000002')<>'accepted' then raise exception 'Edit cleared RSVP'; end if;
- begin perform public.change_plan('20000000-0000-4000-8000-000000000001',1,now()+interval '4 days','Europe/London','Stale studio','',false); raise exception 'Stale owner edit accepted'; exception when serialization_failure then null; end;
+ begin perform public.change_plan_v2('20000000-0000-4000-8000-000000000001',1,'Test activity','',array['creative'],now()+interval '4 days','Europe/London','Stale studio','',false); raise exception 'Stale owner edit accepted'; exception when serialization_failure then null; end;
 end $$;
-select public.change_plan('20000000-0000-4000-8000-000000000001',2,null,null,null,null,true);
+select public.change_plan_v2('20000000-0000-4000-8000-000000000001',2,null,null,null,null,null,null,null,true);
 select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 do $$ begin
  begin perform public.respond('20000000-0000-4000-8000-000000000001','declined',2); raise exception 'Cancelled plan RSVP allowed'; exception when invalid_parameter_value then null; end;

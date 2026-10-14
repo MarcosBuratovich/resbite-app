@@ -69,3 +69,87 @@ do $$ begin
  exception when check_violation then null; end;
 end $$;
 rollback;
+
+-- Block 2: change notices only for a new time or place, to people who may still come (Task 2).
+begin;
+insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data) values
+ ('e2000000-0000-4000-8000-000000000001','ux2-2-owner@resbite-test.invalid',now(),'{}'),
+ ('e2000000-0000-4000-8000-000000000002','ux2-2-going@resbite-test.invalid',now(),'{}'),
+ ('e2000000-0000-4000-8000-000000000003','ux2-2-maybe@resbite-test.invalid',now(),'{}'),
+ ('e2000000-0000-4000-8000-000000000004','ux2-2-pending@resbite-test.invalid',now(),'{}'),
+ ('e2000000-0000-4000-8000-000000000005','ux2-2-declined@resbite-test.invalid',now(),'{}'),
+ ('e2000000-0000-4000-8000-000000000006','ux2-2-withdrawn@resbite-test.invalid',now(),'{}');
+insert into private.tester_roster(email) values
+ ('ux2-2-owner@resbite-test.invalid'),('ux2-2-going@resbite-test.invalid'),('ux2-2-maybe@resbite-test.invalid'),
+ ('ux2-2-pending@resbite-test.invalid'),('ux2-2-declined@resbite-test.invalid'),('ux2-2-withdrawn@resbite-test.invalid');
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e2000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.save_profile('Owner two');
+select public.create_plan_v2('e2100000-0000-4000-8000-000000000001','Picnic','Bring a rug',array['natural'],null,'2099-06-01 10:00+00','UTC','Park','Gate B');
+select public.create_invite('e2200000-0000-4000-8000-000000000002','e2100000-0000-4000-8000-000000000001',repeat('2',64));
+select public.create_invite('e2200000-0000-4000-8000-000000000003','e2100000-0000-4000-8000-000000000001',repeat('3',64));
+select public.create_invite('e2200000-0000-4000-8000-000000000004','e2100000-0000-4000-8000-000000000001',repeat('4',64));
+select public.create_invite('e2200000-0000-4000-8000-000000000005','e2100000-0000-4000-8000-000000000001',repeat('5',64));
+select public.create_invite('e2200000-0000-4000-8000-000000000006','e2100000-0000-4000-8000-000000000001',repeat('6',64));
+select set_config('request.jwt.claims','{"sub":"e2000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+select public.save_profile('Going'); select public.claim_invite(repeat('2',64));
+select public.respond('e2100000-0000-4000-8000-000000000001','accepted',1);
+select set_config('request.jwt.claims','{"sub":"e2000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
+select public.save_profile('Maybe'); select public.claim_invite(repeat('3',64));
+select public.respond('e2100000-0000-4000-8000-000000000001','maybe',1);
+select set_config('request.jwt.claims','{"sub":"e2000000-0000-4000-8000-000000000004","role":"authenticated"}',true);
+select public.save_profile('Pending'); select public.claim_invite(repeat('4',64));
+select set_config('request.jwt.claims','{"sub":"e2000000-0000-4000-8000-000000000005","role":"authenticated"}',true);
+select public.save_profile('Declined'); select public.claim_invite(repeat('5',64));
+select public.respond('e2100000-0000-4000-8000-000000000001','declined',1);
+select set_config('request.jwt.claims','{"sub":"e2000000-0000-4000-8000-000000000006","role":"authenticated"}',true);
+select public.save_profile('Withdrawn'); select public.claim_invite(repeat('6',64));
+select public.respond('e2100000-0000-4000-8000-000000000001','accepted',1);
+select public.respond('e2100000-0000-4000-8000-000000000001','withdrawn',2);
+select set_config('request.jwt.claims','{"sub":"e2000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+-- v2: name, description, vibe and note only; the same instant and the same place padded with spaces.
+select public.change_plan_v2('e2100000-0000-4000-8000-000000000001',1,'Big picnic','Bring two rugs',array['natural','community'],'2099-06-01 12:00+02','UTC','  Park ','Gate C');
+reset role;
+do $$ begin
+ if exists(select 1 from private.notification_outbox where kind='plan_changed' and plan_id='e2100000-0000-4000-8000-000000000001') then raise exception 'A text-only edit notified someone'; end if;
+end $$;
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e2000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+-- v3: same instant, another time zone. The shown time moves, so it is a time change.
+select public.change_plan_v2('e2100000-0000-4000-8000-000000000001',2,'Big picnic','Bring two rugs',array['natural','community'],'2099-06-01 10:00+00','Europe/London','Park','Gate C');
+-- v4: new place only.
+select public.change_plan_v2('e2100000-0000-4000-8000-000000000001',3,'Big picnic','Bring two rugs',array['natural','community'],'2099-06-01 10:00+00','Europe/London','Lake','Gate C');
+-- v5: new time and new place.
+select public.change_plan_v2('e2100000-0000-4000-8000-000000000001',4,'Big picnic','Bring two rugs',array['natural','community'],'2099-06-02 10:00+00','Europe/London','Hill','Gate C');
+reset role;
+do $$ declare v integer; d text; begin
+ for v, d in select * from (values (3,'time'),(4,'place'),(5,'time_place')) as t(v,d) loop
+  -- Going, Maybe and not-yet-answered invitees only; never the organizer, never Can't make it.
+  if (select string_agg(recipient_id::text,',' order by recipient_id) from private.notification_outbox
+      where kind='plan_changed' and dedupe_key like 'plan:e2100000-0000-4000-8000-000000000001:'||v||':%'
+        and detail=d and actor_id='e2000000-0000-4000-8000-000000000001')
+     is distinct from 'e2000000-0000-4000-8000-000000000002,e2000000-0000-4000-8000-000000000003,e2000000-0000-4000-8000-000000000004' then
+   raise exception 'Version % did not notify exactly Going, Maybe and Pending with detail %', v, d;
+  end if;
+ end loop;
+end $$;
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e2000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+-- The old edit function is switched off.
+do $$ begin
+ begin perform public.change_plan('e2100000-0000-4000-8000-000000000001',5,'2099-06-03 10:00+00','UTC','Elsewhere','',false); raise exception 'Old edit function still callable'; exception when insufficient_privilege then null; end;
+end $$;
+-- v6: cancel tells every invitee, whatever they answered.
+select public.change_plan_v2('e2100000-0000-4000-8000-000000000001',5,null,null,null,null,null,null,null,true);
+reset role;
+do $$ begin
+ if (select count(*) from private.notification_outbox where kind='plan_cancelled' and plan_id='e2100000-0000-4000-8000-000000000001'
+     and actor_id='e2000000-0000-4000-8000-000000000001' and detail is null)<>5 then raise exception 'Cancel did not notify all five invitees'; end if;
+ if has_function_privilege('authenticated','public.change_plan(uuid,integer,timestamptz,text,text,text,boolean)','execute')
+    or has_function_privilege('authenticated','private.change_plan(uuid,integer,timestamptz,text,text,text,boolean)','execute') then
+  raise exception 'Old edit function still granted';
+ end if;
+ if not has_function_privilege('authenticated','public.change_plan_v2(uuid,integer,text,text,text[],timestamptz,text,text,text,boolean)','execute') then raise exception 'change_plan_v2 lost its grant'; end if;
+ if not (select prosecdef from pg_proc where oid='private.change_plan_v2(uuid,integer,text,text,text[],timestamptz,text,text,text,boolean)'::regprocedure) then raise exception 'change_plan_v2 lost definer rights'; end if;
+end $$;
+rollback;

@@ -119,20 +119,20 @@ do $$ begin
 end $$;
 reset role;
 do $$ begin
- if not exists(select 1 from private.notification_outbox where plan_id='a2000000-0000-4000-8000-000000000001' and recipient_id='a1000000-0000-4000-8000-000000000002' and kind='plan_changed') then raise exception 'Invitee not told about the edit'; end if;
+ -- UX2: same time and place, so nobody is told (title, description, vibe and note never notify).
+ if exists(select 1 from private.notification_outbox where plan_id='a2000000-0000-4000-8000-000000000001' and kind='plan_changed') then raise exception 'Text-only edit notified the invitee'; end if;
 end $$;
 
--- The legacy change_plan leaves event text alone; cancelling ignores the other arguments.
+-- The old change_plan is switched off in UX2; cancelling ignores the other arguments.
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"a1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
-select public.change_plan('a2000000-0000-4000-8000-000000000001',2,now()+interval '1 day','Europe/London','New place','Bring wine',false);
 do $$ begin
- if (select title from public.plans where id='a2000000-0000-4000-8000-000000000001')<>'Dinner & games' then raise exception 'Legacy edit lost the title'; end if;
+ begin perform public.change_plan('a2000000-0000-4000-8000-000000000001',2,now()+interval '1 day','Europe/London','New place','Bring wine',false); raise exception 'Old edit function still callable'; exception when insufficient_privilege then null; end;
 end $$;
-select public.change_plan_v2('a2000000-0000-4000-8000-000000000001',3,null,null,null,null,null,null,null,true);
+select public.change_plan_v2('a2000000-0000-4000-8000-000000000001',2,null,null,null,null,null,null,null,true);
 do $$ begin
  if (select status||'|'||title from public.plans where id='a2000000-0000-4000-8000-000000000001')<>'cancelled|Dinner & games' then raise exception 'Cancel failed or changed the title'; end if;
- begin perform public.change_plan_v2('a2000000-0000-4000-8000-000000000001',4,null,null,null,null,null,null,null,true); raise exception 'Cancelled twice'; exception when invalid_parameter_value then null; end;
+ begin perform public.change_plan_v2('a2000000-0000-4000-8000-000000000001',3,null,null,null,null,null,null,null,true); raise exception 'Cancelled twice'; exception when invalid_parameter_value then null; end;
 end $$;
 reset role;
 do $$ begin

@@ -56,3 +56,46 @@ begin
  insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id) values(v_inv.plan_id,v_plan.owner_id,'invitation','invite:'||v_inv.id,v_uid) on conflict do nothing;
  return v_inv.plan_id;
 end $$;
+
+-- Only a new time or place notifies, and only people who may still come; cancelling tells everyone (UX-P4).
+-- Otherwise the 20261007150000_custom_events body.
+create or replace function private.change_plan_v2(p_plan uuid,p_version integer,p_title text,p_description text,p_categories text[],p_start timestamptz,p_zone text,p_place text,p_note text,p_cancel boolean default false)
+returns integer language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := private.require_tester(); v_plan public.plans; v_next integer; v_cancel boolean := coalesce(p_cancel,false);
+ v_time boolean; v_place boolean;
+begin
+ select * into v_plan from public.plans where id=p_plan for update;
+ if not found or v_plan.owner_id<>v_uid then raise exception 'Owner required' using errcode='42501'; end if;
+ if v_plan.status<>'active' or v_plan.starts_at<=now() then raise exception 'Plan unavailable' using errcode='22023'; end if;
+ if p_version is distinct from v_plan.version then raise exception 'Plan changed; refresh' using errcode='40001'; end if;
+ if not v_cancel and (p_start is null or p_start<=now() or not exists(select 1 from pg_catalog.pg_timezone_names where name=p_zone)) then raise exception 'Invalid future schedule' using errcode='22023'; end if;
+ v_next := v_plan.version+1;
+ if v_cancel then
+  -- Terminal; the other arguments are ignored.
+  update public.plans set status='cancelled',version=v_next where id=p_plan;
+  update private.invitations set revoked_at=now() where plan_id=p_plan and revoked_at is null;
+  insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id)
+  select p_plan,a.user_id,'plan_cancelled','plan:'||p_plan||':'||v_next||':'||a.user_id,v_uid
+  from public.attendees a where a.plan_id=p_plan and a.user_id<>v_uid on conflict do nothing;
+ else
+  -- A zone change at the same instant moves the shown time, so it counts as a time change.
+  v_time := p_start is distinct from v_plan.starts_at or p_zone is distinct from v_plan.time_zone;
+  v_place := btrim(p_place) is distinct from v_plan.place_label;
+  update public.plans set title=btrim(p_title),description=coalesce(p_description,''),categories=p_categories,
+   starts_at=p_start,time_zone=p_zone,place_label=btrim(p_place),note=coalesce(p_note,''),latitude=null,longitude=null,version=v_next
+  where id=p_plan;
+  if v_time or v_place then
+   insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,detail)
+   select p_plan,a.user_id,'plan_changed','plan:'||p_plan||':'||v_next||':'||a.user_id,v_uid,
+    case when v_time and v_place then 'time_place' when v_time then 'time' else 'place' end
+   from public.attendees a
+   where a.plan_id=p_plan and a.user_id<>v_uid and a.response in ('accepted','maybe','pending')
+   on conflict do nothing;
+  end if;
+ end if;
+ return v_next;
+end $$;
+
+-- The first "change event" function would bypass these rules; the app has used change_plan_v2 since CE1.
+revoke execute on function public.change_plan(uuid,integer,timestamptz,text,text,text,boolean) from authenticated;
+revoke execute on function private.change_plan(uuid,integer,timestamptz,text,text,text,boolean) from authenticated;
