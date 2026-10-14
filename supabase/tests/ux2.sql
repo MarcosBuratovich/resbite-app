@@ -153,3 +153,88 @@ do $$ begin
  if not (select prosecdef from pg_proc where oid='private.change_plan_v2(uuid,integer,text,text,text[],timestamptz,text,text,text,boolean)'::regprocedure) then raise exception 'change_plan_v2 lost definer rights'; end if;
 end $$;
 rollback;
+
+-- Block 3: the guest list, names and profile photos after answering (Task 3).
+begin;
+insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data) values
+ ('e3000000-0000-4000-8000-000000000001','ux2-3-owner@resbite-test.invalid',now(),'{}'),
+ ('e3000000-0000-4000-8000-000000000002','ux2-3-ana@resbite-test.invalid',now(),'{}'),
+ ('e3000000-0000-4000-8000-000000000003','ux2-3-ben@resbite-test.invalid',now(),'{}'),
+ ('e3000000-0000-4000-8000-000000000004','ux2-3-cy@resbite-test.invalid',now(),'{}'),
+ ('e3000000-0000-4000-8000-000000000005','ux2-3-outsider@resbite-test.invalid',now(),'{}');
+insert into private.tester_roster(email) values
+ ('ux2-3-owner@resbite-test.invalid'),('ux2-3-ana@resbite-test.invalid'),('ux2-3-ben@resbite-test.invalid'),
+ ('ux2-3-cy@resbite-test.invalid'),('ux2-3-outsider@resbite-test.invalid');
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e3000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.save_profile('Owner three');
+select public.create_plan_v2('e3100000-0000-4000-8000-000000000001','Board games','',array['community'],null,'2099-06-01 10:00+00','UTC','Games room','');
+select public.create_invite('e3200000-0000-4000-8000-000000000002','e3100000-0000-4000-8000-000000000001',repeat('7',64));
+select public.create_invite('e3200000-0000-4000-8000-000000000003','e3100000-0000-4000-8000-000000000001',repeat('8',64));
+select public.create_invite('e3200000-0000-4000-8000-000000000004','e3100000-0000-4000-8000-000000000001',repeat('9',64));
+select set_config('request.jwt.claims','{"sub":"e3000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+select public.save_profile('Ana'); select public.claim_invite(repeat('7',64));
+select set_config('request.jwt.claims','{"sub":"e3000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
+select public.save_profile('Ben'); select public.claim_invite(repeat('8',64));
+select public.respond('e3100000-0000-4000-8000-000000000001','accepted',1);
+select set_config('request.jwt.claims','{"sub":"e3000000-0000-4000-8000-000000000004","role":"authenticated"}',true);
+select public.save_profile('Cy'); select public.claim_invite(repeat('9',64));
+select set_config('request.jwt.claims','{"sub":"e3000000-0000-4000-8000-000000000005","role":"authenticated"}',true);
+select public.save_profile('Outsider');
+reset role;
+-- Ben has a profile photo.
+insert into storage.objects(bucket_id,name,owner) values
+ ('profile-photos','e3000000-0000-4000-8000-000000000003/ben.jpg','e3000000-0000-4000-8000-000000000003');
+update public.profiles set avatar_path='e3000000-0000-4000-8000-000000000003/ben.jpg' where id='e3000000-0000-4000-8000-000000000003';
+set local role authenticated;
+-- Ana has not answered: the organizer and herself only, by every route.
+select set_config('request.jwt.claims','{"sub":"e3000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+do $$ begin
+ if (select count(*) from public.plans)<>1 then raise exception 'Unanswered invitee lost the event'; end if;
+ if (select string_agg(user_id::text,',') from public.attendees)<>'e3000000-0000-4000-8000-000000000002' then raise exception 'Unanswered invitee sees other guests'; end if;
+ if exists(select 1 from public.attendees where user_id='e3000000-0000-4000-8000-000000000003') then raise exception 'Unanswered invitee found a guest by id'; end if;
+ if (select string_agg(display_name,',' order by display_name) from public.profiles)<>'Ana,Owner three' then raise exception 'Unanswered invitee sees other names'; end if;
+ if exists(select 1 from storage.objects where bucket_id='profile-photos' and name='e3000000-0000-4000-8000-000000000003/ben.jpg') then raise exception 'Unanswered invitee sees a guest photo'; end if;
+end $$;
+-- Any answer opens the list, Can't make it included.
+select public.respond('e3100000-0000-4000-8000-000000000001','declined',1);
+do $$ begin
+ if (select count(*) from public.attendees)<>3 then raise exception 'Answered invitee does not see the guest list'; end if;
+ if (select string_agg(display_name,',' order by display_name) from public.profiles)<>'Ana,Ben,Cy,Owner three' then raise exception 'Answered invitee does not see guest names'; end if;
+ if not exists(select 1 from storage.objects where bucket_id='profile-photos' and name='e3000000-0000-4000-8000-000000000003/ben.jpg') then raise exception 'Answered invitee cannot see a guest photo'; end if;
+end $$;
+-- Cy has not answered: still only herself and the organizer, although others have.
+select set_config('request.jwt.claims','{"sub":"e3000000-0000-4000-8000-000000000004","role":"authenticated"}',true);
+do $$ begin
+ if (select count(*) from public.attendees)<>1 then raise exception 'Unanswered invitee sees answered guests'; end if;
+ if (select string_agg(display_name,',' order by display_name) from public.profiles)<>'Cy,Owner three' then raise exception 'Unanswered invitee sees answered names'; end if;
+end $$;
+select public.respond('e3100000-0000-4000-8000-000000000001','maybe',1);
+do $$ begin
+ if (select count(*) from public.attendees)<>3 then raise exception 'Maybe does not open the guest list'; end if;
+end $$;
+-- Ben backs out after Going: still answered.
+select set_config('request.jwt.claims','{"sub":"e3000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
+select public.respond('e3100000-0000-4000-8000-000000000001','withdrawn',2);
+do $$ begin
+ if (select count(*) from public.attendees)<>3 then raise exception 'Withdrawn guest lost the list'; end if;
+end $$;
+-- The organizer always sees everyone; an outsider sees nothing.
+select set_config('request.jwt.claims','{"sub":"e3000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+do $$ begin
+ if (select count(*) from public.attendees)<>3 then raise exception 'Organizer does not see every guest'; end if;
+ if (select count(*) from public.profiles)<>4 then raise exception 'Organizer does not see every guest name'; end if;
+end $$;
+select set_config('request.jwt.claims','{"sub":"e3000000-0000-4000-8000-000000000005","role":"authenticated"}',true);
+do $$ begin
+ if exists(select 1 from public.attendees) or exists(select 1 from public.plans) then raise exception 'Outsider sees the event'; end if;
+ if (select count(*) from public.profiles)<>1 then raise exception 'Outsider sees other names'; end if;
+end $$;
+reset role;
+do $$ begin
+ if has_function_privilege('anon','private.can_see_guests(uuid)','execute') then raise exception 'anon can execute can_see_guests'; end if;
+ if not has_function_privilege('authenticated','private.can_see_guests(uuid)','execute') then raise exception 'Policies cannot call can_see_guests'; end if;
+ if not (select prosecdef from pg_proc where oid='private.can_see_guests(uuid)'::regprocedure) then raise exception 'can_see_guests is not a definer'; end if;
+ if not (select prosecdef from pg_proc where oid='private.can_read_profile(uuid)'::regprocedure) then raise exception 'can_read_profile lost definer rights'; end if;
+end $$;
+rollback;

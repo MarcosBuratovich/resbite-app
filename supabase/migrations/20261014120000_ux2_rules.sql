@@ -99,3 +99,23 @@ end $$;
 -- The first "change event" function would bypass these rules; the app has used change_plan_v2 since CE1.
 revoke execute on function public.change_plan(uuid,integer,timestamptz,text,text,text,boolean) from authenticated;
 revoke execute on function private.change_plan(uuid,integer,timestamptz,text,text,text,boolean) from authenticated;
+
+-- Guest list after answering (UX-P5). The organizer sees every guest; an invitee sees the organizer and
+-- themselves until they answer (Going, Maybe or Can't make it), then everyone. Names and profile photos
+-- follow the same rule, because the avatar storage policy calls can_read_profile.
+create function private.can_see_guests(p_plan uuid) returns boolean language sql stable security definer set search_path = '' as $$
+ select private.eligible() and exists(select 1 from public.plans p where p.id=p_plan and (p.owner_id=auth.uid()
+  or exists(select 1 from public.attendees a where a.plan_id=p.id and a.user_id=auth.uid() and a.response<>'pending')))
+$$;
+revoke all on function private.can_see_guests(uuid) from public, anon, authenticated, service_role;
+grant execute on function private.can_see_guests(uuid) to authenticated;
+
+drop policy attendee_read on public.attendees;
+create policy attendee_read on public.attendees for select to authenticated
+ using (private.can_read_plan(plan_id) and (user_id=(select auth.uid()) or private.can_see_guests(plan_id)));
+
+create or replace function private.can_read_profile(p_id uuid) returns boolean language sql stable security definer set search_path = '' as $$
+ select private.eligible() and (p_id=auth.uid() or exists (
+ select 1 from public.plans p where private.can_read_plan(p.id) and
+ (p.owner_id=p_id or (private.can_see_guests(p.id) and exists(select 1 from public.attendees a where a.plan_id=p.id and a.user_id=p_id)))))
+$$;
