@@ -175,3 +175,24 @@ test("Expo gateway validates malformed reply and classifies HTTP failures withou
     (e: any) => e.disposition === "unknown",
   );
 });
+
+test("payload uses the event title and what happened when the claim carries them", async () => {
+  const f = fixture({
+    kind: "rsvp",
+    detail: "maybe",
+    title: "Picnic in the park",
+    starts_at: "2026-10-17T09:00:00Z",
+    time_zone: "Europe/London",
+    actor_name: "Sam",
+  });
+  await runNotifications(f.store, f.gateway, true);
+  assert.deepEqual(f.payloads, [
+    {
+      to: job.token,
+      title: "Picnic in the park",
+      body: "Sam might come.",
+      data: { type: "plan_update", planId: job.plan_id, notificationId: "1" },
+      ttl: 3600,
+    },
+  ]);
+});

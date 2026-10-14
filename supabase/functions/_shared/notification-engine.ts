@@ -1,3 +1,5 @@
+import { notificationCopy } from "./notification-copy.ts";
+
 /** Tokens and provider responses must never be logged. A receipt is not proof of reading. */
 export type Delivery = {
   id: string;
@@ -9,6 +11,13 @@ export type Delivery = {
   attempts: number;
   ticket_id: string | null;
   ticket_created_at: string | null;
+  /** UX2 wording inputs from claim_notification_deliveries; never the place, note or descriptions. */
+  kind?: string | null;
+  detail?: string | null;
+  title?: string | null;
+  starts_at?: string | null;
+  time_zone?: string | null;
+  actor_name?: string | null;
 };
 export type Outcome =
   | "ticket"
@@ -52,8 +61,7 @@ export function payloadFor(job: Delivery) {
   }
   return {
     to: job.token,
-    title: "Resbite",
-    body: "You have an update. Open Resbite to see it.",
+    ...notificationCopy(job),
     data: {
       type: "plan_update",
       planId: job.plan_id,
