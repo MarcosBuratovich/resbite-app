@@ -597,7 +597,7 @@ export function usePlanEditor({
           // An unchanged start keeps the event's own zone, so an edit from another zone is not a time change.
           time_zone:
             original && Date.parse(original.starts_at) === date!.getTime()
-              ? original.time_zone
+              ? (original.time_zone ?? zone)
               : zone,
           place_label: place.trim(),
           note,
