@@ -308,6 +308,8 @@ try {
     page.getByText("The photo changed elsewhere. Reopen this resbite, then describe it again.", { exact: true }),
   ).toBeVisible();
   await expect(page.getByLabel("Photo description", { exact: true })).toHaveValue("Four swimmers");
+  // The photo change moved the revision to 4 (one bump); the app must send that, not the stale 3.
+  assert.deepEqual(descriptionCalls.at(-1), { p_description: "Four swimmers", p_expected_revision: 4 });
   assert.equal(swimPlan.cover_description, "");
   await page.getByRole("button", { name: "Close sheet", exact: true }).click();
   await closeToList(page);

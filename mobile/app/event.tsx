@@ -198,7 +198,7 @@ export default function EventPage() {
         {area.kind === "hidden" ? (
           <View style={{ gap: 6 }}>
             <AvatarStack names={[area.organizer]} label={`${area.organizer} is organizing`} />
-            <Copy style={s.muted}>Answer to see who’s coming</Copy>
+            {allowed && <Copy style={s.muted}>Answer to see who’s coming</Copy>}
           </View>
         ) : (
           area.kind === "list" && (

@@ -67,6 +67,7 @@ const edited = {
   place_label: "Park",
   note: "",
 };
+const closed = { ...invited, id: "66666666-6666-4666-8666-666666666666", title: "Closed games", status: "cancelled" };
 const errors = [];
 try {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
@@ -85,6 +86,7 @@ try {
     [hosted.id, { ...hosted }],
     [invited.id, { ...invited }],
     [edited.id, { ...edited }],
+    [closed.id, { ...closed }],
   ]);
   let attendee = { version: 1, response: "pending" };
   let failGuests = false;
@@ -331,6 +333,15 @@ try {
   await expect(tPage.getByText("Changes saved", { exact: true })).toHaveCount(0);
   await tokyo.close();
   console.log("PASS: a saved edit returns to its event page with Changes saved; Back goes to My resbites; a title-only edit from another time zone keeps the stored zone and instant.");
+
+  // An unanswered invitee on a closed event sees the organizer and the closed note, not "Answer to see who’s coming".
+  await page.goto(`${base}/event?plan=${closed.id}`);
+  await expect(page.getByRole("heading", { name: "Closed games", exact: true })).toBeVisible();
+  await expect(
+    page.getByText("This plan is cancelled or has already started. Responses are closed.", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("Jo is organizing", { exact: true })).toBeVisible();
+  await expect(page.getByText("Answer to see who’s coming", { exact: true })).toHaveCount(0);
 
   // Invitee. A failed guest read makes the whole event unavailable, never a partial page; Refresh recovers.
   failGuests = true;
