@@ -10,7 +10,30 @@ export type NotificationAdapter = {
   openSettings(): Promise<void>;
 };
 
-// Deliberately no request/token/register/schedule methods at this boundary.
+/** The permission a device reports, as one state (shared by the reminders service, UX3). */
+export function permissionFrom(
+  platform: string,
+  permission: NotificationPermissionResponse,
+): NotificationPermission {
+  if (platform === "ios" && permission.ios) {
+    // Expo 57 IosAuthorizationStatus: use the richer iOS status before
+    // the generic flag, which cannot distinguish quiet/temporary access.
+    const statuses: Record<number, NotificationPermission> = {
+      0: "undetermined",
+      1: "denied",
+      2: "granted",
+      3: "provisional",
+      4: "ephemeral",
+    };
+    return statuses[permission.ios.status] ?? "unknown";
+  }
+  return ["undetermined", "denied", "granted"].includes(permission.status)
+    ? (permission.status as NotificationPermission)
+    : "unknown";
+}
+
+// Deliberately no request/token/register/schedule methods at this boundary
+// (UX3 reminders have their own boundary in reminders.ts).
 export function createNotificationService(adapter: NotificationAdapter) {
   const supported =
     adapter.platform === "ios" || adapter.platform === "android";
@@ -18,22 +41,7 @@ export function createNotificationService(adapter: NotificationAdapter) {
     async readPermission(preview: boolean): Promise<NotificationPermission> {
       if (preview) return "preview";
       if (!supported) return "unsupported";
-      const permission = await adapter.getPermission();
-      if (adapter.platform === "ios" && permission.ios) {
-        // Expo 57 IosAuthorizationStatus: use the richer iOS status before
-        // the generic flag, which cannot distinguish quiet/temporary access.
-        const statuses: Record<number, NotificationPermission> = {
-          0: "undetermined",
-          1: "denied",
-          2: "granted",
-          3: "provisional",
-          4: "ephemeral",
-        };
-        return statuses[permission.ios.status] ?? "unknown";
-      }
-      return ["undetermined", "denied", "granted"].includes(permission.status)
-        ? (permission.status as NotificationPermission)
-        : "unknown";
+      return permissionFrom(adapter.platform, await adapter.getPermission());
     },
     async openSettings(preview: boolean) {
       if (preview || !supported)

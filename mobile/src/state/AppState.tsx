@@ -14,6 +14,8 @@ import { profilePhotoStore } from "../services/profile";
 import { planCoverStore } from "../services/planCovers";
 import { peopleStore } from "../services/people";
 import { recentPlaces } from "../services/recentPlaces";
+import { clearReminders } from "../services/deviceReminders";
+import { clearCalendarRecords } from "../services/deviceCalendar";
 import { supabase, storage } from "../services/supabase";
 import type { Plan } from "../domain/plans";
 /** Kept as an alias for existing screens; the type lives in the domain layer. */
@@ -101,6 +103,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       resume: peopleStore.resume,
       clearPeople: peopleStore.clear,
       clearRecentPlaces: (scope) => recentPlaces.clear(scope),
+      clearReminders,
+      clearCalendarRecords,
       clearPhoto: (scope) => profilePhotoStore.clear(scope),
       clearCovers: (scope) => planCoverStore.clearCoverJournals(scope),
       blockPending: pendingStore.beginCleanup,

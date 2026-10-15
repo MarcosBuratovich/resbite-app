@@ -4,6 +4,10 @@ type Dependencies = {
   resume: (scope: string) => void;
   clearPeople: (scope: string) => Promise<void>;
   clearRecentPlaces: (scope: string) => Promise<void>;
+  /** UX3: the scope's reminders (scheduled and shown) and reminder switches. */
+  clearReminders: (scope: string) => Promise<void>;
+  /** UX3: which events this scope added to the calendar on this device. */
+  clearCalendarRecords: (scope: string) => Promise<void>;
   clearPhoto: (scope: string) => Promise<void>;
   clearCovers: (scope: string) => Promise<void>;
   blockPending: () => () => void;
@@ -82,6 +86,10 @@ export function createSessionLifecycle(deps: Dependencies) {
             await deps.clearPeople(scope);
             current();
             await deps.clearRecentPlaces(scope);
+            current();
+            await deps.clearReminders(scope);
+            current();
+            await deps.clearCalendarRecords(scope);
             current();
             if (!original.preview) await deps.clearPhoto(scope);
             current();

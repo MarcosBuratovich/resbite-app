@@ -96,7 +96,8 @@ function lifecycleHarness() {
   const disk = storage(),
     people = createPeopleStore(disk),
     events: string[] = [],
-    places: string[] = [];
+    places: string[] = [],
+    device: string[] = [];
   let auth = async () => {
       events.push("auth");
     },
@@ -112,6 +113,12 @@ function lifecycleHarness() {
     },
     clearRecentPlaces: async (scope) => {
       places.push(scope);
+    },
+    clearReminders: async (scope) => {
+      device.push(`reminders:${scope}`);
+    },
+    clearCalendarRecords: async (scope) => {
+      device.push(`calendar:${scope}`);
     },
     clearPhoto: () => photo(),
     clearCovers: async (scope) => {
@@ -139,6 +146,7 @@ function lifecycleHarness() {
     people,
     events,
     places,
+    device,
     setAuth: (fn: () => Promise<void>) => {
       auth = fn;
     },
@@ -201,6 +209,8 @@ test("a failed cover clear fails sign-out before auth sign-out", async () => {
     resume: () => {},
     clearPeople: async () => {},
     clearRecentPlaces: async () => {},
+    clearReminders: async () => {},
+    clearCalendarRecords: async () => {},
     clearPhoto: async () => {},
     clearCovers: async () => {
       throw Error("disk");
@@ -310,6 +320,8 @@ test("a failed recent-places clear fails sign-out before auth sign-out", async (
     clearRecentPlaces: async () => {
       throw Error("disk");
     },
+    clearReminders: async () => {},
+    clearCalendarRecords: async () => {},
     clearPhoto: async () => {
       events.push("photo");
     },
@@ -325,4 +337,46 @@ test("a failed recent-places clear fails sign-out before auth sign-out", async (
   life.update({ account: "owner", preview: false });
   await assert.rejects(life.signOut(), /disk/);
   assert.deepEqual(events, []);
+});
+
+test("sign-out clears reminders and calendar records for the account and for preview", async () => {
+  const h = lifecycleHarness();
+  h.life.update({ account: "owner", preview: false });
+  await h.life.signOut();
+  assert.deepEqual(h.device, ["reminders:owner", "calendar:owner"]);
+  const p = lifecycleHarness();
+  p.life.update({ account: "owner", preview: true });
+  await p.life.signOut();
+  assert.deepEqual(p.device, ["reminders:preview", "calendar:preview"]);
+});
+test("a failed reminder or calendar clear fails sign-out before auth sign-out", async () => {
+  for (const failing of ["reminders", "calendar"]) {
+    const events: string[] = [];
+    const fail = (name: string) => async () => {
+      events.push(name);
+      if (name === failing) throw Error("disk");
+    };
+    const life = createSessionLifecycle({
+      suspend: () => {},
+      resume: () => {},
+      clearPeople: async () => {},
+      clearRecentPlaces: async () => {},
+      clearReminders: fail("reminders"),
+      clearCalendarRecords: fail("calendar"),
+      clearPhoto: async () => {
+        events.push("photo");
+      },
+      clearCovers: async () => {},
+      blockPending: () => () => {},
+      clearPending: async () => {},
+      authSignOut: async () => {
+        events.push("auth");
+      },
+      finish: () => {},
+      busy: () => {},
+    });
+    life.update({ account: "owner", preview: false });
+    await assert.rejects(life.signOut(), /disk/);
+    assert.deepEqual(events, failing === "reminders" ? ["reminders"] : ["reminders", "calendar"]);
+  }
 });

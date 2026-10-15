@@ -9,6 +9,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.resbite.app",
+      "associatedDomains": ["applinks:go.resbite.com"],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -62,6 +63,13 @@
         "expo-contacts",
         {
           "contactsPermission": "Choose contacts to invite to your Resbite plans."
+        }
+      ],
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "Resbite doesn’t read your calendar. It only opens iPhone’s own form so you can add an event you choose.",
+          "remindersPermission": "Resbite doesn’t use your reminders. The calendar library it relies on requires this description."
         }
       ],
       "expo-notifications",

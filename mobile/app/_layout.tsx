@@ -7,6 +7,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { AppProvider, useApp } from "../src/state/AppState";
 import { AccountProvider, useAccount } from "../src/state/AccountState";
+import { useDeviceReminders } from "../src/state/useDeviceReminders";
 import { colors } from "../src/design/tokens";
 import { Button, Copy, useReduceMotion } from "../src/design/ui";
 void SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -72,6 +73,8 @@ function Navigation() {
     path !== "/auth" &&
     path !== "/auth/callback" &&
     path !== "/invite";
+  // UX3: reminders follow the session and come back to the foreground with it; a tapped one opens its event.
+  useDeviceReminders(!restoring && !waitingForInitialAccess);
   if (restoring || waitingForInitialAccess)
     return (
       <View
