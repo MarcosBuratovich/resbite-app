@@ -170,9 +170,20 @@ try {
     });
     const suffix = large ? "large-320" : String(width);
     const fits = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+    const clipped = () =>
+      page.evaluate(() =>
+        [...document.querySelectorAll("[role=button],[role=link],[role=heading],h1,h2,h3,input,textarea")]
+          .filter((el) => !el.closest("[role=tablist],[aria-hidden=true]") && el.getBoundingClientRect().width > 0)
+          .filter((el) => {
+            const b = el.getBoundingClientRect();
+            return b.left < -1 || b.right > window.innerWidth + 1;
+          })
+          .map((el) => (el.getAttribute("role") || el.tagName.toLowerCase()) + " " + (el.getAttribute("aria-label") || el.textContent.trim().slice(0, 40))),
+      );
     const visit = async (name, title) => {
       await expect(heading(page, title)).toBeVisible();
       assert.ok(await fits(), `${name} fits at ${suffix}`);
+      assert.deepEqual(await clipped(), [], `${name} has nothing clipped at ${suffix}`);
       await page.waitForTimeout(500);
       await page.screenshot({ path: `${out}/${name}-${suffix}.png`, fullPage: true });
     };
@@ -214,9 +225,20 @@ try {
       if (m.type() === "error") errors.push(m.text());
     });
     const fits = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+    const clipped = () =>
+      page.evaluate(() =>
+        [...document.querySelectorAll("[role=button],[role=link],[role=heading],h1,h2,h3,input,textarea")]
+          .filter((el) => !el.closest("[role=tablist],[aria-hidden=true]") && el.getBoundingClientRect().width > 0)
+          .filter((el) => {
+            const b = el.getBoundingClientRect();
+            return b.left < -1 || b.right > window.innerWidth + 1;
+          })
+          .map((el) => (el.getAttribute("role") || el.tagName.toLowerCase()) + " " + (el.getAttribute("aria-label") || el.textContent.trim().slice(0, 40))),
+      );
     const visit = async (name, title) => {
       await expect(heading(page, title)).toBeVisible();
       assert.ok(await fits(), `${name} fits at 320 px under Larger Text`);
+      assert.deepEqual(await clipped(), [], `${name} has nothing clipped at 320 px under Larger Text`);
       await page.waitForTimeout(500);
       await page.screenshot({ path: `${out}/${name}-large-320.png`, fullPage: true });
     };
