@@ -224,3 +224,43 @@ Owner decisions from the UX4 design session ([spec](../docs/superpowers/specs/20
 10. Profile shows the signed-in email again, as a muted line under the name (the old screen showed it).
 11. The introduction’s "I have an account" keeps its old target (`/auth` with no mode), so a saved confirmation or recovery request restores its screen. The landing’s link keeps `mode: "login"`.
 12. P1 change: "Check again" (account access and Notifications) and "Email help" are labelled by their visible text, with hints, so iOS Voice Control "Tap Check again" works.
+
+## UX3 — 15 October 2026
+
+Owner decisions from the UX3 design session ([spec](../docs/superpowers/specs/2026-10-15-ux3-design.md), [plan](../docs/superpowers/plans/2026-10-15-ux3.md)). UX3 covers invite links on their own domain, an optional end time, private Meeting details, the Note to guests, Add to calendar and reminders. Status: built on the `ux3` branch; not on the hosted project, not deployed, not on TestFlight.
+
+| # | Decision |
+| --- | --- |
+| UX3-D1 | One piece of work: links, event details, calendar and reminders share one spec, one plan, one migration and one TestFlight build. The owner chose this over the recommended split into three. |
+| UX3-D2 | Links live on their own subdomain, `go.resbite.com`. It is a tiny static site kept in this repo and deployed as its own Vercel project. The owner adds one DNS record in Cloudflare. The marketing site (`www.resbite.com`) is untouched. |
+| UX3-D3 | Approach "phone first": reminders are scheduled on each person’s phone; "Add to calendar" uses iPhone’s own form; notes live in the database behind access rules; anything meant for a server notification is only recorded. |
+| UX3-D4 | Two reminders, 1 day and 1 hour before the start. The owner chose "Both" over a single reminder. |
+| UX3-D5 | Two notes. Today’s "A note for everyone" becomes private Meeting details (a door code, a meeting spot). A new Note to guests is a short announcement pinned for everyone invited. |
+| UX3-D6 | "Accepted" means Going or Maybe: these guests, and the organizer, see Meeting details and get reminders. |
+| UX3-D7 | "Can’t go" replaces "Can’t make it" on the answer button, the status chip, the guest-list group and the stored notification text. "Can’t make it now" becomes "Can’t go now". |
+| UX3-D8 | Reminders don’t depend on the calendar. They come from Resbite whether or not the event was added to a calendar. The calendar entry Resbite fills in carries no alert, so nobody gets doubled reminders. |
+
+**Decisions the plan makes (P1 to P12).**
+
+| # | Decision |
+| --- | --- |
+| P1 | **Spec amendment, confirmed by the owner with the plan (15 October):** Add to calendar asks for no permission at all. It uses `createEventInCalendarAsync` from `expo-calendar/legacy`, which opens iPhone’s own form, so Resbite never gets calendar access, not even write-only (the spec said write-only). The build still declares honest calendar and reminders purpose strings, because Apple rejects builds whose libraries reference those APIs without them (build 3’s motion rejection). |
+| P2 | **Spec amendment, confirmed by the owner with the plan:** one hosted migration plus one local-only migration. The unreleased notification sender re-checks each Note to guests notice at send time, like change notices. That check lives in a local-only function, so it gets its own local-only migration, as UX2 did. Nothing local-only goes live with UX3. |
+| P3 | **Spec amendment, confirmed by the owner with the plan:** `plans.has_meeting_details` lets every invitee know Meeting details exist, so the locked line appears only when there is something to unlock. The text itself stays private. |
+| P4 | The database does the deletion clean-up. Account deletion’s existing redaction trigger (hosted) now also removes Meeting details and the Note to guests, so the local-only deletion code needs no change. |
+| P5 | Old save functions delegate. `create_plan_v2` and `change_plan_v2` keep their signatures and call the v3 functions; v2 edits keep an existing end’s length. The first-generation `create_plan` (unused since CE1) now refuses a non-empty note, because the old note column must stay empty. |
+| P6 | Note to guests notification text: "Sam posted a note to guests." It never includes the note itself. |
+| P7 | Reminders are capped at the 60 soonest, under iOS’s limit of 64 pending notifications. |
+| P8 | The link site serves the Resbite mark as the preview image and redirects `/` to `www.resbite.com`. Its page reads "You’re invited" with one line, a button and a private-testing note. |
+| P9 | Reminders play the default sound when they arrive in the background, because a reminder nobody hears isn’t much of one. Inside the app they show as a banner with no sound. |
+| P10 | Add to calendar needs iOS 17 or later. On iOS 17+, iPhone’s form opens with no permission check. On older iOS the library would demand calendar access, so Resbite shows "We couldn’t open your calendar. Add to calendar needs iOS 17 or later." instead of asking. |
+| P11 | Reminder times are stored with each reminder (`data.at`). Expo 57 on iOS reports a date trigger back as a time interval, so without the stored time every sync would cancel and reschedule everything. |
+| P12 | Signing out also clears reminders already shown in Notification Center, not only scheduled ones. |
+
+**Decided during the build (15 October 2026), for the owner’s review.**
+1. The Note to guests is the organizer’s alone, even on an ownerless event. `private.set_guest_note` checks `owner_id is distinct from` the caller. The plan’s block used `<>`, which let any attendee post on an event whose organizer had deleted their account while it was under way. A test in `supabase/tests/ux3.sql` (block 3) covers it.
+2. The 280-character limit counts characters as the database does (code points, `char_length`), in `guestNoteError`, so an emoji counts once in both places.
+3. The calendar form carries the place name, as the spec says. The plan’s line that listed the place among things never in calendar entries was a wording error. Only Meeting details, the Note to guests text and links never reach calendars. Reminders carry the name and time only.
+4. The first-generation `create_plan` refuses a non-empty note (P5), kept as planned.
+
+Each UX3 database migration needs the owner’s explicit approval. The hosted migration goes live together with the new TestFlight build, because builds older than UX3 read the emptied note column. Notification sending stays switched off.
