@@ -32,18 +32,19 @@ try {
     });
   });
   await page.goto(base);
-  await page
-    .getByRole("button", { name: "Let’s get together", exact: true })
-    .click();
   await expect(
-    page.getByText("Introduction 1 of 3", { exact: true }),
+    page.getByRole("heading", { name: "Get together", exact: true }),
   ).toBeVisible();
-  await page
-    .getByRole("button", {
-      name: "Already have an account? Sign in",
-      exact: true,
-    })
-    .click();
+  // The landing's "I have an account" opens sign-in with a valid mode (it used to pass "signin").
+  await page.getByRole("button", { name: "I have an account", exact: true }).click();
+  await expect(page).toHaveURL(/\/auth\?mode=login$/);
+  await expect(page.getByText("Welcome back.", { exact: true })).toBeVisible();
+  await page.goto(base);
+  await page.getByRole("button", { name: "Get started", exact: true }).click();
+  await expect(
+    page.getByRole("progressbar", { name: "Step 1 of 3", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "I have an account", exact: true }).click();
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(
     page.getByText("Enter a valid email address.", { exact: true }),

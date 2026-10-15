@@ -734,6 +734,29 @@ export function focusHeading(target: Text | null) {
   } else AccessibilityInfo.sendAccessibilityEvent(target, "focus");
 }
 
+/**
+ * Moves VoiceOver (or browser focus) to a heading whenever `key` changes, but not on the first
+ * render: the sign-in modes and steps, and the introduction's slides. On iOS it waits until the
+ * step has settled (STEP_SETTLED_MS), as the creation steps do.
+ */
+export function useFocusOnChange(target: React.RefObject<Text | null>, key: unknown) {
+  const first = React.useRef(true);
+  React.useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    const web = Platform.OS === "web";
+    const focus = () => focusHeading(target.current);
+    const frame = web ? requestAnimationFrame(focus) : undefined;
+    const settled = web ? undefined : setTimeout(focus, STEP_SETTLED_MS);
+    return () => {
+      if (frame !== undefined) cancelAnimationFrame(frame);
+      clearTimeout(settled);
+    };
+  }, [target, key]);
+}
+
 /** Announces a short message on iOS and Android. On the web, ErrorNote's alert role announces it. */
 export function announce(message: string) {
   if (Platform.OS !== "web") AccessibilityInfo.announceForAccessibility(message);

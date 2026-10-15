@@ -23,28 +23,44 @@ try {
       });
     });
     await page.goto(base);
-    await page
-      .getByRole("button", { name: "Let’s get together", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Get started", exact: true }).click();
     await expect(
-      page.getByText("Introduction 1 of 3", { exact: true }),
+      page.getByRole("progressbar", { name: "Step 1 of 3", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Little plans", exact: true }),
     ).toBeVisible();
     await page.screenshot({
       path: `/private/tmp/resbite-registration/intro-${width}.png`,
       fullPage: true,
     });
-    await page.getByRole("button", { name: "Continue", exact: true }).click();
+    // Close on the first slide returns to the landing, also when the introduction was opened directly.
+    await page.getByRole("button", { name: "Close", exact: true }).click();
     await expect(
-      page.getByText("Introduction 2 of 3", { exact: true }),
+      page.getByRole("heading", { name: "Get together", exact: true }),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Back", exact: true }).click();
+    await page.goto(`${base}/introduction`);
+    await page.getByRole("button", { name: "Close", exact: true }).click();
     await expect(
-      page.getByText("Introduction 1 of 3", { exact: true }),
+      page.getByRole("heading", { name: "Get together", exact: true }),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Continue", exact: true }).click();
-    await page.getByRole("button", { name: "Continue", exact: true }).click();
+    await page.getByRole("button", { name: "Get started", exact: true }).click();
+    await page.getByRole("button", { name: "Next", exact: true }).click();
+    await expect(
+      page.getByRole("progressbar", { name: "Step 2 of 3", exact: true }),
+    ).toBeVisible();
+    // VoiceOver focus follows the new slide's title.
+    await expect(
+      page.getByRole("heading", { name: "Your people", exact: true }),
+    ).toBeFocused();
+    await page.getByRole("button", { name: "Previous step", exact: true }).click();
+    await expect(
+      page.getByRole("progressbar", { name: "Step 1 of 3", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Next", exact: true }).click();
+    await page.getByRole("button", { name: "Next", exact: true }).click();
     await page
-      .getByRole("button", { name: "Create my account", exact: true })
+      .getByRole("button", { name: "Create account", exact: true })
       .click();
     await page.getByRole("button", { name: "Continue", exact: true }).click();
     await expect(
