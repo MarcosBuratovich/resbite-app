@@ -11,6 +11,7 @@ import {
   signupTitles,
   wellnessSample,
 } from "./accountCopy.ts";
+import { notificationDelivery, permissionCopy, reminderCopy } from "./notifications.ts";
 
 test("sign-in headings: one per mode and sign-up step, three words or fewer", () => {
   assert.equal(authTitle("login", 0, ""), "Welcome back");
@@ -43,6 +44,43 @@ test("notifications: the permission chip shows the permission's title, or checki
   assert.equal(permissionChip("denied", true), "Permission is off");
   assert.equal(permissionChip(null, true), "Checking permission…");
   assert.equal(permissionChip(null, false), "Couldn’t check permission");
+});
+
+test("UX3 notifications wording: reminders use the permission, updates from organizers aren’t active yet", () => {
+  // The titles keep their UX4 wording; the details no longer say there's nothing to enable.
+  assert.deepEqual(
+    Object.fromEntries(Object.entries(permissionCopy).map(([key, copy]) => [key, copy.title])),
+    {
+      undetermined: "Not requested",
+      denied: "Permission is off",
+      granted: "Permission is allowed",
+      provisional: "Quiet permission",
+      ephemeral: "Temporary permission",
+      unknown: "Permission unavailable",
+      preview: "Design preview",
+      unsupported: "Available in the mobile app",
+    },
+  );
+  assert.equal(permissionCopy.undetermined.detail, "Resbite asks the first time it can set a reminder.");
+  assert.equal(
+    permissionCopy.denied.detail,
+    "Turn notifications on in Settings to get reminders. Updates from organizers aren’t active yet.",
+  );
+  assert.equal(permissionCopy.granted.detail, "Reminders can reach you. Updates from organizers aren’t active yet.");
+  assert.equal(permissionCopy.provisional.detail, "Reminders arrive quietly. Updates from organizers aren’t active yet.");
+  assert.equal(
+    permissionCopy.ephemeral.detail,
+    "Reminders can reach you for now. Updates from organizers aren’t active yet.",
+  );
+  for (const copy of Object.values(permissionCopy)) {
+    assert.ok(!copy.detail.includes("nothing you need to enable"), copy.detail);
+    assert.ok(!copy.detail.includes("Delivery is still unavailable"), copy.detail);
+    assert.ok(!copy.detail.includes("'"), "Curly apostrophes only");
+  }
+  assert.equal(reminderCopy.line, "1 day and 1 hour before resbites you’re going to, or might. Set on this phone.");
+  assert.match(reminderCopy.about, /it may still arrive at the old time\.$/);
+  // Server sending stays off (B1).
+  assert.equal(notificationDelivery.enabled, false);
 });
 
 test("email-link page headings", () => {

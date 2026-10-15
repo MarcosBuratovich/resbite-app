@@ -29,8 +29,25 @@ try {
   await expect(
     page.getByRole("heading", { name: "Notifications", exact: true }),
   ).toBeVisible();
+  // UX3: updates from organizers stay "Not active yet"; reminders are set on this phone, with a real switch.
+  await expect(page.getByText("Updates from organizers", { exact: true })).toBeVisible();
   await expect(page.getByText("Not active yet", { exact: true })).toBeVisible();
   await expect(page.getByText("Design preview", { exact: true })).toBeVisible();
+  const reminders = page.getByRole("switch", { name: "Event reminders", exact: true });
+  await expect(reminders).toBeChecked();
+  await expect(
+    page.getByText("1 day and 1 hour before resbites you’re going to, or might. Set on this phone.", { exact: true }),
+  ).toBeVisible();
+  const box = await reminders.boundingBox();
+  assert.ok(box && box.x >= 0 && box.x + box.width <= 320, "The switch fits at 320px");
+  await reminders.click();
+  await expect(reminders).not.toBeChecked();
+  // It's kept on this phone: leaving and coming back keeps it off.
+  await page.getByRole("button", { name: "Profile", exact: true }).click();
+  await page.getByRole("button", { name: "Notifications", exact: true }).click();
+  await expect(page.getByRole("switch", { name: "Event reminders", exact: true })).not.toBeChecked();
+  await page.getByRole("switch", { name: "Event reminders", exact: true }).click();
+  await expect(page.getByRole("switch", { name: "Event reminders", exact: true })).toBeChecked();
   await page
     .getByRole("button", { name: "About notifications", exact: true })
     .click();
@@ -40,7 +57,14 @@ try {
       { exact: true },
     ),
   ).toBeVisible();
+  await expect(
+    page.getByText(
+      "Reminders are set on this phone when you answer Going or Maybe, or organize a resbite. If an organizer changes the time and you don’t open Resbite before the old reminder, it may still arrive at the old time.",
+      { exact: true },
+    ),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Close sheet", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Close sheet", exact: true })).toHaveCount(0);
   await expect(
     page.getByText(
       "Preview does not read or request notification permission, or send notifications.",
@@ -65,7 +89,7 @@ try {
   ).toBeVisible();
   assert.deepEqual(errors, []);
   console.log(
-    "Notification availability preview passed at 320px; no permission prompts or backend calls.",
+    "PASS: Notifications preview at 320px: the Event reminders switch (kept on this phone), Updates from organizers not active yet, the About sheet; no permission prompts or backend calls.",
   );
 } finally {
   await browser.close();

@@ -2,25 +2,28 @@ import React, { useCallback, useRef, useState } from "react";
 import { AppState, Platform, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useFocusEffect } from "expo-router";
-import { BellOff, CalendarHeart, Info, RefreshCw, Settings, Smartphone } from "lucide-react-native";
+import { Bell, BellOff, CalendarHeart, Info, RefreshCw, Settings, Smartphone } from "lucide-react-native";
 import { useApp } from "../src/state/AppState";
 import { Back, Copy, ErrorNote, Title, s } from "../src/design/ui";
-import { Chip, IconButton, InfoSheet, StatusCard } from "../src/design/kit";
+import { Chip, IconButton, InfoSheet, RowGroup, StatusCard, SwitchRow } from "../src/design/kit";
 import { PreviewNotice } from "../src/design/Chrome";
 import { colors as c } from "../src/design/tokens";
 import {
   notificationDelivery,
   permissionCopy,
+  reminderCopy,
   type NotificationPermission,
 } from "../src/domain/notifications";
+import { REMINDERS_CHANGE_FAILED } from "../src/domain/eventDevice";
 import {
   openNotificationSettings,
   readNotificationPermission,
 } from "../src/services/notifications";
+import { remindersFor, setRemindersEnabled } from "../src/services/deviceReminders";
 import { permissionChip } from "../src/domain/accountCopy";
 
 export default function Notifications() {
-  const { preview, session } = useApp();
+  const { preview, session, captureSession } = useApp();
   const identity = preview ? "preview" : (session?.user.id ?? "signed-out");
   const currentIdentity = useRef(identity);
   currentIdentity.current = identity;
@@ -30,6 +33,10 @@ export default function Notifications() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [about, setAbout] = useState(false);
+  // UX3 "Event reminders": this phone's switch for the person's reminders (null until read).
+  const [reminders, setReminders] = useState<boolean | null>(null);
+  const [switching, setSwitching] = useState(false);
+  const reminderScope = { userId: session?.user.id ?? null, preview };
   const refresh = useRef<() => void>(() => {});
   const focused = useRef(false);
   useFocusEffect(
@@ -70,6 +77,13 @@ export default function Notifications() {
       };
       refresh.current = () => void read();
       void read();
+      setReminders(null);
+      void remindersFor({ userId: session?.user.id ?? null, preview }).then(
+        (prefs) => {
+          if (active && currentIdentity.current === identity) setReminders(prefs.enabled);
+        },
+        () => {},
+      );
       const subscription = AppState.addEventListener("change", (state) => {
         if (state === "active") void read();
       });
@@ -83,6 +97,23 @@ export default function Notifications() {
   );
   const copy = permission ? permissionCopy[permission] : null;
   const permissionTitle = permissionChip(permission, busy);
+  async function switchReminders(on: boolean) {
+    if (switching) return;
+    setSwitching(true);
+    setError(null);
+    setReminders(on);
+    try {
+      const prefs = await setRemindersEnabled(reminderScope, on, captureSession());
+      if (focused.current && currentIdentity.current === identity) setReminders(prefs.enabled);
+    } catch {
+      if (focused.current && currentIdentity.current === identity) {
+        setReminders(!on);
+        setError(REMINDERS_CHANGE_FAILED);
+      }
+    } finally {
+      setSwitching(false);
+    }
+  }
   return (
     <SafeAreaView style={s.page}>
       <ScrollView contentContainerStyle={[s.body, { paddingBottom: 32 }]}>
@@ -92,17 +123,31 @@ export default function Notifications() {
           <Title style={{ flexShrink: 1 }}>Notifications</Title>
           <IconButton icon={Info} label="About notifications" onPress={() => setAbout(true)} />
         </View>
-        <StatusCard icon={BellOff} title="Not active yet">
-          <View style={styles.chips}>
-            <Chip
-              text={permissionTitle}
-              icon={Smartphone}
-              tone="status"
-              label={`Phone permission: ${permissionTitle}`}
+        {/* UX3: reminders are set on this phone; updates from organizers stay off until sending is approved (B1). */}
+        <View style={styles.group}>
+          <RowGroup>
+            <SwitchRow
+              title="Event reminders"
+              icon={Bell}
+              value={reminders ?? false}
+              disabled={reminders === null || switching}
+              onValueChange={(on) => void switchReminders(on)}
             />
-          </View>
-          {copy && <Copy style={styles.line}>{copy.detail}</Copy>}
+          </RowGroup>
+          <Copy style={styles.hint}>{reminderCopy.line}</Copy>
+        </View>
+        <StatusCard icon={BellOff} title="Updates from organizers">
+          <Chip text="Not active yet" />
         </StatusCard>
+        <View style={styles.chips}>
+          <Chip
+            text={permissionTitle}
+            icon={Smartphone}
+            tone="status"
+            label={`Phone permission: ${permissionTitle}`}
+          />
+        </View>
+        {copy && <Copy style={styles.line}>{copy.detail}</Copy>}
         <ErrorNote message={error} />
         <View style={styles.chips}>
           {!preview && Platform.OS !== "web" && (
@@ -148,6 +193,7 @@ export default function Notifications() {
       <InfoSheet visible={about} title="About notifications" onClose={() => setAbout(false)}>
         <Copy>{notificationDelivery.label}</Copy>
         <Copy>{notificationDelivery.detail}</Copy>
+        <Copy>{reminderCopy.about}</Copy>
       </InfoSheet>
     </SafeAreaView>
   );
@@ -156,5 +202,7 @@ export default function Notifications() {
 const styles = StyleSheet.create({
   header: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12 },
   line: { textAlign: "center", color: c.muted },
+  group: { gap: 10 },
+  hint: { fontSize: 14, color: c.muted, marginHorizontal: 6 },
   chips: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 8 },
 });

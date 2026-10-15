@@ -10,6 +10,7 @@ import {
   type PressableProps,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   type TextInputProps,
@@ -822,6 +823,55 @@ export function Row({
       </View>
       <Copy style={destructive ? [styles.rowTitle, { color: c.error }] : styles.rowTitle}>{title}</Copy>
       {chevron && <ChevronRight size={18} strokeWidth={2.2} color={c.muted} />}
+    </Pressable>
+  );
+}
+
+/** A Row with a real switch (UX3 "Event reminders"): the switch carries the title as its label. */
+export function SwitchRow({
+  title,
+  icon: Icon,
+  tint = c.aquaSoft,
+  ink = c.aquaDark,
+  value,
+  onValueChange,
+  disabled = false,
+}: {
+  title: string;
+  icon: LucideIcon;
+  tint?: string;
+  ink?: string;
+  value: boolean;
+  onValueChange: (next: boolean) => void;
+  disabled?: boolean;
+}) {
+  // The whole row (at least 60 pt) is the switch, so the target meets 44 pt; the drawn switch only shows the state.
+  return (
+    <Pressable
+      accessibilityRole="switch"
+      accessibilityLabel={title}
+      accessibilityState={{ checked: value, disabled }}
+      aria-checked={value}
+      aria-disabled={disabled}
+      disabled={disabled}
+      onPress={() => onValueChange(!value)}
+      style={({ pressed }) => [styles.row, { opacity: disabled ? 0.45 : pressed ? 0.7 : 1 }]}
+    >
+      <View aria-hidden importantForAccessibility="no-hide-descendants" style={[styles.rowIcon, { backgroundColor: tint }]}>
+        <Icon size={20} strokeWidth={2} color={ink} />
+      </View>
+      <Copy aria-hidden importantForAccessibility="no" style={styles.rowTitle}>
+        {title}
+      </Copy>
+      <View pointerEvents="none" aria-hidden importantForAccessibility="no-hide-descendants">
+        <Switch
+          value={value}
+          disabled={disabled}
+          trackColor={{ false: c.line, true: c.aquaDark }}
+          thumbColor={c.paper}
+          ios_backgroundColor={c.line}
+        />
+      </View>
     </Pressable>
   );
 }
