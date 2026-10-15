@@ -62,58 +62,58 @@ try {
     await page
       .getByRole("button", { name: "Create account", exact: true })
       .click();
-    await page.getByRole("button", { name: "Continue", exact: true }).click();
+    await page.getByRole("button", { name: "Next", exact: true }).click();
     await expect(
       page.getByText("Use a name between 1 and 80 characters.", {
         exact: true,
       }),
     ).toBeVisible();
-    await page.locator("input").nth(0).fill("Alex Fixture");
-    await page.locator("input").nth(1).fill("2000-02-29");
+    await page.getByLabel("Your name", { exact: true }).fill("Alex Fixture");
+    await page.getByLabel("Date of birth (optional)", { exact: true }).fill("2000-02-29");
     await page.screenshot({
       path: `/private/tmp/resbite-registration/about-${width}.png`,
       fullPage: true,
     });
-    await page.getByRole("button", { name: "Continue", exact: true }).click();
-    await page.locator("input").nth(0).fill("07700900123");
-    await page.getByRole("button", { name: "Continue", exact: true }).click();
+    await page.getByRole("button", { name: "Next", exact: true }).click();
+    await page.getByLabel("Phone number (optional)", { exact: true }).fill("07700900123");
+    await page.getByRole("button", { name: "Next", exact: true }).click();
     await expect(
       page.getByText(
         "Include your country code, for example +44 7700 900123.",
         { exact: true },
       ),
     ).toBeVisible();
-    await page.locator("input").nth(0).fill("+44 7700 900123");
-    await page.locator("input").nth(1).fill("London");
+    await page.getByLabel("Phone number (optional)", { exact: true }).fill("+44 7700 900123");
+    await page.getByLabel("City (optional)", { exact: true }).fill("London");
     await page.getByText("Outdoors", { exact: true }).click();
     await page.screenshot({
       path: `/private/tmp/resbite-registration/interests-${width}.png`,
       fullPage: true,
     });
-    await page.getByRole("button", { name: "Continue", exact: true }).click();
+    await page.getByRole("button", { name: "Next", exact: true }).click();
     await page
       .getByRole("button", { name: "Previous step", exact: true })
       .click();
-    await expect(page.locator("input").nth(1)).toHaveValue("London");
-    await page.getByRole("button", { name: "Continue", exact: true }).click();
-    await page.locator("input").nth(0).fill("fixture@example.invalid");
-    await page.locator("input").nth(1).fill("test-password-only");
+    await expect(
+      page.getByRole("heading", { name: "About you", exact: true }),
+    ).toBeFocused();
+    await expect(page.getByLabel("City (optional)", { exact: true })).toHaveValue("London");
+    await page.getByRole("button", { name: "Next", exact: true }).click();
+    await page.getByLabel("Email address", { exact: true }).fill("fixture@example.invalid");
+    await page.getByLabel("Password", { exact: true }).fill("test-password-only");
     await page
       .getByRole("button", { name: "Show password", exact: true })
       .click();
     assert.equal(
-      await page
-        .locator("input")
-        .nth(1)
-        .evaluate((el) => el.type),
+      await page.getByLabel("Password", { exact: true }).evaluate((el) => el.type),
       "text",
     );
     await page
       .getByRole("button", { name: "Create account", exact: true })
       .click();
     await expect(
-      page.getByText("Check your inbox.", { exact: true }),
-    ).toBeVisible();
+      page.getByRole("heading", { name: "Check your inbox", exact: true }),
+    ).toBeFocused();
     assert.equal(payload.data.display_name, "Alex Fixture");
     assert.deepEqual(payload.data.registration_details, {
       birth_date: "2000-02-29",

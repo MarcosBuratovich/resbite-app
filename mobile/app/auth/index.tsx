@@ -1,12 +1,19 @@
-import React from "react";
-import { ScrollView, View, KeyboardAvoidingView, Platform } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { Mail } from "lucide-react-native";
-import { Back, Button, Copy, Title, Field, ErrorNote, TextAction, IconBadge, s } from "../../src/design/ui";
-import { colors as c } from "../../src/design/tokens";
+import React, { useRef, useState } from "react";
+import { StyleSheet, Text, View } from "react-native";
+import { router } from "expo-router";
+import { Eye, EyeOff, Info, KeyRound, Mail, MailCheck, RefreshCw, Send } from "lucide-react-native";
+import { Button, Copy, ErrorNote, TextAction, s } from "../../src/design/ui";
+import { Chip, FieldCard, IconButton, InfoSheet, StatusCard, StepScreen, useFocusOnChange } from "../../src/design/kit";
+import { colors as c, fonts } from "../../src/design/tokens";
 import { RegistrationDetails } from "../../src/design/RegistrationDetails";
+import { authTitle } from "../../src/domain/accountCopy";
+import { skipOptionalDetails } from "../../src/domain/registration";
 import { useAuthFlow } from "../../src/state/useAuthFlow";
 
+/**
+ * Sign in, sign up, reset and confirm (UX4-D3): one step screen per mode, field cards and
+ * chips. All behaviour is useAuthFlow's; the notices, guidance and errors keep their wording.
+ */
 export default function Auth() {
   const {
     mode, step, setStep, details, setDetails, confirmedEmail, setConfirmedEmail,
@@ -14,59 +21,227 @@ export default function Auth() {
     busy, restoring, blocked, error, setError, notice, setNotice, pending, remaining, scroll,
     submit, checkConfirmed, switchMode, forgetDestination, google,
   } = useAuthFlow();
+  const [about, setAbout] = useState(false);
+  const [direction, setDirection] = useState<"forward" | "back">("forward");
+  const heading = useRef<Text>(null);
+  const title = authTitle(mode, step, confirmedEmail);
+  // VoiceOver focus moves to each new heading: a mode switch, a sign-up step, "Check your inbox".
+  useFocusOnChange(heading, title);
+  const register = mode === "register";
+  const forward = () => setDirection("forward");
+  const go = (next: Parameters<typeof switchMode>[0]) => {
+    forward();
+    switchMode(next);
+  };
+  const resendChip = (
+    <Chip
+      text={remaining > 0 ? `Resend in ${remaining}s` : "Resend"}
+      icon={RefreshCw}
+      label="Resend confirmation email"
+      disabled={restoring || busy || remaining > 0}
+      onPress={() => void submit()}
+    />
+  );
+  const primary =
+    mode === "confirm" && confirmedEmail ? undefined : (
+      <Button
+        large
+        icon={false}
+        title={
+          mode === "reset"
+            ? "Send reset link"
+            : mode === "confirm"
+              ? "Resend confirmation email"
+              : register
+                ? step < 2
+                  ? "Next"
+                  : "Create account"
+                : "Sign in"
+        }
+        onPress={() => {
+          forward();
+          void submit();
+        }}
+        loading={busy}
+        disabled={restoring || ((mode === "reset" || mode === "confirm" || (register && step === 2)) && remaining > 0)}
+      />
+    );
+  const status =
+    remaining > 0 && (mode === "reset" || (mode === "confirm" && !confirmedEmail))
+      ? `You can request another email in ${remaining}s.`
+      : register && step === 2 && remaining > 0
+        ? `You can request another email in ${remaining}s. Check your inbox first if you already tried to create this account.`
+        : undefined;
   return (
-    <SafeAreaView style={s.page}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <ScrollView ref={scroll} keyboardShouldPersistTaps="handled" contentContainerStyle={[s.body, { paddingBottom: 36 }]}>
-          <Back />
-          {mode === "register" && <Copy style={{ color: c.muted }}>YOUR ACCOUNT · STEP {step + 1} OF 3</Copy>}
-          <Copy style={{ color: c.aquaDark }}>A LITTLE TIME TOGETHER</Copy>
-          <Title>{mode === "confirm" ? confirmedEmail ? "Check your inbox." : "Confirm your email."
-            : mode === "register" ? step === 0 ? "A little about you." : step === 1 ? "Make it yours." : "Your account, your people."
-              : mode === "reset" ? "Let’s get you back in." : "Welcome back."}</Title>
-          <Copy style={s.muted}>Private Resbite test · access is opened by invitation.</Copy>
-          {mode === "login" && <>
-            <Button title="Continue with Google" secondary onPress={google} loading={busy} disabled={restoring} />
-            <Copy style={{ textAlign: "center", color: c.muted }}>or with your email</Copy>
-          </>}
-          {mode === "register" && step < 2 && <RegistrationDetails value={details} onChange={(value) => { setDetails(value); setError(null); }} step={step} />}
-          {(mode !== "register" || step === 2) && !confirmedEmail && <>
-            <Field label="Email address" autoCapitalize="none" autoComplete="email" keyboardType="email-address" value={email} editable={!blocked} onChangeText={(value) => { setEmail(value); setError(null); setNotice(""); }} />
-            {(mode === "register" || mode === "login") && <>
-              <Field label="Password" secureTextEntry={!showPassword} autoCorrect={false} autoCapitalize="none" autoComplete={mode === "register" ? "new-password" : "current-password"} value={password} editable={!blocked} onChangeText={setPassword} />
-              <TextAction title={showPassword ? "Hide password" : "Show password"} disabled={blocked} onPress={() => setShowPassword(!showPassword)} />
-            </>}
-            {mode === "register" && <Copy style={{ color: c.muted, fontSize: 13 }}>Use at least 8 characters. After confirming your email, you can add an optional profile photo.</Copy>}
-          </>}
-          {Boolean(confirmedEmail) && <View style={[s.card, { padding: 20, gap: 12 }]}>
-            <IconBadge icon={Mail} tone="aqua" />
-            <Copy>{confirmedEmail}</Copy>
-            <Copy style={s.muted}>Open the most recent link on this device, where you requested it. Confirmation and private-beta approval are separate steps.</Copy>
-            <Copy style={{ color: c.muted, fontSize: 12 }}>This email is remembered on this device for up to 7 days. Your password is never saved with it.</Copy>
-          </View>}
-          <ErrorNote message={error} />
-          {Boolean(notice) && <View style={[s.card, { padding: 18, backgroundColor: c.aquaSoft }]}><Copy accessibilityLiveRegion="polite">{notice}</Copy></View>}
-          {mode === "confirm" && Boolean(confirmedEmail) && <Button title="I’ve confirmed my email" onPress={checkConfirmed} loading={busy} disabled={restoring} />}
-          {mode === "reset" || mode === "confirm" ? <>
-            <Button title={mode === "reset" ? "Send reset link" : "Resend confirmation email"} secondary={Boolean(confirmedEmail)} onPress={submit} loading={busy} disabled={restoring || remaining > 0} />
-            {remaining > 0 && <Copy style={s.muted}>You can request another email in {remaining}s.</Copy>}
-          </> : <>
-            <Button title={mode === "register" ? step < 2 ? "Continue" : "Create account" : "Sign in"} onPress={submit} loading={busy} disabled={restoring || (mode === "register" && step === 2 && remaining > 0)} />
-            {mode === "register" && step === 2 && remaining > 0 && <Copy style={s.muted}>You can request another email in {remaining}s. Check your inbox first if you already tried to create this account.</Copy>}
-          </>}
-          {mode === "register" && step > 0 && <TextAction title="Previous step" disabled={blocked} onPress={() => { setStep(step - 1); setError(null); }} />}
-          {mode === "confirm" && Boolean(confirmedEmail) && <TextAction title="Use a different email" disabled={blocked} onPress={() => void forgetDestination()} />}
-          <TextAction title={mode === "register" || mode === "confirm" ? "Already have an account? Sign in" : "New to Resbite? Create an account"} disabled={blocked} onPress={() => switchMode(mode === "register" || mode === "confirm" ? "login" : "register")} />
-          {mode === "reset" && <Button title="Back to sign in" secondary disabled={blocked} onPress={() => switchMode("login")} />}
-          {mode === "login" && <>
-            <TextAction title="Forgot password?" disabled={blocked} onPress={() => switchMode("reset")} />
-            <TextAction title="Need to confirm your email?" disabled={blocked} onPress={() => {
-              switchMode("confirm");
-              if (pending?.kind === "confirmation") { setEmail(pending.email); setConfirmedEmail(pending.email); }
-            }} />
-          </>}
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+    <StepScreen
+      step={register ? step + 1 : null}
+      total={3}
+      title={title}
+      titleRef={heading}
+      scrollRef={scroll}
+      direction={direction}
+      onBack={
+        register && step > 0
+          ? () => {
+              if (blocked) return;
+              setDirection("back");
+              setStep(step - 1);
+              setError(null);
+            }
+          : undefined
+      }
+      onClose={() => (router.canGoBack() ? router.back() : router.replace("/"))}
+      header={<IconButton icon={Info} label="About access" tone="plain" onPress={() => setAbout(true)} />}
+      primary={primary}
+      status={status}
+    >
+      {register && step < 2 && (
+        <RegistrationDetails
+          value={details}
+          onChange={(value) => {
+            setDetails(value);
+            setError(null);
+          }}
+          step={step}
+        />
+      )}
+      {register && step === 1 && (
+        <Chip
+          text="Skip"
+          label="Skip"
+          disabled={blocked}
+          onPress={() => {
+            forward();
+            setDetails(skipOptionalDetails(details));
+            setError(null);
+            setStep(2);
+          }}
+        />
+      )}
+      {(!register || step === 2) && !confirmedEmail && (
+        <>
+          <FieldCard
+            label="Email address"
+            icon={Mail}
+            autoCapitalize="none"
+            autoComplete="email"
+            keyboardType="email-address"
+            value={email}
+            editable={!blocked}
+            onChangeText={(value) => {
+              setEmail(value);
+              setError(null);
+              setNotice("");
+            }}
+          />
+          {(register || mode === "login") && (
+            <FieldCard
+              label="Password"
+              icon={KeyRound}
+              secureTextEntry={!showPassword}
+              autoCorrect={false}
+              autoCapitalize="none"
+              autoComplete={register ? "new-password" : "current-password"}
+              value={password}
+              editable={!blocked}
+              onChangeText={setPassword}
+              accessory={
+                <IconButton
+                  icon={showPassword ? EyeOff : Eye}
+                  label={showPassword ? "Hide password" : "Show password"}
+                  tone="plain"
+                  disabled={blocked}
+                  onPress={() => setShowPassword(!showPassword)}
+                />
+              }
+            />
+          )}
+          {register && (
+            <Copy style={styles.small}>
+              Use at least 8 characters. After confirming your email, you can add an optional profile photo.
+            </Copy>
+          )}
+        </>
+      )}
+      {Boolean(confirmedEmail) && (
+        <StatusCard icon={MailCheck}>
+          <Copy style={styles.email}>{confirmedEmail}</Copy>
+          <Copy style={styles.center}>
+            Open the most recent link on this device, where you requested it. Confirmation and private-beta approval are separate steps.
+          </Copy>
+          <Copy style={[styles.center, styles.small]}>
+            This email is remembered on this device for up to 7 days. Your password is never saved with it.
+          </Copy>
+          {mode === "confirm" && (
+            <View style={styles.chips}>
+              <Chip
+                text="I’ve confirmed"
+                icon={MailCheck}
+                tone="aqua"
+                label="I’ve confirmed my email"
+                disabled={blocked}
+                onPress={() => {
+                  forward();
+                  void checkConfirmed();
+                }}
+              />
+              {resendChip}
+              <Chip
+                text="Use a different email"
+                icon={Send}
+                disabled={blocked}
+                onPress={() => void forgetDestination()}
+              />
+            </View>
+          )}
+        </StatusCard>
+      )}
+      <ErrorNote message={error} />
+      {Boolean(notice) && (
+        <View style={[s.card, styles.notice]}>
+          <Copy accessibilityLiveRegion="polite">{notice}</Copy>
+        </View>
+      )}
+      {(mode === "login" || (register && step === 2)) && (
+        <Chip text="Continue with Google" onPress={google} disabled={blocked} />
+      )}
+      <View style={styles.links}>
+        {mode === "login" && (
+          <>
+            <TextAction title="Forgot password?" disabled={blocked} onPress={() => go("reset")} />
+            <TextAction title="Create account" disabled={blocked} onPress={() => go("register")} />
+            <TextAction
+              title="Need to confirm your email?"
+              disabled={blocked}
+              onPress={() => {
+                go("confirm");
+                if (pending?.kind === "confirmation") {
+                  setEmail(pending.email);
+                  setConfirmedEmail(pending.email);
+                }
+              }}
+            />
+          </>
+        )}
+        {(register || mode === "confirm") && (
+          <TextAction title="I have an account" disabled={blocked} onPress={() => go("login")} />
+        )}
+        {mode === "reset" && (
+          <TextAction title="Back to sign in" disabled={blocked} onPress={() => go("login")} />
+        )}
+      </View>
+      <InfoSheet visible={about} title="About access" onClose={() => setAbout(false)}>
+        <Copy>Private Resbite test · access is opened by invitation.</Copy>
+      </InfoSheet>
+    </StepScreen>
   );
 }
+
+const styles = StyleSheet.create({
+  small: { color: c.muted, fontSize: 13 },
+  email: { fontFamily: fonts.medium, textAlign: "center" },
+  center: { textAlign: "center", color: c.muted },
+  chips: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 8 },
+  notice: { padding: 18, backgroundColor: c.aquaSoft },
+  links: { alignItems: "flex-start" },
+});

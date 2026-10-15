@@ -4,7 +4,10 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  StyleSheet,
+  View,
 } from "react-native";
+import { KeyRound, MailCheck, RotateCcw } from "lucide-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { configured, supabase } from "../../src/services/supabase";
@@ -12,7 +15,10 @@ import { exchangeAuthCode } from "../../src/services/authCallback";
 import { confirmationStore } from "../../src/services/confirmation";
 import { authLinkGuidance, normalizeEmail } from "../../src/services/confirmationFlow";
 import { parseAuthCallbackParams } from "../../src/domain/authCallbackParams";
-import { Button, Copy, Title, Field, ErrorNote, s } from "../../src/design/ui";
+import { Button, Copy, Title, ErrorNote, TextAction, s } from "../../src/design/ui";
+import { FieldCard, StatusCard } from "../../src/design/kit";
+import { colors as c } from "../../src/design/tokens";
+import { callbackTitle } from "../../src/domain/accountCopy";
 
 export default function Callback() {
   const params = useLocalSearchParams<{
@@ -153,6 +159,7 @@ export default function Callback() {
     }
   }
 
+  const title = callbackTitle(ready, Boolean(error));
   return (
     <SafeAreaView style={s.page}>
       <KeyboardAvoidingView
@@ -167,19 +174,29 @@ export default function Callback() {
             { flexGrow: 1, justifyContent: "center", paddingBottom: 36 },
           ]}
         >
-          <Title>
-            {ready
-              ? "Choose a new password."
-              : error
-                ? "Let’s try that again."
-                : "Confirming your account…"}
-          </Title>
+          <Title>{title}</Title>
+          <StatusCard
+            icon={ready ? KeyRound : error ? RotateCcw : MailCheck}
+            tint={error && !ready ? c.pinkSoft : c.aquaSoft}
+            ink={error && !ready ? c.error : c.aquaDark}
+          >
+            {ready ? (
+              <Copy style={styles.line}>Use at least 8 characters for your new password.</Copy>
+            ) : error ? (
+              <Copy style={styles.line}>
+                Use the newest email and the same device where you requested it.
+                If the account is already confirmed, you can sign in normally.
+              </Copy>
+            ) : (
+              <ActivityIndicator accessibilityLabel="Confirming your account" />
+            )}
+          </StatusCard>
           <ErrorNote message={error} />
-          {ready ? (
+          {ready && (
             <>
-              <Copy>Use at least 8 characters for your new password.</Copy>
-              <Field
+              <FieldCard
                 label="New password"
+                icon={KeyRound}
                 secureTextEntry
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -191,31 +208,28 @@ export default function Callback() {
                 onSubmitEditing={() => void savePassword()}
               />
               <Button
-                title="Save password"
+                large
+                icon={false}
+                title="Save"
                 loading={busy}
                 onPress={() => void savePassword()}
               />
             </>
-          ) : (
-            !error && (
-              <ActivityIndicator accessibilityLabel="Confirming your account" />
-            )
           )}
           {!ready && error && (
             <>
-              <Copy>
-                Use the newest email and the same device where you requested it.
-                If the account is already confirmed, you can sign in normally.
-              </Copy>
               <Button
+                large
+                icon={false}
                 title={recovery ? "Request a new reset link" : "Request confirmation email"}
                 onPress={() => router.replace(recovery ? "/auth?mode=reset" : "/auth?mode=confirm")}
               />
-              <Button
-                title="Back to sign in"
-                secondary
-                onPress={() => router.replace("/auth?mode=login")}
-              />
+              <View style={{ alignItems: "center" }}>
+                <TextAction
+                  title="Back to sign in"
+                  onPress={() => router.replace("/auth?mode=login")}
+                />
+              </View>
             </>
           )}
         </ScrollView>
@@ -223,3 +237,7 @@ export default function Callback() {
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  line: { textAlign: "center", color: c.muted },
+});

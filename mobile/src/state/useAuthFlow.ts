@@ -11,7 +11,7 @@ import {
   checkEmailConfirmation, confirmationNotice, recoveryNotice,
   emailRequestFailure, retrySeconds, normalizeEmail, validEmail,
 } from "../services/confirmationFlow";
-import { emptyRegistration, validateDetails, registrationMetadata } from "../domain/registration";
+import { emptyRegistration, validateDetails, validateSignupStep, registrationMetadata } from "../domain/registration";
 import type { AuthMode } from "../domain/accountCopy";
 
 WebBrowser.maybeCompleteAuthSession();
@@ -135,7 +135,7 @@ export function useAuthFlow() {
     const current = generation.current;
     setError(null); setNotice("");
     if (mode === "register" && step < 2) {
-      const invalid = validateDetails(step === 0 ? { ...details, phone: "", city: "", interests: [] } : details);
+      const invalid = validateSignupStep(step, details);
       if (invalid) { setError(invalid); return; }
       setStep(step + 1); return;
     }

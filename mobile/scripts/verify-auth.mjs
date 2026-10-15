@@ -14,9 +14,11 @@ try {
       errors.push(message.text());
   });
   const requests = [];
+  let signup = null;
   await page.route("**/*.supabase.co/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     requests.push(path);
+    if (path === "/auth/v1/signup") signup = route.request().postDataJSON();
     await new Promise((resolve) => setTimeout(resolve, 350));
     await route.fulfill({
       status: path === "/auth/v1/token" ? 400 : 200,
@@ -38,7 +40,7 @@ try {
   // The landing's "I have an account" opens sign-in with a valid mode (it used to pass "signin").
   await page.getByRole("button", { name: "I have an account", exact: true }).click();
   await expect(page).toHaveURL(/\/auth\?mode=login$/);
-  await expect(page.getByText("Welcome back.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Welcome back", exact: true })).toBeVisible();
   await page.goto(base);
   await page.getByRole("button", { name: "Get started", exact: true }).click();
   await expect(
@@ -50,9 +52,8 @@ try {
     page.getByText("Enter a valid email address.", { exact: true }),
   ).toBeVisible();
   assert.equal(requests.length, 0);
-  const inputs = page.locator("input");
-  await inputs.nth(0).fill("fixture@example.invalid");
-  await inputs.nth(1).fill("fixture-password");
+  await page.getByLabel("Email address", { exact: true }).fill("fixture@example.invalid");
+  await page.getByLabel("Password", { exact: true }).fill("fixture-password");
   await page.getByRole("button", { name: "Sign in", exact: true }).dblclick();
   await expect(
     page.getByText("Invalid login credentials", { exact: true }),
@@ -61,6 +62,9 @@ try {
   await page
     .getByRole("button", { name: "Forgot password?", exact: true })
     .click();
+  await expect(
+    page.getByRole("heading", { name: "Reset password", exact: true }),
+  ).toBeFocused();
   await page
     .getByRole("button", { name: "Send reset link", exact: true })
     .click();
@@ -74,18 +78,26 @@ try {
   await page
     .getByRole("button", { name: "Back to sign in", exact: true })
     .click();
-  await expect(page.getByText("Welcome back.", { exact: true })).toBeVisible();
-  await page
-    .getByRole("button", {
-      name: "New to Resbite? Create an account",
-      exact: true,
-    })
-    .click();
-  await page.locator("input").nth(0).fill("Fixture");
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page.locator("input").nth(0).fill("signup-fixture@example.invalid");
-  await page.locator("input").nth(1).fill("fixture-password");
+  await expect(
+    page.getByRole("heading", { name: "Welcome back", exact: true }),
+  ).toBeFocused();
+  await page.getByRole("button", { name: "Create account", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Your name?", exact: true }),
+  ).toBeFocused();
+  await page.getByLabel("Your name", { exact: true }).fill("Fixture");
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "About you", exact: true }),
+  ).toBeFocused();
+  // Skip leaves an invalid phone behind instead of blocking sign-up (decision P7).
+  await page.getByLabel("Phone number (optional)", { exact: true }).fill("0770");
+  await page.getByRole("button", { name: "Skip", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Your account", exact: true }),
+  ).toBeVisible();
+  await page.getByLabel("Email address", { exact: true }).fill("signup-fixture@example.invalid");
+  await page.getByLabel("Password", { exact: true }).fill("fixture-password");
   await page
     .getByRole("button", { name: "Create account", exact: true })
     .click();
@@ -96,16 +108,17 @@ try {
     ),
   ).toBeVisible();
   assert.equal(requests.filter((x) => x === "/auth/v1/signup").length, 1);
-  await page
-    .getByRole("button", {
-      name: "Already have an account? Sign in",
-      exact: true,
-    })
-    .click();
-  await page.locator("input").nth(1).fill("fixture-password");
+  assert.deepEqual(signup.data.registration_details, {
+    birth_date: null,
+    phone: null,
+    city: null,
+    interests: [],
+  });
+  await page.getByRole("button", { name: "I have an account", exact: true }).click();
+  await page.getByLabel("Password", { exact: true }).fill("fixture-password");
   // Leave while a login response is in flight; its error must not change the previous page.
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await page.getByRole("button", { name: "Close", exact: true }).click();
   await expect(
     page.getByText("Preview the design", { exact: true }),
   ).toBeVisible();
@@ -167,17 +180,15 @@ try {
   );
   await page.goto(`${base}/auth/callback?code=fixture-code&recovery=1`);
   await expect(
-    page.getByText("Choose a new password.", { exact: true }),
+    page.getByRole("heading", { name: "New password", exact: true }),
   ).toBeVisible();
-  await page.locator("input").fill("new-fixture-password");
-  await page
-    .getByRole("button", { name: "Save password", exact: true })
-    .dblclick();
+  await page.getByLabel("New password", { exact: true }).fill("new-fixture-password");
+  await page.getByRole("button", { name: "Save", exact: true }).dblclick();
   await expect(page).toHaveURL(/\/create$/);
   assert.equal(updates, 1);
   assert.deepEqual(errors, []);
   console.log(
-    "Auth fixtures passed: registration, validation, single-flight login, stale response, reset return, malformed callback and recovery password save; all backend requests intercepted.",
+    "Auth fixtures passed: landing mode, registration with Skip, validation, single-flight login, heading focus, stale response, reset return, malformed callback and recovery password save; all backend requests intercepted.",
   );
 } finally {
   await browser.close();

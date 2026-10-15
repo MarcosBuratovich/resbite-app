@@ -59,6 +59,18 @@ export function validateOptionalDetails(
     return "Choose interests from the list.";
   return null;
 }
+/** Sign-up's step checks, today's rules: the name and birth date on step 0, every detail on step 1. */
+export function validateSignupStep(
+  step: number,
+  value: RegistrationDetails,
+  now = new Date(),
+): string | null {
+  return validateDetails(step === 0 ? skipOptionalDetails(value) : value, now);
+}
+/** Sign-up's Skip on the optional step: phone, city and interests are left empty. */
+export function skipOptionalDetails(value: RegistrationDetails): RegistrationDetails {
+  return { ...value, phone: "", city: "", interests: [] };
+}
 export function registrationMetadata(value: RegistrationDetails) {
   return {
     display_name: value.name.trim(),
