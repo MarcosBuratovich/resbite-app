@@ -98,6 +98,27 @@ try {
     await expect(page.getByRole("heading", { name: "Cover photos", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Close sheet", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Cover photos", exact: true })).toHaveCount(0);
+    // UX4 grouped rows: buttons at least 44 pt tall, a topic row that opens its sheet, a red row.
+    const row = page.getByRole("button", { name: "People & groups", exact: true });
+    assert.ok((await size(row)).height >= 44, "Row is at least 44 pt");
+    await row.click();
+    await expect(page.getByText("Pressed row", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sign out", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "On this device", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "On this device", exact: true })).toBeVisible();
+    await expect(page.getByText("Topic text sits here, word for word.", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Close sheet", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "On this device", exact: true })).toHaveCount(0);
+    // FieldCard: the label names the input; the accessory is its own 44 pt button.
+    const email = page.getByLabel("Email address", { exact: true });
+    await email.fill("fixture@example.invalid");
+    await expect(email).toHaveValue("fixture@example.invalid");
+    const eye = await size(page.getByRole("button", { name: "Show password", exact: true }));
+    assert.ok(eye.width >= 44 && eye.height >= 44, "The field accessory is at least 44 pt");
+    // StatusCard: a title that is not a heading, and a chip whose label says more than its text.
+    await expect(page.getByText("Check your inbox", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Check your inbox", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Resend confirmation email", exact: true })).toHaveText("Resend");
     assert.equal(await fitsWidth(page, '[data-testid="kit"]'), true, `Kit fits ${width} px`);
     await page.screenshot({ path: `${out}/kit-${width}.png`, fullPage: true });
     // StepScreen: progress, a big question title, Previous step and Close, and the pinned pill.
@@ -163,7 +184,7 @@ try {
   }
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: kit roles, labels, selected states and 44 pt targets at 390/320; Larger Text at 320; Preview chip and sheet. Screenshots: " +
+    "PASS: kit roles, labels, selected states and 44 pt targets at 390/320 (with UX4 rows, field and status cards); Larger Text at 320; Preview chip and sheet. Screenshots: " +
       out,
   );
 } finally {

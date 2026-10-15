@@ -2,18 +2,23 @@ import React, { useState } from "react";
 import { ScrollView, View } from "react-native";
 import { Redirect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { CalendarDays, Info, MapPin, Pencil } from "lucide-react-native";
+import { CalendarDays, Eye, Info, LogOut, Mail, MailCheck, MapPin, Pencil, Smartphone, Users } from "lucide-react-native";
 import {
   AvatarStack,
   Chip,
   CoverCard,
   DateBadge,
   Fab,
+  FieldCard,
   IconButton,
   InfoSheet,
+  Row,
+  RowGroup,
   Segmented,
+  StatusCard,
   StepScreen,
   Tile,
+  TopicRow,
   type CardChip,
 } from "../src/design/kit";
 import { categoryIcons } from "../src/design/categories";
@@ -39,6 +44,7 @@ function Gallery() {
   const [sheet, setSheet] = useState(false);
   const [step, setStep] = useState(false);
   const [pressed, setPressed] = useState("");
+  const [field, setField] = useState("");
   const now = new Date();
   if (step)
     return (
@@ -151,6 +157,23 @@ function Gallery() {
           value={segment}
           onChange={setSegment}
         />
+        <RowGroup>
+          <Row title="People & groups" icon={Users} onPress={() => setPressed("row")} />
+          <TopicRow title="On this device" icon={Smartphone}>
+            <Copy>Topic text sits here, word for word.</Copy>
+          </TopicRow>
+          <Row title="Sign out" icon={LogOut} destructive onPress={() => setPressed("sign out")} />
+        </RowGroup>
+        <FieldCard
+          label="Email address"
+          icon={Mail}
+          value={field}
+          onChangeText={setField}
+          accessory={<IconButton icon={Eye} label="Show password" tone="plain" onPress={() => setPressed("eye")} />}
+        />
+        <StatusCard icon={MailCheck} title="Check your inbox">
+          <Chip text="Resend" label="Resend confirmation email" onPress={() => setPressed("resend")} />
+        </StatusCard>
         <Button title="Show step screen" secondary onPress={() => setStep(true)} />
         {pressed ? <Copy accessibilityLiveRegion="polite">{`Pressed ${pressed}`}</Copy> : null}
       </ScrollView>

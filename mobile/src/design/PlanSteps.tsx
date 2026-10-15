@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ActivityIndicator, Platform, Pressable, StyleSheet, TextInput, View, type TextInputProps } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 import {
   Check,
   Clock,
@@ -13,10 +13,9 @@ import {
   Sparkles,
   TextAlignStart,
   Trash2,
-  type LucideIcon,
 } from "lucide-react-native";
 import { Button, Copy, ErrorNote, TextAction, s, useLargeText } from "./ui";
-import { Chip, CoverCard, ScalePressable, Tile } from "./kit";
+import { Chip, CoverCard, FieldCard, ScalePressable, Tile } from "./kit";
 import { CoverPicker, CoverRecovery } from "./CoverPicker";
 import { PlanSchedule } from "./PlanSchedule";
 import { categoryIcons } from "./categories";
@@ -53,75 +52,6 @@ const pictureOf = (editor: PlanEditor) =>
 const startIso = (start: string) => parseLocalDateTime(start)?.toISOString() ?? null;
 const vibeChips = (editor: PlanEditor) =>
   editor.fields.categories.map((key) => ({ key, text: categoryLabels[key], category: key, icon: categoryIcons[key] }));
-const ROSE = "#963F58";
-
-/**
- * A white field card with a leading icon (steps v2). The input fills the card, so a tap
- * anywhere on it focuses the field; the icon is decorative. The placeholder is the visible
- * prompt and `label` stays the input's stable accessibility label.
- */
-function CardInput({
-  label,
-  icon: Icon,
-  circle,
-  display = false,
-  minHeight = 78,
-  multiline = false,
-  onFocus,
-  onBlur,
-  ...props
-}: Omit<TextInputProps, "style"> & {
-  label: string;
-  icon: LucideIcon;
-  /** A tinted 44 pt circle behind the icon (the place field). */
-  circle?: string;
-  /** Quicksand at title size (the name and the place). */
-  display?: boolean;
-  minHeight?: number;
-}) {
-  const [focused, setFocused] = useState(false);
-  const left = circle ? 16 : 20;
-  return (
-    <View style={[styles.inputCard, focused && styles.inputCardFocused]}>
-      <TextInput
-        accessibilityLabel={label}
-        placeholderTextColor={c.muted}
-        {...props}
-        multiline={multiline}
-        textAlignVertical={multiline ? "top" : "center"}
-        onFocus={(e) => {
-          setFocused(true);
-          onFocus?.(e);
-        }}
-        onBlur={(e) => {
-          setFocused(false);
-          onBlur?.(e);
-        }}
-        style={[
-          styles.input,
-          Platform.OS === "web" && styles.noOutline,
-          { minHeight, paddingLeft: left + (circle ? 44 : 26) + 14 },
-          display ? (circle ? styles.inputPlace : styles.inputName) : styles.inputBody,
-          multiline && styles.inputMulti,
-        ]}
-      />
-      <View
-        aria-hidden
-        importantForAccessibility="no-hide-descendants"
-        style={[styles.inputIcon, { left }, multiline ? styles.inputIconTop : styles.inputIconMiddle]}
-      >
-        {circle ? (
-          <View style={[styles.circle44, { backgroundColor: circle }]}>
-            <Icon size={24} strokeWidth={2.2} color={ROSE} />
-          </View>
-        ) : (
-          <Icon size={multiline ? 24 : 26} strokeWidth={2} color={c.muted} />
-        )}
-      </View>
-    </View>
-  );
-}
-
 /** A 52 pt suggestion chip (day or time); selected fills aqua. */
 function StepChip({
   text,
@@ -168,7 +98,7 @@ export function WhatStep({ editor }: { editor: PlanEditor }) {
   return (
     <>
       <CoverPicker cover={cover} disabled={locked} fallback={pictureOf(editor)} />
-      <CardInput
+      <FieldCard
         label="Name"
         icon={Pencil}
         display
@@ -180,7 +110,7 @@ export function WhatStep({ editor }: { editor: PlanEditor }) {
         returnKeyType="next"
         accessibilityHint="Required"
       />
-      <CardInput
+      <FieldCard
         label="Description (optional)"
         icon={TextAlignStart}
         placeholder="What you’ll do together (optional)"
@@ -278,7 +208,7 @@ export function WhereStep({ editor, recent }: { editor: PlanEditor; recent: read
   const current = place.trim().toLocaleLowerCase();
   return (
     <>
-      <CardInput
+      <FieldCard
         label="Meeting place"
         icon={MapPin}
         circle={c.pinkSoft}
@@ -342,7 +272,7 @@ export function WhereStep({ editor, recent }: { editor: PlanEditor; recent: read
           </View>
         </View>
       )}
-      <CardInput
+      <FieldCard
         label="A note for everyone (optional)"
         icon={MessageSquare}
         placeholder="Note for guests (optional)"
@@ -548,26 +478,6 @@ export function DraftProblems({ editor }: { editor: PlanEditor }) {
 }
 
 const styles = StyleSheet.create({
-  // Field cards (CardInput)
-  inputCard: {
-    position: "relative",
-    borderRadius: r.panel,
-    backgroundColor: c.paper,
-    borderWidth: 1,
-    borderColor: "#EFEAF0",
-    boxShadow: depth.card,
-  },
-  // The focus ring is the card's (a 2 pt aqua ring, web and native alike), not the browser outline.
-  inputCardFocused: { borderColor: c.aquaDark, boxShadow: `0 0 0 1px ${c.aquaDark}` },
-  noOutline: { outlineStyle: "solid", outlineWidth: 0 },
-  input: { paddingRight: 20, color: c.ink, borderRadius: r.panel },
-  inputName: { fontFamily: fonts.display, fontSize: 24, paddingVertical: 14 },
-  inputPlace: { fontFamily: fonts.display, fontSize: 22, paddingVertical: 14 },
-  inputBody: { fontFamily: fonts.body, fontSize: 17, lineHeight: 24 },
-  inputMulti: { paddingTop: 18, paddingBottom: 18 },
-  inputIcon: { position: "absolute", pointerEvents: "none", justifyContent: "center" },
-  inputIconMiddle: { top: 0, bottom: 0 },
-  inputIconTop: { top: 18 },
   circle44: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
   circle40: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
   // When

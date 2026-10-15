@@ -11,6 +11,8 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
+  type TextInputProps,
   View,
   type StyleProp,
   type ViewStyle,
@@ -23,7 +25,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ChevronLeft, MapPin, Plus, X, type LucideIcon } from "lucide-react-native";
+import { ChevronLeft, ChevronRight, MapPin, Plus, X, type LucideIcon } from "lucide-react-native";
 import { Button, Copy, s, useLargeText, useReduceMotion } from "./ui";
 import { EventPictureView } from "./categories";
 import { categoryPalette, colors as c, depth, fonts, r, space } from "./tokens";
@@ -737,6 +739,193 @@ export function announce(message: string) {
   if (Platform.OS !== "web") AccessibilityInfo.announceForAccessibility(message);
 }
 
+const ROSE = "#963F58";
+
+/**
+ * A card of rows separated by hairlines (UX4 grouped rows): Profile, Privacy and Account
+ * details. Children are Row or TopicRow elements; empty children (false, null) are skipped.
+ */
+export function RowGroup({ children }: { children: React.ReactNode }) {
+  const rows = React.Children.toArray(children);
+  return (
+    <View style={styles.rowGroup}>
+      {rows.map((row, i) => (
+        <React.Fragment key={i}>
+          {i > 0 && <View style={styles.rowDivider} />}
+          {row}
+        </React.Fragment>
+      ))}
+    </View>
+  );
+}
+
+/** One settings row: a tinted icon circle, a short title and a chevron; at least 60 pt tall. */
+export function Row({
+  title,
+  icon: Icon,
+  tint = c.aquaSoft,
+  ink = c.aquaDark,
+  onPress,
+  label,
+  hint,
+  destructive = false,
+  chevron = !destructive,
+  disabled = false,
+}: {
+  title: string;
+  icon: LucideIcon;
+  tint?: string;
+  ink?: string;
+  onPress: () => void;
+  label?: string;
+  hint?: string;
+  destructive?: boolean;
+  chevron?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label ?? title}
+      accessibilityHint={hint}
+      aria-disabled={disabled}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [styles.row, { opacity: disabled ? 0.45 : pressed ? 0.7 : 1 }]}
+    >
+      <View style={[styles.rowIcon, { backgroundColor: destructive ? c.pinkSoft : tint }]}>
+        <Icon size={20} strokeWidth={2} color={destructive ? c.error : ink} />
+      </View>
+      <Copy style={destructive ? [styles.rowTitle, { color: c.error }] : styles.rowTitle}>{title}</Copy>
+      {chevron && <ChevronRight size={18} strokeWidth={2.2} color={c.muted} />}
+    </Pressable>
+  );
+}
+
+/** A Row that opens a sheet with longer text (UX4 topic sheet). The text keeps its wording. */
+export function TopicRow({
+  title,
+  icon,
+  tint,
+  ink,
+  children,
+}: {
+  title: string;
+  icon: LucideIcon;
+  tint?: string;
+  ink?: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <>
+      <Row title={title} icon={icon} tint={tint} ink={ink} hint="Opens details" onPress={() => setOpen(true)} />
+      <InfoSheet visible={open} title={title} onClose={() => setOpen(false)}>
+        {children}
+      </InfoSheet>
+    </>
+  );
+}
+
+/**
+ * A large input card (the creation steps' field, shared by sign-in, sign-up, account details
+ * and deletion). The label is the input's accessible name; `accessory` sits at the right
+ * (the show-password button).
+ */
+export function FieldCard({
+  label,
+  icon: Icon,
+  circle,
+  display = false,
+  minHeight = 78,
+  multiline = false,
+  accessory,
+  onFocus,
+  onBlur,
+  ...props
+}: Omit<TextInputProps, "style"> & {
+  label: string;
+  icon: LucideIcon;
+  /** A tinted 44 pt circle behind the icon (the place field). */
+  circle?: string;
+  /** Quicksand at title size (the name and the place). */
+  display?: boolean;
+  minHeight?: number;
+  accessory?: React.ReactNode;
+}) {
+  const [focused, setFocused] = React.useState(false);
+  const left = circle ? 16 : 20;
+  return (
+    <View style={[styles.inputCard, focused && styles.inputCardFocused]}>
+      <TextInput
+        accessibilityLabel={label}
+        placeholderTextColor={c.muted}
+        {...props}
+        multiline={multiline}
+        textAlignVertical={multiline ? "top" : "center"}
+        onFocus={(e) => {
+          setFocused(true);
+          onFocus?.(e);
+        }}
+        onBlur={(e) => {
+          setFocused(false);
+          onBlur?.(e);
+        }}
+        style={[
+          styles.input,
+          Platform.OS === "web" && styles.noOutline,
+          { minHeight, paddingLeft: left + (circle ? 44 : 26) + 14, paddingRight: accessory ? 64 : 20 },
+          display ? (circle ? styles.inputPlace : styles.inputName) : styles.inputBody,
+          multiline && styles.inputMulti,
+        ]}
+      />
+      <View
+        aria-hidden
+        importantForAccessibility="no-hide-descendants"
+        style={[styles.inputIcon, { left }, multiline ? styles.inputIconTop : styles.inputIconMiddle]}
+      >
+        {circle ? (
+          <View style={[styles.circle44, { backgroundColor: circle }]}>
+            <Icon size={24} strokeWidth={2.2} color={ROSE} />
+          </View>
+        ) : (
+          <Icon size={multiline ? 24 : 26} strokeWidth={2} color={c.muted} />
+        )}
+      </View>
+      {accessory ? <View style={styles.inputAccessory}>{accessory}</View> : null}
+    </View>
+  );
+}
+
+/** A state at a glance (UX4 status card): a tinted icon circle, an optional short title, then lines and chips. */
+export function StatusCard({
+  icon: Icon,
+  tint = c.aquaSoft,
+  ink = c.aquaDark,
+  title,
+  children,
+}: {
+  icon: LucideIcon;
+  tint?: string;
+  ink?: string;
+  title?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <View style={styles.statusCard}>
+      <View
+        aria-hidden
+        importantForAccessibility="no-hide-descendants"
+        style={[styles.statusIcon, { backgroundColor: tint }]}
+      >
+        <Icon size={30} strokeWidth={2} color={ink} />
+      </View>
+      {title ? <Copy style={styles.statusTitle}>{title}</Copy> : null}
+      {children}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   chip: {
     flexDirection: "row",
@@ -853,4 +1042,34 @@ const styles = StyleSheet.create({
   sheetBody: { padding: space.xl, gap: space.l },
   sheetHeader: { flexDirection: "row", alignItems: "center", gap: space.m },
   sheetTitle: { flex: 1, fontSize: 24, lineHeight: 30 },
+  // UX4: grouped rows, field cards and status cards.
+  rowGroup: { borderRadius: r.card, backgroundColor: c.paper, boxShadow: depth.card, paddingVertical: 4, overflow: "hidden" },
+  rowDivider: { height: 1, backgroundColor: c.line, marginLeft: 68 },
+  row: { flexDirection: "row", alignItems: "center", gap: space.m, minHeight: 60, paddingHorizontal: 18, paddingVertical: 8 },
+  rowIcon: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  rowTitle: { flex: 1, fontFamily: fonts.medium, fontSize: 16, color: c.ink },
+  // The focus ring is the card's (a 2 pt aqua ring, web and native alike), not the browser outline.
+  inputCard: {
+    position: "relative",
+    borderRadius: r.panel,
+    backgroundColor: c.paper,
+    borderWidth: 1,
+    borderColor: "#EFEAF0",
+    boxShadow: depth.card,
+  },
+  inputCardFocused: { borderColor: c.aquaDark, boxShadow: `0 0 0 1px ${c.aquaDark}` },
+  noOutline: { outlineStyle: "solid", outlineWidth: 0 },
+  input: { paddingRight: 20, color: c.ink, borderRadius: r.panel },
+  inputName: { fontFamily: fonts.display, fontSize: 24, paddingVertical: 14 },
+  inputPlace: { fontFamily: fonts.display, fontSize: 22, paddingVertical: 14 },
+  inputBody: { fontFamily: fonts.body, fontSize: 17, lineHeight: 24 },
+  inputMulti: { paddingTop: 18, paddingBottom: 18 },
+  inputIcon: { position: "absolute", pointerEvents: "none", justifyContent: "center" },
+  inputIconMiddle: { top: 0, bottom: 0 },
+  inputIconTop: { top: 18 },
+  inputAccessory: { position: "absolute", right: 10, top: 0, bottom: 0, justifyContent: "center" },
+  circle44: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
+  statusCard: { padding: space.xl, gap: space.m, alignItems: "center", borderRadius: r.card, backgroundColor: c.paper, boxShadow: depth.card },
+  statusIcon: { width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center" },
+  statusTitle: { fontFamily: fonts.display, fontSize: 22, lineHeight: 28, textAlign: "center", color: c.ink },
 });
