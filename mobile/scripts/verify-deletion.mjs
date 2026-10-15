@@ -23,9 +23,47 @@ try {
   await page
     .getByRole("button", { name: "Data & privacy", exact: true })
     .click();
+  await expect(
+    page.getByRole("heading", { name: "Privacy", exact: true }),
+  ).toBeVisible();
+  // Each topic opens a sheet with today's text, word for word.
+  await page.getByRole("button", { name: "On this device", exact: true }).click();
+  await expect(
+    page.getByText(/^Contacts are read only when you choose them\./),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Close sheet", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Close sheet", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "About this page", exact: true }).click();
+  await expect(
+    page.getByText(/^Resbite is in private development\./),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Close sheet", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Close sheet", exact: true }),
+  ).toHaveCount(0);
   await page
-    .getByRole("button", { name: "Review account deletion", exact: true })
+    .getByRole("button", { name: "Delete account", exact: true })
     .click();
+  await expect(
+    page.getByText("Deletion immediately closes access.", { exact: true }),
+  ).toBeVisible();
+  // The full warnings, and the former Privacy deletion paragraph, sit in "What happens".
+  await page.getByRole("button", { name: "What happens", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "What happens", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/^Future plans you organized are cancelled\./),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/^Signing out does not delete your account or shared plans\./),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Close sheet", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Close sheet", exact: true }),
+  ).toHaveCount(0);
   await expect(
     page.getByText(
       "You are exploring the design. Preview cannot delete a real account.",

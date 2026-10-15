@@ -103,6 +103,7 @@ export function Button({
   icon = true,
   hint,
   large = false,
+  destructive = false,
 }: {
   title: string;
   onPress: () => void;
@@ -114,6 +115,8 @@ export function Button({
   hint?: string;
   /** The creation steps' pill (steps v2): 62 pt tall with a centred, bold label. */
   large?: boolean;
+  /** A red button with a white label, for a permanent action (Delete account). */
+  destructive?: boolean;
 }) {
   const reduce = useReduceMotion(),
     scale = useSharedValue(1),
@@ -121,6 +124,7 @@ export function Button({
   const anim = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
   }));
+  const ink = destructive ? c.paper : c.ink;
   return (
     <Animated.View style={anim}>
       <GluestackButton
@@ -146,22 +150,25 @@ export function Button({
           s.button,
           large && s.buttonLarge,
           secondary && s.secondary,
+          destructive && s.destructive,
           (disabled || loading) && { opacity: 0.65, boxShadow: "none" },
           pressed && {
-            backgroundColor: secondary ? c.purpleSoft : "#EBA1AC",
+            backgroundColor: destructive ? "#8A2737" : secondary ? c.purpleSoft : "#EBA1AC",
             boxShadow: depth.pressed,
           },
         ]}
       >
-        <Copy style={large ? [s.buttonLabel, s.buttonLabelLarge] : s.buttonLabel}>{title}</Copy>
+        <Copy style={large ? [s.buttonLabel, s.buttonLabelLarge, { color: ink }] : [s.buttonLabel, { color: ink }]}>
+          {title}
+        </Copy>
         {loading ? (
-          <ActivityIndicator color={c.ink} />
+          <ActivityIndicator color={ink} />
         ) : (
           icon && (
             <ArrowRight
               size={large ? 22 : 19}
               strokeWidth={large ? 2.2 : 1.6}
-              color={c.ink}
+              color={ink}
             />
           )
         )}
@@ -393,6 +400,7 @@ export const s = StyleSheet.create({
     borderColor: "#E5DBE9",
     boxShadow: depth.small,
   },
+  destructive: { backgroundColor: c.error, borderColor: c.error, boxShadow: "none" },
   buttonLabel: {
     fontFamily: fonts.body,
     fontSize: 15,

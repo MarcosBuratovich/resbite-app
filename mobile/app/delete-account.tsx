@@ -1,18 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
-import { ScrollView, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ShieldCheck, Trash2, Mail, KeyRound } from "lucide-react-native";
-import {
-  ActionRow,
-  Back,
-  Button,
-  Copy,
-  Field,
-  Title,
-  s,
-} from "../src/design/ui";
-import { colors } from "../src/design/tokens";
+import { Info, KeyRound, Mail, ShieldCheck, Trash2, TriangleAlert } from "lucide-react-native";
+import { Back, Button, Copy, TextAction, Title, s } from "../src/design/ui";
+import { Chip, FieldCard, InfoSheet, StatusCard } from "../src/design/kit";
+import { colors, fonts } from "../src/design/tokens";
 import { useApp } from "../src/state/AppState";
 import {
   accountDeletionEnabled,
@@ -35,6 +28,7 @@ export default function DeleteAccount() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [restoringReceipt, setRestoringReceipt] = useState(true);
+  const [warnings, setWarnings] = useState(false);
   const focused = useRef(false);
   useFocusEffect(
     useCallback(() => {
@@ -142,105 +136,104 @@ export default function DeleteAccount() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={[s.body, { paddingBottom: 40 }]}
       >
-        <Back label="Your data & privacy" />
+        <Back label="Privacy" />
         <Title>Delete account</Title>
-        <View style={[s.card, { padding: 20, gap: 12 }]}>
-          <Trash2 color={colors.error} size={28} />
-          <Title style={{ fontSize: 23 }}>A permanent goodbye</Title>
-          <Copy>
-            Deletion immediately closes access. Your profile, private photo and
-            sign-in account are then removed as cleanup finishes. Invitations
-            are revoked and your participation records are removed.
-          </Copy>
-          <Copy>
-            Future plans you organized are cancelled. Other participants can
-            retain a neutral plan record; your meeting place, note and location
-            are cleared.
-          </Copy>
-          <Copy>
-            Saved groups, invitation records and plan drafts on this device are
-            cleared. Information already copied or shared outside Resbite cannot
-            be recalled. Backup copies are not erased instantly.
-          </Copy>
-        </View>
+        <StatusCard icon={Trash2} tint={colors.pinkSoft} ink={colors.error}>
+          <Copy style={styles.line}>Deletion immediately closes access.</Copy>
+          <Chip
+            text="What happens"
+            icon={Info}
+            hint="Opens the full deletion warnings"
+            onPress={() => setWarnings(true)}
+          />
+        </StatusCard>
         {!available &&
         !status &&
         (!receipt || preview || !accountDeletionEnabled) ? (
-          <View style={[s.card, { padding: 20, gap: 12 }]}>
-            <ShieldCheck color={colors.aquaDark} size={26} />
-            <Copy>
+          <StatusCard icon={ShieldCheck}>
+            <Copy style={styles.line}>
               {preview
                 ? "You are exploring the design. Preview cannot delete a real account."
                 : "Account deletion is not enabled in this development build. Its server setup and recovery checks must be completed before tester access opens."}
             </Copy>
-          </View>
+          </StatusCard>
         ) : null}
         {available && !status && (
-          <View style={[s.card, { padding: 20, gap: 14 }]}>
-            <Title style={{ fontSize: 23 }}>Confirm it’s you</Title>
-            <Copy>{email}</Copy>
-            {passwordMode ? (
-              <Field
-                label="Current password"
-                value={credential}
-                onChangeText={setCredential}
-                secureTextEntry
-                autoComplete="current-password"
-                editable={!busy}
-              />
-            ) : (
-              <>
-                <Copy>
-                  Request an email verification code for this account. A fresh
-                  code is required; refreshing your session is not enough.
-                </Copy>
-                <Button
-                  title="Send verification code"
-                  secondary
-                  loading={busy}
-                  onPress={() =>
-                    void action(async () => {
-                      const guard = capture();
-                      await sendDeletionCode(email!, guard);
-                      setMessage("Check your email for the verification code.");
-                    })
-                  }
-                />
-                <Field
-                  label="Email verification code"
+          <>
+            <NumberedCard number={1} title="Confirm it’s you">
+              <Copy style={{ color: colors.muted }}>{email}</Copy>
+              {passwordMode ? (
+                <FieldCard
+                  label="Current password"
+                  icon={KeyRound}
                   value={credential}
                   onChangeText={setCredential}
-                  autoComplete="one-time-code"
-                  keyboardType="number-pad"
+                  secureTextEntry
+                  autoComplete="current-password"
                   editable={!busy}
                 />
-              </>
-            )}
-            {passwordAccount && (
-              <ActionRow
-                title={
-                  passwordMode
-                    ? "Use an email code instead"
-                    : "Use my password instead"
-                }
-                icon={passwordMode ? Mail : KeyRound}
-                disabled={busy}
-                onPress={() => {
-                  setUseEmailCode(!useEmailCode);
-                  setCredential("");
-                }}
+              ) : (
+                <>
+                  <Copy>
+                    Request an email verification code for this account. A fresh
+                    code is required; refreshing your session is not enough.
+                  </Copy>
+                  <Button
+                    title="Send verification code"
+                    secondary
+                    loading={busy}
+                    onPress={() =>
+                      void action(async () => {
+                        const guard = capture();
+                        await sendDeletionCode(email!, guard);
+                        setMessage("Check your email for the verification code.");
+                      })
+                    }
+                  />
+                  <FieldCard
+                    label="Email verification code"
+                    icon={Mail}
+                    value={credential}
+                    onChangeText={setCredential}
+                    autoComplete="one-time-code"
+                    keyboardType="number-pad"
+                    editable={!busy}
+                  />
+                </>
+              )}
+              {passwordAccount && (
+                <TextAction
+                  title={
+                    passwordMode
+                      ? "Use an email code instead"
+                      : "Use my password instead"
+                  }
+                  icon={passwordMode ? Mail : KeyRound}
+                  disabled={busy}
+                  onPress={() => {
+                    setUseEmailCode(!useEmailCode);
+                    setCredential("");
+                  }}
+                />
+              )}
+            </NumberedCard>
+            <NumberedCard number={2} title="Type DELETE">
+              <FieldCard
+                label="Type DELETE to confirm"
+                icon={TriangleAlert}
+                placeholder="DELETE"
+                value={confirmation}
+                onChangeText={setConfirmation}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                editable={!busy}
               />
-            )}
-            <Field
-              label="Type DELETE to confirm"
-              value={confirmation}
-              onChangeText={setConfirmation}
-              autoCapitalize="characters"
-              autoCorrect={false}
-              editable={!busy}
-            />
-            <Copy>This cannot be undone once your request is accepted.</Copy>
+              <Copy style={{ color: colors.muted }}>
+                This cannot be undone once your request is accepted.
+              </Copy>
+            </NumberedCard>
             <Button
+              destructive
               title={
                 receipt
                   ? "Retry account deletion"
@@ -276,7 +269,7 @@ export default function DeleteAccount() {
                 })
               }
             />
-          </View>
+          </>
         )}
         {receipt && !session && !preview && accountDeletionEnabled && (
           <Copy>
@@ -315,6 +308,68 @@ export default function DeleteAccount() {
           />
         )}
       </ScrollView>
+      <InfoSheet visible={warnings} title="What happens" onClose={() => setWarnings(false)}>
+        <Copy>
+          Deletion immediately closes access. Your profile, private photo and
+          sign-in account are then removed as cleanup finishes. Invitations
+          are revoked and your participation records are removed.
+        </Copy>
+        <Copy>
+          Future plans you organized are cancelled. Other participants can
+          retain a neutral plan record; your meeting place, note and location
+          are cleared.
+        </Copy>
+        <Copy>
+          Saved groups, invitation records and plan drafts on this device are
+          cleared. Information already copied or shared outside Resbite cannot
+          be recalled. Backup copies are not erased instantly.
+        </Copy>
+        <Copy>
+          Signing out does not delete your account or shared plans. Review
+          what permanent deletion removes and its availability in this build.
+          Backup retention and restore handling must also be verified before
+          tester access opens.
+        </Copy>
+      </InfoSheet>
     </SafeAreaView>
   );
 }
+
+/** One numbered step of the deletion form: a card with a number circle and a short title. */
+function NumberedCard({
+  number,
+  title,
+  children,
+}: {
+  number: number;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={[s.card, styles.card]}>
+      <View style={styles.cardTop}>
+        <View aria-hidden importantForAccessibility="no-hide-descendants" style={styles.number}>
+          <Text style={styles.numberText}>{number}</Text>
+        </View>
+        <Copy style={styles.cardTitle}>{title}</Copy>
+      </View>
+      {children}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  line: { textAlign: "center" },
+  card: { padding: 20, gap: 14 },
+  cardTop: { flexDirection: "row", alignItems: "center", gap: 12 },
+  number: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.pinkSoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  numberText: { fontFamily: fonts.bold, fontSize: 15, color: colors.error },
+  cardTitle: { flex: 1, fontFamily: fonts.medium, fontSize: 17 },
+});
