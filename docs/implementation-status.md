@@ -427,3 +427,24 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
 2. After that, one coworker on TestFlight checks the invitee side (UX2-D6, UX2-D7): the organizer-only view before answering, Maybe, and the guest list after answering. Adding the coworker to the tester list is a separate live data change that needs its own approval.
 
 **Next.** Push `main` when the owner says so, then the TestFlight stage with one coworker (each tester-list addition is approved separately). Then B1. Tester access is still owner-only and account deletion is not enabled.
+
+## UX4 build — 15 October 2026
+
+**Built on branch `ux4`, awaiting the owner’s iPhone check. Not merged, not pushed, not on TestFlight.** UX4 is the third part of the UX work: it brings the 13 screens outside the event flow to the same minimal, widget-like standard as UX1 ([spec](superpowers/specs/2026-10-15-ux4-design.md), [plan](superpowers/plans/2026-10-15-ux4.md); decisions UX4-D1 to UX4-D5, P1 to P14 and the changes made during the build in `knowledge-base/08-decisions.md`).
+
+**What changed.**
+- App only. There is no database, service, native, build or dependency change, so nothing touches the hosted project.
+- 13 screens are redrawn with the kit: landing, introduction, sign-in, sign-up, confirm your email, reset password, the email-link page, account access check, Profile, Account details, Notifications, Data & privacy, Wellness and Delete account. Each has one short heading and chips, rows and cards in place of paragraphs and long button labels.
+- Sign-in and Profile logic moved into `useAuthFlow` and `useProfile` unchanged; the screens now only draw.
+- Delete account gets a short warning card, a "What happens" sheet and a red `destructive` button. Account deletion stays switched off (`EXPO_PUBLIC_ACCOUNT_DELETION_ENABLED`).
+- Browser scripts are updated for the new wording, and new captures cover each screen at 390 and 320 px and with Larger Text, with a check that no button, heading or field is clipped.
+
+**Verification.** `npm run check`, every browser script, the deletion script with deletion switched on (intercepted fixtures only), the iOS JavaScript export and `git diff --check main...HEAD` pass. The diff against `main` has no change under `supabase`, `app.json`, `eas.json`, `package-lock.json` or `ios`. Nothing here was run on a device.
+
+**Deferred to the owner’s iPhone check.**
+1. Sign out and back in; the landing page and introduction (Close on the first slide, Skip, Next, "Create account"); starting a sign-up and backing out; requesting a password reset email.
+2. Editing the Profile name (the sheet over the keyboard) and photo; Account details (the birth date sheet), Privacy, Notifications, Wellness and Delete account (deletion stays off).
+3. Larger Text and VoiceOver on a few screens, including focus moving to the new heading on Sign in, Forgot password?, Back to sign in.
+4. The tab bar labels and single-line placeholders at the largest text sizes, which truncate in the browser proxy.
+
+**Next.** The owner’s iPhone check, then merge `ux4` into `main`. UX4 reaches TestFlight in a later build, after the coworker’s UX2 invitee check on the current build.

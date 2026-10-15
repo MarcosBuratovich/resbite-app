@@ -179,3 +179,44 @@ Owner decisions from the UX2 design session ([spec](../docs/superpowers/specs/20
 - The migrations are fixed as `20261014120000_ux2_rules.sql` (hosted-compatible) and `20261014130000_ux2_notification_wording.sql` (local-only, ships with the notification sender).
 
 Each UX2 database migration needs the owner’s explicit approval, and the rules migration must land before the second tester joins. Notification sending stays switched off.
+
+## UX4 — 15 October 2026
+
+Owner decisions from the UX4 design session ([spec](../docs/superpowers/specs/2026-10-15-ux4-design.md), [plan](../docs/superpowers/plans/2026-10-15-ux4.md)). UX4 brings the 13 screens outside the event flow (sign-in, first run, Profile and its sub-screens) to the same minimal, widget-like standard as UX1, without changing how anything works. Status: built on branch `ux4`, awaiting the owner’s iPhone check.
+
+| # | Decision |
+| --- | --- |
+| UX4-D1 | One piece of work for all 13 screens: one spec, one plan, one iPhone check. The owner chose this over splitting into two phases. |
+| UX4-D2 | Profile is "B · Grouped rows": a centred photo and name, one card of icon rows (People & groups, Account details, Notifications, Data & privacy), and Sign out in its own card. The owner’s single browser click was on A; the typed answer "b" is taken as the choice. |
+| UX4-D3 | Sign-in and first run are "A · Landing, then a short introduction": a landing page, three trimmed introduction slides, sign-in as field cards, and sign-up as step cards. |
+| UX4-D4 | Wellness, Data & privacy, Notifications and Delete account follow the mockup ("looks right"). The full deletion warning moves into a "What happens" sheet while a short warning card stays visible. |
+| UX4-D5 | The Wellness sample rows use approved categories: "Adventure" becomes Physical and "Meals & Drinks" becomes Community. The minutes are unchanged (60, 60, 30). The data stays labelled as sample. |
+
+**Decisions the plan makes (P1 to P14).**
+
+| # | Decision |
+| --- | --- |
+| P1 | Chips show short text and keep today’s action wording as their accessibility label (for example "Check again" is labelled "Check account access"; "Skip" is labelled "Skip introduction"; "Sample data" is labelled "Sample wellness data"; "Clear date" is labelled "Clear date of birth"). |
+| P2 | **Spec amendment, confirmed by the owner with the plan:** "Reload saved details" on Account details is always a quiet (not red) row. The spec showed it only when loading failed, but Account details has no load-failure state, and Reload is the one way to discard unsaved edits and fetch the saved values. |
+| P3 | Notifications: the status card’s title is "Not active yet". The delivery label and detail move unchanged into an ⓘ sheet, "About notifications". "Open My resbites" stays as a chip because that explanation tells people to open it. |
+| P4 | Sign-up step buttons say "Next", as the creation steps do. The last step says "Create account". |
+| P5 | The private-beta line ("Private Resbite test · access is opened by invitation.") moves behind an ⓘ labelled "About access" in the sign-in screen’s top bar. |
+| P6 | The Google chip appears on Sign in and on sign-up’s "Your account" step (the spec). It was on Sign in only. Choosing it from sign-up leaves the typed sign-up details behind, as Google sign-in from Sign in does today; Account details’ setup ("About you") then offers them. |
+| P7 | Sign-up Skip (on "About you") empties phone, city and interests and moves to "Your account". The name and birth date stay. |
+| P8 | The account access check keeps its guidance on the card, word for word, with no ⓘ. |
+| P9 | Delete account: the Back label is "Privacy". The "What happens" sheet holds the three warning paragraphs and the former Privacy "Account deletion" paragraph, word for word. The two numbered card titles are not headings. The red button is a new `destructive` variant of `Button`. |
+| P10 | On iPhone the birth date picker opens in an `InfoSheet` (same picker, "Use this date" and "Cancel"). The web keeps the typed field. |
+| P11 | Reset and the email-only Confirm show "You can request another email in Ns." as the screen’s status line. The sign-up "Your account" line keeps its full text. |
+| P12 | Removed text that is not protected: the eyebrows (for example "YOUR RESBITE ACCOUNT", "YOUR PREFERENCES", "DEVICE PERMISSION"); "or with your email"; the landing note "A little time. A real connection."; the introduction’s eyebrows, descriptions and detail cards; the Profile "Browse ideas" row (the spec); and the second Wellness heading "A little of everything.". |
+| P13 | Profile’s `save()` returns `true` once the name is saved, and the name sheet closes on `true`. Nothing else about saving changes. |
+| P14 | "Check your inbox" (an email on file) and the email-link page are status cards. Reset and the email-only "Confirm your email" are forms: an email field card and one button, with their notice in the existing tinted card. |
+
+**Decided during the build (15 October 2026), for the owner’s review.**
+1. On "Check your inbox" the resend chip keeps the label "Resend confirmation email" and, while the cooldown runs, carries the hint "You can request another email in Ns." (the visible text says "Resend in Ns"), so VoiceOver reads the countdown.
+2. "Create account" stays on Reset password, next to "Back to sign in". The old screen offered it there; the plan had dropped it.
+3. Every field card has a visible prompt: "Email address", "Password" (sign-in), "New password" (email-link page), "Current password" and "Verification code" (Delete account). Labels are unchanged.
+4. Shorter sign-up placeholders so they fit under Larger Text: "Your name" (was "What should we call you?") and "Your city" (was "Your city or town"). The phone placeholder is unchanged.
+5. Header rows wrap under Larger Text on Wellness, Notifications, Privacy and Account details: the ⓘ drops below the heading instead of being pushed off screen.
+6. The Wellness ring grows with its content under Larger Text (148 pt minimum), so "2h 30m" stays inside it.
+7. Large pill buttons centre wrapped text.
+8. Deferred to the owner’s iPhone check: the tab bar’s labels truncate under the largest forced text sizes in the browser proxy (the tab bar is unchanged by UX4), and single-line field placeholders can still truncate at the very largest sizes.
