@@ -182,7 +182,7 @@ Each UX2 database migration needs the owner’s explicit approval, and the rules
 
 ## UX4 — 15 October 2026
 
-Owner decisions from the UX4 design session ([spec](../docs/superpowers/specs/2026-10-15-ux4-design.md), [plan](../docs/superpowers/plans/2026-10-15-ux4.md)). UX4 brings the 13 screens outside the event flow (sign-in, first run, Profile and its sub-screens) to the same minimal, widget-like standard as UX1, without changing how anything works. Status: built on branch `ux4`, awaiting the owner’s iPhone check.
+Owner decisions from the UX4 design session ([spec](../docs/superpowers/specs/2026-10-15-ux4-design.md), [plan](../docs/superpowers/plans/2026-10-15-ux4.md)). UX4 brings the 13 screens outside the event flow (sign-in, first run, Profile and its sub-screens) to the same minimal, widget-like standard as UX1, without changing how anything works. Status: accepted on the owner’s iPhone on 15 October ([UX4 QA](../qa/ux4-2026-10-15/README.md)).
 
 | # | Decision |
 | --- | --- |
