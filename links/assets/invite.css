@@ -1,8 +1,8 @@
 :root {
   color-scheme: light;
-  font-family: system-ui, sans-serif;
-  color: #322f35;
-  background: #faf5f0;
+  font-family: -apple-system, system-ui, sans-serif;
+  color: #343043;
+  background: #faf9f7;
 }
 body {
   margin: 0;
@@ -12,35 +12,37 @@ main {
   max-width: 440px;
   margin: 8vh auto;
   background: #fff;
-  border: 1px solid #eee5e9;
-  border-radius: 24px;
+  border-radius: 28px;
   padding: 28px;
-  box-shadow: 0 12px 35px #56384d12;
+  box-shadow: 0 2px 3px #402c4106, 0 8px 22px #402c4111;
+  text-align: center;
 }
-.brand {
-  color: #816779;
-  letter-spacing: 0.08em;
+.mark {
+  border-radius: 14px;
 }
 h1 {
   font-size: 2rem;
-  line-height: 1.12;
-  font-weight: 500;
+  line-height: 1.15;
+  font-weight: 700;
+  margin: 16px 0 8px;
 }
 p {
-  line-height: 1.6;
+  line-height: 1.55;
 }
-a {
+.button {
   display: inline-block;
-  padding: 14px 24px;
-  border: 1px solid #f3c9df;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 14px 28px;
   border-radius: 99px;
-  background: #f7d0e3;
-  color: #44333d;
-  box-shadow: 0 4px 8px #70334a16;
+  background: #f2adb2;
+  color: #343043;
+  font-weight: 700;
   text-decoration: none;
+  margin: 8px 0;
 }
-a:focus-visible {
-  outline: 3px solid #44333d;
+.button:focus-visible {
+  outline: 3px solid #245f60;
   outline-offset: 4px;
 }
 [hidden] {
@@ -48,5 +50,5 @@ a:focus-visible {
 }
 .note {
   font-size: 0.9rem;
-  color: #675963;
+  color: #6d6777;
 }

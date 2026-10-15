@@ -7,7 +7,7 @@
   const valid = !hasQuery && /^#token=[a-f0-9]{64}$/.test(hash);
   if (!valid) {
     document.getElementById("status").textContent =
-      "This invitation link is incomplete. Return to the original invitation message or ask your organizer for a new link.";
+      "This invitation link is incomplete. Open the original message again, or ask the person who invited you for a new link.";
     return;
   }
   const open = document.getElementById("open");
