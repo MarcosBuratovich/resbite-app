@@ -89,6 +89,40 @@ Before that:
 
 UX2 counts as fully accepted only after this stage.
 
+### TestFlight build configuration (15 October)
+
+The configuration was checked read-only and then fixed on the owner's instruction. The owner's decisions:
+- **Internal tester:** the coworker is on the Apple developer team, so there is no beta app review.
+- **Bundle identifier:** `com.resbite.app`, replacing `com.resbite.preview`. Android stays `com.resbite.preview`.
+
+Changes in `mobile/eas.json`:
+- the production profile reads the Expo `production` environment;
+- build numbers are tracked remotely (`appVersionSource: "remote"`).
+
+Changes in `mobile/app.json`:
+- `ITSAppUsesNonExemptEncryption: false`;
+- specific permission text for photos;
+- unused permission entries removed: camera, microphone, motion, Face ID, and the two "always" location entries. The app requests only foreground location, picks photos only from the library, and doesn't use biometric secure-store access.
+
+`npx expo config --type introspect` confirms:
+- the bundle identifier;
+- only three usage descriptions remain: contacts, location when in use, and the photo library;
+- export compliance is set.
+
+**Owner steps for the first build** (interactive, from `mobile/`):
+1. `npx eas init` links or creates the Expo project and writes `extra.eas.projectId` and `owner` into `app.json`. Commit that change.
+2. Store the live Supabase settings for production builds. `.env.local` is git-ignored and never reaches the cloud build.
+   - `set -a; source .env.local; set +a`
+   - `npx eas env:create production --name EXPO_PUBLIC_SUPABASE_URL --value "$EXPO_PUBLIC_SUPABASE_URL" --visibility plaintext`
+   - `npx eas env:create production --name EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY --value "$EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY" --visibility plaintext`
+3. `npx eas build --platform ios --profile production` signs in to Apple and creates the `com.resbite.app` identifier, certificate and profile.
+4. `npx eas submit --platform ios --latest` uploads the build to App Store Connect.
+5. Add the coworker as an internal tester.
+
+**The TestFlight app is a separate app.** It installs alongside the development build (`com.resbite.preview`) and has its own sign-in and device storage.
+
+**Invite links** still use `resbite://`. The coworker may need to paste the link into Safari to open it.
+
 ## Rollback
 
 - **Database:** run `supabase/rollback/20261014120000_ux2_rules.rollback.sql` in one transaction, after owner approval. It is rehearsed byte-exact. See the plan's rollback notes:

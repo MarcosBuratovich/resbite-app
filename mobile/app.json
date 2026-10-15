@@ -8,7 +8,10 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.resbite.preview"
+      "bundleIdentifier": "com.resbite.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.resbite.preview"
@@ -24,13 +27,29 @@
           "backgroundColor": "#FAF5F0"
         }
       ],
-      "expo-secure-store",
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Choose a photo for your profile or for a resbite’s cover.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
       "expo-web-browser",
       "@react-native-community/datetimepicker",
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Use your location when choosing where to meet."
+          "locationWhenInUsePermission": "Use your location when choosing where to meet.",
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false,
+          "motionUsagePermission": false
         }
       ],
       [
