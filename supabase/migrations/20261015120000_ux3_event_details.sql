@@ -199,7 +199,7 @@ declare v_uid uuid := private.require_tester(); v_plan public.plans; v_text text
 begin
  if char_length(v_text)>280 then raise exception 'Note too long' using errcode='22023'; end if;
  select * into v_plan from public.plans where id=p_plan for update;
- if not found or v_plan.owner_id<>v_uid then raise exception 'Owner required' using errcode='42501'; end if;
+ if not found or v_plan.owner_id is distinct from v_uid then raise exception 'Owner required' using errcode='42501'; end if;
  if v_plan.status<>'active' or now()>=coalesce(v_plan.ends_at,v_plan.starts_at+interval '1 hour') then
   raise exception 'Plan unavailable' using errcode='22023';
  end if;

@@ -305,4 +305,21 @@ do $$ begin
  exception when invalid_parameter_value then null; end;
 end $$;
 reset role;
+-- An ownerless event in progress (its owner's account was deleted) takes no note from a guest.
+-- The hosted baseline still requires an owner; this test-only change is undone by the rollback below.
+alter table public.plans alter column owner_id drop not null;
+insert into public.plans(id,owner_id,activity_id,title,description,categories,starts_at,time_zone,place_label)
+ values('f3100000-0000-4000-8000-000000000002',null,null,'Ownerless fixture','',array['community'],now()-interval '30 minutes','UTC','Park');
+insert into public.attendees(plan_id,user_id,response) values('f3100000-0000-4000-8000-000000000002','f3000000-0000-4000-8000-000000000002','accepted');
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"f3000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+do $$ begin
+ begin perform public.set_guest_note('f3100000-0000-4000-8000-000000000002','Hijack'); raise exception 'Guest posted a note on an ownerless event';
+ exception when insufficient_privilege then null; end;
+end $$;
+reset role;
+do $$ begin
+ if (select guest_note from public.plans where id='f3100000-0000-4000-8000-000000000002')<>'' then raise exception 'Ownerless event kept a note'; end if;
+ if exists(select 1 from private.notification_outbox where plan_id='f3100000-0000-4000-8000-000000000002' and kind='guest_note') then raise exception 'Ownerless event recorded a note notice'; end if;
+end $$;
 rollback;
