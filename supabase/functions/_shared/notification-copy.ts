@@ -1,7 +1,8 @@
 /**
  * UX2 notification text (spec "Notification wording", UX2-D4). The heading is the event title and the body
- * says what happened and who did it. It never contains the place, the note, the description or the cover
- * description. Anything missing or unexpected falls back to the generic text.
+ * says what happened and who did it. It never contains the place, the Meeting details, the Note to guests
+ * itself, the description or the cover description (UX3). Anything missing or unexpected falls back to the
+ * generic text.
  */
 export type CopyInput = {
   kind?: string | null;
@@ -44,9 +45,9 @@ function answer(detail: string | null | undefined): string | null {
     case "maybe":
       return "might come.";
     case "declined":
-      return "can’t make it.";
+      return "can’t go.";
     case "withdrawn":
-      return "can’t make it now.";
+      return "can’t go now.";
     default:
       return null;
   }
@@ -63,6 +64,8 @@ function body(input: CopyInput): string | null {
       return name ? `${name} joined from your invite.` : null;
     case "plan_cancelled":
       return "This resbite was cancelled.";
+    case "guest_note":
+      return name ? `${name} posted a note to guests.` : null;
     case "plan_changed": {
       if (input.detail === "place") return "The place changed.";
       const time = eventTime(input.starts_at, input.time_zone);

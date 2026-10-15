@@ -57,7 +57,7 @@ update public.plans set note='',has_meeting_details=true where note<>'';
 alter table public.plans add constraint plans_note_moved check (note='');
 
 -- Account deletion marks the profile before it updates each owned plan; while the mark is present no
--- update leaves organizer-written text behind, now including the Meeting details.
+-- update leaves organizer-written text behind, now including the note and the Meeting details.
 -- Otherwise the 20261014120000_ux2_rules body (create or replace keeps its privileges).
 create or replace function private.redact_deleting_owner_plan() returns trigger
 language plpgsql set search_path = '' as $$
@@ -68,6 +68,8 @@ begin
   new.description := '';
   new.cover_path := null;
   new.cover_description := '';
+  new.guest_note := '';
+  new.guest_note_at := null;
   new.has_meeting_details := false;
   perform private.forget_meeting_details(new.id);
  end if;
@@ -176,3 +178,46 @@ grant execute on function
  private.change_plan_v3(uuid,integer,text,text,text[],timestamptz,timestamptz,text,text,text,boolean,boolean),
  public.change_plan_v3(uuid,integer,text,text,text[],timestamptz,timestamptz,text,text,text,boolean)
  to authenticated;
+
+-- Slice 3: Note to guests (UX3-D5). One short announcement with the time it was posted.
+alter table public.plans add column guest_note text not null default '',
+ add column guest_note_at timestamptz,
+ add constraint plans_guest_note_valid check (
+  guest_note=btrim(guest_note) and char_length(guest_note)<=280 and ((guest_note='')=(guest_note_at is null)));
+
+-- A posted note is recorded for a notification; nothing is sent while sending stays off. Replaced by
+-- exact name: if the live name differs, this fails instead of leaving two checks.
+alter table private.notification_outbox drop constraint notification_outbox_kind_check;
+alter table private.notification_outbox add constraint notification_outbox_kind_check
+ check (kind in ('invitation','rsvp','plan_changed','plan_cancelled','guest_note'));
+
+-- The organizer posts, edits or removes the note until the event ends (its end time, or an hour after the
+-- start). It never changes the event's version, so it can't conflict with an edit. Posting or changing it
+-- records one notice for each guest who may come; removing it records nothing.
+create function private.set_guest_note(p_plan uuid,p_note text) returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := private.require_tester(); v_plan public.plans; v_text text := btrim(coalesce(p_note,'')); v_at timestamptz;
+begin
+ if char_length(v_text)>280 then raise exception 'Note too long' using errcode='22023'; end if;
+ select * into v_plan from public.plans where id=p_plan for update;
+ if not found or v_plan.owner_id<>v_uid then raise exception 'Owner required' using errcode='42501'; end if;
+ if v_plan.status<>'active' or now()>=coalesce(v_plan.ends_at,v_plan.starts_at+interval '1 hour') then
+  raise exception 'Plan unavailable' using errcode='22023';
+ end if;
+ if v_text=v_plan.guest_note then
+  return jsonb_build_object('guest_note',v_plan.guest_note,'guest_note_at',v_plan.guest_note_at);
+ end if;
+ v_at := case when v_text='' then null else pg_catalog.clock_timestamp() end;
+ update public.plans set guest_note=v_text,guest_note_at=v_at where id=p_plan;
+ if v_text<>'' then
+  insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id)
+  select p_plan,a.user_id,'guest_note','note:'||p_plan||':'||pg_catalog.to_char(v_at,'YYYYMMDDHH24MISSUS')||':'||a.user_id,v_uid
+  from public.attendees a where a.plan_id=p_plan and a.user_id<>v_uid and a.response in ('accepted','maybe','pending')
+  on conflict do nothing;
+ end if;
+ return jsonb_build_object('guest_note',v_text,'guest_note_at',v_at);
+end $$;
+create function public.set_guest_note(p_plan uuid,p_note text) returns jsonb language sql security invoker set search_path = '' as $$
+ select private.set_guest_note(p_plan,p_note)
+$$;
+revoke all on function private.set_guest_note(uuid,text), public.set_guest_note(uuid,text) from public, anon, authenticated, service_role;
+grant execute on function private.set_guest_note(uuid,text), public.set_guest_note(uuid,text) to authenticated;

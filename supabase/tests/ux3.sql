@@ -177,18 +177,132 @@ do $$ begin
  if (select has_meeting_details from public.plans where id='f2100000-0000-4000-8000-000000000001') then raise exception 'Flag kept after removal'; end if;
  perform public.change_plan_v3('f2100000-0000-4000-8000-000000000001',2,'Private fixture','',array['community'],
   '2099-07-01 10:00+00',null,'UTC','Park','Back door');
+ perform public.set_guest_note('f2100000-0000-4000-8000-000000000001','Bring a blanket');
 end $$;
 reset role;
 do $$ begin
  -- The old column can never hold text again.
  begin update public.plans set note='leak' where id='f2100000-0000-4000-8000-000000000001'; raise exception 'Note column accepted text';
  exception when check_violation then null; end;
- -- Account deletion's redaction removes Meeting details with the other text.
+ -- Account deletion's redaction removes Meeting details and the Note to guests with the other text.
  update public.profiles set deletion_requested_at=now() where id='f2000000-0000-4000-8000-000000000001';
  update public.plans set status='cancelled' where id='f2100000-0000-4000-8000-000000000001';
  if exists(select 1 from public.plan_meeting_details where plan_id='f2100000-0000-4000-8000-000000000001') then raise exception 'Redaction kept Meeting details'; end if;
  if (select has_meeting_details from public.plans where id='f2100000-0000-4000-8000-000000000001') then raise exception 'Redaction kept the flag'; end if;
+ if (select guest_note||':'||coalesce(guest_note_at::text,'null') from public.plans where id='f2100000-0000-4000-8000-000000000001')<>':null' then raise exception 'Redaction kept the Note to guests'; end if;
  -- Deleting an event deletes its Meeting details.
  update public.profiles set deletion_requested_at=null where id='f2000000-0000-4000-8000-000000000001';
 end $$;
+rollback;
+
+-- Block 3: Note to guests (Task 2).
+begin;
+insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data) values
+ ('f3000000-0000-4000-8000-000000000001','ux3-3-owner@resbite-test.invalid',now(),'{}'),
+ ('f3000000-0000-4000-8000-000000000002','ux3-3-going@resbite-test.invalid',now(),'{}'),
+ ('f3000000-0000-4000-8000-000000000003','ux3-3-maybe@resbite-test.invalid',now(),'{}'),
+ ('f3000000-0000-4000-8000-000000000004','ux3-3-pending@resbite-test.invalid',now(),'{}'),
+ ('f3000000-0000-4000-8000-000000000005','ux3-3-declined@resbite-test.invalid',now(),'{}'),
+ ('f3000000-0000-4000-8000-000000000006','ux3-3-withdrawn@resbite-test.invalid',now(),'{}');
+insert into private.tester_roster(email) select email from auth.users where email like 'ux3-3-%@resbite-test.invalid';
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"f3000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.save_profile('Owner three');
+select public.create_plan_v3('f3100000-0000-4000-8000-000000000001','Note fixture','',array['community'],null,
+ '2099-08-01 10:00+00',null,'UTC','Park','');
+select public.create_invite(('f3200000-0000-4000-8000-00000000000'||n)::uuid,'f3100000-0000-4000-8000-000000000001',repeat(chr(96+n),64))
+ from generate_series(2,6) n;
+do $$ declare n int; begin
+ for n in 2..6 loop
+  perform set_config('request.jwt.claims','{"sub":"f3000000-0000-4000-8000-00000000000'||n||'","role":"authenticated"}',true);
+  perform public.save_profile('Guest '||n);
+  perform public.claim_invite(repeat(chr(96+n),64));
+ end loop;
+end $$;
+reset role;
+update public.attendees set response=case user_id
+ when 'f3000000-0000-4000-8000-000000000002' then 'accepted' when 'f3000000-0000-4000-8000-000000000003' then 'maybe'
+ when 'f3000000-0000-4000-8000-000000000005' then 'declined' when 'f3000000-0000-4000-8000-000000000006' then 'withdrawn'
+ else 'pending' end where plan_id='f3100000-0000-4000-8000-000000000001';
+delete from private.notification_outbox where plan_id='f3100000-0000-4000-8000-000000000001';
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"f3000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+do $$ declare r jsonb; begin
+ r := public.set_guest_note('f3100000-0000-4000-8000-000000000001','  Bring a blanket  ');
+ if r->>'guest_note' is distinct from 'Bring a blanket' or r->>'guest_note_at' is null then raise exception 'Note not posted: %', r; end if;
+ -- The same text again is acknowledged without a second notice.
+ perform public.set_guest_note('f3100000-0000-4000-8000-000000000001','Bring a blanket');
+ begin perform public.set_guest_note('f3100000-0000-4000-8000-000000000001',repeat('x',281)); raise exception 'Long note accepted';
+ exception when invalid_parameter_value then null; end;
+end $$;
+-- Guests read the note; a guest can't post one.
+select set_config('request.jwt.claims','{"sub":"f3000000-0000-4000-8000-000000000004","role":"authenticated"}',true);
+do $$ begin
+ if (select guest_note from public.plans where id='f3100000-0000-4000-8000-000000000001') is distinct from 'Bring a blanket' then raise exception 'Unanswered guest cannot read the note'; end if;
+ begin perform public.set_guest_note('f3100000-0000-4000-8000-000000000001','Hijack'); raise exception 'Guest posted a note';
+ exception when insufficient_privilege then null; end;
+end $$;
+reset role;
+do $$ begin
+ -- One notice each for Going, Maybe and unanswered guests, naming the organizer; none for Can't go or the organizer.
+ if (select string_agg(recipient_id::text,',' order by recipient_id) from private.notification_outbox
+     where plan_id='f3100000-0000-4000-8000-000000000001' and kind='guest_note'
+       and actor_id='f3000000-0000-4000-8000-000000000001' and detail is null)
+    is distinct from 'f3000000-0000-4000-8000-000000000002,f3000000-0000-4000-8000-000000000003,f3000000-0000-4000-8000-000000000004' then
+  raise exception 'Note notices went to the wrong people';
+ end if;
+ -- The note never changes the event version.
+ if (select version from public.plans where id='f3100000-0000-4000-8000-000000000001')<>1 then raise exception 'Note changed the version'; end if;
+ -- A note notice carries no detail.
+ begin
+  insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,detail)
+  values('f3100000-0000-4000-8000-000000000001','f3000000-0000-4000-8000-000000000002','guest_note','ux3-bad-1','time');
+  raise exception 'Note notice accepted a detail';
+ exception when check_violation then null; end;
+end $$;
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"f3000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+do $$ declare r jsonb; begin
+ -- Editing records a second notice; removing records none and clears the time.
+ perform public.set_guest_note('f3100000-0000-4000-8000-000000000001','Running 10 minutes late');
+ r := public.set_guest_note('f3100000-0000-4000-8000-000000000001','');
+ if r->>'guest_note'<>'' or r->>'guest_note_at' is not null then raise exception 'Note not removed: %', r; end if;
+end $$;
+reset role;
+do $$ begin
+ if (select count(*) from private.notification_outbox where plan_id='f3100000-0000-4000-8000-000000000001' and kind='guest_note')<>6 then
+  raise exception 'Expected 3 notices for the post and 3 for the edit, none for the removal';
+ end if;
+ -- Started events take notes until the end (or an hour after the start); not after, and never when cancelled.
+ update public.plans set starts_at=now()-interval '30 minutes' where id='f3100000-0000-4000-8000-000000000001';
+end $$;
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"f3000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+do $$ begin
+ perform public.set_guest_note('f3100000-0000-4000-8000-000000000001','Running late');
+end $$;
+reset role;
+update public.plans set starts_at=now()-interval '2 hours' where id='f3100000-0000-4000-8000-000000000001';
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"f3000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+do $$ begin
+ begin perform public.set_guest_note('f3100000-0000-4000-8000-000000000001','Too late'); raise exception 'Note accepted after the end';
+ exception when invalid_parameter_value then null; end;
+end $$;
+reset role;
+update public.plans set ends_at=now()+interval '1 hour' where id='f3100000-0000-4000-8000-000000000001';
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"f3000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+do $$ begin
+ perform public.set_guest_note('f3100000-0000-4000-8000-000000000001','Still here until the end');
+end $$;
+reset role;
+update public.plans set status='cancelled' where id='f3100000-0000-4000-8000-000000000001';
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"f3000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+do $$ begin
+ begin perform public.set_guest_note('f3100000-0000-4000-8000-000000000001','After cancelling'); raise exception 'Note accepted on a cancelled event';
+ exception when invalid_parameter_value then null; end;
+end $$;
+reset role;
 rollback;

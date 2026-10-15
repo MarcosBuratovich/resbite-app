@@ -13,13 +13,14 @@ test("each kind and detail has its wording under the event title", () => {
   const cases: [string, string | null, string][] = [
     ["rsvp", "accepted", "Sam is going."],
     ["rsvp", "maybe", "Sam might come."],
-    ["rsvp", "declined", "Sam can’t make it."],
-    ["rsvp", "withdrawn", "Sam can’t make it now."],
+    ["rsvp", "declined", "Sam can’t go."],
+    ["rsvp", "withdrawn", "Sam can’t go now."],
     ["invitation", null, "Sam joined from your invite."],
     ["plan_changed", "time", "New time: Sat 17 Oct, 10:00."],
     ["plan_changed", "place", "The place changed."],
     ["plan_changed", "time_place", "New time: Sat 17 Oct, 10:00, and a new place."],
     ["plan_cancelled", null, "This resbite was cancelled."],
+    ["guest_note", null, "Sam posted a note to guests."],
   ];
   for (const [kind, detail, body] of cases)
     assert.deepEqual(notificationCopy({ ...base, kind, detail }), { title: "Picnic in the park", body }, `${kind}/${detail}`);
@@ -38,6 +39,7 @@ test("anything missing or unexpected falls back to the generic text", () => {
     { ...base, kind: "rsvp", detail: "maybe", actor_name: null },
     { ...base, kind: "rsvp", detail: "maybe", actor_name: "   " },
     { ...base, kind: "invitation", detail: null, actor_name: null },
+    { ...base, kind: "guest_note", detail: null, actor_name: null },
     { ...base, kind: "rsvp", detail: "constructor" },
     { ...base, kind: "rsvp", detail: "pending" },
     { ...base, kind: "plan_changed", detail: null },
@@ -52,11 +54,12 @@ test("anything missing or unexpected falls back to the generic text", () => {
   assert.deepEqual(GENERIC_COPY, { title: "Resbite", body: "You have an update. Open Resbite to see it." });
 });
 
-test("the place, note and descriptions never reach the text, even if a job carried them", () => {
+test("the place, notes and descriptions never reach the text, even if a job carried them", () => {
   const leaky = {
     ...base,
     place_label: "Secret café",
     note: "Secret note",
+    guest_note: "Secret announcement",
     description: "Secret description",
     cover_description: "Secret photo",
   } as Parameters<typeof notificationCopy>[0];
@@ -66,6 +69,7 @@ test("the place, note and descriptions never reach the text, even if a job carri
     ["plan_changed", "time_place"],
     ["plan_changed", "place"],
     ["plan_cancelled", null],
+    ["guest_note", null],
   ] as const) {
     const copy = notificationCopy({ ...leaky, kind, detail });
     assert.ok(!JSON.stringify(copy).includes("Secret"), `${kind}/${detail}`);

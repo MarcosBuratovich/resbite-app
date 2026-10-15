@@ -115,4 +115,12 @@ update public.attendees set response='declined' where user_id='95000000-0000-400
 do $$ begin
  if not private.notification_recipient_eligible((select id from private.notification_outbox where dedupe_key='ux2w-cancel')) then raise exception 'Declined guest not told about the cancellation'; end if;
 end $$;
+-- A Note to guests reaches Sam only while Sam may still come (UX3); Sam said Can't go above.
+insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id)
+ values('95100000-0000-4000-8000-000000000001','95000000-0000-4000-8000-000000000002','guest_note','ux3w-note','95000000-0000-4000-8000-000000000001');
+do $$ declare o bigint := (select id from private.notification_outbox where dedupe_key='ux3w-note'); begin
+ if private.notification_recipient_eligible(o) then raise exception 'Can''t go guest still eligible for a note'; end if;
+ update public.attendees set response='accepted' where user_id='95000000-0000-4000-8000-000000000002';
+ if not private.notification_recipient_eligible(o) then raise exception 'Going guest not eligible for a note'; end if;
+end $$;
 rollback;
