@@ -213,7 +213,7 @@ export function WhenStep({ editor }: { editor: PlanEditor }) {
             onPress={() => setEnd(defaultEnd(start))}
           />
         )}
-        <Copy style={styles.endHint}>Optional. Without it, calendars get a 1-hour event.</Copy>
+        {!end && <Copy style={styles.endHint}>Optional. Without it, calendars get a 1-hour event.</Copy>}
       </View>
       <View accessible accessibilityLabel={`Times shown in ${zone.replaceAll("_", " ")}`} style={styles.zone}>
         <Globe size={18} strokeWidth={2} color={c.muted} />

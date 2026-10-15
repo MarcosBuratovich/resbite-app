@@ -37,10 +37,13 @@ export function EventDeviceChips({ device }: { device: EventDevice }) {
   );
 }
 
-/** "Get reminders?": shown once, before iPhone's own prompt. Either answer counts as asked. */
+/**
+ * "Get reminders?": shown once, before iPhone's own prompt. Either answer counts as asked. Only while the chips
+ * show: a read still in flight when the guest answers Can’t go must not open it afterwards.
+ */
 export function ReminderSheet({ device }: { device: EventDevice }) {
   return (
-    <InfoSheet visible={device.asking} title="Get reminders?" onClose={device.notNow}>
+    <InfoSheet visible={device.asking && device.shown} title="Get reminders?" onClose={device.notNow}>
       <Copy>{GET_REMINDERS_LINE}</Copy>
       <View style={styles.actions}>
         <Button title="Allow reminders" icon={false} onPress={device.allowReminders} />

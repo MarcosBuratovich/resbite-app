@@ -626,7 +626,9 @@ export function usePlanEditor({
               ? (original.time_zone ?? zone)
               : zone,
           place_label: place.trim(),
-          note,
+          // Trimmed, so spaces or blank lines alone don't count as Meeting details (the locked line would
+          // promise guests something empty).
+          note: note.trim(),
         },
       };
     }

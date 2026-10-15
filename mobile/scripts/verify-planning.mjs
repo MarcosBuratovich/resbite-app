@@ -805,14 +805,20 @@ try {
     await expect(endField).toHaveValue("2099-03-01 18:30");
     await button(fixture, "Remove end time").click();
     await next(fixture);
+    // Meeting details are sent trimmed (create and edit share this payload), so spaces or blank lines alone
+    // never count as Meeting details.
+    await button(fixture, "Edit place, Original café").click();
+    await fixture.getByLabel("Meeting details (optional)", { exact: true }).fill("  \nGate code 9876 \n\n");
+    await next(fixture);
     await button(fixture, "Save").click();
     await expect(heading(fixture, "Looks good?")).toHaveCount(0);
     assert.equal(writes.length, 2);
     assert.equal(writes[1].p_ends, null);
     assert.equal(writes[1].p_start, "2099-03-01T16:00:00.000Z");
+    assert.equal(writes[1].p_note, "Gate code 9876");
     await expect(fixture.getByText("16:00", { exact: true })).toBeVisible();
     await fixture.context().close();
-    console.log("PASS: the end time is sent as p_ends (none after Remove) and shown as a range; Meeting details load in the editor.");
+    console.log("PASS: the end time is sent as p_ends (none after Remove) and shown as a range; Meeting details load in the editor and are sent trimmed.");
   }
   assert.deepEqual(errors, []);
 } finally {

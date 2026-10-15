@@ -369,6 +369,8 @@ try {
     await button(page, "Add an end time").click();
     await expect(endField).toHaveValue("2026-10-10 14:00");
     await expect(button(page, "Add an end time")).toHaveCount(0);
+    // The 1-hour line explains the missing end, so it goes once there is one.
+    await expect(page.getByText("Optional. Without it, calendars get a 1-hour event.", { exact: true })).toHaveCount(0);
     assert.ok((await heightOf(button(page, "Remove end time"))) >= 44, "Remove is a 44 pt target");
     // Moving the start keeps the end's length, from a chip or typed.
     await button(page, "Saturday 10 October at 18:00").click();
@@ -394,6 +396,7 @@ try {
     await button(page, "Remove end time").click();
     await expect(endField).toHaveCount(0);
     await expect(button(page, "Add an end time")).toBeVisible();
+    await expect(page.getByText("Optional. Without it, calendars get a 1-hour event.", { exact: true })).toBeVisible();
     await next(page);
     await expect(button(page, "Edit date and time, Saturday 10 October at 09:00")).toContainText("09:00");
     await button(page, "Edit date and time, Saturday 10 October at 09:00").click();
