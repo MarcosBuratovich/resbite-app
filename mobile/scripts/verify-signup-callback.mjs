@@ -30,7 +30,7 @@ try {
   await expect(page).toHaveURL(/\/account$/);
   assert.equal(exchanges, 1);
   assert.equal(checks, 1);
-  await page.getByRole('button', { name: 'Check account access', exact: true }).click();
+  await page.getByRole('button', { name: 'Check again', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Waiting for access', exact: true })).toBeVisible();
   assert.equal(checks, 2);
   await page.reload();

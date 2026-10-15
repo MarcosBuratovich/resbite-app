@@ -51,7 +51,7 @@ try {
     page.getByRole("button", { name: "Open device settings", exact: true }),
   ).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "Check permission again", exact: true }),
+    page.getByRole("button", { name: "Check again", exact: true }),
   ).toHaveCount(0);
   assert.equal(await page.evaluate(() => window.__notificationPrompts), 0);
   await page

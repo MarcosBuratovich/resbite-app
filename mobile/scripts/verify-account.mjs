@@ -234,7 +234,7 @@ try {
   });
   f.failAccess(true);
   await page
-    .getByRole("button", { name: "Check account access", exact: true })
+    .getByRole("button", { name: "Check again", exact: true })
     .click();
   await expect(
     page.getByText("Let’s try again", { exact: true }),
@@ -243,7 +243,7 @@ try {
   f.failAccess(false);
   f.access("approved");
   await page
-    .getByRole("button", { name: "Check account access", exact: true })
+    .getByRole("button", { name: "Check again", exact: true })
     .click();
   await expect(
     page.getByRole("heading", { name: "About you", exact: true }),

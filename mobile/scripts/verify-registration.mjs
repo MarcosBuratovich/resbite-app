@@ -70,6 +70,12 @@ try {
     ).toBeVisible();
     await page.getByLabel("Your name", { exact: true }).fill("Alex Fixture");
     await page.getByLabel("Date of birth (optional)", { exact: true }).fill("2000-02-29");
+    await page.getByRole("button", { name: "Why we ask", exact: true }).click();
+    await expect(
+      page.getByText("Date of birth is optional and is not displayed on shared plans.", { exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Close sheet", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Close sheet", exact: true })).toHaveCount(0);
     await page.screenshot({
       path: `/private/tmp/resbite-registration/about-${width}.png`,
       fullPage: true,
@@ -84,6 +90,12 @@ try {
       ),
     ).toBeVisible();
     await page.getByLabel("Phone number (optional)", { exact: true }).fill("+44 7700 900123");
+    await page.getByRole("button", { name: "Why we ask", exact: true }).click();
+    await expect(
+      page.getByText("Include your country code. This does not enable SMS sign-in or send invitations.", { exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Close sheet", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Close sheet", exact: true })).toHaveCount(0);
     await page.getByLabel("City (optional)", { exact: true }).fill("London");
     await page.getByText("Outdoors", { exact: true }).click();
     await page.screenshot({

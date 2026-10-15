@@ -36,6 +36,14 @@ try {
     await page.getByRole("button", { name: "Create account", exact: true }).dblclick();
     await expect(page.getByRole("heading", { name: "Check your inbox", exact: true })).toBeVisible();
     await expect(page.getByText(/If this address needs confirmation/)).toBeVisible();
+    assert.ok(
+      await page.evaluate(() => {
+        const notice = [...document.querySelectorAll("*")].find((el) => el.children.length === 0 && /If this address needs confirmation/.test(el.textContent));
+        const resend = document.querySelector('[aria-label="Resend confirmation email"]');
+        return Boolean(notice && resend && notice.compareDocumentPosition(resend) & Node.DOCUMENT_POSITION_FOLLOWING);
+      }),
+      "The Resend chip sits below the notice",
+    );
     assert.equal(requests.filter((r) => r.path === "/auth/v1/signup").length, 1);
     await expect(page.getByRole("button", { name: "Resend confirmation email", exact: true })).toBeDisabled();
     await expect(page.getByRole("button", { name: "Resend confirmation email", exact: true })).toHaveText(/^Resend in \d+s$/);

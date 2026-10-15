@@ -147,6 +147,7 @@ try {
   await page.goto(`${base}/profile`);
   await expect(page.getByRole("heading", { name: "Profile", exact: true })).toBeVisible();
   await expect(page.getByText("Saved name", { exact: true })).toBeVisible();
+  await expect(page.getByText("fixture@example.invalid", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Edit name", exact: true }).click();
   const name = page.getByRole("textbox", {
     name: "What should we call you?",
