@@ -38,6 +38,7 @@ export default function Auth() {
       text={remaining > 0 ? `Resend in ${remaining}s` : "Resend"}
       icon={RefreshCw}
       label="Resend confirmation email"
+      hint={remaining > 0 ? `You can request another email in ${remaining}s.` : undefined}
       disabled={restoring || busy || remaining > 0}
       onPress={() => void submit()}
     />
@@ -227,7 +228,10 @@ export default function Auth() {
           <TextAction title="I have an account" disabled={blocked} onPress={() => go("login")} />
         )}
         {mode === "reset" && (
-          <TextAction title="Back to sign in" disabled={blocked} onPress={() => go("login")} />
+          <>
+            <TextAction title="Create account" disabled={blocked} onPress={() => go("register")} />
+            <TextAction title="Back to sign in" disabled={blocked} onPress={() => go("login")} />
+          </>
         )}
       </View>
       <InfoSheet visible={about} title="About access" onClose={() => setAbout(false)}>

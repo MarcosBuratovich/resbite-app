@@ -65,6 +65,7 @@ try {
   await expect(
     page.getByRole("heading", { name: "Reset password", exact: true }),
   ).toBeFocused();
+  await expect(page.getByRole("button", { name: "Create account", exact: true })).toBeVisible();
   await page
     .getByRole("button", { name: "Send reset link", exact: true })
     .click();
