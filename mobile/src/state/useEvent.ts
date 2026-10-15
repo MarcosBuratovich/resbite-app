@@ -6,6 +6,7 @@ import { cancelPlan, PlanSaveError } from "../domain/plans";
 import { reconcileRsvp, type Response, type RsvpAttempt } from "../domain/rsvp";
 import { planGateway } from "../services/plans";
 import { readEvent, readGuests, readRsvp, writeRsvp, type EventSnapshot, type Guest } from "../services/rsvp";
+import { syncReminders } from "../services/deviceReminders";
 
 export type EventRole = "owner" | "invitee";
 export type EventPage = {
@@ -44,6 +45,8 @@ export function useEvent(planId: string | undefined): EventPage {
   const [busy, setBusy] = useState(!preview),
     [fresh, setFresh] = useState(false);
   const [pending, setPending] = useState<RsvpAttempt | null>(null);
+  // UX3: this phone's reminders follow every event load, answer and cancellation; failures wait for the next sync.
+  const syncDevice = () => void syncReminders({ userId: userId ?? null, preview }).catch(() => {});
   useEffect(() => {
     setSnapshot(null);
     setPending(null);
@@ -64,6 +67,7 @@ export function useEvent(planId: string | undefined): EventPage {
         if (valid()) {
           setSnapshot(next);
           setFresh(true);
+          syncDevice();
         }
       } catch (e) {
         if (valid()) {
@@ -129,6 +133,7 @@ export function useEvent(planId: string | undefined): EventPage {
       if (result === "confirmed") {
         setPending(null);
         setNotice("Your response is saved.");
+        syncDevice();
         // UX-P5: answering reveals who's coming; the server now returns the whole list.
         try {
           const list = await readGuests(attempt.planId);
@@ -179,7 +184,10 @@ export function useEvent(planId: string | undefined): EventPage {
     working.current = false;
     if (reload) await load();
     if (failure) setError(failure);
-    else setNotice(preview ? "Preview plan cancelled." : "Your plan is cancelled.");
+    else {
+      setNotice(preview ? "Preview plan cancelled." : "Your plan is cancelled.");
+      syncDevice();
+    }
     setBusy(false);
   }
   return {

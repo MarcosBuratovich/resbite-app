@@ -17,6 +17,7 @@ import {
   inOrder,
   later,
   next,
+  quietReminders,
   typeDate,
 } from "./qa-helpers.mjs";
 const baseURL = process.env.RESBITE_QA_URL || "http://localhost:8081";
@@ -35,6 +36,8 @@ async function preview({ width = 390, query = "", time, reducedMotion = "reduce"
   });
   const page = await context.newPage();
   page.on("pageerror", (e) => errors.push(e.message));
+  // Opening a card shows the event page, which would otherwise ask "Get reminders?" (verify-event covers it).
+  await quietReminders(context);
   if (time) await page.clock.setFixedTime(time);
   // Records which CSS animations start and, every frame, the step body's opacity and transform,
   // to check how steps enter under Reduce Motion.

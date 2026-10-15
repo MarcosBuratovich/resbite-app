@@ -1,7 +1,7 @@
 // All Supabase calls are intercepted; no catalogue publication, users or plans are created.
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
-import { button, card, closeToList, createFromIdea, editEvent, heading, later } from "./qa-helpers.mjs";
+import { button, card, closeToList, createFromIdea, editEvent, heading, later, quietReminders } from "./qa-helpers.mjs";
 import { mkdir, readFile } from "node:fs/promises";
 
 const additions = JSON.parse(
@@ -71,6 +71,8 @@ async function fixture(width = 390, preview = false) {
   const context = await browser.newContext({
     viewport: { width, height: 844 },
   });
+  // Event pages would otherwise ask "Get reminders?" (verify-event covers it).
+  await quietReminders(context);
   const page = await context.newPage();
   const state = {
     rows: [],

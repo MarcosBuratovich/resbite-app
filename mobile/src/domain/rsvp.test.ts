@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   answerKey,
   canReadSample,
-  cantMakeItResponse,
+  cantGoResponse,
   reconcileRsvp,
   responseFor,
   type RsvpSnapshot,
@@ -94,20 +94,20 @@ test("sample access requires accepted response and future active plan", () => {
   );
 });
 
-test("Can’t make it withdraws after Going and declines before ever accepting; the control reads stored answers", () => {
-  assert.equal(cantMakeItResponse("accepted"), "withdrawn");
-  assert.equal(cantMakeItResponse("withdrawn"), "withdrawn");
-  assert.equal(cantMakeItResponse("pending"), "declined");
-  assert.equal(cantMakeItResponse("declined"), "declined");
+test("Can’t go withdraws after Going and declines before ever accepting; the control reads stored answers", () => {
+  assert.equal(cantGoResponse("accepted"), "withdrawn");
+  assert.equal(cantGoResponse("withdrawn"), "withdrawn");
+  assert.equal(cantGoResponse("pending"), "declined");
+  assert.equal(cantGoResponse("declined"), "declined");
   assert.equal(answerKey("accepted"), "going");
   assert.equal(answerKey("declined"), "cant");
   assert.equal(answerKey("withdrawn"), "cant");
   assert.equal(answerKey("pending"), null);
 });
 
-test("UX2: Maybe is its own answer; Can’t make it after Maybe declines", () => {
+test("UX2: Maybe is its own answer; Can’t go after Maybe declines", () => {
   assert.equal(answerKey("maybe"), "maybe");
-  assert.equal(cantMakeItResponse("maybe"), "declined");
+  assert.equal(cantGoResponse("maybe"), "declined");
   assert.equal(responseFor("going", "pending"), "accepted");
   assert.equal(responseFor("maybe", "accepted"), "maybe");
   assert.equal(responseFor("cant", "accepted"), "withdrawn");

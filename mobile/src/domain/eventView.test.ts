@@ -51,9 +51,9 @@ test("card chips: Cancelled, then the role, then guests or the invitee's answer"
   assert.deepEqual(cardChips({ owner: true, status: "active", going: 2 }), ["Hosting", "2 going"]);
   assert.deepEqual(cardChips({ owner: false, status: "active", response: "accepted" }), ["Invited", "Going"]);
   assert.deepEqual(cardChips({ owner: false, status: "active", response: "pending" }), ["Invited", "Not answered"]);
-  assert.deepEqual(cardChips({ owner: false, status: "active", response: "withdrawn" }), ["Invited", "Can’t make it now"]);
+  assert.deepEqual(cardChips({ owner: false, status: "active", response: "withdrawn" }), ["Invited", "Can’t go now"]);
   assert.deepEqual(cardChips({ owner: true, status: "cancelled", going: 3 }), ["Cancelled", "Hosting"]);
-  assert.equal(responseText("declined"), "Can’t make it");
+  assert.equal(responseText("declined"), "Can’t go");
   assert.equal(responseText(undefined), "Not answered");
 });
 
@@ -233,10 +233,10 @@ test("cover outcomes keep their action wording", () => {
   assert.equal(coverNotice(["pending"]), null);
 });
 
-test("UX2 answer labels: Maybe, and Can’t make it now after Going", () => {
+test("UX2 answer labels: Maybe; UX3-D7: Can’t go, and Can’t go now after Going", () => {
   assert.equal(responseText("maybe"), "Maybe");
-  assert.equal(responseText("withdrawn"), "Can’t make it now");
-  assert.equal(responseText("declined"), "Can’t make it");
+  assert.equal(responseText("withdrawn"), "Can’t go now");
+  assert.equal(responseText("declined"), "Can’t go");
   assert.equal(responseText("pending"), "Not answered");
   assert.deepEqual(cardChips({ owner: false, status: "active", response: "maybe" }), ["Invited", "Maybe"]);
 });
@@ -273,7 +273,7 @@ test("guest area: only the organizer until an invitee answers (UX-P5)", () => {
   });
 });
 
-test("guest groups: Going, Maybe, Can’t make it, Not answered yet; empty groups hidden", () => {
+test("guest groups: Going, Maybe, Can’t go, Not answered yet; empty groups hidden", () => {
   assert.deepEqual(
     guestGroups([
       { userId: "a", name: "Ana", response: "pending" },
@@ -284,9 +284,9 @@ test("guest groups: Going, Maybe, Can’t make it, Not answered yet; empty group
     [
       { title: "Going", guests: [{ userId: "c", name: "Cy", note: null }] },
       {
-        title: "Can’t make it",
+        title: "Can’t go",
         guests: [
-          { userId: "b", name: "Ben", note: "Can’t make it now" },
+          { userId: "b", name: "Ben", note: "Can’t go now" },
           { userId: "d", name: "Di", note: null },
         ],
       },

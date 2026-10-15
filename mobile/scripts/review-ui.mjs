@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium, expect } from "@playwright/test";
-import { button, heading, next } from "./qa-helpers.mjs";
+import { button, heading, next, quietReminders } from "./qa-helpers.mjs";
 const base = process.env.RESBITE_QA_URL || "http://localhost:8081";
 const out = process.env.RESBITE_QA_SHOTS || "/private/tmp/resbite-ui-audit";
 await mkdir(out, { recursive: true });
@@ -17,6 +17,8 @@ const browser = await chromium.launch({ channel: process.env.RESBITE_QA_BROWSER 
 try {
   for (const width of [390, 320]) {
     const page = await browser.newPage({ viewport: { width, height: 844 }, reducedMotion: "reduce" });
+    // The event page would otherwise open "Get reminders?" over the capture.
+    await quietReminders(page);
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
     page.on("console", (m) => {

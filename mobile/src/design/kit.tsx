@@ -482,7 +482,7 @@ export function AvatarStack({ names, label, onPress }: { names: readonly string[
   );
 }
 
-/** Two or three options as a radio group (Upcoming/Past, Going/Can’t make it). */
+/** Two or three options as a radio group (Upcoming/Past, Going/Maybe/Can’t go). */
 export function Segmented<K extends string>({
   label,
   options,

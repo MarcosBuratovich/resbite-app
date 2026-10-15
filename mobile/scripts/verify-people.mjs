@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
-import { button, choosePeople, createFromIdea, later } from "./qa-helpers.mjs";
+import { button, choosePeople, createFromIdea, later, quietReminders } from "./qa-helpers.mjs";
 const browser = await chromium.launch({ channel: "chrome", headless: true });
 try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  // Choose people is opened from the event page, which would otherwise ask "Get reminders?".
+  await quietReminders(page);
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.route("**/*.supabase.co/**", (route) => route.abort());

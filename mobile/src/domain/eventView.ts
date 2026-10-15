@@ -25,12 +25,12 @@ export function timeText(iso: string | null): string {
   return date ? `${pad(date.getHours())}:${pad(date.getMinutes())}` : "";
 }
 
-/** An invitee's stored answer as a status chip (UX2: Maybe, and "Can’t make it now" after Going). */
+/** An invitee's stored answer as a status chip (UX2: Maybe; UX3-D7: "Can’t go", and "Can’t go now" after Going). */
 export function responseText(response: string | null | undefined): string {
   if (response === "accepted") return "Going";
   if (response === "maybe") return "Maybe";
-  if (response === "declined") return "Can’t make it";
-  if (response === "withdrawn") return "Can’t make it now";
+  if (response === "declined") return "Can’t go";
+  if (response === "withdrawn") return "Can’t go now";
   return "Not answered";
 }
 
@@ -66,17 +66,17 @@ export type GuestGroup = { title: string; guests: { userId: string; name: string
 const GUEST_GROUPS: readonly { title: string; responses: readonly string[] }[] = [
   { title: "Going", responses: ["accepted"] },
   { title: "Maybe", responses: ["maybe"] },
-  { title: "Can’t make it", responses: ["declined", "withdrawn"] },
+  { title: "Can’t go", responses: ["declined", "withdrawn"] },
   { title: "Not answered yet", responses: ["pending"] },
 ];
 
-/** The guest sheet, grouped by answer; "Can’t make it now" marks someone who backed out after Going. */
+/** The guest sheet, grouped by answer; "Can’t go now" marks someone who backed out after Going. */
 export function guestGroups(guests: readonly GuestRow[]): GuestGroup[] {
   return GUEST_GROUPS.map(({ title, responses }) => ({
     title,
     guests: guests
       .filter((g) => responses.includes(g.response))
-      .map((g) => ({ userId: g.userId, name: g.name, note: g.response === "withdrawn" ? "Can’t make it now" : null })),
+      .map((g) => ({ userId: g.userId, name: g.name, note: g.response === "withdrawn" ? "Can’t go now" : null })),
   })).filter((group) => group.guests.length > 0);
 }
 

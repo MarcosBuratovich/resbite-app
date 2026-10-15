@@ -38,19 +38,19 @@ export function reconcileRsvp(
 
 export type AnswerKey = "going" | "maybe" | "cant";
 
-/** The answer control's selected option for a stored response (UX2: Going / Maybe / Can’t make it). */
+/** The answer control's selected option for a stored response (UX2: Going / Maybe; UX3-D7: Can’t go). */
 export function answerKey(response: string): AnswerKey | null {
   if (response === "accepted") return "going";
   if (response === "maybe") return "maybe";
   return response === "declined" || response === "withdrawn" ? "cant" : null;
 }
 
-/** Can’t make it withdraws after Going ("Can’t make it now"); before Going, or after Maybe, it declines. */
-export function cantMakeItResponse(current: string): Response {
+/** Can’t go withdraws after Going ("Can’t go now"); before Going, or after Maybe, it declines. */
+export function cantGoResponse(current: string): Response {
   return current === "accepted" || current === "withdrawn" ? "withdrawn" : "declined";
 }
 
 /** The response a tap on the answer control saves. */
 export function responseFor(key: AnswerKey, current: string): Response {
-  return key === "going" ? "accepted" : key === "maybe" ? "maybe" : cantMakeItResponse(current);
+  return key === "going" ? "accepted" : key === "maybe" ? "maybe" : cantGoResponse(current);
 }

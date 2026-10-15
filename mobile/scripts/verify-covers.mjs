@@ -1,7 +1,7 @@
 // Browser QA for CE2 cover photos. Every Supabase request is intercepted; nothing is uploaded.
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
-import { button, closeToList, editEvent, later, next } from "./qa-helpers.mjs";
+import { button, closeToList, editEvent, later, next, quietReminders } from "./qa-helpers.mjs";
 const baseURL = process.env.RESBITE_QA_URL || "http://localhost:8081";
 const browser = await chromium.launch({
   channel: process.env.RESBITE_QA_BROWSER || "chrome",
@@ -72,6 +72,8 @@ try {
   // 1. Preview: a chosen cover stays in memory and shows on the plan card.
   const preview = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
   preview.on("pageerror", (e) => errors.push(e.message));
+  // Event pages would otherwise ask "Get reminders?" (verify-event covers it).
+  await quietReminders(preview);
   await preview.route("**/*.supabase.co/**", (route) => route.abort());
   await preview.goto(baseURL);
   await preview.getByText("Preview the design", { exact: true }).click();
@@ -108,6 +110,7 @@ try {
   // leaves a journal that Edit retries with the same path; then replace and remove.
   const page = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
   page.on("pageerror", (e) => errors.push(e.message));
+  await quietReminders(page);
   await page.addInitScript((s) => {
     if (!sessionStorage.getItem("covers-seeded")) {
       sessionStorage.setItem("sb-ewcsgvhuojxdpaspwsrx-auth-token", JSON.stringify(s));

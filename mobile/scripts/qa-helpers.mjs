@@ -22,6 +22,17 @@ export async function typeDate(page, value) {
   if (await choose.count()) await choose.click();
   await field.fill(value);
 }
+/**
+ * UX3: the event page asks "Get reminders?" the first time an organizer or a Going or Maybe guest opens one
+ * while the phone's permission was never answered. Scripts that aren't about reminders answer it up front on
+ * the development fake (`__resbiteDevice`): "denied" schedules nothing, reads nothing and never asks.
+ * `target` is a page or a browser context.
+ */
+export async function quietReminders(target) {
+  await target.addInitScript(() => {
+    globalThis.__resbiteDevice ??= { reminders: [], calendar: [], permission: "denied" };
+  });
+}
 /** True when the locators' first matches appear in this order in the DOM (reading and VoiceOver order). */
 export async function inOrder(page, locators) {
   const handles = [];

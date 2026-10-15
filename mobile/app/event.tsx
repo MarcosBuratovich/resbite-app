@@ -8,6 +8,7 @@ import {
   Check,
   Ellipsis,
   MapPin,
+  Megaphone,
   MessageCircle,
   Pencil,
   RefreshCw,
@@ -20,16 +21,21 @@ import {
 import { Button, Copy, ErrorNote, Reveal, s } from "../src/design/ui";
 import { AvatarStack, Chip, chipToneFor, CoverCard, IconButton, InfoSheet, Segmented, Tile } from "../src/design/kit";
 import { PreviewNotice } from "../src/design/Chrome";
+import { EventDeviceChips, ReminderSheet } from "../src/design/EventDeviceChips";
+import { GuestNoteCard, GuestNoteSheet, MeetingDetails } from "../src/design/EventNotes";
 import { categoryIcons } from "../src/design/categories";
 import { colors as c, fonts } from "../src/design/tokens";
 import { categoryLabels } from "../src/domain/categories";
 import { eventPicture } from "../src/domain/events";
+import { canPostGuestNote, meetingDetailsView } from "../src/domain/eventDetails";
 import { againConflict, againDraft, cardChips, coverNotice, guestArea, guestGroups, mapsUrl } from "../src/domain/eventView";
 import { canEditPlan } from "../src/domain/plans";
 import { answerKey, canReadSample, canRespond, responseFor } from "../src/domain/rsvp";
 import { drafts } from "../src/services/drafts";
+import { setGuestNote } from "../src/services/plans";
 import { useApp } from "../src/state/AppState";
 import { useEvent } from "../src/state/useEvent";
+import { useEventDevice } from "../src/state/useEventDevice";
 
 // The last saved-edit notice already shown, so a remount or web history restoring the same URL never
 // repeats it (as on My resbites). Each save passes a fresh `notice` id (UX2-D1).
@@ -38,7 +44,7 @@ let shownNotice: string | undefined;
 /** One page for both roles (spec "Event page"): /event?plan=<id>. */
 export default function EventPage() {
   const { plan: planId, notice, cover } = useLocalSearchParams<{ plan?: string; notice?: string; cover?: string }>();
-  const { session, preview } = useApp();
+  const { session, preview, setLocalPlans } = useApp();
   const event = useEvent(planId);
   const pathname = usePathname();
   const [toast, setToast] = useState<string>();
@@ -55,9 +61,12 @@ export default function EventPage() {
   const [guestsOpen, setGuestsOpen] = useState(false);
   const [moreError, setMoreError] = useState<string | null>(null);
   const [mapsError, setMapsError] = useState<string | null>(null);
+  const [noteOpen, setNoteOpen] = useState(false);
   // One Do this again at a time: a quick double tap must not write two copies or stack two editors.
   const againBusy = useRef(false);
   const { plan, role, attendee, guests, busy, fresh, pending } = event;
+  // UX3 Add to calendar and reminders: the organizer and Going or Maybe guests, on upcoming active events.
+  const device = useEventDevice(plan, { owner: role === "owner", response: attendee?.response ?? null });
   const scope = preview ? "preview" : session?.user.id;
   const back = () => (router.canGoBack() ? router.back() : router.replace("/plans"));
 
@@ -85,6 +94,17 @@ export default function EventPage() {
   const area = guestArea({ owner, response: attendee?.response ?? null, organizer: event.organizer, guests });
   const url = mapsUrl(current);
   const chips = cardChips({ owner, status: current.status, response: attendee?.response });
+  // UX3-D5/D6: Meeting details reach only the organizer and Going or Maybe guests (the database sends them
+  // only to them); the Note to guests is pinned for everyone.
+  const details = meetingDetailsView({
+    owner,
+    response: attendee?.response ?? null,
+    // A locked line only while answering can still unlock it.
+    hasDetails: Boolean(current.has_meeting_details) && (owner || allowed),
+    text: current.note,
+  });
+  const guestNote = current.guest_note?.trim() ?? "";
+  const canNote = owner && canPostGuestNote(current, Date.now());
 
   function ask(message: string, accept: string, onAccept: () => void) {
     if (Platform.OS === "web") {
@@ -144,6 +164,19 @@ export default function EventPage() {
     }
     router.push({ pathname: "/invitations", params: { plan: current.id } });
   }
+  // Note to guests: preview keeps it on this device; otherwise the database saves it and the page reloads.
+  async function saveGuestNote(text: string) {
+    const trimmed = text.trim();
+    if (preview) {
+      const at = trimmed ? new Date().toISOString() : null;
+      setLocalPlans((all) =>
+        all.map((p) => (p.id === current.id ? { ...p, guest_note: trimmed, guest_note_at: at } : p)),
+      );
+      return;
+    }
+    await setGuestNote(current.id, text);
+    await event.load();
+  }
   // Maps opens only when tapped (benchmark row 6); a failure is said, never swallowed.
   function openMaps(target: string) {
     setMapsError(null);
@@ -184,18 +217,41 @@ export default function EventPage() {
             })),
           ]}
         />
-        {url && (
-          <Chip
-            icon={MapPin}
-            tone="aqua"
-            text="Open in Maps"
-            label={`Open ${current.place_label.trim()} in Maps`}
-            onPress={() => openMaps(url)}
-          />
+        {(device.shown || url) && (
+          <View style={styles.chips}>
+            <EventDeviceChips device={device} />
+            {url && (
+              <Chip
+                icon={MapPin}
+                tone="aqua"
+                text="Open in Maps"
+                label={`Open ${current.place_label.trim()} in Maps`}
+                onPress={() => openMaps(url)}
+              />
+            )}
+          </View>
         )}
+        <ErrorNote message={device.error} />
         <ErrorNote message={mapsError} />
+        {guestNote ? (
+          <GuestNoteCard
+            text={guestNote}
+            postedAt={current.guest_note_at}
+            onEdit={canNote ? () => setNoteOpen(true) : undefined}
+          />
+        ) : (
+          canNote && (
+            <Chip
+              icon={Megaphone}
+              text="Note to guests"
+              label="Post a note to guests"
+              disabled={busy}
+              onPress={() => setNoteOpen(true)}
+            />
+          )
+        )}
+        <MeetingDetails view={details} owner={owner} place={current.place_label} />
         {!!current.description && <Copy>{current.description}</Copy>}
-        {!!current.note && <Copy style={s.muted}>{current.note}</Copy>}
         {area.kind === "hidden" ? (
           <View style={{ gap: 6 }}>
             <AvatarStack names={[area.organizer]} label={`${area.organizer} is organizing`} />
@@ -255,7 +311,7 @@ export default function EventPage() {
                   options={[
                     { key: "going", text: "Going" },
                     { key: "maybe", text: "Maybe" },
-                    { key: "cant", text: "Can’t make it" },
+                    { key: "cant", text: "Can’t go" },
                   ] as const}
                   value={answerKey(attendee.response)}
                   onChange={(key) => void event.respond(responseFor(key, attendee.response))}
@@ -303,11 +359,18 @@ export default function EventPage() {
           </View>
         ))}
       </InfoSheet>
+      <GuestNoteSheet
+        visible={noteOpen}
+        current={guestNote}
+        onSave={saveGuestNote}
+        onClose={() => setNoteOpen(false)}
+      />
+      <ReminderSheet device={device} />
       <InfoSheet visible={more} title="More" onClose={() => setMore(false)}>
         <Tile
           icon={Repeat}
           title="Do this again"
-          hint="Copies the name, description, vibe, place and note into a new draft"
+          hint="Copies the name, description, vibe, place and Meeting details into a new draft"
           onPress={() => void again()}
         />
         <ErrorNote message={moreError} />
@@ -336,6 +399,7 @@ export default function EventPage() {
 const styles = StyleSheet.create({
   top: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   actions: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 10 },
+  chips: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 },
   guest: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 44 },
   group: { fontFamily: fonts.bold, fontSize: 15, marginTop: 8 },
   confirm: { gap: 12, padding: 14, backgroundColor: c.pinkSoft, borderRadius: 16 },

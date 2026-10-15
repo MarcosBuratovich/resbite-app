@@ -1,7 +1,9 @@
 // UX1 event page for both roles. Every Supabase request is intercepted; nothing is sent.
+// UX3: Meeting details in all three roles, the Note to guests, Add to calendar and reminders (on the
+// development fakes, `__resbiteDevice`), and the "Can’t go" wording.
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
-import { visible } from "./qa-helpers.mjs";
+import { quietReminders, visible } from "./qa-helpers.mjs";
 const base = process.env.RESBITE_QA_URL || "http://localhost:8081";
 const browser = await chromium.launch({
   channel: process.env.RESBITE_QA_BROWSER || "chrome",
@@ -48,6 +50,8 @@ const hosted = {
   cover_path: null,
   cover_revision: 0,
   cover_description: "",
+  guest_note: "",
+  guest_note_at: null,
 };
 const invited = {
   ...hosted,
@@ -55,10 +59,12 @@ const invited = {
   title: "Board games",
   owner_id: "33333333-3333-4333-8333-333333333333",
   place_label: "Games room",
-  note: "",
+  note: "Gate code 4512",
   cover_path: "33333333-3333-4333-8333-333333333333/44444444-4444-4444-8444-444444444444/a.jpg",
   cover_revision: 1,
   cover_description: "Two mugs on a window sill",
+  guest_note: "Bring a blanket",
+  guest_note_at: "2099-02-28T09:41:00Z",
 };
 const edited = {
   ...hosted,
@@ -69,9 +75,48 @@ const edited = {
   note: "",
 };
 const closed = { ...invited, id: "66666666-6666-4666-8666-666666666666", title: "Closed games", status: "cancelled" };
+// An invitation with no Meeting details: nothing to unlock, so no locked line.
+const quiz = {
+  ...invited,
+  id: "77777777-7777-4777-8777-777777777777",
+  title: "Quiz night",
+  note: "",
+  guest_note: "",
+  guest_note_at: null,
+  cover_path: null,
+  cover_description: "",
+};
+// The organizer's event with an end, for reminders and the calendar.
+const lunch = {
+  ...hosted,
+  id: "88888888-8888-4888-8888-888888888888",
+  title: "Garden lunch",
+  description: "",
+  place_label: "Rose garden",
+  note: "Door code 4521",
+  ends_at: "2099-03-01T17:00:00Z",
+};
+const LOCKED = "Meeting details appear after you answer Going or Maybe.";
+const GET_REMINDERS =
+  "Resbite can remind you 1 day and 1 hour before your resbites. Reminders are set on this phone, and only show the name and time.";
+/** Brings the page back to the foreground: the event and this phone's reminder state are read again. */
+const foreground = (page) =>
+  page.evaluate(() => {
+    for (const state of ["hidden", "visible"]) {
+      Object.defineProperty(document, "visibilityState", { configurable: true, value: state });
+      document.dispatchEvent(new Event("visibilitychange"));
+    }
+  });
+/** After an InfoSheet closes, wait until its Modal has gone before the next tap. */
+const sheetClosed = (page) => expect(page.getByRole("button", { name: "Close sheet", exact: true })).toHaveCount(0);
+/** The development fake's reminders for one event, soonest first. */
+const remindersFor = (page, planId) =>
+  page.evaluate((id) => globalThis.__resbiteDevice.reminders.filter((r) => r.id.includes(id)), planId);
 const errors = [];
 try {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
+  // This context isn't about reminders: the permission is answered "denied" up front, so nothing asks.
+  await quietReminders(context);
   const page = await context.newPage();
   page.on("pageerror", (e) => errors.push(e.message));
   const init = (s) => {
@@ -88,6 +133,8 @@ try {
     [invited.id, { ...invited }],
     [edited.id, { ...edited }],
     [closed.id, { ...closed }],
+    [quiz.id, { ...quiz }],
+    [lunch.id, { ...lunch }],
   ]);
   let attendee = { version: 1, response: "pending" };
   let failGuests = false;
@@ -100,6 +147,8 @@ try {
   const cancels = [];
   const edits = [];
   const editBodies = [];
+  const noteBodies = [];
+  let failNote = false;
   // UX3: Meeting details live in their own table, which the database sends only to the organizer and
   // Going or Maybe guests; every invitee may know some exist. The plans row's own note is always "".
   const asRow = (plan) => {
@@ -140,6 +189,13 @@ try {
     }
     if (path === "/rest/v1/attendees") {
       if (one) return reply(attendee);
+      // The reminder sync's read of the person's own answers: the one fixture answer, on every invitation.
+      if (url.searchParams.get("select") === "plan_id,response")
+        return reply(
+          [...plans.values()]
+            .filter((p) => p.owner_id !== user.id)
+            .map((p) => ({ plan_id: p.id, response: attendee.response })),
+        );
       // 500, not 503: postgrest-js retries a 503 GET with backoff.
       if (failGuests) return reply({ message: "Fixture: guest list unavailable" }, 500);
       if (failNextGuestList) {
@@ -168,6 +224,19 @@ try {
       assert.equal(body.p_version, attendee.version);
       attendee = { version: attendee.version + 1, response: body.p_response };
       return reply(attendee.version);
+    }
+    if (path === "/rest/v1/rpc/set_guest_note") {
+      const body = req.postDataJSON();
+      noteBodies.push(body);
+      if (failNote) {
+        failNote = false;
+        return reply({ code: "22023", message: "Fixture: this resbite has ended" }, 400);
+      }
+      // The note never changes the event's version.
+      const plan = plans.get(body.p_plan);
+      plan.guest_note = body.p_note;
+      plan.guest_note_at = body.p_note ? new Date().toISOString() : null;
+      return reply({ guest_note: plan.guest_note, guest_note_at: plan.guest_note_at });
     }
     if (path === "/rest/v1/rpc/change_plan_v3") {
       const body = req.postDataJSON();
@@ -211,11 +280,62 @@ try {
   // Guests (UX2): the stack counts Going and Maybe; the sheet groups every answer.
   await page.getByRole("button", { name: "1 going, 1 maybe", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Guests", exact: true })).toBeVisible();
-  for (const group of ["Going", "Maybe", "Can’t make it", "Not answered yet"])
+  for (const group of ["Going", "Maybe", "Can’t go", "Not answered yet"])
     await expect(page.getByRole("heading", { name: group, exact: true })).toBeVisible();
   await expect(page.getByText("Bea", { exact: true })).toBeVisible();
-  await expect(page.getByText("Can’t make it now", { exact: true })).toBeVisible();
+  await expect(page.getByText("Can’t go now", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Close sheet", exact: true }).click();
+  await sheetClosed(page);
+  // UX3 Meeting details: the organizer sees them, with who else can.
+  await expect(page.getByText("Meeting details · only Going & Maybe see this", { exact: true })).toBeVisible();
+  await expect(page.getByText("Window table", { exact: true })).toBeVisible();
+  await expect(page.getByText(LOCKED, { exact: true })).toHaveCount(0);
+  // UX3 Note to guests: posted from a chip, then pinned with ✎ to edit or remove it.
+  await expect(page.getByRole("button", { name: "Edit note to guests", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Post a note to guests", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Note to guests", exact: true })).toBeVisible();
+  const noteField = page.getByLabel("Note to guests", { exact: true });
+  await expect(noteField).toHaveAttribute("placeholder", "Running late, bring a blanket… (optional)");
+  await expect(page.getByRole("button", { name: "Post", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Remove note", exact: true })).toHaveCount(0);
+  // Over 280 characters is refused in the sheet, before anything is sent.
+  await noteField.fill(`${"x".repeat(281)}`);
+  await page.getByRole("button", { name: "Post", exact: true }).click();
+  await expect(page.getByText("Keep the note to 280 characters.", { exact: true })).toBeVisible();
+  assert.deepEqual(noteBodies, []);
+  // A refusal from the database is said in the sheet, which stays open.
+  failNote = true;
+  await noteField.fill("Running 10 minutes late");
+  await page.getByRole("button", { name: "Post", exact: true }).click();
+  await expect(
+    page.getByText("This resbite has ended or was cancelled, so its note can’t change.", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Post", exact: true }).click();
+  await sheetClosed(page);
+  await expect(page.getByText("Running 10 minutes late", { exact: true })).toBeVisible();
+  await expect(page.getByText(/^Note to guests · \d{1,2}:\d{2}$/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Post a note to guests", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Edit note to guests", exact: true }).click();
+  await expect(noteField).toHaveValue("Running 10 minutes late");
+  await noteField.fill("Running 15 minutes late");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await sheetClosed(page);
+  await expect(page.getByText("Running 15 minutes late", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Edit note to guests", exact: true }).click();
+  await page.getByRole("button", { name: "Remove note", exact: true }).click();
+  await sheetClosed(page);
+  await expect(page.getByText("Running 15 minutes late", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Post a note to guests", exact: true })).toBeVisible();
+  assert.deepEqual(
+    noteBodies.map((b) => [b.p_plan, b.p_note]),
+    [
+      [hosted.id, "Running 10 minutes late"],
+      [hosted.id, "Running 10 minutes late"],
+      [hosted.id, "Running 15 minutes late"],
+      [hosted.id, ""],
+    ],
+  );
+  assert.equal(plans.get(hosted.id).version, 1, "The note never changes the event's version");
   // Open in Maps opens only when tapped, here with the place name.
   assert.equal(await page.evaluate(() => window.__opened ?? null), null);
   const maps = page.getByRole("button", { name: "Open Fixture café in Maps", exact: true });
@@ -322,6 +442,7 @@ try {
     reducedMotion: "reduce",
     timezoneId: "Asia/Tokyo",
   });
+  await quietReminders(tokyo);
   const tPage = await tokyo.newPage();
   tPage.on("pageerror", (e) => errors.push(e.message));
   await tPage.addInitScript(init, session);
@@ -355,6 +476,15 @@ try {
   ).toBeVisible();
   await expect(page.getByText("Jo is organizing", { exact: true })).toBeVisible();
   await expect(page.getByText("Answer to see who’s coming", { exact: true })).toHaveCount(0);
+  // Its Meeting details can't be unlocked any more, so the locked line isn't offered.
+  await expect(page.getByText(LOCKED, { exact: true })).toHaveCount(0);
+
+  // An invitation with no Meeting details shows no locked line.
+  await page.goto(`${base}/event?plan=${quiz.id}`);
+  await expect(page.getByRole("heading", { name: "Quiz night", exact: true })).toBeVisible();
+  await expect(page.getByRole("radiogroup", { name: "Your answer", exact: true })).toBeVisible();
+  await expect(page.getByText(LOCKED, { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/^Meeting details/)).toHaveCount(0);
 
   // Invitee. A failed guest read makes the whole event unavailable, never a partial page; Refresh recovers.
   failGuests = true;
@@ -377,9 +507,18 @@ try {
   // The organizer's photo description labels the picture.
   await expect(page.getByRole("img", { name: "Two mugs on a window sill", exact: true })).toBeVisible();
   await expect(page.getByRole("radiogroup", { name: "Your answer", exact: true })).toBeVisible();
+  // UX3: the pinned Note to guests is for everyone; only the organizer can change it.
+  await expect(page.getByText("Bring a blanket", { exact: true })).toBeVisible();
+  await expect(page.getByText(/^Note to guests · /)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Edit note to guests", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Post a note to guests", exact: true })).toHaveCount(0);
+  // Before answering, Meeting details are locked (the database doesn't send them) and there's no calendar.
+  await expect(page.getByText(LOCKED, { exact: true })).toBeVisible();
+  await expect(page.getByText("Gate code 4512", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add to calendar", exact: true })).toHaveCount(0);
   const going = page.getByRole("radio", { name: "Going", exact: true });
   const maybe = page.getByRole("radio", { name: "Maybe", exact: true });
-  const cant = page.getByRole("radio", { name: "Can’t make it", exact: true });
+  const cant = page.getByRole("radio", { name: "Can’t go", exact: true });
   for (const option of [going, maybe, cant]) await expect(option).not.toBeChecked();
   // The answer saves, but who's coming fails to load: the answer stays, Refresh recovers.
   failNextGuestList = true;
@@ -389,26 +528,164 @@ try {
     page.getByText("Your answer is saved, but who’s coming couldn’t load. Refresh to try again.", { exact: true }),
   ).toBeVisible();
   await expect(maybe).toBeChecked();
+  // The answer's confirming read brings the Meeting details.
+  await expect(page.getByText("Meeting details · Games room", { exact: true })).toBeVisible();
+  await expect(page.getByText("Gate code 4512", { exact: true })).toBeVisible();
+  await expect(page.getByText(LOCKED, { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add to calendar", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Refresh invitation", exact: true }).click();
   await expect(page.getByRole("button", { name: "1 going, 1 maybe", exact: true })).toBeVisible();
   await expect(page.getByText("Answer to see who’s coming", { exact: true })).toHaveCount(0);
-  // Going opens the sample chat; backing out after Going reads "Can’t make it now".
+  // Going opens the sample chat and keeps the Meeting details; backing out after Going reads "Can’t go now"
+  // and locks them again.
   await going.click();
   await expect(going).toBeChecked();
   await expect(page.getByRole("button", { name: "View sample conversation", exact: true })).toBeVisible();
+  await expect(page.getByText("Gate code 4512", { exact: true })).toBeVisible();
   await cant.click();
   await expect(cant).toBeChecked();
-  await expect(page.getByText("Can’t make it now", { exact: true })).toBeVisible();
-  // After Maybe, Can’t make it is a plain decline.
+  await expect(page.getByText("Can’t go now", { exact: true })).toBeVisible();
+  await expect(page.getByText(LOCKED, { exact: true })).toBeVisible();
+  await expect(page.getByText("Gate code 4512", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add to calendar", exact: true })).toHaveCount(0);
+  // After Maybe, Can’t go is a plain decline.
   await maybe.click();
   await expect(maybe).toBeChecked();
+  await expect(page.getByText("Gate code 4512", { exact: true })).toBeVisible();
   await cant.click();
   await expect(cant).toBeChecked();
+  await expect(page.getByText(LOCKED, { exact: true })).toBeVisible();
   assert.deepEqual(responses, ["maybe", "accepted", "withdrawn", "maybe", "declined"]);
   await context.close();
+  console.log(
+    "PASS: invitee: the organizer only before answering, Maybe, the list after answering (and its load failure), Can’t go now after Going, the photo label; the Note to guests; Meeting details locked, shown after Going or Maybe, locked again after Can’t go, and absent when there are none.",
+  );
+
+  // UX3 reminders and Add to calendar, on the development fakes. A fresh context: the phone's permission
+  // was never asked for. Times are read in UTC.
+  const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce", timezoneId: "UTC" });
+  const device = await phone.newPage();
+  device.on("pageerror", (e) => errors.push(e.message));
+  await device.addInitScript(init, session);
+  await device.route("**/*.supabase.co/**", stub);
+  await device.goto(`${base}/event?plan=${lunch.id}`);
+  await expect(device.getByRole("heading", { name: "Garden lunch", exact: true })).toBeVisible();
+  // The cover card shows the end.
+  await expect(device.getByText("15:00 – 17:00", { exact: true })).toBeVisible();
+  // The organizer's first visit asks once, before iPhone's prompt.
+  await expect(device.getByRole("heading", { name: "Get reminders?", exact: true })).toBeVisible();
+  await expect(device.getByText(GET_REMINDERS, { exact: true })).toBeVisible();
+  await device.getByRole("button", { name: "Allow reminders", exact: true }).click();
+  await sheetClosed(device);
+  assert.equal(await device.evaluate(() => globalThis.__resbiteDevice.permission), "granted");
+  const remindersOn = device.getByRole("button", { name: "Reminders on, 1 day and 1 hour before", exact: true });
+  await expect(remindersOn).toBeVisible();
+  // Two reminders, 1 day and 1 hour before: the name and time only, never the place or Meeting details.
+  await expect
+    .poll(() => remindersFor(device, lunch.id))
+    .toEqual([
+      { id: `resbite-reminder:${lunch.id}:1d`, at: "2099-02-28T15:00:00.000Z", body: "Tomorrow at 15:00 · Garden lunch" },
+      { id: `resbite-reminder:${lunch.id}:1h`, at: "2099-03-01T14:00:00.000Z", body: "In 1 hour · Garden lunch" },
+    ]);
+  // Reminders off for this event only, then on again.
+  await remindersOn.click();
+  await expect(device.getByRole("button", { name: "Reminders off", exact: true })).toBeVisible();
+  await expect.poll(() => remindersFor(device, lunch.id)).toEqual([]);
+  await device.getByRole("button", { name: "Reminders off", exact: true }).click();
+  await expect(remindersOn).toBeVisible();
+  await expect.poll(async () => (await remindersFor(device, lunch.id)).length).toBe(2);
+  // Add to calendar fills iPhone's form: the name, start and end, the place, no alert, never the Meeting details.
+  const calendar = () =>
+    device.evaluate(() =>
+      globalThis.__resbiteDevice.calendar.map((e) => ({
+        ...e,
+        startDate: e.startDate.toISOString(),
+        endDate: e.endDate.toISOString(),
+      })),
+    );
+  await device.getByRole("button", { name: "Add to calendar", exact: true }).click();
+  await expect.poll(async () => (await calendar()).length).toBe(1);
+  assert.deepEqual((await calendar())[0], {
+    title: "Garden lunch",
+    startDate: "2099-03-01T15:00:00.000Z",
+    endDate: "2099-03-01T17:00:00.000Z",
+    location: "Rose garden",
+    notes: "Added from Resbite",
+    alarms: [],
+  });
+  assert.ok(!JSON.stringify(await calendar()).includes("Door code"), "No Meeting details in calendars");
+  // The organizer moves it: the chip offers Update calendar, and the reminders move too.
+  Object.assign(plans.get(lunch.id), { starts_at: "2099-03-01T16:00:00Z", ends_at: "2099-03-01T18:00:00Z" });
+  await foreground(device);
+  await expect(device.getByText("16:00 – 18:00", { exact: true })).toBeVisible();
+  await device.getByRole("button", { name: "Update calendar", exact: true }).click();
+  await expect.poll(async () => (await calendar()).length).toBe(2);
+  assert.equal((await calendar())[1].notes, "Updated. Remove the earlier entry from your calendar.");
+  assert.equal((await calendar())[1].startDate, "2099-03-01T16:00:00.000Z");
+  await expect(device.getByRole("button", { name: "Add to calendar", exact: true })).toBeVisible();
+  await expect
+    .poll(async () => (await remindersFor(device, lunch.id)).map((r) => r.body))
+    .toEqual(["Tomorrow at 16:00 · Garden lunch", "In 1 hour · Garden lunch"]);
+  // Controller ruling P10: a form that can't open (before iOS 17) is explained; nothing asks for calendar access.
+  await device.evaluate(() => {
+    globalThis.__resbiteDevice.calendar.push = () => {
+      throw Error("Fixture: the calendar form can't open");
+    };
+  });
+  await device.getByRole("button", { name: "Add to calendar", exact: true }).click();
+  await expect(
+    device.getByText("We couldn’t open your calendar. Add to calendar needs iOS 17 or later.", { exact: true }),
+  ).toBeVisible();
+  await device.evaluate(() => delete globalThis.__resbiteDevice.calendar.push);
+  // With the permission off, the phone keeps none and the chip leads to Settings (the browser has none).
+  await device.evaluate(() => (globalThis.__resbiteDevice.permission = "denied"));
+  await foreground(device);
+  await expect(device.getByRole("button", { name: "Reminders off", exact: true })).toBeVisible();
+  await expect.poll(() => device.evaluate(() => globalThis.__resbiteDevice.reminders.length)).toBe(0);
+  await device.getByRole("button", { name: "Reminders off", exact: true }).click();
+  await expect(
+    device.getByText("Couldn’t open device settings. Please open Settings on your phone.", { exact: true }),
+  ).toBeVisible();
+  await expect(device.getByRole("heading", { name: "Get reminders?", exact: true })).toHaveCount(0);
+  console.log(
+    "PASS: organizer: Get reminders? once, two reminders with the name and time only, the per-event switch, Add to calendar without Meeting details, Update calendar after a time change, the iOS 17 note, Settings when the permission is off.",
+  );
+
+  // A guest: no sheet before answering; right after Going it asks, without holding up the answer.
+  attendee = { version: 1, response: "pending" };
+  const guest = await phone.newPage();
+  guest.on("pageerror", (e) => errors.push(e.message));
+  await guest.addInitScript(init, session);
+  await guest.route("**/*.supabase.co/**", stub);
+  await guest.goto(`${base}/event?plan=${invited.id}`);
+  await expect(guest.getByRole("heading", { name: "Board games", exact: true })).toBeVisible();
+  await expect(guest.getByText(LOCKED, { exact: true })).toBeVisible();
+  await guest.waitForTimeout(500); // a sheet would appear within this settle time
+  await expect(guest.getByRole("heading", { name: "Get reminders?", exact: true })).toHaveCount(0);
+  await guest.getByRole("radio", { name: "Going", exact: true }).click();
+  await expect(guest.getByText("Your response is saved.", { exact: true })).toBeVisible();
+  await expect(guest.getByRole("heading", { name: "Get reminders?", exact: true })).toBeVisible();
+  await guest.getByRole("button", { name: "Not now", exact: true }).click();
+  await sheetClosed(guest);
+  await expect(guest.getByRole("radio", { name: "Going", exact: true })).toBeChecked();
+  await expect(guest.getByText("Gate code 4512", { exact: true })).toBeVisible();
+  assert.equal(await guest.evaluate(() => globalThis.__resbiteDevice.permission), "undetermined");
+  // "Not now" leaves Reminders off; it isn't asked again; the chip can turn them on.
+  await foreground(guest);
+  await guest.waitForTimeout(500);
+  await expect(guest.getByRole("heading", { name: "Get reminders?", exact: true })).toHaveCount(0);
+  await guest.getByRole("button", { name: "Reminders off", exact: true }).click();
+  await expect(guest.getByRole("button", { name: "Reminders on, 1 day and 1 hour before", exact: true })).toBeVisible();
+  await expect.poll(async () => (await remindersFor(guest, invited.id)).length).toBe(2);
+  // Can't go removes the chips and the reminders.
+  await guest.getByRole("radio", { name: "Can’t go", exact: true }).click();
+  await expect(guest.getByRole("radio", { name: "Can’t go", exact: true })).toBeChecked();
+  await expect(guest.getByRole("button", { name: "Add to calendar", exact: true })).toHaveCount(0);
+  await expect.poll(() => remindersFor(guest, invited.id)).toEqual([]);
+  await phone.close();
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: invitee: the organizer only before answering, Maybe, the list after answering (and its load failure), Can’t make it now after Going, the photo label.",
+    "PASS: guest: Get reminders? only after answering Going, Not now leaves Reminders off without asking again, the chip turns them on, Can’t go removes them.",
   );
 } finally {
   await browser.close();

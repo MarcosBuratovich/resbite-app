@@ -16,6 +16,7 @@ import {
   inviteFromList,
   later,
   next,
+  quietReminders,
   typeDate,
 } from "./qa-helpers.mjs";
 const baseURL = process.env.RESBITE_QA_URL || "http://localhost:8081";
@@ -29,6 +30,8 @@ const newPage = async (options = {}) => {
     viewport: { width: 390, height: 844 },
     ...options,
   });
+  // Saves land on the event page, which would otherwise ask "Get reminders?" (verify-event covers it).
+  await quietReminders(context);
   const page = await context.newPage();
   page.on("pageerror", (error) => errors.push(error.message));
   return page;
@@ -790,9 +793,10 @@ try {
     assert.equal(writes[0].p_ends, "2099-03-01T17:30:00.000Z");
     assert.equal(writes[0].p_start, "2099-03-01T15:00:00.000Z");
     assert.equal(writes[0].p_note, "Gate code 4512");
-    // The event page shows the range.
+    // The event page shows the range, and the organizer's Meeting details card.
     await expect(heading(fixture, "Coffee evening")).toBeVisible();
     await expect(fixture.getByText("15:00 – 17:30", { exact: true })).toBeVisible();
+    await expect(fixture.getByText("Meeting details · only Going & Maybe see this", { exact: true })).toBeVisible();
     await button(fixture, "Edit Coffee evening").click();
     await button(fixture, /^Edit date and time, /).click();
     await expect(endField).toHaveValue("2099-03-01 17:30");

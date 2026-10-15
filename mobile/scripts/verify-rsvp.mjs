@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
+import { quietReminders } from "./qa-helpers.mjs";
 const browser = await chromium.launch({
   channel: process.env.RESBITE_QA_BROWSER || "chrome",
   headless: true,
@@ -51,6 +52,8 @@ try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
+  // Answering Going would otherwise ask "Get reminders?" (verify-event covers it).
+  await quietReminders(page);
   await page.addInitScript(
     (session) =>
       sessionStorage.setItem(
@@ -167,7 +170,9 @@ try {
       { exact: true },
     ),
   ).toBeVisible();
-  await expect(page.getByRole("radio", { name: "Can’t make it", exact: true })).toBeChecked();
+  // UX3-D7: "Can’t go" on the answer control and the status chip.
+  await expect(page.getByRole("radio", { name: "Can’t go", exact: true })).toBeChecked();
+  await expect(page.getByText("Can’t go", { exact: true })).toHaveCount(2);
   // The invitation shows the plan's own text, not the bundled idea title.
   await expect(page.getByText("Coffee evening", { exact: true })).toBeVisible();
   await expect(page.getByText("Bring a book", { exact: true })).toBeVisible();
@@ -177,7 +182,7 @@ try {
   await expect(
     page.getByRole("button", { name: "Retry my response", exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("radio", { name: "Can’t make it", exact: true })).toBeDisabled();
+  await expect(page.getByRole("radio", { name: "Can’t go", exact: true })).toBeDisabled();
   await page
     .getByRole("button", { name: "Retry my response", exact: true })
     .click();
@@ -258,7 +263,7 @@ try {
   assert.deepEqual(previewRequests, []);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: lost RSVP reply reconciliation, conflict review, cancellation, accepted-only fictional sample with no composer. All backend requests intercepted.",
+    "PASS: lost RSVP reply reconciliation, conflict review (Can’t go), cancellation, accepted-only fictional sample with no composer. All backend requests intercepted.",
   );
 } finally {
   await browser.close();
