@@ -145,23 +145,30 @@ try {
     return reply({ message: `Unexpected ${path}` }, 400);
   });
   await page.goto(`${base}/profile`);
+  await expect(page.getByRole("heading", { name: "Profile", exact: true })).toBeVisible();
+  await expect(page.getByText("Saved name", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Edit name", exact: true }).click();
   const name = page.getByRole("textbox", {
     name: "What should we call you?",
     exact: true,
   });
   await expect(name).toHaveValue("Saved name");
   await name.fill("My changed name");
-  await page.getByRole("button", { name: "Save profile", exact: true }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(
     page.getByText("Could not save your name. Your changes are kept.", {
       exact: true,
     }),
   ).toBeVisible();
+  // A failed save keeps the sheet open with the typed name.
   await expect(name).toHaveValue("My changed name");
-  await page.getByRole("button", { name: "Save profile", exact: true }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(
     page.getByText("Your profile is saved.", { exact: true }),
   ).toBeVisible();
+  // A successful save closes the sheet, and the card shows the new name.
+  await expect(page.getByRole("heading", { name: "Your name", exact: true })).toHaveCount(0);
+  await expect(page.getByText("My changed name", { exact: true })).toBeVisible();
   const png = await page.evaluate(() => {
     const canvas = document.createElement("canvas");
     canvas.width = 1600;

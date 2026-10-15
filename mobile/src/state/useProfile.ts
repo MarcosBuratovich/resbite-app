@@ -133,18 +133,19 @@ export function useProfile() {
       };
     }, [load]),
   );
-  async function save() {
-    if (working.current) return;
+  /** Saves the name; true once it is saved (the name sheet then closes). */
+  async function save(): Promise<boolean> {
+    if (working.current) return false;
     if (!name.trim() || name.trim().length > 80) {
       setError("Use a name between 1 and 80 characters.");
-      return;
+      return false;
     }
     const value = name.trim();
     let check: () => void;
     try {
       check = guard();
     } catch {
-      return;
+      return false;
     }
     working.current = true;
     setBusy(true);
@@ -167,6 +168,7 @@ export function useProfile() {
           pathname: "/invite",
           params: { token: pendingInvite },
         });
+      return true;
     } catch (e) {
       if (identity.current === scope)
         setError(
@@ -180,6 +182,7 @@ export function useProfile() {
         setBusy(false);
       }
     }
+    return false;
   }
   async function changePhoto(action: "choose" | "remove" | "retry" | "keep") {
     if (working.current) return;

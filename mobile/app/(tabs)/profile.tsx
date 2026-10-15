@@ -1,37 +1,49 @@
-import React from "react";
-import { ScrollView, View, Image } from "react-native";
+import React, { useState } from "react";
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import {
-  Button,
-  Copy,
-  Title,
-  Field,
-  ErrorNote,
-  ActionRow,
-  ActionGroup,
-  TextAction,
-  s,
-} from "../../src/design/ui";
+import { Bell, Camera, LogOut, MessageCircle, Pencil, ShieldCheck, Trash2, UserRound, Users } from "lucide-react-native";
+import { Button, Copy, ErrorNote, Title, s } from "../../src/design/ui";
+import { FieldCard, IconButton, InfoSheet, Row, RowGroup } from "../../src/design/kit";
 import { PreviewNotice } from "../../src/design/Chrome";
-import { colors as c } from "../../src/design/tokens";
+import { categoryPalette, colors as c, depth, fonts, r } from "../../src/design/tokens";
 import { useProfile } from "../../src/state/useProfile";
-import {
-  UserRound,
-  Users,
-  Bell,
-  ShieldCheck,
-  MessageCircle,
-  Compass,
-  Camera,
-  Trash2,
-  LogOut,
-} from "lucide-react-native";
+
+/**
+ * Profile (UX4-D2, "B · Grouped rows"): a centred photo and name, then one card of rows, and
+ * Sign out in its own card. All logic is useProfile's, unchanged. Until a name is saved the
+ * name field sits in the card (first run); afterwards ✎ opens it in a sheet.
+ */
 export default function Profile() {
-  const {
-    preview, session, signingOut, name, busy, loading, error, loadError, saved, profile,
-    photoUri, photoMessage, pending, load, save, changePhoto, changeName, photoFailed, signOutAndLeave,
-  } = useProfile();
+  const p = useProfile();
+  const [editing, setEditing] = useState(false);
+  const firstRun = !p.profile && !p.loading;
+  const shownName = p.profile?.display_name || p.name;
+  const photoBlocked = p.busy || p.loading || p.signingOut || (!p.preview && (!p.profile || !!p.loadError));
+  const nameField = (
+    <FieldCard
+      label="What should we call you?"
+      icon={Pencil}
+      display
+      placeholder="Your name"
+      value={p.name}
+      onChangeText={p.changeName}
+      editable={!p.busy}
+      maxLength={80}
+      autoComplete="name"
+    />
+  );
+  // A save closes the name sheet; an error keeps it open with the typed name.
+  const saveName = (
+    <Button
+      title="Save"
+      onPress={async () => {
+        if (await p.save()) setEditing(false);
+      }}
+      loading={p.busy}
+      disabled={p.loading || p.signingOut}
+    />
+  );
   return (
     <SafeAreaView edges={["top", "left", "right"]} style={s.page}>
       <ScrollView
@@ -41,172 +53,197 @@ export default function Profile() {
         keyboardDismissMode="on-drag"
       >
         <PreviewNotice />
-        <Copy style={{ color: c.aquaDark }}>YOUR LITTLE CORNER</Copy>
-        <Title>Hello, you.</Title>
-        <Copy style={s.muted}>
-          {preview
-            ? "Design preview"
-            : session?.user.email || "Sign in to set up your profile."}
-        </Copy>
-        <View style={[s.card, { padding: 16, gap: 12 }]}>
-          <View
-            style={{
-              minWidth: 64,
-              minHeight: 64,
-              padding: 16,
-              alignSelf: "flex-start",
-              borderRadius: 42,
-              backgroundColor: c.pinkSoft,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            {photoUri ? (
-              <Image
-                source={{ uri: photoUri }}
-                accessibilityLabel="Your profile photo"
-                onError={photoFailed}
-                style={{ width: 100, height: 100, borderRadius: 50 }}
-              />
-            ) : (
-              <Title>{name ? name[0].toUpperCase() : "R"}</Title>
-            )}
-          </View>
-          <Field
-            label="What should we call you?"
-            value={name}
-            onChangeText={changeName}
-            editable={!busy}
-            maxLength={80}
-            autoComplete="name"
-          />
-          <ErrorNote message={error} />
-          {loadError && (
-            <>
-              <ErrorNote message={loadError} />
-              <Button
-                title="Retry profile"
-                secondary
-                onPress={() => void load()}
-                disabled={busy}
-              />
-            </>
-          )}
-          {loading && <Copy>Loading your profile…</Copy>}
-          <Copy style={s.muted}>An optional photo, just for your profile.</Copy>
-          {!preview && !profile && !loading && (
-            <Copy style={s.muted}>Save your name first to add a photo.</Copy>
-          )}
-          {pending ? (
-            <>
+        <Title>Profile</Title>
+        <View style={styles.card}>
+          {p.pending ? (
+            <View style={{ gap: 12, alignSelf: "stretch" }}>
               <Copy>
-                {pending.expectedRevision === undefined
+                {p.pending.expectedRevision === undefined
                   ? "This photo change was prepared by an older app. Keep the saved photo, then choose again."
                   : "A photo change needs confirmation. Retry checks the saved photo before changing anything."}
               </Copy>
               <Button
                 title="Keep saved photo"
                 secondary
-                onPress={() => void changePhoto("keep")}
-                disabled={busy || loading || signingOut}
+                onPress={() => void p.changePhoto("keep")}
+                disabled={p.busy || p.loading || p.signingOut}
               />
-              {pending.expectedRevision !== undefined && <Button
-                title="Retry photo change"
-                onPress={() => void changePhoto("retry")}
-                disabled={busy || loading || signingOut}
-              />}
-            </>
-          ) : (
-            <>
-              <ActionRow
-                icon={Camera}
-                tone="rose"
-                title={photoUri ? "Change photo" : "Add optional photo"}
-                onPress={() => void changePhoto("choose")}
-                disabled={
-                  busy ||
-                  loading ||
-                  signingOut ||
-                  (!preview && (!profile || !!loadError))
-                }
-              />
-              {!!(photoUri || profile?.avatar_path) && (
-                <TextAction
-                  icon={Trash2}
-                  destructive
-                  title="Remove photo"
-                  onPress={() => void changePhoto("remove")}
-                  disabled={busy || loading || signingOut}
+              {p.pending.expectedRevision !== undefined && (
+                <Button
+                  title="Retry photo change"
+                  onPress={() => void p.changePhoto("retry")}
+                  disabled={p.busy || p.loading || p.signingOut}
                 />
               )}
-            </>
+            </View>
+          ) : (
+            <View style={styles.photoRow}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={p.photoUri ? "Change photo" : "Add optional photo"}
+                accessibilityHint="An optional photo, just for your profile."
+                aria-disabled={photoBlocked}
+                disabled={photoBlocked}
+                onPress={() => void p.changePhoto("choose")}
+                style={({ pressed }) => [styles.avatar, { opacity: photoBlocked ? 0.55 : pressed ? 0.8 : 1 }]}
+              >
+                {p.photoUri ? (
+                  <Image
+                    source={{ uri: p.photoUri }}
+                    accessibilityIgnoresInvertColors
+                    onError={p.photoFailed}
+                    style={styles.photo}
+                  />
+                ) : (
+                  <Text style={styles.initial}>{shownName ? shownName[0].toUpperCase() : "R"}</Text>
+                )}
+                <View style={styles.camera}>
+                  <Camera size={18} strokeWidth={2.2} color={categoryPalette.creative.ink} />
+                </View>
+              </Pressable>
+              {!!(p.photoUri || p.profile?.avatar_path) && (
+                <View style={styles.remove}>
+                  <IconButton
+                    icon={Trash2}
+                    label="Remove photo"
+                    onPress={() => void p.changePhoto("remove")}
+                    disabled={p.busy || p.loading || p.signingOut}
+                  />
+                </View>
+              )}
+            </View>
           )}
-          {photoMessage && <Copy style={s.muted}>{photoMessage}</Copy>}
-          {saved && (
-            <Copy style={{ color: c.aquaDark }}>
-              {preview ? "Preview name saved." : "Your profile is saved."}
-            </Copy>
+          {firstRun ? (
+            <View style={{ gap: 12, alignSelf: "stretch" }}>
+              {nameField}
+              <ErrorNote message={p.error} />
+              {saveName}
+            </View>
+          ) : (
+            <View style={styles.nameRow}>
+              <Text style={styles.name} numberOfLines={2}>
+                {shownName}
+              </Text>
+              <IconButton
+                icon={Pencil}
+                label="Edit name"
+                tone="plain"
+                disabled={p.busy || p.signingOut}
+                onPress={() => setEditing(true)}
+              />
+            </View>
           )}
-          <Button
-            title="Save profile"
-            onPress={save}
-            loading={busy}
-            disabled={loading || signingOut}
-          />
         </View>
-        <Copy style={s.muted}>YOUR SPACE</Copy>
-        <ActionGroup>
-          {!preview && (
-            <ActionRow
+        {!firstRun && !editing && <ErrorNote message={p.error} />}
+        {p.loadError && (
+          <>
+            <ErrorNote message={p.loadError} />
+            <Button title="Retry profile" secondary onPress={() => void p.load()} disabled={p.busy} />
+          </>
+        )}
+        {p.loading && <Copy>Loading your profile…</Copy>}
+        {!p.preview && !p.profile && !p.loading && (
+          <Copy style={s.muted}>Save your name first to add a photo.</Copy>
+        )}
+        {p.photoMessage && <Copy style={s.muted}>{p.photoMessage}</Copy>}
+        {p.saved && (
+          <Copy accessibilityLiveRegion="polite" style={{ color: c.aquaDark }}>
+            {p.preview ? "Preview name saved." : "Your profile is saved."}
+          </Copy>
+        )}
+        <RowGroup>
+          <Row
+            title="People & groups"
+            icon={Users}
+            tint={categoryPalette.mindful.tint}
+            ink={categoryPalette.mindful.ink}
+            onPress={() => router.push("/people")}
+          />
+          {!p.preview && (
+            <Row
               title="Account details"
-              description="Edit or remove your optional personal details"
               icon={UserRound}
-              tone="rose"
+              tint={categoryPalette.intellectual.tint}
+              ink={categoryPalette.intellectual.ink}
               onPress={() => router.push("/account-details")}
             />
           )}
-          <ActionRow
-            title="People & groups"
-            description="Your favourite company"
-            icon={Users}
-            onPress={() => router.push("/people")}
-          />
-          <View style={s.divider} />
-          <ActionRow
-            title="Notification settings"
+          <Row
+            title="Notifications"
             icon={Bell}
-            tone="amber"
+            tint={categoryPalette.creative.tint}
+            ink={categoryPalette.creative.ink}
             onPress={() => router.push("/notifications")}
           />
-          <View style={s.divider} />
-          <ActionRow
-            title="Your data & privacy"
+          <Row
+            title="Data & privacy"
             icon={ShieldCheck}
-            tone="violet"
+            tint={categoryPalette.natural.tint}
+            ink={categoryPalette.natural.ink}
             onPress={() => router.push("/data-privacy")}
           />
-        </ActionGroup>
-        <ActionGroup>
-          {preview && (
-            <ActionRow
-              title="Explore sample conversation"
+          {p.preview && (
+            <Row
+              title="Sample conversation"
               icon={MessageCircle}
-              tone="rose"
+              tint={categoryPalette.creative.tint}
+              ink={categoryPalette.creative.ink}
               onPress={() => router.push("/sample-chat")}
             />
           )}
-          <ActionRow
-            title="Browse ideas"
-            icon={Compass}
-            onPress={() => router.navigate("/create")}
+        </RowGroup>
+        <RowGroup>
+          <Row
+            title={p.preview ? "Leave preview" : "Sign out"}
+            icon={LogOut}
+            destructive
+            disabled={p.signingOut}
+            onPress={() => void p.signOutAndLeave()}
           />
-        </ActionGroup>
-        <TextAction
-          icon={LogOut}
-          title={preview ? "Leave preview" : "Sign out"}
-          onPress={() => void signOutAndLeave()}
-        />
+        </RowGroup>
       </ScrollView>
+      <InfoSheet visible={editing} title="Your name" onClose={() => setEditing(false)}>
+        {nameField}
+        <ErrorNote message={p.error} />
+        {saveName}
+      </InfoSheet>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  card: {
+    padding: 24,
+    gap: 14,
+    alignItems: "center",
+    borderRadius: r.card,
+    backgroundColor: c.paper,
+    boxShadow: depth.card,
+  },
+  photoRow: { alignItems: "center" },
+  avatar: {
+    width: 104,
+    height: 104,
+    borderRadius: 52,
+    backgroundColor: categoryPalette.intellectual.tint,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  photo: { width: 104, height: 104, borderRadius: 52 },
+  initial: { fontFamily: fonts.display, fontSize: 44, color: categoryPalette.intellectual.ink },
+  camera: {
+    position: "absolute",
+    right: -4,
+    bottom: -4,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: c.paper,
+    alignItems: "center",
+    justifyContent: "center",
+    boxShadow: depth.small,
+  },
+  remove: { position: "absolute", right: -64, top: 30 },
+  nameRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, maxWidth: "100%" },
+  name: { flexShrink: 1, fontFamily: fonts.display, fontSize: 26, lineHeight: 32, color: c.ink, textAlign: "center" },
+});

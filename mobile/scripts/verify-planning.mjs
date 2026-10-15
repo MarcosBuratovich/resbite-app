@@ -92,7 +92,7 @@ try {
   await page
     .getByLabel("What should we call you?", { exact: true })
     .fill("Alex");
-  await page.getByRole("button", { name: "Save profile", exact: true }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(
     page.getByText("Preview name saved.", { exact: true }),
   ).toBeVisible();

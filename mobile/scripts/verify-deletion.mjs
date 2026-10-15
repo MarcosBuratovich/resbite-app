@@ -21,7 +21,7 @@ try {
     .click();
   await page.getByRole("tab", { name: "Profile", exact: true }).click();
   await page
-    .getByRole("button", { name: "Your data & privacy", exact: true })
+    .getByRole("button", { name: "Data & privacy", exact: true })
     .click();
   await page
     .getByRole("button", { name: "Review account deletion", exact: true })

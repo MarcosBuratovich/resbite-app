@@ -103,7 +103,7 @@ try {
     // Profile, settings and People & groups, with gluestack keyboard selection.
     await page.getByRole("tab", { name: "Profile", exact: true }).click();
     await shot("profile");
-    await page.getByRole("button", { name: "Your data & privacy", exact: true }).scrollIntoViewIfNeeded();
+    await page.getByRole("button", { name: "Data & privacy", exact: true }).scrollIntoViewIfNeeded();
     await shot("settings");
     await page.getByRole("button", { name: "People & groups", exact: true }).click();
     await page.getByRole("button", { name: "Create a group", exact: true }).click();

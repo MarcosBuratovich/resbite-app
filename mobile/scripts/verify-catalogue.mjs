@@ -245,7 +245,7 @@ try {
   await delayed.page.getByRole("tab", { name: "Profile", exact: true }).click();
   delayed.state.release();
   await expect(
-    delayed.page.getByLabel("What should we call you?", { exact: true }),
+    delayed.page.getByRole("heading", { name: "Profile", exact: true }),
   ).toBeVisible();
   delayed.state.rows = [];
   await delayed.page

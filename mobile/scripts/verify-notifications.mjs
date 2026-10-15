@@ -24,7 +24,7 @@ try {
   await page.getByText("Preview the design", { exact: true }).click();
   await page.getByRole("tab", { name: "Profile", exact: true }).click();
   await page
-    .getByRole("button", { name: "Notification settings", exact: true })
+    .getByRole("button", { name: "Notifications", exact: true })
     .click();
   await expect(
     page.getByRole("heading", {

@@ -168,15 +168,13 @@ try {
       .getByRole("button", { name: "Save and continue", exact: true })
       .click();
     await expect(
-      page.getByRole("button", { name: "Save profile", exact: true }),
+      page.getByRole("heading", { name: "Profile", exact: true }),
     ).toBeVisible();
     await expect(
       page.getByLabel("What should we call you?", { exact: true }),
     ).toHaveValue("Google Fixture");
     assert.equal(f.writes.length, 1);
-    await page
-      .getByRole("button", { name: "Save profile", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
     await page.getByText("Account details", { exact: true }).click();
     await expect(
       page.getByLabel("City (optional)", { exact: true }),

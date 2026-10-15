@@ -233,7 +233,7 @@ try {
   await previewPage.getByText("Preview the design", { exact: true }).click();
   await previewPage.getByRole("tab", { name: "Profile", exact: true }).click();
   await previewPage
-    .getByRole("button", { name: "Explore sample conversation", exact: true })
+    .getByRole("button", { name: "Sample conversation", exact: true })
     .click();
   await expect(
     previewPage.getByText("Sam · fictional", { exact: true }),
