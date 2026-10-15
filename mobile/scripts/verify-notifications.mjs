@@ -27,11 +27,20 @@ try {
     .getByRole("button", { name: "Notifications", exact: true })
     .click();
   await expect(
-    page.getByRole("heading", {
-      name: "Notifications aren’t active yet",
-      exact: true,
-    }),
+    page.getByRole("heading", { name: "Notifications", exact: true }),
   ).toBeVisible();
+  await expect(page.getByText("Not active yet", { exact: true })).toBeVisible();
+  await expect(page.getByText("Design preview", { exact: true })).toBeVisible();
+  await page
+    .getByRole("button", { name: "About notifications", exact: true })
+    .click();
+  await expect(
+    page.getByText(
+      "This build does not send plan or RSVP notifications. Open My resbites to check the latest details and responses.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Close sheet", exact: true }).click();
   await expect(
     page.getByText(
       "Preview does not read or request notification permission, or send notifications.",

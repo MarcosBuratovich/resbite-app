@@ -85,8 +85,16 @@ try {
   await expectCancelled(page, "Coffee together");
   await page.getByRole("tab", { name: "Wellness", exact: true }).click();
   await expect(
-    page.getByText("Sample dashboard", { exact: true }),
+    page.getByText("Sample data", { exact: true }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "About sample data", exact: true }).click();
+  await expect(
+    page.getByText(
+      "These are example numbers for design review. They do not track your activity or measure health.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Close sheet", exact: true }).click();
   await expect(page.getByText("30 min", { exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "Profile", exact: true }).click();
   await page

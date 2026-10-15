@@ -26,15 +26,15 @@ try {
   await page.goto(`${base}/auth?mode=confirm`);
   await page.evaluate(() => sessionStorage.setItem('sb-ewcsgvhuojxdpaspwsrx-auth-token-code-verifier', JSON.stringify('fixture-verifier')));
   await page.goto(`${base}/auth/callback?code=fixture-signup`);
-  await expect(page.getByText('You’re on your way', { exact: true })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByRole('heading', { name: 'Waiting for access', exact: true })).toBeVisible({ timeout: 15000 });
   await expect(page).toHaveURL(/\/account$/);
   assert.equal(exchanges, 1);
   assert.equal(checks, 1);
   await page.getByRole('button', { name: 'Check account access', exact: true }).click();
-  await expect(page.getByText('You’re on your way', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Waiting for access', exact: true })).toBeVisible();
   assert.equal(checks, 2);
   await page.reload();
-  await expect(page.getByText('You’re on your way', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Waiting for access', exact: true })).toBeVisible();
   assert.deepEqual(errors, []);
   console.log('Signup callback passed: delayed access check, pending access, retry and restart; one code exchange; all backend requests intercepted.');
 } finally { await browser.close(); }

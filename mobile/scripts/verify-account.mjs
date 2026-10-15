@@ -221,7 +221,7 @@ try {
   const invitation = "a".repeat(64);
   await page.goto(`${base}/invite?token=${invitation}`);
   await expect(
-    page.getByText("You’re on your way", { exact: true }),
+    page.getByRole("heading", { name: "Waiting for access", exact: true }),
   ).toBeVisible();
   assert.equal(f.claims(), 0);
   assert.equal(

@@ -1,10 +1,11 @@
 import React, { useCallback, useRef, useState } from "react";
-import { AppState, Platform, ScrollView, View } from "react-native";
+import { AppState, Platform, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useFocusEffect } from "expo-router";
-import { BellOff } from "lucide-react-native";
+import { BellOff, CalendarHeart, Info, RefreshCw, Settings, Smartphone } from "lucide-react-native";
 import { useApp } from "../src/state/AppState";
-import { Back, Button, Copy, ErrorNote, Title, s } from "../src/design/ui";
+import { Back, Copy, ErrorNote, Title, s } from "../src/design/ui";
+import { Chip, IconButton, InfoSheet, StatusCard } from "../src/design/kit";
 import { PreviewNotice } from "../src/design/Chrome";
 import { colors as c } from "../src/design/tokens";
 import {
@@ -16,6 +17,7 @@ import {
   openNotificationSettings,
   readNotificationPermission,
 } from "../src/services/notifications";
+import { permissionChip } from "../src/domain/accountCopy";
 
 export default function Notifications() {
   const { preview, session } = useApp();
@@ -27,6 +29,7 @@ export default function Notifications() {
   );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [about, setAbout] = useState(false);
   const refresh = useRef<() => void>(() => {});
   const focused = useRef(false);
   useFocusEffect(
@@ -79,41 +82,34 @@ export default function Notifications() {
     }, [identity, preview, session]),
   );
   const copy = permission ? permissionCopy[permission] : null;
+  const permissionTitle = permissionChip(permission, busy);
   return (
     <SafeAreaView style={s.page}>
       <ScrollView contentContainerStyle={[s.body, { paddingBottom: 32 }]}>
         <PreviewNotice />
         <Back label="Profile" />
-        <Copy style={{ color: c.aquaDark }}>YOUR PREFERENCES</Copy>
-        <Title>Notifications</Title>
-        <View
-          style={[
-            s.card,
-            { padding: 22, gap: 14, backgroundColor: c.aquaSoft },
-          ]}
-        >
-          <View
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
-          >
-            <BellOff size={28} color={c.aquaDark} />
-          </View>
-          <Title style={{ fontSize: 24 }}>{notificationDelivery.label}</Title>
-          <Copy>{notificationDelivery.detail}</Copy>
+        <View style={styles.header}>
+          <Title>Notifications</Title>
+          <IconButton icon={Info} label="About notifications" onPress={() => setAbout(true)} />
         </View>
-        <View style={[s.card, { padding: 22, gap: 12 }]}>
-          <Copy style={s.muted}>DEVICE PERMISSION</Copy>
-          <Title style={{ fontSize: 23 }}>
-            {copy?.title ??
-              (busy ? "Checking permission…" : "Couldn’t check permission")}
-          </Title>
-          {copy && <Copy>{copy.detail}</Copy>}
-          <ErrorNote message={error} />
+        <StatusCard icon={BellOff} title="Not active yet">
+          <Chip
+            text={permissionTitle}
+            icon={Smartphone}
+            tone="status"
+            label={`Phone permission: ${permissionTitle}`}
+          />
+          {copy && <Copy style={styles.line}>{copy.detail}</Copy>}
+        </StatusCard>
+        <ErrorNote message={error} />
+        <View style={styles.chips}>
           {!preview && Platform.OS !== "web" && (
-            <Button
-              title="Check permission again"
-              secondary
-              loading={busy}
+            <Chip
+              text="Check again"
+              icon={RefreshCw}
+              tone="aqua"
+              label="Check permission again"
+              disabled={busy}
               onPress={() => refresh.current()}
             />
           )}
@@ -123,9 +119,10 @@ export default function Notifications() {
             !["undetermined", "unsupported", "preview"].includes(
               permission,
             ) && (
-              <Button
-                title="Open device settings"
-                secondary
+              <Chip
+                text="Settings"
+                icon={Settings}
+                label="Open device settings"
                 onPress={async () => {
                   try {
                     await openNotificationSettings(preview);
@@ -138,12 +135,24 @@ export default function Notifications() {
                 }}
               />
             )}
+          <Chip
+            text="My resbites"
+            icon={CalendarHeart}
+            label="Open My resbites"
+            onPress={() => router.navigate("/plans")}
+          />
         </View>
-        <Button
-          title="Open My resbites"
-          onPress={() => router.navigate("/plans")}
-        />
       </ScrollView>
+      <InfoSheet visible={about} title="About notifications" onClose={() => setAbout(false)}>
+        <Copy>{notificationDelivery.label}</Copy>
+        <Copy>{notificationDelivery.detail}</Copy>
+      </InfoSheet>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  line: { textAlign: "center", color: c.muted },
+  chips: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 8 },
+});
