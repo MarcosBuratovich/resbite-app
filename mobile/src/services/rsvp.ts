@@ -1,6 +1,6 @@
 import { supabase } from "./supabase";
-import { withDeadline } from "./plans";
-import type { Plan } from "../domain/plans";
+import { planWithDetails, withDeadline } from "./plans";
+import { planFromRow, type Plan } from "../domain/plans";
 import type { RsvpAttempt, RsvpSnapshot } from "../domain/rsvp";
 const eventUnavailable =
   "This invitation is unavailable, or its details could not be refreshed. Check your connection and try again.";
@@ -12,7 +12,7 @@ export async function readRsvp(
     withDeadline((signal) =>
       supabase
         .from("plans")
-        .select("*")
+        .select(planWithDetails)
         .eq("id", planId)
         .abortSignal(signal)
         .single(),
@@ -28,7 +28,8 @@ export async function readRsvp(
     ),
   ]);
   if (plan.error || attendee.error) throw new Error(eventUnavailable);
-  return { plan: plan.data, attendee: attendee.data };
+  // Read after an answer, so Going or Maybe now brings the Meeting details (and Can’t go hides them).
+  return { plan: planFromRow(plan.data), attendee: attendee.data };
 }
 export async function claimInvitation(token: string) {
   if (!/^[a-f0-9]{64}$/.test(token))
@@ -94,7 +95,9 @@ export async function readGuests(planId: string): Promise<Guest[]> {
  */
 export async function readEvent(planId: string, userId: string): Promise<EventSnapshot> {
   const [plan, guests] = await Promise.all([
-    withDeadline((signal) => supabase.from("plans").select("*").eq("id", planId).abortSignal(signal).single()),
+    withDeadline((signal) =>
+      supabase.from("plans").select(planWithDetails).eq("id", planId).abortSignal(signal).single(),
+    ),
     readGuests(planId),
   ]);
   if (plan.error || !plan.data) throw new Error(eventUnavailable);
@@ -119,5 +122,5 @@ export async function readEvent(planId: string, userId: string): Promise<EventSn
     attendee = own.data;
     organizer = host.data?.display_name ?? null;
   }
-  return { plan: plan.data as Plan, attendee, organizer, guests };
+  return { plan: planFromRow(plan.data), attendee, organizer, guests };
 }

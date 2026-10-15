@@ -7,7 +7,7 @@ import {
   legacyEventFields,
   validateEventFields,
 } from "./events.ts";
-import { reconcilePlan, type PlanGateway } from "./plans.ts";
+import { reconcilePlan, type PlanDetails, type PlanGateway } from "./plans.ts";
 import type { Activity } from "./rules.ts";
 
 const fields = { title: "Garden picnic", description: "", categories: ["natural" as const] };
@@ -102,7 +102,8 @@ const legacyGateway = (
 
 test("a landed pre-custom-events pending create is acknowledged, not a conflict", async () => {
   let creates = 0;
-  const details = { ...legacyDetails, ...completeEventFields({}, legacyEventFields(idea)) };
+  // Kept by a build older than UX3 as well, so it has no end time.
+  const details = { ...legacyDetails, ...completeEventFields({}, legacyEventFields(idea)) } as PlanDetails;
   await reconcilePlan(
     legacyGateway(
       async () => ({
@@ -124,7 +125,8 @@ test("a landed pre-custom-events pending create is acknowledged, not a conflict"
 
 test("a pre-custom-events pending create that never landed is retried with an empty description", async () => {
   const sent: unknown[] = [];
-  const details = { ...legacyDetails, ...completeEventFields({}, legacyEventFields(idea)) };
+  // Kept by a build older than UX3 as well, so it has no end time.
+  const details = { ...legacyDetails, ...completeEventFields({}, legacyEventFields(idea)) } as PlanDetails;
   await reconcilePlan(
     legacyGateway(async () => null, (d) => sent.push(d)),
     { id: "p1", activityId: "painting", details },

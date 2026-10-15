@@ -32,6 +32,14 @@ const newPage = async () => {
   page.on("pageerror", (error) => errors.push(error.message));
   return page;
 };
+// UX3: a plans row as the server sends it. Meeting details come from their own table, embedded only for
+// people allowed to read them (here, the organizer); the row's own note column is always empty.
+const row = (plan) => ({
+  ...plan,
+  note: "",
+  has_meeting_details: Boolean(plan.note),
+  plan_meeting_details: plan.note ? { note: plan.note } : null,
+});
 try {
   const page = await newPage();
   await page.route("**/*.supabase.co/**", (route) => route.abort());
@@ -531,16 +539,16 @@ try {
           await new Promise((resolve) => {
             releaseRead = resolve;
           });
-          return reply([snapshot]);
+          return reply([row(snapshot)]);
         }
         if (readFailure) return reply({ message: "Offline fixture" }, 503);
         return reply(
           request.headers().accept?.includes("object")
-            ? savedPlan
-            : [savedPlan],
+            ? row(savedPlan)
+            : [row(savedPlan)],
         );
       }
-      if (url.pathname === "/rest/v1/rpc/change_plan_v2") {
+      if (url.pathname === "/rest/v1/rpc/change_plan_v3") {
         const write = request.postDataJSON();
         writes.push(write);
         if (writes.length === 1) {
@@ -551,6 +559,7 @@ try {
               description: write.p_description,
               categories: write.p_categories,
               starts_at: write.p_start,
+              ends_at: write.p_ends,
               time_zone: write.p_zone,
               place_label: write.p_place,
               note: write.p_note,
@@ -578,6 +587,7 @@ try {
           description: write.p_description,
           categories: write.p_categories,
           starts_at: write.p_start,
+          ends_at: write.p_ends,
           time_zone: write.p_zone,
           place_label: write.p_place,
           note: write.p_note,

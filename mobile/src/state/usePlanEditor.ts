@@ -594,6 +594,13 @@ export function usePlanEditor({
           description: fields.description,
           categories: fields.categories,
           starts_at: date!.toISOString(),
+          // UX3: until the When step edits the end, an edit keeps the
+          // event's length, as the database does for builds older than UX3.
+          ends_at: original?.ends_at
+            ? new Date(
+                Date.parse(original.ends_at) + date!.getTime() - Date.parse(original.starts_at),
+              ).toISOString()
+            : null,
           // An unchanged start keeps the event's own zone, so an edit from another zone is not a time change.
           time_zone:
             original && Date.parse(original.starts_at) === date!.getTime()

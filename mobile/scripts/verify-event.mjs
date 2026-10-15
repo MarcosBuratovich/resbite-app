@@ -41,6 +41,7 @@ const hosted = {
   starts_at: "2099-03-01T15:00:00Z",
   time_zone: "UTC",
   place_label: "Fixture café",
+  // The fixture keeps Meeting details on the plan; the stub sends them only to people who may read them.
   note: "Window table",
   status: "active",
   version: 1,
@@ -99,6 +100,17 @@ try {
   const cancels = [];
   const edits = [];
   const editBodies = [];
+  // UX3: Meeting details live in their own table, which the database sends only to the organizer and
+  // Going or Maybe guests; every invitee may know some exist. The plans row's own note is always "".
+  const asRow = (plan) => {
+    const insider = plan.owner_id === user.id || ["accepted", "maybe"].includes(attendee.response);
+    return {
+      ...plan,
+      note: "",
+      has_meeting_details: Boolean(plan.note),
+      plan_meeting_details: insider && plan.note ? { note: plan.note } : null,
+    };
+  };
   const stub = async (route) => {
     const req = route.request();
     const url = new URL(req.url());
@@ -123,7 +135,7 @@ try {
         return reply({ message: "Fixture: plan read unavailable" }, 500);
       }
       const id = url.searchParams.get("id")?.replace(/^eq\./, "");
-      const rows = [...plans.values()].filter((p) => !id || p.id === id);
+      const rows = [...plans.values()].filter((p) => !id || p.id === id).map(asRow);
       return reply(one ? (rows[0] ?? null) : rows);
     }
     if (path === "/rest/v1/attendees") {
@@ -157,7 +169,7 @@ try {
       attendee = { version: attendee.version + 1, response: body.p_response };
       return reply(attendee.version);
     }
-    if (path === "/rest/v1/rpc/change_plan_v2") {
+    if (path === "/rest/v1/rpc/change_plan_v3") {
       const body = req.postDataJSON();
       const plan = plans.get(body.p_plan);
       if (body.p_cancel) {
@@ -179,6 +191,7 @@ try {
         description: body.p_description,
         categories: body.p_categories,
         starts_at: body.p_start,
+        ends_at: body.p_ends,
         time_zone: body.p_zone,
         place_label: body.p_place.trim(),
         note: body.p_note,

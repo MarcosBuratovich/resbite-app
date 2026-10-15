@@ -1,6 +1,6 @@
 import { supabase } from "./supabase";
-import type { Plan } from "../domain/plans";
-import type { PlanGateway } from "../domain/plans";
+import { planFromRow, type PlanGateway, type PlanRow } from "../domain/plans";
+import { createGuestNoteWriter } from "./guestNote";
 
 export async function withDeadline<T>(
   request: (signal: AbortSignal) => PromiseLike<T>,
@@ -14,8 +14,12 @@ export async function withDeadline<T>(
   }
 }
 
+// UX3: Meeting details come from their own table, embedded only for people allowed to read them.
 const planColumns =
-  "id,activity_id,title,description,categories,starts_at,time_zone,place_label,note,status,version,owner_id";
+  "id,activity_id,title,description,categories,starts_at,ends_at,time_zone,place_label,status,version,owner_id,has_meeting_details,guest_note,guest_note_at,plan_meeting_details(note)";
+
+/** The event page's and editor's plan read: every column plus the Meeting details this person may read. */
+export const planWithDetails = "*,plan_meeting_details(note)";
 
 export const planGateway: PlanGateway = {
   async read(id) {
@@ -28,18 +32,20 @@ export const planGateway: PlanGateway = {
         .maybeSingle(),
     );
     if (error) throw error;
-    return data as Plan | null;
+    return data ? planFromRow(data as PlanRow) : null;
   },
   async create({ id, activityId, details }) {
     const { error } = await withDeadline((signal) =>
       supabase
-        .rpc("create_plan_v2", {
+        .rpc("create_plan_v3", {
           p_id: id,
           p_title: details.title,
           p_description: details.description,
           p_categories: details.categories,
           p_activity: activityId,
           p_start: details.starts_at,
+          // A save kept on the device before UX3 has no end; v3 needs the argument.
+          p_ends: details.ends_at ?? null,
           p_zone: details.time_zone,
           p_place: details.place_label,
           p_note: details.note,
@@ -51,13 +57,14 @@ export const planGateway: PlanGateway = {
   async update({ id, version, details }) {
     const { error } = await withDeadline((signal) =>
       supabase
-        .rpc("change_plan_v2", {
+        .rpc("change_plan_v3", {
           p_plan: id,
           p_version: version,
           p_title: details.title,
           p_description: details.description,
           p_categories: details.categories,
           p_start: details.starts_at,
+          p_ends: details.ends_at ?? null,
           p_zone: details.time_zone,
           p_place: details.place_label,
           p_note: details.note,
@@ -70,13 +77,14 @@ export const planGateway: PlanGateway = {
   async cancel({ id, version }) {
     const { error } = await withDeadline((signal) =>
       supabase
-        .rpc("change_plan_v2", {
+        .rpc("change_plan_v3", {
           p_plan: id,
           p_version: version,
           p_title: null,
           p_description: null,
           p_categories: null,
           p_start: null,
+          p_ends: null,
           p_zone: null,
           p_place: null,
           p_note: null,
@@ -87,3 +95,13 @@ export const planGateway: PlanGateway = {
     if (error) throw error;
   },
 };
+
+/**
+ * UX3 Note to guests: posts, changes or (with "") removes the organizer's note. It never changes the event's
+ * version. Preview never calls it; the caller keeps the note on the device.
+ */
+export const setGuestNote = createGuestNoteWriter((planId, text) =>
+  withDeadline((signal) =>
+    supabase.rpc("set_guest_note", { p_plan: planId, p_note: text }).abortSignal(signal),
+  ),
+);

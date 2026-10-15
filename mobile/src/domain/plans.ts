@@ -9,7 +9,10 @@ export type Plan = {
   description: string;
   categories: CategoryKey[];
   starts_at: string;
+  /** UX3 optional end time; absent on plans loaded before UX3. */
+  ends_at?: string | null;
   place_label: string;
+  /** UX3 Meeting details visible to this person: "" when there are none or they may not read them. */
   note: string;
   status: string;
   version: number;
@@ -23,10 +26,31 @@ export type Plan = {
   /** Saved coordinates. The app does not set them yet; Open in Maps prefers them when present. */
   latitude?: number | null;
   longitude?: number | null;
+  /** UX3 Note to guests: "" when none, with the time it was posted. */
+  guest_note?: string;
+  guest_note_at?: string | null;
+  /** UX3: every invitee may know Meeting details exist; only the organizer and Going or Maybe guests read them. */
+  has_meeting_details?: boolean;
 };
 
+/** A plans row read with its Meeting details embedded as `plan_meeting_details(note)`. */
+export type PlanRow = Omit<Plan, "note"> & {
+  note?: string | null;
+  plan_meeting_details?: { note: string | null } | { note: string | null }[] | null;
+};
+
+/**
+ * The app's Plan from a plans row (UX3). Meeting details live in their own table, which the database only
+ * returns to the organizer and Going or Maybe guests; the row's own note column is always empty now.
+ */
+export function planFromRow(row: PlanRow): Plan {
+  const { plan_meeting_details: embedded, ...plan } = row;
+  const details = Array.isArray(embedded) ? embedded[0] : embedded;
+  return { ...plan, note: details?.note ?? "" };
+}
+
 export type PlanDetails = EventFields &
-  Pick<Plan, "starts_at" | "place_label" | "note"> & { time_zone: string };
+  Pick<Plan, "starts_at" | "place_label" | "note"> & { time_zone: string; ends_at: string | null };
 
 export function canEditPlan(
   plan: Plan,
@@ -57,6 +81,9 @@ export function parseLocalDateTime(text: string): Date | null {
 
 const sameCategories = (a: readonly string[], b: readonly string[]) =>
   a.length === b.length && a.every((key, i) => key === b[i]);
+// Two ends match when both are absent or they are the same instant.
+const sameEnd = (a: string | null = null, b: string | null = null) =>
+  a === null || b === null ? a === b : Date.parse(a) === Date.parse(b);
 
 export function samePlanDetails(plan: Plan, details: PlanDetails): boolean {
   return (
@@ -64,6 +91,7 @@ export function samePlanDetails(plan: Plan, details: PlanDetails): boolean {
     plan.description === details.description &&
     sameCategories(plan.categories, details.categories) &&
     Date.parse(plan.starts_at) === Date.parse(details.starts_at) &&
+    sameEnd(plan.ends_at, details.ends_at) &&
     plan.time_zone === details.time_zone &&
     plan.place_label.trim() === details.place_label.trim() &&
     plan.note === details.note

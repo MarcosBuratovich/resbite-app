@@ -136,7 +136,7 @@ try {
       const rows = [...plans.values()].filter((p) => !id || p.id === id);
       return reply(req.headers().accept?.includes("object") ? (rows[0] ?? null) : rows);
     }
-    if (path === "/rest/v1/rpc/create_plan_v2") {
+    if (path === "/rest/v1/rpc/create_plan_v3") {
       const b = req.postDataJSON();
       plans.set(b.p_id, {
         cover_description: "",
@@ -147,9 +147,13 @@ try {
         description: b.p_description,
         categories: b.p_categories,
         starts_at: b.p_start,
+        ends_at: b.p_ends,
         time_zone: b.p_zone,
         place_label: b.p_place,
-        note: b.p_note,
+        // UX3: Meeting details are read from their own table, embedded for the organizer.
+        note: "",
+        plan_meeting_details: b.p_note ? { note: b.p_note } : null,
+        has_meeting_details: Boolean(b.p_note),
         status: "active",
         version: 1,
         cover_path: null,

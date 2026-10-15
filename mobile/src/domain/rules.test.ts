@@ -96,6 +96,7 @@ const change: PlanWrite = {
     description: "",
     categories: ["community", "uplifting"],
     starts_at: plan.starts_at,
+    ends_at: null,
     time_zone: "UTC",
     place_label: "The park",
     note: "Bring a picnic",
