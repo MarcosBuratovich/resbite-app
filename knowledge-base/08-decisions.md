@@ -220,3 +220,7 @@ Owner decisions from the UX4 design session ([spec](../docs/superpowers/specs/20
 6. The Wellness ring grows with its content under Larger Text (148 pt minimum), so "2h 30m" stays inside it.
 7. Large pill buttons centre wrapped text.
 8. Deferred to the owner’s iPhone check: the tab bar’s labels truncate under the largest forced text sizes in the browser proxy (the tab bar is unchanged by UX4), and single-line field placeholders can still truncate at the very largest sizes.
+9. On "Check your inbox" the chips (I’ve confirmed, Resend, Use a different email) sit below the notice, so signing in with an unconfirmed account reads "…or request another below." above them.
+10. Profile shows the signed-in email again, as a muted line under the name (the old screen showed it).
+11. The introduction’s "I have an account" keeps its old target (`/auth` with no mode), so a saved confirmation or recovery request restores its screen. The landing’s link keeps `mode: "login"`.
+12. P1 change: "Check again" (account access and Notifications) and "Email help" are labelled by their visible text, with hints, so iOS Voice Control "Tap Check again" works.

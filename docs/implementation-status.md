@@ -434,7 +434,7 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
 
 **What changed.**
 - App only. There is no database, service, native, build or dependency change, so nothing touches the hosted project.
-- 13 screens are redrawn with the kit: landing, introduction, sign-in, sign-up, confirm your email, reset password, the email-link page, account access check, Profile, Account details, Notifications, Data & privacy, Wellness and Delete account. Each has one short heading and chips, rows and cards in place of paragraphs and long button labels.
+- 13 screens (the sign-in screen and its Confirm your email mode count once) are redrawn with the kit: landing, introduction, sign-in, sign-up, confirm your email, reset password, the email-link page, account access check, Profile, Account details, Notifications, Data & privacy, Wellness and Delete account. Each has one short heading and chips, rows and cards in place of paragraphs and long button labels.
 - Sign-in and Profile logic moved into `useAuthFlow` and `useProfile` unchanged; the screens now only draw.
 - Delete account gets a short warning card, a "What happens" sheet and a red `destructive` button. Account deletion stays switched off (`EXPO_PUBLIC_ACCOUNT_DELETION_ENABLED`).
 - Browser scripts are updated for the new wording, and new captures cover each screen at 390 and 320 px and with Larger Text, with a check that no button, heading or field is clipped.
@@ -444,7 +444,7 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
 **Deferred to the owner’s iPhone check.**
 1. Sign out and back in; the landing page and introduction (Close on the first slide, Skip, Next, "Create account"); starting a sign-up and backing out; requesting a password reset email.
 2. Editing the Profile name (the sheet over the keyboard) and photo; Account details (the birth date sheet), Privacy, Notifications, Wellness and Delete account (deletion stays off).
-3. Larger Text and VoiceOver on a few screens, including focus moving to the new heading on Sign in, Forgot password?, Back to sign in.
+3. Accessibility and layout on the phone: signing in with an unconfirmed account (the chips sit below the notice); tapping Remove photo; Larger Text on Account details (both modes), the account access check and "Check your inbox"; Voice Control "Tap Check again"; VoiceOver focus on Sign in, then Forgot password?, then Back to sign in; the resend countdown hint.
 4. The tab bar labels and single-line placeholders at the largest text sizes, which truncate in the browser proxy.
 
 **Next.** The owner’s iPhone check, then merge `ux4` into `main`. UX4 reaches TestFlight in a later build, after the coworker’s UX2 invitee check on the current build.
