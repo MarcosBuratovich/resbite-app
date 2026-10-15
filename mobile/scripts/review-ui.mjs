@@ -1,9 +1,9 @@
-// Captures every UX1 and UX4 screen at 390 and 320 px (UX4 also with Larger Text at 320 px) with no console or page errors,
+// Captures every UX1, UX3 and UX4 screen at 390 and 320 px (UX3 and UX4 also with Larger Text at 320 px) with no console or page errors,
 // and keeps the gluestack keyboard-selection check. Every Supabase request is aborted.
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium, expect } from "@playwright/test";
-import { button, heading, next, quietReminders } from "./qa-helpers.mjs";
+import { button, heading, later, next, openEvent, quietReminders } from "./qa-helpers.mjs";
 const base = process.env.RESBITE_QA_URL || "http://localhost:8081";
 const out = process.env.RESBITE_QA_SHOTS || "/private/tmp/resbite-ui-audit";
 await mkdir(out, { recursive: true });
@@ -54,8 +54,13 @@ try {
     await page.getByLabel("Name", { exact: true }).fill("Picnic in the park");
     await next(page);
     await shot("step-when");
+    // UX3: an end time on When, Meeting details on Where.
+    await button(page, "Add an end time").click();
+    await expect(page.getByLabel("End date and time (local)", { exact: true })).toBeVisible();
+    await shot("step-when-end");
     await next(page);
     await page.getByLabel("Meeting place", { exact: true }).fill("Riverside park");
+    await page.getByLabel("Meeting details (optional)", { exact: true }).fill("By the big oak near the north gate. Gate code 4512.");
     await shot("step-where");
     await next(page);
     await page.getByRole("checkbox", { name: "Natural", exact: true }).click();
@@ -93,6 +98,14 @@ try {
     await card.click();
     await expect(heading(page, "Picnic in the park")).toBeVisible();
     await shot("event");
+    // UX3: the organizer posts a Note to guests; the page shows it with the Meeting details and the device chips.
+    await button(page, "Post a note to guests").click();
+    await page.getByLabel("Note to guests", { exact: true }).fill("Bring a blanket, we have the drinks covered.");
+    await shot("event-note-sheet", false);
+    await button(page, "Post").click();
+    await expect(page.getByRole("button", { name: "Close sheet" })).toHaveCount(0);
+    await expect(page.getByText("Bring a blanket, we have the drinks covered.", { exact: true })).toBeVisible();
+    await shot("event-organizer-notes");
     await button(page, "More actions").click();
     await shot("event-more", false);
     await button(page, "Close sheet").click();
@@ -309,8 +322,54 @@ try {
     if (errors.length) throw Error(errors.join("\n"));
     await page.close();
   }
+  // UX3 under Larger Text at 320 px: When with an end, Where with Meeting details, the organizer's event page.
+  {
+    const page = await browser.newPage({ viewport: { width: 320, height: 844 }, reducedMotion: "reduce" });
+    await quietReminders(page);
+    const errors = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    page.on("console", (m) => {
+      if (m.type() === "error") errors.push(m.text());
+    });
+    const fits = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+    const shot = async (name, fullPage = true) => {
+      await page.waitForTimeout(500);
+      return page.screenshot({ path: `${out}/${name}-large-320.png`, fullPage });
+    };
+    await page.route("**/*.supabase.co/**", (r) => r.abort());
+    await page.goto(`${base}/?largeText=1`);
+    await page.addStyleTag({ content: '[dir="auto"] { zoom: 1.4; }' });
+    await page.getByText("Preview the design", { exact: true }).click();
+    await page.getByRole("tab", { name: "My resbites", exact: true }).click();
+    await button(page, "New resbite").click();
+    await page.getByLabel("Name", { exact: true }).fill("Picnic in the park");
+    await next(page);
+    await button(page, "Add an end time").click();
+    assert.ok(await fits(), "When with an end fits at 320 px under Larger Text");
+    await shot("step-when-end");
+    await next(page);
+    await page.getByLabel("Meeting place", { exact: true }).fill("Riverside park");
+    await page.getByLabel("Meeting details (optional)", { exact: true }).fill("By the big oak near the north gate. Gate code 4512.");
+    assert.ok(await fits(), "Where with Meeting details fits at 320 px under Larger Text");
+    await shot("step-where");
+    await next(page);
+    await page.getByRole("checkbox", { name: "Natural", exact: true }).click();
+    await next(page);
+    await button(page, "Create preview").click();
+    await later(page);
+    await openEvent(page, "Picnic in the park");
+    await expect(heading(page, "Picnic in the park")).toBeVisible();
+    await button(page, "Post a note to guests").click();
+    await page.getByLabel("Note to guests", { exact: true }).fill("Bring a blanket, we have the drinks covered.");
+    await button(page, "Post").click();
+    await expect(page.getByRole("button", { name: "Close sheet" })).toHaveCount(0);
+    assert.ok(await fits(), "The organizer's event page fits at 320 px under Larger Text");
+    await shot("event-organizer-notes");
+    if (errors.length) throw Error(errors.join("\n"));
+    await page.close();
+  }
   console.log(
-    "PASS: every UX1 and UX4 screen at 390/320 px, UX4 under Larger Text at 320 px, gluestack keyboard selection, no console/page errors. Screenshots: " + out,
+    "PASS: every UX1, UX3 and UX4 screen at 390/320 px, UX3 and UX4 under Larger Text at 320 px, gluestack keyboard selection, no console/page errors. Screenshots: " + out,
   );
 } finally {
   await browser.close();
