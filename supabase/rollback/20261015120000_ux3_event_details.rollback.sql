@@ -2,6 +2,8 @@
 --   begin; \i supabase/rollback/20261015120000_ux3_event_details.rollback.sql; commit;
 -- It puts Meeting details back in plans.note, restores the replaced functions verbatim, and removes
 -- the end time, the Note to guests and their notices.
+-- Weigh this before rolling back: every Meeting details text goes back into plans.note, which builds older than
+-- UX3 show to every invitee, including text written under "Only people who answer Going or Maybe see this".
 
 alter table public.plans drop constraint plans_note_moved;
 update public.plans as p set note=m.note from public.plan_meeting_details as m where m.plan_id=p.id;

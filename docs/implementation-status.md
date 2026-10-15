@@ -463,13 +463,20 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
 - One new dependency, `expo-calendar`, and the Associated Domains entry `applinks:go.resbite.com`.
 
 **Migrations.**
-- `supabase/migrations/20261015120000_ux3_event_details.sql` is hosted-compatible. It awaits the owner’s explicit approval and goes live together with the new TestFlight build. A rollback script restores the exact pre-UX3 definitions and the note text.
+- `supabase/migrations/20261015120000_ux3_event_details.sql` is hosted-compatible. It awaits the owner’s explicit approval and goes live together with the new TestFlight build. A rollback script restores the exact pre-UX3 definitions and the note text; rolling back shows every Meeting details text to every invitee on older builds, so weigh that first.
+- Rollout: an empty note from an older build now keeps the Meeting details, so applying the migration before the new build only costs older builds the display of Meeting details. Still keep apply → build → submit back to back.
 - `supabase/migrations/20261015130000_ux3_note_delivery.sql` is local-only and goes live only with the notification sender, after that has its own approval.
 - Notification sending stays switched off (`DELIVERY_RELEASE_APPROVED = false`).
 
 **Link site.** It awaits the Apple Team ID, the Vercel project for `go.resbite.com` and the Cloudflare DNS record for `go`. Until then the link part can’t be accepted.
 
-**Verification (15 October 2026).** The database suite passes in full mode and in hosted-baseline mode with the UX3 candidate. The worker tests pass (56 of 56). `npm run check` passes (44 test files, 282 tests, content validation). All 19 `verify-*` browser scripts and `review-ui` exit 0. The iOS JavaScript export succeeds. The native configuration shows `applinks:go.resbite.com` and the four calendar and reminders purpose strings. `git diff --check main...HEAD` is clean outside the plan file, whose embedded patches carry blank context lines. Nothing here was run on a device or the live project.
+**Known limits, for the owner.**
+- The "Get reminders?" sheet appears on the event page (the organizer’s own event, or after answering Going or Maybe), not right after creating an event as the spec says. An organizer isn’t asked until they open the event’s page.
+- A niche case: an edit draft saved by an older build after the migration, then restored in the new build, carries an empty note. Saving it in the new build would remove the Meeting details.
+
+**Verification (15 October 2026).** The database suite passes in full mode and in hosted-baseline mode with the UX3 candidate. The worker tests pass (56 of 56). `npm run check` passes (44 test files, 282 tests, content validation). All 19 `verify-*` browser scripts and `review-ui` exit 0. The iOS JavaScript export succeeds. The native configuration shows `applinks:go.resbite.com` and the four calendar and reminders purpose strings. `git diff --check main...HEAD` is clean outside the plan file, whose embedded patches carry blank context lines.
+
+**Final-review fixes (15 October 2026).** Older builds’ empty note keeps Meeting details; the owner checks in `create_plan_v3` and `change_plan_v3` are NULL-safe; Meeting details are sent trimmed; "Get reminders?" never opens once the chips are gone (after Can’t go); the When step’s 1-hour line shows only without an end. Re-run afterwards: the database suite passes in full mode and in hosted-baseline mode with the UX3 candidate (rollback rehearsal included), with the new checks in `supabase/tests/ux3.sql`. The worker tests pass (56 of 56). `npm run check` passes (44 test files, 282 tests, content validation). `verify-steps`, `verify-planning` and `verify-event` exit 0 (`verify-planning`’s known flaky draft line failed once and passed on the re-run); the other browser scripts weren’t re-run, as the fixes don’t touch what they cover. `git diff --check` stays clean outside the plan file. Nothing here was run on a device or the live project.
 
 **Deferred to the owner’s iPhone check (on the new TestFlight build).**
 1. A `go.resbite.com` invite sent in Messages opens the app; without the app, the fallback page shows.
@@ -480,5 +487,6 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
 6. Larger Text on the When step with an end time and on the Where step: the web preview clips long values in single-line fields at 320 px (start and end date, place); confirm the iPhone pickers and fields read in full.
 7. Under Larger Text, "Remove end time" and the note card’s ✎ ("Edit note to guests") are reachable by scrolling.
 8. Where the Note to guests card sits on the event page (today below the calendar and reminder chips); the owner may want it above them.
+9. Add to calendar with the phone set to another time zone: the entry sits at the event’s real time.
 
 **Next.** After the coworker’s UX2 invitee check on the current build: the link site setup, then the migration (with the owner’s approval) and the new TestFlight build together.

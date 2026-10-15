@@ -262,5 +262,7 @@ Owner decisions from the UX3 design session ([spec](../docs/superpowers/specs/20
 2. The 280-character limit counts characters as the database does (code points, `char_length`), in `guestNoteError`, so an emoji counts once in both places.
 3. The calendar form carries the place name, as the spec says. The plan’s line that listed the place among things never in calendar entries was a wording error. Only Meeting details, the Note to guests text and links never reach calendars. Reminders carry the name and time only.
 4. The first-generation `create_plan` refuses a non-empty note (P5), kept as planned.
+5. Older builds can replace Meeting details but can no longer remove them: an empty note from `change_plan_v2` keeps the existing text, so an ordinary edit on an old build never deletes them. (Their editor loads the note column, which is now always empty, and sends it back with every edit.) A test in `supabase/tests/ux3.sql` (block 1) covers it.
+6. The owner checks in `create_plan_v3`’s retry branch and in `change_plan_v3` use `is distinct from`, like `set_guest_note`, so nobody can edit an ownerless event or have its creation identifier acknowledged (block 3 covers both).
 
 Each UX3 database migration needs the owner’s explicit approval. The hosted migration goes live together with the new TestFlight build, because builds older than UX3 read the emptied note column. Notification sending stays switched off.
