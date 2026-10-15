@@ -1,38 +1,65 @@
 import React, { useState } from "react";
-import { Keyboard, Modal, Platform, ScrollView, View } from "react-native";
+import { Keyboard, Platform, StyleSheet, View } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { SafeAreaView } from "react-native-safe-area-context";
 import {
-  CalendarDays,
-  Check,
-  Trees,
-  Coffee,
-  Palette,
-  Sparkles,
   BookOpen,
+  CalendarDays,
+  Coffee,
+  Info,
+  MapPin,
+  Palette,
+  Phone,
+  Sparkles,
+  Trees,
+  UserRound,
   Users,
+  X,
 } from "lucide-react-native";
-import { Button, Copy, Field, ActionRow, TextAction, s } from "./ui";
-import { GluestackCheckbox } from "./gluestack";
-import { colors as c } from "./tokens";
+import { Button, Copy } from "./ui";
+import { Chip, FieldCard, InfoSheet, Row, RowGroup } from "./kit";
+import { colors as c, fonts } from "./tokens";
 import {
   registrationInterests,
   type RegistrationDetails as Details,
 } from "../domain/registration";
+
+const interestIcons = [Trees, Coffee, Palette, Sparkles, BookOpen, Users];
+
+/** The helper lines for a step, word for word (they sit behind "Why we ask" or Account details' ⓘ). */
+export function registrationHelp(step: number, showName = true): string[] {
+  return step === 0
+    ? [
+        ...(showName ? ["This is the name people will see on your plans."] : []),
+        "Date of birth is optional and is not displayed on shared plans.",
+      ]
+    : [
+        "Include your country code. This does not enable SMS sign-in or send invitations.",
+        "These details stay with your account. Recommendations based on interests are not active yet.",
+      ];
+}
+
+/**
+ * Sign-up's first two steps and Account details (UX4): field cards, interest chips and a date
+ * sheet. Values, labels and validation are today's; the helper lines are behind "Why we ask"
+ * unless the screen shows them itself (`whyWeAsk={false}`).
+ */
 export function RegistrationDetails({
   value,
   onChange,
   step,
   showName = true,
   disabled = false,
+  whyWeAsk = true,
 }: {
   value: Details;
   onChange: (v: Details) => void;
   step: number;
   showName?: boolean;
   disabled?: boolean;
+  whyWeAsk?: boolean;
 }) {
   const [dateOpen, setDateOpen] = useState(false);
+  const [why, setWhy] = useState(false);
   const [candidate, setCandidate] = useState(new Date(2000, 0, 1));
   const set = (key: keyof Details, next: string | string[]) =>
     !disabled && onChange({ ...value, [key]: next });
@@ -57,66 +84,63 @@ export function RegistrationDetails({
     />
   );
   return (
-    <View style={{ gap: 20 }}>
+    <View style={{ gap: 16 }}>
       {step === 0 ? (
         <>
           {showName && (
-            <>
-              <Field
-                editable={!disabled}
-                label="Your name"
-                value={value.name}
-                onChangeText={(v) => set("name", v)}
-                autoComplete="name"
-                maxLength={80}
-                placeholder="What should we call you?"
-              />
-              <Copy style={{ color: c.muted }}>
-                This is the name people will see on your plans.
-              </Copy>
-            </>
+            <FieldCard
+              label="Your name"
+              icon={UserRound}
+              display
+              editable={!disabled}
+              value={value.name}
+              onChangeText={(v) => set("name", v)}
+              autoComplete="name"
+              maxLength={80}
+              placeholder="What should we call you?"
+            />
           )}
           {Platform.OS === "web" ? (
-            <Field
-              editable={!disabled}
+            <FieldCard
               label="Date of birth (optional)"
+              icon={CalendarDays}
+              editable={!disabled}
               value={value.birthDate}
               onChangeText={(v) => set("birthDate", v)}
               placeholder="YYYY-MM-DD"
             />
           ) : (
-            <ActionRow
-              disabled={disabled}
-              title="Date of birth (optional)"
-              description={value.birthDate || "Choose your date of birth"}
-              icon={CalendarDays}
-              onPress={() => {
-                Keyboard.dismiss();
-                setCandidate(
-                  value.birthDate
-                    ? new Date(`${value.birthDate}T12:00:00`)
-                    : new Date(2000, 0, 1),
-                );
-                setDateOpen(true);
-              }}
-            />
+            <RowGroup>
+              <Row
+                title={value.birthDate || "Date of birth"}
+                label={value.birthDate ? `Date of birth (optional), ${value.birthDate}` : "Date of birth (optional)"}
+                hint="Opens a date picker"
+                icon={CalendarDays}
+                disabled={disabled}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setCandidate(value.birthDate ? new Date(`${value.birthDate}T12:00:00`) : new Date(2000, 0, 1));
+                  setDateOpen(true);
+                }}
+              />
+            </RowGroup>
           )}
           {Boolean(value.birthDate) && (
-            <TextAction
+            <Chip
+              text="Clear date"
+              icon={X}
+              label="Clear date of birth"
               disabled={disabled}
-              title="Clear date of birth"
               onPress={() => set("birthDate", "")}
             />
           )}
-          <Copy style={{ color: c.muted, fontSize: 13 }}>
-            Date of birth is optional and is not displayed on shared plans.
-          </Copy>
         </>
       ) : (
         <>
-          <Field
-            editable={!disabled}
+          <FieldCard
             label="Phone number (optional)"
+            icon={Phone}
+            editable={!disabled}
             value={value.phone}
             onChangeText={(v) => set("phone", v)}
             keyboardType="phone-pad"
@@ -124,119 +148,68 @@ export function RegistrationDetails({
             placeholder="+44 7700 900123"
             maxLength={30}
           />
-          <Copy style={{ color: c.muted, fontSize: 13 }}>
-            Include your country code. This does not enable SMS sign-in or send
-            invitations.
-          </Copy>
-          <Field
-            editable={!disabled}
+          <FieldCard
             label="City (optional)"
+            icon={MapPin}
+            editable={!disabled}
             value={value.city}
             onChangeText={(v) => set("city", v)}
             placeholder="Your city or town"
             maxLength={100}
           />
-          <Copy>What do you enjoy? (optional)</Copy>
-          <View style={[s.card, { padding: 8, gap: 4 }]}>
+          <Copy style={styles.label}>What do you enjoy?</Copy>
+          <View style={styles.chips}>
             {registrationInterests.map((interest, index) => {
               const selected = value.interests.includes(interest);
-              const Icon = [Trees, Coffee, Palette, Sparkles, BookOpen, Users][
-                index
-              ];
               return (
-                <GluestackCheckbox
+                <Chip
                   key={interest}
-                  value={interest}
-                  isChecked={selected}
-                  isDisabled={disabled}
-                  aria-label={interest}
-                  accessibilityLabel={interest}
-                  accessibilityState={{ checked: selected, disabled }}
-                  onChange={() =>
+                  text={interest}
+                  icon={interestIcons[index]}
+                  tone="aqua"
+                  selected={selected}
+                  disabled={disabled}
+                  onPress={() =>
                     set(
                       "interests",
-                      selected
-                        ? value.interests.filter((x) => x !== interest)
-                        : [...value.interests, interest],
+                      selected ? value.interests.filter((x) => x !== interest) : [...value.interests, interest],
                     )
                   }
-                  style={{
-                    padding: 14,
-                    borderRadius: 14,
-                    backgroundColor: selected ? c.aquaSoft : c.paper,
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 12,
-                  }}
-                >
-                  <Icon size={22} color={c.aquaDark} />
-                  <Copy style={{ flex: 1 }}>{interest}</Copy>
-                  <View
-                    style={{
-                      width: 24,
-                      height: 24,
-                      borderRadius: 7,
-                      borderWidth: 1,
-                      borderColor: selected ? c.aquaDark : c.line,
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    {selected && <Check size={16} color={c.aquaDark} />}
-                  </View>
-                </GluestackCheckbox>
+                />
               );
             })}
           </View>
-          <Copy style={{ color: c.muted, fontSize: 13 }}>
-            These details stay with your account. Recommendations based on
-            interests are not active yet.
-          </Copy>
         </>
       )}
+      {whyWeAsk && (
+        <Chip text="Why we ask" icon={Info} onPress={() => setWhy(true)} />
+      )}
+      <InfoSheet visible={why} title="Why we ask" onClose={() => setWhy(false)}>
+        {registrationHelp(step, showName).map((line) => (
+          <Copy key={line}>{line}</Copy>
+        ))}
+      </InfoSheet>
       {dateOpen &&
         (Platform.OS === "ios" ? (
-          <Modal
-            transparent
-            animationType="none"
-            onRequestClose={() => setDateOpen(false)}
-          >
-            <View
-              style={{
-                flex: 1,
-                backgroundColor: "#34304355",
-                justifyContent: "flex-end",
+          <InfoSheet visible title="Date of birth" onClose={() => setDateOpen(false)}>
+            {picker}
+            <Button
+              title="Use this date"
+              onPress={() => {
+                set("birthDate", dateText(candidate));
+                setDateOpen(false);
               }}
-            >
-              <SafeAreaView
-                style={{
-                  backgroundColor: c.cream,
-                  borderTopLeftRadius: 28,
-                  borderTopRightRadius: 28,
-                }}
-              >
-                <ScrollView contentContainerStyle={{ padding: 24, gap: 16 }}>
-                  <Copy>Date of birth</Copy>
-                  {picker}
-                  <Button
-                    title="Use this date"
-                    onPress={() => {
-                      set("birthDate", dateText(candidate));
-                      setDateOpen(false);
-                    }}
-                  />
-                  <Button
-                    title="Cancel"
-                    secondary
-                    onPress={() => setDateOpen(false)}
-                  />
-                </ScrollView>
-              </SafeAreaView>
-            </View>
-          </Modal>
+            />
+            <Button title="Cancel" secondary onPress={() => setDateOpen(false)} />
+          </InfoSheet>
         ) : (
           picker
         ))}
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  label: { fontFamily: fonts.medium, fontSize: 13, color: c.muted },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+});

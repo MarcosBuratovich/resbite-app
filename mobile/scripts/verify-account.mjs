@@ -149,8 +149,18 @@ try {
       { page } = f;
     await page.goto(`${base}/account`);
     await expect(
-      page.getByText("Make yourself at home", { exact: true }),
+      page.getByRole("heading", { name: "About you", exact: true }),
     ).toBeVisible();
+    await page
+      .getByRole("button", { name: "About these details", exact: true })
+      .click();
+    await expect(
+      page.getByText(
+        "Date of birth is optional and is not displayed on shared plans.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Close sheet", exact: true }).click();
     await page
       .getByLabel("Date of birth (optional)", { exact: true })
       .fill("2000-02-29");
@@ -165,7 +175,7 @@ try {
     });
     f.loseReply();
     await page
-      .getByRole("button", { name: "Save and continue", exact: true })
+      .getByRole("button", { name: "Save", exact: true })
       .click();
     await expect(
       page.getByRole("heading", { name: "Profile", exact: true }),
@@ -180,10 +190,10 @@ try {
       page.getByLabel("City (optional)", { exact: true }),
     ).toHaveValue("London");
     await page
-      .getByRole("button", { name: "Clear optional details", exact: true })
+      .getByRole("button", { name: "Clear details", exact: true })
       .click();
     await page
-      .getByRole("button", { name: "Save account details", exact: true })
+      .getByRole("button", { name: "Save", exact: true })
       .click();
     await expect(
       page.getByText("Account details saved.", { exact: true }),
@@ -196,7 +206,7 @@ try {
     });
     await page.reload();
     await expect(
-      page.getByText("Account details", { exact: true }),
+      page.getByRole("heading", { name: "Account details", exact: true }),
     ).toBeVisible();
     await expect(
       page.getByLabel("City (optional)", { exact: true }),
@@ -236,9 +246,9 @@ try {
     .getByRole("button", { name: "Check account access", exact: true })
     .click();
   await expect(
-    page.getByText("Make yourself at home", { exact: true }),
+    page.getByRole("heading", { name: "About you", exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Skip for now", exact: true }).click();
+  await page.getByRole("button", { name: "Skip", exact: true }).click();
   await expect(page.getByText("Fixture café", { exact: true })).toBeVisible();
   assert.equal(f.claims(), 1);
   assert.equal(

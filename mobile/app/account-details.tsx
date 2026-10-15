@@ -5,6 +5,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  StyleSheet,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -15,22 +16,13 @@ import {
   useLocalSearchParams,
 } from "expo-router";
 import { useNavigation, usePreventRemove } from "expo-router/react-navigation";
-import { UserRound, ShieldCheck } from "lucide-react-native";
+import { Eraser, Info, LogOut, RotateCcw } from "lucide-react-native";
 import type { User } from "@supabase/supabase-js";
 import { useApp } from "../src/state/AppState";
 import { useAccount } from "../src/state/AccountState";
-import { RegistrationDetails } from "../src/design/RegistrationDetails";
-import {
-  Back,
-  Button,
-  Copy,
-  ErrorNote,
-  IconBadge,
-  TextAction,
-  Title,
-  s,
-} from "../src/design/ui";
-import { colors as c } from "../src/design/tokens";
+import { RegistrationDetails, registrationHelp } from "../src/design/RegistrationDetails";
+import { Back, Button, Copy, ErrorNote, Title, s } from "../src/design/ui";
+import { Chip, IconButton, InfoSheet, Row, RowGroup } from "../src/design/kit";
 import {
   detailsFromMetadata,
   emptyRegistration,
@@ -52,7 +44,8 @@ export default function AccountDetails() {
   const [baseline, setBaseline] = useState<User | null>(user);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null),
-    [notice, setNotice] = useState<string | null>(null);
+    [notice, setNotice] = useState<string | null>(null),
+    [about, setAbout] = useState(false);
   const focused = useRef(false),
     generation = useRef(0),
     working = useRef(false),
@@ -215,28 +208,14 @@ export default function AccountDetails() {
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={[s.body, { paddingBottom: 40 }]}
         >
-          {setup !== "1" && <Back label="Account" />}
-          <IconBadge icon={UserRound} tone="rose" />
-          <Copy style={{ color: c.aquaDark }}>
-            {setup === "1" ? "A LITTLE ABOUT YOU" : "YOUR ACCOUNT"}
-          </Copy>
-          <Title>
-            {setup === "1" ? "Make yourself at home" : "Account details"}
-          </Title>
-          <Copy>
-            All of these details are optional. Add what feels useful, and change
-            or remove it whenever you like.
-          </Copy>
-          <View style={[s.card, { padding: 18, gap: 12 }]}>
-            <ShieldCheck color={c.aquaDark} size={24} />
-            <Copy>
-              These details stay private to your account. Your shared name and
-              photo are managed in Profile.
-            </Copy>
+          {setup !== "1" && <Back label="Profile" />}
+          <View style={styles.header}>
+            <Title>{setup === "1" ? "About you" : "Account details"}</Title>
+            <IconButton icon={Info} label="About these details" onPress={() => setAbout(true)} />
           </View>
           <View
             pointerEvents={busy ? "none" : "auto"}
-            style={{ gap: 24 }}
+            style={{ gap: 16 }}
             accessibilityElementsHidden={busy}
             importantForAccessibility={busy ? "no-hide-descendants" : "auto"}
           >
@@ -246,55 +225,74 @@ export default function AccountDetails() {
               onChange={change}
               step={0}
               showName={false}
+              whyWeAsk={false}
             />
             <RegistrationDetails
               disabled={busy}
               value={value}
               onChange={change}
               step={1}
+              whyWeAsk={false}
             />
           </View>
           <ErrorNote message={error} />
           {notice && <Copy accessibilityLiveRegion="polite">{notice}</Copy>}
-          <Button
-            title={setup === "1" ? "Save and continue" : "Save account details"}
-            loading={busy}
-            onPress={() => void save()}
-          />
-          {setup === "1" ? (
-            <TextAction
-              title="Skip for now"
-              disabled={busy}
-              onPress={() => void save(true)}
-            />
-          ) : (
-            <>
-              <TextAction
-                title="Clear optional details"
-                disabled={busy}
-                onPress={() =>
-                  change({ ...emptyRegistration, name: value.name })
-                }
-              />
-              <Copy style={{ color: c.muted, fontSize: 13 }}>
-                Clear the fields, then save to remove them from your account.
-              </Copy>
-            </>
-          )}
-          <TextAction
-            title="Reload saved details"
-            disabled={busy}
-            onPress={confirmReload}
-          />
+          <Button title="Save" loading={busy} onPress={() => void save()} />
           {setup === "1" && (
-            <TextAction
-              title="Sign out"
-              disabled={busy || signingOut}
-              onPress={() => void signOut().catch(() => {})}
-            />
+            <View style={styles.center}>
+              <Chip text="Skip" disabled={busy} onPress={() => void save(true)} />
+            </View>
           )}
+          <RowGroup>
+            {setup !== "1" && (
+              <Row
+                title="Clear details"
+                icon={Eraser}
+                destructive
+                disabled={busy}
+                onPress={() => change({ ...emptyRegistration, name: value.name })}
+              />
+            )}
+            <Row
+              title="Reload saved details"
+              icon={RotateCcw}
+              chevron={false}
+              disabled={busy}
+              onPress={confirmReload}
+            />
+            {setup === "1" && (
+              <Row
+                title="Sign out"
+                icon={LogOut}
+                destructive
+                disabled={busy || signingOut}
+                onPress={() => void signOut().catch(() => {})}
+              />
+            )}
+          </RowGroup>
         </ScrollView>
       </KeyboardAvoidingView>
+      <InfoSheet visible={about} title="About these details" onClose={() => setAbout(false)}>
+        <Copy>
+          All of these details are optional. Add what feels useful, and change
+          or remove it whenever you like.
+        </Copy>
+        <Copy>
+          These details stay private to your account. Your shared name and
+          photo are managed in Profile.
+        </Copy>
+        {setup !== "1" && (
+          <Copy>Clear the fields, then save to remove them from your account.</Copy>
+        )}
+        {[...registrationHelp(0, false), ...registrationHelp(1)].map((line) => (
+          <Copy key={line}>{line}</Copy>
+        ))}
+      </InfoSheet>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  center: { alignItems: "center" },
+});
