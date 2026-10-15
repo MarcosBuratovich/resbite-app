@@ -5,8 +5,8 @@ import {
   Clock,
   Globe,
   LocateFixed,
+  Lock,
   MapPin,
-  MessageSquare,
   Pencil,
   Plus,
   Send,
@@ -17,12 +17,14 @@ import {
 import { Button, Copy, ErrorNote, TextAction, s, useLargeText } from "./ui";
 import { Chip, CoverCard, FieldCard, ScalePressable, Tile } from "./kit";
 import { CoverPicker, CoverRecovery } from "./CoverPicker";
-import { PlanSchedule } from "./PlanSchedule";
+import { EndSchedule, PlanSchedule } from "./PlanSchedule";
 import { categoryIcons } from "./categories";
 import { categoryPalette, colors as c, depth, fonts, r } from "./tokens";
 import { categoryKeys, categoryLabels, toggleCategory, type CategoryKey } from "../domain/categories";
 import { canDiscardDraft } from "../domain/draftAutosave";
 import { DESCRIPTION_MAX, TITLE_MAX, eventPicture } from "../domain/events";
+import { MEETING_DETAILS_HINT } from "../domain/eventDetails";
+import { defaultEnd } from "../domain/eventTime";
 import { coverNotice, reviewLabels, type CoverCardPart } from "../domain/eventView";
 import { parseLocalDateTime } from "../domain/plans";
 import { joinLocal, quickDays, quickTimes, splitLocal, zoneLabel } from "../domain/schedule";
@@ -50,6 +52,8 @@ export const STEP_HINTS: Record<Step, string | undefined> = {
 const pictureOf = (editor: PlanEditor) =>
   eventPicture({ activity_id: editor.sourceId, categories: editor.fields.categories });
 const startIso = (start: string) => parseLocalDateTime(start)?.toISOString() ?? null;
+/** The editor's end as an instant for cards; null when there is none or it can't be read yet. */
+const endIso = (end: string) => (end ? startIso(end) : null);
 const vibeChips = (editor: PlanEditor) =>
   editor.fields.categories.map((key) => ({ key, text: categoryLabels[key], category: key, icon: categoryIcons[key] }));
 /** A 52 pt suggestion chip (day or time); selected fills aqua. */
@@ -126,7 +130,7 @@ export function WhatStep({ editor }: { editor: PlanEditor }) {
 }
 
 export function WhenStep({ editor }: { editor: PlanEditor }) {
-  const { start, setStart, locked, zone } = editor;
+  const { start, setStart, end, setEnd, locked, zone } = editor;
   const largeText = useLargeText();
   const [pendingDay, setPendingDay] = useState<string | null>(null);
   const now = new Date();
@@ -194,6 +198,22 @@ export function WhenStep({ editor }: { editor: PlanEditor }) {
             />
           ))}
         </View>
+      </View>
+      {/* UX3: the optional end, empty by default; it needs a chosen start to begin from. */}
+      <View style={styles.section}>
+        {end ? (
+          <EndSchedule value={end} start={start} onChange={setEnd} onRemove={() => setEnd("")} disabled={locked} />
+        ) : (
+          <Chip
+            icon={Plus}
+            text="End time"
+            label="Add an end time"
+            hint={parseLocalDateTime(start) ? undefined : "Choose a day and time first"}
+            disabled={locked || !parseLocalDateTime(start)}
+            onPress={() => setEnd(defaultEnd(start))}
+          />
+        )}
+        <Copy style={styles.endHint}>Optional. Without it, calendars get a 1-hour event.</Copy>
       </View>
       <View accessible accessibilityLabel={`Times shown in ${zone.replaceAll("_", " ")}`} style={styles.zone}>
         <Globe size={18} strokeWidth={2} color={c.muted} />
@@ -272,17 +292,21 @@ export function WhereStep({ editor, recent }: { editor: PlanEditor; recent: read
           </View>
         </View>
       )}
-      <FieldCard
-        label="A note for everyone (optional)"
-        icon={MessageSquare}
-        placeholder="Note for guests (optional)"
-        value={note}
-        onChangeText={setNote}
-        multiline
-        minHeight={110}
-        maxLength={2000}
-        editable={!locked}
-      />
+      {/* UX3-D5: today's note becomes private Meeting details, read only by the organizer and Going or Maybe guests. */}
+      <View style={styles.meeting}>
+        <FieldCard
+          label="Meeting details (optional)"
+          icon={Lock}
+          placeholder="Door code, meeting spot… (optional)"
+          value={note}
+          onChangeText={setNote}
+          multiline
+          minHeight={110}
+          maxLength={2000}
+          editable={!locked}
+        />
+        <Copy style={styles.meetingHint}>{MEETING_DETAILS_HINT}</Copy>
+      </View>
     </>
   );
 }
@@ -366,8 +390,9 @@ export function VibeStep({ editor }: { editor: PlanEditor }) {
 
 /** Review is exactly what guests will see (benchmark row 4); each part jumps to its step. */
 export function ReviewStep({ editor, onJump }: { editor: PlanEditor; onJump: (part: CoverCardPart) => void }) {
-  const { fields, place, note, start, locked, cover, sourceId, idea, historicalActivity } = editor;
+  const { fields, place, note, start, end, locked, cover, sourceId, idea, historicalActivity } = editor;
   const at = startIso(start);
+  const until = endIso(end);
   const description = fields.description.trim();
   const sourceTitle = sourceId ? (idea?.title ?? historicalActivity?.title) : undefined;
   return (
@@ -378,10 +403,14 @@ export function ReviewStep({ editor, onJump }: { editor: PlanEditor; onJump: (pa
         uri={cover.uri}
         title={fields.title.trim() || "Your resbite"}
         startsAt={at}
+        endsAt={until}
         place={place}
         chips={vibeChips(editor)}
         onPressPart={onJump}
-        partLabels={reviewLabels({ title: fields.title, startsAt: at, place, categories: fields.categories, photo: cover.description }, new Date())}
+        partLabels={reviewLabels(
+          { title: fields.title, startsAt: at, endsAt: until, place, categories: fields.categories, photo: cover.description },
+          new Date(),
+        )}
       />
       {sourceTitle ? <Chip icon={Sparkles} tone="aqua" text={sourceTitle} label={`From the idea ${sourceTitle}`} /> : null}
       {/* The description is written on What (steps v2); here it shows, and a tap goes to What like the name. */}
@@ -428,7 +457,7 @@ function LatestSaved({ editor }: { editor: PlanEditor }) {
           <Copy>{latest.title}</Copy>
           <Copy>{new Date(latest.starts_at).toLocaleString()}</Copy>
           <Copy>{latest.place_label}</Copy>
-          <Copy>{latest.note || "No note"}</Copy>
+          <Copy>{latest.note || "No meeting details"}</Copy>
           {editor.latestEditable ? (
             <>
               <Copy style={s.muted}>Using these details replaces your unsaved draft.</Copy>
@@ -457,6 +486,7 @@ export function InviteNext({ editor, onInvite }: { editor: PlanEditor; onInvite:
         pictureLabel={editor.cover.description}
         title={editor.fields.title.trim()}
         startsAt={startIso(editor.start)}
+        endsAt={endIso(editor.end)}
         place={editor.place}
         chips={vibeChips(editor)}
       />
@@ -504,6 +534,7 @@ const styles = StyleSheet.create({
   chipTextOn: { color: c.paper },
   zone: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 2 },
   zoneText: { fontFamily: fonts.medium, fontSize: 14, color: c.muted, flexShrink: 1 },
+  endHint: { fontSize: 14, color: c.muted, marginHorizontal: 4 },
   // Where
   locate: {
     minHeight: 72,
@@ -536,6 +567,8 @@ const styles = StyleSheet.create({
   row: { minHeight: 64, flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 16, paddingVertical: 10 },
   rowDivider: { borderTopWidth: 1, borderColor: "#F1EDF1" },
   rowText: { flex: 1, fontFamily: fonts.medium, fontSize: 17, lineHeight: 22 },
+  meeting: { gap: 10 },
+  meetingHint: { fontSize: 14, color: c.muted, marginHorizontal: 4 },
   // Vibe
   vibeGrid: { gap: 12 },
   vibeRow: { flexDirection: "row", gap: 12 },

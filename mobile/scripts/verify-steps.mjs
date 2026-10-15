@@ -1,7 +1,8 @@
 // UX1 creation steps in preview: Next with a missing answer, alerts and focus, quick day and
 // time chips, jumping from Review, the Invite screen, leaving mid-flow, a restored
 // unconfirmed save, recent places, and Larger Text at 320 px. Steps v2: the order, placement
-// and sizes from the owner-approved mockup. Every Supabase request is aborted.
+// and sizes from the owner-approved mockup. UX3: the optional end time on When and Meeting
+// details on Where. Every Supabase request is aborted.
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium, expect } from "@playwright/test";
@@ -109,16 +110,19 @@ try {
     await next(page);
     await next(page);
     await expect(heading(page, "Where?")).toBeFocused();
+    // UX3-D5: the note is now private Meeting details, with a lock and one line saying who sees them.
     assert.equal(
       await inOrder(page, [
         page.getByLabel("Meeting place", { exact: true }),
         button(page, "Use my location"),
-        page.getByLabel("A note for everyone (optional)", { exact: true }),
+        page.getByLabel("Meeting details (optional)", { exact: true }),
+        page.getByText("Only people who answer Going or Maybe see this.", { exact: true }),
       ]),
       true,
-      "Where shows the place, Use my location, then the note",
+      "Where shows the place, Use my location, then Meeting details and its line",
     );
-    await expect(page.getByPlaceholder("Note for guests (optional)", { exact: true })).toBeVisible();
+    await expect(page.getByPlaceholder("Door code, meeting spot… (optional)", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("A note for everyone (optional)", { exact: true })).toHaveCount(0);
     assert.ok((await heightOf(button(page, "Use my location"))) >= 70, "Use my location is a 72 pt tile");
     // With no recent places the Recent section is hidden.
     await expect(page.getByText(/^recent$/i)).toHaveCount(0);
@@ -335,6 +339,72 @@ try {
     console.log("PASS: the date card before the day and time chips, the weekend rule, past times disabled, local YYYY-MM-DD HH:mm value.");
   }
 
+  // 4b. UX3 optional end time (spec "Event details"): empty by default, "+ End time" adds it an hour after the
+  //     start, moving the start keeps its length, an end before the start stays on When with the step's
+  //     alert, it may end on a later day, Remove clears it, and cards show the range. Friday 9 October 2026.
+  {
+    const page = await preview({ time: new Date("2026-10-09T10:30:00+01:00") });
+    await button(page, "New resbite").click();
+    await page.getByLabel("Name", { exact: true }).fill("Long lunch");
+    await next(page);
+    const endField = page.getByLabel("End date and time (local)", { exact: true });
+    await expect(endField).toHaveCount(0);
+    await expect(page.getByText("Optional. Without it, calendars get a 1-hour event.", { exact: true })).toBeVisible();
+    await button(page, "Tomorrow, Saturday 10 October").click();
+    await button(page, "Saturday 10 October at 13:00").click();
+    assert.ok((await heightOf(button(page, "Add an end time"))) >= 44, "The end chip is a 44 pt target");
+    assert.equal(
+      await inOrder(page, [
+        button(page, "Saturday 10 October at 13:00"),
+        button(page, "Add an end time"),
+        page.getByText("Optional. Without it, calendars get a 1-hour event.", { exact: true }),
+        page.getByLabel("Times shown in Europe/London", { exact: true }),
+      ]),
+      true,
+      "The end comes after the time chips and before the zone",
+    );
+    await button(page, "Add an end time").click();
+    await expect(endField).toHaveValue("2026-10-10 14:00");
+    await expect(button(page, "Add an end time")).toHaveCount(0);
+    assert.ok((await heightOf(button(page, "Remove end time"))) >= 44, "Remove is a 44 pt target");
+    // Moving the start keeps the end's length, from a chip or typed.
+    await button(page, "Saturday 10 October at 18:00").click();
+    await expect(endField).toHaveValue("2026-10-10 19:00");
+    await typeDate(page, "2026-10-10 09:00");
+    await expect(endField).toHaveValue("2026-10-10 10:00");
+    await endField.fill("2026-10-10 08:30");
+    await next(page);
+    await expect(heading(page, "When?")).toBeVisible();
+    await expect(page.getByRole("alert")).toContainText("The end must be after the start.");
+    await endField.fill("2026-10-11 01:00");
+    await next(page);
+    await expect(heading(page, "Where?")).toBeVisible();
+    await page.getByLabel("Meeting place", { exact: true }).fill("Old mill");
+    await page.getByLabel("Meeting details (optional)", { exact: true }).fill("Door code 4521");
+    await next(page);
+    await page.getByRole("checkbox", { name: "Natural", exact: true }).click();
+    await next(page);
+    // Review reads the range, here ending the next day.
+    const range = button(page, "Edit date and time, Saturday 10 October, from 09:00 to 01:00 on Sunday 11 October");
+    await expect(range).toContainText("09:00 – Sun 11 01:00");
+    await range.click();
+    await button(page, "Remove end time").click();
+    await expect(endField).toHaveCount(0);
+    await expect(button(page, "Add an end time")).toBeVisible();
+    await next(page);
+    await expect(button(page, "Edit date and time, Saturday 10 October at 09:00")).toContainText("09:00");
+    await button(page, "Edit date and time, Saturday 10 October at 09:00").click();
+    await button(page, "Add an end time").click();
+    await expect(endField).toHaveValue("2026-10-10 10:00");
+    await next(page);
+    await button(page, "Create preview").click();
+    await later(page);
+    await expect(card(page, "Long lunch")).toHaveAttribute("aria-label", /^Long lunch, Saturday 10 October, from 09:00 to 10:00, Old mill, /);
+    await expect(card(page, "Long lunch")).toContainText("09:00 – 10:00");
+    await page.context().close();
+    console.log("PASS: the optional end time: added an hour after the start, keeps its length, checked on When, may end the next day, Remove clears it, cards show the range.");
+  }
+
   // 5. Leaving mid-flow runs the existing keep-draft guard; a kept draft resumes at its first missing step.
   {
     const page = await preview();
@@ -456,8 +526,14 @@ try {
     await button(page, "New resbite").click();
     const steps = [
       ["What’s the plan?", () => page.getByLabel("Name", { exact: true }).fill("A long name for a very relaxed afternoon")],
-      ["When?"],
-      ["Where?", () => page.getByLabel("Meeting place", { exact: true }).fill("The community garden behind the old library")],
+      ["When?", () => button(page, "Add an end time").click()],
+      [
+        "Where?",
+        async () => {
+          await page.getByLabel("Meeting place", { exact: true }).fill("The community garden behind the old library");
+          await page.getByLabel("Meeting details (optional)", { exact: true }).fill("Ring the bell by the blue gate");
+        },
+      ],
       ["What’s the vibe?", () => page.getByRole("checkbox", { name: "Community", exact: true }).click()],
       ["Looks good?"],
     ];

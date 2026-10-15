@@ -8,6 +8,7 @@ import { activities } from "../services/catalogue";
 import { useCatalogue } from "./useCatalogue";
 import { drafts, type PlanDraft } from "../services/drafts";
 import { planGateway } from "../services/plans";
+import { syncReminders } from "../services/deviceReminders";
 import { recentPlaces } from "../services/recentPlaces";
 import { useApp, type LocalPlan } from "./AppState";
 import { useCoverPhoto, type CoverControls, type CoverOutcome } from "./useCoverPhoto";
@@ -20,6 +21,7 @@ import {
 } from "../domain/events";
 import { canDiscardDraft, draftAutosaveAction } from "../domain/draftAutosave";
 import { defaultStart } from "../domain/schedule";
+import { shiftedEnd, validateEnd } from "../domain/eventTime";
 import { validatePlan, type Activity } from "../domain/rules";
 import {
   canEditPlan,
@@ -56,10 +58,15 @@ export type PlanEditor = {
   fields: EventFields;
   setFields: (next: EventFields) => void;
   start: string;
+  /** Sets the start; a set end keeps its length (UX3). */
   setStart: (next: string) => void;
+  /** UX3 optional end time, in the same local format as the start; "" when there is none. */
+  end: string;
+  setEnd: (next: string) => void;
   place: string;
   /** Typing or choosing a place; a running "Use my location" then never overwrites it. */
   changePlace: (next: string) => void;
+  /** Meeting details (UX3): only the organizer and Going or Maybe guests can read them. */
   note: string;
   setNote: (next: string) => void;
   zone: string;
@@ -124,6 +131,11 @@ export function usePlanEditor({
   const [loadAttempt, setLoadAttempt] = useState(0);
   // A new event starts tomorrow at 10:00; the blank and idea baselines are taken from it, so an untouched editor stays clean.
   const [start, setStart] = useState(() => defaultStart(new Date()));
+  // UX3: the optional end, empty by default.
+  const [end, setEnd] = useState("");
+  // The last valid start shown, so a start typed on the web moves the end once it is valid again.
+  const startAnchor = useRef(start);
+  if (parseLocalDateTime(start)) startAnchor.current = start;
   const [place, setPlace] = useState("");
   const [note, setNote] = useState("");
   const [fields, setFields] = useState<EventFields>({
@@ -191,10 +203,11 @@ export function usePlanEditor({
     mode === "idea" && !preview && !pending
       ? catalogue.items[0]
       : (catalogue.items[0] ?? historicalActivity);
-  const snapshotOf = (f: EventFields, s: string, p: string, n: string) =>
-    JSON.stringify([f.title, f.description, f.categories, s, p, n]);
+  // An end joins the snapshot only when there is one, so a baseline saved before UX3 (no end) still matches.
+  const snapshotOf = (f: EventFields, s: string, p: string, n: string, e = "") =>
+    JSON.stringify(e ? [f.title, f.description, f.categories, s, p, n, e] : [f.title, f.description, f.categories, s, p, n]);
   const dirty =
-    initial !== null && initial !== snapshotOf(fields, start, place, note);
+    initial !== null && initial !== snapshotOf(fields, start, place, note, end);
   const locked = busy || pending !== null;
 
   useEffect(() => {
@@ -205,6 +218,7 @@ export function usePlanEditor({
   }, []);
   function applyPlan(plan: LocalPlan) {
     const text = localDateTime(new Date(plan.starts_at));
+    const endText = plan.ends_at ? localDateTime(new Date(plan.ends_at)) : "";
     const planFields = {
       title: plan.title,
       description: plan.description,
@@ -213,9 +227,10 @@ export function usePlanEditor({
     setOriginal(plan);
     setFields(planFields);
     setStart(text);
+    setEnd(endText);
     setPlace(plan.place_label);
     setNote(plan.note);
-    setInitial(snapshotOf(planFields, text, plan.place_label, plan.note));
+    setInitial(snapshotOf(planFields, text, plan.place_label, plan.note, endText));
     setLatest(undefined);
     setError(null);
     setPending(null);
@@ -256,6 +271,12 @@ export function usePlanEditor({
               ? localDateTime(new Date(stored.startInstant))
               : stored.start,
           );
+          // Drafts saved before UX3 have no end.
+          setEnd(
+            stored.zone !== currentZone && stored.endInstant
+              ? localDateTime(new Date(stored.endInstant))
+              : (stored.end ?? ""),
+          );
           setPlace(stored.place);
           setNote(stored.note);
           setZone(currentZone);
@@ -292,7 +313,7 @@ export function usePlanEditor({
             );
           applyPlan(plan);
         } else if (mode === "blank") {
-          setInitial(snapshotOf(fields, start, place, note));
+          setInitial(snapshotOf(fields, start, place, note, end));
         } else {
           // An idea prefills once it is available (effect below).
           needsPrefill.current = true;
@@ -317,7 +338,7 @@ export function usePlanEditor({
     needsPrefill.current = false;
     const prefilled = fieldsFromActivity(idea);
     setFields(prefilled);
-    setInitial(snapshotOf(prefilled, start, place, note));
+    setInitial(snapshotOf(prefilled, start, place, note, end));
   }, [draftReady, idea]);
 
   draftSnapshot.current =
@@ -337,10 +358,12 @@ export function usePlanEditor({
           description: fields.description,
           categories: fields.categories,
           start,
+          end,
           place,
           note,
           zone,
           startInstant: parseLocalDateTime(start)?.toISOString(),
+          endInstant: parseLocalDateTime(end)?.toISOString(),
           pending,
           updatedAt: new Date().toISOString(),
         }
@@ -430,6 +453,7 @@ export function usePlanEditor({
   }, [
     draftReady,
     start,
+    end,
     place,
     note,
     zone,
@@ -576,7 +600,7 @@ export function usePlanEditor({
         return;
       }
       const date = parseLocalDateTime(start);
-      const invalid = validatePlan(date?.toISOString() ?? "", place);
+      const invalid = validatePlan(date?.toISOString() ?? "", place) ?? validateEnd(start, end);
       if (invalid) {
         setError(invalid);
         return;
@@ -594,13 +618,8 @@ export function usePlanEditor({
           description: fields.description,
           categories: fields.categories,
           starts_at: date!.toISOString(),
-          // UX3: until the When step edits the end, an edit keeps the
-          // event's length, as the database does for builds older than UX3.
-          ends_at: original?.ends_at
-            ? new Date(
-                Date.parse(original.ends_at) + date!.getTime() - Date.parse(original.starts_at),
-              ).toISOString()
-            : null,
+          // UX3: the optional end from the When step (validated above), or none.
+          ends_at: parseLocalDateTime(end)?.toISOString() ?? null,
           // An unchanged start keeps the event's own zone, so an edit from another zone is not a time change.
           time_zone:
             original && Date.parse(original.starts_at) === date!.getTime()
@@ -663,6 +682,8 @@ export function usePlanEditor({
       else await writePlan(planGateway, write);
       if (!preview && !original) coverOutcome.current = await cover.commitAfterCreate(write.id);
       if (!original) createdId.current = write.id;
+      // UX3: reminders follow the saved time (preview re-syncs from its plans on its own).
+      void syncReminders({ userId: session?.user.id ?? null, preview }).catch(() => {});
       stopped.current = true;
       await drafts.remove(scope!, draftKey);
       // Recent places (UX-P6) are a convenience on this device; they never fail the save.
@@ -751,7 +772,14 @@ export function usePlanEditor({
     fields,
     setFields,
     start,
-    setStart,
+    // UX3: moving the start keeps a set end's length (from the last valid start, so typing works).
+    setStart: (next: string) => {
+      const from = startAnchor.current;
+      setStart(next);
+      if (parseLocalDateTime(next)) setEnd((current) => (current ? shiftedEnd(from, next, current) : current));
+    },
+    end,
+    setEnd,
     place,
     changePlace: (text: string) => {
       placeRevision.current++;

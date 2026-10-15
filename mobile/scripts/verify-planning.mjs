@@ -24,9 +24,10 @@ const browser = await chromium.launch({
   headless: true,
 });
 const errors = [];
-const newPage = async () => {
+const newPage = async (options = {}) => {
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
+    ...options,
   });
   const page = await context.newPage();
   page.on("pageerror", (error) => errors.push(error.message));
@@ -53,7 +54,7 @@ try {
   await expect(page.getByText("Add a meeting place.", { exact: true })).toBeInViewport();
   await expect(heading(page, "Where?")).toBeFocused();
   await page.getByLabel("Meeting place", { exact: true }).fill("The garden café");
-  await page.getByLabel("A note for everyone (optional)", { exact: true }).fill("Meet by the window.");
+  await page.getByLabel("Meeting details (optional)", { exact: true }).fill("Meet by the window.");
   await button(page, "Previous step").click();
   await typeDate(page, "2099-02-30 12:00");
   await next(page);
@@ -716,6 +717,98 @@ try {
       `PASS: mocked ${scenario} save, retained draft and safe retry.`,
     );
     await fixture.context().close();
+  }
+
+  // UX3: the end time and Meeting details over the network. The editor reads the Meeting details from
+  // their own table, sends the end as p_ends and, after Remove, no end at all.
+  {
+    const fixture = await newPage({ timezoneId: "UTC" });
+    let savedPlan = {
+      id: "22222222-2222-4222-8222-222222222222",
+      activity_id: null,
+      title: "Coffee evening",
+      description: "",
+      categories: ["community"],
+      owner_id: user.id,
+      starts_at: "2099-03-01T15:00:00.000Z",
+      ends_at: null,
+      time_zone: "UTC",
+      place_label: "Original café",
+      note: "Gate code 4512",
+      status: "active",
+      version: 1,
+    };
+    const writes = [];
+    await fixture.addInitScript(
+      (session) => sessionStorage.setItem("sb-ewcsgvhuojxdpaspwsrx-auth-token", JSON.stringify(session)),
+      session,
+    );
+    await fixture.route("**/*.supabase.co/**", async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      const reply = (body, status = 200) =>
+        route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+      if (url.pathname === "/auth/v1/user") return reply(user);
+      if (url.pathname === "/rest/v1/rpc/account_access_status") return reply({ account_id: user.id, status: "approved" });
+      if (url.pathname === "/rest/v1/profiles") return reply({ id: user.id, display_name: "Fixture", avatar_path: null });
+      if (url.pathname === "/rest/v1/activities") return reply([]);
+      if (url.pathname === "/rest/v1/attendees") return reply([]);
+      if (url.pathname === "/rest/v1/plans")
+        return reply(request.headers().accept?.includes("object") ? row(savedPlan) : [row(savedPlan)]);
+      if (url.pathname === "/rest/v1/rpc/change_plan_v3") {
+        const write = request.postDataJSON();
+        writes.push(write);
+        assert.equal(write.p_version, savedPlan.version);
+        savedPlan = {
+          ...savedPlan,
+          starts_at: write.p_start,
+          ends_at: write.p_ends,
+          place_label: write.p_place,
+          note: write.p_note,
+          version: savedPlan.version + 1,
+        };
+        return reply(savedPlan.version);
+      }
+      throw new Error(`Unexpected fixture request: ${url.pathname}`);
+    });
+    await fixture.goto(`${baseURL}/arrange?plan=${savedPlan.id}`);
+    await expect(fixture.getByText("Gate code 4512", { exact: true })).toBeVisible();
+    await button(fixture, /^Edit date and time, .* at 15:00$/).click();
+    const endField = fixture.getByLabel("End date and time (local)", { exact: true });
+    await button(fixture, "Add an end time").click();
+    await expect(endField).toHaveValue("2099-03-01 16:00");
+    await endField.fill("2099-03-01 14:00");
+    await next(fixture);
+    await expect(heading(fixture, "When?")).toBeVisible();
+    await expect(fixture.getByRole("alert")).toContainText("The end must be after the start.");
+    await endField.fill("2099-03-01 17:30");
+    await next(fixture);
+    await expect(button(fixture, /^Edit date and time, .*, from 15:00 to 17:30$/)).toContainText("15:00 – 17:30");
+    await button(fixture, "Save").click();
+    await expect(heading(fixture, "Looks good?")).toHaveCount(0);
+    assert.equal(writes.length, 1);
+    assert.equal(writes[0].p_ends, "2099-03-01T17:30:00.000Z");
+    assert.equal(writes[0].p_start, "2099-03-01T15:00:00.000Z");
+    assert.equal(writes[0].p_note, "Gate code 4512");
+    // The event page shows the range.
+    await expect(heading(fixture, "Coffee evening")).toBeVisible();
+    await expect(fixture.getByText("15:00 – 17:30", { exact: true })).toBeVisible();
+    await button(fixture, "Edit Coffee evening").click();
+    await button(fixture, /^Edit date and time, /).click();
+    await expect(endField).toHaveValue("2099-03-01 17:30");
+    // Moving the start keeps the end's length.
+    await fixture.getByLabel("Date and time (local)", { exact: true }).fill("2099-03-01 16:00");
+    await expect(endField).toHaveValue("2099-03-01 18:30");
+    await button(fixture, "Remove end time").click();
+    await next(fixture);
+    await button(fixture, "Save").click();
+    await expect(heading(fixture, "Looks good?")).toHaveCount(0);
+    assert.equal(writes.length, 2);
+    assert.equal(writes[1].p_ends, null);
+    assert.equal(writes[1].p_start, "2099-03-01T16:00:00.000Z");
+    await expect(fixture.getByText("16:00", { exact: true })).toBeVisible();
+    await fixture.context().close();
+    console.log("PASS: the end time is sent as p_ends (none after Remove) and shown as a range; Meeting details load in the editor.");
   }
   assert.deepEqual(errors, []);
 } finally {

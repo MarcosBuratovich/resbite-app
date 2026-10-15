@@ -2,6 +2,7 @@ import type { CategoryKey } from "./categories";
 import { validateEventFields, type EventFields } from "./events";
 import { parseLocalDateTime } from "./plans";
 import { validatePlan } from "./rules";
+import { validateEnd } from "./eventTime";
 
 // UX1 creation steps (UX-D2). Each step wraps the existing validators with valid
 // stand-ins for the other answers, so the messages stay exactly as they are.
@@ -9,7 +10,8 @@ export const QUESTION_STEPS = ["what", "when", "where", "vibe"] as const;
 export type QuestionStep = (typeof QUESTION_STEPS)[number];
 export type Step = QuestionStep | "review";
 export const STEP_ORDER: readonly Step[] = [...QUESTION_STEPS, "review"];
-export type StepAnswers = EventFields & { start: string; place: string };
+/** `end` is the UX3 optional end time ("" or absent when there is none). */
+export type StepAnswers = EventFields & { start: string; place: string; end?: string };
 
 const VALID_TITLE = "Resbite";
 const VALID_CATEGORIES: CategoryKey[] = ["community"];
@@ -19,7 +21,11 @@ export function stepProblem(step: Step, answers: StepAnswers, now = Date.now()):
     case "what":
       return validateEventFields({ title: answers.title, description: "", categories: VALID_CATEGORIES });
     case "when":
-      return validatePlan(parseLocalDateTime(answers.start)?.toISOString() ?? "", "place", now);
+      // The start first, in its existing wording; then the optional end (UX3).
+      return (
+        validatePlan(parseLocalDateTime(answers.start)?.toISOString() ?? "", "place", now) ??
+        validateEnd(answers.start, answers.end ?? "")
+      );
     case "where":
       return validatePlan(new Date(now + 86_400_000).toISOString(), answers.place, now);
     case "vibe":

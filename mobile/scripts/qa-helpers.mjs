@@ -44,7 +44,7 @@ export async function createSteps(page, { name, when, place, note, categories = 
   if (when) await typeDate(page, when);
   await next(page);
   await page.getByLabel("Meeting place", { exact: true }).fill(place);
-  if (note) await page.getByLabel("A note for everyone (optional)", { exact: true }).fill(note);
+  if (note) await page.getByLabel("Meeting details (optional)", { exact: true }).fill(note);
   await next(page);
   for (const category of categories) await page.getByRole("checkbox", { name: category, exact: true }).click();
   await next(page);

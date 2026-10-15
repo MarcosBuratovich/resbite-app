@@ -53,7 +53,7 @@ export default function Arrange() {
   // A reason for a jump to another step, said once VoiceOver focus has reached that step's heading.
   const jumpReason = useRef<{ step: Step; problem: string } | null>(null);
   const [recent, setRecent] = useState<string[]>([]);
-  const answers: StepAnswers = { ...editor.fields, start: editor.start, place: editor.place };
+  const answers: StepAnswers = { ...editor.fields, start: editor.start, end: editor.end, place: editor.place };
 
   // VoiceOver focus follows the step (and the Invite screen). On iOS it is posted once the step's
   // slide or fade has finished, so the title is in place and fully opaque; the web focuses on the

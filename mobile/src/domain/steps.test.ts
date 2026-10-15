@@ -45,6 +45,18 @@ test("Review re-checks everything in flow order", () => {
   assert.equal(firstMissingStep({ ...complete, description: "d".repeat(1001) }, now), "review");
 });
 
+test("UX3: the When step checks the optional end after the start; Review names When for a bad end", () => {
+  assert.equal(stepProblem("when", { ...complete, end: "" }, now), null);
+  assert.equal(stepProblem("when", { ...complete, end: "2099-03-01 17:00" }, now), null);
+  // The end may fall on a later day.
+  assert.equal(stepProblem("when", { ...complete, end: "2099-03-02 01:00" }, now), null);
+  assert.equal(stepProblem("when", { ...complete, end: "2099-03-01 15:00" }, now), "The end must be after the start.");
+  assert.equal(stepProblem("when", { ...complete, end: "2099-03-01 1" }, now), "Choose a valid end time.");
+  // A missing start keeps its own message first.
+  assert.equal(stepProblem("when", { ...complete, start: "", end: "2099-03-01 17:00" }, now), "Choose a date and time in the future.");
+  assert.equal(firstMissingStep({ ...complete, end: "2099-03-01 14:00" }, now), "when");
+});
+
 test("entry: blank at What, idea and edit at Review, restored drafts at Review when complete or else at the first missing step", () => {
   const entry = (mode: "edit" | "idea" | "blank", restored: boolean, answers: StepAnswers) =>
     entryStep({ mode, restored, pending: false, answers, now });

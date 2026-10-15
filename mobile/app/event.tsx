@@ -170,6 +170,7 @@ export default function EventPage() {
           picture={eventPicture(current)}
           title={current.title}
           startsAt={current.starts_at}
+          endsAt={current.ends_at}
           place={current.place_label}
           dimmed={current.status === "cancelled"}
           pictureLabel={current.cover_description}

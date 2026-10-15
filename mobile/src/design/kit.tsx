@@ -32,8 +32,8 @@ import { categoryPalette, colors as c, depth, fonts, r, space } from "./tokens";
 import { motionPolicy } from "../domain/rules";
 import type { CategoryKey } from "../domain/categories";
 import type { EventPicture } from "../domain/events";
-import { dateBadgeParts, timeText, type CoverCardPart } from "../domain/eventView";
-import { spokenDateTime } from "../domain/schedule";
+import { dateBadgeParts, spokenWhen, type CoverCardPart } from "../domain/eventView";
+import { timeRange } from "../domain/eventTime";
 import { progressLabel } from "../domain/steps";
 
 // UX1 component kit (spec "Component kit"). States use aria-* props: react-native-web
@@ -304,12 +304,14 @@ function CoverArt({ picture, uri }: { picture: EventPicture; uri?: string | null
  * - `onPressPart` + `partLabels`: Review. Each part is its own button that jumps to its step.
  * - Otherwise the title is the screen's heading, unless `heading={false}`.
  * - `pictureLabel`: the organizer's photo description; on a static card the picture is an image with this label.
+ * - `endsAt` (UX3): the time line reads "10:00 – 12:00" and the static card says "from 10:00 to 12:00".
  */
 export function CoverCard({
   picture,
   uri,
   title,
   startsAt,
+  endsAt,
   place,
   chips = [],
   label,
@@ -325,6 +327,7 @@ export function CoverCard({
   uri?: string | null;
   title: string;
   startsAt: string | null;
+  endsAt?: string | null;
   place: string;
   chips?: readonly CardChip[];
   label?: string;
@@ -355,7 +358,7 @@ export function CoverCard({
         {children}
       </View>
     );
-  const time = timeText(startsAt);
+  const time = timeRange(startsAt, endsAt);
   const content = (
     <>
       {part(
@@ -394,9 +397,7 @@ export function CoverCard({
           [styles.dateRow, largeText && styles.stacked],
           // The badge is hidden from assistive tech. Pressable and Review modes say the date in
           // their labels; the static (heading) card says it here.
-          !onPress && startsAt && !Number.isNaN(new Date(startsAt).getTime())
-            ? spokenDateTime(new Date(startsAt), new Date())
-            : undefined,
+          !onPress ? spokenWhen(startsAt, endsAt, new Date()) || undefined : undefined,
         )}
         {part(
           "place",

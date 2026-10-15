@@ -17,10 +17,15 @@ export type PlanDraft = {
   description?: string;
   categories?: CategoryKey[];
   start: string;
+  /** UX3 optional end time in the editor's local format ("" when none); absent in drafts saved before UX3. */
+  end?: string;
   place: string;
+  /** Meeting details (UX3); the field keeps its name so older drafts still load. */
   note: string;
   zone: string;
   startInstant?: string;
+  /** The end as an instant, to restore it in another time zone like the start. */
+  endInstant?: string;
   pending: PlanWrite | null;
   updatedAt: string;
 };
@@ -59,6 +64,8 @@ export function createDraftStore(storage: KeyStore) {
           !(typeof d.activityId === "string" || d.activityId === null) ||
           (d.title !== undefined && typeof d.title !== "string") ||
           (d.description !== undefined && typeof d.description !== "string") ||
+          (d.end !== undefined && typeof d.end !== "string") ||
+          (d.endInstant !== undefined && typeof d.endInstant !== "string") ||
           (d.categories !== undefined &&
             !(
               Array.isArray(d.categories) &&

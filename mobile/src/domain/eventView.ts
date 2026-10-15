@@ -1,6 +1,7 @@
 import { categoryLabels, type CategoryKey } from "./categories";
 import type { Plan } from "./plans";
-import { spokenDateTime } from "./schedule";
+import { spokenDate, spokenDateTime } from "./schedule";
+import { spokenRange } from "./eventTime";
 import type { PlanDraft } from "../services/draftStore";
 
 // Wording and grouping for cover cards, Review, My resbites and the event page (UX1).
@@ -90,15 +91,32 @@ export function cardChips(card: { owner: boolean; status: string; response?: str
   return chips;
 }
 
-/** The single label a pressable card reads as: title, full date and time, place, chips. */
+/**
+ * How a card's date and time read to VoiceOver: "Saturday 10 October at 10:00", or with an end (UX3)
+ * "Saturday 10 October, from 10:00 to 12:00". "" when there is no valid start.
+ */
+export function spokenWhen(startIso: string | null, endIso: string | null | undefined, now: Date): string {
+  const date = parse(startIso);
+  if (!date) return "";
+  const range = spokenRange(startIso, endIso, now);
+  return range ? `${spokenDate(date, now)}, ${range}` : spokenDateTime(date, now);
+}
+
+/** The single label a pressable card reads as: title, full date and time (with the end, if any), place, chips. */
 export function cardLabel(
-  card: { title: string; startsAt: string | null; place: string; chips: readonly string[]; photo?: string },
+  card: {
+    title: string;
+    startsAt: string | null;
+    endsAt?: string | null;
+    place: string;
+    chips: readonly string[];
+    photo?: string;
+  },
   now: Date,
 ): string {
-  const date = parse(card.startsAt);
   return [
     card.title.trim() || "Your resbite",
-    date ? spokenDateTime(date, now) : "date not set",
+    spokenWhen(card.startsAt, card.endsAt, now) || "date not set",
     card.place.trim(),
     ...card.chips,
     card.photo?.trim() ? `Photo: ${card.photo.trim()}` : "",
@@ -116,15 +134,21 @@ export type CoverCardPart = "picture" | "title" | "date" | "place" | "chips";
 
 /** Review card parts: each is a button that jumps to its step (benchmark row 4). */
 export function reviewLabels(
-  event: { title: string; startsAt: string | null; place: string; categories: readonly CategoryKey[]; photo?: string },
+  event: {
+    title: string;
+    startsAt: string | null;
+    endsAt?: string | null;
+    place: string;
+    categories: readonly CategoryKey[];
+    photo?: string;
+  },
   now: Date,
 ): Record<CoverCardPart, string> {
-  const date = parse(event.startsAt);
   const orNotSet = (value: string) => value.trim() || "not set";
   return {
     picture: event.photo?.trim() ? `Edit photo, ${event.photo.trim()}` : "Edit photo",
     title: `Edit name, ${orNotSet(event.title)}`,
-    date: `Edit date and time, ${date ? spokenDateTime(date, now) : "not set"}`,
+    date: `Edit date and time, ${orNotSet(spokenWhen(event.startsAt, event.endsAt, now))}`,
     place: `Edit place, ${orNotSet(event.place)}`,
     chips: `Edit vibe, ${orNotSet(vibeText(event.categories))}`,
   };
@@ -164,8 +188,9 @@ export const BLANK_DRAFT_BASELINE = JSON.stringify(["", "", [], "", "", ""]);
 
 /**
  * "Do this again" (benchmark row 5): a new blank-type draft (key "new") with the title,
- * description, categories, place and note copied. It never copies the date, guests or
- * cover, and it has no source idea (activityId null), so it opens at When.
+ * description, categories, place and Meeting details (`note`) copied. It never copies the date,
+ * the end time (UX3), the Note to guests, guests or cover, and it has no source idea
+ * (activityId null), so it opens at When.
  */
 export function againDraft(
   plan: Plan,

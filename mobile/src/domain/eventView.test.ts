@@ -15,6 +15,7 @@ import {
   mapsUrl,
   responseText,
   reviewLabels,
+  spokenWhen,
   timeText,
 } from "./eventView.ts";
 import type { Plan } from "./plans.ts";
@@ -86,6 +87,32 @@ test("Review parts read as full phrases and say when something is missing", () =
     });
   }));
 
+test("UX3 time ranges: cards and Review read the end when there is one; labels without an end are unchanged", () =>
+  inZone("Europe/London", () => {
+    const now = new Date("2026-10-07T12:00:00+01:00");
+    const start = new Date(2026, 9, 10, 10, 0).toISOString();
+    const end = new Date(2026, 9, 10, 12, 0).toISOString();
+    const late = new Date(2026, 9, 11, 2, 0).toISOString();
+    assert.equal(spokenWhen(start, null, now), "Saturday 10 October at 10:00");
+    assert.equal(spokenWhen(start, end, now), "Saturday 10 October, from 10:00 to 12:00");
+    assert.equal(spokenWhen(start, late, now), "Saturday 10 October, from 10:00 to 02:00 on Sunday 11 October");
+    // An end that isn't after the start is ignored, as on the card.
+    assert.equal(spokenWhen(start, start, now), "Saturday 10 October at 10:00");
+    assert.equal(spokenWhen(null, end, now), "");
+    assert.equal(
+      cardLabel({ title: "Picnic", startsAt: start, endsAt: end, place: "Park", chips: ["Hosting"] }, now),
+      "Picnic, Saturday 10 October, from 10:00 to 12:00, Park, Hosting",
+    );
+    assert.equal(
+      cardLabel({ title: "Picnic", startsAt: start, endsAt: null, place: "Park", chips: ["Hosting"] }, now),
+      "Picnic, Saturday 10 October at 10:00, Park, Hosting",
+    );
+    assert.equal(
+      reviewLabels({ title: "Picnic", startsAt: start, endsAt: end, place: "Park", categories: [] }, now).date,
+      "Edit date and time, Saturday 10 October, from 10:00 to 12:00",
+    );
+  }));
+
 test("Upcoming is active and ahead, soonest first; Past is started or cancelled, latest first", () => {
   const now = Date.parse("2026-10-07T12:00:00Z");
   const plan = (id: string, starts_at: string, status = "active") => ({ id, starts_at, status });
@@ -137,7 +164,7 @@ const plan: Plan = {
 };
 const options = { scope: "u1", requestId: "r1", zone: "Europe/London", now: new Date("2026-10-07T12:00:00Z") };
 
-test("Do this again copies the event text, place, note, never the date, guests, cover or idea", () => {
+test("Do this again copies the event text, place, Meeting details, never the date, end, guests, cover or idea", () => {
   const draft = againDraft(plan, options);
   assert.deepEqual(draft, {
     schema: 1,

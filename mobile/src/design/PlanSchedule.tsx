@@ -2,10 +2,11 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Platform, Pressable, StyleSheet, TextInput, View, useWindowDimensions } from "react-native";
 import DateTimePicker, { DateTimePickerAndroid } from "@react-native-community/datetimepicker";
 import { CalendarDays, Clock3, type LucideIcon } from "lucide-react-native";
-import { Copy } from "./ui";
+import { Copy, useLargeText } from "./ui";
 import { colors as c, depth, fonts, r } from "./tokens";
-import { parseLocalDateTime } from "../domain/plans";
-import { addDays, localDay, pickedValue, pickerSeed, splitLocal, spokenDate } from "../domain/schedule";
+import { localDateTime, parseLocalDateTime } from "../domain/plans";
+import { defaultEnd } from "../domain/eventTime";
+import { addDays, localDay, pickedValue, pickerSeed, splitLocal, spokenDate, spokenDateTime } from "../domain/schedule";
 
 /**
  * The When step's picker cards (steps v2): the picker comes first, full width, with the
@@ -82,7 +83,8 @@ export function PlanSchedule({
       />
     );
   }
-  if (Platform.OS === "web") return <WebField value={value} onChange={onChange} disabled={disabled} />;
+  if (Platform.OS === "web")
+    return <WebField label="Date and time (local)" icon={CalendarDays} value={value} onChange={onChange} disabled={disabled} />;
   if (Platform.OS === "android") {
     const chosen = day ? parseLocalDateTime(`${day} 12:00`) : null;
     const time = splitLocal(value).time;
@@ -152,28 +154,160 @@ function CardButton({
   );
 }
 
-/** Web QA types into this field; it stands in for both native pickers. */
-function WebField({ value, onChange, disabled }: { value: string; onChange: (value: string) => void; disabled: boolean }) {
-  const [focused, setFocused] = useState(false);
+/**
+ * UX3 optional end time (mockup "When step: optional end"), shown once "+ End time" is tapped. The end
+ * may fall on a later day, so iOS shows one date-and-time picker (compact, wheels under Larger Text) and
+ * Android opens its date dialog, then its time dialog. The web keeps a typed "End date and time (local)"
+ * field, like the start's. "Remove" clears the end.
+ */
+export function EndSchedule({
+  value,
+  start,
+  onChange,
+  onRemove,
+  disabled,
+}: {
+  /** The end in the editor's local `YYYY-MM-DD HH:mm` format. */
+  value: string;
+  /** The start, the end's lower bound and its seed when the end can't be read. */
+  start: string;
+  onChange: (value: string) => void;
+  onRemove: () => void;
+  disabled: boolean;
+}) {
+  const { fontScale } = useWindowDimensions();
+  const remove = <RemoveEnd onPress={onRemove} disabled={disabled} />;
+  if (Platform.OS === "web")
+    return (
+      <WebField
+        label="End date and time (local)"
+        icon={Clock3}
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        accessory={remove}
+      />
+    );
+  const seed = parseLocalDateTime(value) ?? parseLocalDateTime(defaultEnd(start)) ?? addDays(new Date(), 1);
+  const minimumDate = parseLocalDateTime(start) ?? undefined;
+  const pick = (next: Date) => onChange(localDateTime(next));
+  if (Platform.OS === "android") {
+    const dialog = () =>
+      DateTimePickerAndroid.open({
+        value: seed,
+        mode: "date",
+        display: "default",
+        minimumDate,
+        onValueChange: (_event, day) =>
+          DateTimePickerAndroid.open({ value: day, mode: "time", display: "default", onValueChange: (_e, at) => pick(at) }),
+      });
+    const text = spokenDateTime(seed, new Date());
+    return (
+      <View style={[styles.card, styles.row]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Change end, ${text}`}
+          aria-disabled={disabled}
+          disabled={disabled}
+          onPress={dialog}
+          style={({ pressed }) => [styles.endButton, { opacity: disabled ? 0.55 : pressed ? 0.7 : 1 }]}
+        >
+          <View style={styles.circle}>
+            <Clock3 size={24} strokeWidth={2} color={c.aquaDark} />
+          </View>
+          <View style={styles.text}>
+            <Copy style={styles.caption}>Ends</Copy>
+            <Copy style={styles.endValue}>{text}</Copy>
+          </View>
+        </Pressable>
+        {remove}
+      </View>
+    );
+  }
   return (
-    <View style={[styles.card, styles.row, focused && styles.focused]}>
-      <View aria-hidden style={styles.circle}>
-        <CalendarDays size={24} strokeWidth={2} color={c.aquaDark} />
+    <View style={[styles.card, styles.endCard]}>
+      <View style={styles.endHeader}>
+        <View aria-hidden style={styles.circle}>
+          <Clock3 size={24} strokeWidth={2} color={c.aquaDark} />
+        </View>
+        <Copy style={[styles.caption, styles.text]}>Ends</Copy>
+        {remove}
       </View>
-      <View style={styles.text}>
-        <Copy style={styles.caption}>Date and time (local)</Copy>
-        <TextInput
-          accessibilityLabel="Date and time (local)"
-          value={value}
-          onChangeText={onChange}
-          placeholder="YYYY-MM-DD HH:mm"
-          placeholderTextColor={c.muted}
-          editable={!disabled}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          style={[styles.input, styles.noOutline]}
-        />
+      <DateTimePicker
+        accessibilityLabel="End date and time"
+        value={seed}
+        mode="datetime"
+        // Larger Text keeps the wheels, as the start's date does: the compact buttons do not grow with it.
+        display={fontScale < 1.4 ? "compact" : "spinner"}
+        minimumDate={minimumDate}
+        themeVariant="light"
+        accentColor={c.aquaDark}
+        disabled={disabled}
+        onValueChange={(_event, next) => pick(next)}
+      />
+    </View>
+  );
+}
+
+/** The end card's "Remove" action: a 44 pt text button that reads "Remove end time". */
+function RemoveEnd({ onPress, disabled }: { onPress: () => void; disabled: boolean }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Remove end time"
+      aria-disabled={disabled}
+      disabled={disabled}
+      onPress={onPress}
+      hitSlop={4}
+      style={({ pressed }) => [styles.remove, { opacity: disabled ? 0.45 : pressed ? 0.6 : 1 }]}
+    >
+      <Copy style={styles.removeText}>Remove</Copy>
+    </Pressable>
+  );
+}
+
+/** Web QA types into these fields: the start's stands in for both native pickers, the end's for its picker. */
+function WebField({
+  label,
+  icon: Icon,
+  value,
+  onChange,
+  disabled,
+  accessory,
+}: {
+  label: string;
+  icon: LucideIcon;
+  value: string;
+  onChange: (value: string) => void;
+  disabled: boolean;
+  accessory?: React.ReactNode;
+}) {
+  const [focused, setFocused] = useState(false);
+  // Under Larger Text the accessory (Remove) moves under the field, so the field keeps its width at 320 px.
+  const below = useLargeText() && accessory;
+  return (
+    <View style={[styles.card, focused && styles.focused]}>
+      <View style={styles.row}>
+        <View aria-hidden style={styles.circle}>
+          <Icon size={24} strokeWidth={2} color={c.aquaDark} />
+        </View>
+        <View style={styles.text}>
+          <Copy style={styles.caption}>{label}</Copy>
+          <TextInput
+            accessibilityLabel={label}
+            value={value}
+            onChangeText={onChange}
+            placeholder="YYYY-MM-DD HH:mm"
+            placeholderTextColor={c.muted}
+            editable={!disabled}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            style={[styles.input, styles.noOutline]}
+          />
+        </View>
+        {!below && accessory}
       </View>
+      {below ? <View style={styles.below}>{accessory}</View> : null}
     </View>
   );
 }
@@ -205,4 +339,12 @@ const styles = StyleSheet.create({
   change: { fontFamily: fonts.medium, fontSize: 14, color: c.aquaDark },
   caption: { fontFamily: fonts.medium, fontSize: 13, color: c.muted },
   input: { fontFamily: fonts.display, fontSize: 22, color: c.ink, paddingVertical: 4, minHeight: 36 },
+  // UX3 end card.
+  endCard: { gap: 10, paddingHorizontal: 16, paddingVertical: 12, alignItems: "flex-start" },
+  endHeader: { alignSelf: "stretch", flexDirection: "row", alignItems: "center", gap: 14 },
+  endButton: { flex: 1, flexDirection: "row", alignItems: "center", gap: 14, minHeight: 54 },
+  endValue: { fontFamily: fonts.display, fontSize: 20, lineHeight: 26 },
+  below: { alignItems: "flex-end", paddingHorizontal: 10, paddingBottom: 6, marginTop: -6 },
+  remove: { minHeight: 44, minWidth: 44, paddingHorizontal: 6, alignItems: "center", justifyContent: "center" },
+  removeText: { fontFamily: fonts.medium, fontSize: 15, color: "#963F58" },
 });

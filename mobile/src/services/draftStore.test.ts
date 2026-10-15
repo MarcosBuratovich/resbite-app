@@ -187,6 +187,17 @@ test("drafts saved before custom events still load without event fields", async 
   assert.equal(legacy.activityId, "coffee");
 });
 
+test("UX3: a draft keeps its end time; drafts saved before UX3 have none", async () => {
+  const { storage } = memory();
+  const drafts = createDraftStore(storage);
+  await drafts.put(fixture());
+  assert.equal((await drafts.list("account-a"))[0].end, undefined);
+  await drafts.put({ ...fixture(), end: "2099-01-01 14:00", endInstant: "2099-01-01T14:00:00.000Z" });
+  const [restored] = await createDraftStore(storage).list("account-a");
+  assert.equal(restored.end, "2099-01-01 14:00");
+  assert.equal(restored.endInstant, "2099-01-01T14:00:00.000Z");
+});
+
 test("a blank event draft has no idea and keeps its event fields", async () => {
   const { storage } = memory();
   const drafts = createDraftStore(storage);
@@ -222,6 +233,8 @@ test("corrupt event fields are rejected rather than half-restored", async () => 
     { categories: ["bogus"] },
     { categories: ["creative", "mindful", "natural"] },
     { description: 7 },
+    { end: 1200 },
+    { endInstant: false },
   ]) {
     const { storage, values } = memory();
     values.set("resbite.drafts.v1.account-a", JSON.stringify([{ ...fixture(), ...corrupt }]));

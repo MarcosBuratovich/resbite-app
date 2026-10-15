@@ -249,10 +249,14 @@ export default function Plans() {
                 picture={eventPicture(p)}
                 title={p.title}
                 startsAt={p.starts_at}
+                endsAt={p.ends_at}
                 place={p.place_label}
                 dimmed={p.status === "cancelled"}
                 chips={chips.map((text) => ({ key: text, text, tone: chipToneFor(text) }))}
-                label={cardLabel({ title: p.title, startsAt: p.starts_at, place: p.place_label, chips, photo: p.cover_description }, new Date(now))}
+                label={cardLabel(
+                  { title: p.title, startsAt: p.starts_at, endsAt: p.ends_at, place: p.place_label, chips, photo: p.cover_description },
+                  new Date(now),
+                )}
                 onPress={() => open(p)}
               />
             );
