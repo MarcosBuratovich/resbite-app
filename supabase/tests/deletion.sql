@@ -6,7 +6,8 @@ insert into auth.sessions(id,user_id,created_at) values('42000000-0000-4000-8000
 insert into private.tester_roster(email) values('delete@resbite-test.invalid'),('remain@resbite-test.invalid');
 insert into public.profiles(id,display_name,avatar_path) values('41000000-0000-4000-8000-000000000001','Name to erase','41000000-0000-4000-8000-000000000001/a.jpg'),('41000000-0000-4000-8000-000000000002','Keep',null);
 insert into public.activities(id,title,description,category,artwork_key,source_ids,published,categories) values('delete-test','Test','Test','Creative','test',array['test'],true,array['creative']);
-insert into public.plans(id,owner_id,activity_id,title,description,starts_at,time_zone,place_label,note) values('43000000-0000-4000-8000-000000000001','41000000-0000-4000-8000-000000000001','delete-test','Private title','Private description',now()+interval '1 day','UTC','Private place','Private note');
+insert into public.plans(id,owner_id,activity_id,title,description,starts_at,time_zone,place_label) values('43000000-0000-4000-8000-000000000001','41000000-0000-4000-8000-000000000001','delete-test','Private title','Private description',now()+interval '1 day','UTC','Private place');
+insert into public.plan_meeting_details(plan_id,note) values('43000000-0000-4000-8000-000000000001','Private note');
 insert into public.attendees(plan_id,user_id) values('43000000-0000-4000-8000-000000000001','41000000-0000-4000-8000-000000000002');
 insert into storage.objects(bucket_id,name) values
  ('profile-photos','41000000-0000-4000-8000-000000000001/a.jpg'),
@@ -36,6 +37,7 @@ do $$ begin
  if (select display_name from public.profiles where id='41000000-0000-4000-8000-000000000001')<>'Deleted member' then raise exception 'Name not redacted'; end if;
  if (select cover_path from public.plans where id='43000000-0000-4000-8000-000000000001') is not null then raise exception 'Cover not detached by deletion'; end if;
  if (select cover_description from public.plans where id='43000000-0000-4000-8000-000000000001')<>'' then raise exception 'Cover description not redacted by deletion'; end if;
+ if exists(select 1 from public.plan_meeting_details where plan_id='43000000-0000-4000-8000-000000000001') then raise exception 'Meeting details not redacted by deletion'; end if;
 end $$;
 set local role authenticated;
 do $$ begin

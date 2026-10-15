@@ -7,3 +7,4 @@ custom-events.sql
 plan-covers.sql
 claim-notification.sql
 ux2.sql
+ux3.sql

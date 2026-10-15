@@ -1,0 +1,178 @@
+-- UX3 event details (docs/superpowers/specs/2026-10-15-ux3-design.md): an optional end time, private
+-- Meeting details for the organizer and Going or Maybe guests, and a pinned Note to guests.
+-- Hosted-compatible: depends only on the migrations listed in supabase/tests/hosted-baseline/migrations.txt.
+-- Rollback: supabase/rollback/20261015120000_ux3_event_details.rollback.sql.
+
+-- Slice 1: the optional end time. Builds older than UX3 can't set one; when they move the start, the
+-- end moves by the same amount, so the length is kept.
+alter table public.plans add column ends_at timestamptz,
+ add constraint plans_ends_after_start check (ends_at is null or ends_at>starts_at);
+
+-- Slice 2: Meeting details (UX3-D5, UX3-D6). The text leaves the event row, which every invitee can read,
+-- for its own table, which only the organizer and guests who answered Going or Maybe can read. Nobody
+-- writes it directly; the save functions below do.
+-- Every invitee may know that Meeting details exist (so the locked line is honest); only the people above
+-- may read them.
+alter table public.plans add column has_meeting_details boolean not null default false;
+create table public.plan_meeting_details (
+ plan_id uuid primary key references public.plans(id) on delete cascade,
+ note text not null check (note<>'' and char_length(note)<=2000),
+ updated_at timestamptz not null default now()
+);
+alter table public.plan_meeting_details enable row level security;
+revoke all on public.plan_meeting_details from public, anon, authenticated;
+grant select on public.plan_meeting_details to authenticated;
+
+create function private.can_read_meeting_details(p_plan uuid) returns boolean language sql stable security definer set search_path = '' as $$
+ select private.eligible() and exists(select 1 from public.plans p where p.id=p_plan and (p.owner_id=auth.uid()
+  or exists(select 1 from public.attendees a where a.plan_id=p.id and a.user_id=auth.uid() and a.response in ('accepted','maybe'))))
+$$;
+revoke all on function private.can_read_meeting_details(uuid) from public, anon, authenticated, service_role;
+grant execute on function private.can_read_meeting_details(uuid) to authenticated;
+create policy meeting_details_read on public.plan_meeting_details for select to authenticated
+ using (private.can_read_meeting_details(plan_id));
+
+-- Removal is its own definer function so the deletion redaction trigger can call it whoever updates the plan.
+create function private.forget_meeting_details(p_plan uuid) returns void language sql security definer set search_path = '' as $$
+ delete from public.plan_meeting_details where plan_id=p_plan
+$$;
+-- An empty text removes the row; the same text leaves it (and its time) alone. Keeps the flag in step.
+create function private.write_meeting_details(p_plan uuid,p_note text) returns void language plpgsql security definer set search_path = '' as $$
+begin
+ if coalesce(p_note,'')='' then
+  perform private.forget_meeting_details(p_plan);
+  update public.plans set has_meeting_details=false where id=p_plan and has_meeting_details;
+ else
+  insert into public.plan_meeting_details(plan_id,note) values(p_plan,p_note)
+  on conflict (plan_id) do update set note=excluded.note,updated_at=now()
+  where public.plan_meeting_details.note is distinct from excluded.note;
+  update public.plans set has_meeting_details=true where id=p_plan and not has_meeting_details;
+ end if;
+end $$;
+revoke all on function private.forget_meeting_details(uuid), private.write_meeting_details(uuid,text) from public, anon, authenticated, service_role;
+
+-- Existing notes move over intact; the old column then stays empty for good.
+insert into public.plan_meeting_details(plan_id,note) select id,note from public.plans where note<>'';
+update public.plans set note='',has_meeting_details=true where note<>'';
+alter table public.plans add constraint plans_note_moved check (note='');
+
+-- Account deletion marks the profile before it updates each owned plan; while the mark is present no
+-- update leaves organizer-written text behind, now including the Meeting details.
+-- Otherwise the 20261014120000_ux2_rules body (create or replace keeps its privileges).
+create or replace function private.redact_deleting_owner_plan() returns trigger
+language plpgsql set search_path = '' as $$
+begin
+ if new.owner_id is not null and exists(
+  select 1 from public.profiles as p where p.id = new.owner_id and p.deletion_requested_at is not null) then
+  new.title := 'Resbite';
+  new.description := '';
+  new.cover_path := null;
+  new.cover_description := '';
+  new.has_meeting_details := false;
+  perform private.forget_meeting_details(new.id);
+ end if;
+ return new;
+end $$;
+
+-- Saving: v3 takes the end time and writes Meeting details; v2 keeps its signature for builds older than
+-- UX3 and delegates, keeping the event's length when the start moves.
+create function private.create_plan_v3(p_id uuid,p_title text,p_description text,p_categories text[],p_activity text,p_start timestamptz,p_ends timestamptz,p_zone text,p_place text,p_note text default '',p_lat double precision default null,p_lon double precision default null)
+returns uuid language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := private.require_tester(); v_existing public.plans;
+begin
+ -- Serialize repeated creation IDs; a retry must match the original payload exactly.
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(p_id::text,0));
+ select * into v_existing from public.plans where id=p_id;
+ if found then
+  if v_existing.owner_id<>v_uid or v_existing.title is distinct from btrim(p_title)
+  or v_existing.description is distinct from coalesce(p_description,'') or v_existing.categories is distinct from p_categories
+  or v_existing.activity_id is distinct from p_activity or v_existing.starts_at is distinct from p_start
+  or v_existing.ends_at is distinct from p_ends
+  or v_existing.time_zone is distinct from p_zone or v_existing.place_label is distinct from btrim(p_place)
+  or coalesce((select note from public.plan_meeting_details where plan_id=p_id),'') is distinct from coalesce(p_note,'')
+  or v_existing.latitude is distinct from p_lat or v_existing.longitude is distinct from p_lon then
+   raise exception 'Creation identifier already used' using errcode='22023';
+  end if;
+  return p_id;
+ end if;
+ if p_title is null or p_categories is null then raise exception 'Title and categories required' using errcode='23502'; end if;
+ if p_start is null or p_start<=now() or not exists(select 1 from pg_catalog.pg_timezone_names where name=p_zone) then raise exception 'Invalid future schedule' using errcode='22023'; end if;
+ if p_ends is not null and p_ends<=p_start then raise exception 'The end must be after the start' using errcode='22023'; end if;
+ if p_activity is not null and not exists(select 1 from public.activities where id=p_activity and published) then raise exception 'Activity unavailable' using errcode='22023'; end if;
+ insert into public.plans(id,owner_id,activity_id,title,description,categories,starts_at,ends_at,time_zone,place_label,latitude,longitude)
+ values(p_id,v_uid,p_activity,btrim(p_title),coalesce(p_description,''),p_categories,p_start,p_ends,p_zone,btrim(p_place),p_lat,p_lon);
+ perform private.write_meeting_details(p_id,coalesce(p_note,''));
+ return p_id;
+end $$;
+
+-- Otherwise the 20261014120000_ux2_rules change_plan_v2 body: only a new start time or place notifies (an
+-- end-time change doesn't), and only people who may still come; cancelling tells everyone.
+create function private.change_plan_v3(p_plan uuid,p_version integer,p_title text,p_description text,p_categories text[],p_start timestamptz,p_ends timestamptz,p_zone text,p_place text,p_note text,p_cancel boolean default false,p_keep_length boolean default false)
+returns integer language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := private.require_tester(); v_plan public.plans; v_next integer; v_cancel boolean := coalesce(p_cancel,false);
+ v_time boolean; v_place boolean; v_ends timestamptz;
+begin
+ select * into v_plan from public.plans where id=p_plan for update;
+ if not found or v_plan.owner_id<>v_uid then raise exception 'Owner required' using errcode='42501'; end if;
+ if v_plan.status<>'active' or v_plan.starts_at<=now() then raise exception 'Plan unavailable' using errcode='22023'; end if;
+ if p_version is distinct from v_plan.version then raise exception 'Plan changed; refresh' using errcode='40001'; end if;
+ if not v_cancel and (p_start is null or p_start<=now() or not exists(select 1 from pg_catalog.pg_timezone_names where name=p_zone)) then raise exception 'Invalid future schedule' using errcode='22023'; end if;
+ v_ends := case when p_keep_length then p_start+(v_plan.ends_at-v_plan.starts_at) else p_ends end;
+ if not v_cancel and v_ends is not null and v_ends<=p_start then raise exception 'The end must be after the start' using errcode='22023'; end if;
+ v_next := v_plan.version+1;
+ if v_cancel then
+  -- Terminal; the other arguments are ignored.
+  update public.plans set status='cancelled',version=v_next where id=p_plan;
+  update private.invitations set revoked_at=now() where plan_id=p_plan and revoked_at is null;
+  insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id)
+  select p_plan,a.user_id,'plan_cancelled','plan:'||p_plan||':'||v_next||':'||a.user_id,v_uid
+  from public.attendees a where a.plan_id=p_plan and a.user_id<>v_uid on conflict do nothing;
+ else
+  -- A zone change at the same instant moves the shown time, so it counts as a time change.
+  v_time := p_start is distinct from v_plan.starts_at or p_zone is distinct from v_plan.time_zone;
+  v_place := btrim(p_place) is distinct from v_plan.place_label;
+  update public.plans set title=btrim(p_title),description=coalesce(p_description,''),categories=p_categories,
+   starts_at=p_start,ends_at=v_ends,time_zone=p_zone,place_label=btrim(p_place),latitude=null,longitude=null,version=v_next
+  where id=p_plan;
+  perform private.write_meeting_details(p_plan,coalesce(p_note,''));
+  if v_time or v_place then
+   insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,detail)
+   select p_plan,a.user_id,'plan_changed','plan:'||p_plan||':'||v_next||':'||a.user_id,v_uid,
+    case when v_time and v_place then 'time_place' when v_time then 'time' else 'place' end
+   from public.attendees a
+   where a.plan_id=p_plan and a.user_id<>v_uid and a.response in ('accepted','maybe','pending')
+   on conflict do nothing;
+  end if;
+ end if;
+ return v_next;
+end $$;
+
+create or replace function private.create_plan_v2(p_id uuid,p_title text,p_description text,p_categories text[],p_activity text,p_start timestamptz,p_zone text,p_place text,p_note text default '',p_lat double precision default null,p_lon double precision default null)
+returns uuid language sql security definer set search_path = '' as $$
+ select private.create_plan_v3(p_id,p_title,p_description,p_categories,p_activity,p_start,null,p_zone,p_place,p_note,p_lat,p_lon)
+$$;
+create or replace function private.change_plan_v2(p_plan uuid,p_version integer,p_title text,p_description text,p_categories text[],p_start timestamptz,p_zone text,p_place text,p_note text,p_cancel boolean default false)
+returns integer language sql security definer set search_path = '' as $$
+ select private.change_plan_v3(p_plan,p_version,p_title,p_description,p_categories,p_start,null,p_zone,p_place,p_note,p_cancel,true)
+$$;
+
+create function public.create_plan_v3(p_id uuid,p_title text,p_description text,p_categories text[],p_activity text,p_start timestamptz,p_ends timestamptz,p_zone text,p_place text,p_note text default '',p_lat double precision default null,p_lon double precision default null)
+returns uuid language sql security invoker set search_path='' as $$
+ select private.create_plan_v3(p_id,p_title,p_description,p_categories,p_activity,p_start,p_ends,p_zone,p_place,p_note,p_lat,p_lon)
+$$;
+create function public.change_plan_v3(p_plan uuid,p_version integer,p_title text,p_description text,p_categories text[],p_start timestamptz,p_ends timestamptz,p_zone text,p_place text,p_note text,p_cancel boolean default false)
+returns integer language sql security invoker set search_path='' as $$
+ select private.change_plan_v3(p_plan,p_version,p_title,p_description,p_categories,p_start,p_ends,p_zone,p_place,p_note,p_cancel,false)
+$$;
+revoke all on function
+ private.create_plan_v3(uuid,text,text,text[],text,timestamptz,timestamptz,text,text,text,double precision,double precision),
+ public.create_plan_v3(uuid,text,text,text[],text,timestamptz,timestamptz,text,text,text,double precision,double precision),
+ private.change_plan_v3(uuid,integer,text,text,text[],timestamptz,timestamptz,text,text,text,boolean,boolean),
+ public.change_plan_v3(uuid,integer,text,text,text[],timestamptz,timestamptz,text,text,text,boolean)
+ from public, anon, authenticated, service_role;
+grant execute on function
+ private.create_plan_v3(uuid,text,text,text[],text,timestamptz,timestamptz,text,text,text,double precision,double precision),
+ public.create_plan_v3(uuid,text,text,text[],text,timestamptz,timestamptz,text,text,text,double precision,double precision),
+ private.change_plan_v3(uuid,integer,text,text,text[],timestamptz,timestamptz,text,text,text,boolean,boolean),
+ public.change_plan_v3(uuid,integer,text,text,text[],timestamptz,timestamptz,text,text,text,boolean)
+ to authenticated;
