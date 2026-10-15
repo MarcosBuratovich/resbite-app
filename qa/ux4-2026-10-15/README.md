@@ -57,7 +57,7 @@ Protected wording (notices, guidance, warnings, privacy statements, photo messag
 
 ## Next
 
-- Merge `ux4` into `main` (the owner's choice), and push only when the owner says so.
+- Merged into `main` by fast-forward and pushed on 15 October (the owner chose "1, merge and push it").
 - **TestFlight:** UX4 reaches TestFlight in a later build, after the coworker's UX2 invitee check on the current build.
 
 **Rollback:** serve the previous `main` JavaScript. There is no database change.

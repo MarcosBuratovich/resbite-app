@@ -430,7 +430,7 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
 
 ## UX4 build — 15 October 2026
 
-**Accepted on the owner’s iPhone on 15 October (“all good, everything works on the iPhone”, then “Accept as-is” for the checks that leave no trace). Built on branch `ux4`; not merged, not pushed, not on TestFlight.** UX4 is the third part of the UX work: it brings the 13 screens outside the event flow to the same minimal, widget-like standard as UX1 ([spec](superpowers/specs/2026-10-15-ux4-design.md), [plan](superpowers/plans/2026-10-15-ux4.md); decisions UX4-D1 to UX4-D5, P1 to P14 and the changes made during the build in `knowledge-base/08-decisions.md`).
+**Accepted on the owner’s iPhone on 15 October (“all good, everything works on the iPhone”, then “Accept as-is” for the checks that leave no trace). Merged into `main` and pushed on 15 October; not on TestFlight yet.** UX4 is the third part of the UX work: it brings the 13 screens outside the event flow to the same minimal, widget-like standard as UX1 ([spec](superpowers/specs/2026-10-15-ux4-design.md), [plan](superpowers/plans/2026-10-15-ux4.md); decisions UX4-D1 to UX4-D5, P1 to P14 and the changes made during the build in `knowledge-base/08-decisions.md`).
 
 **What changed.**
 - App only. There is no database, service, native, build or dependency change, so nothing touches the hosted project.
@@ -447,4 +447,4 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
 3. Accessibility and layout on the phone: signing in with an unconfirmed account (the chips sit below the notice); tapping Remove photo; Larger Text on Account details (both modes), the account access check and "Check your inbox"; Voice Control "Tap Check again"; VoiceOver focus on Sign in, then Forgot password?, then Back to sign in; the resend countdown hint.
 4. The tab bar labels and single-line placeholders at the largest text sizes, which truncate in the browser proxy.
 
-**Next.** Merge `ux4` into `main` (record: [UX4 QA](../qa/ux4-2026-10-15/README.md)). UX4 reaches TestFlight in a later build, after the coworker’s UX2 invitee check on the current build.
+**Next.** UX4 reaches TestFlight in a later build, after the coworker’s UX2 invitee check on the current build (record: [UX4 QA](../qa/ux4-2026-10-15/README.md)).
