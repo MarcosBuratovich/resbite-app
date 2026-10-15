@@ -210,7 +210,7 @@ export default function AccountDetails() {
         >
           {setup !== "1" && <Back label="Profile" />}
           <View style={styles.header}>
-            <Title>{setup === "1" ? "About you" : "Account details"}</Title>
+            <Title style={{ flexShrink: 1 }}>{setup === "1" ? "About you" : "Account details"}</Title>
             <IconButton icon={Info} label="About these details" onPress={() => setAbout(true)} />
           </View>
           <View
@@ -293,6 +293,6 @@ export default function AccountDetails() {
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  header: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12 },
   center: { alignItems: "center" },
 });

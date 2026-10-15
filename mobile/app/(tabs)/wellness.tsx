@@ -27,7 +27,7 @@ export default function Wellness() {
       >
         <PreviewNotice />
         <View style={styles.header}>
-          <Title>Wellness</Title>
+          <Title style={{ flexShrink: 1 }}>Wellness</Title>
           <IconButton icon={Info} label="About sample data" onPress={() => setAbout(true)} />
         </View>
         <Chip text="Sample data" icon={FlaskConical} tone="pink" label="Sample wellness data" />
@@ -71,18 +71,20 @@ export default function Wellness() {
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  header: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12 },
   ringCard: { padding: 24, gap: 12, alignItems: "center", borderRadius: r.card, backgroundColor: c.paper, boxShadow: depth.card },
   ring: {
-    width: 148,
-    height: 148,
-    borderRadius: 74,
+    minWidth: 148,
+    minHeight: 148,
+    aspectRatio: 1,
+    padding: 8,
+    borderRadius: 999,
     borderWidth: 14,
     borderColor: c.aqua,
     alignItems: "center",
     justifyContent: "center",
   },
-  total: { fontFamily: fonts.display, fontSize: 30, color: c.ink },
+  total: { textAlign: "center", fontFamily: fonts.display, fontSize: 30, color: c.ink },
   together: { color: c.muted },
   bars: { borderRadius: r.card, backgroundColor: c.paper, boxShadow: depth.card, paddingHorizontal: 18 },
   bar: { gap: 10, paddingVertical: 16 },

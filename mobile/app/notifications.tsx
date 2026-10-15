@@ -89,7 +89,7 @@ export default function Notifications() {
         <PreviewNotice />
         <Back label="Profile" />
         <View style={styles.header}>
-          <Title>Notifications</Title>
+          <Title style={{ flexShrink: 1 }}>Notifications</Title>
           <IconButton icon={Info} label="About notifications" onPress={() => setAbout(true)} />
         </View>
         <StatusCard icon={BellOff} title="Not active yet">
@@ -152,7 +152,7 @@ export default function Notifications() {
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  header: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12 },
   line: { textAlign: "center", color: c.muted },
   chips: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 8 },
 });

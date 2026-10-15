@@ -21,7 +21,7 @@ export default function DataPrivacy() {
         <PreviewNotice />
         <Back label="Profile" />
         <View style={styles.header}>
-          <Title>Privacy</Title>
+          <Title style={{ flexShrink: 1 }}>Privacy</Title>
           <IconButton icon={Info} label="About this page" onPress={() => setAbout(true)} />
         </View>
         <RowGroup>
@@ -112,5 +112,5 @@ export default function DataPrivacy() {
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  header: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12 },
 });
