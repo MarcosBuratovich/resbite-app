@@ -32,7 +32,9 @@ grant execute on function private.can_read_meeting_details(uuid) to authenticate
 create policy meeting_details_read on public.plan_meeting_details for select to authenticated
  using (private.can_read_meeting_details(plan_id));
 
--- Removal is its own definer function so the deletion redaction trigger can call it whoever updates the plan.
+-- Removal is its own definer function. Execute is revoked from every role and the deletion redaction trigger
+-- isn't a definer function, so the trigger reaches it only through the definer functions that update plans
+-- (saving, cancelling, the Note to guests, account deletion), which run as the function owner.
 create function private.forget_meeting_details(p_plan uuid) returns void language sql security definer set search_path = '' as $$
  delete from public.plan_meeting_details where plan_id=p_plan
 $$;
@@ -86,7 +88,7 @@ begin
  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(p_id::text,0));
  select * into v_existing from public.plans where id=p_id;
  if found then
-  if v_existing.owner_id<>v_uid or v_existing.title is distinct from btrim(p_title)
+  if v_existing.owner_id is distinct from v_uid or v_existing.title is distinct from btrim(p_title)
   or v_existing.description is distinct from coalesce(p_description,'') or v_existing.categories is distinct from p_categories
   or v_existing.activity_id is distinct from p_activity or v_existing.starts_at is distinct from p_start
   or v_existing.ends_at is distinct from p_ends
@@ -115,7 +117,7 @@ declare v_uid uuid := private.require_tester(); v_plan public.plans; v_next inte
  v_time boolean; v_place boolean; v_ends timestamptz;
 begin
  select * into v_plan from public.plans where id=p_plan for update;
- if not found or v_plan.owner_id<>v_uid then raise exception 'Owner required' using errcode='42501'; end if;
+ if not found or v_plan.owner_id is distinct from v_uid then raise exception 'Owner required' using errcode='42501'; end if;
  if v_plan.status<>'active' or v_plan.starts_at<=now() then raise exception 'Plan unavailable' using errcode='22023'; end if;
  if p_version is distinct from v_plan.version then raise exception 'Plan changed; refresh' using errcode='40001'; end if;
  if not v_cancel and (p_start is null or p_start<=now() or not exists(select 1 from pg_catalog.pg_timezone_names where name=p_zone)) then raise exception 'Invalid future schedule' using errcode='22023'; end if;
@@ -153,9 +155,13 @@ create or replace function private.create_plan_v2(p_id uuid,p_title text,p_descr
 returns uuid language sql security definer set search_path = '' as $$
  select private.create_plan_v3(p_id,p_title,p_description,p_categories,p_activity,p_start,null,p_zone,p_place,p_note,p_lat,p_lon)
 $$;
+-- Builds older than UX3 can't see Meeting details: their editor loads the note column, now always empty, and
+-- sends it back with every edit. So an empty note from v2 keeps the existing Meeting details; a non-empty one
+-- still replaces them. v3 checks the owner before any write, and the text read here is never returned.
 create or replace function private.change_plan_v2(p_plan uuid,p_version integer,p_title text,p_description text,p_categories text[],p_start timestamptz,p_zone text,p_place text,p_note text,p_cancel boolean default false)
 returns integer language sql security definer set search_path = '' as $$
- select private.change_plan_v3(p_plan,p_version,p_title,p_description,p_categories,p_start,null,p_zone,p_place,p_note,p_cancel,true)
+ select private.change_plan_v3(p_plan,p_version,p_title,p_description,p_categories,p_start,null,p_zone,p_place,
+  coalesce(nullif(p_note,''),(select m.note from public.plan_meeting_details m where m.plan_id=p_plan),''),p_cancel,true)
 $$;
 
 create function public.create_plan_v3(p_id uuid,p_title text,p_description text,p_categories text[],p_activity text,p_start timestamptz,p_ends timestamptz,p_zone text,p_place text,p_note text default '',p_lat double precision default null,p_lon double precision default null)

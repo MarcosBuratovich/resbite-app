@@ -77,6 +77,27 @@ end $$;
 do $$ begin
  if exists(select 1 from public.plans where id='f1100000-0000-4000-8000-000000000001' and title<>'End fixture') then raise exception 'Title lost'; end if;
 end $$;
+-- Older builds load the note column, now always empty, and send it back with every edit: an empty note
+-- from v2 keeps Meeting details (here a title-only change), while a non-empty one still replaces them.
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.change_plan_v2('f1100000-0000-4000-8000-000000000001',4,'End fixture renamed','',array['community'],
+ '2099-06-01 11:00+00','UTC','Park','');
+reset role;
+do $$ begin
+ if (select title||':'||version from public.plans where id='f1100000-0000-4000-8000-000000000001') is distinct from 'End fixture renamed:5' then raise exception 'v2 title change not saved'; end if;
+ if (select note from public.plan_meeting_details where plan_id='f1100000-0000-4000-8000-000000000001') is distinct from 'Gate 4512' then raise exception 'An empty v2 note removed Meeting details'; end if;
+ if not (select has_meeting_details from public.plans where id='f1100000-0000-4000-8000-000000000001') then raise exception 'An empty v2 note cleared the flag'; end if;
+end $$;
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.change_plan_v2('f1100000-0000-4000-8000-000000000001',5,'End fixture renamed','',array['community'],
+ '2099-06-01 11:00+00','UTC','Park','Gate 9876');
+reset role;
+do $$ begin
+ if (select note from public.plan_meeting_details where plan_id='f1100000-0000-4000-8000-000000000001') is distinct from 'Gate 9876' then raise exception 'A v2 note did not replace Meeting details'; end if;
+ if not (select has_meeting_details from public.plans where id='f1100000-0000-4000-8000-000000000001') then raise exception 'Flag lost after a v2 replacement'; end if;
+end $$;
 rollback;
 
 begin;
@@ -309,17 +330,31 @@ reset role;
 -- The hosted baseline still requires an owner; this test-only change is undone by the rollback below.
 alter table public.plans alter column owner_id drop not null;
 insert into public.plans(id,owner_id,activity_id,title,description,categories,starts_at,time_zone,place_label)
- values('f3100000-0000-4000-8000-000000000002',null,null,'Ownerless fixture','',array['community'],now()-interval '30 minutes','UTC','Park');
+ values('f3100000-0000-4000-8000-000000000002',null,null,'Ownerless fixture','',array['community'],now()-interval '30 minutes','UTC','Park'),
+  ('f3100000-0000-4000-8000-000000000003',null,null,'Ownerless future','',array['community'],'2099-08-02 10:00+00','UTC','Park');
 insert into public.attendees(plan_id,user_id,response) values('f3100000-0000-4000-8000-000000000002','f3000000-0000-4000-8000-000000000002','accepted');
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"f3000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 do $$ begin
  begin perform public.set_guest_note('f3100000-0000-4000-8000-000000000002','Hijack'); raise exception 'Guest posted a note on an ownerless event';
  exception when insufficient_privilege then null; end;
+ -- Nor can anyone edit a future ownerless event, or have its creation identifier acknowledged by sending
+ -- the same payload.
+ begin
+  perform public.change_plan_v3('f3100000-0000-4000-8000-000000000003',1,'Taken over','',array['community'],
+   '2099-08-02 10:00+00',null,'UTC','Park','');
+  raise exception 'Guest changed an ownerless event';
+ exception when insufficient_privilege then null; end;
+ begin
+  perform public.create_plan_v3('f3100000-0000-4000-8000-000000000003','Ownerless future','',array['community'],null,
+   '2099-08-02 10:00+00',null,'UTC','Park','');
+  raise exception 'An ownerless event''s creation identifier was acknowledged';
+ exception when invalid_parameter_value then null; end;
 end $$;
 reset role;
 do $$ begin
  if (select guest_note from public.plans where id='f3100000-0000-4000-8000-000000000002')<>'' then raise exception 'Ownerless event kept a note'; end if;
  if exists(select 1 from private.notification_outbox where plan_id='f3100000-0000-4000-8000-000000000002' and kind='guest_note') then raise exception 'Ownerless event recorded a note notice'; end if;
+ if (select title||':'||version from public.plans where id='f3100000-0000-4000-8000-000000000003') is distinct from 'Ownerless future:1' then raise exception 'Ownerless event changed'; end if;
 end $$;
 rollback;
