@@ -97,7 +97,7 @@ export function RegistrationDetails({
               onChangeText={(v) => set("name", v)}
               autoComplete="name"
               maxLength={80}
-              placeholder="What should we call you?"
+              placeholder="Your name"
             />
           )}
           {Platform.OS === "web" ? (
@@ -154,7 +154,7 @@ export function RegistrationDetails({
             editable={!disabled}
             value={value.city}
             onChangeText={(v) => set("city", v)}
-            placeholder="Your city or town"
+            placeholder="Your city"
             maxLength={100}
           />
           <Copy style={styles.label}>What do you enjoy?</Copy>

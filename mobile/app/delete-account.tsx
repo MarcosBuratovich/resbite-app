@@ -165,6 +165,7 @@ export default function DeleteAccount() {
               {passwordMode ? (
                 <FieldCard
                   label="Current password"
+                  placeholder="Current password"
                   icon={KeyRound}
                   value={credential}
                   onChangeText={setCredential}
@@ -192,6 +193,7 @@ export default function DeleteAccount() {
                   />
                   <FieldCard
                     label="Email verification code"
+                    placeholder="Verification code"
                     icon={Mail}
                     value={credential}
                     onChangeText={setCredential}

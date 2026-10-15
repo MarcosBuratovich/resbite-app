@@ -415,7 +415,7 @@ export const s = StyleSheet.create({
     justifyContent: "center",
     gap: 10,
   },
-  buttonLabelLarge: { fontFamily: fonts.bold, fontSize: 18, lineHeight: 24 },
+  buttonLabelLarge: { textAlign: "center", fontFamily: fonts.bold, fontSize: 18, lineHeight: 24 },
   field: {
     minHeight: 50,
     borderWidth: 1,

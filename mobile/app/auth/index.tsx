@@ -123,6 +123,7 @@ export default function Auth() {
         <>
           <FieldCard
             label="Email address"
+            placeholder="Email address"
             icon={Mail}
             autoCapitalize="none"
             autoComplete="email"
@@ -138,6 +139,7 @@ export default function Auth() {
           {(register || mode === "login") && (
             <FieldCard
               label="Password"
+              placeholder="Password"
               icon={KeyRound}
               secureTextEntry={!showPassword}
               autoCorrect={false}

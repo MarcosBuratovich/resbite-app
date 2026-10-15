@@ -196,6 +196,7 @@ export default function Callback() {
             <>
               <FieldCard
                 label="New password"
+                placeholder="New password"
                 icon={KeyRound}
                 secureTextEntry
                 autoCapitalize="none"
