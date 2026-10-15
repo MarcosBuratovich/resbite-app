@@ -30,3 +30,11 @@ test("Note to guests: 280 characters, posted time, and the posting window", () =
   assert.equal(canPostGuestNote({ status: "active", starts_at: start, ends_at: new Date(2099, 9, 16, 13, 0).toISOString() }, t(12, 30)), true);
   assert.equal(canPostGuestNote({ status: "cancelled", starts_at: start }, t(9)), false);
 });
+
+test("Note to guests: the 280 limit counts characters, not UTF-16 units", () => {
+  // 140 party poppers plus 140 letters: 280 characters, 420 UTF-16 units.
+  const emojiNote = "🎉".repeat(140) + "a".repeat(140);
+  assert.equal(guestNoteError(emojiNote), null);
+  assert.equal(guestNoteError(`${emojiNote}a`), "Keep the note to 280 characters.");
+  assert.equal(guestNoteError(`  ${"a".repeat(280)}  `), null);
+});

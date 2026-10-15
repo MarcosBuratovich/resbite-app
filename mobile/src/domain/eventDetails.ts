@@ -24,9 +24,12 @@ export const MEETING_DETAILS_HINT = "Only people who answer Going or Maybe see t
 
 export const GUEST_NOTE_MAX = 280;
 
-/** The note sheet's check: up to 280 characters after trimming. An empty note removes it. */
+/**
+ * The note sheet's check: up to 280 characters after trimming, counted as the database does (code points, so an
+ * emoji counts once). An empty note removes it.
+ */
 export function guestNoteError(text: string): string | null {
-  return text.trim().length > GUEST_NOTE_MAX ? `Keep the note to ${GUEST_NOTE_MAX} characters.` : null;
+  return [...text.trim()].length > GUEST_NOTE_MAX ? `Keep the note to ${GUEST_NOTE_MAX} characters.` : null;
 }
 
 /** The posted time on the note card: "9:41" today, "Fri 16 9:41" on another day, or "" when unknown. */
