@@ -14,7 +14,13 @@
       }
     },
     "android": {
-      "package": "com.resbite.preview"
+      "package": "com.resbite.preview",
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.READ_CONTACTS",
+        "android.permission.WRITE_CONTACTS"
+      ]
     },
     "plugins": [
       "expo-router",
@@ -49,7 +55,7 @@
           "locationWhenInUsePermission": "Use your location when choosing where to meet.",
           "locationAlwaysAndWhenInUsePermission": false,
           "locationAlwaysPermission": false,
-          "motionUsagePermission": false
+          "motionUsagePermission": "Resbite doesn’t use motion or fitness data. The location library it relies on requires this description, but the app never asks for this access."
         }
       ],
       [
@@ -70,6 +76,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "67671c20-374c-470e-995d-a4ec8ad5b852"
+      }
+    },
+    "owner": "marcosburato"
   }
 }
