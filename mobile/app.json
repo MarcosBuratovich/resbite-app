@@ -6,6 +6,7 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "icon": "./assets/brand/resbite-icon.png",
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.resbite.app",
