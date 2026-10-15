@@ -175,34 +175,34 @@ export default function Auth() {
           <Copy style={[styles.center, styles.small]}>
             This email is remembered on this device for up to 7 days. Your password is never saved with it.
           </Copy>
-          {mode === "confirm" && (
-            <View style={styles.chips}>
-              <Chip
-                text="I’ve confirmed"
-                icon={MailCheck}
-                tone="aqua"
-                label="I’ve confirmed my email"
-                disabled={blocked}
-                onPress={() => {
-                  forward();
-                  void checkConfirmed();
-                }}
-              />
-              {resendChip}
-              <Chip
-                text="Use a different email"
-                icon={Send}
-                disabled={blocked}
-                onPress={() => void forgetDestination()}
-              />
-            </View>
-          )}
         </StatusCard>
       )}
       <ErrorNote message={error} />
       {Boolean(notice) && (
         <View style={[s.card, styles.notice]}>
           <Copy accessibilityLiveRegion="polite">{notice}</Copy>
+        </View>
+      )}
+      {mode === "confirm" && Boolean(confirmedEmail) && (
+        <View style={styles.chips}>
+          <Chip
+            text="I’ve confirmed"
+            icon={MailCheck}
+            tone="aqua"
+            label="I’ve confirmed my email"
+            disabled={blocked}
+            onPress={() => {
+              forward();
+              void checkConfirmed();
+            }}
+          />
+          {resendChip}
+          <Chip
+            text="Use a different email"
+            icon={Send}
+            disabled={blocked}
+            onPress={() => void forgetDestination()}
+          />
         </View>
       )}
       {(mode === "login" || (register && step === 2)) && (

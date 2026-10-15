@@ -140,12 +140,14 @@ export default function DeleteAccount() {
         <Title>Delete account</Title>
         <StatusCard icon={Trash2} tint={colors.pinkSoft} ink={colors.error}>
           <Copy style={styles.line}>Deletion immediately closes access.</Copy>
-          <Chip
-            text="What happens"
-            icon={Info}
-            hint="Opens the full deletion warnings"
-            onPress={() => setWarnings(true)}
-          />
+          <View style={styles.chips}>
+            <Chip
+              text="What happens"
+              icon={Info}
+              hint="Opens the full deletion warnings"
+              onPress={() => setWarnings(true)}
+            />
+          </View>
         </StatusCard>
         {!available &&
         !status &&
@@ -362,6 +364,7 @@ function NumberedCard({
 
 const styles = StyleSheet.create({
   line: { textAlign: "center" },
+  chips: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 8 },
   card: { padding: 20, gap: 14 },
   cardTop: { flexDirection: "row", alignItems: "center", gap: 12 },
   number: {

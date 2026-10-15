@@ -172,7 +172,9 @@ function Gallery() {
           accessory={<IconButton icon={Eye} label="Show password" tone="plain" onPress={() => setPressed("eye")} />}
         />
         <StatusCard icon={MailCheck} title="Check your inbox">
-          <Chip text="Resend" label="Resend confirmation email" onPress={() => setPressed("resend")} />
+          <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 8 }}>
+            <Chip text="Resend" label="Resend confirmation email" onPress={() => setPressed("resend")} />
+          </View>
         </StatusCard>
         <Button title="Show step screen" secondary onPress={() => setStep(true)} />
         {pressed ? <Copy accessibilityLiveRegion="polite">{`Pressed ${pressed}`}</Copy> : null}

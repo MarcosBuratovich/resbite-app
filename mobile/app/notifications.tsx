@@ -93,12 +93,14 @@ export default function Notifications() {
           <IconButton icon={Info} label="About notifications" onPress={() => setAbout(true)} />
         </View>
         <StatusCard icon={BellOff} title="Not active yet">
-          <Chip
-            text={permissionTitle}
-            icon={Smartphone}
-            tone="status"
-            label={`Phone permission: ${permissionTitle}`}
-          />
+          <View style={styles.chips}>
+            <Chip
+              text={permissionTitle}
+              icon={Smartphone}
+              tone="status"
+              label={`Phone permission: ${permissionTitle}`}
+            />
+          </View>
           {copy && <Copy style={styles.line}>{copy.detail}</Copy>}
         </StatusCard>
         <ErrorNote message={error} />
@@ -108,7 +110,7 @@ export default function Notifications() {
               text="Check again"
               icon={RefreshCw}
               tone="aqua"
-              label="Check permission again"
+              hint="Checks the phone’s notification permission again."
               disabled={busy}
               onPress={() => refresh.current()}
             />

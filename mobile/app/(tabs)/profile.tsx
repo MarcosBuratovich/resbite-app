@@ -119,7 +119,7 @@ export default function Profile() {
               <ErrorNote message={p.error} />
               {saveName}
             </View>
-          ) : (
+          ) : p.loading && !p.profile ? null : (
             <View style={styles.nameRow}>
               <Text style={styles.name} numberOfLines={2}>
                 {shownName}
@@ -132,6 +132,9 @@ export default function Profile() {
                 onPress={() => setEditing(true)}
               />
             </View>
+          )}
+          {!p.preview && !!p.session?.user.email && (
+            <Text style={styles.email}>{p.session.user.email}</Text>
           )}
         </View>
         {!firstRun && !editing && <ErrorNote message={p.error} />}
@@ -245,5 +248,6 @@ const styles = StyleSheet.create({
   },
   remove: { position: "absolute", right: -64, top: 30 },
   nameRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, maxWidth: "100%" },
+  email: { color: c.muted, fontSize: 14, textAlign: "center" },
   name: { flexShrink: 1, fontFamily: fonts.display, fontSize: 26, lineHeight: 32, color: c.ink, textAlign: "center" },
 });

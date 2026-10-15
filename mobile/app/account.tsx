@@ -122,14 +122,14 @@ export default function Account() {
                 text="Check again"
                 icon={RefreshCw}
                 tone="aqua"
-                label="Check account access"
+                hint="Checks your account access again."
                 onPress={() => void refresh()}
               />
               {status === "unconfirmed" && (
                 <Chip
                   text="Email help"
                   icon={Mail}
-                  label="Email confirmation help"
+                  hint="Opens email confirmation help."
                   onPress={() => router.push("/auth?mode=confirm")}
                 />
               )}

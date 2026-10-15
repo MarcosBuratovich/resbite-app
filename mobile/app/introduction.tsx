@@ -56,9 +56,7 @@ export default function Introduction() {
           <View style={styles.center}>
             <TextAction
               title="I have an account"
-              onPress={() =>
-                router.replace({ pathname: "/auth", params: { mode: "login" } })
-              }
+              onPress={() => router.replace("/auth")}
             />
           </View>
         </View>
