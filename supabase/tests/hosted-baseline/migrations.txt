@@ -9,3 +9,4 @@
 20261007200000_plan_covers.sql                         20261007175855
 20261007210000_claim_notifies_owner.sql                20261007193235
 20261014120000_ux2_rules.sql                           20261014163459
+20261015120000_ux3_event_details.sql                   20261016125958

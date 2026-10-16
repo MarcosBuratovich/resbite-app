@@ -451,7 +451,7 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
 
 ## UX3 build — 15 October 2026
 
-**Built on the `ux3` branch. Not merged, not on the live database, not deployed and not on TestFlight.** UX3 is the fourth part of the UX work: invite links on `link.resbite.com`, an optional end time, private Meeting details, the Note to guests, Add to calendar and two reminders ([spec](superpowers/specs/2026-10-15-ux3-design.md), [plan](superpowers/plans/2026-10-15-ux3.md); decisions UX3-D1 to UX3-D8, P1 to P12 and the changes made during the build in `knowledge-base/08-decisions.md`).
+**Live on 16 October 2026: the migration is applied, build 8 is on TestFlight and the link site is up. The `ux3` branch is not merged yet; it waits for the owner’s iPhone check.** UX3 is the fourth part of the UX work: invite links on `link.resbite.com`, an optional end time, private Meeting details, the Note to guests, Add to calendar and two reminders ([spec](superpowers/specs/2026-10-15-ux3-design.md), [plan](superpowers/plans/2026-10-15-ux3.md); decisions UX3-D1 to UX3-D8, P1 to P12 and the changes made during the build in `knowledge-base/08-decisions.md`).
 
 **What changed.**
 - Invite links use `link.resbite.com`, with a small static site in `links/` (the Apple link file, a private preview and a fallback page).
@@ -463,10 +463,12 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
 - One new dependency, `expo-calendar`, and the Associated Domains entry `applinks:link.resbite.com`.
 
 **Migrations.**
-- `supabase/migrations/20261015120000_ux3_event_details.sql` is hosted-compatible. It awaits the owner’s explicit approval and goes live together with the new TestFlight build. A rollback script restores the exact pre-UX3 definitions and the note text; rolling back shows every Meeting details text to every invitee on older builds, so weigh that first.
+- `supabase/migrations/20261015120000_ux3_event_details.sql` is live (hosted version `20261016125958`, applied 16 October 2026 after the owner’s approval, sha256 `7d9cffbe…54d00a`). The live functions, checks and policy match the reviewed file exactly, the one existing note moved into Meeting details, and the advisors show nothing new. Snapshots: `qa/ux3-2026-10-16/hosted-before.json` and `hosted-after.json`. A rollback script restores the exact pre-UX3 definitions and the note text; rolling back shows every Meeting details text to every invitee on older builds, so weigh that first.
 - Rollout: an empty note from an older build now keeps the Meeting details, so applying the migration before the new build only costs older builds the display of Meeting details. Still keep apply → build → submit back to back.
 - `supabase/migrations/20261015130000_ux3_note_delivery.sql` is local-only and goes live only with the notification sender, after that has its own approval.
 - Notification sending stays switched off (`DELIVERY_RELEASE_APPROVED = false`).
+
+**TestFlight build 8 (16 October 2026).** Built by EAS from commit `277fbcf` with `EXPO_PUBLIC_INVITATION_ORIGIN=https://link.resbite.com`, so new invitations use the HTTPS link. Builds 6 and 7 failed because the App Store provisioning profile predated the Associated Domains capability; the owner’s signed-in EAS run enabled it on `com.resbite.app` and made a new profile.
 
 **Link site (live 16 October 2026).** Generated from `links/` for Team ID `QY833VTUWL` and `com.resbite.app`, and deployed as the Vercel project `resbite-link` in the Good Unicorn Ltd team, next to the marketing site. Cloudflare has a DNS-only CNAME `link`. Checked live: `/.well-known/apple-app-site-association` returns 200 as `application/json` with no redirect, lists only `/invite`, and Apple’s CDN already serves it; `/invite` returns 200 with `no-store`, `no-referrer`, the strict CSP and `nosniff`; `/` redirects to `www.resbite.com`; nothing else is served. Invites keep using `resbite://` links until the new TestFlight build sets `EXPO_PUBLIC_INVITATION_ORIGIN=https://link.resbite.com`.
 

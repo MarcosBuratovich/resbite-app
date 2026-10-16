@@ -1,0 +1,28 @@
+{
+  "taken": "2026-10-16, read-only, project ewcsgvhuojxdpaspwsrx, before applying 20261015120000_ux3_event_details",
+  "server_version": "17.6",
+  "migrations": [
+    ["20260917191323", "resbite_private_tester_foundation"],
+    ["20260923151512", "account_access_status"],
+    ["20260923151515", "atomic_registration_details"],
+    ["20260923154040", "activity_catalogue_details"],
+    ["20260924150824", "avatar_revision_compare_and_swap"],
+    ["20261007154825", "custom_events"],
+    ["20261007175855", "plan_covers"],
+    ["20261007193235", "claim_notifies_owner"],
+    ["20261014163459", "ux2_rules"]
+  ],
+  "outbox_checks": {
+    "notification_outbox_detail_check": "CHECK (((detail IS NULL) OR ((kind = 'plan_changed'::text) AND (detail = ANY (ARRAY['time'::text, 'place'::text, 'time_place'::text]))) OR ((kind = 'rsvp'::text) AND (detail = ANY (ARRAY['accepted'::text, 'maybe'::text, 'declined'::text, 'withdrawn'::text])))))",
+    "notification_outbox_kind_check": "CHECK ((kind = ANY (ARRAY['invitation'::text, 'rsvp'::text, 'plan_changed'::text, 'plan_cancelled'::text])))"
+  },
+  "function_md5": {
+    "private.create_plan_v2(...)": "a9fd0e4d3788f8c42573aa9006d74352",
+    "private.change_plan_v2(...)": "cb59aece2b59dda7215555aad1c6c40f",
+    "private.redact_deleting_owner_plan()": "db51d2aa7417e9f9447d204a2e312c26"
+  },
+  "local_hosted_baseline_md5_match": true,
+  "plans": {"total": 16, "with_note": 1},
+  "outbox_kinds": {"invitation": 4, "rsvp": 3},
+  "ux3_objects_absent": {"plan_meeting_details": true, "plans.ends_at": true, "create_plan_v3": true}
+}

@@ -1,0 +1,14 @@
+{
+  "taken": "2026-10-16, read-only, project ewcsgvhuojxdpaspwsrx, after applying 20261015120000_ux3_event_details",
+  "applied": {"tool": "Supabase MCP apply_migration", "name": "ux3_event_details", "hosted_version": "20261016125958",
+              "file": "supabase/migrations/20261015120000_ux3_event_details.sql",
+              "sha256": "7d9cffbeb5137f2690b805abd1fe5e245ff1ce3968d18352c62d5bb3e454d00a", "owner_approval": "approve ux3_event_details"},
+  "fingerprints": "33 function, check-constraint and policy md5s identical to a local hosted-baseline cluster with the same file applied",
+  "counts": {"plan_meeting_details": 1, "plans_with_note": 0, "plans_flagged_has_meeting_details": 1, "plans_total": 19,
+             "note": "before: 16 plans, 1 with a note; 3 plans were created by testers between the snapshot and this check (2 before the apply, 1 after)"},
+  "rls": {"plan_meeting_details": true, "table_grants": ["authenticated SELECT"], "policy": "meeting_details_read"},
+  "execute": {"anon": "none of create_plan_v3, change_plan_v3, set_guest_note, write/forget_meeting_details",
+              "authenticated": "create_plan_v3, change_plan_v3, set_guest_note only"},
+  "outbox_kinds": {"invitation": 4, "rsvp": 3},
+  "advisors": "security and performance identical to before the apply (INFO only: 4 RLS-without-policy private tables, 4 unused indexes, Auth connection strategy)"
+}
