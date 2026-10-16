@@ -468,7 +468,7 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
 - `supabase/migrations/20261015130000_ux3_note_delivery.sql` is local-only and goes live only with the notification sender, after that has its own approval.
 - Notification sending stays switched off (`DELIVERY_RELEASE_APPROVED = false`).
 
-**Link site.** It awaits the Apple Team ID, the Vercel project for `link.resbite.com` and the Cloudflare DNS record for `link`. Until then the link part can’t be accepted.
+**Link site (live 16 October 2026).** Generated from `links/` for Team ID `QY833VTUWL` and `com.resbite.app`, and deployed as the Vercel project `resbite-link` in the Good Unicorn Ltd team, next to the marketing site. Cloudflare has a DNS-only CNAME `link`. Checked live: `/.well-known/apple-app-site-association` returns 200 as `application/json` with no redirect, lists only `/invite`, and Apple’s CDN already serves it; `/invite` returns 200 with `no-store`, `no-referrer`, the strict CSP and `nosniff`; `/` redirects to `www.resbite.com`; nothing else is served. Invites keep using `resbite://` links until the new TestFlight build sets `EXPO_PUBLIC_INVITATION_ORIGIN=https://link.resbite.com`.
 
 **Known limits, for the owner.**
 - The "Get reminders?" sheet appears on the event page (the organizer’s own event, or after answering Going or Maybe), not right after creating an event as the spec says. An organizer isn’t asked until they open the event’s page.
