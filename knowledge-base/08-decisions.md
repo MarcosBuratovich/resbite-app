@@ -232,7 +232,7 @@ Owner decisions from the UX3 design session ([spec](../docs/superpowers/specs/20
 | # | Decision |
 | --- | --- |
 | UX3-D1 | One piece of work: links, event details, calendar and reminders share one spec, one plan, one migration and one TestFlight build. The owner chose this over the recommended split into three. |
-| UX3-D2 | Links live on their own subdomain, `go.resbite.com`. It is a tiny static site kept in this repo and deployed as its own Vercel project. The owner adds one DNS record in Cloudflare. The marketing site (`www.resbite.com`) is untouched. |
+| UX3-D2 | Links live on their own subdomain, `link.resbite.com`. It is a tiny static site kept in this repo and deployed as its own Vercel project. The owner adds one DNS record in Cloudflare. The marketing site (`www.resbite.com`) is untouched. Changed from `go.resbite.com` to `link.resbite.com` by the owner on 15 October 2026, before anything was deployed: a plain name that can carry other links later. |
 | UX3-D3 | Approach "phone first": reminders are scheduled on each person’s phone; "Add to calendar" uses iPhone’s own form; notes live in the database behind access rules; anything meant for a server notification is only recorded. |
 | UX3-D4 | Two reminders, 1 day and 1 hour before the start. The owner chose "Both" over a single reminder. |
 | UX3-D5 | Two notes. Today’s "A note for everyone" becomes private Meeting details (a door code, a meeting spot). A new Note to guests is a short announcement pinned for everyone invited. |

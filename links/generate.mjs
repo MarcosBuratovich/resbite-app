@@ -1,4 +1,4 @@
-// Generates the invitation-link site for review and deployment (UX3, go.resbite.com). Never uploads anything
+// Generates the invitation-link site for review and deployment (UX3, link.resbite.com). Never uploads anything
 // or changes app config: the output folder is deployed separately, as its own Vercel project.
 import { mkdir, readFile, writeFile, copyFile } from "node:fs/promises";
 import { resolve, dirname } from "node:path";

@@ -9,7 +9,7 @@ import { generate, INVITE_CSP } from "./generate.mjs";
 
 async function site() {
   const dir = await mkdtemp(join(tmpdir(), "resbite-links-"));
-  await generate("https://go.resbite.com", "ABCDE12345", "com.resbite.app", join(dir, "out"));
+  await generate("https://link.resbite.com", "ABCDE12345", "com.resbite.app", join(dir, "out"));
   return { out: join(dir, "out"), cleanup: () => rm(dir, { recursive: true, force: true }) };
 }
 
@@ -24,7 +24,7 @@ test("Apple's link file names this app and only the invitation path", async () =
       },
     ]);
     const fragment = JSON.parse(await readFile(join(out, "expo-ios-config.fragment.json"), "utf8"));
-    assert.deepEqual(fragment, { ios: { associatedDomains: ["applinks:go.resbite.com"] } });
+    assert.deepEqual(fragment, { ios: { associatedDomains: ["applinks:link.resbite.com"] } });
   } finally {
     await cleanup();
   }
@@ -35,14 +35,14 @@ test("the preview says only “You’re invited to a resbite”, and the page is
   try {
     const page = await readFile(join(out, "invite.html"), "utf8");
     assert.match(page, /<meta property="og:title" content="You’re invited to a resbite" \/>/);
-    assert.match(page, /<meta property="og:image" content="https:\/\/go\.resbite\.com\/resbite-mark\.png" \/>/);
+    assert.match(page, /<meta property="og:image" content="https:\/\/link\.resbite\.com\/resbite-mark\.png" \/>/);
     assert.ok(!page.includes("{{"), "Every placeholder is filled");
     assert.ok(!/og:description/.test(page), "No description that could carry details");
     assert.match(page, /<html lang="en">/);
     assert.match(page, /<main>/);
     assert.equal(page.match(/<h1>/g)?.length, 1);
     assert.ok(!/maximum-scale|user-scalable/.test(page), "Zoom is never blocked");
-    assert.ok(!/https?:\/\/(?!go\.resbite\.com)/.test(page), "No third-party resources");
+    assert.ok(!/https?:\/\/(?!link\.resbite\.com)/.test(page), "No third-party resources");
     const script = await readFile(join(out, "invite.js"), "utf8");
     assert.match(script, /\^#token=\[a-f0-9\]\{64\}\$/);
     assert.match(script, /resbite:\/\/invite\?token=/);
@@ -70,6 +70,6 @@ test("the host serves the link file as JSON and the page with private headers", 
 });
 
 test("a bad team ID or origin is refused before anything is written", async () => {
-  await assert.rejects(generate("https://go.resbite.com", "short", "com.resbite.app", "/tmp/never"), /Usage/);
-  await assert.rejects(generate("http://go.resbite.com", "ABCDE12345", "com.resbite.app", "/tmp/never"), /HTTPS/);
+  await assert.rejects(generate("https://link.resbite.com", "short", "com.resbite.app", "/tmp/never"), /Usage/);
+  await assert.rejects(generate("http://link.resbite.com", "ABCDE12345", "com.resbite.app", "/tmp/never"), /HTTPS/);
 });

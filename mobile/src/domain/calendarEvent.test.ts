@@ -29,7 +29,7 @@ test("the calendar form gets the name, times and place, an hour without an end, 
   assert.deepEqual(calendarEventDetails({ ...plan, ends_at: "2099-10-16T11:30:00.000Z" }).endDate, new Date("2099-10-16T11:30:00.000Z"));
   assert.equal(calendarEventDetails(plan, true).notes, CALENDAR_UPDATED_NOTE);
   // Even if a plan object carried Meeting details or a link, they never reach the form.
-  const leaky = { ...plan, note: "Gate 4512", url: "https://go.resbite.com/invite#token=x" } as typeof plan;
+  const leaky = { ...plan, note: "Gate 4512", url: "https://link.resbite.com/invite#token=x" } as typeof plan;
   assert.ok(!JSON.stringify(calendarEventDetails(leaky)).includes("4512"));
   assert.ok(!JSON.stringify(calendarEventDetails(leaky)).includes("token"));
 });
