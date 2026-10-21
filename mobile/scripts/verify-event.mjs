@@ -43,6 +43,7 @@ const hosted = {
   starts_at: "2099-03-01T15:00:00Z",
   time_zone: "UTC",
   place_label: "Fixture café",
+  area: "",
   // The fixture keeps Meeting details on the plan; the stub sends them only to people who may read them.
   note: "Window table",
   status: "active",
@@ -264,6 +265,7 @@ try {
         time_zone: body.p_zone,
         place_label: body.p_place.trim(),
         note: body.p_note,
+        area: body.p_area ?? plan.area,
         version: plan.version + 1,
       });
       return reply(plan.version);

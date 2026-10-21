@@ -153,6 +153,7 @@ try {
         ends_at: b.p_ends,
         time_zone: b.p_zone,
         place_label: b.p_place,
+        area: b.p_area ?? "",
         // UX3: Meeting details are read from their own table, embedded for the organizer.
         note: "",
         plan_meeting_details: b.p_note ? { note: b.p_note } : null,

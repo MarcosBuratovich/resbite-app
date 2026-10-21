@@ -201,6 +201,7 @@ test("Do this again never replaces an unconfirmed save and asks before replacing
       categories: plan.categories,
       starts_at: "2099-01-01T10:00:00Z",
       ends_at: null,
+      area: "",
       time_zone: "UTC",
       place_label: "Fixture café",
       note: "",

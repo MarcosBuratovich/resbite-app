@@ -2,6 +2,8 @@ import { supabase } from "./supabase";
 import { planWithDetails, withDeadline } from "./plans";
 import { planFromRow, type Plan } from "../domain/plans";
 import type { RsvpAttempt, RsvpSnapshot } from "../domain/rsvp";
+import { isLinkCode } from "../domain/appLinks";
+import { claimLinkErrorMessage } from "../domain/eventLinks";
 const eventUnavailable =
   "This invitation is unavailable, or its details could not be refreshed. Check your connection and try again.";
 export async function readRsvp(
@@ -42,6 +44,23 @@ export async function claimInvitation(token: string) {
       "This invitation could not be opened. It may be revoked, already claimed by someone else, or no longer available. Check your connection and try again.",
     );
   return data as string;
+}
+/**
+ * GI1: joins the event behind its link (as Not answered yet) and returns its id. The organizer opening their
+ * own link gets their event's id back, with nothing joined.
+ */
+export async function claimEventLink(code: string): Promise<string> {
+  if (!isLinkCode(code)) throw new Error("This invitation link is incomplete.");
+  let reply;
+  try {
+    reply = await withDeadline((signal) =>
+      supabase.rpc("claim_plan_link", { p_code: code }).abortSignal(signal),
+    );
+  } catch (error) {
+    throw new Error(claimLinkErrorMessage(error));
+  }
+  if (reply.error) throw new Error(claimLinkErrorMessage(reply.error));
+  return reply.data as string;
 }
 export async function writeRsvp(attempt: RsvpAttempt) {
   const { error } = await withDeadline((signal) =>

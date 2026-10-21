@@ -466,6 +466,7 @@ try {
       starts_at: "2099-03-01T15:00:00Z",
       time_zone: "UTC",
       place_label: "Original café",
+      area: "",
       note: "Original note",
       status: "active",
       version: 1,
@@ -567,6 +568,7 @@ try {
               time_zone: write.p_zone,
               place_label: write.p_place,
               note: write.p_note,
+              area: write.p_area ?? savedPlan.area,
               version: savedPlan.version + 1,
             };
             return reply({ message: "Lost response" }, 503);
@@ -595,6 +597,7 @@ try {
           time_zone: write.p_zone,
           place_label: write.p_place,
           note: write.p_note,
+          area: write.p_area ?? savedPlan.area,
           version: savedPlan.version + 1,
         };
         return reply(savedPlan.version);
@@ -737,6 +740,7 @@ try {
       ends_at: null,
       time_zone: "UTC",
       place_label: "Original café",
+      area: "",
       note: "Gate code 4512",
       status: "active",
       version: 1,
@@ -768,6 +772,7 @@ try {
           ends_at: write.p_ends,
           place_label: write.p_place,
           note: write.p_note,
+          area: write.p_area ?? savedPlan.area,
           version: savedPlan.version + 1,
         };
         return reply(savedPlan.version);

@@ -32,6 +32,7 @@ const details = {
   categories: plan.categories,
   starts_at: plan.starts_at,
   ends_at: null,
+  area: "",
   time_zone: "UTC",
   place_label: plan.place_label,
   note: plan.note,
@@ -50,6 +51,17 @@ test("event text and category order are part of the saved details", () => {
   assert.equal(samePlanDetails(plan, { ...details, title: "Park picnic" }), false);
   assert.equal(samePlanDetails(plan, { ...details, description: "" }), false);
   assert.equal(samePlanDetails(plan, { ...details, categories: ["community", "natural"] }), false);
+});
+
+test("the area (GI1) is part of the saved details, trimmed; a save kept before GI1 matches any area", () => {
+  const near = { ...plan, area: "Near Old Street" };
+  assert.equal(samePlanDetails(near, { ...details, area: " Near Old Street " }), true);
+  assert.equal(samePlanDetails(near, { ...details, area: "" }), false);
+  assert.equal(samePlanDetails(plan, { ...details, area: "Near Old Street" }), false);
+  // A plan read before GI1 has no area: the same as none.
+  assert.equal(samePlanDetails(plan, { ...details, area: "" }), true);
+  const { area: _none, ...older } = details;
+  assert.equal(samePlanDetails(near, older as typeof details), true);
 });
 
 test("the end time is part of the saved details: the same instant, or none on both", () => {

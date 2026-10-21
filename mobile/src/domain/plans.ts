@@ -31,6 +31,8 @@ export type Plan = {
   guest_note_at?: string | null;
   /** UX3: every invitee may know Meeting details exist; only the organizer and Going or Maybe guests read them. */
   has_meeting_details?: boolean;
+  /** GI1 area shown to anyone with the event's link before they reply: "" when none, absent before GI1. */
+  area?: string;
 };
 
 /** A plans row read with its Meeting details embedded as `plan_meeting_details(note)`. */
@@ -50,7 +52,12 @@ export function planFromRow(row: PlanRow): Plan {
 }
 
 export type PlanDetails = EventFields &
-  Pick<Plan, "starts_at" | "place_label" | "note"> & { time_zone: string; ends_at: string | null };
+  Pick<Plan, "starts_at" | "place_label" | "note"> & {
+    time_zone: string;
+    ends_at: string | null;
+    /** GI1 area (trimmed). A save kept on the device before GI1 has none: the stored area stays as it is. */
+    area: string;
+  };
 
 export function canEditPlan(
   plan: Plan,
@@ -94,7 +101,9 @@ export function samePlanDetails(plan: Plan, details: PlanDetails): boolean {
     sameEnd(plan.ends_at, details.ends_at) &&
     plan.time_zone === details.time_zone &&
     plan.place_label.trim() === details.place_label.trim() &&
-    plan.note === details.note
+    plan.note === details.note &&
+    // A save kept before GI1 has no area and leaves the stored one unchanged, so any area matches it.
+    (details.area === undefined || (plan.area ?? "").trim() === details.area.trim())
   );
 }
 

@@ -629,6 +629,8 @@ export function usePlanEditor({
           // Trimmed, so spaces or blank lines alone don't count as Meeting details (the locked line would
           // promise guests something empty).
           note: note.trim(),
+          // GI1: the editor has no Area field yet; an edit keeps the stored area.
+          area: original?.area ?? "",
         },
       };
     }
