@@ -58,7 +58,8 @@ begin
  return v_code;
 end $$;
 -- Removes a guest from the event. Their per-person invitations (links shared before GI1) stop working too;
--- the event link stays open, so this is a removal, not a ban. Removing the organizer or a stranger does nothing.
+-- the event link stays open, so this is a removal, not a ban. Removing the organizer is refused (22023);
+-- removing someone who isn't on the event does nothing.
 create function private.remove_guest(p_plan uuid,p_user uuid) returns void language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid;
 begin
@@ -234,17 +235,22 @@ revoke all on function private.invitation_page(text), public.invitation_page(tex
 grant execute on function private.invitation_page(text), public.invitation_page(text) to anon, authenticated;
 
 -- Joining by the event link: the same refusals as claim_invite, one notice to the organizer per guest. The
--- organizer opening their own link just gets their event back (they will tap it in the chat they posted it in).
+-- organizer and anyone already on the event get their event back from any of its links, old or turned off,
+-- before or after the start (they will tap it again in the chat it was posted in). Everyone else is refused
+-- when the link is turned off, or the event is cancelled or has started.
 create function private.claim_plan_link(p_code text) returns uuid language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester(); v_link private.plan_links; v_plan public.plans;
 begin
  if p_code is null or p_code !~ '^[A-Za-z0-9_-]{22}$' then raise exception 'Invitation unavailable' using errcode='42501'; end if;
- select * into v_link from private.plan_links where code=p_code and revoked_at is null;
+ select * into v_link from private.plan_links where code=p_code;
  if not found then raise exception 'Invitation unavailable' using errcode='42501'; end if;
  select * into v_plan from public.plans where id=v_link.plan_id for update;
- if not found or v_plan.status<>'active' or v_plan.starts_at<=now() then raise exception 'Invitation unavailable' using errcode='42501'; end if;
- if v_plan.owner_id=v_uid then return v_plan.id; end if;
- if exists(select 1 from public.attendees where plan_id=v_plan.id and user_id=v_uid) then return v_plan.id; end if;
+ if not found then raise exception 'Invitation unavailable' using errcode='42501'; end if;
+ if v_plan.owner_id=v_uid or exists(select 1 from public.attendees where plan_id=v_plan.id and user_id=v_uid) then return v_plan.id; end if;
+ -- Read again under the plan lock: rotate_plan_link holds the same lock while it turns the link off.
+ perform 1 from private.plan_links where id=v_link.id and revoked_at is null;
+ if not found then raise exception 'Invitation unavailable' using errcode='42501'; end if;
+ if v_plan.status<>'active' or v_plan.starts_at<=now() then raise exception 'Invitation unavailable' using errcode='42501'; end if;
  insert into public.attendees(plan_id,user_id) values(v_plan.id,v_uid);
  insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id)
   values(v_plan.id,v_plan.owner_id,'invitation','link:'||v_link.id||':'||v_uid,v_uid) on conflict do nothing;

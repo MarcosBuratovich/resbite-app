@@ -1,5 +1,5 @@
 -- GI1 event links (docs/superpowers/specs/2026-10-21-gi1-event-links-design.md). Synthetic identities only.
--- One rolled-back block per slice; each block uses its own UUID prefix family (g1, g2, g3).
+-- One rolled-back block per slice; each block uses its own UUID prefix family (a1, a2, a3).
 
 -- Block 1: the link (plan_link, rotate_plan_link) and remove_guest.
 begin;
@@ -169,11 +169,18 @@ rollback;
 begin;
 insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data) values
  ('a3000000-0000-4000-8000-000000000001','gi1-3-owner@resbite-test.invalid',now(),'{}'),
- ('a3000000-0000-4000-8000-000000000002','gi1-3-guest@resbite-test.invalid',now(),'{}');
-insert into private.tester_roster(email) values ('gi1-3-owner@resbite-test.invalid'),('gi1-3-guest@resbite-test.invalid');
+ ('a3000000-0000-4000-8000-000000000002','gi1-3-guest@resbite-test.invalid',now(),'{}'),
+ ('a3000000-0000-4000-8000-000000000003','gi1-3-other@resbite-test.invalid',now(),'{}'),
+ ('a3000000-0000-4000-8000-000000000004','gi1-3-fresh@resbite-test.invalid',now(),'{}');
+insert into private.tester_roster(email) values ('gi1-3-owner@resbite-test.invalid'),('gi1-3-guest@resbite-test.invalid'),
+ ('gi1-3-other@resbite-test.invalid'),('gi1-3-fresh@resbite-test.invalid');
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"a3000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 select public.save_profile('Guest three');
+select set_config('request.jwt.claims','{"sub":"a3000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
+select public.save_profile('Other three');
+select set_config('request.jwt.claims','{"sub":"a3000000-0000-4000-8000-000000000004","role":"authenticated"}',true);
+select public.save_profile('Fresh three');
 select set_config('request.jwt.claims','{"sub":"a3000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 select public.save_profile('Owner three');
 create temporary table gi1_codes(name text primary key, code text);
@@ -218,20 +225,62 @@ do $$ declare id uuid; begin
  begin perform public.claim_plan_link('nope'); raise exception 'Malformed code joined';
  exception when insufficient_privilege then null; end;
 end $$;
+-- The organizer turns the link off. They still get their event back from the old code.
+select set_config('request.jwt.claims','{"sub":"a3000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+do $$ begin
+ insert into gi1_codes values('one-new',public.rotate_plan_link('a3100000-0000-4000-8000-000000000001'));
+ if public.claim_plan_link((select code from gi1_codes where name='one'))<>'a3100000-0000-4000-8000-000000000001' then raise exception 'Organizer refused by the turned-off link'; end if;
+end $$;
+-- Someone already on the event gets it back from the turned-off link, and nothing is added.
+select set_config('request.jwt.claims','{"sub":"a3000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+do $$ begin
+ if public.claim_plan_link((select code from gi1_codes where name='one'))<>'a3100000-0000-4000-8000-000000000001' then raise exception 'Attendee refused by the turned-off link'; end if;
+end $$;
+-- Anyone else is refused by the turned-off link.
+select set_config('request.jwt.claims','{"sub":"a3000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
+do $$ begin
+ begin perform public.claim_plan_link((select code from gi1_codes where name='one')); raise exception 'Joined by a turned-off link';
+ exception when insufficient_privilege then null; end;
+end $$;
+-- A fresh guest joins by the new link as before: not answered yet, one notice.
+select set_config('request.jwt.claims','{"sub":"a3000000-0000-4000-8000-000000000004","role":"authenticated"}',true);
+do $$ declare id uuid; begin
+ id := public.claim_plan_link((select code from gi1_codes where name='one-new'));
+ if id<>'a3100000-0000-4000-8000-000000000001' then raise exception 'Wrong plan joined by the new link'; end if;
+ if (select response from public.attendees where plan_id=id and user_id='a3000000-0000-4000-8000-000000000004')<>'pending' then raise exception 'Fresh guest not pending'; end if;
+end $$;
 reset role;
 do $$ begin
  if (select count(*) from private.notification_outbox where plan_id='a3100000-0000-4000-8000-000000000001' and kind='invitation' and recipient_id='a3000000-0000-4000-8000-000000000001' and actor_id='a3000000-0000-4000-8000-000000000002')<>1 then raise exception 'One invitation notice expected'; end if;
- -- Once the event starts or is cancelled, the link no longer lets anyone join.
+ if (select count(*) from private.notification_outbox where plan_id='a3100000-0000-4000-8000-000000000001' and kind='invitation' and recipient_id='a3000000-0000-4000-8000-000000000001' and actor_id='a3000000-0000-4000-8000-000000000004')<>1 then raise exception 'One invitation notice expected for the fresh guest'; end if;
+ if exists(select 1 from public.attendees where plan_id='a3100000-0000-4000-8000-000000000001' and user_id='a3000000-0000-4000-8000-000000000003') then raise exception 'A refused claim added a guest'; end if;
+ if (select count(*) from public.attendees where plan_id='a3100000-0000-4000-8000-000000000001')<>2 then raise exception 'Two guests expected'; end if;
+ -- Once the event starts or is cancelled, the link no longer lets anyone new join.
  update public.plans set starts_at=now()-interval '1 minute' where id='a3100000-0000-4000-8000-000000000001';
  update public.plans set status='cancelled' where id='a3100000-0000-4000-8000-000000000002';
 end $$;
 set local role authenticated;
+-- Someone already on the event still gets it back after the start, from the current link and the old one.
 select set_config('request.jwt.claims','{"sub":"a3000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 do $$ begin
- begin perform public.claim_plan_link((select code from gi1_codes where name='one')); raise exception 'Joined a started event';
+ if public.claim_plan_link((select code from gi1_codes where name='one-new'))<>'a3100000-0000-4000-8000-000000000001' then raise exception 'Attendee refused after the start'; end if;
+ if public.claim_plan_link((select code from gi1_codes where name='one'))<>'a3100000-0000-4000-8000-000000000001' then raise exception 'Attendee refused by the old link after the start'; end if;
+ begin perform public.claim_plan_link((select code from gi1_codes where name='two')); raise exception 'Joined a cancelled event';
+ exception when insufficient_privilege then null; end;
+end $$;
+-- Someone who hasn't joined is refused once the event starts or is cancelled.
+select set_config('request.jwt.claims','{"sub":"a3000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
+do $$ begin
+ begin perform public.claim_plan_link((select code from gi1_codes where name='one-new')); raise exception 'Joined a started event';
  exception when insufficient_privilege then null; end;
  begin perform public.claim_plan_link((select code from gi1_codes where name='two')); raise exception 'Joined a cancelled event';
  exception when insufficient_privilege then null; end;
+end $$;
+-- The organizer gets their event back after the start or a cancellation.
+select set_config('request.jwt.claims','{"sub":"a3000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+do $$ begin
+ if public.claim_plan_link((select code from gi1_codes where name='one-new'))<>'a3100000-0000-4000-8000-000000000001' then raise exception 'Organizer refused after the start'; end if;
+ if public.claim_plan_link((select code from gi1_codes where name='two'))<>'a3100000-0000-4000-8000-000000000002' then raise exception 'Organizer refused after cancelling'; end if;
 end $$;
 reset role;
 -- Account deletion's redaction blanks the area with the other organizer-written text.
