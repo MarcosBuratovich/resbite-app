@@ -1,5 +1,6 @@
 // Captures every UX1, UX3 and UX4 screen at 390 and 320 px (UX3 and UX4 also with Larger Text at 320 px) with no console or page errors,
-// and keeps the gluestack keyboard-selection check. Every Supabase request is aborted.
+// and keeps the gluestack keyboard-selection check. Every Supabase request is aborted, except in the GI1 block at the end,
+// where a signed-in organizer's requests are answered by a local stub (the link screen and the Guests sheet with Remove).
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium, expect } from "@playwright/test";
@@ -62,6 +63,9 @@ try {
     await page.getByLabel("Meeting place", { exact: true }).fill("Riverside park");
     await page.getByLabel("Meeting details (optional)", { exact: true }).fill("By the big oak near the north gate. Gate code 4512.");
     await shot("step-where");
+    // GI1: the optional Area, shown before people reply.
+    await page.getByLabel("Area, shown before people reply", { exact: true }).fill("Near the north gate, Victoria Park");
+    await shot("step-where-area");
     await next(page);
     await page.getByRole("checkbox", { name: "Natural", exact: true }).click();
     await shot("step-vibe");
@@ -365,8 +369,93 @@ try {
     if (errors.length) throw Error(errors.join("\n"));
     await page.close();
   }
+  // GI1, signed in as the organizer against a local stub: Invite people (the event's link) and the Guests sheet
+  // with Remove, at 390 and 320 px and under Larger Text at 320 px.
+  for (const [width, large] of [[390, false], [320, false], [320, true]]) {
+    const page = await browser.newPage({ viewport: { width, height: 844 }, reducedMotion: "reduce", timezoneId: "Europe/London" });
+    await quietReminders(page);
+    const errors = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    page.on("console", (m) => {
+      if (m.type() === "error") errors.push(m.text());
+    });
+    const suffix = large ? "large-320" : String(width);
+    const fits = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+    const shot = async (name, fullPage = true) => {
+      await page.waitForTimeout(500);
+      return page.screenshot({ path: `${out}/${name}-${suffix}.png`, fullPage });
+    };
+    const user = { id: "11111111-1111-4111-8111-111111111111", aud: "authenticated", role: "authenticated", email: "fixture@example.invalid", email_confirmed_at: "2026-01-01T00:00:00Z", app_metadata: {}, user_metadata: { registration_details_version: 1 }, created_at: "2026-01-01T00:00:00Z" };
+    const expiry = Math.floor(Date.now() / 1000) + 3600;
+    const jwt = [
+      Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url"),
+      Buffer.from(JSON.stringify({ sub: user.id, exp: expiry, role: "authenticated" })).toString("base64url"),
+      "local-fixture-only",
+    ].join(".");
+    const session = { access_token: jwt, refresh_token: "local-fixture", token_type: "bearer", expires_at: expiry, expires_in: 3600, user };
+    const plan = {
+      id: "22222222-2222-4222-8222-222222222222",
+      activity_id: null,
+      title: "Film club: Paris, Texas",
+      description: "",
+      categories: ["creative", "community"],
+      owner_id: user.id,
+      starts_at: "2099-10-23T18:30:00Z",
+      ends_at: "2099-10-23T21:00:00Z",
+      time_zone: "Europe/London",
+      place_label: "Flat 3, 12 Old Street",
+      area: "Near Old Street",
+      note: "",
+      status: "active",
+      version: 1,
+      cover_path: null,
+      cover_revision: 0,
+      cover_description: "",
+      guest_note: "",
+      guest_note_at: null,
+    };
+    const guests = [
+      { user_id: "g1", response: "accepted", profiles: { display_name: "Alex Rivera" } },
+      { user_id: "g2", response: "accepted", profiles: { display_name: "Bea" } },
+      { user_id: "g3", response: "maybe", profiles: { display_name: "Cy" } },
+      { user_id: "g4", response: "pending", profiles: { display_name: "Di" } },
+    ];
+    await page.addInitScript((session) => sessionStorage.setItem("sb-ewcsgvhuojxdpaspwsrx-auth-token", JSON.stringify(session)), session);
+    await page.route("**/*.supabase.co/**", (route) => {
+      const req = route.request();
+      const path = new URL(req.url()).pathname;
+      const one = req.headers().accept?.includes("object");
+      const reply = (body, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+      if (path === "/auth/v1/user") return reply(user);
+      if (path === "/rest/v1/rpc/account_access_status") return reply({ account_id: user.id, status: "approved" });
+      if (path === "/rest/v1/profiles") return reply({ id: user.id, display_name: "Stephen", avatar_path: null, avatar_revision: 0 });
+      if (path === "/rest/v1/activities") return reply([]);
+      if (path === "/rest/v1/plans") return reply(one ? { ...plan, plan_meeting_details: null } : [{ ...plan, plan_meeting_details: null }]);
+      if (path === "/rest/v1/attendees") return reply(one ? null : guests);
+      if (path === "/rest/v1/rpc/plan_link") return reply("AbCdEfGhIjKlMnOpQrStUv");
+      return reply({ message: `Unexpected ${path}` }, 400);
+    });
+    const open = async (path) => {
+      await page.goto(`${base}${path}${large ? "&largeText=1" : ""}`);
+      if (large) await page.addStyleTag({ content: '[dir="auto"] { zoom: 1.4; }' });
+    };
+    await open(`/invitations?plan=${plan.id}`);
+    await expect(heading(page, "Invite people")).toBeVisible();
+    await expect(button(page, "Turn off this link")).toBeEnabled();
+    assert.ok(await fits(), `Invite people fits at ${suffix}`);
+    await shot("invite-people");
+    await open(`/event?plan=${plan.id}`);
+    await expect(heading(page, "Film club: Paris, Texas")).toBeVisible();
+    await button(page, "2 going, 1 maybe").click();
+    await expect(heading(page, "Guests")).toBeVisible();
+    await expect(button(page, "Remove Alex Rivera")).toBeVisible();
+    assert.ok(await fits(), `The Guests sheet with Remove fits at ${suffix}`);
+    await shot("event-guests-remove", false);
+    if (errors.length) throw Error(errors.join("\n"));
+    await page.close();
+  }
   console.log(
-    "PASS: every UX1, UX3 and UX4 screen at 390/320 px, UX3 and UX4 under Larger Text at 320 px, gluestack keyboard selection, no console/page errors. Screenshots: " + out,
+    "PASS: every UX1, UX3 and UX4 screen at 390/320 px, UX3 and UX4 under Larger Text at 320 px, GI1 Invite people, the Where step with an Area and the Guests sheet with Remove (390/320 and Larger Text at 320 px), gluestack keyboard selection, no console/page errors. Screenshots: " + out,
   );
 } finally {
   await browser.close();
