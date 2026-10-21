@@ -1,0 +1,45 @@
+{
+  "taken": "2026-10-21, read-only, project ewcsgvhuojxdpaspwsrx, after applying 20261021120000_gi1_event_links (hosted version 20261021165314, file sha256 74faf731a0e97eede4282b6e3050efdf9de03b6dcef9dde5705b9e8ba0b42b77)",
+  "migrations_tail": [
+    ["20261016125958", "ux3_event_details"],
+    ["20261021165314", "gi1_event_links"]
+  ],
+  "function_md5": {
+    "private.create_plan_v3(..., p_area)": "13c2f8e21be30295ab42eb19d19fbff8",
+    "public.create_plan_v3(..., p_area)": "b8b3b83fdd1a72a155253f239d5396ee",
+    "private.change_plan_v3(..., p_area)": "e662846687a29a779cc6ca02c742d558",
+    "public.change_plan_v3(..., p_area)": "fa6ecfa7f9b222b757b035e8eb4989f4",
+    "private.redact_deleting_owner_plan()": "72b85ca7db663e38173aa3dadd3850ec",
+    "private.invitation_page(text)": "8040e0fa1f56d7918484d93027f4fafb",
+    "public.invitation_page(text)": "ae05a1a79c450f82c394166f1a140514",
+    "private.claim_plan_link(text)": "2143413a22acefdd7da1e945ec2d51bc",
+    "public.claim_plan_link(text)": "0e3c44627f4b018dd6ab20847c08db51",
+    "private.plan_link(uuid)": "73f896802dc8133818140bdda9fd725b",
+    "private.rotate_plan_link(uuid)": "7f3ed03171fe81bc0fcd2c37c797172e",
+    "private.remove_guest(uuid,uuid)": "1e5ee26d506869f93f46e86e6c5521fb",
+    "private.require_link_owner(uuid)": "77ffd2efb1a4dbd9a9e3cae6c0adebdc",
+    "private.new_link_code()": "78c236397a8d07e448d6f9eb4442c27b"
+  },
+  "local_replay_md5_match": true,
+  "old_signatures_gone": true,
+  "plans": { "total": 21, "active": 19, "area_empty": 21 },
+  "attendees": 4,
+  "invitations": { "total": 13, "unclaimed_live": 2 },
+  "plan_links": 0,
+  "plan_links_rls": true,
+  "grants": {
+    "public.invitation_page(text)": { "anon": true, "authenticated": true },
+    "public.claim_plan_link(text)": { "anon": false, "authenticated": true },
+    "public.plan_link(uuid)": { "anon": false, "authenticated": true },
+    "public.rotate_plan_link(uuid)": { "anon": false, "authenticated": true },
+    "public.remove_guest(uuid,uuid)": { "anon": false, "authenticated": true }
+  },
+  "inactive_probe": { "state": "inactive" },
+  "advisors": {
+    "security_new": [
+      "INFO rls_enabled_no_policy on private.plan_links (same pattern as the other private tables; nobody reads it directly)",
+      "WARN anon_security_definer_function_executable and authenticated_security_definer_function_executable on public.invitation_page (intended, P2: the page server calls it without a session; it returns only the basics)"
+    ],
+    "performance_new": []
+  }
+}

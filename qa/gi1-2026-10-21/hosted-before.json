@@ -1,0 +1,28 @@
+{
+  "taken": "2026-10-21, read-only, project ewcsgvhuojxdpaspwsrx, before applying 20261021120000_gi1_event_links",
+  "server_version": "17.6",
+  "migrations": [
+    ["20260917191323", "resbite_private_tester_foundation"],
+    ["20260923151512", "account_access_status"],
+    ["20260923151515", "atomic_registration_details"],
+    ["20260923154040", "activity_catalogue_details"],
+    ["20260924150824", "avatar_revision_compare_and_swap"],
+    ["20261007154825", "custom_events"],
+    ["20261007175855", "plan_covers"],
+    ["20261007193235", "claim_notifies_owner"],
+    ["20261014163459", "ux2_rules"],
+    ["20261016125958", "ux3_event_details"]
+  ],
+  "function_md5": {
+    "private.create_plan_v3(...)": "0d5b9908c840fb0540607a841b8133cd",
+    "public.create_plan_v3(...)": "a6f0d976d6b2d49848d6c441565d082d",
+    "private.change_plan_v3(...)": "b894d68967c5e9cc34e3974aa444f55a",
+    "public.change_plan_v3(...)": "2a7641f8668d3a6d5793353126a67ee4",
+    "private.redact_deleting_owner_plan()": "4c825aa419e9927a126e78a2e9425374"
+  },
+  "local_hosted_baseline_md5_match": true,
+  "plans": { "total": 21, "active": 19 },
+  "attendees": 4,
+  "invitations": { "total": 13, "unclaimed_live": 2 },
+  "gi1_objects_absent": { "plan_links": true, "plans.area": true, "invitation_page": true, "claim_plan_link": true }
+}
