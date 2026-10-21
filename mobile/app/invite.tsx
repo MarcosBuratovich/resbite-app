@@ -7,19 +7,27 @@ import { useApp } from "../src/state/AppState";
 import { useFocusedRefresh, type Run } from "../src/state/useFocusedRefresh";
 import { Back, Button, Copy, Title, ErrorNote, s } from "../src/design/ui";
 import { colors as c } from "../src/design/tokens";
-import { claimInvitation } from "../src/services/rsvp";
+import { claimEventLink, claimInvitation } from "../src/services/rsvp";
+import { isInviteToken, isLinkCode } from "../src/domain/appLinks";
 
-/** Claims an invitation link, then replaces itself with the event page's answer. */
+/**
+ * Claims an invitation link, then replaces itself with the event page's answer. A per-person link brings a
+ * `token`; the event's one link (GI1, /r/<code>) brings a `code`. Either is kept on the device until claimed.
+ */
 export default function Invite() {
-  const { token, plan } = useLocalSearchParams<{
+  const { token, code, plan } = useLocalSearchParams<{
     token?: string;
+    code?: string;
     plan?: string;
   }>();
+  // What was opened (a token wins over a code), and that value when it is well formed.
+  const secret = token ?? code;
+  const keep = token ? (isInviteToken(token) ? token : null) : isLinkCode(code) ? code : null;
   const { session, restoring, preview, rememberInvite, signingOut } = useApp();
   const account = useAccount();
   const accountReady = account.status === "approved" && account.reviewed && account.profileReady;
   const userId = session?.user.id;
-  const identity = `${userId}:${token}:${plan}:${preview}`;
+  const identity = `${userId}:${token}:${code}:${plan}:${preview}`;
   const currentIdentity = useRef(identity);
   currentIdentity.current = identity;
   const resolved = useRef<{ identity: string; id: string } | null>(null);
@@ -30,7 +38,7 @@ export default function Invite() {
   const retained = useRef<{ identity: string; promise: Promise<void> } | null>(null);
   function retainToken() {
     if (retained.current?.identity === identity) return retained.current.promise;
-    const promise = currentIdentity.current === identity ? remember.current(token!) : Promise.resolve();
+    const promise = currentIdentity.current === identity ? remember.current(keep!) : Promise.resolve();
     retained.current = { identity, promise };
     void promise.catch(() => {
       if (retained.current?.promise === promise) retained.current = null;
@@ -43,16 +51,16 @@ export default function Invite() {
       retained.current = null;
       return;
     }
-    if (!preview && token && /^[a-f0-9]{64}$/.test(token))
+    if (!preview && keep)
       void retainToken().catch(() => {
         if (currentIdentity.current === identity)
           setError("We could not keep this invitation on this device. Keep the original link.");
       });
-  }, [identity, token, signingOut]);
+  }, [identity, keep, signingOut]);
   useEffect(() => {
     if (!session || preview || signingOut || accountReady || account.status === "checking") return;
     let active = true;
-    const preserve = token && /^[a-f0-9]{64}$/.test(token) ? retainToken() : Promise.resolve();
+    const preserve = keep ? retainToken() : Promise.resolve();
     void preserve
       .then(() => {
         if (active) router.replace("/account");
@@ -71,20 +79,21 @@ export default function Invite() {
       setBusy(true);
       setError(null);
       try {
-        if (token) {
-          if (!/^[a-f0-9]{64}$/.test(token)) throw new Error("This invitation link is incomplete.");
+        if (secret) {
+          if (!keep) throw new Error("This invitation link is incomplete.");
           await retainToken();
           if (!valid()) return;
         }
-        let id = resolved.current?.identity === identity ? resolved.current.id : token ? undefined : plan;
-        if (!id && token) {
+        let id = resolved.current?.identity === identity ? resolved.current.id : secret ? undefined : plan;
+        if (!id && keep) {
           assertSession();
-          id = await claimInvitation(token);
+          // GI1: the organizer opening their own event's link lands on their event, as any claim does.
+          id = token ? await claimInvitation(keep) : await claimEventLink(keep);
           if (!valid()) return;
           resolved.current = { identity, id };
         }
-        if (token && id) {
-          if (valid()) await remember.current(null, token);
+        if (keep && id) {
+          if (valid()) await remember.current(null, keep);
           if (!valid()) return;
         }
         if (!id) throw new Error("Invitation unavailable. Open the original invitation link.");
@@ -96,7 +105,7 @@ export default function Invite() {
         if (valid()) setBusy(false);
       }
     },
-    [identity, plan, token, userId, preview, signingOut, accountReady],
+    [identity, plan, token, code, userId, preview, signingOut, accountReady],
   );
   const { refresh } = useFocusedRefresh(claim, { identity });
   return (

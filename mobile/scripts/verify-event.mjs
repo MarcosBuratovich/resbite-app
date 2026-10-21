@@ -150,6 +150,10 @@ try {
   const editBodies = [];
   const noteBodies = [];
   let failNote = false;
+  // GI1: guests the organizer removed, and whether the next removal's reply is lost.
+  const removed = new Set();
+  const removeBodies = [];
+  let failRemove = false;
   // UX3: Meeting details live in their own table, which the database sends only to the organizer and
   // Going or Maybe guests; every invitee may know some exist. The plans row's own note is always "".
   const asRow = (plan) => {
@@ -213,7 +217,7 @@ try {
               { user_id: "g2", response: "pending", profiles: { display_name: "Bea" } },
               { user_id: "g3", response: "maybe", profiles: { display_name: "Cy" } },
               { user_id: "g4", response: "withdrawn", profiles: { display_name: "Di" } },
-            ]
+            ].filter((row) => !removed.has(row.user_id))
           : attendee.response === "pending"
             ? [own]
             : [own, { user_id: "g1", response: "accepted", profiles: { display_name: "Alex" } }],
@@ -225,6 +229,16 @@ try {
       assert.equal(body.p_version, attendee.version);
       attendee = { version: attendee.version + 1, response: body.p_response };
       return reply(attendee.version);
+    }
+    if (path === "/rest/v1/rpc/remove_guest") {
+      const body = req.postDataJSON();
+      removeBodies.push(body);
+      if (failRemove) {
+        failRemove = false;
+        return reply({ message: "Fixture: remove reply lost" }, 500);
+      }
+      removed.add(body.p_user);
+      return reply(null);
     }
     if (path === "/rest/v1/rpc/set_guest_note") {
       const body = req.postDataJSON();
@@ -286,8 +300,38 @@ try {
     await expect(page.getByRole("heading", { name: group, exact: true })).toBeVisible();
   await expect(page.getByText("Bea", { exact: true })).toBeVisible();
   await expect(page.getByText("Can’t go now", { exact: true })).toBeVisible();
+  // GI1: the organizer removes a guest, after a question; Keep changes nothing.
+  for (const name of ["Alex", "Bea", "Cy", "Di"])
+    await expect(page.getByRole("button", { name: `Remove ${name}`, exact: true })).toBeVisible();
+  let removeAsked = "";
+  page.once("dialog", (dialog) => {
+    removeAsked = dialog.message();
+    void dialog.dismiss();
+  });
+  await page.getByRole("button", { name: "Remove Bea", exact: true }).click();
+  await expect.poll(() => removeAsked).toBe("Remove Bea from this resbite?");
+  await page.waitForTimeout(200);
+  assert.deepEqual(removeBodies, []);
+  // A lost reply says so in the sheet; Bea stays listed until a removal is confirmed.
+  failRemove = true;
+  page.once("dialog", (dialog) => void dialog.accept());
+  await page.getByRole("button", { name: "Remove Bea", exact: true }).click();
+  await expect(
+    page.getByText("Couldn’t confirm this guest was removed. Check your connection and try again.", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("Bea", { exact: true })).toBeVisible();
+  page.once("dialog", (dialog) => void dialog.accept());
+  await page.getByRole("button", { name: "Remove Bea", exact: true }).click();
+  await expect(page.getByText("Bea", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Not answered yet", exact: true })).toHaveCount(0);
+  assert.deepEqual(removeBodies, [
+    { p_plan: hosted.id, p_user: "g2" },
+    { p_plan: hosted.id, p_user: "g2" },
+  ]);
   await page.getByRole("button", { name: "Close sheet", exact: true }).click();
   await sheetClosed(page);
+  // The stack still counts Going and Maybe after the reload.
+  await expect(page.getByRole("button", { name: "1 going, 1 maybe", exact: true })).toBeVisible();
   // UX3 Meeting details: the organizer sees them, with who else can.
   await expect(page.getByText("Meeting details · only Going & Maybe see this", { exact: true })).toBeVisible();
   await expect(page.getByText("Window table", { exact: true })).toBeVisible();
@@ -434,7 +478,7 @@ try {
   await expect(page.getByRole("button", { name: "Edit Coffee evening", exact: true })).toHaveCount(0);
   assert.deepEqual(cancels, [hosted.id]);
   console.log(
-    "PASS: organizer event page: guests, Open in Maps (and its failure note), Edit at Review, Do this again at When with a replace guard, an unconfirmed cancel with Refresh event, cancel.",
+    "PASS: organizer event page: guests (GI1: Remove asks first, says a lost reply, reloads the list; invitees have no Remove), Open in Maps (and its failure note), Edit at Review, Do this again at When with a replace guard, an unconfirmed cancel with Refresh event, cancel.",
   );
 
   // UX2-D1: a saved edit returns to its event page with "Changes saved"; Back then leaves for My resbites.
@@ -538,6 +582,12 @@ try {
   await page.getByRole("button", { name: "Refresh invitation", exact: true }).click();
   await expect(page.getByRole("button", { name: "1 going, 1 maybe", exact: true })).toBeVisible();
   await expect(page.getByText("Answer to see who’s coming", { exact: true })).toHaveCount(0);
+  // GI1: only the organizer can remove guests.
+  await page.getByRole("button", { name: "1 going, 1 maybe", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Guests", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Remove / })).toHaveCount(0);
+  await page.getByRole("button", { name: "Close sheet", exact: true }).click();
+  await sheetClosed(page);
   // Going opens the sample chat and keeps the Meeting details; backing out after Going reads "Can’t go now"
   // and locks them again.
   await going.click();

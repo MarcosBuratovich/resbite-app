@@ -16,6 +16,7 @@ import {
   RotateCcw,
   Send,
   Trash2,
+  UserMinus,
   Users,
 } from "lucide-react-native";
 import { Button, Copy, ErrorNote, Reveal, s } from "../src/design/ui";
@@ -33,6 +34,7 @@ import { canEditPlan } from "../src/domain/plans";
 import { answerKey, canReadSample, canRespond, responseFor } from "../src/domain/rsvp";
 import { drafts } from "../src/services/drafts";
 import { setGuestNote } from "../src/services/plans";
+import { invitationGateway } from "../src/services/invitations";
 import { useApp } from "../src/state/AppState";
 import { useEvent } from "../src/state/useEvent";
 import { useEventDevice } from "../src/state/useEventDevice";
@@ -62,6 +64,9 @@ export default function EventPage() {
   const [moreError, setMoreError] = useState<string | null>(null);
   const [mapsError, setMapsError] = useState<string | null>(null);
   const [noteOpen, setNoteOpen] = useState(false);
+  // GI1: the organizer removes a guest from the Guests sheet.
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
   // One Do this again at a time: a quick double tap must not write two copies or stack two editors.
   const againBusy = useRef(false);
   const { plan, role, attendee, guests, busy, fresh, pending } = event;
@@ -176,6 +181,31 @@ export default function EventPage() {
     }
     await setGuestNote(current.id, text);
     await event.load();
+  }
+  // GI1: Remove asks first, then the database removes the guest and the page reloads the list and counts.
+  function confirmRemove(guest: { userId: string; name: string }) {
+    const question = `Remove ${guest.name} from this resbite?`;
+    const remove = () => void removeGuest(guest.userId);
+    if (Platform.OS === "web") {
+      if (window.confirm(question)) remove();
+    } else
+      Alert.alert(question, undefined, [
+        { text: "Keep", style: "cancel" },
+        { text: "Remove", style: "destructive", onPress: remove },
+      ]);
+  }
+  async function removeGuest(userId: string) {
+    if (removing) return;
+    setRemoving(userId);
+    setRemoveError(null);
+    try {
+      await invitationGateway.removeGuest(current.id, userId);
+      await event.load();
+    } catch (e) {
+      setRemoveError(e instanceof Error ? e.message : "Couldn’t remove this guest. Try again.");
+    } finally {
+      setRemoving(null);
+    }
   }
   // Maps opens only when tapped (benchmark row 6); a failure is said, never swallowed.
   function openMaps(target: string) {
@@ -344,7 +374,15 @@ export default function EventPage() {
           )
         )}
       </ScrollView>
-      <InfoSheet visible={guestsOpen} title="Guests" onClose={() => setGuestsOpen(false)}>
+      <InfoSheet
+        visible={guestsOpen}
+        title="Guests"
+        onClose={() => {
+          setGuestsOpen(false);
+          setRemoveError(null);
+        }}
+      >
+        <ErrorNote message={removeError} />
         {guestGroups(guests).map((group) => (
           <View key={group.title} style={{ gap: 2 }}>
             <Copy accessibilityRole="header" style={styles.group}>
@@ -354,6 +392,16 @@ export default function EventPage() {
               <View key={g.userId} style={styles.guest}>
                 <Copy style={{ flex: 1 }}>{g.name}</Copy>
                 {g.note && <Chip text={g.note} />}
+                {editable && !preview && g.userId !== session?.user.id && (
+                  <IconButton
+                    icon={UserMinus}
+                    tone="plain"
+                    label={`Remove ${g.name}`}
+                    busy={removing === g.userId}
+                    disabled={removing !== null || busy}
+                    onPress={() => confirmRemove(g)}
+                  />
+                )}
               </View>
             ))}
           </View>
