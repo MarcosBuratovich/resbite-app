@@ -3,6 +3,9 @@
 -- It removes the event links (every shared /r/ link stops working), the area, the public page read and joining
 -- by link, and restores the 20261015120000 save functions and redaction trigger verbatim. Guests who joined by
 -- a link stay on their events; per-person invitations are untouched.
+-- After a rollback, builds that send p_area (the GI1 builds) can no longer create or edit events: PostgREST
+-- finds no function with that argument. That lasts until those phones get an older build or a fix-forward
+-- migration restores a matching signature.
 
 drop function public.claim_plan_link(text);
 drop function private.claim_plan_link(text);

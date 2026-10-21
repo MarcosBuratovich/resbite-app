@@ -312,4 +312,15 @@ Owner decisions from the GI1 design session ([spec](../docs/superpowers/specs/20
 6. The inactive page adds "Ask whoever sent it for a new link."
 7. The capture script asserts that the Area step has no sideways overflow, and that the Invite people card shows the area and never the place.
 
+From the final review’s fixes (21 October 2026):
+
+8. The organizer and anyone already on the event get the event back from any of its links: an old or turned-off one, and after the start or a cancellation. Everyone else is refused when the link is turned off (checked again under the event’s lock, so a link turned off at the same moment can’t let them in), or the event is cancelled or has started.
+9. A link refused for good (turned off, started, cancelled, malformed, or the organizer’s own per-person link) is no longer kept on the phone, so the next start opens the app as usual; the error still shows and offers "Go to My resbites". Only a lost connection or a timeout keeps the link for a retry. A per-person link opened by its own organizer says "You organize this resbite. Open it from My resbites." (new copy).
+10. The exact place hides until a reply. An invitee who hasn’t answered sees the area (if any) and "Exact address after you reply" (only while they can still answer), with no Open in Maps; Going, Maybe and Can’t go all show the place, as before. The Note to guests stays visible to everyone on the event, which narrows GI-D2’s list: on the event page the exact place, Meeting details and guests’ names wait for a reply. The database still sends the place to everyone on the event; this is the app’s display.
+11. Removing a guest is not a ban, and the app says so: the question reads "Remove <name> from this resbite? They can join again with the link unless you turn it off.", and the ⓘ sheet adds "Someone you remove can join again with the link, unless you turn it off."
+12. The event page has no Choose people entry, since inviting from contacts is out of scope (GI-D3). People stays on Profile.
+13. The page’s link opens the app also with a trailing slash, a query (such as `?fbclid=…`) or a fragment, which are ignored. The `resbite://` forms stay exact, and `/r?…` or `/r#…` lands on the invite screen.
+14. Every `/r/<code>` and `/r/<code>/image` path reaches the page functions, with no pattern on the code, so a truncated or malformed link shows the inactive page with its headers instead of Vercel’s bare 404.
+15. Do this again copies the area too.
+
 Each GI1 database migration needs the owner’s explicit approval. The hosted migration goes live together with the new TestFlight build, because build 8 can’t open `/r/` links. Old per-person links keep working.

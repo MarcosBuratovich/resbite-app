@@ -495,30 +495,34 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
 
 ## GI1 build — 21 October 2026
 
-**Built on the `gi1` branch, on top of `ux3` (unmerged); not on the live database, not deployed, not on TestFlight.** GI1 is the first of three parts of the guest invitation flow: one link per event, `link.resbite.com/r/<code>`, and a web page that shows the basics and one RSVP button ([spec](superpowers/specs/2026-10-21-gi1-event-links-design.md), [plan](superpowers/plans/2026-10-21-gi1.md); decisions GI-D1 to GI-D7, P1 to P12 and the changes made during the build in `knowledge-base/08-decisions.md`). `gi1` is rebased onto `main` before the final review, once `ux3` is accepted and merged.
+**Built on the `gi1` branch, on top of `ux3` (unmerged); not on the live database, not deployed, not on TestFlight.** GI1 is the first of three parts of the guest invitation flow: one link per event, `link.resbite.com/r/<code>`, and a web page that shows the basics and one RSVP button ([spec](superpowers/specs/2026-10-21-gi1-event-links-design.md), [plan](superpowers/plans/2026-10-21-gi1.md); decisions GI-D1 to GI-D7, P1 to P12 and the changes made during the build in `knowledge-base/08-decisions.md`). `gi1` is rebased onto `main` at rollout, after the final review, once `ux3` is accepted and merged.
 
 **What changed.**
 - One link per event, made and kept by the database, with "Turn off this link" (which makes a new one). Per-person links stop being made.
 - The web page at `link.resbite.com/r/<code>`, rendered by a Vercel function in `links/`, with four states (open, cancelled, happened, inactive), a chat preview (title, start, host and image; never the area or the place) and a "Join Resbite to reply" sheet.
 - An optional Area field on the Where step, shown on the page before people reply.
-- Invite people replaces the Invitations screen: Share, Copy link, Turn off this link. The guest list gets Remove.
-- The app opens `/r/<code>` links and joins the event for a signed-in, approved tester. The host opening their own link lands on the event.
+- Invite people replaces the Invitations screen: Share, Copy link, Turn off this link. The guest list gets Remove; the question and the ⓘ sheet say a removed guest can join again with the link unless it is turned off.
+- The app opens `/r/<code>` links (also with a trailing slash, a query such as `?fbclid=…` or a fragment) and joins the event for a signed-in, approved tester. The host, and anyone already on the event, opening any of its links (even a turned-off one, or after the start) lands on the event.
+- A link refused for good (turned off, started, cancelled or malformed) is not kept on the phone, so the next start opens the app as usual; the error offers "Go to My resbites". Only a lost connection keeps it for a retry.
+- On the event page, an invitee who hasn’t answered sees the area (if any) and "Exact address after you reply", with no Open in Maps. The Note to guests stays visible to everyone on the event. Choose people has no entry on the event page (GI-D3); People stays on Profile.
 - Old per-person links and the `/invite#token=` page keep working.
 
-**Migration.** `supabase/migrations/20261021120000_gi1_event_links.sql` has a rollback script and a rehearsal in the database suite. It is not applied. It awaits the owner’s approval, by file name and sha256, and goes live together with the new TestFlight build, because build 8 can’t open `/r/` links. Applying it without the build only hides the new screens.
+**Migration.** `supabase/migrations/20261021120000_gi1_event_links.sql` has a rollback script and a rehearsal in the database suite. It is not applied. It awaits the owner’s approval, by file name and sha256, and goes live together with the new TestFlight build, because build 8 can’t open `/r/` links. Applying it without the build only hides the new screens. After a rollback, builds that send `p_area` (the GI1 builds) can no longer create or edit events, because PostgREST finds no matching function, until those phones are back on an older build or a fix-forward migration restores the signature.
 
 **Rollout still to do (controller and owner).**
+- Deploy the page before building the app, then confirm that `https://app-site-association.cdn-apple.com/a/v1/link.resbite.com` lists `/r/*` before the build.
+- Ask testers to update to the new build before they open `/r/` links. A build 8 phone whose association file has refreshed opens them into an error.
 - The `resbite-link` Vercel project needs environment variables: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY` (the owner sets it as a sensitive variable), `LINK_ORIGIN`, `APP_STORE_URL` (the TestFlight invitation link; if it is unset, "Get the app" opens the App Store home) and `APP_STORE_ID` (left unset until the app is public). It also needs a firewall rate limit on `/r/*`.
 - Smoke-test the page with a real open code, one with a cover and one with an illustration. A misconfigured environment renders every link as "no longer active" (P3).
 - Vercel request logs record `/r/<code>` paths. Check the log retention.
 
 **Still owed by GI2 and GI3.** GI2: the guest’s account created from a link, the 18+ tick, Sign in with Apple, and the link granting beta access. GI3: capacity ("spaces left", the full state) and host approval.
 
-**Verification (21 October 2026, on the final commit before this one).** Nothing here was run on a device or the live project.
+**Verification (21 October 2026, after the final review’s fixes, on the final commit before this one).** Nothing here was run on a device or the live project.
 - `./scripts/test-database.sh` passes in full mode (`PASS: gi1.sql` and the disposable SQL assertions line; exit 0).
 - `./scripts/test-database.sh --hosted-baseline supabase/migrations/20261021120000_gi1_event_links.sql` passes (`PASS: gi1.sql (hosted baseline)`; exit 0).
 - The worker tests pass (56 of 56, unchanged).
-- `npm run check` passes (typecheck, 46 test files, 309 tests, content validation). `links/page.test.mjs` has 17 tests and `links/generate.test.mjs` 5, both inside that count.
+- `npm run check` passes: typecheck, the test chain and content validation. The chain runs 46 files: 44 app test files with 291 tests, then `links/generate.test.mjs` (5 tests) and `links/page.test.mjs` (17 tests) as their own steps; 313 tests in all.
 - All 20 `verify-*` browser scripts and `review-ui` exit 0, with Expo web started on `--clear` and stopped afterwards. `verify-planning`’s known flaky draft line passed on the first run.
 - `npx expo export --platform ios` succeeds.
 - The generated Apple link file lists `/r/*` once.
@@ -526,7 +530,7 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
 
 **Deferred to the owner’s iPhone check (on the new TestFlight build).**
 1. Make an event with an area and a cover, then open Invite people.
-2. Share the link into WhatsApp. The preview shows the title, date, host and image, with no area and no place.
+2. Share the link into WhatsApp. The preview shows the title, date, host and image, with no area and no place. Try one event with a heavy illustration (walk-and-talk, picnic-in-the-park or board-game-night) and one with a large cover; if WhatsApp drops the image, plan pre-sized preview copies.
 3. Open the link on a phone without Resbite (the page, RSVP, the sheet, "Get the app") and on one with it (it lands on the invitation and joins).
 4. Tap the host’s own link: it opens the event page.
 5. Turn off this link: the old link says it is no longer active, and the new link works.
@@ -535,5 +539,7 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
 8. Larger Text and VoiceOver on Invite people. The ⓘ sheet scrolls fully under Larger Text.
 9. The native Keep/Remove alert presents above the open Guests sheet.
 10. The Review step’s "Area · …" row reads as pressable, and a long Area value reads in the field.
+11. As a guest who hasn’t answered, the event page shows the area and "Exact address after you reply", with no Open in Maps; after Going, the place and Open in Maps show.
+12. Open a turned-off link as someone not on the event: the error shows with "Go to My resbites", and the next cold start opens the app as usual.
 
 **Next.** After the final whole-branch review: the `ux3` iPhone check and merge, the page deploy, the migration (with the owner’s approval) and the new TestFlight build, back to back.
