@@ -270,6 +270,16 @@ test("the exact place hides until an invitee replies: the area (if any), the hin
   for (const response of ["accepted", "maybe", "declined", "withdrawn"])
     assert.deepEqual(eventPlace({ owner: false, response, place, area: "Near the station" }), { exact: true, line: place });
   assert.deepEqual(eventPlace({ owner: true, response: null, place, area: "Near the station" }), { exact: true, line: place });
+  // My resbites reads the card the same way; with no area the label just has no place.
+  const now = new Date("2026-10-07T12:00:00Z");
+  const label = (response: string | null, area: string) =>
+    cardLabel(
+      { title: "Board games", startsAt: null, place: eventPlace({ owner: false, response, place, area }).line ?? "", chips: ["Invited"] },
+      now,
+    );
+  assert.equal(label("pending", "Near the station"), "Board games, date not set, Near the station, Invited");
+  assert.equal(label("pending", ""), "Board games, date not set, Invited");
+  assert.equal(label("accepted", "Near the station"), `Board games, date not set, ${place}, Invited`);
 });
 
 test("guest area: only the organizer until an invitee answers (UX-P5)", () => {

@@ -234,10 +234,11 @@ $$;
 revoke all on function private.invitation_page(text), public.invitation_page(text) from public, anon, authenticated, service_role;
 grant execute on function private.invitation_page(text), public.invitation_page(text) to anon, authenticated;
 
--- Joining by the event link: the same refusals as claim_invite, one notice to the organizer per guest. The
--- organizer and anyone already on the event get their event back from any of its links, old or turned off,
--- before or after the start (they will tap it again in the chat it was posted in). Everyone else is refused
--- when the link is turned off, or the event is cancelled or has started.
+-- Joining by the event link, with one notice to the organizer per guest. In this order: an unknown or
+-- malformed code is refused; then the organizer and anyone already on the event get the plan id from any of
+-- its links, old or turned off, before or after the start (they will tap it again in the chat it was posted
+-- in); then everyone else is refused when the link is turned off, or the event is cancelled or has started
+-- (42501 throughout, as claim_invite's refusals). Only then does a new guest join, not answered yet.
 create function private.claim_plan_link(p_code text) returns uuid language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester(); v_link private.plan_links; v_plan public.plans;
 begin

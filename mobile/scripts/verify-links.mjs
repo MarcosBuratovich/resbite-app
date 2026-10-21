@@ -3,7 +3,8 @@
 // approved: claim_plan_link, then the event page, and the kept code is cleared. The organizer's own link lands
 // on their event. Signed out: the code is kept and "Sign in" shows. An inactive code says so and drops the kept
 // code, so a restart opens the app as usual; a lost connection keeps it; "Go to My resbites" leaves either. A
-// malformed code claims nothing. Every Supabase request is intercepted.
+// malformed code claims nothing. A per-person link (before GI1) that is refused, or is the organizer's own, is
+// dropped the same way. Every Supabase request is intercepted.
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { quietReminders } from "./qa-helpers.mjs";
@@ -56,6 +57,9 @@ const OPEN = "OpenOpenOpenOpenOpen_1";
 const OWN = "OwnOwnOwnOwnOwnOwn-__2";
 const OFF = "OffOffOffOffOffOffOff3";
 const NET = "NetNetNetNetNetNetNet4";
+// Per-person links from before GI1: one turned off (42501), one the organizer's own (22023).
+const REVOKED_TOKEN = "c".repeat(64);
+const OWN_TOKEN = "d".repeat(64);
 const pending = (page) => page.evaluate(() => sessionStorage.getItem("resbite.pending-invite"));
 
 async function fixture({ signedIn = true } = {}) {
@@ -98,6 +102,13 @@ async function fixture({ signedIn = true } = {}) {
       if (body.p_code === OPEN) return reply(invited.id);
       if (body.p_code === OWN) return reply(own.id);
       if (body.p_code === NET) return reply({ message: "Fixture: connection lost" }, 500);
+      return reply({ code: "42501", message: "Invitation unavailable" }, 403);
+    }
+    if (path === "/rest/v1/rpc/claim_invite") {
+      const body = req.postDataJSON();
+      claims.push(body);
+      assert.equal(await pending(page), body.p_token);
+      if (body.p_token === OWN_TOKEN) return reply({ code: "22023", message: "Owner cannot claim own invitation" }, 400);
       return reply({ code: "42501", message: "Invitation unavailable" }, 403);
     }
     return reply({ message: `Unexpected ${req.method()} ${path}` }, 400);
@@ -151,6 +162,21 @@ try {
     await page.getByRole("button", { name: "Go to My resbites", exact: true }).click();
     await expect(page.getByRole("heading", { name: "My resbites", exact: true })).toBeVisible();
     await expect.poll(() => pending(page)).toBe(null);
+    // The same for a refused per-person link: it says so, is dropped, and a cold start opens Create.
+    await page.goto(`${base}/invite?token=${REVOKED_TOKEN}`);
+    await expect(inactive).toBeVisible();
+    await expect.poll(() => pending(page)).toBe(null);
+    await page.goto(base);
+    await expect(page.getByRole("heading", { name: "Create", exact: true })).toBeVisible();
+    assert.equal(new URL(page.url()).pathname, "/create");
+    // The organizer's own per-person link says whose it is, and is dropped too.
+    await page.goto(`${base}/invite?token=${OWN_TOKEN}`);
+    await expect(page.getByText("You organize this resbite. Open it from My resbites.", { exact: true })).toBeVisible();
+    await expect.poll(() => pending(page)).toBe(null);
+    assert.deepEqual(
+      claims.filter((c) => c.p_token).map((c) => c.p_token),
+      [REVOKED_TOKEN, OWN_TOKEN],
+    );
     // A malformed code claims nothing and leaves a kept invitation alone.
     const before = claims.length;
     await page.evaluate((code) => sessionStorage.setItem("resbite.pending-invite", code), OPEN);
@@ -161,7 +187,7 @@ try {
     assert.deepEqual(errors, []);
     await page.close();
     console.log(
-      "PASS: signed in, an event link joins and lands on the invitation (code cleared); the organizer's own link lands on their event; an inactive link says so and drops the code (a cold start opens Create); a lost connection keeps it (a cold start returns to it); Go to My resbites leaves and drops it; a malformed one claims nothing.",
+      "PASS: signed in, an event link joins and lands on the invitation (code cleared); the organizer's own link lands on their event; an inactive link says so and drops the code (a cold start opens Create); a lost connection keeps it (a cold start returns to it); Go to My resbites leaves and drops it; a refused or own per-person link is dropped too; a malformed one claims nothing.",
     );
   }
   {

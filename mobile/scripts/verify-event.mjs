@@ -203,6 +203,13 @@ try {
             .filter((p) => p.owner_id !== user.id)
             .map((p) => ({ plan_id: p.id, response: attendee.response })),
         );
+      // My resbites' read (no plan filter): here, the person's own answer on each invitation.
+      if (url.searchParams.get("select") === "plan_id,user_id,response,profiles(display_name)" && !url.searchParams.has("plan_id"))
+        return reply(
+          [...plans.values()]
+            .filter((p) => p.owner_id !== user.id)
+            .map((p) => ({ plan_id: p.id, user_id: user.id, response: attendee.response, profiles: { display_name: "Fixture" } })),
+        );
       // 500, not 503: postgrest-js retries a 503 GET with backoff.
       if (failGuests) return reply({ message: "Fixture: guest list unavailable" }, 500);
       if (failNextGuestList) {
@@ -636,9 +643,28 @@ try {
   await expect(cant).toBeChecked();
   await expect(page.getByText(LOCKED, { exact: true })).toBeVisible();
   assert.deepEqual(responses, ["maybe", "accepted", "withdrawn", "maybe", "declined"]);
+  // GI1 on My resbites: an unanswered invitation's card shows the area, never the place (also to VoiceOver);
+  // after Going it shows the place.
+  attendee = { version: attendee.version, response: "pending" };
+  await page.goto(`${base}/plans`);
+  const boardCard = page.getByRole("button", { name: /^Board games, / });
+  await expect(boardCard).toBeVisible();
+  await expect(boardCard).toHaveAttribute("aria-label", /, Near the station, Invited, Not answered/);
+  await expect(boardCard).not.toHaveAttribute("aria-label", /Games room/);
+  await expect(boardCard.getByText("Near the station", { exact: true })).toBeVisible();
+  await expect(boardCard.getByText("Games room", { exact: true })).toHaveCount(0);
+  await boardCard.click();
+  await expect(page.getByRole("heading", { name: "Board games", exact: true })).toBeVisible();
+  await going.click();
+  await expect(going).toBeChecked();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "My resbites", exact: true })).toBeVisible();
+  await expect(boardCard).toHaveAttribute("aria-label", /, Games room, Invited, Going/);
+  await expect(boardCard.getByText("Games room", { exact: true })).toBeVisible();
+  await expect(boardCard.getByText("Near the station", { exact: true })).toHaveCount(0);
   await context.close();
   console.log(
-    "PASS: invitee: the organizer only before answering, Maybe, the list after answering (and its load failure), Can’t go now after Going, the photo label; the Note to guests; Meeting details locked, shown after Going or Maybe, locked again after Can’t go, and absent when there are none; GI1: the area, Exact address after you reply and no Maps before answering, the place and Maps after.",
+    "PASS: invitee: the organizer only before answering, Maybe, the list after answering (and its load failure), Can’t go now after Going, the photo label; the Note to guests; Meeting details locked, shown after Going or Maybe, locked again after Can’t go, and absent when there are none; GI1: the area, Exact address after you reply and no Maps before answering, the place and Maps after, on the event page and its My resbites card.",
   );
 
   // UX3 reminders and Add to calendar, on the development fakes. A fresh context: the phone's permission

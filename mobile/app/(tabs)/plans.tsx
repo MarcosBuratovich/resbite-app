@@ -14,7 +14,7 @@ import { colors as c, fonts, r } from "../../src/design/tokens";
 import { PreviewNotice } from "../../src/design/Chrome";
 import { drafts, type PlanDraft } from "../../src/services/drafts";
 import { planCoverStore } from "../../src/services/planCovers";
-import { cardChips, cardLabel, coverNotice, draftRoute, groupPlans } from "../../src/domain/eventView";
+import { cardChips, cardLabel, coverNotice, draftRoute, eventPlace, groupPlans } from "../../src/domain/eventView";
 import { canDiscardDraft } from "../../src/domain/draftAutosave";
 import { confirmDiscardDraft } from "../../src/state/usePlanEditor";
 
@@ -243,6 +243,8 @@ export default function Plans() {
             const mine = attendees.find((a) => a.plan_id === p.id && a.user_id === session?.user.id);
             const going = attendees.filter((a) => a.plan_id === p.id && a.response === "accepted").length;
             const chips = cardChips({ owner, status: p.status, response: mine?.response ?? "pending", going });
+            // GI1: as on the event page, an invitee who hasn’t answered sees the area (or no place), never the place.
+            const place = eventPlace({ owner, response: mine?.response ?? null, place: p.place_label, area: p.area }).line;
             return (
               <CoverCard
                 key={p.id}
@@ -250,11 +252,11 @@ export default function Plans() {
                 title={p.title}
                 startsAt={p.starts_at}
                 endsAt={p.ends_at}
-                place={p.place_label}
+                place={place}
                 dimmed={p.status === "cancelled"}
                 chips={chips.map((text) => ({ key: text, text, tone: chipToneFor(text) }))}
                 label={cardLabel(
-                  { title: p.title, startsAt: p.starts_at, endsAt: p.ends_at, place: p.place_label, chips, photo: p.cover_description },
+                  { title: p.title, startsAt: p.starts_at, endsAt: p.ends_at, place: place ?? "", chips, photo: p.cover_description },
                   new Date(now),
                 )}
                 onPress={() => open(p)}
