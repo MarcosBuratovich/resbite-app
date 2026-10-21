@@ -31,6 +31,7 @@ try {
       await page.waitForTimeout(500);
       return page.screenshot({ path: `${out}/${name}-${width}.png`, fullPage });
     };
+    const fits = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
     await page.route("**/*.supabase.co/**", (r) => r.abort());
     await page.goto(base);
     await page.getByText("Preview the design", { exact: true }).click();
@@ -65,6 +66,7 @@ try {
     await shot("step-where");
     // GI1: the optional Area, shown before people reply.
     await page.getByLabel("Area, shown before people reply", { exact: true }).fill("Near the north gate, Victoria Park");
+    assert.ok(await fits(), `step-where-area-${width} fits at ${width} px`);
     await shot("step-where-area");
     await next(page);
     await page.getByRole("checkbox", { name: "Natural", exact: true }).click();
@@ -351,7 +353,8 @@ try {
     await next(page);
     await page.getByLabel("Meeting place", { exact: true }).fill("Riverside park");
     await page.getByLabel("Meeting details (optional)", { exact: true }).fill("By the big oak near the north gate. Gate code 4512.");
-    assert.ok(await fits(), "Where with Meeting details fits at 320 px under Larger Text");
+    await page.getByLabel("Area, shown before people reply", { exact: true }).fill("Near the north gate, Victoria Park");
+    assert.ok(await fits(), "Where with Meeting details and an Area fits at 320 px under Larger Text");
     await shot("step-where");
     await next(page);
     await page.getByRole("checkbox", { name: "Natural", exact: true }).click();
@@ -442,6 +445,9 @@ try {
     await open(`/invitations?plan=${plan.id}`);
     await expect(heading(page, "Invite people")).toBeVisible();
     await expect(button(page, "Turn off this link")).toBeEnabled();
+    // Privacy: the card shows the area, never the exact place.
+    await expect(page.getByText("Flat 3, 12 Old Street")).toHaveCount(0);
+    await expect(page.getByText("Near Old Street")).toBeVisible();
     assert.ok(await fits(), `Invite people fits at ${suffix}`);
     await shot("invite-people");
     await open(`/event?plan=${plan.id}`);
