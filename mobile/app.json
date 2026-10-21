@@ -10,6 +10,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.resbite.app",
       "associatedDomains": ["applinks:link.resbite.com"],
+      "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -49,6 +50,7 @@
         }
       ],
       "expo-web-browser",
+      "expo-apple-authentication",
       "@react-native-community/datetimepicker",
       [
         "expo-location",

@@ -41,6 +41,12 @@ try {
   await page.getByRole("button", { name: "I have an account", exact: true }).click();
   await expect(page).toHaveURL(/\/auth\?mode=login$/);
   await expect(page.getByRole("heading", { name: "Welcome back", exact: true })).toBeVisible();
+  // Apple is offered on iOS only (appleSignInAvailable is false off iOS): web shows Google alone.
+  const noAppleChip = async () => {
+    await expect(page.getByRole("button", { name: "Continue with Google", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Continue with Apple", exact: true })).toHaveCount(0);
+  };
+  await noAppleChip();
   await page.goto(base);
   await page.getByRole("button", { name: "Get started", exact: true }).click();
   await expect(
@@ -97,6 +103,7 @@ try {
   await expect(
     page.getByRole("heading", { name: "Your account", exact: true }),
   ).toBeVisible();
+  await noAppleChip();
   await page.getByLabel("Email address", { exact: true }).fill("signup-fixture@example.invalid");
   await page.getByLabel("Password", { exact: true }).fill("fixture-password");
   await page
@@ -189,7 +196,7 @@ try {
   assert.equal(updates, 1);
   assert.deepEqual(errors, []);
   console.log(
-    "Auth fixtures passed: landing mode, registration with Skip, validation, single-flight login, heading focus, stale response, reset return, malformed callback and recovery password save; all backend requests intercepted.",
+    "Auth fixtures passed: landing mode, no Apple chip on web, registration with Skip, validation, single-flight login, heading focus, stale response, reset return, malformed callback and recovery password save; all backend requests intercepted.",
   );
 } finally {
   await browser.close();

@@ -1,7 +1,7 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
-import { Eye, EyeOff, Info, KeyRound, Mail, MailCheck, RefreshCw, Send } from "lucide-react-native";
+import { Apple, Eye, EyeOff, Info, KeyRound, Mail, MailCheck, RefreshCw, Send } from "lucide-react-native";
 import { Button, Copy, ErrorNote, TextAction, s } from "../../src/design/ui";
 import { Chip, FieldCard, IconButton, InfoSheet, StatusCard, StepScreen, useFocusOnChange } from "../../src/design/kit";
 import { colors as c, fonts } from "../../src/design/tokens";
@@ -9,6 +9,7 @@ import { RegistrationDetails } from "../../src/design/RegistrationDetails";
 import { authTitle } from "../../src/domain/accountCopy";
 import { skipOptionalDetails } from "../../src/domain/registration";
 import { useAuthFlow } from "../../src/state/useAuthFlow";
+import { appleSignInAvailable } from "../../src/services/appleSignIn";
 
 /**
  * Sign in, sign up, reset and confirm (UX4-D3): one step screen per mode, field cards and
@@ -19,9 +20,20 @@ export default function Auth() {
     mode, step, setStep, details, setDetails, confirmedEmail, setConfirmedEmail,
     showPassword, setShowPassword, email, setEmail, password, setPassword,
     busy, restoring, blocked, error, setError, notice, setNotice, pending, remaining, scroll,
-    submit, checkConfirmed, switchMode, forgetDestination, google,
+    submit, checkConfirmed, switchMode, forgetDestination, google, apple,
   } = useAuthFlow();
   const [about, setAbout] = useState(false);
+  // Apple is offered only where it's available (iOS); web and Android never show the chip.
+  const [appleAvailable, setAppleAvailable] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void appleSignInAvailable().then((available) => {
+      if (live) setAppleAvailable(available);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
   const [direction, setDirection] = useState<"forward" | "back">("forward");
   const heading = useRef<Text>(null);
   const title = authTitle(mode, step, confirmedEmail);
@@ -206,7 +218,10 @@ export default function Auth() {
         </View>
       )}
       {(mode === "login" || (register && step === 2)) && (
-        <Chip text="Continue with Google" onPress={google} disabled={blocked} />
+        <>
+          {appleAvailable && <Chip text="Continue with Apple" icon={Apple} onPress={apple} disabled={blocked} />}
+          <Chip text="Continue with Google" onPress={google} disabled={blocked} />
+        </>
       )}
       <View style={styles.links}>
         {mode === "login" && (

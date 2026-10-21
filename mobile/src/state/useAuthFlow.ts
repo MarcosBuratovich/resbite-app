@@ -5,6 +5,7 @@ import * as WebBrowser from "expo-web-browser";
 import { supabase, configured } from "../services/supabase";
 import { safeAuthCode, validateRegistration } from "../domain/rules";
 import { exchangeAuthCode } from "../services/authCallback";
+import { appleSignInDeps, signInWithApple } from "../services/appleSignIn";
 import { confirmationStore } from "../services/confirmation";
 import {
   type PendingEmailRequest, type EmailRequestKind, EmailRequestCooldownError,
@@ -255,10 +256,36 @@ export function useAuthFlow() {
       if (generation.current === current) setError(failure instanceof Error ? failure.message : "Sign-in failed.");
     } finally { working.current = false; setBusy(false); }
   }
+
+  async function apple() {
+    if (working.current || restoring) return;
+    if (!configured) { setError("Account services are not configured yet."); return; }
+    const current = generation.current;
+    working.current = true; setBusy(true); setNotice(""); setError(null);
+    try {
+      const result = await signInWithApple(appleSignInDeps);
+      if (!result.ok) {
+        if (!result.cancelled && generation.current === current) setError(result.message);
+        return;
+      }
+      // Apple sends the name on the first authorisation only, so it's kept even if this screen
+      // was left meanwhile. Signing in already succeeded; a failed save leaves the name to ask for later.
+      if (result.name) {
+        try {
+          const { data } = await supabase.auth.getSession();
+          if (!data.session?.user.user_metadata?.display_name)
+            await supabase.auth.updateUser({ data: { display_name: result.name } });
+        } catch { /* Not an error for the person: they are signed in. */ }
+      }
+      if (generation.current === current) router.replace("/account");
+    } catch (failure) {
+      if (generation.current === current) setError(failure instanceof Error ? failure.message : "Sign-in failed.");
+    } finally { working.current = false; setBusy(false); }
+  }
   return {
     mode, step, setStep, details, setDetails, confirmedEmail, setConfirmedEmail,
     showPassword, setShowPassword, email, setEmail, password, setPassword,
     busy, restoring, blocked, error, setError, notice, setNotice, pending, remaining, scroll,
-    submit, checkConfirmed, switchMode, forgetDestination, google,
+    submit, checkConfirmed, switchMode, forgetDestination, google, apple,
   };
 }
