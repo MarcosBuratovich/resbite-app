@@ -1,6 +1,6 @@
 // Generates the invitation-link site for review and deployment (UX3, link.resbite.com). Never uploads anything
 // or changes app config: the output folder is deployed separately, as its own Vercel project.
-import { mkdir, readFile, writeFile, copyFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile, copyFile, readdir } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { invitationOrigin } from "../mobile/src/domain/appLinks.ts";
@@ -39,7 +39,10 @@ export async function generate(originValue, teamId, bundleId, output) {
           details: [
             {
               appIDs: [`${teamId}.${bundleId}`],
-              components: [{ "/": "/invite", comment: "Resbite invitations only; auth setup remains separate." }],
+              components: [
+                { "/": "/invite", comment: "Resbite invitations only; auth setup remains separate." },
+                { "/": "/r/*", comment: "Event links (GI1): the app opens on the invitation." },
+              ],
             },
           ],
         },
@@ -53,11 +56,23 @@ export async function generate(originValue, teamId, bundleId, output) {
   await write("invite.html", page);
   for (const name of ["invite.js", "invite.css"]) await write(name, await readFile(resolve(source, "assets", name)));
   await copyFile(resolve(source, "../mobile/assets/brand/resbite-mark.png"), resolve(root, "resbite-mark.png"));
+  // The event page (GI1): two Vercel functions, their shared code, its style and script, and the activity
+  // illustrations the image route serves. Nothing here holds a secret; the keys are Vercel environment variables.
+  for (const dir of ["api", "lib", "activities"]) await mkdir(resolve(root, dir), { recursive: true });
+  for (const name of await readdir(resolve(source, "server", "api"))) await copyFile(resolve(source, "server", "api", name), resolve(root, "api", name));
+  for (const name of await readdir(resolve(source, "server", "lib"))) await copyFile(resolve(source, "server", "lib", name), resolve(root, "lib", name));
+  for (const name of ["page.css", "page.js"]) await write(name, await readFile(resolve(source, "assets", name)));
+  for (const name of await readdir(resolve(source, "../mobile/assets/activities")))
+    if (name.endsWith(".png")) await copyFile(resolve(source, "../mobile/assets/activities", name), resolve(root, "activities", name));
   await write(
     "vercel.json",
     JSON.stringify(
       {
-        rewrites: [{ source: "/invite", destination: "/invite.html" }],
+        rewrites: [
+          { source: "/invite", destination: "/invite.html" },
+          { source: "/r/:code([A-Za-z0-9_-]{22})/image", destination: "/api/image?code=:code" },
+          { source: "/r/:code([A-Za-z0-9_-]{22})", destination: "/api/page?code=:code" },
+        ],
         redirects: [{ source: "/", destination: "https://www.resbite.com/", permanent: false }],
         headers: [
           {
@@ -77,7 +92,7 @@ export async function generate(originValue, teamId, bundleId, output) {
   );
   await write(
     "hosting-requirements.txt",
-    `Origin: ${origin}\nDeploy this folder as its own Vercel project (vercel.json sets the rewrite and headers).\nServe /invite as invite.html (200, no redirect).\nServe /.well-known/apple-app-site-association as application/json over HTTPS, without authentication or redirects.\nSet Referrer-Policy: no-referrer; Cache-Control: no-store on /invite.\nSet Content-Security-Policy: ${INVITE_CSP}\nDisable request query logging, analytics, session replay and third-party scripts on invitation pages. Fragments are not sent to the server.\nReview before deployment; this script does not publish anything.\n`,
+    `Origin: ${origin}\nDeploy this folder as its own Vercel project (vercel.json sets the rewrite and headers).\nServe /invite as invite.html (200, no redirect).\nServe /.well-known/apple-app-site-association as application/json over HTTPS, without authentication or redirects.\nSet Referrer-Policy: no-referrer; Cache-Control: no-store on /invite.\nSet Content-Security-Policy: ${INVITE_CSP}\nDisable request query logging, analytics, session replay and third-party scripts on invitation pages. Fragments are not sent to the server.\nEvent pages (/r/<code>) are rendered by api/page.mjs and need these Vercel environment variables: SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_SECRET_KEY (cover photos only), LINK_ORIGIN, APP_STORE_URL, APP_STORE_ID (optional). Add a per-address rate limit for /r/* in the Vercel firewall.\nReview before deployment; this script does not publish anything.\n`,
   );
   await write(
     "expo-ios-config.fragment.json",

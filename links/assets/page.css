@@ -1,0 +1,27 @@
+:root { color-scheme: light; --ink: #1f2a37; --muted: #5b6673; --aqua: #0f6f6b; --aqua-soft: #e3f2f1; --paper: #f7f6f2; --card: #ffffff; }
+* { box-sizing: border-box; }
+html { background: var(--paper); }
+body { margin: 0; font: 17px/1.45 -apple-system, "Helvetica Neue", Arial, sans-serif; color: var(--ink); }
+main { max-width: 390px; margin: 0 auto; padding: 24px 24px 120px; }
+h1 { font-size: 28px; line-height: 1.2; margin: 16px 0 12px; }
+h2 { font-size: 17px; margin: 0 0 8px; }
+p { margin: 0 0 8px; }
+.invited { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.dot { width: 26px; height: 26px; border-radius: 13px; background: var(--aqua-soft); }
+.hero { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 16px; background: #e8e6df; }
+.detail { font-weight: 500; }
+.muted { color: var(--muted); font-size: 15px; }
+.why { background: var(--card); border-radius: 16px; padding: 14px; margin: 16px 0; }
+.why ul { margin: 0 0 8px; padding-left: 20px; }
+.footer { position: fixed; left: 0; right: 0; bottom: 0; padding: 12px 24px calc(12px + env(safe-area-inset-bottom)); background: var(--paper); }
+.button { display: block; min-height: 52px; line-height: 52px; text-align: center; border-radius: 26px; background: var(--aqua); color: #fff; font-weight: 700; text-decoration: none; }
+.button.secondary { background: var(--card); color: var(--aqua); border: 2px solid var(--aqua); line-height: 48px; margin-top: 12px; }
+.button:focus-visible, .scrim:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+.sheet { display: none; position: fixed; inset: 0; }
+.sheet:target { display: block; }
+.scrim { position: absolute; inset: 0; background: rgba(31, 42, 55, 0.5); }
+.panel { position: absolute; left: 0; right: 0; bottom: 0; background: var(--card); border-radius: 24px 24px 0 0; padding: 20px 24px calc(20px + env(safe-area-inset-bottom)); }
+.summary { display: flex; gap: 10px; align-items: center; background: var(--paper); border-radius: 12px; padding: 10px; }
+.summary img { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; }
+@media (prefers-reduced-motion: no-preference) { .sheet:target .panel { animation: rise 180ms ease-out; } }
+@keyframes rise { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }

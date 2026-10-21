@@ -20,7 +20,10 @@ test("Apple's link file names this app and only the invitation path", async () =
     assert.deepEqual(aasa.applinks.details, [
       {
         appIDs: ["ABCDE12345.com.resbite.app"],
-        components: [{ "/": "/invite", comment: "Resbite invitations only; auth setup remains separate." }],
+        components: [
+          { "/": "/invite", comment: "Resbite invitations only; auth setup remains separate." },
+          { "/": "/r/*", comment: "Event links (GI1): the app opens on the invitation." },
+        ],
       },
     ]);
     const fragment = JSON.parse(await readFile(join(out, "expo-ios-config.fragment.json"), "utf8"));
@@ -63,7 +66,7 @@ test("the host serves the link file as JSON and the page with private headers", 
       assert.equal(headers(source)["Cache-Control"], "no-store");
       assert.equal(headers(source)["Content-Security-Policy"], INVITE_CSP);
     }
-    assert.deepEqual(vercel.rewrites, [{ source: "/invite", destination: "/invite.html" }]);
+    assert.equal(vercel.rewrites[0].source, "/invite");
   } finally {
     await cleanup();
   }
@@ -72,4 +75,24 @@ test("the host serves the link file as JSON and the page with private headers", 
 test("a bad team ID or origin is refused before anything is written", async () => {
   await assert.rejects(generate("https://link.resbite.com", "short", "com.resbite.app", "/tmp/never"), /Usage/);
   await assert.rejects(generate("http://link.resbite.com", "ABCDE12345", "com.resbite.app", "/tmp/never"), /HTTPS/);
+});
+
+test("the event page's functions, assets and routes are part of the site (GI1)", async () => {
+  const { out, cleanup } = await site();
+  try {
+    for (const name of ["api/page.mjs", "api/image.mjs", "lib/render.mjs", "lib/supabase.mjs", "page.css", "page.js", "activities/coffee-together.png"])
+      assert.ok((await readFile(join(out, name))).length > 0, name);
+    const vercel = JSON.parse(await readFile(join(out, "vercel.json"), "utf8"));
+    assert.deepEqual(vercel.rewrites, [
+      { source: "/invite", destination: "/invite.html" },
+      { source: "/r/:code([A-Za-z0-9_-]{22})/image", destination: "/api/image?code=:code" },
+      { source: "/r/:code([A-Za-z0-9_-]{22})", destination: "/api/page?code=:code" },
+    ]);
+    assert.match(await readFile(join(out, "hosting-requirements.txt"), "utf8"), /SUPABASE_SECRET_KEY \(cover photos only\)/);
+    // The deployed folder carries no key: the functions read them from the environment.
+    for (const name of ["api/page.mjs", "api/image.mjs", "lib/supabase.mjs"])
+      assert.ok(!/sb_(secret|publishable)_[A-Za-z0-9]/.test(await readFile(join(out, name), "utf8")), name);
+  } finally {
+    await cleanup();
+  }
 });
