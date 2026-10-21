@@ -1,6 +1,7 @@
 import { isPendingInvite } from "../domain/appLinks";
 import type { KeyStore } from "./secureChunks";
 const key = "resbite.pending-invite";
+const termsKey = "resbite.pending-terms";
 /**
  * One kept invitation: a per-person token or (GI1) an event link code, told apart by their shapes
  * (`pendingInviteParams`). A newer link replaces an older one of either kind.
@@ -31,8 +32,10 @@ export function createPendingInviteStore(
           return;
         }
       }
-      if (token === null) await storage.removeItem(key);
-      else await storage.setItem(key, token);
+      if (token === null) {
+        await storage.removeItem(key);
+        await storage.removeItem(termsKey);
+      } else await storage.setItem(key, token);
       if (version === revision) publish(token);
     });
   }
@@ -45,6 +48,13 @@ export function createPendingInviteStore(
         if (version === revision) publish(isPendingInvite(value) ? value : null);
       });
     },
+    /** GI2: the Terms version agreed to before sign-in, kept beside the invitation until it is claimed. */
+    rememberTerms: (version: string | null) =>
+      run(async () => {
+        if (version === null) await storage.removeItem(termsKey);
+        else await storage.setItem(termsKey, version);
+      }),
+    readTerms: () => run(() => storage.getItem(termsKey)),
     beginCleanup: () => {
       blocked = true;
       ++revision;
@@ -56,6 +66,7 @@ export function createPendingInviteStore(
       const version = ++revision;
       return run(async () => {
         await storage.removeItem(key);
+        await storage.removeItem(termsKey);
         if (version === revision) publish(null);
       });
     },
