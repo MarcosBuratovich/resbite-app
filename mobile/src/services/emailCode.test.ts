@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { sendCode, verifyCode, type EmailCodeDeps } from "./emailCode";
+import { CODE_LIFETIME_MS, sendCode, verifyCode, type EmailCodeDeps } from "./emailCode";
 
-type Error = { message: string; status?: number } | null;
-function harness(otp: Error = null, verify: Error = null) {
+type AuthError = { message: string; status?: number } | null;
+function harness(otp: AuthError = null, verify: AuthError = null, now = 1_000) {
   const calls = {
     signInWithOtp: [] as Parameters<EmailCodeDeps["signInWithOtp"]>[0][],
     verifyOtp: [] as Parameters<EmailCodeDeps["verifyOtp"]>[0][],
@@ -17,7 +17,7 @@ function harness(otp: Error = null, verify: Error = null) {
       calls.verifyOtp.push(args);
       return { error: verify };
     },
-    now: () => 1_000,
+    now: () => now,
   };
   return { d, calls };
 }
@@ -46,8 +46,8 @@ test("another send error is shown as Supabase words it", async () => {
 });
 
 test("a wrong code maps to the doesn’t-match copy and clears", async () => {
-  const h = harness(null, { message: "Invalid token", status: 403 });
-  assert.deepEqual(await verifyCode(h.d, "ana@example.com", "123456"), {
+  const h = harness(null, { message: "Token has expired or is invalid", status: 403 }, 1_000 + CODE_LIFETIME_MS - 1);
+  assert.deepEqual(await verifyCode(h.d, "ana@example.com", "123456", 1_000), {
     ok: false,
     message: "That code doesn’t match. Try again.",
     clear: true,
@@ -56,8 +56,8 @@ test("a wrong code maps to the doesn’t-match copy and clears", async () => {
 });
 
 test("an expired code maps to the expired copy", async () => {
-  const h = harness(null, { message: "Token has expired or is invalid" });
-  assert.deepEqual(await verifyCode(h.d, "ana@example.com", "123456"), {
+  const h = harness(null, { message: "Token has expired or is invalid", status: 403 }, 1_000 + CODE_LIFETIME_MS);
+  assert.deepEqual(await verifyCode(h.d, "ana@example.com", "123456", 1_000), {
     ok: false,
     message: "That code has expired. Send a new one.",
     clear: true,
@@ -66,16 +66,40 @@ test("an expired code maps to the expired copy", async () => {
 });
 
 test("a right code is ok", async () => {
-  assert.deepEqual(await verifyCode(harness().d, "ana@example.com", "123456"), { ok: true });
+  assert.deepEqual(await verifyCode(harness().d, "ana@example.com", "123456", 1_000), { ok: true });
 });
 
 test("five digits are refused before any call", async () => {
   const h = harness();
   for (const bad of ["12345", "1234567", "12345a", ""])
-    assert.deepEqual(await verifyCode(h.d, "ana@example.com", bad), {
+    assert.deepEqual(await verifyCode(h.d, "ana@example.com", bad, 1_000), {
       ok: false,
       message: "That code doesn’t match. Try again.",
       clear: true,
     });
   assert.deepEqual(h.calls.verifyOtp, []);
+});
+
+test("a connection failure is not a wrong code and keeps the digits", async () => {
+  const down = { message: "fetch failed", status: 0 };
+  assert.deepEqual(await verifyCode(harness(null, down).d, "ana@example.com", "123456", 1_000), {
+    ok: false,
+    message: "Check your connection and try again.",
+    clear: false,
+  });
+  assert.deepEqual(await verifyCode(harness(null, { message: "x", status: 502 }).d, "ana@example.com", "123456", 1_000), {
+    ok: false,
+    message: "Check your connection and try again.",
+    clear: false,
+  });
+  assert.deepEqual(await sendCode(harness(down).d, "ana@example.com"), {
+    ok: false,
+    message: "Check your connection and try again.",
+  });
+});
+
+test("spaces in a pasted code are ignored", async () => {
+  const h = harness();
+  assert.deepEqual(await verifyCode(h.d, "ana@example.com", "123 456", 1_000), { ok: true });
+  assert.equal(h.calls.verifyOtp[0].token, "123456");
 });

@@ -39,3 +39,12 @@ test("the kept tick is stored and cleared with the invite", async () => {
   await store.rememberTerms(null);
   assert.equal(await store.readTerms(), null);
 });
+
+test("the tick is refused while sign-out is in progress", async () => {
+  const store = createPendingInviteStore(memory(), () => {});
+  const unblock = store.beginCleanup();
+  await assert.rejects(store.rememberTerms("2026-10"), /Sign-out/);
+  unblock();
+  await store.rememberTerms("2026-10");
+  assert.equal(await store.readTerms(), "2026-10");
+});

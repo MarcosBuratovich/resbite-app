@@ -48,7 +48,7 @@ test("the preview call carries the publishable key and no bearer of a session", 
     Authorization: `Bearer ${KEY}`,
     "Content-Type": "application/json",
   });
-  assert.equal(h.fetched[0].init.body, JSON.stringify({ code }));
+  assert.equal(h.fetched[0].init.body, JSON.stringify({ p_code: code }));
 });
 
 test("a closed state keeps only its state, and an unknown state is inactive", async () => {
@@ -62,6 +62,14 @@ test("a closed state keeps only its state, and an unknown state is inactive", as
   );
 });
 
+test("a happened state and a null body", async () => {
+  assert.deepEqual(
+    await harness({ respond: async () => new Response(JSON.stringify({ state: "happened", title: "T" })) }).g.readInvitationPreview(code),
+    { state: "happened", title: "T" },
+  );
+  assert.deepEqual(await harness({ respond: async () => new Response("null") }).g.readInvitationPreview(code), { state: "inactive" });
+});
+
 test("a failed preview request throws, so the page can offer a retry", async () => {
   const h = harness({ respond: async () => new Response("no", { status: 500 }) });
   await assert.rejects(h.g.readInvitationPreview(code));
@@ -71,6 +79,7 @@ test("noteLinkOpen swallows a 500 and a network failure", async () => {
   const h = harness({ respond: async () => new Response("no", { status: 500 }) });
   await h.g.noteLinkOpen(code);
   assert.equal(h.fetched[0].url, "https://x.supabase.co/rest/v1/rpc/note_link_open");
+  assert.equal(h.fetched[0].init.body, JSON.stringify({ p_code: code }));
   const down = harness({
     respond: async () => {
       throw new TypeError("offline");
@@ -103,4 +112,9 @@ test("join returns the plan id and sends an empty name for none", async () => {
   const h = harness();
   assert.equal(await h.g.joinByLink(code, null, "2026-10"), "plan-1");
   assert.deepEqual(h.rpcs, [{ fn: "join_by_link", args: { p_code: code, p_name: "", p_terms_version: "2026-10" } }]);
+});
+
+test("a join that returns no plan id throws", async () => {
+  const h = harness({ rpcReply: { data: null, error: null } });
+  await assert.rejects(h.g.joinByLink(code, "Ana", "2026-10"), /no plan/);
 });

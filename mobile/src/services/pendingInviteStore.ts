@@ -49,11 +49,13 @@ export function createPendingInviteStore(
       });
     },
     /** GI2: the Terms version agreed to before sign-in, kept beside the invitation until it is claimed. */
-    rememberTerms: (version: string | null) =>
-      run(async () => {
+    rememberTerms: (version: string | null) => {
+      if (blocked) return Promise.reject(Error("Sign-out is in progress."));
+      return run(async () => {
         if (version === null) await storage.removeItem(termsKey);
         else await storage.setItem(termsKey, version);
-      }),
+      });
+    },
     readTerms: () => run(() => storage.getItem(termsKey)),
     beginCleanup: () => {
       blocked = true;

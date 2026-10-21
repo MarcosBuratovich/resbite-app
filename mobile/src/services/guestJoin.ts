@@ -46,7 +46,7 @@ export function createGuestJoin(d: GuestJoinDeps) {
         Authorization: `Bearer ${d.publishableKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ code }),
+      body: JSON.stringify({ p_code: code }),
       signal: AbortSignal.timeout(20000),
     });
 
@@ -87,7 +87,8 @@ export function createGuestJoin(d: GuestJoinDeps) {
       if (match) throw new JoinRefusal(match[1], error.message);
       throw error;
     }
-    return data as string;
+    if (typeof data !== "string") throw new Error("join_by_link returned no plan");
+    return data;
   }
 
   return { readInvitationPreview, noteLinkOpen, joinByLink };
