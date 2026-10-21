@@ -35,25 +35,39 @@ create function private.has_live_grant(p_user uuid) returns boolean language sql
 $$;
 revoke all on function private.has_live_grant(uuid) from public, anon, authenticated, service_role;
 
--- A roster row or a live grant, with the same account checks for both. Otherwise the
--- 20260917190517_resbite_private_tester_foundation body, the one the hosted project runs; the local-only
--- 20261022120001_gi2_local_delivery_and_deletion.sql widens the deletion-aware body the same way.
-create or replace function private.eligible() returns boolean language sql stable security definer set search_path = '' as $$
- select auth.uid() is not null and exists (
+-- An account that may use the app: confirmed, not anonymous, not banned and not leaving, with a roster row or a
+-- live grant (the same account checks for both). The 20260917190517_resbite_private_tester_foundation eligible()
+-- body, the one the hosted project runs, for any user and with the roster row widened; the local-only
+-- 20261022120001_gi2_local_delivery_and_deletion.sql redefines it with the deletion-aware checks.
+create function private.user_eligible(p_user uuid) returns boolean language sql stable security definer set search_path = '' as $$
+ select p_user is not null and exists (
   select 1 from auth.users u
-  where u.id = auth.uid() and u.email_confirmed_at is not null
+  where u.id = p_user and u.email_confirmed_at is not null
     and not coalesce(u.is_anonymous,false)
     and (exists (select 1 from private.tester_roster r where r.email = lower(u.email) and r.enabled) or private.has_live_grant(u.id))
     and (u.banned_until is null or u.banned_until <= now())
- ) and not exists (select 1 from public.profiles p where p.id=auth.uid() and p.deletion_requested_at is not null)
+ ) and not exists (select 1 from public.profiles p where p.id=p_user and p.deletion_requested_at is not null)
 $$;
+revoke all on function private.user_eligible(uuid) from public, anon, authenticated, service_role;
+
+-- The signed-in account's eligibility. Its execute grants are unchanged (RLS policies call it).
+create or replace function private.eligible() returns boolean language sql stable security definer set search_path = '' as $$
+ select private.user_eligible(auth.uid())
+$$;
+
+-- The account is being deleted. Here: its profile is marked as leaving. The local-only
+-- 20261022120001_gi2_local_delivery_and_deletion.sql adds a pending deletion request.
+create function private.deletion_pending(p_user uuid) returns boolean language sql stable security definer set search_path = '' as $$
+ select exists(select 1 from public.profiles p where p.id=p_user and p.deletion_requested_at is not null)
+$$;
+revoke all on function private.deletion_pending(uuid) from public, anon, authenticated, service_role;
 
 -- Joining by the event link from a new account (GI2-D2). In this order: a signed-in, confirmed, non-anonymous
 -- account that isn't banned or leaving, else 42501 "Sign-in required"; the account's lock (require_tester's,
 -- so this serialises with deletion); a revoked grant is refused (42501); testers and grant holders take GI1's
 -- claim_plan_link and the name and tick are ignored. Everyone else needs a live link to an active event that
--- hasn't started and isn't their own (42501 "Invitation unavailable": an organizer dropped from the roster
--- does not let themselves back in), a name of 1-80 characters unless they have a profile, and the tick unless
+-- hasn't started, whose organizer may still use the app, and that isn't their own (42501 "Invitation
+-- unavailable": an organizer dropped from the roster neither lets themselves nor new guests in), a name of 1-80 characters unless they have a profile, and the tick unless
 -- it is already stored (22023). Then the tick, the grant, the profile (only when new), the attendance (not
 -- answered yet) and the organizer's notice, under GI1's dedupe key, in one transaction.
 create function private.join_by_link(p_code text,p_name text,p_terms_version text) returns uuid
@@ -62,7 +76,7 @@ declare v_uid uuid := auth.uid(); v_link private.plan_links; v_plan public.plans
 begin
  if v_uid is null or not exists(select 1 from auth.users u where u.id=v_uid and u.email_confirmed_at is not null
   and not coalesce(u.is_anonymous,false) and (u.banned_until is null or u.banned_until<=now()))
- or exists(select 1 from public.profiles p where p.id=v_uid and p.deletion_requested_at is not null) then
+ or private.deletion_pending(v_uid) then
   raise exception 'Sign-in required' using errcode='42501';
  end if;
  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_uid::text,47));
@@ -74,7 +88,9 @@ begin
  select * into v_link from private.plan_links where code=p_code and revoked_at is null;
  if not found then raise exception 'Invitation unavailable' using errcode='42501'; end if;
  select * into v_plan from public.plans where id=v_link.plan_id for update;
- if not found or v_plan.owner_id is null or v_plan.status<>'active' or v_plan.starts_at<=now() then
+ -- A link grants access only while its organizer may use the app themselves.
+ if not found or v_plan.owner_id is null or v_plan.status<>'active' or v_plan.starts_at<=now()
+ or not private.user_eligible(v_plan.owner_id) then
   raise exception 'Invitation unavailable' using errcode='42501';
  end if;
  -- Read again under the plan lock: rotate_plan_link holds the same lock while it turns the link off.

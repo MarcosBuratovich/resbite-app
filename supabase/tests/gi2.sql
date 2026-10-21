@@ -228,6 +228,8 @@ do $$ begin
  exception when insufficient_privilege then null; end;
  begin perform private.has_live_grant('b1000000-0000-4000-8000-000000000002'); raise exception 'A client called has_live_grant';
  exception when insufficient_privilege then null; end;
+ begin perform private.deletion_pending('b1000000-0000-4000-8000-000000000002'); raise exception 'A client called deletion_pending';
+ exception when insufficient_privilege then null; end;
 end $$;
 reset role;
 do $$ begin
@@ -240,6 +242,7 @@ do $$ begin
  if has_function_privilege('anon','public.join_by_link(text,text,text)','execute') or has_function_privilege('service_role','public.join_by_link(text,text,text)','execute')
  or has_function_privilege('anon','private.join_by_link(text,text,text)','execute') or has_function_privilege('service_role','private.join_by_link(text,text,text)','execute')
  or not has_function_privilege('authenticated','public.join_by_link(text,text,text)','execute') then raise exception 'join_by_link grants wrong'; end if;
+ if has_function_privilege('anon','private.deletion_pending(uuid)','execute') or has_function_privilege('authenticated','private.deletion_pending(uuid)','execute') then raise exception 'deletion_pending exposed'; end if;
  -- The tables hold only what they say.
  begin insert into private.beta_access(user_id,source) values ('b1000000-0000-4000-8000-000000000005','roster'); raise exception 'Unknown grant source accepted';
  exception when check_violation then null; end;
@@ -366,7 +369,8 @@ do $$ begin
  begin perform public.join_by_link((select code from gi2_codes where name='three'),'Guest Three','2026-10'); raise exception 'A revoked grant got the event back';
  exception when others then if sqlstate<>'42501' or sqlerrm<>'Invitation unavailable' then raise; end if; end;
 end $$;
--- An organizer dropped from the roster does not let themselves back in through their own link.
+-- An organizer dropped from the roster lets nobody in through their link: not themselves, not a new guest. Back
+-- on the roster, the same link works again.
 select set_config('request.jwt.claims','{"sub":"b2000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 do $$ begin
  perform public.create_plan_v3('b2100000-0000-4000-8000-000000000004','Brunch','',array['community'],null,
@@ -374,7 +378,7 @@ do $$ begin
  insert into gi2_codes values('four',public.plan_link('b2100000-0000-4000-8000-000000000004'));
 end $$;
 reset role;
-delete from private.tester_roster where email='gi2-2-owner@resbite-test.invalid';
+update private.tester_roster set enabled=false where email='gi2-2-owner@resbite-test.invalid';
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"b2000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 do $$ begin
@@ -382,12 +386,30 @@ do $$ begin
  begin perform public.join_by_link((select code from gi2_codes where name='four'),'Owner','2026-10'); raise exception 'Organizer let themselves back in';
  exception when others then if sqlstate<>'42501' or sqlerrm<>'Invitation unavailable' then raise; end if; end;
 end $$;
+select set_config('request.jwt.claims','{"sub":"b2000000-0000-4000-8000-000000000004","role":"authenticated"}',true);
+do $$ begin
+ begin perform public.join_by_link((select code from gi2_codes where name='four'),'Late Guest','2026-10'); raise exception 'Joined through a de-provisioned organizer''s link';
+ exception when others then if sqlstate<>'42501' or sqlerrm<>'Invitation unavailable' then raise; end if; end;
+end $$;
 reset role;
 do $$ begin
- if exists(select 1 from private.beta_access where user_id='b2000000-0000-4000-8000-000000000001')
- or exists(select 1 from private.age_attestations where user_id='b2000000-0000-4000-8000-000000000001')
- or exists(select 1 from public.attendees where user_id='b2000000-0000-4000-8000-000000000001')
- or exists(select 1 from private.notification_outbox where plan_id='b2100000-0000-4000-8000-000000000004') then raise exception 'The refused organizer wrote something'; end if;
+ if exists(select 1 from private.beta_access where user_id in ('b2000000-0000-4000-8000-000000000001','b2000000-0000-4000-8000-000000000004'))
+ or exists(select 1 from private.age_attestations where user_id in ('b2000000-0000-4000-8000-000000000001','b2000000-0000-4000-8000-000000000004'))
+ or exists(select 1 from public.profiles where id='b2000000-0000-4000-8000-000000000004')
+ or exists(select 1 from public.attendees where user_id in ('b2000000-0000-4000-8000-000000000001','b2000000-0000-4000-8000-000000000004'))
+ or exists(select 1 from private.notification_outbox where plan_id='b2100000-0000-4000-8000-000000000004') then raise exception 'A de-provisioned organizer''s link wrote something'; end if;
  if (select display_name from public.profiles where id='b2000000-0000-4000-8000-000000000001')<>'Owner' then raise exception 'The refused organizer was renamed'; end if;
+end $$;
+update private.tester_roster set enabled=true where email='gi2-2-owner@resbite-test.invalid';
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"b2000000-0000-4000-8000-000000000004","role":"authenticated"}',true);
+do $$ begin
+ if public.join_by_link((select code from gi2_codes where name='four'),'Late Guest','2026-10')<>'b2100000-0000-4000-8000-000000000004' then raise exception 'Join refused after the organizer is back'; end if;
+end $$;
+reset role;
+do $$ begin
+ if not exists(select 1 from private.beta_access where user_id='b2000000-0000-4000-8000-000000000004' and revoked_at is null
+  and plan_link_id=(select id from private.plan_links where code=(select code from gi2_codes where name='four'))) then raise exception 'No grant after the organizer is back'; end if;
+ if (select response from public.attendees where plan_id='b2100000-0000-4000-8000-000000000004' and user_id='b2000000-0000-4000-8000-000000000004') is distinct from 'pending' then raise exception 'Guest not on the event after the organizer is back'; end if;
 end $$;
 rollback;
