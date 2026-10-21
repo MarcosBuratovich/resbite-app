@@ -266,3 +266,50 @@ Owner decisions from the UX3 design session ([spec](../docs/superpowers/specs/20
 6. The owner checks in `create_plan_v3`’s retry branch and in `change_plan_v3` use `is distinct from`, like `set_guest_note`, so nobody can edit an ownerless event or have its creation identifier acknowledged (block 3 covers both).
 
 Each UX3 database migration needs the owner’s explicit approval. The hosted migration goes live together with the new TestFlight build, because builds older than UX3 read the emptied note column. Notification sending stays switched off.
+
+## GI1 — 21 October 2026
+
+Owner decisions from the GI1 design session ([spec](../docs/superpowers/specs/2026-10-21-gi1-event-links-design.md), [plan](../docs/superpowers/plans/2026-10-21-gi1.md)). GI1 gives each event one link, `link.resbite.com/r/<code>`, and a web page that shows the basics and one RSVP button. Stephen’s reason, from the research board: being invited is the best moment to turn a guest into a user. GI2 builds the guest’s account and reply; GI3 builds capacity and host approval. Status: built on the `gi1` branch, on top of `ux3`; not on the hosted project, not deployed, not on TestFlight.
+
+| # | Decision |
+| --- | --- |
+| GI-D1 | **The invite link grants access.** An account created from a valid link is approved for the beta automatically; the tester roster stays for everyone else. Built in GI2; GI1 keeps today’s roster gate. (21 October 2026) |
+| GI-D2 | **The page and the preview show the basics, as designed:** the host’s name, title, time, area, count and image. The exact place, Meeting details, the Note to guests and guests’ names stay behind an account and a reply. This reverses UX3-D2’s generic preview, deliberately. (21 October 2026) |
+| GI-D3 | **Three parts:** GI1, GI2 (guest account and reply) and GI3 (capacity and host approval). Not now: the group chat, replying on a computer, change notifications (B1), inviting from contacts. (21 October 2026) |
+| GI-D4 | **The Invitations screen is replaced** by the event’s link: Share, Copy link, Turn off this link. Per-person links go. Removing a guest moves to the guest list. (21 October 2026) |
+| GI-D5 | **An optional "Area" field** on the Where step, shown before people reply. The existing place is the exact one, shown after. (21 October 2026) |
+| GI-D6 | **The image is the cover photo, else the activity illustration, else the Resbite mark.** The cover photo becomes visible to anyone with the link. Video is out. (21 October 2026) |
+| GI-D7 | **The page is rendered by a server function on the existing Vercel project** (`link.resbite.com`), reading one public database function. Not an Edge Function, and not a static page with a browser-side fetch, because the preview needs server-rendered tags. (21 October 2026) |
+
+**Design proposals the owner accepted with the sections (21 October 2026).**
+1. The count shows Going only ("6 going"), or "Be one of the first" when nobody has replied.
+2. The "why join" box promises only what the app does today.
+3. No analytics in GI1.
+
+**Decisions the plan makes (P1 to P12).**
+
+| # | Decision |
+| --- | --- |
+| P1 | **Spec amendment, confirmed by the owner with the plan (21 October):** the organizer opening their own link lands on the event. The spec mirrored `claim_invite` (22023 for the organizer). A host will tap their own link in the chat they just posted it in, and an error there is wrong. `claim_plan_link` returns the plan id for the organizer, adds nothing and notifies nobody. |
+| P2 | **Spec amendment, confirmed by the owner with the plan:** `public.invitation_page` is a definer wrapper. The spec’s pattern is an invoker wrapper over a definer body, but `anon` has no usage on the `private` schema, so the wrapper for the one anonymous function is a definer too. It returns only what the private body returns. |
+| P3 | The page server fails closed. A database error or timeout renders the "no longer active" page with the generic preview. Nothing is cached, so the next request tries again. |
+| P4 | The image route streams the cover, through a signed URL valid for minutes and made with the Vercel-only secret, rather than redirecting. The preview address stays stable and the signed URL never leaves the server. |
+| P5 | The RSVP sheet opens without JavaScript (a `:target` sheet). The page’s only script shows "If Resbite doesn’t open, install it first." after "I have Resbite: open the app", when the page is still visible 1.5 seconds later. |
+| P6 | "Get the app" points at the TestFlight invitation link (`APP_STORE_URL`) until the app is public. The smart app banner is off (`APP_STORE_ID` empty) until then, because Safari only shows it for App Store apps. |
+| P7 | Illustrations ship with the site. The generator copies `mobile/assets/activities/*.png` into the deployed folder, so the image route serves them from disk with no database or storage call. |
+| P8 | Removing a guest revokes their per-person links too, so a link shared before GI1 can’t bring them straight back. The event link can, by design. |
+| P9 | Old links and the old page stay. `/invite#token=` and `claim_invite` keep working for links already shared. Only the organizer screen stops making them. |
+| P10 | **Confirmed by the owner with the plan (21 October):** "Turn off this link" also turns off the event’s unclaimed per-person links (shared before GI1). The per-person Revoke is gone, so the host would otherwise have no way to stop one. Claimed ones belong to guests, whom Remove handles (P8). The ⓘ sheet says so. |
+| P11 | **Confirmed by the owner with the plan (21 October):** People is no longer an entry point to Invite people. Its only link was "Review invitations", which belonged to the per-person flow. The two entry points that matter (after creating an event, and "Invite someone" on the event page) stay. The spec listed People among the entry points. |
+| P12 | **Confirmed by the owner with the plan (21 October):** the share text’s date is in the phone’s time zone, like every card in the app. The web page uses the event’s time zone. For a host sharing their own event the two agree. |
+
+**Decided during the build (21 October 2026), for the owner’s review.**
+1. The page’s image route falls back to the Resbite mark on any signing, fetch or read error, and allows only the cover’s content types (image/jpeg, image/png, image/webp). Image responses carry a `default-src 'none'` content security policy.
+2. The generated `vercel.json` bundles the mark and the illustrations into the image function (`functions.api/image.mjs.includeFiles`), so the function finds them on Vercel.
+3. The "happened" page’s "Plan your own with Resbite." links to the app.
+4. An end on another day is written as the app does it ("Fri 23 Oct, 22:00 – Sat 24 02:00").
+5. There is no smart app banner when there is no code.
+6. The inactive page adds "Ask whoever sent it for a new link."
+7. The capture script asserts that the Area step has no sideways overflow, and that the Invite people card shows the area and never the place.
+
+Each GI1 database migration needs the owner’s explicit approval. The hosted migration goes live together with the new TestFlight build, because build 8 can’t open `/r/` links. Old per-person links keep working.
