@@ -7,6 +7,7 @@ import {
   LocateFixed,
   Lock,
   MapPin,
+  MapPinned,
   Pencil,
   Plus,
   Send,
@@ -23,7 +24,14 @@ import { categoryPalette, colors as c, depth, fonts, r } from "./tokens";
 import { categoryKeys, categoryLabels, toggleCategory, type CategoryKey } from "../domain/categories";
 import { canDiscardDraft } from "../domain/draftAutosave";
 import { DESCRIPTION_MAX, TITLE_MAX, eventPicture } from "../domain/events";
-import { MEETING_DETAILS_HINT } from "../domain/eventDetails";
+import {
+  AREA_HINT,
+  AREA_LABEL,
+  AREA_MAX,
+  AREA_PLACEHOLDER,
+  MEETING_DETAILS_HINT,
+  areaLine,
+} from "../domain/eventDetails";
 import { defaultEnd } from "../domain/eventTime";
 import { coverNotice, reviewLabels, type CoverCardPart } from "../domain/eventView";
 import { parseLocalDateTime } from "../domain/plans";
@@ -224,7 +232,7 @@ export function WhenStep({ editor }: { editor: PlanEditor }) {
 }
 
 export function WhereStep({ editor, recent }: { editor: PlanEditor; recent: readonly string[] }) {
-  const { place, changePlace, note, setNote, locked, locating, locate } = editor;
+  const { place, changePlace, area, setArea, note, setNote, locked, locating, locate } = editor;
   const current = place.trim().toLocaleLowerCase();
   return (
     <>
@@ -292,6 +300,20 @@ export function WhereStep({ editor, recent }: { editor: PlanEditor; recent: read
           </View>
         </View>
       )}
+      {/* GI1-D5: the optional area, for the link's page and preview; the place above is the exact one. */}
+      <View style={styles.meeting}>
+        <FieldCard
+          label={AREA_LABEL}
+          icon={MapPinned}
+          placeholder={AREA_PLACEHOLDER}
+          value={area}
+          onChangeText={setArea}
+          maxLength={AREA_MAX}
+          editable={!locked}
+          returnKeyType="done"
+        />
+        <Copy style={styles.meetingHint}>{AREA_HINT}</Copy>
+      </View>
       {/* UX3-D5: today's note becomes private Meeting details, read only by the organizer and Going or Maybe guests. */}
       <View style={styles.meeting}>
         <FieldCard
@@ -390,7 +412,8 @@ export function VibeStep({ editor }: { editor: PlanEditor }) {
 
 /** Review is exactly what guests will see (benchmark row 4); each part jumps to its step. */
 export function ReviewStep({ editor, onJump }: { editor: PlanEditor; onJump: (part: CoverCardPart) => void }) {
-  const { fields, place, note, start, end, locked, cover, sourceId, idea, historicalActivity } = editor;
+  const { fields, place, area, note, start, end, locked, cover, sourceId, idea, historicalActivity } = editor;
+  const areaText = areaLine(area);
   const at = startIso(start);
   const until = endIso(end);
   const description = fields.description.trim();
@@ -427,6 +450,17 @@ export function ReviewStep({ editor, onJump }: { editor: PlanEditor; onJump: (pa
       ) : (
         <Chip icon={Plus} text="Description" label="Add description" disabled={locked} onPress={() => onJump("title")} />
       )}
+      {areaText ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Edit area, ${area.trim()}`}
+          onPress={() => onJump("place")}
+          style={({ pressed }) => [styles.description, pressed && { backgroundColor: c.surface }]}
+        >
+          <MapPinned size={20} strokeWidth={2} color={c.muted} />
+          <Copy style={styles.descriptionText}>{areaText}</Copy>
+        </Pressable>
+      ) : null}
       {!!note && <Copy style={s.muted}>{note}</Copy>}
       {cover.pending && <CoverRecovery cover={cover} disabled={locked} />}
       {!!cover.message && (

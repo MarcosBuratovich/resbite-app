@@ -2,7 +2,8 @@
 // time chips, jumping from Review, the Invite screen, leaving mid-flow, a restored
 // unconfirmed save, recent places, and Larger Text at 320 px. Steps v2: the order, placement
 // and sizes from the owner-approved mockup. UX3: the optional end time on When and Meeting
-// details on Where. Every Supabase request is aborted.
+// details on Where. GI1: the optional Area on Where, kept by drafts and shown on Review. Every Supabase
+// request is aborted.
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium, expect } from "@playwright/test";
@@ -118,12 +119,16 @@ try {
       await inOrder(page, [
         page.getByLabel("Meeting place", { exact: true }),
         button(page, "Use my location"),
+        page.getByLabel("Area, shown before people reply", { exact: true }),
+        page.getByText("Anyone with the link sees this. The exact place shows after they reply.", { exact: true }),
         page.getByLabel("Meeting details (optional)", { exact: true }),
         page.getByText("Only people who answer Going or Maybe see this.", { exact: true }),
       ]),
       true,
-      "Where shows the place, Use my location, then Meeting details and its line",
+      "Where shows the place, Use my location, the Area and its line, then Meeting details and its line",
     );
+    await expect(page.getByPlaceholder("Near Old Street", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Area, shown before people reply", { exact: true })).toHaveAttribute("maxlength", "80");
     await expect(page.getByPlaceholder("Door code, meeting spot… (optional)", { exact: true })).toBeVisible();
     await expect(page.getByLabel("A note for everyone (optional)", { exact: true })).toHaveCount(0);
     assert.ok((await heightOf(button(page, "Use my location"))) >= 70, "Use my location is a 72 pt tile");
@@ -431,6 +436,39 @@ try {
     console.log("PASS: Close runs the keep-draft guard; a kept draft resumes at its first missing step.");
   }
 
+  // 5b. GI1 Area: optional, kept by the draft, shown on Review as "Area · …", which jumps back to Where.
+  {
+    const page = await preview();
+    await button(page, "New resbite").click();
+    await page.getByLabel("Name", { exact: true }).fill("Film club");
+    await next(page);
+    await next(page);
+    const area = page.getByLabel("Area, shown before people reply", { exact: true });
+    await page.getByLabel("Meeting place", { exact: true }).fill("12 Old Street, flat 3");
+    await area.fill("Near Old Street");
+    await expect(page.getByText("Draft saved on this device.", { exact: true })).toBeVisible();
+    page.once("dialog", (dialog) => dialog.accept());
+    await close(page);
+    await button(page, /^Continue draft/).click();
+    await expect(heading(page, "What’s the vibe?")).toBeVisible();
+    await button(page, "Previous step").click();
+    await expect(area).toHaveValue("Near Old Street");
+    await next(page);
+    await page.getByRole("checkbox", { name: "Creative", exact: true }).click();
+    await next(page);
+    await expect(heading(page, "Looks good?")).toBeVisible();
+    await expect(page.getByText("Area · Near Old Street", { exact: true })).toBeVisible();
+    await button(page, "Edit area, Near Old Street").click();
+    await expect(heading(page, "Where?")).toBeVisible();
+    // Spaces alone are no area: Review shows nothing.
+    await area.fill("   ");
+    await button(page, "Done").click();
+    await expect(heading(page, "Looks good?")).toBeVisible();
+    await expect(page.getByText(/^Area · /)).toHaveCount(0);
+    await page.context().close();
+    console.log("PASS: the optional Area on Where: kept by a draft, shown on Review as “Area · …” (jumps to Where), absent when blank.");
+  }
+
   // 6. A restored unconfirmed save opens at Review, locked, offering Retry save.
   {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
@@ -537,6 +575,7 @@ try {
         "Where?",
         async () => {
           await page.getByLabel("Meeting place", { exact: true }).fill("The community garden behind the old library");
+          await page.getByLabel("Area, shown before people reply", { exact: true }).fill("Near the old library, Stoke Newington");
           await page.getByLabel("Meeting details (optional)", { exact: true }).fill("Ring the bell by the blue gate");
         },
       ],

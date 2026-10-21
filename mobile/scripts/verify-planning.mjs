@@ -740,7 +740,7 @@ try {
       ends_at: null,
       time_zone: "UTC",
       place_label: "Original café",
-      area: "",
+      area: "Near the river",
       note: "Gate code 4512",
       status: "active",
       version: 1,
@@ -798,6 +798,8 @@ try {
     assert.equal(writes[0].p_ends, "2099-03-01T17:30:00.000Z");
     assert.equal(writes[0].p_start, "2099-03-01T15:00:00.000Z");
     assert.equal(writes[0].p_note, "Gate code 4512");
+    // GI1: the area loads in the editor and is sent unchanged as p_area.
+    assert.equal(writes[0].p_area, "Near the river");
     // The event page shows the range, and the organizer's Meeting details card.
     await expect(heading(fixture, "Coffee evening")).toBeVisible();
     await expect(fixture.getByText("15:00 – 17:30", { exact: true })).toBeVisible();
@@ -814,6 +816,9 @@ try {
     // never count as Meeting details.
     await button(fixture, "Edit place, Original café").click();
     await fixture.getByLabel("Meeting details (optional)", { exact: true }).fill("  \nGate code 9876 \n\n");
+    const areaField = fixture.getByLabel("Area, shown before people reply", { exact: true });
+    await expect(areaField).toHaveValue("Near the river");
+    await areaField.fill("  Near Old Street ");
     await next(fixture);
     await button(fixture, "Save").click();
     await expect(heading(fixture, "Looks good?")).toHaveCount(0);
@@ -821,9 +826,20 @@ try {
     assert.equal(writes[1].p_ends, null);
     assert.equal(writes[1].p_start, "2099-03-01T16:00:00.000Z");
     assert.equal(writes[1].p_note, "Gate code 9876");
+    assert.equal(writes[1].p_area, "Near Old Street");
     await expect(fixture.getByText("16:00", { exact: true })).toBeVisible();
+    // Clearing the area sends "" (cleared), never null (which leaves it as it is).
+    await button(fixture, "Edit Coffee evening").click();
+    await button(fixture, /^Edit place, /).click();
+    await expect(areaField).toHaveValue("Near Old Street");
+    await areaField.fill("");
+    await next(fixture);
+    await button(fixture, "Save").click();
+    await expect(heading(fixture, "Looks good?")).toHaveCount(0);
+    assert.equal(writes.length, 3);
+    assert.equal(writes[2].p_area, "");
     await fixture.context().close();
-    console.log("PASS: the end time is sent as p_ends (none after Remove) and shown as a range; Meeting details load in the editor and are sent trimmed.");
+    console.log("PASS: the end time is sent as p_ends (none after Remove) and shown as a range; Meeting details load in the editor and are sent trimmed; the area loads and is sent trimmed as p_area (\"\" when cleared).");
   }
   assert.deepEqual(errors, []);
 } finally {

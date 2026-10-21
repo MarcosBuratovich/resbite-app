@@ -1,6 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canPostGuestNote, guestNoteError, guestNoteTime, meetingDetailsView } from "./eventDetails.ts";
+import {
+  AREA_HINT,
+  AREA_LABEL,
+  AREA_MAX,
+  AREA_PLACEHOLDER,
+  areaLine,
+  canPostGuestNote,
+  guestNoteError,
+  guestNoteTime,
+  meetingDetailsView,
+} from "./eventDetails.ts";
 
 test("Meeting details: organizer, Going and Maybe see the text; others see a lock only when some exist", () => {
   const text = "Gate 4512";
@@ -37,4 +47,13 @@ test("Note to guests: the 280 limit counts characters, not UTF-16 units", () => 
   assert.equal(guestNoteError(emojiNote), null);
   assert.equal(guestNoteError(`${emojiNote}a`), "Keep the note to 280 characters.");
   assert.equal(guestNoteError(`  ${"a".repeat(280)}  `), null);
+});
+
+test("GI1 area: the field's words, its length, and Review's line only when set", () => {
+  assert.equal(AREA_LABEL, "Area, shown before people reply");
+  assert.equal(AREA_PLACEHOLDER, "Near Old Street");
+  assert.equal(AREA_HINT, "Anyone with the link sees this. The exact place shows after they reply.");
+  assert.equal(AREA_MAX, 80);
+  assert.equal(areaLine("  Near Old Street "), "Area · Near Old Street");
+  for (const none of ["", "   ", null, undefined]) assert.equal(areaLine(none), null);
 });

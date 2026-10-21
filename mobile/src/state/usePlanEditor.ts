@@ -64,6 +64,9 @@ export type PlanEditor = {
   end: string;
   setEnd: (next: string) => void;
   place: string;
+  /** GI1 area shown to anyone with the link before they reply (max 80, trimmed on save); "" when none. */
+  area: string;
+  setArea: (next: string) => void;
   /** Typing or choosing a place; a running "Use my location" then never overwrites it. */
   changePlace: (next: string) => void;
   /** Meeting details (UX3): only the organizer and Going or Maybe guests can read them. */
@@ -137,6 +140,7 @@ export function usePlanEditor({
   const startAnchor = useRef(start);
   if (parseLocalDateTime(start)) startAnchor.current = start;
   const [place, setPlace] = useState("");
+  const [area, setArea] = useState("");
   const [note, setNote] = useState("");
   const [fields, setFields] = useState<EventFields>({
     title: "",
@@ -203,11 +207,12 @@ export function usePlanEditor({
     mode === "idea" && !preview && !pending
       ? catalogue.items[0]
       : (catalogue.items[0] ?? historicalActivity);
-  // An end joins the snapshot only when there is one, so a baseline saved before UX3 (no end) still matches.
-  const snapshotOf = (f: EventFields, s: string, p: string, n: string, e = "") =>
-    JSON.stringify(e ? [f.title, f.description, f.categories, s, p, n, e] : [f.title, f.description, f.categories, s, p, n]);
+  // An end (and, GI1, an area) joins the snapshot only when there is one, so a baseline saved before UX3 or
+  // GI1 still matches.
+  const snapshotOf = (f: EventFields, s: string, p: string, n: string, e = "", a = "") =>
+    JSON.stringify([f.title, f.description, f.categories, s, p, n, ...(e || a ? [e] : []), ...(a ? [a] : [])]);
   const dirty =
-    initial !== null && initial !== snapshotOf(fields, start, place, note, end);
+    initial !== null && initial !== snapshotOf(fields, start, place, note, end, area);
   const locked = busy || pending !== null;
 
   useEffect(() => {
@@ -229,8 +234,9 @@ export function usePlanEditor({
     setStart(text);
     setEnd(endText);
     setPlace(plan.place_label);
+    setArea(plan.area ?? "");
     setNote(plan.note);
-    setInitial(snapshotOf(planFields, text, plan.place_label, plan.note, endText));
+    setInitial(snapshotOf(planFields, text, plan.place_label, plan.note, endText, plan.area ?? ""));
     setLatest(undefined);
     setError(null);
     setPending(null);
@@ -278,6 +284,8 @@ export function usePlanEditor({
               : (stored.end ?? ""),
           );
           setPlace(stored.place);
+          // Drafts saved before GI1 have no area; an edit keeps the event's own.
+          setArea(stored.area ?? restoredOriginal?.area ?? "");
           setNote(stored.note);
           setZone(currentZone);
           setInitial(stored.initial);
@@ -313,7 +321,7 @@ export function usePlanEditor({
             );
           applyPlan(plan);
         } else if (mode === "blank") {
-          setInitial(snapshotOf(fields, start, place, note, end));
+          setInitial(snapshotOf(fields, start, place, note, end, area));
         } else {
           // An idea prefills once it is available (effect below).
           needsPrefill.current = true;
@@ -338,7 +346,7 @@ export function usePlanEditor({
     needsPrefill.current = false;
     const prefilled = fieldsFromActivity(idea);
     setFields(prefilled);
-    setInitial(snapshotOf(prefilled, start, place, note, end));
+    setInitial(snapshotOf(prefilled, start, place, note, end, area));
   }, [draftReady, idea]);
 
   draftSnapshot.current =
@@ -360,6 +368,7 @@ export function usePlanEditor({
           start,
           end,
           place,
+          area,
           note,
           zone,
           startInstant: parseLocalDateTime(start)?.toISOString(),
@@ -455,6 +464,7 @@ export function usePlanEditor({
     start,
     end,
     place,
+    area,
     note,
     zone,
     pending,
@@ -629,8 +639,8 @@ export function usePlanEditor({
           // Trimmed, so spaces or blank lines alone don't count as Meeting details (the locked line would
           // promise guests something empty).
           note: note.trim(),
-          // GI1: the editor has no Area field yet; an edit keeps the stored area.
-          area: original?.area ?? "",
+          // GI1: shown to anyone with the link before they reply; "" clears it.
+          area: area.trim(),
         },
       };
     }
@@ -789,6 +799,8 @@ export function usePlanEditor({
       placeRevision.current++;
       setPlace(text);
     },
+    area,
+    setArea,
     note,
     setNote,
     zone,

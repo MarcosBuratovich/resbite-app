@@ -199,6 +199,16 @@ test("UX3: a draft keeps its end time; drafts saved before UX3 have none", async
   assert.equal(restored.endInstant, "2099-01-01T14:00:00.000Z");
 });
 
+test("GI1: a draft keeps its area; drafts saved before GI1 have none", async () => {
+  const { storage } = memory();
+  const drafts = createDraftStore(storage);
+  await drafts.put(fixture());
+  assert.equal((await drafts.list("account-a"))[0].area, undefined);
+  await drafts.put({ ...fixture(), area: "Near Old Street" });
+  const [restored] = await createDraftStore(storage).list("account-a");
+  assert.equal(restored.area, "Near Old Street");
+});
+
 test("a blank event draft has no idea and keeps its event fields", async () => {
   const { storage } = memory();
   const drafts = createDraftStore(storage);
@@ -236,6 +246,8 @@ test("corrupt event fields are rejected rather than half-restored", async () => 
     { description: 7 },
     { end: 1200 },
     { endInstant: false },
+    { area: 80 },
+    { area: null },
   ]) {
     const { storage, values } = memory();
     values.set("resbite.drafts.v1.account-a", JSON.stringify([{ ...fixture(), ...corrupt }]));

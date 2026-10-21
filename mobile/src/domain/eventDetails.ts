@@ -22,6 +22,17 @@ export function meetingDetailsView(view: {
 export const MEETING_DETAILS_LOCKED = "Meeting details appear after you answer Going or Maybe.";
 export const MEETING_DETAILS_HINT = "Only people who answer Going or Maybe see this.";
 
+// GI1-D5: the optional area, shown to anyone with the event's link before they reply; the place is the exact one.
+export const AREA_MAX = 80;
+export const AREA_LABEL = "Area, shown before people reply";
+export const AREA_PLACEHOLDER = "Near Old Street";
+export const AREA_HINT = "Anyone with the link sees this. The exact place shows after they reply.";
+/** Review's line for a set area, or null when there is none. */
+export function areaLine(area: string | null | undefined): string | null {
+  const text = (area ?? "").trim();
+  return text ? `Area · ${text}` : null;
+}
+
 export const GUEST_NOTE_MAX = 280;
 
 /**

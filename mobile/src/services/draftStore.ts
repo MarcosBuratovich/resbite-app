@@ -20,6 +20,8 @@ export type PlanDraft = {
   /** UX3 optional end time in the editor's local format ("" when none); absent in drafts saved before UX3. */
   end?: string;
   place: string;
+  /** GI1 area shown before people reply ("" when none); absent in drafts saved before GI1. */
+  area?: string;
   /** Meeting details (UX3); the field keeps its name so older drafts still load. */
   note: string;
   zone: string;
@@ -66,6 +68,7 @@ export function createDraftStore(storage: KeyStore) {
           (d.description !== undefined && typeof d.description !== "string") ||
           (d.end !== undefined && typeof d.end !== "string") ||
           (d.endInstant !== undefined && typeof d.endInstant !== "string") ||
+          (d.area !== undefined && typeof d.area !== "string") ||
           (d.categories !== undefined &&
             !(
               Array.isArray(d.categories) &&
