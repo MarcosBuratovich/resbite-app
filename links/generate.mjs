@@ -74,6 +74,8 @@ export async function generate(originValue, teamId, bundleId, output) {
           { source: "/r/:code([A-Za-z0-9_-]{22})", destination: "/api/page?code=:code" },
         ],
         redirects: [{ source: "/", destination: "https://www.resbite.com/", permanent: false }],
+        // The image route reads these files from disk, so Vercel must bundle them with the function.
+        functions: { "api/image.mjs": { includeFiles: "{resbite-mark.png,activities/**}" } },
         headers: [
           {
             source: "/.well-known/apple-app-site-association",

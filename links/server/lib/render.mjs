@@ -21,7 +21,10 @@ export const isLinkCode = (value) => typeof value === "string" && CODE_PATTERN.t
 const escape = (text) =>
   String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
-/** "Fri 23 Oct, 19:30 – 22:00" in the event's own time zone, as the app shows it; "Fri 23 Oct, 19:30" without an end. */
+/**
+ * "Fri 23 Oct, 19:30 – 22:00" in the event's own time zone, as the app shows it; "Fri 23 Oct, 19:30" without an end.
+ * An end on another local day reads "Fri 23 Oct, 22:00 – Sat 24 02:00": the end gets its weekday and day number.
+ */
 export function formatWhen(startsAt, endsAt, timeZone) {
   const start = new Date(startsAt);
   if (Number.isNaN(start.getTime())) return "";
@@ -32,10 +35,17 @@ export function formatWhen(startsAt, endsAt, timeZone) {
     zone = "UTC";
   }
   const day = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: zone });
+  const endDay = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", timeZone: zone });
+  const dayKey = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: zone });
   const time = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: zone });
   const clock = (date) => time.format(date).replace(/^24:/, "00:");
   const end = endsAt ? new Date(endsAt) : null;
-  const range = end && !Number.isNaN(end.getTime()) && end > start ? `${clock(start)} – ${clock(end)}` : clock(start);
+  let range = clock(start);
+  if (end && !Number.isNaN(end.getTime()) && end > start) {
+    range = dayKey.format(end) === dayKey.format(start)
+      ? `${clock(start)} – ${clock(end)}`
+      : `${clock(start)} – ${endDay.format(end)} ${clock(end)}`;
+  }
   return `${day.format(start)}, ${range}`;
 }
 
@@ -67,8 +77,9 @@ export function renderPage(data, options) {
   const title = open ? data.title : "You’re invited to a resbite";
   const image = open ? `${self}/image` : `${origin}/resbite-mark.png`;
   const description = open ? previewDescription(data) : "Open the link on your phone to see the resbite.";
-  const banner = appStoreId ? `<meta name="apple-itunes-app" content="app-id=${escape(appStoreId)}, app-argument=${escape(self)}" />` : "";
-  const body = open ? openBody(data, { image, code, appStoreUrl }) : closedBody(state, data);
+  // No banner without a code: the inactive page for a malformed link has none to hand the app.
+  const banner = appStoreId && code ? `<meta name="apple-itunes-app" content="app-id=${escape(appStoreId)}, app-argument=${escape(self)}" />` : "";
+  const body = open ? openBody(data, { image, code, appStoreUrl }) : closedBody(state, data, appStoreUrl);
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -108,7 +119,7 @@ function openBody(data, { image, code, appStoreUrl }) {
         <ul>
           <li>See who’s going</li>
           <li>Add it to your calendar</li>
-          <li>Get reminders before it starts</li>
+          <li>Reminders before it starts</li>
         </ul>
         <p class="muted">Free. No ads. No public profile.</p>
       </section>
@@ -127,12 +138,12 @@ function openBody(data, { image, code, appStoreUrl }) {
       </div>`;
 }
 
-function closedBody(state, data) {
+function closedBody(state, data, appStoreUrl) {
   const host = escape(data?.host || "The host");
   if (state === "cancelled") return `      <h1>${host} cancelled this resbite.</h1>`;
   if (state === "happened")
     return `      <h1>This resbite has already happened.</h1>
-      <p class="muted">Plan your own with Resbite.</p>`;
+      <p class="muted"><a href="${escape(appStoreUrl)}">Plan your own with Resbite.</a></p>`;
   return `      <h1>This invitation is no longer active.</h1>
       <p class="muted">Ask whoever sent it for a new link.</p>`;
 }

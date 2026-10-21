@@ -88,6 +88,7 @@ test("the event page's functions, assets and routes are part of the site (GI1)",
       { source: "/r/:code([A-Za-z0-9_-]{22})/image", destination: "/api/image?code=:code" },
       { source: "/r/:code([A-Za-z0-9_-]{22})", destination: "/api/page?code=:code" },
     ]);
+    assert.deepEqual(vercel.functions, { "api/image.mjs": { includeFiles: "{resbite-mark.png,activities/**}" } });
     assert.match(await readFile(join(out, "hosting-requirements.txt"), "utf8"), /SUPABASE_SECRET_KEY \(cover photos only\)/);
     // The deployed folder carries no key: the functions read them from the environment.
     for (const name of ["api/page.mjs", "api/image.mjs", "lib/supabase.mjs"])
