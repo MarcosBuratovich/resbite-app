@@ -83,10 +83,12 @@ test("the event page's functions, assets and routes are part of the site (GI1)",
     for (const name of ["api/page.mjs", "api/image.mjs", "lib/render.mjs", "lib/supabase.mjs", "page.css", "page.js", "activities/coffee-together.png"])
       assert.ok((await readFile(join(out, name))).length > 0, name);
     const vercel = JSON.parse(await readFile(join(out, "vercel.json"), "utf8"));
+    // Any /r/<code> reaches the functions, which render a malformed or truncated code as inactive (with the
+    // page's headers) rather than leaving it to Vercel's bare 404.
     assert.deepEqual(vercel.rewrites, [
       { source: "/invite", destination: "/invite.html" },
-      { source: "/r/:code([A-Za-z0-9_-]{22})/image", destination: "/api/image?code=:code" },
-      { source: "/r/:code([A-Za-z0-9_-]{22})", destination: "/api/page?code=:code" },
+      { source: "/r/:code/image", destination: "/api/image?code=:code" },
+      { source: "/r/:code", destination: "/api/page?code=:code" },
     ]);
     assert.deepEqual(vercel.functions, { "api/image.mjs": { includeFiles: "{resbite-mark.png,activities/**}" } });
     assert.match(await readFile(join(out, "hosting-requirements.txt"), "utf8"), /SUPABASE_SECRET_KEY \(cover photos only\)/);

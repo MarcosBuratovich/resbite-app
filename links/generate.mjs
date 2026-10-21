@@ -70,8 +70,9 @@ export async function generate(originValue, teamId, bundleId, output) {
       {
         rewrites: [
           { source: "/invite", destination: "/invite.html" },
-          { source: "/r/:code([A-Za-z0-9_-]{22})/image", destination: "/api/image?code=:code" },
-          { source: "/r/:code([A-Za-z0-9_-]{22})", destination: "/api/page?code=:code" },
+          // No pattern on :code: the functions render a malformed or truncated code as inactive.
+          { source: "/r/:code/image", destination: "/api/image?code=:code" },
+          { source: "/r/:code", destination: "/api/page?code=:code" },
         ],
         redirects: [{ source: "/", destination: "https://www.resbite.com/", permanent: false }],
         // The image route reads these files from disk, so Vercel must bundle them with the function.
