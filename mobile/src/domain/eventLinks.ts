@@ -1,3 +1,5 @@
+import { timeRange } from "./eventTime";
+
 /**
  * GI1: the event's one link. What the app says when reading, turning off or joining by a link, or removing a
  * guest, fails. The database's codes: 42501 is "not the organizer of an upcoming, active resbite" for the
@@ -36,3 +38,35 @@ export function claimLinkErrorMessage(error: unknown): string {
     ? inactiveInvitation
     : "This invitation could not be opened. Check your connection and try again.";
 }
+
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+
+/** "Fri 23 Oct, 19:30 – 22:00" (no end: "Fri 23 Oct, 19:30"), as the link's web page writes it; "" without a start. */
+export function linkDate(startIso: string | null, endIso?: string | null): string {
+  const start = startIso ? new Date(startIso) : null;
+  if (!start || !Number.isFinite(start.getTime())) return "";
+  return `${DAYS[start.getDay()]} ${start.getDate()} ${MONTHS[start.getMonth()]}, ${timeRange(startIso, endIso)}`;
+}
+
+/** What Share sends: "<Title>, <date>. RSVP: <link>". */
+export function shareMessage(
+  plan: { title: string; starts_at: string; ends_at?: string | null },
+  link: string,
+): string {
+  const date = linkDate(plan.starts_at, plan.ends_at);
+  return `${plan.title.trim()}${date ? `, ${date}` : ""}. RSVP: ${link}`;
+}
+
+export const TURN_OFF_TITLE = "Turn off this link?";
+export const TURN_OFF_MESSAGE =
+  "People with the old link will see that it’s no longer active. You’ll get a new link.";
+
+/** The ⓘ "Invitation links" sheet. */
+export const LINK_INFO = [
+  "Each resbite has one invitation link. Share it anywhere: messages, email or a group chat.",
+  "Anyone with the link sees the basics: who invited them, the name, the time, the area, how many are going and the picture.",
+  "The exact place and Meeting details show only after they reply.",
+  "Turn the link off to stop it working. You’ll get a new link to share.",
+  "Turning the link off also stops any older per-person links you shared.",
+] as const;

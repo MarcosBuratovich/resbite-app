@@ -525,7 +525,7 @@ export function InviteNext({ editor, onInvite }: { editor: PlanEditor; onInvite:
         chips={vibeChips(editor)}
       />
       <ErrorNote message={coverNotice(editor.created?.cover)} />
-      <Tile size="large" icon={Send} title="Invite people" hint="Prepare a link for each person" onPress={onInvite} />
+      <Tile size="large" icon={Send} title="Invite people" hint="Share one link for this resbite" onPress={onInvite} />
     </>
   );
 }

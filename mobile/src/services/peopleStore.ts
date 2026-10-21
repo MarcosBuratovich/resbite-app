@@ -1,8 +1,6 @@
-import type { InvitationSlot } from "../domain/invitations";
 import type { KeyStore } from "./secureChunks";
 import { mergePeople, type Person, type PeopleGroup } from "../domain/people";
 export type PeopleData = {
-  invitations?: InvitationSlot[];
   groups: PeopleGroup[];
   plans: Record<string, Person[]>;
 };
@@ -26,7 +24,9 @@ export function createPeopleStore(storage: KeyStore) {
       typeof data.plans !== "object"
     )
       throw Error("Invalid saved groups");
-    return data;
+    // GI1: per-person invitation links are gone; their local journal (with its secrets) is dropped on the next write.
+    const { invitations: _dropped, ...rest } = data;
+    return rest;
   }
   function change(scope: string, update: (d: PeopleData) => PeopleData) {
     if (blocked.has(scope)) return Promise.reject(Error("Session changed"));
@@ -72,54 +72,6 @@ export function createPeopleStore(storage: KeyStore) {
         ...d,
         plans: { ...d.plans, [plan]: mergePeople(people) },
       })),
-    reserveInvitation: async (scope: string, slot: InvitationSlot) => {
-      const data = await change(scope, (d) => {
-        const existing = d.invitations?.find(
-          (i) =>
-            i.planId === slot.planId &&
-            i.targetKey === slot.targetKey &&
-            i.state !== "revoked",
-        );
-        return existing
-          ? d
-          : { ...d, invitations: [...(d.invitations ?? []), slot] };
-      });
-      return data.invitations!.find(
-        (i) =>
-          i.planId === slot.planId &&
-          i.targetKey === slot.targetKey &&
-          i.state !== "revoked",
-      )!;
-    },
-    setInvitationState: async (
-      scope: string,
-      id: string,
-      state: InvitationSlot["state"],
-    ) => {
-      await change(scope, (d) => {
-        if (!d.invitations?.some((i) => i.id === id))
-          throw Error("Invitation no longer exists on this device.");
-        return {
-          ...d,
-          invitations: d.invitations.map((i) =>
-            i.id === id
-              ? (() => {
-                  const allowed =
-                    i.state === state ||
-                    (i.state === "pending" && state === "ready") ||
-                    (i.state === "ready" && state === "revoking") ||
-                    (i.state === "revoking" && state === "revoked");
-                  if (!allowed)
-                    throw Error(
-                      "Invitation state changed. Reload before continuing.",
-                    );
-                  return { ...i, state };
-                })()
-              : i,
-          ),
-        };
-      });
-    },
     clear: (scope: string) => {
       epochs.set(scope, (epochs.get(scope) ?? 0) + 1);
       return run(() => storage.removeItem(key(scope)));

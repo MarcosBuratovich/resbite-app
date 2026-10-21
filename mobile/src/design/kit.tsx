@@ -306,6 +306,7 @@ function CoverArt({ picture, uri }: { picture: EventPicture; uri?: string | null
  * - Otherwise the title is the screen's heading, unless `heading={false}`.
  * - `pictureLabel`: the organizer's photo description; on a static card the picture is an image with this label.
  * - `endsAt` (UX3): the time line reads "10:00 – 12:00" and the static card says "from 10:00 to 12:00".
+ * - `place` null (GI1): no place line, as on the link's preview before people reply; `byline` adds a line under it.
  */
 export function CoverCard({
   picture,
@@ -314,6 +315,7 @@ export function CoverCard({
   startsAt,
   endsAt,
   place,
+  byline,
   chips = [],
   label,
   onPress,
@@ -329,7 +331,8 @@ export function CoverCard({
   title: string;
   startsAt: string | null;
   endsAt?: string | null;
-  place: string;
+  place: string | null;
+  byline?: string;
   chips?: readonly CardChip[];
   label?: string;
   onPress?: () => void;
@@ -400,14 +403,16 @@ export function CoverCard({
           // their labels; the static (heading) card says it here.
           !onPress ? spokenWhen(startsAt, endsAt, new Date()) || undefined : undefined,
         )}
-        {part(
-          "place",
-          <>
-            <MapPin size={16} color={c.muted} />
-            <Copy style={styles.cardLine}>{place.trim() || "Place to choose"}</Copy>
-          </>,
-          styles.placeRow,
-        )}
+        {place !== null &&
+          part(
+            "place",
+            <>
+              <MapPin size={16} color={c.muted} />
+              <Copy style={styles.cardLine}>{place.trim() || "Place to choose"}</Copy>
+            </>,
+            styles.placeRow,
+          )}
+        {!!byline && <Copy style={styles.cardLine}>{byline}</Copy>}
         {(chips.length > 0 || parts) &&
           part(
             "chips",

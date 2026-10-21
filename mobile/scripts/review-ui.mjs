@@ -71,22 +71,14 @@ try {
     await expect(heading(page, "It’s on!")).toBeVisible();
     await shot("invite-screen");
     await button(page, "Invite people").click();
-    await expect(heading(page, "Invitations")).toBeVisible();
+    // GI1: the event's one link; preview shows the card and says it can't share.
+    await expect(heading(page, "Invite people")).toBeVisible();
     await shot("invitations");
-    // Add two people to the plan, then capture the invitation rows.
-    await button(page, "Choose people").click();
-    await addPerson(page, "Alex Rivera", "alex@example.invalid");
-    await addPerson(page, "Bea", "bea@example.invalid");
-    await button(page, "Save people").click();
-    await button(page, "Review invitations").click();
-    await expect(heading(page, "Invitations")).toBeVisible();
-    await expect(button(page, "Prepare link for Alex Rivera")).toBeVisible();
-    await shot("invitations-rows");
     await button(page, "About invitation links").click();
     await expect(heading(page, "Invitation links")).toBeVisible();
     await shot("invitations-about", false);
     await button(page, "Close sheet").click();
-    // Back may pass through People (opened from here) before My resbites.
+    // Back returns to My resbites.
     for (let i = 0; i < 3 && !(await button(page, /^Picnic in the park, /).isVisible()); i++) {
       await button(page, "Back").click();
       await page.waitForTimeout(300);
@@ -278,6 +270,8 @@ try {
   // Larger Text at 320 px (forced layouts plus scaled text, as in verify-kit): rows, top row and sheets.
   {
     const page = await browser.newPage({ viewport: { width: 320, height: 844 }, reducedMotion: "reduce" });
+    // People now opens from the event page, which would otherwise ask "Get reminders?".
+    await quietReminders(page);
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
     page.on("console", (m) => {
@@ -303,6 +297,15 @@ try {
     await next(page);
     await button(page, "Create preview").click();
     await button(page, "Invite people").click();
+    // GI1: the preview link screen (card and the note that preview can't share) and its ⓘ sheet.
+    await expect(heading(page, "Invite people")).toBeVisible();
+    assert.ok(await fits(), "Invite people fits at 320 px under Larger Text");
+    await shot("invitations");
+    await button(page, "About invitation links").click();
+    await shot("invitations-about", false);
+    await button(page, "Close sheet").click();
+    await button(page, "Back").click();
+    await openEvent(page, "Picnic in the park");
     await button(page, "Choose people").click();
     await shot("people-empty");
     assert.ok(await fits(), "People top row fits at 320 px under Larger Text");
@@ -313,12 +316,6 @@ try {
     await shot("people-about", false);
     await button(page, "Close sheet").click();
     await button(page, "Save people").click();
-    await button(page, "Review invitations").click();
-    await expect(button(page, "Prepare link for Alex Rivera")).toBeVisible();
-    await shot("invitations-rows");
-    assert.ok(await fits(), "Invitation rows fit at 320 px under Larger Text");
-    await button(page, "About invitation links").click();
-    await shot("invitations-about", false);
     if (errors.length) throw Error(errors.join("\n"));
     await page.close();
   }

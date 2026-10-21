@@ -1,6 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { claimLinkErrorMessage, inactiveInvitation, linkErrorMessage } from "./eventLinks";
+import { buildEventLink } from "./appLinks";
+import {
+  claimLinkErrorMessage,
+  inactiveInvitation,
+  LINK_INFO,
+  linkDate,
+  linkErrorMessage,
+  shareMessage,
+  TURN_OFF_MESSAGE,
+  TURN_OFF_TITLE,
+} from "./eventLinks";
 
 test("joining by an event link: an inactive, started or cancelled event says so; anything else is a retry", () => {
   assert.equal(claimLinkErrorMessage({ code: "42501", message: "Invitation unavailable" }), inactiveInvitation);
@@ -27,4 +37,38 @@ test("the organizer's link calls name what failed, and never include the code", 
     linkErrorMessage("rotate", { code: "57014" }),
     "Couldn’t confirm the link was turned off. Check your connection and try again.",
   );
+});
+
+// Local times, so the expectations hold in any test zone.
+const at = (d: number, h: number, m = 0) => new Date(2099, 9, d, h, m).toISOString();
+
+test("the link's date reads as the web page writes it: day, date, month and the time range", () => {
+  assert.equal(linkDate(at(23, 19, 30)), "Fri 23 Oct, 19:30");
+  assert.equal(linkDate(at(23, 19, 30), at(23, 22)), "Fri 23 Oct, 19:30 – 22:00");
+  assert.equal(linkDate(at(23, 22), at(24, 2)), "Fri 23 Oct, 22:00 – Sat 24 02:00");
+  assert.equal(linkDate(null), "");
+  assert.equal(linkDate("not a date"), "");
+});
+
+test("Share sends the title, the date and the link; the link is the owned page or the app scheme", () => {
+  const code = "Ab3_-xYz0123456789abcd";
+  const plan = { title: " Film club ", starts_at: at(23, 19, 30), ends_at: at(23, 22) };
+  assert.equal(
+    shareMessage(plan, buildEventLink(code, "https://link.resbite.com")),
+    `Film club, Fri 23 Oct, 19:30 – 22:00. RSVP: https://link.resbite.com/r/${code}`,
+  );
+  assert.equal(
+    shareMessage({ ...plan, ends_at: null }, buildEventLink(code)),
+    `Film club, Fri 23 Oct, 19:30. RSVP: resbite://r/${code}`,
+  );
+});
+
+test("turning the link off asks first, and the ⓘ sheet says what the link shows and hides", () => {
+  assert.equal(TURN_OFF_TITLE, "Turn off this link?");
+  assert.equal(TURN_OFF_MESSAGE, "People with the old link will see that it’s no longer active. You’ll get a new link.");
+  const info = LINK_INFO.join(" ");
+  for (const part of [/one invitation link/, /Anyone with the link sees the basics/, /exact place and Meeting details show only after they reply/, /Turn the link off/, /also stops any older per-person links you shared\./])
+    assert.match(info, part);
+  // Curly apostrophes only.
+  assert.doesNotMatch(info + TURN_OFF_MESSAGE, /'/);
 });

@@ -14,7 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { useNavigation, usePreventRemove } from "expo-router/react-navigation";
 import * as Crypto from "expo-crypto";
-import { ArrowLeft, Check, ContactRound, Info, Mail, Pencil, Plus, Settings2, Trash2, UserPlus } from "lucide-react-native";
+import { ArrowLeft, Check, ContactRound, Info, Pencil, Plus, Settings2, Trash2, UserPlus } from "lucide-react-native";
 import { Button, Copy, ErrorNote, Field, Title, s } from "../src/design/ui";
 import { Chip, IconButton, InfoSheet, Tile } from "../src/design/kit";
 import { colors as c, fonts, r } from "../src/design/tokens";
@@ -475,14 +475,6 @@ export default function People() {
                   </View>
                 </View>
                 <Button title={editing ? "Save group" : "Save people"} onPress={save} loading={busy} />
-                {planId && !dirty && (
-                  <Tile
-                    icon={Mail}
-                    title="Review invitations"
-                    disabled={busy}
-                    onPress={() => router.navigate({ pathname: "/invitations", params: { plan: planId } })}
-                  />
-                )}
               </>
             )}
           </>
@@ -494,13 +486,6 @@ export default function People() {
         <Copy style={s.muted}>
           People sharing the same email or phone appear once. Choose one contact detail for each person.
         </Copy>
-        {planId && (
-          <Copy style={s.muted}>
-            {preview
-              ? "Preview invitations remain disabled."
-              : "Review invitations to prepare a separate link for each person. Nothing is sent automatically."}
-          </Copy>
-        )}
       </InfoSheet>
     </SafeAreaView>
   );
