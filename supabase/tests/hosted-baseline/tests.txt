@@ -8,3 +8,4 @@ plan-covers.sql
 claim-notification.sql
 ux2.sql
 ux3.sql
+gi1.sql
