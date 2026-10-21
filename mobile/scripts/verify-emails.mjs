@@ -9,7 +9,7 @@ try {
  for(const name of ['confirmation','recovery','email-code']) {
   const html=await readFile(new URL(`${name}.html`,root),'utf8');
   const variables=[...html.matchAll(/{{\s*\.([A-Za-z]+)\s*}}/g)].map(x=>x[1]);
-  assert.deepEqual([...new Set(variables)],[name==='email-code'?'Token':'ConfirmationURL']);
+  assert.deepEqual([...new Set(variables)],name==='email-code'?['Token']:name==='confirmation'?['ConfirmationURL','Token']:['ConfirmationURL']);
   assert.ok(!/<script|<iframe|<form|<img|@import/i.test(html));
   const fixture=html.replaceAll('{{ .ConfirmationURL }}','https://example.invalid/auth/verify?token='+ 'x'.repeat(128)+'&redirect_to=resbite%3A%2F%2Fauth%2Fcallback').replaceAll('{{ .Token }}','12345678');
   for(const width of [320,600]) {
