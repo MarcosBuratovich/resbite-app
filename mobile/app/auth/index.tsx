@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
-import { Apple, Eye, EyeOff, Info, KeyRound, Mail, MailCheck, RefreshCw, Send } from "lucide-react-native";
+import { Eye, EyeOff, Info, KeyRound, Mail, MailCheck, RefreshCw, Send } from "lucide-react-native";
 import { Button, Copy, ErrorNote, TextAction, s } from "../../src/design/ui";
 import { Chip, FieldCard, IconButton, InfoSheet, StatusCard, StepScreen, useFocusOnChange } from "../../src/design/kit";
 import { colors as c, fonts } from "../../src/design/tokens";
 import { RegistrationDetails } from "../../src/design/RegistrationDetails";
+import { AppleMark } from "../../src/design/AppleMark";
 import { authTitle } from "../../src/domain/accountCopy";
 import { skipOptionalDetails } from "../../src/domain/registration";
 import { useAuthFlow } from "../../src/state/useAuthFlow";
@@ -219,7 +220,7 @@ export default function Auth() {
       )}
       {(mode === "login" || (register && step === 2)) && (
         <>
-          {appleAvailable && <Chip text="Continue with Apple" icon={Apple} onPress={apple} disabled={blocked} />}
+          {appleAvailable && <Chip text="Continue with Apple" icon={AppleMark} onPress={apple} disabled={blocked} />}
           <Chip text="Continue with Google" onPress={google} disabled={blocked} />
         </>
       )}
