@@ -22,10 +22,12 @@ end $$;
 reset role;
 set local role service_role;
 do $$ begin
- begin perform public.request_account_deletion('41000000-0000-4000-8000-000000000001','42000000-0000-4000-8000-000000000009','44000000-0000-4000-8000-000000000001',repeat('a',64)); raise exception 'Nonexistent proof session accepted'; exception when insufficient_privilege then null; end;
+ begin perform public.request_account_deletion('41000000-0000-4000-8000-000000000001','42000000-0000-4000-8000-000000000001','44000000-0000-4000-8000-000000000001',repeat('a',64)); raise exception 'Retired deletion RPC open to service_role';
+ exception when insufficient_privilege then if sqlerrm<>'permission denied for function request_account_deletion' then raise; end if; end;
+ begin perform private.request_account_deletion('41000000-0000-4000-8000-000000000001','42000000-0000-4000-8000-000000000009','44000000-0000-4000-8000-000000000001',repeat('a',64)); raise exception 'Nonexistent proof session accepted'; exception when insufficient_privilege then null; end;
 end $$;
-select public.request_account_deletion('41000000-0000-4000-8000-000000000001','42000000-0000-4000-8000-000000000001','44000000-0000-4000-8000-000000000001',repeat('a',64));
-select public.request_account_deletion('41000000-0000-4000-8000-000000000001','42000000-0000-4000-8000-000000000001','44000000-0000-4000-8000-000000000001',repeat('a',64));
+select private.request_account_deletion('41000000-0000-4000-8000-000000000001','42000000-0000-4000-8000-000000000001','44000000-0000-4000-8000-000000000001',repeat('a',64));
+select private.request_account_deletion('41000000-0000-4000-8000-000000000001','42000000-0000-4000-8000-000000000001','44000000-0000-4000-8000-000000000001',repeat('a',64));
 do $$ begin
  if public.account_deletion_status('44000000-0000-4000-8000-000000000001',repeat('b',64)) is not null then raise exception 'Recovery secret bypassed'; end if;
 end $$;

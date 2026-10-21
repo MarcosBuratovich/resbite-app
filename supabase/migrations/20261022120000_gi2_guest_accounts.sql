@@ -126,3 +126,31 @@ language sql security invoker set search_path = '' as $$
 $$;
 revoke all on function private.join_by_link(text,text,text), public.join_by_link(text,text,text) from public, anon, authenticated, service_role;
 grant execute on function private.join_by_link(text,text,text), public.join_by_link(text,text,text) to authenticated;
+
+-- Slice B: counting link opens (GI2-D9). One row per open of a live link: the link and the time, nothing about
+-- who opened it. Nobody but the database reads or writes the table.
+create table private.link_opens (
+ id bigint generated always as identity primary key,
+ plan_link_id uuid not null references private.plan_links(id) on delete cascade,
+ opened_at timestamptz not null default now()
+);
+create index link_opens_plan_link_idx on private.link_opens(plan_link_id, opened_at);
+alter table private.link_opens enable row level security;
+revoke all on private.link_opens from public, anon, authenticated;
+
+-- Anyone, signed in or not, may call it with anything. A well-formed code of a live link adds one row, unless
+-- that link already has 60 opens in the last minute (the database's own limit: the gateway cannot limit one RPC).
+-- Every other input returns the same way and writes nothing, so a call never tells whether a code exists. A
+-- definer, as public.invitation_page is: anon has no usage on the private schema.
+create function public.note_link_open(p_code text) returns void
+language plpgsql volatile security definer set search_path = '' as $$
+declare v_link uuid;
+begin
+ if p_code is null or p_code !~ '^[A-Za-z0-9_-]{22}$' then return; end if;
+ select id into v_link from private.plan_links where code=p_code and revoked_at is null;
+ if not found then return; end if;
+ if (select count(*) from private.link_opens where plan_link_id=v_link and opened_at>now()-interval '1 minute')>=60 then return; end if;
+ insert into private.link_opens(plan_link_id) values(v_link);
+end $$;
+revoke all on function public.note_link_open(text) from public, anon, authenticated, service_role;
+grant execute on function public.note_link_open(text) to anon, authenticated;

@@ -444,3 +444,136 @@ do $$ begin
   and actor_id='b2000000-0000-4000-8000-000000000002')<>1 then raise exception 'An existing guest notified the organizer again'; end if;
 end $$;
 rollback;
+
+-- Block 3: a grant holder may delete their account, as a roster tester can. The deletion lifecycle and the
+-- deletion intent are local-only (20261022120001), so the hosted-baseline run makes the grant and skips the rest.
+-- The guards look up the public wrappers: on the hosted baseline service_role has no usage on the private schema.
+begin;
+insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data) values
+ ('b3000000-0000-4000-8000-000000000001','gi2-3-owner@resbite-test.invalid',now(),'{}'),
+ ('b3000000-0000-4000-8000-000000000002','gi2-3-guest@resbite-test.invalid',now(),'{}'),
+ ('b3000000-0000-4000-8000-000000000003','gi2-3-outsider@resbite-test.invalid',now(),'{}');
+insert into auth.sessions(id,user_id,created_at) values
+ ('b3200000-0000-4000-8000-000000000002','b3000000-0000-4000-8000-000000000002',now()),
+ ('b3200000-0000-4000-8000-000000000003','b3000000-0000-4000-8000-000000000003',now());
+insert into private.tester_roster(email) values ('gi2-3-owner@resbite-test.invalid');
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"b3000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.save_profile('Owner');
+create temporary table gi2_codes(name text primary key, code text);
+do $$ begin
+ perform public.create_plan_v3('b3100000-0000-4000-8000-000000000001','Board games','',array['community'],null,
+  '2099-08-01 19:00+00',null,'UTC','The library','');
+ insert into gi2_codes values('one',public.plan_link('b3100000-0000-4000-8000-000000000001'));
+end $$;
+select set_config('request.jwt.claims','{"sub":"b3000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+do $$ begin
+ if public.join_by_link((select code from gi2_codes where name='one'),'Guest Three','2026-10')<>'b3100000-0000-4000-8000-000000000001' then raise exception 'Guest join returned another plan'; end if;
+ if public.account_access_status()->>'status'<>'approved' then raise exception 'Grant holder not approved before deleting'; end if;
+end $$;
+reset role;
+-- The gateway's ledger path (deletion-intent.sql's pattern) and the raw request (deletion.sql's): the grant holder
+-- passes the eligibility check, someone with neither a roster row nor a grant still does not.
+set local role service_role;
+do $$ declare v_intent jsonb; begin
+ if to_regprocedure('public.prepare_deletion_intent(uuid,uuid,uuid,text,text)') is not null then
+  begin
+   perform public.prepare_deletion_intent('b3000000-0000-4000-8000-000000000003','b3200000-0000-4000-8000-000000000003','b3300000-0000-4000-8000-000000000003',repeat('a',64),'fixture-project');
+   raise exception 'Someone with neither roster nor grant prepared a deletion';
+  exception when insufficient_privilege then if sqlerrm<>'Fresh eligible authentication required' then raise; end if; end;
+  v_intent := public.prepare_deletion_intent('b3000000-0000-4000-8000-000000000002','b3200000-0000-4000-8000-000000000002','b3300000-0000-4000-8000-000000000002',repeat('a',64),'fixture-project');
+  if v_intent->>'userId' is distinct from 'b3000000-0000-4000-8000-000000000002' or v_intent->>'requestId' is distinct from 'b3300000-0000-4000-8000-000000000002' then raise exception 'Grant holder''s deletion not prepared'; end if;
+ end if;
+ if to_regprocedure('public.request_account_deletion(uuid,uuid,uuid,text)') is not null then
+  begin
+   perform private.request_account_deletion('b3000000-0000-4000-8000-000000000003','b3200000-0000-4000-8000-000000000003','b3400000-0000-4000-8000-000000000003',repeat('b',64));
+   raise exception 'Someone with neither roster nor grant requested a deletion';
+  exception when insufficient_privilege then if sqlerrm<>'Fresh eligible authentication required' then raise; end if; end;
+  if private.request_account_deletion('b3000000-0000-4000-8000-000000000002','b3200000-0000-4000-8000-000000000002','b3400000-0000-4000-8000-000000000002',repeat('b',64))->>'status'
+   is distinct from 'queued' then raise exception 'Grant holder''s deletion not requested'; end if;
+ end if;
+end $$;
+reset role;
+set local role authenticated;
+do $$ begin
+ if to_regprocedure('public.request_account_deletion(uuid,uuid,uuid,text)') is not null and public.account_access_status()->>'status'='approved' then
+  raise exception 'A grant holder who asked to be deleted is still approved';
+ end if;
+end $$;
+reset role;
+do $$ begin
+ if to_regprocedure('public.request_account_deletion(uuid,uuid,uuid,text)') is not null then
+  if not exists(select 1 from private.account_deletion_jobs where user_id='b3000000-0000-4000-8000-000000000002' and request_id='b3400000-0000-4000-8000-000000000002') then raise exception 'No deletion job for the grant holder'; end if;
+  if exists(select 1 from private.account_deletion_jobs where user_id='b3000000-0000-4000-8000-000000000003')
+  or exists(select 1 from private.deletion_intent_reservations where user_id='b3000000-0000-4000-8000-000000000003') then raise exception 'A refused deletion wrote something'; end if;
+  if not exists(select 1 from private.tester_roster where email='gi2-3-owner@resbite-test.invalid') then raise exception 'The organizer left the roster'; end if;
+  -- The grant and the tick go with the auth user, which the deletion worker removes.
+  delete from auth.users where id='b3000000-0000-4000-8000-000000000002';
+  if exists(select 1 from private.beta_access where user_id='b3000000-0000-4000-8000-000000000002')
+  or exists(select 1 from private.age_attestations where user_id='b3000000-0000-4000-8000-000000000002') then raise exception 'The grant outlived the account'; end if;
+ end if;
+end $$;
+rollback;
+
+-- Block 4: opens of a link are counted, signed out, at most 60 a minute, and never say whether a code exists.
+begin;
+insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data) values
+ ('b4000000-0000-4000-8000-000000000001','gi2-4-owner@resbite-test.invalid',now(),'{}');
+insert into private.tester_roster(email) values ('gi2-4-owner@resbite-test.invalid');
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"b4000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.save_profile('Owner');
+create temporary table gi2_codes(name text primary key, code text);
+grant select on gi2_codes to anon;
+do $$ begin
+ perform public.create_plan_v3('b4100000-0000-4000-8000-000000000001','Book club','',array['community'],null,
+  '2099-09-01 19:00+00',null,'UTC','The cafe','');
+ insert into gi2_codes values('old',public.plan_link('b4100000-0000-4000-8000-000000000001'));
+ insert into gi2_codes values('live',public.rotate_plan_link('b4100000-0000-4000-8000-000000000001'));
+end $$;
+reset role;
+-- Signed out, each call with the live code adds one row.
+set local role anon;
+select set_config('request.jwt.claims','',true);
+do $$ begin perform public.note_link_open((select code from gi2_codes where name='live')); end $$;
+reset role;
+do $$ begin
+ if (select count(*) from private.link_opens where plan_link_id=(select id from private.plan_links where code=(select code from gi2_codes where name='live')))<>1 then raise exception 'An open was not counted'; end if;
+end $$;
+set local role anon;
+do $$ begin
+ perform public.note_link_open((select code from gi2_codes where name='live'));
+ -- A turned-off, malformed, missing or unknown code returns the same way and writes nothing.
+ perform public.note_link_open((select code from gi2_codes where name='old'));
+ perform public.note_link_open('short');
+ perform public.note_link_open(null);
+ perform public.note_link_open('AAAAAAAAAAAAAAAAAAAAAA');
+ begin perform count(*) from private.link_opens; raise exception 'Anonymous role read the opens';
+ exception when insufficient_privilege then null; end;
+end $$;
+reset role;
+do $$ declare v_live uuid := (select id from private.plan_links where code=(select code from gi2_codes where name='live')); begin
+ if (select count(*) from private.link_opens where plan_link_id=v_live)<>2 then raise exception 'Opens of the live link not counted once per call'; end if;
+ if (select count(*) from private.link_opens)<>2 then raise exception 'An open of a dead, malformed or unknown code was counted'; end if;
+ -- Opens older than a minute do not count towards the limit; 59 in the last minute still let one more in.
+ insert into private.link_opens(plan_link_id,opened_at) select v_live,now()-interval '2 minutes' from generate_series(1,100);
+ insert into private.link_opens(plan_link_id,opened_at) select v_live,now() from generate_series(1,57);
+end $$;
+set local role anon;
+do $$ begin perform public.note_link_open((select code from gi2_codes where name='live')); end $$;
+reset role;
+do $$ begin
+ if (select count(*) from private.link_opens where plan_link_id=(select id from private.plan_links where code=(select code from gi2_codes where name='live')))<>160 then raise exception 'The 60th open in a minute was not counted'; end if;
+end $$;
+set local role anon;
+do $$ begin perform public.note_link_open((select code from gi2_codes where name='live')); end $$;
+reset role;
+do $$ begin
+ if (select count(*) from private.link_opens where plan_link_id=(select id from private.plan_links where code=(select code from gi2_codes where name='live')))<>160 then raise exception 'An open past 60 a minute was counted'; end if;
+ -- Only the database touches the opens; anyone may call the counter, which runs as its owner.
+ if has_table_privilege('anon','private.link_opens','select,insert,update,delete') or has_table_privilege('authenticated','private.link_opens','select,insert,update,delete') then raise exception 'A client can touch the opens'; end if;
+ if not has_function_privilege('anon','public.note_link_open(text)','execute') or not has_function_privilege('authenticated','public.note_link_open(text)','execute')
+ or has_function_privilege('service_role','public.note_link_open(text)','execute') then raise exception 'note_link_open grants wrong'; end if;
+ if not (select prosecdef and proconfig @> array['search_path=""'] from pg_proc where oid='public.note_link_open(text)'::regprocedure) then raise exception 'note_link_open is not a definer with an empty search path'; end if;
+end $$;
+rollback;
