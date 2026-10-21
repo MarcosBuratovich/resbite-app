@@ -1,8 +1,9 @@
 // GI1: opening the event's one link (/r/<code>). The native router turns it into /invite?code=<code>
 // (routeSystemLink, unit-tested in appLinks.test.ts); this drives that screen on the web build. Signed in and
 // approved: claim_plan_link, then the event page, and the kept code is cleared. The organizer's own link lands
-// on their event. Signed out: the code is kept and "Sign in" shows. An inactive code says so; a malformed one
-// claims nothing. Every Supabase request is intercepted.
+// on their event. Signed out: the code is kept and "Sign in" shows. An inactive code says so and drops the kept
+// code, so a restart opens the app as usual; a lost connection keeps it; "Go to My resbites" leaves either. A
+// malformed code claims nothing. Every Supabase request is intercepted.
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { quietReminders } from "./qa-helpers.mjs";
@@ -54,6 +55,7 @@ const own = { ...invited, id: "44444444-4444-4444-8444-444444444444", title: "Bo
 const OPEN = "OpenOpenOpenOpenOpen_1";
 const OWN = "OwnOwnOwnOwnOwnOwn-__2";
 const OFF = "OffOffOffOffOffOffOff3";
+const NET = "NetNetNetNetNetNetNet4";
 const pending = (page) => page.evaluate(() => sessionStorage.getItem("resbite.pending-invite"));
 
 async function fixture({ signedIn = true } = {}) {
@@ -95,6 +97,7 @@ async function fixture({ signedIn = true } = {}) {
       assert.equal(await pending(page), body.p_code);
       if (body.p_code === OPEN) return reply(invited.id);
       if (body.p_code === OWN) return reply(own.id);
+      if (body.p_code === NET) return reply({ message: "Fixture: connection lost" }, 500);
       return reply({ code: "42501", message: "Invitation unavailable" }, 403);
     }
     return reply({ message: `Unexpected ${req.method()} ${path}` }, 400);
@@ -116,12 +119,38 @@ try {
     await expect(page.getByRole("heading", { name: "Book swap", exact: true })).toBeVisible();
     await expect(page.getByText("Hosting", { exact: true })).toBeVisible();
     await expect.poll(() => pending(page)).toBe(null);
-    // An inactive, started or cancelled event's link says so.
+    // An inactive, started or cancelled event's link says so, and the kept code is dropped.
+    const inactive = page.getByText(
+      "This invitation is no longer active, or the event has started or was cancelled.",
+      { exact: true },
+    );
     await page.goto(`${base}/invite?code=${OFF}`);
-    await expect(
-      page.getByText("This invitation is no longer active, or the event has started or was cancelled.", { exact: true }),
-    ).toBeVisible();
+    await expect(inactive).toBeVisible();
     await expect(page.getByRole("heading", { name: "You’re invited.", exact: true })).toBeVisible();
+    await expect.poll(() => pending(page)).toBe(null);
+    // So a cold start opens the app as usual, not this error.
+    await page.goto(base);
+    await expect(page.getByRole("heading", { name: "Create", exact: true })).toBeVisible();
+    assert.equal(new URL(page.url()).pathname, "/create");
+    await expect(inactive).toHaveCount(0);
+    // "Go to My resbites" leaves the error.
+    await page.goto(`${base}/invite?code=${OFF}`);
+    await expect(inactive).toBeVisible();
+    await page.getByRole("button", { name: "Go to My resbites", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "My resbites", exact: true })).toBeVisible();
+    assert.equal(new URL(page.url()).pathname, "/plans");
+    // A lost connection keeps the code for a retry, and a cold start comes back to it; leaving drops it.
+    await page.goto(`${base}/invite?code=${NET}`);
+    await expect(
+      page.getByText("This invitation could not be opened. Check your connection and try again.", { exact: true }),
+    ).toBeVisible();
+    assert.equal(await pending(page), NET);
+    await page.goto(base);
+    await expect.poll(() => new URL(page.url()).pathname).toBe("/invite");
+    assert.equal(new URL(page.url()).searchParams.get("code"), NET);
+    await page.getByRole("button", { name: "Go to My resbites", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "My resbites", exact: true })).toBeVisible();
+    await expect.poll(() => pending(page)).toBe(null);
     // A malformed code claims nothing and leaves a kept invitation alone.
     const before = claims.length;
     await page.evaluate((code) => sessionStorage.setItem("resbite.pending-invite", code), OPEN);
@@ -132,7 +161,7 @@ try {
     assert.deepEqual(errors, []);
     await page.close();
     console.log(
-      "PASS: signed in, an event link joins and lands on the invitation (code cleared); the organizer's own link lands on their event; an inactive link says so; a malformed one claims nothing.",
+      "PASS: signed in, an event link joins and lands on the invitation (code cleared); the organizer's own link lands on their event; an inactive link says so and drops the code (a cold start opens Create); a lost connection keeps it (a cold start returns to it); Go to My resbites leaves and drops it; a malformed one claims nothing.",
     );
   }
   {

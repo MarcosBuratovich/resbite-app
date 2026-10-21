@@ -17,7 +17,6 @@ import {
   Send,
   Trash2,
   UserMinus,
-  Users,
 } from "lucide-react-native";
 import { Button, Copy, ErrorNote, Reveal, s } from "../src/design/ui";
 import { AvatarStack, Chip, chipToneFor, CoverCard, IconButton, InfoSheet, Segmented, Tile } from "../src/design/kit";
@@ -29,7 +28,18 @@ import { colors as c, fonts } from "../src/design/tokens";
 import { categoryLabels } from "../src/domain/categories";
 import { eventPicture } from "../src/domain/events";
 import { canPostGuestNote, meetingDetailsView } from "../src/domain/eventDetails";
-import { againConflict, againDraft, cardChips, coverNotice, guestArea, guestGroups, mapsUrl } from "../src/domain/eventView";
+import {
+  againConflict,
+  againDraft,
+  cardChips,
+  coverNotice,
+  eventPlace,
+  EXACT_ADDRESS_LATER,
+  guestArea,
+  guestGroups,
+  mapsUrl,
+} from "../src/domain/eventView";
+import { removeGuestQuestion } from "../src/domain/eventLinks";
 import { canEditPlan } from "../src/domain/plans";
 import { answerKey, canReadSample, canRespond, responseFor } from "../src/domain/rsvp";
 import { drafts } from "../src/services/drafts";
@@ -97,7 +107,14 @@ export default function EventPage() {
   const editable = owner && canEditPlan(current, session?.user.id, preview);
   const allowed = attendee ? canRespond({ plan: current, attendee }) : false;
   const area = guestArea({ owner, response: attendee?.response ?? null, organizer: event.organizer, guests });
-  const url = mapsUrl(current);
+  // GI1: until an invitee answers, the area stands in for the exact place, and there is no Open in Maps.
+  const place = eventPlace({
+    owner,
+    response: attendee?.response ?? null,
+    place: current.place_label,
+    area: current.area,
+  });
+  const url = place.exact ? mapsUrl(current) : null;
   const chips = cardChips({ owner, status: current.status, response: attendee?.response });
   // UX3-D5/D6: Meeting details reach only the organizer and Going or Maybe guests (the database sends them
   // only to them); the Note to guests is pinned for everyone.
@@ -184,7 +201,7 @@ export default function EventPage() {
   }
   // GI1: Remove asks first, then the database removes the guest and the page reloads the list and counts.
   function confirmRemove(guest: { userId: string; name: string }) {
-    const question = `Remove ${guest.name} from this resbite?`;
+    const question = removeGuestQuestion(guest.name);
     const remove = () => void removeGuest(guest.userId);
     if (Platform.OS === "web") {
       if (window.confirm(question)) remove();
@@ -234,7 +251,7 @@ export default function EventPage() {
           title={current.title}
           startsAt={current.starts_at}
           endsAt={current.ends_at}
-          place={current.place_label}
+          place={place.line}
           dimmed={current.status === "cancelled"}
           pictureLabel={current.cover_description}
           chips={[
@@ -247,6 +264,8 @@ export default function EventPage() {
             })),
           ]}
         />
+        {/* Only while an answer can still bring the place. */}
+        {!place.exact && allowed && <Copy style={s.muted}>{EXACT_ADDRESS_LATER}</Copy>}
         {(device.shown || url) && (
           <View style={styles.chips}>
             <EventDeviceChips device={device} />
@@ -308,13 +327,9 @@ export default function EventPage() {
                   disabled={busy}
                   onPress={() => router.push({ pathname: "/arrange", params: { plan: current.id } })}
                 />
+                {/* GI-D3: inviting from contacts is out of scope, so Choose people has no entry here; People
+                    stays on Profile. */}
                 <IconButton icon={Send} label="Invite someone" disabled={busy} onPress={invite} />
-                <IconButton
-                  icon={Users}
-                  label="Choose people"
-                  disabled={busy}
-                  onPress={() => router.push({ pathname: "/people", params: { plan: current.id } })}
-                />
               </>
             )}
             <IconButton

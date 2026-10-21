@@ -60,6 +60,8 @@ const invited = {
   title: "Board games",
   owner_id: "33333333-3333-4333-8333-333333333333",
   place_label: "Games room",
+  // GI1: the area stands in for the exact place until the invitee answers.
+  area: "Near the station",
   note: "Gate code 4512",
   cover_path: "33333333-3333-4333-8333-333333333333/44444444-4444-4444-8444-444444444444/a.jpg",
   cover_revision: 1,
@@ -293,6 +295,11 @@ try {
   await expect(page.getByRole("heading", { name: "Coffee evening", exact: true })).toBeVisible();
   await expect(page.getByText("Hosting", { exact: true })).toBeVisible();
   await expect(page.getByText("Bring a book", { exact: true })).toBeVisible();
+  // The organizer sees the exact place. GI-D3: no Choose people entry (People stays on Profile).
+  await expect(page.getByText("Fixture café", { exact: true })).toBeVisible();
+  await expect(page.getByText("Exact address after you reply", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Invite someone", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Choose people", exact: true })).toHaveCount(0);
   // Guests (UX2): the stack counts Going and Maybe; the sheet groups every answer.
   await page.getByRole("button", { name: "1 going, 1 maybe", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Guests", exact: true })).toBeVisible();
@@ -309,7 +316,9 @@ try {
     void dialog.dismiss();
   });
   await page.getByRole("button", { name: "Remove Bea", exact: true }).click();
-  await expect.poll(() => removeAsked).toBe("Remove Bea from this resbite?");
+  await expect
+    .poll(() => removeAsked)
+    .toBe("Remove Bea from this resbite? They can join again with the link unless you turn it off.");
   await page.waitForTimeout(200);
   assert.deepEqual(removeBodies, []);
   // A lost reply says so in the sheet; Bea stays listed until a removal is confirmed.
@@ -478,7 +487,7 @@ try {
   await expect(page.getByRole("button", { name: "Edit Coffee evening", exact: true })).toHaveCount(0);
   assert.deepEqual(cancels, [hosted.id]);
   console.log(
-    "PASS: organizer event page: guests (GI1: Remove asks first, says a lost reply, reloads the list; invitees have no Remove), Open in Maps (and its failure note), Edit at Review, Do this again at When with a replace guard, an unconfirmed cancel with Refresh event, cancel.",
+    "PASS: organizer event page: the exact place and no Choose people (GI-D3); guests (GI1: Remove asks first and says they can rejoin by the link, says a lost reply, reloads the list; invitees have no Remove), Open in Maps (and its failure note), Edit at Review, Do this again at When with a replace guard, an unconfirmed cancel with Refresh event, cancel.",
   );
 
   // UX2-D1: a saved edit returns to its event page with "Changes saved"; Back then leaves for My resbites.
@@ -524,6 +533,11 @@ try {
   await expect(page.getByText("Answer to see who’s coming", { exact: true })).toHaveCount(0);
   // Its Meeting details can't be unlocked any more, so the locked line isn't offered.
   await expect(page.getByText(LOCKED, { exact: true })).toHaveCount(0);
+  // GI1: the exact place stays hidden (the area shows); no answer can bring it now, so no hint and no Maps.
+  await expect(page.getByText("Near the station", { exact: true })).toBeVisible();
+  await expect(page.getByText("Games room", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Exact address after you reply", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /in Maps$/ })).toHaveCount(0);
 
   // An invitation with no Meeting details shows no locked line.
   await page.goto(`${base}/event?plan=${quiz.id}`);
@@ -553,6 +567,11 @@ try {
   // The organizer's photo description labels the picture.
   await expect(page.getByRole("img", { name: "Two mugs on a window sill", exact: true })).toBeVisible();
   await expect(page.getByRole("radiogroup", { name: "Your answer", exact: true })).toBeVisible();
+  // GI1: before answering, the area stands in for the exact place, with the hint and no Open in Maps.
+  await expect(page.getByText("Near the station", { exact: true })).toBeVisible();
+  await expect(page.getByText("Games room", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Exact address after you reply", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /in Maps$/ })).toHaveCount(0);
   // UX3: the pinned Note to guests is for everyone; only the organizer can change it.
   await expect(page.getByText("Bring a blanket", { exact: true })).toBeVisible();
   await expect(page.getByText(/^Note to guests · /)).toBeVisible();
@@ -574,8 +593,12 @@ try {
     page.getByText("Your answer is saved, but who’s coming couldn’t load. Refresh to try again.", { exact: true }),
   ).toBeVisible();
   await expect(maybe).toBeChecked();
-  // The answer's confirming read brings the Meeting details.
+  // The answer's confirming read brings the Meeting details, and the exact place with Open in Maps.
   await expect(page.getByText("Meeting details · Games room", { exact: true })).toBeVisible();
+  await expect(page.getByText("Games room", { exact: true })).toBeVisible();
+  await expect(page.getByText("Near the station", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Exact address after you reply", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Open Games room in Maps", exact: true })).toBeVisible();
   await expect(page.getByText("Gate code 4512", { exact: true })).toBeVisible();
   await expect(page.getByText(LOCKED, { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Add to calendar", exact: true })).toBeVisible();
@@ -594,9 +617,14 @@ try {
   await expect(going).toBeChecked();
   await expect(page.getByRole("button", { name: "View sample conversation", exact: true })).toBeVisible();
   await expect(page.getByText("Gate code 4512", { exact: true })).toBeVisible();
+  await expect(page.getByText("Games room", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open Games room in Maps", exact: true })).toBeVisible();
   await cant.click();
   await expect(cant).toBeChecked();
   await expect(page.getByText("Can’t go now", { exact: true })).toBeVisible();
+  // They answered, so the place and Maps stay after Can’t go.
+  await expect(page.getByText("Games room", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open Games room in Maps", exact: true })).toBeVisible();
   await expect(page.getByText(LOCKED, { exact: true })).toBeVisible();
   await expect(page.getByText("Gate code 4512", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Add to calendar", exact: true })).toHaveCount(0);
@@ -610,7 +638,7 @@ try {
   assert.deepEqual(responses, ["maybe", "accepted", "withdrawn", "maybe", "declined"]);
   await context.close();
   console.log(
-    "PASS: invitee: the organizer only before answering, Maybe, the list after answering (and its load failure), Can’t go now after Going, the photo label; the Note to guests; Meeting details locked, shown after Going or Maybe, locked again after Can’t go, and absent when there are none.",
+    "PASS: invitee: the organizer only before answering, Maybe, the list after answering (and its load failure), Can’t go now after Going, the photo label; the Note to guests; Meeting details locked, shown after Going or Maybe, locked again after Can’t go, and absent when there are none; GI1: the area, Exact address after you reply and no Maps before answering, the place and Maps after.",
   );
 
   // UX3 reminders and Add to calendar, on the development fakes. A fresh context: the phone's permission

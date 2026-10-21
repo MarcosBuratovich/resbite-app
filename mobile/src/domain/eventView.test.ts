@@ -9,6 +9,8 @@ import {
   coverNotice,
   dateBadgeParts,
   draftRoute,
+  eventPlace,
+  EXACT_ADDRESS_LATER,
   groupPlans,
   guestArea,
   guestGroups,
@@ -164,7 +166,7 @@ const plan: Plan = {
 };
 const options = { scope: "u1", requestId: "r1", zone: "Europe/London", now: new Date("2026-10-07T12:00:00Z") };
 
-test("Do this again copies the event text, place, Meeting details, never the date, end, guests, cover or idea", () => {
+test("Do this again copies the event text, place, area, Meeting details, never the date, end, guests, cover or idea", () => {
   const draft = againDraft(plan, options);
   assert.deepEqual(draft, {
     schema: 1,
@@ -179,6 +181,7 @@ test("Do this again copies the event text, place, Meeting details, never the dat
     categories: ["community", "uplifting"],
     start: "",
     place: "Fixture café",
+    area: "",
     note: "Window table",
     zone: "Europe/London",
     pending: null,
@@ -188,6 +191,13 @@ test("Do this again copies the event text, place, Meeting details, never the dat
   // The again-draft has text in it, so it is dirty against the all-empty baseline and must be saved or cleared.
   const snapshot = JSON.stringify([draft.title, draft.description, draft.categories, draft.start, draft.place, draft.note]);
   assert.notEqual(snapshot, draft.initial);
+});
+
+test("Do this again copies the area too (GI1), and an event without one gives an empty area", () => {
+  assert.equal(againDraft({ ...plan, area: "Near Old Street" }, options).area, "Near Old Street");
+  assert.equal(againDraft({ ...plan, area: "" }, options).area, "");
+  // An event read before GI1 has no area at all.
+  assert.equal(againDraft(plan, options).area, "");
 });
 
 test("Do this again never replaces an unconfirmed save and asks before replacing a draft", () => {
@@ -240,6 +250,26 @@ test("UX2 answer labels: Maybe; UX3-D7: Can’t go, and Can’t go now after Goi
   assert.equal(responseText("declined"), "Can’t go");
   assert.equal(responseText("pending"), "Not answered");
   assert.deepEqual(cardChips({ owner: false, status: "active", response: "maybe" }), ["Invited", "Maybe"]);
+});
+
+test("the exact place hides until an invitee replies: the area (if any), the hint, and no Maps (GI1)", () => {
+  assert.equal(EXACT_ADDRESS_LATER, "Exact address after you reply");
+  const place = "Games room, 12 Example Street";
+  // Not answered yet: the area when there is one, else no place line at all.
+  assert.deepEqual(eventPlace({ owner: false, response: "pending", place, area: " Near the station " }), {
+    exact: false,
+    line: "Near the station",
+  });
+  assert.deepEqual(eventPlace({ owner: false, response: "pending", place, area: "" }), { exact: false, line: null });
+  assert.deepEqual(eventPlace({ owner: false, response: "pending", place }), { exact: false, line: null });
+  assert.deepEqual(eventPlace({ owner: false, response: null, place, area: "Shoreditch" }), {
+    exact: false,
+    line: "Shoreditch",
+  });
+  // The organizer, and anyone who has answered (Going, Maybe or Can’t go), see the place as before.
+  for (const response of ["accepted", "maybe", "declined", "withdrawn"])
+    assert.deepEqual(eventPlace({ owner: false, response, place, area: "Near the station" }), { exact: true, line: place });
+  assert.deepEqual(eventPlace({ owner: true, response: null, place, area: "Near the station" }), { exact: true, line: place });
 });
 
 test("guest area: only the organizer until an invitee answers (UX-P5)", () => {

@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
-import { button, choosePeople, createFromIdea, later, quietReminders } from "./qa-helpers.mjs";
+import { button, createFromIdea, later, openEvent, quietReminders } from "./qa-helpers.mjs";
 const browser = await chromium.launch({ channel: "chrome", headless: true });
 try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
-  // Choose people is opened from the event page, which would otherwise ask "Get reminders?".
+  // The event page would otherwise ask "Get reminders?".
   await quietReminders(page);
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -62,24 +62,10 @@ try {
     .click();
   await createFromIdea(page, "Test café");
   await later(page);
-  await choosePeople(page, "Coffee together");
-  await page
-    .getByRole("button", { name: "Add Coffee friends", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "Add Coffee friends", exact: true })
-    .click();
-  await expect(
-    page.getByRole("heading", { name: "Selected · 1", exact: true }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Save people", exact: true }).click();
-  await expect(
-    page.getByText(
-      "People saved for this plan. No invitations have been sent.",
-      { exact: true },
-    ),
-  ).toBeVisible();
-  await button(page, "Back").click();
+  // GI-D3: inviting from contacts is out of scope, so the event page has no Choose people; People stays on Profile.
+  await openEvent(page, "Coffee together");
+  await expect(button(page, "Invite someone")).toBeVisible();
+  await expect(button(page, "Choose people")).toHaveCount(0);
   await button(page, "Back").click();
   await page.getByRole("tab", { name: "Profile", exact: true }).click();
   await page
@@ -94,16 +80,6 @@ try {
       exact: true,
     }),
   ).toBeVisible();
-  await button(page, "Back").click();
-  await page.getByRole("tab", { name: "My resbites", exact: true }).click();
-  await choosePeople(page, "Coffee together");
-  await expect(
-    page.getByRole("checkbox", {
-      name: "Alex, alex@example.invalid",
-      exact: true,
-    }),
-  ).toBeChecked();
-  await button(page, "Back").click();
   await button(page, "Back").click();
   await page.getByRole("tab", { name: "Profile", exact: true }).click();
   assert.equal(
@@ -126,7 +102,7 @@ try {
   );
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: manual contact fallback, group create/edit/delete, deduplication, independent plan selections and exit cleanup. No network writes.",
+    "PASS: manual contact fallback, group create/edit/delete, deduplication, no Choose people on the event page (GI-D3) and exit cleanup. No network writes.",
   );
 } finally {
   await browser.close();

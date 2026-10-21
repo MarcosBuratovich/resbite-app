@@ -2,8 +2,8 @@ import { supabase } from "./supabase";
 import { planWithDetails, withDeadline } from "./plans";
 import { planFromRow, type Plan } from "../domain/plans";
 import type { RsvpAttempt, RsvpSnapshot } from "../domain/rsvp";
-import { isLinkCode } from "../domain/appLinks";
-import { claimLinkErrorMessage } from "../domain/eventLinks";
+import { isInviteToken, isLinkCode } from "../domain/appLinks";
+import { claimLinkErrorMessage, incompleteInvitation } from "../domain/eventLinks";
 const eventUnavailable =
   "This invitation is unavailable, or its details could not be refreshed. Check your connection and try again.";
 export async function readRsvp(
@@ -33,24 +33,29 @@ export async function readRsvp(
   // Read after an answer, so Going or Maybe now brings the Meeting details (and Can’t go hides them).
   return { plan: planFromRow(plan.data), attendee: attendee.data };
 }
-export async function claimInvitation(token: string) {
-  if (!/^[a-f0-9]{64}$/.test(token))
-    throw new Error("This invitation link is incomplete.");
-  const { data, error } = await withDeadline((signal) =>
-    supabase.rpc("claim_invite", { p_token: token }).abortSignal(signal),
-  );
-  if (error)
-    throw new Error(
-      "This invitation could not be opened. It may be revoked, already claimed by someone else, or no longer available. Check your connection and try again.",
+/**
+ * A per-person link (before GI1). Its refusals read as the event link's do, so the invite screen can tell a
+ * refusal for good (`isClaimRefusal`) from a lost connection.
+ */
+export async function claimInvitation(token: string): Promise<string> {
+  if (!isInviteToken(token)) throw new Error(incompleteInvitation);
+  let reply;
+  try {
+    reply = await withDeadline((signal) =>
+      supabase.rpc("claim_invite", { p_token: token }).abortSignal(signal),
     );
-  return data as string;
+  } catch (error) {
+    throw new Error(claimLinkErrorMessage(error));
+  }
+  if (reply.error) throw new Error(claimLinkErrorMessage(reply.error));
+  return reply.data as string;
 }
 /**
  * GI1: joins the event behind its link (as Not answered yet) and returns its id. The organizer opening their
  * own link gets their event's id back, with nothing joined.
  */
 export async function claimEventLink(code: string): Promise<string> {
-  if (!isLinkCode(code)) throw new Error("This invitation link is incomplete.");
+  if (!isLinkCode(code)) throw new Error(incompleteInvitation);
   let reply;
   try {
     reply = await withDeadline((signal) =>

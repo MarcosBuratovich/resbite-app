@@ -4,7 +4,8 @@ import { timeRange } from "./eventTime";
  * GI1: the event's one link. What the app says when reading, turning off or joining by a link, or removing a
  * guest, fails. The database's codes: 42501 is "not the organizer of an upcoming, active resbite" for the
  * organizer's calls and "no longer active, started or cancelled" for joining; 22023 is "the organizer can't be
- * removed". Link codes are never part of a message.
+ * removed" (and, for a per-person link from before GI1, "the organizer can't claim it"). Link codes are never
+ * part of a message.
  */
 const errorCode = (error: unknown) =>
   typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
@@ -31,12 +32,33 @@ export function linkErrorMessage(action: LinkAction, error: unknown): string {
 
 export const inactiveInvitation =
   "This invitation is no longer active, or the event has started or was cancelled.";
+export const incompleteInvitation = "This invitation link is incomplete.";
+/** A per-person link (before GI1) opened by its own organizer. An event link just opens their event. */
+export const ownInvitation = "You organize this resbite. Open it from My resbites.";
 
-/** Joining by an event link. The organizer opening their own link lands on their event (no error). */
+/**
+ * Joining by an event link or a per-person link. The organizer opening their own event link lands on their
+ * event (no error).
+ */
 export function claimLinkErrorMessage(error: unknown): string {
-  return errorCode(error) === "42501"
-    ? inactiveInvitation
-    : "This invitation could not be opened. Check your connection and try again.";
+  const code = errorCode(error);
+  if (code === "42501") return inactiveInvitation;
+  if (code === "22023") return ownInvitation;
+  return "This invitation could not be opened. Check your connection and try again.";
+}
+
+/**
+ * A claim refused for good: the link is turned off, the event started or was cancelled, the link is malformed,
+ * or it is the organizer's own. The invite screen then drops the kept link, so a restart opens the app as
+ * usual. Anything else (a lost connection or a timeout) keeps it for a retry.
+ */
+export function isClaimRefusal(message: string): boolean {
+  return message === inactiveInvitation || message === incompleteInvitation || message === ownInvitation;
+}
+
+/** The question before the organizer removes a guest: removing is not a ban (P8). */
+export function removeGuestQuestion(name: string): string {
+  return `Remove ${name} from this resbite? They can join again with the link unless you turn it off.`;
 }
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
@@ -69,4 +91,5 @@ export const LINK_INFO = [
   "The exact place and Meeting details show only after they reply.",
   "Turn the link off to stop it working. You’ll get a new link to share.",
   "Turning the link off also stops any older per-person links you shared.",
+  "Someone you remove can join again with the link, unless you turn it off.",
 ] as const;

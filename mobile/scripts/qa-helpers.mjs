@@ -112,10 +112,7 @@ export async function expectCancelled(page, title) {
   await expect(card(page, title)).toHaveAttribute("aria-label", /, Cancelled, /);
   await page.getByRole("radio", { name: "Upcoming", exact: true }).click();
 }
-export async function choosePeople(page, title) {
-  await openEvent(page, title);
-  await button(page, "Choose people").click();
-}
+
 /** Leaves an unchanged editor (opened from the event page) and returns to My resbites. */
 export async function closeToList(page) {
   await close(page);

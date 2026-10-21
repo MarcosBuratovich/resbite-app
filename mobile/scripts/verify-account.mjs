@@ -249,7 +249,9 @@ try {
     page.getByRole("heading", { name: "About you", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Skip", exact: true }).click();
-  await expect(page.getByText("Fixture café", { exact: true })).toBeVisible();
+  // The claim lands on the invitation (GI1: not answered yet, so the exact place waits for a reply).
+  await expect(page.getByRole("heading", { name: "Coffee evening", exact: true })).toBeVisible();
+  await expect(page.getByText("Exact address after you reply", { exact: true })).toBeVisible();
   assert.equal(f.claims(), 1);
   assert.equal(
     await page.evaluate(() => sessionStorage.getItem("resbite.pending-invite")),
@@ -289,7 +291,7 @@ try {
     .getByRole("button", { name: "Try restoring again", exact: true })
     .click();
   await expect(
-    restored.page.getByText("Fixture café", { exact: true }),
+    restored.page.getByRole("heading", { name: "Coffee evening", exact: true }),
   ).toBeVisible();
   assert.equal(restored.claims(), 1);
   assert.deepEqual(restored.errors, []);

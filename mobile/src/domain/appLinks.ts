@@ -91,17 +91,22 @@ export function buildEventLink(code: string, origin?: string): string {
   return owned ? `${owned}/r/${code}` : `resbite://r/${code}`;
 }
 
-/** The code from an event link, or null. Only the exact canonical forms pass: no query, hash or extra path. */
+/**
+ * The code from an event link, or null. The app's own scheme passes only in its exact forms. The owned page's
+ * link must have the exact path, but may end with a slash and carry a query or a fragment (chat apps add
+ * `?fbclid=…`), which are ignored. Nothing before the query may be percent-encoded.
+ */
 export function parseEventLink(value: unknown, origin?: string): string | null {
-  if (typeof value !== "string" || value.length > 512 || /[\s\\%]/.test(value))
+  if (typeof value !== "string" || value.length > 512 || /[\s\\]/.test(value))
     return null;
   try {
     const owned = invitationOrigin(origin);
-    const code = value.slice(value.lastIndexOf("/") + 1);
+    const head = value.split(/[?#]/, 1)[0];
+    if (head.includes("%")) return null;
+    const code = head.replace(/\/$/, "").split("/").at(-1);
     if (!isLinkCode(code)) return null;
-    const canonical = [`resbite://r/${code}`, `resbite:///r/${code}`];
-    if (owned) canonical.push(`${owned}/r/${code}`);
-    return canonical.includes(value) ? code : null;
+    if (value === `resbite://r/${code}` || value === `resbite:///r/${code}`) return code;
+    return owned && (head === `${owned}/r/${code}` || head === `${owned}/r/${code}/`) ? code : null;
   } catch {
     return null;
   }
@@ -112,7 +117,7 @@ export function routeSystemLink(path: string, origin?: string): string {
   // GI1 event links, as a full link or as the native path the router hands over.
   const code = parseEventLink(path.startsWith("/r/") ? `resbite://${path}` : path, origin);
   if (code) return `/invite?code=${code}`;
-  if (path.startsWith("/r/") || path === "/r") return "/invite";
+  if (/^\/r(?:[/?#]|$)/.test(path)) return "/invite";
   const candidate = path.startsWith("/invite?") ? `resbite://${path}` : path;
   const token = parseInvitationLink(candidate, origin);
   if (token) return `/invite?token=${token}`;

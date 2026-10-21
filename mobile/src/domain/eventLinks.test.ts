@@ -4,9 +4,13 @@ import { buildEventLink } from "./appLinks";
 import {
   claimLinkErrorMessage,
   inactiveInvitation,
+  incompleteInvitation,
+  isClaimRefusal,
   LINK_INFO,
   linkDate,
   linkErrorMessage,
+  ownInvitation,
+  removeGuestQuestion,
   shareMessage,
   TURN_OFF_MESSAGE,
   TURN_OFF_TITLE,
@@ -23,6 +27,21 @@ test("joining by an event link: an inactive, started or cancelled event says so;
       claimLinkErrorMessage(other),
       "This invitation could not be opened. Check your connection and try again.",
     );
+});
+
+test("a claim refused for good drops the kept link; only a connection failure keeps it for a retry", () => {
+  assert.equal(incompleteInvitation, "This invitation link is incomplete.");
+  // A per-person link (before GI1) refuses its own organizer with 22023.
+  assert.equal(claimLinkErrorMessage({ code: "22023", message: "Owner cannot claim own invitation" }), ownInvitation);
+  assert.equal(ownInvitation, "You organize this resbite. Open it from My resbites.");
+  for (const refused of [inactiveInvitation, incompleteInvitation, ownInvitation]) assert.equal(isClaimRefusal(refused), true);
+  for (const retry of [
+    claimLinkErrorMessage({ code: "08006" }),
+    claimLinkErrorMessage(new Error("abort")),
+    "Sign-out is in progress.",
+    "Invitation unavailable.",
+  ])
+    assert.equal(isClaimRefusal(retry), false, retry);
 });
 
 test("the organizer's link calls name what failed, and never include the code", () => {
@@ -69,6 +88,12 @@ test("turning the link off asks first, and the ⓘ sheet says what the link show
   const info = LINK_INFO.join(" ");
   for (const part of [/one invitation link/, /Anyone with the link sees the basics/, /exact place and Meeting details show only after they reply/, /Turn the link off/, /also stops any older per-person links you shared\./])
     assert.match(info, part);
+  // Removing is not a ban: the sheet and the question both say so.
+  assert.equal(LINK_INFO.at(-1), "Someone you remove can join again with the link, unless you turn it off.");
+  assert.equal(
+    removeGuestQuestion("Bea"),
+    "Remove Bea from this resbite? They can join again with the link unless you turn it off.",
+  );
   // Curly apostrophes only.
-  assert.doesNotMatch(info + TURN_OFF_MESSAGE, /'/);
+  assert.doesNotMatch(info + TURN_OFF_MESSAGE + ownInvitation, /'/);
 });

@@ -9,10 +9,13 @@ import { Back, Button, Copy, Title, ErrorNote, s } from "../src/design/ui";
 import { colors as c } from "../src/design/tokens";
 import { claimEventLink, claimInvitation } from "../src/services/rsvp";
 import { isInviteToken, isLinkCode } from "../src/domain/appLinks";
+import { incompleteInvitation, isClaimRefusal } from "../src/domain/eventLinks";
 
 /**
  * Claims an invitation link, then replaces itself with the event page's answer. A per-person link brings a
- * `token`; the event's one link (GI1, /r/<code>) brings a `code`. Either is kept on the device until claimed.
+ * `token`; the event's one link (GI1, /r/<code>) brings a `code`. Either is kept on the device until claimed,
+ * or until it is refused for good (turned off, started, cancelled, malformed): only a lost connection keeps it
+ * for a retry. "Go to My resbites" leaves the error and drops it too.
  */
 export default function Invite() {
   const { token, code, plan } = useLocalSearchParams<{
@@ -80,7 +83,7 @@ export default function Invite() {
       setError(null);
       try {
         if (secret) {
-          if (!keep) throw new Error("This invitation link is incomplete.");
+          if (!keep) throw new Error(incompleteInvitation);
           await retainToken();
           if (!valid()) return;
         }
@@ -100,7 +103,11 @@ export default function Invite() {
         // The claim lands straight on the answer (benchmark row 9).
         router.replace({ pathname: "/event", params: { plan: id } });
       } catch (e) {
-        if (valid()) setError(e instanceof Error ? e.message : "Invitation unavailable.");
+        const message = e instanceof Error ? e.message : "Invitation unavailable.";
+        // A refusal for good drops the kept link (a malformed one was never kept), so a restart opens the app
+        // as usual instead of this error. The message still shows.
+        if (keep && isClaimRefusal(message) && valid()) await remember.current(null, keep).catch(() => {});
+        if (valid()) setError(message);
       } finally {
         if (valid()) setBusy(false);
       }
@@ -108,6 +115,11 @@ export default function Invite() {
     [identity, plan, token, code, userId, preview, signingOut, accountReady],
   );
   const { refresh } = useFocusedRefresh(claim, { identity });
+  // The way out of an error: the kept link (if it is this one) is dropped, then My resbites.
+  async function leave() {
+    if (keep) await remember.current(null, keep).catch(() => {});
+    router.replace("/plans");
+  }
   return (
     <SafeAreaView style={s.page}>
       <ScrollView contentContainerStyle={s.body}>
@@ -126,6 +138,9 @@ export default function Invite() {
         {busy && <ActivityIndicator accessibilityLabel="Opening your invitation" color={c.aquaDark} />}
         {session && !preview && (
           <Button title="Refresh invitation" secondary loading={busy} onPress={() => void refresh()} />
+        )}
+        {!!error && session && !preview && accountReady && (
+          <Button title="Go to My resbites" secondary onPress={() => void leave()} />
         )}
       </ScrollView>
     </SafeAreaView>

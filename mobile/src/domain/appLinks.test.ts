@@ -199,17 +199,41 @@ test("GI1 event links: owned HTTPS and the app scheme round trip to the invite s
   assert.equal(parseInvitationLink(`resbite://r/${code}`, origin), null);
 });
 
-test("GI1 event links reject everything but the exact canonical forms", () => {
+test("GI1 the owned page's link may carry a trailing slash, a query or a fragment, which are ignored", () => {
+  for (const url of [
+    `${origin}/r/${code}/`,
+    `${origin}/r/${code}?fbclid=IwAR0abc_DEF-123`,
+    `${origin}/r/${code}?utm_source=whatsapp&utm_campaign=a%20b`,
+    `${origin}/r/${code}#top`,
+    `${origin}/r/${code}?`,
+    `${origin}/r/${code}#`,
+    `${origin}/r/${code}/?fbclid=x`,
+    `${origin}/r/${code}?a=1#x`,
+    `${origin}/r/${code}/#x`,
+  ]) {
+    assert.equal(parseEventLink(url, origin), code, url);
+    assert.equal(routeSystemLink(url, origin), `/invite?code=${code}`, url);
+  }
+});
+
+test("GI1 event links reject everything but the canonical forms", () => {
   for (const bad of [
     `${origin}/r/${code.slice(1)}`,
     `${origin}/r/${code}a`,
-    `${origin}/r/${code}/`,
+    `${origin}/r/${code}//`,
     `${origin}/r/${code}/image`,
+    `${origin}/r/${code}/image?x=1`,
     `${origin}/r/x/${code}`,
     `${origin}/x/r/${code}`,
-    `${origin}/r/${code}?utm=1`,
-    `${origin}/r/${code}#top`,
+    `${origin}//r/${code}`,
     `${origin}/r/?code=${code}`,
+    `${origin}/r?code=${code}`,
+    `${origin}/r#${code}`,
+    `${origin}/r/%41${code.slice(1)}?x=1`,
+    `${origin}/r/${code}%3Fx=1`,
+    `${origin}/r/${code}?x=1\n`,
+    `${origin}/r/${code}?x=${"y".repeat(512)}`,
+    `https://LINKS.example.org/r/${code}?x=1`,
     `https://LINKS.example.org/r/${code}`,
     `https://links.EXAMPLE.org/r/${code}`,
     `http://links.example.org/r/${code}`,
@@ -234,6 +258,8 @@ test("GI1 event links reject everything but the exact canonical forms", () => {
     `/r/${code.slice(1)}`,
     "/r/",
     "/r",
+    "/r?x=1",
+    "/r#x",
   ]) {
     assert.equal(parseEventLink(bad, origin), null, bad);
     assert.equal(routeSystemLink(bad, origin), "/invite", bad);

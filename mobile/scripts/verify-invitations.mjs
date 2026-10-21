@@ -60,6 +60,7 @@ const INFO = [
   "The exact place and Meeting details show only after they reply.",
   "Turn the link off to stop it working. You’ll get a new link to share.",
   "Turning the link off also stops any older per-person links you shared.",
+  "Someone you remove can join again with the link, unless you turn it off.",
 ];
 const linkOf = (code) => new RegExp(`^(resbite://r/|https://[a-z0-9.-]+/r/)${code}$`);
 

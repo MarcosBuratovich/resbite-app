@@ -62,6 +62,24 @@ export function guestArea(view: {
   };
 }
 
+export const EXACT_ADDRESS_LATER = "Exact address after you reply";
+
+/**
+ * The event page's place line (GI1). An invitee who hasn’t answered yet sees the area when there is one, else no
+ * place line, with EXACT_ADDRESS_LATER and no Open in Maps (`exact: false`). The organizer and anyone who has
+ * answered (Going, Maybe or Can’t go) see the exact place, as before. The Note to guests is not affected.
+ */
+export function eventPlace(view: {
+  owner: boolean;
+  response: string | null;
+  place: string;
+  area?: string | null;
+}): { exact: true; line: string } | { exact: false; line: string | null } {
+  if (!view.owner && (view.response === null || view.response === "pending"))
+    return { exact: false, line: view.area?.trim() || null };
+  return { exact: true, line: view.place };
+}
+
 export type GuestGroup = { title: string; guests: { userId: string; name: string; note: string | null }[] };
 const GUEST_GROUPS: readonly { title: string; responses: readonly string[] }[] = [
   { title: "Going", responses: ["accepted"] },
@@ -188,7 +206,7 @@ export const BLANK_DRAFT_BASELINE = JSON.stringify(["", "", [], "", "", ""]);
 
 /**
  * "Do this again" (benchmark row 5): a new blank-type draft (key "new") with the title,
- * description, categories, place and Meeting details (`note`) copied. It never copies the date,
+ * description, categories, place, area (GI1) and Meeting details (`note`) copied. It never copies the date,
  * the end time (UX3), the Note to guests, guests or cover, and it has no source idea
  * (activityId null), so it opens at When.
  */
@@ -209,6 +227,7 @@ export function againDraft(
     categories: [...plan.categories],
     start: "",
     place: plan.place_label,
+    area: plan.area ?? "",
     note: plan.note,
     zone: options.zone,
     pending: null,

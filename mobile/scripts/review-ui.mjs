@@ -89,7 +89,7 @@ try {
       await button(page, "Back").click();
       await page.waitForTimeout(300);
     }
-    // My resbites with a card, the event page, its More sheet and Choose people.
+    // My resbites with a card, the event page and its More sheet (GI-D3: no Choose people on the event page).
     const card = button(page, /^Picnic in the park, /);
     await expect(card).toBeVisible();
     await shot("plans");
@@ -107,9 +107,8 @@ try {
     await button(page, "More actions").click();
     await shot("event-more", false);
     await button(page, "Close sheet").click();
-    await button(page, "Choose people").click();
-    await shot("people-plan");
-    await button(page, "Back").click();
+    await expect(page.getByRole("button", { name: "Close sheet" })).toHaveCount(0);
+    await expect(button(page, "Choose people")).toHaveCount(0);
     await button(page, "Back").click();
     await page.getByRole("radio", { name: "Past", exact: true }).click();
     await shot("plans-past");
@@ -151,19 +150,12 @@ try {
     await page.keyboard.press("Space");
     await expect(page.getByRole("heading", { name: "Selected · 0", exact: true })).toBeVisible();
     await expect(page.locator("body")).not.toContainText("Uncaught Error");
-    // A saved group, then the plan selection with a group row and selected rows, and its sheet.
+    // A saved group, and the About people sheet.
     await addPerson(page, "Alex", "alex@example.invalid");
     await page.getByLabel("Group name", { exact: true }).fill("Friends");
     await button(page, "Save group").click();
     await expect(button(page, "Edit Friends")).toBeVisible();
     await shot("people-groups");
-    await button(page, "Back").click();
-    await page.getByRole("tab", { name: "My resbites", exact: true }).click();
-    await page.getByRole("radio", { name: "Upcoming", exact: true }).click();
-    await button(page, /^Picnic in the park, /).click();
-    await button(page, "Choose people").click();
-    await button(page, "Add Friends").click();
-    await shot("people-plan-selected");
     await button(page, "About people").click();
     await expect(heading(page, "About people")).toBeVisible();
     await shot("people-about", false);
@@ -276,7 +268,7 @@ try {
   // Larger Text at 320 px (forced layouts plus scaled text, as in verify-kit): rows, top row and sheets.
   {
     const page = await browser.newPage({ viewport: { width: 320, height: 844 }, reducedMotion: "reduce" });
-    // People now opens from the event page, which would otherwise ask "Get reminders?".
+    // The event page would otherwise ask "Get reminders?".
     await quietReminders(page);
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
@@ -311,8 +303,10 @@ try {
     await shot("invitations-about", false);
     await button(page, "Close sheet").click();
     await button(page, "Back").click();
-    await openEvent(page, "Picnic in the park");
-    await button(page, "Choose people").click();
+    // People opens from Profile (GI-D3: not from the event page).
+    await page.getByRole("tab", { name: "Profile", exact: true }).click();
+    await page.getByRole("button", { name: "People & groups", exact: true }).click();
+    await page.getByRole("button", { name: "Create a group", exact: true }).click();
     await shot("people-empty");
     assert.ok(await fits(), "People top row fits at 320 px under Larger Text");
     await addPerson(page, "Alex Rivera", "alex@example.invalid");
@@ -321,7 +315,6 @@ try {
     await button(page, "About people").click();
     await shot("people-about", false);
     await button(page, "Close sheet").click();
-    await button(page, "Save people").click();
     if (errors.length) throw Error(errors.join("\n"));
     await page.close();
   }
