@@ -9,6 +9,7 @@ import { Button, Copy, ErrorNote, Title, s } from "../src/design/ui";
 import { Chip, StatusCard } from "../src/design/kit";
 import { categoryPalette, colors as c, fonts } from "../src/design/tokens";
 import { accessState, accessTitles, type AccessState } from "../src/domain/accountCopy";
+import { pendingInviteParams } from "../src/domain/appLinks";
 
 const icons: Record<AccessState, typeof ShieldCheck> = {
   checking: ShieldCheck,
@@ -65,12 +66,9 @@ export default function Account() {
       );
     if (!reviewed) return <Redirect href="/account-details?setup=1" />;
     if (!profileReady) return <Redirect href="/profile" />;
-    if (pendingInvite)
-      return (
-        <Redirect
-          href={{ pathname: "/invite", params: { token: pendingInvite } }}
-        />
-      );
+    const kept = pendingInviteParams(pendingInvite);
+    if (kept)
+      return <Redirect href={{ pathname: "/invite", params: kept }} />;
     return <Redirect href="/create" />;
   }
   const checking = restoring || status === "checking";

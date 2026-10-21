@@ -5,6 +5,7 @@ import * as Crypto from "expo-crypto";
 import { useAccount } from "./AccountState";
 import { useApp } from "./AppState";
 import { detailsFromMetadata } from "../domain/registration";
+import { pendingInviteParams } from "../domain/appLinks";
 import {
   readProfile,
   saveProfile,
@@ -163,11 +164,9 @@ export function useProfile() {
         avatar_path: old?.avatar_path ?? null,
         avatar_revision: old?.avatar_revision ?? 0,
       }));
-      if (pendingInvite && !preview)
-        router.replace({
-          pathname: "/invite",
-          params: { token: pendingInvite },
-        });
+      const kept = pendingInviteParams(pendingInvite);
+      if (kept && !preview)
+        router.replace({ pathname: "/invite", params: kept });
       return true;
     } catch (e) {
       if (identity.current === scope)

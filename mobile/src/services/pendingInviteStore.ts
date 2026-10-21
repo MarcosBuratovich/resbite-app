@@ -1,6 +1,10 @@
-import { isInviteToken } from "../domain/appLinks";
+import { isPendingInvite } from "../domain/appLinks";
 import type { KeyStore } from "./secureChunks";
 const key = "resbite.pending-invite";
+/**
+ * One kept invitation: a per-person token or (GI1) an event link code, told apart by their shapes
+ * (`pendingInviteParams`). A newer link replaces an older one of either kind.
+ */
 export function createPendingInviteStore(
   storage: KeyStore,
   publish: (token: string | null) => void,
@@ -14,7 +18,7 @@ export function createPendingInviteStore(
     return next;
   };
   function remember(token: string | null, expected?: string) {
-    if (token !== null && !isInviteToken(token))
+    if (token !== null && !isPendingInvite(token))
       return Promise.reject(Error("This invitation link is incomplete."));
     if (blocked) return Promise.reject(Error("Sign-out is in progress."));
     const version = ++revision;
@@ -23,7 +27,7 @@ export function createPendingInviteStore(
         const saved = await storage.getItem(key);
         if (saved !== expected) {
           if (version === revision)
-            publish(isInviteToken(saved) ? saved : null);
+            publish(isPendingInvite(saved) ? saved : null);
           return;
         }
       }
@@ -38,7 +42,7 @@ export function createPendingInviteStore(
       const version = revision;
       return run(async () => {
         const value = await storage.getItem(key);
-        if (version === revision) publish(isInviteToken(value) ? value : null);
+        if (version === revision) publish(isPendingInvite(value) ? value : null);
       });
     },
     beginCleanup: () => {
