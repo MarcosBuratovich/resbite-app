@@ -62,24 +62,27 @@ create function private.deletion_pending(p_user uuid) returns boolean language s
 $$;
 revoke all on function private.deletion_pending(uuid) from public, anon, authenticated, service_role;
 
--- Joining by the event link from a new account (GI2-D2). In this order: a signed-in, confirmed, non-anonymous
--- account that isn't banned or leaving, else 42501 "Sign-in required"; the account's lock (require_tester's,
--- so this serialises with deletion); a revoked grant is refused (42501); testers and grant holders take GI1's
--- claim_plan_link and the name and tick are ignored. Everyone else needs a live link to an active event that
--- hasn't started, whose organizer may still use the app, and that isn't their own (42501 "Invitation
--- unavailable": an organizer dropped from the roster neither lets themselves nor new guests in), a name of 1-80 characters unless they have a profile, and the tick unless
--- it is already stored (22023). Then the tick, the grant, the profile (only when new), the attendance (not
--- answered yet) and the organizer's notice, under GI1's dedupe key, in one transaction.
+-- Joining by the event link from a new account (GI2-D2). In this order: a session, else 42501 "Sign-in
+-- required"; the account's lock (require_tester's, so this serialises with deletion, and everything after it
+-- sees a deletion request that committed while it waited); a confirmed, non-anonymous account that isn't
+-- banned or being deleted, else 42501 "Sign-in required"; a revoked grant is refused (42501); testers and
+-- grant holders take GI1's claim_plan_link and the name and tick are ignored. Everyone else needs a live link
+-- to an active event that hasn't started, whose organizer may still use the app, and that isn't their own
+-- (42501 "Invitation unavailable": an organizer dropped from the roster lets in neither themselves nor new
+-- guests), a name of 1-80 characters unless they have a profile, and the tick unless it is already stored
+-- (22023). Then the tick, the grant, the profile (only when new), the attendance (not answered yet) and, only
+-- when the attendance is new, the organizer's notice under GI1's dedupe key, in one transaction.
 create function private.join_by_link(p_code text,p_name text,p_terms_version text) returns uuid
 language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := auth.uid(); v_link private.plan_links; v_plan public.plans; v_has_profile boolean;
 begin
- if v_uid is null or not exists(select 1 from auth.users u where u.id=v_uid and u.email_confirmed_at is not null
+ if v_uid is null then raise exception 'Sign-in required' using errcode='42501'; end if;
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_uid::text,47));
+ if not exists(select 1 from auth.users u where u.id=v_uid and u.email_confirmed_at is not null
   and not coalesce(u.is_anonymous,false) and (u.banned_until is null or u.banned_until<=now()))
  or private.deletion_pending(v_uid) then
   raise exception 'Sign-in required' using errcode='42501';
  end if;
- perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_uid::text,47));
  if exists(select 1 from private.beta_access where user_id=v_uid and revoked_at is not null) then
   raise exception 'Invitation unavailable' using errcode='42501';
  end if;
@@ -96,6 +99,7 @@ begin
  -- Read again under the plan lock: rotate_plan_link holds the same lock while it turns the link off.
  perform 1 from private.plan_links where id=v_link.id and revoked_at is null;
  if not found then raise exception 'Invitation unavailable' using errcode='42501'; end if;
+ -- Defensive: the organizer check above already refuses this unless the roster changed after eligible().
  if v_plan.owner_id=v_uid then raise exception 'Invitation unavailable' using errcode='42501'; end if;
  v_has_profile := exists(select 1 from public.profiles where id=v_uid);
  if not v_has_profile and coalesce(char_length(btrim(p_name)),0) not between 1 and 80 then
@@ -110,8 +114,10 @@ begin
  insert into private.beta_access(user_id,source,plan_link_id) values(v_uid,'link',v_link.id);
  if not v_has_profile then insert into public.profiles(id,display_name) values(v_uid,btrim(p_name)); end if;
  insert into public.attendees(plan_id,user_id) values(v_plan.id,v_uid) on conflict do nothing;
- insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id)
-  values(v_plan.id,v_plan.owner_id,'invitation','link:'||v_link.id||':'||v_uid,v_uid) on conflict do nothing;
+ if found then
+  insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id)
+   values(v_plan.id,v_plan.owner_id,'invitation','link:'||v_link.id||':'||v_uid,v_uid) on conflict do nothing;
+ end if;
  return v_plan.id;
 end $$;
 create function public.join_by_link(p_code text,p_name text,p_terms_version text) returns uuid

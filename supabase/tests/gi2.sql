@@ -218,6 +218,8 @@ select set_config('request.jwt.claims','{"role":"anon"}',true);
 do $$ begin
  begin perform public.join_by_link('AAAAAAAAAAAAAAAAAAAAAA','Anon','2026-10'); raise exception 'Anonymous role joined';
  exception when insufficient_privilege then if sqlerrm<>'permission denied for function join_by_link' then raise; end if; end;
+ begin perform private.user_eligible('b1000000-0000-4000-8000-000000000002'); raise exception 'Anonymous role called user_eligible';
+ exception when insufficient_privilege then null; end;
 end $$;
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"b1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
@@ -229,6 +231,8 @@ do $$ begin
  begin perform private.has_live_grant('b1000000-0000-4000-8000-000000000002'); raise exception 'A client called has_live_grant';
  exception when insufficient_privilege then null; end;
  begin perform private.deletion_pending('b1000000-0000-4000-8000-000000000002'); raise exception 'A client called deletion_pending';
+ exception when insufficient_privilege then null; end;
+ begin perform private.user_eligible('b1000000-0000-4000-8000-000000000001'); raise exception 'A client called user_eligible';
  exception when insufficient_privilege then null; end;
 end $$;
 reset role;
@@ -243,6 +247,7 @@ do $$ begin
  or has_function_privilege('anon','private.join_by_link(text,text,text)','execute') or has_function_privilege('service_role','private.join_by_link(text,text,text)','execute')
  or not has_function_privilege('authenticated','public.join_by_link(text,text,text)','execute') then raise exception 'join_by_link grants wrong'; end if;
  if has_function_privilege('anon','private.deletion_pending(uuid)','execute') or has_function_privilege('authenticated','private.deletion_pending(uuid)','execute') then raise exception 'deletion_pending exposed'; end if;
+ if has_function_privilege('anon','private.user_eligible(uuid)','execute') or has_function_privilege('authenticated','private.user_eligible(uuid)','execute') then raise exception 'user_eligible exposed'; end if;
  -- The tables hold only what they say.
  begin insert into private.beta_access(user_id,source) values ('b1000000-0000-4000-8000-000000000005','roster'); raise exception 'Unknown grant source accepted';
  exception when check_violation then null; end;
@@ -295,7 +300,8 @@ do $$ begin
  if exists(select 1 from private.beta_access where user_id='b2000000-0000-4000-8000-000000000003')
  or exists(select 1 from private.age_attestations where user_id='b2000000-0000-4000-8000-000000000003')
  or exists(select 1 from public.profiles where id='b2000000-0000-4000-8000-000000000003')
- or exists(select 1 from public.attendees where user_id='b2000000-0000-4000-8000-000000000003') then raise exception 'A dead link wrote something'; end if;
+ or exists(select 1 from public.attendees where user_id='b2000000-0000-4000-8000-000000000003')
+ or exists(select 1 from private.notification_outbox where kind='invitation' and actor_id='b2000000-0000-4000-8000-000000000003') then raise exception 'A dead link wrote something'; end if;
 end $$;
 -- A fresh event: the guest joins (the name is trimmed); a roster tester takes GI1's path and gets no grant or tick.
 set local role authenticated;
@@ -339,7 +345,8 @@ do $$ begin
  if exists(select 1 from private.beta_access where user_id='b2000000-0000-4000-8000-000000000004')
  or exists(select 1 from private.age_attestations where user_id='b2000000-0000-4000-8000-000000000004')
  or exists(select 1 from public.profiles where id='b2000000-0000-4000-8000-000000000004')
- or exists(select 1 from public.attendees where user_id='b2000000-0000-4000-8000-000000000004') then raise exception 'A started event wrote something'; end if;
+ or exists(select 1 from public.attendees where user_id='b2000000-0000-4000-8000-000000000004')
+ or exists(select 1 from private.notification_outbox where kind='invitation' and actor_id='b2000000-0000-4000-8000-000000000004') then raise exception 'A started event wrote something'; end if;
 end $$;
 -- Notices reach a live grant holder and the roster tester, not a revoked grant or someone with neither. The
 -- sender's check is local-only (20261022120001), so the hosted-baseline run skips these assertions.
@@ -411,5 +418,29 @@ do $$ begin
  if not exists(select 1 from private.beta_access where user_id='b2000000-0000-4000-8000-000000000004' and revoked_at is null
   and plan_link_id=(select id from private.plan_links where code=(select code from gi2_codes where name='four'))) then raise exception 'No grant after the organizer is back'; end if;
  if (select response from public.attendees where plan_id='b2100000-0000-4000-8000-000000000004' and user_id='b2000000-0000-4000-8000-000000000004') is distinct from 'pending' then raise exception 'Guest not on the event after the organizer is back'; end if;
+end $$;
+-- A former tester already on the event gets a grant from a new link, and the organizer no second notice.
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"b2000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+select public.join_by_link((select code from gi2_codes where name='four'),'ignored','ignored');
+select set_config('request.jwt.claims','{"sub":"b2000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+do $$ begin
+ insert into gi2_codes values('five',public.rotate_plan_link('b2100000-0000-4000-8000-000000000004'));
+end $$;
+reset role;
+update private.tester_roster set enabled=false where email='gi2-2-tester@resbite-test.invalid';
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"b2000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+do $$ begin
+ if public.account_access_status()->>'status'<>'access_pending' then raise exception 'Former tester still approved'; end if;
+ if public.join_by_link((select code from gi2_codes where name='five'),'','2026-10')<>'b2100000-0000-4000-8000-000000000004' then raise exception 'Former tester join returned another plan'; end if;
+end $$;
+reset role;
+do $$ begin
+ if not exists(select 1 from private.beta_access where user_id='b2000000-0000-4000-8000-000000000002' and revoked_at is null
+  and plan_link_id=(select id from private.plan_links where code=(select code from gi2_codes where name='five'))) then raise exception 'Former tester got no grant'; end if;
+ if (select count(*) from public.attendees where plan_id='b2100000-0000-4000-8000-000000000004' and user_id='b2000000-0000-4000-8000-000000000002')<>1 then raise exception 'Former tester attendance changed'; end if;
+ if (select count(*) from private.notification_outbox where plan_id='b2100000-0000-4000-8000-000000000004' and kind='invitation'
+  and actor_id='b2000000-0000-4000-8000-000000000002')<>1 then raise exception 'An existing guest notified the organizer again'; end if;
 end $$;
 rollback;
