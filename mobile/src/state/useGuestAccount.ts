@@ -282,7 +282,7 @@ export function useGuestAccount({ code, token }: { code?: string; token?: string
     appleAvailable,
     codeInput,
     /** While a join runs (and until its handoff), Close waits: leaving would drop the code the join may still use. */
-    closeDisabled: step === "joining" && !failed,
+    closeDisabled: step === "joining" && !failed && !dead,
     retryCard: loadCard,
     tick(next: boolean) {
       setTicked(next);
@@ -385,7 +385,7 @@ export function useGuestAccount({ code, token }: { code?: string; token?: string
      * instead of sending the person straight back here; signed out, it only leaves. Not while a join runs.
      */
     async close() {
-      if (step === "joining" && !failed) return;
+      if (step === "joining" && !failed && !dead) return;
       if (session && linkCode) {
         await rememberInvite(null, linkCode).catch(() => {});
         await rememberTerms(null).catch(() => {});
