@@ -324,3 +324,38 @@ From the final review’s fixes (21 October 2026):
 15. Do this again copies the area too.
 
 Each GI1 database migration needs the owner’s explicit approval. The hosted migration goes live together with the new TestFlight build, because build 8 can’t open `/r/` links. Old per-person links keep working.
+
+## GI2 — 22 October 2026
+
+Decisions from the GI2 design ([spec](../docs/superpowers/specs/2026-10-21-gi2-guest-accounts-design.md), [plan](../docs/superpowers/plans/2026-10-21-gi2.md)). GI2 lets a friend of the host create an account from the event link, join and reply. The calls marked as the controller’s are listed for the owner’s review at the end of the spec.
+
+| # | Decision |
+| --- | --- |
+| GI2-D1 | **One access source next to the roster.** `private.beta_access` holds link-made grants; `eligible()` accepts a roster row or a live grant. Nothing else in the app’s reading, notification or deletion rules changes shape. (22 October 2026) |
+| GI2-D2 | **The guest’s account is created by Supabase Auth, then one database call joins them:** `join_by_link(code, name, terms_version)` records the attestation, grants access, creates the profile and the attendance, and notifies the host, in one transaction. No grant without a successful join through a live link. (22 October 2026) |
+| GI2-D3 | **The tick comes first, and the buttons stay disabled until it is ticked** ("I’m 18 or over" / "I agree to the Terms and Privacy Policy.", as Stephen asked on 19 October). The tick is sent with the join call, so an account that exists without an attestation is asked again next time and gets nothing until then. (22 October 2026) |
+| GI2-D4 | **Email means a six-digit code, no password,** for guests. Existing password accounts keep signing in on the sign-in screen. A code sent to an address that already has an account signs into that account. (22 October 2026) |
+| GI2-D5 | **Google stays on the guest screen** because the browser flow already exists; Apple is the new native path. Both appear on the guest screen and the sign-in screen. (22 October 2026) |
+| GI2-D6 | **The reply keeps Maybe.** The boards draw Going and Can’t go only; the app shipped Maybe in UX2 and the owner has not retired it. (22 October 2026) |
+| GI2-D7 | **The screen after a reply is the existing event page:** the exact address, Add to calendar and reminders (UX3). The notifications ask card and the chat link wait for B1 and the chat. (22 October 2026) |
+| GI2-D8 | **Guests skip "About you"** and the interest questions; the name is the only thing asked, and only when Apple or Google do not supply one. (22 October 2026) |
+| GI2-D9 | **Link opens are counted, nothing more:** a row per open with the link id and a timestamp, written by an anonymous call; no device id, no address. The privacy sheet says so. Page views come from Vercel’s logs. (22 October 2026) |
+| GI2-D10 | **Deletion works for link-made accounts and is on in this build;** Apple accounts prove it is them by signing in with Apple again rather than by an emailed code. The raw deletion RPC is retired in the same migration. The owner decides whether deletion is switched on. Amended during the build: it also needs the deletion lifecycle on hosted, which is still local-only (see call 1). (22 October 2026) |
+
+**Calls made during the build (22 October 2026), for the owner’s review.**
+1. The migration is split in two, as UX2 and UX3 were: `20261022120000_gi2_guest_accounts.sql` is hosted-compatible, and `20261022120001_gi2_local_delivery_and_deletion.sql` is local-only, because the hosted project lacks the deletion lifecycle and the notification sender; the companion goes live with them, and GI2-D10’s "deletion is on" therefore waits for those migrations.
+2. The rollback is split the same way, and the hosted rollback alone is incomplete wherever the companion has run, so the companion’s rollback follows it in the same transaction.
+3. `join_by_link` refuses an organizer who is no longer eligible, and an organizer who has left the roster does not re-admit themselves through their own link, because a ban that leaves the banned organizer’s links admitting guests is not a ban.
+4. `join_by_link` raises on a missing user, takes the per-user lock, and only then runs the account and deletion checks, so a deletion that commits while a join waits is seen and nothing is written.
+5. A person who is not eligible but is already on the event gets the grant and no new "invitation" notice, because GI1’s early return sends none for existing attendees; the host is told only of a new attendance.
+6. The Apple button is the kit’s chip with Apple’s own logo mark (`AppleMark`, drawn with `react-native-svg`), not lucide’s apple glyph and not the native `AppleAuthenticationButton`, which lacks the kit’s disabled state and accessibility.
+7. The two link functions take `p_code`, the real argument name; the first draft sent `code` and would have failed on the database.
+8. A wrong code and an expired code arrive as one message from Supabase, so the app shows "expired" only when the time since the send is 600 seconds or more (the hosted OTP expiry), and the mismatch copy otherwise.
+9. A status of 0 or 500 and above, or a thrown call, is a connection failure and shows "Check your connection and try again."; a verify lost to the connection keeps the digits and offers Retry.
+10. On the guest screen, Close when signed in drops the kept code and the kept tick before leaving, so `/account` shows the waiting card with Sign out instead of looping back to `/invite`; the spec’s redirect stays.
+11. Apple confirms deletion through the isolated auth client the password and code paths use, so the app’s session never changes and a wrong Apple ID is refused by the existing different-account check; the red submit button becomes "Continue with Apple" and runs Apple, then the request, inside the five-minute window.
+12. The `delete-account` Edge function accepts a fresh `oauth` sign-in when the account’s providers are `["apple","google"]` and not email, which counts a linked Apple and Google account as Apple-only; the app offers no linking today.
+13. A dead preview (cancelled, happened or inactive) skips the parallel join and drops the kept code at once, as GI1 drops refused links.
+14. Strings not in the plan were accepted and listed for the owner’s copy pass: "6-digit code", "Retry", the spinner labels and "You’re invited".
+
+Each GI2 database migration needs the owner’s explicit approval, by file name and sha256. The hosted migration goes live together with build 10 and the `delete-account` redeploy; the companion waits for the deletion lifecycle and the notification sender.

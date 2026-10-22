@@ -78,3 +78,12 @@ Saved and verified in the Supabase dashboard:
 - Allowed redirects: `resbite://auth/callback` and `resbite://auth/callback?recovery=1`.
 
 SMTP saved by the owner and verified in the dashboard: custom SMTP enabled, sender name Resbite, host `smtp.resend.com`, port 465, minimum per-user interval 60 seconds, and Save changes disabled (no unsaved changes). The chosen sender is `noreply@resbite.com` and username `resend`; these sensitive input values were not exposed in the browser snapshot. The credential was not revealed or retained in repository files. End-to-end email delivery and confirmation on iPhone remain untested. Tester access is unchanged.
+
+## Apple and email-code sign-in — 22 October 2026
+
+GI2 adds Sign in with Apple and a six-digit email code. These need the owner’s dashboard settings before build 10; none has been changed from this repository.
+
+1. **Apple provider.** Supabase dashboard, Authentication, Providers, Apple: enabled, client id `com.resbite.app` (the bundle id). The app uses the native flow with `signInWithIdToken`, so there is no Services ID and no secret key to create or rotate. EAS adds the Sign in with Apple capability at build time from `ios.usesAppleSignIn`.
+2. **Templates.** The **Confirm sign up** template (`supabase/templates/confirmation.html`) and the **Magic Link** template (`supabase/templates/email-code.html`) must both carry `{{ .Token }}`, because a new or unconfirmed address receives the first and an existing confirmed one the second. This supersedes the wording of items 4 and 5 above for Confirm sign up: the link stays, and the six-digit code now sits next to it. Paste both from the repository.
+3. **Resend interval.** Hosted SMTP allows one email per address every 60 seconds, so the code screen’s resend line counts down from 1:00.
+4. **OTP expiry.** Set to 600 seconds. The app treats a wrong-or-expired code received 600 seconds or more after the send as expired.
