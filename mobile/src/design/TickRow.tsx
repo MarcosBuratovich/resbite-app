@@ -58,19 +58,41 @@ export function TermsLine({ text }: { text: string }) {
   const [before, rest = ""] = text.split("Terms");
   const [between, after = ""] = rest.split("Privacy Policy");
   if ((!termsUrl && !privacyUrl) || !rest) return <Copy style={styles.subText}>{text}</Copy>;
-  const word = (title: string, url: string | undefined) =>
-    url ? (
-      <TextAction title={title} onPress={() => void Linking.openURL(url).catch(() => {})} />
-    ) : (
-      <Copy style={styles.subText}>{title}</Copy>
-    );
+  // Plain words join the text around them; a link is its own button. A full stop after the last link stays
+  // with it, pulled back over the link's own padding.
+  const runs: { text: string; url?: string }[] = [];
+  const push = (part: string, url?: string) => {
+    const last = runs[runs.length - 1];
+    if (!url && last && !last.url) last.text += part;
+    else if (url || part.trim()) runs.push({ text: part, url });
+  };
+  push(before);
+  push("Terms", termsUrl);
+  push(between);
+  push("Privacy Policy", privacyUrl);
+  push(after);
+  const tail = runs[runs.length - 1];
+  const stop = runs.length > 1 && !tail.url && /^[.,;:!?]+$/.test(tail.text.trim()) ? tail.text.trim() : null;
+  if (stop) runs.pop();
   return (
     <View style={styles.line}>
-      <Copy style={styles.subText}>{before.trim()}</Copy>
-      {word("Terms", termsUrl)}
-      <Copy style={styles.subText}>{between.trim()}</Copy>
-      {word("Privacy Policy", privacyUrl)}
-      {after ? <Copy style={styles.subText}>{after.trim()}</Copy> : null}
+      {runs.map((run, i) => {
+        const node = run.url ? (
+          <TextAction key={i} title={run.text} onPress={() => void Linking.openURL(run.url!).catch(() => {})} />
+        ) : (
+          <Copy key={i} style={styles.subText}>
+            {run.text.trim()}
+          </Copy>
+        );
+        return stop && i === runs.length - 1 ? (
+          <View key={i} style={styles.attached}>
+            {node}
+            <Copy style={[styles.subText, styles.stop]}>{stop}</Copy>
+          </View>
+        ) : (
+          node
+        );
+      })}
     </View>
   );
 }
@@ -93,4 +115,7 @@ const styles = StyleSheet.create({
   sub: { paddingLeft: 36 },
   subText: { color: c.muted, fontSize: 14 },
   line: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 4 },
+  attached: { flexDirection: "row", alignItems: "center" },
+  // TextAction pads its label by 4 on each side.
+  stop: { marginLeft: -4 },
 });

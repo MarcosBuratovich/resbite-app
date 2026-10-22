@@ -133,7 +133,7 @@ async function fixture({ signedIn = true } = {}) {
  * A person without access: signed out unless `signedIn`, optionally with a kept code and a kept tick. The account
  * is access_pending until join_by_link succeeds; the email code 123456 signs in.
  */
-async function guestFixture({ metadata = {}, signedIn = false, kept = null, tick = null } = {}) {
+async function guestFixture({ metadata = {}, signedIn = false, kept = null, tick = null, verifyDropsOnce = false } = {}) {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -182,7 +182,13 @@ async function guestFixture({ metadata = {}, signedIn = false, kept = null, tick
       return reply({});
     }
     if (path === "/auth/v1/verify") {
-      if (req.postDataJSON().token !== "123456")
+      const { token } = req.postDataJSON();
+      // The right code's first check is lost to the connection when asked.
+      if (verifyDropsOnce && token === "123456") {
+        verifyDropsOnce = false;
+        return reply({ message: "Fixture: connection lost" }, 503);
+      }
+      if (token !== "123456")
         return reply({ code: 403, error_code: "otp_expired", msg: "Token has expired or is invalid" }, 403);
       signed = true;
       return reply(sessionFor(guest));
@@ -302,7 +308,7 @@ try {
     );
   }
   {
-    const { page, errors, opens, otps, joins, details } = await guestFixture();
+    const { page, errors, opens, otps, joins, details } = await guestFixture({ verifyDropsOnce: true });
     // Signed out: the guest's account screen, with the invitation's card, the tick first and the providers
     // disabled until it is ticked. Web has no Sign in with Apple.
     await page.goto(`${base}/invite?code=${GUEST}`);
@@ -319,6 +325,15 @@ try {
     await expect(tick).toBeChecked();
     for (const name of ["Continue with Google", "Continue with email"]) await expect(button(page, name)).toBeEnabled();
     await expect(page.getByText("Resbite is for people aged 18 and over.", { exact: true })).toHaveCount(0);
+    await expect.poll(() => terms(page)).toBe("2026-10");
+    // Unticking drops the kept tick, disables the providers and shows the helper again.
+    await tick.click();
+    await expect(tick).not.toBeChecked();
+    for (const name of ["Continue with Google", "Continue with email"]) await expect(button(page, name)).toBeDisabled();
+    await expect(page.getByText("Resbite is for people aged 18 and over.", { exact: true })).toBeVisible();
+    await expect.poll(() => terms(page)).toBe(null);
+    await tick.click();
+    await expect(tick).toBeChecked();
     // The tick and the code are kept on the device for after the sign-in; the open was counted once.
     await expect.poll(() => terms(page)).toBe("2026-10");
     await expect.poll(() => pending(page)).toBe(GUEST);
@@ -341,13 +356,18 @@ try {
     await digits.fill("000000");
     await expect(page.getByText("That code doesn’t match. Try again.", { exact: true })).toBeVisible();
     await expect(digits).toHaveValue("");
+    // A check lost to the connection keeps the six digits and offers Retry, which checks them again.
     await digits.fill("123456");
+    await expect(page.getByText("Check your connection and try again.", { exact: true })).toBeVisible();
+    await expect(digits).toHaveValue("123456");
+    await button(page, "Retry").click();
     // The account has no name, so the Name step asks for it, then the join and the event page.
     await expect(heading(page, "What’s your name?")).toBeVisible();
     await page.getByLabel("Your name", { exact: true }).fill("Guest One");
     await button(page, "Continue").click();
     await expect(heading(page, "Film night")).toBeVisible();
     assert.equal(new URL(page.url()).pathname, "/event");
+    assert.equal(new URL(page.url()).searchParams.get("plan"), filmNight.id);
     assert.deepEqual(joins, [{ p_code: GUEST, p_name: "Guest One", p_terms_version: "2026-10" }]);
     // Setup is marked reviewed with the account's (empty) optional details, so "About you" is skipped.
     assert.deepEqual(details, [{ birth_date: null, phone: null, city: null, interests: [] }]);
@@ -358,7 +378,7 @@ try {
     assert.deepEqual(errors, []);
     await page.close();
     console.log(
-      "PASS: signed out, an event link shows the guest's account screen (card, tick first, providers disabled until ticked, no Apple on web, one open counted); email code (invalid address, countdown 1:00, wrong code empties the boxes); the Name step; join_by_link with the name and terms 2026-10; the event page; setup marked reviewed; code and tick cleared.",
+      "PASS: signed out, an event link shows the guest's account screen (card, tick first, providers disabled until ticked and again when unticked, no Apple on web, one open counted); email code (invalid address, countdown 1:00, wrong code empties the boxes, a lost check keeps the digits and Retry checks them); the Name step; join_by_link with the name and terms 2026-10; the event page with plan=; setup marked reviewed; code and tick cleared.",
     );
   }
   {
@@ -377,11 +397,31 @@ try {
     await button(page, "Continue").click();
     // The account's name is known, so it joins straight away.
     await expect(heading(page, "Film night")).toBeVisible();
+    assert.equal(new URL(page.url()).searchParams.get("plan"), filmNight.id);
     assert.deepEqual(joins, [{ p_code: GUEST, p_name: "Guest Two", p_terms_version: "2026-10" }]);
     await expect.poll(() => pending(page)).toBe(null);
     assert.deepEqual(errors, []);
     await page.close();
     console.log("PASS: a cold start with a kept code and a session but no kept tick asks for the tick with one Continue, then joins with the account's name.");
+  }
+  {
+    const { page, errors, joins } = await guestFixture({ metadata: { full_name: "Guest Six" }, signedIn: true, kept: GUEST });
+    // Signed in and waiting, Close drops the kept code and tick, so the waiting card (with Sign out) stays.
+    await page.goto(base);
+    await expect(heading(page, "Create your account to reply")).toBeVisible();
+    await button(page, "Close").click();
+    await expect(heading(page, "Waiting for access")).toBeVisible();
+    await expect(button(page, "Sign out")).toBeVisible();
+    await expect(page.getByText("If someone invited you to a resbite, open their link again.", { exact: true })).toBeVisible();
+    await page.waitForTimeout(1000);
+    assert.equal(new URL(page.url()).pathname, "/account");
+    await expect(heading(page, "Waiting for access")).toBeVisible();
+    assert.equal(await pending(page), null);
+    assert.equal(await terms(page), null);
+    assert.deepEqual(joins, []);
+    assert.deepEqual(errors, []);
+    await page.close();
+    console.log("PASS: signed in and waiting, Close drops the kept code and tick and leaves the waiting card with Sign out; no redirect back.");
   }
   {
     const { page, errors, joins } = await guestFixture({ metadata: { full_name: "Guest Three" }, signedIn: true, kept: AGE, tick: "2026-10" });
@@ -421,6 +461,7 @@ try {
     await expect.poll(() => pending(page)).toBe(FLAKY);
     await button(page, "Retry").click();
     await expect(heading(page, "Film night")).toBeVisible();
+    assert.equal(new URL(page.url()).searchParams.get("plan"), filmNight.id);
     assert.deepEqual(joins.map((j) => j.p_name), ["Guest Five", "Guest Five"]);
     await expect.poll(() => pending(page)).toBe(null);
     assert.deepEqual(errors, []);
@@ -429,17 +470,34 @@ try {
   }
   {
     const { page, errors, opens } = await guestFixture();
-    // Signed out, a dead link says so with Go to Resbite, and offers no account creation.
+    // Signed out, a dead link says so with Go to Resbite, offers no account creation and drops the kept code.
     await page.goto(`${base}/invite?code=${DEAD}`);
     await expect(page.getByText("This invitation is no longer active.", { exact: true })).toBeVisible();
     await expect(page.getByRole("checkbox", { name: "I’m 18 or over", exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Continue with email", exact: true })).toHaveCount(0);
     assert.deepEqual(opens, [DEAD]);
+    await expect.poll(() => pending(page)).toBe(null);
     await button(page, "Go to Resbite").click();
     await expect(heading(page, "Get together")).toBeVisible();
     assert.deepEqual(errors, []);
     await page.close();
-    console.log("PASS: signed out, a dead link shows its state with Go to Resbite and no account creation.");
+    console.log("PASS: signed out, a dead link shows its state with Go to Resbite, no account creation, and drops the kept code.");
+  }
+  {
+    const { page, errors, joins } = await guestFixture({ metadata: { full_name: "Guest Seven" }, signedIn: true, kept: DEAD, tick: "2026-10" });
+    // A cold start with a kept code that is now dead: its state, no join tried, the kept code dropped, so a
+    // second cold start lands on the normal start.
+    await page.goto(base);
+    await expect(page.getByText("This invitation is no longer active.", { exact: true })).toBeVisible();
+    await expect.poll(() => pending(page)).toBe(null);
+    assert.deepEqual(joins, []);
+    await page.goto(base);
+    await expect(heading(page, "Waiting for access")).toBeVisible();
+    assert.equal(new URL(page.url()).pathname, "/account");
+    assert.deepEqual(joins, []);
+    assert.deepEqual(errors, []);
+    await page.close();
+    console.log("PASS: a cold start with a kept dead code shows its state without trying a join and drops the code; a second cold start lands on the normal start.");
   }
 } finally {
   await browser.close();

@@ -8,14 +8,11 @@ import { TermsLine, TickRow } from "./TickRow";
 import { AppleMark } from "./AppleMark";
 import { categoryPalette, colors as c, fonts } from "./tokens";
 import { GUEST_COPY, previewLine, stateSentence } from "../domain/guestAccount";
-import type { InvitationPreview } from "../services/guestJoin";
-import type { GuestAccount } from "../state/useGuestAccount";
+import type { CardState, GuestAccount } from "../state/useGuestAccount";
 
 // GI2: the guest's account screen (app/invite.tsx): one StepScreen whose heading, content and pinned footer
 // follow useGuestAccount's state, and its pieces: the invitation's card, the tick, the providers and the
 // Email, Code and Name steps.
-
-export type CardState = { status: "loading" } | { status: "failed" } | { status: "ready"; value: InvitationPreview };
 
 const connectionCopy = "Check your connection and try again.";
 
@@ -82,13 +79,14 @@ export function GuestScreen({ guest }: { guest: GuestAccount }) {
         <CodeBody
           email={guest.email}
           digits={guest.digits}
-          onDigits={(value) => void guest.typeDigits(value)}
+          onDigits={guest.typeDigits}
           inputRef={guest.codeInput}
+          error={guest.error}
+          onRetry={guest.verifyLost ? guest.retryVerify : undefined}
           secondsLeft={guest.secondsLeft}
           onResend={() => void guest.send()}
           busy={working}
         />
-        <ErrorNote message={guest.error} />
       </>
     );
   } else if (step === "name") {
@@ -146,7 +144,7 @@ export function GuestScreen({ guest }: { guest: GuestAccount }) {
       title={title}
       titleRef={heading}
       onBack={onBack}
-      onClose={() => (router.canGoBack() ? router.back() : router.replace("/"))}
+      onClose={() => void guest.close()}
       primary={primary}
     >
       {body}
@@ -155,7 +153,7 @@ export function GuestScreen({ guest }: { guest: GuestAccount }) {
 }
 
 /** "<Host> invited you", the title and the start, from invitation_page; a placeholder while loading. */
-export function InvitationCard({ card, onRetry }: { card: CardState; onRetry: () => void }) {
+function InvitationCard({ card, onRetry }: { card: CardState; onRetry: () => void }) {
   const tone = categoryPalette.uplifting;
   if (card.status === "loading")
     return (
@@ -181,7 +179,7 @@ export function InvitationCard({ card, onRetry }: { card: CardState; onRetry: ()
 }
 
 /** The tick ("I’m 18 or over"), the Terms line under it and, while unticked, the age helper. */
-export function AgeTick({
+function AgeTick({
   ticked,
   onChange,
   disabled,
@@ -201,7 +199,7 @@ export function AgeTick({
 }
 
 /** The pinned footer before sign-in: Apple (iOS only), Google, email, then "I already have an account". */
-export function ProviderButtons({
+function ProviderButtons({
   apple,
   enabled,
   busy,
@@ -233,7 +231,7 @@ export function ProviderButtons({
   );
 }
 
-export function EmailBody({
+function EmailBody({
   email,
   onChange,
   onSubmit,
@@ -306,11 +304,13 @@ function CodeField({
   );
 }
 
-export function CodeBody({
+function CodeBody({
   email,
   digits,
   onDigits,
   inputRef,
+  error,
+  onRetry,
   secondsLeft,
   onResend,
   busy,
@@ -319,6 +319,9 @@ export function CodeBody({
   digits: string;
   onDigits: (value: string) => void;
   inputRef: React.RefObject<TextInput | null>;
+  error: string | null;
+  /** Shown after a check lost to the connection: checks the same six digits again. */
+  onRetry?: () => void;
   secondsLeft: number;
   onResend: () => void;
   busy: boolean;
@@ -328,6 +331,8 @@ export function CodeBody({
       <Copy>{GUEST_COPY.codeBody(email.trim())}</Copy>
       <CodeField value={digits} onChange={onDigits} inputRef={inputRef} />
       {busy ? <ActivityIndicator accessibilityLabel="Checking the code" color={c.aquaDark} /> : null}
+      <ErrorNote message={error} />
+      {onRetry && !busy ? <TextAction title="Retry" onPress={onRetry} /> : null}
       <View style={styles.links}>
         {secondsLeft > 0 ? (
           <Copy style={styles.helper}>{GUEST_COPY.resendIn(secondsLeft)}</Copy>
@@ -342,7 +347,7 @@ export function CodeBody({
   );
 }
 
-export function NameBody({
+function NameBody({
   name,
   onChange,
   onSubmit,

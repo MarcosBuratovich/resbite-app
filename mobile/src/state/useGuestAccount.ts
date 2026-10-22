@@ -5,10 +5,15 @@ import type { Session, User } from "@supabase/supabase-js";
 import { useAccount } from "./AccountState";
 import { useApp } from "./AppState";
 import { useAuthFlow } from "./useAuthFlow";
-import type { CardState } from "../design/GuestSteps";
 import { appleSignInAvailable, appleSignInDeps, signInWithApple } from "../services/appleSignIn";
 import { emailCodeDeps, sendCode, verifyCode } from "../services/emailCode";
-import { JoinRefusal, joinByLink, noteLinkOpen, readInvitationPreview } from "../services/guestJoin";
+import {
+  JoinRefusal,
+  joinByLink,
+  noteLinkOpen,
+  readInvitationPreview,
+  type InvitationPreview,
+} from "../services/guestJoin";
 import { accountDetailsAdapter, saveAccountDetails } from "../services/accountDetails";
 import { withDeadline } from "../services/plans";
 import { supabase } from "../services/supabase";
@@ -24,7 +29,9 @@ let countedSignedOut: string | null = null;
 /** sendCode's `resendAt` is the send time plus this; verifyCode wants the send time. */
 const RESEND_MS = 60_000;
 
-export type DeadState = "cancelled" | "happened" | "inactive";
+type DeadState = "cancelled" | "happened" | "inactive";
+/** The invitation's card: loading, unreadable (offer Retry) or read. */
+export type CardState = { status: "loading" } | { status: "failed" } | { status: "ready"; value: InvitationPreview };
 
 /** Marks setup as reviewed with the account's own optional details, so a guest skips "About you" (GI2-D8). */
 async function markReviewed(current: Session, assertCurrent: () => void): Promise<User> {
@@ -70,6 +77,7 @@ export function useGuestAccount({ code, token }: { code?: string; token?: string
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  const [verifyLost, setVerifyLost] = useState(false);
   const [signInAgain, setSignInAgain] = useState(false);
   const [handoff, setHandoff] = useState<string | null>(null);
   const [appleAvailable, setAppleAvailable] = useState(false);
@@ -77,9 +85,11 @@ export function useGuestAccount({ code, token }: { code?: string; token?: string
   const mounted = useRef(true);
   const joining = useRef(false);
   const verifying = useRef(false);
+  const acting = useRef(false);
   const lastName = useRef<string | null>(null);
   const counted = useRef<string | null>(null);
   const cardFor = useRef<string | null>(null);
+  const cardRead = useRef<Promise<InvitationPreview | null> | null>(null);
   const decided = useRef<string | null>(null);
   const codeInput = useRef<TextInput>(null);
   const remember = useRef(rememberInvite);
@@ -105,34 +115,41 @@ export function useGuestAccount({ code, token }: { code?: string; token?: string
     countedSignedOut = session ? null : link;
     void noteLinkOpen(link);
   }, [link]);
+  /** Reads the card; resolves with the preview, or null when it could not be read. */
   const loadCard = useCallback(() => {
-    if (link === null) return;
+    if (link === null) return Promise.resolve(null);
     cardFor.current = link;
     setCard({ status: "loading" });
-    readInvitationPreview(link).then(
+    const read = readInvitationPreview(link).then(
       (value) => {
-        if (!mounted.current) return;
-        setCard({ status: "ready", value });
-        // A cancelled, past or turned-off invitation is refused for good: the kept code goes, as GI1 does.
-        if (value.state !== "open") {
-          setDead(value.state);
-          if (linkCode) void remember.current(null, linkCode).catch(() => {});
+        if (mounted.current) {
+          setCard({ status: "ready", value });
+          // A cancelled, past or turned-off invitation is refused for good: the kept code goes, as GI1 does.
+          if (value.state !== "open") {
+            setDead(value.state);
+            if (linkCode) void remember.current(null, linkCode).catch(() => {});
+          }
         }
+        return value;
       },
       () => {
         if (mounted.current) setCard({ status: "failed" });
+        return null;
       },
     );
+    cardRead.current = read;
+    return read;
   }, [link, linkCode]);
   useEffect(() => {
-    if (active && cardFor.current !== link) loadCard();
+    if (active && cardFor.current !== link) void loadCard();
   }, [active, link, loadCard]);
   const sessionName = (current: Session) =>
     nameFromSession(
       account.user?.id === current.user.id ? account.user : current.user,
       appleNames.get(current.user.id) ?? null,
     );
-  // Signed in and waiting for access: once per account (and sign-in) on this screen, after the kept tick is read.
+  // Signed in and waiting for access: once per account (and sign-in) on this screen, after the kept tick and the
+  // card are read. A dead card is final: no join is tried, and its own sentence stays.
   useEffect(() => {
     if (!pendingAccess || !session || signingOut || decided.current === session.user.id) return;
     decided.current = session.user.id;
@@ -140,10 +157,9 @@ export function useGuestAccount({ code, token }: { code?: string; token?: string
     setBegan(true);
     setStep(null);
     setSignInAgain(false);
-    void readTerms()
-      .catch(() => null)
-      .then((terms) => {
-        if (!mounted.current) return;
+    void Promise.all([readTerms().catch(() => null), cardRead.current ?? loadCard()])
+      .then(([terms, preview]) => {
+        if (!mounted.current || (preview && preview.state !== "open")) return;
         const known = sessionName(current);
         const next = nextStepAfterSignIn({ name: known, attested: Boolean(terms) });
         setTicked(Boolean(terms));
@@ -202,7 +218,8 @@ export function useGuestAccount({ code, token }: { code?: string; token?: string
       if (!(failure instanceof JoinRefusal)) setFailed(true);
       else if (failure.kind === "unavailable") {
         await rememberInvite(null, linkCode).catch(() => {});
-        if (live()) setDead("inactive");
+        // The card's own sentence (cancelled, happened) wins over the generic one.
+        if (live()) setDead((known) => known ?? "inactive");
       } else if (failure.kind === "age") {
         await rememberTerms(null).catch(() => {});
         if (live()) {
@@ -223,6 +240,22 @@ export function useGuestAccount({ code, token }: { code?: string; token?: string
   function signedInHere() {
     decided.current = null;
   }
+  async function verify(entered: string) {
+    verifying.current = true;
+    setWorking(true);
+    setVerifyLost(false);
+    const result = await verifyCode(emailCodeDeps, email, entered, resendAt - RESEND_MS);
+    verifying.current = false;
+    if (!mounted.current) return;
+    setWorking(false);
+    // Signed in: the session takes the screen over (it remounts, and the signed-in branch decides).
+    if (result.ok) return signedInHere();
+    setError(result.message);
+    if (result.clear) {
+      setDigits("");
+      codeInput.current?.focus();
+    } else setVerifyLost(true);
+  }
 
   return {
     active,
@@ -238,6 +271,7 @@ export function useGuestAccount({ code, token }: { code?: string; token?: string
     working: working || flow.busy,
     error: error ?? (step === "providers" ? flow.error : null),
     failed,
+    verifyLost,
     signInAgain,
     appleAvailable,
     codeInput,
@@ -248,10 +282,12 @@ export function useGuestAccount({ code, token }: { code?: string; token?: string
       void rememberTerms(next ? TERMS_VERSION : null).catch(() => {});
     },
     async apple() {
-      if (working) return;
+      if (acting.current) return;
+      acting.current = true;
       setWorking(true);
       setError(null);
       const result = await signInWithApple(appleSignInDeps);
+      acting.current = false;
       if (result.ok) {
         signedInHere();
         if (result.name)
@@ -282,10 +318,13 @@ export function useGuestAccount({ code, token }: { code?: string; token?: string
       setError(null);
     },
     async send() {
-      if (working) return;
+      if (acting.current || verifying.current) return;
+      acting.current = true;
       setWorking(true);
       setError(null);
+      setVerifyLost(false);
       const result = await sendCode(emailCodeDeps, email);
+      acting.current = false;
       if (!mounted.current) return;
       setWorking(false);
       if (!result.ok) {
@@ -298,25 +337,17 @@ export function useGuestAccount({ code, token }: { code?: string; token?: string
       if (step === "code") codeInput.current?.focus();
       setStep("code");
     },
-    async typeDigits(value: string) {
+    typeDigits(value: string) {
       if (verifying.current) return;
       const clean = value.replace(/\D/g, "").slice(0, 6);
       setDigits(clean);
       setError(null);
-      if (clean.length < 6) return;
-      verifying.current = true;
-      setWorking(true);
-      const result = await verifyCode(emailCodeDeps, email, clean, resendAt - RESEND_MS);
-      verifying.current = false;
-      if (!mounted.current) return;
-      setWorking(false);
-      // Signed in: the session takes the screen over (it remounts, and the signed-in branch decides).
-      if (result.ok) return signedInHere();
-      setError(result.message);
-      if (result.clear) {
-        setDigits("");
-        codeInput.current?.focus();
-      }
+      setVerifyLost(false);
+      if (clean.length === 6) void verify(clean);
+    },
+    /** After a verify lost to the connection: the same six digits again. */
+    retryVerify() {
+      if (!verifying.current && digits.length === 6) void verify(digits);
     },
     /** Signed in without a kept tick: join, or ask for the name first. */
     continueTicked() {
@@ -335,6 +366,18 @@ export function useGuestAccount({ code, token }: { code?: string; token?: string
     async goHome() {
       if (linkCode) await remember.current(null, linkCode).catch(() => {});
       router.replace("/");
+    },
+    /**
+     * Close. Signed in, the kept code and tick go first, so /account shows the waiting card (with Sign out)
+     * instead of sending the person straight back here; signed out, it only leaves.
+     */
+    async close() {
+      if (session && linkCode) {
+        await rememberInvite(null, linkCode).catch(() => {});
+        await rememberTerms(null).catch(() => {});
+        router.replace("/account");
+      } else if (router.canGoBack()) router.back();
+      else router.replace("/");
     },
   };
 }

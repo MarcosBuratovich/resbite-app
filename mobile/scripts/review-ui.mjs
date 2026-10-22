@@ -466,8 +466,8 @@ try {
     });
     const suffix = large ? "large-320" : String(width);
     const fits = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
-    const clipped = () =>
-      page.evaluate(() =>
+    const clipped = (target = page) =>
+      target.evaluate(() =>
         [...document.querySelectorAll("[role=button],[role=checkbox],[role=heading],h1,h2,h3,input,textarea")]
           .filter((el) => !el.closest("[aria-hidden=true]") && el.getBoundingClientRect().width > 0)
           .filter((el) => {
@@ -555,6 +555,7 @@ try {
     await expect(heading(dead, "This invitation is no longer active.")).toBeVisible();
     await expect(button(dead, "Go to Resbite")).toBeVisible();
     assert.ok(await dead.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `guest-inactive fits at ${suffix}`);
+    assert.deepEqual(await clipped(dead), [], `guest-inactive has nothing clipped at ${suffix}`);
     await dead.waitForTimeout(500);
     await dead.screenshot({ path: `${out}/guest-inactive-${suffix}.png`, fullPage: true });
     if (errors.length) throw Error(errors.join("\n"));
