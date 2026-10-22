@@ -145,6 +145,7 @@ export function GuestScreen({ guest }: { guest: GuestAccount }) {
       titleRef={heading}
       onBack={onBack}
       onClose={() => void guest.close()}
+      closeDisabled={guest.closeDisabled}
       primary={primary}
     >
       {body}

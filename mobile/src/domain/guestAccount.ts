@@ -54,6 +54,17 @@ export function nameFromSession(user: { user_metadata?: Record<string, unknown> 
   );
 }
 
+/**
+ * Apple's name to save as `display_name` (spec §2), so it outlives the app: Apple sends it on the first
+ * authorisation only. Saved only when the account has no display name yet, and only as `nameFromSession` would
+ * read it (trimmed, 1-80 characters); otherwise `null`.
+ */
+export function appleNameToSave(appleName: string | null, meta: Record<string, unknown> | undefined): string | null {
+  const current = meta?.display_name;
+  if (typeof current === "string" && current.trim()) return null;
+  return cleanName(appleName);
+}
+
 export function nextStepAfterSignIn(args: { name: string | null; attested: boolean }): GuestStep {
   if (!args.attested) return "providers";
   return args.name ? "joining" : "name";

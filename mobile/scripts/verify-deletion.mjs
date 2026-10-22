@@ -225,6 +225,22 @@ try {
       throw Error(`Unexpected intercepted API ${path}`);
     });
     await page.goto(`${base}/delete-account`);
+    // An email account opens on the code (it may never have had a password); the password is one tap away.
+    await expect(
+      page.getByRole("button", { name: "Send verification code", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByLabel("Current password", { exact: true }),
+    ).toHaveCount(0);
+    await page
+      .getByRole("button", { name: "Use my password instead", exact: true })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Send verification code", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Use an email code instead", exact: true }),
+    ).toBeVisible();
     await page
       .getByLabel("Current password", { exact: true })
       .fill("fixture-password");
@@ -279,9 +295,7 @@ try {
       { session, user },
     );
     await page.reload();
-    await page
-      .getByRole("button", { name: "Use an email code instead", exact: true })
-      .click();
+    // The code step is the default: no switch needed.
     await page
       .getByRole("button", { name: "Send verification code", exact: true })
       .click();
@@ -421,6 +435,7 @@ try {
       "Permanently delete account",
       "Send verification code",
       "Use an email code instead",
+      "Use my password instead",
     ])
       await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
     await expect(
@@ -484,7 +499,7 @@ try {
   }
   assert.deepEqual(errors, []);
   console.log(
-    `Deletion UI passed: preview/disabled no outbound calls${enabled ? ", enabled synthetic password/OTP, lost reply, local cleanup failure/retry including drafts, restart receipt recovery, Apple-only account confirms with Apple (closed sheet quiet, different Apple ID refused with the app session unchanged, isolated proof)" : ""}. No real account, email or deletion request.`,
+    `Deletion UI passed: preview/disabled no outbound calls${enabled ? ", enabled synthetic password/OTP (an email account opens on the code, the password one switch away), lost reply, local cleanup failure/retry including drafts, restart receipt recovery, Apple-only account confirms with Apple (closed sheet quiet, different Apple ID refused with the app session unchanged, isolated proof)" : ""}. No real account, email or deletion request.`,
   );
 } finally {
   await browser.close();

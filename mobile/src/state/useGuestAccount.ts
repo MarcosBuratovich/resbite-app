@@ -19,7 +19,13 @@ import { withDeadline } from "../services/plans";
 import { supabase } from "../services/supabase";
 import { isLinkCode } from "../domain/appLinks";
 import { detailsFromMetadata } from "../domain/registration";
-import { TERMS_VERSION, nameFromSession, nextStepAfterSignIn, type GuestStep } from "../domain/guestAccount";
+import {
+  TERMS_VERSION,
+  appleNameToSave,
+  nameFromSession,
+  nextStepAfterSignIn,
+  type GuestStep,
+} from "../domain/guestAccount";
 
 // Signing in remounts every screen (the root Stack is keyed by the account), so two things live outside it:
 // Apple's name by account (Apple sends it on the first sign-in only), and the code a signed-out visit counted,
@@ -275,6 +281,8 @@ export function useGuestAccount({ code, token }: { code?: string; token?: string
     signInAgain,
     appleAvailable,
     codeInput,
+    /** While a join runs (and until its handoff), Close waits: leaving would drop the code the join may still use. */
+    closeDisabled: step === "joining" && !failed,
     retryCard: loadCard,
     tick(next: boolean) {
       setTicked(next);
@@ -293,7 +301,12 @@ export function useGuestAccount({ code, token }: { code?: string; token?: string
         if (result.name)
           try {
             const { data } = await supabase.auth.getSession();
-            if (data.session) appleNames.set(data.session.user.id, result.name);
+            if (data.session) {
+              // Module memory is the fast path for the remount; the metadata keeps the name if the app dies first.
+              appleNames.set(data.session.user.id, result.name);
+              const save = appleNameToSave(result.name, data.session.user.user_metadata);
+              if (save) await supabase.auth.updateUser({ data: { display_name: save } }).catch(() => {});
+            }
           } catch {
             // The Name step asks instead.
           }
@@ -369,9 +382,10 @@ export function useGuestAccount({ code, token }: { code?: string; token?: string
     },
     /**
      * Close. Signed in, the kept code and tick go first, so /account shows the waiting card (with Sign out)
-     * instead of sending the person straight back here; signed out, it only leaves.
+     * instead of sending the person straight back here; signed out, it only leaves. Not while a join runs.
      */
     async close() {
+      if (step === "joining" && !failed) return;
       if (session && linkCode) {
         await rememberInvite(null, linkCode).catch(() => {});
         await rememberTerms(null).catch(() => {});

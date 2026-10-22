@@ -529,13 +529,25 @@ export function Segmented<K extends string>({
 }
 
 /** StepScreen's 48 pt round Previous step and Close buttons (steps v2). The label is required. */
-function StepButton({ icon: Icon, label, onPress }: { icon: LucideIcon; label: string; onPress: () => void }) {
+function StepButton({
+  icon: Icon,
+  label,
+  onPress,
+  disabled = false,
+}: {
+  icon: LucideIcon;
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
   return (
     <ScalePressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => [styles.stepButton, pressed && { backgroundColor: c.surface }]}
+      style={({ pressed }) => [styles.stepButton, pressed && { backgroundColor: c.surface }, disabled && { opacity: 0.45 }]}
     >
       <Icon size={24} strokeWidth={2.2} color={c.ink} />
     </ScalePressable>
@@ -566,8 +578,9 @@ function Progress({ step, total }: { step: number; total: number }) {
  * round Previous step and Close buttons and the header (the Preview chip) between them, a
  * big question title (a header), the content and the pinned primary pill, which moves
  * inline under Larger Text. Without Previous step, Close takes its place on the left (steps
- * v2 mockup). "Previous step" changes the step; "Close" leaves through the caller's guard.
- * Content slides in, or fades under Reduce Motion (StepBody).
+ * v2 mockup). "Previous step" changes the step; "Close" leaves through the caller's guard, and is
+ * dimmed while `closeDisabled` (GI2: while a join runs). Content slides in, or fades under Reduce
+ * Motion (StepBody).
  */
 export function StepScreen({
   step,
@@ -577,6 +590,7 @@ export function StepScreen({
   titleRef,
   onBack,
   onClose,
+  closeDisabled = false,
   header,
   status,
   primary,
@@ -591,6 +605,7 @@ export function StepScreen({
   titleRef?: React.RefObject<Text | null>;
   onBack?: () => void;
   onClose: () => void;
+  closeDisabled?: boolean;
   header?: React.ReactNode;
   status?: string;
   primary?: React.ReactNode;
@@ -617,10 +632,14 @@ export function StepScreen({
         {onBack ? (
           <StepButton icon={ChevronLeft} label="Previous step" onPress={onBack} />
         ) : (
-          <StepButton icon={X} label="Close" onPress={onClose} />
+          <StepButton icon={X} label="Close" onPress={onClose} disabled={closeDisabled} />
         )}
         <View style={styles.stepMiddle}>{header}</View>
-        {onBack ? <StepButton icon={X} label="Close" onPress={onClose} /> : <View style={styles.spacer} />}
+        {onBack ? (
+          <StepButton icon={X} label="Close" onPress={onClose} disabled={closeDisabled} />
+        ) : (
+          <View style={styles.spacer} />
+        )}
       </View>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <ScrollView

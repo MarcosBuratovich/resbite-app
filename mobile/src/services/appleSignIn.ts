@@ -14,7 +14,7 @@ export type AppleSignInDeps = {
     provider: "apple";
     token: string;
     nonce: string;
-  }) => Promise<{ error: { message: string } | null }>;
+  }) => Promise<{ error: { message: string; status?: number } | null }>;
 };
 export type AppleSignInResult =
   | { ok: true; name: string | null }
@@ -22,6 +22,9 @@ export type AppleSignInResult =
   | { ok: false; cancelled: false; message: string };
 
 const connectionCopy = "Check your connection and try again.";
+// auth-js returns network failures as status 0 rather than throwing (emailCode.ts does the same).
+const isConnectionFailure = (error: { status?: number }) =>
+  error.status === 0 || (error.status !== undefined && error.status >= 500);
 
 /** Apple's name joined as given then family, or `null`. Apple sends it on the first authorisation only. */
 export function appleName(fullName: AppleCredential["fullName"]): string | null {
@@ -33,8 +36,9 @@ export function appleName(fullName: AppleCredential["fullName"]): string | null 
 
 /**
  * A closed sheet is `cancelled`, not an error: the screen stays as it was and nothing is stored.
- * Supabase's error is shown as it is; any other failure gets the connection copy, since Apple's own
- * messages are technical (signInAsync throws ERR_REQUEST_FAILED itself when the token is missing).
+ * Supabase's error is shown as it is, unless it is a connection failure (status 0 or 500 and above);
+ * that and any other failure get the connection copy, since Apple's own messages are technical
+ * (signInAsync throws ERR_REQUEST_FAILED itself when the token is missing).
  */
 export async function signInWithApple(d: AppleSignInDeps): Promise<AppleSignInResult> {
   try {
@@ -42,7 +46,8 @@ export async function signInWithApple(d: AppleSignInDeps): Promise<AppleSignInRe
     const credential = await d.requestCredential(await d.sha256(nonce));
     if (!credential.identityToken) return { ok: false, cancelled: false, message: connectionCopy };
     const { error } = await d.signInWithIdToken({ provider: "apple", token: credential.identityToken, nonce });
-    if (error) return { ok: false, cancelled: false, message: error.message };
+    if (error)
+      return { ok: false, cancelled: false, message: isConnectionFailure(error) ? connectionCopy : error.message };
     return { ok: true, name: appleName(credential.fullName) };
   } catch (failure) {
     if (typeof failure === "object" && failure !== null && "code" in failure && failure.code === "ERR_REQUEST_CANCELED")

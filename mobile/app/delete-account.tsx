@@ -26,7 +26,7 @@ import { GUEST_COPY } from "../src/domain/guestAccount";
 export default function DeleteAccount() {
   const { session, preview, captureSession, finishAccountDeletion } = useApp();
   const [credential, setCredential] = useState("");
-  const [useEmailCode, setUseEmailCode] = useState(false);
+  const [usePassword, setUsePassword] = useState(false);
   const [confirmation, setConfirmation] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -60,8 +60,10 @@ export default function DeleteAccount() {
   const providers: string[] = session?.user.app_metadata.providers ?? [];
   // GI2-D10: Apple-only accounts (no "email" provider) confirm by signing in with Apple again.
   const appleAccount = appleOnlyAccount(providers);
+  // An "email" account may have a password or only ever have used a code (GI2's email code), and no claim says
+  // which, so the code comes first and "Use my password instead" switches to the password.
   const passwordAccount = providers.includes("email");
-  const passwordMode = passwordAccount && !useEmailCode;
+  const passwordMode = passwordAccount && usePassword;
   const available =
     accountDeletionEnabled && !preview && !!accountId && !!email;
   useEffect(() => {
@@ -78,7 +80,7 @@ export default function DeleteAccount() {
       setStatus(null);
       setMessage("");
       setReceipt(null);
-      setUseEmailCode(false);
+      setUsePassword(false);
     }
     if (preview) {
       setRestoringReceipt(false);
@@ -222,7 +224,7 @@ export default function DeleteAccount() {
                   icon={passwordMode ? Mail : KeyRound}
                   disabled={busy}
                   onPress={() => {
-                    setUseEmailCode(!useEmailCode);
+                    setUsePassword(!usePassword);
                     setCredential("");
                   }}
                 />

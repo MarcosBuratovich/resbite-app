@@ -65,6 +65,21 @@ test("Supabase's error is passed through", async () => {
   });
 });
 
+test("Supabase's connection failures get the connection copy", async () => {
+  for (const status of [0, 500, 503]) {
+    const h = harness({
+      signInWithIdToken: async () => ({ error: { message: "Network request failed", status } }),
+    });
+    assert.deepEqual(await signInWithApple(h.d), {
+      ok: false,
+      cancelled: false,
+      message: "Check your connection and try again.",
+    });
+  }
+  const h = harness({ signInWithIdToken: async () => ({ error: { message: "Invalid nonce", status: 400 } }) });
+  assert.deepEqual(await signInWithApple(h.d), { ok: false, cancelled: false, message: "Invalid nonce" });
+});
+
 test("a failed sheet is an error with the connection copy, not a cancel", async () => {
   const failure = Object.assign(
     new Error("The credential returned by `signInAsync` is missing one or more required fields."),

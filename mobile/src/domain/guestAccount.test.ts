@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { GUEST_COPY, TERMS_VERSION, formatCountdown, nameFromSession, nextStepAfterSignIn, previewLine, stateSentence } from "./guestAccount";
+import {
+  GUEST_COPY,
+  TERMS_VERSION,
+  appleNameToSave,
+  formatCountdown,
+  nameFromSession,
+  nextStepAfterSignIn,
+  previewLine,
+  stateSentence,
+} from "./guestAccount";
 
 test("a credential without a name needs the Name step", () => {
   assert.equal(nextStepAfterSignIn({ name: null, attested: true }), "name");
@@ -34,6 +43,18 @@ test("an 81-character name is not a name", () => {
   assert.equal(nameFromSession({ user_metadata: { name: "a".repeat(80) } }, null), "a".repeat(80));
   assert.equal(nameFromSession({ user_metadata: { name: "Fallback" } }, "a".repeat(81)), "Fallback");
   assert.equal(nameFromSession({ user_metadata: { name: ` ${"a".repeat(80)} ` } }, null), "a".repeat(80));
+});
+
+test("Apple's name is saved only when the account has no display name, as nameFromSession reads it", () => {
+  assert.equal(appleNameToSave(" Ana Lima ", undefined), "Ana Lima");
+  assert.equal(appleNameToSave("Ana Lima", {}), "Ana Lima");
+  assert.equal(appleNameToSave("Ana Lima", { display_name: "  ", full_name: "Google Name" }), "Ana Lima");
+  assert.equal(appleNameToSave("Ana Lima", { display_name: 5 }), "Ana Lima");
+  assert.equal(appleNameToSave("Ana Lima", { display_name: "Chosen" }), null);
+  assert.equal(appleNameToSave(null, {}), null);
+  assert.equal(appleNameToSave("   ", {}), null);
+  assert.equal(appleNameToSave("a".repeat(80), {}), "a".repeat(80));
+  assert.equal(appleNameToSave("a".repeat(81), {}), null);
 });
 
 test("countdown formats", () => {

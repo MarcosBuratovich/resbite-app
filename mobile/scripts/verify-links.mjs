@@ -151,6 +151,9 @@ async function guestFixture({ metadata = {}, signedIn = false, kept = null, tick
     otps = [],
     joins = [],
     details = [];
+  // FLAKY's first join waits until the test releases it, so the screen can be seen while it runs.
+  let releaseJoin;
+  const joinHeld = new Promise((resolve) => (releaseJoin = resolve));
   await page.addInitScript(
     ({ session, kept, tick }) => {
       if (sessionStorage.getItem("fixture-seeded")) return;
@@ -203,7 +206,10 @@ async function guestFixture({ metadata = {}, signedIn = false, kept = null, tick
       assert.equal(await pending(page), body.p_code);
       if (body.p_code === AGE) return reply({ code: "22023", message: "Age confirmation required" }, 400);
       if (body.p_code === GONE) return reply({ code: "42501", message: "Invitation unavailable" }, 403);
-      if (body.p_code === FLAKY && joins.length === 1) return reply({ message: "Fixture: connection lost" }, 503);
+      if (body.p_code === FLAKY && joins.length === 1) {
+        await joinHeld;
+        return reply({ message: "Fixture: connection lost" }, 503);
+      }
       joined = true;
       profile = { id: guest.id, display_name: body.p_name, avatar_path: null, avatar_revision: 0 };
       return reply(filmNight.id);
@@ -230,7 +236,7 @@ async function guestFixture({ metadata = {}, signedIn = false, kept = null, tick
     }
     return reply({ message: `Unexpected ${req.method()} ${path}` }, 400);
   });
-  return { page, errors, opens, otps, joins, details };
+  return { page, errors, opens, otps, joins, details, releaseJoin };
 }
 
 try {
@@ -454,10 +460,18 @@ try {
     console.log("PASS: an unavailable invitation shows the inactive state and drops the kept code; a cold start lands on the normal start.");
   }
   {
-    const { page, errors, joins } = await guestFixture({ metadata: { full_name: "Guest Five" }, signedIn: true, kept: FLAKY, tick: "2026-10" });
-    // A lost connection during the join says so with Retry and keeps the code; Retry joins.
+    const { page, errors, joins, releaseJoin } = await guestFixture({ metadata: { full_name: "Guest Five" }, signedIn: true, kept: FLAKY, tick: "2026-10" });
+    // While the join runs Close is dimmed (leaving would drop the code the join may still use). A lost connection
+    // says so with Retry, keeps the code and gives Close back; Retry joins.
     await page.goto(base);
+    await expect(heading(page, "Joining…")).toBeVisible();
+    const close = page.getByRole("button", { name: "Close", exact: true });
+    await expect(close).toBeDisabled();
+    await close.click({ force: true });
+    await expect.poll(() => pending(page)).toBe(FLAKY);
+    releaseJoin();
     await expect(page.getByText("Check your connection and try again.", { exact: true })).toBeVisible();
+    await expect(close).toBeEnabled();
     await expect.poll(() => pending(page)).toBe(FLAKY);
     await button(page, "Retry").click();
     await expect(heading(page, "Film night")).toBeVisible();
@@ -466,7 +480,7 @@ try {
     await expect.poll(() => pending(page)).toBe(null);
     assert.deepEqual(errors, []);
     await page.close();
-    console.log("PASS: a lost connection during the join shows the connection copy with Retry and keeps the code; Retry joins.");
+    console.log("PASS: Close is disabled while the join runs; a lost connection during the join shows the connection copy with Retry, keeps the code and enables Close; Retry joins.");
   }
   {
     const { page, errors, opens } = await guestFixture();
