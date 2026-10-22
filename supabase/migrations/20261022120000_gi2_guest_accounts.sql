@@ -66,12 +66,14 @@ revoke all on function private.deletion_pending(uuid) from public, anon, authent
 -- required"; the account's lock (require_tester's, so this serialises with deletion, and everything after it
 -- sees a deletion request that committed while it waited); a confirmed, non-anonymous account that isn't
 -- banned or being deleted, else 42501 "Sign-in required"; a revoked grant is refused (42501); testers and
--- grant holders take GI1's claim_plan_link and the name and tick are ignored. Everyone else needs a live link
--- to an active event that hasn't started, whose organizer may still use the app, and that isn't their own
--- (42501 "Invitation unavailable": an organizer dropped from the roster lets in neither themselves nor new
--- guests), a name of 1-80 characters unless they have a profile, and the tick unless it is already stored
--- (22023). Then the tick, the grant, the profile (only when new), the attendance (not answered yet) and, only
--- when the attendance is new, the organizer's notice under GI1's dedupe key, in one transaction.
+-- grant holders take GI1's claim_plan_link and the name and tick are ignored. Everyone else is refused when their
+-- roster row is switched off (42501: the owner's switch for a tester, which no link lifts, as a revoked grant is
+-- for a guest), and needs a live link to an active event that hasn't started, whose organizer may still use the
+-- app, and that isn't their own (42501 "Invitation unavailable": an organizer dropped from the roster lets in
+-- neither themselves nor new guests), a name of 1-80 characters unless they have a profile, and the tick unless
+-- it is already stored (22023). Then the tick, the grant, the profile (only when new), the attendance (not
+-- answered yet) and, only when the attendance is new, the organizer's notice under GI1's dedupe key, in one
+-- transaction.
 create function private.join_by_link(p_code text,p_name text,p_terms_version text) returns uuid
 language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := auth.uid(); v_link private.plan_links; v_plan public.plans; v_has_profile boolean;
@@ -87,6 +89,10 @@ begin
   raise exception 'Invitation unavailable' using errcode='42501';
  end if;
  if private.eligible() then return private.claim_plan_link(p_code); end if;
+ if exists(select 1 from auth.users u where u.id=v_uid
+  and exists(select 1 from private.tester_roster r where r.email = lower(u.email) and not r.enabled)) then
+  raise exception 'Invitation unavailable' using errcode='42501';
+ end if;
  if p_code is null or p_code !~ '^[A-Za-z0-9_-]{22}$' then raise exception 'Invitation unavailable' using errcode='42501'; end if;
  select * into v_link from private.plan_links where code=p_code and revoked_at is null;
  if not found then raise exception 'Invitation unavailable' using errcode='42501'; end if;

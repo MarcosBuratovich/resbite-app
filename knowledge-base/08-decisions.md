@@ -364,5 +364,6 @@ Decisions from the GI2 design ([spec](../docs/superpowers/specs/2026-10-21-gi2-g
 19. Apple confirms deletion through the isolated auth client the password and code paths use, so the app’s session never changes and a wrong Apple ID is refused by the existing different-account check; the red submit button becomes "Continue with Apple" and runs Apple, then the request, inside the five-minute window.
 20. The `delete-account` Edge function accepts a fresh `oauth` sign-in when the account’s providers are `["apple","google"]` and not email, which counts a linked Apple and Google account as Apple-only; the app offers no linking today.
 21. Strings not in the plan were accepted and listed for the owner’s copy pass: "6-digit code", "Retry", the spinner labels and "You’re invited".
+22. Disabling a roster row keeps that person out of link joins too (`join_by_link` refuses them with "Invitation unavailable" before writing anything); a revoked grant is the ban for link-made accounts.
 
 Each GI2 database migration needs the owner’s explicit approval, by file name and sha256. The hosted migration goes live together with build 10 and the `delete-account` redeploy; the companion waits for the deletion lifecycle and the notification sender.

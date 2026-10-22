@@ -5,7 +5,7 @@
 -- After a rollback every link-made account loses access until the migration is re-applied. The grants and the
 -- ticks are deleted with their tables, so after a re-apply each of those accounts joins through a live link (and
 -- ticks) again. Their profiles and places on events stay. The tester roster is unchanged.
--- On a local database, where 20261022120001_gi2_local_delivery_and_deletion.sql has also run, run
+-- Wherever 20261022120001_gi2_local_delivery_and_deletion.sql has also run, run
 -- supabase/rollback/20261022120001_gi2_local_delivery_and_deletion.rollback.sql after this file, in the same
 -- transaction: until then the functions that file redefined still call the private.has_live_grant() dropped here.
 

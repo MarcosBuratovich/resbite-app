@@ -2,11 +2,11 @@
 -- (docs/superpowers/specs/2026-10-21-gi2-guest-accounts-design.md). LOCAL-ONLY: replaces functions from
 -- 20260918001316_account_deletion_lifecycle.sql, 20260929125858_deletion_intent_reservations.sql and
 -- 20261015130000_ux3_note_delivery.sql, which the hosted project does not run, and user_eligible and
--- deletion_pending from 20261022120000_gi2_guest_accounts.sql. It redefines user_eligible(),
+-- deletion_pending from 20261022120000_gi2_guest_accounts.sql. It redefines user_eligible(), eligible(),
 -- notification_recipient_eligible(), deletion_pending(), request_account_deletion(uuid,uuid,uuid,text) and
 -- prepare_deletion_intent(uuid,uuid,uuid,text,text), each keeping its grants, and revokes service_role's execute
--- on the public.request_account_deletion wrapper. eligible() delegates to user_eligible(), so if 20260918001316
--- runs after GI2 its eligible() must be pointed back at user_eligible().
+-- on the public.request_account_deletion wrapper. It re-points eligible() at user_eligible() itself, so it is safe
+-- to run after 20260918001316, whose eligible() is roster-only.
 -- It goes live with the notification sender and the deletion milestone, after each has its own owner approval,
 -- never with the GI2 release, and is applied after those files: they would otherwise put back roster-only bodies.
 
@@ -20,6 +20,12 @@ create or replace function private.user_eligible(p_user uuid) returns boolean la
  and (u.banned_until is null or u.banned_until<=now()))
  and not exists(select 1 from public.profiles p where p.id=p_user and p.deletion_requested_at is not null)
  and not exists(select 1 from private.account_deletion_jobs j where j.user_id=p_user)
+$$;
+
+-- The signed-in account's eligibility, delegating as in 20261022120000_gi2_guest_accounts: 20260918001316 puts back
+-- a roster-only body when it runs after GI2, as it will on the hosted project. Its execute grants are unchanged.
+create or replace function private.eligible() returns boolean language sql stable security definer set search_path = '' as $$
+ select private.user_eligible(auth.uid())
 $$;
 
 -- A notice goes to a roster tester or a live grant holder. Otherwise the 20261015130000_ux3_note_delivery body.

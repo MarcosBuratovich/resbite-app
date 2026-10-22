@@ -419,7 +419,8 @@ do $$ begin
   and plan_link_id=(select id from private.plan_links where code=(select code from gi2_codes where name='four'))) then raise exception 'No grant after the organizer is back'; end if;
  if (select response from public.attendees where plan_id='b2100000-0000-4000-8000-000000000004' and user_id='b2000000-0000-4000-8000-000000000004') is distinct from 'pending' then raise exception 'Guest not on the event after the organizer is back'; end if;
 end $$;
--- A former tester already on the event gets a grant from a new link, and the organizer no second notice.
+-- A tester switched off on the roster is refused by a new link, even when already on the event, and nothing is
+-- written: disabling the roster row keeps them out of link joins too.
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"b2000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 select public.join_by_link((select code from gi2_codes where name='four'),'ignored','ignored');
@@ -429,6 +430,25 @@ do $$ begin
 end $$;
 reset role;
 update private.tester_roster set enabled=false where email='gi2-2-tester@resbite-test.invalid';
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"b2000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+do $$ begin
+ if public.account_access_status()->>'status'<>'access_pending' then raise exception 'Switched-off tester still approved'; end if;
+ begin perform public.join_by_link((select code from gi2_codes where name='five'),'','2026-10'); raise exception 'A switched-off tester joined through a link';
+ exception when others then if sqlstate<>'42501' or sqlerrm<>'Invitation unavailable' then raise; end if; end;
+end $$;
+reset role;
+do $$ begin
+ if exists(select 1 from private.beta_access where user_id='b2000000-0000-4000-8000-000000000002')
+ or exists(select 1 from private.age_attestations where user_id='b2000000-0000-4000-8000-000000000002') then raise exception 'A switched-off tester got a grant or a tick'; end if;
+ if (select display_name from public.profiles where id='b2000000-0000-4000-8000-000000000002')<>'Tester' then raise exception 'A refused join renamed the tester'; end if;
+ if (select count(*) from public.attendees where plan_id='b2100000-0000-4000-8000-000000000004' and user_id='b2000000-0000-4000-8000-000000000002')<>1 then raise exception 'A refused join changed the attendance'; end if;
+ if (select count(*) from private.notification_outbox where plan_id='b2100000-0000-4000-8000-000000000004' and kind='invitation'
+  and actor_id='b2000000-0000-4000-8000-000000000002')<>1 then raise exception 'A refused join notified the organizer'; end if;
+end $$;
+-- A former tester whose roster row was deleted, not switched off, already on the event gets a grant from the new
+-- link, and the organizer no second notice.
+delete from private.tester_roster where email='gi2-2-tester@resbite-test.invalid';
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"b2000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 do $$ begin

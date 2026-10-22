@@ -1,5 +1,6 @@
 -- GI2 rollback on the full local schema (not on the hosted baseline): the hosted rollback, then its local-only
--- companion, remove every GI2 object and put back the pre-GI2 local definitions and grants. Synthetic identities
+-- companion, remove every GI2 object and put back the pre-GI2 local definitions and grants. First, the hosted order
+-- (the deletion lifecycle after GI2, then the companion) keeps link-made accounts approved. Synthetic identities
 -- only (prefix b6); one rolled-back block, so nothing persists.
 begin;
 insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data) values
@@ -40,6 +41,35 @@ do $$ begin
   raise exception 'Grant holder not notified before the rollback';
  end if;
 end $$;
+-- The hosted order: the deletion lifecycle (20260918001316) runs after GI2 and puts back its roster-only
+-- eligible(), copied here verbatim, which leaves the link-made guest waiting; the companion, run after it, points
+-- eligible() at user_eligible() again and the guest is approved.
+create or replace function private.eligible() returns boolean language sql stable security definer set search_path='' as $$
+ select auth.uid() is not null and exists(
+ select 1 from auth.users u join private.tester_roster r on r.email=lower(u.email)
+ where u.id=auth.uid() and u.email_confirmed_at is not null and not coalesce(u.is_anonymous,false)
+ and r.enabled and (u.banned_until is null or u.banned_until<=now()))
+ and not exists(select 1 from public.profiles p where p.id=auth.uid() and p.deletion_requested_at is not null)
+ and not exists(select 1 from private.account_deletion_jobs j where j.user_id=auth.uid())
+$$;
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"b6000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+do $$ begin
+ if public.account_access_status()->>'status'='approved' then raise exception 'Roster-only eligible() still approves the guest'; end if;
+end $$;
+reset role;
+\ir ../migrations/20261022120001_gi2_local_delivery_and_deletion.sql
+do $$ begin
+ if pg_catalog.pg_get_functiondef('private.eligible()'::regprocedure) not like '%user_eligible%' then
+  raise exception 'The companion did not point eligible() at user_eligible()';
+ end if;
+end $$;
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"b6000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+do $$ begin
+ if public.account_access_status()->>'status'<>'approved' then raise exception 'Guest not approved after the companion ran again'; end if;
+end $$;
+reset role;
 \ir ../rollback/20261022120000_gi2_guest_accounts.rollback.sql
 \ir ../rollback/20261022120001_gi2_local_delivery_and_deletion.rollback.sql
 do $$ declare f text; begin
