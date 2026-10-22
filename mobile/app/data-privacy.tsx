@@ -61,7 +61,7 @@ export default function DataPrivacy() {
               sign-in. Edit or remove optional details in Profile → Account details.
             </Copy>
             <Copy>
-              With an eligible account, Resbite stores your profile, plans,
+              With an account, Resbite stores your profile, plans,
               invitations and responses with its hosted service. Access is
               restricted to the organizer and authorized participants. Your
               sign-in identity is used to check access.
@@ -74,8 +74,11 @@ export default function DataPrivacy() {
               links can remain valid for up to five minutes.
             </Copy>
             <Copy>
-              An invitation link can be claimed by the first eligible account that
-              opens it. Share each link only with its intended recipient.
+              Anyone with an event’s link can join it while the link is on.
+            </Copy>
+            <Copy>
+              Resbite counts how many times an event’s link is opened in the app.
+              It does not record who opened it.
             </Copy>
           </TopicRow>
           <TopicRow
@@ -104,7 +107,7 @@ export default function DataPrivacy() {
       <InfoSheet visible={about} title="About this page" onClose={() => setAbout(false)}>
         <Copy>
           Resbite is in private development. This page describes the current
-          build; access is limited to approved testers.
+          build; access comes with an invitation link or a tester invitation.
         </Copy>
       </InfoSheet>
     </SafeAreaView>

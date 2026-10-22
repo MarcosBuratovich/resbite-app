@@ -104,6 +104,7 @@ export function Button({
   hint,
   large = false,
   destructive = false,
+  mark: Mark,
 }: {
   title: string;
   onPress: () => void;
@@ -117,6 +118,8 @@ export function Button({
   large?: boolean;
   /** A red button with a white label, for a permanent action (Delete account). */
   destructive?: boolean;
+  /** A mark before the label (GI2: Apple's logo on "Continue with Apple"). */
+  mark?: LucideIcon;
 }) {
   const reduce = useReduceMotion(),
     scale = useSharedValue(1),
@@ -158,9 +161,16 @@ export function Button({
           },
         ]}
       >
-        <Copy style={large ? [s.buttonLabel, s.buttonLabelLarge, { color: ink }] : [s.buttonLabel, { color: ink }]}>
-          {title}
-        </Copy>
+        {Mark ? (
+          <View style={s.buttonMarked}>
+            <Mark size={large ? 22 : 19} color={ink} />
+            <Copy style={[s.buttonLabel, { color: ink }]}>{title}</Copy>
+          </View>
+        ) : (
+          <Copy style={large ? [s.buttonLabel, s.buttonLabelLarge, { color: ink }] : [s.buttonLabel, { color: ink }]}>
+            {title}
+          </Copy>
+        )}
         {loading ? (
           <ActivityIndicator color={ink} />
         ) : (
@@ -416,6 +426,7 @@ export const s = StyleSheet.create({
     gap: 10,
   },
   buttonLabelLarge: { textAlign: "center", fontFamily: fonts.bold, fontSize: 18, lineHeight: 24 },
+  buttonMarked: { flexDirection: "row", alignItems: "center", gap: 10, flexShrink: 1 },
   field: {
     minHeight: 50,
     borderWidth: 1,

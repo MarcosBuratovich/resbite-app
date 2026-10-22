@@ -28,6 +28,10 @@ const State = createContext<{
   inviteRestoreError: string | null;
   restoreInvite: () => Promise<void>;
   rememberInvite: (token: string | null, expected?: string) => Promise<void>;
+  /** GI2: the Terms version ticked before sign-in, kept beside the invitation until it is claimed. */
+  pendingTerms: string | null;
+  rememberTerms: (version: string | null) => Promise<void>;
+  readTerms: () => Promise<string | null>;
   captureSession: () => () => void;
   signingOut: boolean;
   signOutError: string | null;
@@ -46,6 +50,9 @@ const State = createContext<{
   inviteRestoreError: null,
   restoreInvite: async () => {},
   rememberInvite: async () => {},
+  pendingTerms: null,
+  rememberTerms: async () => {},
+  readTerms: async () => null,
   captureSession: () => () => {},
   signingOut: false,
   signOutError: null,
@@ -59,8 +66,24 @@ const State = createContext<{
 });
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [pendingInvite, setPendingInvite] = useState<string | null>(null);
+  const [pendingTerms, setPendingTerms] = useState<string | null>(null);
+  // Dropping the kept invitation drops the kept tick with it (the store removes both keys).
   const [pendingStore] = useState(() =>
-    createPendingInviteStore(storage, setPendingInvite),
+    createPendingInviteStore(storage, (token) => {
+      setPendingInvite(token);
+      if (token === null) setPendingTerms(null);
+    }),
+  );
+  const rememberTerms = useCallback(
+    async (version: string | null) => {
+      await pendingStore.rememberTerms(version);
+      setPendingTerms(version);
+    },
+    [pendingStore],
+  );
+  const readTerms = useCallback(
+    () => pendingStore.readTerms(),
+    [pendingStore],
   );
   const rememberInvite = useCallback(
     async (token: string | null, expected?: string) => {
@@ -88,7 +111,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [pendingStore]);
   useEffect(() => {
     void restoreInvite();
-  }, [restoreInvite]);
+    void pendingStore.readTerms().then(setPendingTerms, () => {});
+  }, [restoreInvite, pendingStore]);
   const [session, setSession] = useState<Session | null>(null),
     [restoring, setRestoring] = useState(true),
     [preview, setPreview] = useState(false),
@@ -195,6 +219,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         inviteRestoreError,
         restoreInvite,
         rememberInvite,
+        pendingTerms,
+        rememberTerms,
+        readTerms,
         preview,
         setPreview: changePreview,
         signingOut,

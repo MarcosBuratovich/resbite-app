@@ -1,6 +1,7 @@
 // Captures every UX1, UX3 and UX4 screen at 390 and 320 px (UX3 and UX4 also with Larger Text at 320 px) with no console or page errors,
-// and keeps the gluestack keyboard-selection check. Every Supabase request is aborted, except in the GI1 block at the end,
-// where a signed-in organizer's requests are answered by a local stub (the link screen and the Guests sheet with Remove).
+// and keeps the gluestack keyboard-selection check. Every Supabase request is aborted, except in the GI1 and GI2 blocks at the end,
+// where requests are answered by a local stub: a signed-in organizer's link screen and Guests sheet with Remove (GI1), and a
+// signed-out guest's account screen, its Code and Name steps and a dead link (GI2).
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium, expect } from "@playwright/test";
@@ -453,8 +454,114 @@ try {
     if (errors.length) throw Error(errors.join("\n"));
     await page.close();
   }
+  // GI2, a signed-out guest against a local stub: the account screen unticked and ticked, the Code step, the Name
+  // step and a dead link, at 390 and 320 px and under Larger Text at 320 px, with nothing wider than the screen.
+  for (const [width, large] of [[390, false], [320, false], [320, true]]) {
+    const page = await browser.newPage({ viewport: { width, height: 844 }, reducedMotion: "reduce", timezoneId: "Europe/London" });
+    await quietReminders(page);
+    const errors = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    page.on("console", (m) => {
+      if (m.type() === "error") errors.push(m.text());
+    });
+    const suffix = large ? "large-320" : String(width);
+    const fits = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+    const clipped = () =>
+      page.evaluate(() =>
+        [...document.querySelectorAll("[role=button],[role=checkbox],[role=heading],h1,h2,h3,input,textarea")]
+          .filter((el) => !el.closest("[aria-hidden=true]") && el.getBoundingClientRect().width > 0)
+          .filter((el) => {
+            const b = el.getBoundingClientRect();
+            return b.left < -1 || b.right > window.innerWidth + 1;
+          })
+          .map((el) => (el.getAttribute("role") || el.tagName.toLowerCase()) + " " + (el.getAttribute("aria-label") || el.textContent.trim().slice(0, 40))),
+      );
+    const visit = async (name, title) => {
+      await expect(heading(page, title)).toBeVisible();
+      assert.ok(await fits(), `${name} fits at ${suffix}`);
+      assert.deepEqual(await clipped(), [], `${name} has nothing clipped at ${suffix}`);
+      await page.waitForTimeout(500);
+      await page.screenshot({ path: `${out}/${name}-${suffix}.png`, fullPage: true });
+      // Larger Text moves the footer into the scroll: capture its end too.
+      if (large) {
+        await page.mouse.move(width / 2, 400);
+        await page.mouse.wheel(0, 3000);
+        await page.waitForTimeout(300);
+        await page.screenshot({ path: `${out}/${name}-${suffix}-end.png` });
+      }
+    };
+    const user = { id: "66666666-6666-4666-8666-666666666666", aud: "authenticated", role: "authenticated", email: "guest@example.invalid", email_confirmed_at: "2026-01-01T00:00:00Z", app_metadata: {}, user_metadata: {}, created_at: "2026-01-01T00:00:00Z" };
+    const expiry = Math.floor(Date.now() / 1000) + 3600;
+    const jwt = [
+      Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url"),
+      Buffer.from(JSON.stringify({ sub: user.id, exp: expiry, role: "authenticated" })).toString("base64url"),
+      "local-fixture-only",
+    ].join(".");
+    let signedIn = false;
+    await page.route("**/*.supabase.co/**", (route) => {
+      const req = route.request();
+      const path = new URL(req.url()).pathname;
+      const reply = (body, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+      if (path === "/rest/v1/rpc/invitation_page")
+        return reply(
+          req.postDataJSON().p_code === "DeadDeadDeadDeadDead_8"
+            ? { state: "inactive" }
+            : { state: "open", host: "Stephen", title: "Film club: Paris, Texas", starts_at: "2099-10-23T18:30:00Z", time_zone: "Europe/London" },
+        );
+      if (path === "/rest/v1/rpc/note_link_open") return route.fulfill({ status: 204, body: "" });
+      if (path === "/auth/v1/otp") return reply({});
+      if (path === "/auth/v1/verify") {
+        signedIn = true;
+        return reply({ access_token: jwt, refresh_token: "local-fixture", token_type: "bearer", expires_at: expiry, expires_in: 3600, user });
+      }
+      if (path === "/auth/v1/user") return signedIn ? reply(user) : reply({ message: "No session" }, 401);
+      if (path === "/rest/v1/rpc/account_access_status") return reply({ account_id: user.id, status: "access_pending" });
+      return reply({ message: `Unexpected ${path}` }, 400);
+    });
+    const open = async (path) => {
+      await page.goto(`${base}${path}${large ? "&largeText=1" : ""}`);
+      if (large) await page.addStyleTag({ content: '[dir="auto"] { zoom: 1.4; }' });
+    };
+    await open("/invite?code=GuestGuestGuestGuest_5");
+    await expect(page.getByText("Stephen invited you", { exact: true })).toBeVisible();
+    await expect(button(page, "Continue with email")).toBeDisabled();
+    await visit("guest-unticked", "Create your account to reply");
+    await page.getByRole("checkbox", { name: "I’m 18 or over", exact: true }).click();
+    await expect(button(page, "Continue with email")).toBeEnabled();
+    await visit("guest-ticked", "Create your account to reply");
+    await button(page, "Continue with email").click();
+    await page.getByLabel("Email", { exact: true }).fill("guest@example.invalid");
+    await button(page, "Send code").click();
+    await visit("guest-code", "Check your email");
+    await page.getByLabel("6-digit code", { exact: true }).fill("123456");
+    await visit("guest-name", "What’s your name?");
+    await page.close();
+    if (errors.length) throw Error(errors.join("\n"));
+    // A dead link, signed out.
+    const dead = await browser.newPage({ viewport: { width, height: 844 }, reducedMotion: "reduce" });
+    dead.on("pageerror", (e) => errors.push(e.message));
+    dead.on("console", (m) => {
+      if (m.type() === "error") errors.push(m.text());
+    });
+    await dead.route("**/*.supabase.co/**", (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === "/rest/v1/rpc/invitation_page")
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ state: "inactive" }) });
+      if (path === "/rest/v1/rpc/note_link_open") return route.fulfill({ status: 204, body: "" });
+      return route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ message: "No session" }) });
+    });
+    await dead.goto(`${base}/invite?code=DeadDeadDeadDeadDead_8${large ? "&largeText=1" : ""}`);
+    if (large) await dead.addStyleTag({ content: '[dir="auto"] { zoom: 1.4; }' });
+    await expect(heading(dead, "This invitation is no longer active.")).toBeVisible();
+    await expect(button(dead, "Go to Resbite")).toBeVisible();
+    assert.ok(await dead.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `guest-inactive fits at ${suffix}`);
+    await dead.waitForTimeout(500);
+    await dead.screenshot({ path: `${out}/guest-inactive-${suffix}.png`, fullPage: true });
+    if (errors.length) throw Error(errors.join("\n"));
+    await dead.close();
+  }
   console.log(
-    "PASS: every UX1, UX3 and UX4 screen at 390/320 px, UX3 and UX4 under Larger Text at 320 px, GI1 Invite people, the Where step with an Area and the Guests sheet with Remove (390/320 and Larger Text at 320 px), gluestack keyboard selection, no console/page errors. Screenshots: " + out,
+    "PASS: every UX1, UX3 and UX4 screen at 390/320 px, UX3 and UX4 under Larger Text at 320 px, GI1 Invite people, the Where step with an Area and the Guests sheet with Remove (390/320 and Larger Text at 320 px), GI2's guest account screen unticked and ticked, its Code and Name steps and a dead link (390/320 and Larger Text at 320 px, nothing wider than the screen), gluestack keyboard selection, no console/page errors. Screenshots: " + out,
   );
 } finally {
   await browser.close();

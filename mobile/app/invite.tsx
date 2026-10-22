@@ -5,7 +5,9 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useAccount } from "../src/state/AccountState";
 import { useApp } from "../src/state/AppState";
 import { useFocusedRefresh, type Run } from "../src/state/useFocusedRefresh";
+import { useGuestAccount } from "../src/state/useGuestAccount";
 import { Back, Button, Copy, Title, ErrorNote, s } from "../src/design/ui";
+import { GuestScreen } from "../src/design/GuestSteps";
 import { colors as c } from "../src/design/tokens";
 import { claimEventLink, claimInvitation } from "../src/services/rsvp";
 import { isInviteToken, isLinkCode } from "../src/domain/appLinks";
@@ -16,6 +18,10 @@ import { incompleteInvitation, isClaimRefusal } from "../src/domain/eventLinks";
  * `token`; the event's one link (GI1, /r/<code>) brings a `code`. Either is kept on the device until claimed,
  * or until it is refused for good (turned off, started, cancelled, malformed): only a lost connection keeps it
  * for a retry. "Go to My resbites" leaves the error and drops it too.
+ *
+ * GI2: for anyone without access an event link is the guest's account screen (useGuestAccount, GuestScreen):
+ * signed out, and signed in while the account waits for access, until the join hands over to the event page.
+ * Approved accounts keep GI1's claim.
  */
 export default function Invite() {
   const { token, code, plan } = useLocalSearchParams<{
@@ -29,6 +35,10 @@ export default function Invite() {
   const { session, restoring, preview, rememberInvite, signingOut } = useApp();
   const account = useAccount();
   const accountReady = account.status === "approved" && account.reviewed && account.profileReady;
+  const guest = useGuestAccount({ code, token });
+  // While the guest's screen shows, GI1's claim and its redirect to /account stand aside.
+  const guestActive = useRef(guest.active);
+  guestActive.current = guest.active;
   const userId = session?.user.id;
   const identity = `${userId}:${token}:${code}:${plan}:${preview}`;
   const currentIdentity = useRef(identity);
@@ -61,7 +71,8 @@ export default function Invite() {
       });
   }, [identity, keep, signingOut]);
   useEffect(() => {
-    if (!session || preview || signingOut || accountReady || account.status === "checking") return;
+    if (!session || preview || signingOut || accountReady || account.status === "checking" || guestActive.current)
+      return;
     let active = true;
     const preserve = keep ? retainToken() : Promise.resolve();
     void preserve
@@ -77,7 +88,7 @@ export default function Invite() {
   }, [identity, accountReady, account.status, signingOut]);
   const claim = useCallback(
     async (begin: () => Run) => {
-      if (!userId || preview || signingOut || !accountReady) return;
+      if (!userId || preview || signingOut || !accountReady || guestActive.current) return;
       const { valid, assertSession } = begin();
       setBusy(true);
       setError(null);
@@ -120,6 +131,7 @@ export default function Invite() {
     if (keep) await remember.current(null, keep).catch(() => {});
     router.replace("/plans");
   }
+  if (guest.active) return <GuestScreen guest={guest} />;
   return (
     <SafeAreaView style={s.page}>
       <ScrollView contentContainerStyle={s.body}>
@@ -127,15 +139,15 @@ export default function Invite() {
         <Title>You’re invited.</Title>
         {!session && !restoring && (
           <>
-            <Copy>
-              Sign in with your tester account. We’ll keep this invitation ready while you finish setting up.
-            </Copy>
+            <Copy>We’ll keep this invitation ready while you finish setting up.</Copy>
             <Button title="Sign in" onPress={() => router.push("/auth")} />
           </>
         )}
         {preview && <Copy>Preview cannot claim invitations or send an RSVP.</Copy>}
         <ErrorNote message={error} />
-        {busy && <ActivityIndicator accessibilityLabel="Opening your invitation" color={c.aquaDark} />}
+        {(busy || (session && account.status === "checking")) && (
+          <ActivityIndicator accessibilityLabel="Opening your invitation" color={c.aquaDark} />
+        )}
         {session && !preview && (
           <Button title="Refresh invitation" secondary loading={busy} onPress={() => void refresh()} />
         )}

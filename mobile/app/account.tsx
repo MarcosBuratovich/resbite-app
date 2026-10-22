@@ -9,7 +9,7 @@ import { Button, Copy, ErrorNote, Title, s } from "../src/design/ui";
 import { Chip, StatusCard } from "../src/design/kit";
 import { categoryPalette, colors as c, fonts } from "../src/design/tokens";
 import { accessState, accessTitles, type AccessState } from "../src/domain/accountCopy";
-import { pendingInviteParams } from "../src/domain/appLinks";
+import { isLinkCode, pendingInviteParams } from "../src/domain/appLinks";
 
 const icons: Record<AccessState, typeof ShieldCheck> = {
   checking: ShieldCheck,
@@ -71,6 +71,9 @@ export default function Account() {
       return <Redirect href={{ pathname: "/invite", params: kept }} />;
     return <Redirect href="/create" />;
   }
+  // GI2: an event link is the invitation to the beta; its screen creates the guest's access.
+  if (session && status === "access_pending" && pendingInvite && isLinkCode(pendingInvite))
+    return <Redirect href={{ pathname: "/invite", params: { code: pendingInvite } }} />;
   const checking = restoring || status === "checking";
   const state = accessState(checking, status);
   const Icon = icons[state];
@@ -94,6 +97,9 @@ export default function Account() {
                     Once your account is approved, check again here to continue.
                     Confirming your email does not automatically grant tester
                     access.
+                  </Copy>
+                  <Copy style={styles.line}>
+                    If someone invited you to a resbite, open their link again.
                   </Copy>
                 </>
               )}
