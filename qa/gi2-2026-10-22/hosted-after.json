@@ -1,0 +1,44 @@
+{
+  "taken": "2026-10-22, read-only, project ewcsgvhuojxdpaspwsrx, after applying 20261022120000_gi2_guest_accounts (hosted version 20261022113838)",
+  "approval": "owner approved by file name and sha256 dc081dbd37a4877b11b7b771e12696dacdff54245db8df79e91c2b5dfd09d100 in chat on 2026-10-22; applied with the MCP apply_migration tool as gi2_guest_accounts",
+  "migrations_tail": [
+    ["20261021165314", "gi1_event_links"],
+    ["20261022113838", "gi2_guest_accounts"]
+  ],
+  "function_md5": {
+    "private.eligible()": "d356d71bb2f03fcf8cff6189e903ceaa",
+    "private.user_eligible(uuid)": "5fb9715068614b1e7a3dfe6e4866517d",
+    "private.has_live_grant(uuid)": "2a9ce48e7f668c93a855252ec48baba7",
+    "private.deletion_pending(uuid)": "3b75f045cc4099ea4a760158f624836f",
+    "private.join_by_link(text,text,text)": "1f45ffbbb9e94cbc38945bd6a39a5c2e",
+    "public.join_by_link(text,text,text)": "acaabc91cda400b59344ba9198cea7a5",
+    "public.note_link_open(text)": "140c6894b898ce1709ac73771be83583"
+  },
+  "matches_local_replay": "all seven md5 values equal the local replay of migrations.txt plus the candidate (expected_after_local_replay in hosted-before.json)",
+  "function_acl": {
+    "private.eligible()": "{postgres=X/postgres,authenticated=X/postgres} (unchanged from before)",
+    "private.user_eligible(uuid)": "{postgres=X/postgres}",
+    "private.has_live_grant(uuid)": "{postgres=X/postgres}",
+    "private.deletion_pending(uuid)": "{postgres=X/postgres}",
+    "private.join_by_link(text,text,text)": "{postgres=X/postgres,authenticated=X/postgres}",
+    "public.join_by_link(text,text,text)": "{postgres=X/postgres,authenticated=X/postgres}",
+    "public.note_link_open(text)": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres}"
+  },
+  "tables": {
+    "rls_enabled": { "private.beta_access": true, "private.age_attestations": true, "private.link_opens": true },
+    "acl": "{postgres=arwdDxtm/postgres} on all three (no client role)"
+  },
+  "privilege_checks": {
+    "anon can execute public.note_link_open": true,
+    "anon can execute public.join_by_link": false,
+    "authenticated can execute public.join_by_link": true,
+    "anon can execute private.user_eligible": false,
+    "authenticated can execute private.eligible": true
+  },
+  "counts": { "beta_access": 0, "age_attestations": 0, "link_opens": 0, "tester_roster": 15, "auth_users": 7 },
+  "advisors": {
+    "security": "no new class of finding: rls_enabled_no_policy INFO on the three new private tables (the existing pattern for every private table); anon/authenticated SECURITY DEFINER WARN on public.note_link_open, the same accepted class as public.invitation_page (GI1) and intended by GI2-D9",
+    "performance": "unused_index INFO on beta_access_plan_link_idx and link_opens_plan_link_idx (new, no rows yet); the pre-existing auth connection-strategy INFO"
+  },
+  "not_applied": "supabase/migrations/20261022120001_gi2_local_delivery_and_deletion.sql (LOCAL-ONLY; goes live straight after the deletion lifecycle and the notification sender)"
+}

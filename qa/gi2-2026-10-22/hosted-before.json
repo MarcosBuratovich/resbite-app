@@ -1,0 +1,46 @@
+{
+  "taken": "2026-10-22, read-only, project ewcsgvhuojxdpaspwsrx, before applying 20261022120000_gi2_guest_accounts",
+  "server_version": "17.6",
+  "migrations": [
+    ["20260917191323", "resbite_private_tester_foundation"],
+    ["20260923151512", "account_access_status"],
+    ["20260923151515", "atomic_registration_details"],
+    ["20260923154040", "activity_catalogue_details"],
+    ["20260924150824", "avatar_revision_compare_and_swap"],
+    ["20261007154825", "custom_events"],
+    ["20261007175855", "plan_covers"],
+    ["20261007193235", "claim_notifies_owner"],
+    ["20261014163459", "ux2_rules"],
+    ["20261016125958", "ux3_event_details"],
+    ["20261021165314", "gi1_event_links"]
+  ],
+  "function_md5": {
+    "private.eligible()": "320599746fa2cdb72d99774b62314a82"
+  },
+  "function_acl": {
+    "private.eligible()": "{postgres=X/postgres,authenticated=X/postgres}"
+  },
+  "local_replay_matches": "the hosted-baseline replay of migrations.txt gives the same md5 and acl for private.eligible()",
+  "absent_before": {
+    "tables": ["private.beta_access", "private.age_attestations", "private.link_opens"],
+    "functions": ["public.join_by_link(text,text,text)", "public.note_link_open(text)", "private.user_eligible(uuid)", "private.has_live_grant(uuid)", "private.deletion_pending(uuid)"],
+    "local_only_still_absent": ["private.account_deletion_jobs", "private.notification_recipient_eligible(bigint)"]
+  },
+  "counts": { "tester_roster": 15, "plan_links": 0, "plans": 21, "auth_users": 7 },
+  "expected_after_local_replay": {
+    "private.eligible()": "d356d71bb2f03fcf8cff6189e903ceaa",
+    "private.user_eligible(uuid)": "5fb9715068614b1e7a3dfe6e4866517d",
+    "private.has_live_grant(uuid)": "2a9ce48e7f668c93a855252ec48baba7",
+    "private.deletion_pending(uuid)": "3b75f045cc4099ea4a760158f624836f",
+    "private.join_by_link(text,text,text)": "1f45ffbbb9e94cbc38945bd6a39a5c2e",
+    "public.join_by_link(text,text,text)": "acaabc91cda400b59344ba9198cea7a5",
+    "public.note_link_open(text)": "140c6894b898ce1709ac73771be83583"
+  },
+  "candidate": {
+    "file": "supabase/migrations/20261022120000_gi2_guest_accounts.sql",
+    "sha256": "dc081dbd37a4877b11b7b771e12696dacdff54245db8df79e91c2b5dfd09d100",
+    "rollback": "supabase/rollback/20261022120000_gi2_guest_accounts.rollback.sql",
+    "rollback_sha256": "88df5e6df21e9a04eb1cc9f8e9f98606d30afaf839e14de8036cd16ef54c9845",
+    "companion_not_applied": "supabase/migrations/20261022120001_gi2_local_delivery_and_deletion.sql stays local-only until the deletion lifecycle and notification sender reach hosted"
+  }
+}
