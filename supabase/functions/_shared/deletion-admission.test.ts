@@ -78,7 +78,7 @@ test('HTTP handler does not acknowledge or revoke sessions while recovery persis
   const f = fixture(); let revoked = false;
   const request = ledgerBackedDeletionRequest(project, f.backend, { record: async () => { throw Error('secret provider failure'); } });
   const handler = createDeletionHandler({
-    verify: async () => ({ userId, sessionId, amr: [{ method: 'password', timestamp: 1000 }] }),
+    verify: async () => ({ userId, sessionId, amr: [{ method: 'password', timestamp: 1000 }], providers: ['email'] }),
     request, status: async () => null, revoke: async () => { revoked = true; },
   }, true, () => 1000);
   const response = await handler(new Request('https://fixture.invalid', { method: 'POST', headers: { Authorization: 'Bearer fixture' }, body: JSON.stringify({ action: 'request', requestId, recoveryToken, proof: 'fixture' }) }));

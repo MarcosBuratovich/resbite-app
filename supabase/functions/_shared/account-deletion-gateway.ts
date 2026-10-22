@@ -59,10 +59,15 @@ export function accountDeletionGateway(
         claims.exp <= Date.now() / 1000
       )
         throw Error("Invalid identity");
+      // GI2-D10: freshIdentity reads the sign-in providers (an Apple-only account may confirm with Apple).
+      const providers = claims.app_metadata?.providers;
       return {
         userId: user.id,
         sessionId: claims.session_id,
         amr: Array.isArray(claims.amr) ? claims.amr : [],
+        providers: Array.isArray(providers)
+          ? providers.filter((p: unknown): p is string => typeof p === "string")
+          : [],
       } as VerifiedIdentity;
     },
     request: async () => {

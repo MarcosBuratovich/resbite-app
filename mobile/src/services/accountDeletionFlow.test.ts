@@ -155,3 +155,50 @@ test("duplicate taps share one operation and failed cleanup remains retryable", 
   await flow.submit(true);
   assert.deepEqual(h.calls, ["save", "status"]);
 });
+test("the flow picks apple mode for an Apple-only account and calls reauthenticateWithApple before requesting", async () => {
+  for (const providers of [undefined, ["email"], ["google"], ["apple", "email"]]) {
+    const other = harness({ providers });
+    other.d.reauthenticateWithApple = async () => {
+      other.calls.push("apple");
+      return { ok: true };
+    };
+    const flow = createAccountDeletionFlow(other.d);
+    assert.equal(flow.mode, "credential");
+    assert.equal(await flow.submit(true), "queued");
+    assert.deepEqual(other.calls, ["save", "status", "proof", "request", "cleanup"]);
+  }
+  const h = harness({ providers: ["apple"] });
+  h.d.reauthenticateWithApple = async () => {
+    h.calls.push("apple");
+    return { ok: true };
+  };
+  const flow = createAccountDeletionFlow(h.d);
+  assert.equal(flow.mode, "apple");
+  assert.equal(await flow.submit(true), "queued");
+  assert.deepEqual(h.calls, ["save", "status", "apple", "proof", "request", "cleanup"]);
+  // Without the Apple dependency nothing is requested.
+  const missing = harness({ providers: ["apple"] });
+  await assert.rejects(createAccountDeletionFlow(missing.d).submit(true), /Apple/);
+  assert.equal(missing.calls.includes("request"), false);
+});
+test("a closed Apple sheet ends the flow quietly and keeps the receipt", async () => {
+  const h = harness({ providers: ["apple"] });
+  h.d.reauthenticateWithApple = async () => {
+    h.calls.push("apple");
+    return { ok: false };
+  };
+  assert.equal(await createAccountDeletionFlow(h.d).submit(true), null);
+  assert.deepEqual(h.calls, ["save", "status", "apple"]);
+  assert.ok(h.receipt());
+  // A failed Apple sign-in surfaces its message and requests nothing.
+  const failed = harness({ providers: ["apple"] });
+  failed.d.reauthenticateWithApple = async () => {
+    throw new Error("Check your connection and try again.");
+  };
+  await assert.rejects(
+    createAccountDeletionFlow(failed.d).submit(true),
+    /Check your connection and try again\./,
+  );
+  assert.equal(failed.calls.includes("proof"), false);
+  assert.equal(failed.calls.includes("request"), false);
+});

@@ -2,10 +2,12 @@ import { createClient } from "@supabase/supabase-js";
 import * as Crypto from "expo-crypto";
 import { configured, storage, supabase } from "./supabase";
 import {
+  appleOnlyAccount,
   createAccountDeletionFlow,
   type DeletionReceipt,
   type DeletionStatus,
 } from "./accountDeletionFlow";
+import { appleSignInDeps, signInWithApple } from "./appleSignIn";
 export const accountDeletionEnabled =
   configured && process.env.EXPO_PUBLIC_ACCOUNT_DELETION_ENABLED === "true";
 const url =
@@ -98,11 +100,17 @@ export const checkDeletionStatus = (receipt: DeletionReceipt) =>
 export function deletionFlow(options: {
   accountId: string;
   email: string;
+  /** The account's `app_metadata.providers`: an Apple-only account confirms with Apple. */
+  providers: readonly string[];
   preview: boolean;
   assertCurrent: () => void;
-  credential: { kind: "password" | "otp"; value: string };
+  /** The password or emailed code; `null` for an Apple-only account. */
+  credential: { kind: "password" | "otp"; value: string } | null;
   cleanup: () => Promise<void>;
 }) {
+  // GI2-D10: Apple's sign-in goes to its own isolated client, as the password and the code do, so
+  // the app's session never changes; a different Apple ID is refused by the flow's account check.
+  let appleProof: { accountId: string; accessToken: string } | null = null;
   return createAccountDeletionFlow({
     ...options,
     enabled: accountDeletionEnabled,
@@ -122,7 +130,36 @@ export function deletionFlow(options: {
       ).join(""),
     }),
     status: checkDeletionStatus,
+    reauthenticateWithApple: async () => {
+      appleProof = null;
+      const client = isolatedAuth();
+      const result = await signInWithApple({
+        ...appleSignInDeps,
+        signInWithIdToken: async (args) => {
+          const { data, error } = await client.auth.signInWithIdToken(args);
+          if (!error && data.session && data.user)
+            appleProof = {
+              accountId: data.user.id,
+              accessToken: data.session.access_token,
+            };
+          return { error };
+        },
+      });
+      if (result.ok) return { ok: true };
+      if (result.cancelled) return { ok: false };
+      throw new Error(result.message);
+    },
     reauthenticate: async () => {
+      if (appleOnlyAccount(options.providers)) {
+        const proof = appleProof;
+        appleProof = null;
+        if (!proof) throw new Error("Check your connection and try again.");
+        return proof;
+      }
+      if (!options.credential)
+        throw new Error(
+          "Verification failed. Check your password or request a new email code.",
+        );
       const client = isolatedAuth();
       const result =
         options.credential.kind === "password"

@@ -12,6 +12,8 @@ export type VerifiedIdentity = {
   userId: string;
   sessionId: string;
   amr: { method: string; timestamp: number }[];
+  /** The verified token's app_metadata.providers (`[]` when absent). */
+  providers: string[];
 };
 export type DeletionGateway = {
   verify: (accessToken: string) => Promise<VerifiedIdentity>;
@@ -30,12 +32,20 @@ export type DeletionGateway = {
 const uuid =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export function freshIdentity(identity: VerifiedIdentity, now: number) {
+  // GI2-D10: an Apple-only account has no password and Apple's relay address may not deliver a
+  // code, so a fresh Sign in with Apple (Supabase records it as `oauth`) counts for it, and only
+  // for it: Google accounts and Apple accounts with a password keep the password or the code.
+  const providers = Array.isArray(identity.providers) ? identity.providers : [];
+  const methods =
+    providers.includes("apple") && !providers.includes("email")
+      ? ["password", "otp", "oauth"]
+      : ["password", "otp"];
   return (
     uuid.test(identity.userId) &&
     uuid.test(identity.sessionId) &&
     identity.amr.some(
       ({ method, timestamp }) =>
-        ["password", "otp"].includes(method) &&
+        methods.includes(method) &&
         Number.isFinite(timestamp) &&
         timestamp <= now + 30 &&
         timestamp >= now - 300,

@@ -5,6 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Info, KeyRound, Mail, ShieldCheck, Trash2, TriangleAlert } from "lucide-react-native";
 import { Back, Button, Copy, TextAction, Title, s } from "../src/design/ui";
 import { Chip, FieldCard, InfoSheet, StatusCard } from "../src/design/kit";
+import { AppleMark } from "../src/design/AppleMark";
 import { colors, fonts } from "../src/design/tokens";
 import { useApp } from "../src/state/AppState";
 import {
@@ -15,10 +16,12 @@ import {
   loadRecentDeletionReceipt,
   sendDeletionCode,
 } from "../src/services/accountDeletion";
-import type {
-  DeletionReceipt,
-  DeletionStatus,
+import {
+  appleOnlyAccount,
+  type DeletionReceipt,
+  type DeletionStatus,
 } from "../src/services/accountDeletionFlow";
+import { GUEST_COPY } from "../src/domain/guestAccount";
 
 export default function DeleteAccount() {
   const { session, preview, captureSession, finishAccountDeletion } = useApp();
@@ -54,8 +57,10 @@ export default function DeleteAccount() {
   const context = useRef({ accountId, preview });
   context.current = { accountId, preview };
   const email = session?.user.email;
-  const passwordAccount =
-    session?.user.app_metadata.providers?.includes("email");
+  const providers: string[] = session?.user.app_metadata.providers ?? [];
+  // GI2-D10: Apple-only accounts (no "email" provider) confirm by signing in with Apple again.
+  const appleAccount = appleOnlyAccount(providers);
+  const passwordAccount = providers.includes("email");
   const passwordMode = passwordAccount && !useEmailCode;
   const available =
     accountDeletionEnabled && !preview && !!accountId && !!email;
@@ -164,7 +169,9 @@ export default function DeleteAccount() {
           <>
             <NumberedCard number={1} title="Confirm it’s you">
               <Copy style={{ color: colors.muted }}>{email}</Copy>
-              {passwordMode ? (
+              {appleAccount ? (
+                <Copy>To confirm it’s you, sign in with Apple again.</Copy>
+              ) : passwordMode ? (
                 <FieldCard
                   label="Current password"
                   placeholder="Current password"
@@ -239,13 +246,23 @@ export default function DeleteAccount() {
             <Button
               destructive
               title={
-                receipt
-                  ? "Retry account deletion"
-                  : "Permanently delete account"
+                appleAccount
+                  ? GUEST_COPY.apple
+                  : receipt
+                    ? "Retry account deletion"
+                    : "Permanently delete account"
+              }
+              mark={appleAccount ? AppleMark : undefined}
+              hint={
+                appleAccount
+                  ? "Signs in with Apple again, then permanently deletes your account."
+                  : undefined
               }
               loading={busy}
               disabled={
-                restoringReceipt || confirmation !== "DELETE" || !credential
+                restoringReceipt ||
+                confirmation !== "DELETE" ||
+                (!appleAccount && !credential)
               }
               onPress={() =>
                 void action(async () => {
@@ -253,12 +270,15 @@ export default function DeleteAccount() {
                   const flow = deletionFlow({
                     accountId: accountId!,
                     email: email!,
+                    providers,
                     preview,
                     assertCurrent: guard,
-                    credential: {
-                      kind: passwordMode ? "password" : "otp",
-                      value: credential,
-                    },
+                    credential: appleAccount
+                      ? null
+                      : {
+                          kind: passwordMode ? "password" : "otp",
+                          value: credential,
+                        },
                     cleanup: async () => {
                       const saved = await loadDeletionReceipt(accountId!);
                       if (mounted.current) setReceipt(saved);
@@ -266,6 +286,8 @@ export default function DeleteAccount() {
                     },
                   });
                   const value = await flow.submit(confirmation === "DELETE");
+                  // A closed Apple sheet: nothing was requested and nothing is said.
+                  if (value === null) return;
                   if (mounted.current) {
                     setStatus(value);
                     setMessage(describe(value));

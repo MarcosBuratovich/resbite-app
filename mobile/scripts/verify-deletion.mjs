@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { chromium, expect } from "@playwright/test";
 const base = process.env.RESBITE_QA_URL || "http://localhost:8081";
 const enabled = process.env.RESBITE_QA_DELETION_ENABLED === "true";
@@ -154,6 +155,13 @@ try {
       proofCount = 0,
       statusCount = 0,
       otpCount = 0;
+    // The Apple-only case below swaps these: the signed-in account, the token the app sends as
+    // Authorization, the proof the worker should receive, and who Apple's sign-in returns.
+    let current = user,
+      expectedAuthorization = token,
+      expectedProof = token,
+      appleProof = null;
+    const appleNonces = [];
     await page.route("**/*.supabase.co/**", async (route) => {
       const req = route.request(),
         path = new URL(req.url()).pathname;
@@ -163,11 +171,11 @@ try {
           contentType: "application/json",
           body: JSON.stringify(body),
         });
-      if (path === "/auth/v1/user") return reply(user);
+      if (path === "/auth/v1/user") return reply(current);
       if (path === "/rest/v1/rpc/account_access_status")
-        return reply({ account_id: user.id, status: "approved" });
+        return reply({ account_id: current.id, status: "approved" });
       if (path === "/rest/v1/profiles")
-        return reply({ id: user.id, display_name: "Fixture", avatar_path: null });
+        return reply({ id: current.id, display_name: "Fixture", avatar_path: null });
       if (path === "/auth/v1/otp") {
         otpCount++;
         assert.equal(req.postDataJSON().create_user, false);
@@ -180,6 +188,15 @@ try {
       }
       if (path === "/auth/v1/token") {
         proofCount++;
+        if (new URL(req.url()).searchParams.get("grant_type") === "id_token") {
+          // Sign in with Apple's id-token call, from the deletion screen's isolated client.
+          const body = req.postDataJSON();
+          assert.equal(body.provider, "apple");
+          assert.equal(body.id_token, "fixture-apple-identity-token");
+          appleNonces.push(body.nonce);
+          assert.ok(appleProof, "Apple's sign-in was not expected here");
+          return reply(appleProof);
+        }
         return reply(session);
       }
       if (path === "/auth/v1/logout") return reply({});
@@ -192,11 +209,12 @@ try {
             : reply({}, 404);
         }
         assert.equal(body.action, "request");
-        assert.equal(body.proof, token);
+        assert.equal(body.proof, expectedProof);
+        assert.equal(req.headers().authorization, `Bearer ${expectedAuthorization}`);
         assert.equal(body.recoveryToken.length, 64);
         const saved = await page.evaluate(
           (id) => JSON.parse(sessionStorage.getItem(`resbite.deletion.${id}`)),
-          user.id,
+          current.id,
         );
         assert.equal(saved.requestId, body.requestId);
         assert.equal(saved.recoveryToken, body.recoveryToken);
@@ -316,10 +334,157 @@ try {
       ),
       null,
     );
+    // GI2-D10: an Apple-only account confirms by signing in with Apple again. Web has no Sign in
+    // with Apple, so Apple's native module is stubbed at Expo's module boundary (on web,
+    // expo-modules-core reads native modules from ExpoDomWebView.expoModulesProxy): the app's own appleSignInDeps,
+    // nonce and id-token call run as on the phone, and the id-token endpoint is intercepted above.
+    const jwt = (claims) =>
+      [
+        Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url"),
+        Buffer.from(JSON.stringify({ role: "authenticated", exp: expires_at, ...claims })).toString("base64url"),
+        "local-fixture-only",
+      ].join(".");
+    const appleUser = {
+      ...user,
+      id: "22222222-2222-4222-8222-222222222222",
+      email: "fixture-apple@example.invalid",
+      app_metadata: { provider: "apple", providers: ["apple"] },
+    };
+    const appleToken = jwt({ sub: appleUser.id });
+    const appleSession = { ...session, access_token: appleToken, user: appleUser };
+    const appleProofFor = (account) => ({
+      ...appleSession,
+      access_token: jwt({
+        sub: account.id,
+        amr: [{ method: "oauth", timestamp: Math.floor(Date.now() / 1000) }],
+        app_metadata: account.app_metadata,
+      }),
+      refresh_token: "fixture-apple-proof",
+      user: account,
+    });
+    accepted = null;
+    current = appleUser;
+    expectedAuthorization = appleToken;
+    await page.addInitScript(() => {
+      globalThis.__appleSheet = { result: "cancel", nonces: [] };
+      globalThis.ExpoDomWebView = {
+        expoModulesProxy: {
+          ExpoAppleAuthentication: {
+            isAvailableAsync: async () => true,
+            addListener() {},
+            removeListeners: async () => {},
+            requestAsync: async (options) => {
+              const sheet = globalThis.__appleSheet;
+              sheet.nonces.push(options.nonce);
+              if (sheet.result === "cancel")
+                throw Object.assign(new Error("Fixture: sheet closed"), {
+                  code: "ERR_REQUEST_CANCELED",
+                });
+              return {
+                user: "fixture-apple-user",
+                identityToken: "fixture-apple-identity-token",
+                authorizationCode: "fixture-apple-code",
+                fullName: null,
+                email: null,
+                realUserStatus: 1,
+                state: null,
+              };
+            },
+          },
+        },
+      };
+    });
+    await page.evaluate(
+      ({ session, user }) => {
+        sessionStorage.clear();
+        sessionStorage.setItem(
+          "sb-ewcsgvhuojxdpaspwsrx-auth-token",
+          JSON.stringify(session),
+        );
+      },
+      { session: appleSession, user: appleUser },
+    );
+    await page.goto(`${base}/delete-account`);
+    const appleButton = page.getByRole("button", {
+      name: "Continue with Apple",
+      exact: true,
+    });
+    await expect(
+      page.getByText("To confirm it’s you, sign in with Apple again.", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(page.getByText(appleUser.email, { exact: true })).toBeVisible();
+    await expect(appleButton).toBeVisible();
+    await expect(appleButton).toBeDisabled();
+    for (const name of [
+      "Permanently delete account",
+      "Send verification code",
+      "Use an email code instead",
+    ])
+      await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
+    await expect(
+      page.getByLabel("Current password", { exact: true }),
+    ).toHaveCount(0);
+    await page
+      .getByLabel("Type DELETE to confirm", { exact: true })
+      .fill("DELETE");
+    await expect(appleButton).toBeEnabled();
+    const sheetNonces = () => page.evaluate(() => globalThis.__appleSheet.nonces);
+    const appSession = () =>
+      page.evaluate(() =>
+        JSON.parse(sessionStorage.getItem("sb-ewcsgvhuojxdpaspwsrx-auth-token")),
+      );
+    const before = { proofCount, requestCount };
+    // A closed sheet: nothing is requested and nothing is said.
+    await appleButton.click();
+    await expect.poll(async () => (await sheetNonces()).length).toBe(1);
+    await expect(appleButton).toBeEnabled();
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    assert.deepEqual({ proofCount, requestCount }, before);
+    // A different Apple ID is refused, and the app stays signed in as the same account.
+    appleProof = appleProofFor({
+      ...appleUser,
+      id: "33333333-3333-4333-8333-333333333333",
+    });
+    await page.evaluate(() => (globalThis.__appleSheet.result = "ok"));
+    await appleButton.click();
+    await expect(
+      page.getByText("Reauthentication returned a different account.", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    assert.equal(requestCount, before.requestCount);
+    assert.equal((await appSession()).access_token, appleToken);
+    // Apple's sign-in for this account: its fresh session is the proof; the app's own session
+    // stays the Authorization, then cleanup signs out as for a password or a code.
+    appleProof = appleProofFor(appleUser);
+    expectedProof = appleProof.access_token;
+    await appleButton.click();
+    await expect(
+      page.getByText(/Your deletion request is accepted/),
+    ).toBeVisible();
+    assert.equal(requestCount, before.requestCount + 1);
+    assert.equal(proofCount, before.proofCount + 2);
+    const nonces = await sheetNonces();
+    assert.equal(nonces.length, 3);
+    assert.equal(appleNonces.length, 2);
+    // Apple's sheet gets the SHA-256 of the one-use nonce Supabase receives.
+    assert.equal(
+      nonces[2],
+      createHash("sha256").update(appleNonces[1]).digest("hex"),
+    );
+    assert.equal(await appSession(), null);
+    assert.ok(
+      await page.evaluate(
+        (id) => sessionStorage.getItem(`resbite.deletion.${id}`),
+        appleUser.id,
+      ),
+    );
   }
   assert.deepEqual(errors, []);
   console.log(
-    `Deletion UI passed: preview/disabled no outbound calls${enabled ? ", enabled synthetic password/OTP, lost reply, local cleanup failure/retry including drafts, restart receipt recovery" : ""}. No real account, email or deletion request.`,
+    `Deletion UI passed: preview/disabled no outbound calls${enabled ? ", enabled synthetic password/OTP, lost reply, local cleanup failure/retry including drafts, restart receipt recovery, Apple-only account confirms with Apple (closed sheet quiet, different Apple ID refused with the app session unchanged, isolated proof)" : ""}. No real account, email or deletion request.`,
   );
 } finally {
   await browser.close();

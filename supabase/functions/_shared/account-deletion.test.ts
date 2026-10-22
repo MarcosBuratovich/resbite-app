@@ -18,6 +18,7 @@ const identity: VerifiedIdentity = {
   userId,
   sessionId,
   amr: [{ method: "password", timestamp: 1000 }],
+  providers: ["email"],
 };
 const req = (body: unknown, token = "original") =>
   new Request("https://example.invalid/delete", {
@@ -49,6 +50,58 @@ test("fresh proof requires authentication method and time, not token refresh", (
     true,
   );
   assert.equal(freshIdentity(identity, 900), false);
+});
+// GI2-D10: Supabase records signInWithIdToken (Sign in with Apple) as an `oauth` entry.
+const oauth = (providers: string[], timestamp = 1200): VerifiedIdentity => ({
+  ...identity,
+  amr: [{ method: "oauth", timestamp }],
+  providers,
+});
+test("a fresh oauth entry passes for an Apple-only account", async () => {
+  assert.equal(freshIdentity(oauth(["apple"]), 1200), true);
+  // The same five-minute window as a password or a code.
+  assert.equal(freshIdentity(oauth(["apple"], 1200), 1501), false);
+  assert.equal(freshIdentity(oauth(["apple"], 1300), 1200), false);
+  const g = gateway();
+  g.verify = async () => oauth(["apple"]);
+  assert.equal(
+    (
+      await createDeletionHandler(
+        g,
+        true,
+        () => 1200,
+      )(req({ action: "request", ...receipt, proof: "fresh" }))
+    ).status,
+    202,
+  );
+});
+test("a fresh oauth entry fails for a Google account", async () => {
+  assert.equal(freshIdentity(oauth(["google"]), 1200), false);
+  assert.equal(freshIdentity(oauth([]), 1200), false);
+  const g = gateway();
+  g.verify = async () => oauth(["google"]);
+  assert.equal(
+    (
+      await createDeletionHandler(
+        g,
+        true,
+        () => 1200,
+      )(req({ action: "request", ...receipt, proof: "fresh" }))
+    ).status,
+    401,
+  );
+});
+test("a fresh oauth entry fails for an Apple account that also has a password", () => {
+  assert.equal(freshIdentity(oauth(["apple", "email"]), 1200), false);
+  assert.equal(freshIdentity(oauth(["email", "apple"]), 1200), false);
+  // Such an account still confirms with its password or a code.
+  assert.equal(
+    freshIdentity(
+      { ...oauth(["apple", "email"]), amr: [{ method: "password", timestamp: 1200 }] },
+      1200,
+    ),
+    true,
+  );
 });
 test("disabled handler has no backend side effects", async () => {
   const g = gateway();
@@ -222,6 +275,7 @@ test("gateway only decodes claims after Auth verification; removes objects via S
     role: "authenticated",
     exp: Date.now() / 1000 + 1000,
     amr: identity.amr,
+    app_metadata: { provider: "apple", providers: ["apple", 7] },
   };
   const token = `e30.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.signature`;
   const g = accountDeletionGateway(
@@ -242,7 +296,12 @@ test("gateway only decodes claims after Auth verification; removes objects via S
   );
   await assert.rejects(g.request.verify(token));
   authorized = true;
-  assert.equal((await g.request.verify(token)).userId, userId);
+  const verified = await g.request.verify(token);
+  assert.equal(verified.userId, userId);
+  // Providers come from the verified token's app_metadata, strings only.
+  assert.deepEqual(verified.providers, ["apple"]);
+  const bare = `e30.${Buffer.from(JSON.stringify({ ...claims, app_metadata: undefined })).toString("base64url")}.signature`;
+  assert.deepEqual((await g.request.verify(bare)).providers, []);
   await g.cleanup.removePhotos([`${userId}/a.jpg`]);
   assert.ok(calls.at(-1)?.endsWith("/storage/v1/object/profile-photos"));
 });
