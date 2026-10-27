@@ -1,6 +1,7 @@
 -- Rehearsal checks for 20261028120000_contact_invitations (hosted-baseline mode only).
 -- 1. The migration added its two tables and nineteen functions, redefined exactly remove_guest(), the outbox kind
--- check, the grant-source check and the private schema's grants, changed nothing else it relies on and wrote no rows.
+-- check and the grant-source check, changed nothing else it relies on (the private schema's grants included) and
+-- wrote no rows.
 do $$ declare item record; begin
  if exists(select 1 from private.invite_rehearsal_snapshot() where (name like 'table %' or name like 'function %') and definition is null) then
   raise exception 'Contact-invitation objects missing after the apply';
@@ -11,7 +12,7 @@ do $$ declare item record; begin
   where b.name not like 'table %' and b.name not like 'function %'
  loop
   if item.name in ('private.remove_guest(uuid,uuid)','constraint private.notification_outbox notification_outbox_kind_check',
-   'constraint private.beta_access beta_access_source_check','schema private') then
+   'constraint private.beta_access beta_access_source_check') then
    if item.before=item.after then raise exception '% not redefined by the apply', item.name; end if;
   elsif item.before is distinct from item.after then
    raise exception 'The apply changed %', item.name;
@@ -30,8 +31,8 @@ do $$ declare item record; begin
  end if;
 end $$;
 -- 2. Grants: the tables and the budget helper for nobody; the host's calls, the answer and the caller's own invitation
--- for signed-in accounts; the page and the number check for anyone but the service role; the fold for the service
--- role only, which may now use the private schema.
+-- for signed-in accounts; the page and the number check for anyone but the service role; the fold, a definer, for the
+-- service role only, and its private body for no one.
 do $$ declare r text; s text; f text; begin
  foreach r in array array['anon','authenticated','service_role'] loop
   if has_table_privilege(r,'private.phone_invitations','select,insert,update,delete')
@@ -50,11 +51,16 @@ do $$ declare r text; s text; f text; begin
    if not has_function_privilege('anon',s||f,'execute') or not has_function_privilege('authenticated',s||f,'execute')
    or has_function_privilege('service_role',s||f,'execute') then raise exception '% grants wrong', s||f; end if;
   end loop;
-  if not has_function_privilege('service_role',s||'fold_web_account(uuid,uuid)','execute')
-  or has_function_privilege('anon',s||'fold_web_account(uuid,uuid)','execute')
-  or has_function_privilege('authenticated',s||'fold_web_account(uuid,uuid)','execute') then raise exception '%fold_web_account grants wrong', s; end if;
  end loop;
- if not has_schema_privilege('service_role','private','usage') then raise exception 'service_role cannot reach the fold'; end if;
+ if not has_function_privilege('service_role','public.fold_web_account(uuid,uuid)','execute')
+ or has_function_privilege('anon','public.fold_web_account(uuid,uuid)','execute')
+ or has_function_privilege('authenticated','public.fold_web_account(uuid,uuid)','execute')
+ or not (select prosecdef from pg_catalog.pg_proc where oid='public.fold_web_account(uuid,uuid)'::regprocedure) then
+  raise exception 'public.fold_web_account grants or definer wrong';
+ end if;
+ foreach r in array array['anon','authenticated','service_role'] loop
+  if has_function_privilege(r,'private.fold_web_account(uuid,uuid)','execute') then raise exception '% may call the private fold', r; end if;
+ end loop;
 end $$;
 -- 3. The host looks up and invites (the contact in the app, the web invitee and one more number by link), the web
 -- invitee opens, checks and answers, the host removes the in-app guest and revokes the other link, the web invitee is

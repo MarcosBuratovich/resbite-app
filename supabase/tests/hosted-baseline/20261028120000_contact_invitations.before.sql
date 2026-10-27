@@ -64,5 +64,4 @@ do $$ begin
  if (select count(*) from private.invite_rehearsal_baseline where name like 'grants %' and definition is not null)<>8 then
   raise exception 'Expected eight function fingerprints with grants';
  end if;
- if has_schema_privilege('service_role','private','usage') then raise exception 'service_role already uses the private schema'; end if;
 end $$;

@@ -324,12 +324,13 @@ grant execute on function private.answer_phone_invitation(text,text,text,text), 
  private.my_phone_invitation(text), public.my_phone_invitation(text) to authenticated;
 
 -- Folding (plan Task 3). An account that adds a number already held by a web-only account (one that answered on the
--- web and never used the app) takes that account's answers, invitations, 18+ tick and grant; the
--- fold-phone-account Edge Function then deletes the web-only user. Refuses (22023) the same account on both sides, an
--- account that has used the app or organizes an event, and a target that doesn't exist. A source already folded or
--- deleted moves nothing, so a retry is safe. Both users' locks are taken in uuid order before any row.
+-- web and never used the app) takes that account's answers, invitations, 18+ tick and grant (never a live grant when
+-- its tester-roster entry is disabled); what doesn't move is deleted, and the fold-phone-account Edge Function then
+-- deletes the web-only user. Refuses (22023) the same account on both sides, an account that has used the app or
+-- organizes an event, and a target that doesn't exist. A source already folded or deleted moves nothing, so a retry is
+-- safe. Both users' locks are taken in uuid order before any row.
 create function private.fold_web_account(p_from uuid, p_into uuid) returns jsonb language plpgsql security definer set search_path = '' as $$
-declare v_moved integer;
+declare v_moved integer; v_disabled boolean;
 begin
  if p_from is null or p_into is null or p_from=p_into then raise exception 'Invalid accounts' using errcode='22023'; end if;
  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(least(p_from,p_into)::text,47));
@@ -348,27 +349,32 @@ begin
  get diagnostics v_moved = row_count;
  -- 2. Invitations.
  update private.phone_invitations set user_id=p_into where user_id=p_from;
- -- 3. The tick and the grant, unless the account has its own. A revoked grant is a ban: one on either side stays.
+ -- 3. The tick and the grant, unless the account has its own. A revoked grant is a ban: one on either side stays. An
+ -- account whose tester-roster entry is disabled gets no live grant, as join_by_link and answer_phone_invitation.
+ v_disabled := exists(select 1 from auth.users u where u.id=p_into
+  and exists(select 1 from private.tester_roster r where r.email = lower(u.email) and not r.enabled));
  if not exists(select 1 from private.age_attestations where user_id=p_into) then
   update private.age_attestations set user_id=p_into where user_id=p_from;
  end if;
  if not exists(select 1 from private.beta_access where user_id=p_into) then
-  update private.beta_access set user_id=p_into where user_id=p_from;
+  update private.beta_access set user_id=p_into where user_id=p_from and (revoked_at is not null or not v_disabled);
  else
   update private.beta_access t set revoked_at=f.revoked_at from private.beta_access f
    where t.user_id=p_into and t.revoked_at is null and f.user_id=p_from and f.revoked_at is not null;
  end if;
+ -- What didn't move goes, so a fold whose user deletion then fails leaves no second account that gets in.
+ delete from private.beta_access where user_id=p_from;
+ delete from private.age_attestations where user_id=p_from;
  -- 4. The web profile.
  delete from public.profiles where id=p_from;
  return jsonb_build_object('moved_attendees',v_moved);
 end $$;
-create function public.fold_web_account(p_from uuid, p_into uuid) returns jsonb language sql security invoker set search_path = '' as $$
+-- The Edge Function calls this through REST with the service-role key, which has no use of the private schema on the
+-- hosted project, so it is the definer, as invitation_page is for anon. Only the service role may call it; no one may
+-- call the private body.
+create function public.fold_web_account(p_from uuid, p_into uuid) returns jsonb language sql security definer set search_path = '' as $$
  select private.fold_web_account(p_from,p_into)
 $$;
 revoke all on function private.fold_web_account(uuid,uuid), public.fold_web_account(uuid,uuid)
  from public, anon, authenticated, service_role;
--- The Edge Function calls the façade through REST with the service-role key. The hosted project has not given
--- service_role the private schema (20260918001316_account_deletion_lifecycle.sql, which does, is not applied there);
--- the only private function it can then reach besides the fold is valid_categories(), which every role may call.
-grant usage on schema private to service_role;
-grant execute on function private.fold_web_account(uuid,uuid), public.fold_web_account(uuid,uuid) to service_role;
+grant execute on function public.fold_web_account(uuid,uuid) to service_role;

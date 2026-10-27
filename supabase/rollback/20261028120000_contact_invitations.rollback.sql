@@ -10,8 +10,7 @@
 --     it becomes a revoked 'maintainer' grant instead and the ban stays.
 -- It restores verbatim remove_guest() from 20261021120000_gi1_event_links.sql (its grants were never changed), the
 -- outbox kind check from 20261015120000_ux3_event_details.sql and the grant-source check from
--- 20261027120000_phone_accounts.sql; drops every function the migration created; and takes back the private schema
--- from service_role, unless 20260918001316_account_deletion_lifecycle.sql, which gives it too, has run.
+-- 20261027120000_phone_accounts.sql; and drops every function the migration created.
 -- Kept: guests who answered or were invited in the app stay on their events with their answers, profiles and 18+
 -- ticks. Folded accounts stay folded: the places and ticks they took are not moved back (a grant they took goes with
 -- the invitation grants above), and the deleted web profiles and users do not return.
@@ -70,10 +69,3 @@ alter table private.beta_access drop constraint beta_access_source_check,
 
 drop table private.lookup_usage;
 drop table private.phone_invitations;
-
--- The fold was service_role's only use of the private schema on the hosted project.
-do $$ begin
- if pg_catalog.to_regprocedure('private.claim_account_deletions(integer)') is null then
-  revoke usage on schema private from service_role;
- end if;
-end $$;

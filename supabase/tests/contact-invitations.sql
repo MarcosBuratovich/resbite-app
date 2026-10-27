@@ -531,6 +531,7 @@ do $$ begin
  if (select source from private.beta_access where user_id='d1000000-0000-4000-8000-000000000011' and revoked_at is null) is distinct from 'invitation'
   or exists(select 1 from private.beta_access where user_id='d1000000-0000-4000-8000-000000000010') then raise exception 'Grant not moved'; end if;
  if not private.user_eligible('d1000000-0000-4000-8000-000000000011') then raise exception 'The moved grant should let the account in'; end if;
+ if private.user_eligible('d1000000-0000-4000-8000-000000000010') then raise exception 'The folded account still gets in'; end if;
  if exists(select 1 from public.profiles where id='d1000000-0000-4000-8000-000000000010') then raise exception 'Web profile not deleted'; end if;
  if (select display_name from public.profiles where id='d1000000-0000-4000-8000-000000000011') is distinct from 'Email Ana' then raise exception 'The account''s own name changed'; end if;
  if not exists(select 1 from auth.users where id='d1000000-0000-4000-8000-000000000010') then raise exception 'The fold deleted the user'; end if;
@@ -578,5 +579,48 @@ end $$;
 reset role;
 do $$ begin
  if exists(select 1 from public.attendees where plan_id='d1100000-0000-4000-8000-000000000011') then raise exception 'The organizer became their own guest'; end if;
+end $$;
+
+-- fold: what doesn't move is deleted, so the folded account gets nothing back if its user outlives the fold. 17 is a
+-- web-only account with a live grant and its own tick, folded into 11, which has both already.
+insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) values
+ ('d1000000-0000-4000-8000-000000000017',null,null,'447700900217',now());
+insert into public.profiles(id,display_name) values ('d1000000-0000-4000-8000-000000000017','Web Jo');
+insert into private.age_attestations(user_id,terms_version) values ('d1000000-0000-4000-8000-000000000017','2026-09');
+insert into private.beta_access(user_id,source) values ('d1000000-0000-4000-8000-000000000017','invitation');
+set local role service_role;
+do $$ begin perform public.fold_web_account('d1000000-0000-4000-8000-000000000017','d1000000-0000-4000-8000-000000000011'); end $$;
+reset role;
+do $$ begin
+ if exists(select 1 from private.beta_access where user_id='d1000000-0000-4000-8000-000000000017')
+  or exists(select 1 from private.age_attestations where user_id='d1000000-0000-4000-8000-000000000017') then raise exception 'The folded account kept its grant or tick'; end if;
+ if private.user_eligible('d1000000-0000-4000-8000-000000000017') then raise exception 'The folded account still gets in before its user is deleted'; end if;
+ if (select terms_version from private.age_attestations where user_id='d1000000-0000-4000-8000-000000000011') is distinct from '2026-10' then raise exception 'The account''s own tick changed'; end if;
+end $$;
+
+-- fold: a tester whose roster entry is disabled gets the answers and the tick, but no live grant. 19 is a web-only
+-- account with a live grant, folded into 18, an email account disabled on the roster.
+insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) values
+ ('d1000000-0000-4000-8000-000000000018','fold-disabled@example.test',now(),null,null),
+ ('d1000000-0000-4000-8000-000000000019',null,null,'447700900219',now());
+insert into public.profiles(id,display_name) values
+ ('d1000000-0000-4000-8000-000000000018','Disabled Dee'),('d1000000-0000-4000-8000-000000000019','Web Ray');
+insert into private.tester_roster(email,enabled) values ('fold-disabled@example.test',false);
+insert into private.age_attestations(user_id,terms_version) values ('d1000000-0000-4000-8000-000000000019','2026-10');
+insert into private.beta_access(user_id,source) values ('d1000000-0000-4000-8000-000000000019','invitation');
+insert into public.attendees(plan_id,user_id,response) values
+ ('d1100000-0000-4000-8000-000000000001','d1000000-0000-4000-8000-000000000019','accepted');
+set local role service_role;
+do $$ declare r jsonb; begin
+ r := public.fold_web_account('d1000000-0000-4000-8000-000000000019','d1000000-0000-4000-8000-000000000018');
+ if r<>'{"moved_attendees":1}'::jsonb then raise exception 'Disabled fold returned %', r; end if;
+end $$;
+reset role;
+do $$ begin
+ if (select response from public.attendees where plan_id='d1100000-0000-4000-8000-000000000001' and user_id='d1000000-0000-4000-8000-000000000018') is distinct from 'accepted'
+  or (select terms_version from private.age_attestations where user_id='d1000000-0000-4000-8000-000000000018') is distinct from '2026-10' then raise exception 'The disabled tester''s answer or tick did not move'; end if;
+ if exists(select 1 from private.beta_access where user_id in ('d1000000-0000-4000-8000-000000000018','d1000000-0000-4000-8000-000000000019')) then raise exception 'A live grant survived for a disabled tester'; end if;
+ if private.user_eligible('d1000000-0000-4000-8000-000000000018') then raise exception 'The fold let a disabled tester in'; end if;
+ if private.user_eligible('d1000000-0000-4000-8000-000000000019') then raise exception 'The folded account still gets in'; end if;
 end $$;
 rollback;
