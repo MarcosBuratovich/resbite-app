@@ -1146,10 +1146,32 @@ try {
   await expect(guest.getByRole("radio", { name: "Can’t go", exact: true })).toBeChecked();
   await expect(guest.getByRole("button", { name: "Add to calendar", exact: true })).toHaveCount(0);
   await expect.poll(() => remindersFor(guest, invited.id)).toEqual([]);
+  // A tap on a notification for a resbite that is gone lands on My resbites with a note, shown once per tap.
+  const GONE = "That resbite isn’t available any more.";
+  const gone = guest.getByText(GONE, { exact: true });
+  const sendTo = (path) =>
+    guest.evaluate((path) => {
+      history.pushState(null, "", path);
+      dispatchEvent(new PopStateEvent("popstate"));
+    }, path);
+  await guest.goto(`${base}/plans`);
+  await expect(guest.getByRole("heading", { name: "My resbites", exact: true })).toBeVisible();
+  await expect(gone).toHaveCount(0);
+  await sendTo("/plans?notice=gone&n=test1");
+  await expect(gone).toBeVisible();
+  await guest.getByRole("button", { name: /^Board games, / }).click();
+  await expect(guest.getByRole("heading", { name: "Board games", exact: true })).toBeVisible();
+  await guest.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(guest.getByRole("heading", { name: "My resbites", exact: true })).toBeVisible();
+  await guest.waitForTimeout(500);
+  await expect(gone).toHaveCount(0);
+  // A new tap carries a new id, so it shows again.
+  await sendTo("/plans?notice=gone&n=test2");
+  await expect(gone).toBeVisible();
   await phone.close();
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: guest: Get notified? only after answering Going (never Can’t go), Not now leaves Reminders off without asking again, the chip turns them on, Can’t go removes them.",
+    "PASS: guest: Get notified? only after answering Going (never Can’t go), Not now leaves Reminders off without asking again, the chip turns them on, Can’t go removes them; the gone note shows once per tap, not again after opening a resbite and going Back, and again for a new tap.",
   );
 } finally {
   await browser.close();
