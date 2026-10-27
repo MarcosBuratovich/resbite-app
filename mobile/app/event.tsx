@@ -519,8 +519,10 @@ export default function EventPage() {
               {INVITE_COPY.invitedGroup}
             </Copy>
             {invited.map((person) => (
-              <View key={person.phone} style={styles.guest}>
-                <Copy style={{ flex: 1 }}>{person.name}</Copy>
+              // Under Larger Text the actions move below the name rather than off the screen.
+              <View key={person.phone} style={[styles.guest, styles.invited]}>
+                <Copy style={{ flex: 1, minWidth: 72 }}>{person.name}</Copy>
+                <View style={styles.invitedActions}>
                   <Button
                     secondary
                     icon={false}
@@ -530,14 +532,15 @@ export default function EventPage() {
                     loading={invitedBusy === person.phone}
                     onPress={() => void resendInvite(person)}
                   />
-                <IconButton
-                  icon={UserMinus}
-                  tone="plain"
-                  label={`Remove ${person.name}`}
-                  busy={invitedBusy === person.phone}
-                  disabled={invitedBusy !== null || busy}
-                  onPress={() => confirmRemoveInvite(person)}
-                />
+                  <IconButton
+                    icon={UserMinus}
+                    tone="plain"
+                    label={`Remove ${person.name}`}
+                    busy={invitedBusy === person.phone}
+                    disabled={invitedBusy !== null || busy}
+                    onPress={() => confirmRemoveInvite(person)}
+                  />
+                </View>
               </View>
             ))}
           </View>
@@ -585,6 +588,8 @@ const styles = StyleSheet.create({
   actions: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 10 },
   chips: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 },
   guest: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 44 },
+  invited: { flexWrap: "wrap" },
+  invitedActions: { flexDirection: "row", alignItems: "center", gap: 12, marginLeft: "auto" },
   group: { fontFamily: fonts.bold, fontSize: 15, marginTop: 8 },
   confirm: { gap: 12, padding: 14, backgroundColor: c.pinkSoft, borderRadius: 16 },
 });
