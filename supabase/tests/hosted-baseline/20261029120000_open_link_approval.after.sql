@@ -75,8 +75,9 @@ end $$;
 -- build claims the link; Dee asks; the link guest already on the event gets 'already'. The host sees five waiting,
 -- approves Ana and Bea and declines Dee, and Bea is then banned. Cal and the tester are still waiting. The rollback
 -- restores every fingerprint entry exactly, deletes the requests with their table and the request and approval
--- notices, and turns the approval grants into link grants (Bea's ban stays a ban); approved guests keep their places
--- and their access, and the restored bodies admit straight from the link again. Rehearsed, then undone.
+-- notices, and turns the approval grants into link grants with their times (Bea's ban stays a ban); approved guests
+-- keep their places and their access, and the restored bodies admit straight from the link again. Rehearsed, then
+-- undone.
 begin;
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"cc000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
@@ -131,6 +132,12 @@ do $$ begin
 end $$;
 reset role;
 update private.beta_access set revoked_at=now() where user_id='cc000000-0000-4000-8000-000000000003';
+-- The approval grants' times, set apart from this transaction's now() so a rollback that rewrote the rows would show,
+-- and kept (outside both schemas, so not in the fingerprint) to compare after the rollback.
+update private.beta_access set granted_at=granted_at-interval '2 days', revoked_at=revoked_at-interval '1 day'
+ where source='approval';
+create temporary table approval_rehearsal_grants on commit drop as
+ select user_id, granted_at, revoked_at from private.beta_access where source='approval';
 do $$ begin
  if (select count(*) from private.join_requests where plan_id='cd000000-0000-4000-8000-000000000001')<>5
  or (select count(*) from private.notification_outbox where kind='join_request')<>5
@@ -169,6 +176,13 @@ do $$ declare item record; begin
  or exists(select 1 from private.beta_access where user_id in ('cc000000-0000-4000-8000-000000000004','cc000000-0000-4000-8000-000000000006'))
  or exists(select 1 from private.beta_access where source not in ('link','maintainer','invitation')) then
   raise exception 'Rollback changed the wrong grants';
+ end if;
+ -- Each converted grant keeps its times: granted_at, and revoked_at (null while live).
+ if (select count(*) from approval_rehearsal_grants)<>2
+ or exists(select 1 from approval_rehearsal_grants g left join private.beta_access b on b.user_id=g.user_id
+   where b.user_id is null or b.source<>'link' or b.granted_at is distinct from g.granted_at
+    or b.revoked_at is distinct from g.revoked_at) then
+  raise exception 'Rollback changed a converted grant''s times';
  end if;
  -- Approved guests keep their places and answers (Bea too, as a banned link guest would); Ana keeps her access and
  -- Bea stays out. Waiting and declined people have no place; everyone keeps the name and tick they gave.

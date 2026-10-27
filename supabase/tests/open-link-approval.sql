@@ -403,23 +403,50 @@ do $$ begin
 end $$;
 
 -- decide: a cancelled or started event refuses approval (42501) and the request stays waiting. Eve asks on the Quiz.
+-- The host's list shows her while the Quiz is open and nobody once it is cancelled or started ([]), while someone
+-- else still gets 42501 there.
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000011","role":"authenticated"}',true);
 do $$ begin perform public.request_to_join(repeat('Q',22),null,'accepted',null); end $$;
+select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+do $$ declare r jsonb; begin
+ r := public.plan_join_requests('d2100000-0000-4000-8000-000000000004');
+ if jsonb_array_length(r) is distinct from 1 or r->0->>'user_id' is distinct from 'd2000000-0000-4000-8000-000000000011' then
+  raise exception 'Open Quiz list was %', r;
+ end if;
+end $$;
 reset role;
 update public.plans set status='cancelled' where id='d2100000-0000-4000-8000-000000000004';
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 do $$ begin
+ if public.plan_join_requests('d2100000-0000-4000-8000-000000000004') is distinct from '[]'::jsonb then raise exception 'A cancelled event listed requests'; end if;
  begin perform public.decide_join_request('d2100000-0000-4000-8000-000000000004','d2000000-0000-4000-8000-000000000011',true); raise exception 'Approved on a cancelled event';
  exception when insufficient_privilege then null; end;
 end $$;
+select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
+do $$ begin
+ begin perform public.plan_join_requests('d2100000-0000-4000-8000-000000000004'); raise exception 'Someone else listed a cancelled event''s requests';
+ exception when others then if sqlstate is distinct from '42501' or sqlerrm is distinct from 'Plan owner required' then raise; end if; end;
+end $$;
 reset role;
+do $$ begin
+ if (select status from private.join_requests where plan_id='d2100000-0000-4000-8000-000000000004' and user_id='d2000000-0000-4000-8000-000000000011') is distinct from 'waiting' then
+  raise exception 'Cancelling the event changed the request';
+ end if;
+end $$;
 update public.plans set status='active', starts_at=now()-interval '1 minute' where id='d2100000-0000-4000-8000-000000000004';
 set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 do $$ begin
+ if public.plan_join_requests('d2100000-0000-4000-8000-000000000004') is distinct from '[]'::jsonb then raise exception 'A started event listed requests'; end if;
  begin perform public.decide_join_request('d2100000-0000-4000-8000-000000000004','d2000000-0000-4000-8000-000000000011',true); raise exception 'Approved on a started event';
  exception when insufficient_privilege then null; end;
+end $$;
+select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
+do $$ begin
+ begin perform public.plan_join_requests('d2100000-0000-4000-8000-000000000004'); raise exception 'Someone else listed a started event''s requests';
+ exception when others then if sqlstate is distinct from '42501' or sqlerrm is distinct from 'Plan owner required' then raise; end if; end;
 end $$;
 reset role;
 do $$ begin

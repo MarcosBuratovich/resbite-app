@@ -18,11 +18,18 @@
 -- Kept: approved guests stay on their events with their answers, as they would have joined under GI2; the profiles,
 -- names and 18+ ticks people gave while asking stay. Folded accounts stay folded: a request a fold moved goes with the
 -- table.
+-- Builds: once this has run, app and web builds made with this plan call functions that no longer exist (the open
+-- link, the waiting screen, Waiting for you); see step 7 of qa/open-link-approval-2026-10-29/README.md.
 -- Order: run it before supabase/rollback/20261028120000_contact_invitations.rollback.sql, never after it. That file
 -- drops fold_web_account() with its public wrapper, and private.phone_invitations, which the fold body restored here
--- updates: run after it, this file would bring back the private fold on its own, executable by everyone instead of
--- no one, updating a table that is gone, and would widen that file's two checks again. That file's checks also
--- cannot go back while request notices or approval grants exist, and only this file clears them.
+-- updates: run after it, this file would bring back the private fold on its own, executable by any signed-in account
+-- instead of no one, updating a table that is gone, and would widen that file's two checks again. That file's checks
+-- also cannot go back while request notices or approval grants exist, and only this file clears them. The guard
+-- below stops this file when that rollback has already run (private.phone_invitations is gone); it changes nothing.
+
+do $$ begin
+ if to_regclass('private.phone_invitations') is null then raise exception 'Run this before the contact-invitations rollback'; end if;
+end $$;
 
 -- Asking and deciding.
 drop function public.decide_join_request(uuid,uuid,boolean);

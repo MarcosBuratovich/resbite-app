@@ -176,6 +176,7 @@ end $$;
 -- The waiting screen changes the answer by event: only a waiting request of someone not on the event yet (22023
 -- "Request already decided" when there is none, it was approved or declined, or they are on the event another way), on
 -- an active event that hasn't started (42501 "Invitation unavailable"). A refusal changes nothing. Nothing is queued.
+-- The update is checked too: a request no longer waiting by then is refused the same way, never answered as saved.
 create function private.change_join_answer(p_plan uuid, p_response text) returns jsonb language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := auth.uid();
 begin
@@ -190,16 +191,19 @@ begin
   raise exception 'Invitation unavailable' using errcode='42501';
  end if;
  update private.join_requests set response=p_response where plan_id=p_plan and user_id=v_uid and status='waiting';
+ if not found then raise exception 'Request already decided' using errcode='22023'; end if;
  return jsonb_build_object('status','waiting','response',p_response);
 end $$;
 
 -- The host's waiting list: [{user_id, name, response, ending, created_at}], ending being the last two digits of the
 -- person's number, or null. People already on the event, and people whose account is being deleted, are left out.
--- Owner only (42501).
+-- Owner only (42501). Only while someone can still be approved: a cancelled or started event lists nobody ([]), as
+-- decide_join_request would refuse them; the requests themselves stay waiting.
 create function private.plan_join_requests(p_plan uuid) returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester();
 begin
  if not exists(select 1 from public.plans where id=p_plan and owner_id=v_uid) then raise exception 'Plan owner required' using errcode='42501'; end if;
+ if not exists(select 1 from public.plans where id=p_plan and status='active' and starts_at>now()) then return '[]'::jsonb; end if;
  return coalesce((select jsonb_agg(jsonb_build_object('user_id',j.user_id,'name',(select display_name from public.profiles where id=j.user_id),
    'response',j.response,'ending',(select nullif(right(u.phone,2),'') from auth.users u where u.id=j.user_id),'created_at',j.created_at)
    order by j.created_at,j.user_id)
