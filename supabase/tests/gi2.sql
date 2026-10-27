@@ -1,5 +1,7 @@
 -- GI2 guest accounts (docs/superpowers/specs/2026-10-21-gi2-guest-accounts-design.md). Synthetic identities only.
 -- One rolled-back block per slice; each block uses its own UUID prefix family (b1, b2, …).
+-- Since open-link approval (20261029120000), joining by the link is a request: the grant and the place on the event
+-- come from the organizer approving it. These blocks approve where GI2 admitted.
 
 -- Block 1: the grant and the join.
 begin;
@@ -23,24 +25,40 @@ do $$ begin
   '2099-06-01 19:30+00',null,'UTC','Cinema room, 12 Example Street','');
  insert into gi2_codes values('one',public.plan_link('b1100000-0000-4000-8000-000000000001'));
 end $$;
--- A confirmed account with no roster row and no profile is not approved until it joins through a live link.
+-- A confirmed account with no roster row and no profile is not approved until it asks through a live link and the
+-- organizer approves.
 select set_config('request.jwt.claims','{"sub":"b1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 do $$ declare id uuid; begin
  if public.account_access_status()->>'status'<>'access_pending' then raise exception 'Guest approved before joining'; end if;
  id := public.join_by_link((select code from gi2_codes where name='one'),'Guest Two','2026-10');
  if id<>'b1100000-0000-4000-8000-000000000001' then raise exception 'Join returned the wrong plan'; end if;
- if public.account_access_status()->>'status'<>'approved' then raise exception 'Guest not approved after joining'; end if;
+ if public.account_access_status()->>'status'<>'access_pending' then raise exception 'Guest approved by asking'; end if;
 end $$;
 reset role;
--- One transaction wrote the tick, the grant, the profile, the attendance and the organizer's notice.
+-- One transaction wrote the tick, the profile, the waiting request and the organizer's notice; no grant, no place.
 do $$ declare v_link uuid := (select id from private.plan_links where code=(select code from gi2_codes where name='one')); begin
- if (select count(*) from private.beta_access where user_id='b1000000-0000-4000-8000-000000000002' and source='link' and plan_link_id=v_link and revoked_at is null and granted_at is not null)<>1 then raise exception 'One live grant from the link expected'; end if;
+ if exists(select 1 from private.beta_access where user_id='b1000000-0000-4000-8000-000000000002') then raise exception 'Asking made a grant'; end if;
  if (select count(*) from private.age_attestations where user_id='b1000000-0000-4000-8000-000000000002' and terms_version='2026-10' and method='tick' and confirmed_at is not null)<>1 then raise exception 'One attestation expected'; end if;
  if (select display_name from public.profiles where id='b1000000-0000-4000-8000-000000000002') is distinct from 'Guest Two' then raise exception 'Profile not created with the name'; end if;
- if (select response from public.attendees where plan_id='b1100000-0000-4000-8000-000000000001' and user_id='b1000000-0000-4000-8000-000000000002') is distinct from 'pending' then raise exception 'Guest not pending on the event'; end if;
- if (select count(*) from private.notification_outbox where plan_id='b1100000-0000-4000-8000-000000000001' and kind='invitation'
+ if exists(select 1 from public.attendees where user_id='b1000000-0000-4000-8000-000000000002') then raise exception 'Asking put the guest on the event'; end if;
+ if (select status||'|'||response||'|'||plan_link_id from private.join_requests where plan_id='b1100000-0000-4000-8000-000000000001' and user_id='b1000000-0000-4000-8000-000000000002')
+  is distinct from 'waiting|pending|'||v_link then raise exception 'One waiting request from the link expected'; end if;
+ if (select count(*) from private.notification_outbox where plan_id='b1100000-0000-4000-8000-000000000001' and kind='join_request'
   and recipient_id='b1000000-0000-4000-8000-000000000001' and actor_id='b1000000-0000-4000-8000-000000000002'
-  and dedupe_key='link:'||v_link||':b1000000-0000-4000-8000-000000000002')<>1 then raise exception 'One invitation notice to the organizer expected'; end if;
+  and dedupe_key like 'join:b1100000-0000-4000-8000-000000000001:b1000000-0000-4000-8000-000000000002:'||v_link||':%')<>1 then raise exception 'One request notice to the organizer expected'; end if;
+end $$;
+-- The organizer approves: a live grant from the approval, and the guest on the event, not answered yet.
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"b1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.decide_join_request('b1100000-0000-4000-8000-000000000001','b1000000-0000-4000-8000-000000000002',true);
+select set_config('request.jwt.claims','{"sub":"b1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+do $$ begin
+ if public.account_access_status()->>'status'<>'approved' then raise exception 'Guest not approved after the organizer approved'; end if;
+end $$;
+reset role;
+do $$ declare v_link uuid := (select id from private.plan_links where code=(select code from gi2_codes where name='one')); begin
+ if (select count(*) from private.beta_access where user_id='b1000000-0000-4000-8000-000000000002' and source='approval' and plan_link_id=v_link and revoked_at is null and granted_at is not null)<>1 then raise exception 'One live grant from the approval expected'; end if;
+ if (select response from public.attendees where plan_id='b1100000-0000-4000-8000-000000000001' and user_id='b1000000-0000-4000-8000-000000000002') is distinct from 'pending' then raise exception 'Guest not pending on the event'; end if;
 end $$;
 -- Joining again returns the event and rewrites nothing: the first name and the first tick stay.
 set local role authenticated;
@@ -58,7 +76,7 @@ do $$ begin
  if (select display_name from public.profiles where id='b1000000-0000-4000-8000-000000000002')<>'Guest Two' then raise exception 'A later join rewrote the name'; end if;
  if (select terms_version from private.age_attestations where user_id='b1000000-0000-4000-8000-000000000002')<>'2026-10' then raise exception 'A later join rewrote the tick'; end if;
  if (select count(*) from private.beta_access where user_id='b1000000-0000-4000-8000-000000000002')<>1 then raise exception 'A later join added a grant'; end if;
- if (select count(*) from private.notification_outbox where plan_id='b1100000-0000-4000-8000-000000000001' and kind='invitation')<>1 then raise exception 'A later join notified again'; end if;
+ if (select count(*) from private.notification_outbox where plan_id='b1100000-0000-4000-8000-000000000001' and kind='join_request')<>1 then raise exception 'A later join notified again'; end if;
 end $$;
 -- The grant stands in for the roster row only: a grant holder who is banned, anonymous or leaving is not approved.
 update auth.users set banned_until='2099-01-01 00:00+00' where id='b1000000-0000-4000-8000-000000000002';
@@ -193,10 +211,11 @@ do $$ begin
   'b1000000-0000-4000-8000-00000000000b')) then raise exception 'A refused join made a profile'; end if;
  if (select display_name from public.profiles where id='b1000000-0000-4000-8000-000000000008')<>'Leaving' then raise exception 'A refused join renamed a profile'; end if;
  if exists(select 1 from public.attendees where user_id<>'b1000000-0000-4000-8000-000000000002') then raise exception 'A refused join added a guest'; end if;
- if exists(select 1 from private.notification_outbox where actor_id<>'b1000000-0000-4000-8000-000000000002') then raise exception 'A refused join notified the organizer'; end if;
+ if exists(select 1 from private.notification_outbox where kind='join_request' and actor_id<>'b1000000-0000-4000-8000-000000000002') then raise exception 'A refused join notified the organizer'; end if;
+ if exists(select 1 from private.join_requests where user_id<>'b1000000-0000-4000-8000-000000000002') then raise exception 'A refused join stored a request'; end if;
 end $$;
 -- An account that already has a profile (a former tester) keeps its name: none is needed, and the one sent is ignored.
--- An account whose tick is already stored keeps the first one: none is needed.
+-- An account whose tick is already stored keeps the first one: none is needed. Both only ask: no grant yet.
 insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data) values
  ('b1000000-0000-4000-8000-000000000009','gi2-1-former@resbite-test.invalid',now(),'{}'),
  ('b1000000-0000-4000-8000-00000000000a','gi2-1-ticked@resbite-test.invalid',now(),'{}');
@@ -206,7 +225,7 @@ set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"b1000000-0000-4000-8000-000000000009","role":"authenticated"}',true);
 do $$ begin
  if public.join_by_link((select code from gi2_codes where name='one'),'','2026-10')<>'b1100000-0000-4000-8000-000000000001' then raise exception 'Former tester join returned another plan'; end if;
- if public.account_access_status()->>'status'<>'approved' then raise exception 'Former tester not approved after joining'; end if;
+ if public.account_access_status()->>'status'<>'access_pending' then raise exception 'Former tester approved by asking'; end if;
 end $$;
 select set_config('request.jwt.claims','{"sub":"b1000000-0000-4000-8000-00000000000a","role":"authenticated"}',true);
 do $$ begin
@@ -238,11 +257,13 @@ end $$;
 reset role;
 do $$ begin
  if (select display_name from public.profiles where id='b1000000-0000-4000-8000-000000000009')<>'Former Tester' then raise exception 'Join renamed an existing profile'; end if;
- if not exists(select 1 from private.beta_access where user_id='b1000000-0000-4000-8000-000000000009' and revoked_at is null)
- or not exists(select 1 from private.age_attestations where user_id='b1000000-0000-4000-8000-000000000009' and terms_version='2026-10') then raise exception 'Former tester has no grant or tick'; end if;
+ if exists(select 1 from private.beta_access where user_id='b1000000-0000-4000-8000-000000000009')
+ or not exists(select 1 from private.age_attestations where user_id='b1000000-0000-4000-8000-000000000009' and terms_version='2026-10')
+ or not exists(select 1 from private.join_requests where user_id='b1000000-0000-4000-8000-000000000009' and status='waiting') then raise exception 'Former tester should have a tick and a waiting request, no grant'; end if;
  if (select count(*) from private.age_attestations where user_id='b1000000-0000-4000-8000-00000000000a' and terms_version='2025-01')<>1 then raise exception 'Join replaced a stored tick'; end if;
  if (select display_name from public.profiles where id='b1000000-0000-4000-8000-00000000000a') is distinct from 'Ticked'
- or not exists(select 1 from private.beta_access where user_id='b1000000-0000-4000-8000-00000000000a' and revoked_at is null) then raise exception 'Already-ticked account not joined'; end if;
+ or not exists(select 1 from private.join_requests where user_id='b1000000-0000-4000-8000-00000000000a' and status='waiting')
+ or exists(select 1 from private.beta_access where user_id='b1000000-0000-4000-8000-00000000000a') then raise exception 'Already-ticked account did not ask'; end if;
  if has_function_privilege('anon','public.join_by_link(text,text,text)','execute') or has_function_privilege('service_role','public.join_by_link(text,text,text)','execute')
  or has_function_privilege('anon','private.join_by_link(text,text,text)','execute') or has_function_privilege('service_role','private.join_by_link(text,text,text)','execute')
  or not has_function_privilege('authenticated','public.join_by_link(text,text,text)','execute') then raise exception 'join_by_link grants wrong'; end if;
@@ -301,9 +322,11 @@ do $$ begin
  or exists(select 1 from private.age_attestations where user_id='b2000000-0000-4000-8000-000000000003')
  or exists(select 1 from public.profiles where id='b2000000-0000-4000-8000-000000000003')
  or exists(select 1 from public.attendees where user_id='b2000000-0000-4000-8000-000000000003')
- or exists(select 1 from private.notification_outbox where kind='invitation' and actor_id='b2000000-0000-4000-8000-000000000003') then raise exception 'A dead link wrote something'; end if;
+ or exists(select 1 from private.join_requests where user_id='b2000000-0000-4000-8000-000000000003')
+ or exists(select 1 from private.notification_outbox where actor_id='b2000000-0000-4000-8000-000000000003') then raise exception 'A dead link wrote something'; end if;
 end $$;
--- A fresh event: the guest joins (the name is trimmed); a roster tester takes GI1's path and gets no grant or tick.
+-- A fresh event: the guest asks (the name is trimmed); a roster tester takes GI1's path and gets no grant or tick. The
+-- organizer approves both.
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"b2000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 do $$ begin
@@ -319,6 +342,9 @@ select set_config('request.jwt.claims','{"sub":"b2000000-0000-4000-8000-00000000
 do $$ begin
  if public.join_by_link((select code from gi2_codes where name='three'),'ignored','ignored')<>'b2100000-0000-4000-8000-000000000003' then raise exception 'Tester join returned another plan'; end if;
 end $$;
+select set_config('request.jwt.claims','{"sub":"b2000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.decide_join_request('b2100000-0000-4000-8000-000000000003','b2000000-0000-4000-8000-000000000003',true);
+select public.decide_join_request('b2100000-0000-4000-8000-000000000003','b2000000-0000-4000-8000-000000000002',true);
 reset role;
 do $$ begin
  if (select display_name from public.profiles where id='b2000000-0000-4000-8000-000000000003')<>'Guest Three' then raise exception 'Name not trimmed'; end if;
@@ -346,7 +372,8 @@ do $$ begin
  or exists(select 1 from private.age_attestations where user_id='b2000000-0000-4000-8000-000000000004')
  or exists(select 1 from public.profiles where id='b2000000-0000-4000-8000-000000000004')
  or exists(select 1 from public.attendees where user_id='b2000000-0000-4000-8000-000000000004')
- or exists(select 1 from private.notification_outbox where kind='invitation' and actor_id='b2000000-0000-4000-8000-000000000004') then raise exception 'A started event wrote something'; end if;
+ or exists(select 1 from private.join_requests where user_id='b2000000-0000-4000-8000-000000000004')
+ or exists(select 1 from private.notification_outbox where actor_id='b2000000-0000-4000-8000-000000000004') then raise exception 'A started event wrote something'; end if;
 end $$;
 -- Notices reach a live grant holder and the roster tester, not a revoked grant or someone with neither. The
 -- sender's check is local-only (20261022120001), so the hosted-baseline run skips these assertions.
@@ -404,6 +431,7 @@ do $$ begin
  or exists(select 1 from private.age_attestations where user_id in ('b2000000-0000-4000-8000-000000000001','b2000000-0000-4000-8000-000000000004'))
  or exists(select 1 from public.profiles where id='b2000000-0000-4000-8000-000000000004')
  or exists(select 1 from public.attendees where user_id in ('b2000000-0000-4000-8000-000000000001','b2000000-0000-4000-8000-000000000004'))
+ or exists(select 1 from private.join_requests where plan_id='b2100000-0000-4000-8000-000000000004')
  or exists(select 1 from private.notification_outbox where plan_id='b2100000-0000-4000-8000-000000000004') then raise exception 'A de-provisioned organizer''s link wrote something'; end if;
  if (select display_name from public.profiles where id='b2000000-0000-4000-8000-000000000001')<>'Owner' then raise exception 'The refused organizer was renamed'; end if;
 end $$;
@@ -413,6 +441,8 @@ select set_config('request.jwt.claims','{"sub":"b2000000-0000-4000-8000-00000000
 do $$ begin
  if public.join_by_link((select code from gi2_codes where name='four'),'Late Guest','2026-10')<>'b2100000-0000-4000-8000-000000000004' then raise exception 'Join refused after the organizer is back'; end if;
 end $$;
+select set_config('request.jwt.claims','{"sub":"b2000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.decide_join_request('b2100000-0000-4000-8000-000000000004','b2000000-0000-4000-8000-000000000004',true);
 reset role;
 do $$ begin
  if not exists(select 1 from private.beta_access where user_id='b2000000-0000-4000-8000-000000000004' and revoked_at is null
@@ -425,6 +455,7 @@ set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"b2000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 select public.join_by_link((select code from gi2_codes where name='four'),'ignored','ignored');
 select set_config('request.jwt.claims','{"sub":"b2000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.decide_join_request('b2100000-0000-4000-8000-000000000004','b2000000-0000-4000-8000-000000000002',true);
 do $$ begin
  insert into gi2_codes values('five',public.rotate_plan_link('b2100000-0000-4000-8000-000000000004'));
 end $$;
@@ -443,11 +474,11 @@ do $$ begin
  or exists(select 1 from private.age_attestations where user_id='b2000000-0000-4000-8000-000000000002') then raise exception 'A switched-off tester got a grant or a tick'; end if;
  if (select display_name from public.profiles where id='b2000000-0000-4000-8000-000000000002')<>'Tester' then raise exception 'A refused join renamed the tester'; end if;
  if (select count(*) from public.attendees where plan_id='b2100000-0000-4000-8000-000000000004' and user_id='b2000000-0000-4000-8000-000000000002')<>1 then raise exception 'A refused join changed the attendance'; end if;
- if (select count(*) from private.notification_outbox where plan_id='b2100000-0000-4000-8000-000000000004' and kind='invitation'
+ if (select count(*) from private.notification_outbox where plan_id='b2100000-0000-4000-8000-000000000004' and kind='join_request'
   and actor_id='b2000000-0000-4000-8000-000000000002')<>1 then raise exception 'A refused join notified the organizer'; end if;
 end $$;
--- A former tester whose roster row was deleted, not switched off, already on the event gets a grant from the new
--- link, and the organizer no second notice.
+-- A former tester whose roster row was deleted, not switched off, already on the event gets the event back from the
+-- new link but no grant (only an approval grants access now), and the organizer no second notice.
 delete from private.tester_roster where email='gi2-2-tester@resbite-test.invalid';
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"b2000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
@@ -457,10 +488,9 @@ do $$ begin
 end $$;
 reset role;
 do $$ begin
- if not exists(select 1 from private.beta_access where user_id='b2000000-0000-4000-8000-000000000002' and revoked_at is null
-  and plan_link_id=(select id from private.plan_links where code=(select code from gi2_codes where name='five'))) then raise exception 'Former tester got no grant'; end if;
+ if exists(select 1 from private.beta_access where user_id='b2000000-0000-4000-8000-000000000002') then raise exception 'Former tester got a grant without an approval'; end if;
  if (select count(*) from public.attendees where plan_id='b2100000-0000-4000-8000-000000000004' and user_id='b2000000-0000-4000-8000-000000000002')<>1 then raise exception 'Former tester attendance changed'; end if;
- if (select count(*) from private.notification_outbox where plan_id='b2100000-0000-4000-8000-000000000004' and kind='invitation'
+ if (select count(*) from private.notification_outbox where plan_id='b2100000-0000-4000-8000-000000000004' and kind='join_request'
   and actor_id='b2000000-0000-4000-8000-000000000002')<>1 then raise exception 'An existing guest notified the organizer again'; end if;
 end $$;
 rollback;
@@ -489,6 +519,11 @@ end $$;
 select set_config('request.jwt.claims','{"sub":"b3000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 do $$ begin
  if public.join_by_link((select code from gi2_codes where name='one'),'Guest Three','2026-10')<>'b3100000-0000-4000-8000-000000000001' then raise exception 'Guest join returned another plan'; end if;
+end $$;
+select set_config('request.jwt.claims','{"sub":"b3000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.decide_join_request('b3100000-0000-4000-8000-000000000001','b3000000-0000-4000-8000-000000000002',true);
+select set_config('request.jwt.claims','{"sub":"b3000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+do $$ begin
  if public.account_access_status()->>'status'<>'approved' then raise exception 'Grant holder not approved before deleting'; end if;
 end $$;
 reset role;

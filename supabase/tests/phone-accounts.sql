@@ -284,8 +284,9 @@ do $$ declare r text; begin
 end $$;
 rollback;
 -- Joining by an event link (GI2's join_by_link): a confirmed phone counts as a confirmed account, so a phone-only
--- account waiting for access joins and becomes eligible; an account with neither confirmed is refused. Synthetic
--- identities only (prefix c3); one rolled-back block.
+-- account waiting for access asks to join and becomes eligible once the host approves (open-link approval,
+-- 20261029120000); an account with neither confirmed is refused. Synthetic identities only (prefix c3); one
+-- rolled-back block.
 begin;
 insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) values
  ('c3000000-0000-4000-8000-000000000001','phone-accounts-link-owner@resbite-test.invalid',now(),null,null),
@@ -307,7 +308,13 @@ do $$ begin
  if public.join_by_link((select code from phone_link_codes where name='one'),'Phone Guest','2026-10')<>'c3100000-0000-4000-8000-000000000001' then
   raise exception 'Phone-only join returned another plan';
  end if;
- if public.account_access_status()->>'status'<>'approved' then raise exception 'Phone-only account not approved after joining'; end if;
+ if public.account_access_status()->>'status'<>'access_pending' then raise exception 'Phone-only account approved before the host approved'; end if;
+end $$;
+select set_config('request.jwt.claims','{"sub":"c3000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.decide_join_request('c3100000-0000-4000-8000-000000000001','c3000000-0000-4000-8000-000000000002',true);
+select set_config('request.jwt.claims','{"sub":"c3000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+do $$ begin
+ if public.account_access_status()->>'status'<>'approved' then raise exception 'Phone-only account not approved after the host approved'; end if;
 end $$;
 select set_config('request.jwt.claims','{"sub":"c3000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
 do $$ begin
@@ -317,7 +324,7 @@ end $$;
 reset role;
 do $$ begin
  if not private.user_eligible('c3000000-0000-4000-8000-000000000002') then raise exception 'Phone-only account not eligible after joining'; end if;
- if (select count(*) from private.beta_access where user_id='c3000000-0000-4000-8000-000000000002' and source='link' and revoked_at is null)<>1 then raise exception 'One link grant expected'; end if;
+ if (select count(*) from private.beta_access where user_id='c3000000-0000-4000-8000-000000000002' and source='approval' and revoked_at is null)<>1 then raise exception 'One approval grant expected'; end if;
  if (select display_name from public.profiles where id='c3000000-0000-4000-8000-000000000002') is distinct from 'Phone Guest' then raise exception 'Profile not created with the name'; end if;
  if (select response from public.attendees where plan_id='c3100000-0000-4000-8000-000000000001' and user_id='c3000000-0000-4000-8000-000000000002') is distinct from 'pending' then raise exception 'Phone guest not on the event'; end if;
  if exists(select 1 from private.beta_access where user_id='c3000000-0000-4000-8000-000000000003')

@@ -12,3 +12,4 @@ gi1.sql
 gi2.sql
 phone-accounts.sql
 contact-invitations.sql
+open-link-approval.sql

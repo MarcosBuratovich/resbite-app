@@ -17,10 +17,16 @@ do $$ begin
   '2099-09-01 19:00+00',null,'UTC','The hall','');
  insert into gi2_rollback_codes values('one',public.plan_link('b6100000-0000-4000-8000-000000000001'));
 end $$;
--- A link-made guest, approved through the grant.
+-- A link-made guest, approved through the grant. Since open-link approval (20261029120000) the link join is a request
+-- and the grant comes from the host approving it.
 select set_config('request.jwt.claims','{"sub":"b6000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 do $$ begin
  if public.join_by_link((select code from gi2_rollback_codes where name='one'),'Rollback Guest','2026-10')<>'b6100000-0000-4000-8000-000000000001' then raise exception 'Join returned another plan'; end if;
+end $$;
+select set_config('request.jwt.claims','{"sub":"b6000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.decide_join_request('b6100000-0000-4000-8000-000000000001','b6000000-0000-4000-8000-000000000002',true);
+select set_config('request.jwt.claims','{"sub":"b6000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+do $$ begin
  if public.account_access_status()->>'status'<>'approved' then raise exception 'Guest not approved after joining'; end if;
 end $$;
 reset role;

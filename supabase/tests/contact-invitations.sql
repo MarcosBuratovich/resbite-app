@@ -652,14 +652,16 @@ do $$ begin
  begin perform public.join_by_link(repeat('P',22),'Web Pat','2026-10'); raise exception 'The banned web account joined by a link';
  exception when insufficient_privilege then if sqlerrm<>'Invitation unavailable' then raise exception 'Wrong refusal: %', sqlerrm; end if; end;
 end $$;
--- the same link lets in a folded web account that was never banned (17, above): the refusal is the ban's
+-- the same link takes a request from a folded web account that was never banned (17, above): the refusal is the
+-- ban's. Since open-link approval (20261029120000) a link join is a waiting request, not a place on the event.
 select set_config('request.jwt.claims','{"sub":"d1000000-0000-4000-8000-000000000017","role":"authenticated"}',true);
 do $$ begin perform public.join_by_link(repeat('P',22),'Web Jo','2026-10'); end $$;
 reset role;
 do $$ begin
  if exists(select 1 from public.attendees where user_id='d1000000-0000-4000-8000-000000000020')
+  or exists(select 1 from private.join_requests where user_id='d1000000-0000-4000-8000-000000000020')
   or exists(select 1 from private.beta_access where user_id='d1000000-0000-4000-8000-000000000020' and revoked_at is null) then raise exception 'The refused join wrote something'; end if;
- if not exists(select 1 from public.attendees where plan_id='d1100000-0000-4000-8000-000000000001' and user_id='d1000000-0000-4000-8000-000000000017') then raise exception 'The control join failed'; end if;
+ if not exists(select 1 from private.join_requests where plan_id='d1100000-0000-4000-8000-000000000001' and user_id='d1000000-0000-4000-8000-000000000017' and status='waiting') then raise exception 'The control join failed'; end if;
 end $$;
 -- Final review fixes (F5). M1: re-inviting a revoked invitation brings it back fresh (no answer, nobody attached), and
 -- inviting someone in the app turns off a live personal link for the same number on that event, and only that event.

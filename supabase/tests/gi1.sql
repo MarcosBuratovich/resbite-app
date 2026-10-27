@@ -1,5 +1,7 @@
 -- GI1 event links (docs/superpowers/specs/2026-10-21-gi1-event-links-design.md). Synthetic identities only.
 -- One rolled-back block per slice; each block uses its own UUID prefix family (a1, a2, a3).
+-- Since open-link approval (20261029120000), joining by the link is a request the organizer approves; these blocks
+-- approve where GI1 admitted.
 
 -- Block 1: the link (plan_link, rotate_plan_link) and remove_guest.
 begin;
@@ -44,10 +46,12 @@ do $$ begin
  exception when insufficient_privilege then null; end;
  begin perform public.remove_guest('a1100000-0000-4000-8000-000000000001','a1000000-0000-4000-8000-000000000003'); raise exception 'Guest removed a guest';
  exception when insufficient_privilege then null; end;
- -- The guest joins by the current link; the other person by a per-person link shared before GI1.
+ -- The guest asks through the current link and the organizer approves; the other person joins by a per-person link
+ -- shared before GI1.
  if public.claim_plan_link((select code from gi1_codes where name='current'))<>'a1100000-0000-4000-8000-000000000001' then raise exception 'Claim returned the wrong plan'; end if;
 end $$;
 select set_config('request.jwt.claims','{"sub":"a1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.decide_join_request('a1100000-0000-4000-8000-000000000001','a1000000-0000-4000-8000-000000000002',true);
 select public.create_invite('a1200000-0000-4000-8000-000000000001','a1100000-0000-4000-8000-000000000001',repeat('b',64));
 select public.create_invite('a1200000-0000-4000-8000-000000000002','a1100000-0000-4000-8000-000000000001',repeat('c',64));
 select set_config('request.jwt.claims','{"sub":"a1000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
@@ -112,12 +116,17 @@ do $$ begin
  perform public.set_guest_note('a2100000-0000-4000-8000-000000000001','Secret note to guests');
  insert into gi1_codes values('film',public.plan_link('a2100000-0000-4000-8000-000000000001')),('plain',public.plan_link('a2100000-0000-4000-8000-000000000002'));
 end $$;
--- Two guests join; one says Going, the other Maybe.
+-- Two guests ask, the organizer approves them; one says Going, the other Maybe.
 select set_config('request.jwt.claims','{"sub":"a2000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 select public.claim_plan_link((select code from gi1_codes where name='film'));
-select public.respond('a2100000-0000-4000-8000-000000000001','accepted',(select version from public.attendees where plan_id='a2100000-0000-4000-8000-000000000001' and user_id='a2000000-0000-4000-8000-000000000002'));
 select set_config('request.jwt.claims','{"sub":"a2000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
 select public.claim_plan_link((select code from gi1_codes where name='film'));
+select set_config('request.jwt.claims','{"sub":"a2000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.decide_join_request('a2100000-0000-4000-8000-000000000001','a2000000-0000-4000-8000-000000000002',true);
+select public.decide_join_request('a2100000-0000-4000-8000-000000000001','a2000000-0000-4000-8000-000000000003',true);
+select set_config('request.jwt.claims','{"sub":"a2000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+select public.respond('a2100000-0000-4000-8000-000000000001','accepted',(select version from public.attendees where plan_id='a2100000-0000-4000-8000-000000000001' and user_id='a2000000-0000-4000-8000-000000000002'));
+select set_config('request.jwt.claims','{"sub":"a2000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
 select public.respond('a2100000-0000-4000-8000-000000000001','maybe',(select version from public.attendees where plan_id='a2100000-0000-4000-8000-000000000001' and user_id='a2000000-0000-4000-8000-000000000003'));
 -- The page reads without a session.
 set local role anon;
@@ -214,10 +223,9 @@ do $$ declare v integer; begin
 end $$;
 select set_config('request.jwt.claims','{"sub":"a3000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 do $$ declare id uuid; begin
- -- Joining: not answered yet, one notice to the organizer; joining again adds nothing.
+ -- Asking: a waiting request, not answered yet, one notice to the organizer; asking again adds nothing.
  id := public.claim_plan_link((select code from gi1_codes where name='one'));
  if id<>'a3100000-0000-4000-8000-000000000001' then raise exception 'Wrong plan joined'; end if;
- if (select response from public.attendees where plan_id=id and user_id='a3000000-0000-4000-8000-000000000002')<>'pending' then raise exception 'Not pending after joining'; end if;
  if public.claim_plan_link((select code from gi1_codes where name='one'))<>id then raise exception 'Second join differs'; end if;
  -- Unknown or malformed codes are refused like a revoked link.
  begin perform public.claim_plan_link('AAAAAAAAAAAAAAAAAAAAAA'); raise exception 'Unknown code joined';
@@ -225,9 +233,17 @@ do $$ declare id uuid; begin
  begin perform public.claim_plan_link('nope'); raise exception 'Malformed code joined';
  exception when insufficient_privilege then null; end;
 end $$;
--- The organizer turns the link off. They still get their event back from the old code.
+reset role;
+do $$ begin
+ if (select status||'|'||response from private.join_requests where plan_id='a3100000-0000-4000-8000-000000000001' and user_id='a3000000-0000-4000-8000-000000000002')
+  is distinct from 'waiting|pending' then raise exception 'Not waiting after asking'; end if;
+ if exists(select 1 from public.attendees where plan_id='a3100000-0000-4000-8000-000000000001') then raise exception 'Asking put someone on the event'; end if;
+end $$;
+set local role authenticated;
+-- The organizer approves, then turns the link off. They still get their event back from the old code.
 select set_config('request.jwt.claims','{"sub":"a3000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 do $$ begin
+ perform public.decide_join_request('a3100000-0000-4000-8000-000000000001','a3000000-0000-4000-8000-000000000002',true);
  insert into gi1_codes values('one-new',public.rotate_plan_link('a3100000-0000-4000-8000-000000000001'));
  if public.claim_plan_link((select code from gi1_codes where name='one'))<>'a3100000-0000-4000-8000-000000000001' then raise exception 'Organizer refused by the turned-off link'; end if;
 end $$;
@@ -242,18 +258,21 @@ do $$ begin
  begin perform public.claim_plan_link((select code from gi1_codes where name='one')); raise exception 'Joined by a turned-off link';
  exception when insufficient_privilege then null; end;
 end $$;
--- A fresh guest joins by the new link as before: not answered yet, one notice.
+-- A fresh guest asks through the new link as before: not answered yet, one notice; the organizer approves.
 select set_config('request.jwt.claims','{"sub":"a3000000-0000-4000-8000-000000000004","role":"authenticated"}',true);
 do $$ declare id uuid; begin
  id := public.claim_plan_link((select code from gi1_codes where name='one-new'));
  if id<>'a3100000-0000-4000-8000-000000000001' then raise exception 'Wrong plan joined by the new link'; end if;
- if (select response from public.attendees where plan_id=id and user_id='a3000000-0000-4000-8000-000000000004')<>'pending' then raise exception 'Fresh guest not pending'; end if;
 end $$;
+select set_config('request.jwt.claims','{"sub":"a3000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.decide_join_request('a3100000-0000-4000-8000-000000000001','a3000000-0000-4000-8000-000000000004',true);
 reset role;
 do $$ begin
- if (select count(*) from private.notification_outbox where plan_id='a3100000-0000-4000-8000-000000000001' and kind='invitation' and recipient_id='a3000000-0000-4000-8000-000000000001' and actor_id='a3000000-0000-4000-8000-000000000002')<>1 then raise exception 'One invitation notice expected'; end if;
- if (select count(*) from private.notification_outbox where plan_id='a3100000-0000-4000-8000-000000000001' and kind='invitation' and recipient_id='a3000000-0000-4000-8000-000000000001' and actor_id='a3000000-0000-4000-8000-000000000004')<>1 then raise exception 'One invitation notice expected for the fresh guest'; end if;
- if exists(select 1 from public.attendees where plan_id='a3100000-0000-4000-8000-000000000001' and user_id='a3000000-0000-4000-8000-000000000003') then raise exception 'A refused claim added a guest'; end if;
+ if (select response from public.attendees where plan_id='a3100000-0000-4000-8000-000000000001' and user_id='a3000000-0000-4000-8000-000000000004') is distinct from 'pending' then raise exception 'Fresh guest not pending'; end if;
+ if (select count(*) from private.notification_outbox where plan_id='a3100000-0000-4000-8000-000000000001' and kind='join_request' and recipient_id='a3000000-0000-4000-8000-000000000001' and actor_id='a3000000-0000-4000-8000-000000000002')<>1 then raise exception 'One request notice expected'; end if;
+ if (select count(*) from private.notification_outbox where plan_id='a3100000-0000-4000-8000-000000000001' and kind='join_request' and recipient_id='a3000000-0000-4000-8000-000000000001' and actor_id='a3000000-0000-4000-8000-000000000004')<>1 then raise exception 'One request notice expected for the fresh guest'; end if;
+ if exists(select 1 from public.attendees where plan_id='a3100000-0000-4000-8000-000000000001' and user_id='a3000000-0000-4000-8000-000000000003')
+  or exists(select 1 from private.join_requests where plan_id='a3100000-0000-4000-8000-000000000001' and user_id='a3000000-0000-4000-8000-000000000003') then raise exception 'A refused claim added a guest'; end if;
  if (select count(*) from public.attendees where plan_id='a3100000-0000-4000-8000-000000000001')<>2 then raise exception 'Two guests expected'; end if;
  -- Once the event starts or is cancelled, the link no longer lets anyone new join.
  update public.plans set starts_at=now()-interval '1 minute' where id='a3100000-0000-4000-8000-000000000001';
