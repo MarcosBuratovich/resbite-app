@@ -180,3 +180,134 @@ grant execute on function private.contacts_on_resbite(text[]), public.contacts_o
  private.plan_phone_invitations(uuid), public.plan_phone_invitations(uuid),
  private.revoke_phone_invitation(uuid,text), public.revoke_phone_invitation(uuid,text)
  to authenticated;
+
+-- Invitee side (plan Task 2). The web page reads a personal invitation without a session, checks the typed number, signs
+-- the person in with a phone code and records their answer.
+
+-- The public read, as invitation_page: state, host, title, time, area, how many are going and which image. Plus the last
+-- two digits of the invited number and its calling code, so the page can ask for the rest. Never the full number, the
+-- exact place, Meeting details or guests' names. Unknown, malformed, revoked and ownerless are indistinguishable.
+create function private.personal_invitation_page(p_code text) returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_inv private.phone_invitations; v_plan public.plans; v_host text; v_going integer; v_state text;
+begin
+ if p_code is null or p_code !~ '^[A-Za-z0-9_-]{22}$' then return jsonb_build_object('state','inactive'); end if;
+ select * into v_inv from private.phone_invitations where code_hash=extensions.digest(p_code,'sha256') and revoked_at is null;
+ if not found then return jsonb_build_object('state','inactive'); end if;
+ select * into v_plan from public.plans where id=v_inv.plan_id;
+ if not found or v_plan.owner_id is null then return jsonb_build_object('state','inactive'); end if;
+ select display_name into v_host from public.profiles where id=v_plan.owner_id;
+ v_state := case when v_plan.status<>'active' then 'cancelled' when v_plan.starts_at<=now() then 'happened' else 'open' end;
+ if v_state<>'open' then return jsonb_build_object('state',v_state,'host',v_host,'title',v_plan.title); end if;
+ select count(*) into v_going from public.attendees where plan_id=v_plan.id and response='accepted';
+ return jsonb_build_object('state','open','host',v_host,'title',v_plan.title,'starts_at',v_plan.starts_at,'ends_at',v_plan.ends_at,
+  'time_zone',v_plan.time_zone,'area',v_plan.area,'going',v_going,
+  'image',case when v_plan.cover_path is not null then jsonb_build_object('kind','cover','ref',v_plan.cover_path)
+   when v_plan.activity_id is not null then jsonb_build_object('kind','activity','ref',v_plan.activity_id)
+   else jsonb_build_object('kind','mark','ref','') end,
+  'ending',right(v_inv.phone,2),'country',v_inv.country);
+end $$;
+create function public.personal_invitation_page(p_code text) returns jsonb language sql stable security definer set search_path = '' as $$
+ select private.personal_invitation_page(p_code)
+$$;
+
+-- Does the typed number match the invited one? True or false only, for a live open invitation; 10 checks per invitation
+-- per hour (the count is a single update, so concurrent calls queue on the row).
+create function private.check_invited_number(p_code text, p_phone text) returns boolean language plpgsql security definer set search_path = '' as $$
+declare v_inv private.phone_invitations; v_count int;
+begin
+ if p_code is null or p_code !~ '^[A-Za-z0-9_-]{22}$' then return false; end if;
+ select i.* into v_inv from private.phone_invitations i join public.plans p on p.id=i.plan_id
+  where i.code_hash=extensions.digest(p_code,'sha256') and i.revoked_at is null
+   and p.owner_id is not null and p.status='active' and p.starts_at>now();
+ if not found then return false; end if;
+ update private.phone_invitations set
+  check_count=case when check_window is null or check_window<=now()-interval '1 hour' then 1 else check_count+1 end,
+  check_window=case when check_window is null or check_window<=now()-interval '1 hour' then now() else check_window end
+  where id=v_inv.id and (check_window is null or check_window<=now()-interval '1 hour' or check_count<10)
+  returning check_count into v_count;
+ if v_count is null then raise exception 'Too many tries. Try again later.' using errcode='22023'; end if;
+ return private.phone_digits(p_phone)=v_inv.phone;
+end $$;
+create function public.check_invited_number(p_code text, p_phone text) returns boolean language sql security definer set search_path = '' as $$
+ select private.check_invited_number(p_code,p_phone)
+$$;
+
+-- Records the answer of the person who signed in with the invited number. In order: the caller's lock, the invitation,
+-- the caller's confirmed number, the event, the invitation's owner, a ban, the answer, the age tick, the name, the grant,
+-- the attendee row, the invitation's answer and a notice to the host (as respond does).
+create function private.answer_phone_invitation(p_code text, p_name text, p_response text, p_terms_version text) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := auth.uid(); v_inv private.phone_invitations; v_plan public.plans; v_has_profile boolean; v_att public.attendees; v_next integer;
+begin
+ if v_uid is null then raise exception 'Sign-in required' using errcode='42501'; end if;
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_uid::text,47));
+ if p_code is null or p_code !~ '^[A-Za-z0-9_-]{22}$' then raise exception 'Invitation unavailable' using errcode='42501'; end if;
+ select * into v_inv from private.phone_invitations where code_hash=extensions.digest(p_code,'sha256') and revoked_at is null;
+ if not found then raise exception 'Invitation unavailable' using errcode='42501'; end if;
+ if not exists(select 1 from auth.users u where u.id=v_uid and u.phone_confirmed_at is not null
+  and private.phone_digits(u.phone)=v_inv.phone and not coalesce(u.is_anonymous,false)
+  and (u.banned_until is null or u.banned_until<=now())) or private.deletion_pending(v_uid) then
+  raise exception 'That isn''t the invited number.' using errcode='42501';
+ end if;
+ select * into v_plan from public.plans where id=v_inv.plan_id for update;
+ if not found or v_plan.owner_id is null or v_plan.status<>'active' or v_plan.starts_at<=now() or v_plan.owner_id=v_uid then
+  raise exception 'Invitation unavailable' using errcode='42501';
+ end if;
+ -- Read again under the plan lock: revoking an invitation takes the same lock through its owner checks.
+ select * into v_inv from private.phone_invitations where id=v_inv.id and revoked_at is null;
+ if not found then raise exception 'Invitation unavailable' using errcode='42501'; end if;
+ if v_inv.user_id is not null and v_inv.user_id<>v_uid then raise exception 'Invitation unavailable' using errcode='42501'; end if;
+ if exists(select 1 from private.beta_access where user_id=v_uid and revoked_at is not null) then
+  raise exception 'Invitation unavailable' using errcode='42501';
+ end if;
+ if p_response is null or p_response not in ('accepted','maybe','declined') then raise exception 'Invalid response' using errcode='22023'; end if;
+ if not exists(select 1 from private.age_attestations where user_id=v_uid) then
+  if p_terms_version is null or p_terms_version !~ '^[0-9]{4}-[0-9]{2}$' then
+   raise exception 'Age confirmation required' using errcode='22023';
+  end if;
+  insert into private.age_attestations(user_id,terms_version) values(v_uid,p_terms_version);
+ end if;
+ v_has_profile := exists(select 1 from public.profiles where id=v_uid);
+ if not v_has_profile then
+  if coalesce(char_length(btrim(p_name)),0) not between 1 and 80 then raise exception 'Name required' using errcode='22023'; end if;
+  insert into public.profiles(id,display_name) values(v_uid,btrim(p_name));
+ end if;
+ insert into private.beta_access(user_id,source) values(v_uid,'invitation') on conflict (user_id) do nothing;
+ select * into v_att from public.attendees where plan_id=v_plan.id and user_id=v_uid for update;
+ if v_att.user_id is null then
+  insert into public.attendees(plan_id,user_id,response) values(v_plan.id,v_uid,p_response) returning * into v_att;
+ else
+  update public.attendees set response=p_response,version=version+1,updated_at=now()
+   where plan_id=v_plan.id and user_id=v_uid returning * into v_att;
+ end if;
+ update private.phone_invitations set user_id=v_uid, answered_at=now() where id=v_inv.id;
+ insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,detail)
+  values(v_plan.id,v_plan.owner_id,'rsvp','rsvp:'||v_plan.id||':'||v_uid||':'||v_att.version,v_uid,p_response) on conflict do nothing;
+ return jsonb_build_object('response',p_response,'plan_id',v_plan.id);
+end $$;
+
+-- The page, plus the caller's own answer when they are attached to it.
+create function private.my_phone_invitation(p_code text) returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_uid uuid := auth.uid(); v_page jsonb := private.personal_invitation_page(p_code); v_resp text;
+begin
+ if v_uid is null then raise exception 'Sign-in required' using errcode='42501'; end if;
+ select a.response into v_resp from private.phone_invitations i join public.attendees a on a.plan_id=i.plan_id and a.user_id=i.user_id
+  where i.code_hash=extensions.digest(p_code,'sha256') and i.revoked_at is null and i.user_id=v_uid;
+ return v_page || jsonb_build_object('response',v_resp);
+end $$;
+
+create function public.answer_phone_invitation(p_code text, p_name text, p_response text, p_terms_version text) returns jsonb language sql security invoker set search_path = '' as $$
+ select private.answer_phone_invitation(p_code,p_name,p_response,p_terms_version)
+$$;
+create function public.my_phone_invitation(p_code text) returns jsonb language sql stable security invoker set search_path = '' as $$
+ select private.my_phone_invitation(p_code)
+$$;
+revoke all on function private.personal_invitation_page(text), public.personal_invitation_page(text),
+ private.check_invited_number(text,text), public.check_invited_number(text,text),
+ private.answer_phone_invitation(text,text,text,text), public.answer_phone_invitation(text,text,text,text),
+ private.my_phone_invitation(text), public.my_phone_invitation(text)
+ from public, anon, authenticated, service_role;
+grant execute on function private.personal_invitation_page(text), public.personal_invitation_page(text),
+ private.check_invited_number(text,text), public.check_invited_number(text,text) to anon, authenticated;
+grant execute on function private.answer_phone_invitation(text,text,text,text), public.answer_phone_invitation(text,text,text,text),
+ private.my_phone_invitation(text), public.my_phone_invitation(text) to authenticated;

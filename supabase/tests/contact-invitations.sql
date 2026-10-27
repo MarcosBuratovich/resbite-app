@@ -214,4 +214,186 @@ do $$ declare r text; begin
   if has_table_privilege(r,'private.phone_invitations','select') or has_table_privilege(r,'private.lookup_usage','select') then raise exception '% may read the tables', r; end if;
  end loop;
 end $$;
+
+-- Invitee side (plan 2, Task 2). Code A is the 202 invitation on the Picnic; F is the 207 invitation; G a cancelled event;
+-- H a started event; I a revoked invitation. User 07 (207) has no profile and no grant; user 02 holds another confirmed number.
+reset role;
+insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) values
+ ('d1000000-0000-4000-8000-000000000007',null,null,'447700900207',now());
+insert into public.plans(id,owner_id,title,starts_at,time_zone,place_label,area,categories) values
+ ('d1100000-0000-4000-8000-000000000003','d1000000-0000-4000-8000-000000000001','Started picnic','2099-06-03 12:00+00','UTC','Park','Town',array['community']);
+update public.plans set starts_at='2020-01-01 12:00+00' where id='d1100000-0000-4000-8000-000000000003';
+update public.plans set area='Riverside' where id='d1100000-0000-4000-8000-000000000001';
+update private.phone_invitations set revoked_at=null, user_id=null, answered_at=null, code_hash=extensions.digest(repeat('A',22),'sha256'), check_count=0, check_window=null where phone='447700900202';
+insert into private.phone_invitations(plan_id,phone,country,code_hash,invited_by) values
+ ('d1100000-0000-4000-8000-000000000001','447700900207','44',extensions.digest(repeat('F',22),'sha256'),'d1000000-0000-4000-8000-000000000001'),
+ ('d1100000-0000-4000-8000-000000000002','447700900202','44',extensions.digest(repeat('G',22),'sha256'),'d1000000-0000-4000-8000-000000000001'),
+ ('d1100000-0000-4000-8000-000000000003','447700900202','44',extensions.digest(repeat('H',22),'sha256'),'d1000000-0000-4000-8000-000000000001'),
+ ('d1100000-0000-4000-8000-000000000001','447700900203','44',null,'d1000000-0000-4000-8000-000000000001');
+insert into private.phone_invitations(plan_id,phone,country,code_hash,invited_by,revoked_at) values
+ ('d1100000-0000-4000-8000-000000000001','447700900204','44',extensions.digest(repeat('I',22),'sha256'),'d1000000-0000-4000-8000-000000000001',now());
+update public.attendees set response='accepted' where plan_id='d1100000-0000-4000-8000-000000000001' and user_id='d1000000-0000-4000-8000-000000000003';
+
+-- page: anon
+set local role anon;
+do $$ declare r jsonb; begin
+ r := public.personal_invitation_page(repeat('A',22));
+ if r->>'state'<>'open' or r->>'ending'<>'02' or r->>'country'<>'44' or r->>'host'<>'Host' or r->>'title'<>'Picnic' or r->>'area'<>'Riverside'
+  or (r->>'going')::int<>1 or r->'image'->>'kind'<>'mark' then raise exception 'Open page was %', r; end if;
+ if r::text like '%Park%' or r::text like '%place_label%' or r::text like '%447700900202%' or r::text like '%Contact on Resbite%' then raise exception 'Page leaks: %', r; end if;
+ if public.personal_invitation_page(repeat('Z',22))<>'{"state":"inactive"}'::jsonb
+  or public.personal_invitation_page('short')<>'{"state":"inactive"}'::jsonb
+  or public.personal_invitation_page(null)<>'{"state":"inactive"}'::jsonb
+  or public.personal_invitation_page(repeat('I',22))<>'{"state":"inactive"}'::jsonb then raise exception 'Unknown, malformed or revoked must be inactive'; end if;
+ r := public.personal_invitation_page(repeat('G',22));
+ if r<>'{"state":"cancelled","host":"Host","title":"Cancelled picnic"}'::jsonb then raise exception 'Cancelled was %', r; end if;
+ r := public.personal_invitation_page(repeat('H',22));
+ if r<>'{"state":"happened","host":"Host","title":"Started picnic"}'::jsonb then raise exception 'Started was %', r; end if;
+end $$;
+
+-- check: anon, 10 an hour
+do $$ declare i int; begin
+ if public.check_invited_number(repeat('A',22),'07700 900202') then raise exception 'Local-format number without a country matched'; end if;
+ if not public.check_invited_number(repeat('A',22),'+447700900202') then raise exception 'Matching number refused'; end if;
+ if public.check_invited_number(repeat('Z',22),'+447700900202') or public.check_invited_number(repeat('I',22),'+447700900204')
+  or public.check_invited_number(repeat('G',22),'+447700900202') or public.check_invited_number(repeat('H',22),'+447700900202') then raise exception 'Inactive or closed invitation matched'; end if;
+ for i in 3..10 loop perform public.check_invited_number(repeat('A',22),'+447700900299'); end loop;
+ begin perform public.check_invited_number(repeat('A',22),'+447700900202'); raise exception 'The 11th check was allowed';
+ exception when invalid_parameter_value then
+  if sqlerrm<>'Too many tries. Try again later.' then raise exception 'Wrong message: %', sqlerrm; end if;
+ end;
+end $$;
+reset role;
+do $$ begin
+ if (select check_count from private.phone_invitations where code_hash=extensions.digest(repeat('A',22),'sha256'))<>10 then raise exception '10 checks expected'; end if;
+ -- an hour later the window starts again
+ update private.phone_invitations set check_window=now()-interval '61 minutes' where code_hash=extensions.digest(repeat('A',22),'sha256');
+end $$;
+set local role anon;
+do $$ begin
+ if not public.check_invited_number(repeat('A',22),'+447700900202') then raise exception 'New window should allow a check'; end if;
+ begin perform public.my_phone_invitation(repeat('A',22)); raise exception 'anon my_phone_invitation';
+ exception when insufficient_privilege then null; end;
+ begin perform public.answer_phone_invitation(repeat('F',22),'Sam','accepted','2026-10'); raise exception 'anon answered';
+ exception when insufficient_privilege then null; end;
+end $$;
+reset role;
+do $$ begin
+ if (select check_count from private.phone_invitations where code_hash=extensions.digest(repeat('A',22),'sha256'))<>1 then raise exception 'Window reset expected'; end if;
+end $$;
+
+-- answer: refusals first
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"d1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+do $$ begin
+ begin perform public.answer_phone_invitation(repeat('F',22),'Sam','accepted','2026-10'); raise exception 'Forwarded link answered by another number';
+ exception when insufficient_privilege then if sqlerrm<>'That isn''t the invited number.' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+end $$;
+reset role;
+do $$ begin
+ if exists(select 1 from private.phone_invitations where user_id is not null and phone='447700900207') or exists(select 1 from public.attendees where user_id='d1000000-0000-4000-8000-000000000002') then raise exception 'Refused answer wrote something'; end if;
+ update auth.users set phone_confirmed_at=null where id='d1000000-0000-4000-8000-000000000007';
+end $$;
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"d1000000-0000-4000-8000-000000000007","role":"authenticated"}',true);
+do $$ begin
+ begin perform public.answer_phone_invitation(repeat('F',22),'Sam','accepted','2026-10'); raise exception 'Unconfirmed phone answered';
+ exception when insufficient_privilege then null; end;
+end $$;
+reset role;
+update auth.users set phone_confirmed_at=now() where id='d1000000-0000-4000-8000-000000000007';
+set local role authenticated;
+do $$ begin
+ begin perform public.answer_phone_invitation(repeat('I',22),'Sam','accepted','2026-10'); raise exception 'Revoked answered';
+ exception when insufficient_privilege then null; end;
+ begin perform public.answer_phone_invitation(repeat('Z',22),'Sam','accepted','2026-10'); raise exception 'Unknown answered';
+ exception when insufficient_privilege then null; end;
+ begin perform public.answer_phone_invitation(repeat('F',22),'Sam','nope','2026-10'); raise exception 'Bad response allowed';
+ exception when invalid_parameter_value then null; end;
+ begin perform public.answer_phone_invitation(repeat('F',22),'Sam','accepted','2026'); raise exception 'Bad terms allowed';
+ exception when invalid_parameter_value then null; end;
+ begin perform public.answer_phone_invitation(repeat('F',22),'  ','accepted','2026-10'); raise exception 'Empty name allowed';
+ exception when invalid_parameter_value then null; end;
+ begin perform public.answer_phone_invitation(repeat('F',22),repeat('x',81),'accepted','2026-10'); raise exception 'Long name allowed';
+ exception when invalid_parameter_value then null; end;
+end $$;
+reset role;
+do $$ begin
+ if exists(select 1 from private.age_attestations where user_id='d1000000-0000-4000-8000-000000000007') or exists(select 1 from public.profiles where id='d1000000-0000-4000-8000-000000000007') or exists(select 1 from private.beta_access where user_id='d1000000-0000-4000-8000-000000000007') then raise exception 'Refused answers wrote something'; end if;
+end $$;
+
+-- answer: the invitee answers
+set local role authenticated;
+do $$ declare r jsonb; begin
+ r := public.answer_phone_invitation(repeat('F',22),' Sam ','accepted','2026-10');
+ if r<>jsonb_build_object('response','accepted','plan_id','d1100000-0000-4000-8000-000000000001') then raise exception 'Answer returned %', r; end if;
+end $$;
+reset role;
+do $$ begin
+ if (select terms_version from private.age_attestations where user_id='d1000000-0000-4000-8000-000000000007')<>'2026-10' then raise exception 'Attestation expected'; end if;
+ if (select source from private.beta_access where user_id='d1000000-0000-4000-8000-000000000007')<>'invitation' then raise exception 'Invitation grant expected'; end if;
+ if (select display_name from public.profiles where id='d1000000-0000-4000-8000-000000000007')<>'Sam' then raise exception 'Profile Sam expected'; end if;
+ if (select response||version from public.attendees where plan_id='d1100000-0000-4000-8000-000000000001' and user_id='d1000000-0000-4000-8000-000000000007')<>'accepted1' then raise exception 'Accepted attendee expected'; end if;
+ if (select user_id from private.phone_invitations where phone='447700900207') is distinct from 'd1000000-0000-4000-8000-000000000007' or (select answered_at from private.phone_invitations where phone='447700900207') is null then raise exception 'Invitation not marked answered'; end if;
+ if (select count(*) from private.notification_outbox where kind='rsvp' and recipient_id='d1000000-0000-4000-8000-000000000001' and actor_id='d1000000-0000-4000-8000-000000000007' and detail='accepted')<>1 then raise exception 'One rsvp row expected'; end if;
+ if not private.user_eligible('d1000000-0000-4000-8000-000000000007') then raise exception 'Invitee should be eligible'; end if;
+end $$;
+set local role authenticated;
+do $$ begin
+ perform public.answer_phone_invitation(repeat('F',22),'Other name','declined','not-checked');
+end $$;
+reset role;
+do $$ begin
+ if (select response||version from public.attendees where plan_id='d1100000-0000-4000-8000-000000000001' and user_id='d1000000-0000-4000-8000-000000000007')<>'declined2' then raise exception 'Declined, version 2 expected'; end if;
+ if (select display_name from public.profiles where id='d1000000-0000-4000-8000-000000000007')<>'Sam' then raise exception 'Profile must stay'; end if;
+ if (select count(*) from private.notification_outbox where kind='rsvp' and actor_id='d1000000-0000-4000-8000-000000000007')<>2 then raise exception 'Second rsvp row expected'; end if;
+end $$;
+-- maybe is an answer too
+set local role authenticated;
+do $$ begin
+ perform public.answer_phone_invitation(repeat('F',22),null,'maybe',null);
+ if (select response from public.attendees where plan_id='d1100000-0000-4000-8000-000000000001' and user_id='d1000000-0000-4000-8000-000000000007')<>'maybe' then raise exception 'Maybe expected'; end if;
+end $$;
+
+-- my_phone_invitation
+do $$ declare r jsonb; begin
+ r := public.my_phone_invitation(repeat('F',22));
+ if r->>'state'<>'open' or r->>'response'<>'maybe' then raise exception 'Attached caller got %', r; end if;
+end $$;
+select set_config('request.jwt.claims','{"sub":"d1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+do $$ declare r jsonb; begin
+ r := public.my_phone_invitation(repeat('F',22));
+ if r->>'state'<>'open' or not (r ? 'response') or r->'response'<>'null'::jsonb then raise exception 'Other caller got %', r; end if;
+end $$;
+
+-- a ban, a cancelled event, a started event
+reset role;
+update private.beta_access set revoked_at=now() where user_id='d1000000-0000-4000-8000-000000000007';
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"d1000000-0000-4000-8000-000000000007","role":"authenticated"}',true);
+do $$ begin
+ begin perform public.answer_phone_invitation(repeat('F',22),'Sam','accepted','2026-10'); raise exception 'Banned grant answered';
+ exception when insufficient_privilege then null; end;
+end $$;
+reset role;
+update private.beta_access set revoked_at=null where user_id='d1000000-0000-4000-8000-000000000007';
+update private.phone_invitations set phone='447700900207' where code_hash=extensions.digest(repeat('G',22),'sha256');
+update private.phone_invitations set phone='447700900207' where code_hash=extensions.digest(repeat('H',22),'sha256');
+set local role authenticated;
+do $$ begin
+ begin perform public.answer_phone_invitation(repeat('G',22),'Sam','accepted','2026-10'); raise exception 'Cancelled answered';
+ exception when insufficient_privilege then null; end;
+ begin perform public.answer_phone_invitation(repeat('H',22),'Sam','accepted','2026-10'); raise exception 'Started answered';
+ exception when insufficient_privilege then null; end;
+end $$;
+-- the owner cannot answer their own invitation
+reset role;
+update private.phone_invitations set phone='447700900200' where code_hash=extensions.digest(repeat('A',22),'sha256');
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"d1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+do $$ begin
+ begin perform public.answer_phone_invitation(repeat('A',22),'Host','accepted','2026-10'); raise exception 'Owner answered';
+ exception when insufficient_privilege then null; end;
+end $$;
+reset role;
 rollback;
