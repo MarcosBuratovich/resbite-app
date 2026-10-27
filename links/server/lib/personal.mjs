@@ -41,6 +41,8 @@ export const PERSONAL_WORDS = {
   inactive: "This invitation is no longer active.",
   inactiveHint: "Ask whoever sent it for a new link.",
   plan: "Plan your own with Resbite.",
+  // The open link's way into the app (GI1's words), for people who already have Resbite.
+  haveApp: "I have Resbite: open the app",
 };
 
 const escape = (text) =>
@@ -110,7 +112,8 @@ ${script ? '    <script type="module" src="/personal.js"></script>\n' : ""}  </b
 
 /**
  * Screen 1 and the empty steps /personal.js fills. In open mode there is no number to match: no ending, no "for the
- * number ending" note and no "Not your number?", and numbers typed without + take OPEN_LINK_COUNTRY.
+ * number ending" note and no "Not your number?", and numbers typed without + take OPEN_LINK_COUNTRY; GI1's "I have
+ * Resbite: open the app" opens this link in the app.
  */
 function stepsBody(data, image, options, mode) {
   const w = PERSONAL_WORDS;
@@ -134,7 +137,9 @@ function stepsBody(data, image, options, mode) {
     .map(([name, value]) => `data-${name}="${escape(value)}"`)
     .join(" ");
   const note = open ? "" : `\n        <p class="note">${escape(w.forNumber(data.ending))}</p>`;
-  const notYours = open ? "" : `\n        <p class="muted">${escape(w.notYours(data.host))}</p>`;
+  const after = open
+    ? `\n        <p><a class="button secondary" id="open-app" href="resbite://r/${escape(options.code)}">${w.haveApp}</a></p>`
+    : `\n        <p class="muted">${escape(w.notYours(data.host))}</p>`;
   return `    <main id="main" ${dataAttrs}>
       <section id="step-invitation">
         <p class="invited"><span class="dot" aria-hidden="true"></span>${escape(w.invited(data.host))}</p>
@@ -142,7 +147,7 @@ function stepsBody(data, image, options, mode) {
         <h1>${escape(data.title)}</h1>
         <p class="detail">${escape(when)}</p>${area}
         <p class="detail">${escape(w.going(data.going))}</p>${note}
-        <p><button type="button" class="button" id="answer">${w.answer}</button></p>${notYours}
+        <p><button type="button" class="button" id="answer">${w.answer}</button></p>${after}
       </section>
       <section id="step-confirm" aria-live="polite" hidden></section>
       <section id="step-code" aria-live="polite" hidden></section>

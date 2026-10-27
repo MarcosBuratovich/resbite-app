@@ -173,6 +173,15 @@ export function screenForReturn(page) {
   return { join: null, response: null };
 }
 
+/**
+ * The open link's last screen for the state: "waiting" (Going, Maybe, or no answer yet), "cantGo" (a waiting answer of
+ * Can't go, drawn as the personal page's Can't go), "notAdded" or "alreadyIn"; null before the last step's screen.
+ */
+export function openDoneScreen(state) {
+  if (state.join === "waiting") return state.response === "declined" ? "cantGo" : "waiting";
+  return state.join;
+}
+
 /** The open link's screen for request_to_join's reply, as screenForReturn's; null for a reply it doesn't know. */
 export function screenForRequest(result) {
   switch (result?.state) {

@@ -44,8 +44,10 @@ test("the open page is the personal page's first step in open mode: the basics a
   const html = renderOpenLinkPage(open, linkOptions);
   for (const text of ["Stephen invited you", "Film night: Paddington 2", "Fri 23 Oct, 19:30 – 22:00", "Near Old Street, London", "6 going", ">Answer</button>"])
     assert.ok(html.includes(text), text);
-  for (const gone of ["number ending", "Not your number", "RSVP", "Join Resbite to reply", "I have Resbite", 'href="#join"', "/page.js", "Exact address after you reply"])
+  for (const gone of ["number ending", "Not your number", "RSVP", "Join Resbite to reply", 'href="#join"', "/page.js", "Exact address after you reply"])
     assert.ok(!html.includes(gone), gone);
+  // GI1's way into the app stays for people who already have Resbite.
+  assert.ok(html.includes(`<a class="button secondary" id="open-app" href="resbite://r/${code}">I have Resbite: open the app</a>`));
   assert.ok(html.includes(`<img class="hero" src="https://link.resbite.com/r/${code}/image" alt="" />`));
   for (const step of ["confirm", "code", "answer", "app"]) assert.ok(html.includes(`<section id="step-${step}" aria-live="polite" hidden></section>`), step);
   assert.match(html, /<script type="module" src="\/personal\.js"><\/script>/);

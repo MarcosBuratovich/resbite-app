@@ -41,6 +41,8 @@ const COPY = {
   codeHeading: "Enter the code",
   verified: "✓ Verified · ••34",
   hostSees: "Marcos will see your answer.",
+  cant: "Thanks for letting them know",
+  haveApp: "I have Resbite: open the app",
   waiting: "Waiting for Marcos",
   waitingBody: "Marcos will confirm your spot.",
   notAdded: "You weren’t added to this resbite.",
@@ -315,6 +317,25 @@ async function waitingScreen(page) {
   await expect(visible(page.getByText(/^Sign up with/))).toHaveCount(0);
   await expect(link(page, "Open Resbite")).toHaveCount(0);
 }
+/**
+ * Can't go while waiting: the personal page's Can't go screen (the heading, "Marcos will see your answer.", Plan your
+ * own and the small Get Resbite), with Change answer, and nothing of waiting for the host.
+ */
+async function cantGoScreen(page) {
+  await expect(heading(page, COPY.cant)).toBeVisible();
+  await expect(text(page, COPY.hostSees)).toBeVisible();
+  await expect(text(page, COPY.planOwn)).toBeVisible();
+  const small = link(page, "Get Resbite");
+  await expect(small).toHaveAttribute("href", APP_STORE_URL);
+  await expect(small).not.toHaveClass(/\bdark\b/);
+  await expect(visible(page.getByRole("link"))).toHaveCount(1);
+  await expect(button(page, "Change answer")).toBeVisible();
+  await expect(button(page, COPY.signOut)).toBeVisible();
+  await expect(button(page, "Not now")).toHaveCount(0);
+  await expect(visible(page.getByText(/confirm your spot/))).toHaveCount(0);
+  for (const gone of [COPY.waiting, COPY.benefits[0], COPY.notAdded, COPY.alreadyIn, "Marcos can see your answer."]) await expect(text(page, gone)).toHaveCount(0);
+  await expect(visible(page.getByText(/^Sign up with/))).toHaveCount(0);
+}
 /** The not-added screen: the sentence and only "Plan your own with Resbite." */
 async function notAddedScreen(page) {
   await expect(heading(page, COPY.notAdded)).toBeVisible();
@@ -351,6 +372,9 @@ try {
     await expect(text(page, "Mon 2 Nov, 13:00 – 16:00")).toBeVisible();
     await expect(text(page, "4 going")).toBeVisible();
     await expect(page.getByText(/number ending|Not your number/)).toHaveCount(0);
+    // GI1's way into the app stays, for people who already have Resbite.
+    await expect(link(page, COPY.haveApp)).toHaveAttribute("href", `resbite://r/${CODE}`);
+    assert.equal(await page.locator("#open-app").getAttribute("class"), "button secondary");
     assert.equal(await page.locator("#main").getAttribute("data-mode"), "open");
     assert.equal(await page.locator("#main").getAttribute("data-country"), "44");
     assert.equal(await page.locator("[data-ending]").count(), 0);
@@ -504,6 +528,33 @@ try {
     await f.done();
   }
 
+  // 2c. Can't go while waiting is the personal page's Can't go screen, never "will confirm your spot", on the reply and
+  // on a reload; Change answer to Going waits for the host again.
+  {
+    const f = await fixture({ seeds: [{ phone: SAM, request: { status: "waiting", response: "accepted" } }] }),
+      { page } = f;
+    await page.goto(`${ORIGIN}/r/${CODE}`);
+    await waitingScreen(page);
+    await button(page, "Change answer").click();
+    await page.getByRole("radio", { name: "Can’t go", exact: true }).check();
+    await button(page, "Send answer").click();
+    await cantGoScreen(page);
+    await focused(page, COPY.cant);
+    assert.deepEqual(f.calls("/rest/v1/rpc/request_to_join").map((x) => x.body), [
+      { p_code: CODE, p_name: "", p_response: "declined", p_terms_version: "2026-10" },
+    ]);
+    assert.deepEqual(f.state.requests.get(f.user(SAM).id), { status: "waiting", response: "declined" });
+    await page.reload();
+    await cantGoScreen(page);
+    await noTestCode(page, "the Can't go screen");
+    await button(page, "Change answer").click();
+    await expect(page.getByRole("radio", { name: "Can’t go", exact: true })).toBeChecked();
+    await page.getByRole("radio", { name: "Going", exact: true }).check();
+    await button(page, "Send answer").click();
+    await waitingScreen(page);
+    await f.done();
+  }
+
   // 3. Declined: coming back shows "You weren't added to this resbite." with only "Plan your own with Resbite.", and
   // asks nothing more. A decline that lands while the answer is being changed shows the same.
   {
@@ -605,7 +656,7 @@ try {
   }
 
   console.log(
-    "PASS: /r/<code> in headless Chrome, open mode: Answer → the 18+ tick → a +1 number sent as typed and a UK number with the page's 44 (no number check, the Outside the UK hint) → 000000 exchanged then verified → the name and Going → request_to_join with exact bodies → Waiting for Marcos with the get-the-app block; a reload restores the waiting answer through my_join_request and changing it sends request_to_join again with no name (one request, the latest answer), as does a request made in the app (pending); declined shows You weren't added with only Plan your own; a guest or the owner sees You're on this resbite with Open Resbite and Get Resbite; a decline or an approval landing mid-change shows the same screens; a turned-off link refuses the answer; Not you? Sign out ends the kept session; closed links keep GI1's pages and the strict CSP; no 000000 anywhere; no request beyond the page's origin and the intercepted Supabase host; nothing scrolls sideways at 320.",
+    "PASS: /r/<code> in headless Chrome, open mode: Answer → the 18+ tick → a +1 number sent as typed and a UK number with the page's 44 (no number check, the Outside the UK hint) → 000000 exchanged then verified → the name and Going → request_to_join with exact bodies → Waiting for Marcos with the get-the-app block; a reload restores the waiting answer through my_join_request and changing it sends request_to_join again with no name (one request, the latest answer), as does a request made in the app (pending); Can't go while waiting is the personal page's Can't go screen, on the reply and on a reload; I have Resbite: open the app stays on the first screen; declined shows You weren't added with only Plan your own; a guest or the owner sees You're on this resbite with Open Resbite and Get Resbite; a decline or an approval landing mid-change shows the same screens; a turned-off link refuses the answer; Not you? Sign out ends the kept session; closed links keep GI1's pages and the strict CSP; no 000000 anywhere; no request beyond the page's origin and the intercepted Supabase host; nothing scrolls sideways at 320.",
   );
 } finally {
   await browser?.close();

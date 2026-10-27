@@ -47,6 +47,8 @@ h1[tabindex="-1"]:focus { outline: none; }
 .button { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 52px; border: 0; padding: 8px 20px; font: inherit; font-weight: 700; line-height: 1.25; text-align: center; background: var(--pink); color: var(--pink-ink); box-shadow: 0 2px 0 rgba(178, 105, 127, 0.2), 0 6px 14px rgba(178, 105, 127, 0.18); cursor: pointer; }
 .button.dark { background: #1d1b22; color: #fff; box-shadow: none; }
 .button.small { align-self: center; width: auto; min-height: 44px; padding: 6px 20px; background: var(--card); color: var(--ink); border: 2px solid var(--line); box-shadow: none; font-size: 15px; }
+/* The open link's "I have Resbite: open the app": full width under Answer, drawn as the other secondary buttons. */
+.button.secondary { margin-top: 4px; line-height: 1.25; background: var(--card); color: var(--ink); border: 2px solid var(--line); box-shadow: none; }
 .button:disabled, .button[aria-disabled="true"] { opacity: 0.5; box-shadow: none; cursor: not-allowed; }
 .link { align-self: center; min-height: 44px; padding: 0 8px; border: 0; background: none; color: var(--ink); font: inherit; font-size: 15px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .button:focus-visible, .link:focus-visible, .terms a:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }

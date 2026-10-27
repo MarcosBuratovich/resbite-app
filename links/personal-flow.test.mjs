@@ -30,6 +30,7 @@ import {
   endingOf,
   screenForRequest,
   screenForReturn,
+  openDoneScreen,
 } from "./assets/personal-flow.mjs";
 import { GUEST_COPY } from "../mobile/src/domain/guestAccount.ts";
 import { PHONE_CODE_COPY } from "../mobile/src/services/phoneCode.ts";
@@ -411,6 +412,27 @@ test("open link: coming back declined or already in shows that screen; no reques
   const waiting = run([{ type: "restore", join: "waiting", response: "accepted", phone: "+447700900834" }, { type: "change" }, { type: "submit", name: "" }]);
   const refused = next(waiting, { type: "refused", error: null });
   assert.deepEqual([refused.step, refused.join, refused.response, refused.phone], ["confirm", null, null, null]);
+});
+
+test("open link: a waiting Can't go is drawn as the personal page's Can't go; Going, Maybe and none yet wait", () => {
+  const back = (response, join = "waiting") => next(initialState(), { type: "restore", join, response, phone: "+447700900834" });
+  // Coming back through my_join_request, a waiting request of declined is Can't go.
+  assert.deepEqual(screenForReturn({ state: "open", member: null, request: { status: "waiting", response: "declined" } }), { join: "waiting", response: "declined" });
+  assert.equal(openDoneScreen(back("declined")), "cantGo");
+  for (const response of ["accepted", "maybe", null]) assert.equal(openDoneScreen(back(response)), "waiting", String(response));
+  assert.equal(openDoneScreen(back(null, "notAdded")), "notAdded");
+  assert.equal(openDoneScreen(back(null, "alreadyIn")), "alreadyIn");
+  assert.equal(openDoneScreen(initialState()), null, "no last screen before the last step");
+  // A fresh Can't go answer, still waiting, shows the same; it can change, and Going waits again.
+  let s = run([{ type: "change" }, { type: "choose", response: "declined" }, { type: "submit", name: "" }], back("accepted"));
+  s = next(s, { type: "answered", ...screenForRequest({ state: "waiting", response: "declined" }) });
+  assert.deepEqual([s.step, openDoneScreen(s)], ["done", "cantGo"]);
+  s = next(s, { type: "change" });
+  assert.deepEqual([s.step, s.choice], ["answer", "declined"]);
+  s = run([{ type: "choose", response: "accepted" }, { type: "submit", name: "" }, { type: "answered", join: "waiting", response: "accepted" }], s);
+  assert.equal(openDoneScreen(s), "waiting");
+  // A decided request is never Can't go, whatever its answer.
+  assert.equal(openDoneScreen({ ...back(null, "notAdded"), response: "declined" }), "notAdded");
 });
 
 test("needsName: a first answer needs a name; a changed answer or a waiting request doesn't", () => {

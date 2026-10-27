@@ -20,6 +20,7 @@ import {
   maskNumber,
   needsName,
   next,
+  openDoneScreen,
   readKept,
   rpcError,
   sameNumber,
@@ -277,21 +278,24 @@ function start(main, answerButton) {
 
   /**
    * The open link's last step. Waiting: the host's line, the get-the-app block and Change answer (the page's 44 need
-   * not be the number's country, so no "Sign up with +44 ••• 834"). Not added: only Plan your own. Already in: Open
-   * Resbite and Get Resbite.
+   * not be the number's country, so no "Sign up with +44 ••• 834"). Can't go, still waiting: the personal page's Can't
+   * go screen, with Change answer. Not added: only Plan your own. Already in: Open Resbite and Get Resbite.
    */
   function drawJoin(s) {
-    const waiting = s.join === "waiting";
-    okMark.hidden = s.join === "notAdded";
-    doneHeading.textContent = waiting ? C.waitingHeading(host) : s.join === "alreadyIn" ? C.alreadyIn : s.join === "notAdded" ? C.notAdded : "";
-    doneHost.textContent = waiting ? C.waitingBody(host) : "";
-    doneHost.hidden = !waiting;
-    changeButton.hidden = !waiting;
+    const screen = openDoneScreen(s);
+    const waiting = screen === "waiting";
+    const cantGo = screen === "cantGo";
+    okMark.hidden = cantGo || screen === "notAdded";
+    doneHeading.textContent =
+      { waiting: C.waitingHeading(host), cantGo: C.cantHeading, notAdded: C.notAdded, alreadyIn: C.alreadyIn }[screen] ?? "";
+    doneHost.textContent = waiting ? C.waitingBody(host) : cantGo ? C.hostSees(host) : "";
+    doneHost.hidden = !waiting && !cantGo;
+    changeButton.hidden = !waiting && !cantGo;
     pitch.hidden = !waiting || !s.pitch;
     waitingLine.hidden = true;
-    soft.hidden = true;
-    planOwnLine.hidden = s.join !== "notAdded";
-    inApp.hidden = s.join !== "alreadyIn";
+    soft.hidden = !cantGo;
+    planOwnLine.hidden = screen !== "notAdded";
+    inApp.hidden = screen !== "alreadyIn";
   }
 
   function setError(el, text, input, invalid) {
