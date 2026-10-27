@@ -140,6 +140,25 @@ do $$ begin
  if private.user_eligible('c2000000-0000-4000-8000-000000000005') then raise exception 'Leaving phone-only account eligible'; end if;
  if not private.user_eligible('c2000000-0000-4000-8000-000000000004') then raise exception 'Email-confirmed roster tester not eligible'; end if;
 end $$;
+-- A roster row needs a confirmed email: a confirmed phone with an unconfirmed roster email waits until the email
+-- is confirmed.
+insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) values
+ ('c2000000-0000-4000-8000-000000000006','phone-accounts-roster-unconfirmed@resbite-test.invalid',null,'447700900106',now());
+insert into private.tester_roster(email,enabled) values ('phone-accounts-roster-unconfirmed@resbite-test.invalid',true);
+do $$ begin
+ if private.user_eligible('c2000000-0000-4000-8000-000000000006') then raise exception 'Roster match with an unconfirmed email eligible'; end if;
+end $$;
+set local role authenticated;
+do $$ begin
+ if pg_temp.phone_access('c2000000-0000-4000-8000-000000000006') is distinct from 'access_pending' then raise exception 'Roster match with an unconfirmed email not waiting'; end if;
+end $$;
+reset role;
+update auth.users set email_confirmed_at=now() where id='c2000000-0000-4000-8000-000000000006';
+set local role authenticated;
+do $$ begin
+ if pg_temp.phone_access('c2000000-0000-4000-8000-000000000006') is distinct from 'approved' then raise exception 'Roster match with the email confirmed not approved'; end if;
+end $$;
+reset role;
 -- A phone-confirmed account awaiting access may save its details; one with nothing confirmed may not.
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"c2000000-0000-4000-8000-000000000002","role":"authenticated"}',true);

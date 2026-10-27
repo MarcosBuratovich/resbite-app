@@ -96,7 +96,8 @@ alter table private.beta_access drop constraint beta_access_source_check,
  add constraint beta_access_source_check check (source in ('link','maintainer'));
 
 -- A confirmed account has a confirmed email or a confirmed phone. The 20261022120000_gi2_guest_accounts body, the
--- one the hosted project runs, with the confirmed check widened and the leaving check delegated to
+-- one the hosted project runs, with the confirmed check widened (a roster row still needs the email itself
+-- confirmed: a confirmed phone doesn't prove the roster email is the caller's) and the leaving check delegated to
 -- deletion_pending(): there, a profile marked as leaving; with the local-only
 -- 20261022120001_gi2_local_delivery_and_deletion.sql (which gives user_eligible() this same body), also a pending
 -- deletion request. Its execute grants are unchanged; eligible() keeps delegating to it.
@@ -105,7 +106,7 @@ create or replace function private.user_eligible(p_user uuid) returns boolean la
   select 1 from auth.users u
   where u.id = p_user and (u.email_confirmed_at is not null or u.phone_confirmed_at is not null)
     and not coalesce(u.is_anonymous,false)
-    and (exists (select 1 from private.tester_roster r where r.email = lower(u.email) and r.enabled) or private.has_live_grant(u.id))
+    and ((u.email_confirmed_at is not null and exists (select 1 from private.tester_roster r where r.email = lower(u.email) and r.enabled)) or private.has_live_grant(u.id))
     and (u.banned_until is null or u.banned_until <= now())
  ) and not private.deletion_pending(p_user)
 $$;

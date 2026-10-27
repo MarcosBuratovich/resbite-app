@@ -10,7 +10,8 @@
 -- It goes live with the notification sender and the deletion milestone, after each has its own owner approval,
 -- never with the GI2 release, and is applied after those files: they would otherwise put back roster-only bodies.
 
--- The 20261027120000_phone_accounts body, verbatim: a confirmed email or phone, and the leaving check delegated to
+-- The 20261027120000_phone_accounts body, verbatim: a confirmed email or phone (a roster row needs the confirmed
+-- email), and the leaving check delegated to
 -- deletion_pending(), which this file widens below, so an account with a deletion request may not use the app
 -- either. The hosted order runs that file before this one; locally it runs after, with the same body.
 -- eligible() keeps delegating to it.
@@ -19,7 +20,7 @@ create or replace function private.user_eligible(p_user uuid) returns boolean la
   select 1 from auth.users u
   where u.id = p_user and (u.email_confirmed_at is not null or u.phone_confirmed_at is not null)
     and not coalesce(u.is_anonymous,false)
-    and (exists (select 1 from private.tester_roster r where r.email = lower(u.email) and r.enabled) or private.has_live_grant(u.id))
+    and ((u.email_confirmed_at is not null and exists (select 1 from private.tester_roster r where r.email = lower(u.email) and r.enabled)) or private.has_live_grant(u.id))
     and (u.banned_until is null or u.banned_until <= now())
  ) and not private.deletion_pending(p_user)
 $$;
