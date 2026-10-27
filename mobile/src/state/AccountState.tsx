@@ -15,7 +15,6 @@ import {
 import { accountDetailsAdapter } from "../services/accountDetails";
 import { readProfile } from "../services/profile";
 import { withDeadline } from "../services/plans";
-import { hasReviewedDetails } from "../domain/registration";
 import { phoneVerified } from "../domain/phone";
 import { flushAttestation, noteAppSession } from "../services/phoneAccount";
 
@@ -126,12 +125,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     <Context.Provider
       value={{
         ...value,
-        // With the phone gate there is no separate setup step: a verified number counts as set up.
-        reviewed: Boolean(
-          value.user &&
-            (phoneVerified(value.user) ||
-              hasReviewedDetails(value.user.user_metadata)),
-        ),
+        // The phone gate is the only way in: reviewed details alone no longer open the app.
+        reviewed: Boolean(value.user && phoneVerified(value.user)),
         refresh,
         acceptDetails: (user) => {
           if (user.id !== identity.current) return;

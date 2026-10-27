@@ -11,4 +11,6 @@ assert.equal(accountGate({ ...base, status: "access_pending", name: "Sam" }), nu
 assert.equal(accountGate({ ...base, status: "unconfirmed", phoneVerified: false }), null);
 assert.equal(accountGate({ ...base, status: "checking", phoneVerified: false }), null);
 assert.equal(accountGate({ ...base, status: "error", phoneVerified: false }), null);
+assert.equal(accountGate({ ...base, status: "access_pending" }), "about-you");
+assert.equal(accountGate({ ...base, name: "Sam" }), null);
 console.log("accountRoute tests passed");

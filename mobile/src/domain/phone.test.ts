@@ -25,6 +25,7 @@ test("device region comes from the locale", () => {
 
 test("format and ending", () => {
   assert.equal(formatPhone("+447700900834"), "+44 7700 900834");
+  assert.equal(formatPhone("447700900834"), "+44 7700 900834");
   assert.equal(phoneEnding("+447700900834"), "34");
 });
 

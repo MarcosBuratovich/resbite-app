@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { phoneVerified } from "../domain/phone";
 import type { TextInput } from "react-native";
 import { router } from "expo-router";
 import type { Session, User } from "@supabase/supabase-js";
@@ -68,7 +69,7 @@ export function useGuestAccount({ code, token }: { code?: string; token?: string
   // The event link as opened, and that code when well formed.
   const link = !token && code !== undefined && !preview ? code : null;
   const linkCode = isLinkCode(link) ? link : null;
-  const pendingAccess = Boolean(session) && linkCode !== null && account.status === "access_pending";
+  const pendingAccess = Boolean(session) && linkCode !== null && account.status === "access_pending" && phoneVerified(account.user);
   const [began, setBegan] = useState(false);
   const active = link !== null && (!session || pendingAccess || began);
   const [card, setCard] = useState<CardState>({ status: "loading" });

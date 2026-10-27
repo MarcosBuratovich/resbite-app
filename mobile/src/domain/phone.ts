@@ -17,7 +17,7 @@ export function deviceRegion(locale: string = Intl.DateTimeFormat().resolvedOpti
 }
 
 export function formatPhone(e164: string): string {
-  return parsePhoneNumberFromString(e164)?.formatInternational() ?? e164;
+  return parsePhoneNumberFromString(e164.startsWith("+") ? e164 : `+${e164}`)?.formatInternational() ?? e164;
 }
 
 export function phoneEnding(e164: string): string {
