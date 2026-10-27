@@ -1,13 +1,11 @@
 import React from "react";
-import { StyleSheet, View } from "react-native";
 import { Bell, BellOff, CalendarPlus, CalendarSync } from "lucide-react-native";
-import { Button, Copy } from "./ui";
-import { Chip, InfoSheet } from "./kit";
-import { GET_REMINDERS_LINE } from "../domain/eventDevice";
+import { Chip } from "./kit";
 import type { EventDevice } from "../state/useEventDevice";
 
 // UX3 Add to calendar and reminders on the event page (spec "Calendar and reminders"; mockup "Calendar and
-// reminders"). The chips sit in the event page's chip row, before Open in Maps.
+// reminders"). The chips sit in the event page's chip row, before Open in Maps. The notification ask that
+// replaced "Get reminders?" is NotificationAsk.
 
 /** "Add to calendar" (or "Update calendar") and "Reminders on" / "Reminders off". */
 export function EventDeviceChips({ device }: { device: EventDevice }) {
@@ -36,23 +34,3 @@ export function EventDeviceChips({ device }: { device: EventDevice }) {
     </>
   );
 }
-
-/**
- * "Get reminders?": shown once, before iPhone's own prompt. Either answer counts as asked. Only while the chips
- * show: a read still in flight when the guest answers Can’t go must not open it afterwards.
- */
-export function ReminderSheet({ device }: { device: EventDevice }) {
-  return (
-    <InfoSheet visible={device.asking && device.shown} title="Get reminders?" onClose={device.notNow}>
-      <Copy>{GET_REMINDERS_LINE}</Copy>
-      <View style={styles.actions}>
-        <Button title="Allow reminders" icon={false} onPress={device.allowReminders} />
-        <Button title="Not now" secondary icon={false} onPress={device.notNow} />
-      </View>
-    </InfoSheet>
-  );
-}
-
-const styles = StyleSheet.create({
-  actions: { gap: 10 },
-});

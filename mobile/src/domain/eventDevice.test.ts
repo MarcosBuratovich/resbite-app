@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { CALENDAR_OPEN_FAILED, GET_REMINDERS_LINE, reminderChip, shouldAskForReminders } from "./eventDevice.ts";
+import { CALENDAR_OPEN_FAILED, reminderChip } from "./eventDevice.ts";
 
 const chip = (permission: Parameters<typeof reminderChip>[0]["permission"], enabled = true, muted = false) =>
   reminderChip({ permission, allowed: permission === "granted" || permission === "provisional", enabled, muted });
@@ -40,18 +40,6 @@ test("switched off on Notifications, the chip reads Reminders off and opens Noti
   }
 });
 
-test("Get reminders? asks once, only before iPhone's prompt and only with reminders switched on", () => {
-  assert.equal(shouldAskForReminders({ permission: "undetermined", asked: false, enabled: true }), true);
-  assert.equal(shouldAskForReminders({ permission: "undetermined", asked: true, enabled: true }), false);
-  assert.equal(shouldAskForReminders({ permission: "undetermined", asked: false, enabled: false }), false);
-  for (const permission of ["granted", "provisional", "denied", "preview", "unsupported"] as const)
-    assert.equal(shouldAskForReminders({ permission, asked: false, enabled: true }), false, permission);
-});
-
-test("the sheet and the calendar failure keep their wording", () => {
-  assert.equal(
-    GET_REMINDERS_LINE,
-    "Resbite can remind you 1 day and 1 hour before your resbites. Reminders are set on this phone, and only show the name and time.",
-  );
+test("the calendar failure keeps its wording", () => {
   assert.equal(CALENDAR_OPEN_FAILED, "We couldn’t open your calendar. Add to calendar needs iOS 17 or later.");
 });

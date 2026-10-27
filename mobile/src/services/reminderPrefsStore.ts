@@ -1,6 +1,9 @@
 import type { KeyStore } from "./secureChunks";
 
-/** UX3 reminder switches: all reminders on or off, events muted one by one, and whether "Get reminders?" was shown. */
+/**
+ * UX3 reminder switches: all reminders on or off, events muted one by one, and whether the notification ask was
+ * shown (`asked`; Plan 4's "Get notified?" keeps the flag "Get reminders?" set).
+ */
 export type ReminderPrefs = { enabled: boolean; muted: string[]; asked: boolean };
 /** The most muted events kept; the oldest mute drops off first. */
 export const MUTED_MAX = 200;

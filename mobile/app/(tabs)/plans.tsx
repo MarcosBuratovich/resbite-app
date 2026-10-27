@@ -26,6 +26,8 @@ import {
 } from "../../src/domain/eventView";
 import { INVITE_COPY } from "../../src/domain/inviteCopy";
 import { RequestCard } from "../../src/design/GuestSteps";
+import { NotificationAsk } from "../../src/design/NotificationAsk";
+import { useNotificationAsk } from "../../src/state/useNotificationAsk";
 import { joinRequestGateway, type MyRequest } from "../../src/services/joinRequests";
 import { ANSWER_OPTIONS, reconcileRsvp, responseFor, type AnswerKey, type RsvpAttempt } from "../../src/domain/rsvp";
 import { readRsvp, writeRsvp } from "../../src/services/rsvp";
@@ -57,7 +59,9 @@ export default function Plans() {
     [requests, setRequests] = useState<MyRequest[]>([]),
     [hosts, setHosts] = useState<Record<string, string>>({}),
     [answering, setAnswering] = useState<string | null>(null),
-    [answerError, setAnswerError] = useState<{ plan: string; message: string } | null>(null);
+    [answerError, setAnswerError] = useState<{ plan: string; message: string } | null>(null),
+    // The last answer confirmed from an Invitations row: Going or Maybe brings the notification ask.
+    [answered, setAnswered] = useState<{ scope: string; response: string } | null>(null);
   const scope = preview ? "preview" : session?.user.id;
   const [savedDrafts, setSavedDrafts] = useState<PlanDraft[]>([]);
   const [draftLoadError, setDraftLoadError] = useState(false);
@@ -222,6 +226,7 @@ export default function Plans() {
         if (!valid()) return;
       }
       const result = reconcileRsvp(attempt, next);
+      if (result === "confirmed") setAnswered({ scope: uid, response: attempt.response });
       if (result !== "confirmed")
         setAnswerError({
           plan: p.id,
@@ -273,6 +278,11 @@ export default function Plans() {
         : null;
   // A tapped notification for an event that can't be read any more (usePushRouting).
   const goneNote = gone ? INVITE_COPY.goneNotice : null;
+  // Plan 4: "Get notified?" after creating an event, or after a Going or Maybe answer from an Invitations row.
+  const ask = useNotificationAsk({
+    created: created === "1",
+    response: answered && answered.scope === scope ? answered.response : null,
+  });
   return (
     <SafeAreaView edges={["top", "left", "right"]} style={s.page}>
       <ScrollView
@@ -287,6 +297,7 @@ export default function Plans() {
         </View>
         <PreviewNotice />
         <ErrorNote message={goneNote} />
+        <ErrorNote message={ask.error} />
         {(invitations.length > 0 || waiting.length > 0) && (
           <View style={{ gap: 12 }}>
             <Copy accessibilityRole="header" style={styles.invitationsHeading}>
@@ -416,6 +427,7 @@ export default function Plans() {
       <SafeAreaView edges={["bottom"]} pointerEvents="box-none" style={styles.fabLayer}>
         <Fab placement="float" onPress={start} />
       </SafeAreaView>
+      <NotificationAsk ask={ask} />
     </SafeAreaView>
   );
 }

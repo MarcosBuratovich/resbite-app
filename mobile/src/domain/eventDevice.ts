@@ -1,7 +1,8 @@
 import type { NotificationPermission } from "./notifications";
 
-// UX3 event page: the reminders chip and the "Get reminders?" sheet (spec "Calendar and reminders", UX3-D4).
-// The calendar chip's wording comes from `needsCalendarUpdate` (calendarEvent.ts).
+// UX3 event page: the reminders chip (spec "Calendar and reminders", UX3-D4). The calendar chip's wording comes
+// from `needsCalendarUpdate` (calendarEvent.ts). Plan 4: the ask is the notification ask (`shouldAsk`,
+// notifications.ts), which replaced "Get reminders?".
 
 /** What a tap on the reminders chip does. */
 export type ReminderChipAction = "mute" | "unmute" | "ask" | "settings" | "notifications";
@@ -44,21 +45,6 @@ export function reminderChip(state: {
   if (state.permission === "undetermined") return off("ask", "Asks to allow reminders");
   return off("settings", "Opens Settings to allow notifications");
 }
-
-/**
- * "Get reminders?" is shown once, before iPhone's own prompt: only while the permission was never asked
- * for, the sheet hasn't been shown on this phone and reminders aren't switched off.
- */
-export function shouldAskForReminders(state: {
-  permission: NotificationPermission;
-  asked: boolean;
-  enabled: boolean;
-}): boolean {
-  return state.permission === "undetermined" && !state.asked && state.enabled;
-}
-
-export const GET_REMINDERS_LINE =
-  "Resbite can remind you 1 day and 1 hour before your resbites. Reminders are set on this phone, and only show the name and time.";
 
 /**
  * Controller ruling P10: iPhone's add-event form opens without a permission only on iOS 17 or later; older

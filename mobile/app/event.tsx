@@ -23,7 +23,8 @@ import {
 import { Button, Copy, ErrorNote, Reveal, s } from "../src/design/ui";
 import { AvatarStack, Chip, chipToneFor, CoverCard, IconButton, InfoSheet, Segmented, Tile } from "../src/design/kit";
 import { PreviewNotice } from "../src/design/Chrome";
-import { EventDeviceChips, ReminderSheet } from "../src/design/EventDeviceChips";
+import { EventDeviceChips } from "../src/design/EventDeviceChips";
+import { NotificationAsk } from "../src/design/NotificationAsk";
 import { GuestNoteCard, GuestNoteSheet, MeetingDetails } from "../src/design/EventNotes";
 import { categoryIcons } from "../src/design/categories";
 import { colors as c, fonts } from "../src/design/tokens";
@@ -615,7 +616,7 @@ export default function EventPage() {
         onSave={saveGuestNote}
         onClose={() => setNoteOpen(false)}
       />
-      <ReminderSheet device={device} />
+      <NotificationAsk ask={device.ask} />
       <InfoSheet visible={more} title="More" onClose={() => setMore(false)}>
         <Tile
           icon={Repeat}

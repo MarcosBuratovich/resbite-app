@@ -9,21 +9,31 @@ import { Chip, IconButton, InfoSheet, RowGroup, StatusCard, SwitchRow } from "..
 import { PreviewNotice } from "../src/design/Chrome";
 import { colors as c } from "../src/design/tokens";
 import {
+  NOTIFICATION_EVENTS,
+  NOTIFICATIONS_TURN_ON_FAILED,
   notificationDelivery,
-  permissionCopy,
+  notificationEventsLead,
+  permissionDetail,
   reminderCopy,
+  UPDATES_ACTIONS,
+  updatesChip,
   type NotificationPermission,
+  type UpdatesAction,
 } from "../src/domain/notifications";
 import { REMINDERS_CHANGE_FAILED } from "../src/domain/eventDevice";
 import {
   openNotificationSettings,
   readNotificationPermission,
 } from "../src/services/notifications";
-import { remindersFor, setRemindersEnabled } from "../src/services/deviceReminders";
+import { askForReminders, remindersFor, setRemindersEnabled } from "../src/services/deviceReminders";
 import { permissionChip } from "../src/domain/accountCopy";
+import { usePushRegistration } from "../src/state/usePushRegistration";
 
 export default function Notifications() {
   const { preview, session, captureSession } = useApp();
+  const { pushStatus, reconcilePush } = usePushRegistration();
+  // Plan 4: whether this build sends updates (EXPO_PUBLIC_PUSH_ENABLED).
+  const delivery = notificationDelivery.enabled;
   const identity = preview ? "preview" : (session?.user.id ?? "signed-out");
   const currentIdentity = useRef(identity);
   currentIdentity.current = identity;
@@ -95,8 +105,39 @@ export default function Notifications() {
       };
     }, [identity, preview, session]),
   );
-  const copy = permission ? permissionCopy[permission] : null;
+  const detail = permission ? permissionDetail(permission, delivery) : null;
   const permissionTitle = permissionChip(permission, busy);
+  // Plan 4: the Updates card shows the real state, and the one button that changes it.
+  const updates = updatesChip({ enabled: delivery, permission, push: pushStatus });
+  const [acting, setActing] = useState(false);
+  const openSettings = async () => {
+    try {
+      await openNotificationSettings(preview);
+    } catch {
+      if (focused.current && currentIdentity.current === identity)
+        setError(
+          "Couldn’t open device settings. Please open Settings on your phone.",
+        );
+    }
+  };
+  async function act(action: UpdatesAction) {
+    if (action === "settings") return void openSettings();
+    if (acting) return;
+    setActing(true);
+    setError(null);
+    try {
+      // "Turn on notifications": iPhone's prompt, as the ask does (reminders too), then registers this phone.
+      if (action === "turn-on")
+        await askForReminders(reminderScope).finally(() => reconcilePush());
+      else await reconcilePush();
+    } catch {
+      if (focused.current && currentIdentity.current === identity) setError(NOTIFICATIONS_TURN_ON_FAILED);
+    } finally {
+      setActing(false);
+      // The permission may have changed: read it again.
+      refresh.current();
+    }
+  }
   async function switchReminders(on: boolean) {
     if (switching) return;
     setSwitching(true);
@@ -123,7 +164,7 @@ export default function Notifications() {
           <Title style={{ flexShrink: 1 }}>Notifications</Title>
           <IconButton icon={Info} label="About notifications" onPress={() => setAbout(true)} />
         </View>
-        {/* UX3: reminders are set on this phone; updates from organizers stay off until sending is approved (B1). */}
+        {/* UX3: reminders are set on this phone. Plan 4: updates follow the build's push switch and this phone. */}
         <View style={styles.group}>
           <RowGroup>
             <SwitchRow
@@ -136,8 +177,20 @@ export default function Notifications() {
           </RowGroup>
           <Copy style={styles.hint}>{reminderCopy.line}</Copy>
         </View>
-        <StatusCard icon={BellOff} title="Updates from organizers">
-          <Chip text="Not active yet" />
+        <StatusCard icon={updates.on ? Bell : BellOff} title="Updates">
+          <View style={styles.chips}>
+            <Chip text={updates.text} />
+            {updates.action && (
+              <Chip
+                text={UPDATES_ACTIONS[updates.action].text}
+                icon={updates.action === "settings" ? Settings : updates.action === "retry" ? RefreshCw : Bell}
+                tone={updates.action === "settings" ? undefined : "aqua"}
+                label={UPDATES_ACTIONS[updates.action].label}
+                disabled={updates.action !== "settings" && (acting || busy)}
+                onPress={() => void act(updates.action!)}
+              />
+            )}
+          </View>
         </StatusCard>
         <View style={styles.chips}>
           <Chip
@@ -147,7 +200,7 @@ export default function Notifications() {
             label={`Phone permission: ${permissionTitle}`}
           />
         </View>
-        {copy && <Copy style={styles.line}>{copy.detail}</Copy>}
+        {detail && <Copy style={styles.line}>{detail}</Copy>}
         <ErrorNote message={error} />
         <View style={styles.chips}>
           {!preview && Platform.OS !== "web" && (
@@ -157,12 +210,18 @@ export default function Notifications() {
               tone="aqua"
               hint="Checks the phone’s notification permission again."
               disabled={busy}
-              onPress={() => refresh.current()}
+              onPress={() => {
+                refresh.current();
+                // The Updates chip follows this phone's registration too.
+                if (delivery) void reconcilePush();
+              }}
             />
           )}
+          {/* Not twice: the Updates card already offers Settings when updates are off there. */}
           {!preview &&
             !!session &&
             permission &&
+            updates.action !== "settings" &&
             !["undetermined", "unsupported", "preview"].includes(
               permission,
             ) && (
@@ -170,16 +229,7 @@ export default function Notifications() {
                 text="Settings"
                 icon={Settings}
                 label="Open device settings"
-                onPress={async () => {
-                  try {
-                    await openNotificationSettings(preview);
-                  } catch {
-                    if (focused.current && currentIdentity.current === identity)
-                      setError(
-                        "Couldn’t open device settings. Please open Settings on your phone.",
-                      );
-                  }
-                }}
+                onPress={() => void openSettings()}
               />
             )}
           <Chip
@@ -191,8 +241,12 @@ export default function Notifications() {
         </View>
       </ScrollView>
       <InfoSheet visible={about} title="About notifications" onClose={() => setAbout(false)}>
-        <Copy>{notificationDelivery.label}</Copy>
-        <Copy>{notificationDelivery.detail}</Copy>
+        {!delivery && <Copy>{notificationDelivery.label}</Copy>}
+        {!delivery && <Copy>{notificationDelivery.detail}</Copy>}
+        <Copy>{notificationEventsLead(delivery)}</Copy>
+        {NOTIFICATION_EVENTS.map((line) => (
+          <Copy key={line}>{line}</Copy>
+        ))}
         <Copy>{reminderCopy.about}</Copy>
       </InfoSheet>
     </SafeAreaView>

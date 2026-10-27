@@ -46,7 +46,7 @@ test("notifications: the permission chip shows the permission's title, or checki
   assert.equal(permissionChip(null, false), "Couldn’t check permission");
 });
 
-test("UX3 notifications wording: reminders use the permission, updates from organizers aren’t active yet", () => {
+test("UX3 notifications wording: reminders use the permission, updates aren’t active yet", () => {
   // The titles keep their UX4 wording; the details no longer say there's nothing to enable.
   assert.deepEqual(
     Object.fromEntries(Object.entries(permissionCopy).map(([key, copy]) => [key, copy.title])),
@@ -64,13 +64,13 @@ test("UX3 notifications wording: reminders use the permission, updates from orga
   assert.equal(permissionCopy.undetermined.detail, "Resbite asks the first time it can set a reminder.");
   assert.equal(
     permissionCopy.denied.detail,
-    "Turn notifications on in Settings to get reminders. Updates from organizers aren’t active yet.",
+    "Turn notifications on in Settings to get reminders. Updates aren’t active yet.",
   );
-  assert.equal(permissionCopy.granted.detail, "Reminders can reach you. Updates from organizers aren’t active yet.");
-  assert.equal(permissionCopy.provisional.detail, "Reminders arrive quietly. Updates from organizers aren’t active yet.");
+  assert.equal(permissionCopy.granted.detail, "Reminders can reach you. Updates aren’t active yet.");
+  assert.equal(permissionCopy.provisional.detail, "Reminders arrive quietly. Updates aren’t active yet.");
   assert.equal(
     permissionCopy.ephemeral.detail,
-    "Reminders can reach you for now. Updates from organizers aren’t active yet.",
+    "Reminders can reach you for now. Updates aren’t active yet.",
   );
   for (const copy of Object.values(permissionCopy)) {
     assert.ok(!copy.detail.includes("nothing you need to enable"), copy.detail);
@@ -79,7 +79,7 @@ test("UX3 notifications wording: reminders use the permission, updates from orga
   }
   assert.equal(reminderCopy.line, "1 day and 1 hour before resbites you’re going to, or might. Set on this phone.");
   assert.match(reminderCopy.about, /it may still arrive at the old time\.$/);
-  // Server sending stays off (B1).
+  // Server sending follows EXPO_PUBLIC_PUSH_ENABLED (Plan 4), unset in tests.
   assert.equal(notificationDelivery.enabled, false);
 });
 

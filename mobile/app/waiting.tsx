@@ -5,10 +5,12 @@ import { router, useLocalSearchParams } from "expo-router";
 import { Button, Copy, ErrorNote, Title, s } from "../src/design/ui";
 import { Segmented } from "../src/design/kit";
 import { LinkCard } from "../src/design/GuestSteps";
+import { NotificationAsk } from "../src/design/NotificationAsk";
 import { colors as c } from "../src/design/tokens";
 import { useApp } from "../src/state/AppState";
 import { useAccount } from "../src/state/AccountState";
 import { useFocusedRefresh, type Run } from "../src/state/useFocusedRefresh";
+import { useNotificationAsk } from "../src/state/useNotificationAsk";
 import { joinRequestGateway, RequestDecided, type MyRequest } from "../src/services/joinRequests";
 import { offline } from "../src/services/contactInvites";
 import { INVITE_COPY } from "../src/domain/inviteCopy";
@@ -24,7 +26,8 @@ const failure = (e: unknown) => (e instanceof Error ? e.message : offline);
  * When the request isn't listed any more (approved, or the event is gone) the screen replaces itself with the
  * event. Approval grants access, so an account still read as waiting is read again first, and goes to /account
  * if it still waits. Reachable while the account waits for access (session-guarded in _layout). Without a plan
- * it leaves as Done does.
+ * it leaves as Done does. Plan 4: a Going or Maybe answer here brings "Get notified?" (the host's approval
+ * is sent as a notification).
  */
 export default function Waiting() {
   const { plan } = useLocalSearchParams<{ plan?: string }>();
@@ -41,6 +44,9 @@ export default function Waiting() {
   const [error, setError] = useState<string | null>(null);
   const [handoff, setHandoff] = useState<"reading" | "read" | null>(null);
   const leaving = useRef(false);
+  // The answer just saved here, for the notification ask.
+  const [answered, setAnswered] = useState<{ identity: string; response: string } | null>(null);
+  const ask = useNotificationAsk({ response: answered?.identity === identity ? answered.response : null });
 
   const load = useCallback(
     async (begin: () => Run) => {
@@ -91,7 +97,10 @@ export default function Waiting() {
     let reread = false;
     try {
       const response = await joinRequestGateway.change(plan, requestResponse(key));
-      if (valid()) setRequest((current) => (current ? { ...current, response } : current));
+      if (valid()) {
+        setRequest((current) => (current ? { ...current, response } : current));
+        setAnswered({ identity, response });
+      }
     } catch (e) {
       if (!valid()) return;
       // The host answered meanwhile (RequestDecided): no error, and the read below opens the event for an approved
@@ -136,6 +145,7 @@ export default function Waiting() {
               />
             ) : null}
             <ErrorNote message={error} />
+            <ErrorNote message={ask.error} />
           </>
         ) : null}
         {(loading && !request) || handoff ? (
@@ -145,6 +155,7 @@ export default function Waiting() {
         {loadError ? <Button title="Retry" secondary onPress={() => void refresh()} /> : null}
         <Button large icon={false} title={INVITE_COPY.done} onPress={done} />
       </ScrollView>
+      <NotificationAsk ask={ask} />
     </SafeAreaView>
   );
 }

@@ -60,7 +60,8 @@ export const syncReminders = (scope: ReminderScope): Promise<void> => reminders.
 export const reminderPermission = (scope: Pick<ReminderScope, "preview">): Promise<NotificationPermission> =>
   serviceFor(scope.preview).permission();
 
-/** "Allow reminders": shows iPhone's prompt when it hasn't been answered, then schedules. Returns the result. */
+/** "Turn on notifications" (and the reminders chip): shows iPhone's prompt when it hasn't been answered, then
+ * schedules. Returns the result. Plan 4: callers then register for push (reconcilePush). */
 export async function askForReminders(scope: ReminderScope): Promise<NotificationPermission> {
   const permission = await serviceFor(scope.preview).request();
   void syncReminders(scope).catch(() => {});
@@ -102,7 +103,7 @@ export async function muteReminders(
   return next;
 }
 
-/** Records that the "Get reminders?" sheet was shown, so it's shown once. */
+/** Records that the notification ask ("Get notified?", once "Get reminders?") was shown, so it's shown once. */
 export const markRemindersAsked = (scope: ReminderScope, assertCurrent?: () => void): Promise<ReminderPrefs> =>
   prefs.markAsked(prefsScope(scope), assertCurrent);
 
