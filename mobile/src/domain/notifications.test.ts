@@ -139,15 +139,30 @@ test("Updates: Checking… while the permission or this account’s registration
   for (const push of ["registered", "failed", "permission-off", null] as const)
     assert.deepEqual(chip(null, push), { text: "Checking…", on: false, action: null }, String(push));
   assert.deepEqual(chip("granted", null), { text: "Checking…", on: false, action: null });
-  // Allowed in Settings a moment ago: the registration catches up (foreground, or after the prompt).
-  assert.deepEqual(chip("granted", "permission-off"), { text: "Checking…", on: false, action: null });
 });
 
 test("Updates: a failed registration is quiet, Not set up yet with Try again", () => {
-  for (const permission of ["granted", "provisional", "ephemeral"] as const)
+  for (const permission of ["granted", "provisional", "ephemeral"] as const) {
     assert.deepEqual(chip(permission, "failed"), { text: "Not set up yet", on: false, action: "retry" }, permission);
+    // Allowed in Settings, the registration not caught up: never a "Checking…" that could stick.
+    assert.deepEqual(
+      chip(permission, "permission-off"),
+      { text: "Not set up yet", on: false, action: "retry" },
+      permission,
+    );
+  }
   assert.deepEqual(chip("unknown", "permission-off"), { text: "Not set up yet", on: false, action: "retry" });
   assert.deepEqual(chip("unknown", "failed"), { text: "Not set up yet", on: false, action: "retry" });
+  assert.deepEqual(chip("unknown", "registered"), { text: "Not set up yet", on: false, action: "retry" });
+});
+
+test("Updates: Checking… only while something is still being read", () => {
+  const states = [null, "undetermined", "denied", "granted", "provisional", "ephemeral", "unknown"] as const;
+  const pushes = ["registered", "permission-off", "failed", null] as const;
+  for (const permission of states)
+    for (const push of pushes)
+      if (chip(permission, push).text === "Checking…")
+        assert.ok(permission === null || push === null, `${permission} ${push}`);
 });
 
 test("Updates: every action is a labelled button", () => {

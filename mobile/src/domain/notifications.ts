@@ -148,9 +148,11 @@ const allowed = (permission: NotificationPermission) =>
   permission === "granted" || permission === "provisional" || permission === "ephemeral";
 
 /**
- * Notification settings' Updates chip: the real state. Never alarming: a registration still being checked
- * reads "Checking…", and one that failed (a missing profile can fail it for a moment; it is retried on the
- * next foreground) reads "Not set up yet" with Try again.
+ * Notification settings' Updates chip: the real state. Never alarming: "Checking…" only while the permission
+ * or this account's registration is still being read (null). Anything else short of "On" reads "Not set up
+ * yet" with Try again (reconcilePush): a failed registration (a missing profile can fail it for a moment; it
+ * is retried on the next foreground), or one that last found the permission off although the phone now
+ * allows it (allowed in Settings, the registration not caught up yet).
  */
 export function updatesChip(state: {
   /** `notificationDelivery.enabled`: this build sends updates. */
@@ -167,10 +169,6 @@ export function updatesChip(state: {
   if (permission === "denied") return off("Off in Settings", "settings");
   if (permission === "undetermined") return off("Not asked yet", "turn-on");
   if (permission === null || push === null) return off("Checking…");
-  if (allowed(permission)) {
-    if (push === "registered") return { text: "On", on: true, action: null };
-    // Allowed in Settings a moment ago: the foreground's registration (or the prompt's) catches up.
-    if (push === "permission-off") return off("Checking…");
-  }
+  if (allowed(permission) && push === "registered") return { text: "On", on: true, action: null };
   return off("Not set up yet", "retry");
 }

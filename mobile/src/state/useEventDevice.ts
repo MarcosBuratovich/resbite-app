@@ -3,6 +3,7 @@ import { AppState } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useApp, type LocalPlan } from "./AppState";
 import { canAddToCalendar, needsCalendarUpdate } from "../domain/calendarEvent";
+import { createDeviceActions } from "../domain/deviceActions";
 import {
   CALENDAR_OPEN_FAILED,
   REMINDERS_CHANGE_FAILED,
@@ -59,7 +60,6 @@ export function useEventDevice(plan: LocalPlan | null, view: { owner: boolean; r
   } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const working = useRef(false);
   const revision = useRef(0);
   const identity = `${userId}:${preview}:${plan?.id}`;
   useEffect(() => {
@@ -99,25 +99,15 @@ export function useEventDevice(plan: LocalPlan | null, view: { owner: boolean; r
     }, [read]),
   );
 
-  /** One device action at a time; the chips re-read afterwards. */
-  async function run(work: () => Promise<void>, failure: string) {
-    if (working.current) return;
-    working.current = true;
-    setBusy(true);
-    setError(null);
-    try {
-      await work();
-    } catch {
-      setError(failure);
-    } finally {
-      working.current = false;
-      setBusy(false);
-      void read();
-    }
-  }
-  // Turning notifications on runs as a device action: the chips are busy meanwhile and re-read after.
+  /** One device action at a time; the chips re-read afterwards (`read` is stable). */
+  const [actions] = useState(() =>
+    createDeviceActions({ busy: setBusy, error: setError, settled: () => void read() }),
+  );
+  const run = (work: () => Promise<void>, failure: string) => actions.run(work, failure);
+  // Turning notifications on runs as a device action: the chips are busy meanwhile and re-read after. It is
+  // queued behind an action already running, never dropped: its sheet has closed and its flag is set.
   const ask = useNotificationAsk(shown ? view : null, {
-    perform: (work) => void run(work, NOTIFICATIONS_TURN_ON_FAILED),
+    perform: (work) => void actions.run(work, NOTIFICATIONS_TURN_ON_FAILED, { queue: true }),
   });
   const chip = state
     ? reminderChip({
