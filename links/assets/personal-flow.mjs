@@ -88,10 +88,11 @@ const MAX_NAME = 80;
 /**
  * The typed number in international form, or null. "+…" is used as typed and "00…" becomes "+…"; anything else
  * is the invitation's calling code plus the digits without leading zeros ("07700 900834" with 44 is +447700900834).
+ * A national "(0)" written after the calling code is dropped ("+44 (0) 7700 900834" is +447700900834).
  * Spaces, dashes, dots and brackets are allowed; any other character, fewer than 7 digits or more than 15 is null.
  */
 export function composeNumber(input, country) {
-  const text = typeof input === "string" ? input.trim() : "";
+  const text = (typeof input === "string" ? input.trim() : "").replace(/^(\+|00)(\s*\d{1,3})\s*\(\s*0\s*\)/, "$1$2 ");
   if (!/^\+?[\d\s().-]+$/.test(text)) return null;
   const digits = text.replace(/\D/g, "");
   let number;

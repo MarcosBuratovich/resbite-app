@@ -34,6 +34,15 @@ test("composeNumber: local, +, and 00 forms of the same number all match the inv
   assert.equal(composeNumber("001 415 555 0100", "44"), "+14155550100");
 });
 
+test("composeNumber: a national (0) after the calling code is dropped", () => {
+  assert.equal(composeNumber("+44 (0) 7700 900834", "44"), "+447700900834");
+  assert.equal(composeNumber("+44(0)7700900834", "44"), "+447700900834");
+  assert.equal(composeNumber("0044 (0) 7700 900834", "44"), "+447700900834");
+  assert.equal(composeNumber("+44 (0)20 7946 0000", "44"), "+442079460000");
+  // Only a lone 0 in brackets: an area code in brackets is part of the number.
+  assert.equal(composeNumber("+1 (415) 555-0100", "44"), "+14155550100");
+});
+
 test("composeNumber: too short, too long, letters or no usable country give null", () => {
   assert.equal(composeNumber("12", "44"), null);
   assert.equal(composeNumber("", "44"), null);
