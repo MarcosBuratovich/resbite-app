@@ -70,6 +70,7 @@ export function renderPersonalPage(data, options) {
     <meta name="twitter:card" content="summary" />
     <link rel="icon" href="/resbite-mark.png" />
     <link rel="stylesheet" href="/page.css" />
+    <link rel="stylesheet" href="/personal.css" />
   </head>
   <body>
 ${body}

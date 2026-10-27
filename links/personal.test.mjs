@@ -30,6 +30,7 @@ test("the open page is screen 1: host, picture, title, time, area, going, ending
   assert.equal((html.match(/<h1/g) || []).length, 1);
   assert.ok(html.includes('<html lang="en">') && !html.includes("user-scalable=no"));
   assert.match(html, /<script type="module" src="\/personal\.js"><\/script>/);
+  assert.match(html, /<link rel="stylesheet" href="\/page\.css" \/>\s*<link rel="stylesheet" href="\/personal\.css" \/>/);
   for (const step of ["confirm", "code", "answer", "app"]) assert.match(html, new RegExp(`id="step-${step}"[^>]*hidden`), step);
   assert.ok(!html.includes("000000"));
 });

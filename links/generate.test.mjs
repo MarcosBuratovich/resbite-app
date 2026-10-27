@@ -80,7 +80,7 @@ test("a bad team ID or origin is refused before anything is written", async () =
 test("the event page's functions, assets and routes are part of the site (GI1)", async () => {
   const { out, cleanup } = await site();
   try {
-    for (const name of ["api/page.mjs", "api/image.mjs", "lib/render.mjs", "lib/supabase.mjs", "page.css", "page.js", "api/personal.mjs", "lib/personal.mjs", "personal.js", "personal-flow.mjs", "activities/coffee-together.png"])
+    for (const name of ["api/page.mjs", "api/image.mjs", "lib/render.mjs", "lib/supabase.mjs", "page.css", "page.js", "api/personal.mjs", "lib/personal.mjs", "personal.js", "personal-flow.mjs", "personal.css", "activities/coffee-together.png"])
       assert.ok((await readFile(join(out, name))).length > 0, name);
     const vercel = JSON.parse(await readFile(join(out, "vercel.json"), "utf8"));
     // Any /r/<code> reaches the functions, which render a malformed or truncated code as inactive (with the

@@ -61,7 +61,7 @@ export async function generate(originValue, teamId, bundleId, output) {
   for (const dir of ["api", "lib", "activities"]) await mkdir(resolve(root, dir), { recursive: true });
   for (const name of await readdir(resolve(source, "server", "api"))) await copyFile(resolve(source, "server", "api", name), resolve(root, "api", name));
   for (const name of await readdir(resolve(source, "server", "lib"))) await copyFile(resolve(source, "server", "lib", name), resolve(root, "lib", name));
-  for (const name of ["page.css", "page.js", "personal.js", "personal-flow.mjs"]) await write(name, await readFile(resolve(source, "assets", name)));
+  for (const name of ["page.css", "page.js", "personal.js", "personal-flow.mjs", "personal.css"]) await write(name, await readFile(resolve(source, "assets", name)));
   for (const name of await readdir(resolve(source, "../mobile/assets/activities")))
     if (name.endsWith(".png")) await copyFile(resolve(source, "../mobile/assets/activities", name), resolve(root, "activities", name));
   await write(

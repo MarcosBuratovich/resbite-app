@@ -1,0 +1,86 @@
+/* The personal invitation page /i/<code> (contact invitations; mockup invitee-web-journey): the cream page, the pink
+   primary button, white fields and cards, and the get-the-app screen (direction A). Loaded after page.css. */
+:root {
+  --ink: #343043;
+  --muted: #6b6575;
+  --cream: #faf5f0;
+  --card: #ffffff;
+  --line: #e9e5e9;
+  --aqua-soft: #e8f6f3;
+  --aqua-dark: #245f60;
+  --pink: #f2adb2;
+  --pink-ink: #4a2230;
+  --lilac: #f0edf4;
+  --lilac-ink: #5b4876;
+  --error: #9b2c3f;
+}
+html { background: var(--cream); }
+body { color: var(--ink); font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+[hidden] { display: none !important; }
+main { padding-bottom: 48px; }
+.muted { color: var(--muted); }
+.center { text-align: center; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* Screen 1, as the server draws it. */
+.dot { display: inline-flex; flex: none; align-items: center; justify-content: center; background: var(--pink); color: var(--pink-ink); font-size: 13px; font-weight: 700; }
+.dot::before { content: attr(data-initial); }
+.hero { border-radius: 20px; }
+#step-invitation .detail { display: inline-block; margin: 0 6px 8px 0; padding: 4px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 999px; font-size: 15px; }
+#step-invitation .detail:has(+ .note) { background: var(--aqua-soft); border-color: transparent; color: var(--aqua-dark); }
+.note { margin: 8px 0 16px; padding: 10px 12px; border-radius: 14px; background: var(--lilac); color: var(--lilac-ink); font-size: 15px; }
+#step-invitation .muted { text-align: center; margin-top: 12px; }
+
+/* The steps the script fills: one column, evenly spaced. */
+main > section:not(#step-invitation), main > section form, .pitch, .soft { display: flex; flex-direction: column; gap: 14px; }
+main > section:not(#step-invitation) :is(h1, p, ul) { margin: 0; }
+main > section:not(#step-invitation) h1 { font-size: 26px; line-height: 1.2; }
+/* A step's heading takes focus so reading starts there; it is not a control, so it draws no ring. */
+h1[tabindex="-1"]:focus { outline: none; }
+.lead { color: var(--muted); }
+.chip { align-self: flex-start; padding: 4px 12px; border-radius: 999px; background: var(--aqua-soft); color: var(--aqua-dark); font-size: 14px; font-weight: 600; }
+#step-answer > .chip { order: -2; }
+#step-answer > .hero { order: -1; }
+.hero.small { aspect-ratio: auto; height: 96px; border-radius: 14px; }
+
+/* Buttons: pink for the step's action, dark for Get Resbite, text links for the quiet choices. */
+.button { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 52px; border: 0; padding: 8px 20px; font: inherit; font-weight: 700; line-height: 1.25; text-align: center; background: var(--pink); color: var(--pink-ink); box-shadow: 0 2px 0 rgba(178, 105, 127, 0.2), 0 6px 14px rgba(178, 105, 127, 0.18); cursor: pointer; }
+.button.dark { background: #1d1b22; color: #fff; box-shadow: none; }
+.button.small { align-self: center; width: auto; min-height: 44px; padding: 6px 20px; background: var(--card); color: var(--ink); border: 2px solid var(--line); box-shadow: none; font-size: 15px; }
+.button:disabled, .button[aria-disabled="true"] { opacity: 0.5; box-shadow: none; cursor: not-allowed; }
+.link { align-self: center; min-height: 44px; padding: 0 8px; border: 0; background: none; color: var(--ink); font: inherit; font-size: 15px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.button:focus-visible, .link:focus-visible, .terms a:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+
+/* The tick and the terms (GI2's words). */
+.agree { display: flex; flex-direction: column; gap: 4px; }
+.tick { display: flex; align-items: center; gap: 12px; min-height: 44px; }
+.tick input { flex: none; width: 24px; height: 24px; margin: 0; accent-color: var(--aqua-dark); }
+.tick label { font-weight: 600; }
+.terms, .helper { padding-left: 36px; color: var(--muted); font-size: 15px; }
+.terms a { color: var(--aqua-dark); }
+
+/* Fields: a white card with its label inside, as in the mockup. */
+.field { padding: 8px 14px 6px; border: 1px solid var(--line); border-radius: 16px; background: var(--card); }
+.field:focus-within { outline: 3px solid var(--aqua-dark); outline-offset: 1px; }
+.field:has([aria-invalid="true"]) { border-color: var(--error); }
+.field label { display: block; color: var(--muted); font-size: 13px; }
+.field input { display: block; width: 100%; padding: 4px 0; border: 0; outline: none; background: transparent; color: var(--ink); font: inherit; font-size: 18px; }
+#code { font-size: 24px; letter-spacing: 0.4em; font-variant-numeric: tabular-nums; }
+.error { color: var(--error); font-size: 15px; font-weight: 600; }
+.error:empty { display: none; }
+
+/* Going / Maybe / Can't go: radios drawn as one segmented control. */
+.seg { position: relative; display: flex; gap: 4px; min-inline-size: 0; margin: 0; padding: 4px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); }
+.seg label { position: relative; display: flex; flex: 1; }
+.seg input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.seg span { display: flex; flex: 1; align-items: center; justify-content: center; min-height: 44px; padding: 6px 4px; border-radius: 999px; font-size: 15px; text-align: center; }
+.seg input:checked + span { background: var(--aqua-soft); color: var(--aqua-dark); font-weight: 700; }
+.seg input:focus-visible + span { outline: 3px solid var(--ink); outline-offset: -3px; }
+
+/* Get the app (direction A): the check, what the app gives, one big button. */
+.big-ok { align-self: center; display: flex; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: 50%; background: var(--aqua-soft); color: var(--aqua-dark); font-size: 28px; font-weight: 700; }
+.benefits { list-style: none; padding: 4px 14px; border: 1px solid var(--line); border-radius: 18px; background: var(--card); }
+.benefits li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 16px; }
+.benefits li:last-child { border-bottom: 0; }
+.ic { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 9px; background: var(--aqua-soft); color: var(--aqua-dark); font-size: 15px; }
+.ic::before { content: attr(data-icon); }
