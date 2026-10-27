@@ -38,10 +38,13 @@ comment on column private.notification_outbox.delivered_at is 'Worker processing
 -- Who may get a notice, checked when it is expanded to devices, again by each claim and again before each send: an
 -- account that may use the app (user_eligible: a confirmed email or phone, a roster row or a live grant, not anonymous,
 -- not banned) and isn't being deleted; the event's organizer, or someone on it (a change notice or a Note to guests
--- only while they may still come); a notice less than a day old; and a request's notice only while that request is
--- still waiting, so a host who has approved or declined it isn't told someone asked. The
--- 20261022120001_gi2_local_delivery_and_deletion body with the account checks delegated to user_eligible() and
--- deletion_pending(), so a phone-only account is notified, and the waiting check added.
+-- only while they may still come); and a notice less than a day old. A request's notice goes out only for a request the
+-- host would see in their list (plan_join_requests' filters): still waiting, in the waiting period the notice was made
+-- in (so a notice from an earlier period never comes back when the person asks again), from someone who isn't on the
+-- event another way and isn't being deleted, on an active event that hasn't started. So a host who has approved or
+-- declined it isn't told someone asked. The 20261022120001_gi2_local_delivery_and_deletion body with the account
+-- checks delegated to user_eligible() and deletion_pending(), so a phone-only account is notified, and the request
+-- check added.
 create or replace function private.notification_recipient_eligible(p_outbox bigint) returns boolean
 language sql stable security definer set search_path='' as $$
  select exists (
@@ -52,8 +55,11 @@ language sql stable security definer set search_path='' as $$
  and (plan.owner_id=o.recipient_id or exists(select 1 from public.attendees a where a.plan_id=plan.id and a.user_id=o.recipient_id
   and (o.kind not in ('plan_changed','guest_note') or a.response in ('accepted','maybe','pending'))))
  and o.created_at>now()-interval '24 hours'
- and (o.kind<>'join_request' or exists(select 1 from private.join_requests j
-  where j.plan_id=o.plan_id and j.user_id=o.actor_id and j.status='waiting'))
+ and (o.kind<>'join_request' or (plan.status='active' and plan.starts_at>now()
+  and exists(select 1 from private.join_requests j where j.plan_id=o.plan_id and j.user_id=o.actor_id
+   and j.status='waiting' and j.created_at<=o.created_at)
+  and not exists(select 1 from public.attendees a where a.plan_id=o.plan_id and a.user_id=o.actor_id)
+  and not private.deletion_pending(o.actor_id)))
  )
 $$;
 revoke all on function private.notification_recipient_eligible(bigint) from public,anon,authenticated,service_role;
@@ -65,7 +71,9 @@ revoke all on function private.notification_recipient_eligible(bigint) from publ
 -- expanded, and again before each send (notification_recipient_eligible). Otherwise the
 -- 20260918001308_notification_delivery_preparation body: the token pattern, and a new generation (updated_at) only when
 -- the account or the platform changes, so the same binding again keeps in-flight sends valid while a rebound phone
--- fences the previous account's. The foundation's public façade and grants.
+-- fences the previous account's. The one change besides the access check: a missing platform is refused with the
+-- other bad input (22023 "Invalid endpoint"), where that body let it reach the not-null column (23502). The
+-- foundation's public façade and grants.
 create or replace function private.register_device(p_token text,p_platform text) returns void language plpgsql security definer set search_path='' as $$
 declare v_uid uuid := auth.uid();
 begin
@@ -76,7 +84,7 @@ begin
  or private.deletion_pending(v_uid) then
   raise exception 'Sign-in required' using errcode='42501';
  end if;
- if p_token is null or length(p_token)>300 or p_token !~ '^(ExponentPushToken|ExpoPushToken)\[[A-Za-z0-9_-]+\]$' or p_platform not in ('ios','android') then
+ if p_token is null or length(p_token)>300 or p_token !~ '^(ExponentPushToken|ExpoPushToken)\[[A-Za-z0-9_-]+\]$' or p_platform is null or p_platform not in ('ios','android') then
  raise exception 'Invalid endpoint' using errcode='22023'; end if;
  insert into private.device_endpoints(token,user_id,platform,updated_at) values(p_token,v_uid,p_platform,clock_timestamp())
  on conflict(token) do update set user_id=v_uid,platform=excluded.platform,
@@ -182,8 +190,10 @@ grant execute on function public.unregister_device(text) to authenticated;
 -- Folding a web-only account carries the notices it caused that haven't gone out yet: they name the app account, which
 -- now holds its requests and answers, instead of nobody once the web profile is deleted (a join_request about a moved
 -- request would otherwise also stop reaching the host). Notices already processed keep their actor, blanked with the
--- profile. The 20261029120000_open_link_approval body with one step added (2b); its grants and its public wrapper are
--- unchanged (the revoke below repeats 20261028120000_contact_invitations' for the private body, which has no grant).
+-- profile. A web request dropped because the app account has its own takes its unsent notice with it, so the host
+-- isn't told twice. The 20261029120000_open_link_approval body with those two steps added (in 2a, and 2b); its grants
+-- and its public wrapper are unchanged (the revoke below repeats 20261028120000_contact_invitations' for the private
+-- body, which has no grant).
 create or replace function private.fold_web_account(p_from uuid, p_into uuid) returns jsonb language plpgsql security definer set search_path = '' as $$
 declare v_moved integer; v_disabled boolean;
 begin
@@ -206,6 +216,9 @@ begin
  update private.phone_invitations set user_id=p_into where user_id=p_from;
  -- 2a. Open-link requests: where the account already has its own request, is on the event or organizes it, its own
  -- stands and the web one goes; the rest move with their answer, link and status.
+ -- Where its own request stands, the web one's unsent notice goes with it, so the host is told once.
+ delete from private.notification_outbox o where o.kind='join_request' and o.actor_id=p_from and o.delivered_at is null
+  and exists(select 1 from private.join_requests t where t.plan_id=o.plan_id and t.user_id=p_into);
  delete from private.join_requests f where f.user_id=p_from
   and (exists(select 1 from private.join_requests t where t.plan_id=f.plan_id and t.user_id=p_into)
    or exists(select 1 from public.attendees t where t.plan_id=f.plan_id and t.user_id=p_into)

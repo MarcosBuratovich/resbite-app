@@ -7,8 +7,10 @@
 -- only, nothing else: they ask to join), 04 Mia (phone, maintainer grant, has used the app: invited from contacts),
 -- 05 Ben (banned), 06 Del (being deleted), 07 Ros (email tester, roster row switched off), 08 Old (a notice older than a
 -- day), 09 Dec (said can't go), 10 Gil (going), 11 an anonymous account, 12 an unconfirmed one, 13 Amy and 14 Bob (two
--- accounts on one phone), 21 Lou (web only) and 22 Ola (has used the app; Lou folds into her).
--- The Picnic (P1) is Hana's; its open link is L. Tokens are ExpoPushToken[<name>].
+-- accounts on one phone), 17 Eve, 19 Gus and 20 Ivy (phone only: they ask), 18 Fay (maintainer grant, has used the app:
+-- asks, then is invited from contacts), 21 Lou and 23 Kit (web only) and 22 Ola and 24 Ned (have used the app; Lou folds
+-- into Ola, Kit into Ned), 25 Zoe (a guest who is removed).
+-- The Picnic (P1) is Hana's; its open link is L. Hana's Walk (P2) has the link W. Tokens are ExpoPushToken[<name>].
 begin;
 insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at,banned_until,is_anonymous) values
  ('f4000000-0000-4000-8000-000000000001',null,null,'447700985001',now(),null,false),
@@ -27,8 +29,15 @@ insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at,bann
  ('f4000000-0000-4000-8000-000000000014',null,null,'447700985014',now(),null,false),
  ('f4000000-0000-4000-8000-000000000015',null,null,'447700985015',now(),null,false),
  ('f4000000-0000-4000-8000-000000000016',null,null,'447700985016',now(),null,false),
+ ('f4000000-0000-4000-8000-000000000017',null,null,'447700985017',now(),null,false),
+ ('f4000000-0000-4000-8000-000000000018',null,null,'447700985018',now(),null,false),
+ ('f4000000-0000-4000-8000-000000000019',null,null,'447700985019',now(),null,false),
+ ('f4000000-0000-4000-8000-000000000020',null,null,'447700985020',now(),null,false),
  ('f4000000-0000-4000-8000-000000000021',null,null,'447700985021',now(),null,false),
- ('f4000000-0000-4000-8000-000000000022',null,null,'447700985022',now(),null,false);
+ ('f4000000-0000-4000-8000-000000000022',null,null,'447700985022',now(),null,false),
+ ('f4000000-0000-4000-8000-000000000023',null,null,'447700985023',now(),null,false),
+ ('f4000000-0000-4000-8000-000000000024',null,null,'447700985024',now(),null,false),
+ ('f4000000-0000-4000-8000-000000000025',null,null,'447700985025',now(),null,false);
 -- The anonymous and unconfirmed accounts have profiles, so a refusal comes from the account check, not the endpoint's key.
 insert into public.profiles(id,display_name) values
  ('f4000000-0000-4000-8000-000000000001','Hana'),('f4000000-0000-4000-8000-000000000004','Mia'),
@@ -37,21 +46,27 @@ insert into public.profiles(id,display_name) values
  ('f4000000-0000-4000-8000-000000000009','Dec'),('f4000000-0000-4000-8000-000000000010','Gil'),
  ('f4000000-0000-4000-8000-000000000011','Anon'),('f4000000-0000-4000-8000-000000000012','Unconfirmed'),
  ('f4000000-0000-4000-8000-000000000013','Amy'),('f4000000-0000-4000-8000-000000000014','Bob'),
- ('f4000000-0000-4000-8000-000000000021','Lou'),('f4000000-0000-4000-8000-000000000022','Ola');
+ ('f4000000-0000-4000-8000-000000000018','Fay'),('f4000000-0000-4000-8000-000000000021','Lou'),
+ ('f4000000-0000-4000-8000-000000000022','Ola'),('f4000000-0000-4000-8000-000000000023','Kit'),
+ ('f4000000-0000-4000-8000-000000000024','Ned'),('f4000000-0000-4000-8000-000000000025','Zoe');
 insert into private.beta_access(user_id,source)
- select ('f4000000-0000-4000-8000-0000000000'||n)::uuid,'maintainer' from unnest(array['01','04','05','06','08','09','10','13','14','22']) n;
+ select ('f4000000-0000-4000-8000-0000000000'||n)::uuid,'maintainer' from unnest(array['01','04','05','06','08','09','10','13','14','18','22','24','25']) n;
 insert into private.tester_roster(email,enabled) values ('push-disabled@resbite-test.invalid',false);
 insert into private.app_sessions(user_id) values
- ('f4000000-0000-4000-8000-000000000001'),('f4000000-0000-4000-8000-000000000004'),('f4000000-0000-4000-8000-000000000022');
+ ('f4000000-0000-4000-8000-000000000001'),('f4000000-0000-4000-8000-000000000004'),('f4000000-0000-4000-8000-000000000018'),
+ ('f4000000-0000-4000-8000-000000000022'),('f4000000-0000-4000-8000-000000000024');
 update public.profiles set deletion_requested_at=now() where id='f4000000-0000-4000-8000-000000000006';
 insert into public.plans(id,owner_id,title,description,starts_at,time_zone,place_label,guest_note,guest_note_at,categories) values
  ('f4100000-0000-4000-8000-000000000001','f4000000-0000-4000-8000-000000000001','Picnic','Secret description',
-  '2099-07-01 12:00+00','UTC','Secret Park','Secret note',now(),array['community']);
-insert into private.plan_links(plan_id,code) values ('f4100000-0000-4000-8000-000000000001',repeat('L',22));
+  '2099-07-01 12:00+00','UTC','Secret Park','Secret note',now(),array['community']),
+ ('f4100000-0000-4000-8000-000000000002','f4000000-0000-4000-8000-000000000001','Walk','',
+  '2099-07-02 10:00+00','UTC','Hill','',null,array['community']);
+insert into private.plan_links(plan_id,code) values ('f4100000-0000-4000-8000-000000000001',repeat('L',22)),
+ ('f4100000-0000-4000-8000-000000000002',repeat('W',22));
 insert into public.attendees(plan_id,user_id,response)
  select 'f4100000-0000-4000-8000-000000000001',('f4000000-0000-4000-8000-0000000000'||n)::uuid,r
  from (values ('05','accepted'),('06','accepted'),('07','accepted'),('08','accepted'),('09','declined'),('10','accepted'),
-  ('13','accepted'),('14','accepted')) v(n,r);
+  ('13','accepted'),('14','accepted'),('25','accepted')) v(n,r);
 -- Endpoints of accounts that may not register (the banned, the leaving, the switched-off tester) were bound earlier.
 insert into private.device_endpoints(token,user_id,platform) values
  ('ExpoPushToken[ben]','f4000000-0000-4000-8000-000000000005','ios'),
@@ -72,6 +87,10 @@ do $$ begin
  begin perform public.register_device('not-a-token','ios'); raise exception 'A malformed token registered';
  exception when others then if sqlstate is distinct from '22023' or sqlerrm is distinct from 'Invalid endpoint' then raise; end if; end;
  begin perform public.register_device('ExpoPushToken[hana]','web'); raise exception 'An unknown platform registered';
+ exception when others then if sqlstate is distinct from '22023' or sqlerrm is distinct from 'Invalid endpoint' then raise; end if; end;
+ begin perform public.register_device('ExpoPushToken[hana]',null); raise exception 'A missing platform registered';
+ exception when others then if sqlstate is distinct from '22023' or sqlerrm is distinct from 'Invalid endpoint' then raise; end if; end;
+ begin perform public.register_device('ExpoPushToken[hana-new]',null); raise exception 'A missing platform registered a new token';
  exception when others then if sqlstate is distinct from '22023' or sqlerrm is distinct from 'Invalid endpoint' then raise; end if; end;
 end $$;
 select set_config('request.jwt.claims','{"sub":"f4000000-0000-4000-8000-000000000004","role":"authenticated"}',true);
@@ -241,6 +260,96 @@ do $$ begin
  end if;
 end $$;
 
+-- A request's notice goes out only for the request the host would see in their list (plan_join_requests).
+-- Eve asks; the host approves her before any claim, removes her, and she asks again: only the new waiting period's
+-- notice is sent, never the first one. now() is fixed inside this block, so Eve's first request and its notice are moved
+-- an hour back, as if made then. Fay asks, then the host invites her from contacts while she is still waiting: she is on
+-- the event another way, so nothing is sent. Gus asks on the Walk, which the host then cancels: nothing is sent. Ivy asks,
+-- then her account is being deleted: nothing is sent.
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"f4000000-0000-4000-8000-000000000017","role":"authenticated"}',true);
+select public.request_to_join(repeat('L',22),'Eve','accepted','2026-10');
+reset role;
+update private.notification_outbox set created_at=created_at-interval '1 hour',
+  dedupe_key='join:f4100000-0000-4000-8000-000000000001:f4000000-0000-4000-8000-000000000017:'
+  ||(select id from private.plan_links where code=repeat('L',22))||':'||extract(epoch from now()-interval '1 hour')
+ where kind='join_request' and actor_id='f4000000-0000-4000-8000-000000000017';
+update private.join_requests set created_at=created_at-interval '1 hour' where user_id='f4000000-0000-4000-8000-000000000017';
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"f4000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.decide_join_request('f4100000-0000-4000-8000-000000000001','f4000000-0000-4000-8000-000000000017',true);
+select public.remove_guest('f4100000-0000-4000-8000-000000000001','f4000000-0000-4000-8000-000000000017');
+select set_config('request.jwt.claims','{"sub":"f4000000-0000-4000-8000-000000000017","role":"authenticated"}',true);
+do $$ declare r jsonb; begin
+ r := public.request_to_join(repeat('L',22),null,'maybe',null);
+ if r->>'state' is distinct from 'waiting' then raise exception 'Eve is not waiting again: %', r; end if;
+end $$;
+select set_config('request.jwt.claims','{"sub":"f4000000-0000-4000-8000-000000000018","role":"authenticated"}',true);
+select public.request_to_join(repeat('L',22),null,'accepted',null);
+select set_config('request.jwt.claims','{"sub":"f4000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+do $$ declare r jsonb; begin
+ r := public.invite_contacts('f4100000-0000-4000-8000-000000000001',
+  jsonb_build_array(jsonb_build_object('phone','447700985018','country','44','code',repeat('F',22))));
+ if r->0->>'kind' is distinct from 'app' then raise exception 'Fay was not invited in the app: %', r; end if;
+end $$;
+select set_config('request.jwt.claims','{"sub":"f4000000-0000-4000-8000-000000000019","role":"authenticated"}',true);
+select public.request_to_join(repeat('W',22),'Gus','accepted','2026-10');
+select set_config('request.jwt.claims','{"sub":"f4000000-0000-4000-8000-000000000020","role":"authenticated"}',true);
+select public.request_to_join(repeat('L',22),'Ivy','accepted','2026-10');
+select set_config('request.jwt.claims','{"sub":"f4000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.change_plan_v3('f4100000-0000-4000-8000-000000000002',1,'Walk','',array['community'],'2099-07-02 10:00+00',null,'UTC','Hill','',true);
+reset role;
+update public.profiles set deletion_requested_at=now() where id='f4000000-0000-4000-8000-000000000020';
+do $$ begin
+ if (select count(*) from private.join_requests where status='waiting' and user_id in ('f4000000-0000-4000-8000-000000000017',
+   'f4000000-0000-4000-8000-000000000018','f4000000-0000-4000-8000-000000000019','f4000000-0000-4000-8000-000000000020')) is distinct from 4
+ or not exists(select 1 from public.attendees where plan_id='f4100000-0000-4000-8000-000000000001' and user_id='f4000000-0000-4000-8000-000000000018')
+ or (select count(*) from private.notification_outbox where kind='join_request' and actor_id='f4000000-0000-4000-8000-000000000017') is distinct from 2 then
+  raise exception 'The requests are not set up as the test needs';
+ end if;
+end $$;
+insert into push_jobs select 'periods', j from jsonb_array_elements(public.claim_notification_deliveries(25)) j;
+do $$ declare v text; begin
+ if (select count(*) from push_jobs where step='periods' and job->>'kind'='join_request' and job->>'actor_name'='Eve') is distinct from 1 then
+  raise exception 'Eve''s notices sent: %', (select jsonb_agg(job) from push_jobs where step='periods' and job->>'actor_name'='Eve');
+ end if;
+ if exists(select 1 from private.notification_deliveries d join private.notification_outbox o on o.id=d.outbox_id
+   where o.kind='join_request' and o.actor_id='f4000000-0000-4000-8000-000000000017' and o.created_at<now()) then
+  raise exception 'The first waiting period''s notice revived';
+ end if;
+ select string_agg(p.display_name,', ' order by p.display_name) into v from private.notification_deliveries d
+  join private.notification_outbox o on o.id=d.outbox_id join public.profiles p on p.id=o.actor_id
+  where o.kind='join_request' and o.actor_id in ('f4000000-0000-4000-8000-000000000018','f4000000-0000-4000-8000-000000000019',
+   'f4000000-0000-4000-8000-000000000020');
+ if v is not null then
+  raise exception 'A notice went out for a request the host doesn''t see (Fay on the event, Gus''s cancelled Walk, Ivy leaving): %', v;
+ end if;
+ if exists(select 1 from private.notification_outbox where kind='join_request' and delivered_at is null and actor_id in
+   ('f4000000-0000-4000-8000-000000000018','f4000000-0000-4000-8000-000000000019','f4000000-0000-4000-8000-000000000020')) then
+  raise exception 'A notice nobody may get was left unprocessed';
+ end if;
+end $$;
+
+-- A removed guest gets nothing: Zoe's Note to guests is queued, the host removes her, and the claim sends her nothing.
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"f4000000-0000-4000-8000-000000000025","role":"authenticated"}',true);
+select public.register_device('ExpoPushToken[zoe]','ios');
+reset role;
+insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id) values
+ ('f4100000-0000-4000-8000-000000000001','f4000000-0000-4000-8000-000000000025','guest_note','push:zoe','f4000000-0000-4000-8000-000000000001');
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"f4000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.remove_guest('f4100000-0000-4000-8000-000000000001','f4000000-0000-4000-8000-000000000025');
+reset role;
+insert into push_jobs select 'removed', j from jsonb_array_elements(public.claim_notification_deliveries(25)) j;
+do $$ begin
+ if exists(select 1 from push_jobs where step='removed' and job->>'token'='ExpoPushToken[zoe]')
+ or exists(select 1 from private.notification_deliveries where token='ExpoPushToken[zoe]') then
+  raise exception 'A removed guest was sent a notice';
+ end if;
+ if (select delivered_at from private.notification_outbox where dedupe_key='push:zoe') is null then raise exception 'The removed guest''s notice is still open'; end if;
+end $$;
+
 -- Two accounts on one phone (Review Focus 1). Amy registers the phone; her change notice is claimed and retried (pending).
 -- Bob signs in on the same phone and registers the same token: the endpoint is rebound to him with a new generation, and
 -- the next claim suppresses Amy's pending row. Bob's own notice then reaches the phone, and registering again with the
@@ -348,6 +457,36 @@ do $$ declare j jsonb; begin
  select job into j from push_jobs where step='fold' and job->>'kind'='join_request';
  if j->>'actor_name' is distinct from 'Ola' or j->>'token' is distinct from 'ExpoPushToken[hana]' then
   raise exception 'The folded request''s notice does not name the app account: %', j;
+ end if;
+end $$;
+
+-- Fold duplicates: Ned (has used the app) asked on the Picnic, then so did Kit (web only), with the same number. Ned's own
+-- request stands and Kit's goes, so Kit's unsent notice goes too: the host is told once, by Ned's.
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"f4000000-0000-4000-8000-000000000024","role":"authenticated"}',true);
+select public.request_to_join(repeat('L',22),null,'accepted',null);
+select set_config('request.jwt.claims','{"sub":"f4000000-0000-4000-8000-000000000023","role":"authenticated"}',true);
+select public.request_to_join(repeat('L',22),null,'maybe','2026-10');
+reset role;
+set local role service_role;
+select public.fold_web_account('f4000000-0000-4000-8000-000000000023','f4000000-0000-4000-8000-000000000024');
+reset role;
+insert into push_jobs select 'fold-duplicate', j from jsonb_array_elements(public.claim_notification_deliveries(25)) j;
+do $$ begin
+ if (select count(*) from push_jobs where step='fold-duplicate' and job->>'kind'='join_request' and job->>'token'='ExpoPushToken[hana]')
+  is distinct from 1 then
+  raise exception 'The host was not told exactly once: %', (select jsonb_agg(job) from push_jobs where step='fold-duplicate');
+ end if;
+ if (select job->>'actor_name' from push_jobs where step='fold-duplicate' and job->>'kind'='join_request') is distinct from 'Ned' then
+  raise exception 'The notice does not name the app account';
+ end if;
+ if exists(select 1 from private.notification_outbox where kind='join_request'
+   and dedupe_key like 'join:f4100000-0000-4000-8000-000000000001:f4000000-0000-4000-8000-000000000023:%') then
+  raise exception 'The web account''s duplicate notice was kept';
+ end if;
+ if (select response from private.join_requests where plan_id='f4100000-0000-4000-8000-000000000001' and user_id='f4000000-0000-4000-8000-000000000024')
+  is distinct from 'accepted' then
+  raise exception 'The app account''s own request was replaced';
  end if;
 end $$;
 
