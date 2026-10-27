@@ -37,6 +37,8 @@ import { confirmDiscardDraft } from "../../src/state/usePlanEditor";
 // The last save notice already shown, so a remount or web history restoring the same URL never
 // repeats a saved toast. Each save passes a fresh `notice` id.
 let shownNotice: string | undefined;
+// The last "gone" note tap already shown (its `n`), kept apart from the saved notice id.
+let shownGone: string | undefined;
 
 type Attendee = {
   plan_id: string;
@@ -48,7 +50,7 @@ type Attendee = {
 
 export default function Plans() {
   const largeText = useLargeText();
-  const { created, cover, notice } = useLocalSearchParams(),
+  const { created, cover, notice, n } = useLocalSearchParams(),
     { preview, localPlans, session } = useApp(),
     [plans, setPlans] = useState<LocalPlan[]>([]),
     [busy, setBusy] = useState(false),
@@ -260,14 +262,16 @@ export default function Plans() {
       setToastNotice(undefined);
       setGone(false);
     } else if (noticeId === "gone") {
-      // A tapped notification's note: shown here, then the param is cleared so Back never brings it again.
-      setGone(true);
-      router.setParams({ notice: undefined });
+      // A tapped notification's note: shown once per tap (its `n`), so Back to the same URL never brings it again.
+      if (typeof n === "string" && n !== shownGone) {
+        shownGone = n;
+        setGone(true);
+      }
     } else if (noticeId && noticeId !== shownNotice) {
       shownNotice = noticeId;
       setToastNotice(noticeId);
     }
-  }, [noticeId, pathname]);
+  }, [noticeId, n, pathname]);
   const toast =
     !noticeId || toastNotice !== noticeId
       ? null

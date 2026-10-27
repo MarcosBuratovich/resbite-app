@@ -42,13 +42,17 @@ test("an unreadable plan goes to My resbites with the gone note", async () => {
   const t = setup({}, false);
   t.router.receive(push());
   await settle();
-  assert.deepEqual(t.opened, [{ pathname: "/plans", params: { notice: "gone" } }]);
+  assert.equal(t.opened.length, 1);
+  assert.equal(t.opened[0].pathname, "/plans");
+  assert.match(JSON.stringify(t.opened[0].params), /^\{"notice":"gone","n":"[0-9a-z]+"\}$/);
 });
 test("a malformed push payload goes to My resbites without reading", async () => {
   const t = setup();
   t.router.receive(push({ type: "plan_update", planId: "../x", notificationId: "7" }));
   await settle();
-  assert.deepEqual(t.opened, [{ pathname: "/plans", params: { notice: "gone" } }]);
+  assert.equal(t.opened.length, 1);
+  assert.equal(t.opened[0].pathname, "/plans");
+  assert.match(JSON.stringify(t.opened[0].params), /^\{"notice":"gone","n":"[0-9a-z]+"\}$/);
   assert.deepEqual(t.reads, []);
 });
 test("a reminder tap or an unrelated notification is not a push", async () => {
