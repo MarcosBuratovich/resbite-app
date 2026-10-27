@@ -70,10 +70,10 @@ export default function PhoneAuth() {
         <>
           <Copy>{PHONE_COPY.codeBody(formatPhone(phone.e164 ?? phone.input))}</Copy>
           <CodeField value={phone.digits} onChange={typeDigits} inputRef={phone.codeInput} />
-          {phone.busy ? <ActivityIndicator accessibilityLabel="Checking the code" color={c.aquaDark} /> : null}
+          {phone.busy ? <ActivityIndicator accessibilityLabel={PHONE_COPY.checking} color={c.aquaDark} /> : null}
           <ErrorNote message={phone.error} />
           {phone.error && phone.digits.length === 6 && !phone.busy ? (
-            <TextAction title="Retry" onPress={() => void phone.verify(phone.digits)} />
+            <TextAction title={PHONE_COPY.retry} onPress={() => void phone.verify(phone.digits)} />
           ) : null}
           <View style={styles.links}>
             {phone.secondsLeft > 0 ? (
@@ -120,8 +120,8 @@ export default function PhoneAuth() {
           ) : null}
           {!signup ? (
             <>
-              {appleAvailable ? <Chip text="Continue with Apple" icon={AppleMark} onPress={apple} /> : null}
-              <Chip text="Continue with Google" onPress={google} />
+              {appleAvailable ? <Chip text={GUEST_COPY.apple} icon={AppleMark} onPress={apple} /> : null}
+              <Chip text={GUEST_COPY.google} onPress={google} />
               <View style={styles.links}>
                 <TextAction title={PHONE_COPY.useEmail} onPress={() => router.push("/auth?mode=login")} />
               </View>

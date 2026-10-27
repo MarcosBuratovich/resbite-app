@@ -14,6 +14,8 @@ export const PHONE_COPY = {
   changeNumber: "Change number",
   createInstead: "Create an account",
   useEmail: "Use email and password",
+  retry: "Retry",
+  checking: "Checking the code",
   aboutHeading: "About you",
   nameField: "Your name",
   continue: "Continue",

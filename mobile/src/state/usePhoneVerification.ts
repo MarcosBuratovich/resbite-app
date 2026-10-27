@@ -27,6 +27,9 @@ export function usePhoneVerification(purpose: PhonePurpose) {
   const [reason, setReason] = useState<"no_account" | "taken" | null>(null);
   const mounted = useRef(true);
   const working = useRef(false);
+  const verifying = useRef(false);
+  /** Bumped by changeNumber: a send that finishes under an older tag is dropped. */
+  const request = useRef(0);
   const codeInput = useRef<TextInput>(null);
 
   useEffect(() => {
@@ -43,10 +46,12 @@ export function usePhoneVerification(purpose: PhonePurpose) {
 
   async function sendTo(number: string) {
     working.current = true;
+    const tag = request.current;
     setBusy(true);
     setError(null);
     setReason(null);
     const result = await sendPhoneCode(phoneCodeDeps, number, purpose);
+    if (tag !== request.current) return;
     working.current = false;
     if (!mounted.current) return;
     setBusy(false);
@@ -97,12 +102,14 @@ export function usePhoneVerification(purpose: PhonePurpose) {
     async verify(code: string) {
       if (working.current || !e164) return false;
       working.current = true;
+      verifying.current = true;
       setBusy(true);
       setError(null);
       // Remembered just before the verify that completes a sign-up, and only then.
       if (purpose === "signup") rememberAttestation(TERMS_VERSION);
       const result = await verifyPhoneCode(phoneCodeDeps, e164, code, resendAt - RESEND_MS, purpose);
       working.current = false;
+      verifying.current = false;
       if (result.ok) {
         // Signed in: the navigator may already have remounted onto /account, which makes this moot.
         if (purpose === "add") await refresh();
@@ -123,6 +130,11 @@ export function usePhoneVerification(purpose: PhonePurpose) {
       await sendTo(e164);
     },
     changeNumber() {
+      // A check that may sign the person in can't be called off.
+      if (verifying.current) return;
+      request.current += 1;
+      working.current = false;
+      setBusy(false);
       setStep("number");
       setDigits("");
       setError(null);
