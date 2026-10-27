@@ -4,7 +4,7 @@ import { router } from "expo-router";
 import { deviceRegion, parsePhone, phoneVerified, samePhone } from "../domain/phone";
 import { TERMS_VERSION } from "../domain/guestAccount";
 import { phoneCodeDeps, sendPhoneCode, verifyPhoneCode, type PhonePurpose } from "../services/phoneCode";
-import { foldPhoneAccount, phoneFoldDeps, sendFoldCode, type FoldClientDeps } from "../services/phoneFold";
+import { foldLanded, foldPhoneAccount, retryFold, phoneFoldDeps, sendFoldCode, type FoldClientDeps } from "../services/phoneFold";
 import { clearAttestation, rememberAttestation } from "../services/phoneAccount";
 import { useAccount } from "./AccountState";
 
@@ -30,6 +30,9 @@ export function usePhoneVerification(purpose: PhonePurpose) {
   const [folding, setFolding] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const foldDeps = useRef<FoldClientDeps | null>(null);
+  /** The verified web account's token, in memory only, so Retry can post again without a spent code. */
+  const foreignToken = useRef<string | null>(null);
+  const [foldBlocked, setFoldBlocked] = useState(false);
   const mounted = useRef(true);
   const working = useRef(false);
   const verifying = useRef(false);
@@ -41,6 +44,7 @@ export function usePhoneVerification(purpose: PhonePurpose) {
     mounted.current = true;
     return () => {
       mounted.current = false;
+      foreignToken.current = null;
     };
   }, []);
   useEffect(() => {
@@ -78,9 +82,13 @@ export function usePhoneVerification(purpose: PhonePurpose) {
     step,
     folding,
     notice,
+    /** The fold is switched off: no Retry; change the number or sign out. */
+    foldBlocked,
     /** Offered when Add refused the number as taken: send a code to the web-only account that holds it. */
     async sendFold() {
       if (working.current || purpose !== "add" || !e164) return;
+      foreignToken.current = null;
+      setFoldBlocked(false);
       working.current = true;
       const tag = request.current;
       setBusy(true);
@@ -132,7 +140,7 @@ export function usePhoneVerification(purpose: PhonePurpose) {
       await sendTo(parsed.e164);
     },
     async verify(code: string) {
-      if (working.current || !e164) return false;
+      if (working.current || !e164 || foldBlocked) return false;
       working.current = true;
       verifying.current = true;
       setBusy(true);
@@ -140,14 +148,27 @@ export function usePhoneVerification(purpose: PhonePurpose) {
       // Remembered for this number just before the verify that completes a sign-up, and only then.
       if (purpose === "signup") rememberAttestation(TERMS_VERSION, e164);
       if (folding) {
-        const folded = await foldPhoneAccount(fold(), e164, code, resendAt - RESEND_MS);
-        if (folded.ok) await refresh();
-        working.current = false;
-        verifying.current = false;
-        if (folded.ok) {
+        const held = foreignToken.current;
+        const folded = held
+          ? await retryFold(fold(), e164, held)
+          : await foldPhoneAccount(fold(), e164, code, resendAt - RESEND_MS);
+        foreignToken.current = folded.ok || folded.gone || folded.blocked ? null : (folded.foreignToken ?? null);
+        let landed = folded.ok;
+        // A failure after the code was checked may still have folded (a lost reply): re-read the account.
+        if (!folded.ok && folded.verified && !folded.blocked) landed = foldLanded(await refresh(), e164);
+        else if (folded.ok) await refresh();
+        if (landed) {
+          working.current = false;
+          verifying.current = false;
           router.replace("/account");
           return true;
         }
+        working.current = false;
+        verifying.current = false;
+        if (!folded.ok && folded.blocked && mounted.current) setFoldBlocked(true);
+        if (folded.ok) return false;
+        working.current = false;
+        verifying.current = false;
         if (!mounted.current) return false;
         if (folded.gone) {
           // The web account was deleted meanwhile, so the number is free: carry on with the ordinary Add.
@@ -207,6 +228,8 @@ export function usePhoneVerification(purpose: PhonePurpose) {
       working.current = false;
       setBusy(false);
       setStep("number");
+      foreignToken.current = null;
+      setFoldBlocked(false);
       setFolding(false);
       setNotice(null);
       setDigits("");

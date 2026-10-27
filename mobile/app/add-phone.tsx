@@ -41,7 +41,7 @@ export default function AddPhone() {
               {phone.busy ? <ActivityIndicator accessibilityLabel={PHONE_COPY.checking} color={c.aquaDark} /> : null}
               {phone.notice ? <Copy style={styles.helper}>{phone.notice}</Copy> : null}
               <ErrorNote message={phone.error} />
-              {phone.error && phone.digits.length === 6 && !phone.busy ? (
+              {phone.error && phone.digits.length === 6 && !phone.busy && !phone.foldBlocked ? (
                 <TextAction title={PHONE_COPY.retry} onPress={() => void phone.verify(phone.digits)} />
               ) : null}
               <View style={styles.links}>

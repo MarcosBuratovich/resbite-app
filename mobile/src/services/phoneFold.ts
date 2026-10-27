@@ -2,6 +2,7 @@
 // sent to and checked by an isolated auth client, so the app's own session never changes; the foreign
 // token then goes to the Edge Function with the app session's bearer token.
 import { PHONE_CODE_COPY, type AuthError } from "./phoneCode";
+import { phoneVerified, samePhone } from "../domain/phone";
 import { PHONE_COPY } from "../domain/phoneCopy";
 
 export type FoldClientDeps = {
@@ -19,7 +20,22 @@ export type FoldClientDeps = {
 export type FoldResult =
   | { ok: true }
   /** `gone`: the web account no longer exists, so the number is free for the ordinary Add flow. */
-  | { ok: false; message: string; clear: boolean; gone?: true };
+  | {
+      ok: false;
+      message: string;
+      clear: boolean;
+      gone?: true;
+      /** The code was spent. Keep this in memory (never persist it) and call `retryFold` with it. */
+      foreignToken?: string;
+      /** The code was checked but the function did not finish; the account may still have changed. */
+      verified?: true;
+      /** The fold is switched off: no Retry with the same digits. */
+      blocked?: true;
+    };
+
+/** True when the re-read account holds this number, verified: a fold whose reply was lost still landed. */
+export const foldLanded = (user: { phone?: string | null } | null | undefined, e164: string) =>
+  phoneVerified(user as never) && samePhone(user?.phone, e164);
 
 const CODE_LIFETIME_MS = 600_000;
 const TEST_CODE = "000000";
@@ -60,18 +76,28 @@ export async function foldPhoneAccount(
       const expired = d.now() - sentAt >= CODE_LIFETIME_MS;
       return { ok: false, message: expired ? PHONE_CODE_COPY.expired : PHONE_CODE_COPY.mismatch, clear: true };
     }
-    const appToken = await d.appAccessToken();
-    if (!verified.accessToken || !appToken)
-      return { ok: false, message: PHONE_CODE_COPY.connection, clear: false };
-    const { status } = await d.callFold({ appToken, body: { foreign_token: verified.accessToken, phone: e164 } });
-    if (status >= 200 && status < 300) return { ok: true };
-    if (status === 503) return { ok: false, message: PHONE_COPY.foldOff, clear: false };
-    // The code was just verified, so a 401 means the web user was already deleted: the number is free.
-    if (status === 401) return { ok: false, message: PHONE_COPY.foldGone, clear: false, gone: true };
-    if (status === 403 || status === 409) return { ok: false, message: PHONE_COPY.taken, clear: false };
-    return { ok: false, message: PHONE_CODE_COPY.connection, clear: false };
+    if (!verified.accessToken) return { ok: false, message: PHONE_CODE_COPY.connection, clear: false };
+    return await retryFold(d, e164, verified.accessToken);
   } catch {
     return { ok: false, message: PHONE_CODE_COPY.connection, clear: false };
+  }
+}
+
+/** Post an already-verified foreign token again (after a 500, a timeout or a lost reply). */
+export async function retryFold(d: FoldClientDeps, e164: string, foreignToken: string): Promise<FoldResult> {
+  const again = { verified: true as const, foreignToken, clear: false };
+  try {
+    const appToken = await d.appAccessToken();
+    if (!appToken) return { ok: false, message: PHONE_CODE_COPY.connection, ...again };
+    const { status } = await d.callFold({ appToken, body: { foreign_token: foreignToken, phone: e164 } });
+    if (status >= 200 && status < 300) return { ok: true };
+    if (status === 503) return { ok: false, message: PHONE_COPY.foldOff, clear: false, verified: true, blocked: true };
+    // The code was just verified, so a 401 means the web user was already deleted: the number is free.
+    if (status === 401) return { ok: false, message: PHONE_COPY.foldGone, clear: false, gone: true };
+    if (status === 403 || status === 409) return { ok: false, message: PHONE_COPY.taken, clear: false, verified: true };
+    return { ok: false, message: PHONE_CODE_COPY.connection, ...again };
+  } catch {
+    return { ok: false, message: PHONE_CODE_COPY.connection, ...again };
   }
 }
 
