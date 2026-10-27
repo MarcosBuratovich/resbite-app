@@ -8,15 +8,15 @@
 
 -- One personal invitation per number per event. code_hash is sha256 of the 22-character code made on the host's phone;
 -- the code itself is never stored. user_id/answered_at say who answered it. check_count/check_window limit wrong
--- phone checks on the invitation page.
+-- phone checks on the invitation page. Deleting an account leaves the invitation and forgets who sent or answered it.
 create table private.phone_invitations (
  id uuid primary key default gen_random_uuid(),
  plan_id uuid not null references public.plans(id) on delete cascade,
  phone text not null check (phone ~ '^[1-9][0-9]{6,14}$'),
  country text not null check (country ~ '^[1-9][0-9]{0,2}$'),
  code_hash bytea unique,
- invited_by uuid not null,
- user_id uuid,
+ invited_by uuid references auth.users(id) on delete set null,
+ user_id uuid references auth.users(id) on delete set null,
  answered_at timestamptz,
  created_at timestamptz not null default now(),
  revoked_at timestamptz,
@@ -29,7 +29,7 @@ revoke all on private.phone_invitations from public, anon, authenticated;
 
 -- How many numbers each account has looked up today (UTC).
 create table private.lookup_usage (
- user_id uuid primary key,
+ user_id uuid primary key references auth.users(id) on delete cascade,
  day date not null,
  count int not null
 );
@@ -61,8 +61,9 @@ begin
 end $$;
 revoke all on function private.charge_lookup(uuid,int) from public, anon, authenticated, service_role;
 
--- Which of these numbers belong to people "On Resbite" (eligible and has used the app), never the caller. Returns their
--- digits. At most 50 numbers per call and 500 per caller per UTC day.
+-- Which of these numbers belong to people "On Resbite" (eligible, has used the app and has a profile: exactly who
+-- invite_contacts invites in the app), never the caller. Returns their digits. At most 50 numbers per call and 500 per
+-- caller per UTC day.
 create function private.contacts_on_resbite(p_phones text[]) returns text[] language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester(); v_n int := coalesce(cardinality(p_phones),0); v_out text[];
 begin
@@ -74,14 +75,16 @@ begin
   select distinct u.phone as d from auth.users u
   where u.phone = any(select private.phone_digits(x) from unnest(p_phones) x)
    and u.phone_confirmed_at is not null and u.id<>v_uid
-   and private.user_eligible(u.id) and private.used_app(u.id)) s;
+   and private.user_eligible(u.id) and private.used_app(u.id)
+   and exists(select 1 from public.profiles p where p.id=u.id)) s;
  return v_out;
 end $$;
 
 -- Invites up to 50 people to an event (each item is charged to the daily lookup budget). Each item is {phone, country, code}; the result has one {phone, kind} per item, in
 -- order: 'self' (the host's own number), 'already' (the holder is on the event), 'app' (On Resbite: added as pending
--- with a notice) or 'link' (a personal invitation by number, its code stored as a hash; inviting again replaces the
--- code, brings back a revoked invitation and keeps who answered).
+-- with a notice, and a live personal link for the same number on this event stops working) or 'link' (a personal
+-- invitation by number, its code stored as a hash; inviting again replaces the code and keeps who answered, while a
+-- revoked invitation comes back fresh, with no answer and nobody attached).
 create function private.invite_contacts(p_plan uuid, p_invites jsonb) returns jsonb language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := private.require_link_owner(p_plan); v_item jsonb; v_phone text; v_country text; v_code text; v_holder uuid;
  v_kind text; v_out jsonb := '[]'::jsonb;
@@ -114,11 +117,15 @@ begin
    insert into public.attendees(plan_id,user_id) values(p_plan,v_holder) on conflict do nothing;
    insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id)
     values(p_plan,v_holder,'invited','invited:'||p_plan||':'||v_holder,v_uid) on conflict do nothing;
+   update private.phone_invitations set revoked_at=now(), code_hash=null
+    where plan_id=p_plan and phone=v_phone and revoked_at is null;
   else
    v_kind := 'link';
    insert into private.phone_invitations(plan_id,phone,country,code_hash,invited_by)
     values(p_plan,v_phone,v_country,extensions.digest(v_code,'sha256'),v_uid)
-    on conflict (plan_id,phone) do update set country=excluded.country, code_hash=excluded.code_hash, revoked_at=null;
+    on conflict (plan_id,phone) do update set country=excluded.country, code_hash=excluded.code_hash, revoked_at=null,
+     user_id=case when private.phone_invitations.revoked_at is null then private.phone_invitations.user_id end,
+     answered_at=case when private.phone_invitations.revoked_at is null then private.phone_invitations.answered_at end;
   end if;
   v_out := v_out || jsonb_build_array(jsonb_build_object('phone',v_phone,'kind',v_kind));
  end loop;

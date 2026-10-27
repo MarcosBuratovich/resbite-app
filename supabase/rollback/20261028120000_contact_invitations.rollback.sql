@@ -2,8 +2,8 @@
 -- only with the owner's approval:
 --   begin; \i supabase/rollback/20261028120000_contact_invitations.rollback.sql; commit;
 -- It deletes:
---   - every personal invitation and every daily lookup count, with their tables: every /i/ link stops working, and the
---     codes kept on hosts' phones open nothing;
+--   - every personal invitation and every daily lookup count, with their tables (and those tables' foreign keys to
+--     auth.users): every /i/ link stops working, and the codes kept on hosts' phones open nothing;
 --   - every 'invited' outbox row (the notices of in-app invitations), so the earlier kind check can come back;
 --   - every live 'invitation' grant: people who got access by answering a personal invitation lose it and wait on the
 --     access-pending screen, unless the roster or another grant lets them in. A revoked 'invitation' grant is a ban, so

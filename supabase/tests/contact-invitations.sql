@@ -661,4 +661,99 @@ do $$ begin
   or exists(select 1 from private.beta_access where user_id='d1000000-0000-4000-8000-000000000020' and revoked_at is null) then raise exception 'The refused join wrote something'; end if;
  if not exists(select 1 from public.attendees where plan_id='d1100000-0000-4000-8000-000000000001' and user_id='d1000000-0000-4000-8000-000000000017') then raise exception 'The control join failed'; end if;
 end $$;
+-- Final review fixes (F5). M1: re-inviting a revoked invitation brings it back fresh (no answer, nobody attached), and
+-- inviting someone in the app turns off a live personal link for the same number on that event, and only that event.
+-- 04 (447700900202) answered a link on the Quiz that was then revoked; 03 (447700900201) had a link on the Quiz and one
+-- on the Walk before using the app.
+reset role;
+insert into public.plans(id,owner_id,title,starts_at,time_zone,place_label,categories) values
+ ('d1100000-0000-4000-8000-000000000041','d1000000-0000-4000-8000-000000000001','Quiz','2099-07-01 19:00+00','UTC','Pub',array['community']),
+ ('d1100000-0000-4000-8000-000000000042','d1000000-0000-4000-8000-000000000001','Walk','2099-07-02 10:00+00','UTC','Hill',array['community']);
+insert into private.phone_invitations(plan_id,phone,country,code_hash,invited_by,user_id,answered_at,revoked_at) values
+ ('d1100000-0000-4000-8000-000000000041','447700900202','44',null,'d1000000-0000-4000-8000-000000000001','d1000000-0000-4000-8000-000000000004',now(),now()),
+ ('d1100000-0000-4000-8000-000000000041','447700900201','44',extensions.digest(repeat('Q',22),'sha256'),'d1000000-0000-4000-8000-000000000001',null,null,null),
+ ('d1100000-0000-4000-8000-000000000042','447700900201','44',extensions.digest(repeat('R',22),'sha256'),'d1000000-0000-4000-8000-000000000001',null,null,null);
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"d1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+do $$ declare r jsonb; begin
+ r := public.invite_contacts('d1100000-0000-4000-8000-000000000041', jsonb_build_array(
+  jsonb_build_object('phone','447700900202','country','44','code',repeat('S',22)),
+  jsonb_build_object('phone','447700900201','country','44','code',repeat('T',22))));
+ if (select array_agg(e->>'kind') from jsonb_array_elements(r) e) is distinct from array['link','app'] then raise exception 'F5 kinds were %', r; end if;
+end $$;
+reset role;
+do $$ declare v private.phone_invitations; begin
+ select * into v from private.phone_invitations where plan_id='d1100000-0000-4000-8000-000000000041' and phone='447700900202';
+ if v.revoked_at is not null or v.user_id is not null or v.answered_at is not null or v.code_hash is distinct from extensions.digest(repeat('S',22),'sha256') then
+  raise exception 'A revoked invitation must come back fresh: %', row_to_json(v);
+ end if;
+ select * into v from private.phone_invitations where plan_id='d1100000-0000-4000-8000-000000000041' and phone='447700900201';
+ if v.revoked_at is null or v.code_hash is not null then raise exception 'The link to someone now invited in the app still works'; end if;
+ if public.personal_invitation_page(repeat('Q',22))<>'{"state":"inactive"}'::jsonb then raise exception 'The old link still opens'; end if;
+ if not exists(select 1 from public.attendees where plan_id='d1100000-0000-4000-8000-000000000041' and user_id='d1000000-0000-4000-8000-000000000003') then
+  raise exception 'The app invitee is not on the event';
+ end if;
+ select * into v from private.phone_invitations where plan_id='d1100000-0000-4000-8000-000000000042' and phone='447700900201';
+ if v.revoked_at is not null or v.code_hash is distinct from extensions.digest(repeat('R',22),'sha256') then raise exception 'Another event''s link was turned off'; end if;
+end $$;
+
+-- M2: the lookup says "On Resbite" only for an account with a profile, as invite_contacts invites in the app only then.
+-- 30 is eligible and has used the app, but has no profile yet.
+insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) values
+ ('d1000000-0000-4000-8000-000000000030',null,null,'447700900230',now());
+insert into private.beta_access(user_id,source) values ('d1000000-0000-4000-8000-000000000030','maintainer');
+insert into private.app_sessions(user_id) values ('d1000000-0000-4000-8000-000000000030');
+set local role authenticated;
+do $$ declare r text[]; k jsonb; begin
+ r := public.contacts_on_resbite(array['447700900230','447700900201']);
+ if r is distinct from array['447700900201'] then raise exception 'An account without a profile looked On Resbite: %', r; end if;
+ k := public.invite_contacts('d1100000-0000-4000-8000-000000000042', jsonb_build_array(jsonb_build_object('phone','447700900230','country','44','code',repeat('U',22))));
+ if k->0->>'kind'<>'link' then raise exception 'Lookup and invite disagree: %', k; end if;
+end $$;
+reset role;
+insert into public.profiles(id,display_name) values ('d1000000-0000-4000-8000-000000000030','Profile now');
+set local role authenticated;
+do $$ begin
+ if public.contacts_on_resbite(array['447700900230']) is distinct from array['447700900230'] then raise exception 'With a profile, 30 is On Resbite'; end if;
+end $$;
+reset role;
+
+-- M3: the tables follow auth.users. Deleting an account forgets who sent or answered an invitation (the invitation
+-- stays) and removes its daily lookup count. 31 invited someone to the Walk and looked numbers up; 04 answered the Quiz.
+do $$ begin
+ if (select is_nullable from information_schema.columns where table_schema='private' and table_name='phone_invitations' and column_name='invited_by')<>'YES' then
+  raise exception 'invited_by must be nullable';
+ end if;
+ if (select array_agg(a.attname::text||':'||c.confdeltype::text order by a.attname) from pg_catalog.pg_constraint c
+     join pg_catalog.pg_attribute a on a.attrelid=c.conrelid and a.attnum=c.conkey[1]
+     where c.contype='f' and c.confrelid='auth.users'::regclass and c.conrelid='private.phone_invitations'::regclass) is distinct from array['invited_by:n','user_id:n']
+ or (select array_agg(a.attname::text||':'||c.confdeltype::text) from pg_catalog.pg_constraint c
+     join pg_catalog.pg_attribute a on a.attrelid=c.conrelid and a.attnum=c.conkey[1]
+     where c.contype='f' and c.confrelid='auth.users'::regclass and c.conrelid='private.lookup_usage'::regclass) is distinct from array['user_id:c'] then
+  raise exception 'Foreign keys to auth.users are wrong';
+ end if;
+end $$;
+insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) values
+ ('d1000000-0000-4000-8000-000000000031',null,null,'447700900231',now());
+insert into private.phone_invitations(plan_id,phone,country,code_hash,invited_by) values
+ ('d1100000-0000-4000-8000-000000000042','447700900232','44',extensions.digest(repeat('V',22),'sha256'),'d1000000-0000-4000-8000-000000000031');
+insert into private.lookup_usage(user_id,day,count) values ('d1000000-0000-4000-8000-000000000031',(now() at time zone 'utc')::date,3);
+update private.phone_invitations set user_id='d1000000-0000-4000-8000-000000000004', answered_at=now()
+ where plan_id='d1100000-0000-4000-8000-000000000041' and phone='447700900202';
+do $$ begin
+ begin insert into private.lookup_usage(user_id,day,count) values ('d1000000-0000-4000-8000-0000000000ff',(now() at time zone 'utc')::date,1);
+  raise exception 'A lookup count for no account was stored';
+ exception when foreign_key_violation then null; end;
+end $$;
+delete from auth.users where id in ('d1000000-0000-4000-8000-000000000031','d1000000-0000-4000-8000-000000000004');
+do $$ begin
+ if (select invited_by from private.phone_invitations where code_hash=extensions.digest(repeat('V',22),'sha256')) is not null
+  or not exists(select 1 from private.phone_invitations where code_hash=extensions.digest(repeat('V',22),'sha256')) then
+  raise exception 'Deleting the inviter must keep the invitation and forget who sent it';
+ end if;
+ if (select user_id from private.phone_invitations where plan_id='d1100000-0000-4000-8000-000000000041' and phone='447700900202') is not null then
+  raise exception 'Deleting the answerer must forget who answered';
+ end if;
+ if exists(select 1 from private.lookup_usage where user_id='d1000000-0000-4000-8000-000000000031') then raise exception 'The lookup count outlived its account'; end if;
+end $$;
 rollback;
