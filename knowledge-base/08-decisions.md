@@ -469,3 +469,33 @@ Plan 3 of 4 for contact invitations ([plan](../docs/superpowers/plans/2026-10-28
 17. **A failed decision's message stays until the list empties.** A failed decision is followed by a reload of the list, so clearing the message on each reload would hide its own message. It clears when the list becomes empty and shows the reason the server gave, not the offline line. The cost: a stale note until the next decision.
 
 Each open-link approval rollout step needs the owner's explicit approval.
+
+## Push notifications, 29 October 2026
+
+Plan 4 of 4 for contact invitations ([plan](../docs/superpowers/plans/2026-10-29-push-notifications.md)) carries out CI-D11: push is switched on for the events in the spec's Notifications section. These are the calls made while building it, for the owner's review, grouped by area. The rollout runbook is in `qa/push-notifications-2026-10-30/README.md`.
+
+**Database.**
+1. **One new migration instead of promoting the four local-only files.** `20261030120000_push_delivery.sql` carries the push parts of `20260918001308`, `20261014130000`, `20261015130000` and `20261022120001` in one idempotent file. The owner approves one file, and the account-deletion lifecycle stays untouched. The cost: some definitions are written twice, which a structure test in the SQL suite guards in full mode.
+2. **Any confirmed, non-banned, non-deleting account may register a device,** not only testers. A person waiting for the host's approval must get the "approved" push, and they cannot use the app yet. Delivery is still decided at claim time, so registering gives no access.
+3. **A request notice is tied to the waiting period.** The host does not get "Sam asked to join" for a request they have already approved or declined, and a guest who changed their answer is still notified once. The check is that the request was made no later than the notice, not that the person is an attendee. Why: an attendee check would block the "approved" case wrongly, and a request check by time keeps a changed answer working.
+4. **A fold drops the folded account's request notices when the other account already has a request.** Otherwise the person could be told twice about the same event. A missing platform is refused with `22023`.
+5. **The open-link rollback refuses to run while push is installed.** The push audience check reads the requests table that the open-link rollback drops, and the push rollback restores the open-link fold that the open-link rollback then replaces. Enforcing the order in the file is safer than relying on the runbook. Plan 3's rollback hash and records were updated.
+6. **Hosted-baseline commands pass all four candidates.** The list of tests assumes every pending candidate is applied, so the three-candidate commands in the plan 1 to 3 runbooks now fail at `push-delivery.sql`. Updating the commands and noting the convention in `supabase/README.md` is cheaper than changing the test harness.
+
+**Sender.**
+7. **Scheduling is an owner-run script, not a migration.** `supabase/ops/schedule-deliver-notifications.sql` uses pg_cron, pg_net and Vault, which the local Docker test harness does not have, so a migration could not be tested.
+
+**App.**
+8. **A tap from a signed-in account that isn't approved yet refreshes the account once, then routes.** Approved goes to the event; still waiting goes to Account. "Approved" pushes go to waiting people whose cached status is stale, so dropping the tap would lose exactly the case that matters. The wait is capped at 10 seconds.
+9. **A stale record for another account, with no live session, is replaced when the current account registers.** Why: the old account's pushes must not reach the new person's phone. The server rebinds the token, and the claim suppresses deliveries to the old binding.
+10. **An offline sign-out with a registered device stays refused,** with "Couldn’t sign out. Connect to the internet and try again, so this phone stops getting your notifications." Signing out while still registered would leave the old account's pushes on the phone.
+11. **A damaged push record is forgotten at sign-out, and treated as absent at registration.** Being locked out of sign-out is worse than a possibly stale token, which a rebind or a "device not registered" answer from the provider clears later.
+12. **A web-only seam for push states is allowed for QA,** in its own commit with no native effect. Without it, the browser checks cannot show the settings chip's states, because push is always "not active" on the web.
+
+**The ask.**
+13. **The UX3 "Get reminders?" sheet becomes the single ask.** iOS has one notification permission, so one question serves reminders and updates. The cost: the reminders copy changed.
+14. **The ask has its own device flag.** People who said Not now to "Get reminders?" are asked once about notifications, and nobody is asked once the permission is decided. UX3's flag is kept as stored but no longer read.
+15. **The Updates chip never alarms.** Still checking reads "Checking…", a failed or unknown setup reads "Not set up yet" with Try again, and the ask also turns on reminders as the old sheet did. An explicit switch-off of Event reminders is respected.
+16. **Waiting people are asked on the same moments as everyone else** (after answering through the waiting screen with Going or Maybe, for example), because a waiting person is the one who needs the approval push.
+
+Each push rollout step needs the owner's explicit approval.

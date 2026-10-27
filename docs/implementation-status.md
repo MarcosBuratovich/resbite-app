@@ -691,4 +691,29 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
 
 **For the owner.** The list of parked items is in the runbook: the default calling code 44, former testers who cannot regain access through the link, a second request after a link rotation, the name sent with the request, and the small fixes and clean-ups left for a final wave.
 
-**Next.** Plan 4 (push). Then the owner's approval of the three migrations in order, the dashboard settings from plan 1, the fold release, the link site and the iPhone check.
+**Next.** Plan 4 (push, below). Then the owner's approval of the four migrations in order, the dashboard settings from plan 1, the fold release, the link site and the iPhone check.
+
+## Push notifications build — 30 October 2026
+
+**Built on the `push-notifications` branch (from `main` at `ffc876f`); nothing is applied to the hosted project, Apple, Expo, EAS, Vercel or TestFlight, and nothing is deployed.** Push is plan 4 of 4 ([spec](superpowers/specs/2026-10-27-contact-invitations-design.md), CI-D11 and "Notifications"; [plan](superpowers/plans/2026-10-29-push-notifications.md); the calls made during the build are in `knowledge-base/08-decisions.md`). The rollout runbook and the owner's list are in [`qa/push-notifications-2026-10-30/README.md`](../qa/push-notifications-2026-10-30/README.md).
+
+**What changed.**
+- **Database.** One hosted-compatible migration, `20261030120000_push_delivery.sql`: the delivery ledger, `expanded_at`, the service-only claim, validate and finish functions, `unregister_device`, a `register_device` that any confirmed account may use (waiting people get "approved"), a send-time audience that includes phone-only accounts and drops request notices decided before the push, and a fold that carries unsent notices. It replaces the push parts of four local-only migrations (`20260918001308`, `20261014130000`, `20261015130000`, `20261022120001`), which must never be applied to hosted; the deletion lifecycle stays local-only. Rollback: `supabase/rollback/20261030120000_push_delivery.rollback.sql`, which runs before plan 3's rollback (now guarded to refuse while push is installed).
+- **Sender.** `deliver-notifications` gains wording for `invited`, `join_request` and `join_approved`, and stays hard-disabled by `DELIVERY_RELEASE_APPROVED = false`. `supabase/ops/schedule-deliver-notifications.sql` is the owner-run schedule (pg_cron, pg_net, Vault).
+- **App.** Token registration and unregistering behind `EXPO_PUBLIC_PUSH_ENABLED`; a journal that keeps two accounts on one phone apart; one ask, "Get notified?", with its own flag; Notification settings showing the real state; a tap on a push opens the event after an authorized refetch, or lands on My resbites with "That resbite isn’t available any more." Offline sign-out is refused while a device is registered.
+- **Records.** Hosted-baseline check commands in the plan 1 to 3 runbooks now pass all four candidates (see `supabase/README.md`).
+
+**Migration state: not applied.** Owner approval is by file name and sha256, in order: phone accounts, contact invitations, open-link approval, then push delivery.
+- `supabase/migrations/20261030120000_push_delivery.sql`: `<sha256 — filled at merge>`. Hosted-compatible.
+- `supabase/rollback/20261030120000_push_delivery.rollback.sql`: `<sha256 — filled at merge>`.
+- `supabase/rollback/20261029120000_open_link_approval.rollback.sql` (changed by this plan): `<sha256 — filled at merge>`.
+
+**Rollout (owner-approved, not run).** APNs key into EAS credentials; an Expo access token; the four migrations; the sender deployed (`verify_jwt = false`), its secrets, the one-line release commit, the Vault secrets and the schedule script; `EXPO_PUBLIC_PUSH_ENABLED=true` in EAS production and a build; the two-phone checks. **Rollback:** unschedule the cron, set `NOTIFICATION_DELIVERY_ENABLED=false`, run the push rollback before plan 3's. Builds with the variable keep calling `register_device`, which still works with the foundation body for testers; waiting accounts then fail quietly.
+
+**Checks.** `<filled at merge>`. The commands: `cd mobile && npm run check`; `./scripts/test-database-docker.sh` (full) and with `--hosted-baseline` and all four candidates; the worker tests; the Expo web checks (Task 7).
+
+**Known limits.** Any confirmed account can add device endpoints with no per-account cap (the sender deletes invalid tokens); an account whose session expired without a sign-out keeps its endpoint until another account rebinds it or the person signs in again; an offline sign-out is refused with the notifications message.
+
+**For the owner.** The new words to approve (the ask's failure line, the chip states and Try again, the About sheet's lead lines and six events, the "Updates" renames, the three new push bodies) and the parked items are in the runbook. `20261022120001` must be split before the deletion milestone, without `notification_recipient_eligible`.
+
+**Next.** The owner's approvals, in the runbook's order; then the deletion milestone.

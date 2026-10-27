@@ -41,7 +41,7 @@ The commands:
 
 - `cd mobile && npm run check`.
 - `./scripts/test-database-docker.sh` (full mode; it includes `supabase/tests/open-link-approval.sql`, the rollback rehearsal and the concurrency scripts, among them `supabase/tests/local/decide-join-concurrency.sh`).
-- `./scripts/test-database-docker.sh --hosted-baseline supabase/migrations/20261027120000_phone_accounts.sql supabase/migrations/20261028120000_contact_invitations.sql supabase/migrations/20261029120000_open_link_approval.sql`.
+- `./scripts/test-database-docker.sh --hosted-baseline supabase/migrations/20261027120000_phone_accounts.sql supabase/migrations/20261028120000_contact_invitations.sql supabase/migrations/20261029120000_open_link_approval.sql supabase/migrations/20261030120000_push_delivery.sql` (all four candidates: `tests.txt` includes `push-delivery.sql`, so a shorter list fails there; see `supabase/README.md`).
 - Worker tests: `node --import ./mobile/node_modules/tsx/dist/loader.mjs --test supabase/functions/_shared/*.test.ts`.
 - Browser QA, every request intercepted: `cd mobile && node --import tsx ../links/verify-personal.mjs` and `node --import tsx ../links/verify-open-link.mjs` (headless Chrome), then the app's `mobile/scripts/verify-*.mjs` checks against Expo web on port 8081 with `EXPO_PUBLIC_SUPABASE_URL=https://ewcsgvhuojxdpaspwsrx.supabase.co EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=qa-fixture-key npx expo start --web --port 8081`.
 

@@ -26,7 +26,7 @@ Call `save_profile` once eligible, then read published `activities`. A maintaine
 - `respond(p_plan, p_response, p_version)` returns attendee version. Response is accepted, declined or withdrawn; fetch current attendee version first.
 - `change_plan(p_plan, p_version, p_start, p_zone, p_place, p_note, p_cancel=false)` returns plan version. Owner only, future active plans only; cancellation is terminal. Refresh on version conflict. Edits preserve responses. Editing the place clears old coordinates until coordinate-edit support is added.
 - `revoke_invite(p_id)` withdraws the invitation. If no other active invitation belongs to that attendee, removes their plan access.
-- `register_device(p_token, p_platform)` registers an Expo endpoint for the current account. Registration can rebind a shared physical endpoint at login. Sign-out endpoint cleanup remains required before push is enabled.
+- `register_device(p_token, p_platform)` registers an Expo endpoint for the current account. Registration can rebind a shared physical endpoint at login; the app calls `unregister_device(p_token)` at sign-out. Push delivery changes the rules (see Push delivery below).
 - `set_avatar_if_current(p_path,p_expected_path,p_expected_revision)` updates the caller's photo atomically against the saved path/revision and returns `{avatar_path,avatar_revision}`. Existing uploaded objects must belong to the caller; null detaches the photo. Stale changes fail with `40001`; an exact next-revision retry succeeds. Read the baseline from `profiles.avatar_revision` and persist it before uploading. Normalize/strip image metadata before upload; 2 MB bucket cap, JPEG/PNG/WebP. Use signed URLs, never public URLs.
 - `set_avatar(p_path)` remains for older clients, with every distinct path change now tracked by the revision trigger. Current clients use the guarded RPC above. Client Storage DELETE is denied; removal detaches the profile reference and leaves bytes for the separately gated service cleanup. Owners can read interrupted uploads; other authorized participants can read only the current attached image.
 
@@ -127,3 +127,25 @@ Run `../scripts/test-database.sh --hosted-baseline` before applying a migration 
 - **Redefined, grants unchanged.** `claim_plan_link` and `join_by_link` make a waiting request instead of a guest, so an old build gets the plan id and no admission; `fold_web_account` also moves requests.
 - **Rollback.** Deletes every request and the request and approval notices, turns `approval` grants into `link` grants (approved guests keep their access), restores the three redefined functions and the two checks byte for byte, and drops the new functions. It stops, changing nothing, if the contact-invitations rollback has already run.
 
+
+## Push delivery: local, not deployed (30 October 2026)
+
+`20261030120000_push_delivery.sql` is hosted-compatible but **not applied**. It goes straight after `20261029120000_open_link_approval.sql` (which follows `20261028120000_contact_invitations.sql` and `20261027120000_phone_accounts.sql`; none of the four is applied). Owner approval by file name and sha256; the steps and the rollback are in the [runbook](../qa/push-notifications-2026-10-30/README.md). Rollback: `supabase/rollback/20261030120000_push_delivery.rollback.sql`, run before the open-link rollback, which refuses while push is installed. Tests: `tests/push-delivery.sql`, and the rollback rehearsal in `tests/hosted-baseline/20261030120000_push_delivery.before.sql` and `.after.sql`.
+
+- **One file for the push parts** of the local-only `20260918001308`, `20261014130000`, `20261015130000` and `20261022120001`. Never apply those four to hosted: this migration replaces their push parts, and `20261022120001` would bring back the email-only audience if applied after it (the deletion milestone must split it, without `notification_recipient_eligible`). It creates or redefines no deletion object.
+- **Ledger.** `private.notification_deliveries` (one row per notice and device) and `notification_outbox.expanded_at`, closed to clients. It applies in two modes (a hosted baseline, and after every local file) and ends with the same definitions.
+- **Worker, `service_role` only.** `claim_notification_deliveries(p_limit)` expands notices to devices (100 notices per claim) and leases jobs; `validate_notification_delivery(p_job, p_lease)` re-checks the audience and the exact device binding before each send; `finish_notification_delivery(...)` records the outcome. The audience, `private.notification_recipient_eligible`, includes phone-only accounts, drops request notices that were decided before the push, and excludes banned, deleting and disabled accounts and anything older than 24 hours.
+- **Devices, `authenticated`.** `register_device(p_token, p_platform)` now takes any confirmed, non-banned, non-deleting account (so a waiting person gets "approved"); it rebinds a token that another account held. `unregister_device(p_token)` removes the caller's own binding.
+- **Fold.** `fold_web_account` also carries the web account's unsent notices.
+- **Sender and schedule.** The Edge Function is [`functions/deliver-notifications`](functions/deliver-notifications/README.md) (hard-disabled in source until the owner flips `DELIVERY_RELEASE_APPROVED`). `ops/schedule-deliver-notifications.sql` is an owner-run script, not a migration and not in any test list: it needs `pg_cron` 1.3 or later, `pg_net` and two Vault secrets, and `pg_net` keeps the request (with the secret) in `net.http_request_queue` while it is pending.
+- **Still local-only:** the account-deletion lifecycle, with its own approvals.
+
+### Hosted-baseline commands
+
+`tests/hosted-baseline/tests.txt` assumes every pending candidate is applied: a test is listed once its migration is, so a shorter list of candidates fails at the first test whose migration is missing (`push-delivery.sql` today). Always pass all pending candidates in order:
+
+```
+./scripts/test-database-docker.sh --hosted-baseline supabase/migrations/20261027120000_phone_accounts.sql supabase/migrations/20261028120000_contact_invitations.sql supabase/migrations/20261029120000_open_link_approval.sql supabase/migrations/20261030120000_push_delivery.sql
+```
+
+The plan 1 to 3 runbooks use this command too. When a candidate is applied to hosted and added to `migrations.txt`, drop it from the list.
