@@ -43,6 +43,9 @@ import {
 } from "../src/domain/eventView";
 import { linkDate, removeGuestQuestion } from "../src/domain/eventLinks";
 import { INVITE_COPY } from "../src/domain/inviteCopy";
+import { EventLinkCard } from "../src/design/EventLinkCard";
+import { WaitingForYou } from "../src/design/WaitingForYou";
+import { joinRequestGateway, joinErrorMessage, type HostRequest } from "../src/services/joinRequests";
 import { canEditPlan } from "../src/domain/plans";
 import { answerKey, canReadSample, canRespond, responseFor } from "../src/domain/rsvp";
 import { drafts } from "../src/services/drafts";
@@ -93,7 +96,10 @@ export default function EventPage() {
   const minted = useRef<Record<string, NonNullable<InvitedPerson["stored"]>>>({});
   // One Do this again at a time: a quick double tap must not write two copies or stack two editors.
   const againBusy = useRef(false);
-  const { plan, role, attendee, guests, invited, busy, fresh, pending } = event;
+  // Open-link approval: one decision at a time; the user it is for, and what went wrong.
+  const [deciding, setDeciding] = useState<string | null>(null);
+  const [decideError, setDecideError] = useState<string | null>(null);
+  const { plan, role, attendee, guests, invited, requests, busy, fresh, pending } = event;
   // UX3 Add to calendar and reminders: the organizer and Going or Maybe guests, on upcoming active events.
   const device = useEventDevice(plan, { owner: role === "owner", response: attendee?.response ?? null });
   const scope = preview ? "preview" : session?.user.id;
@@ -237,6 +243,33 @@ export default function EventPage() {
     } finally {
       setRemoving(null);
     }
+  }
+  async function decide(request: HostRequest, approve: boolean) {
+    if (deciding) return;
+    setDeciding(request.user_id);
+    setDecideError(null);
+    try {
+      await joinRequestGateway.decide(current.id, request.user_id, approve);
+    } catch (e) {
+      setDecideError(joinErrorMessage(e));
+    }
+    // Reload either way: an approved guest joins the list, and a request someone else decided drops off.
+    try {
+      await event.load();
+    } finally {
+      setDeciding(null);
+    }
+  }
+  function confirmDecline(request: HostRequest) {
+    const question = INVITE_COPY.declineQuestion(request.name);
+    const decline = () => void decide(request, false);
+    if (Platform.OS === "web") {
+      if (window.confirm(question)) decline();
+    } else
+      Alert.alert(question, undefined, [
+        { text: "Keep", style: "cancel" },
+        { text: INVITE_COPY.decline, style: "destructive", onPress: decline },
+      ]);
   }
   function confirmRemoveInvite(person: InvitedPerson) {
     const question = INVITE_COPY.removeInvite(person.name);
@@ -409,6 +442,16 @@ export default function EventPage() {
             )
           ))
         )}
+        {owner && !preview && (
+          <WaitingForYou
+            requests={requests}
+            deciding={deciding}
+            disabled={busy}
+            error={decideError}
+            onApprove={(r) => void decide(r, true)}
+            onDecline={confirmDecline}
+          />
+        )}
         <ErrorNote message={event.error} />
         {!!event.notice && (
           <Copy accessibilityLiveRegion="polite" style={{ color: c.aquaDark }}>
@@ -486,6 +529,8 @@ export default function EventPage() {
             </View>
           )
         )}
+        {/* The event's one link: only the organizer of an upcoming, active event shares or turns it off. */}
+        {editable && !preview && <EventLinkCard plan={current} />}
       </ScrollView>
       <InfoSheet
         visible={guestsOpen}

@@ -89,10 +89,11 @@ test("turning the link off asks first, and the ⓘ sheet says what the link show
   for (const part of [/one invitation link/, /Anyone with the link sees the basics/, /exact place and Meeting details show only after they reply/, /Turn the link off/, /also stops any older per-person links you shared\./])
     assert.match(info, part);
   // Removing is not a ban: the sheet and the question both say so.
-  assert.equal(LINK_INFO.at(-1), "Someone you remove can join again with the link, unless you turn it off.");
+  assert.equal(LINK_INFO.at(-1), "Someone you remove can ask to join again with the link, and you’ll decide.");
+  assert.match(LINK_INFO.join(" "), /Answers through the link wait for your approval\./);
   assert.equal(
     removeGuestQuestion("Bea"),
-    "Remove Bea from this resbite? They can join again with the link unless you turn it off.",
+    "Remove Bea from this resbite? They can ask to join again with the event link, and you’ll decide.",
   );
   // Curly apostrophes only.
   assert.doesNotMatch(info + TURN_OFF_MESSAGE + ownInvitation, /'/);

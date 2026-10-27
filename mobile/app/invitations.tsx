@@ -1,14 +1,12 @@
-import { ArrowLeft, Copy as CopyIcon, Info, Link2Off, RefreshCw, Share2 } from "lucide-react-native";
+import { ArrowLeft, Info, RefreshCw } from "lucide-react-native";
 import React, { useCallback, useState } from "react";
-import { Alert, Platform, ScrollView, Share, StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
-import * as Clipboard from "expo-clipboard";
 import { Copy, ErrorNote, Title, s } from "../src/design/ui";
-import { Chip, IconButton, InfoSheet } from "../src/design/kit";
+import { IconButton, InfoSheet } from "../src/design/kit";
 import { PickStep, SendStep } from "../src/design/ContactPicker";
 import { PreviewNotice } from "../src/design/Chrome";
-import { colors as c } from "../src/design/tokens";
 import { useApp } from "../src/state/AppState";
 import { useContactInvites } from "../src/state/useContactInvites";
 import { useAccount } from "../src/state/AccountState";
@@ -16,10 +14,8 @@ import { INVITE_COPY } from "../src/domain/inviteCopy";
 import { useFocusedRefresh, type Run } from "../src/state/useFocusedRefresh";
 import { planGateway } from "../src/services/plans";
 import { readProfile } from "../src/services/profile";
-import { invitationGateway } from "../src/services/invitations";
-import { buildEventLink } from "../src/domain/appLinks";
 import { canEditPlan, type Plan } from "../src/domain/plans";
-import { LINK_INFO, linkDate, shareMessage, TURN_OFF_MESSAGE, TURN_OFF_TITLE } from "../src/domain/eventLinks";
+import { LINK_INFO, linkDate } from "../src/domain/eventLinks";
 
 const unavailable = "Only the organizer can invite people to an upcoming, active resbite.";
 
@@ -35,11 +31,8 @@ export default function Invitations() {
   const identity = `${preview ? "preview" : (userId ?? "")}:${planId}`;
   const [plan, setPlan] = useState<Plan | null>(null);
   const [host, setHost] = useState<string | null>(null);
-  const [code, setCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState("");
   const [about, setAbout] = useState(false);
   const { user } = useAccount();
   const contacts = useContactInvites({
@@ -69,26 +62,20 @@ export default function Invitations() {
         }
         if (!valid()) return;
         if (!found || !canEditPlan(found, userId, preview)) throw Error(unavailable);
-        let next: string | null = null;
         let name: string | null = null;
         if (!preview) {
-          [next, name] = await Promise.all([
-            invitationGateway.link(found.id),
-            // The name is only for the card; without it the card says "Invited by you".
-            readProfile(userId!).then(
-              (profile) => profile?.display_name?.trim() || null,
-              () => null,
-            ),
-          ]);
+          // The name is only for the invitation message; without it the message says "Your host".
+          name = await readProfile(userId!).then(
+            (profile) => profile?.display_name?.trim() || null,
+            () => null,
+          );
           if (!valid()) return;
         }
         setPlan(found);
         setHost(name);
-        setCode(next);
       } catch (e) {
         if (valid()) {
-          setCode(null);
-          setError(e instanceof Error ? e.message : "Couldn’t load the link. Check your connection and try again.");
+          setError(e instanceof Error ? e.message : "Couldn’t load this resbite. Check your connection and try again.");
         }
       } finally {
         if (valid()) setLoading(false);
@@ -96,63 +83,7 @@ export default function Invitations() {
     },
     [planId, preview, userId, localPlans],
   );
-  const { refresh, begin } = useFocusedRefresh(load, { identity });
-
-  const link = code ? buildEventLink(code, process.env.EXPO_PUBLIC_INVITATION_ORIGIN) : null;
-
-  async function share() {
-    if (!plan || !link) return;
-    setError(null);
-    setNotice("");
-    try {
-      await Share.share({ message: shareMessage(plan, link) });
-    } catch {
-      // Closing the share sheet is not a failure; the link stays as it is.
-    }
-  }
-  async function copy() {
-    if (!link) return;
-    setError(null);
-    setNotice("");
-    let copied = false;
-    try {
-      copied = await Clipboard.setStringAsync(link);
-    } catch {
-      copied = false;
-    }
-    if (copied) setNotice("Link copied.");
-    else setError("Couldn’t copy the link. Use Share instead.");
-  }
-  async function turnOff() {
-    if (!plan || busy) return;
-    const { valid } = begin();
-    setBusy(true);
-    setError(null);
-    setNotice("");
-    try {
-      const next = await invitationGateway.rotate(plan.id);
-      if (!valid()) return;
-      setCode(next);
-      setNotice("The old link is off. Share this new link.");
-    } catch (e) {
-      if (!valid()) return;
-      setError(e instanceof Error ? e.message : "Couldn’t confirm the link was turned off.");
-      // Whether or not it was turned off, show the link that works now (or none, until Try again).
-      const current = await invitationGateway.link(plan.id).catch(() => null);
-      if (valid()) setCode(current);
-    } finally {
-      setBusy(false);
-    }
-  }
-  function confirmTurnOff() {
-    if (Platform.OS === "web") {
-      if (window.confirm(`${TURN_OFF_TITLE}\n\n${TURN_OFF_MESSAGE}`)) void turnOff();
-    } else
-      Alert.alert(TURN_OFF_TITLE, TURN_OFF_MESSAGE, [
-        { text: "Keep", style: "cancel" },
-        { text: "Turn off", style: "destructive", onPress: () => void turnOff() },
-      ]);
-  }
+  const { refresh } = useFocusedRefresh(load, { identity });
 
   return (
     <SafeAreaView style={s.page}>
@@ -176,36 +107,10 @@ export default function Invitations() {
             onDone={() => (router.canGoBack() ? router.back() : router.replace("/plans"))}
           />
         )}
-        {plan && !contacts.outcome && !preview && <Title style={{ fontSize: 23 }}>{INVITE_COPY.eventLink}</Title>}
         <ErrorNote message={error} />
-        {!!notice && (
-          <Copy accessibilityLiveRegion="polite" style={{ color: c.aquaDark }}>
-            {notice}
-          </Copy>
-        )}
-        {loading && !plan && <Copy accessibilityLiveRegion="polite">Loading the link…</Copy>}
-        {!preview && plan && !contacts.outcome && (
-          <View style={styles.chips}>
-            <Chip
-              icon={Share2}
-              tone="aqua"
-              text="Share"
-              label="Share link"
-              disabled={!link || busy}
-              onPress={() => void share()}
-            />
-            <Chip icon={CopyIcon} tone="aqua" text="Copy link" disabled={!link || busy} onPress={() => void copy()} />
-            <Chip
-              icon={Link2Off}
-              tone="pink"
-              text="Turn off this link"
-              disabled={!link || busy}
-              onPress={confirmTurnOff}
-            />
-          </View>
-        )}
-        {!loading && !preview && (!plan || !link) && (
-          <IconButton icon={RefreshCw} label="Try again" busy={busy} onPress={() => void refresh()} />
+        {loading && !plan && <Copy accessibilityLiveRegion="polite">Loading this resbite…</Copy>}
+        {!loading && !preview && !plan && (
+          <IconButton icon={RefreshCw} label="Try again" busy={loading} onPress={() => void refresh()} />
         )}
       </ScrollView>
       <InfoSheet visible={about} title="Invitation links" onClose={() => setAbout(false)}>
@@ -221,5 +126,4 @@ export default function Invitations() {
 
 const styles = StyleSheet.create({
   top: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  chips: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 10 },
-});
+ });

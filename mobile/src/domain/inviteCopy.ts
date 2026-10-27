@@ -56,4 +56,19 @@ export const INVITE_COPY = {
   inviteHint: "Invites everyone you picked",
   whatsappHint: "Opens WhatsApp with their link",
   messagesHint: "Opens Messages with their link",
+  waitingForYou: "Waiting for you",
+  viaLink: "via event link",
+  approve: "Approve",
+  decline: "Decline",
+  approveLabel: (name: string) => `Approve ${name}`,
+  declineLabel: (name: string) => `Decline ${name}`,
+  approveHint: "Adds them to this resbite",
+  declineHint: "Asks you to confirm first",
+  declineQuestion: (name: string) => `Decline ${name}? They’ll see they weren’t added.`,
+  linkInfoLine: "Anyone can answer with it, and you approve them first.",
 };
+
+/** A Waiting for you row's detail line: "Going · via event link · ••1234" (no ending: without the last part). */
+export function requestDetail(answer: string, ending: string | null): string {
+  return [answer, INVITE_COPY.viaLink, ending ? `••${ending}` : ""].filter(Boolean).join(" · ");
+}

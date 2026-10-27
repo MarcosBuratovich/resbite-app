@@ -10,6 +10,7 @@ import { syncReminders } from "../services/deviceReminders";
 import { contactInviteGateway } from "../services/contactInvites";
 import { inviteCodeStore, type StoredInvite } from "../services/inviteCodeStore";
 import { formatPhone } from "../domain/phone";
+import { joinRequestGateway, type HostRequest } from "../services/joinRequests";
 
 /** Someone the host invited by personal link who hasn't answered: the stored name, else the number. */
 export type InvitedPerson = {
@@ -28,6 +29,8 @@ export type EventPage = {
   organizer: string | null;
   guests: Guest[];
   invited: InvitedPerson[];
+  /** Open-link answers waiting for the organizer; empty for everyone else. */
+  requests: HostRequest[];
   busy: boolean;
   fresh: boolean;
   error: string | null;
@@ -59,11 +62,13 @@ export function useEvent(planId: string | undefined): EventPage {
     [fresh, setFresh] = useState(false);
   const [pending, setPending] = useState<RsvpAttempt | null>(null);
   const [invited, setInvited] = useState<InvitedPerson[]>([]);
+  const [requests, setRequests] = useState<HostRequest[]>([]);
   // UX3: this phone's reminders follow every event load, answer and cancellation; failures wait for the next sync.
   const syncDevice = () => void syncReminders({ userId: userId ?? null, preview }).catch(() => {});
   useEffect(() => {
     setSnapshot(null);
     setInvited([]);
+    setRequests([]);
     setPending(null);
     setNotice(null);
     setError(null);
@@ -81,8 +86,12 @@ export function useEvent(planId: string | undefined): EventPage {
         const next = await readEvent(planId, userId);
         // Unanswered personal links are the organizer's; this list is a convenience, so a failure leaves it empty.
         const people = next.plan.owner_id === userId ? await readInvited(planId, userId).catch(() => []) : [];
+        // Likewise the waiting list: the event still opens if it can't be read.
+        const waiting =
+          next.plan.owner_id === userId ? await joinRequestGateway.forPlan(planId).catch(() => []) : [];
         if (valid()) {
           setInvited(people);
+          setRequests(waiting);
           setSnapshot(next);
           setFresh(true);
           syncDevice();
@@ -91,6 +100,7 @@ export function useEvent(planId: string | undefined): EventPage {
         if (valid()) {
           setSnapshot(null);
           setInvited([]);
+          setRequests([]);
           setError(e instanceof Error ? e.message : "Invitation unavailable.");
         }
       } finally {
@@ -216,6 +226,7 @@ export function useEvent(planId: string | undefined): EventPage {
     organizer: snapshot?.organizer ?? null,
     guests: snapshot?.guests ?? [],
     invited,
+    requests,
     busy,
     fresh: preview || fresh,
     error,
