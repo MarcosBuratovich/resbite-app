@@ -15,3 +15,11 @@ node --experimental-transform-types --test supabase/functions/_shared/notificati
 ```
 
 Apply the migration and run `supabase/tests/notifications.sql` only in a disposable local Supabase-compatible database. Tests roll back synthetic fixtures and make no provider requests. Production requires the real Supabase Edge runtime and Storage/Auth integration checks separately.
+
+## Deployment and schedule (owner steps)
+
+- Deploy with `verify_jwt = false` (the handler checks the worker secret, not a user JWT).
+- Function secrets: `NOTIFICATION_WORKER_SECRET` (random, 32+ characters), `EXPO_ACCESS_TOKEN`, and `NOTIFICATION_DELIVERY_ENABLED`. Delivery needs the enabled switch and the release constant together.
+- The release constant `DELIVERY_RELEASE_APPROVED` in `index.ts` stays `false` until the owner flips it at release.
+- Schedule: create the Vault secrets `deliver_notifications_url` and `deliver_notifications_secret` (same value as `NOTIFICATION_WORKER_SECRET`), then run `supabase/ops/schedule-deliver-notifications.sql` once in the hosted SQL editor. It calls the function every minute and can be undone with `select cron.unschedule('deliver-notifications');`. It is not a migration and is not run by the tests.
+- Wording: `_shared/notification-copy.ts`. The title is the event title; bodies name what happened and who, never the place, notes, descriptions or phone numbers.

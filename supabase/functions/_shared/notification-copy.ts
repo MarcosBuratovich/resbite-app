@@ -62,6 +62,12 @@ function body(input: CopyInput): string | null {
     }
     case "invitation":
       return name ? `${name} joined from your invite.` : null;
+    case "invited":
+      return name ? `${name} invited you.` : null;
+    case "join_request":
+      return name ? `${name} asked to join.` : null;
+    case "join_approved":
+      return name ? `${name} approved your request.` : null;
     case "plan_cancelled":
       return "This resbite was cancelled.";
     case "guest_note":

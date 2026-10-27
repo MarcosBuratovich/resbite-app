@@ -75,3 +75,39 @@ test("the place, notes and descriptions never reach the text, even if a job carr
     assert.ok(!JSON.stringify(copy).includes("Secret"), `${kind}/${detail}`);
   }
 });
+
+test("invitation and join request kinds have their wording under the event title", () => {
+  const cases: [string, string][] = [
+    ["invited", "Sam invited you."],
+    ["join_request", "Sam asked to join."],
+    ["join_approved", "Sam approved your request."],
+  ];
+  for (const [kind, body] of cases)
+    assert.deepEqual(notificationCopy({ ...base, kind, detail: null }), { title: "Picnic in the park", body }, kind);
+});
+
+test("the new kinds fall back to the generic text without a name", () => {
+  for (const kind of ["invited", "join_request", "join_approved"])
+    for (const actor_name of [null, undefined, "   "])
+      assert.deepEqual(notificationCopy({ ...base, kind, detail: null, actor_name }), GENERIC_COPY, `${kind}/${actor_name}`);
+});
+
+test("the new kinds never reveal a place, note, description or phone number", () => {
+  const leaky = {
+    ...base,
+    place: "Secret café",
+    place_label: "Secret café",
+    note: "Secret note",
+    description: "Secret description",
+    phone: "+447700900123",
+    phone_number: "07700900123",
+  } as Parameters<typeof notificationCopy>[0];
+  for (const kind of ["invited", "join_request", "join_approved"]) {
+    for (const actor_name of ["Sam", null]) {
+      const copy = notificationCopy({ ...leaky, kind, detail: null, actor_name });
+      const text = JSON.stringify(copy);
+      assert.ok(!/place|note|description|Secret/i.test(copy.body), `${kind} body`);
+      assert.ok(!/\d{4,}/.test(text), `${kind} digits`);
+    }
+  }
+});
