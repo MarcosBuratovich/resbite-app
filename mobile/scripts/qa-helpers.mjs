@@ -14,6 +14,17 @@ export async function next(page) {
 export async function close(page) {
   await button(page, "Close").click();
 }
+/**
+ * Fills a field that has just appeared on a new step. A fill in the step's first moments can land on an input
+ * that is then redrawn from the editor's state, so the text is lost; this fills again until the value holds.
+ */
+export async function fillSettled(field, value) {
+  await expect(async () => {
+    await field.fill(value);
+    await field.page().waitForTimeout(150);
+    await expect(field).toHaveValue(value, { timeout: 100 });
+  }).toPass({ timeout: 5000 });
+}
 /** Web QA types dates into "Date and time (local)", the When step's first card ("Choose a day" first while unset). */
 export async function typeDate(page, value) {
   const field = visible(page.getByLabel("Date and time (local)", { exact: true }));

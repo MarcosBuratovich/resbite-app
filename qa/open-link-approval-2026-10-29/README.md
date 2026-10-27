@@ -2,7 +2,7 @@
 
 - **Spec:** [Contact invitations design](../../docs/superpowers/specs/2026-10-27-contact-invitations-design.md), decision CI-D9 and flow 6. Open-link approval is plan 3 of 4 (plan 1 is phone accounts, plan 2 contact invitations).
 - **Plan:** [Open-link approval plan](../../docs/superpowers/plans/2026-10-28-open-link-approval.md).
-- **Code:** branch `open-link-approval`, commits `<first commit — filled at merge>` to `<last commit — filled at merge>`. **Nothing is applied to the hosted project, the Auth dashboard, Vercel, EAS or TestFlight.** This directory will hold the hosted before/after snapshots when the migration is applied.
+- **Code:** branch `open-link-approval`, commits `154c97b` (the plan) to the merge into `main`. **Nothing is applied to the hosted project, the Auth dashboard, Vercel, EAS or TestFlight.** This directory will hold the hosted before/after snapshots when the migration is applied.
 
 ## What is built
 
@@ -21,14 +21,21 @@
 
 | File | sha256 |
 | --- | --- |
-| `supabase/migrations/20261029120000_open_link_approval.sql` | `<sha256 — filled at merge>` |
-| `supabase/rollback/20261029120000_open_link_approval.rollback.sql` | `<sha256 — filled at merge>` |
+| `supabase/migrations/20261029120000_open_link_approval.sql` | `5cd7f723bdd7119d3133c225d1186031e2ec265a054a208e7fef40de9c7f50a0` |
+| `supabase/rollback/20261029120000_open_link_approval.rollback.sql` | `9f2fe2cb213301136a6d08164f3ab83660d9bdb2c080069d8b278d0843571fee` |
 
 Hosted order: this migration is applied **straight after** `20261028120000_contact_invitations.sql`, which follows `20261027120000_phone_accounts.sql`; none of the three is applied yet. Their runbooks are [`qa/phone-accounts-2026-10-27/README.md`](../phone-accounts-2026-10-27/README.md) and [`qa/contact-invites-2026-10-28/README.md`](../contact-invites-2026-10-28/README.md); finish their migration steps first.
 
 ## Final local checks
 
-To be filled at merge, with the commit they ran at. They are run on Linux:
+Run on Linux on 27 October 2026, on the branch head before the merge (the code at `2aed5af`; the later commits change only this runbook, the status page and `verify-planning`'s typing). All passed:
+
+- Database, full mode: 29 PASS. Hosted-baseline mode with the three migrations: 18 PASS, including the rollback rehearsal.
+- Worker tests: 69 pass. `npm run check`: 478 tests pass.
+- `links/verify-personal.mjs` and `links/verify-open-link.mjs`; the iOS export; every `mobile/scripts/verify-*.mjs` and `review-ui.mjs` against Expo web.
+- `verify-planning.mjs` first failed on this branch every time (and passed on `main`): a test typed into a field in a step's first moments, and the text was lost when the field was redrawn. Its four fills right after a step change now use `fillSettled` (fill, wait, check the value, retry); it then passed five runs out of five. It was a timing race in the test, not an app bug.
+
+The commands:
 
 - `cd mobile && npm run check`.
 - `./scripts/test-database-docker.sh` (full mode; it includes `supabase/tests/open-link-approval.sql`, the rollback rehearsal and the concurrency scripts, among them `supabase/tests/local/decide-join-concurrency.sh`).

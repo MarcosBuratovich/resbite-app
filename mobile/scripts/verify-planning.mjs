@@ -11,6 +11,7 @@ import {
   editEvent,
   expectCancelled,
   expectCategories,
+  fillSettled,
   heading,
   heightOf,
   inviteFromList,
@@ -301,7 +302,7 @@ try {
     await button(kept, "Previous step").click();
     await button(kept, "Previous step").click();
     // Returning a restored draft to its baseline removes it.
-    await kept.getByLabel("Name", { exact: true }).fill("");
+    await fillSettled(kept.getByLabel("Name", { exact: true }), "");
     await kept.waitForTimeout(1200);
     await back(kept);
     await noDraft(kept);
@@ -829,10 +830,10 @@ try {
     // Meeting details are sent trimmed (create and edit share this payload), so spaces or blank lines alone
     // never count as Meeting details.
     await button(fixture, "Edit place, Original café").click();
-    await fixture.getByLabel("Meeting details (optional)", { exact: true }).fill("  \nGate code 9876 \n\n");
+    await fillSettled(fixture.getByLabel("Meeting details (optional)", { exact: true }), "  \nGate code 9876 \n\n");
     const areaField = fixture.getByLabel("Area, shown before people reply", { exact: true });
     await expect(areaField).toHaveValue("Near the river");
-    await areaField.fill("  Near Old Street ");
+    await fillSettled(areaField, "  Near Old Street ");
     await next(fixture);
     await button(fixture, "Save").click();
     await expect(heading(fixture, "Looks good?")).toHaveCount(0);
@@ -846,7 +847,7 @@ try {
     await button(fixture, "Edit Coffee evening").click();
     await button(fixture, /^Edit place, /).click();
     await expect(areaField).toHaveValue("Near Old Street");
-    await areaField.fill("");
+    await fillSettled(areaField, "");
     await next(fixture);
     await button(fixture, "Save").click();
     await expect(heading(fixture, "Looks good?")).toHaveCount(0);
