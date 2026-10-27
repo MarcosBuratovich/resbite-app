@@ -16,8 +16,8 @@ export type ContactInviteGateway = {
   revoke(plan: string, phone: string): Promise<void>;
 };
 
-const offline = "Check your connection and try again.";
-const errorField = (e: unknown, field: "code" | "message") =>
+export const offline = "Check your connection and try again.";
+export const errorField = (e: unknown, field: "code" | "message") =>
   typeof e === "object" && e !== null && field in e
     ? String((e as Record<string, unknown>)[field])
     : "";
@@ -33,19 +33,19 @@ export function inviteErrorMessage(e: unknown): string {
 const kinds: readonly string[] = ["app", "link", "self", "already"];
 const BATCH = 50;
 
-type Rpc = (
+export type Rpc = (
   fn: string,
   args: Record<string, unknown>,
   signal: AbortSignal,
 ) => PromiseLike<{ data: unknown; error: unknown }>;
 
-type Deadline = <T>(
+export type Deadline = <T>(
   request: (signal: AbortSignal) => PromiseLike<T>,
 ) => Promise<T>;
 // plans.ts loads the Supabase client, so both load on first use; this keeps the module testable under node.
-const planDeadline: Deadline = async (request) =>
+export const planDeadline: Deadline = async (request) =>
   (await import("./plans")).withDeadline(request);
-const passThrough: Deadline = async (request) =>
+export const passThrough: Deadline = async (request) =>
   request(new AbortController().signal);
 
 export function createContactInviteGateway(
