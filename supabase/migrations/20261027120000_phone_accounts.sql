@@ -9,7 +9,7 @@
 -- Rollback: supabase/rollback/20261027120000_phone_accounts.rollback.sql.
 
 -- One row: whether test mode is on. Turning it off (update private.phone_mode set test_mode=false) makes the hook
--- refuse and the exchange return nothing.
+-- refuse and the exchange return nothing. A missing row counts as off: test mode never fails open.
 create table private.phone_mode (
  id boolean primary key default true check (id),
  test_mode boolean not null default true,
@@ -55,7 +55,7 @@ begin
  if v_phone !~ '^[1-9][0-9]{6,14}$' or v_otp is null or v_otp !~ '^[0-9]{6}$' then
   return '{"error":{"http_code":400,"message":"Invalid code request."}}'::jsonb;
  end if;
- if not (select test_mode from private.phone_mode) then
+ if not coalesce((select test_mode from private.phone_mode), false) then
   return '{"error":{"http_code":503,"message":"Text messages aren''t set up yet."}}'::jsonb;
  end if;
  begin
@@ -77,7 +77,7 @@ declare
  v_phone text := private.phone_digits(p_phone);
  v_otp text;
 begin
- if p_code is distinct from '000000' or not (select test_mode from private.phone_mode) then
+ if p_code is distinct from '000000' or not coalesce((select test_mode from private.phone_mode), false) then
   return null;
  end if;
  select otp into v_otp from private.test_codes where phone = v_phone and sent_at > now() - interval '10 minutes';

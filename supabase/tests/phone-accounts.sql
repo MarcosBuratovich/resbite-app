@@ -82,6 +82,24 @@ do $$ begin
  if exists(select 1 from private.test_codes where phone='447700900777') then raise exception 'Live mode stored a code'; end if;
  if (select count(*) from private.test_mode_log where kind='sent')<>3 then raise exception 'Live mode logged'; end if;
 end $$;
+-- a missing mode row is live mode: test mode never fails open
+update private.phone_mode set test_mode=true;
+delete from private.phone_mode;
+set local role anon;
+do $$ begin
+ if public.exchange_test_code('+44 7700 900834','000000') is not null then raise exception 'Exchange worked with no mode row'; end if;
+end $$;
+reset role;
+set local role supabase_auth_admin;
+do $$ begin
+ if public.send_sms_hook('{"user":{"id":"c1000000-0000-4000-8000-000000000001","phone":"447700900778"},"sms":{"otp":"123456"}}')
+   <> '{"error":{"http_code":503,"message":"Text messages aren''t set up yet."}}'::jsonb then raise exception 'No mode row should return 503'; end if;
+end $$;
+reset role;
+do $$ begin
+ if exists(select 1 from private.test_codes where phone='447700900778') then raise exception 'No mode row stored a code'; end if;
+ if (select count(*) from private.test_mode_log where kind='exchanged')<>1 then raise exception 'No mode row logged an exchange'; end if;
+end $$;
 -- grants
 do $$ declare r text; begin
  foreach r in array array['anon','authenticated','service_role'] loop
