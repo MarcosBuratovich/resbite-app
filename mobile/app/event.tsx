@@ -100,6 +100,10 @@ export default function EventPage() {
   const [deciding, setDeciding] = useState<string | null>(null);
   const [decideError, setDecideError] = useState<string | null>(null);
   const { plan, role, attendee, guests, invited, requests, busy, fresh, pending } = event;
+  // A decision error belongs to the list it came from: once nothing is waiting, it must not return on a later request.
+  useEffect(() => {
+    if (requests.length === 0) setDecideError(null);
+  }, [requests.length]);
   // UX3 Add to calendar and reminders: the organizer and Going or Maybe guests, on upcoming active events.
   const device = useEventDevice(plan, { owner: role === "owner", response: attendee?.response ?? null });
   const scope = preview ? "preview" : session?.user.id;

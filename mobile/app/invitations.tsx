@@ -20,9 +20,8 @@ import { LINK_INFO, linkDate } from "../src/domain/eventLinks";
 const unavailable = "Only the organizer can invite people to an upcoming, active resbite.";
 
 /**
- * GI1 "Invite people" (/invitations?plan=<id>): the event's one link. A card shows what guests see before
- * they reply; Share, Copy link and Turn off this link act on the link. The code is read from the database
- * on open, on focus and after a failed turn-off, and never stored on this device.
+ * "Invite people" (/invitations?plan=<id>): the organizer picks phone contacts or adds numbers to invite, then
+ * sends each person's own link. The event link (Share, Copy and Turn off) lives on the event page.
  */
 export default function Invitations() {
   const { plan: planId } = useLocalSearchParams<{ plan: string }>();
@@ -126,4 +125,4 @@ export default function Invitations() {
 
 const styles = StyleSheet.create({
   top: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
- });
+});

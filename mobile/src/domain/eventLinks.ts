@@ -89,7 +89,7 @@ export const LINK_INFO = [
   "Each resbite has one invitation link. Share it anywhere: messages, email or a group chat.",
   "Anyone with the link sees the basics: who invited them, the name, the time, the area, how many are going and the picture.",
   "The exact place and Meeting details show only after they reply.",
-  "Turn the link off to stop it working. You’ll get a new link to share.",
+  "The event link, with Share, Copy and Turn off, is on the event page.",
   "Turning the link off also stops any older per-person links you shared.",
   "Answers through the link wait for your approval. You’ll see them in Waiting for you on the event page.",
   "Someone you remove can ask to join again with the link, and you’ll decide.",

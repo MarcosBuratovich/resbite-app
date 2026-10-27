@@ -86,7 +86,7 @@ test("turning the link off asks first, and the ⓘ sheet says what the link show
   assert.equal(TURN_OFF_TITLE, "Turn off this link?");
   assert.equal(TURN_OFF_MESSAGE, "People with the old link will see that it’s no longer active. You’ll get a new link.");
   const info = LINK_INFO.join(" ");
-  for (const part of [/one invitation link/, /Anyone with the link sees the basics/, /exact place and Meeting details show only after they reply/, /Turn the link off/, /also stops any older per-person links you shared\./])
+  for (const part of [/one invitation link/, /Anyone with the link sees the basics/, /exact place and Meeting details show only after they reply/, /event link, with Share, Copy and Turn off, is on the event page\./, /also stops any older per-person links you shared\./])
     assert.match(info, part);
   // Removing is not a ban: the sheet and the question both say so.
   assert.equal(LINK_INFO.at(-1), "Someone you remove can ask to join again with the link, and you’ll decide.");

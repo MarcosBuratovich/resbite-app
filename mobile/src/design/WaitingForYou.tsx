@@ -25,12 +25,12 @@ export function WaitingForYou({
   onDecline: (request: HostRequest) => void;
 }) {
   if (requests.length === 0) return null;
+  const off = disabled || deciding !== null;
   return (
     <View style={{ gap: 10 }}>
       <Title style={{ fontSize: 23 }}>{INVITE_COPY.waitingForYou}</Title>
       <ErrorNote message={error} />
       {requests.map((r) => {
-        const off = disabled || deciding !== null;
         return (
           <View key={r.user_id} style={styles.row}>
             <View style={{ flex: 1, minWidth: 120 }}>
