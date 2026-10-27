@@ -367,3 +367,55 @@ Decisions from the GI2 design ([spec](../docs/superpowers/specs/2026-10-21-gi2-g
 22. Disabling a roster row keeps that person out of link joins too (`join_by_link` refuses them with "Invitation unavailable" before writing anything); a revoked grant is the ban for link-made accounts.
 
 Each GI2 database migration needs the owner’s explicit approval, by file name and sha256. The hosted migration goes live together with build 10 and the `delete-account` redeploy; the companion waits for the deletion lifecycle and the notification sender.
+
+## Contact invitations, 27 October 2026
+
+Decisions from the contact-invitations design ([spec](../docs/superpowers/specs/2026-10-27-contact-invitations-design.md)), agreed with the owner in conversation on 27 October 2026, and the proposals he accepted. Phone accounts ([plan](../docs/superpowers/plans/2026-10-27-phone-accounts.md)) is the first of four plans; the calls made while building it follow.
+
+**The owner's decisions.**
+
+| # | Decision |
+| --- | --- |
+| CI-D1 | Nobody joins an event unless the host invited them personally or approved them. Forwarded links must not let anyone in. (27 October 2026) |
+| CI-D2 | The host invites from their phone contacts. Each invitation is tied to the invitee's phone number. (27 October 2026) |
+| CI-D3 | A contact who already has a Resbite account gets a direct in-app invitation: no link, no code. (27 October 2026) |
+| CI-D4 | A contact without an account gets a personal link to `link.resbite.com`. There they confirm the invited number with a code before they can answer. (27 October 2026) |
+| CI-D5 | After answering on the web they see the "get the app" screen, direction **A**: "You're going!", a list of what the app gives them, one "Get Resbite" button, "Sign up with +44 ••• 834 and this resbite will be waiting", and a small "Not now". (27 October 2026) |
+| CI-D6 | In the app they create their account with the same phone number, and the event is already there. (27 October 2026) |
+| CI-D7 | A verified phone number is required on **every** account, including existing email, Google and Apple accounts. (27 October 2026) |
+| CI-D8 | Sign in with Apple and Google stay, as the quick way to fill in name and email during onboarding. The phone is required on top. (27 October 2026) |
+| CI-D9 | The open event link stays. Everyone who answers through it waits for the host to approve or decline them. (27 October 2026) |
+| CI-D10 | No paid SMS service yet. (27 October 2026) |
+| CI-D11 | Push notifications are part of this work. (27 October 2026) |
+| CI-D12 | Groups and circles of trust are the next project, designed separately on top of this one. (27 October 2026) |
+| CI-D13 | **Test mode for now:** keep the whole flow, but every code step accepts **000000 for any number**, with no SMS sent, so the complete journey can be tested without paying for SMS. The owner chose "any number" over a list of registered test numbers after hearing the risk (see "Test mode" in the spec). (27 October 2026) |
+
+**Accepted proposals.**
+
+| # | Proposal |
+| --- | --- |
+| CI-P1 | **Sending:** the host sends personal links from their own phone. WhatsApp or Messages opens with that person and their link filled in. Resbite never sends texts itself. One send per person is accepted, because each link is tied to one number. (27 October 2026) |
+| CI-P2 | **Codes before paying:** the real path is Supabase's phone sign-in, with a provider connected later through Supabase's Send SMS hook. Until then, test mode (CI-D13) stands in for the code check. *Amended 27 October: the owner replaced "registered test numbers only" with test mode for any number.* (27 October 2026) |
+| CI-P3 | **Contact lookup:** only the numbers the host actually picks are checked against accounts, at that moment. The address book is never uploaded. (27 October 2026) |
+| CI-P4 | **What the web page shows:** who invited them, title, time, rough area, the going count, and "This invitation is for the number ending ••34". The exact address, meeting details and other guests' names stay in the app; direction A lists them as reasons to install. (27 October 2026) |
+| CI-P5 | **Number check:** the invitee types their number, and a code is sent only when it matches the invited one. The page never reveals the full number. (27 October 2026) |
+| CI-P6 | **After "Can't go":** a softer version of the screen ("Marcos will know" and a smaller nudge to get Resbite). (27 October 2026) |
+| CI-P7 | **Web verification creates the account:** confirming the number on the web creates their Resbite account, tied to that phone, holding their first name and answer. In the app they sign in with the same number. The phone number carries them across, so "tap the link again" is no longer needed. (27 October 2026) |
+| CI-P8 | **App sign-up order:** number and code first, then "Continue with Apple" or "Continue with Google" to fill name and email, or type the name. The 18+ and terms tick from GI2 stays on the first screen. (27 October 2026) |
+| CI-P9 | **Existing accounts:** the next time they open the app, "Add your phone number" appears before anything else, once. (27 October 2026) |
+| CI-P10 | **Email and password:** new accounts no longer use them. Existing password accounts keep signing in, but must add a phone (CI-P9). (27 October 2026) |
+| CI-P11 | **Shorter sign-up:** birth date, city and interests leave sign-up and stay optional in Account details. (27 October 2026) |
+| CI-P12 | **Linking providers:** Apple and Google attach to a phone account through Supabase identity linking. It must be enabled in the project and confirmed to work with native Apple sign-in. (27 October 2026) |
+| CI-P13 | **Push in scope**, because the in-app invitation (CI-D3) and the "get the app" promises (CI-D5) depend on it. (27 October 2026) |
+
+**Calls made during the phone accounts build (27 October 2026), for the owner's review.**
+1. The Send SMS hook and the code exchange are each one `SECURITY DEFINER` function in `public` (`send_sms_hook`, `exchange_test_code`), not a `private` body with an invoker front, because Auth's role and the signed-out app have no usage on schema `private`. The grants stay narrow: the hook to `supabase_auth_admin`, the exchange to `anon` and `authenticated`.
+2. The test-mode log has no foreign key on `user_id`. Auth may call the hook before a new user's row is visible, and a foreign key violation would make every sign-up code fail. The cost is that log rows can name deleted users.
+3. A roster match needs a confirmed email. A confirmed phone or email makes an account confirmed, but an unproven email must never grant access through the roster (CI-D1); a live link grant needs only the account's confirmation. The companion migration carries the same rule.
+4. `reviewed` in the account state means a verified phone, nothing else. CI-P9 makes the phone gate block the rest of the app and CI-P11 takes the details review out of sign-up. An approved account without a verified phone goes to "Add your number" before any deep link works.
+5. `formatPhone` accepts digits-only input by adding the missing `+`, because `auth.users.phone` and the user object hold digits only.
+6. In live mode 000000 is still sent to the server as typed and the server refuses it, so the person sees the mismatch copy, the cells clear, nobody signs in and the age tick is not recorded. The app does not try to guess the mode.
+7. Numbers are accepted when `libphonenumber-js` says they are possible, not valid, because the UK range reserved for fiction (`07700 900000` to `900999`), used for test friends, is reported invalid by its metadata (checked with 1.13.15).
+8. Rolling back restores GI2's hosted `user_eligible` body. Where the local-only companion exists, its deletion-aware check is dropped until the companion is re-applied, so the companion is rolled back first and this migration second.
+
+Each phone accounts rollout step needs the owner's explicit approval; the runbook is in `qa/phone-accounts-2026-10-27/README.md`.

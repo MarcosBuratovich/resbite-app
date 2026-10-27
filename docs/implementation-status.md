@@ -601,3 +601,37 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
 - Local-only: `mobile/ios/` is git-ignored and stale, so the entitlement comes from `usesAppleSignIn` at build time; the web Apple stub relies on `expo-modules-core` internals; the `useAuthFlow` mount on every invite screen adds a ticker and a listener.
 
 **Next.** The final whole-branch review is done (one fix wave, re-review clean). The owner’s answers on the three review items, the `ux3` iPhone check and merge, then the rebase, the migration (with the owner’s approval) and build 10.
+
+## Phone accounts build — 27 October 2026
+
+**Built on the `contact-invitations` branch, from `main` (which carries UX3, GI1 and GI2); nothing is applied to the hosted project, the Auth dashboard, EAS or TestFlight, and no build is on TestFlight.** Phone accounts are plan 1 of 4 for contact invitations ([spec](superpowers/specs/2026-10-27-contact-invitations-design.md), [plan](superpowers/plans/2026-10-27-phone-accounts.md); decisions CI-D1 to CI-D13, CI-P1 to CI-P13 and the calls made during the build in `knowledge-base/08-decisions.md`). The commits are `afd5dd2` to `7fe57ad` (Tasks 1 to 10), on top of the spec (`d730b00`) and the plan (`9073afc`). The rollout runbook and the owner’s list are in [`qa/phone-accounts-2026-10-27/README.md`](../qa/phone-accounts-2026-10-27/README.md).
+
+**What changed.**
+- **Test mode.** No paid SMS yet (CI-D10). Supabase Auth’s Send SMS hook (`public.send_sms_hook`) stores the code instead of sending it, and `public.exchange_test_code` swaps the fixed code 000000 for the stored one, for any number, for 10 minutes after the send, while `private.phone_mode.test_mode` is true. In live mode 000000 is refused. Turning test mode off waits for a real SMS sender.
+- **Access.** A confirmed phone now counts like a confirmed email. A roster match needs a confirmed email, and a live link grant needs only the account’s confirmation. A maintainer grant (`source = 'maintainer'`) gives test phone accounts access. The app records that an account has used it, and the 18+ tick is recorded on its own.
+- **App.** Sign-up and sign-in by phone number and code (existing email and password accounts keep signing in). "Add your number" is the gate for accounts without a verified phone, and "About you" for accounts without a name, with Apple and Google linked to the signed-in account to fill the name. Numbers are parsed and stored in international form (`07700 900834` on a GB phone becomes `+447700900834`), and fiction-range test numbers are accepted. A taken number is refused and the person can change it or sign out.
+- **Records.** `scripts/test-database-docker.sh` runs the SQL harness in Docker `postgres:17`, which is how it runs on Linux; the Expo types are generated and the contacts path is case-correct.
+
+**Migration state: not applied.** Owner approval is by file name and sha256:
+- `supabase/migrations/20261027120000_phone_accounts.sql`: `c2f39f7e20fa4ccf39bc9a72a8081dc758118db257e6e27b7debc67651a3bf13`. Hosted-compatible.
+- `supabase/rollback/20261027120000_phone_accounts.rollback.sql`: `a0826a92590d90c5f7ee50f08959de3792d88e1f29dd97826ebea3771261b266`.
+- **The local-only GI2 companion changed, which supersedes the values in the GI2 build section above.** `20261022120001_gi2_local_delivery_and_deletion.sql` is now `f48b5ca74e8b7460f413ed76e9bd85113cc88e6a462af4cb73aa7f665a01aba5` (was `0bbcba8e6eab16491fb1a2eec7fb5551b4af9723d66a6a58ac07ab2ebb671e5a`); its `user_eligible` body now matches the new hosted body (a confirmed email or phone, and a roster match needs a confirmed email). Its rollback is `4d5db49ad841c53f996ee76ddee07bce5414bf1c4237fa1e6531d71e4b6888e1` (was `df7a68fba12885049103b3a5c833358b8ea18d935055f261c8a71bb8bb86ed81`), a header change only.
+- **Not live with this plan.** Local-only checks still read `email_confirmed_at` (notification recipients, deletion requests and intents); Plan 4 (push) and the deletion milestone must widen them before phone-only accounts get notices or can delete. `join_by_link` (GI2, hosted) still requires a confirmed email; Plan 3 replaces it.
+
+**Rollout (owner-approved, not run).** The migration, then the Auth dashboard (phone provider, Send SMS hook to `public.send_sms_hook`, OTP length 6 and expiry 600 seconds, "Allow manual linking" on), a proof of the real path with one Supabase test number, the maintainer grants, a TestFlight build and the iPhone check. Manual linking must be on, and native Apple id-token linking must be checked on the iPhone. **Rollback:** serve the previous build; run the rollback in one transaction; revert the dashboard settings. It restores GI2’s hosted `user_eligible` body, so where the companion’s deletion-aware `deletion_pending` exists the deletion-job check is dropped. On hosted today the companion is not applied and the rollback is exact. If the companion is ever applied, roll it back first, then this migration; the companion rollback alone leaves `eligible()` roster-only, which locks out link-grant and phone-only accounts until re-applied.
+
+**Checks (at `7fe57ad`, run on Linux).**
+- `cd mobile && npm run check` passes: the type check is clean and 382 unit tests pass (0 fail, 55 test files).
+- `./scripts/test-database-docker.sh` passes in full mode (26 `PASS` lines, ending `PASS: disposable SQL assertions (full)`).
+- `./scripts/test-database-docker.sh --hosted-baseline supabase/migrations/20261027120000_phone_accounts.sql` passes (14 `PASS` lines including `phone-accounts.sql (hosted baseline)`).
+- The worker tests pass (59 of 59) as `node --import ./mobile/node_modules/tsx/dist/loader.mjs --test supabase/functions/_shared/*.test.ts`, because this machine’s Node lacks TypeScript stripping.
+- Browser QA runs Expo web with `EXPO_PUBLIC_SUPABASE_URL=https://ewcsgvhuojxdpaspwsrx.supabase.co EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=qa-fixture-key` and every request intercepted; `verify-phone.mjs` covers the new screens.
+
+**For the owner.**
+1. On sign-in, "Create account" then Close reopens "Reset password" when a saved reset request exists (the app’s `/auth` restore). The browser check no longer pins it.
+2. The introduction’s "I have an account" still opens email sign-in, while the landing’s opens phone sign-in.
+3. A phone-only account waiting for access sees the protected line "Your email is confirmed…", which is wrong for phone accounts.
+4. An approved account without a name sees About you, then Profile’s first-run name card. About you saves only the account metadata.
+5. Under Larger Text at 320 px the number field’s text scrolls inside the field.
+
+**Next.** The final whole-branch review, then the owner’s approval of the migration by file name and sha256, the dashboard settings, the TestFlight build and the iPhone check.
