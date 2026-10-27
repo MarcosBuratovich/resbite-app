@@ -25,4 +25,8 @@ export const PHONE_COPY = {
   continue: "Continue",
   addHeading: "Add your number",
   addBody: "Your friends find and invite you by your number.",
+  taken: "This number already belongs to another Resbite account. Use a different number, or sign out and sign in with that number.",
+  foldOffer: "This number answered an invitation on the web. Confirm it with a code to bring its resbites here.",
+  foldOff: "Bringing an invitation into this account isn’t switched on yet.",
+  foldGone: "That web account is gone, so we sent a code to add this number instead.",
 };

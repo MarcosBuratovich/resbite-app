@@ -39,6 +39,7 @@ export default function AddPhone() {
               <Copy>{PHONE_COPY.codeBody(formatPhone(phone.e164 ?? phone.input))}</Copy>
               <CodeField value={phone.digits} onChange={typeDigits} inputRef={phone.codeInput} />
               {phone.busy ? <ActivityIndicator accessibilityLabel={PHONE_COPY.checking} color={c.aquaDark} /> : null}
+              {phone.notice ? <Copy style={styles.helper}>{phone.notice}</Copy> : null}
               <ErrorNote message={phone.error} />
               {phone.error && phone.digits.length === 6 && !phone.busy ? (
                 <TextAction title={PHONE_COPY.retry} onPress={() => void phone.verify(phone.digits)} />
@@ -65,7 +66,11 @@ export default function AddPhone() {
               <Copy style={styles.helper}>{PHONE_COPY.numberHint}</Copy>
               <ErrorNote message={phone.error} />
               {phone.reason === "taken" ? (
-                <TextAction title={PHONE_COPY.changeNumber} onPress={() => phone.setInput("")} />
+                <>
+                  <Copy>{PHONE_COPY.foldOffer}</Copy>
+                  <Button large icon={false} title={PHONE_COPY.send} loading={phone.busy} onPress={() => void phone.sendFold()} />
+                  <TextAction title={PHONE_COPY.changeNumber} onPress={() => phone.setInput("")} />
+                </>
               ) : null}
               <Button
                 large

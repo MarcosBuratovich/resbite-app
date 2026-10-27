@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import { deviceRegion, parsePhone, phoneVerified, samePhone } from "../domain/phone";
 import { TERMS_VERSION } from "../domain/guestAccount";
 import { phoneCodeDeps, sendPhoneCode, verifyPhoneCode, type PhonePurpose } from "../services/phoneCode";
+import { foldPhoneAccount, phoneFoldDeps, sendFoldCode, type FoldClientDeps } from "../services/phoneFold";
 import { clearAttestation, rememberAttestation } from "../services/phoneAccount";
 import { useAccount } from "./AccountState";
 
@@ -25,6 +26,10 @@ export function usePhoneVerification(purpose: PhonePurpose) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reason, setReason] = useState<"no_account" | "taken" | null>(null);
+  /** Add only: the code on its way (or checked) is for a web-only account to bring in, not for this one. */
+  const [folding, setFolding] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const foldDeps = useRef<FoldClientDeps | null>(null);
   const mounted = useRef(true);
   const working = useRef(false);
   const verifying = useRef(false);
@@ -67,8 +72,35 @@ export function usePhoneVerification(purpose: PhonePurpose) {
     setStep("code");
   }
 
+  const fold = () => (foldDeps.current ??= phoneFoldDeps());
+
   return {
     step,
+    folding,
+    notice,
+    /** Offered when Add refused the number as taken: send a code to the web-only account that holds it. */
+    async sendFold() {
+      if (working.current || purpose !== "add" || !e164) return;
+      working.current = true;
+      const tag = request.current;
+      setBusy(true);
+      setError(null);
+      const result = await sendFoldCode(fold(), e164);
+      if (tag !== request.current) return;
+      working.current = false;
+      if (!mounted.current) return;
+      setBusy(false);
+      if (!result.ok) {
+        setError(result.message);
+        return;
+      }
+      setReason(null);
+      setFolding(true);
+      setResendAt(result.resendAt);
+      setNow(Date.now());
+      setDigits("");
+      setStep("code");
+    },
     input,
     setInput(value: string) {
       setInputState(value);
@@ -107,6 +139,32 @@ export function usePhoneVerification(purpose: PhonePurpose) {
       setError(null);
       // Remembered for this number just before the verify that completes a sign-up, and only then.
       if (purpose === "signup") rememberAttestation(TERMS_VERSION, e164);
+      if (folding) {
+        const folded = await foldPhoneAccount(fold(), e164, code, resendAt - RESEND_MS);
+        if (folded.ok) await refresh();
+        working.current = false;
+        verifying.current = false;
+        if (folded.ok) {
+          router.replace("/account");
+          return true;
+        }
+        if (!mounted.current) return false;
+        if (folded.gone) {
+          // The web account was deleted meanwhile, so the number is free: carry on with the ordinary Add.
+          setFolding(false);
+          setNotice(folded.message);
+          setDigits("");
+          await sendTo(e164);
+          return false;
+        }
+        setBusy(false);
+        setError(folded.message);
+        if (folded.clear) {
+          setDigits("");
+          codeInput.current?.focus();
+        }
+        return false;
+      }
       const result = await verifyPhoneCode(phoneCodeDeps, e164, code, resendAt - RESEND_MS, purpose);
       // A failed sign-up check leaves no tick behind; the next verify remembers it again.
       if (!result.ok && purpose === "signup") clearAttestation();
@@ -136,6 +194,10 @@ export function usePhoneVerification(purpose: PhonePurpose) {
     },
     async resend() {
       if (working.current || !e164) return;
+      if (folding) {
+        await this.sendFold();
+        return;
+      }
       await sendTo(e164);
     },
     changeNumber() {
@@ -145,6 +207,8 @@ export function usePhoneVerification(purpose: PhonePurpose) {
       working.current = false;
       setBusy(false);
       setStep("number");
+      setFolding(false);
+      setNotice(null);
       setDigits("");
       setError(null);
       setReason(null);
