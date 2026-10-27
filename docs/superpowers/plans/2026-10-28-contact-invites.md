@@ -179,7 +179,7 @@ The open link's approval is Plan 3, and push delivery is Plan 4. Plan 1 (`docs/s
 - Create: `supabase/rollback/20261028120000_contact_invitations.rollback.sql`, plus `supabase/tests/hosted-baseline/20261028120000_contact_invitations.before.sql` and `.after.sql`, modelled on `20261027120000_phone_accounts.before.sql`/`.after.sql`. They fingerprint the redefined functions and constraints, check the new objects and grants, and rehearse the rollback.
 
 **Interfaces:**
-- Produces **`private.fold_web_account(p_from uuid, p_into uuid) returns jsonb`**, plus a `public.fold_web_account(p_from uuid, p_into uuid)` SECURITY INVOKER façade so the Edge Function can call it through REST. Both are executable by `service_role` only:
+- Produces **`private.fold_web_account(p_from uuid, p_into uuid) returns jsonb`**, plus a `public.fold_web_account(p_from uuid, p_into uuid)` façade so the Edge Function can call it through REST. *Amended during Task 3 (ruling R5): the public function is a single SECURITY DEFINER function with `search_path = ''`, executable only by `service_role`, with no schema grant. `service_role` has no usage on `private`, so an invoker façade could not reach the body.* Both are executable by `service_role` only:
   - Refuses (22023) when:
     - the ids are equal;
     - `p_from` has an `app_sessions` row;

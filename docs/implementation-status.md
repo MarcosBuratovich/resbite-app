@@ -637,3 +637,35 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
 7. A banned or leaving account without a verified phone sees Add your number rather than its status card.
 
 **Next.** The final whole-branch review is done and its fix wave is in (`join_by_link` for phone accounts, the 18+ tick tied to its number, the test-mode switch-off steps, and smaller fixes). Then the owner’s approval of the migration by file name and sha256, the dashboard settings, the TestFlight build and the iPhone check.
+
+## Contact invitations build — 28 October 2026
+
+**Built on the `contact-invites` branch, from `main`; nothing is applied to the hosted project, Vercel, EAS or TestFlight, and the fold function is not deployed.** Contact invitations are plan 2 of 4 ([spec](superpowers/specs/2026-10-27-contact-invitations-design.md), [plan](superpowers/plans/2026-10-28-contact-invites.md); the calls made during the build are in `knowledge-base/08-decisions.md`). The commits are `2c6113e` (the plan) to `386d453` (Tasks 1 to 12), then the records. The rollout runbook and the owner's list are in [`qa/contact-invites-2026-10-28/README.md`](../qa/contact-invites-2026-10-28/README.md).
+
+**What changed.**
+- **Host side.** From a plan, the host picks contacts. Those on Resbite get an in-app invitation; everyone else gets a personal link made on the host's phone and sent by WhatsApp or Messages. Looking up who is on Resbite and inviting share one budget of 500 numbers per day.
+- **Invitee on the web.** `link.resbite.com/i/<code>` shows the event and the invited number's last two digits, checks the number typed, confirms it by code, takes the name and answer, then shows the "get the app" screen.
+- **My resbites.** An Invited group for the host, Invitations at the top for invitees; answered invitations leave Upcoming; Send again works from any phone (it mints a new code, and the old link stops working).
+- **Folding.** An existing account that adds a number held by a web-only account can bring it in (Edge Function `fold-phone-account`, switched off in source). A fold that landed counts as done; Retry doesn't re-verify; a 503 blocks Retry.
+
+**Migration state: not applied.** Owner approval is by file name and sha256, straight after `20261027120000_phone_accounts.sql` (also not applied):
+- `supabase/migrations/20261028120000_contact_invitations.sql`: `c35b88b9195b82b2e9c6dbf02ebba256ebe92d2ce54a82436c5fcf869c6fe1af`. Hosted-compatible.
+- `supabase/rollback/20261028120000_contact_invitations.rollback.sql`: `3169a076b623234d45320f75b95f20e5a9ed97385143855dead8ee78b23b1392`.
+
+**Rollout (owner-approved, not run).** The migration; the fold release constant flipped in a reviewed commit and the function deployed with `verify_jwt = false`; the link site regenerated and deployed (`TERMS_URL`, `PRIVACY_URL`, `APP_STORE_URL`, `TERMS_VERSION`, a firewall rate limit on `/i/*`, `/personal-flow.mjs` checked for a JavaScript MIME type on the first preview); an EAS build with `EXPO_PUBLIC_INVITATION_ORIGIN=https://link.resbite.com` (a new native build, for `LSApplicationQueriesSchemes`; Android `<queries>` is B8); the iPhone check. **Rollback:** serve the previous build, run the rollback SQL with approval (it removes the grants made by invitations), redeploy the previous link site.
+
+**Checks (at `386d453`, run on Linux).**
+- `cd mobile && npm run check` passes: type check clean, 448 unit tests pass (0 fail, 61 test scripts).
+- `./scripts/test-database-docker.sh` passes in full mode (27 `PASS` lines).
+- `./scripts/test-database-docker.sh --hosted-baseline supabase/migrations/20261027120000_phone_accounts.sql supabase/migrations/20261028120000_contact_invitations.sql` passes (16 `PASS` lines including `contact-invitations.sql (hosted baseline)`).
+- The worker tests pass (66 of 66) as `node --import ./mobile/node_modules/tsx/dist/loader.mjs --test supabase/functions/_shared/*.test.ts`.
+- `cd mobile && node --import tsx ../links/verify-personal.mjs` passes (headless Chrome, every request intercepted); the app screens are checked by the browser scripts of `386d453`.
+
+**For the owner.**
+1. The web page keeps the invitee's full account session in that browser's `localStorage`, with no "not you / sign out" control. This matters on shared computers.
+2. "Add your number" shows two buttons both named "Send code" when a number is taken.
+3. Web answers made with a "+44 (0) 7700..." style number compose wrongly and use up one of the 10 checks per hour.
+4. If the event is cancelled while someone is mid-flow, the page says "That isn't the number <host> invited".
+5. A host's personal links live on their phone; another phone mints a new link and the old one stops working.
+
+**Next.** Plans 3 (open-link approval) and 4 (push). Then the owner's approval of the two migrations in order, the dashboard settings from plan 1, the fold release, the link site and the iPhone check.
