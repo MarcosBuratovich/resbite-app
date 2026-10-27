@@ -10,6 +10,9 @@ import { Chip, StatusCard } from "../src/design/kit";
 import { categoryPalette, colors as c, fonts } from "../src/design/tokens";
 import { accessState, accessTitles, type AccessState } from "../src/domain/accountCopy";
 import { isLinkCode, pendingInviteParams } from "../src/domain/appLinks";
+import { accountGate } from "../src/domain/accountRoute";
+import { nameFromSession } from "../src/domain/guestAccount";
+import { phoneVerified } from "../src/domain/phone";
 
 const icons: Record<AccessState, typeof ShieldCheck> = {
   checking: ShieldCheck,
@@ -34,9 +37,18 @@ export default function Account() {
     inviteRestoreError,
     restoreInvite,
   } = useApp();
-  const { status, reviewed, profileReady, error, refresh } = useAccount();
+  const { status, user, profileReady, error, refresh } = useAccount();
   if (preview) return <Redirect href="/create" />;
   if (!session && !restoring) return <Redirect href="/auth" />;
+  const gate = session
+    ? accountGate({
+        status,
+        phoneVerified: phoneVerified(user),
+        name: nameFromSession(user, null),
+        profileReady,
+      })
+    : null;
+  if (gate) return <Redirect href={gate === "add-phone" ? "/add-phone" : "/about-you"} />;
   const signOutChip = (
     <Chip
       text="Sign out"
@@ -64,7 +76,6 @@ export default function Account() {
           </ScrollView>
         </SafeAreaView>
       );
-    if (!reviewed) return <Redirect href="/account-details?setup=1" />;
     if (!profileReady) return <Redirect href="/profile" />;
     const kept = pendingInviteParams(pendingInvite);
     if (kept)

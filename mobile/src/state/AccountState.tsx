@@ -16,6 +16,8 @@ import { accountDetailsAdapter } from "../services/accountDetails";
 import { readProfile } from "../services/profile";
 import { withDeadline } from "../services/plans";
 import { hasReviewedDetails } from "../domain/registration";
+import { phoneVerified } from "../domain/phone";
+import { flushAttestation, noteAppSession } from "../services/phoneAccount";
 
 type Snapshot = {
   accountId: string;
@@ -53,6 +55,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const identity = useRef(accountId),
     generation = useRef(0),
     sessionRef = useRef(session);
+  const noted = useRef<string | null>(null);
   identity.current = accountId;
   sessionRef.current = session;
   const refresh = useCallback(async () => {
@@ -90,6 +93,13 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         profileReady: Boolean(profile?.display_name),
         error: null,
       });
+      if (status === "approved" || status === "access_pending") {
+        if (noted.current !== accountId) {
+          noted.current = accountId;
+          void noteAppSession();
+        }
+        void flushAttestation();
+      }
     } catch {
       try {
         assertCurrent();
@@ -116,8 +126,11 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     <Context.Provider
       value={{
         ...value,
+        // With the phone gate there is no separate setup step: a verified number counts as set up.
         reviewed: Boolean(
-          value.user && hasReviewedDetails(value.user.user_metadata),
+          value.user &&
+            (phoneVerified(value.user) ||
+              hasReviewedDetails(value.user.user_metadata)),
         ),
         refresh,
         acceptDetails: (user) => {

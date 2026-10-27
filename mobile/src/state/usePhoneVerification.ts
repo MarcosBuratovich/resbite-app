@@ -112,7 +112,13 @@ export function usePhoneVerification(purpose: PhonePurpose) {
       verifying.current = false;
       if (result.ok) {
         // Signed in: the navigator may already have remounted onto /account, which makes this moot.
-        if (purpose === "add") await refresh();
+        if (purpose === "add") {
+          try {
+            await refresh();
+          } catch {
+            // The number is verified; /account re-reads the account on arrival.
+          }
+        }
         router.replace("/account");
         return true;
       }

@@ -130,6 +130,8 @@ function Navigation() {
           <Stack.Protected guard={Boolean(session)}>
             <Stack.Screen name="account" />
             <Stack.Screen name="account-details" />
+            <Stack.Screen name="about-you" />
+            <Stack.Screen name="add-phone" />
           </Stack.Protected>
           <Stack.Protected
             guard={

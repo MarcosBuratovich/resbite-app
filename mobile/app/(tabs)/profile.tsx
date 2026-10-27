@@ -7,6 +7,7 @@ import { Button, Copy, ErrorNote, Title, s } from "../../src/design/ui";
 import { FieldCard, IconButton, InfoSheet, Row, RowGroup } from "../../src/design/kit";
 import { PreviewNotice } from "../../src/design/Chrome";
 import { categoryPalette, colors as c, depth, fonts, r } from "../../src/design/tokens";
+import { formatPhone } from "../../src/domain/phone";
 import { useProfile } from "../../src/state/useProfile";
 
 /**
@@ -133,9 +134,11 @@ export default function Profile() {
               />
             </View>
           )}
-          {!p.preview && !!p.session?.user.email && (
+          {!p.preview && !!p.session?.user.email ? (
             <Text style={styles.email}>{p.session.user.email}</Text>
-          )}
+          ) : !p.preview && !!p.session?.user.phone ? (
+            <Text style={styles.email}>{formatPhone(p.session.user.phone)}</Text>
+          ) : null}
         </View>
         {!firstRun && !editing && <ErrorNote message={p.error} />}
         {p.loadError && (
