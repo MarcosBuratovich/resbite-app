@@ -61,7 +61,7 @@ export async function generate(originValue, teamId, bundleId, output) {
   for (const dir of ["api", "lib", "activities"]) await mkdir(resolve(root, dir), { recursive: true });
   for (const name of await readdir(resolve(source, "server", "api"))) await copyFile(resolve(source, "server", "api", name), resolve(root, "api", name));
   for (const name of await readdir(resolve(source, "server", "lib"))) await copyFile(resolve(source, "server", "lib", name), resolve(root, "lib", name));
-  for (const name of ["page.css", "page.js"]) await write(name, await readFile(resolve(source, "assets", name)));
+  for (const name of ["page.css", "page.js", "personal.js", "personal-flow.mjs"]) await write(name, await readFile(resolve(source, "assets", name)));
   for (const name of await readdir(resolve(source, "../mobile/assets/activities")))
     if (name.endsWith(".png")) await copyFile(resolve(source, "../mobile/assets/activities", name), resolve(root, "activities", name));
   await write(
@@ -73,6 +73,9 @@ export async function generate(originValue, teamId, bundleId, output) {
           // No pattern on :code: the functions render a malformed or truncated code as inactive.
           { source: "/r/:code/image", destination: "/api/image?code=:code" },
           { source: "/r/:code", destination: "/api/page?code=:code" },
+          // The personal invitation page (contact invitations): web-only, so the Apple link file does not list /i/.
+          { source: "/i/:code/image", destination: "/api/image?kind=personal&code=:code" },
+          { source: "/i/:code", destination: "/api/personal?code=:code" },
         ],
         redirects: [{ source: "/", destination: "https://www.resbite.com/", permanent: false }],
         // The image route reads these files from disk, so Vercel must bundle them with the function.
@@ -95,7 +98,7 @@ export async function generate(originValue, teamId, bundleId, output) {
   );
   await write(
     "hosting-requirements.txt",
-    `Origin: ${origin}\nDeploy this folder as its own Vercel project (vercel.json sets the rewrite and headers).\nServe /invite as invite.html (200, no redirect).\nServe /.well-known/apple-app-site-association as application/json over HTTPS, without authentication or redirects.\nSet Referrer-Policy: no-referrer; Cache-Control: no-store on /invite.\nSet Content-Security-Policy: ${INVITE_CSP}\nDisable request query logging, analytics, session replay and third-party scripts on invitation pages. Fragments are not sent to the server.\nEvent pages (/r/<code>) are rendered by api/page.mjs and need these Vercel environment variables: SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_SECRET_KEY (cover photos only), LINK_ORIGIN, APP_STORE_URL, APP_STORE_ID (optional). Add a per-address rate limit for /r/* in the Vercel firewall.\nReview before deployment; this script does not publish anything.\n`,
+    `Origin: ${origin}\nDeploy this folder as its own Vercel project (vercel.json sets the rewrite and headers).\nServe /invite as invite.html (200, no redirect).\nServe /.well-known/apple-app-site-association as application/json over HTTPS, without authentication or redirects.\nSet Referrer-Policy: no-referrer; Cache-Control: no-store on /invite.\nSet Content-Security-Policy: ${INVITE_CSP}\nDisable request query logging, analytics, session replay and third-party scripts on invitation pages. Fragments are not sent to the server.\nEvent pages (/r/<code>) are rendered by api/page.mjs and need these Vercel environment variables: SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_SECRET_KEY (cover photos only), LINK_ORIGIN, APP_STORE_URL, APP_STORE_ID (optional). Personal invitation pages (/i/<code>) are rendered by api/personal.mjs and also read TERMS_VERSION (default 2026-10), TERMS_URL and PRIVACY_URL (both optional). Add a per-address rate limit for /r/* and /i/* in the Vercel firewall.\nReview before deployment; this script does not publish anything.\n`,
   );
   await write(
     "expo-ios-config.fragment.json",

@@ -1,11 +1,11 @@
-// GET /r/<code>/image (rewritten to /api/image?code=<code>): the event's picture for the page and the preview.
+// GET /r/<code>/image (rewritten to /api/image?code=<code>), and /i/<code>/image (kind=personal): the event's picture for the page and the preview.
 // A stable address per link; the signed cover URL behind it rotates. Anything other than an open event's
 // cover or illustration gets the Resbite mark. Nothing here logs; a failure falls back to the mark, or to an empty 204.
 import { readFile } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isLinkCode } from "../lib/render.mjs";
-import { readInvitationPage, signCoverUrl } from "../lib/supabase.mjs";
+import { readInvitationPage, readPersonalInvitation, signCoverUrl } from "../lib/supabase.mjs";
 
 const defaultRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const COVER_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -24,7 +24,7 @@ const send = (res, bytes, type) => {
 
 /** Handler for GET /api/image. `deps` lets tests inject the database, signing, fetch and the bundled files' root. */
 export default async function handler(req, res, deps = {}) {
-  const d = { readInvitationPage, signCoverUrl, fetch: globalThis.fetch, root: defaultRoot, ...deps };
+  const d = { readInvitationPage, readPersonalInvitation, signCoverUrl, fetch: globalThis.fetch, root: defaultRoot, ...deps };
   // The Resbite mark; a last resort with no bundled file is an empty 204, never a 500.
   const mark = async () => {
     try {
@@ -39,7 +39,7 @@ export default async function handler(req, res, deps = {}) {
   let data = { state: "inactive" };
   if (isLinkCode(code)) {
     try {
-      data = await d.readInvitationPage(code);
+      data = req.query?.kind === "personal" ? await d.readPersonalInvitation(code) : await d.readInvitationPage(code);
     } catch {
       data = { state: "inactive" };
     }

@@ -80,7 +80,7 @@ test("a bad team ID or origin is refused before anything is written", async () =
 test("the event page's functions, assets and routes are part of the site (GI1)", async () => {
   const { out, cleanup } = await site();
   try {
-    for (const name of ["api/page.mjs", "api/image.mjs", "lib/render.mjs", "lib/supabase.mjs", "page.css", "page.js", "activities/coffee-together.png"])
+    for (const name of ["api/page.mjs", "api/image.mjs", "lib/render.mjs", "lib/supabase.mjs", "page.css", "page.js", "api/personal.mjs", "lib/personal.mjs", "personal.js", "personal-flow.mjs", "activities/coffee-together.png"])
       assert.ok((await readFile(join(out, name))).length > 0, name);
     const vercel = JSON.parse(await readFile(join(out, "vercel.json"), "utf8"));
     // Any /r/<code> reaches the functions, which render a malformed or truncated code as inactive (with the
@@ -89,11 +89,17 @@ test("the event page's functions, assets and routes are part of the site (GI1)",
       { source: "/invite", destination: "/invite.html" },
       { source: "/r/:code/image", destination: "/api/image?code=:code" },
       { source: "/r/:code", destination: "/api/page?code=:code" },
+      { source: "/i/:code/image", destination: "/api/image?kind=personal&code=:code" },
+      { source: "/i/:code", destination: "/api/personal?code=:code" },
     ]);
     assert.deepEqual(vercel.functions, { "api/image.mjs": { includeFiles: "{resbite-mark.png,activities/**}" } });
+    // /i/ is web-only: Apple's file lists neither it nor anything beyond /invite and /r/*.
+    const aasa = await readFile(join(out, ".well-known/apple-app-site-association"), "utf8");
+    assert.deepEqual(JSON.parse(aasa).applinks.details[0].components.map((c) => c["/"]), ["/invite", "/r/*"]);
+    assert.ok(!aasa.includes("/i/"));
     assert.match(await readFile(join(out, "hosting-requirements.txt"), "utf8"), /SUPABASE_SECRET_KEY \(cover photos only\)/);
     // The deployed folder carries no key: the functions read them from the environment.
-    for (const name of ["api/page.mjs", "api/image.mjs", "lib/supabase.mjs"])
+    for (const name of ["api/page.mjs", "api/image.mjs", "api/personal.mjs", "lib/personal.mjs", "lib/supabase.mjs"])
       assert.ok(!/sb_(secret|publishable)_[A-Za-z0-9]/.test(await readFile(join(out, name), "utf8")), name);
   } finally {
     await cleanup();

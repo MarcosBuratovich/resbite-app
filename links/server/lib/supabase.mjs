@@ -23,6 +23,21 @@ export async function readInvitationPage(code, fetchImpl = fetch) {
   return data && typeof data === "object" && typeof data.state === "string" ? data : { state: "inactive" };
 }
 
+/** Calls public.personal_invitation_page(code): the invitee's page data. Never returns the place or the full number. */
+export async function readPersonalInvitation(code, fetchImpl = fetch) {
+  if (!isLinkCode(code)) return { state: "inactive" };
+  const url = need("SUPABASE_URL"),
+    key = need("SUPABASE_PUBLISHABLE_KEY");
+  const response = await fetchImpl(`${url}/rest/v1/rpc/personal_invitation_page`, {
+    method: "POST",
+    headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ p_code: code }),
+  });
+  if (!response.ok) throw Error(`personal_invitation_page ${response.status}`);
+  const data = await response.json();
+  return data && typeof data === "object" && typeof data.state === "string" ? data : { state: "inactive" };
+}
+
 /** A signed URL for a cover photo, valid for `expiresIn` seconds; null when the storage call fails. */
 export async function signCoverUrl(path, expiresIn = 300, fetchImpl = fetch) {
   if (typeof path !== "string" || !/^[A-Za-z0-9/_.-]{1,300}$/.test(path) || path.includes("..")) return null;
