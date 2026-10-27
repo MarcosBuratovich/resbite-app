@@ -23,7 +23,10 @@ const icons: Record<AccessState, typeof ShieldCheck> = {
 
 /**
  * The account access check (UX4): one status card per state, today's guidance word for word,
- * and chips for the actions. Routing is unchanged.
+ * and chips for the actions. Before any of it, the phone gate (accountGate): an approved or waiting
+ * account without a verified phone goes to Add your number, and one with a phone but no name (and
+ * no profile) to About you. Details are no longer asked for here; they stay optional in Account
+ * details.
  */
 export default function Account() {
   const {
