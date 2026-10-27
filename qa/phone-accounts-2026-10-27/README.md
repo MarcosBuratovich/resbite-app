@@ -43,6 +43,7 @@ None of these steps has been run. Each is done later, with the owner's approval.
    - Phone provider on.
    - Hooks, Send SMS, Postgres, `public.send_sms_hook`.
    - SMS OTP length 6 and expiry 600 seconds.
+   - "Enable phone confirmations" stays **on**. With it off (SMS autoconfirm), `updateUser({ phone })` confirms any number with no code, so Add your number would prove nothing.
    - Raise the SMS-sent rate limit for testing.
    - "Allow manual linking" on. Native Apple id-token linking needs this; check it on the iPhone in step 4.
    - Check that phone sign-in works with the hook standing in for a provider. If Supabase still demands a provider, note what it asks for and stop.
@@ -58,31 +59,59 @@ None of these steps has been run. Each is done later, with the owner's approval.
    ```
 
    Test numbers come from `+44 7700 900000` to `900999`.
-4. **Build.** A TestFlight build from `contact-invitations`, then the owner's iPhone check:
+4. **Build.** A TestFlight build from `contact-invitations`, given to the owner's TestFlight group only. Only once Add your number passes on the owner's iPhone does it go to the coworkers' group. The owner's iPhone check:
    - sign up with a test number and 000000;
    - About you with Apple, then with Google on a second account (this proves native Apple linking);
    - sign out and sign in by number;
    - the owner's own account gets Add your number;
    - a taken number is refused;
+   - with the iPhone's region set outside the UK (for example United States), a number typed in that region's local format (`(415) 555-2671`) is read in that region: the code step says `+1 415 555 2671`. The region comes from the JavaScript engine's locale on the phone; if it reads the UK anyway, note it for the owner;
    - Larger Text and VoiceOver on the four new screens.
 5. **Known limit, until Plan 2's account folding.** Someone who creates a phone account by mistake while already having an Apple, Google or email account gets "already has a Resbite account" when About you links Apple or Google, whether that Apple ID or Google account, or only its email, belongs to the other account. Their number is then held by the new, empty account. The owner removes that empty user in the dashboard.
 6. **Not live with this plan.**
    - Local-only checks still read `email_confirmed_at`: notification recipients, deletion requests and intents.
    - Plan 4 (push) and the deletion milestone must widen them before phone-only accounts get notices or can delete.
    - `join_by_link` (GI2, hosted) still requires a confirmed email. Plan 3 replaces it.
-7. **Turning test mode off later.**
+7. **Turning test mode off later.** Do this only after a real SMS sender replaces the hook body. While test mode was on, anyone who knew a number could sign into its account with 000000, so switching it off also closes what that left open. In one sitting, with the owner's approval:
+   1. Switch it off, and empty the stored codes:
 
-   ```sql
-   update private.phone_mode set test_mode = false, changed_at = now();
-   ```
+      ```sql
+      update private.phone_mode set test_mode = false, changed_at = now();
+      truncate private.test_codes;
+      ```
 
-   Do this only after a real SMS sender replaces the hook body.
+   2. Revoke every session, so every account signs in again (phone accounts with a real code). Either sign every user out globally with the Auth admin API, or delete the sessions and refresh tokens:
+
+      ```sql
+      begin;
+      delete from auth.refresh_tokens;
+      delete from auth.sessions;
+      commit;
+      ```
+
+      Access tokens already issued stay valid until they expire (the JWT expiry, one hour by default) but can't be refreshed.
+   3. Review every `exchanged` row in the test-mode log against the known testers (the owner and the coworkers). Raise any row that isn't one of them with the owner.
+
+      ```sql
+      select l.at, l.phone_suffix, l.user_id, u.phone, u.email
+      from private.test_mode_log l left join auth.users u on u.id = l.user_id
+      where l.kind = 'exchanged' order by l.at;
+      ```
+
+   4. Review the Auth identities created while test mode was on (phone sign-ups, and Apple or Google linked at About you) against the same testers, from the time the migration was applied:
+
+      ```sql
+      select i.created_at, i.provider, i.user_id, u.phone, u.email
+      from auth.identities i join auth.users u on u.id = i.user_id
+      where i.created_at >= :applied_at order by i.created_at;
+      ```
 8. **Rollback.**
    - Serve the previous build.
+   - Turn the Send SMS hook off in the Auth dashboard **before** running the rollback SQL: Auth would otherwise call a function that no longer exists.
    - Run `supabase/rollback/20261027120000_phone_accounts.rollback.sql` in one transaction, with the owner's approval.
-   - Revert the dashboard settings.
-   - Phone-only accounts lose access until re-applied.
-   - The rollback restores GI2's hosted `user_eligible` body. Where the local-only companion's deletion-aware `deletion_pending` exists, that body drops the deletion-job check.
+   - Revert the remaining dashboard settings.
+   - Phone-only accounts lose access, and can't join by an event link, until re-applied.
+   - The rollback restores GI2's hosted `user_eligible` and `join_by_link` bodies. Where the local-only companion's deletion-aware `deletion_pending` exists, that body drops the deletion-job check.
    - On hosted today the companion is not applied, so the rollback is exact.
    - If the companion is ever applied later, roll the companion back first, then this migration.
    - Running the companion rollback on its own leaves `eligible()` roster-only, which locks out link-grant and phone-only accounts until it is re-applied.
@@ -94,6 +123,8 @@ None of these steps has been run. Each is done later, with the owner's approval.
 3. A phone-only account waiting for access sees the protected line "Your email is confirmed…", which is wrong for phone accounts.
 4. An approved account without a name sees About you, then Profile's first-run name card. About you saves only the account metadata.
 5. Under Larger Text at 320 px the number field's text scrolls inside the field.
+6. Account details still offers "Phone number (optional)", a details field separate from the verified number friends find you by, and its protected lines ("All of these details are optional", "These details stay private to your account") no longer fit now that every account has a verified number.
+7. A banned or leaving account without a verified phone sees Add your number rather than its status card: `account_access_status` reports it as waiting, and the phone gate comes first.
 
 ## Not done here
 
