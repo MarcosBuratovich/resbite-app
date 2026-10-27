@@ -65,6 +65,21 @@ export async function linkApple(d: AppleLinkDeps): Promise<LinkResult> {
   }
 }
 
+/** `error_code` (or `error`) from a callback URL's query or fragment; `null` when neither is present. */
+function callbackError(url: string): string | null {
+  try {
+    const u = new URL(url);
+    for (const raw of [u.search, u.hash]) {
+      const params = new URLSearchParams(raw.replace(/^[?#]/, ""));
+      const found = params.get("error_code") ?? params.get("error");
+      if (found) return found;
+    }
+  } catch {
+    /* Not a URL: treated as no error. */
+  }
+  return null;
+}
+
 export async function linkGoogle(d: GoogleLinkDeps): Promise<LinkResult> {
   try {
     const { url, error } = await d.linkUrl(d.redirectTo);
@@ -76,6 +91,12 @@ export async function linkGoogle(d: GoogleLinkDeps): Promise<LinkResult> {
     const result = await d.openAuthSession(url, d.redirectTo);
     if (result.type !== "success") return { ok: false, cancelled: true };
     const code = result.url ? safeAuthCode(result.url) : null;
+    if (!code && result.url) {
+      // GoTrue reports a conflict after the browser round trip: error params, no code (query or fragment).
+      const failure = callbackError(result.url);
+      if (failure === "identity_already_exists") return { ok: false, cancelled: false, message: LINK_COPY.googleTaken };
+      if (failure) return { ok: false, cancelled: false, message: connectionCopy };
+    }
     if (!code) return { ok: false, cancelled: false, message: "Unable to verify the sign-in link." };
     await d.exchange(code);
     const { name, email } = await d.googleIdentity();

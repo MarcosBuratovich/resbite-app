@@ -95,3 +95,29 @@ test("Google taken surfacing on exchange", async () => {
   const h = google({ exchange: async () => { throw { code: "identity_already_exists" }; } });
   assert.deepEqual(await linkGoogle(h.d), { ok: false, cancelled: false, message: LINK_COPY.googleTaken });
 });
+
+const taken = (url: string) => google({ openAuthSession: async () => ({ type: "success", url }) });
+
+test("Google taken reported in the fragment of the redirect", async () => {
+  const h = taken("resbite://auth/callback#error=server_error&error_code=identity_already_exists");
+  assert.deepEqual(await linkGoogle(h.d), { ok: false, cancelled: false, message: LINK_COPY.googleTaken });
+  assert.deepEqual(h.exchanged, []);
+});
+
+test("Google taken reported in the query of the redirect", async () => {
+  const h = taken("resbite://auth/callback?error=server_error&error_code=identity_already_exists");
+  assert.deepEqual(await linkGoogle(h.d), { ok: false, cancelled: false, message: LINK_COPY.googleTaken });
+  assert.deepEqual(h.exchanged, []);
+});
+
+test("other redirect errors get the connection copy", async () => {
+  const h = taken("resbite://auth/callback?error=access_denied");
+  assert.deepEqual(await linkGoogle(h.d), { ok: false, cancelled: false, message: "Check your connection and try again." });
+  assert.deepEqual(h.exchanged, []);
+});
+
+test("a success URL with neither code nor error is unverifiable", async () => {
+  const h = taken("resbite://auth/callback");
+  assert.deepEqual(await linkGoogle(h.d), { ok: false, cancelled: false, message: "Unable to verify the sign-in link." });
+  assert.deepEqual(h.exchanged, []);
+});
