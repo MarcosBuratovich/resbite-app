@@ -5,7 +5,9 @@ import { resolveNotificationTarget } from "./pushRegistration";
 export type TapResponse = {
   notification: { request: { identifier: string; content: { data?: Record<string, unknown> | null } } };
 };
-export type TapContext = { ready: boolean; account: string | null; preview: boolean };
+/** `account` is the signed-in user id; `approved` is whether the app is open to them (approved and reviewed). */
+export type TapContext = { ready: boolean; account: string | null; approved: boolean; preview: boolean };
+export type TapDestination = PushDestination | { pathname: "/account" };
 
 /** A push from Resbite's sender: not a local reminder, and typed as a plan update (well formed or not). */
 export function isPlanUpdateTap(response: TapResponse | null): boolean {
@@ -22,20 +24,42 @@ export function isPlanUpdateTap(response: TapResponse | null): boolean {
 export function createPushTapRouter(deps: {
   context(): TapContext;
   readAuthorizedPlan(account: string, plan: string): Promise<{ id: string } | null>;
-  open(destination: PushDestination): void;
+  /** Re-reads the account (fire and forget). The context goes not-ready while it runs, then settles. */
+  refreshAccount(): void;
+  open(destination: TapDestination): void;
 }) {
   let pending: unknown;
   let has = false;
   let launched = false;
   let running = false;
+  let refreshed = false;
   async function flush(): Promise<void> {
     if (!has || running) return;
     const start = { ...deps.context() };
     if (!start.ready) return;
+    if (!start.account || start.preview) {
+      has = false;
+      pending = undefined;
+      refreshed = false;
+      return;
+    }
+    if (!start.approved) {
+      // Perhaps approved while the app sat in the background: refresh once and wait for it to settle.
+      if (!refreshed) {
+        refreshed = true;
+        deps.refreshAccount();
+        return;
+      }
+      has = false;
+      pending = undefined;
+      refreshed = false;
+      deps.open({ pathname: "/account" });
+      return;
+    }
     const data = pending;
     has = false;
     pending = undefined;
-    if (!start.account || start.preview) return;
+    refreshed = false;
     running = true;
     try {
       const result = await resolveNotificationTarget(data, {

@@ -32,17 +32,21 @@ export function usePushRouting(ready: boolean) {
     ready && !restoring && !signingOut && Boolean(navigation?.key) &&
     (!session || preview || account.status !== "checking");
   const approved = account.status === "approved" && account.reviewed;
-  const context = useRef<TapContext>({ ready: false, account: null, preview: false });
+  const refreshAccount = account.refresh;
+  const refreshRef = useRef(refreshAccount);
+  refreshRef.current = refreshAccount;
+  const context = useRef<TapContext>({ ready: false, account: null, approved: false, preview: false });
   context.current = {
     ready: settled,
-    // A person still waiting for approval has no events to open; their tap is dropped.
-    account: session && approved ? session.user.id : null,
+    account: session?.user.id ?? null,
+    approved,
     preview,
   };
   const tapRouter = useRef<ReturnType<typeof createPushTapRouter> | undefined>(undefined);
   tapRouter.current ??= createPushTapRouter({
     context: () => context.current,
     readAuthorizedPlan,
+    refreshAccount: () => void refreshRef.current(),
     open: (destination) => router.push(destination),
   });
   useEffect(() => {

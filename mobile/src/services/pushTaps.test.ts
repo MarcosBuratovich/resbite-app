@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createPushTapRouter, isPlanUpdateTap, type TapContext, type TapResponse } from "./pushTaps.ts";
-import type { PushDestination } from "../domain/pushRoute.ts";
+import type { TapDestination } from "./pushTaps.ts";
 
 const PLAN = "123e4567-e89b-42d3-a456-426614174000";
 const push = (data: Record<string, unknown> = { type: "plan_update", planId: PLAN, notificationId: "7" }): TapResponse => ({
@@ -10,9 +10,10 @@ const push = (data: Record<string, unknown> = { type: "plan_update", planId: PLA
 const reminder: TapResponse = {
   notification: { request: { identifier: "resbite-reminder:p1:1h", content: { data: { planId: PLAN } } } },
 };
-function setup(initial: Partial<TapContext> = {}, readable = true) {
-  const context: TapContext = { ready: true, account: "u1", preview: false, ...initial };
-  const opened: PushDestination[] = [];
+function setup(initial: Partial<TapContext> = {}, readable = true, onRefresh: (c: TapContext) => void = () => {}) {
+  const context: TapContext = { ready: true, account: "u1", approved: true, preview: false, ...initial };
+  const opened: TapDestination[] = [];
+  let refreshes = 0;
   const reads: string[] = [];
   const router = createPushTapRouter({
     context: () => context,
@@ -20,9 +21,13 @@ function setup(initial: Partial<TapContext> = {}, readable = true) {
       reads.push(plan);
       return readable ? { id: plan } : null;
     },
+    refreshAccount: () => {
+      refreshes++;
+      onRefresh(context);
+    },
     open: (d) => void opened.push(d),
   });
-  return { context, opened, reads, router };
+  return { context, opened, reads, router, refreshes: () => refreshes };
 }
 const settle = () => new Promise((r) => setTimeout(r, 0));
 
@@ -98,9 +103,41 @@ test("an account change while checking drops the tap", async () => {
       t.context.account = "u2";
       return { id: plan };
     },
+    refreshAccount: () => {},
     open: (d) => void t.opened.push(d),
   });
   router.receive(push());
   await settle();
   assert.deepEqual(t.opened, []);
+});
+
+test("a pending account that turns approved after one refresh opens the event", async () => {
+  let t!: ReturnType<typeof setup>;
+  t = setup({ approved: false }, true, (c) => {
+    c.ready = false;
+  });
+  t.router.receive(push());
+  await settle();
+  assert.equal(t.refreshes(), 1);
+  assert.deepEqual(t.opened, []);
+  t.context.ready = true;
+  t.context.approved = true;
+  await t.router.flush();
+  assert.deepEqual(t.opened, [{ pathname: "/event", params: { plan: PLAN } }]);
+  assert.equal(t.refreshes(), 1);
+});
+test("an account that stays pending goes to /account, refreshing only once", async () => {
+  const t = setup({ approved: false }, true, (c) => {
+    c.ready = false;
+  });
+  t.router.receive(push());
+  await settle();
+  t.context.ready = false;
+  await t.router.flush();
+  t.context.ready = true;
+  await t.router.flush();
+  await t.router.flush();
+  assert.deepEqual(t.opened, [{ pathname: "/account" }]);
+  assert.equal(t.refreshes(), 1);
+  assert.deepEqual(t.reads, []);
 });
