@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { INVALID_PHONE, deviceRegion, formatPhone, parsePhone, phoneEnding, phoneVerified } from "./phone";
+import { INVALID_PHONE, deviceRegion, formatPhone, parsePhone, phoneEnding, phoneVerified, samePhone } from "./phone";
 
 test("numbers parse to E.164, including the UK fiction range", () => {
   assert.deepEqual(parsePhone("07700 900834", "GB"), { ok: true, e164: "+447700900834" });
@@ -35,4 +35,13 @@ test("verified needs a phone and its confirmation", () => {
   assert.equal(phoneVerified({ phone: "", phone_confirmed_at: "2026-10-27T10:00:00Z" }), false);
   assert.equal(phoneVerified({ phone: null, phone_confirmed_at: null }), false);
   assert.equal(phoneVerified(null), false);
+});
+
+test("same phone compares digits, so stored digits match E.164", () => {
+  assert.equal(samePhone("447700900834", "+447700900834"), true);
+  assert.equal(samePhone("+44 7700 900834", "+447700900834"), true);
+  assert.equal(samePhone("447700900999", "+447700900834"), false);
+  assert.equal(samePhone("", ""), false);
+  assert.equal(samePhone(null, "+447700900834"), false);
+  assert.equal(samePhone(undefined, undefined), false);
 });

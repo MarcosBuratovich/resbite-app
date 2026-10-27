@@ -27,3 +27,9 @@ export function phoneEnding(e164: string): string {
 export function phoneVerified(user: { phone?: string | null; phone_confirmed_at?: string | null } | null): boolean {
   return !!user && !!user.phone && !!user.phone_confirmed_at;
 }
+
+/** The same number, by its digits: `auth.users.phone` holds digits only, the app works in E.164. */
+export function samePhone(a: string | null | undefined, b: string | null | undefined): boolean {
+  const digits = (p: string | null | undefined) => (p ?? "").replace(/\D/g, "");
+  return digits(a) !== "" && digits(a) === digits(b);
+}

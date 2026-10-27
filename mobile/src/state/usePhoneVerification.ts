@@ -4,7 +4,7 @@ import { router } from "expo-router";
 import { deviceRegion, parsePhone } from "../domain/phone";
 import { TERMS_VERSION } from "../domain/guestAccount";
 import { phoneCodeDeps, sendPhoneCode, verifyPhoneCode, type PhonePurpose } from "../services/phoneCode";
-import { rememberAttestation } from "../services/phoneAccount";
+import { clearAttestation, rememberAttestation } from "../services/phoneAccount";
 import { useAccount } from "./AccountState";
 
 const RESEND_MS = 60_000;
@@ -105,11 +105,13 @@ export function usePhoneVerification(purpose: PhonePurpose) {
       verifying.current = true;
       setBusy(true);
       setError(null);
-      // Remembered just before the verify that completes a sign-up, and only then.
-      if (purpose === "signup") rememberAttestation(TERMS_VERSION);
+      // Remembered for this number just before the verify that completes a sign-up, and only then.
+      if (purpose === "signup") rememberAttestation(TERMS_VERSION, e164);
       const result = await verifyPhoneCode(phoneCodeDeps, e164, code, resendAt - RESEND_MS, purpose);
       working.current = false;
       verifying.current = false;
+      // A failed sign-up check leaves no tick behind; the next verify remembers it again.
+      if (!result.ok && purpose === "signup") clearAttestation();
       if (result.ok) {
         // Signed in: the navigator may already have remounted onto /account, which makes this moot.
         if (purpose === "add") {

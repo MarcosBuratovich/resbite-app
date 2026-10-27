@@ -97,7 +97,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
           noted.current = accountId;
           void noteAppSession();
         }
-        void flushAttestation();
+        // Recorded only when this account holds the number the tick was given for.
+        void flushAttestation(user);
       }
     } catch {
       try {

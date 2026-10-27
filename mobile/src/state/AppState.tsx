@@ -16,6 +16,7 @@ import { peopleStore } from "../services/people";
 import { recentPlaces } from "../services/recentPlaces";
 import { clearReminders } from "../services/deviceReminders";
 import { clearCalendarRecords } from "../services/deviceCalendar";
+import { clearAttestation } from "../services/phoneAccount";
 import { supabase, storage } from "../services/supabase";
 import type { Plan } from "../domain/plans";
 /** Kept as an alias for existing screens; the type lives in the domain layer. */
@@ -132,7 +133,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       clearPhoto: (scope) => profilePhotoStore.clear(scope),
       clearCovers: (scope) => planCoverStore.clearCoverJournals(scope),
       blockPending: pendingStore.beginCleanup,
-      clearPending: pendingStore.clear,
+      clearPending: async () => {
+        // A sign-up's 18+ tick still waiting for its account goes with the device's other pending state.
+        clearAttestation();
+        await pendingStore.clear();
+      },
       clearDrafts: drafts.clearScope,
       authSignOut: async (localOnly) => {
         const { error } = await supabase.auth.signOut(
