@@ -71,11 +71,14 @@ end $$;
 revoke all on function public.send_sms_hook(jsonb) from public, anon, authenticated, service_role;
 grant execute on function public.send_sms_hook(jsonb) to supabase_auth_admin;
 
--- In test mode only: 000000 for a number whose code was sent in the last 10 minutes returns that code.
+-- In test mode only: 000000 for a number whose code was sent in the last 10 minutes returns that code. The log names
+-- the account the code is for: the number's holder (signing in), else the one account adding it (phone_change);
+-- null when nobody, or more than one account, is adding it.
 create function public.exchange_test_code(p_phone text, p_code text) returns text language plpgsql security definer set search_path = '' as $$
 declare
  v_phone text := private.phone_digits(p_phone);
  v_otp text;
+ v_user uuid;
 begin
  if p_code is distinct from '000000' or not coalesce((select test_mode from private.phone_mode), false) then
   return null;
@@ -84,8 +87,11 @@ begin
  if v_otp is null then
   return null;
  end if;
- insert into private.test_mode_log(kind, phone_suffix, user_id)
-  values ('exchanged', right(v_phone, 2), (select id from auth.users where phone = v_phone));
+ select id into v_user from auth.users where phone = v_phone;
+ if v_user is null then
+  select case when count(*) = 1 then (array_agg(id))[1] end into v_user from auth.users where phone_change = v_phone;
+ end if;
+ insert into private.test_mode_log(kind, phone_suffix, user_id) values ('exchanged', right(v_phone, 2), v_user);
  return v_otp;
 end $$;
 revoke all on function public.exchange_test_code(text, text) from public, anon, authenticated, service_role;

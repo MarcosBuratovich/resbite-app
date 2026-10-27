@@ -6,7 +6,7 @@ create role supabase_auth_admin nologin;
 create schema auth;
 create schema storage;
 create schema extensions;
-create table auth.users(id uuid primary key,email text,phone text unique,phone_confirmed_at timestamptz,email_confirmed_at timestamptz,raw_user_meta_data jsonb default '{}',is_anonymous boolean default false,banned_until timestamptz);
+create table auth.users(id uuid primary key,email text,phone text unique,phone_change text,phone_confirmed_at timestamptz,email_confirmed_at timestamptz,raw_user_meta_data jsonb default '{}',is_anonymous boolean default false,banned_until timestamptz);
 create table auth.sessions(id uuid primary key,user_id uuid references auth.users(id) on delete cascade,created_at timestamptz default now());
 create function auth.uid() returns uuid language sql stable as $$ select (nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'sub')::uuid $$;
 

@@ -119,6 +119,32 @@ do $$ declare r text; begin
  end;
  reset role;
 end $$;
+-- the log names an account adding a number (phone_change), and nobody when more than one account is adding it
+insert into private.phone_mode default values;
+insert into auth.users(id,email,email_confirmed_at,phone,phone_change,phone_confirmed_at) values
+ ('c1000000-0000-4000-8000-000000000002','phone-accounts-adding@resbite-test.invalid',now(),null,'447700900835',null),
+ ('c1000000-0000-4000-8000-000000000003','phone-accounts-adding-a@resbite-test.invalid',now(),null,'447700900836',null),
+ ('c1000000-0000-4000-8000-000000000004','phone-accounts-adding-b@resbite-test.invalid',now(),null,'447700900836',null);
+set local role supabase_auth_admin;
+do $$ begin
+ perform public.send_sms_hook('{"user":{"id":"c1000000-0000-4000-8000-000000000002","phone":"","new_phone":"447700900835"},"sms":{"otp":"222222"}}');
+ perform public.send_sms_hook('{"user":{"id":"c1000000-0000-4000-8000-000000000003","phone":"","new_phone":"447700900836"},"sms":{"otp":"333333"}}');
+end $$;
+reset role;
+set local role anon;
+do $$ begin
+ if public.exchange_test_code('+44 7700 900835','000000') is distinct from '222222' then raise exception 'Exchange for a number being added failed'; end if;
+ if public.exchange_test_code('+44 7700 900836','000000') is distinct from '333333' then raise exception 'Exchange for a number two accounts are adding failed'; end if;
+end $$;
+reset role;
+do $$ begin
+ if (select count(*) from private.test_mode_log where kind='exchanged' and phone_suffix='35' and user_id='c1000000-0000-4000-8000-000000000002')<>1 then
+  raise exception 'Exchanged row for a number being added should name that account';
+ end if;
+ if (select count(*) from private.test_mode_log where kind='exchanged' and phone_suffix='36' and user_id is null)<>1 then
+  raise exception 'Exchanged row for a number two accounts are adding should name nobody';
+ end if;
+end $$;
 rollback;
 -- Accounts confirmed by phone: a confirmed phone counts as a confirmed account, the maintainer grant, app use and
 -- the 18+ tick. Synthetic identities only (prefix c2); one rolled-back block.
