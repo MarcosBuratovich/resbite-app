@@ -85,7 +85,8 @@ export default function Account() {
       return <Redirect href={{ pathname: "/invite", params: kept }} />;
     return <Redirect href="/create" />;
   }
-  // GI2: an event link is the invitation to the beta; its screen creates the guest's access.
+  // Plan 3: a kept event link sends its request from the invite screen once the gate above is clear; the
+  // host's approval is what grants access.
   if (session && status === "access_pending" && pendingInvite && isLinkCode(pendingInvite))
     return <Redirect href={{ pathname: "/invite", params: { code: pendingInvite } }} />;
   const checking = restoring || status === "checking";

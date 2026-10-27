@@ -1,160 +1,59 @@
 import React, { useRef } from "react";
-import { ActivityIndicator, Linking, Platform, StyleSheet, Text, TextInput, View } from "react-native";
-import { router } from "expo-router";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { Ticket } from "lucide-react-native";
-import { Button, Copy, ErrorNote, Field, TextAction } from "./ui";
-import { StatusCard, StepScreen, useFocusOnChange } from "./kit";
-import { TermsLine, TickRow } from "./TickRow";
-import { AppleMark } from "./AppleMark";
-import { CodeField } from "./CodeField";
-import { categoryPalette, colors as c, fonts } from "./tokens";
-import { GUEST_COPY, previewLine, stateSentence } from "../domain/guestAccount";
+import { Button, Copy, ErrorNote, TextAction } from "./ui";
+import { CoverCard, StatusCard, StepScreen, useFocusOnChange } from "./kit";
+import { categoryPalette, colors as c } from "./tokens";
+import { GUEST_COPY, stateSentence } from "../domain/guestAccount";
+import { INVITE_COPY } from "../domain/inviteCopy";
+import { areaLine, linkPicture } from "../domain/joinView";
 import type { CardState, GuestAccount } from "../state/useGuestAccount";
 
-// GI2: the guest's account screen (app/invite.tsx): one StepScreen whose heading, content and pinned footer
-// follow useGuestAccount's state, and its pieces: the invitation's card, the tick, the providers and the
-// Email, Code and Name steps.
+// The open event link signed out (app/invite.tsx, plan 3): the invitation's card, then Sign up to reply or
+// I have an account. GI2's Email, Code and Name steps are retired in favour of phone sign-in.
 
 const connectionCopy = "Check your connection and try again.";
 
-/** The screen for each state: a dead link, checking or joining, the providers, the Email, Code and Name steps. */
-export function GuestScreen({ guest }: { guest: GuestAccount }) {
-  const { card, dead, step, failed, working } = guest;
+/** Signed out: the card and the two ways in; a cancelled, past or turned-off link says so instead. */
+export function GuestScreen({ guest, notice }: { guest: GuestAccount; notice?: string | null }) {
+  const { card, dead } = guest;
   const heading = useRef<Text>(null);
   const title = dead
     ? stateSentence(dead, card.status === "ready" ? card.value.host : undefined)
-    : step === "email"
-      ? GUEST_COPY.emailHeading
-      : step === "code"
-        ? GUEST_COPY.codeHeading
-        : step === "name"
-          ? GUEST_COPY.nameHeading
-          : step === "joining" && !failed
-            ? GUEST_COPY.joining
-            : GUEST_COPY.heading;
-  // VoiceOver focus moves to each new heading (the steps, joining, a dead link).
+    : INVITE_COPY.invitedHeading;
+  // VoiceOver focus moves to the new heading when a dead link replaces the invitation.
   useFocusOnChange(heading, title);
-  const cardView = <InvitationCard card={card} onRetry={guest.retryCard} />;
-  let body: React.ReactNode = null;
-  let primary: React.ReactNode;
-  let onBack: (() => void) | undefined;
-  if (dead) primary = <Button large icon={false} title={GUEST_COPY.goHome} onPress={() => void guest.goHome()} />;
-  else if (step === null || (step === "joining" && !failed))
-    body = (
-      <>
-        {step === null ? cardView : null}
-        <ActivityIndicator
-          accessibilityLabel={step === null ? "Checking account access" : GUEST_COPY.joining}
-          color={c.aquaDark}
-        />
-      </>
-    );
-  else if (step === "joining") {
-    body = (
-      <>
-        {cardView}
-        <ErrorNote message={connectionCopy} />
-      </>
-    );
-    primary = <Button large icon={false} title="Retry" onPress={guest.retry} />;
-  } else if (step === "email") {
-    onBack = () => guest.goTo("providers");
-    body = (
-      <>
-        <EmailBody
-          email={guest.email}
-          onChange={guest.setEmail}
-          onSubmit={() => void guest.send()}
-          editable={!working}
-        />
-        <ErrorNote message={guest.error} />
-      </>
-    );
-    primary = (
-      <Button large icon={false} title={GUEST_COPY.sendCode} loading={working} onPress={() => void guest.send()} />
-    );
-  } else if (step === "code") {
-    onBack = () => guest.goTo("email");
-    body = (
-      <>
-        <CodeBody
-          email={guest.email}
-          digits={guest.digits}
-          onDigits={guest.typeDigits}
-          inputRef={guest.codeInput}
-          error={guest.error}
-          onRetry={guest.verifyLost ? guest.retryVerify : undefined}
-          secondsLeft={guest.secondsLeft}
-          onResend={() => void guest.send()}
-          busy={working}
-        />
-      </>
-    );
-  } else if (step === "name") {
-    body = (
-      <>
-        <NameBody name={guest.name} onChange={guest.setName} onSubmit={guest.continueWithName} editable={!working} />
-        <ErrorNote message={guest.error} />
-      </>
-    );
-    primary = (
-      <Button
-        large
-        icon={false}
-        title="Continue"
-        disabled={!guest.name.trim()}
-        loading={working}
-        onPress={guest.continueWithName}
-      />
-    );
-  } else {
-    // The providers before signing in (or to sign in again); signed in without a kept tick, one Continue.
-    body = (
-      <>
-        {cardView}
-        <Copy>{GUEST_COPY.body}</Copy>
-        <AgeTick ticked={guest.ticked} onChange={guest.tick} disabled={working} />
-        <ErrorNote message={guest.error} />
-      </>
-    );
-    primary =
-      !guest.signedIn || guest.signInAgain ? (
-        <ProviderButtons
-          apple={guest.appleAvailable}
-          enabled={guest.ticked}
-          busy={working}
-          onApple={() => void guest.apple()}
-          onGoogle={guest.google}
-          onEmail={() => guest.goTo("email")}
-          onExisting={() => router.push("/auth")}
-        />
-      ) : (
-        <Button
-          large
-          icon={false}
-          title="Continue"
-          hint={guest.ticked ? undefined : GUEST_COPY.ageHelper}
-          disabled={!guest.ticked}
-          onPress={guest.continueTicked}
-        />
-      );
-  }
   return (
     <StepScreen
       step={null}
       title={title}
       titleRef={heading}
-      onBack={onBack}
-      onClose={() => void guest.close()}
-      closeDisabled={guest.closeDisabled}
-      primary={primary}
+      onClose={guest.close}
+      primary={
+        dead ? (
+          <Button large icon={false} title={GUEST_COPY.goHome} onPress={() => void guest.goHome()} />
+        ) : (
+          <>
+            <Button large icon={false} title={INVITE_COPY.signUpToReply} onPress={guest.signUp} />
+            <View style={styles.centerRow}>
+              <TextAction title={INVITE_COPY.iHaveAccount} onPress={guest.signIn} />
+            </View>
+          </>
+        )
+      }
     >
-      {body}
+      {dead ? null : (
+        <>
+          <InvitationCard card={card} onRetry={() => void guest.retryCard()} />
+          <Copy style={styles.helper}>{INVITE_COPY.keptNote}</Copy>
+        </>
+      )}
+      <ErrorNote message={notice ?? null} />
     </StepScreen>
   );
 }
 
-/** "<Host> invited you", the title and the start, from invitation_page; a placeholder while loading. */
+/** The card while invitation_page is read: a placeholder, Retry when it couldn't be read, then the event. */
 function InvitationCard({ card, onRetry }: { card: CardState; onRetry: () => void }) {
   const tone = categoryPalette.uplifting;
   if (card.status === "loading")
@@ -170,177 +69,53 @@ function InvitationCard({ card, onRetry }: { card: CardState; onRetry: () => voi
         <TextAction title="Retry" onPress={onRetry} />
       </StatusCard>
     );
-  const { host, title } = card.value;
-  const when = previewLine(card.value);
+  const v = card.value;
   return (
-    <StatusCard icon={Ticket} tint={tone.tint} ink={tone.ink} title={host ? `${host} invited you` : "You’re invited"}>
-      {title ? <Copy style={styles.eventTitle}>{title}</Copy> : null}
-      {when ? <Copy style={styles.center}>{when}</Copy> : null}
-    </StatusCard>
-  );
-}
-
-/** The tick ("I’m 18 or over"), the Terms line under it and, while unticked, the age helper. */
-function AgeTick({
-  ticked,
-  onChange,
-  disabled,
-}: {
-  ticked: boolean;
-  onChange: (next: boolean) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <View style={styles.tick}>
-      <TickRow label={GUEST_COPY.tick} hint={GUEST_COPY.terms} checked={ticked} onChange={onChange} disabled={disabled}>
-        <TermsLine text={GUEST_COPY.terms} />
-      </TickRow>
-      {!ticked ? <Copy style={styles.helper}>{GUEST_COPY.ageHelper}</Copy> : null}
-    </View>
-  );
-}
-
-/** The pinned footer before sign-in: Apple (iOS only), Google, email, then "I already have an account". */
-function ProviderButtons({
-  apple,
-  enabled,
-  busy,
-  onApple,
-  onGoogle,
-  onEmail,
-  onExisting,
-}: {
-  apple: boolean;
-  enabled: boolean;
-  busy: boolean;
-  onApple: () => void;
-  onGoogle: () => void;
-  onEmail: () => void;
-  onExisting: () => void;
-}) {
-  const hint = enabled ? undefined : GUEST_COPY.ageHelper;
-  return (
-    <>
-      {apple ? (
-        <Button title={GUEST_COPY.apple} mark={AppleMark} hint={hint} disabled={!enabled || busy} onPress={onApple} />
-      ) : null}
-      <Button title={GUEST_COPY.google} secondary hint={hint} disabled={!enabled || busy} onPress={onGoogle} />
-      <Button title={GUEST_COPY.email} secondary hint={hint} disabled={!enabled || busy} onPress={onEmail} />
-      <View style={styles.centerRow}>
-        <TextAction title={GUEST_COPY.existing} disabled={busy} onPress={onExisting} />
-      </View>
-    </>
-  );
-}
-
-function EmailBody({
-  email,
-  onChange,
-  onSubmit,
-  editable,
-}: {
-  email: string;
-  onChange: (value: string) => void;
-  onSubmit: () => void;
-  editable: boolean;
-}) {
-  return (
-    <Field
-      label={GUEST_COPY.emailField}
-      value={email}
-      onChangeText={onChange}
-      onSubmitEditing={onSubmit}
-      editable={editable}
-      autoFocus
-      autoCapitalize="none"
-      autoCorrect={false}
-      autoComplete="email"
-      keyboardType="email-address"
-      textContentType="emailAddress"
-      returnKeyType="send"
+    <LinkCard
+      title={v.title}
+      startsAt={v.starts_at}
+      endsAt={v.ends_at}
+      area={v.area}
+      host={v.host}
+      image={v.image}
     />
   );
 }
 
-function CodeBody({
-  email,
-  digits,
-  onDigits,
-  inputRef,
-  error,
-  onRetry,
-  secondsLeft,
-  onResend,
-  busy,
+/**
+ * What an open link shows before the host lets someone in (CI-P4): "<Host> invited you", the title, the time,
+ * the rough area and the picture. Never the place. Also the waiting screen's card.
+ */
+export function LinkCard({
+  title,
+  startsAt,
+  endsAt,
+  area,
+  host,
+  image,
 }: {
-  email: string;
-  digits: string;
-  onDigits: (value: string) => void;
-  inputRef: React.RefObject<TextInput | null>;
-  error: string | null;
-  /** Shown after a check lost to the connection: checks the same six digits again. */
-  onRetry?: () => void;
-  secondsLeft: number;
-  onResend: () => void;
-  busy: boolean;
+  title?: string;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  area?: string | null;
+  host?: string;
+  image?: { kind: string; ref: string | null } | null;
 }) {
   return (
-    <>
-      <Copy>{GUEST_COPY.codeBody(email.trim())}</Copy>
-      <CodeField value={digits} onChange={onDigits} inputRef={inputRef} />
-      {busy ? <ActivityIndicator accessibilityLabel="Checking the code" color={c.aquaDark} /> : null}
-      <ErrorNote message={error} />
-      {onRetry && !busy ? <TextAction title="Retry" onPress={onRetry} /> : null}
-      <View style={styles.links}>
-        {secondsLeft > 0 ? (
-          <Copy style={styles.helper}>{GUEST_COPY.resendIn(secondsLeft)}</Copy>
-        ) : (
-          <TextAction title={GUEST_COPY.resend} disabled={busy} onPress={onResend} />
-        )}
-        {Platform.OS === "ios" ? (
-          <TextAction title={GUEST_COPY.openMail} onPress={() => void Linking.openURL("message://").catch(() => {})} />
-        ) : null}
-      </View>
-    </>
-  );
-}
-
-function NameBody({
-  name,
-  onChange,
-  onSubmit,
-  editable,
-}: {
-  name: string;
-  onChange: (value: string) => void;
-  onSubmit: () => void;
-  editable: boolean;
-}) {
-  return (
-    <>
-      <Field
-        label={GUEST_COPY.nameField}
-        value={name}
-        onChangeText={onChange}
-        onSubmitEditing={onSubmit}
-        editable={editable}
-        autoFocus
-        maxLength={80}
-        autoCapitalize="words"
-        autoComplete="name"
-        textContentType="name"
-        returnKeyType="done"
-      />
-      <Copy style={styles.helper}>{GUEST_COPY.nameHelper}</Copy>
-    </>
+    <CoverCard
+      picture={linkPicture(image)}
+      title={title ?? ""}
+      startsAt={startsAt || null}
+      endsAt={endsAt ?? null}
+      place={areaLine(area)}
+      byline={INVITE_COPY.invitedYou(host?.trim() || INVITE_COPY.hostFallback)}
+      heading={false}
+    />
   );
 }
 
 const styles = StyleSheet.create({
   center: { textAlign: "center", color: c.muted },
-  eventTitle: { fontFamily: fonts.display, fontSize: 22, lineHeight: 28, textAlign: "center" },
-  tick: { gap: 6 },
   helper: { color: c.muted, fontSize: 14 },
   centerRow: { alignItems: "center" },
-  links: { alignItems: "flex-start", gap: 4 },
 });

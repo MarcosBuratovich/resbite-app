@@ -1,5 +1,5 @@
-// Phone sign-up, sign-in and add-a-number by six-digit SMS code. Mirrors emailCode.ts: dependencies are
-// injected so the mappers run under node with recording stubs.
+// Phone sign-up, sign-in and add-a-number by six-digit SMS code. Dependencies are injected so the mappers
+// run under node with recording stubs.
 
 import { PHONE_COPY } from "../domain/phoneCopy";
 
@@ -54,7 +54,7 @@ export async function sendPhoneCode(
   }
 }
 
-/** As in emailCode: expiry is told by the clock, since GoTrue words wrong and expired alike. */
+/** Expiry is told by the clock, since GoTrue words wrong and expired alike. */
 export async function verifyPhoneCode(
   d: PhoneCodeDeps,
   e164: string,

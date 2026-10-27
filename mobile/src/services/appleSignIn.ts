@@ -23,7 +23,7 @@ export type AppleSignInResult =
   | { ok: false; cancelled: false; message: string };
 
 const connectionCopy = "Check your connection and try again.";
-// auth-js returns network failures as status 0 rather than throwing (emailCode.ts does the same).
+// auth-js returns network failures as status 0 rather than throwing (phoneCode.ts does the same).
 const isConnectionFailure = (error: { status?: number }) =>
   error.status === 0 || (error.status !== undefined && error.status >= 500);
 

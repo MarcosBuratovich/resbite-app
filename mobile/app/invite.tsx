@@ -9,19 +9,29 @@ import { useGuestAccount } from "../src/state/useGuestAccount";
 import { Back, Button, Copy, Title, ErrorNote, s } from "../src/design/ui";
 import { GuestScreen } from "../src/design/GuestSteps";
 import { colors as c } from "../src/design/tokens";
-import { claimEventLink, claimInvitation } from "../src/services/rsvp";
+import { claimInvitation } from "../src/services/rsvp";
+import { joinRequestGateway } from "../src/services/joinRequests";
 import { isInviteToken, isLinkCode } from "../src/domain/appLinks";
+import { accountGate } from "../src/domain/accountRoute";
 import { incompleteInvitation, isClaimRefusal } from "../src/domain/eventLinks";
+import { GUEST_COPY, nameFromSession } from "../src/domain/guestAccount";
+import { INVITE_COPY } from "../src/domain/inviteCopy";
+import { joinDestination, joinRefusedForGood } from "../src/domain/joinView";
+import { phoneVerified } from "../src/domain/phone";
+
+type Target = { pathname: "/event" | "/waiting"; params: { plan: string } };
 
 /**
- * Claims an invitation link, then replaces itself with the event page's answer. A per-person link brings a
- * `token`; the event's one link (GI1, /r/<code>) brings a `code`. Either is kept on the device until claimed,
- * or until it is refused for good (turned off, started, cancelled, malformed): only a lost connection keeps it
- * for a retry. "Go to My resbites" leaves the error and drops it too.
+ * Opens an invitation link, then replaces itself with where it leads. A per-person link brings a `token`; the
+ * event's one link (GI1, /r/<code>) brings a `code`. Either is kept on the device until it is used, or until it
+ * is refused for good (turned off, started, cancelled, malformed): only a lost connection keeps it for a retry.
+ * "Go to My resbites" leaves the error and drops it too.
  *
- * GI2: for anyone without access an event link is the guest's account screen (useGuestAccount, GuestScreen):
- * signed out, and signed in while the account waits for access, until the join hands over to the event page.
- * Approved accounts keep GI1's claim.
+ * Plan 3: an event link no longer lets anyone in by itself. Signed out it shows the invitation with Sign up to
+ * reply and I have an account (useGuestAccount, GuestScreen). Signed in, approved or still waiting for access,
+ * once the phone gate is clear (accountGate, run by /account first) it sends a request (request_to_join,
+ * "pending"): the owner and existing guests land on the event, anyone else on /waiting. A per-person link keeps
+ * GI1's claim for approved accounts.
  */
 export default function Invite() {
   const { token, code, plan } = useLocalSearchParams<{
@@ -34,18 +44,32 @@ export default function Invite() {
   const keep = token ? (isInviteToken(token) ? token : null) : isLinkCode(code) ? code : null;
   const { session, restoring, preview, rememberInvite, signingOut } = useApp();
   const account = useAccount();
-  const accountReady = account.status === "approved" && account.reviewed && account.profileReady;
+  const approved = account.status === "approved" && account.reviewed;
+  const accountReady = approved && account.profileReady;
+  // The name the gate made sure of (About you). An account still waiting for access has no profile row yet,
+  // so the request carries it; with a profile the server keeps the profile's.
+  const name = nameFromSession(account.user, null);
+  const gateClear =
+    account.status === "access_pending" &&
+    accountGate({
+      status: account.status,
+      phoneVerified: phoneVerified(account.user),
+      name,
+      profileReady: account.profileReady,
+    }) === null;
+  const ready = accountReady || (!token && gateClear);
   const guest = useGuestAccount({ code, token });
-  // While the guest's screen shows, GI1's claim and its redirect to /account stand aside.
-  const guestActive = useRef(guest.active);
-  guestActive.current = guest.active;
   const userId = session?.user.id;
   const identity = `${userId}:${token}:${code}:${plan}:${preview}`;
   const currentIdentity = useRef(identity);
   currentIdentity.current = identity;
-  const resolved = useRef<{ identity: string; id: string } | null>(null);
+  const resolved = useRef<{ identity: string; target: Target } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // The event page needs approved access. An owner or guest whose account still reads as waiting has likely
+  // been let in since: the account is read again, then the event opens, or /account when it still waits.
+  const [handoff, setHandoff] = useState<{ plan: string; read: boolean } | null>(null);
+  const handingOff = useRef(false);
   const remember = useRef(rememberInvite);
   remember.current = rememberInvite;
   const retained = useRef<{ identity: string; promise: Promise<void> } | null>(null);
@@ -71,8 +95,7 @@ export default function Invite() {
       });
   }, [identity, keep, signingOut]);
   useEffect(() => {
-    if (!session || preview || signingOut || accountReady || account.status === "checking" || guestActive.current)
-      return;
+    if (!session || preview || signingOut || ready || account.status === "checking" || handingOff.current) return;
     let active = true;
     const preserve = keep ? retainToken() : Promise.resolve();
     void preserve
@@ -85,74 +108,105 @@ export default function Invite() {
     return () => {
       active = false;
     };
-  }, [identity, accountReady, account.status, signingOut]);
+  }, [identity, ready, account.status, signingOut]);
+  useEffect(() => {
+    if (!handoff?.read) return;
+    if (approved) router.replace({ pathname: "/event", params: { plan: handoff.plan } });
+    else router.replace("/account");
+  }, [handoff, approved]);
   const claim = useCallback(
     async (begin: () => Run) => {
-      if (!userId || preview || signingOut || !accountReady || guestActive.current) return;
+      if (!userId || preview || signingOut || !ready || handingOff.current) return;
       const { valid, assertSession } = begin();
       setBusy(true);
       setError(null);
+      // Set when the server refused the request (not a lost connection): only that drops a kept event link.
+      let refused = false;
       try {
         if (secret) {
           if (!keep) throw new Error(incompleteInvitation);
           await retainToken();
           if (!valid()) return;
         }
-        let id = resolved.current?.identity === identity ? resolved.current.id : secret ? undefined : plan;
-        if (!id && keep) {
+        let target: Target | undefined =
+          resolved.current?.identity === identity
+            ? resolved.current.target
+            : !secret && plan
+              ? { pathname: "/event", params: { plan } }
+              : undefined;
+        if (!target && keep) {
           assertSession();
-          // GI1: the organizer opening their own event's link lands on their event, as any claim does.
-          id = token ? await claimInvitation(keep) : await claimEventLink(keep);
+          target = token
+            ? { pathname: "/event", params: { plan: await claimInvitation(keep) } }
+            : joinDestination(
+                await joinRequestGateway.request(keep, "pending", name ?? undefined).catch((e: unknown) => {
+                  refused = joinRefusedForGood(e instanceof Error ? e.message : INVITE_COPY.offline);
+                  throw e;
+                }),
+              );
           if (!valid()) return;
-          resolved.current = { identity, id };
+          resolved.current = { identity, target };
         }
-        if (keep && id) {
+        if (keep && target) {
           if (valid()) await remember.current(null, keep);
           if (!valid()) return;
         }
-        if (!id) throw new Error("Invitation unavailable. Open the original invitation link.");
-        // The claim lands straight on the answer (benchmark row 9).
-        router.replace({ pathname: "/event", params: { plan: id } });
+        if (!target) throw new Error("Invitation unavailable. Open the original invitation link.");
+        if (target.pathname === "/event" && !approved) {
+          const id = target.params.plan;
+          handingOff.current = true;
+          setHandoff({ plan: id, read: false });
+          void account.refresh().then(() => setHandoff((h) => (h?.plan === id ? { plan: id, read: true } : h)));
+          return;
+        }
+        // The claim lands straight on the answer (benchmark row 9); a request on its waiting screen.
+        router.replace(target);
       } catch (e) {
         const message = e instanceof Error ? e.message : "Invitation unavailable.";
         // A refusal for good drops the kept link (a malformed one was never kept), so a restart opens the app
         // as usual instead of this error. The message still shows.
-        if (keep && isClaimRefusal(message) && valid()) await remember.current(null, keep).catch(() => {});
+        const final = token ? isClaimRefusal(message) : refused;
+        if (keep && final && valid()) await remember.current(null, keep).catch(() => {});
         if (valid()) setError(message);
       } finally {
         if (valid()) setBusy(false);
       }
     },
-    [identity, plan, token, code, userId, preview, signingOut, accountReady],
+    [identity, plan, token, code, userId, preview, signingOut, ready, approved, name],
   );
   const { refresh } = useFocusedRefresh(claim, { identity });
-  // The way out of an error: the kept link (if it is this one) is dropped, then My resbites.
+  // The way out of an error: the kept link (if it is this one) is dropped, then My resbites, or the account's
+  // access screen while it still waits for access.
   async function leave() {
     if (keep) await remember.current(null, keep).catch(() => {});
-    router.replace("/plans");
+    router.replace(accountReady ? "/plans" : "/account");
   }
-  if (guest.active) return <GuestScreen guest={guest} />;
+  if (guest.active) return <GuestScreen guest={guest} notice={error} />;
   return (
     <SafeAreaView style={s.page}>
       <ScrollView contentContainerStyle={s.body}>
         <Back />
-        <Title>You’re invited.</Title>
+        <Title>{INVITE_COPY.invitedHeading}</Title>
         {!session && !restoring && (
           <>
-            <Copy>We’ll keep this invitation ready while you finish setting up.</Copy>
+            <Copy>{INVITE_COPY.keptNote}</Copy>
             <Button title="Sign in" onPress={() => router.push("/auth")} />
           </>
         )}
         {preview && <Copy>Preview cannot claim invitations or send an RSVP.</Copy>}
         <ErrorNote message={error} />
-        {(busy || (session && account.status === "checking")) && (
+        {(busy || handoff || (session && account.status === "checking")) && (
           <ActivityIndicator accessibilityLabel="Opening your invitation" color={c.aquaDark} />
         )}
         {session && !preview && (
           <Button title="Refresh invitation" secondary loading={busy} onPress={() => void refresh()} />
         )}
-        {!!error && session && !preview && accountReady && (
-          <Button title="Go to My resbites" secondary onPress={() => void leave()} />
+        {!!error && session && !preview && ready && (
+          <Button
+            title={accountReady ? "Go to My resbites" : GUEST_COPY.goHome}
+            secondary
+            onPress={() => void leave()}
+          />
         )}
       </ScrollView>
     </SafeAreaView>

@@ -1,5 +1,5 @@
-// GI2 guest services: the invitation preview and link-open count (anon, publishable key only, no
-// session, as the isolated client in accountDeletion.ts is built) and the join itself (signed in).
+// The open event link's anon reads: the invitation preview and the link-open count (publishable key only, no
+// session, as the isolated client in accountDeletion.ts is built). Answering is a request now (joinRequests.ts).
 // The factory takes its dependencies so the mappers run under node with stubs.
 import { isLinkCode } from "../domain/appLinks";
 
@@ -8,32 +8,18 @@ export type InvitationPreview = {
   host?: string;
   title?: string;
   starts_at?: string;
+  ends_at?: string;
   time_zone?: string;
+  area?: string;
+  image?: { kind: string; ref: string | null };
 };
-
-export type JoinRefusalKind = "unavailable" | "name" | "age" | "signin";
-export class JoinRefusal extends Error {
-  kind: JoinRefusalKind;
-  constructor(kind: JoinRefusalKind, message: string) {
-    super(message);
-    this.name = "JoinRefusal";
-    this.kind = kind;
-  }
-}
 
 export type GuestJoinDeps = {
   fetch: typeof fetch;
   supabaseUrl: string;
   publishableKey: string;
-  rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>;
 };
 
-const refusals: [string, JoinRefusalKind][] = [
-  ["Invitation unavailable", "unavailable"],
-  ["Name required", "name"],
-  ["Age confirmation required", "age"],
-  ["Sign-in required", "signin"],
-];
 const states = ["open", "cancelled", "happened", "inactive"] as const;
 const inactive: InvitationPreview = { state: "inactive" };
 
@@ -60,10 +46,13 @@ export function createGuestJoin(d: GuestJoinDeps) {
     const state = states.find((s) => s === row.state);
     if (!state) return inactive;
     const preview: InvitationPreview = { state };
-    if (typeof row.host === "string") preview.host = row.host;
-    if (typeof row.title === "string") preview.title = row.title;
-    if (typeof row.starts_at === "string") preview.starts_at = row.starts_at;
-    if (typeof row.time_zone === "string") preview.time_zone = row.time_zone;
+    for (const key of ["host", "title", "starts_at", "ends_at", "time_zone", "area"] as const) {
+      const value = row[key];
+      if (typeof value === "string") preview[key] = value;
+    }
+    const image = row.image as { kind?: unknown; ref?: unknown } | null | undefined;
+    if (typeof image === "object" && image !== null && typeof image.kind === "string")
+      preview.image = { kind: image.kind, ref: typeof image.ref === "string" ? image.ref : null };
     return preview;
   }
 
@@ -76,33 +65,13 @@ export function createGuestJoin(d: GuestJoinDeps) {
     }
   }
 
-  async function joinByLink(code: string, name: string | null, termsVersion: string): Promise<string> {
-    const { data, error } = await d.rpc("join_by_link", {
-      p_code: code,
-      p_name: name ?? "",
-      p_terms_version: termsVersion,
-    });
-    if (error) {
-      const match = refusals.find(([text]) => error.message.includes(text));
-      if (match) throw new JoinRefusal(match[1], error.message);
-      throw error;
-    }
-    if (typeof data !== "string") throw new Error("join_by_link returned no plan");
-    return data;
-  }
-
-  return { readInvitationPreview, noteLinkOpen, joinByLink };
+  return { readInvitationPreview, noteLinkOpen };
 }
 
 const real = createGuestJoin({
   fetch: (input, init) => fetch(input, init),
   supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL || "https://unconfigured.supabase.co",
   publishableKey: process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY || "unconfigured",
-  rpc: async (fn, args) => {
-    const { supabase } = require("./supabase") as typeof import("./supabase");
-    return supabase.rpc(fn, args);
-  },
 });
 export const readInvitationPreview = real.readInvitationPreview;
 export const noteLinkOpen = real.noteLinkOpen;
-export const joinByLink = real.joinByLink;

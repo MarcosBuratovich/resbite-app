@@ -18,33 +18,29 @@ function memory() {
   };
 }
 
-test("the kept tick is stored and cleared with the invite", async () => {
+test("a tick GI2 kept goes with the invite", async () => {
   const disk = memory();
   const store = createPendingInviteStore(disk, () => {});
-  assert.equal(await store.readTerms(), null);
+  disk.data.set("resbite.pending-terms", "2026-10");
   await store.remember(code);
-  await store.rememberTerms("2026-10");
-  assert.equal(await store.readTerms(), "2026-10");
-  assert.equal(disk.data.get("resbite.pending-terms"), "2026-10");
+  assert.equal(disk.data.get("resbite.pending-invite"), code);
   await store.remember(null);
-  assert.equal(await store.readTerms(), null);
-
-  await store.remember(code);
-  await store.rememberTerms("2026-10");
-  await store.clear();
-  assert.equal(await store.readTerms(), null);
   assert.equal(disk.data.size, 0);
 
-  await store.rememberTerms("2026-10");
-  await store.rememberTerms(null);
-  assert.equal(await store.readTerms(), null);
+  disk.data.set("resbite.pending-terms", "2026-10");
+  await store.remember(code);
+  await store.clear();
+  assert.equal(disk.data.size, 0);
 });
 
-test("the tick is refused while sign-out is in progress", async () => {
-  const store = createPendingInviteStore(memory(), () => {});
+test("an invite is refused while sign-out is in progress", async () => {
+  const kept: (string | null)[] = [];
+  const disk = memory();
+  const store = createPendingInviteStore(disk, (token) => kept.push(token));
   const unblock = store.beginCleanup();
-  await assert.rejects(store.rememberTerms("2026-10"), /Sign-out/);
+  await assert.rejects(store.remember(code), /Sign-out/);
   unblock();
-  await store.rememberTerms("2026-10");
-  assert.equal(await store.readTerms(), "2026-10");
+  await store.remember(code);
+  assert.equal(disk.data.get("resbite.pending-invite"), code);
+  assert.deepEqual(kept, [code]);
 });

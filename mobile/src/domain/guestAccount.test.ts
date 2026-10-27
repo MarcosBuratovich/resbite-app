@@ -6,23 +6,8 @@ import {
   appleNameToSave,
   formatCountdown,
   nameFromSession,
-  nextStepAfterSignIn,
-  previewLine,
   stateSentence,
 } from "./guestAccount";
-
-test("a credential without a name needs the Name step", () => {
-  assert.equal(nextStepAfterSignIn({ name: null, attested: true }), "name");
-});
-
-test("a missing tick goes back to the providers", () => {
-  assert.equal(nextStepAfterSignIn({ name: "Ada", attested: false }), "providers");
-  assert.equal(nextStepAfterSignIn({ name: null, attested: false }), "providers");
-});
-
-test("a name and a tick join", () => {
-  assert.equal(nextStepAfterSignIn({ name: "Ada", attested: true }), "joining");
-});
 
 test("Apple's name wins over metadata", () => {
   assert.equal(nameFromSession({ user_metadata: { full_name: "Meta Name" } }, " Apple Name "), "Apple Name");
@@ -64,7 +49,6 @@ test("countdown formats", () => {
   assert.equal(formatCountdown(0), "0:00");
   assert.equal(formatCountdown(-3), "0:00");
   assert.equal(GUEST_COPY.resendIn(5), "Didn’t get it? Send a new code in 0:05");
-  assert.equal(GUEST_COPY.codeBody("a@b.co"), "We sent a 6-digit code to a@b.co.");
   assert.equal(TERMS_VERSION, "2026-10");
 });
 
@@ -73,15 +57,4 @@ test("state sentences", () => {
   assert.equal(stateSentence("cancelled", undefined), "The host cancelled this resbite.");
   assert.equal(stateSentence("happened", "Sam"), "This resbite has already happened.");
   assert.equal(stateSentence("inactive", undefined), "This invitation is no longer active.");
-});
-
-test("the preview line is the event's time in its zone", () => {
-  const starts_at = "2026-10-23T18:30:00Z";
-  assert.equal(previewLine({ starts_at, time_zone: "Europe/London" }), "Fri 23 Oct, 7.30pm");
-  assert.equal(previewLine({ starts_at, time_zone: "UTC" }), "Fri 23 Oct, 6.30pm");
-  assert.equal(previewLine({ starts_at }), "Fri 23 Oct, 6.30pm");
-  assert.equal(previewLine({ starts_at: "2026-10-23T19:00:00Z", time_zone: "Europe/London" }), "Fri 23 Oct, 8pm");
-  assert.equal(previewLine({ starts_at: "2026-10-23T11:05:00Z", time_zone: "UTC" }), "Fri 23 Oct, 11.05am");
-  assert.equal(previewLine({ time_zone: "UTC" }), "");
-  assert.equal(previewLine({ starts_at: "nonsense" }), "");
 });

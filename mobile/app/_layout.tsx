@@ -132,6 +132,8 @@ function Navigation() {
             <Stack.Screen name="account-details" />
             <Stack.Screen name="about-you" />
             <Stack.Screen name="add-phone" />
+            {/* Plan 3: an open link's request, reachable while the account still waits for access. */}
+            <Stack.Screen name="waiting" />
           </Stack.Protected>
           <Stack.Protected
             guard={

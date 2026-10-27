@@ -1,13 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createGuestJoin, JoinRefusal, type GuestJoinDeps } from "./guestJoin";
+import { createGuestJoin, type GuestJoinDeps } from "./guestJoin";
 
 const code = "abcdEFGH_-0123456789ab";
 const KEY = "sb_publishable_key";
 
-function harness(opts: { respond?: () => Promise<Response>; rpcReply?: Awaited<ReturnType<GuestJoinDeps["rpc"]>> } = {}) {
+function harness(opts: { respond?: () => Promise<Response> } = {}) {
   const fetched: { url: string; init: RequestInit }[] = [];
-  const rpcs: { fn: string; args: Record<string, unknown> }[] = [];
   const d: GuestJoinDeps = {
     fetch: (async (url: string, init: RequestInit) => {
       fetched.push({ url, init });
@@ -15,12 +14,8 @@ function harness(opts: { respond?: () => Promise<Response>; rpcReply?: Awaited<R
     }) as unknown as typeof fetch,
     supabaseUrl: "https://x.supabase.co",
     publishableKey: KEY,
-    rpc: async (fn, args) => {
-      rpcs.push({ fn, args });
-      return opts.rpcReply ?? { data: "plan-1", error: null };
-    },
   };
-  return { g: createGuestJoin(d), fetched, rpcs };
+  return { g: createGuestJoin(d), fetched };
 }
 
 test("a malformed code is inactive without a request", async () => {
@@ -89,32 +84,38 @@ test("noteLinkOpen swallows a 500 and a network failure", async () => {
   assert.equal(down.fetched.length, 1);
 });
 
-test("join maps the four refusals to kinds", async () => {
-  const cases = [
-    ["Invitation unavailable", "unavailable"],
-    ["Name required", "name"],
-    ["Age confirmation required", "age"],
-    ["Sign-in required", "signin"],
-  ] as const;
-  for (const [message, kind] of cases) {
-    const h = harness({ rpcReply: { data: null, error: { message: `P0001: ${message}` } } });
-    await assert.rejects(h.g.joinByLink(code, "Ana", "2026-10"), (e: unknown) => e instanceof JoinRefusal && e.kind === kind);
-  }
-});
-
-test("any other join error is rethrown as it is", async () => {
-  const error = { message: "boom" };
-  const h = harness({ rpcReply: { data: null, error } });
-  await assert.rejects(h.g.joinByLink(code, "Ana", "2026-10"), (e: unknown) => e === error);
-});
-
-test("join returns the plan id and sends an empty name for none", async () => {
-  const h = harness();
-  assert.equal(await h.g.joinByLink(code, null, "2026-10"), "plan-1");
-  assert.deepEqual(h.rpcs, [{ fn: "join_by_link", args: { p_code: code, p_name: "", p_terms_version: "2026-10" } }]);
-});
-
-test("a join that returns no plan id throws", async () => {
-  const h = harness({ rpcReply: { data: null, error: null } });
-  await assert.rejects(h.g.joinByLink(code, "Ana", "2026-10"), /no plan/);
+test("an open card keeps its end, area and image, and never the place", async () => {
+  const h = harness({
+    respond: async () =>
+      new Response(
+        JSON.stringify({
+          state: "open",
+          host: "Ana",
+          title: "Picnic",
+          starts_at: "2026-11-01T10:00:00Z",
+          ends_at: "2026-11-01T12:00:00Z",
+          time_zone: "Europe/London",
+          area: "Hackney",
+          going: 3,
+          image: { kind: "activity", ref: "bbq" },
+          place_label: "leak",
+        }),
+      ),
+  });
+  assert.deepEqual(await h.g.readInvitationPreview(code), {
+    state: "open",
+    host: "Ana",
+    title: "Picnic",
+    starts_at: "2026-11-01T10:00:00Z",
+    ends_at: "2026-11-01T12:00:00Z",
+    time_zone: "Europe/London",
+    area: "Hackney",
+    image: { kind: "activity", ref: "bbq" },
+  });
+  const odd = harness({
+    respond: async () => new Response(JSON.stringify({ state: "open", ends_at: null, image: { kind: "mark", ref: 4 } })),
+  });
+  assert.deepEqual(await odd.g.readInvitationPreview(code), { state: "open", image: { kind: "mark", ref: null } });
+  const none = harness({ respond: async () => new Response(JSON.stringify({ state: "open", image: "cover" })) });
+  assert.deepEqual(await none.g.readInvitationPreview(code), { state: "open" });
 });

@@ -1,6 +1,7 @@
 import { isPendingInvite } from "../domain/appLinks";
 import type { KeyStore } from "./secureChunks";
 const key = "resbite.pending-invite";
+/** GI2 kept an 18+ tick beside the invitation (retired in plan 3); it still goes whenever the invitation does. */
 const termsKey = "resbite.pending-terms";
 /**
  * One kept invitation: a per-person token or (GI1) an event link code, told apart by their shapes
@@ -48,15 +49,6 @@ export function createPendingInviteStore(
         if (version === revision) publish(isPendingInvite(value) ? value : null);
       });
     },
-    /** GI2: the Terms version agreed to before sign-in, kept beside the invitation until it is claimed. */
-    rememberTerms: (version: string | null) => {
-      if (blocked) return Promise.reject(Error("Sign-out is in progress."));
-      return run(async () => {
-        if (version === null) await storage.removeItem(termsKey);
-        else await storage.setItem(termsKey, version);
-      });
-    },
-    readTerms: () => run(() => storage.getItem(termsKey)),
     beginCleanup: () => {
       blocked = true;
       ++revision;

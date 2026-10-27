@@ -25,6 +25,8 @@ import {
   withoutInvitations,
 } from "../../src/domain/eventView";
 import { INVITE_COPY } from "../../src/domain/inviteCopy";
+import { areaLine, linkPicture, requestChip } from "../../src/domain/joinView";
+import { joinRequestGateway, type MyRequest } from "../../src/services/joinRequests";
 import { reconcileRsvp, responseFor, type AnswerKey, type RsvpAttempt } from "../../src/domain/rsvp";
 import { readRsvp, writeRsvp } from "../../src/services/rsvp";
 import { canDiscardDraft } from "../../src/domain/draftAutosave";
@@ -51,6 +53,8 @@ export default function Plans() {
     [error, setError] = useState<string | null>(null),
     [segment, setSegment] = useState<"upcoming" | "past">("upcoming"),
     [attendees, setAttendees] = useState<Attendee[]>([]),
+    // Plan 3: the open-link requests still waiting for their host, or declined.
+    [requests, setRequests] = useState<MyRequest[]>([]),
     [hosts, setHosts] = useState<Record<string, string>>({}),
     [answering, setAnswering] = useState<string | null>(null),
     [answerError, setAnswerError] = useState<{ plan: string; message: string } | null>(null);
@@ -85,6 +89,7 @@ export default function Plans() {
   useEffect(() => {
     setPlans([]);
     setAttendees([]);
+    setRequests([]);
     setHosts({});
     setLoadedFor(undefined);
     setError(null);
@@ -95,6 +100,7 @@ export default function Plans() {
     if (preview || !session) {
       setPlans([]);
       setAttendees([]);
+      setRequests([]);
       setBusy(false);
       return;
     }
@@ -106,18 +112,21 @@ export default function Plans() {
     setBusy(true);
     setError(null);
     try {
-      const [p, a] = await Promise.all([
+      const [p, a, q] = await Promise.all([
         supabase.from("plans").select("*").order("starts_at").abortSignal(controller.signal),
         supabase
           .from("attendees")
           .select("plan_id,user_id,response,version,profiles(display_name)")
           .abortSignal(controller.signal),
+        // Requests never block My resbites: a failed read keeps the last list.
+        joinRequestGateway.mine().catch(() => null),
       ]);
       if (!isCurrent()) return;
       if (p.error) throw p.error;
       if (a.error) throw a.error;
       setLoadedFor(uid);
       setPlans(p.data || []);
+      if (q) setRequests(q);
       // Cover changes for cancelled or started plans can never complete; drop them quietly.
       void planCoverStore.discardStaleCoverJournals(uid, p.data || []).catch(() => {});
       const mine = (a.data || []) as unknown as Attendee[];
@@ -167,6 +176,11 @@ export default function Plans() {
   const list = preview ? localPlans : loadedFor === session?.user.id && session ? plans : [];
   const now = Date.now();
   const invitations = preview || !session ? [] : invitationCards(list, attendees, session.user.id, now);
+  // A plan the account can already read (invited in person since) shows as itself, not as a request.
+  const waiting =
+    preview || !session || loadedFor !== session.user.id
+      ? []
+      : requests.filter((q) => !list.some((p) => p.id === q.plan_id));
   const { upcoming: ahead, past } = groupPlans(list, now);
   const upcoming = withoutInvitations(ahead, invitations);
   const shown = segment === "upcoming" ? upcoming : past;
@@ -263,7 +277,7 @@ export default function Plans() {
           <IconButton icon={UserRound} label="Your profile" onPress={() => router.navigate("/profile")} />
         </View>
         <PreviewNotice />
-        {invitations.length > 0 && (
+        {(invitations.length > 0 || waiting.length > 0) && (
           <View style={{ gap: 12 }}>
             <Copy accessibilityRole="header" style={styles.invitationsHeading}>
               {INVITE_COPY.invitationsHeading}
@@ -289,7 +303,7 @@ export default function Plans() {
                     onPress={() => open(p)}
                   />
                   <Segmented
-                    label={`Your answer to ${p.title.trim() || "this resbite"}`}
+                    label={INVITE_COPY.yourAnswer(p.title)}
                     options={[
                       { key: "going", text: "Going" },
                       { key: "maybe", text: "Maybe" },
@@ -301,6 +315,26 @@ export default function Plans() {
                   />
                   {answerError?.plan === p.id && <ErrorNote message={answerError.message} />}
                 </View>
+              );
+            })}
+            {waiting.map((q) => {
+              const chip = requestChip(q);
+              const place = areaLine(q.area);
+              return (
+                <CoverCard
+                  key={`request-${q.plan_id}`}
+                  picture={linkPicture(q.image)}
+                  title={q.title}
+                  startsAt={q.starts_at || null}
+                  endsAt={q.ends_at}
+                  place={place}
+                  chips={[{ key: chip.text, text: chip.text, tone: chip.tone }]}
+                  label={cardLabel(
+                    { title: q.title, startsAt: q.starts_at || null, endsAt: q.ends_at, place: place ?? "", chips: [chip.text] },
+                    new Date(now),
+                  )}
+                  onPress={() => router.push({ pathname: "/waiting", params: { plan: q.plan_id } })}
+                />
               );
             })}
           </View>
