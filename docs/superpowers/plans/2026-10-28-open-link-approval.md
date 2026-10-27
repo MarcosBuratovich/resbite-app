@@ -9,7 +9,7 @@
 - **Redefined functions:** `claim_plan_link` and `join_by_link` create a request instead of admitting the person.
 - **New functions:**
   - `request_to_join` (web and app) and `my_join_request` (anyone with a session);
-  - `my_join_requests` (the app's list);
+  - `my_join_requests` (the app's list) and `change_join_answer` (the app's waiting screen);
   - `plan_join_requests` and `decide_join_request` (host).
 - **Web:** `/r/<code>` reuses Plan 2's personal-page client in an "open" mode: no number match, and a waiting screen instead of "You're going".
 - **App:** opening a `/r/` link sends a request and shows a waiting screen. My resbites lists waiting requests. The host's event page gains "Waiting for you" and the event link card, which moves there from Invite people. GI2's email-code guest screen is retired in favour of phone sign-in.
@@ -83,6 +83,7 @@
   8. `private.request_join`.
 - **`public.my_join_request(p_code text) returns jsonb`** (house pattern, authenticated): `invitation_page(p_code)` plus `request: {status, response} | null` for the caller on that link's plan, plus `member: 'owner'|'attendee'|null`.
 - **`public.my_join_requests() returns jsonb`** (house pattern, authenticated): `[{plan_id, title, starts_at, ends_at, time_zone, host, area, image, response, status}]` for the caller's requests that are `waiting` or `declined` on active, future plans. It never returns the place.
+- **`public.change_join_answer(p_plan uuid, p_response text) returns jsonb`** (house pattern, authenticated): session and the per-user lock; `p_response` in the four values, else 22023; updates the caller's `waiting` request on that plan and returns `{status:'waiting', response}`. No waiting request (none, approved or declined) → 22023 "Request already decided". No outbox row. The app's waiting screen uses this, since it knows the plan but not always the code.
 - **`public.plan_join_requests(p_plan uuid) returns jsonb`** (house pattern, owner only, 42501 otherwise): `[{user_id, name, response, ending, created_at}]` for `waiting` rows. `name` comes from `profiles.display_name`; `ending` is the last two digits of `auth.users.phone`, or `null`.
 - **`public.decide_join_request(p_plan uuid, p_user uuid, p_approve boolean) returns jsonb`** (house pattern):
   - `require_link_owner(p_plan)`: the owner of an active, future plan, with the plan locked;
@@ -105,6 +106,7 @@
     - the owner gives `owner`; an attendee gives `already`;
     - a banned user, a disabled roster email, a turned-off link, a cancelled or started event, and an ineligible organizer each give 42501;
     - `'nope'` gives 22023.
+  - **change_join_answer:** a waiting user changes `accepted` → `maybe` with no outbox row; after a decision it gives 22023 "Request already decided"; another user's plan with no request gives 22023.
   - **my_join_request / my_join_requests:**
     - they show the status and response and never `place_label`;
     - another user's request is invisible.
@@ -131,7 +133,7 @@
 
 **Interfaces:** the rollback:
 - restores `claim_plan_link`, `join_by_link` and both checks verbatim;
-- deletes `join_request`/`join_approved` outbox rows and `approval` grants first, saying so in its header (approved guests keep their attendee rows);
+- deletes `join_request`/`join_approved` outbox rows first, and turns every `approval` grant into a `link` grant (live stays live, revoked stays revoked: a ban stays a ban), saying so in its header. Approved guests keep their attendee rows and their access, as they would have had under GI2;
 - drops the table and the new functions.
 
 The rehearsal fingerprints definitions, ACLs, constraints and the `private` schema ACL, and proves an exact restore, like Plan 2's.
@@ -151,6 +153,7 @@ The rehearsal fingerprints definitions, ACLs, constraints and the `private` sche
 - `joinRequestGateway`:
   - `request(code, response, name?, termsVersion?): Promise<{ state: JoinState; plan_id: string; response: string }>`
   - `mine(): Promise<MyRequest[]>`
+  - `change(plan, response): Promise<string>` (calls `change_join_answer`, returns the stored response)
   - `forPlan(plan): Promise<HostRequest[]>`
   - `decide(plan, user, approve): Promise<"approved" | "declined">`
 
@@ -199,12 +202,11 @@ The rehearsal fingerprints definitions, ACLs, constraints and the `private` sche
     - A signed-out `/invite?code=` shows the invitation card (from `invitation_page`, as GI2 reads it), plus "Sign up to reply" (→ `/auth/phone`) and "I have an account" (→ `/auth/phone?intent=signin`). The code stays kept through `rememberInvite`, as today.
     - Signed in, with any access status but a verified phone, the code path calls `joinRequestGateway.request(code, "pending")` and routes:
       - `owner`/`already` → `/event?plan=`;
-      - `waiting` → `/waiting?code=`;
-      - `declined` → the waiting screen in its declined state.
+      - `waiting` or `declined` → `/waiting?plan=<plan_id>`.
   - `mobile/app/account.tsx`: an `access_pending` account with a kept link code goes to `/invite?code=` (as today).
-  - `mobile/app/(tabs)/plans.tsx`: the Invitations section also lists `mine()` requests. `waiting` shows a "Waiting for <host>" chip; `declined` shows "Not added". Tapping opens `/waiting?code=`. Codes aren't known for these, so `/waiting` accepts `plan=` and reads from `mine()`.
+  - `mobile/app/(tabs)/plans.tsx`: the Invitations section also lists `mine()` requests. `waiting` shows a "Waiting for <host>" chip; `declined` shows "Not added". Tapping opens `/waiting?plan=`.
 - Create:
-  - `mobile/app/waiting.tsx`: the invitation card (title, time, area, host, image); "Waiting for <host>"; the answer `Segmented` (Going / Maybe / Can't go) that re-requests; Done. The declined state shows "You weren’t added to this resbite." It is reachable while `access_pending`, so add it to the session-guarded `Stack.Protected` group in `_layout.tsx`.
+  - `mobile/app/waiting.tsx` (`/waiting?plan=`): reads the request from `mine()`; when it isn't listed (approved, or the event is gone) it replaces itself with `/event?plan=`. Shows the invitation card (title, time, area, host, image); "Waiting for <host>"; the answer `Segmented` (Going / Maybe / Can't go) that calls `change`; Done. The declined state shows "You weren’t added to this resbite." It is reachable while `access_pending`, so add it to the session-guarded `Stack.Protected` group in `_layout.tsx`.
   - `mobile/src/domain/joinView.ts` with tests: pure helpers for state → copy and chip.
 - Delete or stop using:
   - `src/services/emailCode.ts` and the GI2 email steps in `src/design/GuestSteps.tsx`, unless other code uses them;
@@ -239,7 +241,7 @@ The rehearsal fingerprints definitions, ACLs, constraints and the `private` sche
 - Modify: `verify-links.mjs` (the GI2 guest cases become the new signed-out screen and requests), `verify-invitations.mjs` (the event link section is gone), `verify-event.mjs` (Waiting for you, the moved link card), `verify-contact-invites.mjs` if affected, `review-ui.mjs` (captures: `/waiting` in both states, the signed-out invite, the host's Waiting for you, the link card, at 390/320 and Larger Text 320).
 
 - [ ] **Step 1: Write the cases:**
-  1. Signed in, opening `/invite?code=` sends `request_to_join` with `p_response:"pending"` and lands on `/waiting`. Changing the answer sends it again.
+  1. Signed in, opening `/invite?code=` sends `request_to_join` with `p_response:"pending"` and lands on `/waiting?plan=`. Changing the answer sends `change_join_answer`.
   2. Signed out, the invite screen shows the card and "Sign up to reply" → `/auth/phone`, with the code kept.
   3. My resbites lists a waiting request with "Waiting for Sam" and a declined one with "Not added".
   4. The host sees Waiting for you with name, answer and `••34`. Approve sends `decide_join_request` with `p_approve:true` and the row leaves. Decline confirms, then sends `false`.
@@ -264,5 +266,5 @@ The rehearsal fingerprints definitions, ACLs, constraints and the `private` sche
      - a declined person sees Not added;
      - turning the link off doesn't remove approved guests.
   5. **Old builds:** opening `/r/` links now waits silently (the event page says it isn't available). Ask testers to update.
-  6. **Rollback:** approved guests stay. Approval grants and request notices are deleted by the rollback.
+  6. **Rollback:** approved guests stay, with their access (approval grants become link grants). Request notices are deleted.
 - [ ] **Step 2:** update the docs and record this plan's calls. Run all checks one last time. **Step 3: Commit** "Record open-link approval: decisions, status and the rollout runbook".
