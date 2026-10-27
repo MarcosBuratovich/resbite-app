@@ -22,6 +22,8 @@ try {
       await new Promise(resolve => setTimeout(resolve, 1800));
       body = { account_id: user.id, status: 'access_pending' };
     } else if (path === '/rest/v1/rpc/note_app_session') return route.fulfill({ status: 204, body: '' });
+    // Waiting for access lists the account's open-link requests: none here.
+    else if (path === '/rest/v1/rpc/my_join_requests') body = [];
     else throw Error(`Unexpected backend request: ${path}`);
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   });

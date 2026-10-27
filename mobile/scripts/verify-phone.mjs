@@ -138,6 +138,8 @@ async function fixture({ user = null, access = "access_pending", profile = null,
       return route.fulfill({ status: 204, body: "" });
     if (path === "/rest/v1/profiles") return reply(state.profile);
     if (path === "/rest/v1/activities") return reply([]);
+    // Waiting for access lists the account's open-link requests: none here.
+    if (path === "/rest/v1/rpc/my_join_requests") return reply([]);
     unexpected.push(`${method} ${path}`);
     return reply({ message: `Unexpected fixture request ${path}` }, 404);
   });

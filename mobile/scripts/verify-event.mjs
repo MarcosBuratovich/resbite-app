@@ -3,6 +3,10 @@
 // development fakes, `__resbiteDevice`), and the "Can’t go" wording.
 // Plan 2: the organizer's Invited group (people invited by personal link who haven't answered) with WhatsApp, Messages and
 // Remove, and an unanswered invitation's card under Invitations on My resbites.
+// Open-link approval: the organizer's Waiting for you (name, answer, ••34; Approve sends decide_join_request with
+// p_approve true and the row leaves; Decline asks first, then sends false; a request someone else decided says
+// so), and the Event link card that lives on the event page (Share, Copy link, Turn off this link). An invitee
+// has neither.
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { inOrder, quietReminders, visible } from "./qa-helpers.mjs";
@@ -141,6 +145,24 @@ try {
     };
   };
   await page.addInitScript(init, session);
+  await page.addInitScript(() => {
+    window.fixtureShares = [];
+    window.fixtureCopies = [];
+    Object.defineProperty(navigator, "share", {
+      configurable: true,
+      value: async (payload) => {
+        window.fixtureShares.push(payload);
+      },
+    });
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (text) => {
+          window.fixtureCopies.push(text);
+        },
+      },
+    });
+  });
   // The organizer's phone keeps Pat's personal code; the app's own writes are kept across reloads.
   await page.addInitScript(
     ({ key, value }) => {
@@ -181,6 +203,16 @@ try {
   ];
   const inviteBodies = [];
   const revokeBodies = [];
+  // Open-link approval: Coffee evening's requests from the event link, the decisions the organizer makes, and
+  // the event link (turned off once for a new code).
+  const SAM = { user_id: "r1", name: "Sam Reed", response: "accepted", ending: "34", created_at: "2099-02-20T10:00:00Z" };
+  const KIM = { user_id: "r2", name: "Kim Lau", response: "maybe", ending: null, created_at: "2099-02-20T11:00:00Z" };
+  const LEE = { user_id: "r3", name: "Lee Fox", response: "declined", ending: "56", created_at: "2099-02-20T12:00:00Z" };
+  let waiting = [SAM, KIM, LEE];
+  const decisions = [];
+  const linkCalls = [];
+  const LINK_CODES = ["AAAAAAAAAAAAAAAAAAAAA1", "BBBBBBBBBBBBBBBBBBBBB2"];
+  let linkIndex = 0;
   // UX3: Meeting details live in their own table, which the database sends only to the organizer and
   // Going or Maybe guests; every invitee may know some exist. The plans row's own note is always "".
   const asRow = (plan) => {
@@ -284,6 +316,33 @@ try {
       removed.add(body.p_user);
       return reply(null);
     }
+    // Open-link approval: the organizer's requests and decisions, and the event link.
+    if (path === "/rest/v1/rpc/plan_join_requests") {
+      const body = req.postDataJSON();
+      return reply(body.p_plan === hosted.id ? waiting : []);
+    }
+    if (path === "/rest/v1/rpc/decide_join_request") {
+      const body = req.postDataJSON();
+      decisions.push(body);
+      const request = waiting.find((r) => r.user_id === body.p_user);
+      // Lee was decided by someone else a moment ago.
+      if (body.p_user === LEE.user_id) {
+        waiting = waiting.filter((r) => r !== LEE);
+        return reply({ code: "22023", message: "Request already decided" }, 400);
+      }
+      assert.ok(request, "decided request is waiting");
+      waiting = waiting.filter((r) => r !== request);
+      return reply({ status: body.p_approve ? "approved" : "declined" });
+    }
+    if (path === "/rest/v1/rpc/plan_link") {
+      linkCalls.push(req.postDataJSON());
+      return reply(LINK_CODES[linkIndex]);
+    }
+    if (path === "/rest/v1/rpc/rotate_plan_link") {
+      linkCalls.push(req.postDataJSON());
+      linkIndex++;
+      return reply(LINK_CODES[linkIndex]);
+    }
     // Plan 2: the organizer's personal links (Coffee evening only; the other events have none).
     if (path === "/rest/v1/rpc/plan_phone_invitations") {
       const body = req.postDataJSON();
@@ -358,6 +417,93 @@ try {
   await expect(page.getByText("Exact address after you reply", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Invite someone", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Choose people", exact: true })).toHaveCount(0);
+  // Open-link approval: Waiting for you lists each request with the name, the answer and the phone's last two
+  // digits (no ending, no dots), above the Event link card, which is on the event page and not on Invite people.
+  const shares = () => page.evaluate(() => window.fixtureShares);
+  const copies = () => page.evaluate(() => window.fixtureCopies);
+  const linkMatch = (code) => new RegExp(`^(resbite://r/|https://[a-z0-9.-]+/r/)${code}$`);
+  const approve = (name) => page.getByRole("button", { name: `Approve ${name}`, exact: true });
+  const decline = (name) => page.getByRole("button", { name: `Decline ${name}`, exact: true });
+  await expect(page.getByRole("heading", { name: "Waiting for you", exact: true })).toBeVisible();
+  await expect(page.getByText("Sam Reed", { exact: true })).toBeVisible();
+  await expect(page.getByText("Going · via event link · ••34", { exact: true })).toBeVisible();
+  await expect(page.getByText("Kim Lau", { exact: true })).toBeVisible();
+  await expect(page.getByText("Maybe · via event link", { exact: true })).toBeVisible();
+  await expect(page.getByText("Can’t go · via event link · ••56", { exact: true })).toBeVisible();
+  await expect(page.getByText("000000")).toHaveCount(0);
+  assert.ok(
+    await inOrder(page, [
+      page.getByRole("heading", { name: "Waiting for you", exact: true }),
+      approve("Sam Reed"),
+      decline("Lee Fox"),
+      page.getByRole("heading", { name: "Event link", exact: true }),
+      page.getByRole("button", { name: "Share link", exact: true }),
+      page.getByRole("button", { name: "Copy link", exact: true }),
+      page.getByRole("button", { name: "Turn off this link", exact: true }),
+    ]),
+    "Waiting for you comes before the Event link card",
+  );
+  // Approve sends decide_join_request with p_approve true, and the row leaves.
+  await approve("Sam Reed").click();
+  await expect(page.getByText("Sam Reed", { exact: true })).toHaveCount(0);
+  assert.deepEqual(decisions, [{ p_plan: hosted.id, p_user: SAM.user_id, p_approve: true }]);
+  // A request someone else already decided says so, and drops off the list when the page reads it again.
+  await approve("Lee Fox").click();
+  await expect(page.getByText("Someone already answered this request.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Lee Fox", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Kim Lau", { exact: true })).toBeVisible();
+  assert.equal(decisions.length, 2);
+  // Decline asks first: Keep sends nothing; confirming sends p_approve false and the row leaves.
+  let declineAsked = "";
+  page.once("dialog", (dialog) => {
+    declineAsked = dialog.message();
+    void dialog.dismiss();
+  });
+  await decline("Kim Lau").click();
+  await expect.poll(() => declineAsked).toBe("Decline Kim Lau? They’ll see they weren’t added.");
+  await page.waitForTimeout(200);
+  assert.equal(decisions.length, 2);
+  await expect(page.getByText("Kim Lau", { exact: true })).toBeVisible();
+  page.once("dialog", (dialog) => void dialog.accept());
+  await decline("Kim Lau").click();
+  await expect(page.getByText("Kim Lau", { exact: true })).toHaveCount(0);
+  assert.deepEqual(decisions[2], { p_plan: hosted.id, p_user: KIM.user_id, p_approve: false });
+  assert.equal(decisions.length, 3);
+  await expect(page.getByRole("heading", { name: "Waiting for you", exact: true })).toHaveCount(0);
+  await expect(page.getByText("Someone already answered this request.", { exact: true })).toHaveCount(0);
+  // The Event link card: Share, Copy link and Turn off this link, read for this event only.
+  await expect(page.getByText("Anyone can answer with it, and you approve them first.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Turn off this link", exact: true })).toBeEnabled();
+  assert.deepEqual(linkCalls, [{ p_plan: hosted.id }]);
+  await page.getByRole("button", { name: "Share link", exact: true }).click();
+  await expect.poll(async () => (await shares()).length).toBe(1);
+  const [firstShare] = await shares();
+  const shareText = firstShare.text ?? firstShare.message;
+  const shareMatch = /^Coffee evening, Sun 1 Mar, \d\d:\d\d\. RSVP: (.+)$/.exec(shareText);
+  assert.ok(shareMatch, `Share text: ${shareText}`);
+  assert.match(shareMatch[1], linkMatch(LINK_CODES[0]));
+  await page.getByRole("button", { name: "Copy link", exact: true }).click();
+  await expect(page.getByText("Link copied.", { exact: true })).toBeVisible();
+  assert.deepEqual(await copies(), [shareMatch[1]]);
+  // Turn off asks first: Keep changes nothing; Turn off gives a new link, which Copy then uses.
+  let turnOffAsked = "";
+  page.once("dialog", (dialog) => {
+    turnOffAsked = dialog.message();
+    void dialog.dismiss();
+  });
+  await page.getByRole("button", { name: "Turn off this link", exact: true }).click();
+  await expect.poll(() => turnOffAsked).toContain("Turn off this link?");
+  await page.waitForTimeout(200);
+  assert.equal(linkCalls.length, 1);
+  page.once("dialog", (dialog) => void dialog.accept());
+  await page.getByRole("button", { name: "Turn off this link", exact: true }).click();
+  await expect(page.getByText("The old link is off. Share this new link.", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Copy link", exact: true }).click();
+  await expect.poll(async () => (await copies()).length).toBe(2);
+  assert.match((await copies())[1], linkMatch(LINK_CODES[1]));
+  // The link is read from the database, never kept in browser storage.
+  const storedLinks = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
+  for (const code of LINK_CODES) assert.ok(!storedLinks.includes(code), "The link code is not stored on the device");
   // Guests (UX2): the stack counts Going and Maybe; the sheet groups every answer.
   await page.getByRole("button", { name: "1 going, 1 maybe", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Guests", exact: true })).toBeVisible();
@@ -376,7 +522,7 @@ try {
   await page.getByRole("button", { name: "Remove Bea", exact: true }).click();
   await expect
     .poll(() => removeAsked)
-    .toBe("Remove Bea from this resbite? They can join again with the link unless you turn it off.");
+    .toBe("Remove Bea from this resbite? They can ask to join again with the event link, and you’ll decide.");
   await page.waitForTimeout(200);
   assert.deepEqual(removeBodies, []);
   // A lost reply says so in the sheet; Bea stays listed until a removal is confirmed.
@@ -623,7 +769,7 @@ try {
   await expect(page.getByRole("button", { name: "Edit Coffee evening", exact: true })).toHaveCount(0);
   assert.deepEqual(cancels, [hosted.id]);
   console.log(
-    "PASS: organizer event page: the exact place and no Choose people (GI-D3); guests (GI1: Remove asks first and says they can rejoin by the link, says a lost reply, reloads the list; invitees have no Remove); the Invited group (Plan 2: unanswered only, by stored name or number, WhatsApp and Messages on each row with the last-used first, the stored code either way or a fresh one kept for the other app when WhatsApp won't open, Remove calls revoke_phone_invitation), Open in Maps (and its failure note), Edit at Review, Do this again at When with a replace guard, an unconfirmed cancel with Refresh event, cancel.",
+    "PASS: organizer event page: the exact place and no Choose people (GI-D3); guests (GI1: Remove asks first and says they can ask to join again and the organizer decides, says a lost reply, reloads the list; invitees have no Remove); the Invited group (Plan 2: unanswered only, by stored name or number, WhatsApp and Messages on each row with the last-used first, the stored code either way or a fresh one kept for the other app when WhatsApp won't open, Remove calls revoke_phone_invitation), Waiting for you (open-link approval: name, answer and ••34; Approve sends decide_join_request true and the row leaves; Decline asks first then sends false; an already-decided request says so) above the Event link card (Share text with the date and link, Copy link, Turn off asks first and gives a new link, nothing stored; invitees have neither), Open in Maps (and its failure note), Edit at Review, Do this again at When with a replace guard, an unconfirmed cancel with Refresh event, cancel.",
   );
 
   // UX2-D1: a saved edit returns to its event page with "Changes saved"; Back then leaves for My resbites.
@@ -747,6 +893,11 @@ try {
   await expect(page.getByRole("button", { name: /^Remove / })).toHaveCount(0);
   await page.getByRole("button", { name: "Close sheet", exact: true }).click();
   await sheetClosed(page);
+  // Open-link approval: an invitee sees neither Waiting for you nor the Event link card, and reads no link.
+  await expect(page.getByRole("heading", { name: "Waiting for you", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Event link", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Turn off this link", exact: true })).toHaveCount(0);
+  assert.ok(linkCalls.every((c) => c.p_plan !== invited.id), "an invited event reads no link");
   // Going opens the sample chat and keeps the Meeting details; backing out after Going reads "Can’t go now"
   // and locks them again.
   await going.click();

@@ -1,13 +1,20 @@
-// GI1: opening the event's one link (/r/<code>). The native router turns it into /invite?code=<code>
-// (routeSystemLink, unit-tested in appLinks.test.ts); this drives that screen on the web build. Signed in and
-// approved: claim_plan_link, then the event page, and the kept code is cleared. The organizer's own link lands
-// on their event. An inactive code says so and drops the kept code, so a restart opens the app as usual; a lost
-// connection keeps it; "Go to My resbites" leaves either. A malformed code claims nothing. A per-person link
-// (before GI1) that is refused, or is the organizer's own, is dropped the same way.
-// GI2: signed out, the link is the guest's account screen: the invitation's card (invitation_page), the 18+ tick
-// before the providers (web has no Apple), the email code, the Name step when the account has no name, then
-// join_by_link and the event page. A cold start with a kept code and a session but no kept tick asks for the tick
-// again; a refused tick or a dead invitation are handled as the server says. Every Supabase request is intercepted.
+// The event's one link opened in the app (GI1's /r/<code>, which the native router turns into /invite?code=<code>:
+// routeSystemLink, unit-tested in appLinks.test.ts); this drives that screen on the web build. Open-link approval
+// (plan 3) changed what it does: an answer through the link is a request the host approves, so nobody joins by
+// opening it (verify-open-link-app covers the waiting screen, the answer, the tick and My resbites in depth).
+//  - Signed in: request_to_join ("pending"). A new person lands on /waiting?plan=, a guest ("already") or the
+//    organizer ("owner") on the event page. The kept code is cleared. A link turned off, started or cancelled
+//    says so and drops the kept code, so a restart opens the app as usual; a lost connection keeps it;
+//    "Go to My resbites" leaves either. A malformed code sends nothing. A per-person link (before GI1) that is
+//    refused, or is the organizer's own, is dropped the same way.
+//  - Signed out: the invitation's card (invitation_page) with Sign up to reply and I have an account; a card that
+//    can't be read offers Retry; a cancelled, past or turned-off link says so with Go to Resbite and drops the
+//    kept code. No tick, providers or email on this screen (GI2's email-code guest account is retired).
+//  - Waiting for access (the beta hasn't approved the account yet): a kept code goes through /account to the
+//    invite screen, which sends the request with the account's name once the phone and name are there; the
+//    request opens on /waiting?plan= and is listed on the waiting-for-access screen. A refusal or a lost
+//    connection is handled as the server says.
+// Every Supabase request is intercepted.
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { button, heading, quietReminders } from "./qa-helpers.mjs";
@@ -67,13 +74,17 @@ const REVOKED_TOKEN = "c".repeat(64);
 const OWN_TOKEN = "d".repeat(64);
 const pending = (page) => page.evaluate(() => sessionStorage.getItem("resbite.pending-invite"));
 const terms = (page) => page.evaluate(() => sessionStorage.getItem("resbite.pending-terms"));
-// GI2 guest links: GUEST joins, AGE is refused for a missing tick, GONE is refused as unavailable (the page still
-// read it as open), DEAD reads as inactive, FLAKY loses the connection on the first join only.
+// Signed-out and waiting-for-access links: GUEST is open, DEAD/CANCELLED/HAPPENED read as closed, CARDFAIL's card
+// can't be read the first time, GONE is refused for good, FLAKY loses the connection on the first request only.
 const GUEST = "GuestGuestGuestGuest_5";
-const AGE = "AgeAgeAgeAgeAgeAgeAge6";
 const GONE = "GoneGoneGoneGoneGone_7";
 const DEAD = "DeadDeadDeadDeadDead_8";
 const FLAKY = "FlakyFlakyFlakyFlaky_9";
+const CANCELLED = "CancelledCancelledCa_a";
+const HAPPENED = "HappenedHappenedHapp_b";
+const CARDFAIL = "CardFailCardFailCard_c";
+// A person already in (state "already"), who lands on the event.
+const ALREADY = "AlreadyAlreadyAlread_d";
 const filmNight = { ...invited, id: "55555555-5555-4555-8555-555555555555", title: "Film night" };
 const sessionFor = (account) => ({ ...session, user: account });
 
@@ -88,6 +99,7 @@ async function fixture({ signedIn = true } = {}) {
       session,
     );
   const claims = [];
+  let requested = false;
   await page.route("**/*.supabase.co/**", async (route) => {
     const req = route.request();
     const url = new URL(req.url());
@@ -110,16 +122,26 @@ async function fixture({ signedIn = true } = {}) {
       if (one) return reply({ version: 1, response: "pending" });
       return reply([{ user_id: user.id, plan_id: invited.id, response: "pending", profiles: { display_name: "Fixture" } }]);
     }
-    if (path === "/rest/v1/rpc/claim_plan_link") {
+    if (path === "/rest/v1/rpc/request_to_join") {
       const body = req.postDataJSON();
       claims.push(body);
-      // The code is kept on the device while it is claimed.
+      // The code is kept on the device while it is sent.
       assert.equal(await pending(page), body.p_code);
-      if (body.p_code === OPEN) return reply(invited.id);
-      if (body.p_code === OWN) return reply(own.id);
+      if (body.p_code === OPEN) {
+        requested = true;
+        return reply({ state: "waiting", plan_id: invited.id, response: "pending" });
+      }
+      if (body.p_code === ALREADY) return reply({ state: "already", plan_id: invited.id, response: "accepted" });
+      if (body.p_code === OWN) return reply({ state: "owner", plan_id: own.id, response: "accepted" });
       if (body.p_code === NET) return reply({ message: "Fixture: connection lost" }, 500);
       return reply({ code: "42501", message: "Invitation unavailable" }, 403);
     }
+    if (path === "/rest/v1/rpc/my_join_requests")
+      return reply(
+        requested
+          ? [{ plan_id: invited.id, title: "Film club", starts_at: invited.starts_at, ends_at: null, time_zone: "UTC", host: "Stephen", area: "Near Old Street", image: { kind: "mark", ref: null }, response: "pending", status: "waiting" }]
+          : [],
+      );
     if (path === "/rest/v1/rpc/claim_invite") {
       const body = req.postDataJSON();
       claims.push(body);
@@ -133,40 +155,34 @@ async function fixture({ signedIn = true } = {}) {
 }
 
 /**
- * A person without access: signed out unless `signedIn`, optionally with a kept code and a kept tick. The account
- * is access_pending until join_by_link succeeds; the email code 123456 signs in.
+ * A person without a signed-in approved account: signed out unless `signedIn` (then an account the beta hasn't
+ * approved, waiting for access), optionally with a kept code. request_to_join answers by code; the account never
+ * becomes approved here (the host's approval is what grants access).
  */
-async function guestFixture({ metadata = {}, signedIn = false, kept = null, tick = null, verifyDropsOnce = false } = {}) {
+async function guestFixture({ metadata = {}, signedIn = false, kept = null } = {}) {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await quietReminders(page);
-  // The guest keeps the fixture's confirmed phone: without one, Add your number (verify-phone) comes before any join.
-  let guest = {
+  // The guest keeps the fixture's confirmed phone: without one, Add your number (verify-phone) comes before any request.
+  const guest = {
     ...user,
     id: "66666666-6666-4666-8666-666666666666",
     email: "guest@example.invalid",
     user_metadata: metadata,
   };
-  let signed = signedIn,
-    joined = false,
-    profile = null;
   const opens = [],
-    otps = [],
-    joins = [],
-    details = [];
-  // FLAKY's first join waits until the test releases it, so the screen can be seen while it runs.
-  let releaseJoin;
-  const joinHeld = new Promise((resolve) => (releaseJoin = resolve));
+    joins = [];
+  let requested = false,
+    cardReads = 0;
   await page.addInitScript(
-    ({ session, kept, tick }) => {
+    ({ session, kept }) => {
       if (sessionStorage.getItem("fixture-seeded")) return;
       sessionStorage.setItem("fixture-seeded", "1");
       if (session) sessionStorage.setItem("sb-ewcsgvhuojxdpaspwsrx-auth-token", JSON.stringify(session));
       if (kept) sessionStorage.setItem("resbite.pending-invite", kept);
-      if (tick) sessionStorage.setItem("resbite.pending-terms", tick);
     },
-    { session: signedIn ? sessionFor(guest) : null, kept, tick },
+    { session: signedIn ? sessionFor(guest) : null, kept },
   );
   await page.route("**/*.supabase.co/**", async (route) => {
     const req = route.request();
@@ -177,81 +193,65 @@ async function guestFixture({ metadata = {}, signedIn = false, kept = null, tick
       route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
     if (path === "/rest/v1/rpc/invitation_page") {
       const { p_code } = req.postDataJSON();
+      cardReads++;
       if (p_code === DEAD) return reply({ state: "inactive" });
-      return reply({ state: "open", host: "Stephen", title: "Film night", starts_at: "2099-10-23T18:30:00Z", time_zone: "Europe/London" });
+      if (p_code === CANCELLED) return reply({ state: "cancelled", host: "Stephen" });
+      if (p_code === HAPPENED) return reply({ state: "happened" });
+      if (p_code === CARDFAIL && cardReads === 1) return reply({ message: "Fixture: connection lost" }, 500);
+      return reply({ state: "open", host: "Stephen", title: "Film night", starts_at: "2099-10-23T18:30:00Z", time_zone: "Europe/London", area: "Near Old Street", image: { kind: "mark", ref: null } });
     }
     if (path === "/rest/v1/rpc/note_link_open") {
       opens.push(req.postDataJSON().p_code);
       return route.fulfill({ status: 204, body: "" });
     }
-    if (path === "/auth/v1/otp") {
-      otps.push(req.postDataJSON().email);
-      return reply({});
-    }
-    if (path === "/auth/v1/verify") {
-      const { token } = req.postDataJSON();
-      // The right code's first check is lost to the connection when asked.
-      if (verifyDropsOnce && token === "123456") {
-        verifyDropsOnce = false;
-        return reply({ message: "Fixture: connection lost" }, 503);
-      }
-      if (token !== "123456")
-        return reply({ code: 403, error_code: "otp_expired", msg: "Token has expired or is invalid" }, 403);
-      signed = true;
-      return reply(sessionFor(guest));
-    }
-    if (path === "/auth/v1/user") return signed ? reply(guest) : reply({ message: "No session" }, 401);
+    if (path === "/auth/v1/user") return signedIn ? reply(guest) : reply({ message: "No session" }, 401);
     if (path === "/rest/v1/rpc/note_app_session") return route.fulfill({ status: 204, body: "" });
-    if (path === "/rest/v1/rpc/account_access_status")
-      return reply({ account_id: guest.id, status: joined ? "approved" : "access_pending" });
-    if (path === "/rest/v1/rpc/join_by_link") {
+    if (path === "/rest/v1/rpc/account_access_status") return reply({ account_id: guest.id, status: "access_pending" });
+    if (path === "/rest/v1/rpc/request_to_join") {
       const body = req.postDataJSON();
       joins.push(body);
-      // The code is still kept on the device while the join runs.
+      // The code is still kept on the device while the request runs.
       assert.equal(await pending(page), body.p_code);
-      if (body.p_code === AGE) return reply({ code: "22023", message: "Age confirmation required" }, 400);
       if (body.p_code === GONE) return reply({ code: "42501", message: "Invitation unavailable" }, 403);
-      if (body.p_code === FLAKY && joins.length === 1) {
-        await joinHeld;
-        return reply({ message: "Fixture: connection lost" }, 503);
-      }
-      joined = true;
-      profile = { id: guest.id, display_name: body.p_name, avatar_path: null, avatar_revision: 0 };
-      return reply(filmNight.id);
+      if (body.p_code === FLAKY && joins.length === 1) return reply({ message: "Fixture: connection lost" }, 503);
+      requested = true;
+      return reply({ state: "waiting", plan_id: filmNight.id, response: "pending" });
     }
-    if (path === "/rest/v1/rpc/save_registration_details") {
-      const { p_details } = req.postDataJSON();
-      details.push(p_details);
-      guest = {
-        ...guest,
-        user_metadata: { ...guest.user_metadata, registration_details: p_details, registration_details_version: 1 },
-      };
-      return reply({ account_id: guest.id, registration_details: p_details });
-    }
-    if (path === "/rest/v1/profiles") {
-      if (url.searchParams.get("id") === `eq.${filmNight.owner_id}`)
-        return reply({ id: filmNight.owner_id, display_name: "Stephen", avatar_path: null, avatar_revision: 0 });
-      return reply(one ? profile : profile ? [profile] : []);
-    }
+    if (path === "/rest/v1/rpc/my_join_requests")
+      return reply(
+        requested
+          ? [{ plan_id: filmNight.id, title: "Film night", starts_at: filmNight.starts_at, ends_at: null, time_zone: "UTC", host: "Stephen", area: "Near Old Street", image: { kind: "mark", ref: null }, response: "pending", status: "waiting" }]
+          : [],
+      );
+    // The account has no profile and no plans: it waits for access.
+    if (path === "/rest/v1/profiles") return reply(one ? null : []);
     if (path === "/rest/v1/activities") return reply([]);
-    if (path === "/rest/v1/plans") return reply(one ? filmNight : [filmNight]);
-    if (path === "/rest/v1/attendees") {
-      if (one) return reply({ version: 1, response: "pending" });
-      return reply([{ user_id: guest.id, plan_id: filmNight.id, response: "pending", profiles: { display_name: "Guest" } }]);
-    }
+    if (path === "/rest/v1/plans") return reply(one ? null : []);
+    if (path === "/rest/v1/attendees") return reply(one ? null : []);
     return reply({ message: `Unexpected ${req.method()} ${path}` }, 400);
   });
-  return { page, errors, opens, otps, joins, details, releaseJoin };
+  return { page, errors, opens, joins };
 }
+
+const refusedLink = "This link isn’t open to you right now.";
+const lostConnection = "Check your connection and try again.";
 
 try {
   {
     const { page, errors, claims } = await fixture();
-    // Signed in and approved: joins, lands on the invitation, and the kept code is cleared.
+    // Signed in: the event link is a request. A new person lands on their waiting screen, and the kept code is cleared.
     await page.goto(`${base}/invite?code=${OPEN}`);
+    await expect(page.getByRole("heading", { name: "Waiting for Stephen", exact: true })).toBeVisible();
+    await expect(page.getByText("Film club", { exact: true })).toBeVisible();
+    assert.equal(new URL(page.url()).pathname, "/waiting");
+    assert.equal(new URL(page.url()).searchParams.get("plan"), invited.id);
+    assert.deepEqual(claims, [{ p_code: OPEN, p_name: null, p_response: "pending", p_terms_version: null }]);
+    await expect.poll(() => pending(page)).toBe(null);
+    // Someone already in lands on the event page, answering as before.
+    await page.goto(`${base}/invite?code=${ALREADY}`);
     await expect(page.getByRole("heading", { name: "Film club", exact: true })).toBeVisible();
     await expect(page.getByRole("radio", { name: "Going", exact: true })).toBeVisible();
-    assert.deepEqual(claims, [{ p_code: OPEN }]);
+    assert.equal(new URL(page.url()).pathname, "/event");
     await expect.poll(() => pending(page)).toBe(null);
     // The organizer opening their own event's link lands on their event.
     await page.goto(`${base}/invite?code=${OWN}`);
@@ -263,26 +263,25 @@ try {
       "This invitation is no longer active, or the event has started or was cancelled.",
       { exact: true },
     );
+    const refused = page.getByText(refusedLink, { exact: true });
     await page.goto(`${base}/invite?code=${OFF}`);
-    await expect(inactive).toBeVisible();
+    await expect(refused).toBeVisible();
     await expect(page.getByRole("heading", { name: "You’re invited.", exact: true })).toBeVisible();
     await expect.poll(() => pending(page)).toBe(null);
     // So a cold start opens the app as usual, not this error.
     await page.goto(base);
     await expect(page.getByRole("heading", { name: "Create", exact: true })).toBeVisible();
     assert.equal(new URL(page.url()).pathname, "/create");
-    await expect(inactive).toHaveCount(0);
+    await expect(refused).toHaveCount(0);
     // "Go to My resbites" leaves the error.
     await page.goto(`${base}/invite?code=${OFF}`);
-    await expect(inactive).toBeVisible();
+    await expect(refused).toBeVisible();
     await page.getByRole("button", { name: "Go to My resbites", exact: true }).click();
     await expect(page.getByRole("heading", { name: "My resbites", exact: true })).toBeVisible();
     assert.equal(new URL(page.url()).pathname, "/plans");
     // A lost connection keeps the code for a retry, and a cold start comes back to it; leaving drops it.
     await page.goto(`${base}/invite?code=${NET}`);
-    await expect(
-      page.getByText("This invitation could not be opened. Check your connection and try again.", { exact: true }),
-    ).toBeVisible();
+    await expect(page.getByText(lostConnection, { exact: true })).toBeVisible();
     assert.equal(await pending(page), NET);
     await page.goto(base);
     await expect.poll(() => new URL(page.url()).pathname).toBe("/invite");
@@ -305,7 +304,7 @@ try {
       claims.filter((c) => c.p_token).map((c) => c.p_token),
       [REVOKED_TOKEN, OWN_TOKEN],
     );
-    // A malformed code claims nothing and leaves a kept invitation alone.
+    // A malformed code sends nothing and leaves a kept invitation alone.
     const before = claims.length;
     await page.evaluate((code) => sessionStorage.setItem("resbite.pending-invite", code), OPEN);
     await page.goto(`${base}/invite?code=short`);
@@ -315,144 +314,101 @@ try {
     assert.deepEqual(errors, []);
     await page.close();
     console.log(
-      "PASS: signed in, an event link joins and lands on the invitation (code cleared); the organizer's own link lands on their event; an inactive link says so and drops the code (a cold start opens Create); a lost connection keeps it (a cold start returns to it); Go to My resbites leaves and drops it; a refused or own per-person link is dropped too; a malformed one claims nothing.",
+      "PASS: signed in, an event link sends request_to_join and lands a new person on /waiting?plan= (code cleared), a guest on the event page, the organizer on their event; a link turned off says so and drops the code (a cold start opens Create); a lost connection keeps it (a cold start returns to it); Go to My resbites leaves and drops it; a refused or own per-person link is dropped too; a malformed one sends nothing.",
     );
   }
   {
-    const { page, errors, opens, otps, joins, details } = await guestFixture({ verifyDropsOnce: true });
-    // Signed out: the guest's account screen, with the invitation's card, the tick first and the providers
-    // disabled until it is ticked. Web has no Sign in with Apple.
+    const { page, errors, opens, joins } = await guestFixture();
+    // Signed out: the invitation's card, then Sign up to reply or I have an account. No tick, providers or email.
     await page.goto(`${base}/invite?code=${GUEST}`);
-    await expect(heading(page, "Create your account to reply")).toBeVisible();
+    await expect(heading(page, "You’re invited.")).toBeVisible();
     await expect(page.getByText("Stephen invited you", { exact: true })).toBeVisible();
     await expect(page.getByText("Film night", { exact: true })).toBeVisible();
-    await expect(page.getByText("Fri 23 Oct, 7.30pm", { exact: true })).toBeVisible();
-    for (const name of ["Continue with Google", "Continue with email"]) await expect(button(page, name)).toBeDisabled();
-    await expect(page.getByRole("button", { name: "Continue with Apple" })).toHaveCount(0);
-    await expect(page.getByText("Resbite is for people aged 18 and over.", { exact: true })).toBeVisible();
-    const tick = page.getByRole("checkbox", { name: "I’m 18 or over", exact: true });
-    await expect(tick).not.toBeChecked();
-    await tick.click();
-    await expect(tick).toBeChecked();
-    for (const name of ["Continue with Google", "Continue with email"]) await expect(button(page, name)).toBeEnabled();
+    await expect(page.getByText("Near Old Street", { exact: true })).toBeVisible();
+    await expect(page.getByText("We’ll keep this invitation ready while you finish setting up.", { exact: true })).toBeVisible();
+    await expect(button(page, "Sign up to reply")).toBeVisible();
+    await expect(button(page, "I have an account")).toBeVisible();
+    for (const gone of ["Continue with Google", "Continue with Apple", "Continue with email", "Send code", "Continue"])
+      await expect(page.getByRole("button", { name: gone, exact: true })).toHaveCount(0);
+    await expect(page.getByRole("checkbox")).toHaveCount(0);
     await expect(page.getByText("Resbite is for people aged 18 and over.", { exact: true })).toHaveCount(0);
-    await expect.poll(() => terms(page)).toBe("2026-10");
-    // Unticking drops the kept tick, disables the providers and shows the helper again.
-    await tick.click();
-    await expect(tick).not.toBeChecked();
-    for (const name of ["Continue with Google", "Continue with email"]) await expect(button(page, name)).toBeDisabled();
-    await expect(page.getByText("Resbite is for people aged 18 and over.", { exact: true })).toBeVisible();
-    await expect.poll(() => terms(page)).toBe(null);
-    await tick.click();
-    await expect(tick).toBeChecked();
-    // The tick and the code are kept on the device for after the sign-in; the open was counted once.
-    await expect.poll(() => terms(page)).toBe("2026-10");
+    // The code is kept on the device for after the sign-in; the open was counted once; nothing is requested yet.
     await expect.poll(() => pending(page)).toBe(GUEST);
     assert.deepEqual(opens, [GUEST]);
-    // Email by code: an invalid address is refused here, a valid one gets a code and the resend countdown.
-    await button(page, "Continue with email").click();
-    await expect(heading(page, "What’s your email?")).toBeVisible();
-    await page.getByLabel("Email", { exact: true }).fill("not-an-email");
-    await button(page, "Send code").click();
-    await expect(page.getByText("Enter a valid email address.", { exact: true })).toBeVisible();
-    assert.deepEqual(otps, []);
-    await page.getByLabel("Email", { exact: true }).fill("guest@example.invalid");
-    await button(page, "Send code").click();
-    await expect(heading(page, "Check your email")).toBeVisible();
-    await expect(page.getByText("Didn’t get it? Send a new code in 1:00", { exact: true })).toBeVisible();
-    await expect(page.getByText("We sent a 6-digit code to guest@example.invalid.", { exact: true })).toBeVisible();
-    assert.deepEqual(otps, ["guest@example.invalid"]);
-    // A wrong code says so and empties the boxes; the right one signs in.
-    const digits = page.getByLabel("6-digit code", { exact: true });
-    await digits.fill("000000");
-    await expect(page.getByText("That code doesn’t match. Try again.", { exact: true })).toBeVisible();
-    await expect(digits).toHaveValue("");
-    // A check lost to the connection keeps the six digits and offers Retry, which checks them again.
-    await digits.fill("123456");
-    await expect(page.getByText("Check your connection and try again.", { exact: true })).toBeVisible();
-    await expect(digits).toHaveValue("123456");
-    await button(page, "Retry").click();
-    // The account has no name, so the Name step asks for it, then the join and the event page.
-    await expect(heading(page, "What’s your name?")).toBeVisible();
-    await page.getByLabel("Your name", { exact: true }).fill("Guest One");
-    await button(page, "Continue").click();
-    await expect(heading(page, "Film night")).toBeVisible();
-    assert.equal(new URL(page.url()).pathname, "/event");
-    assert.equal(new URL(page.url()).searchParams.get("plan"), filmNight.id);
-    assert.deepEqual(joins, [{ p_code: GUEST, p_name: "Guest One", p_terms_version: "2026-10" }]);
-    // Setup is marked reviewed with the account's (empty) optional details, so "About you" is skipped.
-    assert.deepEqual(details, [{ birth_date: null, phone: null, city: null, interests: [] }]);
-    // Signing in on the screen remounts it; the same visit's open is not counted again.
+    assert.deepEqual(joins, []);
+    // Sign up to reply goes to the phone sign-up; the code stays kept.
+    await button(page, "Sign up to reply").click();
+    await expect.poll(() => new URL(page.url()).pathname).toBe("/auth/phone");
+    assert.equal(await pending(page), GUEST);
     assert.deepEqual(opens, [GUEST]);
-    await expect.poll(() => pending(page)).toBe(null);
-    await expect.poll(() => terms(page)).toBe(null);
     assert.deepEqual(errors, []);
     await page.close();
-    console.log(
-      "PASS: signed out, an event link shows the guest's account screen (card, tick first, providers disabled until ticked and again when unticked, no Apple on web, one open counted); email code (invalid address, countdown 1:00, wrong code empties the boxes, a lost check keeps the digits and Retry checks them); the Name step; join_by_link with the name and terms 2026-10; the event page with plan=; setup marked reviewed; code and tick cleared.",
-    );
+    console.log("PASS: signed out, an event link shows the invitation's card (host, title, area) with Sign up to reply and I have an account, no tick, providers or email; the code is kept, one open is counted, nothing is requested; Sign up to reply opens the phone sign-up.");
   }
+  {
+    const { page, errors, opens } = await guestFixture();
+    // A card that can't be read says so with Retry, which reads it again.
+    await page.goto(`${base}/invite?code=${CARDFAIL}`);
+    await expect(page.getByText("Check your connection and try again.", { exact: true })).toBeVisible();
+    await expect(heading(page, "You’re invited.")).toBeVisible();
+    await page.getByRole("button", { name: "Retry", exact: true }).click();
+    await expect(page.getByText("Film night", { exact: true })).toBeVisible();
+    await expect(button(page, "Sign up to reply")).toBeVisible();
+    assert.deepEqual(opens, [CARDFAIL]);
+    await expect.poll(() => pending(page)).toBe(CARDFAIL);
+    assert.deepEqual(errors, []);
+    await page.close();
+    console.log("PASS: signed out, an unreadable card shows the connection copy with Retry, which reads it again; the code stays kept.");
+  }
+  for (const [code, sentence] of [
+    [DEAD, "This invitation is no longer active."],
+    [CANCELLED, "Stephen cancelled this resbite."],
+    [HAPPENED, "This resbite has already happened."],
+  ]) {
+    const { page, errors, opens, joins } = await guestFixture();
+    // Signed out, a dead link says so with Go to Resbite, offers no sign-up and drops the kept code.
+    await page.goto(`${base}/invite?code=${code}`);
+    await expect(heading(page, sentence)).toBeVisible();
+    await expect(button(page, "Sign up to reply")).toHaveCount(0);
+    await expect(button(page, "I have an account")).toHaveCount(0);
+    assert.deepEqual(opens, [code]);
+    await expect.poll(() => pending(page)).toBe(null);
+    await button(page, "Go to Resbite").click();
+    await expect(heading(page, "Get together")).toBeVisible();
+    assert.deepEqual(joins, []);
+    assert.deepEqual(errors, []);
+    await page.close();
+  }
+  console.log("PASS: signed out, an inactive, cancelled or past link says so with Go to Resbite, offers no sign-up and drops the kept code.");
   {
     const { page, errors, joins } = await guestFixture({ metadata: { full_name: "Guest Two" }, signedIn: true, kept: GUEST });
-    // A cold start with a kept code and a session but no kept tick: the tick row again, with one Continue.
+    // Waiting for access with a kept code: a cold start goes through /account to the invite screen, which sends the
+    // request with the account's name (the beta's approval is not what lets them in), and opens the waiting screen.
     await page.goto(base);
-    await expect(heading(page, "Create your account to reply")).toBeVisible();
-    assert.equal(new URL(page.url()).pathname, "/invite");
-    const tick = page.getByRole("checkbox", { name: "I’m 18 or over", exact: true });
-    await expect(tick).not.toBeChecked();
-    await expect(button(page, "Continue")).toBeDisabled();
-    for (const name of ["Continue with Google", "Continue with email", "I already have an account"])
-      await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
-    assert.deepEqual(joins, []);
-    await tick.click();
-    await button(page, "Continue").click();
-    // The account's name is known, so it joins straight away.
-    await expect(heading(page, "Film night")).toBeVisible();
+    await expect(heading(page, "Waiting for Stephen")).toBeVisible();
+    assert.equal(new URL(page.url()).pathname, "/waiting");
     assert.equal(new URL(page.url()).searchParams.get("plan"), filmNight.id);
-    assert.deepEqual(joins, [{ p_code: GUEST, p_name: "Guest Two", p_terms_version: "2026-10" }]);
+    assert.deepEqual(joins, [{ p_code: GUEST, p_name: "Guest Two", p_response: "pending", p_terms_version: null }]);
+    await expect(page.getByText("Film night", { exact: true })).toBeVisible();
     await expect.poll(() => pending(page)).toBe(null);
-    assert.deepEqual(errors, []);
-    await page.close();
-    console.log("PASS: a cold start with a kept code and a session but no kept tick asks for the tick with one Continue, then joins with the account's name.");
-  }
-  {
-    const { page, errors, joins } = await guestFixture({ metadata: { full_name: "Guest Six" }, signedIn: true, kept: GUEST });
-    // Signed in and waiting, Close drops the kept code and tick, so the waiting card (with Sign out) stays.
-    await page.goto(base);
-    await expect(heading(page, "Create your account to reply")).toBeVisible();
-    await button(page, "Close").click();
+    // Done leaves for the waiting-for-access screen, which lists the request.
+    await button(page, "Done").click();
     await expect(heading(page, "Waiting for access")).toBeVisible();
-    await expect(button(page, "Sign out")).toBeVisible();
-    await expect(page.getByText("If someone invited you to a resbite, open their link again.", { exact: true })).toBeVisible();
-    await page.waitForTimeout(1000);
     assert.equal(new URL(page.url()).pathname, "/account");
-    await expect(heading(page, "Waiting for access")).toBeVisible();
-    assert.equal(await pending(page), null);
-    assert.equal(await terms(page), null);
-    assert.deepEqual(joins, []);
+    await expect(heading(page, "Invitations")).toBeVisible();
+    await expect(page.getByText("Waiting for Stephen", { exact: true })).toBeVisible();
+    await page.waitForTimeout(500);
+    assert.equal(new URL(page.url()).pathname, "/account", "no redirect back");
+    assert.equal(joins.length, 1);
     assert.deepEqual(errors, []);
     await page.close();
-    console.log("PASS: signed in and waiting, Close drops the kept code and tick and leaves the waiting card with Sign out; no redirect back.");
+    console.log("PASS: waiting for access with a kept code, a cold start sends request_to_join with the account's name, lands on /waiting?plan= and clears the code; Done leaves for Waiting for access, which lists the request.");
   }
   {
-    const { page, errors, joins } = await guestFixture({ metadata: { full_name: "Guest Three" }, signedIn: true, kept: AGE, tick: "2026-10" });
-    // The server refuses the tick (it was lost): the tick row again, unticked, and the kept tick dropped.
+    const { page, errors, joins } = await guestFixture({ metadata: { full_name: "Guest Four" }, signedIn: true, kept: GONE });
+    // A link that is no longer available says so and drops the kept code, so a cold start opens as usual.
     await page.goto(base);
-    await expect(heading(page, "Create your account to reply")).toBeVisible();
-    await expect(page.getByRole("checkbox", { name: "I’m 18 or over", exact: true })).not.toBeChecked();
-    await expect(button(page, "Continue")).toBeDisabled();
-    assert.deepEqual(joins.map((j) => j.p_code), [AGE]);
-    await expect.poll(() => terms(page)).toBe(null);
-    await expect.poll(() => pending(page)).toBe(AGE);
-    assert.deepEqual(errors, []);
-    await page.close();
-    console.log("PASS: a refused tick shows the tick row again with one Continue; the code stays kept.");
-  }
-  {
-    const { page, errors, joins } = await guestFixture({ metadata: { full_name: "Guest Four" }, signedIn: true, kept: GONE, tick: "2026-10" });
-    // An invitation that is no longer available says so and drops the kept code, so a cold start opens as usual.
-    await page.goto(base);
-    await expect(page.getByText("This invitation is no longer active.", { exact: true })).toBeVisible();
+    await expect(page.getByText(refusedLink, { exact: true })).toBeVisible();
     await expect(button(page, "Go to Resbite")).toBeVisible();
     assert.deepEqual(joins.map((j) => j.p_code), [GONE]);
     await expect.poll(() => pending(page)).toBe(null);
@@ -460,63 +416,25 @@ try {
     await expect(heading(page, "Waiting for access")).toBeVisible();
     assert.equal(new URL(page.url()).pathname, "/account");
     await expect(page.getByText("If someone invited you to a resbite, open their link again.", { exact: true })).toBeVisible();
+    await expect(heading(page, "Invitations")).toHaveCount(0);
     assert.deepEqual(errors, []);
     await page.close();
-    console.log("PASS: an unavailable invitation shows the inactive state and drops the kept code; a cold start lands on the normal start.");
+    console.log("PASS: waiting for access, a refused link says so with Go to Resbite and drops the kept code; a cold start lands on Waiting for access.");
   }
   {
-    const { page, errors, joins, releaseJoin } = await guestFixture({ metadata: { full_name: "Guest Five" }, signedIn: true, kept: FLAKY, tick: "2026-10" });
-    // While the join runs Close is dimmed (leaving would drop the code the join may still use). A lost connection
-    // says so with Retry, keeps the code and gives Close back; Retry joins.
+    const { page, errors, joins } = await guestFixture({ metadata: { full_name: "Guest Five" }, signedIn: true, kept: FLAKY });
+    // A lost connection says so, keeps the code and offers Refresh invitation, which sends the request again.
     await page.goto(base);
-    await expect(heading(page, "Joining…")).toBeVisible();
-    const close = page.getByRole("button", { name: "Close", exact: true });
-    await expect(close).toBeDisabled();
-    await close.click({ force: true });
-    await expect.poll(() => pending(page)).toBe(FLAKY);
-    releaseJoin();
-    await expect(page.getByText("Check your connection and try again.", { exact: true })).toBeVisible();
-    await expect(close).toBeEnabled();
-    await expect.poll(() => pending(page)).toBe(FLAKY);
-    await button(page, "Retry").click();
-    await expect(heading(page, "Film night")).toBeVisible();
+    await expect(page.getByText(lostConnection, { exact: true })).toBeVisible();
+    assert.equal(await pending(page), FLAKY);
+    await button(page, "Refresh invitation").click();
+    await expect(heading(page, "Waiting for Stephen")).toBeVisible();
     assert.equal(new URL(page.url()).searchParams.get("plan"), filmNight.id);
     assert.deepEqual(joins.map((j) => j.p_name), ["Guest Five", "Guest Five"]);
     await expect.poll(() => pending(page)).toBe(null);
     assert.deepEqual(errors, []);
     await page.close();
-    console.log("PASS: Close is disabled while the join runs; a lost connection during the join shows the connection copy with Retry, keeps the code and enables Close; Retry joins.");
-  }
-  {
-    const { page, errors, opens } = await guestFixture();
-    // Signed out, a dead link says so with Go to Resbite, offers no account creation and drops the kept code.
-    await page.goto(`${base}/invite?code=${DEAD}`);
-    await expect(page.getByText("This invitation is no longer active.", { exact: true })).toBeVisible();
-    await expect(page.getByRole("checkbox", { name: "I’m 18 or over", exact: true })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Continue with email", exact: true })).toHaveCount(0);
-    assert.deepEqual(opens, [DEAD]);
-    await expect.poll(() => pending(page)).toBe(null);
-    await button(page, "Go to Resbite").click();
-    await expect(heading(page, "Get together")).toBeVisible();
-    assert.deepEqual(errors, []);
-    await page.close();
-    console.log("PASS: signed out, a dead link shows its state with Go to Resbite, no account creation, and drops the kept code.");
-  }
-  {
-    const { page, errors, joins } = await guestFixture({ metadata: { full_name: "Guest Seven" }, signedIn: true, kept: DEAD, tick: "2026-10" });
-    // A cold start with a kept code that is now dead: its state, no join tried, the kept code dropped, so a
-    // second cold start lands on the normal start.
-    await page.goto(base);
-    await expect(page.getByText("This invitation is no longer active.", { exact: true })).toBeVisible();
-    await expect.poll(() => pending(page)).toBe(null);
-    assert.deepEqual(joins, []);
-    await page.goto(base);
-    await expect(heading(page, "Waiting for access")).toBeVisible();
-    assert.equal(new URL(page.url()).pathname, "/account");
-    assert.deepEqual(joins, []);
-    assert.deepEqual(errors, []);
-    await page.close();
-    console.log("PASS: a cold start with a kept dead code shows its state without trying a join and drops the code; a second cold start lands on the normal start.");
+    console.log("PASS: waiting for access, a lost connection shows the connection copy and keeps the code; Refresh invitation sends the request again and lands on /waiting.");
   }
 } finally {
   await browser.close();

@@ -1,11 +1,11 @@
-// GI1 "Invite people": the event's one link, now the Event link section at the bottom of Invite people, below
-// the contacts' Pick step (Plan 2; verify-contact-invites checks the Pick step itself). The screen never shows the
-// exact place; Share sends "<Title>, <date>. RSVP: <link>"; Copy link copies it; Turn off this link asks first and
-// shows a new link; the ⓘ sheet; a failed turn-off re-reads the link; the link is never kept in browser storage;
-// 320 px with Larger Text. Every Supabase request is intercepted.
+// "Invite people" (Plan 2 checks the Pick step itself, in verify-contact-invites). Open-link approval moved the
+// event's one link (Share, Copy, Turn off) to the event page (verify-event), so this screen has no link section:
+// no Event link heading, no Share/Copy/Turn off, and the link is never read. The ⓘ sheet still explains links and
+// points to the event page; nothing is kept in browser storage; 320 px with Larger Text. Every Supabase request
+// is intercepted.
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
-import { button, heading, inOrder } from "./qa-helpers.mjs";
+import { button, heading } from "./qa-helpers.mjs";
 const browser = await chromium.launch({
   channel: process.env.RESBITE_QA_BROWSER || "chrome",
   headless: true,
@@ -56,16 +56,16 @@ const plan = {
   cover_revision: 0,
   cover_description: "",
 };
-const codes = ["AAAAAAAAAAAAAAAAAAAAA1", "BBBBBBBBBBBBBBBBBBBBB2", "CCCCCCCCCCCCCCCCCCCCC3"];
 const INFO = [
   "Each resbite has one invitation link. Share it anywhere: messages, email or a group chat.",
   "Anyone with the link sees the basics: who invited them, the name, the time, the area, how many are going and the picture.",
   "The exact place and Meeting details show only after they reply.",
-  "Turn the link off to stop it working. You’ll get a new link to share.",
+  "The event link, with Share, Copy and Turn off, is on the event page.",
   "Turning the link off also stops any older per-person links you shared.",
-  "Someone you remove can join again with the link, unless you turn it off.",
+  "Answers through the link wait for your approval. You’ll see them in Waiting for you on the event page.",
+  "Someone you remove can ask to join again with the link, and you’ll decide.",
 ];
-const linkOf = (code) => new RegExp(`^(resbite://r/|https://[a-z0-9.-]+/r/)${code}$`);
+const LINK_CONTROLS = ["Share link", "Copy link", "Turn off this link"];
 
 async function fixture({ width = 390, largeText = false } = {}) {
   const context = await browser.newContext({
@@ -81,24 +81,8 @@ async function fixture({ width = 390, largeText = false } = {}) {
   });
   await page.addInitScript((session) => {
     sessionStorage.setItem("sb-ewcsgvhuojxdpaspwsrx-auth-token", JSON.stringify(session));
-    window.fixtureShares = [];
-    window.fixtureCopies = [];
-    Object.defineProperty(navigator, "share", {
-      configurable: true,
-      value: async (payload) => {
-        window.fixtureShares.push(payload);
-      },
-    });
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: {
-        writeText: async (text) => {
-          window.fixtureCopies.push(text);
-        },
-      },
-    });
   }, session);
-  const state = { active: 0, links: 0, rotations: 0, failRotate: false, current: { ...plan } };
+  const state = { links: 0, current: { ...plan } };
   await page.route("**/*.supabase.co/**", async (route) => {
     const req = route.request();
     const url = new URL(req.url());
@@ -113,22 +97,10 @@ async function fixture({ width = 390, largeText = false } = {}) {
     if (path === "/rest/v1/plans")
       return reply(req.headers().accept?.includes("object") ? state.current : [state.current]);
     if (path === "/rest/v1/attendees") return reply([]);
-    if (path === "/rest/v1/rpc/plan_link") {
-      assert.deepEqual(req.postDataJSON(), { p_plan: plan.id });
+    // The link is read by the event page now: this screen must not ask for it.
+    if (path === "/rest/v1/rpc/plan_link" || path === "/rest/v1/rpc/rotate_plan_link") {
       state.links++;
-      return reply(codes[state.active]);
-    }
-    if (path === "/rest/v1/rpc/rotate_plan_link") {
-      assert.deepEqual(req.postDataJSON(), { p_plan: plan.id });
-      state.rotations++;
-      if (state.failRotate) {
-        state.failRotate = false;
-        // The turn-off happened, but its reply was lost: the screen re-reads the link.
-        state.active++;
-        return reply({ message: "Lost reply" }, 500);
-      }
-      state.active++;
-      return reply(codes[state.active]);
+      return reply({ message: "Unexpected link request on Invite people" }, 400);
     }
     return reply({ message: `Unmocked fixture endpoint ${path}` }, 400);
   });
@@ -136,94 +108,33 @@ async function fixture({ width = 390, largeText = false } = {}) {
   if (largeText) await page.addStyleTag({ content: '[dir="auto"] { zoom: 1.4; }' });
   return { page, errors, state };
 }
-const shares = (page) => page.evaluate(() => window.fixtureShares);
-const copies = (page) => page.evaluate(() => window.fixtureCopies);
 
 try {
   {
     const { page, errors, state } = await fixture();
     await expect(heading(page, "Invite people")).toBeVisible();
-    // The Pick step comes first; the Event link section, its heading and its three chips, at the bottom.
-    await expect(heading(page, "Event link")).toBeVisible();
-    await expect(page.getByRole("heading")).toHaveCount(2);
-    await expect(button(page, "Turn off this link")).toBeEnabled();
-    assert.ok(
-      await inOrder(page, [
-        heading(page, "Invite people"),
-        button(page, "Add"),
-        button(page, "Invite 0"),
-        heading(page, "Event link"),
-        button(page, "Share link"),
-        button(page, "Copy link"),
-        button(page, "Turn off this link"),
-      ]),
-      "the Event link section follows the Pick step",
-    );
+    // The Pick step only: no Event link section, no Share, Copy or Turn off, and no link is read.
+    await expect(button(page, "Invite 0")).toBeVisible();
+    await expect(page.getByRole("heading")).toHaveCount(1);
+    await expect(heading(page, "Event link")).toHaveCount(0);
+    for (const name of LINK_CONTROLS) await expect(button(page, name)).toHaveCount(0);
+    await expect(page.getByText("Anyone can answer with it, and you approve them first.", { exact: true })).toHaveCount(0);
+    await page.waitForTimeout(500);
+    assert.equal(state.links, 0, "Invite people reads no link");
     // GI1's cover card is gone, and the screen never shows the exact place.
     await expect(page.getByText("This is what people see before they reply.", { exact: true })).toHaveCount(0);
     await expect(page.getByText(/Fixture café/)).toHaveCount(0);
-    // Share: the title, the date in the app's format and the link.
-    await button(page, "Share link").click();
-    await expect.poll(async () => (await shares(page)).length).toBe(1);
-    const [first] = await shares(page);
-    const message = first.text ?? first.message;
-    const match = /^Coffee evening, Sun 1 Mar, 15:00 – 17:00\. RSVP: (.+)$/.exec(message);
-    assert.ok(match, `Share text: ${message}`);
-    assert.match(match[1], linkOf(codes[0]));
-    // Copy link.
-    await button(page, "Copy link").click();
-    await expect(page.getByText("Link copied.", { exact: true })).toBeVisible();
-    assert.deepEqual(await copies(page), [match[1]]);
-    // Turn off this link: Keep changes nothing.
-    let asked = "";
-    page.once("dialog", (d) => {
-      asked = d.message();
-      return d.dismiss();
-    });
-    await button(page, "Turn off this link").click();
-    await expect.poll(() => asked).toContain("Turn off this link?");
-    assert.ok(
-      asked.includes("People with the old link will see that it’s no longer active. You’ll get a new link."),
-      asked,
-    );
-    await page.waitForTimeout(200);
-    assert.equal(state.rotations, 0);
-    // Turn off: a new link, said on screen and used by Share and Copy.
-    page.once("dialog", (d) => d.accept());
-    await button(page, "Turn off this link").click();
-    await expect(page.getByText("The old link is off. Share this new link.", { exact: true })).toBeVisible();
-    assert.equal(state.rotations, 1);
-    await button(page, "Copy link").click();
-    await expect.poll(async () => (await copies(page)).length).toBe(2);
-    assert.match((await copies(page))[1], linkOf(codes[1]));
-    await button(page, "Share link").click();
-    await expect.poll(async () => (await shares(page)).length).toBe(2);
-    assert.match((await shares(page))[1].text, new RegExp(`RSVP: (resbite://r/|https://[a-z0-9.-]+/r/)${codes[1]}$`));
-    // A lost turn-off reply says so and re-reads the link that works now.
-    const readsBefore = state.links;
-    state.failRotate = true;
-    page.once("dialog", (d) => d.accept());
-    await button(page, "Turn off this link").click();
-    await expect(
-      page.getByText("Couldn’t confirm the link was turned off. Check your connection and try again.", { exact: true }),
-    ).toBeVisible();
-    await expect.poll(() => state.links).toBeGreaterThan(readsBefore);
-    await button(page, "Copy link").click();
-    await expect.poll(async () => (await copies(page)).length).toBe(3);
-    assert.match((await copies(page))[2], linkOf(codes[2]));
     // The ⓘ sheet.
     await button(page, "About invitation links").click();
     await expect(heading(page, "Invitation links")).toBeVisible();
     for (const line of INFO) await expect(page.getByText(line, { exact: true })).toBeVisible();
     await button(page, "Close sheet").click();
     await expect(heading(page, "Invitation links")).toHaveCount(0);
-    // The link is read from the database, never kept in browser storage.
-    const stored = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
-    for (const code of codes) assert.ok(!stored.includes(code), "The link code is not stored on the device");
+    assert.equal(state.links, 0);
     assert.deepEqual(errors, []);
     await page.context().close();
     console.log(
-      "PASS: Invite people: the Event link section below the Pick step (no card, no exact place), Share text with the date and link, Copy link, Turn off with Keep/Turn off and a new link, a lost turn-off re-reads the link, the ⓘ sheet, nothing stored.",
+      "PASS: Invite people has no link section (no Event link heading, no Share, Copy or Turn off, no link read), no card and no exact place; the ⓘ sheet points to the event page and Waiting for you.",
     );
   }
   {
@@ -245,7 +156,8 @@ try {
   {
     const { page, errors } = await fixture({ width: 320, largeText: true });
     await expect(heading(page, "Invite people")).toBeVisible();
-    await expect(button(page, "Turn off this link")).toBeVisible();
+    await expect(button(page, "Invite 0")).toBeVisible();
+    for (const name of LINK_CONTROLS) await expect(button(page, name)).toHaveCount(0);
     const fits = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
     assert.ok(fits, "Invite people fits 320 px under Larger Text");
     const clipped = await page.evaluate(() =>
@@ -258,7 +170,7 @@ try {
         .map((el) => el.getAttribute("aria-label") || el.textContent),
     );
     assert.deepEqual(clipped, []);
-    for (const name of ["Share link", "Copy link", "Turn off this link", "About invitation links", "Back", "Add", "Invite 0"]) {
+    for (const name of ["About invitation links", "Back", "Add", "Invite 0"]) {
       const box = await button(page, name).boundingBox();
       assert.ok(box.height >= 44 && box.width >= 44, `${name} is at least 44 pt`);
     }

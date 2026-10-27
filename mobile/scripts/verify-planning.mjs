@@ -607,6 +607,9 @@ try {
       }
       // Plan 2: the organizer's event page lists their personal links; this event has none.
       if (url.pathname === "/rest/v1/rpc/plan_phone_invitations") return reply([]);
+      // Open-link approval: the organizer's event page reads its link and its requests; My resbites reads its own.
+      if (url.pathname === "/rest/v1/rpc/plan_join_requests" || url.pathname === "/rest/v1/rpc/my_join_requests") return reply([]);
+      if (url.pathname === "/rest/v1/rpc/plan_link") return reply("AbCdEfGhIjKlMnOpQrStUv");
       throw new Error(`Unexpected fixture request: ${url.pathname}`);
     });
     if (scenario === "refresh") {
@@ -785,6 +788,9 @@ try {
       }
       // Plan 2: the organizer's event page lists their personal links; this event has none.
       if (url.pathname === "/rest/v1/rpc/plan_phone_invitations") return reply([]);
+      // Open-link approval: the organizer's event page reads its link and its requests; My resbites reads its own.
+      if (url.pathname === "/rest/v1/rpc/plan_join_requests" || url.pathname === "/rest/v1/rpc/my_join_requests") return reply([]);
+      if (url.pathname === "/rest/v1/rpc/plan_link") return reply("AbCdEfGhIjKlMnOpQrStUv");
       throw new Error(`Unexpected fixture request: ${url.pathname}`);
     });
     await fixture.goto(`${baseURL}/arrange?plan=${savedPlan.id}`);

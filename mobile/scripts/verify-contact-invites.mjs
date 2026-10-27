@@ -239,6 +239,9 @@ async function fixture({ user = host, width = 390, foldStatus = 200 } = {}) {
       return reply(plan === coffee.id ? state.guests : []);
     }
     if (path === "/rest/v1/rpc/plan_link") return reply("AbCdEfGhIjKlMnOpQrStUv");
+    // Open-link approval: nobody has answered the event link (the host's Waiting for you and My resbites' requests
+    // are empty; verify-event and verify-open-link-app cover them).
+    if (path === "/rest/v1/rpc/plan_join_requests" || path === "/rest/v1/rpc/my_join_requests") return reply([]);
     if (path === "/rest/v1/rpc/contacts_on_resbite") return reply(body.p_phones.filter((p) => state.onResbite.has(p)));
     if (path === "/rest/v1/rpc/invite_contacts") {
       assert.equal(body.p_plan, coffee.id);
@@ -366,9 +369,10 @@ try {
     await expect(heading(page, "Coffee evening")).toBeVisible();
     await button(page, "Invite someone").click();
     await expect(heading(page, "Invite people")).toBeVisible();
-    // The Pick step: the web says contacts are in the iPhone app; GI1's link sits at the bottom.
+    // The Pick step: the web says contacts are in the iPhone app. The event link is on the event page now, not here.
     await expect(page.getByText("Phone contacts are in the iPhone app. You can add a number below.", { exact: true })).toBeVisible();
-    await expect(heading(page, "Event link")).toBeVisible();
+    await expect(heading(page, "Event link")).toHaveCount(0);
+    await expect(button(page, "Share link")).toHaveCount(0);
     await expect(button(page, "Invite 0")).toBeDisabled();
     await noTestCode(page, "the Pick step");
     // Nothing is looked up before anything is picked.

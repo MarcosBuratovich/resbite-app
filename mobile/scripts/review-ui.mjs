@@ -1,8 +1,10 @@
 // Captures every UX1, UX3 and UX4 screen at 390 and 320 px (UX3 and UX4 also with Larger Text at 320 px) with no console or page errors,
 // and keeps the gluestack keyboard-selection check. Every Supabase request is aborted, except in the GI1, GI2 and phone blocks at the
 // end, where requests are answered by a local stub: a signed-in organizer's Invite people (Plan 2: the Pick step with three numbers,
-// one On Resbite, and Almost there; GI1's Event link below), the Guests sheet with Remove and the Invited group (WhatsApp, Messages, Remove), and My resbites
-// with an Invitations card; a signed-out guest's account screen, its Code and Name steps and a dead link (GI2); and phone sign-up,
+// one On Resbite, and Almost there; no link section), the event page's Waiting for you and Event link card (open-link approval), the Guests
+// sheet with Remove and the Invited group (WhatsApp, Messages, Remove), and My resbites with an Invitations card and the open-link requests
+// (waiting and declined), and the /waiting screen in both states; a signed-out invitation and a dead link; an account waiting for access with its
+// Invitations and the inline 18+ tick on the invite screen; and phone sign-up,
 // its code, phone sign-in, About you, and Add your number with its "taken" refusal, the offer to bring in a web-only account and
 // that offer's code step.
 import assert from "node:assert/strict";
@@ -364,9 +366,10 @@ try {
     await page.close();
   }
   // Signed in as the organizer against a local stub, at 390 and 320 px and under Larger Text at 320 px, with nothing
-  // wider than the screen or clipped: Invite people's Pick step with three numbers (one On Resbite) and GI1's Event
-  // link below, Almost there, the Guests sheet with Remove and the Invited group, and My resbites with an Invitations
-  // card. The browser can't read phone contacts, so the numbers are added with "Add a number".
+  // wider than the screen or clipped: Invite people's Pick step with three numbers (one On Resbite; the event link
+  // is on the event page now), Almost there, the event page's Waiting for you and Event link card, the Guests sheet
+  // with Remove and the Invited group, My resbites with an Invitations card and the open-link requests, and the
+  // /waiting screen waiting and declined. The browser can't read phone contacts, so the numbers are added with "Add a number".
   for (const [width, large] of [[390, false], [320, false], [320, true]]) {
     const page = await browser.newPage({ viewport: { width, height: 844 }, reducedMotion: "reduce", timezoneId: "Europe/London" });
     await quietReminders(page);
@@ -439,6 +442,17 @@ try {
       ["Cy Lindqvist", "07700 900789", "447700900789"],
     ];
     const links = new Map();
+    // Open-link approval: people waiting for the organizer (Waiting for you), and the organizer's own requests to
+    // other people's events, one waiting and one declined (My resbites, /waiting).
+    const asking = [
+      { user_id: "r1", name: "Alexandria Montgomery-Smith", response: "accepted", ending: "34", created_at: "2099-10-01T10:00:00Z" },
+      { user_id: "r2", name: "Kim Lau", response: "maybe", ending: null, created_at: "2099-10-01T11:00:00Z" },
+    ];
+    const askCard = { starts_at: "2099-10-25T19:00:00Z", ends_at: "2099-10-25T22:00:00Z", time_zone: "Europe/London", area: "Near Old Street", image: { kind: "mark", ref: null }, response: "accepted" };
+    const mine = [
+      { ...askCard, plan_id: "55555555-5555-4555-8555-555555555555", title: "Sunday film club with a long name", host: "Samantha", status: "waiting" },
+      { ...askCard, plan_id: "66666666-6666-4666-8666-666666666666", title: "Quiz night", host: "Jo", status: "declined", response: "declined" },
+    ];
     await page.addInitScript((session) => {
       sessionStorage.setItem("sb-ewcsgvhuojxdpaspwsrx-auth-token", JSON.stringify(session));
       // WhatsApp and Messages open with window.open on the web; nothing leaves the page.
@@ -474,6 +488,8 @@ try {
         return reply(url.searchParams.get("plan_id") === `eq.${plan.id}` ? guests : []);
       }
       if (path === "/rest/v1/rpc/plan_link") return reply("AbCdEfGhIjKlMnOpQrStUv");
+      if (path === "/rest/v1/rpc/plan_join_requests") return reply(req.postDataJSON().p_plan === plan.id ? asking : []);
+      if (path === "/rest/v1/rpc/my_join_requests") return reply(mine);
       if (path === "/rest/v1/rpc/contacts_on_resbite") return reply(req.postDataJSON().p_phones.filter((p) => p === people[0][2]));
       if (path === "/rest/v1/rpc/invite_contacts")
         return reply(
@@ -492,7 +508,10 @@ try {
     };
     await open(`/invitations?plan=${plan.id}`);
     await expect(heading(page, "Invite people")).toBeVisible();
-    await expect(button(page, "Turn off this link")).toBeEnabled();
+    // The event link lives on the event page; this screen has no link section.
+    await expect(button(page, "Invite 0")).toBeVisible();
+    await expect(heading(page, "Event link")).toHaveCount(0);
+    await expect(button(page, "Turn off this link")).toHaveCount(0);
     // Privacy: the screen never shows the exact place.
     await expect(page.getByText("Flat 3, 12 Old Street")).toHaveCount(0);
     await shot("invite-people-empty");
@@ -504,10 +523,10 @@ try {
     }
     await expect(page.getByRole("checkbox", { name: "Ana Rivera-Castellanos, +44 7700 900123, On Resbite", exact: true })).toBeVisible();
     await expect(button(page, "Invite 3")).toBeEnabled();
-    // The screen scrolls inside the app: capture its top (the picked list) and its end (GI1's Event link).
+    // The screen scrolls inside the app: capture its top (the picked list) and its end (the Invite button).
     await heading(page, "Invite people").scrollIntoViewIfNeeded();
     await shot("invite-people");
-    await button(page, "Turn off this link").scrollIntoViewIfNeeded();
+    await button(page, "Invite 3").scrollIntoViewIfNeeded();
     await shot("invite-people-end");
     // Almost there: Ana in the app; Ben and Cy with WhatsApp and Messages, Ben's already sent.
     await button(page, "Invite 3").click();
@@ -517,6 +536,15 @@ try {
     await shot("invite-people-almost");
     await open(`/event?plan=${plan.id}`);
     await expect(heading(page, "Film club: Paris, Texas")).toBeVisible();
+    // Open-link approval: Waiting for you (name, answer, last two digits; Approve and Decline) and the Event link card below.
+    await expect(heading(page, "Waiting for you")).toBeVisible();
+    await expect(page.getByText("Going · via event link · ••34", { exact: true })).toBeVisible();
+    await expect(button(page, "Approve Kim Lau")).toBeVisible();
+    await heading(page, "Waiting for you").scrollIntoViewIfNeeded();
+    await shot("event-waiting-for-you");
+    await expect(heading(page, "Event link")).toBeVisible();
+    await button(page, "Turn off this link").scrollIntoViewIfNeeded();
+    await shot("event-link-card");
     await button(page, "2 going, 1 maybe").click();
     await expect(heading(page, "Guests")).toBeVisible();
     await expect(button(page, "Remove Alex Rivera")).toBeVisible();
@@ -532,23 +560,27 @@ try {
     await expect(heading(page, "Invitations")).toBeVisible();
     await expect(button(page, /^Jo invited you, Board games at the café, /)).toBeVisible();
     await expect(page.getByRole("radiogroup", { name: "Your answer to Board games at the café", exact: true })).toBeVisible();
+    // Open-link approval: the organizer's own requests sit with the invitations, waiting and declined.
+    await expect(page.getByText("Waiting for Samantha", { exact: true })).toBeVisible();
+    await expect(page.getByText("Not added", { exact: true })).toBeVisible();
     await shot("plans-invitations");
+    // The waiting screen in both states: the card, "Waiting for <host>", the answer; and "You weren’t added".
+    await open(`/waiting?plan=${mine[0].plan_id}`);
+    await expect(heading(page, "Waiting for Samantha")).toBeVisible();
+    await expect(page.getByRole("radiogroup", { name: "Your answer to Sunday film club with a long name", exact: true })).toBeVisible();
+    await shot("waiting");
+    await open(`/waiting?plan=${mine[1].plan_id}`);
+    await expect(heading(page, "You weren’t added to this resbite.")).toBeVisible();
+    await shot("waiting-declined");
     if (errors.length) throw Error(errors.join("\n"));
     await page.close();
   }
-  // GI2, a signed-out guest against a local stub: the account screen unticked and ticked, the Code step, the Name
-  // step and a dead link, at 390 and 320 px and under Larger Text at 320 px, with nothing wider than the screen.
+  // Open-link approval, signed out and waiting for access, against a local stub, at 390 and 320 px and under Larger Text
+  // at 320 px, with nothing wider than the screen: the signed-out invitation (card, Sign up to reply, I have an
+  // account), a dead link, an account waiting for access with its Invitations, and the inline 18+ tick on the invite screen.
   for (const [width, large] of [[390, false], [320, false], [320, true]]) {
-    const page = await browser.newPage({ viewport: { width, height: 844 }, reducedMotion: "reduce", timezoneId: "Europe/London" });
-    await quietReminders(page);
-    const errors = [];
-    page.on("pageerror", (e) => errors.push(e.message));
-    page.on("console", (m) => {
-      if (m.type() === "error") errors.push(m.text());
-    });
     const suffix = large ? "large-320" : String(width);
-    const fits = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
-    const clipped = (target = page) =>
+    const clipped = (target) =>
       target.evaluate(() =>
         [...document.querySelectorAll("[role=button],[role=checkbox],[role=heading],h1,h2,h3,input,textarea")]
           .filter((el) => !el.closest("[aria-hidden=true]") && el.getBoundingClientRect().width > 0)
@@ -558,92 +590,116 @@ try {
           })
           .map((el) => (el.getAttribute("role") || el.tagName.toLowerCase()) + " " + (el.getAttribute("aria-label") || el.textContent.trim().slice(0, 40))),
       );
-    const visit = async (name, title) => {
-      await expect(heading(page, title)).toBeVisible();
-      assert.ok(await fits(), `${name} fits at ${suffix}`);
-      assert.deepEqual(await clipped(), [], `${name} has nothing clipped at ${suffix}`);
-      await page.waitForTimeout(500);
-      await page.screenshot({ path: `${out}/${name}-${suffix}.png`, fullPage: true });
-      // Larger Text moves the footer into the scroll: capture its end too.
-      if (large) {
-        await page.mouse.move(width / 2, 400);
-        await page.mouse.wheel(0, 3000);
-        await page.waitForTimeout(300);
-        await page.screenshot({ path: `${out}/${name}-${suffix}-end.png` });
-      }
+    /** A page with its own stub; `session` signs it in as that account. */
+    const guestPage = async ({ session = null, stub }) => {
+      const page = await browser.newPage({ viewport: { width, height: 844 }, reducedMotion: "reduce", timezoneId: "Europe/London" });
+      await quietReminders(page);
+      const errors = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      page.on("console", (m) => {
+        // The stub's 22023 is a 400 the browser logs.
+        if (m.type() === "error" && !/Failed to load resource/.test(m.text())) errors.push(m.text());
+      });
+      if (session)
+        await page.addInitScript((session) => sessionStorage.setItem("sb-ewcsgvhuojxdpaspwsrx-auth-token", JSON.stringify(session)), session);
+      await page.route("**/*.supabase.co/**", (route) => {
+        const req = route.request();
+        const path = new URL(req.url()).pathname;
+        const reply = (body, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+        if (path === "/rest/v1/rpc/note_link_open" || path === "/rest/v1/rpc/note_app_session") return route.fulfill({ status: 204, body: "" });
+        return stub(req, path, reply);
+      });
+      const open = async (path) => {
+        await page.goto(`${base}${path}${large ? `${path.includes("?") ? "&" : "?"}largeText=1` : ""}`);
+        if (large) await page.addStyleTag({ content: '[dir="auto"] { zoom: 1.4; }' });
+      };
+      const visit = async (name, title) => {
+        await expect(heading(page, title)).toBeVisible();
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${name} fits at ${suffix}`);
+        assert.deepEqual(await clipped(page), [], `${name} has nothing clipped at ${suffix}`);
+        await page.waitForTimeout(500);
+        await page.screenshot({ path: `${out}/${name}-${suffix}.png`, fullPage: true });
+        // Larger Text moves the footer into the scroll: capture its end too.
+        if (large) {
+          await page.mouse.move(width / 2, 400);
+          await page.mouse.wheel(0, 3000);
+          await page.waitForTimeout(300);
+          await page.screenshot({ path: `${out}/${name}-${suffix}-end.png` });
+        }
+      };
+      return { page, errors, open, visit };
     };
-    // A confirmed phone: the Name step follows the code (without one, Add your number would, as verify-phone checks).
-    const user = { id: "66666666-6666-4666-8666-666666666666", aud: "authenticated", role: "authenticated", email: "guest@example.invalid", email_confirmed_at: "2026-01-01T00:00:00Z", phone: "447700900835", phone_confirmed_at: "2026-01-01T00:00:00Z", app_metadata: {}, user_metadata: {}, created_at: "2026-01-01T00:00:00Z" };
-    const expiry = Math.floor(Date.now() / 1000) + 3600;
-    const jwt = [
-      Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url"),
-      Buffer.from(JSON.stringify({ sub: user.id, exp: expiry, role: "authenticated" })).toString("base64url"),
-      "local-fixture-only",
-    ].join(".");
-    let signedIn = false;
-    await page.route("**/*.supabase.co/**", (route) => {
-      const req = route.request();
-      const path = new URL(req.url()).pathname;
-      const reply = (body, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
-      if (path === "/rest/v1/rpc/invitation_page")
-        return reply(
-          req.postDataJSON().p_code === "DeadDeadDeadDeadDead_8"
-            ? { state: "inactive" }
-            : { state: "open", host: "Stephen", title: "Film club: Paris, Texas", starts_at: "2099-10-23T18:30:00Z", time_zone: "Europe/London" },
-        );
-      if (path === "/rest/v1/rpc/note_link_open") return route.fulfill({ status: 204, body: "" });
-      if (path === "/auth/v1/otp") return reply({});
-      if (path === "/auth/v1/verify") {
-        signedIn = true;
-        return reply({ access_token: jwt, refresh_token: "local-fixture", token_type: "bearer", expires_at: expiry, expires_in: 3600, user });
-      }
-      if (path === "/auth/v1/user") return signedIn ? reply(user) : reply({ message: "No session" }, 401);
-      if (path === "/rest/v1/rpc/account_access_status") return reply({ account_id: user.id, status: "access_pending" });
-      if (path === "/rest/v1/rpc/note_app_session") return route.fulfill({ status: 204, body: "" });
-      return reply({ message: `Unexpected ${path}` }, 400);
-    });
-    const open = async (path) => {
-      await page.goto(`${base}${path}${large ? "&largeText=1" : ""}`);
-      if (large) await page.addStyleTag({ content: '[dir="auto"] { zoom: 1.4; }' });
-    };
-    await open("/invite?code=GuestGuestGuestGuest_5");
-    await expect(page.getByText("Stephen invited you", { exact: true })).toBeVisible();
-    await expect(button(page, "Continue with email")).toBeDisabled();
-    await visit("guest-unticked", "Create your account to reply");
-    await page.getByRole("checkbox", { name: "I’m 18 or over", exact: true }).click();
-    await expect(button(page, "Continue with email")).toBeEnabled();
-    await visit("guest-ticked", "Create your account to reply");
-    await button(page, "Continue with email").click();
-    await page.getByLabel("Email", { exact: true }).fill("guest@example.invalid");
-    await button(page, "Send code").click();
-    await visit("guest-code", "Check your email");
-    await page.getByLabel("6-digit code", { exact: true }).fill("123456");
-    await visit("guest-name", "What’s your name?");
-    await page.close();
-    if (errors.length) throw Error(errors.join("\n"));
+    const invitation = { state: "open", host: "Stephen", title: "Film club: Paris, Texas", starts_at: "2099-10-23T18:30:00Z", time_zone: "Europe/London", area: "Near Old Street", image: { kind: "mark", ref: null } };
+    // Signed out: the invitation's card with Sign up to reply and I have an account.
+    {
+      const { page, errors, open, visit } = await guestPage({
+        stub: (req, path, reply) =>
+          path === "/rest/v1/rpc/invitation_page"
+            ? reply(invitation)
+            : reply({ message: path === "/auth/v1/user" ? "No session" : `Unexpected ${path}` }, path === "/auth/v1/user" ? 401 : 400),
+      });
+      await open("/invite?code=GuestGuestGuestGuest_5");
+      await expect(page.getByText("Stephen invited you", { exact: true })).toBeVisible();
+      await expect(button(page, "Sign up to reply")).toBeVisible();
+      await expect(button(page, "I have an account")).toBeVisible();
+      await visit("invite-signed-out", "You’re invited.");
+      await page.close();
+      if (errors.length) throw Error(errors.join("\n"));
+    }
     // A dead link, signed out.
-    const dead = await browser.newPage({ viewport: { width, height: 844 }, reducedMotion: "reduce" });
-    dead.on("pageerror", (e) => errors.push(e.message));
-    dead.on("console", (m) => {
-      if (m.type() === "error") errors.push(m.text());
-    });
-    await dead.route("**/*.supabase.co/**", (route) => {
-      const path = new URL(route.request().url()).pathname;
-      if (path === "/rest/v1/rpc/invitation_page")
-        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ state: "inactive" }) });
-      if (path === "/rest/v1/rpc/note_link_open") return route.fulfill({ status: 204, body: "" });
-      return route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ message: "No session" }) });
-    });
-    await dead.goto(`${base}/invite?code=DeadDeadDeadDeadDead_8${large ? "&largeText=1" : ""}`);
-    if (large) await dead.addStyleTag({ content: '[dir="auto"] { zoom: 1.4; }' });
-    await expect(heading(dead, "This invitation is no longer active.")).toBeVisible();
-    await expect(button(dead, "Go to Resbite")).toBeVisible();
-    assert.ok(await dead.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `guest-inactive fits at ${suffix}`);
-    assert.deepEqual(await clipped(dead), [], `guest-inactive has nothing clipped at ${suffix}`);
-    await dead.waitForTimeout(500);
-    await dead.screenshot({ path: `${out}/guest-inactive-${suffix}.png`, fullPage: true });
-    if (errors.length) throw Error(errors.join("\n"));
-    await dead.close();
+    {
+      const { page, errors, open, visit } = await guestPage({
+        stub: (req, path, reply) =>
+          path === "/rest/v1/rpc/invitation_page"
+            ? reply({ state: "inactive" })
+            : reply({ message: "No session" }, 401),
+      });
+      await open("/invite?code=DeadDeadDeadDeadDead_8");
+      await expect(button(page, "Go to Resbite")).toBeVisible();
+      await visit("guest-inactive", "This invitation is no longer active.");
+      await page.close();
+      if (errors.length) throw Error(errors.join("\n"));
+    }
+    // An account the beta hasn't approved: its requests under Invitations, then the invite screen asking for the tick.
+    {
+      const user = { id: "66666666-6666-4666-8666-666666666666", aud: "authenticated", role: "authenticated", email: "guest@example.invalid", email_confirmed_at: "2026-01-01T00:00:00Z", phone: "447700900835", phone_confirmed_at: "2026-01-01T00:00:00Z", app_metadata: {}, user_metadata: { full_name: "Guest Two" }, created_at: "2026-01-01T00:00:00Z" };
+      const expiry = Math.floor(Date.now() / 1000) + 3600;
+      const jwt = [
+        Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url"),
+        Buffer.from(JSON.stringify({ sub: user.id, exp: expiry, role: "authenticated" })).toString("base64url"),
+        "local-fixture-only",
+      ].join(".");
+      const session = { access_token: jwt, refresh_token: "local-fixture", token_type: "bearer", expires_at: expiry, expires_in: 3600, user };
+      const requests = [
+        { plan_id: "55555555-5555-4555-8555-555555555555", title: "Sunday film club with a long name", starts_at: "2099-10-25T19:00:00Z", ends_at: null, time_zone: "Europe/London", host: "Samantha", area: "Near Old Street", image: { kind: "mark", ref: null }, response: "accepted", status: "waiting" },
+        { plan_id: "66666666-6666-4666-8666-666666666666", title: "Quiz night", starts_at: "2099-10-26T19:00:00Z", ends_at: null, time_zone: "Europe/London", host: "Jo", area: "", image: { kind: "mark", ref: null }, response: "declined", status: "declined" },
+      ];
+      const { page, errors, open, visit } = await guestPage({
+        session,
+        stub: (req, path, reply) => {
+          if (path === "/auth/v1/user") return reply(user);
+          if (path === "/rest/v1/rpc/account_access_status") return reply({ account_id: user.id, status: "access_pending" });
+          if (path === "/rest/v1/rpc/my_join_requests") return reply(requests);
+          // The account has no 18+ tick stored: the first request asks for it.
+          if (path === "/rest/v1/rpc/request_to_join") return reply({ code: "22023", message: "Age confirmation required" }, 400);
+          if (path === "/rest/v1/profiles") return reply(req.headers().accept?.includes("object") ? null : []);
+          return reply({ message: `Unexpected ${path}` }, 400);
+        },
+      });
+      await open("/account");
+      await expect(heading(page, "Invitations")).toBeVisible();
+      await expect(page.getByText("Waiting for Samantha", { exact: true })).toBeVisible();
+      await expect(page.getByText("Not added", { exact: true })).toBeVisible();
+      await visit("account-waiting-requests", "Waiting for access");
+      await open("/invite?code=AgeAgeAgeAgeAgeAgeAge6");
+      await expect(page.getByRole("checkbox", { name: "I’m 18 or over", exact: true })).toBeVisible();
+      await visit("invite-tick", "You’re invited.");
+      await page.getByRole("checkbox", { name: "I’m 18 or over", exact: true }).click();
+      await expect(button(page, "Continue")).toBeEnabled();
+      await visit("invite-tick-ticked", "You’re invited.");
+      await page.close();
+      if (errors.length) throw Error(errors.join("\n"));
+    }
   }
   // Phone accounts against a local stub, at 390 and 320 px and under Larger Text at 320 px, with nothing wider than the
   // screen: sign-up's number step with the 18+ tick and its code step, phone sign-in, About you, and Add your number
@@ -685,6 +741,8 @@ try {
         if (path === "/rest/v1/rpc/account_access_status" && user) return reply({ account_id: user.id, status });
         if (path === "/rest/v1/rpc/note_app_session") return route.fulfill({ status: 204, body: "" });
         if (path === "/rest/v1/profiles") return reply({ id: user.id, display_name: "Stephen", avatar_path: null, avatar_revision: 0 });
+        // The waiting-for-access screen lists the account's open-link requests: none here.
+        if (path === "/rest/v1/rpc/my_join_requests") return reply([]);
         errors.push(`Unexpected ${req.method()} ${path}`);
         return reply({ message: `Unexpected ${path}` }, 400);
       });
@@ -776,7 +834,7 @@ try {
     if (errors.length) throw Error(errors.join("\n"));
   }
   console.log(
-    "PASS: every UX1, UX3 and UX4 screen at 390/320 px, UX3 and UX4 under Larger Text at 320 px, the Where step with an Area, Invite people (Pick with three numbers and On Resbite, Almost there, GI1's Event link), the Guests sheet with Remove and the Invited group, My resbites with an Invitations card (390/320 and Larger Text at 320 px, nothing wider than the screen or clipped), GI2's guest account screen unticked and ticked, its Code and Name steps and a dead link, and phone sign-up (number with the tick, code), phone sign-in, About you, and Add your number with its taken-number refusal, the fold offer and its code step (390/320 and Larger Text at 320 px, nothing wider than the screen or clipped), gluestack keyboard selection, no console/page errors. Screenshots: " + out,
+    "PASS: every UX1, UX3 and UX4 screen at 390/320 px, UX3 and UX4 under Larger Text at 320 px, the Where step with an Area, Invite people (Pick with three numbers and On Resbite, Almost there, no link section), the event page's Waiting for you and Event link card, the Guests sheet with Remove and the Invited group, My resbites with an Invitations card and open-link requests, the /waiting screen waiting and declined (390/320 and Larger Text at 320 px, nothing wider than the screen or clipped), the signed-out invitation and a dead link, an account waiting for access with its Invitations, the inline 18+ tick (ticked and not), and phone sign-up (number with the tick, code), phone sign-in, About you, and Add your number with its taken-number refusal, the fold offer and its code step (390/320 and Larger Text at 320 px, nothing wider than the screen or clipped), gluestack keyboard selection, no console/page errors. Screenshots: " + out,
   );
 } finally {
   await browser.close();
