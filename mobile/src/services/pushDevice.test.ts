@@ -470,3 +470,22 @@ test("a reconcile queued just before sign-out starts doesn't register first", as
   await p.settle();
   assert.deepEqual(p.rpc(), [`register_device:jwt-a:${token}:ios`, `unregister_device:jwt-a:${token}`, "auth.signOut"]);
 });
+
+test("a damaged record doesn't block registering: the current account registers and a fresh record replaces it", async () => {
+  const damaged: [string, (p: ReturnType<typeof phone>) => void][] = [
+    ["unparseable", (p) => p.disk.set(JOURNAL, "{not json")],
+    ["untrustworthy", (p) => p.disk.set(JOURNAL, JSON.stringify({ account: "a", token: "nope", phase: "registered" }))],
+    ["unreadable", (p) => p.breakStorage()],
+  ];
+  for (const [name, damage] of damaged) {
+    const p = phone();
+    await p.signIn("a");
+    damage(p);
+    p.events.length = 0;
+    await p.push.reconcile();
+    // Its token is unknown, so nothing is unregistered for it.
+    assert.deepEqual(p.rpc(), [`register_device:jwt-a:${token}:ios`], name);
+    assert.deepEqual(JSON.parse(p.disk.get(JOURNAL)!), { account: "a", token, phase: "registered" }, name);
+    assert.equal(p.push.status(), "registered", name);
+  }
+});

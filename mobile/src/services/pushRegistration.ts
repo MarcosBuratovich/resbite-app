@@ -67,17 +67,27 @@ export function createPushRegistration(
           throw Error("Account changed during notification setup.");
       };
       current();
-      let journal = await adapter.readJournal().catch((cause: unknown) => {
-        throw unreadable(cause);
-      });
+      let journal: PushJournal | null = null;
+      let damage: unknown = null;
+      try {
+        journal = await adapter.readJournal();
+      } catch (cause) {
+        damage = cause ?? Error("Unreadable notification record.");
+      }
       current();
       if (
         journal &&
         (!validToken(journal.token) ||
           !journal.account ||
           !["registering", "registered", "removing"].includes(journal.phase))
-      )
-        throw unreadable();
+      ) {
+        damage = Error("Untrustworthy notification record.");
+        journal = null;
+      }
+      // A record that can't be read, parsed or trusted names no token that can be unregistered. Sign-out
+      // forgets it (it throws here); registering treats it as absent and its fresh record replaces it.
+      // The server's rebinding covers the same token.
+      if (damage && removeOnly) throw unreadable(damage);
       if (journal && journal.account !== account) {
         // An account switch must first await cleanup using the old authenticated session.
         if (await adapter.hasSession(journal.account))
