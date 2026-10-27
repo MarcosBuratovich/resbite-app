@@ -108,6 +108,7 @@ These were parked rather than fixed. None blocks the rollout.
 
 **Cosmetic**
 14. A waiting person's card in the app (My resbites, Account, the waiting screen) shows the placeholder, not the event's cover photo, because storage row security does not let them read it.
+15. If an approval is refused because the event has just started or been cancelled, the reload empties Waiting for you and the reason ("This resbite has started or was cancelled…") goes with it. The event page itself shows the new state, and nobody can be approved then.
 
 ## Not done here
 
