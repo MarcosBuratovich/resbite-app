@@ -37,6 +37,11 @@ export default function DataPrivacy() {
               Your address book is not uploaded.
             </Copy>
             <Copy>
+              When you invite people, Resbite checks only the numbers you pick
+              to see who already uses it. Your address book never leaves your
+              phone.
+            </Copy>
+            <Copy>
               Signing out removes local groups, selections and invitation records.
               It does not revoke links already shared. Revoke those links from
               your plan before signing out if you want them to stop working.

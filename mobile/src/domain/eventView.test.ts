@@ -14,6 +14,7 @@ import {
   groupPlans,
   guestArea,
   guestGroups,
+  invitationCards,
   mapsUrl,
   responseText,
   reviewLabels,
@@ -351,4 +352,30 @@ test("photo descriptions are read with cards and the Review picture; a failed de
     coverNotice("description"),
     "Your resbite is saved, but the photo description didn’t save. Open Edit to add it again.",
   );
+});
+
+test("invitation cards: upcoming active plans where I am a pending invitee, soonest first", () => {
+  const now = Date.parse("2026-10-28T12:00:00Z");
+  const mk = (id: string, starts_at: string, owner_id = "host", status = "active") =>
+    ({ id, starts_at, owner_id, status }) as unknown as Plan;
+  const plans = [
+    mk("late", "2026-11-05T18:00:00Z"),
+    mk("soon", "2026-10-30T18:00:00Z"),
+    mk("answered", "2026-10-31T18:00:00Z"),
+    mk("mine", "2026-10-31T18:00:00Z", "me"),
+    mk("past", "2026-10-20T18:00:00Z"),
+    mk("cancelled", "2026-11-01T18:00:00Z", "host", "cancelled"),
+    mk("other", "2026-11-02T18:00:00Z"),
+  ];
+  const attendees = [
+    { plan_id: "late", user_id: "me", response: "pending" },
+    { plan_id: "soon", user_id: "me", response: "pending" },
+    { plan_id: "answered", user_id: "me", response: "maybe" },
+    { plan_id: "mine", user_id: "me", response: "pending" },
+    { plan_id: "past", user_id: "me", response: "pending" },
+    { plan_id: "cancelled", user_id: "me", response: "pending" },
+    { plan_id: "other", user_id: "you", response: "pending" },
+  ];
+  assert.deepEqual(invitationCards(plans, attendees, "me", now).map((p) => p.id), ["soon", "late"]);
+  assert.deepEqual(invitationCards(plans, [], "me", now), []);
 });

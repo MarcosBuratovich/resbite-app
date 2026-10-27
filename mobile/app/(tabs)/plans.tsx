@@ -14,7 +14,18 @@ import { colors as c, fonts, r } from "../../src/design/tokens";
 import { PreviewNotice } from "../../src/design/Chrome";
 import { drafts, type PlanDraft } from "../../src/services/drafts";
 import { planCoverStore } from "../../src/services/planCovers";
-import { cardChips, cardLabel, coverNotice, draftRoute, eventPlace, groupPlans } from "../../src/domain/eventView";
+import {
+  cardChips,
+  cardLabel,
+  coverNotice,
+  draftRoute,
+  eventPlace,
+  groupPlans,
+  invitationCards,
+} from "../../src/domain/eventView";
+import { INVITE_COPY } from "../../src/domain/inviteCopy";
+import { reconcileRsvp, responseFor, type AnswerKey, type RsvpAttempt } from "../../src/domain/rsvp";
+import { readRsvp, writeRsvp } from "../../src/services/rsvp";
 import { canDiscardDraft } from "../../src/domain/draftAutosave";
 import { confirmDiscardDraft } from "../../src/state/usePlanEditor";
 
@@ -26,6 +37,7 @@ type Attendee = {
   plan_id: string;
   user_id: string;
   response: string;
+  version: number;
   profiles: { display_name: string } | null;
 };
 
@@ -37,7 +49,10 @@ export default function Plans() {
     [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null),
     [segment, setSegment] = useState<"upcoming" | "past">("upcoming"),
-    [attendees, setAttendees] = useState<Attendee[]>([]);
+    [attendees, setAttendees] = useState<Attendee[]>([]),
+    [hosts, setHosts] = useState<Record<string, string>>({}),
+    [answering, setAnswering] = useState<string | null>(null),
+    [answerError, setAnswerError] = useState<{ plan: string; message: string } | null>(null);
   const scope = preview ? "preview" : session?.user.id;
   const [savedDrafts, setSavedDrafts] = useState<PlanDraft[]>([]);
   const [draftLoadError, setDraftLoadError] = useState(false);
@@ -69,6 +84,7 @@ export default function Plans() {
   useEffect(() => {
     setPlans([]);
     setAttendees([]);
+    setHosts({});
     setLoadedFor(undefined);
     setError(null);
     setBusy(false);
@@ -93,7 +109,7 @@ export default function Plans() {
         supabase.from("plans").select("*").order("starts_at").abortSignal(controller.signal),
         supabase
           .from("attendees")
-          .select("plan_id,user_id,response,profiles(display_name)")
+          .select("plan_id,user_id,response,version,profiles(display_name)")
           .abortSignal(controller.signal),
       ]);
       if (!isCurrent()) return;
@@ -103,7 +119,25 @@ export default function Plans() {
       setPlans(p.data || []);
       // Cover changes for cancelled or started plans can never complete; drop them quietly.
       void planCoverStore.discardStaleCoverJournals(uid, p.data || []).catch(() => {});
-      setAttendees((a.data || []) as unknown as Attendee[]);
+      const mine = (a.data || []) as unknown as Attendee[];
+      setAttendees(mine);
+      // The host's name for each invitation card; without it the card says "Your host invited you".
+      const owners = [
+        ...new Set(invitationCards(p.data || [], mine, uid, Date.now()).map((x) => x.owner_id ?? "").filter(Boolean)),
+      ];
+      if (owners.length) {
+        const names = await supabase
+          .from("profiles")
+          .select("id,display_name")
+          .in("id", owners)
+          .abortSignal(controller.signal)
+          .then(
+            (r) => r.data ?? [],
+            () => [],
+          );
+        if (!isCurrent()) return;
+        setHosts(Object.fromEntries(names.map((n) => [n.id, n.display_name])));
+      } else setHosts({});
     } catch (e) {
       if (isCurrent())
         setError(
@@ -143,6 +177,53 @@ export default function Plans() {
         () => setDraftRemoveError(true),
       );
     });
+  const invitations = preview || !session ? [] : invitationCards(list, attendees, session.user.id, now);
+  // Answers an invitation exactly as the event page does: read, reconcile, write when still needed, confirm.
+  async function answer(p: LocalPlan, key: AnswerKey) {
+    const me = attendees.find((a) => a.plan_id === p.id && a.user_id === session?.user.id);
+    const uid = session?.user.id;
+    if (!me || !uid || answering) return;
+    const attempt: RsvpAttempt = {
+      planId: p.id,
+      planVersion: p.version,
+      version: me.version,
+      response: responseFor(key, me.response),
+    };
+    const valid = () => identity.current === uid;
+    setAnswering(p.id);
+    setAnswerError(null);
+    try {
+      let next = await readRsvp(p.id, uid);
+      if (!valid()) return;
+      if (reconcileRsvp(attempt, next) === "retry") {
+        try {
+          await writeRsvp(attempt);
+        } catch {
+          /* Confirm saved state before saying anything. */
+        }
+        if (!valid()) return;
+        next = await readRsvp(p.id, uid);
+        if (!valid()) return;
+      }
+      const result = reconcileRsvp(attempt, next);
+      if (result !== "confirmed")
+        setAnswerError({
+          plan: p.id,
+          message:
+            result === "unavailable"
+              ? "This plan is cancelled or has already started. Responses are closed."
+              : result === "review"
+                ? "The plan or your response changed. Open it to review the latest details."
+                : "Your response is not confirmed. Try again.",
+        });
+      await refresh();
+    } catch {
+      if (valid())
+        setAnswerError({ plan: p.id, message: "We could not confirm your response. Check your connection, then retry." });
+    } finally {
+      if (valid()) setAnswering(null);
+    }
+  }
   const start = () => router.push("/arrange");
   const open = (p: LocalPlan) => {
     router.setParams({ created: "0", cover: "none" });
@@ -180,6 +261,48 @@ export default function Plans() {
           <IconButton icon={UserRound} label="Your profile" onPress={() => router.navigate("/profile")} />
         </View>
         <PreviewNotice />
+        {invitations.length > 0 && (
+          <View style={{ gap: 12 }}>
+            <Copy accessibilityRole="header" style={styles.invitationsHeading}>
+              {INVITE_COPY.invitationsHeading}
+            </Copy>
+            {invitations.map((p) => {
+              const host = hosts[p.owner_id ?? ""]?.trim() || INVITE_COPY.hostFallback;
+              const place = eventPlace({ owner: false, response: "pending", place: p.place_label, area: p.area }).line;
+              const chips = cardChips({ owner: false, status: p.status, response: "pending" });
+              return (
+                <View key={p.id} style={{ gap: 8 }}>
+                  <CoverCard
+                    picture={eventPicture(p)}
+                    title={p.title}
+                    startsAt={p.starts_at}
+                    endsAt={p.ends_at}
+                    place={place}
+                    byline={INVITE_COPY.invitedYou(host)}
+                    chips={chips.map((text) => ({ key: text, text, tone: chipToneFor(text) }))}
+                    label={`${INVITE_COPY.invitedYou(host)}, ${cardLabel(
+                      { title: p.title, startsAt: p.starts_at, endsAt: p.ends_at, place: place ?? "", chips, photo: p.cover_description },
+                      new Date(now),
+                    )}`}
+                    onPress={() => open(p)}
+                  />
+                  <Segmented
+                    label={`Your answer to ${p.title.trim() || "this resbite"}`}
+                    options={[
+                      { key: "going", text: "Going" },
+                      { key: "maybe", text: "Maybe" },
+                      { key: "cant", text: "Can’t go" },
+                    ] as const}
+                    value={null}
+                    disabled={answering !== null}
+                    onChange={(key) => void answer(p, key)}
+                  />
+                  {answerError?.plan === p.id && <ErrorNote message={answerError.message} />}
+                </View>
+              );
+            })}
+          </View>
+        )}
         <Segmented
           label="Show"
           options={[
@@ -308,6 +431,7 @@ function DraftTile({ draft, onRemove }: { draft: PlanDraft; onRemove: () => void
 
 const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  invitationsHeading: { fontFamily: fonts.display, fontSize: 22 },
   drafts: { gap: 10 },
   draft: {
     flexDirection: "row",

@@ -1,17 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AppState, Linking, Platform } from "react-native";
+import { AppState, Platform } from "react-native";
 import { getRandomBytes } from "expo-crypto";
 import { readPhoneRows, hasContactAccess, expandContactAccess } from "../services/contacts";
 import { contactInviteGateway, type InviteKind } from "../services/contactInvites";
 import { inviteCodeStore, type StoredInvite } from "../services/inviteCodeStore";
+import { putInviteQuietly, sendPersonalLink } from "../services/inviteSend";
 import {
   contactNumbers,
   hostRegion,
-  inviteMessage,
   newInviteCode,
-  personalLink,
-  smsUrl,
-  whatsappAppUrl,
   type ContactNumber,
 } from "../domain/contactInvites";
 import { INVITE_COPY } from "../domain/inviteCopy";
@@ -234,7 +231,7 @@ export function useContactInvites(a: {
         if (kind === "link") {
           const prior = stored[n.e164];
           const value: StoredInvite = { code: items[i].code, name: n.name, sentVia: prior?.code === items[i].code ? prior.sentVia : undefined };
-          await putQuietly(scope, planId, n.e164, value);
+          await putInviteQuietly(scope, planId, n.e164, value);
           out.links.push({ number: n, code: items[i].code, sentVia: value.sentVia });
         } else if (kind === "app" || kind === "already") {
           await inviteCodeStore.remove(scope, planId, n.e164).catch(() => {});
@@ -254,34 +251,23 @@ export function useContactInvites(a: {
       }
     }
   }
-  // During sign-out the store refuses writes; the screen is going away, so say nothing.
-  async function putQuietly(scopeId: string, plan: string, e164: string, value: StoredInvite) {
-    try {
-      await inviteCodeStore.put(scopeId, plan, e164, value);
-    } catch (e) {
-      if (!(e instanceof Error && e.message === "Session changed")) throw e;
-    }
-  }
-
   const sending = useRef(false);
   async function send(item: Sendable, via: "whatsapp" | "messages"): Promise<string | null> {
     if (!planId || !scope || sending.current) return null;
     sending.current = true;
     const ctx = current.current;
     try {
-      const text = inviteMessage({ ...message, link: personalLink(origin, item.code) });
-      const e164 = item.number.e164;
-      try {
-        if (via === "whatsapp") {
-          // wa.me never fails (it opens a web page), so only open the app itself, and only when it is there.
-          const url = whatsappAppUrl(e164, text);
-          if (!(await Linking.canOpenURL(url))) return INVITE_COPY.whatsappMissing;
-          await Linking.openURL(url);
-        } else await Linking.openURL(smsUrl(e164, text, Platform.OS));
-      } catch {
-        return via === "whatsapp" ? INVITE_COPY.whatsappMissing : INVITE_COPY.messagesFailed;
-      }
-      await putQuietly(scope, planId, e164, { code: item.code, name: item.number.name, sentVia: via }).catch(() => {});
+      const failure = await sendPersonalLink({
+        scope,
+        plan: planId,
+        e164: item.number.e164,
+        name: item.number.name,
+        code: item.code,
+        via,
+        origin,
+        message,
+      });
+      if (failure) return failure;
       if (alive(ctx))
         setOutcome((o) =>
           o && { ...o, links: o.links.map((l) => (l.number.key === item.number.key ? { ...l, sentVia: via } : l)) },

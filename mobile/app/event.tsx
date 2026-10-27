@@ -39,12 +39,19 @@ import {
   guestGroups,
   mapsUrl,
 } from "../src/domain/eventView";
-import { removeGuestQuestion } from "../src/domain/eventLinks";
+import { linkDate, removeGuestQuestion } from "../src/domain/eventLinks";
+import { INVITE_COPY } from "../src/domain/inviteCopy";
 import { canEditPlan } from "../src/domain/plans";
 import { answerKey, canReadSample, canRespond, responseFor } from "../src/domain/rsvp";
 import { drafts } from "../src/services/drafts";
 import { setGuestNote } from "../src/services/plans";
 import { invitationGateway } from "../src/services/invitations";
+import { contactInviteGateway } from "../src/services/contactInvites";
+import { inviteCodeStore } from "../src/services/inviteCodeStore";
+import { sendPersonalLink } from "../src/services/inviteSend";
+import { readProfile } from "../src/services/profile";
+import { DEFAULT_ORIGIN } from "../src/state/useContactInvites";
+import type { InvitedPerson } from "../src/state/useEvent";
 import { useApp } from "../src/state/AppState";
 import { useEvent } from "../src/state/useEvent";
 import { useEventDevice } from "../src/state/useEventDevice";
@@ -77,9 +84,11 @@ export default function EventPage() {
   // GI1: the organizer removes a guest from the Guests sheet.
   const [removing, setRemoving] = useState<string | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
+  // Invited by personal link and not answered yet: Send again and Remove act on one person at a time.
+  const [invitedBusy, setInvitedBusy] = useState<string | null>(null);
   // One Do this again at a time: a quick double tap must not write two copies or stack two editors.
   const againBusy = useRef(false);
-  const { plan, role, attendee, guests, busy, fresh, pending } = event;
+  const { plan, role, attendee, guests, invited, busy, fresh, pending } = event;
   // UX3 Add to calendar and reminders: the organizer and Going or Maybe guests, on upcoming active events.
   const device = useEventDevice(plan, { owner: role === "owner", response: attendee?.response ?? null });
   const scope = preview ? "preview" : session?.user.id;
@@ -224,6 +233,62 @@ export default function EventPage() {
       setRemoving(null);
     }
   }
+  function confirmRemoveInvite(person: InvitedPerson) {
+    const question = INVITE_COPY.removeInvite(person.name);
+    const remove = () => void removeInvite(person);
+    if (Platform.OS === "web") {
+      if (window.confirm(question)) remove();
+    } else
+      Alert.alert(question, undefined, [
+        { text: "Keep", style: "cancel" },
+        { text: "Remove", style: "destructive", onPress: remove },
+      ]);
+  }
+  async function removeInvite(person: InvitedPerson) {
+    if (invitedBusy || !scope) return;
+    setInvitedBusy(person.phone);
+    setRemoveError(null);
+    try {
+      await contactInviteGateway.revoke(current.id, person.phone);
+      // The link no longer works; the stored code has no use, and a failure to drop it is harmless.
+      await inviteCodeStore.remove(scope, current.id, person.e164).catch(() => {});
+      await event.load();
+    } catch (e) {
+      setRemoveError(e instanceof Error ? e.message : INVITE_COPY.offline);
+    } finally {
+      setInvitedBusy(null);
+    }
+  }
+  async function resendInvite(person: InvitedPerson) {
+    if (invitedBusy || !scope || !person.stored) return;
+    setInvitedBusy(person.phone);
+    setRemoveError(null);
+    try {
+      const host = await readProfile(scope).then(
+        (profile) => profile?.display_name?.trim() || null,
+        () => null,
+      );
+      const failure = await sendPersonalLink({
+        scope,
+        plan: current.id,
+        e164: person.e164,
+        name: person.stored.name,
+        code: person.stored.code,
+        via: person.stored.sentVia ?? "whatsapp",
+        origin: process.env.EXPO_PUBLIC_INVITATION_ORIGIN || DEFAULT_ORIGIN,
+        message: {
+          host: host ?? INVITE_COPY.hostFallback,
+          title: current.title.trim(),
+          when: linkDate(current.starts_at, current.ends_at),
+        },
+      });
+      if (failure) setRemoveError(failure);
+    } catch {
+      setRemoveError(INVITE_COPY.offline);
+    } finally {
+      setInvitedBusy(null);
+    }
+  }
   // Maps opens only when tapped (benchmark row 6); a failure is said, never swallowed.
   function openMaps(target: string) {
     setMapsError(null);
@@ -307,9 +372,20 @@ export default function EventPage() {
             {allowed && <Copy style={s.muted}>Answer to see who’s coming</Copy>}
           </View>
         ) : (
-          area.kind === "list" && (
+          (area.kind === "list" ? (
             <AvatarStack names={area.names} label={area.label} onPress={() => setGuestsOpen(true)} />
-          )
+          ) : (
+            owner &&
+            !preview &&
+            invited.length > 0 && (
+              <Button
+                secondary
+                icon={false}
+                title={`${INVITE_COPY.invitedGroup} (${invited.length})`}
+                onPress={() => setGuestsOpen(true)}
+              />
+            )
+          ))
         )}
         <ErrorNote message={event.error} />
         {!!event.notice && (
@@ -421,6 +497,37 @@ export default function EventPage() {
             ))}
           </View>
         ))}
+        {editable && !preview && invited.length > 0 && (
+          <View style={{ gap: 2 }}>
+            <Copy accessibilityRole="header" style={styles.group}>
+              {INVITE_COPY.invitedGroup}
+            </Copy>
+            {invited.map((person) => (
+              <View key={person.phone} style={styles.guest}>
+                <Copy style={{ flex: 1 }}>{person.name}</Copy>
+                {person.stored && (
+                  <Button
+                    secondary
+                    icon={false}
+                    title={INVITE_COPY.resend}
+                    hint={`Opens ${person.stored.sentVia === "messages" ? "Messages" : "WhatsApp"} with ${person.name}’s link`}
+                    disabled={invitedBusy !== null || busy}
+                    loading={invitedBusy === person.phone}
+                    onPress={() => void resendInvite(person)}
+                  />
+                )}
+                <IconButton
+                  icon={UserMinus}
+                  tone="plain"
+                  label={`Remove ${person.name}`}
+                  busy={invitedBusy === person.phone}
+                  disabled={invitedBusy !== null || busy}
+                  onPress={() => confirmRemoveInvite(person)}
+                />
+              </View>
+            ))}
+          </View>
+        )}
       </InfoSheet>
       <GuestNoteSheet
         visible={noteOpen}

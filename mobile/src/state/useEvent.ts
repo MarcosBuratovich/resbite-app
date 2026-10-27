@@ -7,6 +7,17 @@ import { reconcileRsvp, type Response, type RsvpAttempt } from "../domain/rsvp";
 import { planGateway } from "../services/plans";
 import { readEvent, readGuests, readRsvp, writeRsvp, type EventSnapshot, type Guest } from "../services/rsvp";
 import { syncReminders } from "../services/deviceReminders";
+import { contactInviteGateway } from "../services/contactInvites";
+import { inviteCodeStore, type StoredInvite } from "../services/inviteCodeStore";
+import { formatPhone } from "../domain/phone";
+
+/** Someone the host invited by personal link who hasn't answered: the stored name, else the number. */
+export type InvitedPerson = {
+  phone: string;
+  e164: string;
+  name: string;
+  stored: StoredInvite | null;
+};
 
 export type EventRole = "owner" | "invitee";
 export type EventPage = {
@@ -15,6 +26,7 @@ export type EventPage = {
   attendee: EventSnapshot["attendee"];
   organizer: string | null;
   guests: Guest[];
+  invited: InvitedPerson[];
   busy: boolean;
   fresh: boolean;
   error: string | null;
@@ -45,10 +57,12 @@ export function useEvent(planId: string | undefined): EventPage {
   const [busy, setBusy] = useState(!preview),
     [fresh, setFresh] = useState(false);
   const [pending, setPending] = useState<RsvpAttempt | null>(null);
+  const [invited, setInvited] = useState<InvitedPerson[]>([]);
   // UX3: this phone's reminders follow every event load, answer and cancellation; failures wait for the next sync.
   const syncDevice = () => void syncReminders({ userId: userId ?? null, preview }).catch(() => {});
   useEffect(() => {
     setSnapshot(null);
+    setInvited([]);
     setPending(null);
     setNotice(null);
     setError(null);
@@ -64,7 +78,10 @@ export function useEvent(planId: string | undefined): EventPage {
       setError(null);
       try {
         const next = await readEvent(planId, userId);
+        // Unanswered personal links are the organizer's; this list is a convenience, so a failure leaves it empty.
+        const people = next.plan.owner_id === userId ? await readInvited(planId, userId).catch(() => []) : [];
         if (valid()) {
+          setInvited(people);
           setSnapshot(next);
           setFresh(true);
           syncDevice();
@@ -72,6 +89,7 @@ export function useEvent(planId: string | undefined): EventPage {
       } catch (e) {
         if (valid()) {
           setSnapshot(null);
+          setInvited([]);
           setError(e instanceof Error ? e.message : "Invitation unavailable.");
         }
       } finally {
@@ -196,6 +214,7 @@ export function useEvent(planId: string | undefined): EventPage {
     attendee: snapshot?.attendee ?? null,
     organizer: snapshot?.organizer ?? null,
     guests: snapshot?.guests ?? [],
+    invited,
     busy,
     fresh: preview || fresh,
     error,
@@ -206,4 +225,18 @@ export function useEvent(planId: string | undefined): EventPage {
     cancel,
     setNotice,
   };
+}
+
+async function readInvited(planId: string, userId: string): Promise<InvitedPerson[]> {
+  const [rows, stored] = await Promise.all([
+    contactInviteGateway.list(planId),
+    inviteCodeStore.get(userId, planId).catch((): Record<string, StoredInvite> => ({})),
+  ]);
+  return rows
+    .filter((r) => !r.answered)
+    .map((r) => {
+      const e164 = `+${r.phone}`;
+      const saved = stored[e164] ?? null;
+      return { phone: r.phone, e164, name: saved?.name?.trim() || formatPhone(e164), stored: saved };
+    });
 }

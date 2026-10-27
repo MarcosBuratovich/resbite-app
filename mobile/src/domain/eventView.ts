@@ -185,6 +185,19 @@ export function groupPlans<T extends { status: string; starts_at: string }>(
   };
 }
 
+/** In-app invitations (My resbites): upcoming active plans I'm invited to, not hosting, and haven't answered. */
+export function invitationCards(
+  plans: Plan[],
+  attendees: { plan_id: string; user_id: string; response: string }[],
+  uid: string,
+  now: number,
+): Plan[] {
+  const pending = new Set(attendees.filter((a) => a.user_id === uid && a.response === "pending").map((a) => a.plan_id));
+  return plans
+    .filter((p) => pending.has(p.id) && p.owner_id !== uid && p.status === "active" && Date.parse(p.starts_at) > now)
+    .sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at));
+}
+
 const TYPED_COORDINATES = /^\s*(-?\d{1,2}(?:\.\d+)?),\s*(-?\d{1,3}(?:\.\d+)?)\s*$/;
 
 /** Apple Maps link (benchmark row 6). Opens only when tapped. */
