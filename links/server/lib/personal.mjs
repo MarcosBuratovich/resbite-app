@@ -1,7 +1,8 @@
 // Renders the personal invitation page /i/<code> (contact invitations, Task 10; mockup invitee-web-journey screen 1).
 // Pure: data in, HTML out. It uses only the keys personal_invitation_page returns, which never include the place
 // or the full number. The steps after the first (confirm, code, answer, get the app) are filled by /personal.js.
-import { PAGE_CSP, formatWhen, pageHeaders, previewDescription } from "./render.mjs";
+// An open link /r/<code> whose event is open renders the same steps in open mode (open-link approval, plan 3).
+import { PAGE_CSP, formatWhen, pageHeaders, previewDescription, smartBanner } from "./render.mjs";
 
 /** The /r/ CSP with the one Supabase host the page may call. Without a usable URL the page cannot connect at all. */
 export function personalCsp(supabaseUrl) {
@@ -14,6 +15,12 @@ export function personalCsp(supabaseUrl) {
   }
   return host ? PAGE_CSP.replace("connect-src 'none'", `connect-src https://${host}`) : PAGE_CSP;
 }
+
+/**
+ * The calling code an open link's page puts before a number typed without +. The beta is in the UK and a plan
+ * stores no country; the number step says how to answer from elsewhere.
+ */
+export const OPEN_LINK_COUNTRY = "44";
 
 /** The /r/ headers with the /i/ CSP. */
 export function personalHeaders(supabaseUrl) {
@@ -50,8 +57,30 @@ export function renderPersonalPage(data, options) {
   const image = open ? `${origin}/i/${code}/image` : `${origin}/resbite-mark.png`;
   const title = open ? data.title : PERSONAL_WORDS.genericTitle;
   const description = open ? previewDescription(data) : PERSONAL_WORDS.genericPreview;
-  const csp = personalCsp(supabaseUrl);
-  const body = open ? openBody(data, image, options) : closedBody(state, data, options.appStoreUrl);
+  const body = open ? stepsBody(data, image, options, "personal") : closedBody(state, data, options.appStoreUrl);
+  return documentHtml({ title, description, image, csp: personalCsp(supabaseUrl), banner: "", body, script: open });
+}
+
+/**
+ * The open link /r/<code> while its event is open: the personal page's steps in open mode, where any number can
+ * answer and the answer waits for the host. `options` are renderPersonalPage's plus appStoreId (the smart app banner).
+ * A closed link's page is render.mjs's renderClosedPage, with the strict CSP.
+ */
+export function renderOpenLinkPage(data, options) {
+  const image = `${options.origin}/r/${options.code}/image`;
+  const body = stepsBody(data, image, options, "open");
+  return documentHtml({
+    title: data.title,
+    description: previewDescription(data),
+    image,
+    csp: personalCsp(options.supabaseUrl),
+    banner: smartBanner(options),
+    body,
+    script: true,
+  });
+}
+
+function documentHtml({ title, description, image, csp, banner, body, script }) {
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -68,27 +97,31 @@ export function renderPersonalPage(data, options) {
     <meta property="og:image" content="${escape(image)}" />
     <meta property="og:image:alt" content="${escape(title)}" />
     <meta name="twitter:card" content="summary" />
-    <link rel="icon" href="/resbite-mark.png" />
+${banner ? `    ${banner}\n` : ""}    <link rel="icon" href="/resbite-mark.png" />
     <link rel="stylesheet" href="/page.css" />
     <link rel="stylesheet" href="/personal.css" />
   </head>
   <body>
 ${body}
-${open ? '    <script type="module" src="/personal.js"></script>\n' : ""}  </body>
+${script ? '    <script type="module" src="/personal.js"></script>\n' : ""}  </body>
 </html>
 `;
 }
 
-function openBody(data, image, options) {
+/**
+ * Screen 1 and the empty steps /personal.js fills. In open mode there is no number to match: no ending, no "for the
+ * number ending" note and no "Not your number?", and numbers typed without + take OPEN_LINK_COUNTRY.
+ */
+function stepsBody(data, image, options, mode) {
   const w = PERSONAL_WORDS;
+  const open = mode === "open";
   const when = formatWhen(data.starts_at, data.ends_at, data.time_zone);
   const area = data.area ? `\n        <p class="detail">${escape(data.area)}</p>` : "";
   const attrs = {
     "supabase-url": options.supabaseUrl,
     "publishable-key": options.publishableKey,
     code: options.code,
-    country: data.country,
-    ending: data.ending,
+    ...(open ? { mode: "open", country: OPEN_LINK_COUNTRY } : { country: data.country, ending: data.ending }),
     host: data.host,
     "terms-version": options.termsVersion,
     "terms-url": options.termsUrl,
@@ -100,16 +133,16 @@ function openBody(data, image, options) {
   const dataAttrs = Object.entries(attrs)
     .map(([name, value]) => `data-${name}="${escape(value)}"`)
     .join(" ");
+  const note = open ? "" : `\n        <p class="note">${escape(w.forNumber(data.ending))}</p>`;
+  const notYours = open ? "" : `\n        <p class="muted">${escape(w.notYours(data.host))}</p>`;
   return `    <main id="main" ${dataAttrs}>
       <section id="step-invitation">
         <p class="invited"><span class="dot" aria-hidden="true"></span>${escape(w.invited(data.host))}</p>
         <img class="hero" src="${escape(image)}" alt="" />
         <h1>${escape(data.title)}</h1>
         <p class="detail">${escape(when)}</p>${area}
-        <p class="detail">${escape(w.going(data.going))}</p>
-        <p class="note">${escape(w.forNumber(data.ending))}</p>
-        <p><button type="button" class="button" id="answer">${w.answer}</button></p>
-        <p class="muted">${escape(w.notYours(data.host))}</p>
+        <p class="detail">${escape(w.going(data.going))}</p>${note}
+        <p><button type="button" class="button" id="answer">${w.answer}</button></p>${notYours}
       </section>
       <section id="step-confirm" aria-live="polite" hidden></section>
       <section id="step-code" aria-live="polite" hidden></section>

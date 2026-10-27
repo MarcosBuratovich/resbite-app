@@ -1,5 +1,7 @@
 // Renders the event page for one link (GI1, spec section 2). Pure: data in, HTML out. It uses only the keys
-// invitation_page returns, so nothing else about an event can reach the page or its preview.
+// invitation_page returns, so nothing else about an event can reach the page or its preview. Since open-link approval
+// (plan 3) an open link's page is the personal page's steps in open mode (personal.mjs renderOpenLinkPage); this file
+// draws the closed links' pages, which keep GI1's words and the strict CSP.
 export const PAGE_CSP =
   "default-src 'none'; img-src 'self'; script-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; connect-src 'none'; frame-ancestors 'none'";
 
@@ -54,8 +56,6 @@ export function previewDescription(data) {
   return `${formatWhen(data.starts_at, null, data.time_zone)} · Invited by ${data.host}`;
 }
 
-const goingLine = (going) => (going > 0 ? `${going} going` : "Be one of the first");
-
 const preview = (title, description, image) =>
   `<meta property="og:title" content="${escape(title)}" />
     <meta property="og:description" content="${escape(description)}" />
@@ -66,20 +66,24 @@ const preview = (title, description, image) =>
     <meta name="twitter:card" content="summary" />`;
 
 /**
- * The whole document. `options`: origin (https://link.resbite.com), code, appStoreUrl, appStoreId (for the smart
- * app banner; empty while the app is only on TestFlight).
+ * Safari's smart app banner, which opens the app on this link. None without a code: the inactive page for a malformed
+ * link has none to hand the app, and none without an App Store id (while the app is only on TestFlight).
  */
-export function renderPage(data, options) {
-  const { origin, code, appStoreUrl, appStoreId } = options;
-  const self = `${origin}/r/${code}`;
-  const state = data?.state;
-  const open = state === "open";
-  const title = open ? data.title : "You’re invited to a resbite";
-  const image = open ? `${self}/image` : `${origin}/resbite-mark.png`;
-  const description = open ? previewDescription(data) : "Open the link on your phone to see the resbite.";
-  // No banner without a code: the inactive page for a malformed link has none to hand the app.
-  const banner = appStoreId && code ? `<meta name="apple-itunes-app" content="app-id=${escape(appStoreId)}, app-argument=${escape(self)}" />` : "";
-  const body = open ? openBody(data, { image, code, appStoreUrl }) : closedBody(state, data, appStoreUrl);
+export function smartBanner({ origin, code, appStoreId }) {
+  return appStoreId && code ? `<meta name="apple-itunes-app" content="app-id=${escape(appStoreId)}, app-argument=${escape(`${origin}/r/${code}`)}" />` : "";
+}
+
+/**
+ * A closed link's whole document: cancelled, happened, or inactive (unknown, turned off, malformed; any other state
+ * reads as inactive). `options`: origin (https://link.resbite.com), code, appStoreUrl, appStoreId.
+ */
+export function renderClosedPage(data, options) {
+  const { origin, appStoreUrl } = options;
+  const title = "You’re invited to a resbite";
+  const image = `${origin}/resbite-mark.png`;
+  const description = "Open the link on your phone to see the resbite.";
+  const banner = smartBanner(options);
+  const body = closedBody(data?.state, data, appStoreUrl);
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -102,40 +106,6 @@ ${body}
   </body>
 </html>
 `;
-}
-
-function openBody(data, { image, code, appStoreUrl }) {
-  const when = formatWhen(data.starts_at, data.ends_at, data.time_zone);
-  const area = data.area ? `<p class="detail">${escape(data.area)}</p>` : "";
-  return `      <p class="invited"><span class="dot" aria-hidden="true"></span>${escape(data.host)} invited you</p>
-      <img class="hero" src="${escape(image)}" alt="" />
-      <h1>${escape(data.title)}</h1>
-      <p class="detail">${escape(when)}</p>
-      ${area}
-      <p class="muted">Exact address after you reply</p>
-      <p class="detail">${escape(goingLine(data.going))}</p>
-      <section class="why" aria-labelledby="why">
-        <h2 id="why">With a free Resbite account you can</h2>
-        <ul>
-          <li>See who’s going</li>
-          <li>Add it to your calendar</li>
-          <li>Reminders before it starts</li>
-        </ul>
-        <p class="muted">Free. No ads. No public profile.</p>
-      </section>
-      <p class="footer"><a class="button" href="#join">RSVP</a></p>
-      <div id="join" class="sheet" role="dialog" aria-labelledby="join-title">
-        <a class="scrim" href="#main" aria-label="Close"></a>
-        <div class="panel">
-          <h2 id="join-title">Join Resbite to reply</h2>
-          <p>${escape(data.host)} will see your answer.</p>
-          <p class="summary"><img src="${escape(image)}" alt="" /><span><strong>${escape(data.title)}</strong><br />${escape(when)}</span></p>
-          <p class="muted">Free. No ads. No public profile.</p>
-          <a class="button" href="${escape(appStoreUrl)}">Get the app</a>
-          <a class="button secondary" id="open-app" href="resbite://r/${escape(code)}">I have Resbite: open the app</a>
-          <p class="muted hint" id="open-hint" hidden>If Resbite doesn’t open, install it first.</p>
-        </div>
-      </div>`;
 }
 
 function closedBody(state, data, appStoreUrl) {

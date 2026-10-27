@@ -1,6 +1,8 @@
 // The personal invitation page's pure step logic (contact invitations, Task 11): the page's words, matching a typed
 // number to the invitation's country, the step reducer and the mapping of server replies to words. No DOM, storage
 // or network here; /personal.js does those. Tested under node by links/personal-flow.test.mjs.
+// The open link /r/<code> runs the same steps in open mode (open-link approval, plan 3): any number can answer, and
+// the answer becomes a request that waits for the host, so the last step is one of three screens (`join`).
 
 /** "1:00", "0:59", "0:05"; never negative. The app's formatCountdown. */
 export function formatCountdown(seconds) {
@@ -65,6 +67,14 @@ export const PAGE_COPY = {
   tooMany: "Too many tries. Try again later.",
   unavailable: "This invitation is no longer active.",
   signOut: "Not you? Sign out",
+  // The open link (plan 3). Its number step names no invited number: it says what the app's number step says.
+  numberHint: "We’ll text you a 6-digit code.",
+  outsideUk: "Outside the UK? Start with + and your country code.",
+  waitingHeading: (host) => `Waiting for ${host}`,
+  waitingBody: (host) => `${host} will confirm your spot.`,
+  notAdded: "You weren’t added to this resbite.",
+  alreadyIn: "You’re on this resbite.",
+  openApp: "Open Resbite",
 };
 
 /** The error keys the reducer holds; anything else in `error` is a server message shown as it came. */
@@ -82,6 +92,8 @@ export function errorText(error, host) {
 }
 
 export const RESPONSES = ["accepted", "maybe", "declined"];
+/** The open link's last screens: waiting for the host, declined on this link, or already on the resbite. */
+const JOINS = ["waiting", "notAdded", "alreadyIn"];
 export const RESEND_DELAY_MS = 60_000;
 const CODE_LIFETIME_MS = 600_000;
 const MAX_NAME = 80;
@@ -130,17 +142,58 @@ export function initialState() {
     choice: null,
     name: "",
     response: null,
+    join: null,
     pitch: true,
     busy: false,
     error: null,
   };
 }
 
+/** A first answer needs a name; a changed answer, or a request already waiting (made in the app, say), has one. */
+export const needsName = (state) => !state.response && !state.join;
+
+/** The last two digits of a number, for "✓ Verified · ••34" on the open link, which names no number; "" without. */
+export function endingOf(phone) {
+  const digits = typeof phone === "string" ? phone.replace(/\D/g, "") : "";
+  return digits.length >= 2 ? digits.slice(-2) : "";
+}
+
+const answerOf = (response) => (RESPONSES.includes(response) ? response : null);
+
+/**
+ * The open link's screen for my_join_request's reply when the page comes back, by the first rule that applies: the
+ * owner or a guest is on the resbite; a waiting request brings its answer back to change ("pending", from the app,
+ * is none yet); a declined one says so; anything else (no request, or an approval whose guest has since been
+ * removed) is the answer step (`join` null).
+ */
+export function screenForReturn(page) {
+  if (page?.member === "owner" || page?.member === "attendee") return { join: "alreadyIn", response: null };
+  if (page?.request?.status === "waiting") return { join: "waiting", response: answerOf(page.request.response) };
+  if (page?.request?.status === "declined") return { join: "notAdded", response: null };
+  return { join: null, response: null };
+}
+
+/** The open link's screen for request_to_join's reply, as screenForReturn's; null for a reply it doesn't know. */
+export function screenForRequest(result) {
+  switch (result?.state) {
+    case "owner":
+    case "already":
+      return { join: "alreadyIn", response: null };
+    case "waiting":
+      return { join: "waiting", response: answerOf(result.response) };
+    case "declined":
+      return { join: "notAdded", response: null };
+    default:
+      return null;
+  }
+}
+
 /**
  * The page's steps: "invite" → "confirm" → "code" → "answer" → "done". Events that start a request ("send",
  * "resend", "verify", "submit") set `busy`; personal.js then makes the request and reports back with "checked",
  * "sent", "verified", "answered", "refused" or "fail". An event out of step, or one that would start a second
- * request while one runs, returns the same state.
+ * request while one runs, returns the same state. On the open link nothing is "checked" (any number can answer), and
+ * "answered" and "restore" carry the screen (`join`); only a waiting answer can change.
  */
 export function next(state, event) {
   const s = state;
@@ -184,18 +237,22 @@ export function next(state, event) {
       if (!s.choice) return { ...s, error: "chooseAnswer" };
       // A changed answer keeps the name the first answer saved.
       const name = String(event.name ?? "").trim();
-      if (!s.response && (name.length < 1 || name.length > MAX_NAME)) return { ...s, error: "nameRule" };
-      return { ...s, busy: true, error: null, name: s.response ? "" : name };
+      const named = needsName(s);
+      if (named && (name.length < 1 || name.length > MAX_NAME)) return { ...s, error: "nameRule" };
+      return { ...s, busy: true, error: null, name: named ? name : "" };
     }
-    case "answered":
+    case "answered": {
       if (!at("answer") || !s.busy) return s;
-      return { ...s, step: "done", busy: false, error: null, response: event.response, choice: event.response, pitch: true };
+      const join = JOINS.includes(event.join) ? event.join : null;
+      return { ...s, step: "done", busy: false, error: null, response: event.response, choice: event.response, join, pitch: true };
+    }
     case "refused":
       // Signed in with a number that isn't this invitation's: sign in again from the number.
       if (!at("answer")) return s;
-      return { ...s, step: "confirm", busy: false, error: event.error ?? null, phone: null, response: null, choice: null, sentAt: null };
+      return { ...s, step: "confirm", busy: false, error: event.error ?? null, phone: null, response: null, choice: null, join: null, sentAt: null };
     case "change":
-      return at("done") ? { ...s, step: "answer", error: null, choice: s.response } : s;
+      // The open link's answer changes only while it waits: declined or let in, the host has decided.
+      return at("done") && (!s.join || s.join === "waiting") ? { ...s, step: "answer", error: null, choice: s.response } : s;
     case "notNow":
       return at("done") ? { ...s, pitch: false } : s;
     case "signOut":
@@ -204,7 +261,8 @@ export function next(state, event) {
     case "restore": {
       if (!at("invite")) return s;
       const response = RESPONSES.includes(event.response) ? event.response : null;
-      return { ...s, step: response ? "done" : "answer", phone: event.phone ?? null, response, choice: response, pitch: true, error: null };
+      const join = JOINS.includes(event.join) ? event.join : null;
+      return { ...s, step: response || join ? "done" : "answer", phone: event.phone ?? null, response, choice: response, join, pitch: true, error: null };
     }
     case "fail":
       return s.busy ? { ...s, busy: false, error: event.error || "connection" } : s;

@@ -1,7 +1,8 @@
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { formatWhen, previewDescription, renderPage, pageHeaders, isLinkCode, PAGE_CSP } from "./server/lib/render.mjs";
+import { formatWhen, previewDescription, renderClosedPage, pageHeaders, isLinkCode, PAGE_CSP } from "./server/lib/render.mjs";
 import { readInvitationPage, signCoverUrl } from "./server/lib/supabase.mjs";
+import { renderOpenLinkPage, personalCsp } from "./server/lib/personal.mjs";
 import page from "./server/api/page.mjs";
 import image from "./server/api/image.mjs";
 import { mkdtemp, mkdir, copyFile, readFile, rm } from "node:fs/promises";
@@ -29,55 +30,89 @@ test("an end on another local day names its day", () => {
   assert.equal(formatWhen("2099-10-23T21:00:00+00:00", "2099-10-24T01:00:00+00:00", "Europe/London"), "Fri 23 Oct, 22:00 – Sat 24 02:00");
 });
 
-test("the open page shows the basics, the why-join box, RSVP and the join sheet", () => {
-  const html = renderPage(open, options);
-  for (const text of ["Stephen invited you", "Film night: Paddington 2", "Fri 23 Oct, 19:30 – 22:00", "Near Old Street, London",
-    "Exact address after you reply", "6 going", "See who’s going", "Add it to your calendar", "Reminders before it starts",
-    "Free. No ads. No public profile.", "Join Resbite to reply", "Stephen will see your answer.", "Get the app", "I have Resbite: open the app"])
+// The open link's page (plan 3): the personal page's steps in open mode, so anyone can answer and wait for the host.
+const linkOptions = {
+  ...options,
+  supabaseUrl: "https://ewcsgvhuojxdpaspwsrx.supabase.co",
+  publishableKey: "sb_publishable_KEY123",
+  termsVersion: "2026-10",
+  termsUrl: "https://www.resbite.com/terms",
+  privacyUrl: "https://www.resbite.com/privacy",
+};
+
+test("the open page is the personal page's first step in open mode: the basics and Answer, no number note", () => {
+  const html = renderOpenLinkPage(open, linkOptions);
+  for (const text of ["Stephen invited you", "Film night: Paddington 2", "Fri 23 Oct, 19:30 – 22:00", "Near Old Street, London", "6 going", ">Answer</button>"])
     assert.ok(html.includes(text), text);
-  assert.ok(html.includes('href="#join"') && html.includes('href="https://testflight.apple.com/join/abc"') && html.includes(`href="resbite://r/${code}"`));
-  assert.ok(html.includes(`<meta name="apple-itunes-app" content="app-id=6823164725, app-argument=https://link.resbite.com/r/${code}" />`));
+  for (const gone of ["number ending", "Not your number", "RSVP", "Join Resbite to reply", "I have Resbite", 'href="#join"', "/page.js", "Exact address after you reply"])
+    assert.ok(!html.includes(gone), gone);
+  assert.ok(html.includes(`<img class="hero" src="https://link.resbite.com/r/${code}/image" alt="" />`));
+  for (const step of ["confirm", "code", "answer", "app"]) assert.ok(html.includes(`<section id="step-${step}" aria-live="polite" hidden></section>`), step);
+  assert.match(html, /<script type="module" src="\/personal\.js"><\/script>/);
+  assert.match(html, /<link rel="stylesheet" href="\/page\.css" \/>\s*<link rel="stylesheet" href="\/personal\.css" \/>/);
   assert.equal((html.match(/<h1/g) || []).length, 1);
-  assert.ok(html.includes('<html lang="en">') && html.includes('<main id="main">') && !html.includes("user-scalable=no"));
-  assert.ok(!/https?:\/\/(?!link\.resbite\.com|testflight\.apple\.com)/.test(html), "no third-party resources");
+  assert.ok(html.includes('<html lang="en">') && html.includes('<main id="main" ') && !html.includes("user-scalable=no"));
+  assert.ok(html.includes(`<meta name="apple-itunes-app" content="app-id=6823164725, app-argument=https://link.resbite.com/r/${code}" />`));
+  assert.ok(!renderOpenLinkPage(open, { ...linkOptions, appStoreId: "" }).includes("apple-itunes-app"));
+  assert.ok(!/https?:\/\/(?!link\.resbite\.com|testflight\.apple\.com|ewcsgvhuojxdpaspwsrx\.supabase\.co|www\.resbite\.com)/.test(html), "no third-party resources");
+  assert.ok(!html.includes("000000"));
 });
 
-test("the preview carries the title, date, host and the stable image; never the area or the place", () => {
-  const html = renderPage(open, options);
+test("the open page carries the personal page's data attributes, with mode open, country 44 and no ending", () => {
+  // invitation_page has no ending or country; were they there, the open page would still not match a number.
+  const html = renderOpenLinkPage({ ...open, ending: "34", country: "1" }, linkOptions);
+  const main = html.match(/<main [^>]*>/)[0];
+  for (const [name, value] of [["supabase-url", linkOptions.supabaseUrl], ["publishable-key", linkOptions.publishableKey], ["code", code],
+    ["mode", "open"], ["country", "44"], ["host", "Stephen"], ["terms-version", "2026-10"], ["terms-url", linkOptions.termsUrl],
+    ["privacy-url", linkOptions.privacyUrl], ["app-store-url", linkOptions.appStoreUrl], ["starts-at", open.starts_at]])
+    assert.ok(main.includes(`data-${name}="${value}"`), name);
+  assert.ok(!html.includes("data-ending") && !html.includes("••34"), "no number to match");
+  assert.equal(html.split(linkOptions.publishableKey).length, 2, "the key appears once");
+  assert.ok(html.indexOf(linkOptions.publishableKey) > html.indexOf("<main"));
+  assert.ok(html.includes(`<meta http-equiv="Content-Security-Policy" content="${personalCsp(linkOptions.supabaseUrl)}" />`));
+});
+
+test("the preview carries the title, date, host and the stable image; never the area, the place or the key", () => {
+  const html = renderOpenLinkPage(open, linkOptions);
   assert.ok(html.includes('<meta property="og:title" content="Film night: Paddington 2" />'));
   assert.ok(html.includes('<meta property="og:description" content="Fri 23 Oct, 19:30 · Invited by Stephen" />'));
   assert.ok(html.includes(`<meta property="og:image" content="https://link.resbite.com/r/${code}/image" />`));
   const head = html.slice(0, html.indexOf("<body>"));
-  assert.ok(!head.includes("Old Street") && !head.includes("covers/x"));
+  for (const secret of ["Old Street", "covers/x", linkOptions.publishableKey]) assert.ok(!head.includes(secret), secret);
 });
 
 test("extra keys never reach the page, and text is escaped", () => {
-  const leaky = { ...open, title: "<b>Film</b> & \"night\"", place_label: "Cinema room, 12 Secret Street", note: "Gate 4512", guests: ["Ana"], description: "Secret description" };
-  const html = renderPage(leaky, options);
+  const leaky = { ...open, title: "<b>Film</b> & \"night\"", host: "<i>Mo</i>", place_label: "Cinema room, 12 Secret Street", note: "Gate 4512", guests: ["Ana"], description: "Secret description" };
+  const html = renderOpenLinkPage(leaky, linkOptions);
   assert.ok(!html.includes("Secret") && !html.includes("4512") && !html.includes("Ana"));
   assert.ok(html.includes("&lt;b&gt;Film&lt;/b&gt; &amp; &quot;night&quot;") && !html.includes("<b>Film"));
+  assert.ok(html.includes('data-host="&lt;i&gt;Mo&lt;/i&gt;"') && !html.includes("<i>Mo"));
 });
 
-test("zero going reads as an invitation, and no area shows only the address line", () => {
-  const html = renderPage({ ...open, going: 0, area: "" }, options);
+test("zero going reads as an invitation, and no area shows no area line", () => {
+  const html = renderOpenLinkPage({ ...open, going: 0, area: "" }, linkOptions);
   assert.ok(html.includes("Be one of the first") && !html.includes("0 going"));
-  assert.ok(html.includes("Exact address after you reply"));
+  assert.ok(!html.includes("Old Street"));
 });
 
 test("cancelled, happened and inactive pages say so, with no RSVP and the generic preview", () => {
-  const cancelled = renderPage({ state: "cancelled", host: "Stephen", title: "Film night" }, options);
+  const cancelled = renderClosedPage({ state: "cancelled", host: "Stephen", title: "Film night" }, options);
   assert.ok(cancelled.includes("Stephen cancelled this resbite.") && !cancelled.includes("RSVP") && !cancelled.includes("Film night"));
-  const happened = renderPage({ state: "happened", host: "Stephen", title: "Film night" }, options);
+  const happened = renderClosedPage({ state: "happened", host: "Stephen", title: "Film night" }, options);
   assert.ok(happened.includes("This resbite has already happened.") && happened.includes("Plan your own with Resbite."));
   assert.ok(happened.includes('<a href="https://testflight.apple.com/join/abc">Plan your own with Resbite.</a>'));
-  const inactive = renderPage({ state: "inactive" }, { ...options, code: "" });
+  const inactive = renderClosedPage({ state: "inactive" }, { ...options, code: "" });
   assert.ok(inactive.includes("This invitation is no longer active.") && !inactive.includes("#join"));
   assert.ok(!inactive.includes("apple-itunes-app"), "no banner without a code");
   for (const html of [cancelled, happened, inactive]) {
     assert.ok(html.includes('<meta property="og:title" content="You’re invited to a resbite" />'));
     assert.ok(html.includes('<meta property="og:image" content="https://link.resbite.com/resbite-mark.png" />'));
   }
-  assert.ok(!renderPage(open, { ...options, appStoreId: "" }).includes("apple-itunes-app"));
+  // As GI1 drew them: the strict CSP, the page's own script, no step and no key.
+  for (const html of [cancelled, happened, inactive]) {
+    assert.ok(html.includes(`<meta http-equiv="Content-Security-Policy" content="${PAGE_CSP}" />`));
+    assert.ok(html.includes('<script src="/page.js"></script>') && !html.includes("personal.js") && !html.includes("data-"));
+  }
 });
 
 test("headers and the code shape", () => {
@@ -122,6 +157,42 @@ test("the page function answers an unknown or malformed code with the inactive p
   assert.ok(body.includes("This invitation is no longer active."));
   assert.equal(headers["Cache-Control"], "no-store");
   assert.equal(headers["X-Robots-Tag"], "noindex, nofollow");
+  assert.equal(headers["Content-Security-Policy"], PAGE_CSP);
+});
+
+test("the page function renders an open link in open mode with the /i/ CSP; closed states keep the strict CSP", async () => {
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_PUBLISHABLE_KEY = "sb_publishable_test";
+  const run = async (read, query = { code }) => {
+    const res = { headers: {}, statusCode: 0, body: "" };
+    res.setHeader = (k, v) => (res.headers[k] = v);
+    res.status = (s) => ({ send: (b) => ((res.statusCode = s), (res.body = b)) });
+    await page({ query }, res, { readInvitationPage: read });
+    return res;
+  };
+  const opened = await run(async (c) => (assert.equal(c, code), open));
+  assert.equal(opened.statusCode, 200);
+  assert.equal(opened.headers["Content-Security-Policy"], personalCsp("https://example.supabase.co"));
+  assert.equal(opened.headers["Cache-Control"], "no-store");
+  assert.equal(opened.headers["Referrer-Policy"], "no-referrer");
+  assert.equal(opened.headers["X-Robots-Tag"], "noindex, nofollow");
+  for (const attr of ['data-mode="open"', 'data-country="44"', 'data-publishable-key="sb_publishable_test"', 'data-supabase-url="https://example.supabase.co"', 'data-terms-version="2026-10"'])
+    assert.ok(opened.body.includes(attr), attr);
+  const closed = [
+    [async () => ({ state: "cancelled", host: "Stephen" }), "Stephen cancelled this resbite."],
+    [async () => ({ state: "happened", host: "Stephen" }), "This resbite has already happened."],
+    [async () => ({ state: "inactive" }), "This invitation is no longer active."],
+    [async () => { throw Error("boom"); }, "This invitation is no longer active."],
+  ];
+  for (const [read, sentence] of closed) {
+    const res = await run(read);
+    assert.equal(res.statusCode, 200);
+    assert.ok(res.body.includes(sentence), sentence);
+    assert.equal(res.headers["Content-Security-Policy"], PAGE_CSP, sentence);
+    assert.ok(!res.body.includes("sb_publishable_test") && !res.body.includes("personal.js"), sentence);
+  }
+  const malformed = await run(async () => { throw Error("must not be called"); }, { code: "nope" });
+  assert.equal(malformed.headers["Content-Security-Policy"], PAGE_CSP);
 });
 
 // ---- The image route (api/image.mjs), driven by injected fakes and a fixture folder of bundled files.

@@ -26,6 +26,10 @@ import {
   sweepKept,
   sameNumber,
   signOutKept,
+  needsName,
+  endingOf,
+  screenForRequest,
+  screenForReturn,
 } from "./assets/personal-flow.mjs";
 import { GUEST_COPY } from "../mobile/src/domain/guestAccount.ts";
 import { PHONE_CODE_COPY } from "../mobile/src/services/phoneCode.ts";
@@ -120,6 +124,19 @@ test("the copy is the mockup's and the app's words", () => {
   assert.equal(c.invalidNumber, INVALID_PHONE);
   // Headings are at most three words, except the protected done heading.
   for (const h of [c.confirmHeading, c.codeHeading, c.goingHeading, c.maybeHeading]) assert.ok(h.split(" ").length <= 3, h);
+});
+
+test("the open link's words (plan 3): the number hint, waiting, not added and already in", () => {
+  const c = PAGE_COPY;
+  assert.equal(c.outsideUk, "Outside the UK? Start with + and your country code.");
+  // Anyone can answer an open link, so the number step says what the app's number step says.
+  assert.equal(c.numberHint, PHONE_COPY.numberHint);
+  assert.equal(c.waitingHeading("Marcos"), "Waiting for Marcos");
+  assert.equal(c.waitingBody("Marcos"), "Marcos will confirm your spot.");
+  assert.equal(c.notAdded, "You weren’t added to this resbite.");
+  assert.equal(c.alreadyIn, "You’re on this resbite.");
+  assert.equal(c.openApp, "Open Resbite");
+  assert.ok(c.waitingHeading("Marcos").split(" ").length <= 3);
 });
 
 test("the copy never holds the test code", () => {
@@ -299,6 +316,111 @@ test("Not you? Sign out goes back to the invitation from the answer and done ste
   assert.equal(next(busy, { type: "signOut" }), busy, "not while the answer is on its way");
   const confirming = next(initialState(), { type: "open" });
   assert.equal(next(confirming, { type: "signOut" }), confirming);
+});
+
+// ---- The open link /r/<code> (plan 3): any number can answer, and the answer waits for the host. ----
+
+test("open link: coming back picks the screen from my_join_request, the first rule that applies", () => {
+  const page = { state: "open", host: "Marcos", title: "Picnic in the park" };
+  const waiting = (response) => ({ status: "waiting", response });
+  // 1. The owner or a guest is on the resbite, whatever a request says.
+  assert.deepEqual(screenForReturn({ ...page, member: "owner", request: null }), { join: "alreadyIn", response: null });
+  assert.deepEqual(screenForReturn({ ...page, member: "attendee", request: waiting("maybe") }), { join: "alreadyIn", response: null });
+  assert.deepEqual(screenForReturn({ ...page, member: "attendee", request: { status: "declined", response: "accepted" } }), { join: "alreadyIn", response: null });
+  // 2. Waiting: the answer comes back to be changed. One asked from the app ("pending") has no answer yet.
+  assert.deepEqual(screenForReturn({ ...page, member: null, request: waiting("accepted") }), { join: "waiting", response: "accepted" });
+  assert.deepEqual(screenForReturn({ ...page, member: null, request: waiting("declined") }), { join: "waiting", response: "declined" });
+  assert.deepEqual(screenForReturn({ ...page, member: null, request: waiting("pending") }), { join: "waiting", response: null });
+  // 3. Declined on this link.
+  assert.deepEqual(screenForReturn({ ...page, member: null, request: { status: "declined", response: "accepted" } }), { join: "notAdded", response: null });
+  // 4. No request (or an approval whose guest was removed since): the answer step.
+  assert.deepEqual(screenForReturn({ ...page, member: null, request: null }), { join: null, response: null });
+  assert.deepEqual(screenForReturn({ ...page, member: null, request: { status: "approved", response: "accepted" } }), { join: null, response: null });
+  assert.deepEqual(screenForReturn({ ...page }), { join: null, response: null });
+  assert.deepEqual(screenForReturn(null), { join: null, response: null });
+});
+
+test("open link: request_to_join's reply maps to the same screens; anything else is no screen", () => {
+  const plan_id = "55555555-5555-4555-8555-555555555555";
+  assert.deepEqual(screenForRequest({ state: "owner", plan_id, response: null }), { join: "alreadyIn", response: null });
+  assert.deepEqual(screenForRequest({ state: "already", plan_id, response: "accepted" }), { join: "alreadyIn", response: null });
+  assert.deepEqual(screenForRequest({ state: "waiting", plan_id, response: "maybe" }), { join: "waiting", response: "maybe" });
+  assert.deepEqual(screenForRequest({ state: "waiting", plan_id, response: "pending" }), { join: "waiting", response: null });
+  assert.deepEqual(screenForRequest({ state: "declined", plan_id, response: "accepted" }), { join: "notAdded", response: null });
+  for (const junk of [null, "waiting", {}, { state: "open" }, { state: "approved" }]) assert.equal(screenForRequest(junk), null, JSON.stringify(junk));
+});
+
+test("open link: the path has no number check and ends waiting", () => {
+  let s = run([{ type: "open" }, { type: "tick", ticked: true }, { type: "send", input: "+1 (415) 555-0100", country: "44" }]);
+  assert.deepEqual([s.step, s.busy, s.phone], ["confirm", true, "+14155550100"], "+ is used as typed, outside the UK");
+  // The code goes straight away: nothing is checked against an invited number.
+  s = next(s, { type: "sent", at: 1000 });
+  assert.deepEqual([s.step, s.busy], ["code", false]);
+  s = next(s, { type: "back" });
+  s = run([{ type: "send", input: "07700 900834", country: "44" }, { type: "sent", at: 2000 }], s);
+  assert.deepEqual([s.step, s.phone], ["code", "+447700900834"], "a number without + takes the page's 44");
+  s = run([{ type: "verify", code: "123456" }, { type: "verified" }], s);
+  assert.deepEqual([s.step, s.join, s.response, needsName(s)], ["answer", null, null, true]);
+  assert.equal(endingOf(s.phone), "34");
+  s = run([{ type: "choose", response: "accepted" }, { type: "submit", name: " Sam " }], s);
+  assert.deepEqual([s.busy, s.name], [true, "Sam"]);
+  s = next(s, { type: "answered", response: "accepted", join: "waiting" });
+  assert.deepEqual([s.step, s.busy, s.join, s.response, s.pitch], ["done", false, "waiting", "accepted", true]);
+  s = next(s, { type: "notNow" });
+  assert.equal(s.pitch, false);
+});
+
+test("open link: while waiting the answer can change with no name, until the host decides", () => {
+  let s = next(initialState(), { type: "restore", join: "waiting", response: "accepted", phone: "+447700900834" });
+  assert.deepEqual([s.step, s.join, s.response, s.phone], ["done", "waiting", "accepted", "+447700900834"]);
+  s = next(s, { type: "change" });
+  assert.deepEqual([s.step, s.choice, needsName(s)], ["answer", "accepted", false]);
+  s = run([{ type: "choose", response: "maybe" }, { type: "submit", name: "" }], s);
+  assert.deepEqual([s.busy, s.error, s.name], [true, null, ""], "a changed answer needs no name");
+  s = next(s, { type: "answered", response: "maybe", join: "waiting" });
+  assert.deepEqual([s.step, s.join, s.response, s.choice], ["done", "waiting", "maybe", "maybe"]);
+  // Asked from the app ("pending"): waiting with no answer yet, and still no name to give.
+  let pending = next(initialState(), { type: "restore", join: "waiting", response: null, phone: "+447700900834" });
+  assert.deepEqual([pending.step, pending.join], ["done", "waiting"]);
+  pending = next(pending, { type: "change" });
+  assert.deepEqual([pending.step, pending.choice, needsName(pending)], ["answer", null, false]);
+  pending = run([{ type: "choose", response: "accepted" }, { type: "submit", name: "" }], pending);
+  assert.deepEqual([pending.busy, pending.error], [true, null]);
+  // The host decided meanwhile: the reply's screen wins, and the answer can no longer change.
+  const changing = run([{ type: "change" }, { type: "choose", response: "accepted" }, { type: "submit", name: "" }], s);
+  const notAdded = next(changing, { type: "answered", response: null, join: "notAdded" });
+  assert.deepEqual([notAdded.step, notAdded.join], ["done", "notAdded"]);
+  assert.equal(next(notAdded, { type: "change" }), notAdded);
+  const alreadyIn = next(changing, { type: "answered", response: null, join: "alreadyIn" });
+  assert.deepEqual([alreadyIn.step, alreadyIn.join], ["done", "alreadyIn"]);
+  assert.equal(next(alreadyIn, { type: "change" }), alreadyIn);
+});
+
+test("open link: coming back declined or already in shows that screen; no request is the answer step", () => {
+  for (const join of ["notAdded", "alreadyIn"]) {
+    const s = next(initialState(), { type: "restore", join, response: null, phone: "+447700900834" });
+    assert.deepEqual([s.step, s.join, s.response], ["done", join, null], join);
+    assert.equal(next(s, { type: "change" }), s, `${join}: nothing to change`);
+    assert.deepEqual(next(s, { type: "signOut" }), initialState(), `${join}: Not you? Sign out`);
+  }
+  const fresh = next(initialState(), { type: "restore", join: null, response: null, phone: "+447700900834" });
+  assert.deepEqual([fresh.step, fresh.join, needsName(fresh)], ["answer", null, true]);
+  const odd = next(initialState(), { type: "restore", join: "approved", response: null, phone: "+447700900834" });
+  assert.deepEqual([odd.step, odd.join], ["answer", null], "only the three screens");
+  // No longer signed in while answering: back to the number, with nothing of the request kept.
+  const waiting = run([{ type: "restore", join: "waiting", response: "accepted", phone: "+447700900834" }, { type: "change" }, { type: "submit", name: "" }]);
+  const refused = next(waiting, { type: "refused", error: null });
+  assert.deepEqual([refused.step, refused.join, refused.response, refused.phone], ["confirm", null, null, null]);
+});
+
+test("needsName: a first answer needs a name; a changed answer or a waiting request doesn't", () => {
+  assert.equal(needsName(initialState()), true);
+  assert.equal(needsName({ ...initialState(), response: "accepted" }), false);
+  assert.equal(needsName({ ...initialState(), join: "waiting" }), false);
+  assert.equal(endingOf("+447700900834"), "34");
+  assert.equal(endingOf("447700900834"), "34");
+  assert.equal(endingOf(null), "");
+  assert.equal(endingOf("+4"), "");
 });
 
 /** A localStorage stand-in with the methods the page uses. */

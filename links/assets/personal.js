@@ -4,20 +4,27 @@
 // session in this origin's storage, one entry per invitation code with the full number verified for it, until the
 // event starts, so the same browser sees its answer again. "Not you? Sign out" ends it. Words and step logic:
 // personal-flow.mjs.
+// The open link /r/<code> runs it in open mode (data-mode="open"; open-link approval, plan 3): any number can answer,
+// so nothing is checked against an invited number; the answer goes to request_to_join and waits for the host, and the
+// last step is waiting, not added, or already on the resbite (my_join_request when the page comes back).
 import {
   PAGE_COPY as C,
   RESEND_DELAY_MS,
   RESPONSES,
   dropKept,
+  endingOf,
   errorText,
   initialState,
   isTestCode,
   keptEntry,
   maskNumber,
+  needsName,
   next,
   readKept,
   rpcError,
   sameNumber,
+  screenForRequest,
+  screenForReturn,
   sendError,
   sessionExpired,
   sessionFrom,
@@ -60,6 +67,8 @@ function start(main, answerButton) {
   const base = (data.supabaseUrl || "").replace(/\/+$/, "");
   const key = data.publishableKey || "";
   const code = data.code || "";
+  // The open link names no number: no ending to match, and the page's calling code for numbers typed without +.
+  const open = data.mode === "open";
   const country = data.country || "";
   const ending = data.ending || "";
   const host = data.host || "";
@@ -94,7 +103,8 @@ function start(main, answerButton) {
     terms.append(url ? h("a", { href: url, target: "_blank", rel: "noopener noreferrer", text: part }) : part);
   }
   const ageHelper = h("p", { id: "age-helper", class: "helper", text: C.ageHelper });
-  const number = h("input", { id: "number", type: "tel", inputmode: "tel", autocomplete: "tel", "aria-describedby": "confirm-error" });
+  const number = h("input", { id: "number", type: "tel", inputmode: "tel", autocomplete: "tel", "aria-describedby": open ? "number-hint confirm-error" : "confirm-error" });
+  const numberHint = open ? h("p", { id: "number-hint", class: "muted", text: C.outsideUk }) : null;
   const confirmError = h("p", { id: "confirm-error", class: "error" });
   const sendButton = h("button", { type: "submit", class: "button", text: C.send });
   const confirmForm = h(
@@ -102,10 +112,11 @@ function start(main, answerButton) {
     { novalidate: true, onsubmit: onSend },
     h("div", { class: "agree" }, h("div", { class: "tick" }, tick, h("label", { for: "tick", text: C.tick })), terms, ageHelper),
     h("div", { class: "field" }, h("label", { for: "number", text: C.numberField }), number),
+    numberHint,
     confirmError,
     sendButton,
   );
-  sections.confirm.append(confirmHeading, h("p", { class: "lead", text: C.confirmBody(host) }), confirmForm);
+  sections.confirm.append(confirmHeading, h("p", { class: "lead", text: open ? C.numberHint : C.confirmBody(host) }), confirmForm);
 
   // ---- The code. ----
   const codeHeading = h("h1", { tabindex: "-1", text: C.codeHeading });
@@ -152,9 +163,11 @@ function start(main, answerButton) {
     answerError,
     h("button", { type: "submit", class: "button", text: C.sendAnswer }),
   );
+  // The open link has no ending on the page: the chip shows the verified number's.
+  const verifiedChip = h("p", { class: "chip", text: C.verified(ending) });
   sections.answer.append(
     answerHeading,
-    h("p", { class: "chip", text: C.verified(ending) }),
+    verifiedChip,
     heroSrc ? h("img", { class: "hero small", src: heroSrc, alt: "" }) : null,
     basics ? h("p", { class: "muted", text: basics }) : null,
     answerForm,
@@ -183,15 +196,18 @@ function start(main, answerButton) {
     h("p", { class: "muted center", text: C.planOwn }),
     appUrl ? h("a", { class: "button small", href: appUrl, text: C.getApp }) : null,
   );
-  sections.done.append(
-    okMark,
-    doneHeading,
-    doneHost,
-    h("button", { type: "button", class: "link", text: C.changeAnswer, onclick: () => dispatch({ type: "change" }) }),
-    pitch,
-    soft,
-    signOutButton(),
-  );
+  const changeButton = h("button", { type: "button", class: "link", text: C.changeAnswer, onclick: () => dispatch({ type: "change" }) });
+  // The open link only: declined, with nothing but a way to plan one's own; already on it, into the app on this link.
+  const planOwnLine = open ? h("p", { class: "muted center plan-own" }, appUrl ? h("a", { href: appUrl, text: C.planOwn }) : C.planOwn) : null;
+  const inApp = open
+    ? h(
+        "div",
+        { class: "in-app" },
+        h("a", { class: "button", href: `resbite://r/${encodeURIComponent(code)}`, text: C.openApp }),
+        appUrl ? h("a", { class: "button small", href: appUrl, text: C.getApp }) : null,
+      )
+    : null;
+  sections.done.append(okMark, doneHeading, doneHost, changeButton, pitch, soft, planOwnLine, inApp, signOutButton());
   // Sign out comes back to the invitation, so its heading can take focus too.
   sections.invite.querySelector("h1")?.setAttribute("tabindex", "-1");
   const headings = { invite: sections.invite.querySelector("h1"), confirm: confirmHeading, code: codeHeading, answer: answerHeading, done: doneHeading };
@@ -236,23 +252,46 @@ function start(main, answerButton) {
     if (s.step !== "code" && timer) timer = (clearInterval(timer), null);
     countdown();
 
-    nameField.hidden = Boolean(s.response);
+    nameField.hidden = !needsName(s);
+    if (open) verifiedChip.textContent = C.verified(endingOf(s.phone));
     for (const radio of radios) radio.checked = radio.value === s.choice;
     setError(answerError, s.step === "answer" ? error : "", nameInput, s.error === "nameRule");
 
-    const declined = s.response === "declined";
-    okMark.hidden = declined;
-    doneHeading.textContent = declined ? C.cantHeading : s.response === "maybe" ? C.maybeHeading : C.goingHeading;
-    doneHost.textContent = declined ? C.hostSees(host) : C.hostCanSee(host);
-    pitch.hidden = declined || !s.pitch;
-    soft.hidden = !declined;
-    const masked = maskNumber(s.phone, country);
-    waitingLine.textContent = masked ? C.waiting(masked) : "";
-    waitingLine.hidden = !masked;
+    if (open) drawJoin(s);
+    else {
+      const declined = s.response === "declined";
+      okMark.hidden = declined;
+      doneHeading.textContent = declined ? C.cantHeading : s.response === "maybe" ? C.maybeHeading : C.goingHeading;
+      doneHost.textContent = declined ? C.hostSees(host) : C.hostCanSee(host);
+      pitch.hidden = declined || !s.pitch;
+      soft.hidden = !declined;
+      const masked = maskNumber(s.phone, country);
+      waitingLine.textContent = masked ? C.waiting(masked) : "";
+      waitingLine.hidden = !masked;
+    }
 
     // Each new step starts at its heading; so does Not now, whose button goes away. Restoring on load follows no
     // action, so it leaves focus where the browser put it.
     if (event.type !== "restore" && (s.step !== before.step || (before.pitch && !s.pitch))) headings[s.step]?.focus();
+  }
+
+  /**
+   * The open link's last step. Waiting: the host's line, the get-the-app block and Change answer (the page's 44 need
+   * not be the number's country, so no "Sign up with +44 ••• 834"). Not added: only Plan your own. Already in: Open
+   * Resbite and Get Resbite.
+   */
+  function drawJoin(s) {
+    const waiting = s.join === "waiting";
+    okMark.hidden = s.join === "notAdded";
+    doneHeading.textContent = waiting ? C.waitingHeading(host) : s.join === "alreadyIn" ? C.alreadyIn : s.join === "notAdded" ? C.notAdded : "";
+    doneHost.textContent = waiting ? C.waitingBody(host) : "";
+    doneHost.hidden = !waiting;
+    changeButton.hidden = !waiting;
+    pitch.hidden = !waiting || !s.pitch;
+    waitingLine.hidden = true;
+    soft.hidden = true;
+    planOwnLine.hidden = s.join !== "notAdded";
+    inApp.hidden = s.join !== "alreadyIn";
   }
 
   function setError(el, text, input, invalid) {
@@ -333,9 +372,12 @@ function start(main, answerButton) {
     event.preventDefault();
     if (!begin({ type: "send", input: number.value, country })) return;
     const phone = state.phone;
-    const check = await api("/rest/v1/rpc/check_invited_number", { p_code: code, p_phone: phone });
-    if (!check.ok) return dispatch({ type: "fail", error: rpcError(check.status, check.body) === "tooMany" ? "tooMany" : "connection" });
-    dispatch({ type: "checked", matches: check.body === true });
+    // The open link takes any number: the code goes straight to it.
+    if (!open) {
+      const check = await api("/rest/v1/rpc/check_invited_number", { p_code: code, p_phone: phone });
+      if (!check.ok) return dispatch({ type: "fail", error: rpcError(check.status, check.body) === "tooMany" ? "tooMany" : "connection" });
+      dispatch({ type: "checked", matches: check.body === true });
+    }
     if (state.busy) await sendCode(phone);
   }
 
@@ -384,10 +426,15 @@ function start(main, answerButton) {
     const fresh = await freshSession();
     if (!fresh.session) return dispatch(fresh.error === "connection" ? { type: "fail", error: "connection" } : { type: "refused", error: null });
     const reply = await api(
-      "/rest/v1/rpc/answer_phone_invitation",
+      open ? "/rest/v1/rpc/request_to_join" : "/rest/v1/rpc/answer_phone_invitation",
       { p_code: code, p_name: state.name, p_response: state.choice, p_terms_version: termsVersion },
       fresh.session.access_token,
     );
+    if (reply.ok && open) {
+      // Waiting for the host, declined on this link, or already on it: the server's reply picks the screen.
+      const screen = screenForRequest(reply.body);
+      return dispatch(screen ? { type: "answered", ...screen } : { type: "fail", error: "connection" });
+    }
     if (reply.ok) return dispatch({ type: "answered", response: RESPONSES.includes(reply.body?.response) ? reply.body.response : state.choice });
     const error = rpcError(reply.status, reply.body);
     // Signed in with another number, or no longer signed in: confirm the number again.
@@ -413,7 +460,8 @@ function start(main, answerButton) {
 
   // Coming back on the same browser: the kept session for this code shows the answer (or the answer step, verified but
   // not yet answered), but only while it holds exactly the number verified here for this code. Anything else is
-  // dropped, and the page starts at the invitation.
+  // dropped, and the page starts at the invitation. The open link has no invited number to match; its kept number is
+  // simply the one verified here, and my_join_request picks the screen.
   async function restore() {
     if (!session) return;
     answerButton.disabled = true;
@@ -422,9 +470,10 @@ function start(main, answerButton) {
       const fresh = await freshSession();
       if (!fresh.session) return;
       if (!sameNumber(fresh.session, { phone: verifiedPhone })) return forget();
-      const reply = await api("/rest/v1/rpc/my_phone_invitation", { p_code: code }, fresh.session.access_token);
+      const reply = await api(open ? "/rest/v1/rpc/my_join_request" : "/rest/v1/rpc/my_phone_invitation", { p_code: code }, fresh.session.access_token);
       if (reply.status === 401) return forget();
       if (!reply.ok || reply.body?.state !== "open") return;
+      if (open) return dispatch({ type: "restore", ...screenForReturn(reply.body), phone: fresh.session.phone });
       const response = RESPONSES.includes(reply.body.response) ? reply.body.response : null;
       dispatch({ type: "restore", response, phone: fresh.session.phone });
     } finally {

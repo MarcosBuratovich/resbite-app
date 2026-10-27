@@ -32,7 +32,7 @@ main { padding-bottom: 48px; }
 #step-invitation .muted { text-align: center; margin-top: 12px; }
 
 /* The steps the script fills: one column, evenly spaced. */
-main > section:not(#step-invitation), main > section form, .pitch, .soft { display: flex; flex-direction: column; gap: 14px; }
+main > section:not(#step-invitation), main > section form, .pitch, .soft, .in-app { display: flex; flex-direction: column; gap: 14px; }
 main > section:not(#step-invitation) :is(h1, p, ul) { margin: 0; }
 main > section:not(#step-invitation) h1 { font-size: 26px; line-height: 1.2; }
 /* A step's heading takes focus so reading starts there; it is not a control, so it draws no ring. */
@@ -87,3 +87,7 @@ h1[tabindex="-1"]:focus { outline: none; }
 .benefits li:last-child { border-bottom: 0; }
 .ic { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 9px; background: var(--aqua-soft); color: var(--aqua-dark); font-size: 15px; }
 .ic::before { content: attr(data-icon); }
+
+/* The open link (plan 3): the number step's hint sits under its field; not added links quietly to the app. */
+#number-hint { margin-top: -6px; font-size: 15px; }
+.plan-own a { color: var(--aqua-dark); text-underline-offset: 3px; }

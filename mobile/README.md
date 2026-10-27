@@ -11,6 +11,7 @@ Use Node 22.13+ and `npm ci`. Copy `.env.example` to `.env.local` and use the pr
 - `npm run web`: developer-only layout review. This is not the deliverable mobile app.
 - `npm run check`: TypeScript, domain/session-storage tests and content-manifest validation.
 - `npx expo export --platform ios --output-dir dist-ios`: checks the iOS JavaScript bundle; does not compile/sign an iPhone app.
+- `node --import tsx ../links/verify-personal.mjs` and `node --import tsx ../links/verify-open-link.mjs`: the link site's personal invitation (`/i/<code>`) and open event link (`/r/<code>`) pages in headless Chrome, with every request intercepted.
 
 The development-only “Preview the design” entry uses memory-only plans, has a persistent preview label and cannot send invitations. It disappears in production. Sample wellness data is labelled in every build. Authenticated paths call Supabase; an empty roster grants no data access.
 
