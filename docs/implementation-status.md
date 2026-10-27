@@ -669,4 +669,26 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
 3. A host's personal links live on their phone; another phone mints a new link and the old one stops working.
 4. Personal links reach existing testers only once the fold is released.
 
-**Next.** Plans 3 (open-link approval) and 4 (push). Then the owner's approval of the two migrations in order, the dashboard settings from plan 1, the fold release, the link site and the iPhone check.
+**Next.** Plan 3 (open-link approval, below) and plan 4 (push). Then the owner's approval of the two migrations in order, the dashboard settings from plan 1, the fold release, the link site and the iPhone check.
+
+## Open-link approval build — 29 October 2026
+
+**Built on the `open-link-approval` branch, from `main`; nothing is applied to the hosted project, Vercel, EAS or TestFlight.** Open-link approval is plan 3 of 4 ([spec](superpowers/specs/2026-10-27-contact-invitations-design.md), CI-D9 and flow 6; [plan](superpowers/plans/2026-10-28-open-link-approval.md); the calls made during the build are in `knowledge-base/08-decisions.md`). The commits are `<first commit — filled at merge>` to `<last commit — filled at merge>`. The rollout runbook and the owner's list are in [`qa/open-link-approval-2026-10-29/README.md`](../qa/open-link-approval-2026-10-29/README.md).
+
+**What changed.**
+- **Open event link.** Whoever answers `link.resbite.com/r/<code>`, on the web or in the app, becomes a waiting request instead of a guest. They never get an attendee row or a live access grant before the host approves them; they stay out of the guest list and the going count. A person who opens the link again sees their waiting answer and can change it. A declined person sees "You weren't added to this resbite." and cannot ask again on that link; a new link lets them ask.
+- **Host.** The event page shows "Waiting for you" with Approve and Decline, and the link card (Share, Copy, Turn off) now lives there. Approving makes the person a normal guest and queues a notice to them; declining queues nothing. Turning the link off does not remove people already approved.
+- **App.** A waiting screen shows the request and lets the person change their answer; the 18+ tick appears inline when the server needs it; people whose access is pending see their requests on Account. GI2's email-code guest steps are gone.
+- **Old builds.** An old TestFlight build opening a `/r/` link makes a waiting request quietly; the event page says it isn't available. Testers should update.
+
+**Migration state: not applied.** Owner approval is by file name and sha256, straight after `20261028120000_contact_invitations.sql` (also not applied):
+- `supabase/migrations/20261029120000_open_link_approval.sql`: `<sha256 — filled at merge>`. Hosted-compatible.
+- `supabase/rollback/20261029120000_open_link_approval.rollback.sql`: `<sha256 — filled at merge>`.
+
+**Rollout (owner-approved, not run).** The migration; the link site regenerated and deployed (`/personal-flow.mjs` checked for a JavaScript MIME type on the first preview); an EAS build after the migration; the iPhone check. **Rollback:** serve the previous app and link site, run the rollback SQL with approval before the contact-invitations rollback, never after it. Approved guests keep their places and access (approval grants become link grants), request notices are deleted, and people the host declined can join through any link still live, so turn off links that matter first.
+
+**Checks.** To be filled at merge, with the commit they ran at: `cd mobile && npm run check`; `./scripts/test-database-docker.sh` (full) and with `--hosted-baseline supabase/migrations/20261027120000_phone_accounts.sql supabase/migrations/20261028120000_contact_invitations.sql supabase/migrations/20261029120000_open_link_approval.sql`; the worker tests; `cd mobile && node --import tsx ../links/verify-personal.mjs` and `../links/verify-open-link.mjs`; the Expo web checks.
+
+**For the owner.** The list of parked items is in the runbook: the default calling code 44, former testers who cannot regain access through the link, a second request after a link rotation, the name sent with the request, and the small fixes and clean-ups left for a final wave.
+
+**Next.** Plan 4 (push). Then the owner's approval of the three migrations in order, the dashboard settings from plan 1, the fold release, the link site and the iPhone check.

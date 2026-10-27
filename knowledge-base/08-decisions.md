@@ -436,3 +436,36 @@ Each phone accounts rollout step needs the owner's explicit approval; the runboo
 11. **Smaller fixes before the migration is applied (final review, F5).** Re-inviting a revoked invitation clears who answered it; inviting someone in the app turns off their live personal link on that event; the lookup's "On Resbite" also needs a profile, as the in-app invitation does; `phone_invitations` (`user_id`, and `invited_by`, now nullable) and `lookup_usage` reference `auth.users` (set null, and cascade); invitations go to the server 50 at a time, like lookups; and `fold-phone-account` joins the release-gate test of destructive entry points.
 
 Each contact invitations rollout step needs the owner's explicit approval.
+
+## Open-link approval, 28 October 2026
+
+Plan 3 of 4 for contact invitations ([plan](../docs/superpowers/plans/2026-10-28-open-link-approval.md)) carries out CI-D9: the open event link stays, and everyone who answers through it waits for the host. These are the calls made while building it, for the owner's review, grouped by area. The rollout runbook is in `qa/open-link-approval-2026-10-29/README.md`.
+
+**Database.**
+1. **The app's waiting screen can change an answer by plan.** A new function, `change_join_answer(p_plan, p_response)`, lets a waiting person change their answer. The screen knows the plan, not always the link's code, so a code-based call would not always work. The cost if wrong: one more function.
+2. **A stored answer is never replaced by "pending".** The app opens a link with `pending` (no answer yet), and old builds reach `claim_plan_link` and `join_by_link`, which carry no answer. Someone who already answered and opens the link again keeps their answer; a fresh `pending` cannot clear it. `change_join_answer` still can change it. The cost: a person cannot return to "no answer" by opening the link.
+3. **Hosts deciding at once do not deadlock.** `decide_join_request` takes the two people's locks in `uuid` order before it checks the host owns the event. Two hosts approving each other's requests would otherwise wait on each other once account deletion also takes these locks. There is a concurrency script for it. The cost: none.
+4. **People who may already use the app are not asked again.** Testers and grant holders skip the 18+ tick, as `join_by_link` never asked them, because testers from before GI2 have no tick on record. They still give a name if they have no profile (otherwise the request would fail with a raw foreign key error). Approval also refuses (with "Invitation unavailable") anyone with a revoked grant, a disabled roster row, or an account that is banned, being deleted, anonymous or unconfirmed, even if they may use the app.
+5. **A fold moves requests.** `fold_web_account` is redefined to move the folded account's requests to the account that takes the number (skipping a request where the account already has one, is on the event, or owns it). The spec's flow 5 says answers move over, and without this the cascade would delete them. The rollback restores the earlier body.
+6. **Accepted without change:** a person declined on a link can ask once more after the host turns that link off and makes a new one; `my_join_request` hides rows that no longer apply; a waiting person whose account is being deleted does not show to the host.
+
+**Rollback.**
+7. **Approved guests keep their access.** The rollback turns every approval grant into a link grant on the same row; live stays live and revoked stays revoked, so a ban stays a ban. GI2 gave a link grant for the same path, and deleting the grants would lock approved guests out of events they were admitted to. If this is wrong, a follow-up delete is easy.
+
+**Web page.**
+8. **The calling code defaults to 44.** The beta is UK-based and no host country is stored. The page says "Outside the UK?" beside it, and any number can answer an open link. The cost if wrong: copy and one attribute.
+9. **Can't go on an open link looks like a personal page's Can't go.** It shows the soft screen ("the host will know" and a small nudge to get Resbite), not "will confirm your spot". The spec's line is about taking a spot, and "confirm your spot" reads wrong after Can't go. The cost: one copy swap.
+10. **"I have Resbite: open the app" stays on the first screen** (`resbite://r/<code>`), as in GI1. The spec says Resbite users opening the link in the app get the waiting state. The cost: one button.
+11. **The page looks up the request after verifying the number.** WhatsApp and Instagram's in-app browsers keep their own storage, so a person returning through one has no kept session, and that is the common way back. Without the lookup they would not see their waiting answer. The cost: one extra read.
+
+**App.**
+12. **"I have an account" goes to the sign-in screen,** `/auth/phone?intent=signin`, and the account gate runs before the request is made. The email-code step from GI2 was removed only where nothing else used it.
+13. **The app sends the About you name with the request.** A waiting phone account has no profile, so the request needs a name. The spec said "no name"; this is the accepted deviation.
+14. **The 18+ tick appears inline when the server asks for it.** On "Age confirmation required" the app shows the existing tick and terms line on the same screen and resends the request with the terms version.
+15. **People whose access is pending see their requests on Account.** After Done they would otherwise land on Account with no sign that they had asked, and this is the main path for new people arriving by an open link. They go to Account rather than My resbites because My resbites is not open to them yet.
+16. **Small gaps in the app services are left.** `mine()` and `forPlan` turn a missing string into an empty one rather than rejecting. The columns are not null in the database, so only a broken server returns such a row. The cost if wrong: a blank field on screen.
+
+**Host.**
+17. **A failed decision's message stays until the list empties.** A failed decision is followed by a reload of the list, so clearing the message on each reload would hide its own message. It clears when the list becomes empty and shows the reason the server gave, not the offline line. The cost: a stale note until the next decision.
+
+Each open-link approval rollout step needs the owner's explicit approval.
