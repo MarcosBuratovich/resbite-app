@@ -38,10 +38,12 @@ alter table private.beta_access drop constraint beta_access_source_check,
 -- The request itself, for a caller its callers have already checked (a live link to an open event, a confirmed
 -- account allowed to ask). Returns {state, plan_id, response}: 'owner' (response null) or 'already' (the attendee's
 -- response) write nothing; a decline on this same link gives 'declined' and changes nothing; anything else is
--- 'waiting' with this response. A request is new (a fresh waiting period: created_at now, decided_at cleared, one
+-- 'waiting' with the answer now stored. A request is new (a fresh waiting period: created_at now, decided_at cleared, one
 -- join_request notice to the host) when there was none, or when it was approved and the person is no longer on the
--- event, or declined on an older link. Asking again while waiting only changes the answer and the link. The notice's
--- dedupe key carries the waiting period's start, so an earlier notice never swallows a later one.
+-- event, or declined on an older link. Asking again while waiting only changes the answer and the link. 'pending'
+-- (no answer yet: an old build's claim_plan_link or join_by_link, or the app opening the link) never replaces a stored
+-- answer, waiting or reopened; the stored one is returned. The notice's dedupe key carries the waiting period's start,
+-- so an earlier notice never swallows a later one.
 create function private.request_join(p_uid uuid, p_link private.plan_links, p_plan public.plans, p_response text) returns jsonb
 language plpgsql security definer set search_path = '' as $$
 declare v_resp text; v_req private.join_requests; v_created timestamptz;
@@ -54,20 +56,22 @@ begin
   return jsonb_build_object('state','declined','plan_id',p_plan.id,'response',v_req.response);
  end if;
  if found and v_req.status='waiting' then
-  update private.join_requests set response=p_response, plan_link_id=p_link.id where plan_id=p_plan.id and user_id=p_uid;
-  return jsonb_build_object('state','waiting','plan_id',p_plan.id,'response',p_response);
+  update private.join_requests set response=case when p_response='pending' then response else p_response end, plan_link_id=p_link.id
+   where plan_id=p_plan.id and user_id=p_uid returning response into v_resp;
+  return jsonb_build_object('state','waiting','plan_id',p_plan.id,'response',v_resp);
  end if;
  if found then
-  update private.join_requests set response=p_response, plan_link_id=p_link.id, status='waiting', created_at=now(), decided_at=null
-   where plan_id=p_plan.id and user_id=p_uid returning created_at into v_created;
+  update private.join_requests set response=case when p_response='pending' then response else p_response end,
+   plan_link_id=p_link.id, status='waiting', created_at=now(), decided_at=null
+   where plan_id=p_plan.id and user_id=p_uid returning created_at, response into v_created, v_resp;
  else
   insert into private.join_requests(plan_id,user_id,plan_link_id,response) values(p_plan.id,p_uid,p_link.id,p_response)
-   returning created_at into v_created;
+   returning created_at, response into v_created, v_resp;
  end if;
  insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id)
   values(p_plan.id,p_plan.owner_id,'join_request',
    'join:'||p_plan.id||':'||p_uid||':'||coalesce(p_link.id::text,'')||':'||extract(epoch from v_created),p_uid) on conflict do nothing;
- return jsonb_build_object('state','waiting','plan_id',p_plan.id,'response',p_response);
+ return jsonb_build_object('state','waiting','plan_id',p_plan.id,'response',v_resp);
 end $$;
 revoke all on function private.request_join(uuid,private.plan_links,public.plans,text) from public, anon, authenticated, service_role;
 
@@ -193,8 +197,11 @@ begin
    and not exists(select 1 from public.attendees a where a.plan_id=j.plan_id and a.user_id=j.user_id)),'[]'::jsonb);
 end $$;
 
--- The host approves or declines a waiting request. The requester's lock comes first, then the plan's (as
--- request_to_join). Only the owner of an active event that hasn't started (42501), and only a waiting request (22023
+-- The host approves or declines a waiting request. Both people's locks come first, in uuid order, then the plan's:
+-- the requester's lock before the plan's, as request_to_join takes them, and a fixed order between the two users so
+-- two hosts approving each other's requests at once queue instead of deadlocking (require_tester then takes the
+-- caller's lock again, which is re-entrant; the deletion lifecycle's require_tester locks the caller, locally now and on
+-- hosted with plan 4). Only the owner of an active event that hasn't started (42501), and only a waiting request (22023
 -- "Request already decided"). Approving puts the person on the event with their answer (someone who joined another way
 -- meanwhile keeps theirs) and grants access unless they may use the app already; an account that is banned, being
 -- deleted, holds a revoked grant or a disabled roster row is refused (42501) and the request stays waiting. The person
@@ -204,7 +211,8 @@ language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid; v_req private.join_requests;
 begin
  if p_approve is null then raise exception 'Invalid decision' using errcode='22023'; end if;
- perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(p_user::text,47));
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(least(auth.uid(),p_user)::text,47));
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(greatest(auth.uid(),p_user)::text,47));
  v_uid := private.require_link_owner(p_plan);
  select * into v_req from private.join_requests where plan_id=p_plan and user_id=p_user and status='waiting' for update;
  if not found then raise exception 'Request already decided' using errcode='22023'; end if;

@@ -34,6 +34,7 @@ if [ "$mode" = full ]; then
   "$repo/supabase/tests/local/photo-cleanup-concurrency.sh" "$pg_bin" "$work" 55437
   "$repo/supabase/tests/local/avatar-revision-concurrency.sh" "$pg_bin" "$work" 55437
   "$repo/supabase/tests/local/join-by-link-concurrency.sh" "$pg_bin" "$work" 55437
+  "$repo/supabase/tests/local/decide-join-concurrency.sh" "$pg_bin" "$work" 55437
 else
   baseline="$repo/supabase/tests/hosted-baseline"
   while read -r name _; do

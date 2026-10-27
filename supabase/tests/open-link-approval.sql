@@ -641,6 +641,71 @@ do $$ begin
  if (select source from private.beta_access where user_id='d2000000-0000-4000-8000-000000000009' and revoked_at is null) is distinct from 'approval' then raise exception 'Leo has no approval grant'; end if;
 end $$;
 
+-- A 'pending' answer never replaces a stored one: an old build's claim_plan_link or join_by_link, or the app opening
+-- the link with 'pending', keeps the answer given on the web, whether the request is waiting or reopened, and returns
+-- it. Any other answer replaces it. 19 Joy holds a grant (claim_plan_link); 20 Kim has none (join_by_link).
+insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) values
+ ('d2000000-0000-4000-8000-000000000019',null,null,'447700900419',now()),
+ ('d2000000-0000-4000-8000-000000000020',null,null,'447700900420',now());
+insert into public.profiles(id,display_name) values ('d2000000-0000-4000-8000-000000000019','Joy'),('d2000000-0000-4000-8000-000000000020','Kim');
+insert into private.age_attestations(user_id,terms_version) values
+ ('d2000000-0000-4000-8000-000000000019','2026-09'),('d2000000-0000-4000-8000-000000000020','2026-09');
+insert into private.beta_access(user_id,source) values ('d2000000-0000-4000-8000-000000000019','maintainer');
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000019","role":"authenticated"}',true);
+do $$ declare r jsonb; begin
+ r := public.request_to_join(repeat('W',22),null,'accepted',null);
+ if r->>'response' is distinct from 'accepted' then raise exception 'Joy''s request returned %', r; end if;
+ if public.claim_plan_link(repeat('W',22)) is distinct from 'd2100000-0000-4000-8000-000000000006' then raise exception 'Joy''s claim returned another plan'; end if;
+ if public.my_join_request(repeat('W',22))->'request' is distinct from '{"status":"waiting","response":"accepted"}'::jsonb then raise exception 'A legacy claim replaced the answer'; end if;
+ r := public.request_to_join(repeat('W',22),null,'pending',null);
+ if r is distinct from jsonb_build_object('state','waiting','plan_id','d2100000-0000-4000-8000-000000000006','response','accepted') then raise exception 'Opening again with pending returned %', r; end if;
+ if public.my_join_request(repeat('W',22))->'request'->>'response' is distinct from 'accepted' then raise exception 'Opening again with pending replaced the answer'; end if;
+end $$;
+select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000020","role":"authenticated"}',true);
+do $$ declare r jsonb; begin
+ perform public.request_to_join(repeat('W',22),null,'accepted',null);
+ if public.join_by_link(repeat('W',22),null,null) is distinct from 'd2100000-0000-4000-8000-000000000006' then raise exception 'Kim''s join returned another plan'; end if;
+ if public.my_join_request(repeat('W',22))->'request' is distinct from '{"status":"waiting","response":"accepted"}'::jsonb then raise exception 'A legacy join replaced the answer'; end if;
+ r := public.request_to_join(repeat('W',22),null,'pending',null);
+ if r->>'response' is distinct from 'accepted' then raise exception 'Kim opening again with pending got %', r; end if;
+end $$;
+-- Reopened: the host declines Joy and turns the Walk's link off; Joy's old build claims the new link. The request is
+-- waiting again, with her answer.
+select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+do $$ begin
+ perform public.decide_join_request('d2100000-0000-4000-8000-000000000006','d2000000-0000-4000-8000-000000000019',false);
+ insert into olr_codes values ('W2',public.rotate_plan_link('d2100000-0000-4000-8000-000000000006'));
+end $$;
+select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000019","role":"authenticated"}',true);
+do $$ declare r jsonb; begin
+ if public.claim_plan_link((select code from olr_codes where name='W2')) is distinct from 'd2100000-0000-4000-8000-000000000006' then raise exception 'Joy''s reopening claim returned another plan'; end if;
+ if public.my_join_request((select code from olr_codes where name='W2'))->'request' is distinct from '{"status":"waiting","response":"accepted"}'::jsonb then
+  raise exception 'A reopening legacy claim replaced the answer';
+ end if;
+ -- A later answer replaces it.
+ r := public.request_to_join((select code from olr_codes where name='W2'),null,'maybe',null);
+ if r->>'response' is distinct from 'maybe' then raise exception 'Joy''s maybe returned %', r; end if;
+ perform public.claim_plan_link((select code from olr_codes where name='W2'));
+end $$;
+select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000020","role":"authenticated"}',true);
+do $$ declare r jsonb; begin
+ r := public.request_to_join((select code from olr_codes where name='W2'),null,'maybe',null);
+ if r->>'response' is distinct from 'maybe' then raise exception 'Kim''s maybe returned %', r; end if;
+ perform public.join_by_link((select code from olr_codes where name='W2'),null,null);
+end $$;
+reset role;
+do $$ begin
+ if (select response from private.join_requests where plan_id='d2100000-0000-4000-8000-000000000006' and user_id='d2000000-0000-4000-8000-000000000019') is distinct from 'maybe'
+  or (select response from private.join_requests where plan_id='d2100000-0000-4000-8000-000000000006' and user_id='d2000000-0000-4000-8000-000000000020') is distinct from 'maybe' then
+  raise exception 'A later answer was not kept';
+ end if;
+ if (select count(*) from private.notification_outbox where kind='join_request' and actor_id='d2000000-0000-4000-8000-000000000019') is distinct from 2
+  or (select count(*) from private.notification_outbox where kind='join_request' and actor_id='d2000000-0000-4000-8000-000000000020') is distinct from 1 then
+  raise exception 'Opening again queued the wrong notices';
+ end if;
+end $$;
+
 -- grants: anon can call none of the new functions, the helper is closed to every client role, and nobody reads the
 -- table.
 set local role anon;
