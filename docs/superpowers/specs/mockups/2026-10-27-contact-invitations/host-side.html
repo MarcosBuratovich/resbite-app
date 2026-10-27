@@ -1,0 +1,125 @@
+<style>
+  .rb { --ink:#343043; --muted:#777180; --aqua:#89CAC7; --aquaSoft:#E8F6F3; --aquaDark:#245F60; --cream:#FAF5F0; --pink:#F2ADB2; --pinkSoft:#FCEAEC; --line:#E9E5E9; --lilac:#F0EDF4; }
+  .rb * { box-sizing:border-box; }
+  .rb .row { display:flex; gap:20px; flex-wrap:wrap; align-items:flex-start; }
+  .rb .step { display:flex; flex-direction:column; gap:8px; }
+  .rb .step-label { font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#8a8494; font-weight:600; }
+  .rb .step-sub { font-size:12px; color:#8a8494; max-width:250px; }
+  .rb .phone { width:250px; min-height:520px; background:var(--cream); border-radius:30px; border:8px solid #2b2733; padding:14px 13px 16px; color:var(--ink); font-family:Montserrat, system-ui, sans-serif; font-size:12px; display:flex; flex-direction:column; gap:9px; }
+  .rb h4 { margin:0; font-family:Quicksand, system-ui, sans-serif; font-size:19px; line-height:1.15; }
+  .rb h5 { margin:4px 0 0; font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
+  .rb .top { display:flex; justify-content:space-between; align-items:center; }
+  .rb .x { width:24px; height:24px; border-radius:50%; background:#fff; border:1px solid var(--line); display:flex; align-items:center; justify-content:center; font-size:11px; }
+  .rb .search { background:#fff; border:1px solid var(--line); border-radius:14px; padding:8px 10px; color:var(--muted); }
+  .rb .sel { display:flex; gap:5px; flex-wrap:wrap; }
+  .rb .chip { background:#fff; border:1px solid var(--line); border-radius:999px; padding:3px 9px; font-size:10.5px; white-space:nowrap; }
+  .rb .chip.aqua { background:var(--aquaSoft); border-color:transparent; color:var(--aquaDark); }
+  .rb .chip.pink { background:var(--pinkSoft); border-color:transparent; color:#963F58; }
+  .rb .chip.lilac { background:var(--lilac); border-color:transparent; color:#665381; }
+  .rb .list { background:#fff; border-radius:18px; border:1px solid var(--line); padding:2px 10px; }
+  .rb .p { display:flex; align-items:center; gap:8px; padding:7px 0; border-bottom:1px solid var(--line); }
+  .rb .p:last-child { border-bottom:none; }
+  .rb .av { width:26px; height:26px; border-radius:50%; background:var(--pink); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:10px; color:#fff; flex:none; }
+  .rb .av.b { background:#BFB5BF; } .rb .av.c { background:var(--aqua); }
+  .rb .who { flex:1; min-width:0; } .rb .who b { display:block; font-weight:600; } .rb .who small { color:var(--muted); font-size:10px; }
+  .rb .box { width:18px; height:18px; border-radius:6px; border:1.5px solid #cfc9d6; flex:none; }
+  .rb .box.on { background:var(--aquaDark); border-color:var(--aquaDark); color:#fff; font-size:11px; display:flex; align-items:center; justify-content:center; }
+  .rb .btn { margin-top:auto; background:var(--pink); color:#4a2230; text-align:center; border-radius:999px; padding:11px; font-weight:600; box-shadow:0 2px 0 rgba(178,105,127,.2),0 6px 14px rgba(178,105,127,.18); }
+  .rb .btn.sec { background:#fff; color:var(--ink); border:1px solid var(--line); box-shadow:none; }
+  .rb .tiny { font-size:10px; color:var(--muted); text-align:center; }
+  .rb .ok { background:var(--aquaSoft); color:var(--aquaDark); border-radius:14px; padding:8px 10px; font-size:11px; }
+  .rb .send { display:flex; gap:5px; }
+  .rb .send span { font-size:10px; border-radius:999px; padding:4px 8px; font-weight:600; }
+  .rb .wa { background:#25D366; color:#fff; } .rb .sms { background:#fff; border:1px solid var(--line); }
+  .rb .card { background:#fff; border-radius:18px; border:1px solid var(--line); padding:9px 10px; display:flex; flex-direction:column; gap:6px; }
+  .rb .cover { height:70px; border-radius:14px; background:linear-gradient(135deg,#EAF4E4,#E8F6F3 60%,#FCEAEC); }
+  .rb .counts { display:flex; gap:5px; flex-wrap:wrap; }
+  .rb .acts { display:flex; gap:5px; }
+  .rb .acts span { font-size:10px; border-radius:999px; padding:4px 9px; font-weight:600; }
+  .rb .approve { background:var(--aquaDark); color:#fff; } .rb .decline { background:#fff; border:1px solid var(--line); }
+  .rb .seg { display:flex; background:var(--cream); border:1px solid var(--line); border-radius:999px; padding:3px; }
+  .rb .seg span { flex:1; text-align:center; padding:6px 0; border-radius:999px; font-size:10.5px; }
+  .rb .tabs { margin-top:auto; display:flex; justify-content:space-around; font-size:9px; color:var(--muted); border-top:1px solid var(--line); padding-top:8px; }
+  .rb .tabs b { color:var(--aquaDark); }
+</style>
+
+<h2>The host's side, and an invitee who's already on Resbite</h2>
+<p class="subtitle">Marcos invites four people to "Picnic in the park". Ana and Leo already use Resbite; Sam and Mia don't. Jordan got the open event link from a friend.</p>
+
+<div class="rb">
+  <div class="row">
+    <div class="step">
+      <div class="step-label">1 · Pick from contacts</div>
+      <div class="step-sub">After "It's on!", or Invite on the event page.</div>
+      <div class="phone">
+        <div class="top"><h4>Invite people</h4><span class="x">✕</span></div>
+        <div class="search">⌕ Search contacts</div>
+        <div class="sel"><span class="chip">Ana ✕</span><span class="chip">Leo ✕</span><span class="chip">Sam ✕</span><span class="chip">Mia ✕</span></div>
+        <div class="list">
+          <div class="p"><div class="av">A</div><div class="who"><b>Ana Ruiz</b><span class="chip aqua">On Resbite</span></div><div class="box on">✓</div></div>
+          <div class="p"><div class="av b">J</div><div class="who"><b>Jo Grant</b><small>+44 ••• 210</small></div><div class="box"></div></div>
+          <div class="p"><div class="av c">L</div><div class="who"><b>Leo Park</b><span class="chip aqua">On Resbite</span></div><div class="box on">✓</div></div>
+          <div class="p"><div class="av b">M</div><div class="who"><b>Mia Chen</b><small>+44 ••• 551</small></div><div class="box on">✓</div></div>
+          <div class="p"><div class="av">S</div><div class="who"><b>Sam Patel</b><small>+44 ••• 834</small></div><div class="box on">✓</div></div>
+        </div>
+        <div class="btn">Invite 4</div>
+        <div class="tiny">Resbite checks only the numbers you pick.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-label">2 · Send the rest yourself</div>
+      <div class="step-sub">Resbite people are invited at once. Each of the others gets their own link, sent from your phone.</div>
+      <div class="phone">
+        <div class="top"><h4>Almost there</h4><span class="x">✕</span></div>
+        <div class="ok">✓ Ana and Leo are invited. They'll see it in Resbite.</div>
+        <h5>Not on Resbite yet</h5>
+        <div class="list">
+          <div class="p"><div class="av">S</div><div class="who"><b>Sam Patel</b><span class="chip aqua">✓ Sent on WhatsApp</span></div></div>
+          <div class="p"><div class="av b">M</div><div class="who"><b>Mia Chen</b><div class="send" style="margin-top:4px"><span class="wa">WhatsApp</span><span class="sms">Messages</span></div></div></div>
+        </div>
+        <div class="tiny" style="text-align:left">Each link only works for that person's number.</div>
+        <div class="btn sec">Done</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-label">3 · Guests on the event page</div>
+      <div class="step-sub">The open link still exists, but whoever answers through it waits for you.</div>
+      <div class="phone">
+        <div class="cover"></div>
+        <h4>Picnic in the park</h4>
+        <div class="counts"><span class="chip aqua">3 going</span><span class="chip">1 maybe</span><span class="chip lilac">2 invited</span></div>
+        <h5>Waiting for you</h5>
+        <div class="card">
+          <div class="p" style="border:none;padding:0"><div class="av c">J</div><div class="who"><b>Jordan</b><small>Going · via event link · +44 ••• 112</small></div></div>
+          <div class="acts"><span class="approve">Approve</span><span class="decline">Decline</span></div>
+        </div>
+        <h5>Event link</h5>
+        <div class="card">
+          <div style="font-size:11px">Anyone can answer with it, and you approve them first.</div>
+          <div class="acts"><span class="decline">Share</span><span class="decline">Copy</span><span class="decline">Turn off</span></div>
+        </div>
+        <div class="btn">Invite people</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-label">4 · Ana, already on Resbite</div>
+      <div class="step-sub">No link, no code: the invitation is in her app (a push too, once notifications are on).</div>
+      <div class="phone">
+        <div class="top"><h4>My resbites</h4><span class="x">☺</span></div>
+        <h5>Invitations</h5>
+        <div class="card">
+          <div class="cover"></div>
+          <b style="font-size:13px">Picnic in the park</b>
+          <div class="tiny" style="text-align:left">Marcos invited you · Sat 2 Nov · 13:00</div>
+          <div class="seg"><span>Going</span><span>Maybe</span><span>Can't go</span></div>
+        </div>
+        <h5>Upcoming</h5>
+        <div class="card"><b>Board game night</b><div class="tiny" style="text-align:left">Fri 8 Nov · 19:30 · Hosting</div></div>
+        <div class="tabs"><span>Create</span><b>My resbites</b><span>Wellness</span><span>Profile</span></div>
+      </div>
+    </div>
+  </div>
+</div>
