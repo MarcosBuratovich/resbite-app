@@ -46,19 +46,30 @@ alter table private.notification_outbox add constraint notification_outbox_kind_
 alter table private.beta_access drop constraint beta_access_source_check,
  add constraint beta_access_source_check check (source in ('link','maintainer','invitation'));
 
+-- The daily budget for finding out who is On Resbite: 500 numbers per caller per UTC day, shared by lookups and by
+-- invitations. Over the limit is 22023 "Try again tomorrow." and nothing is charged. The caller's advisory lock (taken
+-- by both users of this helper, as join_by_link does) makes the read and the write one step even where require_tester
+-- takes no lock.
+create function private.charge_lookup(p_uid uuid, p_count int) returns void language plpgsql security definer set search_path = '' as $$
+declare v_today date := (now() at time zone 'utc')::date; v_used int;
+begin
+ select count into v_used from private.lookup_usage where user_id=p_uid and day=v_today;
+ if coalesce(v_used,0)+p_count>500 then raise exception 'Try again tomorrow.' using errcode='22023'; end if;
+ insert into private.lookup_usage(user_id,day,count) values(p_uid,v_today,p_count)
+  on conflict (user_id) do update set day=excluded.day,
+   count=case when private.lookup_usage.day=excluded.day then private.lookup_usage.count+excluded.count else excluded.count end;
+end $$;
+revoke all on function private.charge_lookup(uuid,int) from public, anon, authenticated, service_role;
+
 -- Which of these numbers belong to people "On Resbite" (eligible and has used the app), never the caller. Returns their
 -- digits. At most 50 numbers per call and 500 per caller per UTC day.
 create function private.contacts_on_resbite(p_phones text[]) returns text[] language plpgsql security definer set search_path = '' as $$
-declare v_uid uuid := private.require_tester(); v_n int := coalesce(cardinality(p_phones),0); v_today date := (now() at time zone 'utc')::date;
- v_used int; v_out text[];
+declare v_uid uuid := private.require_tester(); v_n int := coalesce(cardinality(p_phones),0); v_out text[];
 begin
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_uid::text,47));
  if v_n>50 then raise exception 'Too many numbers' using errcode='22023'; end if;
  if v_n=0 then return array[]::text[]; end if;
- select count into v_used from private.lookup_usage where user_id=v_uid and day=v_today;
- if coalesce(v_used,0)+v_n>500 then raise exception 'Try again tomorrow.' using errcode='22023'; end if;
- insert into private.lookup_usage(user_id,day,count) values(v_uid,v_today,v_n)
-  on conflict (user_id) do update set day=excluded.day,
-   count=case when private.lookup_usage.day=excluded.day then private.lookup_usage.count+excluded.count else excluded.count end;
+ perform private.charge_lookup(v_uid,v_n);
  select coalesce(array_agg(d order by d),array[]::text[]) into v_out from (
   select distinct u.phone as d from auth.users u
   where u.phone = any(select private.phone_digits(x) from unnest(p_phones) x)
@@ -67,7 +78,7 @@ begin
  return v_out;
 end $$;
 
--- Invites up to 50 people to an event. Each item is {phone, country, code}; the result has one {phone, kind} per item, in
+-- Invites up to 50 people to an event (each item is charged to the daily lookup budget). Each item is {phone, country, code}; the result has one {phone, kind} per item, in
 -- order: 'self' (the host's own number), 'already' (the holder is on the event), 'app' (On Resbite: added as pending
 -- with a notice) or 'link' (a personal invitation by number, its code stored as a hash; inviting again replaces the
 -- code, brings back a revoked invitation and keeps who answered).
@@ -75,9 +86,12 @@ create function private.invite_contacts(p_plan uuid, p_invites jsonb) returns js
 declare v_uid uuid := private.require_link_owner(p_plan); v_item jsonb; v_phone text; v_country text; v_code text; v_holder uuid;
  v_kind text; v_out jsonb := '[]'::jsonb;
 begin
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_uid::text,47));
  if jsonb_typeof(p_invites) is distinct from 'array' or jsonb_array_length(p_invites)>50 then
   raise exception 'Invalid invitations' using errcode='22023';
  end if;
+ -- The kind of each item tells the host who is On Resbite, so invitations spend the same daily budget as lookups.
+ perform private.charge_lookup(v_uid,jsonb_array_length(p_invites));
  for v_item in select value from jsonb_array_elements(p_invites) loop
   if jsonb_typeof(v_item) is distinct from 'object' or jsonb_typeof(v_item->'phone') is distinct from 'string'
    or jsonb_typeof(v_item->'country') is distinct from 'string' or jsonb_typeof(v_item->'code') is distinct from 'string' then

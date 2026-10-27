@@ -50,6 +50,36 @@ do $$ declare i int; begin
   if sqlerrm<>'Try again tomorrow.' then raise exception 'Wrong message: %', sqlerrm; end if;
  end;
 end $$;
+-- The shared budget: invitations are charged to it too, and the day rolls over.
+reset role;
+do $$ begin
+ if (select count from private.lookup_usage where user_id='d1000000-0000-4000-8000-000000000001')<>500 then raise exception '500 expected used'; end if;
+ update private.lookup_usage set count=499 where user_id='d1000000-0000-4000-8000-000000000001';
+end $$;
+set local role authenticated;
+do $$ begin
+ begin perform public.invite_contacts('d1100000-0000-4000-8000-000000000001', jsonb_build_array(
+   jsonb_build_object('phone','447700900201','country','44','code',repeat('A',22)),
+   jsonb_build_object('phone','447700900202','country','44','code',repeat('A',22))));
+  raise exception 'Invite past the daily budget allowed';
+ exception when invalid_parameter_value then
+  if sqlerrm<>'Try again tomorrow.' then raise exception 'Wrong message: %', sqlerrm; end if;
+ end;
+end $$;
+reset role;
+do $$ begin
+ if exists(select 1 from private.phone_invitations) or exists(select 1 from private.notification_outbox where kind='invited')
+  or (select count(*) from public.attendees where plan_id='d1100000-0000-4000-8000-000000000001')<>1 then raise exception 'Refused batch wrote something'; end if;
+ if (select count from private.lookup_usage where user_id='d1000000-0000-4000-8000-000000000001')<>499 then raise exception 'Refused batch was charged'; end if;
+ -- an invite of one fits and is charged
+ update private.lookup_usage set count=499 where user_id='d1000000-0000-4000-8000-000000000001';
+ -- the helper's day rollover resets the count
+ update private.lookup_usage set day=day-1, count=500 where user_id='d1000000-0000-4000-8000-000000000001';
+ perform private.charge_lookup('d1000000-0000-4000-8000-000000000001',7);
+ if (select count from private.lookup_usage where user_id='d1000000-0000-4000-8000-000000000001')<>7
+  or (select day from private.lookup_usage where user_id='d1000000-0000-4000-8000-000000000001')<>(now() at time zone 'utc')::date then raise exception 'Day rollover should reset the count'; end if;
+end $$;
+set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"d1000000-0000-4000-8000-000000000006","role":"authenticated"}',true);
 do $$ begin
  begin perform public.contacts_on_resbite(array['447700900201']); raise exception 'Ineligible caller looked up';
