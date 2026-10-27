@@ -15,7 +15,7 @@ if [ "${1:-}" = "--hosted-baseline" ]; then
   shift
   candidates=("$@")
 fi
-work="$(mktemp -d /private/tmp/resbite-pg.XXXXXX)"
+work="$(mktemp -d "${TMPDIR:-/tmp}/resbite-pg.XXXXXX")"
 cleanup() { "$pg_bin/pg_ctl" -D "$work/data" -m immediate stop >/dev/null 2>&1 || true; rm -rf "$work"; }
 trap cleanup EXIT
 "$pg_bin/initdb" -D "$work/data" -A trust -U postgres >/dev/null

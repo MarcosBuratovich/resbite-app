@@ -53,7 +53,7 @@ function loadService(file: string, namespaceImport = false) {
             ) => {
               const swift = readFileSync(
                 new URL(
-                  "../../node_modules/expo-contacts/ios/Next/records/ContactQueryOptions.swift",
+                  "../../node_modules/expo-contacts/ios/next/records/ContactQueryOptions.swift",
                   import.meta.url,
                 ),
                 "utf8",
