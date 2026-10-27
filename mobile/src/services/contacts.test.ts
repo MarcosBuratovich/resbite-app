@@ -134,3 +134,21 @@ test("expanding access invokes only the iOS limited-access picker and does not r
   );
   assert.deepEqual(revoked.calls, []);
 });
+
+test("phone rows keep names and numbers, drop empty numbers and share the permission checks", async () => {
+  const { service, calls } = fixture({
+    read: async () => [
+      { fullName: "Ana Ruiz", emails: [{ address: "a@x.com" }], phones: [{ number: "07700 900834" }, { number: "" }] },
+      { fullName: null, phones: undefined },
+    ],
+  });
+  const page = await service.readPhoneRows(0, true);
+  assert.deepEqual(page.rows, [
+    { fullName: "Ana Ruiz", phones: [{ number: "07700 900834" }] },
+    { fullName: null, phones: [] },
+  ]);
+  assert.deepEqual([page.more, page.limited, page.nextOffset], [false, false, 2]);
+  assert.deepEqual(calls, ["request", "check"]);
+  const denied = fixture({ getPermission: async () => ({ granted: false, accessPrivileges: "none" }) });
+  await assert.rejects(denied.service.readPhoneRows(), /Contacts access is off/);
+});

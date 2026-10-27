@@ -25,28 +25,45 @@ const allowed = (permission: ContactPermission) =>
 // the device address book. This service never persists contacts or requests access
 // except in response to the caller's explicit request flag.
 export function createContactService(adapter: ContactAdapter) {
+  async function readRows(offset: number, request: boolean) {
+    if (adapter.platform === "web")
+      throw Error(
+        "Phone contacts are available in the iPhone app. You can add a person below.",
+      );
+    if (!Number.isSafeInteger(offset) || offset < 0)
+      throw Error(
+        "Could not load this contacts page. Choose phone contacts again.",
+      );
+    const permission = request
+      ? await adapter.requestPermission()
+      : await adapter.getPermission();
+    if (!allowed(permission)) throw Error(accessOff);
+    const rows = await adapter.read(offset, 50);
+    const current = await adapter.getPermission();
+    if (!allowed(current)) throw Error(accessOff);
+    // Do not expose a page obtained with a broader permission than now granted.
+    if (permission.accessPrivileges !== current.accessPrivileges)
+      throw Error(
+        "Contacts access changed. Choose phone contacts again to refresh.",
+      );
+    return { rows, current };
+  }
   return {
+    /** The raw name and phone rows of one page, for inviting by number. */
+    async readPhoneRows(offset = 0, request = false) {
+      const { rows, current } = await readRows(offset, request);
+      return {
+        rows: rows.map((r) => ({
+          fullName: r.fullName ?? null,
+          phones: (r.phones ?? []).flatMap((p) => (p.number ? [{ number: p.number }] : [])),
+        })),
+        more: rows.length === 50,
+        limited: current.accessPrivileges === "limited",
+        nextOffset: offset + rows.length,
+      };
+    },
     async readContactPage(offset = 0, request = false) {
-      if (adapter.platform === "web")
-        throw Error(
-          "Phone contacts are available in the iPhone app. You can add a person below.",
-        );
-      if (!Number.isSafeInteger(offset) || offset < 0)
-        throw Error(
-          "Could not load this contacts page. Choose phone contacts again.",
-        );
-      const permission = request
-        ? await adapter.requestPermission()
-        : await adapter.getPermission();
-      if (!allowed(permission)) throw Error(accessOff);
-      const rows = await adapter.read(offset, 50);
-      const current = await adapter.getPermission();
-      if (!allowed(current)) throw Error(accessOff);
-      // Do not expose a page obtained with a broader permission than now granted.
-      if (permission.accessPrivileges !== current.accessPrivileges)
-        throw Error(
-          "Contacts access changed. Choose phone contacts again to refresh.",
-        );
+      const { rows, current } = await readRows(offset, request);
       let missing = 0;
       const people = mergePeople(
         ...rows.map((row) => {
@@ -115,6 +132,9 @@ async function nativeService() {
 }
 export async function readContactPage(offset = 0, request = false) {
   return (await nativeService()).readContactPage(offset, request);
+}
+export async function readPhoneRows(offset = 0, request = false) {
+  return (await nativeService()).readPhoneRows(offset, request);
 }
 export async function expandContactAccess() {
   return (await nativeService()).expandContactAccess();

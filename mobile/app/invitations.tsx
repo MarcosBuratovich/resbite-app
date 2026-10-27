@@ -5,19 +5,21 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import { Copy, ErrorNote, Title, s } from "../src/design/ui";
-import { Chip, CoverCard, IconButton, InfoSheet } from "../src/design/kit";
+import { Chip, IconButton, InfoSheet } from "../src/design/kit";
+import { PickStep, SendStep } from "../src/design/ContactPicker";
 import { PreviewNotice } from "../src/design/Chrome";
 import { colors as c } from "../src/design/tokens";
 import { useApp } from "../src/state/AppState";
-import { useCoverUri } from "../src/state/useCoverUri";
+import { useContactInvites } from "../src/state/useContactInvites";
+import { useAccount } from "../src/state/AccountState";
+import { INVITE_COPY } from "../src/domain/inviteCopy";
 import { useFocusedRefresh, type Run } from "../src/state/useFocusedRefresh";
 import { planGateway } from "../src/services/plans";
 import { readProfile } from "../src/services/profile";
 import { invitationGateway } from "../src/services/invitations";
 import { buildEventLink } from "../src/domain/appLinks";
 import { canEditPlan, type Plan } from "../src/domain/plans";
-import { eventPicture } from "../src/domain/events";
-import { LINK_INFO, shareMessage, TURN_OFF_MESSAGE, TURN_OFF_TITLE } from "../src/domain/eventLinks";
+import { LINK_INFO, linkDate, shareMessage, TURN_OFF_MESSAGE, TURN_OFF_TITLE } from "../src/domain/eventLinks";
 
 const unavailable = "Only the organizer can invite people to an upcoming, active resbite.";
 
@@ -39,7 +41,18 @@ export default function Invitations() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [about, setAbout] = useState(false);
-  const coverUri = useCoverUri(plan?.cover_path ?? null);
+  const { user } = useAccount();
+  const contacts = useContactInvites({
+    planId,
+    scope: preview ? undefined : userId,
+    userPhone: user?.phone,
+    message: {
+      host: host ?? "Your host",
+      title: plan?.title.trim() ?? "",
+      when: plan ? linkDate(plan.starts_at, plan.ends_at) : "",
+    },
+    enabled: !preview && !!plan,
+  });
 
   const load = useCallback(
     async (begin: () => Run) => {
@@ -153,25 +166,17 @@ export default function Invitations() {
           <PreviewNotice dismissible={false} />
           <IconButton icon={Info} label="About invitation links" onPress={() => setAbout(true)} />
         </View>
-        <Title>Invite people</Title>
-        {plan && (
-          <CoverCard
-            heading={false}
-            picture={eventPicture(plan)}
-            uri={coverUri}
-            pictureLabel={plan.cover_description}
-            title={plan.title}
-            startsAt={plan.starts_at}
-            endsAt={plan.ends_at}
-            // Guests see the area, never the exact place, before they reply.
-            place={plan.area?.trim() || null}
-            byline={`Invited by ${host ?? "you"}`}
+        <Title>{contacts.outcome ? INVITE_COPY.almostHeading : INVITE_COPY.heading}</Title>
+        {plan && !contacts.outcome && <PickStep k={contacts} previewing={preview} />}
+        {plan && contacts.outcome && (
+          <SendStep
+            outcome={contacts.outcome}
+            error={contacts.error}
+            onSend={(item, via) => void contacts.send(item, via).then((m) => contacts.setError(m))}
+            onDone={() => (router.canGoBack() ? router.back() : router.replace("/plans"))}
           />
         )}
-        {plan && <Copy style={s.muted}>This is what people see before they reply.</Copy>}
-        {preview && plan && (
-          <Copy>Preview can’t share invitation links. Real links need an approved tester account.</Copy>
-        )}
+        {plan && !contacts.outcome && !preview && <Title style={{ fontSize: 23 }}>{INVITE_COPY.eventLink}</Title>}
         <ErrorNote message={error} />
         {!!notice && (
           <Copy accessibilityLiveRegion="polite" style={{ color: c.aquaDark }}>
@@ -179,7 +184,7 @@ export default function Invitations() {
           </Copy>
         )}
         {loading && !plan && <Copy accessibilityLiveRegion="polite">Loading the link…</Copy>}
-        {!preview && plan && (
+        {!preview && plan && !contacts.outcome && (
           <View style={styles.chips}>
             <Chip
               icon={Share2}
