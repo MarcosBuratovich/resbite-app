@@ -25,6 +25,13 @@ export type PushRegistrationAdapter = {
 };
 const validToken = (value: string) =>
   /^(ExponentPushToken|ExpoPushToken)\[[A-Za-z0-9_-]+\]$/.test(value);
+const unreadable = (cause?: unknown) =>
+  Object.assign(Error("Notification cleanup record is invalid.", { cause }), {
+    unreadableRecord: true,
+  });
+/** The record couldn't be read, parsed or trusted. Sign-out forgets it rather than refuse. */
+export const isUnreadableRecord = (error: unknown) =>
+  (error as { unreadableRecord?: unknown } | null)?.unreadableRecord === true;
 /** This phone's push endpoint for the signed-in account. The live adapter and its wiring are in
  * pushDevice.ts; nothing here asks for permission. */
 export function createPushRegistration(
@@ -60,7 +67,9 @@ export function createPushRegistration(
           throw Error("Account changed during notification setup.");
       };
       current();
-      let journal = await adapter.readJournal();
+      let journal = await adapter.readJournal().catch((cause: unknown) => {
+        throw unreadable(cause);
+      });
       current();
       if (
         journal &&
@@ -68,7 +77,7 @@ export function createPushRegistration(
           !journal.account ||
           !["registering", "registered", "removing"].includes(journal.phase))
       )
-        throw Error("Notification cleanup record is invalid.");
+        throw unreadable();
       if (journal && journal.account !== account) {
         // An account switch must first await cleanup using the old authenticated session.
         if (await adapter.hasSession(journal.account))

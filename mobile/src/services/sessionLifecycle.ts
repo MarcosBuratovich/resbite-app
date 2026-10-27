@@ -36,7 +36,8 @@ type Dependencies = {
    * register the account again). */
   blockPush?: () => () => void;
   /** Plan 4: removes this phone's push endpoint with the account's own session, first, before auth
-   * sign-out. A failure fails sign-out with nothing cleared (account deletion forgets it instead). */
+   * sign-out. A failure fails sign-out with nothing cleared (account deletion, or a damaged record,
+   * forgets it instead). */
   clearPush?: (deleteAccount: boolean) => Promise<void>;
   clearDrafts?: (scope: string) => Promise<void>;
   authSignOut: (localOnly?: boolean) => Promise<void>;

@@ -2,6 +2,7 @@ import type { KeyStore } from "./secureChunks";
 import { permissionFrom, type NotificationPermissionResponse } from "./notifications";
 import {
   createPushRegistration,
+  isUnreadableRecord,
   type PushContext,
   type PushJournal,
   type PushRegistrationAdapter,
@@ -50,14 +51,10 @@ export function createPushDeviceAdapter(deps: PushDeviceDeps): PushRegistrationA
   }
   return {
     platform,
+    // A record that can't be read or parsed rejects; the registration treats it as unreadable.
     async readJournal() {
       const raw = await deps.store.getItem(JOURNAL);
-      if (raw === null) return null;
-      try {
-        return JSON.parse(raw) as PushJournal;
-      } catch {
-        throw Error("Notification cleanup record is invalid.");
-      }
+      return raw === null ? null : (JSON.parse(raw) as PushJournal);
     },
     writeJournal: (value) =>
       value ? deps.store.setItem(JOURNAL, JSON.stringify(value)) : deps.store.removeItem(JOURNAL),
@@ -75,7 +72,11 @@ export function createPushDeviceAdapter(deps: PushDeviceDeps): PushRegistrationA
   };
 }
 
-/** The last registration outcome for the current session; null until one has settled. */
+/**
+ * The registration state for the current session. "disabled" whenever nothing can be registered (switched
+ * off, web, preview, signed out), set at once; null only while a real account's state is being checked;
+ * otherwise its last outcome.
+ */
 export type PushStatus = "registered" | "permission-off" | "disabled" | "failed" | null;
 
 /**
@@ -90,18 +91,25 @@ export function createPushSession(adapter: PushRegistrationAdapter, enabled: boo
   let generation = 0;
   let holds = 0;
   let leaving: Promise<void> | null = null;
-  let status: PushStatus = null;
+  let running: Promise<void> | null = null;
+  let queued: Promise<void> | null = null;
+  let status: PushStatus = "disabled";
   const listeners = new Set<() => void>();
-  const real = (c: PushContext) => Boolean(c.account) && !c.preview;
+  const registrable = (c: PushContext) =>
+    enabled && adapter.platform !== "web" && Boolean(c.account) && !c.preview;
+  const checking = (c: PushContext): PushStatus => (registrable(c) ? null : "disabled");
+  const same = (a: PushContext, b: PushContext) =>
+    a.account === b.account && a.preview === b.preview;
   const publish = (next: PushStatus) => {
     if (next === status) return;
     status = next;
     for (const listener of listeners) listener();
   };
 
-  async function reconcile(): Promise<void> {
+  async function run(): Promise<void> {
     // Sign-out or an account change is removing the endpoint: nothing may register it again meanwhile.
     if (holds || leaving) return;
+    if (!registrable(followed)) return publish("disabled");
     const mine = generation;
     let next: PushStatus;
     try {
@@ -113,24 +121,48 @@ export function createPushSession(adapter: PushRegistrationAdapter, enabled: boo
     if (mine === generation) publish(next);
   }
 
+  /** Calls made together share one run. One made while a run is under way gets a single run after it,
+   * which later calls share too, so a permission changed meanwhile is still read. */
+  function reconcile(): Promise<void> {
+    if (holds || leaving) return Promise.resolve();
+    if (queued) return queued;
+    const scheduled: Promise<void> = (running ?? Promise.resolve()).then(() => {
+      queued = null;
+      const current = run();
+      running = current;
+      return current.then(() => {
+        if (running === current) running = null;
+      });
+    });
+    queued = scheduled;
+    return scheduled;
+  }
+
   function follow(next: PushContext, again = false): Promise<void> {
-    const changed = next.account !== followed.account || next.preview !== followed.preview;
+    const changed = !same(next, followed);
     followed = next;
     push.update(next);
     if (changed) {
       generation++;
-      publish(null);
+      publish(checking(next));
     }
-    return (changed || again) && real(next) ? reconcile() : Promise.resolve();
+    return (changed || again) && registrable(next) ? reconcile() : Promise.resolve();
   }
 
   function update(next: PushContext): Promise<void> {
+    const before = wanted;
     wanted = { account: next.account, preview: next.preview };
-    if (leaving) return leaving;
-    if (!real(followed) || wanted.account === followed.account) return follow(wanted);
+    if (leaving) {
+      if (!same(wanted, before)) publish(checking(wanted));
+      return leaving;
+    }
+    if (!registrable(followed) || wanted.account === followed.account) return follow(wanted);
     // The session moved to another account, or ended, without signing out here (an email link opened for
-    // another account, a session ended on the server). Remove the endpoint with the leaving account's own
-    // session while the registration still follows it, then follow the new session.
+    // another account, a session ended on the server). The old account's state never shows for the new
+    // one. Remove the endpoint with the leaving account's own session while the registration still
+    // follows it, then follow the new session.
+    generation++;
+    publish(checking(wanted));
     const done: Promise<void> = push
       .beforeSignOut()
       .then(
@@ -155,7 +187,7 @@ export function createPushSession(adapter: PushRegistrationAdapter, enabled: boo
       return () => {
         if (released) return;
         released = true;
-        if (--holds === 0 && !leaving && real(followed)) void reconcile();
+        if (--holds === 0 && !leaving && registrable(followed)) void reconcile();
       };
     },
     /** Sign-out, before auth sign-out: removes this phone's endpoint with the account's own session. An
@@ -166,6 +198,12 @@ export function createPushSession(adapter: PushRegistrationAdapter, enabled: boo
       try {
         await push.beforeSignOut();
       } catch (error) {
+        if (isUnreadableRecord(error)) {
+          // A damaged record never locks anyone out of signing out. A token it may have named is cleared by
+          // the next registration's rebind, or by the sender on DeviceNotRegistered.
+          await adapter.writeJournal(null).catch(() => {});
+          return;
+        }
         if (!deleteAccount) throw error;
         await adapter.writeJournal(null);
       }
@@ -179,6 +217,42 @@ export function createPushSession(adapter: PushRegistrationAdapter, enabled: boo
 }
 export type PushSession = ReturnType<typeof createPushSession>;
 
+type AuthSession = { user: { id: string }; access_token: string } | null;
+/** The part of `supabase.auth` the session binding reads. */
+export type SessionSource = {
+  getSession(): Promise<{ data: { session: AuthSession } }>;
+  onAuthStateChange(callback: (event: string, session: AuthSession) => void): unknown;
+};
+
+/**
+ * Which access token a request for an account carries: the live session's when it is that account's;
+ * otherwise the last one this run saw for it before another session replaced it (so it can still remove
+ * its own endpoint). Never another account's. An account that signs out is forgotten.
+ */
+export function createSessionTokens(
+  auth: SessionSource,
+): Pick<PushDeviceDeps, "sessionFor" | "liveAccount"> {
+  const seen = new Map<string, string>();
+  let last: string | null = null;
+  auth.onAuthStateChange((event, session) => {
+    if (session) {
+      seen.set(session.user.id, session.access_token);
+      last = session.user.id;
+    } else if (event === "SIGNED_OUT" && last) {
+      seen.delete(last);
+      last = null;
+    }
+  });
+  return {
+    async sessionFor(account) {
+      const { session } = (await auth.getSession()).data;
+      if (session?.user.id === account) return session.access_token;
+      return seen.get(account) ?? null;
+    },
+    liveAccount: async () => (await auth.getSession()).data.session?.user.id ?? null,
+  };
+}
+
 /** The live dependencies: expo-notifications, expo-constants, the secure store and Supabase. Native modules
  * are required lazily, as in notifications.ts, so web and the tests never load them. */
 export function nativePushDeps(): PushDeviceDeps {
@@ -188,12 +262,6 @@ export function nativePushDeps(): PushDeviceDeps {
     require("expo-notifications") as typeof import("expo-notifications");
   const url = process.env.EXPO_PUBLIC_SUPABASE_URL || "https://unconfigured.supabase.co";
   const key = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY || "unconfigured";
-  // Each account's latest access token this run, so a session that another one replaced can still remove
-  // its own endpoint.
-  const seen = new Map<string, string>();
-  supabase.auth.onAuthStateChange((_event, session) => {
-    if (session) seen.set(session.user.id, session.access_token);
-  });
   return {
     platform: Platform.OS,
     store: storage,
@@ -205,13 +273,7 @@ export function nativePushDeps(): PushDeviceDeps {
       const { default: Constants } = require("expo-constants") as typeof import("expo-constants");
       return Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
     },
-    async sessionFor(account) {
-      const { data } = await supabase.auth.getSession();
-      if (data.session?.user.id === account) return data.session.access_token;
-      return seen.get(account) ?? null;
-    },
-    liveAccount: async () =>
-      (await supabase.auth.getSession()).data.session?.user.id ?? null,
+    ...createSessionTokens(supabase.auth),
     async rpc(accessToken, name, args) {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 15000);

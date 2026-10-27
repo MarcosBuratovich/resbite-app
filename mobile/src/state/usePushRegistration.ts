@@ -30,10 +30,17 @@ export function usePushForeground() {
 }
 
 /**
- * For the ask and Notification settings (Task 5). `reconcilePush()` registers this phone now: call it
- * after the permission changes in the app ("Turn on notifications"). It never rejects. `pushStatus` is
- * the last outcome for the current session: "registered", "permission-off", "disabled" (switched off,
- * web, preview or signed out), "failed" (retried on the next foreground), or null until one settles.
+ * For the ask and Notification settings (Task 5).
+ *
+ * `reconcilePush()` registers this phone now: call it after the permission changes in the app ("Turn on
+ * notifications"). It never rejects. Calls made together share one registration; one made while a
+ * registration is under way gets a single one after it, so the new permission is always read.
+ *
+ * `pushStatus`, for the current session:
+ * - "disabled": nothing can be registered (switched off, web, preview, signed out). Set at once.
+ * - null: only while a real account's state is being checked, right after a sign-in or an account
+ *   switch. The previous account's state never shows for the new one.
+ * - "registered", "permission-off", or "failed" (retried on the next foreground): the last outcome.
  */
 export function usePushRegistration(): {
   pushStatus: PushStatus;

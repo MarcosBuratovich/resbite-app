@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createSessionLifecycle, signOutNotice } from "./sessionLifecycle";
-import { createPushDeviceAdapter, createPushSession, pushEnabled } from "./pushDevice";
+import {
+  createPushDeviceAdapter,
+  createPushSession,
+  createSessionTokens,
+  pushEnabled,
+  type SessionSource,
+} from "./pushDevice";
 
 const token = "ExponentPushToken[phone-1]";
 const JOURNAL = "resbite.push-endpoint";
@@ -14,20 +20,46 @@ function deferred() {
   return { promise, resolve };
 }
 
-// One phone: fake expo-notifications, fake secure storage and a fake RPC, wired the way AppState wires the
-// real ones (sessionLifecycle for sign-out, every session change mirrored to the push session).
+// A fake `supabase.auth`: the live session and the auth events supabase-js delivers.
+function fakeAuth() {
+  type Live = { user: { id: string }; access_token: string } | null;
+  let live: Live = null;
+  const listeners: ((event: string, session: Live) => void)[] = [];
+  const auth: SessionSource = {
+    getSession: async () => ({ data: { session: live } }),
+    onAuthStateChange: (callback) => listeners.push(callback),
+  };
+  return {
+    auth,
+    emit(event: string, session: Live) {
+      live = session;
+      for (const listener of listeners) listener(event, session);
+    },
+  };
+}
+const signedIn = (account: string, accessToken = `jwt-${account}`) => ({
+  user: { id: account },
+  access_token: accessToken,
+});
+
+// One phone: fake expo-notifications, fake secure storage, a fake RPC and a fake supabase.auth behind the real
+// session binding, wired the way AppState wires the real ones (sessionLifecycle for sign-out, every session
+// change mirrored to the push session).
 function phone(options: { platform?: string; enabled?: boolean } = {}) {
   const disk = new Map<string, string>();
   const events: string[] = [];
-  const sessions = new Set<string>();
+  const supabase = fakeAuth();
   let permission = ios(2);
   let offline = false;
   let authGate: Promise<void> = Promise.resolve();
+  let rpcGate: Promise<void> = Promise.resolve();
+  let unreadable = false;
   const adapter = createPushDeviceAdapter({
     platform: options.platform ?? "ios",
     store: {
       getItem: async (k) => {
         events.push("storage:read");
+        if (unreadable) throw Error("Invalid secure session manifest");
         return disk.get(k) ?? null;
       },
       setItem: async (k, v) => {
@@ -48,9 +80,9 @@ function phone(options: { platform?: string; enabled?: boolean } = {}) {
       },
     },
     projectId: () => "project-1",
-    sessionFor: async (account) => (sessions.has(account) ? `jwt-${account}` : null),
-    liveAccount: async () => current,
+    ...createSessionTokens(supabase.auth),
     rpc: async (accessToken, name, args) => {
+      await rpcGate;
       if (offline) throw Error("offline");
       events.push([name, accessToken, args.p_token, args.p_platform].filter(Boolean).join(":"));
     },
@@ -79,11 +111,11 @@ function phone(options: { platform?: string; enabled?: boolean } = {}) {
     clearPending: async () => {},
     blockPush: push.hold,
     clearPush: push.clear,
-    authSignOut: async () => {
+    authSignOut: async (localOnly) => {
       await authGate;
-      events.push("auth.signOut");
+      events.push(localOnly ? "auth.signOut:local" : "auth.signOut");
       // supabase-js delivers SIGNED_OUT before signOut() resolves; AppState mirrors it.
-      if (current) sessions.delete(current);
+      supabase.emit("SIGNED_OUT", null);
       void session(null);
     },
     finish: () => {
@@ -97,14 +129,18 @@ function phone(options: { platform?: string; enabled?: boolean } = {}) {
     events,
     disk,
     journal: () => (disk.has(JOURNAL) ? JSON.parse(disk.get(JOURNAL)!) : null),
-    rpc: () => events.filter((e) => e.startsWith("register_device") || e.startsWith("unregister_device") || e === "auth.signOut"),
+    rpc: () =>
+      events.filter(
+        (e) => e.startsWith("register_device") || e.startsWith("unregister_device") || e.startsWith("auth.signOut"),
+      ),
+    /** A sign-in, or an email link that replaces the live session with another account's. */
     signIn(account: string) {
-      sessions.add(account);
+      supabase.emit("SIGNED_IN", signedIn(account));
       return session(account);
     },
-    /** The session ends without signing out here (expired, or ended on the server): its token is gone. */
+    /** The session ends without signing out here (expired, or ended on the server). */
     endSession() {
-      if (current) sessions.delete(current);
+      supabase.emit("SIGNED_OUT", null);
       return session(null);
     },
     /** Settles whatever the last session change started. */
@@ -117,6 +153,12 @@ function phone(options: { platform?: string; enabled?: boolean } = {}) {
     },
     holdAuth: (gate: Promise<void>) => {
       authGate = gate;
+    },
+    holdRpc: (gate: Promise<void>) => {
+      rpcGate = gate;
+    },
+    breakStorage: () => {
+      unreadable = true;
     },
   };
 }
@@ -305,4 +347,126 @@ test("web and preview never register", async () => {
   await preview.push.reconcile();
   assert.deepEqual(preview.rpc(), []);
   assert.ok(!preview.events.some((e) => e.startsWith("permission") || e.startsWith("storage")));
+});
+
+test("pushStatus: \"disabled\" at once for preview and signed out; null, then the new account's state, on a switch", async () => {
+  const p = phone();
+  assert.equal(p.push.status(), "disabled");
+  const previewing = p.push.update({ account: "a", preview: true });
+  assert.equal(p.push.status(), "disabled");
+  await previewing;
+  assert.ok(!p.events.some((e) => e.startsWith("permission") || e.startsWith("storage")));
+  await p.push.update({ account: null, preview: false });
+  const signingIn = p.signIn("a");
+  assert.equal(p.push.status(), null);
+  await signingIn;
+  assert.equal(p.push.status(), "registered");
+  p.setPermission(1);
+  const switching = p.signIn("b");
+  // A's "registered" never shows for B.
+  assert.equal(p.push.status(), null);
+  await switching;
+  assert.equal(p.push.status(), "permission-off");
+  await p.lifecycle.signOut();
+  await p.settle();
+  assert.equal(p.push.status(), "disabled");
+});
+
+test("a damaged record never blocks sign-out: it is forgotten and sign-out completes", async () => {
+  const damaged: [string, (p: ReturnType<typeof phone>) => void][] = [
+    ["unparseable", (p) => p.disk.set(JOURNAL, "{not json")],
+    ["untrustworthy", (p) => p.disk.set(JOURNAL, JSON.stringify({ account: "a", token: "nope", phase: "registered" }))],
+    ["unreadable", (p) => p.breakStorage()],
+  ];
+  for (const [name, damage] of damaged) {
+    const p = phone();
+    await p.signIn("a");
+    damage(p);
+    await p.lifecycle.signOut();
+    await p.settle();
+    assert.deepEqual(p.rpc(), [`register_device:jwt-a:${token}:ios`, "auth.signOut"], name);
+    assert.equal(p.disk.has(JOURNAL), false, name);
+  }
+});
+
+test("a request for an account carries only that account's own session, and nothing when it has none", async () => {
+  const supabase = fakeAuth();
+  const tokens = createSessionTokens(supabase.auth);
+  supabase.emit("SIGNED_IN", signedIn("a"));
+  assert.equal(await tokens.sessionFor("a"), "jwt-a");
+  assert.equal(await tokens.sessionFor("b"), null);
+  // An email link for B replaces the live session: A keeps its own last token for its cleanup, never B's.
+  supabase.emit("SIGNED_IN", signedIn("b"));
+  assert.equal(await tokens.sessionFor("a"), "jwt-a");
+  assert.equal(await tokens.sessionFor("b"), "jwt-b");
+  assert.equal(await tokens.liveAccount(), "b");
+  supabase.emit("TOKEN_REFRESHED", signedIn("b", "jwt-b2"));
+  assert.equal(await tokens.sessionFor("b"), "jwt-b2");
+  // B signs out: its token is forgotten.
+  supabase.emit("SIGNED_OUT", null);
+  assert.equal(await tokens.sessionFor("b"), null);
+  assert.equal(await tokens.liveAccount(), null);
+
+  // Through the adapter, with only B's session on this phone: nothing is sent for A.
+  const phoneAuth = fakeAuth();
+  const sent: string[] = [];
+  const adapter = createPushDeviceAdapter({
+    platform: "ios",
+    store: { getItem: async () => null, setItem: async () => {}, removeItem: async () => {} },
+    notifications: {
+      getPermissionsAsync: async () => ios(2),
+      getExpoPushTokenAsync: async () => ({ data: token }),
+    },
+    projectId: () => "project-1",
+    ...createSessionTokens(phoneAuth.auth),
+    rpc: async (accessToken, name) => {
+      sent.push(`${name}:${accessToken}`);
+    },
+  });
+  phoneAuth.emit("SIGNED_IN", signedIn("b"));
+  await assert.rejects(adapter.register("a", token, "ios"), /Sign in again/);
+  await assert.rejects(adapter.unregister("a", token), /Sign in again/);
+  await adapter.register("b", token, "ios");
+  assert.deepEqual(sent, ["register_device:jwt-b"]);
+});
+
+test("reconciles made together share one registration; one made during a run gets a single run after it", async () => {
+  const p = phone();
+  await p.signIn("a");
+  p.events.length = 0;
+  await Promise.all([p.push.reconcile(), p.push.reconcile(), p.push.reconcile()]);
+  assert.deepEqual(p.rpc(), [`register_device:jwt-a:${token}:ios`]);
+  // A run waiting on the server: later calls share one more run, which reads a permission changed meanwhile.
+  p.events.length = 0;
+  const gate = deferred();
+  p.holdRpc(gate.promise);
+  const first = p.push.reconcile();
+  await new Promise((r) => setImmediate(r));
+  const later = [p.push.reconcile(), p.push.reconcile(), p.push.reconcile()];
+  gate.resolve();
+  await Promise.all([first, ...later]);
+  assert.deepEqual(p.rpc(), [`register_device:jwt-a:${token}:ios`, `register_device:jwt-a:${token}:ios`]);
+});
+
+test("account deletion unregisters before the local auth sign-out", async () => {
+  const p = phone();
+  await p.signIn("a");
+  await p.lifecycle.finishAccountDeletion("a");
+  await p.settle();
+  assert.deepEqual(p.rpc(), [
+    `register_device:jwt-a:${token}:ios`,
+    `unregister_device:jwt-a:${token}`,
+    "auth.signOut:local",
+  ]);
+  assert.equal(p.journal(), null);
+});
+
+test("a reconcile queued just before sign-out starts doesn't register first", async () => {
+  const p = phone();
+  await p.signIn("a");
+  const queued = p.push.reconcile();
+  const signingOut = p.lifecycle.signOut();
+  await Promise.all([queued, signingOut]);
+  await p.settle();
+  assert.deepEqual(p.rpc(), [`register_device:jwt-a:${token}:ios`, `unregister_device:jwt-a:${token}`, "auth.signOut"]);
 });
