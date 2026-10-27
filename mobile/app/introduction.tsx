@@ -27,8 +27,7 @@ export default function Introduction() {
   const slide = introSlides[step];
   const picture = pictures[step];
   const last = step === introSlides.length - 1;
-  const start = () =>
-    router.replace({ pathname: "/auth", params: { mode: "register" } });
+  const start = () => router.replace("/auth/phone");
   function move(next: number) {
     setDirection(next > step ? "forward" : "back");
     setStep(next);

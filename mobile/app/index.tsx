@@ -65,7 +65,7 @@ export default function Welcome() {
               <TextAction
                 title="I have an account"
                 onPress={() =>
-                  router.push({ pathname: "/auth", params: { mode: "login" } })
+                  router.push({ pathname: "/auth/phone", params: { intent: "signin" } })
                 }
               />
             </View>

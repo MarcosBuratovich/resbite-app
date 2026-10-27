@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { router } from "expo-router";
+import { Redirect, router } from "expo-router";
 import { Eye, EyeOff, Info, KeyRound, Mail, MailCheck, RefreshCw, Send } from "lucide-react-native";
 import { Button, Copy, ErrorNote, TextAction, s } from "../../src/design/ui";
 import { Chip, FieldCard, IconButton, InfoSheet, StatusCard, StepScreen, useFocusOnChange } from "../../src/design/kit";
@@ -46,6 +46,8 @@ export default function Auth() {
     forward();
     switchMode(next);
   };
+  // Sign-up now starts at the phone screen; every hook above has already run, so this early return is safe.
+  if (register) return <Redirect href="/auth/phone" />;
   const resendChip = (
     <Chip
       text={remaining > 0 ? `Resend in ${remaining}s` : "Resend"}
@@ -228,7 +230,7 @@ export default function Auth() {
         {mode === "login" && (
           <>
             <TextAction title="Forgot password?" disabled={blocked} onPress={() => go("reset")} />
-            <TextAction title="Create account" disabled={blocked} onPress={() => go("register")} />
+            <TextAction title="Create account" disabled={blocked} onPress={() => router.push("/auth/phone")} />
             <TextAction
               title="Need to confirm your email?"
               disabled={blocked}
@@ -247,7 +249,7 @@ export default function Auth() {
         )}
         {mode === "reset" && (
           <>
-            <TextAction title="Create account" disabled={blocked} onPress={() => go("register")} />
+            <TextAction title="Create account" disabled={blocked} onPress={() => router.push("/auth/phone")} />
             <TextAction title="Back to sign in" disabled={blocked} onPress={() => go("login")} />
           </>
         )}

@@ -12,7 +12,7 @@ import { accessState, accessTitles, type AccessState } from "../src/domain/accou
 import { isLinkCode, pendingInviteParams } from "../src/domain/appLinks";
 import { accountGate } from "../src/domain/accountRoute";
 import { nameFromSession } from "../src/domain/guestAccount";
-import { phoneVerified } from "../src/domain/phone";
+import { formatPhone, phoneVerified } from "../src/domain/phone";
 
 const icons: Record<AccessState, typeof ShieldCheck> = {
   checking: ShieldCheck,
@@ -97,7 +97,9 @@ export default function Account() {
             <ActivityIndicator accessibilityLabel="Checking account access" />
           ) : (
             <>
-              <Copy style={styles.email}>{session?.user.email}</Copy>
+              <Copy style={styles.email}>
+                {session?.user.email || (session?.user.phone ? formatPhone(session.user.phone) : null)}
+              </Copy>
               {status === "access_pending" && (
                 <>
                   <Copy style={styles.line}>
