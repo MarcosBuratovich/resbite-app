@@ -305,7 +305,7 @@ update auth.users set phone_confirmed_at=now() where id='d1000000-0000-4000-8000
 set local role authenticated;
 do $$ begin
  begin perform public.answer_phone_invitation(repeat('I',22),'Sam','accepted','2026-10'); raise exception 'Revoked answered';
- exception when insufficient_privilege then null; end;
+ exception when insufficient_privilege then if sqlerrm<>'Invitation unavailable' then raise exception 'Revoked refused for the wrong reason: %', sqlerrm; end if; end;
  begin perform public.answer_phone_invitation(repeat('Z',22),'Sam','accepted','2026-10'); raise exception 'Unknown answered';
  exception when insufficient_privilege then null; end;
  begin perform public.answer_phone_invitation(repeat('F',22),'Sam','nope','2026-10'); raise exception 'Bad response allowed';
@@ -355,6 +355,23 @@ do $$ begin
  if (select response from public.attendees where plan_id='d1100000-0000-4000-8000-000000000001' and user_id='d1000000-0000-4000-8000-000000000007')<>'maybe' then raise exception 'Maybe expected'; end if;
 end $$;
 
+-- the same answer again is quiet: same version, no second notice
+reset role;
+create temp table t_before as select (select version from public.attendees where plan_id='d1100000-0000-4000-8000-000000000001' and user_id='d1000000-0000-4000-8000-000000000007') v,
+ (select count(*) from private.notification_outbox where kind='rsvp' and actor_id='d1000000-0000-4000-8000-000000000007') n;
+grant select on t_before to authenticated;
+set local role authenticated;
+do $$ declare r jsonb; begin
+ r := public.answer_phone_invitation(repeat('F',22),null,'maybe',null);
+ if r<>jsonb_build_object('response','maybe','plan_id','d1100000-0000-4000-8000-000000000001') then raise exception 'Repeat returned %', r; end if;
+end $$;
+reset role;
+do $$ begin
+ if (select version from public.attendees where plan_id='d1100000-0000-4000-8000-000000000001' and user_id='d1000000-0000-4000-8000-000000000007')<>(select v from t_before)
+  or (select count(*) from private.notification_outbox where kind='rsvp' and actor_id='d1000000-0000-4000-8000-000000000007')<>(select n from t_before) then raise exception 'Repeated answer must change nothing'; end if;
+end $$;
+set local role authenticated;
+
 -- my_phone_invitation
 do $$ declare r jsonb; begin
  r := public.my_phone_invitation(repeat('F',22));
@@ -396,4 +413,31 @@ do $$ begin
  exception when insufficient_privilege then null; end;
 end $$;
 reset role;
+-- an organizer who may no longer use the app gives no access through their links
+update private.beta_access set revoked_at=now() where user_id='d1000000-0000-4000-8000-000000000001';
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"d1000000-0000-4000-8000-000000000007","role":"authenticated"}',true);
+do $$ begin
+ begin perform public.answer_phone_invitation(repeat('F',22),'Sam','accepted','2026-10'); raise exception 'Answered through an ineligible organizer';
+ exception when insufficient_privilege then if sqlerrm<>'Invitation unavailable' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+end $$;
+reset role;
+do $$ begin
+ if (select response from public.attendees where plan_id='d1100000-0000-4000-8000-000000000001' and user_id='d1000000-0000-4000-8000-000000000007')<>'maybe' then raise exception 'Refused answer changed the attendee'; end if;
+ update private.beta_access set revoked_at=null where user_id='d1000000-0000-4000-8000-000000000001';
+end $$;
+-- an account whose email is disabled on the roster gets no new access
+delete from private.beta_access where user_id='d1000000-0000-4000-8000-000000000007';
+delete from public.attendees where user_id='d1000000-0000-4000-8000-000000000007';
+update auth.users set email='disabled@example.test' where id='d1000000-0000-4000-8000-000000000007';
+insert into private.tester_roster(email,enabled) values ('disabled@example.test',false);
+set local role authenticated;
+do $$ begin
+ begin perform public.answer_phone_invitation(repeat('F',22),'Sam','accepted','2026-10'); raise exception 'Disabled tester answered';
+ exception when insufficient_privilege then if sqlerrm<>'Invitation unavailable' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+end $$;
+reset role;
+do $$ begin
+ if exists(select 1 from private.beta_access where user_id='d1000000-0000-4000-8000-000000000007') or exists(select 1 from public.attendees where user_id='d1000000-0000-4000-8000-000000000007') then raise exception 'Disabled tester got access'; end if;
+end $$;
 rollback;

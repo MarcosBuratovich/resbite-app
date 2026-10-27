@@ -250,7 +250,8 @@ begin
   raise exception 'That isn''t the invited number.' using errcode='42501';
  end if;
  select * into v_plan from public.plans where id=v_inv.plan_id for update;
- if not found or v_plan.owner_id is null or v_plan.status<>'active' or v_plan.starts_at<=now() or v_plan.owner_id=v_uid then
+ if not found or v_plan.owner_id is null or v_plan.status<>'active' or v_plan.starts_at<=now() or v_plan.owner_id=v_uid
+ or not private.user_eligible(v_plan.owner_id) then
   raise exception 'Invitation unavailable' using errcode='42501';
  end if;
  -- Read again under the plan lock: revoking an invitation takes the same lock through its owner checks.
@@ -258,6 +259,10 @@ begin
  if not found then raise exception 'Invitation unavailable' using errcode='42501'; end if;
  if v_inv.user_id is not null and v_inv.user_id<>v_uid then raise exception 'Invitation unavailable' using errcode='42501'; end if;
  if exists(select 1 from private.beta_access where user_id=v_uid and revoked_at is not null) then
+  raise exception 'Invitation unavailable' using errcode='42501';
+ end if;
+ if exists(select 1 from auth.users u where u.id=v_uid
+  and exists(select 1 from private.tester_roster r where r.email = lower(u.email) and not r.enabled)) then
   raise exception 'Invitation unavailable' using errcode='42501';
  end if;
  if p_response is null or p_response not in ('accepted','maybe','declined') then raise exception 'Invalid response' using errcode='22023'; end if;
@@ -277,8 +282,14 @@ begin
  if v_att.user_id is null then
   insert into public.attendees(plan_id,user_id,response) values(v_plan.id,v_uid,p_response) returning * into v_att;
  else
-  update public.attendees set response=p_response,version=version+1,updated_at=now()
-   where plan_id=v_plan.id and user_id=v_uid returning * into v_att;
+  -- The same answer again changes nothing, as respond.
+  if v_att.response<>p_response then
+   update public.attendees set response=p_response,version=version+1,updated_at=now()
+    where plan_id=v_plan.id and user_id=v_uid returning * into v_att;
+  else
+   update private.phone_invitations set user_id=v_uid, answered_at=coalesce(answered_at,now()) where id=v_inv.id;
+   return jsonb_build_object('response',p_response,'plan_id',v_plan.id);
+  end if;
  end if;
  update private.phone_invitations set user_id=v_uid, answered_at=now() where id=v_inv.id;
  insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,detail)
