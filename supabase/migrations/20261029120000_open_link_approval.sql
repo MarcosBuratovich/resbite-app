@@ -83,8 +83,8 @@ revoke all on function private.request_join(uuid,private.plan_links,public.plans
 -- needs a live link to an active event that hasn't started, whose organizer may still use the app (42501
 -- "Invitation unavailable"), an answer (22023), the 18+ tick unless one is stored and a name of 1-80 characters unless
 -- they have a profile (22023, as answer_phone_invitation). People who may use the app already (testers and grant
--- holders) are not asked for the tick or a name, as join_by_link never asked them; a missing profile is made only from
--- a name they give. Then the request.
+-- holders) are not asked for the tick, as join_by_link never asked them; without a profile they still need a name.
+-- Then the request.
 create function private.request_to_join(p_code text, p_name text, p_response text, p_terms_version text) returns jsonb
 language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := auth.uid(); v_link private.plan_links; v_plan public.plans;
@@ -118,21 +118,15 @@ begin
   raise exception 'Invitation unavailable' using errcode='42501';
  end if;
  if p_response is null or p_response not in ('pending','accepted','maybe','declined') then raise exception 'Invalid response' using errcode='22023'; end if;
- if private.eligible() then
-  if not exists(select 1 from public.profiles where id=v_uid) and coalesce(char_length(btrim(p_name)),0) between 1 and 80 then
-   insert into public.profiles(id,display_name) values(v_uid,btrim(p_name));
+ if not private.eligible() and not exists(select 1 from private.age_attestations where user_id=v_uid) then
+  if p_terms_version is null or p_terms_version !~ '^[0-9]{4}-[0-9]{2}$' then
+   raise exception 'Age confirmation required' using errcode='22023';
   end if;
- else
-  if not exists(select 1 from private.age_attestations where user_id=v_uid) then
-   if p_terms_version is null or p_terms_version !~ '^[0-9]{4}-[0-9]{2}$' then
-    raise exception 'Age confirmation required' using errcode='22023';
-   end if;
-   insert into private.age_attestations(user_id,terms_version) values(v_uid,p_terms_version);
-  end if;
-  if not exists(select 1 from public.profiles where id=v_uid) then
-   if coalesce(char_length(btrim(p_name)),0) not between 1 and 80 then raise exception 'Name required' using errcode='22023'; end if;
-   insert into public.profiles(id,display_name) values(v_uid,btrim(p_name));
-  end if;
+  insert into private.age_attestations(user_id,terms_version) values(v_uid,p_terms_version);
+ end if;
+ if not exists(select 1 from public.profiles where id=v_uid) then
+  if coalesce(char_length(btrim(p_name)),0) not between 1 and 80 then raise exception 'Name required' using errcode='22023'; end if;
+  insert into public.profiles(id,display_name) values(v_uid,btrim(p_name));
  end if;
  return private.request_join(v_uid,v_link,v_plan,p_response);
 end $$;

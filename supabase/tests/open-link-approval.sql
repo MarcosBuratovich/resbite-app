@@ -706,15 +706,16 @@ do $$ begin
  end if;
 end $$;
 
--- People who already have access (testers and grant holders) are not asked for the tick or a name, as join_by_link never
--- asked them; a missing profile is made only from a name they give. 25 Quin is a roster tester with a profile and no
--- tick; 26 a grant holder with neither, who gives a name.
+-- People who already have access (testers and grant holders) are not asked for the tick, as join_by_link never asked
+-- them; one with no profile still needs a name. 25 Quin is a roster tester with a profile and no tick; 26 and 27 are
+-- grant holders with neither: 26 gives a name, 27 doesn't.
 insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) values
  ('d2000000-0000-4000-8000-000000000025','olr-quin@resbite-test.invalid',now(),null,null),
- ('d2000000-0000-4000-8000-000000000026',null,null,'447700900426',now());
+ ('d2000000-0000-4000-8000-000000000026',null,null,'447700900426',now()),
+ ('d2000000-0000-4000-8000-000000000027',null,null,'447700900427',now());
 insert into private.tester_roster(email) values ('olr-quin@resbite-test.invalid');
 insert into public.profiles(id,display_name) values ('d2000000-0000-4000-8000-000000000025','Quin');
-insert into private.beta_access(user_id,source) values ('d2000000-0000-4000-8000-000000000026','maintainer');
+insert into private.beta_access(user_id,source) values ('d2000000-0000-4000-8000-000000000026','maintainer'),('d2000000-0000-4000-8000-000000000027','maintainer');
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000025","role":"authenticated"}',true);
 do $$ declare r jsonb; begin
@@ -728,8 +729,20 @@ do $$ declare r jsonb; begin
  r := public.request_to_join((select code from olr_codes where name='A4'),' Max ','maybe',null);
  if r->>'state' is distinct from 'waiting' then raise exception 'A grant holder with no tick or profile got %', r; end if;
 end $$;
+select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000027","role":"authenticated"}',true);
+do $$ begin
+ begin perform public.request_to_join((select code from olr_codes where name='A4'),null,'accepted',null); raise exception 'A grant holder with no profile asked without a name';
+ exception when others then if sqlstate is distinct from '22023' or sqlerrm is distinct from 'Name required' then raise; end if; end;
+ begin perform public.request_to_join((select code from olr_codes where name='A4'),'   ','accepted',null); raise exception 'A grant holder with no profile asked with a blank name';
+ exception when others then if sqlstate is distinct from '22023' or sqlerrm is distinct from 'Name required' then raise; end if; end;
+end $$;
 reset role;
 do $$ begin
+ if exists(select 1 from private.join_requests where user_id='d2000000-0000-4000-8000-000000000027')
+  or exists(select 1 from public.profiles where id='d2000000-0000-4000-8000-000000000027')
+  or exists(select 1 from private.notification_outbox where actor_id='d2000000-0000-4000-8000-000000000027') then
+  raise exception 'A refused request with no name wrote something';
+ end if;
  if exists(select 1 from private.age_attestations where user_id in ('d2000000-0000-4000-8000-000000000025','d2000000-0000-4000-8000-000000000026')) then
   raise exception 'A tick was stored without being asked';
  end if;
