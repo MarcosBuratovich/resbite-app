@@ -50,6 +50,9 @@ h1[tabindex="-1"]:focus { outline: none; }
 .button:disabled, .button[aria-disabled="true"] { opacity: 0.5; box-shadow: none; cursor: not-allowed; }
 .link { align-self: center; min-height: 44px; padding: 0 8px; border: 0; background: none; color: var(--ink); font: inherit; font-size: 15px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .button:focus-visible, .link:focus-visible, .terms a:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+/* Not you? Sign out: quiet, at the foot of the answer and get-the-app steps, apart from their own actions. */
+.signout { margin-top: 8px; color: var(--muted); }
+.signout[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
 
 /* The tick and the terms (GI2's words). */
 .agree { display: flex; flex-direction: column; gap: 4px; }

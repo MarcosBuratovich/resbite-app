@@ -25,10 +25,14 @@ const CODE = "k7Qx9AbCdEfGhIjKlMnOpQ";
 const CANCELLED = "CancelledCancelledCanc";
 const HAPPENED = "HappenedHappenedHappen";
 const UNKNOWN = "UnknownUnknownUnknownU";
+const ANOTHER = "AnotherAnotherAnotherA"; // Another open invitation, whose kept session is never this page's.
+const STALE = "StaleStaleStaleStaleSt"; // An invitation whose event has started.
 const INVITED = "447700900834";
 const OTHER = "447700900534"; // Another person's number with the same last two digits.
 const STORED_CODE = "123456";
 const PLAN_ID = "55555555-5555-4555-8555-555555555555";
+/** Where the page keeps its session for one invitation code. */
+const kept = (code) => `resbite.personal.session.${code}`;
 const COPY = {
   invited: "Marcos invited you",
   confirm: "Confirm it’s you",
@@ -44,6 +48,7 @@ const COPY = {
   going: "You’re going!",
   cant: "Thanks for letting them know",
   waiting: "Sign up with +44 ••• 834 and this resbite will be waiting.",
+  signOut: "Not you? Sign out",
   planOwn: "Plan your own with Resbite.",
   tooMany: "Too many tries. Try again later.",
   connection: "Check your connection and try again.",
@@ -73,6 +78,9 @@ const PAGES = {
   [CANCELLED]: { state: "cancelled", host: "Marcos", title: "Picnic in the park" },
   [HAPPENED]: { state: "happened", host: "Marcos", title: "Picnic in the park" },
 };
+// ANOTHER is open too, for the per-code storage checks; STALE's event has started, so its page is closed.
+PAGES[ANOTHER] = { ...OPEN_PAGE, title: "Board games" };
+PAGES[STALE] = { state: "happened", host: "Marcos", title: "Old picnic" };
 const readPersonalInvitation = async (code) => PAGES[code] ?? { state: "inactive" };
 
 // ---- The site: generate() output, plus the two functions behind /i/ with fixture readers. ----
@@ -127,12 +135,23 @@ const jwt = (sub, n) =>
 
 /**
  * A page on a stubbed Supabase. The fixture keeps the invitation's answer, the issued tokens and every request.
- * `seed` puts a session for that account in the page's storage before the first load, as the script stores it.
+ * Each of `seeds` puts a kept entry in the page's storage before the first load, as the script stores it: under
+ * `code` (default CODE), a session for `phone`, the number `verified` for that code (default `phone`), and `until`
+ * (default the event's start).
  */
-async function fixture({ seed = null, width = 390 } = {}) {
+async function fixture({ seeds = [], width = 390 } = {}) {
   const context = await browser.newContext({ viewport: { width, height: 844 }, reducedMotion: "reduce", locale: "en-GB" });
   const page = await context.newPage();
-  const state = { response: null, accounts: new Map(), access: new Map(), refresh: new Map(), issued: 0, tooMany: false, offline: false };
+  const state = {
+    response: null,
+    accounts: new Map(),
+    access: new Map(),
+    refresh: new Map(),
+    issued: 0,
+    tooMany: false,
+    offline: false,
+    logoutFails: false,
+  };
   const log = [],
     errors = [],
     unexpected = [],
@@ -144,7 +163,7 @@ async function fixture({ seed = null, width = 390 } = {}) {
     // The <meta> copy of the CSP can't carry frame-ancestors (Chrome says so); the response header does.
     if (
       m.type() === "error" &&
-      !/Failed to load resource: (the server responded with a status of (400|401|403)|net::ERR_INTERNET_DISCONNECTED)/.test(m.text()) &&
+      !/Failed to load resource: (the server responded with a status of (400|401|403|500)|net::ERR_INTERNET_DISCONNECTED)/.test(m.text()) &&
       m.text() !== "The Content Security Policy directive 'frame-ancestors' is ignored when delivered via a <meta> element."
     )
       errors.push(m.text());
@@ -161,16 +180,20 @@ async function fixture({ seed = null, width = 390 } = {}) {
     state.refresh.set(refresh_token, user);
     return { access_token, refresh_token, token_type: "bearer", expires_in: expiresIn, expires_at: Math.floor(Date.now() / 1000) + expiresIn, user };
   };
-  if (seed) {
-    const s = issue(account(seed));
+  if (seeds.length) {
+    const entries = seeds.map(({ code = CODE, phone, verified = phone, until = Date.parse(OPEN_PAGE.starts_at) }) => {
+      const s = issue(account(phone));
+      const session = { access_token: s.access_token, refresh_token: s.refresh_token, expires_at: s.expires_at, phone: `+${phone}` };
+      return [kept(code), JSON.stringify({ session, phone: `+${verified}`, until })];
+    });
     await page.addInitScript(
-      ({ value }) => {
+      ({ entries }) => {
         if (!sessionStorage.getItem("fixture-seeded")) {
-          localStorage.setItem("resbite.personal.session", value);
+          for (const [key, value] of entries) localStorage.setItem(key, value);
           sessionStorage.setItem("fixture-seeded", "1");
         }
       },
-      { value: JSON.stringify({ access_token: s.access_token, refresh_token: s.refresh_token, expires_at: s.expires_at, phone: `+${seed}` }) },
+      { entries },
     );
   }
   await page.route("**/*.supabase.co/**", async (route) => {
@@ -210,6 +233,11 @@ async function fixture({ seed = null, width = 390 } = {}) {
       if (!user) return reply({ code: 400, error_code: "refresh_token_not_found", msg: "Invalid Refresh Token" }, 400);
       state.refresh.delete(body.refresh_token);
       return reply(issue(user));
+    }
+    if (method === "POST" && path === "/auth/v1/logout") {
+      if (state.logoutFails) return reply({ code: 500, msg: "Fixture: logout failed" }, 500);
+      state.access.delete((headers.authorization ?? "").replace(/^Bearer /, ""));
+      return route.fulfill({ status: 204, body: "" });
     }
     if (method === "POST" && path === "/rest/v1/rpc/answer_phone_invitation") {
       const user = signedIn();
@@ -369,6 +397,17 @@ try {
     assert.deepEqual(answers[0].body, { p_code: CODE, p_name: "Sam", p_response: "accepted", p_terms_version: "2026-10" });
     const session = [...f.state.access.keys()].at(-1);
     assert.equal(answers[0].auth, `Bearer ${session}`);
+    // Kept under this code only, with the full verified number and the event's start.
+    const entry = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), kept(CODE));
+    assert.deepEqual(
+      [entry.session.access_token, entry.session.phone, entry.phone, entry.until],
+      [session, "+447700900834", "+447700900834", Date.parse(OPEN_PAGE.starts_at)],
+    );
+    assert.deepEqual(
+      await page.evaluate(() => Object.keys(localStorage)),
+      [kept(CODE)],
+      "nothing else is kept",
+    );
     // Direction A.
     await expect(text(page, COPY.hostCanSee)).toBeVisible();
     for (const benefit of COPY.benefits) await expect(text(page, benefit)).toBeVisible();
@@ -399,10 +438,10 @@ try {
     assert.deepEqual(mine[0].body, { p_code: CODE });
     assert.equal(f.calls("/auth/v1/token").length, 0, "a fresh session is not refreshed");
     // An expired session is refreshed before it is used.
-    await page.evaluate(() => {
-      const stored = JSON.parse(localStorage.getItem("resbite.personal.session"));
-      localStorage.setItem("resbite.personal.session", JSON.stringify({ ...stored, expires_at: Math.floor(Date.now() / 1000) - 10 }));
-    });
+    await page.evaluate((key) => {
+      const stored = JSON.parse(localStorage.getItem(key));
+      localStorage.setItem(key, JSON.stringify({ ...stored, session: { ...stored.session, expires_at: Math.floor(Date.now() / 1000) - 10 } }));
+    }, kept(CODE));
     const before = f.log.length;
     await page.reload();
     await expect(heading(page, COPY.going)).toBeVisible();
@@ -436,6 +475,26 @@ try {
     await page.reload();
     await expect(heading(page, COPY.cant)).toBeVisible();
     await noTestCode(page, "the softer screen");
+    // Not you? Sign out: GoTrue ends this session (scope local), the entry goes, and the page is the invitation again.
+    const stored = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), kept(CODE));
+    await button(page, COPY.signOut).click();
+    await expect(button(page, "Answer")).toBeVisible();
+    await expect(heading(page, "Picnic in the park")).toBeVisible();
+    await focused(page, "Picnic in the park");
+    await expect(heading(page, COPY.cant)).toBeHidden();
+    const logout = f.calls("/auth/v1/logout");
+    assert.equal(logout.length, 1);
+    assert.deepEqual([logout[0].search, logout[0].auth, logout[0].apikey], ["?scope=local", `Bearer ${stored.session.access_token}`, KEY]);
+    assert.deepEqual(await page.evaluate(() => Object.keys(localStorage)), [], "the kept session is gone");
+    // A reload asks Supabase nothing and stays on the invitation; Answer starts at Confirm with nothing ticked.
+    const quiet = f.log.length;
+    await page.reload();
+    await expect(button(page, "Answer")).toBeVisible();
+    await page.waitForTimeout(300);
+    assert.equal(f.log.length, quiet, "nothing restored after signing out");
+    await button(page, "Answer").click();
+    await expect(heading(page, COPY.confirm)).toBeVisible();
+    await expect(page.getByRole("checkbox", { name: COPY.tick, exact: true })).not.toBeChecked();
     await f.done();
   }
 
@@ -459,20 +518,28 @@ try {
     await f.done();
   }
 
-  // 4 (with the checks in 1 and 2). Refusals: a session for another number whose last two digits match is refused
-  // by the server ("That isn't the number…") and nothing is recorded; too many tries; a lost connection.
+  // 4 (with the checks in 1 and 2). What is never restored: a session kept for another invitation, one whose number
+  // isn't every digit of the number verified here for this code (the same last two digits), and one whose event has
+  // started (swept, whatever its code). The page starts at the invitation, asks Supabase nothing and never shows
+  // "✓ Verified"; another invitation's entry stays for that invitation. Then too many tries and a lost connection.
   {
-    const f = await fixture({ seed: OTHER }),
+    const f = await fixture({
+      seeds: [
+        { code: ANOTHER, phone: INVITED },
+        { code: CODE, phone: OTHER, verified: INVITED },
+        { code: STALE, phone: INVITED, until: Date.now() - 60_000 },
+      ],
+    }),
       { page } = f;
     await page.goto(`${ORIGIN}/i/${CODE}`);
-    await expect(text(page, COPY.verified)).toBeVisible();
-    await page.getByLabel("Your first name", { exact: true }).fill("Ana");
-    await page.getByRole("radio", { name: "Maybe", exact: true }).check();
-    await button(page, "Send answer").click();
+    await expect(button(page, "Answer")).toBeVisible();
+    await page.waitForTimeout(300);
+    await expect(text(page, COPY.verified)).toHaveCount(0);
+    assert.equal(f.log.length, 0, "no kept session is used");
+    assert.deepEqual(await page.evaluate(() => Object.keys(localStorage)), [kept(ANOTHER)], "the mismatched and stale entries are gone");
+    await button(page, "Answer").click();
     await expect(heading(page, COPY.confirm)).toBeVisible();
-    await expect(text(page, COPY.wrongNumber)).toBeVisible();
-    assert.equal(f.state.response, null, "no answer is recorded");
-    assert.equal(await page.evaluate(() => localStorage.getItem("resbite.personal.session")), null, "the other number's session is dropped");
+    await expect(text(page, COPY.verified)).toHaveCount(0);
     f.state.tooMany = true;
     await page.getByRole("checkbox", { name: COPY.tick, exact: true }).check();
     await page.getByLabel("Mobile number", { exact: true }).fill("+44 7700 900834");
@@ -498,6 +565,46 @@ try {
     await f.done();
   }
 
+  // 4b. The server still has the last word: an entry edited by hand to name another number (same last two digits)
+  // reaches the answer step, and the answer is refused ("That isn't the number…"), nothing is recorded and the entry
+  // goes (Review Focus 1).
+  {
+    const f = await fixture({ seeds: [{ phone: OTHER }] }),
+      { page } = f;
+    await page.goto(`${ORIGIN}/i/${CODE}`);
+    await expect(text(page, COPY.verified)).toBeVisible();
+    await page.getByLabel("Your first name", { exact: true }).fill("Ana");
+    await page.getByRole("radio", { name: "Maybe", exact: true }).check();
+    await button(page, "Send answer").click();
+    await expect(heading(page, COPY.confirm)).toBeVisible();
+    await expect(text(page, COPY.wrongNumber)).toBeVisible();
+    assert.equal(f.state.response, null, "no answer is recorded");
+    assert.deepEqual(await page.evaluate(() => Object.keys(localStorage)), [], "the other number's session is dropped");
+    await f.done();
+  }
+
+  // 4c. Sign out on the answer step (verified, not yet answered), when GoTrue's logout fails: the kept session still
+  // goes from this browser, and the page is the invitation again.
+  {
+    const f = await fixture({ seeds: [{ phone: INVITED }] }),
+      { page } = f;
+    await page.goto(`${ORIGIN}/i/${CODE}`);
+    await expect(text(page, COPY.verified)).toBeVisible();
+    await expect(page.getByLabel("Your first name", { exact: true })).toBeVisible();
+    assert.deepEqual(f.log.map((x) => x.path), ["/rest/v1/rpc/my_phone_invitation"]);
+    const stored = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), kept(CODE));
+    f.state.logoutFails = true;
+    await button(page, COPY.signOut).click();
+    await expect(button(page, "Answer")).toBeVisible();
+    await focused(page, "Picnic in the park");
+    await expect(text(page, COPY.verified)).toHaveCount(0);
+    await expect.poll(() => f.calls("/auth/v1/logout").length).toBe(1);
+    assert.equal(f.calls("/auth/v1/logout")[0].auth, `Bearer ${stored.session.access_token}`);
+    assert.deepEqual(await page.evaluate(() => Object.keys(localStorage)), [], "gone even though the logout failed");
+    assert.equal(f.state.response, null);
+    await f.done();
+  }
+
   // 5. The narrow screen: nothing scrolls sideways on the steps.
   {
     const f = await fixture({ width: 320 }),
@@ -510,7 +617,7 @@ try {
   }
 
   console.log(
-    "PASS: /i/<code> in headless Chrome: Answer → the 18+ tick → a wrong number (checked, no code) → the right number (local form) → /otp → a wrong code → 000000 exchanged then verified with the stored code → name and Going → answer_phone_invitation → direction A (benefits, Get Resbite → app store, Not now); a reload restores the answer (refreshing an expired session first) and changing it to Can't go shows the softer screen; cancelled, happened and inactive pages have no form; another number's session is refused; too many tries; a lost connection; focus on each step's heading; no 000000 anywhere; no request beyond the page's origin and the intercepted Supabase host.",
+    "PASS: /i/<code> in headless Chrome: Answer → the 18+ tick → a wrong number (checked, no code) → the right number (local form) → /otp → a wrong code → 000000 exchanged then verified with the stored code → name and Going → answer_phone_invitation → direction A (benefits, Get Resbite → app store, Not now); a reload restores the answer (refreshing an expired session first) and changing it to Can't go shows the softer screen; cancelled, happened and inactive pages have no form; Not you? Sign out (on the answer and done steps: a local logout with the token, the kept entry cleared, back to the invitation, even when the logout fails); the session is kept per code with the full verified number until the event starts, so another code's, another number's (same last two digits) and a started event's are never restored; the server still refuses a hand-edited other number; too many tries; a lost connection; focus on each step's heading; no 000000 anywhere; no request beyond the page's origin and the intercepted Supabase host.",
   );
 } finally {
   await browser?.close();

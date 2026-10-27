@@ -1,21 +1,30 @@
 // The personal invitation page's steps (contact invitations, Task 11; mockup invitee-web-journey screens 2–3 and
 // direction A): confirm the invited number behind the 18+ tick, the code, the answer and the get-the-app screen.
 // It talks to Supabase Auth and REST directly with the publishable key (the CSP allows only that host) and keeps the
-// session in this origin's storage, so the same browser sees its answer again. Words and step logic: personal-flow.mjs.
+// session in this origin's storage, one entry per invitation code with the full number verified for it, until the
+// event starts, so the same browser sees its answer again. "Not you? Sign out" ends it. Words and step logic:
+// personal-flow.mjs.
 import {
   PAGE_COPY as C,
   RESEND_DELAY_MS,
   RESPONSES,
+  dropKept,
   errorText,
   initialState,
   isTestCode,
+  keptEntry,
   maskNumber,
   next,
+  readKept,
   rpcError,
+  sameNumber,
   sendError,
   sessionExpired,
   sessionFrom,
+  signOutKept,
+  sweepKept,
   verifyError,
+  writeKept,
 } from "./personal-flow.mjs";
 
 /** A small element builder: `text` sets textContent, `on…` adds a listener, true sets an empty attribute. */
@@ -32,6 +41,17 @@ function h(tag, props = {}, ...children) {
   return el;
 }
 
+/** This origin's localStorage, or a stand-in that keeps nothing when the browser blocks it. */
+function pageStorage() {
+  try {
+    const storage = window.localStorage;
+    if (storage) return storage;
+  } catch {
+    // Blocked: fall through.
+  }
+  return { length: 0, key: () => null, getItem: () => null, setItem() {}, removeItem() {} };
+}
+
 /** Only https addresses become links; an unset or odd one leaves plain words. */
 const httpsUrl = (value) => (/^https:\/\/[^\s"'<>]+$/.test(value ?? "") ? value : "");
 
@@ -44,6 +64,8 @@ function start(main, answerButton) {
   const ending = data.ending || "";
   const host = data.host || "";
   const termsVersion = data.termsVersion || "";
+  // When the event starts the answer closes, and the kept session goes with it.
+  const startsAt = Date.parse(data.startsAt || "");
   const termsUrl = httpsUrl(data.termsUrl);
   const privacyUrl = httpsUrl(data.privacyUrl);
   const appUrl = httpsUrl(data.appStoreUrl);
@@ -108,6 +130,8 @@ function start(main, answerButton) {
 
   // ---- The answer. ----
   const answerHeading = h("h1", { tabindex: "-1", text: title });
+  // Not you? On a shared computer the next person can end the session kept here.
+  const signOutButton = () => h("button", { type: "button", class: "link signout", text: C.signOut, onclick: onSignOut });
   const nameInput = h("input", { id: "name", autocomplete: "given-name", maxlength: "80", "aria-describedby": "answer-error" });
   const nameField = h("div", { class: "field" }, h("label", { for: "name", text: C.nameField }), nameInput);
   const labels = { accepted: C.going, maybe: C.maybe, declined: C.cantGo };
@@ -135,6 +159,7 @@ function start(main, answerButton) {
     basics ? h("p", { class: "muted", text: basics }) : null,
     answerForm,
     h("p", { class: "muted center", text: C.hostSees(host) }),
+    signOutButton(),
   );
 
   // ---- Get the app: direction A after Going or Maybe, the softer screen after Can't go. ----
@@ -165,7 +190,10 @@ function start(main, answerButton) {
     h("button", { type: "button", class: "link", text: C.changeAnswer, onclick: () => dispatch({ type: "change" }) }),
     pitch,
     soft,
+    signOutButton(),
   );
+  // Sign out comes back to the invitation, so its heading can take focus too.
+  sections.invite.querySelector("h1")?.setAttribute("tabindex", "-1");
   const headings = { invite: sections.invite.querySelector("h1"), confirm: confirmHeading, code: codeHeading, answer: answerHeading, done: doneHeading };
 
   // ---- State, drawing and focus. ----
@@ -188,7 +216,7 @@ function start(main, answerButton) {
     for (const [step, el] of Object.entries(sections)) el.hidden = step !== s.step;
     // Requests in flight: the forms say so and their buttons do nothing until the reply.
     for (const form of [confirmForm, codeForm, answerForm]) form.setAttribute("aria-busy", String(s.busy));
-    for (const button of main.querySelectorAll("form .button, form .link")) {
+    for (const button of main.querySelectorAll("form .button, form .link, .signout")) {
       if (s.busy) button.setAttribute("aria-disabled", "true");
       else button.removeAttribute("aria-disabled");
     }
@@ -242,29 +270,23 @@ function start(main, answerButton) {
   }
 
   // ---- Supabase: Auth and REST with the publishable key; the access token once signed in. ----
-  const STORE = "resbite.personal.session";
-  let session = null;
-  try {
-    const stored = JSON.parse(localStorage.getItem(STORE) ?? "null");
-    if (stored && typeof stored.access_token === "string" && typeof stored.refresh_token === "string") session = stored;
-  } catch {
-    // Storage blocked or unreadable: sign in again.
-  }
+  // One entry per invitation code: the session and the full number this page verified for that code. Entries whose
+  // event has started go, whatever their code; this one goes too once its event starts.
+  const storage = pageStorage();
+  sweepKept(storage, Date.now());
+  if (Number.isFinite(startsAt) && startsAt <= Date.now()) dropKept(storage, code);
+  const kept = readKept(storage, code, Date.now());
+  let session = kept?.session ?? null;
+  let verifiedPhone = kept?.phone ?? null;
   function keep(value) {
     session = value;
-    try {
-      localStorage.setItem(STORE, JSON.stringify(value));
-    } catch {
-      // Not kept: this visit still works; the next one asks for the code again.
-    }
+    // Not kept when storage refuses: this visit still works; the next one asks for the code again.
+    writeKept(storage, code, keptEntry(value, verifiedPhone, startsAt));
   }
   function forget() {
     session = null;
-    try {
-      localStorage.removeItem(STORE);
-    } catch {
-      // Nothing to remove.
-    }
+    verifiedPhone = null;
+    dropKept(storage, code);
   }
 
   /** POST to Supabase. A lost connection is status 0. */
@@ -345,6 +367,8 @@ function start(main, answerButton) {
     const reply = await api("/auth/v1/verify", { type: "sms", phone, token });
     const signedIn = reply.ok ? sessionFrom(reply.body, Date.now(), phone) : null;
     if (signedIn) {
+      // The number check passed for this code before the code was sent, so this is the number to restore for it.
+      verifiedPhone = phone;
       keep(signedIn);
       codeInput.value = "";
       return dispatch({ type: "verified" });
@@ -374,10 +398,22 @@ function start(main, answerButton) {
     dispatch({ type: "fail", error });
   }
 
+  /** Not you? The session goes from this browser at once and from GoTrue after; the page starts again. */
+  async function onSignOut() {
+    if (state.busy) return;
+    const done = signOutKept({ storage, code, session, post: api });
+    session = null;
+    verifiedPhone = null;
+    for (const input of [number, codeInput, nameInput]) input.value = "";
+    dispatch({ type: "signOut" });
+    await done;
+  }
+
   answerButton.addEventListener("click", () => dispatch({ type: "open" }));
 
-  // Coming back on the same browser: the kept session shows the answer (or the answer step, verified but not yet
-  // answered). A session for a number that can't be this invitation's is left alone.
+  // Coming back on the same browser: the kept session for this code shows the answer (or the answer step, verified but
+  // not yet answered), but only while it holds exactly the number verified here for this code. Anything else is
+  // dropped, and the page starts at the invitation.
   async function restore() {
     if (!session) return;
     answerButton.disabled = true;
@@ -385,12 +421,12 @@ function start(main, answerButton) {
     try {
       const fresh = await freshSession();
       if (!fresh.session) return;
+      if (!sameNumber(fresh.session, { phone: verifiedPhone })) return forget();
       const reply = await api("/rest/v1/rpc/my_phone_invitation", { p_code: code }, fresh.session.access_token);
       if (reply.status === 401) return forget();
       if (!reply.ok || reply.body?.state !== "open") return;
-      const phone = fresh.session.phone;
-      if (RESPONSES.includes(reply.body.response)) dispatch({ type: "restore", response: reply.body.response, phone });
-      else if (phone && ending && phone.endsWith(ending)) dispatch({ type: "restore", response: null, phone });
+      const response = RESPONSES.includes(reply.body.response) ? reply.body.response : null;
+      dispatch({ type: "restore", response, phone: fresh.session.phone });
     } finally {
       answerButton.disabled = false;
       main.removeAttribute("aria-busy");

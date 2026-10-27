@@ -94,6 +94,8 @@ function openBody(data, image, options) {
     "terms-url": options.termsUrl,
     "privacy-url": options.privacyUrl,
     "app-store-url": options.appStoreUrl,
+    // The script drops the session it keeps for this invitation once the event has started.
+    "starts-at": data.starts_at,
   };
   const dataAttrs = Object.entries(attrs)
     .map(([name, value]) => `data-${name}="${escape(value)}"`)

@@ -39,7 +39,8 @@ test("data attributes carry the client's inputs, and the key appears only there"
   const html = renderPersonalPage(open, options);
   const main = html.match(/<main [^>]*>/)[0];
   for (const [name, value] of [["supabase-url", options.supabaseUrl], ["publishable-key", options.publishableKey], ["code", code],
-    ["country", "44"], ["ending", "34"], ["host", "Marcos"], ["terms-version", "2026-10"], ["app-store-url", options.appStoreUrl]])
+    ["country", "44"], ["ending", "34"], ["host", "Marcos"], ["terms-version", "2026-10"], ["app-store-url", options.appStoreUrl],
+    ["starts-at", "2099-11-02T13:00:00+00:00"]])
     assert.ok(main.includes(`data-${name}="${value}"`), name);
   assert.equal(html.split(options.publishableKey).length, 2, "exactly once");
   assert.ok(html.indexOf(options.publishableKey) > html.indexOf("<main"));

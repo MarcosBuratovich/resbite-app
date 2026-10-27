@@ -64,6 +64,7 @@ export const PAGE_COPY = {
   connection: "Check your connection and try again.",
   tooMany: "Too many tries. Try again later.",
   unavailable: "This invitation is no longer active.",
+  signOut: "Not you? Sign out",
 };
 
 /** The error keys the reducer holds; anything else in `error` is a server message shown as it came. */
@@ -197,6 +198,9 @@ export function next(state, event) {
       return at("done") ? { ...s, step: "answer", error: null, choice: s.response } : s;
     case "notNow":
       return at("done") ? { ...s, pitch: false } : s;
+    case "signOut":
+      // Not you? Back to the invitation as a new visitor: nothing of the verified person stays.
+      return (at("answer") || at("done")) && !s.busy ? initialState() : s;
     case "restore": {
       if (!at("invite")) return s;
       const response = RESPONSES.includes(event.response) ? event.response : null;
@@ -252,4 +256,106 @@ export function sessionFrom(body, now, phone = null) {
 /** True from a minute before the access token expires. */
 export function sessionExpired(session, now) {
   return !Number.isFinite(session?.expires_at) || session.expires_at * 1000 - 60_000 <= now;
+}
+
+// ---- The kept session: one entry per invitation code, in this origin's localStorage. ----
+
+/** Every kept entry's key starts with this; the rest is the invitation's code. */
+export const KEPT_PREFIX = "resbite.personal.session.";
+export const keptKey = (code) => `${KEPT_PREFIX}${code}`;
+
+const digitsOf = (phone) => (typeof phone === "string" ? phone.replace(/\D/g, "") : "");
+
+/**
+ * What the page stores for one invitation: the session, the full number this page verified for this code, and when
+ * the event starts (ms since 1970), after which the entry is dropped.
+ */
+export function keptEntry(session, phone, startsAt) {
+  return { session, phone, until: Number.isFinite(startsAt) ? startsAt : null };
+}
+
+function readEntry(storage, key) {
+  try {
+    const entry = JSON.parse(storage.getItem(key) ?? "null");
+    const session = entry?.session;
+    if (!session || typeof session.access_token !== "string" || typeof session.refresh_token !== "string") return null;
+    if (typeof entry.phone !== "string" || !Number.isFinite(entry.until)) return null;
+    return entry;
+  } catch {
+    return null;
+  }
+}
+
+/** True when the session belongs to exactly the number this page verified for the code: every digit, not an ending. */
+export const sameNumber = (session, entry) => Boolean(digitsOf(entry?.phone)) && digitsOf(session?.phone) === digitsOf(entry?.phone);
+
+/**
+ * The entry kept for this code, or null. An entry that is malformed, whose event has started, or whose session holds
+ * another number than the one verified for this code is dropped, so it is never restored.
+ */
+export function readKept(storage, code, now) {
+  const key = keptKey(code);
+  let entry;
+  try {
+    if (storage.getItem(key) == null) return null;
+    entry = readEntry(storage, key);
+  } catch {
+    return null;
+  }
+  if (entry && entry.until > now && sameNumber(entry.session, entry)) return entry;
+  dropKept(storage, code);
+  return null;
+}
+
+/** Stores the entry for this code; false when storage refuses (the visit still works, the next one asks again). */
+export function writeKept(storage, code, entry) {
+  try {
+    storage.setItem(keptKey(code), JSON.stringify(entry));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function dropKept(storage, code) {
+  try {
+    storage.removeItem(keptKey(code));
+  } catch {
+    // Nothing to remove.
+  }
+}
+
+/** Drops every kept entry, for any code, whose event has started or that can't be read. Returns the codes dropped. */
+export function sweepKept(storage, now) {
+  const dropped = [];
+  try {
+    const keys = [];
+    for (let i = 0; i < storage.length; i += 1) {
+      const key = storage.key(i);
+      if (key?.startsWith(KEPT_PREFIX)) keys.push(key);
+    }
+    for (const key of keys) {
+      const entry = readEntry(storage, key);
+      if (entry && entry.until > now) continue;
+      storage.removeItem(key);
+      dropped.push(key.slice(KEPT_PREFIX.length));
+    }
+  } catch {
+    // Storage blocked: nothing is kept there either.
+  }
+  return dropped;
+}
+
+/**
+ * Not you? Sign out: the entry goes at once, then GoTrue ends this one session (scope local, so the person's app
+ * session, if any, stays). The reply doesn't matter: the token is already gone from this browser.
+ */
+export async function signOutKept({ storage, code, session, post }) {
+  dropKept(storage, code);
+  if (typeof session?.access_token !== "string") return;
+  try {
+    await post("/auth/v1/logout?scope=local", {}, session.access_token);
+  } catch {
+    // Ignored, as the reply is.
+  }
 }

@@ -17,6 +17,15 @@ import {
   sessionExpired,
   isTestCode,
   RESEND_DELAY_MS,
+  KEPT_PREFIX,
+  keptKey,
+  keptEntry,
+  readKept,
+  writeKept,
+  dropKept,
+  sweepKept,
+  sameNumber,
+  signOutKept,
 } from "./assets/personal-flow.mjs";
 import { GUEST_COPY } from "../mobile/src/domain/guestAccount.ts";
 import { PHONE_CODE_COPY } from "../mobile/src/services/phoneCode.ts";
@@ -277,4 +286,110 @@ test("only the test code is exchanged", () => {
   assert.equal(isTestCode("000000"), true);
   assert.equal(isTestCode("123456"), false);
   assert.equal(isTestCode("0000000"), false);
+});
+
+test("Not you? Sign out goes back to the invitation from the answer and done steps, not mid-request", () => {
+  assert.equal(PAGE_COPY.signOut, "Not you? Sign out");
+  const answering = next(initialState(), { type: "restore", response: null, phone: "+447700900834" });
+  assert.deepEqual(next(answering, { type: "signOut" }), initialState());
+  const done = next(initialState(), { type: "restore", response: "accepted", phone: "+447700900834" });
+  assert.deepEqual(next(done, { type: "signOut" }), initialState());
+  const busy = next({ ...answering, choice: "accepted" }, { type: "submit", name: "Sam" });
+  assert.equal(busy.busy, true);
+  assert.equal(next(busy, { type: "signOut" }), busy, "not while the answer is on its way");
+  const confirming = next(initialState(), { type: "open" });
+  assert.equal(next(confirming, { type: "signOut" }), confirming);
+});
+
+/** A localStorage stand-in with the methods the page uses. */
+function memoryStorage(seed = {}) {
+  const map = new Map(Object.entries(seed));
+  return {
+    map,
+    get length() {
+      return map.size;
+    },
+    key: (i) => [...map.keys()][i] ?? null,
+    getItem: (k) => (map.has(k) ? map.get(k) : null),
+    setItem: (k, v) => void map.set(k, String(v)),
+    removeItem: (k) => void map.delete(k),
+  };
+}
+const CODE_A = "k7Qx9AbCdEfGhIjKlMnOpQ";
+const CODE_B = "OtherCodeOtherCodeOthe";
+const NOW = Date.parse("2099-11-01T12:00:00Z");
+const STARTS = Date.parse("2099-11-02T13:00:00Z");
+const session = (phone) => ({ access_token: `a-${phone}`, refresh_token: `r-${phone}`, expires_at: NOW / 1000 + 3600, phone });
+
+test("the kept session is per code, with the full verified number, until the event starts", () => {
+  const storage = memoryStorage();
+  assert.equal(keptKey(CODE_A), `${KEPT_PREFIX}${CODE_A}`);
+  assert.ok(writeKept(storage, CODE_A, keptEntry(session("+447700900834"), "+447700900834", STARTS)));
+  assert.deepEqual(JSON.parse(storage.getItem(keptKey(CODE_A))), {
+    session: session("+447700900834"),
+    phone: "+447700900834",
+    until: STARTS,
+  });
+  assert.deepEqual(readKept(storage, CODE_A, NOW)?.session, session("+447700900834"));
+  // Another invitation's page finds nothing of it.
+  assert.equal(readKept(storage, CODE_B, NOW), null);
+  assert.ok(storage.getItem(keptKey(CODE_A)), "and leaves it alone");
+  // Once the event has started, it is dropped.
+  assert.equal(readKept(storage, CODE_A, STARTS), null);
+  assert.equal(storage.getItem(keptKey(CODE_A)), null);
+  // Storage that refuses keeps nothing and says so.
+  const refusing = { ...memoryStorage(), setItem() { throw Error("quota"); } };
+  assert.equal(writeKept(refusing, CODE_A, keptEntry(session("+447700900834"), "+447700900834", STARTS)), false);
+});
+
+test("a kept session for another number is not restored, even with the same last two digits", () => {
+  const storage = memoryStorage();
+  // The session holds +447700900534; this page verified +447700900834 for the code.
+  writeKept(storage, CODE_A, keptEntry(session("+447700900534"), "+447700900834", STARTS));
+  assert.equal(readKept(storage, CODE_A, NOW), null);
+  assert.equal(storage.getItem(keptKey(CODE_A)), null, "and it is dropped");
+  assert.equal(sameNumber(session("+447700900834"), { phone: "+447700900834" }), true);
+  assert.equal(sameNumber(session("447700900834"), { phone: "+44 7700 900834" }), true, "digits, however written");
+  assert.equal(sameNumber(session("+447700900534"), { phone: "+447700900834" }), false);
+  assert.equal(sameNumber(session(null), { phone: null }), false, "no number is never a match");
+  // Without a known start the entry can't be dropped on time, so it is never restored.
+  writeKept(storage, CODE_A, keptEntry(session("+447700900834"), "+447700900834", NaN));
+  assert.equal(readKept(storage, CODE_A, NOW), null);
+  // Malformed entries go too.
+  storage.setItem(keptKey(CODE_A), "not json");
+  assert.equal(readKept(storage, CODE_A, NOW), null);
+  assert.equal(storage.getItem(keptKey(CODE_A)), null);
+});
+
+test("every kept entry whose event has started is swept, whatever its code", () => {
+  const storage = memoryStorage({ "something.else": "kept" });
+  writeKept(storage, CODE_A, keptEntry(session("+447700900834"), "+447700900834", NOW - 1));
+  writeKept(storage, CODE_B, keptEntry(session("+447700900111"), "+447700900111", STARTS));
+  storage.setItem(keptKey("BrokenBrokenBrokenBrok"), "{");
+  assert.deepEqual(sweepKept(storage, NOW).sort(), ["BrokenBrokenBrokenBrok", CODE_A].sort());
+  assert.deepEqual([...storage.map.keys()].sort(), ["something.else", keptKey(CODE_B)].sort());
+  assert.deepEqual(sweepKept({ get length() { throw Error("blocked"); } }, NOW), []);
+});
+
+test("sign out clears this code's entry first, then posts a local logout with the token; its failure is ignored", async () => {
+  const storage = memoryStorage();
+  writeKept(storage, CODE_A, keptEntry(session("+447700900834"), "+447700900834", STARTS));
+  writeKept(storage, CODE_B, keptEntry(session("+447700900111"), "+447700900111", STARTS));
+  const posts = [];
+  await signOutKept({
+    storage,
+    code: CODE_A,
+    session: session("+447700900834"),
+    post: async (path, body, token) => {
+      posts.push({ path, body, token, cleared: storage.getItem(keptKey(CODE_A)) === null });
+      throw Error("offline");
+    },
+  });
+  assert.deepEqual(posts, [{ path: "/auth/v1/logout?scope=local", body: {}, token: "a-+447700900834", cleared: true }]);
+  assert.equal(readKept(storage, CODE_A, NOW), null);
+  assert.ok(readKept(storage, CODE_B, NOW), "another invitation's entry stays");
+  // Without a session there is nothing to post.
+  const none = [];
+  await signOutKept({ storage, code: CODE_A, session: null, post: async (...a) => none.push(a) });
+  assert.deepEqual(none, []);
 });
