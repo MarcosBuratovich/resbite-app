@@ -23,7 +23,8 @@ export type PushRegistrationAdapter = {
 };
 const validToken = (value: string) =>
   /^(ExponentPushToken|ExpoPushToken)\[[A-Za-z0-9_-]+\]$/.test(value);
-/** Preparation only. No native API, permission request, or live adapter is wired here. */
+/** This phone's push endpoint for the signed-in account. The live adapter and its wiring are in
+ * pushDevice.ts; nothing here asks for permission. */
 export function createPushRegistration(
   adapter: PushRegistrationAdapter,
   enabled = false,

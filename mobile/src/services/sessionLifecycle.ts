@@ -14,6 +14,12 @@ type Dependencies = {
   clearCovers: (scope: string) => Promise<void>;
   blockPending: () => () => void;
   clearPending: () => Promise<void>;
+  /** Plan 4: no push registration starts until the release (a foreground return mid-sign-out must not
+   * register the account again). */
+  blockPush?: () => () => void;
+  /** Plan 4: removes this phone's push endpoint with the account's own session, first, before auth
+   * sign-out. A failure fails sign-out with nothing cleared (account deletion forgets it instead). */
+  clearPush?: (deleteAccount: boolean) => Promise<void>;
   clearDrafts?: (scope: string) => Promise<void>;
   authSignOut: (localOnly?: boolean) => Promise<void>;
   finish: (preview: boolean) => void;
@@ -67,6 +73,8 @@ export function createSessionLifecycle(deps: Dependencies) {
       ++epoch;
       if (scope) deps.suspend(scope);
       const unblock = original.preview ? () => {} : deps.blockPending();
+      const releasePush =
+        original.preview || !deps.blockPush ? () => {} : deps.blockPush();
       deps.busy(true);
       const current = () => {
         if (identity(context) !== identity(original))
@@ -78,6 +86,10 @@ export function createSessionLifecycle(deps: Dependencies) {
       flight = Promise.resolve().then(async () => {
         let completed = false;
         try {
+          if (!original.preview && original.account && deps.clearPush) {
+            await deps.clearPush(deleteAccount);
+            current();
+          }
           if (scope) {
             if (deleteAccount) {
               if (!deps.clearDrafts)
@@ -123,6 +135,7 @@ export function createSessionLifecycle(deps: Dependencies) {
           )
             deps.resume(scope);
           unblock();
+          releasePush();
           flight = null;
           deps.busy(false);
         }

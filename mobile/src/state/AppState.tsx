@@ -19,6 +19,7 @@ import { clearReminders } from "../services/deviceReminders";
 import { clearCalendarRecords } from "../services/deviceCalendar";
 import { clearAttestation } from "../services/phoneAccount";
 import { supabase, storage } from "../services/supabase";
+import { pushSession, usePushForeground } from "./usePushRegistration";
 import type { Plan } from "../domain/plans";
 /** Kept as an alias for existing screens; the type lives in the domain layer. */
 export type LocalPlan = Plan;
@@ -123,6 +124,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         await pendingStore.clear();
       },
       clearDrafts: drafts.clearScope,
+      // Plan 4: this phone's push endpoint goes first, with the account's own session.
+      blockPush: pushSession.hold,
+      clearPush: pushSession.clear,
       authSignOut: async (localOnly) => {
         const { error } = await supabase.auth.signOut(
           localOnly ? { scope: "local" } : undefined,
@@ -137,10 +141,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         previewRef.current = false;
         setPreview(false);
         setLocalPlans([]);
-        lifecycle.update({
+        const next = {
           account: sessionRef.current?.user.id ?? null,
           preview: false,
-        });
+        };
+        lifecycle.update(next);
+        void pushSession.update(next);
       },
       busy: setSigningOut,
     }),
@@ -148,24 +154,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const changePreview = useCallback(
     (value: boolean) => {
       previewRef.current = value;
-      lifecycle.update({
+      const next = {
         account: sessionRef.current?.user.id ?? null,
         preview: value,
-      });
+      };
+      lifecycle.update(next);
+      void pushSession.update(next);
       setPreview(value);
     },
     [lifecycle],
   );
   const captureSession = useCallback(() => lifecycle.capture(), [lifecycle]);
+  usePushForeground();
   useEffect(() => {
     let active = true;
     let authChanged = false;
     const accept = (value: Session | null) => {
       sessionRef.current = value;
-      lifecycle.update({
+      const next = {
         account: value?.user.id ?? null,
         preview: previewRef.current,
-      });
+      };
+      lifecycle.update(next);
+      // Plan 4: registers this phone for push once the session is known.
+      void pushSession.update(next);
       setSession(value);
       setRestoring(false);
     };
