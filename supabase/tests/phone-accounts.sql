@@ -1,4 +1,4 @@
--- Phone accounts, test-mode codes (docs/superpowers/specs/2026-10-27-phone-accounts-design.md). Synthetic identities only.
+-- Phone accounts, test-mode codes (docs/superpowers/specs/2026-10-27-contact-invitations-design.md). Synthetic identities only.
 begin;
 insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) values
  ('c1000000-0000-4000-8000-000000000001',null,null,'447700900834',null);
