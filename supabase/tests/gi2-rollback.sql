@@ -32,10 +32,11 @@ end $$;
 reset role;
 insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key) values
  ('b6100000-0000-4000-8000-000000000001','b6000000-0000-4000-8000-000000000002','plan_changed','gi2-rollback:guest');
--- The GI2 definitions are in place, so the checks after the rollback compare against a real change.
+-- The GI2 definitions are in place, so the checks after the rollback compare against a real change. The audience is
+-- 20261030120000_push_delivery's, which runs after the companion and checks the grant through user_eligible().
 do $$ begin
  if pg_catalog.pg_get_functiondef('private.eligible()'::regprocedure) not like '%user_eligible%'
- or pg_catalog.pg_get_functiondef('private.notification_recipient_eligible(bigint)'::regprocedure) not like '%has_live_grant%'
+ or pg_catalog.pg_get_functiondef('private.notification_recipient_eligible(bigint)'::regprocedure) not like '%user_eligible%'
  or pg_catalog.pg_get_functiondef('private.request_account_deletion(uuid,uuid,uuid,text)'::regprocedure) not like '%has_live_grant%'
  or pg_catalog.pg_get_functiondef('private.prepare_deletion_intent(uuid,uuid,uuid,text,text)'::regprocedure) not like '%has_live_grant%' then
   raise exception 'GI2 definitions not in place';

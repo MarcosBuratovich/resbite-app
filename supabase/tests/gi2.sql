@@ -377,7 +377,8 @@ do $$ begin
  or exists(select 1 from private.notification_outbox where actor_id='b2000000-0000-4000-8000-000000000004') then raise exception 'A started event wrote something'; end if;
 end $$;
 -- Notices reach a live grant holder and the roster tester, not a revoked grant or someone with neither. The
--- sender's check is local-only (20261022120001), so the hosted-baseline run skips these assertions.
+-- sender's check comes with 20261030120000_push_delivery on the hosted baseline (20261022120001 too, locally), so a
+-- hosted-baseline run without that candidate skips these assertions.
 insert into public.profiles(id,display_name) values ('b2000000-0000-4000-8000-000000000005','Outsider');
 insert into public.attendees(plan_id,user_id) values ('b2100000-0000-4000-8000-000000000003','b2000000-0000-4000-8000-000000000005');
 insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key) values
