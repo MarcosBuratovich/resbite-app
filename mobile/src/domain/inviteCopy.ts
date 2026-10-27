@@ -76,10 +76,18 @@ export const INVITE_COPY = {
   approveHint: "Adds them to this resbite",
   declineHint: "Asks you to confirm first",
   declineQuestion: (name: string) => `Decline ${name}? They’ll see they weren’t added.`,
+  // Why Approve or Decline was refused (decideErrorMessage): the event is closed, the person can't be added, or
+  // someone already answered.
+  decideClosed: "This resbite has started or was cancelled, so no one can be added now.",
+  decideCannotAdd: "This person can’t be added to this resbite.",
+  decideAnswered: "Someone already answered this request.",
   linkInfoLine: "Anyone can answer with it, and you approve them first.",
 };
 
-/** A Waiting for you row's detail line: "Going · via event link · ••1234" (no ending: without the last part). */
+/**
+ * A Waiting for you row's detail line: "Going · via event link · ••34", the ending being the last two digits of the
+ * person's number (no ending: without the last part).
+ */
 export function requestDetail(answer: string, ending: string | null): string {
   return [answer, INVITE_COPY.viaLink, ending ? `••${ending}` : ""].filter(Boolean).join(" · ");
 }

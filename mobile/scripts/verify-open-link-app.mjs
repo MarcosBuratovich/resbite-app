@@ -3,7 +3,9 @@
 //  1. Signed in, /invite?code= sends request_to_join (p_response "pending") and lands on /waiting?plan=: "Waiting
 //     for Stephen", the invitation's card, the answer. Changing the answer sends change_join_answer, exactly. Opening
 //     the link again sends the request again, lists nothing twice and shows the same waiting screen. A declined
-//     request says "You weren’t added to this resbite." with no answer to change. The inline 18+ tick: the server's
+//     request says "You weren’t added to this resbite." with no answer to change. A change the server refuses because
+//     the host answered meanwhile (22023 "Request already decided") shows no error: the request is read again, and
+//     a declined one says so while an approved one opens the event. The inline 18+ tick: the server's
 //     22023 "Age confirmation required" shows the tick, Continue sends the request again with p_terms_version.
 //  2. Signed out, the invite screen is the invitation's card with Sign up to reply -> /auth/phone and I have an
 //     account -> /auth/phone?intent=signin; no tick, no providers, no email; the code stays kept.
@@ -86,9 +88,10 @@ async function noTestCode(page, where) {
 
 /**
  * One person: signed in (or out), approved or waiting for the beta, with their requests. `requests` is what
- * my_join_requests returns; request_to_join adds to it for a new code and answers by code.
+ * my_join_requests returns; request_to_join adds to it for a new code and answers by code. With `decided`
+ * ("approved" or "declined"), the host answers the request just before the person changes their answer.
  */
-async function fixture({ signedIn = true, access = "approved", requests = [], kept = null } = {}) {
+async function fixture({ signedIn = true, access = "approved", requests = [], kept = null, decided = null } = {}) {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -102,7 +105,8 @@ async function fixture({ signedIn = true, access = "approved", requests = [], ke
     },
     { session: signedIn ? session : null, kept },
   );
-  const state = { requests: [...requests], joins: [], changes: [], mine: 0, opens: [] };
+  // `hold`, when set, is a promise each my_join_requests reply waits for, so a test can look at the screen meanwhile.
+  const state = { requests: [...requests], joins: [], changes: [], mine: 0, opens: [], hold: null };
   await page.route("**/*.supabase.co/**", async (route) => {
     const req = route.request();
     const url = new URL(req.url());
@@ -155,12 +159,19 @@ async function fixture({ signedIn = true, access = "approved", requests = [], ke
     }
     if (p === "/rest/v1/rpc/my_join_requests") {
       state.mine++;
+      if (state.hold) await state.hold;
       return reply(state.requests);
     }
     if (p === "/rest/v1/rpc/change_join_answer") {
       const body = req.postDataJSON();
       state.changes.push(body);
       const found = state.requests.find((r) => r.plan_id === body.p_plan);
+      // The host answered a moment ago: an approved request leaves the list, a declined one stays as declined.
+      if (decided) {
+        if (decided === "declined") found.status = "declined";
+        else state.requests.splice(state.requests.indexOf(found), 1);
+        return reply({ code: "22023", message: "Request already decided" }, 400);
+      }
       found.response = body.p_response;
       return reply({ status: "waiting", response: body.p_response });
     }
@@ -233,6 +244,44 @@ try {
     assert.deepEqual(errors, []);
     await page.close();
     console.log("PASS: a declined request says \"You weren’t added to this resbite.\" with the card, no host byline and no answer to change.");
+  }
+  for (const decided of ["declined", "approved"]) {
+    const { page, errors, state } = await fixture({ requests: [{ ...card, host: "Sam" }], decided });
+    // The host answers just before the person changes their answer: no error (not the host's words, nor the
+    // connection line), the request is read again, and the screen follows the host's answer.
+    await page.goto(`${base}/waiting?plan=${PLAN}`);
+    await expect(heading(page, "Waiting for Sam")).toBeVisible();
+    const reads = state.mine;
+    let release;
+    state.hold = new Promise((resolve) => (release = resolve));
+    await page.getByRole("radio", { name: "Maybe", exact: true }).click();
+    // Between the refusal and the read after it (held here), the screen shows no error of any kind.
+    await expect.poll(() => state.mine).toBeGreaterThan(reads);
+    await page.waitForTimeout(300);
+    for (const copy of ["Someone already answered this request.", "Check your connection and try again.", "This link isn’t open to you right now."])
+      await expect(page.getByText(copy, { exact: true })).toHaveCount(0);
+    await expect(heading(page, "Waiting for Sam")).toBeVisible();
+    state.hold = null;
+    release();
+    if (decided === "declined") {
+      await expect(heading(page, "You weren’t added to this resbite.")).toBeVisible();
+      await expect(page.getByRole("radio")).toHaveCount(0);
+      assert.equal(path(page), "/waiting");
+      await expect(page.getByText("Check your connection and try again.", { exact: true })).toHaveCount(0);
+    } else {
+      await expect.poll(() => path(page)).toBe("/event");
+      assert.equal(param(page, "plan"), PLAN);
+    }
+    assert.ok(state.mine > reads, "the request is read again");
+    assert.deepEqual(state.changes, [{ p_plan: PLAN, p_response: "maybe" }]);
+    await expect(page.getByText("Someone already answered this request.", { exact: true })).toHaveCount(0);
+    assert.deepEqual(errors, []);
+    await page.close();
+    console.log(
+      decided === "declined"
+        ? "PASS: a change refused as already decided (the host declined meanwhile) shows no error, reads the request again and says \"You weren’t added to this resbite.\" with no answer to change."
+        : "PASS: a change refused as already decided (the host approved meanwhile) shows no error, reads the request again and opens /event?plan=.",
+    );
   }
   {
     const { page, errors, state } = await fixture();

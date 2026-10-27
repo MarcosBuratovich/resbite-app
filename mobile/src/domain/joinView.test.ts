@@ -94,7 +94,8 @@ test("a missing 18+ tick asks for the tick; every other failure has no step", ()
 
 test("only a lost connection, or a tick still to give, keeps the kept code", () => {
   assert.equal(joinRefusedForGood(joinErrorMessage({ code: "42501", message: "Invitation unavailable" })), true);
-  assert.equal(joinRefusedForGood(joinErrorMessage({ code: "22023", message: "Invalid response" })), true);
+  // A 22023 the app has no words for reads as a lost connection, so the code stays (Go to My resbites drops it).
+  assert.equal(joinRefusedForGood(joinErrorMessage({ code: "22023", message: "Invalid response" })), false);
   assert.equal(joinRefusedForGood(joinErrorMessage({ code: "22023", message: "Age confirmation required" })), false);
   assert.equal(joinRefusedForGood(joinErrorMessage({ code: "08006" })), false);
   assert.equal(joinRefusedForGood(joinErrorMessage(new Error("abort"))), false);

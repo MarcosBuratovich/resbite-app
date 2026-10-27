@@ -5,8 +5,8 @@
 // Remove, and an unanswered invitation's card under Invitations on My resbites.
 // Open-link approval: the organizer's Waiting for you (name, answer, ••34; Approve sends decide_join_request with
 // p_approve true and the row leaves; Decline asks first, then sends false; a request someone else decided says
-// so), and the Event link card that lives on the event page (Share, Copy link, Turn off this link). An invitee
-// has neither.
+// so; none on a cancelled or started event, where nobody can be added), and the Event link card that lives on the
+// event page (Share, Copy link, Turn off this link). An invitee has neither.
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { inOrder, quietReminders, visible } from "./qa-helpers.mjs";
@@ -107,6 +107,17 @@ const lunch = {
   place_label: "Rose garden",
   note: "Door code 4521",
   ends_at: "2099-03-01T17:00:00Z",
+};
+// The organizer's event that has already started: nobody can be added now.
+const started = {
+  ...hosted,
+  id: "99999999-9999-4999-8999-999999999999",
+  title: "Morning swim",
+  description: "",
+  place_label: "Lido",
+  note: "",
+  starts_at: "2020-03-01T08:00:00Z",
+  ends_at: "2020-03-01T09:00:00Z",
 };
 const LOCKED = "Meeting details appear after you answer Going or Maybe.";
 // Plan 2: the organizer's personal links for Coffee evening. Pat's code is on this phone (sent on Messages); the
@@ -209,7 +220,11 @@ try {
   const SAM = { user_id: "r1", name: "Sam Reed", response: "accepted", ending: "34", created_at: "2099-02-20T10:00:00Z" };
   const KIM = { user_id: "r2", name: "Kim Lau", response: "maybe", ending: null, created_at: "2099-02-20T11:00:00Z" };
   const LEE = { user_id: "r3", name: "Lee Fox", response: "declined", ending: "56", created_at: "2099-02-20T12:00:00Z" };
+  // Listed on a closed event (the stub lists it even there, so the page's own rule is what hides it).
+  const ANA = { user_id: "r4", name: "Ana Diaz", response: "accepted", ending: "78", created_at: "2099-02-20T13:00:00Z" };
   let waiting = [SAM, KIM, LEE];
+  // The events whose requests were read, in order.
+  const requestReads = [];
   const decisions = [];
   const linkCalls = [];
   const LINK_CODES = ["AAAAAAAAAAAAAAAAAAAAA1", "BBBBBBBBBBBBBBBBBBBBB2", "CCCCCCCCCCCCCCCCCCCCC3"];
@@ -324,7 +339,8 @@ try {
     // Open-link approval: the organizer's requests and decisions, and the event link.
     if (path === "/rest/v1/rpc/plan_join_requests") {
       const body = req.postDataJSON();
-      return reply(body.p_plan === hosted.id ? waiting : []);
+      requestReads.push(body.p_plan);
+      return reply(body.p_plan === hosted.id ? waiting : body.p_plan === started.id ? [ANA] : []);
     }
     if (path === "/rest/v1/rpc/decide_join_request") {
       const body = req.postDataJSON();
@@ -795,8 +811,29 @@ try {
   await expect(page.getByText("Cancelled", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Edit Coffee evening", exact: true })).toHaveCount(0);
   assert.deepEqual(cancels, [hosted.id]);
+  // A cancelled or started event: an approval would be refused, so the organizer sees no Waiting for you, even with
+  // a request listed. The plan and its requests arrive together, so once the title shows, the list has been read.
+  waiting = [ANA];
+  let requestsBefore = requestReads.length;
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Coffee evening", exact: true })).toBeVisible();
+  await expect(page.getByText("Cancelled", { exact: true })).toBeVisible();
+  assert.ok(requestReads.slice(requestsBefore).includes(hosted.id), "the cancelled event's requests were read");
+  await expect(page.getByRole("heading", { name: "Waiting for you", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Approve Ana Diaz", exact: true })).toHaveCount(0);
+  await expect(page.getByText("Ana Diaz", { exact: true })).toHaveCount(0);
+  waiting = [];
+  plans.set(started.id, { ...started });
+  requestsBefore = requestReads.length;
+  await page.goto(`${base}/event?plan=${started.id}`);
+  await expect(page.getByRole("heading", { name: "Morning swim", exact: true })).toBeVisible();
+  assert.ok(requestReads.slice(requestsBefore).includes(started.id), "the started event's requests were read");
+  await expect(page.getByRole("heading", { name: "Waiting for you", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Approve Ana Diaz", exact: true })).toHaveCount(0);
+  await expect(page.getByText("Ana Diaz", { exact: true })).toHaveCount(0);
+  plans.delete(started.id);
   console.log(
-    "PASS: organizer event page: the exact place and no Choose people (GI-D3); guests (GI1: Remove asks first and says they can ask to join again and the organizer decides, says a lost reply, reloads the list; invitees have no Remove); the Invited group (Plan 2: unanswered only, by stored name or number, WhatsApp and Messages on each row with the last-used first, the stored code either way or a fresh one kept for the other app when WhatsApp won't open, Remove calls revoke_phone_invitation), Waiting for you (open-link approval: name, answer and ••34; Approve sends decide_join_request true and the row leaves; Decline asks first then sends false; an already-decided request says so) above the Event link card (Share text with the date and link, Copy link, Turn off asks first and gives a new link, a lost turn-off reply says so and reads the link again, an approved guest joins the guest list, nothing stored; invitees have neither), Open in Maps (and its failure note), Edit at Review, Do this again at When with a replace guard, an unconfirmed cancel with Refresh event, cancel.",
+    "PASS: organizer event page: the exact place and no Choose people (GI-D3); guests (GI1: Remove asks first and says they can ask to join again and the organizer decides, says a lost reply, reloads the list; invitees have no Remove); the Invited group (Plan 2: unanswered only, by stored name or number, WhatsApp and Messages on each row with the last-used first, the stored code either way or a fresh one kept for the other app when WhatsApp won't open, Remove calls revoke_phone_invitation), Waiting for you (open-link approval: name, answer and ••34; Approve sends decide_join_request true and the row leaves; Decline asks first then sends false; an already-decided request says so; none on a cancelled or started event) above the Event link card (Share text with the date and link, Copy link, Turn off asks first and gives a new link, a lost turn-off reply says so and reads the link again, an approved guest joins the guest list, nothing stored; invitees have neither), Open in Maps (and its failure note), Edit at Review, Do this again at When with a replace guard, an unconfirmed cancel with Refresh event, cancel.",
   );
 
   // UX2-D1: a saved edit returns to its event page with "Changes saved"; Back then leaves for My resbites.

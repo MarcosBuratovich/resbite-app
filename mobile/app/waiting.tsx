@@ -9,7 +9,7 @@ import { colors as c } from "../src/design/tokens";
 import { useApp } from "../src/state/AppState";
 import { useAccount } from "../src/state/AccountState";
 import { useFocusedRefresh, type Run } from "../src/state/useFocusedRefresh";
-import { joinRequestGateway, type MyRequest } from "../src/services/joinRequests";
+import { joinRequestGateway, RequestDecided, type MyRequest } from "../src/services/joinRequests";
 import { offline } from "../src/services/contactInvites";
 import { INVITE_COPY } from "../src/domain/inviteCopy";
 import { requestResponse, waitingCopy } from "../src/domain/joinView";
@@ -20,6 +20,7 @@ const failure = (e: unknown) => (e instanceof Error ? e.message : offline);
 /**
  * Plan 3: an open link's request (/waiting?plan=), read from my_join_requests. Waiting: the invitation's card,
  * "Waiting for <host>", the answer (change_join_answer) and Done. Declined: "You weren’t added to this resbite."
+ * A change refused because the host answered meanwhile shows no error: the request is read again quietly.
  * When the request isn't listed any more (approved, or the event is gone) the screen replaces itself with the
  * event. Approval grants access, so an account still read as waiting is read again first, and goes to /account
  * if it still waits. Reachable while the account waits for access (session-guarded in _layout). Without a plan
@@ -93,8 +94,9 @@ export default function Waiting() {
       if (valid()) setRequest((current) => (current ? { ...current, response } : current));
     } catch (e) {
       if (!valid()) return;
-      setError(failure(e));
-      // The host may have decided meanwhile: read the request again.
+      // The host answered meanwhile (RequestDecided): no error, and the read below opens the event for an approved
+      // request or says a declined one wasn't added. Any other failure is shown, and the host may have decided too.
+      if (!(e instanceof RequestDecided)) setError(failure(e));
       reread = true;
     } finally {
       // Always: a refresh on focus or foreground may have begun meanwhile, and the control must not stay off.

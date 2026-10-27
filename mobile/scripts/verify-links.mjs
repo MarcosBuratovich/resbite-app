@@ -132,7 +132,8 @@ async function fixture({ signedIn = true } = {}) {
         return reply({ state: "waiting", plan_id: invited.id, response: "pending" });
       }
       if (body.p_code === ALREADY) return reply({ state: "already", plan_id: invited.id, response: "accepted" });
-      if (body.p_code === OWN) return reply({ state: "owner", plan_id: own.id, response: "accepted" });
+      // The organizer has no answer of their own: request_join sends response null.
+      if (body.p_code === OWN) return reply({ state: "owner", plan_id: own.id, response: null });
       if (body.p_code === NET) return reply({ message: "Fixture: connection lost" }, 500);
       return reply({ code: "42501", message: "Invitation unavailable" }, 403);
     }
@@ -253,11 +254,18 @@ try {
     await expect(page.getByRole("radio", { name: "Going", exact: true })).toBeVisible();
     assert.equal(new URL(page.url()).pathname, "/event");
     await expect.poll(() => pending(page)).toBe(null);
-    // The organizer opening their own event's link lands on their event.
+    // The organizer opening their own event's link (the reply's response is null) lands on their event, not the
+    // connection line, and the kept code is dropped, so a cold start opens the app as usual.
     await page.goto(`${base}/invite?code=${OWN}`);
     await expect(page.getByRole("heading", { name: "Book swap", exact: true })).toBeVisible();
     await expect(page.getByText("Hosting", { exact: true })).toBeVisible();
+    assert.equal(new URL(page.url()).pathname, "/event");
+    assert.equal(new URL(page.url()).searchParams.get("plan"), own.id);
+    await expect(page.getByText(lostConnection, { exact: true })).toHaveCount(0);
     await expect.poll(() => pending(page)).toBe(null);
+    await page.goto(base);
+    await expect(page.getByRole("heading", { name: "Create", exact: true })).toBeVisible();
+    assert.equal(new URL(page.url()).pathname, "/create");
     // An inactive, started or cancelled event's link says so, and the kept code is dropped.
     const inactive = page.getByText(
       "This invitation is no longer active, or the event has started or was cancelled.",
@@ -314,7 +322,7 @@ try {
     assert.deepEqual(errors, []);
     await page.close();
     console.log(
-      "PASS: signed in, an event link sends request_to_join and lands a new person on /waiting?plan= (code cleared), a guest on the event page, the organizer on their event; a link turned off says so and drops the code (a cold start opens Create); a lost connection keeps it (a cold start returns to it); Go to My resbites leaves and drops it; a refused or own per-person link is dropped too; a malformed one sends nothing.",
+      "PASS: signed in, an event link sends request_to_join and lands a new person on /waiting?plan= (code cleared), a guest on the event page, the organizer on their event (response null; code cleared, a cold start opens Create); a link turned off says so and drops the code (a cold start opens Create); a lost connection keeps it (a cold start returns to it); Go to My resbites leaves and drops it; a refused or own per-person link is dropped too; a malformed one sends nothing.",
     );
   }
   {

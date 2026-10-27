@@ -1,4 +1,4 @@
-import type { JoinState } from "../services/joinRequests";
+import { AGE_REQUIRED, type JoinState } from "../services/joinRequests";
 import { offline } from "../services/contactInvites";
 import { eventPicture, type EventPicture } from "./events";
 import { INVITE_COPY } from "./inviteCopy";
@@ -56,9 +56,6 @@ export function areaLine(area: string | null | undefined): string | null {
   return area?.trim() || null;
 }
 
-/** request_to_join's 22023 for an account with no 18+ tick stored yet (joinErrorMessage passes it as it is). */
-const AGE_REQUIRED = "Age confirmation required";
-
 /**
  * A refused request the person can still fix on the invite screen: "tick" when the server has no 18+ tick for
  * the account, so the screen asks for it and sends the request again with the Terms version. A missing name
@@ -71,7 +68,8 @@ export function joinStep(message: string): "tick" | null {
 /**
  * A request refused by the server (the link is off, the event started or was cancelled, or the account can't ask)
  * is final: the kept code goes, so a restart doesn't open the same error. A lost connection keeps it, and so does
- * a tick still to give (joinStep).
+ * a tick still to give (joinStep). A refusal the app has no words for reads as a lost connection (joinErrorMessage),
+ * so it keeps the code too, and Go to My resbites drops it.
  */
 export function joinRefusedForGood(message: string): boolean {
   // The gateway's own word for a lost connection (joinErrorMessage), so the two can't drift apart.

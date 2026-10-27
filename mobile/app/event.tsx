@@ -255,7 +255,7 @@ export default function EventPage() {
     try {
       await joinRequestGateway.decide(current.id, request.user_id, approve);
     } catch (e) {
-      // The gateway already worded the failure (joinErrorMessage); wording it again would turn it into the offline line.
+      // The gateway already worded the failure (decideErrorMessage); wording it again would turn it into the offline line.
       setDecideError(e instanceof Error ? e.message : INVITE_COPY.offline);
     }
     // Reload either way: an approved guest joins the list, and a request someone else decided drops off.
@@ -447,7 +447,8 @@ export default function EventPage() {
             )
           ))
         )}
-        {owner && !preview && (
+        {/* Only while someone can still be added: an active event that hasn't started (editable). */}
+        {editable && !preview && (
           <WaitingForYou
             requests={requests}
             deciding={deciding}
