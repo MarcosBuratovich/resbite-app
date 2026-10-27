@@ -121,6 +121,7 @@ function lifecycleHarness() {
       device.push(`calendar:${scope}`);
     },
     clearPhoto: () => photo(),
+    clearInviteCodes: async () => {},
     clearCovers: async (scope) => {
       events.push(`covers:${scope}`);
     },
@@ -212,6 +213,7 @@ test("a failed cover clear fails sign-out before auth sign-out", async () => {
     clearReminders: async () => {},
     clearCalendarRecords: async () => {},
     clearPhoto: async () => {},
+    clearInviteCodes: async () => {},
     clearCovers: async () => {
       throw Error("disk");
     },
@@ -325,6 +327,7 @@ test("a failed recent-places clear fails sign-out before auth sign-out", async (
     clearPhoto: async () => {
       events.push("photo");
     },
+    clearInviteCodes: async () => {},
     clearCovers: async () => {},
     blockPending: () => () => {},
     clearPending: async () => {},
@@ -366,6 +369,7 @@ test("a failed reminder or calendar clear fails sign-out before auth sign-out", 
       clearPhoto: async () => {
         events.push("photo");
       },
+      clearInviteCodes: async () => {},
       clearCovers: async () => {},
       blockPending: () => () => {},
       clearPending: async () => {},

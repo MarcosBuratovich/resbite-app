@@ -30,6 +30,7 @@ function setup() {
     clearPhoto: async (s) => {
       calls.push(`photo:${s}`);
     },
+    clearInviteCodes: async () => {},
     clearCovers: async (s) => {
       calls.push(`covers:${s}`);
     },
@@ -126,6 +127,7 @@ test("ordinary signout failure cannot resume a deletion-blocked account", async 
     clearReminders: async () => {},
     clearCalendarRecords: async () => {},
     clearPhoto: async () => {},
+    clearInviteCodes: async () => {},
     clearCovers: async () => {},
     blockPending: () => () => {},
     clearPending: async () => {},
