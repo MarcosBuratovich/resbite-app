@@ -8,7 +8,11 @@
 -- notification_recipient_eligible() from 20261015130000_ux3_note_delivery.sql and prepare_deletion_intent() from
 -- 20260929125858_deletion_intent_reservations.sql, with the revoke and grant those files give them (narrowed to the
 -- restored function), and gives service_role back execute on the public.request_account_deletion wrapper.
--- user_eligible() and deletion_pending() are not restored: the hosted rollback, run first, drops them.
+-- user_eligible() and deletion_pending() are not restored: the hosted rollback, run first, drops them. Wherever this
+-- file is undone while GI2 stays, user_eligible() keeps the body the companion gives it, which is the
+-- 20261027120000_phone_accounts body: the one before the companion in the hosted order (GI2, phone accounts, the
+-- deletion lifecycle, then the companion), so a confirmed phone still counts. It is never put back to GI2's
+-- email-only body.
 
 -- The 20260918001316_account_deletion_lifecycle body, verbatim, over the foundation one the hosted rollback put back.
 create or replace function private.eligible() returns boolean language sql stable security definer set search_path='' as $$

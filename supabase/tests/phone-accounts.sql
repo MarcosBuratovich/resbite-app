@@ -102,3 +102,121 @@ do $$ declare r text; begin
  reset role;
 end $$;
 rollback;
+-- Accounts confirmed by phone: a confirmed phone counts as a confirmed account, the maintainer grant, app use and
+-- the 18+ tick. Synthetic identities only (prefix c2); one rolled-back block.
+begin;
+insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) values
+ ('c2000000-0000-4000-8000-000000000001',null,null,'447700900101',now()),
+ ('c2000000-0000-4000-8000-000000000002',null,null,'447700900102',now()),
+ ('c2000000-0000-4000-8000-000000000003',null,null,'447700900103',null),
+ ('c2000000-0000-4000-8000-000000000004','phone-accounts-roster@resbite-test.invalid',now(),null,null),
+ ('c2000000-0000-4000-8000-000000000005',null,null,'447700900105',now());
+insert into private.tester_roster(email) values ('phone-accounts-roster@resbite-test.invalid');
+-- This fixture helper runs as its caller; it is not an application endpoint.
+create function pg_temp.phone_access(p_uid uuid) returns text language plpgsql security invoker as $$
+begin
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',p_uid,'role','authenticated')::text,true);
+ return public.account_access_status()->>'status';
+end $$;
+-- A phone-only account with a maintainer grant is approved.
+insert into private.beta_access(user_id,source) values ('c2000000-0000-4000-8000-000000000001','maintainer');
+do $$ begin
+ if not private.user_eligible('c2000000-0000-4000-8000-000000000001') then raise exception 'Phone-only account with a maintainer grant not eligible'; end if;
+end $$;
+set local role authenticated;
+do $$ begin
+ if pg_temp.phone_access('c2000000-0000-4000-8000-000000000001') is distinct from 'approved' then raise exception 'Phone-only account with a maintainer grant not approved'; end if;
+ -- Without the grant it waits; with nothing confirmed it is unconfirmed; an email-confirmed roster tester is approved.
+ if pg_temp.phone_access('c2000000-0000-4000-8000-000000000002') is distinct from 'access_pending' then raise exception 'Phone-only account without a grant not waiting'; end if;
+ if pg_temp.phone_access('c2000000-0000-4000-8000-000000000003') is distinct from 'unconfirmed' then raise exception 'Account with nothing confirmed not unconfirmed'; end if;
+ if pg_temp.phone_access('c2000000-0000-4000-8000-000000000004') is distinct from 'approved' then raise exception 'Email-confirmed roster tester not approved'; end if;
+end $$;
+reset role;
+-- A phone-only account that is leaving is not eligible, grant or not.
+insert into private.beta_access(user_id,source) values ('c2000000-0000-4000-8000-000000000005','maintainer');
+insert into public.profiles(id,display_name,deletion_requested_at) values ('c2000000-0000-4000-8000-000000000005','Leaving',now());
+do $$ begin
+ if private.user_eligible('c2000000-0000-4000-8000-000000000002') then raise exception 'Phone-only account without a grant eligible'; end if;
+ if private.user_eligible('c2000000-0000-4000-8000-000000000005') then raise exception 'Leaving phone-only account eligible'; end if;
+ if not private.user_eligible('c2000000-0000-4000-8000-000000000004') then raise exception 'Email-confirmed roster tester not eligible'; end if;
+end $$;
+-- A phone-confirmed account awaiting access may save its details; one with nothing confirmed may not.
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"c2000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+do $$ declare r jsonb; begin
+ r := public.save_registration_details(null,'{"birth_date":null,"phone":null,"city":"Leeds","interests":[]}');
+ if r->'registration_details'->>'city' is distinct from 'Leeds' then raise exception 'Details not saved: %', r; end if;
+end $$;
+select set_config('request.jwt.claims','{"sub":"c2000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
+do $$ begin
+ begin
+  perform public.save_registration_details(null,'{"birth_date":null,"phone":null,"city":"Leeds","interests":[]}');
+  raise exception 'Unconfirmed account saved details';
+ exception when insufficient_privilege then null;
+ end;
+end $$;
+-- App use: one row per account, the first time kept and the last time bumped.
+select set_config('request.jwt.claims','{"sub":"c2000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.note_app_session();
+reset role;
+update private.app_sessions set first_at=now()-interval '1 day', last_at=now()-interval '1 day' where user_id='c2000000-0000-4000-8000-000000000001';
+set local role authenticated;
+select public.note_app_session();
+reset role;
+do $$ begin
+ if (select count(*) from private.app_sessions where user_id='c2000000-0000-4000-8000-000000000001')<>1 then raise exception 'One app-session row expected'; end if;
+ if not exists(select 1 from private.app_sessions where user_id='c2000000-0000-4000-8000-000000000001'
+  and first_at=now()-interval '1 day' and last_at=now() and last_at>=first_at) then raise exception 'last_at not bumped or first_at moved'; end if;
+ if not private.used_app('c2000000-0000-4000-8000-000000000001') then raise exception 'used_app false after a session'; end if;
+ if private.used_app('c2000000-0000-4000-8000-000000000002') then raise exception 'used_app true without a session'; end if;
+end $$;
+-- The 18+ tick: written once, never overwritten; a malformed Terms version is refused.
+set local role authenticated;
+do $$ begin
+ perform public.attest_age('2026-10');
+ perform public.attest_age('2026-11');
+ begin perform public.attest_age('oct'); raise exception 'Malformed Terms version accepted';
+ exception when invalid_parameter_value then null; end;
+ begin perform public.attest_age(null); raise exception 'Missing Terms version accepted';
+ exception when invalid_parameter_value then null; end;
+end $$;
+-- No session: both refuse.
+select set_config('request.jwt.claims','{"role":"authenticated"}',true);
+do $$ begin
+ begin perform public.note_app_session(); raise exception 'Session noted without an account'; exception when insufficient_privilege then null; end;
+ begin perform public.attest_age('2026-10'); raise exception 'Tick stored without an account'; exception when insufficient_privilege then null; end;
+end $$;
+reset role;
+do $$ begin
+ if (select count(*) from private.age_attestations where user_id='c2000000-0000-4000-8000-000000000001')<>1
+ or (select terms_version from private.age_attestations where user_id='c2000000-0000-4000-8000-000000000001')<>'2026-10' then
+  raise exception 'The first tick should stay';
+ end if;
+end $$;
+-- anon may call neither.
+set local role anon;
+do $$ begin
+ begin perform public.note_app_session(); raise exception 'anon noted an app session'; exception when insufficient_privilege then null; end;
+ begin perform public.attest_age('2026-10'); raise exception 'anon stored a tick'; exception when insufficient_privilege then null; end;
+end $$;
+reset role;
+-- Grant sources: link and maintainer only.
+do $$ begin
+ begin
+  insert into private.beta_access(user_id,source) values ('c2000000-0000-4000-8000-000000000002','other');
+  raise exception 'Unknown grant source accepted';
+ exception when check_violation then null;
+ end;
+end $$;
+-- Grants: the app-use marker and used_app stay with the database; the façades and bodies go to authenticated only.
+do $$ declare r text; begin
+ foreach r in array array['anon','authenticated','service_role'] loop
+  if has_function_privilege(r,'private.used_app(uuid)','execute') then raise exception '% may call used_app', r; end if;
+  if has_table_privilege(r,'private.app_sessions','select') then raise exception '% may read app_sessions', r; end if;
+ end loop;
+ foreach r in array array['public.note_app_session()','private.note_app_session()','public.attest_age(text)','private.attest_age(text)'] loop
+  if not has_function_privilege('authenticated',r,'execute') then raise exception 'authenticated may not call %', r; end if;
+  if has_function_privilege('anon',r,'execute') or has_function_privilege('service_role',r,'execute') then raise exception '% is open beyond authenticated', r; end if;
+ end loop;
+end $$;
+rollback;
