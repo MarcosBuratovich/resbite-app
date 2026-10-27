@@ -654,6 +654,8 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
 
 **Rollout (owner-approved, not run).** The migration; the fold release constant flipped in a reviewed commit and the function deployed with `verify_jwt = false`; the link site regenerated and deployed (`TERMS_URL`, `PRIVACY_URL`, `APP_STORE_URL`, `TERMS_VERSION`, a firewall rate limit on `/i/*`, `/personal-flow.mjs` checked for a JavaScript MIME type on the first preview); an EAS build with `EXPO_PUBLIC_INVITATION_ORIGIN=https://link.resbite.com` (a new native build, for `LSApplicationQueriesSchemes`; Android `<queries>` is B8); the iPhone check. **Rollback:** serve the previous build, run the rollback SQL with approval (it removes the grants made by invitations), redeploy the previous link site.
 
+**Precondition:** the fold function is deployed and released before, or together with, the link site and the app build that sends personal links; until it is, hold personal links to existing testers, or one person ends up with two accounts.
+
 **Checks (at `386d453`, run on Linux).**
 - `cd mobile && npm run check` passes: type check clean, 448 unit tests pass (0 fail, 61 test scripts).
 - `./scripts/test-database-docker.sh` passes in full mode (27 `PASS` lines).

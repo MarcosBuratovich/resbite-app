@@ -1,6 +1,8 @@
 // Phone sign-up, sign-in and add-a-number by six-digit SMS code. Mirrors emailCode.ts: dependencies are
 // injected so the mappers run under node with recording stubs.
 
+import { PHONE_COPY } from "../domain/phoneCopy";
+
 export type AuthError = { message: string; status?: number; code?: string } | null;
 export type PhoneCodeDeps = {
   signInWithOtp(a: { phone: string; options: { shouldCreateUser: boolean } }): Promise<{ error: AuthError }>;
@@ -17,7 +19,8 @@ const TEST_CODE = "000000";
 
 export const PHONE_CODE_COPY = {
   noAccount: "No Resbite account uses this number yet.",
-  taken: "This number already belongs to another Resbite account. Use a different number, or sign out and sign in with that number.",
+  /** One sentence with PHONE_COPY.taken, so the two can't drift. */
+  taken: PHONE_COPY.taken,
   mismatch: "That code doesn’t match. Try again.",
   expired: "That code has expired. Send a new one.",
   wait: "Wait a minute, then send a new code.",

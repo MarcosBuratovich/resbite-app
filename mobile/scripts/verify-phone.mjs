@@ -18,7 +18,7 @@ const COPY = {
   mismatch: "That code doesn’t match. Try again.",
   noAccount: "No Resbite account uses this number yet.",
   taken:
-    "This number already belongs to another Resbite account. Use a different number, or sign out and sign in with that number.",
+    "This number already belongs to another Resbite account. Use a different number, or ask the Resbite team for help.",
 };
 const jwt = (sub, exp) =>
   [

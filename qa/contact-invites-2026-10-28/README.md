@@ -33,6 +33,8 @@ Hosted order: this migration is applied **straight after** `20261027120000_phone
 
 None of these steps has been run. Each is done later, with the owner's approval.
 
+**Precondition (one person, one account):** the fold function (step 2) is deployed and released before, or together with, the link-site deploy (step 3) and the app build that sends personal links (step 4). Without it, an existing tester who answers a personal link on the web gets a second, web-only account holding their number, and Add your number then refuses that number with nothing to fold it into. If the fold can't go out first, hold personal links to existing testers (people who already have a Resbite account) until it does; people new to Resbite may get them.
+
 1. **Migration.**
    - The owner approves by file name and sha256 of `20261028120000_contact_invitations.sql` (above).
    - It goes straight after `20261027120000_phone_accounts.sql`.

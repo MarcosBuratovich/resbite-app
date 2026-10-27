@@ -544,7 +544,7 @@ try {
     await button(page, "Send code").click();
     await expect(
       page.getByText(
-        "This number already belongs to another Resbite account. Use a different number, or sign out and sign in with that number.",
+        "This number already belongs to another Resbite account. Use a different number, or ask the Resbite team for help.",
         { exact: true },
       ),
     ).toBeVisible();

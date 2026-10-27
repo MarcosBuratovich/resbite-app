@@ -756,7 +756,7 @@ try {
     await button(phoneless, "Send code").click();
     await expect(
       phoneless.getByText(
-        "This number already belongs to another Resbite account. Use a different number, or sign out and sign in with that number.",
+        "This number already belongs to another Resbite account. Use a different number, or ask the Resbite team for help.",
         { exact: true },
       ),
     ).toBeVisible();

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { PHONE_CODE_COPY, sendPhoneCode, verifyPhoneCode, type AuthError, type PhoneCodeDeps } from "./phoneCode";
+import { PHONE_COPY } from "../domain/phoneCopy";
 
 const phone = "+447700900834";
 const wait = "Wait a minute, then send a new code.";
@@ -52,6 +53,12 @@ test("send errors map to copy and reasons", async () => {
     reason: "taken",
     message: PHONE_CODE_COPY.taken,
   });
+  // No "sign in with that number": while folding is off that would make a second account (F2).
+  assert.equal(
+    PHONE_CODE_COPY.taken,
+    "This number already belongs to another Resbite account. Use a different number, or ask the Resbite team for help.",
+  );
+  assert.equal(PHONE_CODE_COPY.taken, PHONE_COPY.taken);
   assert.deepEqual(await sendPhoneCode(harness({ otp: { message: "x", status: 429 } }).d, phone, "signup"), { ok: false, message: wait });
   assert.deepEqual(await sendPhoneCode(harness({ otp: { message: "x", status: 0 } }).d, phone, "signup"), { ok: false, message: connection });
 });
