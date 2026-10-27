@@ -545,6 +545,11 @@ try {
     await expect(heading(page, "Event link")).toBeVisible();
     await button(page, "Turn off this link").scrollIntoViewIfNeeded();
     await shot("event-link-card");
+    // The card's controls stay at least 44 pt, also at 320 px under Larger Text.
+    for (const name of ["Share link", "Copy link", "Turn off this link"]) {
+      const box = await button(page, name).boundingBox();
+      assert.ok(box.height >= 44 && box.width >= 44, `${name} is at least 44 pt at ${suffix}`);
+    }
     await button(page, "2 going, 1 maybe").click();
     await expect(heading(page, "Guests")).toBeVisible();
     await expect(button(page, "Remove Alex Rivera")).toBeVisible();

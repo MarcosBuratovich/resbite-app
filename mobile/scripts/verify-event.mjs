@@ -49,6 +49,7 @@ const hosted = {
   categories: ["community", "uplifting"],
   owner_id: user.id,
   starts_at: "2099-03-01T15:00:00Z",
+  ends_at: "2099-03-01T17:00:00Z",
   time_zone: "UTC",
   place_label: "Fixture café",
   area: "",
@@ -211,8 +212,11 @@ try {
   let waiting = [SAM, KIM, LEE];
   const decisions = [];
   const linkCalls = [];
-  const LINK_CODES = ["AAAAAAAAAAAAAAAAAAAAA1", "BBBBBBBBBBBBBBBBBBBBB2"];
+  const LINK_CODES = ["AAAAAAAAAAAAAAAAAAAAA1", "BBBBBBBBBBBBBBBBBBBBB2", "CCCCCCCCCCCCCCCCCCCCC3"];
   let linkIndex = 0;
+  let failRotate = false;
+  // People the organizer approved: they join the guest list.
+  const approvedGuests = [];
   // UX3: Meeting details live in their own table, which the database sends only to the organizer and
   // Going or Maybe guests; every invitee may know some exist. The plans row's own note is always "".
   const asRow = (plan) => {
@@ -293,6 +297,7 @@ try {
               { user_id: "g2", response: "pending", profiles: { display_name: "Bea" } },
               { user_id: "g3", response: "maybe", profiles: { display_name: "Cy" } },
               { user_id: "g4", response: "withdrawn", profiles: { display_name: "Di" } },
+              ...approvedGuests,
             ].filter((row) => !removed.has(row.user_id))
           : attendee.response === "pending"
             ? [own]
@@ -332,6 +337,8 @@ try {
       }
       assert.ok(request, "decided request is waiting");
       waiting = waiting.filter((r) => r !== request);
+      if (body.p_approve)
+        approvedGuests.push({ user_id: request.user_id, response: request.response, profiles: { display_name: request.name } });
       return reply({ status: body.p_approve ? "approved" : "declined" });
     }
     if (path === "/rest/v1/rpc/plan_link") {
@@ -341,6 +348,11 @@ try {
     if (path === "/rest/v1/rpc/rotate_plan_link") {
       linkCalls.push(req.postDataJSON());
       linkIndex++;
+      if (failRotate) {
+        failRotate = false;
+        // The turn-off happened, but its reply was lost: the card reads the link again.
+        return reply({ message: "Lost reply" }, 500);
+      }
       return reply(LINK_CODES[linkIndex]);
     }
     // Plan 2: the organizer's personal links (Coffee evening only; the other events have none).
@@ -447,6 +459,8 @@ try {
   await approve("Sam Reed").click();
   await expect(page.getByText("Sam Reed", { exact: true })).toHaveCount(0);
   assert.deepEqual(decisions, [{ p_plan: hosted.id, p_user: SAM.user_id, p_approve: true }]);
+  // The page read the event again: the approved guest is counted as going (Alex and Sam).
+  await expect(page.getByRole("button", { name: "2 going, 1 maybe", exact: true })).toBeVisible();
   // A request someone else already decided says so, and drops off the list when the page reads it again.
   await approve("Lee Fox").click();
   await expect(page.getByText("Someone already answered this request.", { exact: true })).toBeVisible();
@@ -479,7 +493,7 @@ try {
   await expect.poll(async () => (await shares()).length).toBe(1);
   const [firstShare] = await shares();
   const shareText = firstShare.text ?? firstShare.message;
-  const shareMatch = /^Coffee evening, Sun 1 Mar, \d\d:\d\d\. RSVP: (.+)$/.exec(shareText);
+  const shareMatch = /^Coffee evening, Sun 1 Mar, \d\d:\d\d – \d\d:\d\d\. RSVP: (.+)$/.exec(shareText);
   assert.ok(shareMatch, `Share text: ${shareText}`);
   assert.match(shareMatch[1], linkMatch(LINK_CODES[0]));
   await page.getByRole("button", { name: "Copy link", exact: true }).click();
@@ -501,18 +515,31 @@ try {
   await page.getByRole("button", { name: "Copy link", exact: true }).click();
   await expect.poll(async () => (await copies()).length).toBe(2);
   assert.match((await copies())[1], linkMatch(LINK_CODES[1]));
+  // A lost turn-off reply says so and reads the link that works now.
+  const readsBefore = linkCalls.length;
+  failRotate = true;
+  page.once("dialog", (dialog) => void dialog.accept());
+  await page.getByRole("button", { name: "Turn off this link", exact: true }).click();
+  await expect(
+    page.getByText("Couldn’t confirm the link was turned off. Check your connection and try again.", { exact: true }),
+  ).toBeVisible();
+  await expect.poll(() => linkCalls.length).toBeGreaterThan(readsBefore + 1);
+  await page.getByRole("button", { name: "Copy link", exact: true }).click();
+  await expect.poll(async () => (await copies()).length).toBe(3);
+  assert.match((await copies())[2], linkMatch(LINK_CODES[2]));
   // The link is read from the database, never kept in browser storage.
   const storedLinks = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
   for (const code of LINK_CODES) assert.ok(!storedLinks.includes(code), "The link code is not stored on the device");
   // Guests (UX2): the stack counts Going and Maybe; the sheet groups every answer.
-  await page.getByRole("button", { name: "1 going, 1 maybe", exact: true }).click();
+  await page.getByRole("button", { name: "2 going, 1 maybe", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Guests", exact: true })).toBeVisible();
+  await expect(page.getByText("Sam Reed", { exact: true })).toBeVisible();
   for (const group of ["Going", "Maybe", "Can’t go", "Not answered yet"])
     await expect(page.getByRole("heading", { name: group, exact: true })).toBeVisible();
   await expect(page.getByText("Bea", { exact: true })).toBeVisible();
   await expect(page.getByText("Can’t go now", { exact: true })).toBeVisible();
   // GI1: the organizer removes a guest, after a question; Keep changes nothing.
-  for (const name of ["Alex", "Bea", "Cy", "Di"])
+  for (const name of ["Alex", "Bea", "Cy", "Di", "Sam Reed"])
     await expect(page.getByRole("button", { name: `Remove ${name}`, exact: true })).toBeVisible();
   let removeAsked = "";
   page.once("dialog", (dialog) => {
@@ -622,7 +649,7 @@ try {
   await page.getByRole("button", { name: "Close sheet", exact: true }).click();
   await sheetClosed(page);
   // The stack still counts Going and Maybe after the reload.
-  await expect(page.getByRole("button", { name: "1 going, 1 maybe", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "2 going, 1 maybe", exact: true })).toBeVisible();
   // UX3 Meeting details: the organizer sees them, with who else can.
   await expect(page.getByText("Meeting details · only Going & Maybe see this", { exact: true })).toBeVisible();
   await expect(page.getByText("Window table", { exact: true })).toBeVisible();
@@ -769,7 +796,7 @@ try {
   await expect(page.getByRole("button", { name: "Edit Coffee evening", exact: true })).toHaveCount(0);
   assert.deepEqual(cancels, [hosted.id]);
   console.log(
-    "PASS: organizer event page: the exact place and no Choose people (GI-D3); guests (GI1: Remove asks first and says they can ask to join again and the organizer decides, says a lost reply, reloads the list; invitees have no Remove); the Invited group (Plan 2: unanswered only, by stored name or number, WhatsApp and Messages on each row with the last-used first, the stored code either way or a fresh one kept for the other app when WhatsApp won't open, Remove calls revoke_phone_invitation), Waiting for you (open-link approval: name, answer and ••34; Approve sends decide_join_request true and the row leaves; Decline asks first then sends false; an already-decided request says so) above the Event link card (Share text with the date and link, Copy link, Turn off asks first and gives a new link, nothing stored; invitees have neither), Open in Maps (and its failure note), Edit at Review, Do this again at When with a replace guard, an unconfirmed cancel with Refresh event, cancel.",
+    "PASS: organizer event page: the exact place and no Choose people (GI-D3); guests (GI1: Remove asks first and says they can ask to join again and the organizer decides, says a lost reply, reloads the list; invitees have no Remove); the Invited group (Plan 2: unanswered only, by stored name or number, WhatsApp and Messages on each row with the last-used first, the stored code either way or a fresh one kept for the other app when WhatsApp won't open, Remove calls revoke_phone_invitation), Waiting for you (open-link approval: name, answer and ••34; Approve sends decide_join_request true and the row leaves; Decline asks first then sends false; an already-decided request says so) above the Event link card (Share text with the date and link, Copy link, Turn off asks first and gives a new link, a lost turn-off reply says so and reads the link again, an approved guest joins the guest list, nothing stored; invitees have neither), Open in Maps (and its failure note), Edit at Review, Do this again at When with a replace guard, an unconfirmed cancel with Refresh event, cancel.",
   );
 
   // UX2-D1: a saved edit returns to its event page with "Changes saved"; Back then leaves for My resbites.

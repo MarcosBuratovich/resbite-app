@@ -207,9 +207,10 @@ try {
     await expect(page.getByRole("radio", { name: "Can’t go", exact: true })).toBeChecked();
     assert.equal(state.joins.length, 2);
     assert.equal(state.requests.length, 1, "one request, never duplicated");
-    // Done leaves the screen for My resbites.
+    // Done leaves the screen for My resbites (nothing to go back to after a fresh load).
     await button(page, "Done").click();
-    await expect.poll(() => path(page)).not.toBe("/waiting");
+    await expect(heading(page, "My resbites")).toBeVisible();
+    assert.equal(path(page), "/plans");
     assert.deepEqual(errors, []);
     await page.close();
     console.log(

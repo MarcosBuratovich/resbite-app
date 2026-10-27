@@ -212,7 +212,7 @@ async function guestFixture({ metadata = {}, signedIn = false, kept = null } = {
       joins.push(body);
       // The code is still kept on the device while the request runs.
       assert.equal(await pending(page), body.p_code);
-      if (body.p_code === GONE) return reply({ code: "42501", message: "Invitation unavailable" }, 403);
+      if (body.p_code === GONE || body.p_code === DEAD) return reply({ code: "42501", message: "Invitation unavailable" }, 403);
       if (body.p_code === FLAKY && joins.length === 1) return reply({ message: "Fixture: connection lost" }, 503);
       requested = true;
       return reply({ state: "waiting", plan_id: filmNight.id, response: "pending" });
@@ -230,7 +230,7 @@ async function guestFixture({ metadata = {}, signedIn = false, kept = null } = {
     if (path === "/rest/v1/attendees") return reply(one ? null : []);
     return reply({ message: `Unexpected ${req.method()} ${path}` }, 400);
   });
-  return { page, errors, opens, joins };
+  return { page, errors, opens, joins, cardReadCount: () => cardReads };
 }
 
 const refusedLink = "This link isn’t open to you right now.";
@@ -420,6 +420,24 @@ try {
     assert.deepEqual(errors, []);
     await page.close();
     console.log("PASS: waiting for access, a refused link says so with Go to Resbite and drops the kept code; a cold start lands on Waiting for access.");
+  }
+  {
+    const { page, errors, joins, cardReadCount } = await guestFixture({ metadata: { full_name: "Guest Seven" }, signedIn: true, kept: DEAD });
+    // A kept code that is dead, on an account waiting for access. Signed in, the invite screen no longer reads the
+    // invitation's card: it sends the request, the server refuses it as unavailable, and the kept code is dropped, so
+    // a second cold start lands on Waiting for access.
+    await page.goto(base);
+    await expect(page.getByText(refusedLink, { exact: true })).toBeVisible();
+    assert.deepEqual(joins, [{ p_code: DEAD, p_name: "Guest Seven", p_response: "pending", p_terms_version: null }]);
+    assert.equal(cardReadCount(), 0, "signed in, the card is not read");
+    await expect.poll(() => pending(page)).toBe(null);
+    await page.goto(base);
+    await expect(heading(page, "Waiting for access")).toBeVisible();
+    assert.equal(new URL(page.url()).pathname, "/account");
+    assert.equal(joins.length, 1, "no second request");
+    assert.deepEqual(errors, []);
+    await page.close();
+    console.log("PASS: waiting for access with a kept dead code: the request is refused (the card is not read signed in), the code is dropped and a second cold start lands on Waiting for access with no second request.");
   }
   {
     const { page, errors, joins } = await guestFixture({ metadata: { full_name: "Guest Five" }, signedIn: true, kept: FLAKY });
