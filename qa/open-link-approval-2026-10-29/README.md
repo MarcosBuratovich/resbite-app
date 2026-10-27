@@ -55,7 +55,7 @@ None of these steps has been run. Each is done later, with the owner's approval.
 3. **App build.** The same build as Plans 1 and 2: `EXPO_PUBLIC_INVITATION_ORIGIN=https://link.resbite.com` in the EAS production environment, built after the migration. The new native build from Plan 2 (`LSApplicationQueriesSchemes`) covers it. There is nothing new to configure.
 4. **iPhone checks.**
    - Open an event's link on a phone without Resbite (in test mode, the test code), answer it, and see Waiting. The event page on the host's phone shows the person under "Waiting for you", and the guest list and the going count do not include them.
-   - The host approves: the person appears as a guest with their answer and the person is told. Sign into the app with that number and the event is there.
+   - The host approves: the person appears as a guest with their answer. Their `join_approved` notice is queued; push delivery arrives with Plan 4, so until then they see it the next time they open the link or the app. Sign into the app with that number and the event is there.
    - Decline another person: they see "You weren't added to this resbite." and cannot ask again on the same link. After the host turns the link off and makes a new one, they can ask again.
    - Turn the link off: people already approved stay on the event.
    - Open the link in the app as a person who already has Resbite: they see the same waiting state, and can change their answer while waiting.
