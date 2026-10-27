@@ -61,7 +61,8 @@ None of these steps has been run. Each is done later, with the owner's approval.
    - Open the link in the app as a person who already has Resbite: they see the same waiting state, and can change their answer while waiting.
    - The host taps their own `/r/` link (from WhatsApp): it opens the event page.
 5. **Old builds.**
-   - An old TestFlight build opening a `/r/` link now creates a waiting request quietly. It receives the event's id but holds no attendee row, so the event page says it isn't available. The host sees the request; the person is told nothing. Build 8 behaves this way.
+   - Build 8 can't open `/r/` links at all (it opens them into an error, as before this plan), so nothing changes for it.
+   - A build with the GI1 or GI2 code (`claim_plan_link`, `join_by_link`) opening a `/r/` link now creates a waiting request quietly. It receives the event's id but holds no attendee row, so the event page says it isn't available. The host sees the request; the person is told nothing.
    - **Build 10 needs confirming.** GI2's flow on build 10 waits after `join_by_link` for the account to read as approved. A new guest's account now stays unapproved until the host approves, so a new guest may sit on "Joining…". Check this on build 10.
    - A former tester who is already on an event but lost access cannot get it back through the link, because there is nothing for the host to approve: they are an attendee already, so the link makes no request.
    - Ask testers to update to the new build.
