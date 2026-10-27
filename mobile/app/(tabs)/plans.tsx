@@ -251,7 +251,7 @@ export default function Plans() {
   useEffect(() => {
     // Leaving /plans ends the toast; a notice id is shown at most once.
     if (pathname !== "/plans") setToastNotice(undefined);
-    else if (noticeId && noticeId !== shownNotice) {
+    else if (noticeId && (noticeId === "gone" || noticeId !== shownNotice)) {
       shownNotice = noticeId;
       setToastNotice(noticeId);
     }
@@ -259,11 +259,15 @@ export default function Plans() {
   const toast =
     !noticeId || toastNotice !== noticeId
       ? null
-      : created === "1"
+      : noticeId === "gone"
+        ? null
+        : created === "1"
         ? preview
           ? "Preview saved"
           : "Resbite saved"
         : null;
+  // A tapped notification for an event that can't be read any more (usePushRouting).
+  const goneNote = noticeId === "gone" && toastNotice === "gone" ? INVITE_COPY.goneNotice : null;
   return (
     <SafeAreaView edges={["top", "left", "right"]} style={s.page}>
       <ScrollView
@@ -277,6 +281,7 @@ export default function Plans() {
           <IconButton icon={UserRound} label="Your profile" onPress={() => router.navigate("/profile")} />
         </View>
         <PreviewNotice />
+        <ErrorNote message={goneNote} />
         {(invitations.length > 0 || waiting.length > 0) && (
           <View style={{ gap: 12 }}>
             <Copy accessibilityRole="header" style={styles.invitationsHeading}>

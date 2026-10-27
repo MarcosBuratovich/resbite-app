@@ -4,6 +4,7 @@ function joinNames(names: string[]): string {
 }
 
 export const INVITE_COPY = {
+  goneNotice: "That resbite isn’t available any more.",
   heading: "Invite people",
   search: "Search contacts",
   onResbite: "On Resbite",

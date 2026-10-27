@@ -114,7 +114,7 @@ export async function clearReminders(scope: string): Promise<void> {
 
 /**
  * Root layout: shows a reminder that arrives while Resbite is open (banner and list, no sound or badge) and
- * reports taps on reminders, including the one that opened the app. Other notifications are left alone.
+ * reports taps on reminders, including the one that opened the app. Plan-update pushes are shown too (their taps go to usePushRouting); others are left alone.
  * Returns the cleanup. Web has no notifications.
  */
 export function listenForReminders(open: (planId: string) => void): () => void {
@@ -122,7 +122,10 @@ export function listenForReminders(open: (planId: string) => void): () => void {
   const notifications = require("expo-notifications") as typeof import("expo-notifications");
   notifications.setNotificationHandler({
     handleNotification: async (notification) => {
-      const ours = notification.request.identifier.startsWith(REMINDER_PREFIX);
+      // Reminders, and plan-update pushes from the sender (UX2-D4 wording); nothing else.
+      const ours =
+        notification.request.identifier.startsWith(REMINDER_PREFIX) ||
+        notification.request.content.data?.type === "plan_update";
       return { shouldShowBanner: ours, shouldShowList: ours, shouldPlaySound: false, shouldSetBadge: false };
     },
   });
@@ -132,7 +135,8 @@ export function listenForReminders(open: (planId: string) => void): () => void {
   };
   // Cold start: the tap that launched the app. Cleared once handled, so a remount never repeats it.
   const launch = notifications.getLastNotificationResponse();
-  if (launch) {
+  // A push tap is left for usePushRouting.
+  if (launch && reminderTapPlan(launch)) {
     notifications.clearLastNotificationResponse();
     tapped(launch);
   }
