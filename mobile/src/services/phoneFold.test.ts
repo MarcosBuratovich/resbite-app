@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { foldLanded, foldPhoneAccount, retryFold, sendFoldCode, type FoldClientDeps } from "./phoneFold";
+import { foldLanded, foldNext, foldPhoneAccount, retryFold, sendFoldCode, type FoldClientDeps } from "./phoneFold";
 import { PHONE_COPY } from "../domain/phoneCopy";
 import { PHONE_CODE_COPY } from "./phoneCode";
 
@@ -44,11 +44,16 @@ test("the function call carries both tokens", async () => {
   assert.deepEqual(h.calls.fold, [{ appToken: "app", body: { foreign_token: "foreign", phone } }]);
 });
 
-test("503, 403, 409, 401, 500 and connection failures map to their copy", async () => {
+test("503, 404, 403, 409, 401, 500 and connection failures map to their copy", async () => {
   const r = async (o: Parameters<typeof harness>[0]) => foldPhoneAccount(harness(o).d, phone, "123456", 1_000);
-  assert.deepEqual(await r({ status: 503 }), { ok: false, message: PHONE_COPY.foldOff, clear: false, verified: true, blocked: true });
+  // Switched off (503) or not deployed (404): the same words, and no Retry.
+  for (const status of [503, 404])
+    assert.deepEqual(await r({ status }), { ok: false, message: PHONE_COPY.foldOff, clear: false, verified: true, blocked: true });
   assert.equal(PHONE_COPY.foldOff, "Bringing an invitation into this account isn’t switched on yet.");
-  for (const status of [403, 409]) assert.deepEqual(await r({ status }), { ok: false, message: PHONE_COPY.taken, clear: false, verified: true });
+  // Refused: the taken copy with its support line, no kept proof, and no Retry.
+  for (const status of [403, 409])
+    assert.deepEqual(await r({ status }), { ok: false, message: PHONE_COPY.taken, clear: false, verified: true, blocked: true });
+  assert.match(PHONE_COPY.taken, /ask the Resbite team for help\.$/);
   assert.deepEqual(await r({ status: 401 }), { ok: false, message: PHONE_COPY.foldGone, clear: false, gone: true });
   assert.deepEqual(await r({ status: 500 }), { ok: false, message: PHONE_CODE_COPY.connection, clear: false, verified: true, foreignToken: "foreign" });
   assert.deepEqual(await r({ throwCall: true }), { ok: false, message: PHONE_CODE_COPY.connection, clear: false, verified: true, foreignToken: "foreign" });
@@ -100,4 +105,32 @@ test("503 keeps no token and a lost reply counts as done once the account holds 
   assert.equal(foldLanded(held as never, phone), true);
   assert.equal(foldLanded({ phone: "447700900835", phone_confirmed_at: "x" } as never, phone), false);
   assert.equal(foldLanded(null, phone), false);
+});
+
+test("after a fold: only a failure that may pass keeps the proof for Retry; off and refused hide Retry", async () => {
+  const at = async (o: Parameters<typeof harness>[0]) => foldNext(await foldPhoneAccount(harness(o).d, phone, "123456", 1_000));
+  for (const status of [404, 503, 403, 409])
+    assert.deepEqual(await at({ status }), { keepToken: null, reread: false, blockRetry: true }, String(status));
+  // A spent code is never verified again: after a refusal there is no token to post and nothing to retry.
+  for (const status of [403, 409]) {
+    const h = harness({ status });
+    const first = await foldPhoneAccount(h.d, phone, "123456", 1_000);
+    assert.equal(!first.ok && first.foreignToken, undefined);
+  }
+  assert.deepEqual(await at({ status: 500 }), { keepToken: "foreign", reread: true, blockRetry: false });
+  assert.deepEqual(await at({ throwCall: true }), { keepToken: "foreign", reread: true, blockRetry: false });
+  assert.deepEqual(await at({ status: 401 }), { keepToken: null, reread: false, blockRetry: false });
+  assert.deepEqual(await at({ status: 200 }), { keepToken: null, reread: false, blockRetry: false });
+  // A wrong code keeps nothing and blocks nothing: the person types the right one.
+  assert.deepEqual(await at({ verify: { status: 400, message: "Token has expired or is invalid" } }), {
+    keepToken: null,
+    reread: false,
+    blockRetry: false,
+  });
+});
+
+test("the offer is conditional and its button has its own name", () => {
+  assert.equal(PHONE_COPY.foldOffer, "If this number answered an invitation on the web, confirm it with a code to bring its resbites here.");
+  assert.equal(PHONE_COPY.foldSend, "Confirm with a code");
+  assert.notEqual(PHONE_COPY.foldSend, PHONE_COPY.send);
 });

@@ -68,7 +68,7 @@ export default function AddPhone() {
               {phone.reason === "taken" ? (
                 <>
                   <Copy>{PHONE_COPY.foldOffer}</Copy>
-                  <Button large icon={false} title={PHONE_COPY.send} loading={phone.busy} onPress={() => void phone.sendFold()} />
+                  <Button large icon={false} title={PHONE_COPY.foldSend} loading={phone.busy} onPress={() => void phone.sendFold()} />
                   <TextAction title={PHONE_COPY.changeNumber} onPress={() => phone.setInput("")} />
                 </>
               ) : null}

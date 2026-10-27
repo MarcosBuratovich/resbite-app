@@ -1,6 +1,6 @@
 # fold-phone-account — prepared, not deployed
 
-Source-gated off by `PHONE_FOLD_RELEASE_APPROVED` in `_shared/fold-release.ts` (stays `false`; no environment flag can activate it). It is flipped only in a reviewed commit, with the owner's approval, as a step of the [contact invitations runbook](../../../qa/contact-invites-2026-10-28/README.md). Until then the app shows its "not switched on" copy (`foldOff`).
+Source-gated off by `PHONE_FOLD_RELEASE_APPROVED` in `_shared/fold-release.ts` (stays `false`; no environment flag can activate it). It is flipped only in a reviewed commit, with the owner's approval, as a step of the [contact invitations runbook](../../../qa/contact-invites-2026-10-28/README.md). Until then the app shows its "not switched on" copy (`foldOff`), with no Retry, whether the function is not deployed (404) or deployed and still gated off (503).
 
 When an existing account adds a phone number held by a web-only account, the app proves ownership through an isolated auth client and sends that account's access token (the foreign token). POST `{ foreign_token, phone }` with the caller's session token in `Authorization`.
 
@@ -14,4 +14,4 @@ Database function: `public.fold_web_account(p_from, p_into)` is a single `SECURI
 
 Deploy command (after the migration `20261028120000_contact_invitations.sql` is applied and the constant is flipped): `supabase functions deploy fold-phone-account --no-verify-jwt`. The setting must be `verify_jwt = false`, because the foreign token is not the caller's session token; check it on the deployed function.
 
-App behaviour: the app keeps the foreign session in memory while the screen is open, so Retry calls the function again without verifying the number again. After a failure that isn't a wrong code the app first refreshes the account; if it already holds the verified number, the fold counts as done. A 503 blocks Retry.
+App behaviour: the app keeps the foreign session in memory while the screen is open, so Retry calls the function again without verifying the number again. After a failure that may still have landed (a 500, a timeout, a lost reply) the app first refreshes the account; if it already holds the verified number, the fold counts as done. A 404 or 503 shows `foldOff` and a 403 or 409 shows the taken copy, which points at the Resbite team; all four drop the foreign token and hide Retry, so a spent code is never verified again.

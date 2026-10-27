@@ -44,7 +44,7 @@ None of these steps has been run. Each is done later, with the owner's approval.
 2. **Fold function.**
    - Flip `PHONE_FOLD_RELEASE_APPROVED` to `true` in `supabase/functions/_shared/fold-release.ts`, in a reviewed commit, with the owner's approval.
    - Deploy with `supabase functions deploy fold-phone-account --no-verify-jwt`. It must deploy with `verify_jwt = false`, as its README says (the handler verifies both tokens itself).
-   - Until then the app shows `foldOff`.
+   - Until then the app shows `foldOff` with no Retry: an undeployed function answers 404 and a deployed one that is still gated off answers 503, and the app maps both to `foldOff`.
 3. **Link site.**
    - Regenerate and deploy `links/` (`links/generate.mjs`).
    - Set the Vercel environment variables: `TERMS_URL`, `PRIVACY_URL` and `APP_STORE_URL` (the TestFlight invite), and `TERMS_VERSION` (default `2026-10`). `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` and `LINK_ORIGIN` are already set for `/r/*`.

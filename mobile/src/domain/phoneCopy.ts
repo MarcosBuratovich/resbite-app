@@ -28,7 +28,10 @@ export const PHONE_COPY = {
   /** Also PHONE_CODE_COPY.taken. While folding is off, signing in with the number would make a second account, so the
    * way out is support, not that number (contact invitations F2). */
   taken: "This number already belongs to another Resbite account. Use a different number, or ask the Resbite team for help.",
-  foldOffer: "This number answered an invitation on the web. Confirm it with a code to bring its resbites here.",
+  /** Conditional: the app can't tell a web-only account from an app account before the function answers. */
+  foldOffer: "If this number answered an invitation on the web, confirm it with a code to bring its resbites here.",
+  /** The offer's own button, so the screen never has two "Send code" buttons. */
+  foldSend: "Confirm with a code",
   foldOff: "Bringing an invitation into this account isn’t switched on yet.",
   foldGone: "That web account is gone, so we sent a code to add this number instead.",
 };

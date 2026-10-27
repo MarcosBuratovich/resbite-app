@@ -90,7 +90,7 @@ const MESSAGE = (code) =>
  * A page signed in as `user` on a stubbed Supabase. The host's event, its guests and phone invitations, and Jo's
  * invitation change as the app writes to them. TAKEN belongs to a web-only account, which the fold brings in.
  */
-async function fixture({ user = host, width = 390 } = {}) {
+async function fixture({ user = host, width = 390, foldStatus = 200 } = {}) {
   // en-GB and London: local numbers are GB, and the event's times read as in the message.
   const context = await browser.newContext({
     viewport: { width, height: 844 },
@@ -146,8 +146,8 @@ async function fixture({ user = host, width = 390 } = {}) {
     unexpected = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => {
-    // The taken number's 422 is the refusal under test.
-    if (m.type() === "error" && !/Failed to load resource: the server responded with a status of 422/.test(m.text()))
+    // The taken number's 422 is the refusal under test, as are the fold's 409 and 404 in section 8.
+    if (m.type() === "error" && !/Failed to load resource: the server responded with a status of (422|409|404)/.test(m.text()))
       errors.push(m.text());
   });
   await page.route("**/*.supabase.co/**", async (route) => {
@@ -195,6 +195,9 @@ async function fixture({ user = host, width = 390 } = {}) {
         },
       });
     if (method === "POST" && path === "/functions/v1/fold-phone-account") {
+      // Refused (409: the number's account has used the app) or not deployed (404): nothing moves.
+      if (foldStatus === 409) return reply({ error: "conflict" }, 409);
+      if (foldStatus === 404) return reply({ code: "NOT_FOUND", message: "Requested function was not found" }, 404);
       // The fold moves the web account's number (and its resbites) onto this account.
       state.user = { ...state.user, phone: TAKEN.slice(1), phone_confirmed_at: now() };
       return reply({ ok: true });
@@ -550,15 +553,14 @@ try {
     ).toBeVisible();
     await expect(
       page.getByText(
-        "This number answered an invitation on the web. Confirm it with a code to bring its resbites here.",
+        "If this number answered an invitation on the web, confirm it with a code to bring its resbites here.",
         { exact: true },
       ),
     ).toBeVisible();
     await noTestCode(page, "the fold offer");
-    // The offer's own Send code comes first; the screen's Send code stays below it.
-    const send = visible(page.getByRole("button", { name: "Send code", exact: true }));
-    await expect(send).toHaveCount(2);
-    await send.first().click();
+    // The offer has its own button; the screen's Send code stays below it, the only one of that name.
+    await expect(visible(page.getByRole("button", { name: "Send code", exact: true }))).toHaveCount(1);
+    await button(page, "Confirm with a code").click();
     await expect(heading(page, "Enter the code")).toBeVisible();
     await expect(page.getByText("We sent a 6-digit code to +44 7700 900111.", { exact: true })).toBeVisible();
     const otp = f.calls("/auth/v1/otp");
@@ -597,6 +599,39 @@ try {
       "PASS: Add your number with a taken number shows the fold offer; its code goes to the web account (create_user false, not the app's session); 000000 is swapped for the stored code; the fold posts to /functions/v1/fold-phone-account with the app's bearer token and the web account's token; the web token isn't stored; no 000000 shows.",
     );
   }
+  // 8. A fold the server refuses (409) shows the taken copy with its support line; one that isn't deployed (404) says
+  // folding isn't switched on. Neither keeps a Retry, and nothing posts again with the spent code.
+  for (const [foldStatus, words] of [
+    [409, "This number already belongs to another Resbite account. Use a different number, or ask the Resbite team for help."],
+    [404, "Bringing an invitation into this account isn’t switched on yet."],
+  ]) {
+    const phoneless = { ...host, phone: undefined, phone_confirmed_at: undefined, app_metadata: { provider: "email", providers: ["email"] } };
+    const f = await fixture({ user: phoneless, foldStatus }),
+      { page } = f;
+    await page.goto(base);
+    await expect(heading(page, "Add your number")).toBeVisible();
+    await page.getByLabel("Mobile number", { exact: true }).fill("07700 900111");
+    await button(page, "Send code").click();
+    await button(page, "Confirm with a code").click();
+    await expect(heading(page, "Enter the code")).toBeVisible();
+    await page.getByLabel("6-digit code", { exact: true }).fill("000000");
+    await expect(page.getByText(words, { exact: true })).toBeVisible();
+    await expect(heading(page, "Enter the code")).toBeVisible();
+    await expect(button(page, "Retry")).toHaveCount(0);
+    assert.equal(f.calls("/functions/v1/fold-phone-account").length, 1, `${foldStatus}: one post`);
+    assert.equal(f.calls("/auth/v1/verify").length, 1, `${foldStatus}: the code is verified once`);
+    // Typing the spent code again does nothing.
+    await page.getByLabel("6-digit code", { exact: true }).fill("");
+    await page.getByLabel("6-digit code", { exact: true }).fill("000000");
+    await page.waitForTimeout(300);
+    assert.equal(f.calls("/auth/v1/verify").length, 1, `${foldStatus}: never verified again`);
+    assert.equal(f.calls("/functions/v1/fold-phone-account").length, 1, `${foldStatus}: never posted again`);
+    const kept = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
+    assert.ok(!kept.includes(f.foreignToken), "the web account's token isn't stored");
+    await noTestCode(page, `the fold's ${foldStatus}`);
+    await f.done();
+  }
+  console.log("PASS: a refused fold (409) shows the taken copy and an undeployed one (404) shows foldOff, with no Retry and no second verify or post.");
   console.log("PASS: contact invitations, the Invited group, Invitations and the fold offer. All Supabase requests intercepted.");
 } finally {
   await browser.close();

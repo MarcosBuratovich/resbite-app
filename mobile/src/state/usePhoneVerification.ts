@@ -4,7 +4,7 @@ import { router } from "expo-router";
 import { deviceRegion, parsePhone, phoneVerified, samePhone } from "../domain/phone";
 import { TERMS_VERSION } from "../domain/guestAccount";
 import { phoneCodeDeps, sendPhoneCode, verifyPhoneCode, type PhonePurpose } from "../services/phoneCode";
-import { foldLanded, foldPhoneAccount, retryFold, phoneFoldDeps, sendFoldCode, type FoldClientDeps } from "../services/phoneFold";
+import { foldLanded, foldNext, foldPhoneAccount, retryFold, phoneFoldDeps, sendFoldCode, type FoldClientDeps } from "../services/phoneFold";
 import { clearAttestation, rememberAttestation } from "../services/phoneAccount";
 import { useAccount } from "./AccountState";
 
@@ -152,24 +152,21 @@ export function usePhoneVerification(purpose: PhonePurpose) {
         const folded = held
           ? await retryFold(fold(), e164, held)
           : await foldPhoneAccount(fold(), e164, code, resendAt - RESEND_MS);
-        foreignToken.current = folded.ok || folded.gone || folded.blocked ? null : (folded.foreignToken ?? null);
-        let landed = folded.ok;
+        const then = foldNext(folded);
+        foreignToken.current = then.keepToken;
         // A failure after the code was checked may still have folded (a lost reply): re-read the account.
-        if (!folded.ok && folded.verified && !folded.blocked) landed = foldLanded(await refresh(), e164);
-        else if (folded.ok) await refresh();
+        let landed = folded.ok;
+        if (folded.ok) await refresh();
+        else if (then.reread) landed = foldLanded(await refresh(), e164);
+        working.current = false;
+        verifying.current = false;
         if (landed) {
-          working.current = false;
-          verifying.current = false;
           router.replace("/account");
           return true;
         }
-        working.current = false;
-        verifying.current = false;
-        if (!folded.ok && folded.blocked && mounted.current) setFoldBlocked(true);
-        if (folded.ok) return false;
-        working.current = false;
-        verifying.current = false;
-        if (!mounted.current) return false;
+        if (folded.ok || !mounted.current) return false;
+        // Off (404, 503) or refused (403, 409): Retry would change nothing, so it goes.
+        if (then.blockRetry) setFoldBlocked(true);
         if (folded.gone) {
           // The web account was deleted meanwhile, so the number is free: carry on with the ordinary Add.
           setFolding(false);

@@ -760,15 +760,15 @@ try {
         { exact: true },
       ),
     ).toBeVisible();
-    // Plan 2: the offer to bring in the web-only account that holds it, with its own Send code above the screen's.
+    // Plan 2: the offer to bring in the web-only account that holds it, with its own Confirm with a code above the screen's Send code.
     await expect(
-      phoneless.getByText("This number answered an invitation on the web. Confirm it with a code to bring its resbites here.", { exact: true }),
+      phoneless.getByText("If this number answered an invitation on the web, confirm it with a code to bring its resbites here.", { exact: true }),
     ).toBeVisible();
     await expect(button(phoneless, "Change number")).toBeVisible();
     await expect(button(phoneless, "Sign out")).toBeVisible();
     await visit(phoneless, "add-phone-taken", "Add your number");
     // The offer's code step (the code goes to the web account; verify-contact-invites checks the fold itself).
-    await button(phoneless, "Send code").first().click();
+    await button(phoneless, "Confirm with a code").click();
     await expect(phoneless.getByText("We sent a 6-digit code to +44 7700 900111.", { exact: true })).toBeVisible();
     await visit(phoneless, "add-phone-fold-code", "Enter the code");
     await phoneless.context().close();

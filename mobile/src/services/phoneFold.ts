@@ -29,9 +29,22 @@ export type FoldResult =
       foreignToken?: string;
       /** The code was checked but the function did not finish; the account may still have changed. */
       verified?: true;
-      /** The fold is switched off: no Retry with the same digits. */
+      /** Nothing to retry: the fold is off (404, 503) or refused this number (403, 409). Retry is hidden. */
       blocked?: true;
     };
+
+/**
+ * What Add your number does after a fold attempt: keep the verified proof in memory for Retry (only after a failure
+ * that may be passing), re-read the account to catch a fold whose reply was lost, or hide Retry for good.
+ */
+export function foldNext(result: FoldResult): { keepToken: string | null; reread: boolean; blockRetry: boolean } {
+  if (result.ok) return { keepToken: null, reread: false, blockRetry: false };
+  return {
+    keepToken: result.gone || result.blocked ? null : (result.foreignToken ?? null),
+    reread: Boolean(result.verified) && !result.blocked,
+    blockRetry: Boolean(result.blocked),
+  };
+}
 
 /** True when the re-read account holds this number, verified: a fold whose reply was lost still landed. */
 export const foldLanded = (user: { phone?: string | null } | null | undefined, e164: string) =>
@@ -91,10 +104,15 @@ export async function retryFold(d: FoldClientDeps, e164: string, foreignToken: s
     if (!appToken) return { ok: false, message: PHONE_CODE_COPY.connection, ...again };
     const { status } = await d.callFold({ appToken, body: { foreign_token: foreignToken, phone: e164 } });
     if (status >= 200 && status < 300) return { ok: true };
-    if (status === 503) return { ok: false, message: PHONE_COPY.foldOff, clear: false, verified: true, blocked: true };
+    // 404: the function isn't deployed; 503: it is, but switched off. Nothing ran, so there is nothing to retry.
+    if (status === 404 || status === 503)
+      return { ok: false, message: PHONE_COPY.foldOff, clear: false, verified: true, blocked: true };
     // The code was just verified, so a 401 means the web user was already deleted: the number is free.
     if (status === 401) return { ok: false, message: PHONE_COPY.foldGone, clear: false, gone: true };
-    if (status === 403 || status === 409) return { ok: false, message: PHONE_COPY.taken, clear: false, verified: true };
+    // Refused: the number's account has used the app or organizes events (409), or the proof doesn't hold it (403).
+    // Retrying changes nothing, so the proof is dropped and Retry hidden; the taken copy points at support.
+    if (status === 403 || status === 409)
+      return { ok: false, message: PHONE_COPY.taken, clear: false, verified: true, blocked: true };
     return { ok: false, message: PHONE_CODE_COPY.connection, ...again };
   } catch {
     return { ok: false, message: PHONE_CODE_COPY.connection, ...again };
