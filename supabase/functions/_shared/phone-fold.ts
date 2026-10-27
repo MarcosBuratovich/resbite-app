@@ -8,6 +8,10 @@ export type FoldDeps = {
   setPhone(id: string, digits: string): Promise<void>;
 };
 
+/** The fold RPC refused the pair (Postgres 22023: the web account used the app, organizes an event, or is the same
+ * account). Nothing moved; the handler answers 409. */
+export class FoldRefused extends Error {}
+
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
@@ -39,7 +43,8 @@ export async function handleFold(request: Request, deps: FoldDeps): Promise<Resp
     await deps.fold(foreign.id, caller.id);
     await deps.deleteUser(foreign.id);
     await deps.setPhone(caller.id, digits);
-  } catch {
+  } catch (error) {
+    if (error instanceof FoldRefused) return json(409, { error: "conflict" });
     return json(500, { error: "failed" });
   }
   return json(200, { ok: true });
@@ -60,7 +65,13 @@ export function foldGateway(url: string, serviceKey: string): Omit<FoldDeps, "ap
       const response = await fetch(`${base}/rest/v1/rpc/fold_web_account`, {
         method: "POST", headers: admin, body: JSON.stringify({ p_from: from, p_into: into }),
       });
-      if (!response.ok) throw Error("Backend operation failed");
+      if (response.ok) return;
+      // PostgREST answers a raised 22023 with 400 and the SQLSTATE in the JSON `code` field.
+      if (response.status === 400) {
+        const body = await response.json().catch(() => null);
+        if (body?.code === "22023") throw new FoldRefused("Fold refused");
+      }
+      throw Error("Backend operation failed");
     },
     async deleteUser(id) {
       const response = await fetch(`${base}/auth/v1/admin/users/${encodeURIComponent(id)}`, { method: "DELETE", headers: admin });

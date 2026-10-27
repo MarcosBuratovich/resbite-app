@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { handleFold, type FoldDeps } from "./phone-fold.ts";
+import { FoldRefused, foldGateway, handleFold, type FoldDeps } from "./phone-fold.ts";
 
 type U = { id: string; phone: string | null; phone_confirmed_at: string | null };
 const web: U = { id: "web", phone: "447700900834", phone_confirmed_at: "2026-10-01T00:00:00Z" };
@@ -84,4 +84,53 @@ test("deleteUser throwing gives 500 and a retry completes", async () => {
   fail = false;
   assert.equal((await handleFold(req(ok), deps)).status, 200);
   assert.ok(calls.some((c) => c.startsWith("phone:me")));
+});
+
+test("a fold the database refuses (22023) is 409, and nothing is deleted", async () => {
+  const { deps, calls } = setup({ fold: async (a, b) => { calls.push(`fold:${a}>${b}`); throw new FoldRefused("Fold refused"); } });
+  const res = await handleFold(req(ok), deps);
+  assert.equal(res.status, 409);
+  assert.deepEqual(await res.json(), { error: "conflict" });
+  assert.ok(!calls.some((c) => c.startsWith("delete") || c.startsWith("phone")));
+});
+
+test("any other fold failure stays 500", async () => {
+  const { deps, calls } = setup({ fold: async () => { throw Error("Backend operation failed"); } });
+  assert.equal((await handleFold(req(ok), deps)).status, 500);
+  assert.ok(!calls.some((c) => c.startsWith("delete") || c.startsWith("phone")));
+});
+
+test("the gateway reads PostgREST's 400 with code 22023 as a refusal, and only that", async () => {
+  const realFetch = globalThis.fetch;
+  const replies: Array<[number, unknown]> = [];
+  globalThis.fetch = (async () => {
+    const [status, body] = replies.shift()!;
+    return new Response(typeof body === "string" ? body : JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+  try {
+    const gw = foldGateway("https://x.invalid/", "service");
+    replies.push([400, { code: "22023", message: "The account has used the app", details: null, hint: null }]);
+    await assert.rejects(gw.fold("web", "me"), (e) => e instanceof FoldRefused);
+    for (const reply of [
+      [400, { code: "22P02", message: "invalid input syntax for type uuid" }],
+      [400, "not json"],
+      [403, { code: "42501", message: "permission denied" }],
+      [500, { code: "22023", message: "odd" }],
+    ] as Array<[number, unknown]>) {
+      replies.push(reply);
+      await assert.rejects(gw.fold("web", "me"), (e) => e instanceof Error && !(e instanceof FoldRefused), String(reply[0]));
+    }
+    replies.push([200, { moved_attendees: 1 }]);
+    await gw.fold("web", "me");
+    // Through the handler: the refusal is 409, never 500.
+    replies.push(
+      [200, { id: "me", phone: null, phone_confirmed_at: null }],
+      [200, { id: "web", phone: "447700900834", phone_confirmed_at: "2026-10-01T00:00:00Z" }],
+      [400, { code: "22023", message: "The account organizes events" }],
+    );
+    assert.equal((await handleFold(req(ok), { approved: true, ...gw })).status, 409);
+    assert.equal(replies.length, 0, "no deletion or phone update after the refusal");
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });
