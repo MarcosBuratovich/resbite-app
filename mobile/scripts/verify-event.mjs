@@ -1,7 +1,7 @@
 // UX1 event page for both roles. Every Supabase request is intercepted; nothing is sent.
 // UX3: Meeting details in all three roles, the Note to guests, Add to calendar and reminders (on the
 // development fakes, `__resbiteDevice`), and the "Can’t go" wording.
-// Plan 2: the organizer's Invited group (people invited by personal link who haven't answered) with Send again and
+// Plan 2: the organizer's Invited group (people invited by personal link who haven't answered) with WhatsApp, Messages and
 // Remove, and an unanswered invitation's card under Invitations on My resbites.
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
@@ -396,41 +396,64 @@ try {
     { p_plan: hosted.id, p_user: "g2" },
   ]);
   // Plan 2: the Invited group, after the guests: the two who haven't answered, by the name kept on this phone or
-  // their number; the one who answered isn't listed.
-  const sendAgain = visible(page.getByRole("button", { name: "Send again", exact: true }));
+  // their number; the one who answered isn't listed. Each row offers WhatsApp and Messages (as Almost there does),
+  // the one used last first: Messages for Pat, whose link went that way; WhatsApp for the number with no code here.
+  const resend = (app, who) => page.getByRole("button", { name: `Send again on ${app}: ${who}`, exact: true });
   await expect(page.getByRole("heading", { name: "Invited", exact: true })).toBeVisible();
   await expect(page.getByText(PAT.name, { exact: true })).toBeVisible();
   await expect(page.getByText(UNSTORED.label, { exact: true })).toBeVisible();
   await expect(page.getByText("+44 7700 900444", { exact: true })).toHaveCount(0);
-  await expect(sendAgain).toHaveCount(2);
+  for (const who of [PAT.name, UNSTORED.label])
+    for (const app of ["WhatsApp", "Messages"]) await expect(visible(resend(app, who))).toHaveCount(1);
+  await expect(visible(page.getByRole("button", { name: "Send again", exact: true }))).toHaveCount(0);
   assert.ok(
     await inOrder(page, [
       page.getByRole("heading", { name: "Maybe", exact: true }),
       page.getByRole("heading", { name: "Invited", exact: true }),
       page.getByText(PAT.name, { exact: true }),
+      resend("Messages", PAT.name),
+      resend("WhatsApp", PAT.name),
       page.getByText(UNSTORED.label, { exact: true }),
+      resend("WhatsApp", UNSTORED.label),
+      resend("Messages", UNSTORED.label),
     ]),
-    "the Invited group follows the guests",
+    "the Invited group follows the guests, each row's last-used app first",
   );
-  // Send again with the code on this phone: Messages, as Pat's link was sent, with the same link. Nothing is invited.
-  await sendAgain.first().click();
+  // Send again with the code on this phone, by Messages and then by WhatsApp: the same link both ways. Nothing is invited.
+  await resend("Messages", PAT.name).click();
   await expect.poll(() => page.evaluate(() => window.__opened ?? null)).toMatch(/^sms:/);
   const patText = decodeURIComponent((await page.evaluate(() => window.__opened)).replace(`sms:${PAT.e164}?body=`, ""));
   assert.match(patText, new RegExp(`^Fixture invited you to Coffee evening, .+\\. Reply here: https://[a-z0-9.-]+/i/${PAT.code}$`));
-  assert.deepEqual(inviteBodies, []);
-  // Send again without a code on this phone: a fresh code for that one number, kept here, then WhatsApp with it.
   await page.evaluate(() => (window.__opened = null));
-  await sendAgain.nth(1).click();
+  await resend("WhatsApp", PAT.name).click();
   await expect.poll(() => page.evaluate(() => window.__opened ?? null)).toMatch(/^whatsapp:/);
+  const patWhatsapp = await page.evaluate(() => window.__opened);
+  assert.ok(patWhatsapp.startsWith(`whatsapp://send?phone=${PAT.phone}&text=`), patWhatsapp);
+  assert.match(decodeURIComponent(patWhatsapp), new RegExp(`/i/${PAT.code}$`));
+  assert.deepEqual(inviteBodies, []);
+  // Send again without a code on this phone, where WhatsApp won't open: a fresh code for that one number, kept here,
+  // then "WhatsApp isn’t installed. Try Messages." with Messages right there, which sends that same new link.
+  await page.evaluate(() => {
+    window.__opened = null;
+    window.__blockOpen = true;
+  });
+  await resend("WhatsApp", UNSTORED.label).click();
+  await expect(page.getByText("WhatsApp isn’t installed. Try Messages.", { exact: true })).toBeVisible();
+  await expect(visible(resend("Messages", UNSTORED.label))).toBeEnabled();
   assert.equal(inviteBodies.length, 1);
   const [fresh] = inviteBodies[0].p_invites;
   assert.deepEqual([inviteBodies[0].p_plan, inviteBodies[0].p_invites.length, fresh.phone, fresh.country], [hosted.id, 1, UNSTORED.phone, "44"]);
   assert.match(fresh.code, PERSONAL_CODE);
+  await page.evaluate(() => (window.__blockOpen = false));
+  await resend("Messages", UNSTORED.label).click();
+  await expect.poll(() => page.evaluate(() => window.__opened ?? null)).toMatch(/^sms:/);
+  await expect(page.getByText("WhatsApp isn’t installed. Try Messages.", { exact: true })).toHaveCount(0);
   const opened = await page.evaluate(() => window.__opened);
-  assert.ok(opened.startsWith(`whatsapp://send?phone=${UNSTORED.phone}&text=`), opened);
+  assert.ok(opened.startsWith(`sms:${UNSTORED.e164}?body=`), opened);
   assert.match(decodeURIComponent(opened), new RegExp(`/i/${fresh.code}$`));
+  assert.equal(inviteBodies.length, 1, "Messages sends the code just made, not another one");
   const kept = await page.evaluate((key) => JSON.parse(sessionStorage.getItem(key)), CODE_STORE);
-  assert.deepEqual(kept[hosted.id][UNSTORED.e164], { code: fresh.code, name: UNSTORED.label, sentVia: "whatsapp" });
+  assert.deepEqual(kept[hosted.id][UNSTORED.e164], { code: fresh.code, name: UNSTORED.label, sentVia: "messages" });
   // Remove asks first, then turns the invitation off; its code leaves this phone.
   let revokeAsked = "";
   page.once("dialog", (dialog) => {
@@ -441,7 +464,10 @@ try {
   await expect.poll(() => revokeAsked).toBe(`Remove the invitation for ${UNSTORED.label}?`);
   await expect(page.getByText(UNSTORED.label, { exact: true })).toHaveCount(0);
   await expect(page.getByText(PAT.name, { exact: true })).toBeVisible();
-  await expect(sendAgain).toHaveCount(1);
+  for (const app of ["WhatsApp", "Messages"]) {
+    await expect(visible(resend(app, UNSTORED.label))).toHaveCount(0);
+    await expect(visible(resend(app, PAT.name))).toHaveCount(1);
+  }
   assert.deepEqual(revokeBodies, [{ p_plan: hosted.id, p_phone: UNSTORED.phone }]);
   const left = await page.evaluate((key) => JSON.parse(sessionStorage.getItem(key)), CODE_STORE);
   assert.deepEqual(Object.keys(left[hosted.id]), [PAT.e164]);
@@ -597,7 +623,7 @@ try {
   await expect(page.getByRole("button", { name: "Edit Coffee evening", exact: true })).toHaveCount(0);
   assert.deepEqual(cancels, [hosted.id]);
   console.log(
-    "PASS: organizer event page: the exact place and no Choose people (GI-D3); guests (GI1: Remove asks first and says they can rejoin by the link, says a lost reply, reloads the list; invitees have no Remove); the Invited group (Plan 2: unanswered only, by stored name or number, Send again with the stored code or a fresh one, Remove calls revoke_phone_invitation), Open in Maps (and its failure note), Edit at Review, Do this again at When with a replace guard, an unconfirmed cancel with Refresh event, cancel.",
+    "PASS: organizer event page: the exact place and no Choose people (GI-D3); guests (GI1: Remove asks first and says they can rejoin by the link, says a lost reply, reloads the list; invitees have no Remove); the Invited group (Plan 2: unanswered only, by stored name or number, WhatsApp and Messages on each row with the last-used first, the stored code either way or a fresh one kept for the other app when WhatsApp won't open, Remove calls revoke_phone_invitation), Open in Maps (and its failure note), Edit at Review, Do this again at When with a replace guard, an unconfirmed cancel with Refresh event, cancel.",
   );
 
   // UX2-D1: a saved edit returns to its event page with "Changes saved"; Back then leaves for My resbites.

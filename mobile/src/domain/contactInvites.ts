@@ -100,3 +100,8 @@ export function whatsappAppUrl(e164: string, text: string): string {
 export function smsUrl(e164: string, text: string, platform: string = "ios"): string {
   return `sms:${e164}${platform === "ios" ? "&" : "?"}body=${encodeURIComponent(text)}`;
 }
+
+/** The two ways to send a personal link, the one used last first (WhatsApp when neither has been used). */
+export function sendOrder(last: "whatsapp" | "messages" | null | undefined): ["whatsapp", "messages"] | ["messages", "whatsapp"] {
+  return last === "messages" ? ["messages", "whatsapp"] : ["whatsapp", "messages"];
+}

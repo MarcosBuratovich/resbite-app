@@ -1,6 +1,6 @@
 // Contact invitations in headless Chrome (Plan 2): Invite people's Pick step (the "On Resbite" lookup for the picked
 // numbers only), Invite N with a personal code each, Almost there (in the app, WhatsApp and Messages), inviting the
-// same number again with its stored code, the event page's Invited group (Send again, Remove), an Invitations card on
+// same number again with its stored code, the event page's Invited group (WhatsApp and Messages, Remove), an Invitations card on
 // My resbites answered Going, and Add your number's offer to bring in a web-only account, with no 000000 anywhere
 // and no contact's number where it doesn't belong. Every Supabase request is answered by the fixture below; any
 // other path fails the run.
@@ -10,7 +10,7 @@
 // says yes, so a refused open (window.open throwing) stands in for "WhatsApp isn’t installed".
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
-import { button, heading, quietReminders, visible } from "./qa-helpers.mjs";
+import { button, heading, inOrder, quietReminders, visible } from "./qa-helpers.mjs";
 const browser = await chromium.launch({ channel: process.env.RESBITE_QA_BROWSER || "chrome", headless: true });
 const base = process.env.RESBITE_QA_URL || "http://localhost:8081";
 const STORAGE_KEY = "sb-ewcsgvhuojxdpaspwsrx-auth-token";
@@ -456,12 +456,28 @@ try {
     await expect(heading(page, "Invited")).toBeVisible();
     for (const p of [ANA, BEN, CY]) await expect(page.getByText(p.name, { exact: true })).toBeVisible();
     for (const p of [BEN, CY]) await expect(button(page, `Remove ${p.name}`)).toBeVisible();
-    await expect(visible(page.getByRole("button", { name: "Send again", exact: true }))).toHaveCount(2);
+    // Each row offers WhatsApp and Messages, the one used last first: WhatsApp for Ben, Messages for Cy.
+    const resend = (app, p) => button(page, `Send again on ${app}: ${p.name}`);
+    for (const p of [BEN, CY]) for (const app of ["WhatsApp", "Messages"]) await expect(resend(app, p)).toBeVisible();
+    assert.ok(
+      await inOrder(page, [resend("WhatsApp", BEN), resend("Messages", BEN), resend("Messages", CY), resend("WhatsApp", CY)]),
+      "the last-used app comes first on each row",
+    );
     await noTestCode(page, "the Guests sheet");
-    // Send again opens WhatsApp (as Ben's link was sent) with the same link.
-    await visible(page.getByRole("button", { name: "Send again", exact: true })).first().click();
+    // Send again on WhatsApp opens it with Ben's same link.
+    await resend("WhatsApp", BEN).click();
     await expect.poll(async () => (await f.opened()).length).toBe(3);
     assert.equal((await f.opened())[2], whatsapp);
+    // Where WhatsApp won't open, it says so, and Messages is right there with the same link.
+    await page.evaluate(() => (window.__blockOpen = true));
+    await resend("WhatsApp", BEN).click();
+    await expect(page.getByText("WhatsApp isn’t installed. Try Messages.", { exact: true })).toBeVisible();
+    await expect(resend("Messages", BEN)).toBeEnabled();
+    await page.evaluate(() => (window.__blockOpen = false));
+    await resend("Messages", BEN).click();
+    await expect.poll(async () => (await f.opened()).length).toBe(4);
+    assert.equal((await f.opened())[3], `sms:${BEN.e164}?body=${encodeURIComponent(MESSAGE(benCode))}`);
+    await expect(page.getByText("WhatsApp isn’t installed. Try Messages.", { exact: true })).toHaveCount(0);
     assert.equal(f.calls("/rest/v1/rpc/invite_contacts").length, 2, "a stored code is sent again without a new invite");
     // Remove asks first; Keep changes nothing; Remove turns Cy's invitation off.
     let asked = "";
@@ -501,7 +517,7 @@ try {
     assert.deepEqual(await numbersShown(page, CONTACTS), [], "My resbites shows no contact's number");
     await f.done();
     console.log(
-      "PASS: Pick three numbers (the lookup carries only their digits; one On Resbite), Invite 3 with a 22-character code each, Almost there with the in-app sentence and WhatsApp/Messages for two, WhatsApp opens whatsapp://send with the personal /i/ link and says Sent on WhatsApp, a refused WhatsApp says so, Messages, inviting again reuses the stored code, the Invited group with Send again and Remove (revoke_phone_invitation), and contact numbers only where they belong.",
+      "PASS: Pick three numbers (the lookup carries only their digits; one On Resbite), Invite 3 with a 22-character code each, Almost there with the in-app sentence and WhatsApp/Messages for two, WhatsApp opens whatsapp://send with the personal /i/ link and says Sent on WhatsApp, a refused WhatsApp says so, Messages, inviting again reuses the stored code, the Invited group with WhatsApp and Messages on each row (last-used first; a refused WhatsApp leaves Messages beside it) and Remove (revoke_phone_invitation), and contact numbers only where they belong.",
     );
   }
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { contactNumbers, hostRegion, inviteMessage, newInviteCode, personalLink, smsUrl, whatsappUrl, whatsappAppUrl, groupContacts } from "./contactInvites";
+import { contactNumbers, hostRegion, inviteMessage, newInviteCode, personalLink, sendOrder, smsUrl, whatsappUrl, whatsappAppUrl, groupContacts } from "./contactInvites";
 import { INVITE_COPY } from "./inviteCopy";
 
 test("contactNumbers gives one entry per distinct number and counts the unparseable", () => {
@@ -83,4 +83,16 @@ test("numbers of one contact share a contact key; two contacts with one name sta
 
 test("whatsappAppUrl opens the app with the digits and the encoded text", () => {
   assert.equal(whatsappAppUrl("+447700900834", "a b&c"), "whatsapp://send?phone=447700900834&text=a%20b%26c");
+});
+
+test("Send again offers both ways, the one used last first", () => {
+  assert.deepEqual(sendOrder("messages"), ["messages", "whatsapp"]);
+  assert.deepEqual(sendOrder("whatsapp"), ["whatsapp", "messages"]);
+  assert.deepEqual(sendOrder(undefined), ["whatsapp", "messages"]);
+  assert.deepEqual(sendOrder(null), ["whatsapp", "messages"]);
+});
+
+test("the Invited row's controls are named for the person and the app", () => {
+  assert.equal(INVITE_COPY.resendVia("WhatsApp", "Ben Ito"), "Send again on WhatsApp: Ben Ito");
+  assert.equal(INVITE_COPY.resendHint("Messages", "Ben Ito"), "Opens Messages with Ben Ito’s link");
 });

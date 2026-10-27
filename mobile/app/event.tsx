@@ -4,7 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams, usePathname } from "expo-router";
 import * as Crypto from "expo-crypto";
 import { getRandomBytes } from "expo-crypto";
-import { newInviteCode } from "../src/domain/contactInvites";
+import { newInviteCode, sendOrder } from "../src/domain/contactInvites";
 import {
   ArrowLeft,
   Check,
@@ -88,6 +88,9 @@ export default function EventPage() {
   const [removeError, setRemoveError] = useState<string | null>(null);
   // Invited by personal link and not answered yet: Send again and Remove act on one person at a time.
   const [invitedBusy, setInvitedBusy] = useState<string | null>(null);
+  // Codes made here since the Invited list was read, by number: when WhatsApp won't open, Messages then sends the
+  // same new link instead of making another one.
+  const minted = useRef<Record<string, NonNullable<InvitedPerson["stored"]>>>({});
   // One Do this again at a time: a quick double tap must not write two copies or stack two editors.
   const againBusy = useRef(false);
   const { plan, role, attendee, guests, invited, busy, fresh, pending } = event;
@@ -252,6 +255,7 @@ export default function EventPage() {
     setRemoveError(null);
     try {
       await contactInviteGateway.revoke(current.id, person.phone);
+      delete minted.current[person.e164];
       // The link no longer works; the stored code has no use, and a failure to drop it is harmless.
       await inviteCodeStore.remove(scope, current.id, person.e164).catch(() => {});
       await event.load();
@@ -261,7 +265,8 @@ export default function EventPage() {
       setInvitedBusy(null);
     }
   }
-  async function resendInvite(person: InvitedPerson) {
+  /** Send again by the chosen app: the stored code, or a fresh one when this phone has none for them. */
+  async function resendInvite(person: InvitedPerson, via: "whatsapp" | "messages") {
     if (invitedBusy || !scope) return;
     setInvitedBusy(person.phone);
     setRemoveError(null);
@@ -270,7 +275,7 @@ export default function EventPage() {
         (profile) => profile?.display_name?.trim() || null,
         () => null,
       );
-      let saved = person.stored;
+      let saved = person.stored ?? minted.current[person.e164];
       if (!saved) {
         // This phone has no code for them (the host changed phones): a fresh code replaces the old link.
         const code = newInviteCode(getRandomBytes(16));
@@ -282,6 +287,7 @@ export default function EventPage() {
           return;
         }
         saved = { code, name: person.name };
+        minted.current[person.e164] = saved;
         await putInviteQuietly(scope, current.id, person.e164, saved);
       }
       const failure = await sendPersonalLink({
@@ -290,7 +296,7 @@ export default function EventPage() {
         e164: person.e164,
         name: saved.name,
         code: saved.code,
-        via: saved.sentVia ?? "whatsapp",
+        via,
         origin: process.env.EXPO_PUBLIC_INVITATION_ORIGIN || DEFAULT_ORIGIN,
         message: {
           host: host ?? INVITE_COPY.hostFallback,
@@ -523,15 +529,21 @@ export default function EventPage() {
               <View key={person.phone} style={[styles.guest, styles.invited]}>
                 <Copy style={{ flex: 1, minWidth: 72 }}>{person.name}</Copy>
                 <View style={styles.invitedActions}>
-                  <Button
-                    secondary
-                    icon={false}
-                    title={INVITE_COPY.resend}
-                    hint={`Opens ${person.stored?.sentVia === "messages" ? "Messages" : "WhatsApp"} with ${person.name}’s link`}
-                    disabled={invitedBusy !== null || busy}
-                    loading={invitedBusy === person.phone}
-                    onPress={() => void resendInvite(person)}
-                  />
+                  {/* Both ways, as Almost there offers them, the one used last first: without WhatsApp, Messages is
+                      always next to it. */}
+                  {sendOrder(person.stored?.sentVia).map((via) => {
+                    const app = via === "whatsapp" ? INVITE_COPY.whatsapp : INVITE_COPY.messages;
+                    return (
+                      <Chip
+                        key={via}
+                        text={app}
+                        label={INVITE_COPY.resendVia(app, person.name)}
+                        hint={INVITE_COPY.resendHint(app, person.name)}
+                        disabled={invitedBusy !== null || busy}
+                        onPress={() => void resendInvite(person, via)}
+                      />
+                    );
+                  })}
                   <IconButton
                     icon={UserMinus}
                     tone="plain"
@@ -589,7 +601,16 @@ const styles = StyleSheet.create({
   chips: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 },
   guest: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 44 },
   invited: { flexWrap: "wrap" },
-  invitedActions: { flexDirection: "row", alignItems: "center", gap: 12, marginLeft: "auto" },
+  // Two send chips and Remove: under Larger Text on a narrow screen they wrap rather than run off it.
+  invitedActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    gap: 8,
+    marginLeft: "auto",
+    maxWidth: "100%",
+  },
   group: { fontFamily: fonts.bold, fontSize: 15, marginTop: 8 },
   confirm: { gap: 12, padding: 14, backgroundColor: c.pinkSoft, borderRadius: 16 },
 });

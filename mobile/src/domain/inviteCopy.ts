@@ -23,7 +23,9 @@ export const INVITE_COPY = {
   chooseNumber: "Which number?",
   skipped: (n: number) => `${n} skipped`,
   invitedGroup: "Invited",
-  resend: "Send again",
+  /** Each Invited row's two controls (WhatsApp and Messages, shown by those names), for VoiceOver. */
+  resendVia: (app: string, name: string) => `Send again on ${app}: ${name}`,
+  resendHint: (app: string, name: string) => `Opens ${app} with ${name}’s link`,
   removeInvite: (name: string) => `Remove the invitation for ${name}?`,
   invitationsHeading: "Invitations",
   invitedYou: (host: string) => `${host} invited you`,

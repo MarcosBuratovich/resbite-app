@@ -1,7 +1,7 @@
 // Captures every UX1, UX3 and UX4 screen at 390 and 320 px (UX3 and UX4 also with Larger Text at 320 px) with no console or page errors,
 // and keeps the gluestack keyboard-selection check. Every Supabase request is aborted, except in the GI1, GI2 and phone blocks at the
 // end, where requests are answered by a local stub: a signed-in organizer's Invite people (Plan 2: the Pick step with three numbers,
-// one On Resbite, and Almost there; GI1's Event link below), the Guests sheet with Remove and the Invited group, and My resbites
+// one On Resbite, and Almost there; GI1's Event link below), the Guests sheet with Remove and the Invited group (WhatsApp, Messages, Remove), and My resbites
 // with an Invitations card; a signed-out guest's account screen, its Code and Name steps and a dead link (GI2); and phone sign-up,
 // its code, phone sign-in, About you, and Add your number with its "taken" refusal, the offer to bring in a web-only account and
 // that offer's code step.
@@ -521,10 +521,11 @@ try {
     await expect(heading(page, "Guests")).toBeVisible();
     await expect(button(page, "Remove Alex Rivera")).toBeVisible();
     await shot("event-guests-remove", false);
-    // The Invited group, below the guests: Send again and Remove for each personal link.
+    // The Invited group, below the guests: WhatsApp, Messages and Remove for each personal link.
     await heading(page, "Invited").scrollIntoViewIfNeeded();
     await expect(button(page, "Remove Cy Lindqvist")).toBeVisible();
-    await expect(visible(page.getByRole("button", { name: "Send again", exact: true }))).toHaveCount(2);
+    await expect(visible(page.getByRole("button", { name: /^Send again on WhatsApp: /, exact: false }))).toHaveCount(2);
+    await expect(visible(page.getByRole("button", { name: /^Send again on Messages: /, exact: false }))).toHaveCount(2);
     await shot("event-guests-invited", false);
     // My resbites with Jo's invitation under Invitations.
     await open("/plans");
