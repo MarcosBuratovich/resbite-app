@@ -1,10 +1,11 @@
-// GI1 "Invite people": the event's one link. The card shows what guests see before they reply (the area,
-// never the exact place, and who invited them); Share sends "<Title>, <date>. RSVP: <link>"; Copy link copies
-// it; Turn off this link asks first and shows a new link; the ⓘ sheet; a failed turn-off re-reads the link;
-// the link is never kept in browser storage; 320 px with Larger Text. Every Supabase request is intercepted.
+// GI1 "Invite people": the event's one link, now the Event link section at the bottom of Invite people, below
+// the contacts' Pick step (Plan 2; verify-contact-invites checks the Pick step itself). The screen never shows the
+// exact place; Share sends "<Title>, <date>. RSVP: <link>"; Copy link copies it; Turn off this link asks first and
+// shows a new link; the ⓘ sheet; a failed turn-off re-reads the link; the link is never kept in browser storage;
+// 320 px with Larger Text. Every Supabase request is intercepted.
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
-import { button, heading } from "./qa-helpers.mjs";
+import { button, heading, inOrder } from "./qa-helpers.mjs";
 const browser = await chromium.launch({
   channel: process.env.RESBITE_QA_BROWSER || "chrome",
   headless: true,
@@ -142,14 +143,25 @@ try {
   {
     const { page, errors, state } = await fixture();
     await expect(heading(page, "Invite people")).toBeVisible();
-    // The card: what guests see before they reply. The area, never the exact place.
-    await expect(page.getByText("Coffee evening", { exact: true })).toBeVisible();
-    await expect(page.getByText("Invited by Stephen", { exact: true })).toBeVisible();
-    await expect(page.getByText("Near Old Street", { exact: true })).toBeVisible();
+    // The Pick step comes first; the Event link section, its heading and its three chips, at the bottom.
+    await expect(heading(page, "Event link")).toBeVisible();
+    await expect(page.getByRole("heading")).toHaveCount(2);
+    await expect(button(page, "Turn off this link")).toBeEnabled();
+    assert.ok(
+      await inOrder(page, [
+        heading(page, "Invite people"),
+        button(page, "Add"),
+        button(page, "Invite 0"),
+        heading(page, "Event link"),
+        button(page, "Share link"),
+        button(page, "Copy link"),
+        button(page, "Turn off this link"),
+      ]),
+      "the Event link section follows the Pick step",
+    );
+    // GI1's cover card is gone, and the screen never shows the exact place.
+    await expect(page.getByText("This is what people see before they reply.", { exact: true })).toHaveCount(0);
     await expect(page.getByText(/Fixture café/)).toHaveCount(0);
-    await expect(page.getByText("This is what people see before they reply.", { exact: true })).toBeVisible();
-    // One heading on the screen.
-    await expect(page.getByRole("heading")).toHaveCount(1);
     // Share: the title, the date in the app's format and the link.
     await button(page, "Share link").click();
     await expect.poll(async () => (await shares(page)).length).toBe(1);
@@ -211,7 +223,7 @@ try {
     assert.deepEqual(errors, []);
     await page.context().close();
     console.log(
-      "PASS: Invite people: the card (area not place, Invited by), Share text with the date and link, Copy link, Turn off with Keep/Turn off and a new link, a lost turn-off re-reads the link, the ⓘ sheet, nothing stored.",
+      "PASS: Invite people: the Event link section below the Pick step (no card, no exact place), Share text with the date and link, Copy link, Turn off with Keep/Turn off and a new link, a lost turn-off re-reads the link, the ⓘ sheet, nothing stored.",
     );
   }
   {
@@ -223,6 +235,8 @@ try {
       page.getByText("Only the organizer can invite people to an upcoming, active resbite.", { exact: true }),
     ).toBeVisible();
     await expect(button(page, "Share link")).toHaveCount(0);
+    await expect(heading(page, "Event link")).toHaveCount(0);
+    await expect(button(page, /^Invite \d+$/)).toHaveCount(0);
     assert.equal(state.links, 0, "No link is read for someone else's event");
     assert.deepEqual(errors, []);
     await page.context().close();
@@ -244,7 +258,7 @@ try {
         .map((el) => el.getAttribute("aria-label") || el.textContent),
     );
     assert.deepEqual(clipped, []);
-    for (const name of ["Share link", "Copy link", "Turn off this link", "About invitation links", "Back"]) {
+    for (const name of ["Share link", "Copy link", "Turn off this link", "About invitation links", "Back", "Add", "Invite 0"]) {
       const box = await button(page, name).boundingBox();
       assert.ok(box.height >= 44 && box.width >= 44, `${name} is at least 44 pt`);
     }

@@ -1,14 +1,16 @@
 // Captures every UX1, UX3 and UX4 screen at 390 and 320 px (UX3 and UX4 also with Larger Text at 320 px) with no console or page errors,
 // and keeps the gluestack keyboard-selection check. Every Supabase request is aborted, except in the GI1, GI2 and phone blocks at the
-// end, where requests are answered by a local stub: a signed-in organizer's link screen and Guests sheet with Remove (GI1), a
-// signed-out guest's account screen, its Code and Name steps and a dead link (GI2), and phone sign-up, its code, phone sign-in,
-// About you and Add your number with its "taken" refusal.
+// end, where requests are answered by a local stub: a signed-in organizer's Invite people (Plan 2: the Pick step with three numbers,
+// one On Resbite, and Almost there; GI1's Event link below), the Guests sheet with Remove and the Invited group, and My resbites
+// with an Invitations card; a signed-out guest's account screen, its Code and Name steps and a dead link (GI2); and phone sign-up,
+// its code, phone sign-in, About you, and Add your number with its "taken" refusal, the offer to bring in a web-only account and
+// that offer's code step.
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium, expect } from "@playwright/test";
-import { button, heading, later, next, openEvent, quietReminders } from "./qa-helpers.mjs";
+import { button, heading, later, next, openEvent, quietReminders, visible } from "./qa-helpers.mjs";
 const base = process.env.RESBITE_QA_URL || "http://localhost:8081";
 const out = process.env.RESBITE_QA_SHOTS || join(tmpdir(), "resbite-ui-audit");
 await mkdir(out, { recursive: true });
@@ -81,7 +83,7 @@ try {
     await expect(heading(page, "It’s on!")).toBeVisible();
     await shot("invite-screen");
     await button(page, "Invite people").click();
-    // GI1: the event's one link; preview shows the card and says it can't share.
+    // Plan 2: preview shows the Pick step and says it can't invite; GI1's Event link section is left out.
     await expect(heading(page, "Invite people")).toBeVisible();
     await shot("invitations");
     await button(page, "About invitation links").click();
@@ -291,7 +293,7 @@ try {
     await next(page);
     await button(page, "Create preview").click();
     await button(page, "Invite people").click();
-    // GI1: the preview link screen (card and the note that preview can't share) and its ⓘ sheet.
+    // The preview's Invite people (the Pick step and the note that preview can't invite) and its ⓘ sheet.
     await expect(heading(page, "Invite people")).toBeVisible();
     assert.ok(await fits(), "Invite people fits at 320 px under Larger Text");
     await shot("invitations");
@@ -361,8 +363,10 @@ try {
     if (errors.length) throw Error(errors.join("\n"));
     await page.close();
   }
-  // GI1, signed in as the organizer against a local stub: Invite people (the event's link) and the Guests sheet
-  // with Remove, at 390 and 320 px and under Larger Text at 320 px.
+  // Signed in as the organizer against a local stub, at 390 and 320 px and under Larger Text at 320 px, with nothing
+  // wider than the screen or clipped: Invite people's Pick step with three numbers (one On Resbite) and GI1's Event
+  // link below, Almost there, the Guests sheet with Remove and the Invited group, and My resbites with an Invitations
+  // card. The browser can't read phone contacts, so the numbers are added with "Add a number".
   for (const [width, large] of [[390, false], [320, false], [320, true]]) {
     const page = await browser.newPage({ viewport: { width, height: 844 }, reducedMotion: "reduce", timezoneId: "Europe/London" });
     await quietReminders(page);
@@ -373,9 +377,22 @@ try {
     });
     const suffix = large ? "large-320" : String(width);
     const fits = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+    const clipped = () =>
+      page.evaluate(() =>
+        [...document.querySelectorAll("[role=button],[role=checkbox],[role=heading],h1,h2,h3,input,textarea")]
+          .filter((el) => !el.closest("[role=tablist],[aria-hidden=true]") && el.getBoundingClientRect().width > 0)
+          .filter((el) => {
+            const b = el.getBoundingClientRect();
+            return b.left < -1 || b.right > window.innerWidth + 1;
+          })
+          .map((el) => (el.getAttribute("role") || el.tagName.toLowerCase()) + " " + (el.getAttribute("aria-label") || el.textContent.trim().slice(0, 40))),
+      );
+    // Captured first, so a failure leaves the picture of what is wrong.
     const shot = async (name, fullPage = true) => {
       await page.waitForTimeout(500);
-      return page.screenshot({ path: `${out}/${name}-${suffix}.png`, fullPage });
+      await page.screenshot({ path: `${out}/${name}-${suffix}.png`, fullPage });
+      assert.ok(await fits(), `${name} fits at ${suffix}`);
+      assert.deepEqual(await clipped(), [], `${name} has nothing clipped at ${suffix}`);
     };
     const user = { id: "11111111-1111-4111-8111-111111111111", aud: "authenticated", role: "authenticated", email: "fixture@example.invalid", email_confirmed_at: "2026-01-01T00:00:00Z", phone: "447700900834", phone_confirmed_at: "2026-01-01T00:00:00Z", app_metadata: {}, user_metadata: { registration_details_version: 1 }, created_at: "2026-01-01T00:00:00Z" };
     const expiry = Math.floor(Date.now() / 1000) + 3600;
@@ -412,41 +429,109 @@ try {
       { user_id: "g3", response: "maybe", profiles: { display_name: "Cy" } },
       { user_id: "g4", response: "pending", profiles: { display_name: "Di" } },
     ];
-    await page.addInitScript((session) => sessionStorage.setItem("sb-ewcsgvhuojxdpaspwsrx-auth-token", JSON.stringify(session)), session);
+    // Jo's invitation to the organizer, not answered yet: a card under Invitations on My resbites.
+    const jo = "33333333-3333-4333-8333-333333333333";
+    const invitation = { ...plan, id: "44444444-4444-4444-8444-444444444444", title: "Board games at the café", owner_id: jo, place_label: "Games room", area: "Near the station", starts_at: "2099-10-24T18:00:00Z", ends_at: null };
+    // Three numbers to invite: Ana is on Resbite (invited in the app); Ben and Cy get personal links.
+    const people = [
+      ["Ana Rivera-Castellanos", "07700 900123", "447700900123"],
+      ["Ben Okafor", "07700 900456", "447700900456"],
+      ["Cy Lindqvist", "07700 900789", "447700900789"],
+    ];
+    const links = new Map();
+    await page.addInitScript((session) => {
+      sessionStorage.setItem("sb-ewcsgvhuojxdpaspwsrx-auth-token", JSON.stringify(session));
+      // WhatsApp and Messages open with window.open on the web; nothing leaves the page.
+      window.open = () => null;
+    }, session);
     await page.route("**/*.supabase.co/**", (route) => {
       const req = route.request();
-      const path = new URL(req.url()).pathname;
+      const url = new URL(req.url());
+      const path = url.pathname;
+      const id = url.searchParams.get("id")?.replace(/^eq\./, "");
       const one = req.headers().accept?.includes("object");
       const reply = (body, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
       if (path === "/auth/v1/user") return reply(user);
       if (path === "/rest/v1/rpc/account_access_status") return reply({ account_id: user.id, status: "approved" });
       if (path === "/rest/v1/rpc/note_app_session") return route.fulfill({ status: 204, body: "" });
-      if (path === "/rest/v1/profiles") return reply({ id: user.id, display_name: "Stephen", avatar_path: null, avatar_revision: 0 });
+      if (path === "/rest/v1/profiles") {
+        if (url.searchParams.get("id")?.startsWith("in.")) return reply([{ id: jo, display_name: "Jo" }]);
+        return reply({ id: user.id, display_name: "Stephen", avatar_path: null, avatar_revision: 0 });
+      }
       if (path === "/rest/v1/activities") return reply([]);
-      if (path === "/rest/v1/plans") return reply(one ? { ...plan, plan_meeting_details: null } : [{ ...plan, plan_meeting_details: null }]);
-      if (path === "/rest/v1/attendees") return reply(one ? null : guests);
+      if (path === "/rest/v1/plans") {
+        const rows = [plan, invitation].filter((p) => !id || p.id === id).map((p) => ({ ...p, plan_meeting_details: null }));
+        return reply(one ? rows[0] : rows);
+      }
+      if (path === "/rest/v1/attendees") {
+        if (one) return reply(null);
+        // My resbites: the organizer's guests and their own row on Jo's invitation.
+        if (!url.searchParams.has("plan_id"))
+          return reply([
+            ...guests.map((g) => ({ ...g, plan_id: plan.id, version: 1 })),
+            { plan_id: invitation.id, user_id: user.id, response: "pending", version: 1, profiles: { display_name: "Stephen" } },
+          ]);
+        return reply(url.searchParams.get("plan_id") === `eq.${plan.id}` ? guests : []);
+      }
       if (path === "/rest/v1/rpc/plan_link") return reply("AbCdEfGhIjKlMnOpQrStUv");
+      if (path === "/rest/v1/rpc/contacts_on_resbite") return reply(req.postDataJSON().p_phones.filter((p) => p === people[0][2]));
+      if (path === "/rest/v1/rpc/invite_contacts")
+        return reply(
+          req.postDataJSON().p_invites.map(({ phone, country }) => {
+            if (phone === people[0][2]) return { phone, kind: "app" };
+            links.set(phone, { phone, country, answered: false, response: null });
+            return { phone, kind: "link" };
+          }),
+        );
+      if (path === "/rest/v1/rpc/plan_phone_invitations") return reply([...links.values()]);
       return reply({ message: `Unexpected ${path}` }, 400);
     });
     const open = async (path) => {
-      await page.goto(`${base}${path}${large ? "&largeText=1" : ""}`);
+      await page.goto(`${base}${path}${large ? `${path.includes("?") ? "&" : "?"}largeText=1` : ""}`);
       if (large) await page.addStyleTag({ content: '[dir="auto"] { zoom: 1.4; }' });
     };
     await open(`/invitations?plan=${plan.id}`);
     await expect(heading(page, "Invite people")).toBeVisible();
     await expect(button(page, "Turn off this link")).toBeEnabled();
-    // Privacy: the card shows the area, never the exact place.
+    // Privacy: the screen never shows the exact place.
     await expect(page.getByText("Flat 3, 12 Old Street")).toHaveCount(0);
-    await expect(page.getByText("Near Old Street")).toBeVisible();
-    assert.ok(await fits(), `Invite people fits at ${suffix}`);
+    await shot("invite-people-empty");
+    // The Pick step with three numbers picked, one On Resbite.
+    for (const [name, number] of people) {
+      await page.getByLabel("Name (optional)", { exact: true }).fill(name);
+      await page.getByLabel("Phone number", { exact: true }).fill(number);
+      await button(page, "Add").click();
+    }
+    await expect(page.getByRole("checkbox", { name: "Ana Rivera-Castellanos, +44 7700 900123, On Resbite", exact: true })).toBeVisible();
+    await expect(button(page, "Invite 3")).toBeEnabled();
+    // The screen scrolls inside the app: capture its top (the picked list) and its end (GI1's Event link).
+    await heading(page, "Invite people").scrollIntoViewIfNeeded();
     await shot("invite-people");
+    await button(page, "Turn off this link").scrollIntoViewIfNeeded();
+    await shot("invite-people-end");
+    // Almost there: Ana in the app; Ben and Cy with WhatsApp and Messages, Ben's already sent.
+    await button(page, "Invite 3").click();
+    await expect(heading(page, "Almost there")).toBeVisible();
+    await button(page, "WhatsApp: Ben Okafor").click();
+    await expect(page.getByText("Sent on WhatsApp", { exact: true })).toBeVisible();
+    await shot("invite-people-almost");
     await open(`/event?plan=${plan.id}`);
     await expect(heading(page, "Film club: Paris, Texas")).toBeVisible();
     await button(page, "2 going, 1 maybe").click();
     await expect(heading(page, "Guests")).toBeVisible();
     await expect(button(page, "Remove Alex Rivera")).toBeVisible();
-    assert.ok(await fits(), `The Guests sheet with Remove fits at ${suffix}`);
     await shot("event-guests-remove", false);
+    // The Invited group, below the guests: Send again and Remove for each personal link.
+    await heading(page, "Invited").scrollIntoViewIfNeeded();
+    await expect(button(page, "Remove Cy Lindqvist")).toBeVisible();
+    await expect(visible(page.getByRole("button", { name: "Send again", exact: true }))).toHaveCount(2);
+    await shot("event-guests-invited", false);
+    // My resbites with Jo's invitation under Invitations.
+    await open("/plans");
+    await expect(heading(page, "Invitations")).toBeVisible();
+    await expect(button(page, /^Jo invited you, Board games at the café, /)).toBeVisible();
+    await expect(page.getByRole("radiogroup", { name: "Your answer to Board games at the café", exact: true })).toBeVisible();
+    await shot("plans-invitations");
     if (errors.length) throw Error(errors.join("\n"));
     await page.close();
   }
@@ -675,14 +760,22 @@ try {
         { exact: true },
       ),
     ).toBeVisible();
+    // Plan 2: the offer to bring in the web-only account that holds it, with its own Send code above the screen's.
+    await expect(
+      phoneless.getByText("This number answered an invitation on the web. Confirm it with a code to bring its resbites here.", { exact: true }),
+    ).toBeVisible();
     await expect(button(phoneless, "Change number")).toBeVisible();
     await expect(button(phoneless, "Sign out")).toBeVisible();
     await visit(phoneless, "add-phone-taken", "Add your number");
+    // The offer's code step (the code goes to the web account; verify-contact-invites checks the fold itself).
+    await button(phoneless, "Send code").first().click();
+    await expect(phoneless.getByText("We sent a 6-digit code to +44 7700 900111.", { exact: true })).toBeVisible();
+    await visit(phoneless, "add-phone-fold-code", "Enter the code");
     await phoneless.context().close();
     if (errors.length) throw Error(errors.join("\n"));
   }
   console.log(
-    "PASS: every UX1, UX3 and UX4 screen at 390/320 px, UX3 and UX4 under Larger Text at 320 px, GI1 Invite people, the Where step with an Area and the Guests sheet with Remove (390/320 and Larger Text at 320 px), GI2's guest account screen unticked and ticked, its Code and Name steps and a dead link, and phone sign-up (number with the tick, code), phone sign-in, About you and Add your number with its taken-number refusal (390/320 and Larger Text at 320 px, nothing wider than the screen or clipped), gluestack keyboard selection, no console/page errors. Screenshots: " + out,
+    "PASS: every UX1, UX3 and UX4 screen at 390/320 px, UX3 and UX4 under Larger Text at 320 px, the Where step with an Area, Invite people (Pick with three numbers and On Resbite, Almost there, GI1's Event link), the Guests sheet with Remove and the Invited group, My resbites with an Invitations card (390/320 and Larger Text at 320 px, nothing wider than the screen or clipped), GI2's guest account screen unticked and ticked, its Code and Name steps and a dead link, and phone sign-up (number with the tick, code), phone sign-in, About you, and Add your number with its taken-number refusal, the fold offer and its code step (390/320 and Larger Text at 320 px, nothing wider than the screen or clipped), gluestack keyboard selection, no console/page errors. Screenshots: " + out,
   );
 } finally {
   await browser.close();

@@ -605,6 +605,8 @@ try {
         };
         return reply(savedPlan.version);
       }
+      // Plan 2: the organizer's event page lists their personal links; this event has none.
+      if (url.pathname === "/rest/v1/rpc/plan_phone_invitations") return reply([]);
       throw new Error(`Unexpected fixture request: ${url.pathname}`);
     });
     if (scenario === "refresh") {
@@ -781,6 +783,8 @@ try {
         };
         return reply(savedPlan.version);
       }
+      // Plan 2: the organizer's event page lists their personal links; this event has none.
+      if (url.pathname === "/rest/v1/rpc/plan_phone_invitations") return reply([]);
       throw new Error(`Unexpected fixture request: ${url.pathname}`);
     });
     await fixture.goto(`${baseURL}/arrange?plan=${savedPlan.id}`);

@@ -1,9 +1,11 @@
 // UX1 event page for both roles. Every Supabase request is intercepted; nothing is sent.
 // UX3: Meeting details in all three roles, the Note to guests, Add to calendar and reminders (on the
 // development fakes, `__resbiteDevice`), and the "Can’t go" wording.
+// Plan 2: the organizer's Invited group (people invited by personal link who haven't answered) with Send again and
+// Remove, and an unanswered invitation's card under Invitations on My resbites.
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
-import { quietReminders, visible } from "./qa-helpers.mjs";
+import { inOrder, quietReminders, visible } from "./qa-helpers.mjs";
 const base = process.env.RESBITE_QA_URL || "http://localhost:8081";
 const browser = await chromium.launch({
   channel: process.env.RESBITE_QA_BROWSER || "chrome",
@@ -102,6 +104,12 @@ const lunch = {
   ends_at: "2099-03-01T17:00:00Z",
 };
 const LOCKED = "Meeting details appear after you answer Going or Maybe.";
+// Plan 2: the organizer's personal links for Coffee evening. Pat's code is on this phone (sent on Messages); the
+// second number's isn't (the host changed phones); the third has answered, so it isn't in the Invited group.
+const PAT = { phone: "447700900222", e164: "+447700900222", name: "Pat Lee", code: "PatCodePatCodePatCode1" };
+const UNSTORED = { phone: "447700900333", e164: "+447700900333", label: "+44 7700 900333" };
+const CODE_STORE = `resbite.invite-codes.v1.${user.id}`;
+const PERSONAL_CODE = /^[A-Za-z0-9_-]{22}$/;
 const GET_REMINDERS =
   "Resbite can remind you 1 day and 1 hour before your resbites. Reminders are set on this phone, and only show the name and time.";
 /** Brings the page back to the foreground: the event and this phone's reminder state are read again. */
@@ -133,6 +141,13 @@ try {
     };
   };
   await page.addInitScript(init, session);
+  // The organizer's phone keeps Pat's personal code; the app's own writes are kept across reloads.
+  await page.addInitScript(
+    ({ key, value }) => {
+      if (!sessionStorage.getItem(key)) sessionStorage.setItem(key, JSON.stringify(value));
+    },
+    { key: CODE_STORE, value: { [hosted.id]: { [PAT.e164]: { code: PAT.code, name: PAT.name, sentVia: "messages" } } } },
+  );
   const plans = new Map([
     [hosted.id, { ...hosted }],
     [invited.id, { ...invited }],
@@ -158,6 +173,14 @@ try {
   const removed = new Set();
   const removeBodies = [];
   let failRemove = false;
+  // Plan 2: Coffee evening's phone invitations, and the invite and revoke calls the organizer makes.
+  const phoneInvites = [
+    { phone: PAT.phone, country: "44", answered: false, response: null },
+    { phone: UNSTORED.phone, country: "44", answered: false, response: null },
+    { phone: "447700900444", country: "44", answered: true, response: "accepted" },
+  ];
+  const inviteBodies = [];
+  const revokeBodies = [];
   // UX3: Meeting details live in their own table, which the database sends only to the organizer and
   // Going or Maybe guests; every invitee may know some exist. The plans row's own note is always "".
   const asRow = (plan) => {
@@ -180,6 +203,9 @@ try {
     if (path === "/rest/v1/rpc/note_app_session") return route.fulfill({ status: 204, body: "" });
     if (path === "/rest/v1/rpc/account_access_status") return reply({ account_id: user.id, status: "approved" });
     if (path === "/rest/v1/profiles") {
+      // My resbites reads its invitations' hosts together.
+      if (url.searchParams.get("id")?.startsWith("in."))
+        return reply(url.searchParams.get("id").includes(invited.owner_id) ? [{ id: invited.owner_id, display_name: "Jo" }] : []);
       // The invited event's organizer; any other read is the signed-in fixture's own profile.
       if (url.searchParams.get("id") === `eq.${invited.owner_id}`) return reply({ display_name: "Jo" });
       return reply({ id: user.id, display_name: "Fixture", avatar_path: null, avatar_revision: 0 });
@@ -206,12 +232,18 @@ try {
             .filter((p) => p.owner_id !== user.id)
             .map((p) => ({ plan_id: p.id, response: attendee.response })),
         );
-      // My resbites' read (no plan filter): here, the person's own answer on each invitation.
-      if (url.searchParams.get("select") === "plan_id,user_id,response,profiles(display_name)" && !url.searchParams.has("plan_id"))
+      // My resbites' read (no plan filter): here, the person's own answer (and its version) on each invitation.
+      if (url.searchParams.get("select") === "plan_id,user_id,response,version,profiles(display_name)" && !url.searchParams.has("plan_id"))
         return reply(
           [...plans.values()]
             .filter((p) => p.owner_id !== user.id)
-            .map((p) => ({ plan_id: p.id, user_id: user.id, response: attendee.response, profiles: { display_name: "Fixture" } })),
+            .map((p) => ({
+              plan_id: p.id,
+              user_id: user.id,
+              response: attendee.response,
+              version: attendee.version,
+              profiles: { display_name: "Fixture" },
+            })),
         );
       // 500, not 503: postgrest-js retries a 503 GET with backoff.
       if (failGuests) return reply({ message: "Fixture: guest list unavailable" }, 500);
@@ -251,6 +283,22 @@ try {
       }
       removed.add(body.p_user);
       return reply(null);
+    }
+    // Plan 2: the organizer's personal links (Coffee evening only; the other events have none).
+    if (path === "/rest/v1/rpc/plan_phone_invitations") {
+      const body = req.postDataJSON();
+      return reply(body.p_plan === hosted.id ? phoneInvites : []);
+    }
+    if (path === "/rest/v1/rpc/invite_contacts") {
+      const body = req.postDataJSON();
+      inviteBodies.push(body);
+      return reply(body.p_invites.map(({ phone }) => ({ phone, kind: "link" })));
+    }
+    if (path === "/rest/v1/rpc/revoke_phone_invitation") {
+      const body = req.postDataJSON();
+      revokeBodies.push(body);
+      phoneInvites.splice(phoneInvites.findIndex((i) => i.phone === body.p_phone), 1);
+      return route.fulfill({ status: 204, body: "" });
     }
     if (path === "/rest/v1/rpc/set_guest_note") {
       const body = req.postDataJSON();
@@ -347,6 +395,58 @@ try {
     { p_plan: hosted.id, p_user: "g2" },
     { p_plan: hosted.id, p_user: "g2" },
   ]);
+  // Plan 2: the Invited group, after the guests: the two who haven't answered, by the name kept on this phone or
+  // their number; the one who answered isn't listed.
+  const sendAgain = visible(page.getByRole("button", { name: "Send again", exact: true }));
+  await expect(page.getByRole("heading", { name: "Invited", exact: true })).toBeVisible();
+  await expect(page.getByText(PAT.name, { exact: true })).toBeVisible();
+  await expect(page.getByText(UNSTORED.label, { exact: true })).toBeVisible();
+  await expect(page.getByText("+44 7700 900444", { exact: true })).toHaveCount(0);
+  await expect(sendAgain).toHaveCount(2);
+  assert.ok(
+    await inOrder(page, [
+      page.getByRole("heading", { name: "Maybe", exact: true }),
+      page.getByRole("heading", { name: "Invited", exact: true }),
+      page.getByText(PAT.name, { exact: true }),
+      page.getByText(UNSTORED.label, { exact: true }),
+    ]),
+    "the Invited group follows the guests",
+  );
+  // Send again with the code on this phone: Messages, as Pat's link was sent, with the same link. Nothing is invited.
+  await sendAgain.first().click();
+  await expect.poll(() => page.evaluate(() => window.__opened ?? null)).toMatch(/^sms:/);
+  const patText = decodeURIComponent((await page.evaluate(() => window.__opened)).replace(`sms:${PAT.e164}?body=`, ""));
+  assert.match(patText, new RegExp(`^Fixture invited you to Coffee evening, .+\\. Reply here: https://[a-z0-9.-]+/i/${PAT.code}$`));
+  assert.deepEqual(inviteBodies, []);
+  // Send again without a code on this phone: a fresh code for that one number, kept here, then WhatsApp with it.
+  await page.evaluate(() => (window.__opened = null));
+  await sendAgain.nth(1).click();
+  await expect.poll(() => page.evaluate(() => window.__opened ?? null)).toMatch(/^whatsapp:/);
+  assert.equal(inviteBodies.length, 1);
+  const [fresh] = inviteBodies[0].p_invites;
+  assert.deepEqual([inviteBodies[0].p_plan, inviteBodies[0].p_invites.length, fresh.phone, fresh.country], [hosted.id, 1, UNSTORED.phone, "44"]);
+  assert.match(fresh.code, PERSONAL_CODE);
+  const opened = await page.evaluate(() => window.__opened);
+  assert.ok(opened.startsWith(`whatsapp://send?phone=${UNSTORED.phone}&text=`), opened);
+  assert.match(decodeURIComponent(opened), new RegExp(`/i/${fresh.code}$`));
+  const kept = await page.evaluate((key) => JSON.parse(sessionStorage.getItem(key)), CODE_STORE);
+  assert.deepEqual(kept[hosted.id][UNSTORED.e164], { code: fresh.code, name: UNSTORED.label, sentVia: "whatsapp" });
+  // Remove asks first, then turns the invitation off; its code leaves this phone.
+  let revokeAsked = "";
+  page.once("dialog", (dialog) => {
+    revokeAsked = dialog.message();
+    void dialog.accept();
+  });
+  await page.getByRole("button", { name: `Remove ${UNSTORED.label}`, exact: true }).click();
+  await expect.poll(() => revokeAsked).toBe(`Remove the invitation for ${UNSTORED.label}?`);
+  await expect(page.getByText(UNSTORED.label, { exact: true })).toHaveCount(0);
+  await expect(page.getByText(PAT.name, { exact: true })).toBeVisible();
+  await expect(sendAgain).toHaveCount(1);
+  assert.deepEqual(revokeBodies, [{ p_plan: hosted.id, p_phone: UNSTORED.phone }]);
+  const left = await page.evaluate((key) => JSON.parse(sessionStorage.getItem(key)), CODE_STORE);
+  assert.deepEqual(Object.keys(left[hosted.id]), [PAT.e164]);
+  // Open in Maps below starts from nothing opened.
+  await page.evaluate(() => (window.__opened = null));
   await page.getByRole("button", { name: "Close sheet", exact: true }).click();
   await sheetClosed(page);
   // The stack still counts Going and Maybe after the reload.
@@ -497,7 +597,7 @@ try {
   await expect(page.getByRole("button", { name: "Edit Coffee evening", exact: true })).toHaveCount(0);
   assert.deepEqual(cancels, [hosted.id]);
   console.log(
-    "PASS: organizer event page: the exact place and no Choose people (GI-D3); guests (GI1: Remove asks first and says they can rejoin by the link, says a lost reply, reloads the list; invitees have no Remove), Open in Maps (and its failure note), Edit at Review, Do this again at When with a replace guard, an unconfirmed cancel with Refresh event, cancel.",
+    "PASS: organizer event page: the exact place and no Choose people (GI-D3); guests (GI1: Remove asks first and says they can rejoin by the link, says a lost reply, reloads the list; invitees have no Remove); the Invited group (Plan 2: unanswered only, by stored name or number, Send again with the stored code or a fresh one, Remove calls revoke_phone_invitation), Open in Maps (and its failure note), Edit at Review, Do this again at When with a replace guard, an unconfirmed cancel with Refresh event, cancel.",
   );
 
   // UX2-D1: a saved edit returns to its event page with "Changes saved"; Back then leaves for My resbites.
@@ -646,28 +746,32 @@ try {
   await expect(cant).toBeChecked();
   await expect(page.getByText(LOCKED, { exact: true })).toBeVisible();
   assert.deepEqual(responses, ["maybe", "accepted", "withdrawn", "maybe", "declined"]);
-  // GI1 on My resbites: an unanswered invitation's card shows the area, never the place (also to VoiceOver);
-  // after Going it shows the place.
+  // GI1 on My resbites: an unanswered invitation's card (Plan 2: under Invitations, from its host) shows the area,
+  // never the place (also to VoiceOver); after Going it moves to Upcoming and shows the place.
   attendee = { version: attendee.version, response: "pending" };
   await page.goto(`${base}/plans`);
+  await expect(page.getByRole("heading", { name: "Invitations", exact: true })).toBeVisible();
+  const invitationCard = page.getByRole("button", { name: /^Jo invited you, Board games, / });
   const boardCard = page.getByRole("button", { name: /^Board games, / });
-  await expect(boardCard).toBeVisible();
-  await expect(boardCard).toHaveAttribute("aria-label", /, Near the station, Invited, Not answered/);
-  await expect(boardCard).not.toHaveAttribute("aria-label", /Games room/);
-  await expect(boardCard.getByText("Near the station", { exact: true })).toBeVisible();
-  await expect(boardCard.getByText("Games room", { exact: true })).toHaveCount(0);
-  await boardCard.click();
+  await expect(invitationCard).toBeVisible();
+  await expect(boardCard).toHaveCount(0);
+  await expect(invitationCard).toHaveAttribute("aria-label", /, Near the station, Invited, Not answered/);
+  await expect(invitationCard).not.toHaveAttribute("aria-label", /Games room/);
+  await expect(invitationCard.getByText("Near the station", { exact: true })).toBeVisible();
+  await expect(invitationCard.getByText("Games room", { exact: true })).toHaveCount(0);
+  await invitationCard.click();
   await expect(page.getByRole("heading", { name: "Board games", exact: true })).toBeVisible();
   await going.click();
   await expect(going).toBeChecked();
   await page.getByRole("button", { name: "Back", exact: true }).click();
   await expect(page.getByRole("heading", { name: "My resbites", exact: true })).toBeVisible();
+  await expect(invitationCard).toHaveCount(0);
   await expect(boardCard).toHaveAttribute("aria-label", /, Games room, Invited, Going/);
   await expect(boardCard.getByText("Games room", { exact: true })).toBeVisible();
   await expect(boardCard.getByText("Near the station", { exact: true })).toHaveCount(0);
   await context.close();
   console.log(
-    "PASS: invitee: the organizer only before answering, Maybe, the list after answering (and its load failure), Can’t go now after Going, the photo label; the Note to guests; Meeting details locked, shown after Going or Maybe, locked again after Can’t go, and absent when there are none; GI1: the area, Exact address after you reply and no Maps before answering, the place and Maps after, on the event page and its My resbites card.",
+    "PASS: invitee: the organizer only before answering, Maybe, the list after answering (and its load failure), Can’t go now after Going, the photo label; the Note to guests; Meeting details locked, shown after Going or Maybe, locked again after Can’t go, and absent when there are none; GI1: the area, Exact address after you reply and no Maps before answering, the place and Maps after, on the event page and its My resbites card (under Invitations until answered, then in Upcoming).",
   );
 
   // UX3 reminders and Add to calendar, on the development fakes. A fresh context: the phone's permission
