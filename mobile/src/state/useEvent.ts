@@ -15,6 +15,7 @@ import { formatPhone } from "../domain/phone";
 export type InvitedPerson = {
   phone: string;
   e164: string;
+  country: string;
   name: string;
   stored: StoredInvite | null;
 };
@@ -237,6 +238,6 @@ async function readInvited(planId: string, userId: string): Promise<InvitedPerso
     .map((r) => {
       const e164 = `+${r.phone}`;
       const saved = stored[e164] ?? null;
-      return { phone: r.phone, e164, name: saved?.name?.trim() || formatPhone(e164), stored: saved };
+      return { phone: r.phone, e164, country: r.country, name: saved?.name?.trim() || formatPhone(e164), stored: saved };
     });
 }

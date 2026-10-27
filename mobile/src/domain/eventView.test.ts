@@ -16,6 +16,7 @@ import {
   guestGroups,
   invitationCards,
   mapsUrl,
+  withoutInvitations,
   responseText,
   reviewLabels,
   spokenWhen,
@@ -378,4 +379,10 @@ test("invitation cards: upcoming active plans where I am a pending invitee, soon
   ];
   assert.deepEqual(invitationCards(plans, attendees, "me", now).map((p) => p.id), ["soon", "late"]);
   assert.deepEqual(invitationCards(plans, [], "me", now), []);
+});
+
+test("plans shown under Invitations are left out of Upcoming", () => {
+  const plans = [{ id: "a" }, { id: "b" }, { id: "c" }];
+  assert.deepEqual(withoutInvitations(plans, [{ id: "b" }]), [{ id: "a" }, { id: "c" }]);
+  assert.deepEqual(withoutInvitations(plans, []), plans);
 });

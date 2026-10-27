@@ -198,6 +198,12 @@ export function invitationCards(
     .sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at));
 }
 
+/** Upcoming without the plans already shown under Invitations (they move here once answered). */
+export function withoutInvitations<T extends { id: string }>(plans: readonly T[], invitations: readonly { id: string }[]): T[] {
+  const shown = new Set(invitations.map((i) => i.id));
+  return plans.filter((p) => !shown.has(p.id));
+}
+
 const TYPED_COORDINATES = /^\s*(-?\d{1,2}(?:\.\d+)?),\s*(-?\d{1,3}(?:\.\d+)?)\s*$/;
 
 /** Apple Maps link (benchmark row 6). Opens only when tapped. */

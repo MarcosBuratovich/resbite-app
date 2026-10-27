@@ -3,6 +3,8 @@ import { Alert, Linking, Platform, ScrollView, StyleSheet, View } from "react-na
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams, usePathname } from "expo-router";
 import * as Crypto from "expo-crypto";
+import { getRandomBytes } from "expo-crypto";
+import { newInviteCode } from "../src/domain/contactInvites";
 import {
   ArrowLeft,
   Check,
@@ -48,7 +50,7 @@ import { setGuestNote } from "../src/services/plans";
 import { invitationGateway } from "../src/services/invitations";
 import { contactInviteGateway } from "../src/services/contactInvites";
 import { inviteCodeStore } from "../src/services/inviteCodeStore";
-import { sendPersonalLink } from "../src/services/inviteSend";
+import { putInviteQuietly, sendPersonalLink } from "../src/services/inviteSend";
 import { readProfile } from "../src/services/profile";
 import { DEFAULT_ORIGIN } from "../src/state/useContactInvites";
 import type { InvitedPerson } from "../src/state/useEvent";
@@ -260,7 +262,7 @@ export default function EventPage() {
     }
   }
   async function resendInvite(person: InvitedPerson) {
-    if (invitedBusy || !scope || !person.stored) return;
+    if (invitedBusy || !scope) return;
     setInvitedBusy(person.phone);
     setRemoveError(null);
     try {
@@ -268,13 +270,27 @@ export default function EventPage() {
         (profile) => profile?.display_name?.trim() || null,
         () => null,
       );
+      let saved = person.stored;
+      if (!saved) {
+        // This phone has no code for them (the host changed phones): a fresh code replaces the old link.
+        const code = newInviteCode(getRandomBytes(16));
+        const [result] = await contactInviteGateway.invite(current.id, [
+          { phone: person.phone, country: person.country, code },
+        ]);
+        if (result?.kind !== "link") {
+          await event.load();
+          return;
+        }
+        saved = { code, name: person.name };
+        await putInviteQuietly(scope, current.id, person.e164, saved);
+      }
       const failure = await sendPersonalLink({
         scope,
         plan: current.id,
         e164: person.e164,
-        name: person.stored.name,
-        code: person.stored.code,
-        via: person.stored.sentVia ?? "whatsapp",
+        name: saved.name,
+        code: saved.code,
+        via: saved.sentVia ?? "whatsapp",
         origin: process.env.EXPO_PUBLIC_INVITATION_ORIGIN || DEFAULT_ORIGIN,
         message: {
           host: host ?? INVITE_COPY.hostFallback,
@@ -283,8 +299,8 @@ export default function EventPage() {
         },
       });
       if (failure) setRemoveError(failure);
-    } catch {
-      setRemoveError(INVITE_COPY.offline);
+    } catch (e) {
+      setRemoveError(e instanceof Error ? e.message : INVITE_COPY.offline);
     } finally {
       setInvitedBusy(null);
     }
@@ -505,17 +521,15 @@ export default function EventPage() {
             {invited.map((person) => (
               <View key={person.phone} style={styles.guest}>
                 <Copy style={{ flex: 1 }}>{person.name}</Copy>
-                {person.stored && (
                   <Button
                     secondary
                     icon={false}
                     title={INVITE_COPY.resend}
-                    hint={`Opens ${person.stored.sentVia === "messages" ? "Messages" : "WhatsApp"} with ${person.name}’s link`}
+                    hint={`Opens ${person.stored?.sentVia === "messages" ? "Messages" : "WhatsApp"} with ${person.name}’s link`}
                     disabled={invitedBusy !== null || busy}
                     loading={invitedBusy === person.phone}
                     onPress={() => void resendInvite(person)}
                   />
-                )}
                 <IconButton
                   icon={UserMinus}
                   tone="plain"

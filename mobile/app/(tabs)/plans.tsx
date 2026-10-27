@@ -22,6 +22,7 @@ import {
   eventPlace,
   groupPlans,
   invitationCards,
+  withoutInvitations,
 } from "../../src/domain/eventView";
 import { INVITE_COPY } from "../../src/domain/inviteCopy";
 import { reconcileRsvp, responseFor, type AnswerKey, type RsvpAttempt } from "../../src/domain/rsvp";
@@ -165,7 +166,9 @@ export default function Plans() {
   );
   const list = preview ? localPlans : loadedFor === session?.user.id && session ? plans : [];
   const now = Date.now();
-  const { upcoming, past } = groupPlans(list, now);
+  const invitations = preview || !session ? [] : invitationCards(list, attendees, session.user.id, now);
+  const { upcoming: ahead, past } = groupPlans(list, now);
+  const upcoming = withoutInvitations(ahead, invitations);
   const shown = segment === "upcoming" ? upcoming : past;
   const myDrafts = savedDrafts.filter((d) => d.scope === scope);
   // Removes a draft from this device after "Discard draft?", exactly as the editor's Discard draft.
@@ -177,7 +180,6 @@ export default function Plans() {
         () => setDraftRemoveError(true),
       );
     });
-  const invitations = preview || !session ? [] : invitationCards(list, attendees, session.user.id, now);
   // Answers an invitation exactly as the event page does: read, reconcile, write when still needed, confirm.
   async function answer(p: LocalPlan, key: AnswerKey) {
     const me = attendees.find((a) => a.plan_id === p.id && a.user_id === session?.user.id);
