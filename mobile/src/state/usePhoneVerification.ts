@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { TextInput } from "react-native";
 import { router } from "expo-router";
-import { deviceRegion, parsePhone } from "../domain/phone";
+import { deviceRegion, parsePhone, phoneVerified, samePhone } from "../domain/phone";
 import { TERMS_VERSION } from "../domain/guestAccount";
 import { phoneCodeDeps, sendPhoneCode, verifyPhoneCode, type PhonePurpose } from "../services/phoneCode";
 import { clearAttestation, rememberAttestation } from "../services/phoneAccount";
@@ -108,19 +108,20 @@ export function usePhoneVerification(purpose: PhonePurpose) {
       // Remembered for this number just before the verify that completes a sign-up, and only then.
       if (purpose === "signup") rememberAttestation(TERMS_VERSION, e164);
       const result = await verifyPhoneCode(phoneCodeDeps, e164, code, resendAt - RESEND_MS, purpose);
-      working.current = false;
-      verifying.current = false;
       // A failed sign-up check leaves no tick behind; the next verify remembers it again.
       if (!result.ok && purpose === "signup") clearAttestation();
-      if (result.ok) {
+      let added = false;
+      if (purpose === "add") {
+        // Re-read the account either way (refresh never rejects). After a failure the server may still
+        // have taken the code and the reply been lost: if the account now holds this number, verified, it
+        // was added. Still "verifying" meanwhile, so Change number can't call it off.
+        const user = await refresh();
+        added = phoneVerified(user) && samePhone(user?.phone, e164);
+      }
+      working.current = false;
+      verifying.current = false;
+      if (result.ok || added) {
         // Signed in: the navigator may already have remounted onto /account, which makes this moot.
-        if (purpose === "add") {
-          try {
-            await refresh();
-          } catch {
-            // The number is verified; /account re-reads the account on arrival.
-          }
-        }
         router.replace("/account");
         return true;
       }

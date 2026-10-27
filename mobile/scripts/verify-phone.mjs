@@ -47,8 +47,8 @@ async function fixture({ user = null, access = "access_pending", profile = null,
     unexpected = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => {
-    // The 400 and 422 replies below are deliberate; the browser reports each one.
-    if (m.type() === "error" && !/Failed to load resource: the server responded with a status of (400|422)/.test(m.text()))
+    // The 400, 422 and 504 replies below are deliberate; the browser reports each one.
+    if (m.type() === "error" && !/Failed to load resource: the server responded with a status of (400|422|504)/.test(m.text()))
       errors.push(m.text());
   });
   if (user) {
@@ -69,6 +69,8 @@ async function fixture({ user = null, access = "access_pending", profile = null,
   let otpReply = null;
   // Live mode: no stored code, so exchange_test_code returns null and the app checks 000000 as typed.
   let live = false;
+  // A lost reply: the server takes the code, but the app gets a gateway timeout instead of the session.
+  let lostVerify = false;
   await page.route("**/*.supabase.co/**", async (route) => {
     const req = route.request();
     const method = req.method();
@@ -106,6 +108,7 @@ async function fixture({ user = null, access = "access_pending", profile = null,
           created_at: now(),
         };
       state.user = { ...state.user, phone: digits, phone_confirmed_at: now(), new_phone: undefined };
+      if (lostVerify) return reply({ code: 504, msg: "Gateway timeout" }, 504);
       return reply(session());
     }
     if (path === "/auth/v1/user") {
@@ -146,6 +149,7 @@ async function fixture({ user = null, access = "access_pending", profile = null,
     state,
     otp: (next) => (otpReply = next),
     live: (next) => (live = next),
+    loseVerify: (next) => (lostVerify = next),
     calls: (method, path) => log.filter((x) => x.method === method && x.path === path),
     index: (predicate) => log.findIndex(predicate),
     async done() {
@@ -390,6 +394,36 @@ try {
     await f.done();
   }
 
+  // 3c. Add your number when the check's reply is lost: a wrong code re-reads the account and stays on the code
+  // step; a code the server took but whose reply never arrived re-reads the account, finds the number verified and
+  // carries on into the app.
+  {
+    const f = await fixture(phoneless()),
+      { page } = f;
+    await page.goto(base);
+    await expect(heading(page, "Add your number")).toBeVisible();
+    await numberField(page).fill("07700 900834");
+    await button(page, "Send code").click();
+    await expect(heading(page, "Enter the code")).toBeVisible();
+    const reads = () => f.calls("GET", "/auth/v1/user").length;
+    const before = reads();
+    await codeField(page).fill("111111");
+    await expect(page.getByText(COPY.mismatch, { exact: true })).toBeVisible();
+    await expect(heading(page, "Enter the code")).toBeVisible();
+    await expect(page).toHaveURL(/\/add-phone$/);
+    assert.ok(reads() > before, "a failed check re-reads the account");
+    assert.equal(f.state.user.phone, undefined, "a wrong code adds nothing");
+    f.loseVerify(true);
+    await codeField(page).fill("000000");
+    await expect(heading(page, "Create")).toBeVisible();
+    await expect(page).toHaveURL(/\/create$/);
+    await expect(page.getByText("Check your connection and try again.", { exact: true })).toHaveCount(0);
+    const verifies = f.calls("POST", "/auth/v1/verify");
+    assert.deepEqual(verifies.map((x) => [x.body.token, x.body.type]), [["111111", "phone_change"], [STORED_CODE, "phone_change"]]);
+    assert.equal(f.state.user.phone, DIGITS);
+    await f.done();
+  }
+
   // 4. An interrupted sign-up, restored from storage: a verified number, no name and no profile opens on About you,
   // also after a reload.
   {
@@ -418,7 +452,7 @@ try {
   }
 
   console.log(
-    "PASS: phone sign-up (tick, invalid number, +44 number, wrong code, 000000 refused in live mode, 000000 swap in test mode → verify → attest_age, About you → name → /account), sign-in with an unknown number → Create an account, Add your number with a taken number then phone_change, Sign out from the taken refusal, interrupted sign-up restored on About you, and no 000000 on any screen. All Supabase requests intercepted.",
+    "PASS: phone sign-up (tick, invalid number, +44 number, wrong code, 000000 refused in live mode, 000000 swap in test mode → verify → attest_age, About you → name → /account), sign-in with an unknown number → Create an account, Add your number with a taken number then phone_change, Sign out from the taken refusal, a wrong code and a lost verify reply at Add your number, interrupted sign-up restored on About you, and no 000000 on any screen. All Supabase requests intercepted.",
   );
 } finally {
   await browser.close();

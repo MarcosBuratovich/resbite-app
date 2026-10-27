@@ -35,14 +35,16 @@ const blank = (accountId = ""): Snapshot => ({
 const Context = createContext<
   Snapshot & {
     reviewed: boolean;
-    refresh: () => Promise<void>;
+    /** Re-reads the account. Resolves with the user it read, or null when the read failed or was
+     * superseded by a newer one or another account; never rejects. */
+    refresh: () => Promise<User | null>;
     acceptDetails: (user: User) => void;
     profileSaved: () => void;
   }
 >({
   ...blank(),
   reviewed: false,
-  refresh: async () => {},
+  refresh: async () => null,
   acceptDetails: () => {},
   profileSaved: () => {},
 });
@@ -57,9 +59,9 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const noted = useRef<string | null>(null);
   identity.current = accountId;
   sessionRef.current = session;
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (): Promise<User | null> => {
     const captured = sessionRef.current;
-    if (!accountId || !captured || signingOut) return;
+    if (!accountId || !captured || signingOut) return null;
     const request = ++generation.current,
       assertSession = captureSession();
     const assertCurrent = () => {
@@ -100,11 +102,12 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         // Recorded only when this account holds the number the tick was given for.
         void flushAttestation(user);
       }
+      return user;
     } catch {
       try {
         assertCurrent();
       } catch {
-        return;
+        return null;
       }
       setSnapshot({
         ...blank(accountId),
@@ -112,6 +115,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         error:
           "We couldn’t check your account. Check your connection and try again.",
       });
+      return null;
     }
   }, [accountId, captureSession, signingOut]);
   useEffect(() => {
