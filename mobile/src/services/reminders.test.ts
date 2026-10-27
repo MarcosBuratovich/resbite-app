@@ -208,7 +208,7 @@ function syncHarness(options: { permission?: string; prefs?: Partial<ReminderPre
   };
   let sources: () => Promise<ReminderSource[]> = async () => [source("p1", 48)];
   const reads: string[] = [];
-  const prefs: ReminderPrefs = { enabled: true, muted: [], asked: true, ...options.prefs };
+  const prefs: ReminderPrefs = { enabled: true, muted: [], asked: true, notificationsAsked: true, ...options.prefs };
   const sync = createReminderSync({
     service: (preview) => services[preview ? "preview" : "phone"],
     prefs: async (scope) => {

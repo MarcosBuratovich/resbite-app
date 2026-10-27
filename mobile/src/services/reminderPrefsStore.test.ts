@@ -16,26 +16,49 @@ function memory() {
   };
 }
 
-test("reminders start on, with nothing muted and the sheet not shown yet", async () => {
+test("reminders start on, with nothing muted and neither ask shown yet", async () => {
   const store = createReminderPrefsStore(memory());
-  assert.deepEqual(await store.read("owner"), { enabled: true, muted: [], asked: false });
+  assert.deepEqual(await store.read("owner"), { enabled: true, muted: [], asked: false, notificationsAsked: false });
 });
 
 test("the switches are saved per scope and clear removes only that scope", async () => {
   const disk = memory();
   const store = createReminderPrefsStore(disk);
-  assert.deepEqual(await store.setEnabled("owner", false), { enabled: false, muted: [], asked: false });
+  assert.deepEqual(await store.setEnabled("owner", false), { enabled: false, muted: [], asked: false, notificationsAsked: false });
   await store.setMuted("owner", "plan-1", true);
-  await store.markAsked("owner");
+  await store.markNotificationsAsked("owner");
   await store.setMuted("preview", "plan-9", true);
-  assert.deepEqual(await store.read("owner"), { enabled: false, muted: ["plan-1"], asked: true });
+  assert.deepEqual(await store.read("owner"), {
+    enabled: false,
+    muted: ["plan-1"],
+    asked: false,
+    notificationsAsked: true,
+  });
   assert.deepEqual([...disk.data.keys()].sort(), [
     "resbite.reminder-prefs.v1.owner",
     "resbite.reminder-prefs.v1.preview",
   ]);
   await store.clear("owner");
-  assert.deepEqual(await store.read("owner"), { enabled: true, muted: [], asked: false });
+  assert.deepEqual(await store.read("owner"), { enabled: true, muted: [], asked: false, notificationsAsked: false });
   assert.deepEqual((await store.read("preview")).muted, ["plan-9"]);
+});
+
+test("UX3’s Get reminders? flag is kept as stored: the notification ask has its own", async () => {
+  const disk = memory();
+  const store = createReminderPrefsStore(disk);
+  const key = "resbite.reminder-prefs.v1.owner";
+  disk.data.set(key, JSON.stringify({ enabled: true, muted: [], asked: true }));
+  assert.deepEqual(await store.read("owner"), { enabled: true, muted: [], asked: true, notificationsAsked: false });
+  // Other switches leave it untouched on the device.
+  await store.setEnabled("owner", false);
+  await store.setMuted("owner", "plan-1", true);
+  assert.equal(JSON.parse(disk.data.get(key)!).asked, true);
+  assert.deepEqual(await store.markNotificationsAsked("owner"), {
+    enabled: false,
+    muted: ["plan-1"],
+    asked: true,
+    notificationsAsked: true,
+  });
 });
 
 test("muting is per event, never duplicated, and unmuting removes it", async () => {
@@ -58,12 +81,12 @@ test("unreadable or partly invalid data reads as the defaults, field by field", 
   const key = "resbite.reminder-prefs.v1.owner";
   for (const raw of ["{not json", "null", "7", "[]"]) {
     disk.data.set(key, raw);
-    assert.deepEqual(await store.read("owner"), { enabled: true, muted: [], asked: false });
+    assert.deepEqual(await store.read("owner"), { enabled: true, muted: [], asked: false, notificationsAsked: false });
   }
-  disk.data.set(key, JSON.stringify({ enabled: "no", muted: ["a", 3, "", "a", "b"], asked: "yes" }));
-  assert.deepEqual(await store.read("owner"), { enabled: true, muted: ["a", "b"], asked: false });
+  disk.data.set(key, JSON.stringify({ enabled: "no", muted: ["a", 3, "", "a", "b"], asked: "yes", notificationsAsked: 1 }));
+  assert.deepEqual(await store.read("owner"), { enabled: true, muted: ["a", "b"], asked: false, notificationsAsked: false });
   disk.data.set(key, "{not json");
-  assert.deepEqual(await store.setEnabled("owner", false), { enabled: false, muted: [], asked: false });
+  assert.deepEqual(await store.setEnabled("owner", false), { enabled: false, muted: [], asked: false, notificationsAsked: false });
 });
 
 test("a storage failure reads as the defaults, but a failed save is reported", async () => {
@@ -74,7 +97,7 @@ test("a storage failure reads as the defaults, but a failed save is reported", a
     setItem: async () => {},
     removeItem: async () => {},
   });
-  assert.deepEqual(await store.read("owner"), { enabled: true, muted: [], asked: false });
+  assert.deepEqual(await store.read("owner"), { enabled: true, muted: [], asked: false, notificationsAsked: false });
   await assert.rejects(store.setEnabled("owner", false), /locked/);
 });
 

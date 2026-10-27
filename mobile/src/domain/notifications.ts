@@ -94,7 +94,7 @@ export const reminderCopy = {
 
 /**
  * Plan 4: the one notification ask (iPhone has one permission for updates and reminders). It replaces UX3's
- * "Get reminders?" and keeps its device flag. "Turn on notifications" shows iPhone's prompt; "Not now"
+ * "Get reminders?", with a device flag of its own. "Turn on notifications" shows iPhone's prompt; "Not now"
  * never blocks anything.
  */
 export const NOTIFICATION_ASK = {
@@ -125,10 +125,13 @@ export const askMoment = (moment: AskMoment): boolean =>
 
 /**
  * The ask shows once: at a moment for it, while iPhone's permission was never asked for and the ask was
- * never shown on this phone (`asked`, the reminder switches' flag). Showing it sets the flag.
+ * never shown on this phone (`notificationsAsked`, its own device flag). Showing it sets the flag. UX3's
+ * "Get reminders?" flag plays no part: a phone that said Not now to it is still asked once.
  */
-export function shouldAsk(state: AskMoment & { permission: NotificationPermission; asked: boolean }): boolean {
-  return state.permission === "undetermined" && !state.asked && askMoment(state);
+export function shouldAsk(
+  state: AskMoment & { permission: NotificationPermission; notificationsAsked: boolean },
+): boolean {
+  return state.permission === "undetermined" && !state.notificationsAsked && askMoment(state);
 }
 
 /** What the Updates card's button does. */

@@ -12,10 +12,12 @@ import {
   UPDATES_ACTIONS,
   type NotificationPermission,
 } from "./notifications.ts";
+import { createReminderPrefsStore } from "../services/reminderPrefsStore.ts";
 
 // Plan 4 Task 5: the one notification ask, and the Updates chip on Notification settings.
 
-const never = { permission: "undetermined", asked: false } as const;
+const never = { permission: "undetermined", notificationsAsked: false } as const;
+const moments = [{ owner: true }, { created: true }, { response: "accepted" }, { response: "maybe" }];
 
 test("the ask comes for the organizer, after creating, and after answering Going or Maybe", () => {
   assert.equal(shouldAsk({ ...never, owner: true }), true, "the organizer on an event page");
@@ -32,8 +34,8 @@ test("Can’t go, no answer yet or no moment at all never brings the ask", () =>
 });
 
 test("the ask shows once: never again once it was shown on this phone", () => {
-  for (const moment of [{ owner: true }, { created: true }, { response: "accepted" }, { response: "maybe" }])
-    assert.equal(shouldAsk({ ...never, ...moment, asked: true }), false, JSON.stringify(moment));
+  for (const moment of moments)
+    assert.equal(shouldAsk({ ...never, ...moment, notificationsAsked: true }), false, JSON.stringify(moment));
 });
 
 test("the ask comes only while the permission was never asked for", () => {
@@ -47,8 +49,45 @@ test("the ask comes only while the permission was never asked for", () => {
     "unsupported",
   ];
   for (const permission of decided)
-    for (const moment of [{ owner: true }, { created: true }, { response: "accepted" }, { response: "maybe" }])
-      assert.equal(shouldAsk({ permission, asked: false, ...moment }), false, `${permission} ${JSON.stringify(moment)}`);
+    for (const moment of moments)
+      assert.equal(
+        shouldAsk({ permission, notificationsAsked: false, ...moment }),
+        false,
+        `${permission} ${JSON.stringify(moment)}`,
+      );
+});
+
+test("a phone that said Not now to UX3’s Get reminders? is still asked once, while the permission is undecided", async () => {
+  // As UX3 left it: "Get reminders?" shown (asked), Not now (the permission never asked for).
+  const data = new Map([
+    ["resbite.reminder-prefs.v1.owner", JSON.stringify({ enabled: true, muted: [], asked: true })],
+  ]);
+  const store = createReminderPrefsStore({
+    getItem: async (k) => data.get(k) ?? null,
+    setItem: async (k, v) => void data.set(k, v),
+    removeItem: async (k) => void data.delete(k),
+  });
+  const prefs = await store.read("owner");
+  assert.equal(prefs.asked, true);
+  assert.equal(prefs.notificationsAsked, false);
+  for (const moment of moments)
+    assert.equal(
+      shouldAsk({ permission: "undetermined", notificationsAsked: prefs.notificationsAsked, ...moment }),
+      true,
+      JSON.stringify(moment),
+    );
+  // Already decided on iPhone: never asked, whatever the flags.
+  for (const permission of ["granted", "denied"] as const)
+    for (const moment of moments)
+      assert.equal(
+        shouldAsk({ permission, notificationsAsked: prefs.notificationsAsked, ...moment }),
+        false,
+        `${permission} ${JSON.stringify(moment)}`,
+      );
+  // Shown once: never again; UX3's flag is left as it was.
+  const shown = await store.markNotificationsAsked("owner");
+  assert.deepEqual(shown, { enabled: true, muted: [], asked: true, notificationsAsked: true });
+  assert.equal(shouldAsk({ permission: "undetermined", notificationsAsked: shown.notificationsAsked, owner: true }), false);
 });
 
 test("the ask's wording", () => {

@@ -10,7 +10,7 @@ import {
 } from "../domain/notifications";
 import {
   askForReminders,
-  markRemindersAsked,
+  markNotificationsAsked,
   reminderPermission,
   remindersFor,
 } from "../services/deviceReminders";
@@ -26,8 +26,9 @@ export type NotificationAskState = {
 
 /**
  * Plan 4: the one notification ask, from the event page, My resbites and the open link's waiting screen.
- * While `moment` is one (askMoment) and the screen is focused, it reads iPhone's permission and the
- * device's asked flag, and opens once when shouldAsk says so; opening sets the flag, whatever the answer.
+ * While `moment` is one (askMoment) and the screen is focused, it reads iPhone's permission and the ask's
+ * own device flag (`notificationsAsked`), and opens once when shouldAsk says so; opening sets the flag,
+ * whatever the answer.
  * It closes while the moment has passed (a guest who answers Can’t go) or the screen is covered.
  *
  * "Turn on notifications" asks as "Allow reminders" did (askForReminders: iPhone's prompt, then the
@@ -61,10 +62,10 @@ export function useNotificationAsk(
         const current = latest.current.moment;
         if (!active || settled.current === identity || !current) return;
         settled.current = identity;
-        if (!shouldAsk({ ...current, permission, asked: prefs.asked })) return;
+        if (!shouldAsk({ ...current, permission, notificationsAsked: prefs.notificationsAsked })) return;
         setAsking(identity);
         // Shown counts as asked, whatever the answer.
-        void markRemindersAsked(scope, captureSession()).catch(() => {});
+        void markNotificationsAsked(scope, captureSession()).catch(() => {});
       },
       // The next moment, focus or account reads again; nothing here blocks the screen.
       () => {},

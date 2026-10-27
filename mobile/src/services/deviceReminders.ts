@@ -77,7 +77,9 @@ const prefsScope = (scope: ReminderScope) => {
 /** The person's reminder switches on this phone; the defaults when signed out. */
 export const remindersFor = (scope: ReminderScope): Promise<ReminderPrefs> => {
   const key = deviceScope(scope);
-  return key ? prefs.read(key) : Promise.resolve({ enabled: true, muted: [], asked: false });
+  return key
+    ? prefs.read(key)
+    : Promise.resolve({ enabled: true, muted: [], asked: false, notificationsAsked: false });
 };
 
 /** The "Event reminders" switch. Re-syncs, so turning it off removes them and on sets them again. */
@@ -103,9 +105,9 @@ export async function muteReminders(
   return next;
 }
 
-/** Records that the notification ask ("Get notified?", once "Get reminders?") was shown, so it's shown once. */
-export const markRemindersAsked = (scope: ReminderScope, assertCurrent?: () => void): Promise<ReminderPrefs> =>
-  prefs.markAsked(prefsScope(scope), assertCurrent);
+/** Records that the notification ask ("Get notified?") was shown, so it's shown once. */
+export const markNotificationsAsked = (scope: ReminderScope, assertCurrent?: () => void): Promise<ReminderPrefs> =>
+  prefs.markNotificationsAsked(prefsScope(scope), assertCurrent);
 
 /** Sign-out and account deletion: removes the scope's reminders (scheduled and shown) and its switches. */
 export async function clearReminders(scope: string): Promise<void> {
