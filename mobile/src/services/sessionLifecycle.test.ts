@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createPendingInviteStore } from "./pendingInviteStore";
-import { createSessionLifecycle } from "./sessionLifecycle";
+import { createSessionLifecycle, signOutNotice } from "./sessionLifecycle";
 import { createPeopleStore } from "./peopleStore";
 function deferred() {
   let resolve!: () => void;
@@ -397,4 +397,52 @@ test("a failed reminder or calendar clear fails sign-out before auth sign-out", 
     await assert.rejects(life.signOut(), /disk/);
     assert.deepEqual(events, failing === "reminders" ? ["reminders"] : ["reminders", "calendar"]);
   }
+});
+
+test("a push cleanup failure refuses sign-out first, with its own notice; other failures keep theirs", async () => {
+  const events: string[] = [];
+  let push = async (): Promise<void> => {
+    throw Error("offline");
+  };
+  const life = createSessionLifecycle({
+    suspend: () => {},
+    resume: () => {},
+    clearPeople: async () => {
+      events.push("people");
+    },
+    clearRecentPlaces: async () => {},
+    clearReminders: async () => {},
+    clearCalendarRecords: async () => {},
+    clearPhoto: async () => {},
+    clearInviteCodes: async () => {},
+    clearCovers: async () => {},
+    blockPending: () => () => {},
+    clearPending: async () => {},
+    blockPush: () => () => {
+      events.push("push:released");
+    },
+    clearPush: () => push(),
+    authSignOut: async () => {
+      throw Error("auth offline");
+    },
+    finish: () => {},
+    busy: () => {},
+  });
+  life.update({ account: "owner", preview: false });
+  const refused = await life.signOut().then(() => null, (e: unknown) => e);
+  assert.deepEqual(events, ["push:released"]);
+  assert.equal(
+    signOutNotice(refused, true),
+    "Couldn’t sign out. Connect to the internet and try again, so this phone stops getting your notifications.",
+  );
+  push = async () => {};
+  const failed = await life.signOut().then(() => null, (e: unknown) => e);
+  assert.equal(
+    signOutNotice(failed, true),
+    "Sign-out could not finish. Some local data may already be cleared. Please try again.",
+  );
+  assert.equal(
+    signOutNotice(failed, false),
+    "You are signed out on this device, but server sign-out could not be confirmed. Other sessions may still be active. Sign in again to manage your account.",
+  );
 });

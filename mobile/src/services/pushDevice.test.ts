@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createSessionLifecycle } from "./sessionLifecycle";
+import { createSessionLifecycle, signOutNotice } from "./sessionLifecycle";
 import { createPushDeviceAdapter, createPushSession, pushEnabled } from "./pushDevice";
 
 const token = "ExponentPushToken[phone-1]";
@@ -49,6 +49,7 @@ function phone(options: { platform?: string; enabled?: boolean } = {}) {
     },
     projectId: () => "project-1",
     sessionFor: async (account) => (sessions.has(account) ? `jwt-${account}` : null),
+    liveAccount: async () => current,
     rpc: async (accessToken, name, args) => {
       if (offline) throw Error("offline");
       events.push([name, accessToken, args.p_token, args.p_platform].filter(Boolean).join(":"));
@@ -100,6 +101,11 @@ function phone(options: { platform?: string; enabled?: boolean } = {}) {
     signIn(account: string) {
       sessions.add(account);
       return session(account);
+    },
+    /** The session ends without signing out here (expired, or ended on the server): its token is gone. */
+    endSession() {
+      if (current) sessions.delete(current);
+      return session(null);
     },
     /** Settles whatever the last session change started. */
     settle: () => push.update({ account: current, preview: false }),
@@ -172,11 +178,45 @@ test("switching account without signing out unregisters A with A's session befor
   assert.equal(p.push.status(), "registered");
 });
 
-test("an offline unregister keeps the journal, fails sign-out before it, and retries on the next reconcile", async () => {
+test("after a session ended without signing out here, the next account replaces its record and registers", async () => {
+  const p = phone();
+  await p.signIn("a");
+  // The cleanup tries, but A's endpoint can't be removed without A's session: A's record stays.
+  await p.endSession();
+  assert.deepEqual(p.journal(), { account: "a", token, phase: "removing" });
+  await p.signIn("b");
+  // register_device rebinds the token to B on the server: A's notifications stop reaching this phone.
+  assert.deepEqual(p.rpc(), [`register_device:jwt-a:${token}:ios`, `register_device:jwt-b:${token}:ios`]);
+  assert.deepEqual(p.journal(), { account: "b", token, phase: "registered" });
+  assert.equal(p.push.status(), "registered");
+});
+
+test("an offline switch can't wait on A's old session: B registers once online, replacing A's record", async () => {
   const p = phone();
   await p.signIn("a");
   p.setOffline(true);
-  await assert.rejects(p.lifecycle.signOut(), /offline/);
+  // An email link for B replaces the live session; A's cleanup fails offline.
+  await p.signIn("b");
+  assert.equal(p.push.status(), "failed");
+  p.setOffline(false);
+  await p.push.reconcile();
+  assert.deepEqual(p.rpc(), [`register_device:jwt-a:${token}:ios`, `register_device:jwt-b:${token}:ios`]);
+  assert.deepEqual(p.journal(), { account: "b", token, phase: "registered" });
+});
+
+test("an offline unregister keeps the journal, refuses sign-out with its reason, and retries on the next reconcile", async () => {
+  const p = phone();
+  await p.signIn("a");
+  p.setOffline(true);
+  const refused = await p.lifecycle.signOut().then(
+    () => null,
+    (error: unknown) => error,
+  );
+  // The notice AppState sets for this failure.
+  assert.equal(
+    signOutNotice(refused, true),
+    "Couldn’t sign out. Connect to the internet and try again, so this phone stops getting your notifications.",
+  );
   // The failed sign-out releases the registration, which retries at once: still offline.
   await new Promise((r) => setImmediate(r));
   assert.ok(!p.events.includes("auth.signOut"));

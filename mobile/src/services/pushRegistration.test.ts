@@ -20,6 +20,8 @@ function fixture(enabled = true) {
     },
     readPermission: async () => "granted",
     readToken: async () => token,
+    // The live session follows the context; a previous account's has ended unless a test says so.
+    hasSession: async () => false,
     register: async (account, t) => {
       events.push(`register:${account}:${t}`);
     },
@@ -87,6 +89,8 @@ test("revocation/signout preserve failed cleanup and retry before account reassi
   };
   await assert.rejects(f.service.reconcile(), /offline/);
   assert.equal(f.journal?.phase, "removing");
+  // A still holds the live session (the switch hasn't settled): its own cleanup comes first.
+  f.adapter.hasSession = async (account) => account === "a";
   f.service.update({ account: "b", preview: false });
   await assert.rejects(f.service.reconcile(), /Previous account/);
   f.service.update({ account: "a", preview: false });
@@ -97,6 +101,34 @@ test("revocation/signout preserve failed cleanup and retry before account reassi
   f.adapter.readPermission = async () => "granted";
   await f.service.reconcile();
   assert.equal(f.journal?.account, "b");
+});
+test("a stale journal for an account with no session here is replaced by the account now signed in", async () => {
+  const f = fixture();
+  await f.service.reconcile();
+  // A's session ended without signing out here: its endpoint can't be removed with its own session.
+  f.adapter.unregister = async () => {
+    throw Error("must not borrow another session");
+  };
+  f.events.length = 0;
+  f.service.update({ account: "b", preview: false });
+  assert.equal(await f.service.reconcile(), "registered");
+  assert.deepEqual(f.events, [
+    "journal:registering",
+    `register:b:${token}`,
+    "journal:registered",
+  ]);
+  assert.deepEqual(f.journal, { account: "b", token, phase: "registered" });
+});
+test("a stale journal stays on disk while the account now signed in has notifications off", async () => {
+  const f = fixture();
+  await f.service.reconcile();
+  f.events.length = 0;
+  f.service.update({ account: "b", preview: false });
+  f.adapter.readPermission = async () => "denied";
+  assert.equal(await f.service.reconcile(), "permission-off");
+  assert.equal(await f.service.beforeSignOut(), "removed");
+  assert.deepEqual(f.events, []);
+  assert.deepEqual(f.journal, { account: "a", token, phase: "registered" });
 });
 test("late token result after account switch cannot register", async () => {
   const f = fixture();

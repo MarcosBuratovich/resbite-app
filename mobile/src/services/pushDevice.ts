@@ -10,7 +10,9 @@ import {
 // Plan 4: this phone's push endpoint (an Expo push token) for the signed-in account. Registered whenever a
 // real session exists and notifications are allowed, including an account still waiting for access (it is
 // sent the host's approval); removed with that account's own session before it signs out or another
-// account takes the phone. It never asks for permission: the ask (Task 5) does, then calls reconcile().
+// account takes the phone; if that session ended without a sign-out here, the next account's registration
+// replaces it (the server rebinds the token). It never asks for permission: the ask (Task 5) does, then
+// calls reconcile().
 
 /** The release switch: `EXPO_PUBLIC_PUSH_ENABLED=true`. Unset (tests, web QA) means off. */
 export const pushEnabled = (): boolean =>
@@ -32,6 +34,8 @@ export type PushDeviceDeps = {
   /** This account's access token: its live session, or the last one this run saw for it once another
    * session replaced it. Null when there is none. Never another account's. */
   sessionFor(account: string): Promise<string | null>;
+  /** The account whose session is live on this phone now, or null. */
+  liveAccount(): Promise<string | null>;
   rpc(accessToken: string, name: Rpc, args: Record<string, string>): Promise<void>;
 };
 
@@ -64,6 +68,7 @@ export function createPushDeviceAdapter(deps: PushDeviceDeps): PushRegistrationA
       if (!projectId) throw Error("This build has no project id for notifications.");
       return (await deps.notifications.getExpoPushTokenAsync({ projectId })).data;
     },
+    hasSession: async (account) => (await deps.liveAccount()) === account,
     register: (account, token, platform) =>
       call(account, "register_device", { p_token: token, p_platform: platform }),
     unregister: (account, token) => call(account, "unregister_device", { p_token: token }),
@@ -205,6 +210,8 @@ export function nativePushDeps(): PushDeviceDeps {
       if (data.session?.user.id === account) return data.session.access_token;
       return seen.get(account) ?? null;
     },
+    liveAccount: async () =>
+      (await supabase.auth.getSession()).data.session?.user.id ?? null,
     async rpc(accessToken, name, args) {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 15000);

@@ -9,7 +9,10 @@ import React, {
 } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { createPendingInviteStore } from "../services/pendingInviteStore";
-import { createSessionLifecycle } from "../services/sessionLifecycle";
+import {
+  createSessionLifecycle,
+  signOutNotice,
+} from "../services/sessionLifecycle";
 import { profilePhotoStore } from "../services/profile";
 import { planCoverStore } from "../services/planCovers";
 import { peopleStore } from "../services/people";
@@ -203,9 +206,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSignOutError(null);
     return lifecycle.signOut().catch((error) => {
       setSignOutError(
-        sessionRef.current || previewRef.current
-          ? "Sign-out could not finish. Some local data may already be cleared. Please try again."
-          : "You are signed out on this device, but server sign-out could not be confirmed. Other sessions may still be active. Sign in again to manage your account.",
+        signOutNotice(error, Boolean(sessionRef.current || previewRef.current)),
       );
       throw error;
     });

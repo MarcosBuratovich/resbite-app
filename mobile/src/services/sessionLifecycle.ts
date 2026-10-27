@@ -1,4 +1,22 @@
 export type SessionContext = { account: string | null; preview: boolean };
+
+/** The sign-out notice the root layout shows when sign-out fails. */
+export const signOutCopy = {
+  /** Plan 4: this phone's push endpoint couldn't be removed, so nothing was signed out or cleared. */
+  notifications:
+    "Couldn’t sign out. Connect to the internet and try again, so this phone stops getting your notifications.",
+  incomplete:
+    "Sign-out could not finish. Some local data may already be cleared. Please try again.",
+  unconfirmed:
+    "You are signed out on this device, but server sign-out could not be confirmed. Other sessions may still be active. Sign in again to manage your account.",
+} as const;
+const NOTIFICATIONS = "notifications";
+/** The notice for a failed sign-out; `signedIn` is whether a session or preview is still open. */
+export function signOutNotice(error: unknown, signedIn: boolean): string {
+  if ((error as { signOutReason?: unknown } | null)?.signOutReason === NOTIFICATIONS)
+    return signOutCopy.notifications;
+  return signedIn ? signOutCopy.incomplete : signOutCopy.unconfirmed;
+}
 type Dependencies = {
   suspend: (scope: string) => void;
   resume: (scope: string) => void;
@@ -87,7 +105,14 @@ export function createSessionLifecycle(deps: Dependencies) {
         let completed = false;
         try {
           if (!original.preview && original.account && deps.clearPush) {
-            await deps.clearPush(deleteAccount);
+            try {
+              await deps.clearPush(deleteAccount);
+            } catch (cause) {
+              // Refused, for privacy: signed out, this phone would keep getting the account's notifications.
+              throw Object.assign(Error(signOutCopy.notifications, { cause }), {
+                signOutReason: NOTIFICATIONS,
+              });
+            }
             current();
           }
           if (scope) {

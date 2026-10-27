@@ -13,6 +13,8 @@ export type PushRegistrationAdapter = {
   writeJournal(value: PushJournal | null): Promise<void>;
   readPermission(): Promise<NotificationPermission>;
   readToken(): Promise<string>;
+  /** Whether this account has the live session on this phone (its own, never another account's). */
+  hasSession(account: string): Promise<boolean>;
   // Gateway MUST bind requests to the captured account session, never a later global session.
   register(
     account: string,
@@ -67,10 +69,17 @@ export function createPushRegistration(
           !["registering", "registered", "removing"].includes(journal.phase))
       )
         throw Error("Notification cleanup record is invalid.");
-      // An account switch must first await cleanup using the old authenticated session.
-      // Do not silently forget an endpoint that may still belong to another account.
-      if (journal && journal.account !== account)
-        throw Error("Previous account notification cleanup is required.");
+      if (journal && journal.account !== account) {
+        // An account switch must first await cleanup using the old authenticated session.
+        if (await adapter.hasSession(journal.account))
+          throw Error("Previous account notification cleanup is required.");
+        current();
+        // That account's session ended without signing out here, so its endpoint can't be removed:
+        // unregister needs its own session. Registering this account rebinds the token on the server
+        // (and claims skip the old account's queued deliveries), so its record is replaced below rather
+        // than its notifications reaching whoever uses the phone now. Until then it stays on disk.
+        journal = null;
+      }
       async function remove() {
         if (!journal) return;
         const pending = { ...journal, phase: "removing" as const };
