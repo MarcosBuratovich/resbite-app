@@ -27,7 +27,8 @@ language sql stable set search_path='' as $$
  with f(oid) as (values ('private.user_eligible(uuid)'::regprocedure),('private.eligible()'::regprocedure),
   ('private.deletion_pending(uuid)'::regprocedure),('private.has_live_grant(uuid)'::regprocedure),
   ('private.account_access_status()'::regprocedure),('public.account_access_status()'::regprocedure),
-  ('private.save_registration_details(jsonb,jsonb)'::regprocedure),('public.save_registration_details(jsonb,jsonb)'::regprocedure))
+  ('private.save_registration_details(jsonb,jsonb)'::regprocedure),('public.save_registration_details(jsonb,jsonb)'::regprocedure),
+  ('private.join_by_link(text,text,text)'::regprocedure),('public.join_by_link(text,text,text)'::regprocedure))
  select f.oid::text, pg_catalog.pg_get_functiondef(f.oid) from f
  union all
  select 'grants '||f.oid::text, p.proacl::text from f join pg_catalog.pg_proc p on p.oid=f.oid
@@ -50,7 +51,7 @@ do $$ begin
  if exists(select 1 from private.phone_rehearsal_baseline where (name like 'table %' or name like 'function %') and definition is not null) then
   raise exception 'Phone-account objects exist before the migration';
  end if;
- if (select count(*) from private.phone_rehearsal_baseline where name like 'grants %' and definition is not null)<>8 then
-  raise exception 'Expected eight function fingerprints with grants';
+ if (select count(*) from private.phone_rehearsal_baseline where name like 'grants %' and definition is not null)<>10 then
+  raise exception 'Expected ten function fingerprints with grants';
  end if;
 end $$;

@@ -1,7 +1,7 @@
 -- Rehearsal checks for 20261027120000_phone_accounts (hosted-baseline mode only).
 -- 1. The migration added its four tables and eight functions, redefined exactly user_eligible(),
--- account_access_status() and save_registration_details() and kept every grant, allowed maintainer grants, left
--- test mode on and wrote no rows.
+-- account_access_status(), save_registration_details() and join_by_link() and kept every grant, allowed maintainer
+-- grants, left test mode on and wrote no rows.
 do $$ declare item record; begin
  if exists(select 1 from private.phone_rehearsal_snapshot() where (name like 'table %' or name like 'function %') and definition is null) then
   raise exception 'Phone-account objects missing after the apply';
@@ -12,7 +12,7 @@ do $$ declare item record; begin
   where b.name not like 'table %' and b.name not like 'function %'
  loop
   if item.name in ('private.user_eligible(uuid)','private.account_access_status()','private.save_registration_details(jsonb,jsonb)',
-   'constraint beta_access_source_check') then
+   'private.join_by_link(text,text,text)','constraint beta_access_source_check') then
    if item.before=item.after then raise exception '% not redefined by the apply', item.name; end if;
   elsif item.before is distinct from item.after then
    raise exception 'The apply changed %', item.name;
