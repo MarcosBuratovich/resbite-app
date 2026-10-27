@@ -49,6 +49,39 @@ test("invite maps the reply in input order", async () => {
   assert.deepEqual(calls[0].args, { p_plan: "plan", p_invites: items });
 });
 
+test("invite sends 120 items in 3 calls of at most 50 and keeps their order", async () => {
+  const items = Array.from({ length: 120 }, (_, i) => ({
+    phone: String(447700900000 + i),
+    country: "44",
+    code: String(i).padStart(22, "A"),
+  }));
+  const { calls, gw } = gateway((c) => ({
+    data: (c.args.p_invites as typeof items).map((x, j) => ({ phone: x.phone, kind: j % 2 ? "app" : "link" })),
+    error: null,
+  }));
+  const results = await gw.invite("plan", items);
+  assert.deepEqual(calls.map((c) => (c.args.p_invites as unknown[]).length), [50, 50, 20]);
+  assert.ok(calls.every((c) => c.fn === "invite_contacts" && c.args.p_plan === "plan"));
+  assert.deepEqual(calls.flatMap((c) => c.args.p_invites as typeof items), items, "every item once, in order");
+  assert.deepEqual(results.map((r) => r.phone), items.map((x) => x.phone));
+  assert.equal(results[50].kind, "link", "each batch's reply lines up with its own items");
+  assert.equal(results[51].kind, "app");
+});
+
+test("invite of nothing makes no call; a short reply in a later batch fails the whole invite", async () => {
+  const none = gateway(() => ({ data: [], error: null }));
+  assert.deepEqual(await none.gw.invite("plan", []), []);
+  assert.equal(none.calls.length, 0);
+  const items = Array.from({ length: 60 }, (_, i) => ({ phone: String(447700901000 + i), country: "44", code: "A".repeat(22) }));
+  // The second batch (10 items) gets 9 results back.
+  const short = gateway((c) => {
+    const batch = c.args.p_invites as typeof items;
+    return { data: batch.slice(0, batch.length === 10 ? 9 : 50).map((x) => ({ phone: x.phone, kind: "link" })), error: null };
+  });
+  await assert.rejects(short.gw.invite("plan", items));
+  assert.equal(short.calls.length, 2);
+});
+
 test("invite rejects a reply that does not match the request", async () => {
   const { gw } = gateway(() => ({ data: [{ phone: "1", kind: "bogus" }], error: null }));
   await assert.rejects(gw.invite("p", [{ phone: "+1", country: "1", code: "A".repeat(22) }]));

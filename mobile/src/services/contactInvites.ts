@@ -77,23 +77,27 @@ export function createContactInviteGateway(
       }
       return found;
     },
+    // The server takes at most 50 a call, as the lookup does; the results come back in the items' order.
     async invite(plan, items) {
-      const data = await call("invite_contacts", {
-        p_plan: plan,
-        p_invites: items,
-      });
-      if (
-        !Array.isArray(data) ||
-        data.length !== items.length ||
-        !data.every(
-          (d) => d && typeof d.phone === "string" && kinds.includes(d.kind),
+      const out: { phone: string; kind: InviteKind }[] = [];
+      for (let i = 0; i < items.length; i += BATCH) {
+        const batch = items.slice(i, i + BATCH);
+        const data = await call("invite_contacts", {
+          p_plan: plan,
+          p_invites: batch,
+        });
+        if (
+          !Array.isArray(data) ||
+          data.length !== batch.length ||
+          !data.every(
+            (d) => d && typeof d.phone === "string" && kinds.includes(d.kind),
+          )
         )
-      )
-        throw Error(offline);
-      return data.map((d) => ({
-        phone: d.phone as string,
-        kind: d.kind as InviteKind,
-      }));
+          throw Error(offline);
+        for (const d of data)
+          out.push({ phone: d.phone as string, kind: d.kind as InviteKind });
+      }
+      return out;
     },
     async list(plan) {
       const data = await call("plan_phone_invitations", { p_plan: plan });
