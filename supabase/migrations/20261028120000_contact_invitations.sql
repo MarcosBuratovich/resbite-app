@@ -325,8 +325,8 @@ grant execute on function private.answer_phone_invitation(text,text,text,text), 
 
 -- Folding (plan Task 3). An account that adds a number already held by a web-only account (one that answered on the
 -- web and never used the app) takes that account's answers, invitations, 18+ tick and grant (never a live grant when
--- its tester-roster entry is disabled); what doesn't move is deleted, and the fold-phone-account Edge Function then
--- deletes the web-only user. Refuses (22023) the same account on both sides, an account that has used the app or
+-- its tester-roster entry is disabled); the web account keeps only a ban, and the fold-phone-account Edge Function
+-- then deletes the web-only user. Refuses (22023) the same account on both sides, an account that has used the app or
 -- organizes an event, and a target that doesn't exist. A source already folded or deleted moves nothing, so a retry is
 -- safe. Both users' locks are taken in uuid order before any row.
 create function private.fold_web_account(p_from uuid, p_into uuid) returns jsonb language plpgsql security definer set search_path = '' as $$
@@ -357,13 +357,16 @@ begin
   update private.age_attestations set user_id=p_into where user_id=p_from;
  end if;
  if not exists(select 1 from private.beta_access where user_id=p_into) then
-  update private.beta_access set user_id=p_into where user_id=p_from and (revoked_at is not null or not v_disabled);
+  insert into private.beta_access(user_id,source,plan_link_id,granted_at,revoked_at)
+   select p_into,source,plan_link_id,granted_at,revoked_at from private.beta_access
+   where user_id=p_from and (revoked_at is not null or not v_disabled);
  else
   update private.beta_access t set revoked_at=f.revoked_at from private.beta_access f
    where t.user_id=p_into and t.revoked_at is null and f.user_id=p_from and f.revoked_at is not null;
  end if;
- -- What didn't move goes, so a fold whose user deletion then fails leaves no second account that gets in.
- delete from private.beta_access where user_id=p_from;
+ -- The web account's live grant and tick go, so a fold whose user deletion then fails leaves no second account that
+ -- gets in; its ban stays, so that account still can't join by a link or answer an invitation.
+ delete from private.beta_access where user_id=p_from and revoked_at is null;
  delete from private.age_attestations where user_id=p_from;
  -- 4. The web profile.
  delete from public.profiles where id=p_from;

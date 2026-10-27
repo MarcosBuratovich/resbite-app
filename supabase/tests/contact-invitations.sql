@@ -566,6 +566,7 @@ end $$;
 reset role;
 do $$ begin
  if (select revoked_at from private.beta_access where user_id='d1000000-0000-4000-8000-000000000013') is null then raise exception 'The ban did not carry over'; end if;
+ if (select revoked_at from private.beta_access where user_id='d1000000-0000-4000-8000-000000000012') is null then raise exception 'The web account lost its ban'; end if;
  if (select display_name from public.profiles where id='d1000000-0000-4000-8000-000000000013') is distinct from 'Web Lee' then raise exception 'The web name did not carry over'; end if;
  if (select response from public.attendees where plan_id='d1100000-0000-4000-8000-000000000001' and user_id='d1000000-0000-4000-8000-000000000013') is distinct from 'accepted' then raise exception 'Place not moved to the new profile'; end if;
 end $$;
@@ -622,5 +623,42 @@ do $$ begin
  if exists(select 1 from private.beta_access where user_id in ('d1000000-0000-4000-8000-000000000018','d1000000-0000-4000-8000-000000000019')) then raise exception 'A live grant survived for a disabled tester'; end if;
  if private.user_eligible('d1000000-0000-4000-8000-000000000018') then raise exception 'The fold let a disabled tester in'; end if;
  if private.user_eligible('d1000000-0000-4000-8000-000000000019') then raise exception 'The folded account still gets in'; end if;
+end $$;
+
+-- fold: a ban is copied to an account with no grant and stays on the web account, so a web user that outlives the
+-- fold still can't join by a link. 20 is a banned web-only account, folded into 21, an email account with no grant;
+-- the Picnic has an event link.
+insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) values
+ ('d1000000-0000-4000-8000-000000000020',null,null,'447700900220',now()),
+ ('d1000000-0000-4000-8000-000000000021','fold-plain@example.test',now(),null,null);
+insert into public.profiles(id,display_name) values
+ ('d1000000-0000-4000-8000-000000000020','Web Pat'),('d1000000-0000-4000-8000-000000000021','Email Bo');
+insert into private.beta_access(user_id,source,revoked_at) values ('d1000000-0000-4000-8000-000000000020','invitation',now());
+insert into private.plan_links(plan_id,code) values ('d1100000-0000-4000-8000-000000000001',repeat('P',22));
+set local role service_role;
+do $$ declare r jsonb; begin
+ r := public.fold_web_account('d1000000-0000-4000-8000-000000000020','d1000000-0000-4000-8000-000000000021');
+ if r<>'{"moved_attendees":0}'::jsonb then raise exception 'Banned fold returned %', r; end if;
+end $$;
+reset role;
+do $$ begin
+ if (select revoked_at from private.beta_access where user_id='d1000000-0000-4000-8000-000000000020') is null then raise exception 'The web account lost its ban'; end if;
+ if (select revoked_at from private.beta_access where user_id='d1000000-0000-4000-8000-000000000021') is null then raise exception 'The ban did not carry over to an account with no grant'; end if;
+ if private.has_live_grant('d1000000-0000-4000-8000-000000000020') or private.user_eligible('d1000000-0000-4000-8000-000000000020') then raise exception 'The banned web account gets in'; end if;
+end $$;
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"d1000000-0000-4000-8000-000000000020","role":"authenticated"}',true);
+do $$ begin
+ begin perform public.join_by_link(repeat('P',22),'Web Pat','2026-10'); raise exception 'The banned web account joined by a link';
+ exception when insufficient_privilege then if sqlerrm<>'Invitation unavailable' then raise exception 'Wrong refusal: %', sqlerrm; end if; end;
+end $$;
+-- the same link lets in a folded web account that was never banned (17, above): the refusal is the ban's
+select set_config('request.jwt.claims','{"sub":"d1000000-0000-4000-8000-000000000017","role":"authenticated"}',true);
+do $$ begin perform public.join_by_link(repeat('P',22),'Web Jo','2026-10'); end $$;
+reset role;
+do $$ begin
+ if exists(select 1 from public.attendees where user_id='d1000000-0000-4000-8000-000000000020')
+  or exists(select 1 from private.beta_access where user_id='d1000000-0000-4000-8000-000000000020' and revoked_at is null) then raise exception 'The refused join wrote something'; end if;
+ if not exists(select 1 from public.attendees where plan_id='d1100000-0000-4000-8000-000000000001' and user_id='d1000000-0000-4000-8000-000000000017') then raise exception 'The control join failed'; end if;
 end $$;
 rollback;
