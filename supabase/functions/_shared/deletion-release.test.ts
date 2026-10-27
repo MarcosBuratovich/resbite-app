@@ -18,7 +18,8 @@ test("destructive entry points stay disabled with all environment flags enabled"
   };
   globalThis.fetch = async () => { networkCalls++; throw Error("No backend call allowed before release"); };
   try {
-    for (const entry of ["delete-account", "cleanup-account", "purge-deletion-receipts", "cleanup-profile-photos"]) {
+    // fold-phone-account deletes the web-only user it folds, so it is gated the same way (PHONE_FOLD_RELEASE_APPROVED).
+    for (const entry of ["delete-account", "cleanup-account", "purge-deletion-receipts", "cleanup-profile-photos", "fold-phone-account"]) {
       handler = undefined;
       await import(`../${entry}/index.ts`);
       assert.ok(handler, `${entry} registered its handler`);
