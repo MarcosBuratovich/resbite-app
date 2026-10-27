@@ -3,9 +3,10 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } fr
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { LogOut, UserRound } from "lucide-react-native";
-import { Button, ErrorNote, s } from "../src/design/ui";
-import { Chip, FieldCard, useFocusOnChange } from "../src/design/kit";
+import { Button, Copy, ErrorNote, s } from "../src/design/ui";
+import { Chip, FieldCard, announce, useFocusOnChange } from "../src/design/kit";
 import { AppleMark } from "../src/design/AppleMark";
+import { colors as c } from "../src/design/tokens";
 import { GUEST_COPY, nameFromSession } from "../src/domain/guestAccount";
 import { PHONE_COPY } from "../src/domain/phoneCopy";
 import { appleSignInAvailable } from "../src/services/appleSignIn";
@@ -53,7 +54,12 @@ export default function AboutYou() {
   }
 
   async function save() {
-    if (busy || !valid) return;
+    if (busy) return;
+    if (!valid) {
+      // Return in the field with no usable name: say why instead of doing nothing.
+      announce(PHONE_COPY.nameRule);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -89,16 +95,27 @@ export default function AboutYou() {
         returnKeyType="done"
         onSubmitEditing={() => void save()}
       />
+      {valid ? null : (
+        <Copy accessibilityLiveRegion="polite" style={styles.helper}>
+          {PHONE_COPY.nameRule}
+        </Copy>
+      )}
       <View style={styles.chips}>
         {appleAvailable ? (
           <Chip
             text={GUEST_COPY.apple}
             icon={AppleMark}
+            hint={PHONE_COPY.appleNameHint}
             disabled={busy}
             onPress={() => void link(() => linkApple(appleLinkDeps))}
           />
         ) : null}
-        <Chip text={GUEST_COPY.google} disabled={busy} onPress={() => void link(() => linkGoogle(googleLinkDeps))} />
+        <Chip
+          text={GUEST_COPY.google}
+          hint={PHONE_COPY.googleNameHint}
+          disabled={busy}
+          onPress={() => void link(() => linkGoogle(googleLinkDeps))}
+        />
       </View>
       <ErrorNote message={error} />
       <Button
@@ -107,6 +124,7 @@ export default function AboutYou() {
         title={PHONE_COPY.continue}
         loading={busy}
         disabled={!valid}
+        hint={valid ? undefined : PHONE_COPY.nameRule}
         onPress={() => void save()}
       />
       <View style={styles.chips}>
@@ -120,4 +138,5 @@ export default function AboutYou() {
 
 const styles = StyleSheet.create({
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  helper: { color: c.muted, fontSize: 14 },
 });

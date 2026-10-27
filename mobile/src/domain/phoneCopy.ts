@@ -18,6 +18,10 @@ export const PHONE_COPY = {
   checking: "Checking the code",
   aboutHeading: "About you",
   nameField: "Your name",
+  /** Why Continue is off: the same words as Profile's name check (useProfile). */
+  nameRule: "Use a name between 1 and 80 characters.",
+  appleNameHint: "Links your Apple ID and fills in your name from it.",
+  googleNameHint: "Links your Google account and fills in your name from it.",
   continue: "Continue",
   addHeading: "Add your number",
   addBody: "Your friends find and invite you by your number.",

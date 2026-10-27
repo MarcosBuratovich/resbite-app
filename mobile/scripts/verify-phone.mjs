@@ -279,7 +279,14 @@ try {
     await expect(page).toHaveURL(/\/about-you$/);
     await expect(page.getByLabel("Your name", { exact: true })).toHaveValue("");
     await expect(button(page, "Continue")).toBeDisabled();
+    // Why Continue is off is on screen (and in the button's hint on the iPhone); a name clears it.
+    const nameRule = page.getByText("Use a name between 1 and 80 characters.", { exact: true });
+    await expect(nameRule).toBeVisible();
+    await page.getByLabel("Your name", { exact: true }).fill("   ");
+    await expect(button(page, "Continue")).toBeDisabled();
+    await expect(nameRule).toBeVisible();
     await page.getByLabel("Your name", { exact: true }).fill("Sam");
+    await expect(nameRule).toHaveCount(0);
     await button(page, "Continue").click();
     await expect(page).toHaveURL(/\/account$/);
     await expect(heading(page, "Waiting for access")).toBeVisible();
