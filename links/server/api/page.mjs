@@ -3,6 +3,7 @@
 // Supabase; a closed one is GI1's page with the strict CSP.
 import { isLinkCode, pageHeaders, renderClosedPage } from "../lib/render.mjs";
 import { personalHeaders, renderOpenLinkPage } from "../lib/personal.mjs";
+import { pageOptions } from "../lib/options.mjs";
 import { readInvitationPage } from "../lib/supabase.mjs";
 
 /** `deps` lets tests inject the database reader. */
@@ -18,20 +19,9 @@ export default async function handler(req, res, deps = {}) {
       data = { state: "inactive" };
     }
   }
-  const supabaseUrl = process.env.SUPABASE_URL || "";
-  const options = {
-    origin: process.env.LINK_ORIGIN || "https://link.resbite.com",
-    code: isLinkCode(code) ? code : "",
-    appStoreUrl: process.env.APP_STORE_URL || "https://apps.apple.com/",
-    appStoreId: process.env.APP_STORE_ID || "",
-    supabaseUrl,
-    publishableKey: process.env.SUPABASE_PUBLISHABLE_KEY || "",
-    termsVersion: process.env.TERMS_VERSION || "2026-10",
-    termsUrl: process.env.TERMS_URL || "",
-    privacyUrl: process.env.PRIVACY_URL || "",
-  };
+  const options = pageOptions(code);
   const open = data?.state === "open";
   const html = open ? renderOpenLinkPage(data, options) : renderClosedPage(data, options);
-  for (const [key, value] of Object.entries(open ? personalHeaders(supabaseUrl) : pageHeaders())) res.setHeader(key, value);
+  for (const [key, value] of Object.entries(open ? personalHeaders(options.supabaseUrl) : pageHeaders())) res.setHeader(key, value);
   res.status(200).send(html);
 }

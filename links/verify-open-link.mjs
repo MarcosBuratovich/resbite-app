@@ -135,11 +135,13 @@ const jwt = (sub, n) =>
 
 /**
  * A page on a stubbed Supabase. The fixture keeps, per person, the request on this link (`requests`: status and
- * response) and whether they are on the resbite (`members`: owner or attendee), as request_to_join and my_join_request
- * would. Each of `seeds` puts a kept entry in the page's storage before the first load, as the script stores it: a
- * session for `phone`, with `request` and `member` set for that person.
+ * response), whether they are on the resbite (`members`: owner or attendee) and whether they have a profile (per
+ * number, `hasProfile` on the account), as request_to_join and my_join_request would (Task 1's SQL). Each of `people`
+ * sets that for a number on the server only, as for someone coming back on another browser; each of `seeds` does the
+ * same and also puts a kept entry in the page's storage before the first load, as the script stores it. Anyone with a
+ * request or a place has a profile unless `hasProfile` says otherwise.
  */
-async function fixture({ seeds = [], width = 390 } = {}) {
+async function fixture({ people = [], seeds = [], width = 390 } = {}) {
   const context = await browser.newContext({ viewport: { width, height: 844 }, reducedMotion: "reduce", locale: "en-GB" });
   const page = await context.newPage();
   const state = {
@@ -168,9 +170,18 @@ async function fixture({ seeds = [], width = 390 } = {}) {
       errors.push(m.text());
   });
   const account = (phone) => {
-    if (!state.accounts.has(phone)) state.accounts.set(phone, { id: `00000000-0000-4000-8000-${phone.padStart(12, "0").slice(-12)}`, phone });
+    if (!state.accounts.has(phone))
+      state.accounts.set(phone, { id: `00000000-0000-4000-8000-${phone.padStart(12, "0").slice(-12)}`, phone, hasProfile: false });
     return state.accounts.get(phone);
   };
+  const person = ({ phone, request = null, member = null, hasProfile = Boolean(request || member) }) => {
+    const user = account(phone);
+    if (request) state.requests.set(user.id, { ...request });
+    if (member) state.members.set(user.id, member);
+    user.hasProfile = hasProfile;
+    return user;
+  };
+  for (const p of people) person(p);
   const issue = (user, expiresIn = 3600) => {
     state.issued += 1;
     const access_token = jwt(user.id, state.issued);
@@ -180,11 +191,9 @@ async function fixture({ seeds = [], width = 390 } = {}) {
     return { access_token, refresh_token, token_type: "bearer", expires_in: expiresIn, expires_at: Math.floor(Date.now() / 1000) + expiresIn, user };
   };
   if (seeds.length) {
-    const entries = seeds.map(({ phone, request = null, member = null }) => {
-      const user = account(phone);
-      if (request) state.requests.set(user.id, { ...request });
-      if (member) state.members.set(user.id, member);
-      const s = issue(user);
+    const entries = seeds.map((seed) => {
+      const { phone } = seed;
+      const s = issue(person(seed));
       const session = { access_token: s.access_token, refresh_token: s.refresh_token, expires_at: s.expires_at, phone: `+${phone}` };
       return [kept(CODE), JSON.stringify({ session, phone: `+${phone}`, until: Date.parse(OPEN_PAGE.starts_at) })];
     });
@@ -235,25 +244,35 @@ async function fixture({ seeds = [], width = 390 } = {}) {
       return route.fulfill({ status: 204, body: "" });
     }
     if (method === "POST" && path === "/rest/v1/rpc/request_to_join") {
-      // public.request_to_join, as Task 1 defines it: the owner and guests are never turned into requests; a decline
-      // on this link stands; anyone else's request is kept (one per person) with the latest answer.
+      // public.request_to_join in Task 1's order. The owner and guests are answered first, before the link and event
+      // checks (`unavailable`: the link turned off), and nothing is written; then the answer, then a name only for
+      // someone with no profile (the first request makes it). A decline on this link stands; anyone else's request is
+      // kept, one per person, with the latest answer.
       const user = signedIn();
       if (!user) return pgError(401, "PGRST301", "JWT expired");
-      if (state.unavailable) return pgError(403, "42501", "Invitation unavailable");
-      if (body.p_code !== CODE || !["pending", "accepted", "maybe", "declined"].includes(body.p_response)) return pgError(400, "22023", "Invalid response");
+      if (body.p_code !== CODE) return pgError(403, "42501", "Invitation unavailable");
       const member = state.members.get(user.id);
       if (member) return reply({ state: member === "owner" ? "owner" : "already", plan_id: PLAN_ID, response: member === "owner" ? null : "accepted" });
+      if (state.unavailable) return pgError(403, "42501", "Invitation unavailable");
+      if (!["pending", "accepted", "maybe", "declined"].includes(body.p_response)) return pgError(400, "22023", "Invalid response");
+      if (!user.hasProfile) {
+        const name = typeof body.p_name === "string" ? body.p_name.trim() : "";
+        if (name.length < 1 || name.length > 80) return pgError(400, "22023", "Name required");
+        user.hasProfile = true;
+      }
       const request = state.requests.get(user.id);
       if (request?.status === "declined") return reply({ state: "declined", plan_id: PLAN_ID, response: request.response });
-      if (!request && !(typeof body.p_name === "string" && body.p_name.trim().length >= 1 && body.p_name.trim().length <= 80))
-        return pgError(400, "22023", "Name required");
       state.requests.set(user.id, { status: "waiting", response: body.p_response });
       return reply({ state: "waiting", plan_id: PLAN_ID, response: body.p_response });
     }
     if (method === "POST" && path === "/rest/v1/rpc/my_join_request") {
+      // As Task 1's SQL: a member's request is never shown, and a request only while it applies (waiting, or declined).
       const user = signedIn();
       if (!user) return pgError(401, "PGRST301", "JWT expired");
-      return reply({ ...OPEN_PAGE, request: state.requests.get(user.id) ?? null, member: state.members.get(user.id) ?? null });
+      const member = state.members.get(user.id) ?? null;
+      const request = state.requests.get(user.id);
+      const applies = !member && (request?.status === "waiting" || request?.status === "declined");
+      return reply({ ...OPEN_PAGE, request: applies ? { status: request.status, response: request.response } : null, member });
     }
     unexpected.push(`${method} ${path}`);
     return reply({ message: `Unexpected fixture request ${path}` }, 404);
@@ -425,12 +444,16 @@ try {
     await expect(button(page, COPY.signOut)).toBeVisible();
     assert.deepEqual(f.calls("/rest/v1/rpc/exchange_test_code").map((x) => x.body), [{ p_phone: `+${SAM}`, p_code: "000000" }]);
     assert.deepEqual(f.calls("/auth/v1/verify").map((x) => x.body), [{ type: "sms", phone: `+${SAM}`, token: STORED_CODE }]);
+    // Looked up right after the code, with the new session: no request yet, so the answer step.
+    const lookups = f.calls("/rest/v1/rpc/my_join_request");
+    assert.deepEqual(lookups.map((x) => [x.body, x.auth]), [[{ p_code: CODE }, `Bearer ${[...f.state.access.keys()].at(-1)}`]]);
     await noTestCode(page, "the answer step");
     for (const answer of ["Going", "Maybe", "Can’t go"]) await expect(page.getByRole("radio", { name: answer, exact: true })).not.toBeChecked();
     await page.getByRole("radio", { name: "Going", exact: true }).check();
     await button(page, "Send answer").click();
     await expect(text(page, "Use a name between 1 and 80 characters.")).toBeVisible();
     assert.equal(f.calls("/rest/v1/rpc/request_to_join").length, 0, "a first answer needs a name");
+    assert.equal(f.user(SAM).hasProfile, false, "and the server would ask for one: no profile yet");
     await page.getByLabel("Your first name", { exact: true }).fill("Sam");
     await button(page, "Send answer").click();
     await waitingScreen(page);
@@ -441,9 +464,10 @@ try {
     const session = [...f.state.access.keys()].at(-1);
     assert.equal(requests[0].auth, `Bearer ${session}`);
     assert.deepEqual(f.state.requests.get(f.user(SAM).id), { status: "waiting", response: "accepted" });
+    assert.equal(f.user(SAM).hasProfile, true, "the first request made the profile");
     assert.deepEqual(
       f.log.map((x) => x.path),
-      ["/auth/v1/otp", "/auth/v1/otp", "/rest/v1/rpc/exchange_test_code", "/auth/v1/verify", "/rest/v1/rpc/request_to_join"],
+      ["/auth/v1/otp", "/auth/v1/otp", "/rest/v1/rpc/exchange_test_code", "/auth/v1/verify", "/rest/v1/rpc/my_join_request", "/rest/v1/rpc/request_to_join"],
       "the whole conversation with Supabase",
     );
     // Kept under this code only (plan 2's scheme), with the full verified number and the event's start.
@@ -462,15 +486,78 @@ try {
     await focused(page, COPY.waiting);
   }
 
+  // 1b. Coming back on another browser (or an app's in-app browser), with no kept session: right after the code,
+  // my_join_request shows the person's screen. A waiting Going is the waiting screen with Going to change, and no
+  // request_to_join is sent; a decline is Not added; a guest is already in; no request is the answer step.
+  {
+    const ANA = "447700900111",
+      LEO = "447700900222",
+      MIA = "447700900333";
+    const f = await fixture({
+        people: [
+          { phone: SAM, request: { status: "waiting", response: "accepted" } },
+          { phone: ANA, request: { status: "declined", response: "maybe" } },
+          { phone: LEO, member: "attendee" },
+          { phone: MIA, hasProfile: true },
+        ],
+      }),
+      { page } = f;
+    /** Answer → the tick → the number, typed the local way → 000000. */
+    const verifyAs = async (number) => {
+      await button(page, "Answer").click();
+      await page.getByRole("checkbox", { name: COPY.tick, exact: true }).check();
+      await page.getByLabel("Mobile number", { exact: true }).fill(number);
+      await button(page, "Send code").click();
+      await page.getByLabel("6-digit code", { exact: true }).fill("000000");
+      await button(page, "Verify").click();
+    };
+    await page.goto(`${ORIGIN}/r/${CODE}`);
+    await expect(button(page, "Answer")).toBeVisible();
+    await page.waitForTimeout(300);
+    assert.equal(f.log.length, 0, "no kept session: nothing asked before Answer");
+    await verifyAs("07700 900834");
+    await waitingScreen(page);
+    await focused(page, COPY.waiting);
+    assert.deepEqual(
+      f.log.map((x) => x.path),
+      ["/auth/v1/otp", "/rest/v1/rpc/exchange_test_code", "/auth/v1/verify", "/rest/v1/rpc/my_join_request"],
+      "the whole conversation: the code, then the lookup; no request_to_join",
+    );
+    const lookup = f.calls("/rest/v1/rpc/my_join_request")[0];
+    assert.deepEqual([lookup.body, lookup.auth], [{ p_code: CODE }, `Bearer ${[...f.state.access.keys()].at(-1)}`]);
+    await button(page, "Change answer").click();
+    await expect(page.getByRole("radio", { name: "Going", exact: true })).toBeChecked();
+    await expect(page.getByLabel("Your first name", { exact: true })).toBeHidden();
+    await expect(text(page, COPY.verified)).toBeVisible();
+    assert.deepEqual(await page.evaluate(() => Object.keys(localStorage)), [kept(CODE)], "kept for this browser from now on");
+    await noTestCode(page, "the looked-up waiting answer");
+    for (const [number, screen] of [
+      ["07700 900111", notAddedScreen],
+      ["07700 900222", alreadyInScreen],
+    ]) {
+      await button(page, COPY.signOut).click();
+      await verifyAs(number);
+      await screen(page);
+    }
+    // Someone with a profile but no request (an existing Resbite account, say): the answer step, as before.
+    await button(page, COPY.signOut).click();
+    await verifyAs("07700 900333");
+    await expect(heading(page, "Picnic in the park")).toBeVisible();
+    await expect(page.getByLabel("Your first name", { exact: true })).toBeVisible();
+    assert.equal(f.calls("/rest/v1/rpc/my_join_request").length, 4, "one lookup per verified number");
+    assert.equal(f.calls("/rest/v1/rpc/request_to_join").length, 0, "nobody was asked to answer again");
+    await f.done();
+  }
+
   // 2. Coming back on the same browser: my_join_request shows the waiting answer, which can change (request_to_join
   // again, no name). Nothing is duplicated: one request, with the latest answer. Then Not you? Sign out.
   {
     await page.reload();
     await waitingScreen(page);
     const mine = f.calls("/rest/v1/rpc/my_join_request");
-    assert.equal(mine.length, 1);
-    assert.deepEqual(mine[0].body, { p_code: CODE });
-    assert.equal(mine[0].auth, `Bearer ${[...f.state.access.keys()].at(-1)}`);
+    assert.equal(mine.length, 2, "one after the code, one on the reload");
+    assert.deepEqual(mine[1].body, { p_code: CODE });
+    assert.equal(mine[1].auth, `Bearer ${[...f.state.access.keys()].at(-1)}`);
     await button(page, "Change answer").click();
     await expect(heading(page, "Picnic in the park")).toBeVisible();
     await focused(page, "Picnic in the park");
@@ -607,8 +694,8 @@ try {
     await button(page, "Send answer").click();
     await expect(text(page, COPY.unavailable)).toBeVisible();
     await expect(heading(page, "Picnic in the park")).toBeVisible();
-    f.state.unavailable = false;
-    f.state.requests.set(f.user(SAM).id, { status: "approved", response: "accepted" }); // The host approves meanwhile.
+    // The host approves meanwhile: a guest is answered before the link is checked, so the link being off doesn't matter.
+    f.state.requests.set(f.user(SAM).id, { status: "approved", response: "accepted" });
     f.state.members.set(f.user(SAM).id, "attendee");
     await button(page, "Send answer").click();
     await alreadyInScreen(page);
@@ -656,7 +743,7 @@ try {
   }
 
   console.log(
-    "PASS: /r/<code> in headless Chrome, open mode: Answer → the 18+ tick → a +1 number sent as typed and a UK number with the page's 44 (no number check, the Outside the UK hint) → 000000 exchanged then verified → the name and Going → request_to_join with exact bodies → Waiting for Marcos with the get-the-app block; a reload restores the waiting answer through my_join_request and changing it sends request_to_join again with no name (one request, the latest answer), as does a request made in the app (pending); Can't go while waiting is the personal page's Can't go screen, on the reply and on a reload; I have Resbite: open the app stays on the first screen; declined shows You weren't added with only Plan your own; a guest or the owner sees You're on this resbite with Open Resbite and Get Resbite; a decline or an approval landing mid-change shows the same screens; a turned-off link refuses the answer; Not you? Sign out ends the kept session; closed links keep GI1's pages and the strict CSP; no 000000 anywhere; no request beyond the page's origin and the intercepted Supabase host; nothing scrolls sideways at 320.",
+    "PASS: /r/<code> in headless Chrome, open mode: Answer → the 18+ tick → a +1 number sent as typed and a UK number with the page's 44 (no number check, the Outside the UK hint) → 000000 exchanged then verified → the name and Going → request_to_join with exact bodies → Waiting for Marcos with the get-the-app block; on another browser, right after the code, my_join_request shows a waiting answer (no request_to_join), Not added or already in; a reload restores the waiting answer through my_join_request and changing it sends request_to_join again with no name (one request, the latest answer), as does a request made in the app (pending); Can't go while waiting is the personal page's Can't go screen, on the reply and on a reload; I have Resbite: open the app stays on the first screen; declined shows You weren't added with only Plan your own; a guest or the owner sees You're on this resbite with Open Resbite and Get Resbite; a decline or an approval landing mid-change shows the same screens; a turned-off link refuses the answer; Not you? Sign out ends the kept session; closed links keep GI1's pages and the strict CSP; no 000000 anywhere; no request beyond the page's origin and the intercepted Supabase host; nothing scrolls sideways at 320.",
   );
 } finally {
   await browser?.close();

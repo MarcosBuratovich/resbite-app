@@ -1,6 +1,7 @@
 // GET /i/<code> (rewritten to /api/personal?code=<code>): the personal invitation page or one of its closed states.
 import { isLinkCode } from "../lib/render.mjs";
 import { personalHeaders, renderPersonalPage } from "../lib/personal.mjs";
+import { pageOptions } from "../lib/options.mjs";
 import { readPersonalInvitation } from "../lib/supabase.mjs";
 
 /** `deps` lets tests inject the database reader. */
@@ -16,17 +17,8 @@ export default async function handler(req, res, deps = {}) {
       data = { state: "inactive" };
     }
   }
-  const supabaseUrl = process.env.SUPABASE_URL || "";
-  const html = renderPersonalPage(data, {
-    origin: process.env.LINK_ORIGIN || "https://link.resbite.com",
-    code: isLinkCode(code) ? code : "",
-    appStoreUrl: process.env.APP_STORE_URL || "https://apps.apple.com/",
-    supabaseUrl,
-    publishableKey: process.env.SUPABASE_PUBLISHABLE_KEY || "",
-    termsVersion: process.env.TERMS_VERSION || "2026-10",
-    termsUrl: process.env.TERMS_URL || "",
-    privacyUrl: process.env.PRIVACY_URL || "",
-  });
-  for (const [key, value] of Object.entries({ ...personalHeaders(supabaseUrl), "X-Robots-Tag": "noindex, nofollow" })) res.setHeader(key, value);
+  const options = pageOptions(code);
+  const html = renderPersonalPage(data, options);
+  for (const [key, value] of Object.entries({ ...personalHeaders(options.supabaseUrl), "X-Robots-Tag": "noindex, nofollow" })) res.setHeader(key, value);
   res.status(200).send(html);
 }

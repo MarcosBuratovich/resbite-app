@@ -435,6 +435,29 @@ test("open link: a waiting Can't go is drawn as the personal page's Can't go; Go
   assert.equal(openDoneScreen({ ...back(null, "notAdded"), response: "declined" }), "notAdded");
 });
 
+test("open link: right after verifying, a person who already asked or is on the event lands on that screen", () => {
+  const atCode = run([{ type: "open" }, { type: "tick", ticked: true }, { type: "send", input: "07700 900834", country: "44" }, { type: "sent", at: 1 }, { type: "verify", code: "123456" }]);
+  assert.deepEqual([atCode.step, atCode.busy], ["code", true]);
+  // my_join_request after the code: waiting brings the stored answer back, ready to change, with no name to give.
+  const waiting = next(atCode, { type: "verified", ...screenForReturn({ state: "open", member: null, request: { status: "waiting", response: "accepted" } }) });
+  assert.deepEqual([waiting.step, waiting.busy, waiting.join, waiting.response, waiting.choice, waiting.code, waiting.phone], ["done", false, "waiting", "accepted", "accepted", "", "+447700900834"]);
+  assert.equal(openDoneScreen(waiting), "waiting");
+  const changing = next(waiting, { type: "change" });
+  assert.deepEqual([changing.step, changing.choice, needsName(changing)], ["answer", "accepted", false]);
+  const cant = next(atCode, { type: "verified", ...screenForReturn({ state: "open", member: null, request: { status: "waiting", response: "declined" } }) });
+  assert.equal(openDoneScreen(cant), "cantGo");
+  const notAdded = next(atCode, { type: "verified", ...screenForReturn({ state: "open", member: null, request: { status: "declined", response: "accepted" } }) });
+  assert.deepEqual([notAdded.step, notAdded.join], ["done", "notAdded"]);
+  const alreadyIn = next(atCode, { type: "verified", ...screenForReturn({ state: "open", member: "attendee", request: null }) });
+  assert.deepEqual([alreadyIn.step, alreadyIn.join], ["done", "alreadyIn"]);
+  // No request (or a lookup that couldn't tell): the answer step, with the name, as on the personal page.
+  for (const event of [{ type: "verified", ...screenForReturn({ state: "open", member: null, request: null }) }, { type: "verified" }]) {
+    const fresh = next(atCode, event);
+    assert.deepEqual([fresh.step, fresh.join, fresh.response, needsName(fresh)], ["answer", null, null, true], JSON.stringify(event));
+  }
+  assert.equal(next(atCode, { type: "verified", join: "approved" }).step, "answer", "only the three screens");
+});
+
 test("needsName: a first answer needs a name; a changed answer or a waiting request doesn't", () => {
   assert.equal(needsName(initialState()), true);
   assert.equal(needsName({ ...initialState(), response: "accepted" }), false);

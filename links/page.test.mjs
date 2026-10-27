@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { formatWhen, previewDescription, renderClosedPage, pageHeaders, isLinkCode, PAGE_CSP } from "./server/lib/render.mjs";
 import { readInvitationPage, signCoverUrl } from "./server/lib/supabase.mjs";
 import { renderOpenLinkPage, personalCsp } from "./server/lib/personal.mjs";
+import { pageOptions } from "./server/lib/options.mjs";
 import page from "./server/api/page.mjs";
 import image from "./server/api/image.mjs";
 import { mkdtemp, mkdir, copyFile, readFile, rm } from "node:fs/promises";
@@ -160,6 +161,38 @@ test("the page function answers an unknown or malformed code with the inactive p
   assert.equal(headers["Cache-Control"], "no-store");
   assert.equal(headers["X-Robots-Tag"], "noindex, nofollow");
   assert.equal(headers["Content-Security-Policy"], PAGE_CSP);
+});
+
+test("the page options come from the environment, with one set of defaults for /r/ and /i/", () => {
+  assert.deepEqual(pageOptions("not-a-code", {}), {
+    origin: "https://link.resbite.com",
+    code: "",
+    appStoreUrl: "https://apps.apple.com/",
+    appStoreId: "",
+    supabaseUrl: "",
+    publishableKey: "",
+    termsVersion: "2026-10",
+    termsUrl: "",
+    privacyUrl: "",
+  });
+  const env = {
+    LINK_ORIGIN: "https://link.example", APP_STORE_URL: "https://testflight.apple.com/join/abc", APP_STORE_ID: "6823164725",
+    SUPABASE_URL: "https://example.supabase.co", SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test", SUPABASE_SECRET_KEY: "sb_secret_never",
+    TERMS_VERSION: "2027-01", TERMS_URL: "https://www.resbite.com/terms", PRIVACY_URL: "https://www.resbite.com/privacy",
+  };
+  const options = pageOptions(code, env);
+  assert.deepEqual(options, {
+    origin: "https://link.example",
+    code,
+    appStoreUrl: "https://testflight.apple.com/join/abc",
+    appStoreId: "6823164725",
+    supabaseUrl: "https://example.supabase.co",
+    publishableKey: "sb_publishable_test",
+    termsVersion: "2027-01",
+    termsUrl: "https://www.resbite.com/terms",
+    privacyUrl: "https://www.resbite.com/privacy",
+  });
+  assert.ok(!JSON.stringify(options).includes("sb_secret"), "never the secret key");
 });
 
 test("the page function renders an open link in open mode with the /i/ CSP; closed states keep the strict CSP", async () => {

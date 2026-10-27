@@ -202,7 +202,7 @@ export function screenForRequest(result) {
  * "resend", "verify", "submit") set `busy`; personal.js then makes the request and reports back with "checked",
  * "sent", "verified", "answered", "refused" or "fail". An event out of step, or one that would start a second
  * request while one runs, returns the same state. On the open link nothing is "checked" (any number can answer), and
- * "answered" and "restore" carry the screen (`join`); only a waiting answer can change.
+ * "verified", "answered" and "restore" carry the screen (`join`); only a waiting answer can change.
  */
 export function next(state, event) {
   const s = state;
@@ -236,8 +236,14 @@ export function next(state, event) {
       if (!/^\d{6}$/.test(code)) return { ...s, error: "mismatch", code: "" };
       return { ...s, busy: true, error: null, code };
     }
-    case "verified":
-      return at("code") && s.busy ? { ...s, step: "answer", busy: false, error: null, code: "" } : s;
+    case "verified": {
+      if (!at("code") || !s.busy) return s;
+      // The open link looks the person up first: a request, or a place on the event, goes straight to its screen.
+      const join = JOINS.includes(event.join) ? event.join : null;
+      if (!join) return { ...s, step: "answer", busy: false, error: null, code: "" };
+      const response = RESPONSES.includes(event.response) ? event.response : null;
+      return { ...s, step: "done", busy: false, error: null, code: "", response, choice: response, join, pitch: true };
+    }
     case "choose":
       if (!at("answer") || s.busy || !RESPONSES.includes(event.response)) return s;
       return { ...s, choice: event.response, error: s.error === "chooseAnswer" ? null : s.error };

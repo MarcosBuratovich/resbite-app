@@ -282,12 +282,12 @@ function start(main, answerButton) {
    * go screen, with Change answer. Not added: only Plan your own. Already in: Open Resbite and Get Resbite.
    */
   function drawJoin(s) {
-    const screen = openDoneScreen(s);
+    // Every way to the last step names its screen; were one ever missing, the answer went in as a request, which waits.
+    const screen = openDoneScreen(s) ?? "waiting";
     const waiting = screen === "waiting";
     const cantGo = screen === "cantGo";
     okMark.hidden = cantGo || screen === "notAdded";
-    doneHeading.textContent =
-      { waiting: C.waitingHeading(host), cantGo: C.cantHeading, notAdded: C.notAdded, alreadyIn: C.alreadyIn }[screen] ?? "";
+    doneHeading.textContent = { waiting: C.waitingHeading(host), cantGo: C.cantHeading, notAdded: C.notAdded, alreadyIn: C.alreadyIn }[screen];
     doneHost.textContent = waiting ? C.waitingBody(host) : cantGo ? C.hostSees(host) : "";
     doneHost.hidden = !waiting && !cantGo;
     changeButton.hidden = !waiting && !cantGo;
@@ -413,11 +413,17 @@ function start(main, answerButton) {
     const reply = await api("/auth/v1/verify", { type: "sms", phone, token });
     const signedIn = reply.ok ? sessionFrom(reply.body, Date.now(), phone) : null;
     if (signedIn) {
-      // The number check passed for this code before the code was sent, so this is the number to restore for it.
+      // This is the number verified here for this code (on a personal page it also passed the invited-number check
+      // before the code was sent), so it is the number to restore for it.
       verifiedPhone = phone;
       keep(signedIn);
       codeInput.value = "";
-      return dispatch({ type: "verified" });
+      if (!open) return dispatch({ type: "verified" });
+      // The open link looks the person up at once, so someone who already asked (on another browser, or in the app)
+      // or is on the event sees that screen, not the answer step. A lookup that can't tell leaves the answer step,
+      // where request_to_join's reply decides.
+      const mine = await api("/rest/v1/rpc/my_join_request", { p_code: code }, signedIn.access_token);
+      return dispatch({ type: "verified", ...(mine.ok && mine.body?.state === "open" ? screenForReturn(mine.body) : null) });
     }
     const error = reply.ok ? "connection" : verifyError(reply.status, reply.body, state.sentAt, Date.now());
     if (error === "mismatch" || error === "expired") codeInput.value = "";
