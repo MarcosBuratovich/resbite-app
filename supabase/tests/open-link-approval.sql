@@ -706,6 +706,200 @@ do $$ begin
  end if;
 end $$;
 
+-- People who already have access (testers and grant holders) are not asked for the tick or a name, as join_by_link never
+-- asked them; a missing profile is made only from a name they give. 25 Quin is a roster tester with a profile and no
+-- tick; 26 a grant holder with neither, who gives a name.
+insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) values
+ ('d2000000-0000-4000-8000-000000000025','olr-quin@resbite-test.invalid',now(),null,null),
+ ('d2000000-0000-4000-8000-000000000026',null,null,'447700900426',now());
+insert into private.tester_roster(email) values ('olr-quin@resbite-test.invalid');
+insert into public.profiles(id,display_name) values ('d2000000-0000-4000-8000-000000000025','Quin');
+insert into private.beta_access(user_id,source) values ('d2000000-0000-4000-8000-000000000026','maintainer');
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000025","role":"authenticated"}',true);
+do $$ declare r jsonb; begin
+ r := public.request_to_join((select code from olr_codes where name='A4'),null,'accepted',null);
+ if r is distinct from jsonb_build_object('state','waiting','plan_id','d2100000-0000-4000-8000-000000000001','response','accepted') then
+  raise exception 'A tester with no tick got %', r;
+ end if;
+end $$;
+select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000026","role":"authenticated"}',true);
+do $$ declare r jsonb; begin
+ r := public.request_to_join((select code from olr_codes where name='A4'),' Max ','maybe',null);
+ if r->>'state' is distinct from 'waiting' then raise exception 'A grant holder with no tick or profile got %', r; end if;
+end $$;
+reset role;
+do $$ begin
+ if exists(select 1 from private.age_attestations where user_id in ('d2000000-0000-4000-8000-000000000025','d2000000-0000-4000-8000-000000000026')) then
+  raise exception 'A tick was stored without being asked';
+ end if;
+ if (select display_name from public.profiles where id='d2000000-0000-4000-8000-000000000026') is distinct from 'Max' then raise exception 'The missing profile was not made from the name'; end if;
+ if (select display_name from public.profiles where id='d2000000-0000-4000-8000-000000000025') is distinct from 'Quin' then raise exception 'The tester''s name changed'; end if;
+end $$;
+
+-- Approval refuses the people request_to_join refuses, even when they may use the app: Quin (a roster tester) now holds
+-- a revoked grant, and Max (a grant holder) an email disabled on the roster. Both stay waiting.
+insert into private.beta_access(user_id,source,revoked_at) values ('d2000000-0000-4000-8000-000000000025','invitation',now());
+update auth.users set email='olr-disabled@resbite-test.invalid' where id='d2000000-0000-4000-8000-000000000026';
+do $$ begin
+ if not private.user_eligible('d2000000-0000-4000-8000-000000000025') or not private.user_eligible('d2000000-0000-4000-8000-000000000026') then
+  raise exception 'Quin and Max should still be eligible';
+ end if;
+end $$;
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+do $$ begin
+ begin perform public.decide_join_request('d2100000-0000-4000-8000-000000000001','d2000000-0000-4000-8000-000000000025',true); raise exception 'Approved a tester with a revoked grant';
+ exception when others then if sqlstate is distinct from '42501' or sqlerrm is distinct from 'Invitation unavailable' then raise; end if; end;
+ begin perform public.decide_join_request('d2100000-0000-4000-8000-000000000001','d2000000-0000-4000-8000-000000000026',true); raise exception 'Approved a grant holder disabled on the roster';
+ exception when others then if sqlstate is distinct from '42501' or sqlerrm is distinct from 'Invitation unavailable' then raise; end if; end;
+end $$;
+reset role;
+do $$ begin
+ if (select count(*) from private.join_requests where user_id in ('d2000000-0000-4000-8000-000000000025','d2000000-0000-4000-8000-000000000026') and status='waiting') is distinct from 2
+  or exists(select 1 from public.attendees where user_id in ('d2000000-0000-4000-8000-000000000025','d2000000-0000-4000-8000-000000000026')) then
+  raise exception 'A refused approval changed Quin''s or Max''s request';
+ end if;
+end $$;
+
+-- The host's list leaves out a requester whose account is being deleted. 28 Rae asks, then asks to be deleted.
+insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) values ('d2000000-0000-4000-8000-000000000028',null,null,'447700900428',now());
+insert into public.profiles(id,display_name) values ('d2000000-0000-4000-8000-000000000028','Rae');
+insert into private.age_attestations(user_id,terms_version) values ('d2000000-0000-4000-8000-000000000028','2026-09');
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000028","role":"authenticated"}',true);
+do $$ begin perform public.request_to_join((select code from olr_codes where name='A4'),null,'accepted',null); end $$;
+select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+do $$ begin
+ if not exists(select 1 from jsonb_array_elements(public.plan_join_requests('d2100000-0000-4000-8000-000000000001')) e where e->>'user_id'='d2000000-0000-4000-8000-000000000028') then
+  raise exception 'Rae should be listed before asking to be deleted';
+ end if;
+end $$;
+reset role;
+update public.profiles set deletion_requested_at=now() where id='d2000000-0000-4000-8000-000000000028';
+set local role authenticated;
+do $$ begin
+ if exists(select 1 from jsonb_array_elements(public.plan_join_requests('d2100000-0000-4000-8000-000000000001')) e where e->>'user_id'='d2000000-0000-4000-8000-000000000028') then
+  raise exception 'A requester being deleted is listed';
+ end if;
+end $$;
+
+-- Asking again while waiting moves the request to the link used, so a decline holds there. 24 Pia asks on A4; the host
+-- turns it off (A5); Pia asks again on A5 and is declined; asking on A5 again is "declined".
+reset role;
+insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) values ('d2000000-0000-4000-8000-000000000024',null,null,'447700900424',now());
+insert into public.profiles(id,display_name) values ('d2000000-0000-4000-8000-000000000024','Pia');
+insert into private.age_attestations(user_id,terms_version) values ('d2000000-0000-4000-8000-000000000024','2026-09');
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000024","role":"authenticated"}',true);
+do $$ begin perform public.request_to_join((select code from olr_codes where name='A4'),null,'accepted',null); end $$;
+select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+do $$ begin insert into olr_codes values ('A5',public.rotate_plan_link('d2100000-0000-4000-8000-000000000001')); end $$;
+select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000024","role":"authenticated"}',true);
+do $$ declare r jsonb; begin
+ r := public.request_to_join((select code from olr_codes where name='A5'),null,'maybe',null);
+ if r->>'state' is distinct from 'waiting' then raise exception 'Pia asking again got %', r; end if;
+end $$;
+select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+do $$ begin perform public.decide_join_request('d2100000-0000-4000-8000-000000000001','d2000000-0000-4000-8000-000000000024',false); end $$;
+select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000024","role":"authenticated"}',true);
+do $$ declare r jsonb; begin
+ r := public.request_to_join((select code from olr_codes where name='A5'),null,'accepted',null);
+ if r is distinct from jsonb_build_object('state','declined','plan_id','d2100000-0000-4000-8000-000000000001','response','maybe') then
+  raise exception 'Asking on the link of the decline got %', r;
+ end if;
+end $$;
+
+-- decide_join_request with a missing argument is 22023 "Invalid decision".
+select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+do $$ begin
+ begin perform public.decide_join_request(null,'d2000000-0000-4000-8000-000000000007',true); raise exception 'Decided with no event';
+ exception when others then if sqlstate is distinct from '22023' or sqlerrm is distinct from 'Invalid decision' then raise; end if; end;
+ begin perform public.decide_join_request('d2100000-0000-4000-8000-000000000001',null,true); raise exception 'Decided with no person';
+ exception when others then if sqlstate is distinct from '22023' or sqlerrm is distinct from 'Invalid decision' then raise; end if; end;
+ begin perform public.decide_join_request('d2100000-0000-4000-8000-000000000001','d2000000-0000-4000-8000-000000000007',null); raise exception 'Decided nothing';
+ exception when others then if sqlstate is distinct from '22023' or sqlerrm is distinct from 'Invalid decision' then raise; end if; end;
+end $$;
+
+-- change_join_answer on a request that no longer applies changes nothing: Cal is now on the event another way (22023),
+-- and Eve's Quiz has started, then is cancelled (42501).
+reset role;
+insert into public.attendees(plan_id,user_id,response) values ('d2100000-0000-4000-8000-000000000001','d2000000-0000-4000-8000-000000000007','declined');
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000007","role":"authenticated"}',true);
+do $$ begin
+ begin perform public.change_join_answer('d2100000-0000-4000-8000-000000000001','maybe'); raise exception 'Changed the answer of a guest already on the event';
+ exception when others then if sqlstate is distinct from '22023' or sqlerrm is distinct from 'Request already decided' then raise; end if; end;
+end $$;
+select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000011","role":"authenticated"}',true);
+do $$ begin
+ begin perform public.change_join_answer('d2100000-0000-4000-8000-000000000004','maybe'); raise exception 'Changed the answer on a started event';
+ exception when others then if sqlstate is distinct from '42501' or sqlerrm is distinct from 'Invitation unavailable' then raise; end if; end;
+end $$;
+reset role;
+update public.plans set status='cancelled', starts_at='2099-06-04 19:00+00' where id='d2100000-0000-4000-8000-000000000004';
+set local role authenticated;
+do $$ begin
+ begin perform public.change_join_answer('d2100000-0000-4000-8000-000000000004','maybe'); raise exception 'Changed the answer on a cancelled event';
+ exception when others then if sqlstate is distinct from '42501' or sqlerrm is distinct from 'Invitation unavailable' then raise; end if; end;
+end $$;
+reset role;
+do $$ begin
+ if (select status||'|'||response from private.join_requests where plan_id='d2100000-0000-4000-8000-000000000001' and user_id='d2000000-0000-4000-8000-000000000007') is distinct from 'waiting|accepted'
+  or (select status||'|'||response from private.join_requests where plan_id='d2100000-0000-4000-8000-000000000004' and user_id='d2000000-0000-4000-8000-000000000011') is distinct from 'waiting|accepted' then
+  raise exception 'A refused change touched the request';
+ end if;
+ if (select response from public.attendees where plan_id='d2100000-0000-4000-8000-000000000001' and user_id='d2000000-0000-4000-8000-000000000007') is distinct from 'declined' then
+  raise exception 'A refused change touched the guest''s answer';
+ end if;
+end $$;
+
+-- Folding a web-only account carries its requests over. 21 Lou (web only) asked on the Picnic, the Walk, Ola's party
+-- and the Supper; 22 Ola (has used the app) has her own request on the Walk, organizes the party and is already on the
+-- Supper. Lou's Picnic request moves to Ola with its answer; on the other three Ola keeps what she has and Lou's goes.
+insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) values
+ ('d2000000-0000-4000-8000-000000000021',null,null,'447700900421',now()),
+ ('d2000000-0000-4000-8000-000000000022',null,null,'447700900422',now());
+insert into public.profiles(id,display_name) values ('d2000000-0000-4000-8000-000000000021','Lou'),('d2000000-0000-4000-8000-000000000022','Ola');
+insert into private.age_attestations(user_id,terms_version) values ('d2000000-0000-4000-8000-000000000021','2026-09'),('d2000000-0000-4000-8000-000000000022','2026-09');
+insert into private.beta_access(user_id,source) values ('d2000000-0000-4000-8000-000000000022','maintainer');
+insert into private.app_sessions(user_id) values ('d2000000-0000-4000-8000-000000000022');
+insert into public.plans(id,owner_id,title,starts_at,time_zone,place_label,area,categories) values
+ ('d2100000-0000-4000-8000-000000000007','d2000000-0000-4000-8000-000000000022','Ola''s party','2099-06-07 20:00+00','UTC','Home','',array['community']),
+ ('d2100000-0000-4000-8000-000000000008','d2000000-0000-4000-8000-000000000001','Supper','2099-06-08 19:00+00','UTC','Hall','',array['community']);
+insert into private.plan_links(plan_id,code) values ('d2100000-0000-4000-8000-000000000007',repeat('X',22)),('d2100000-0000-4000-8000-000000000008',repeat('Y',22));
+insert into public.attendees(plan_id,user_id,response) values ('d2100000-0000-4000-8000-000000000008','d2000000-0000-4000-8000-000000000022','maybe');
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000022","role":"authenticated"}',true);
+do $$ begin perform public.request_to_join((select code from olr_codes where name='W2'),null,'maybe',null); end $$;
+select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000021","role":"authenticated"}',true);
+do $$ begin
+ perform public.request_to_join((select code from olr_codes where name='A5'),null,'accepted',null);
+ perform public.request_to_join((select code from olr_codes where name='W2'),null,'accepted',null);
+ perform public.request_to_join(repeat('X',22),null,'accepted',null);
+ perform public.request_to_join(repeat('Y',22),null,'accepted',null);
+end $$;
+reset role;
+set local role service_role;
+do $$ begin perform public.fold_web_account('d2000000-0000-4000-8000-000000000021','d2000000-0000-4000-8000-000000000022'); end $$;
+reset role;
+do $$ begin
+ if exists(select 1 from private.join_requests where user_id='d2000000-0000-4000-8000-000000000021') then raise exception 'The web account kept requests'; end if;
+ if (select status||'|'||response||'|'||plan_link_id from private.join_requests where plan_id='d2100000-0000-4000-8000-000000000001' and user_id='d2000000-0000-4000-8000-000000000022')
+  is distinct from 'waiting|accepted|'||(select id from private.plan_links where code=(select code from olr_codes where name='A5')) then
+  raise exception 'The Picnic request did not move with its answer';
+ end if;
+ if (select response from private.join_requests where plan_id='d2100000-0000-4000-8000-000000000006' and user_id='d2000000-0000-4000-8000-000000000022') is distinct from 'maybe' then
+  raise exception 'The account''s own request was replaced';
+ end if;
+ if exists(select 1 from private.join_requests where plan_id in ('d2100000-0000-4000-8000-000000000007','d2100000-0000-4000-8000-000000000008')) then
+  raise exception 'A request moved onto the account''s own event or one it is on';
+ end if;
+ if (select response from public.attendees where plan_id='d2100000-0000-4000-8000-000000000008' and user_id='d2000000-0000-4000-8000-000000000022') is distinct from 'maybe' then
+  raise exception 'The fold changed the account''s place';
+ end if;
+end $$;
+
 -- grants: anon can call none of the new functions, the helper is closed to every client role, and nobody reads the
 -- table.
 set local role anon;

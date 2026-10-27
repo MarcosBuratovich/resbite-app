@@ -211,7 +211,8 @@ do $$ begin
   'b1000000-0000-4000-8000-00000000000b')) then raise exception 'A refused join made a profile'; end if;
  if (select display_name from public.profiles where id='b1000000-0000-4000-8000-000000000008')<>'Leaving' then raise exception 'A refused join renamed a profile'; end if;
  if exists(select 1 from public.attendees where user_id<>'b1000000-0000-4000-8000-000000000002') then raise exception 'A refused join added a guest'; end if;
- if exists(select 1 from private.notification_outbox where kind='join_request' and actor_id<>'b1000000-0000-4000-8000-000000000002') then raise exception 'A refused join notified the organizer'; end if;
+ -- The organizer (01) acts only in approving guest 02; any other actor is a refused joiner.
+ if exists(select 1 from private.notification_outbox where actor_id not in ('b1000000-0000-4000-8000-000000000001','b1000000-0000-4000-8000-000000000002')) then raise exception 'A refused join notified the organizer'; end if;
  if exists(select 1 from private.join_requests where user_id<>'b1000000-0000-4000-8000-000000000002') then raise exception 'A refused join stored a request'; end if;
 end $$;
 -- An account that already has a profile (a former tester) keeps its name: none is needed, and the one sent is ignored.

@@ -82,7 +82,9 @@ revoke all on function private.request_join(uuid,private.plan_links,public.plans
 -- event get 'owner' or 'already' here, from any link, before or after the start, and nothing is written. Everyone else
 -- needs a live link to an active event that hasn't started, whose organizer may still use the app (42501
 -- "Invitation unavailable"), an answer (22023), the 18+ tick unless one is stored and a name of 1-80 characters unless
--- they have a profile (22023, as answer_phone_invitation). Then the request.
+-- they have a profile (22023, as answer_phone_invitation). People who may use the app already (testers and grant
+-- holders) are not asked for the tick or a name, as join_by_link never asked them; a missing profile is made only from
+-- a name they give. Then the request.
 create function private.request_to_join(p_code text, p_name text, p_response text, p_terms_version text) returns jsonb
 language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := auth.uid(); v_link private.plan_links; v_plan public.plans;
@@ -116,15 +118,21 @@ begin
   raise exception 'Invitation unavailable' using errcode='42501';
  end if;
  if p_response is null or p_response not in ('pending','accepted','maybe','declined') then raise exception 'Invalid response' using errcode='22023'; end if;
- if not exists(select 1 from private.age_attestations where user_id=v_uid) then
-  if p_terms_version is null or p_terms_version !~ '^[0-9]{4}-[0-9]{2}$' then
-   raise exception 'Age confirmation required' using errcode='22023';
+ if private.eligible() then
+  if not exists(select 1 from public.profiles where id=v_uid) and coalesce(char_length(btrim(p_name)),0) between 1 and 80 then
+   insert into public.profiles(id,display_name) values(v_uid,btrim(p_name));
   end if;
-  insert into private.age_attestations(user_id,terms_version) values(v_uid,p_terms_version);
- end if;
- if not exists(select 1 from public.profiles where id=v_uid) then
-  if coalesce(char_length(btrim(p_name)),0) not between 1 and 80 then raise exception 'Name required' using errcode='22023'; end if;
-  insert into public.profiles(id,display_name) values(v_uid,btrim(p_name));
+ else
+  if not exists(select 1 from private.age_attestations where user_id=v_uid) then
+   if p_terms_version is null or p_terms_version !~ '^[0-9]{4}-[0-9]{2}$' then
+    raise exception 'Age confirmation required' using errcode='22023';
+   end if;
+   insert into private.age_attestations(user_id,terms_version) values(v_uid,p_terms_version);
+  end if;
+  if not exists(select 1 from public.profiles where id=v_uid) then
+   if coalesce(char_length(btrim(p_name)),0) not between 1 and 80 then raise exception 'Name required' using errcode='22023'; end if;
+   insert into public.profiles(id,display_name) values(v_uid,btrim(p_name));
+  end if;
  end if;
  return private.request_join(v_uid,v_link,v_plan,p_response);
 end $$;
@@ -171,21 +179,29 @@ begin
    and not exists(select 1 from public.attendees a where a.plan_id=p.id and a.user_id=v_uid)),'[]'::jsonb);
 end $$;
 
--- The waiting screen changes the answer by event: only a waiting request (22023 "Request already decided" when there
--- is none, or it was approved or declined). Nothing is queued.
+-- The waiting screen changes the answer by event: only a waiting request of someone not on the event yet (22023
+-- "Request already decided" when there is none, it was approved or declined, or they are on the event another way), on
+-- an active event that hasn't started (42501 "Invitation unavailable"). A refusal changes nothing. Nothing is queued.
 create function private.change_join_answer(p_plan uuid, p_response text) returns jsonb language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := auth.uid();
 begin
  if v_uid is null then raise exception 'Sign-in required' using errcode='42501'; end if;
  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_uid::text,47));
  if p_response is null or p_response not in ('pending','accepted','maybe','declined') then raise exception 'Invalid response' using errcode='22023'; end if;
+ if not exists(select 1 from private.join_requests where plan_id=p_plan and user_id=v_uid and status='waiting')
+ or exists(select 1 from public.attendees where plan_id=p_plan and user_id=v_uid) then
+  raise exception 'Request already decided' using errcode='22023';
+ end if;
+ if not exists(select 1 from public.plans where id=p_plan and status='active' and starts_at>now()) then
+  raise exception 'Invitation unavailable' using errcode='42501';
+ end if;
  update private.join_requests set response=p_response where plan_id=p_plan and user_id=v_uid and status='waiting';
- if not found then raise exception 'Request already decided' using errcode='22023'; end if;
  return jsonb_build_object('status','waiting','response',p_response);
 end $$;
 
 -- The host's waiting list: [{user_id, name, response, ending, created_at}], ending being the last two digits of the
--- person's number, or null. People already on the event are left out. Owner only (42501).
+-- person's number, or null. People already on the event, and people whose account is being deleted, are left out.
+-- Owner only (42501).
 create function private.plan_join_requests(p_plan uuid) returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester();
 begin
@@ -194,23 +210,25 @@ begin
    'response',j.response,'ending',(select nullif(right(u.phone,2),'') from auth.users u where u.id=j.user_id),'created_at',j.created_at)
    order by j.created_at,j.user_id)
   from private.join_requests j where j.plan_id=p_plan and j.status='waiting'
-   and not exists(select 1 from public.attendees a where a.plan_id=j.plan_id and a.user_id=j.user_id)),'[]'::jsonb);
+   and not exists(select 1 from public.attendees a where a.plan_id=j.plan_id and a.user_id=j.user_id)
+   and not private.deletion_pending(j.user_id)),'[]'::jsonb);
 end $$;
 
 -- The host approves or declines a waiting request. Both people's locks come first, in uuid order, then the plan's:
 -- the requester's lock before the plan's, as request_to_join takes them, and a fixed order between the two users so
 -- two hosts approving each other's requests at once queue instead of deadlocking (require_tester then takes the
 -- caller's lock again, which is re-entrant; the deletion lifecycle's require_tester locks the caller, locally now and on
--- hosted with plan 4). Only the owner of an active event that hasn't started (42501), and only a waiting request (22023
--- "Request already decided"). Approving puts the person on the event with their answer (someone who joined another way
--- meanwhile keeps theirs) and grants access unless they may use the app already; an account that is banned, being
--- deleted, holds a revoked grant or a disabled roster row is refused (42501) and the request stays waiting. The person
--- gets a join_approved notice. Declining queues nothing.
+-- hosted with plan 4). A missing argument is 22023 "Invalid decision", before any lock. Only the owner of an active
+-- event that hasn't started (42501), and only a waiting request (22023 "Request already decided"). Approving refuses
+-- (42501, the request stays waiting) anyone request_to_join refuses: a revoked grant or a disabled roster row, even for
+-- someone who may use the app, and an account that is banned, being deleted, anonymous or unconfirmed. Otherwise it
+-- puts the person on the event with their answer (someone who joined another way meanwhile keeps theirs), grants
+-- access unless they may use the app already, and sends them a join_approved notice. Declining queues nothing.
 create function private.decide_join_request(p_plan uuid, p_user uuid, p_approve boolean) returns jsonb
 language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid; v_req private.join_requests;
 begin
- if p_approve is null then raise exception 'Invalid decision' using errcode='22023'; end if;
+ if p_plan is null or p_user is null or p_approve is null then raise exception 'Invalid decision' using errcode='22023'; end if;
  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(least(auth.uid(),p_user)::text,47));
  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(greatest(auth.uid(),p_user)::text,47));
  v_uid := private.require_link_owner(p_plan);
@@ -220,13 +238,15 @@ begin
   update private.join_requests set status='declined', decided_at=now() where plan_id=p_plan and user_id=p_user;
   return jsonb_build_object('status','declined');
  end if;
+ if exists(select 1 from private.beta_access where user_id=p_user and revoked_at is not null)
+ or exists(select 1 from auth.users u where u.id=p_user
+  and exists(select 1 from private.tester_roster r where r.email = lower(u.email) and not r.enabled)) then
+  raise exception 'Invitation unavailable' using errcode='42501';
+ end if;
  if not private.user_eligible(p_user) then
   if not exists(select 1 from auth.users u where u.id=p_user and (u.email_confirmed_at is not null or u.phone_confirmed_at is not null)
    and not coalesce(u.is_anonymous,false) and (u.banned_until is null or u.banned_until<=now()))
-  or private.deletion_pending(p_user)
-  or exists(select 1 from private.beta_access where user_id=p_user and revoked_at is not null)
-  or exists(select 1 from auth.users u where u.id=p_user
-   and exists(select 1 from private.tester_roster r where r.email = lower(u.email) and not r.enabled)) then
+  or private.deletion_pending(p_user) then
    raise exception 'Invitation unavailable' using errcode='42501';
   end if;
   insert into private.beta_access(user_id,source,plan_link_id) values(p_user,'approval',v_req.plan_link_id) on conflict (user_id) do nothing;
@@ -341,4 +361,57 @@ begin
  if not v_has_profile then insert into public.profiles(id,display_name) values(v_uid,btrim(p_name)); end if;
  perform private.request_join(v_uid,v_link,v_plan,'pending');
  return v_plan.id;
+end $$;
+
+-- Folding a web-only account into an app account carries its open-link requests too. The
+-- 20261028120000_contact_invitations body with one step added (2a); its grants and its public wrapper are unchanged.
+create or replace function private.fold_web_account(p_from uuid, p_into uuid) returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_moved integer; v_disabled boolean;
+begin
+ if p_from is null or p_into is null or p_from=p_into then raise exception 'Invalid accounts' using errcode='22023'; end if;
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(least(p_from,p_into)::text,47));
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(greatest(p_from,p_into)::text,47));
+ if not exists(select 1 from auth.users where id=p_into) then raise exception 'Unknown account' using errcode='22023'; end if;
+ if private.used_app(p_from) then raise exception 'The account has used the app' using errcode='22023'; end if;
+ if exists(select 1 from public.plans where owner_id=p_from) then raise exception 'The account organizes events' using errcode='22023'; end if;
+ -- Add your number comes before About you, so the account may have no profile yet: it takes the name given on the web.
+ insert into public.profiles(id,display_name) select p_into, display_name from public.profiles where id=p_from
+  on conflict (id) do nothing;
+ -- 1. Places: where the account is already on the event, or organizes it, its own place stays and the web one goes.
+ delete from public.attendees f where f.user_id=p_from
+  and (exists(select 1 from public.attendees t where t.plan_id=f.plan_id and t.user_id=p_into)
+   or exists(select 1 from public.plans p where p.id=f.plan_id and p.owner_id=p_into));
+ update public.attendees set user_id=p_into where user_id=p_from;
+ get diagnostics v_moved = row_count;
+ -- 2. Invitations.
+ update private.phone_invitations set user_id=p_into where user_id=p_from;
+ -- 2a. Open-link requests: where the account already has its own request, is on the event or organizes it, its own
+ -- stands and the web one goes; the rest move with their answer, link and status.
+ delete from private.join_requests f where f.user_id=p_from
+  and (exists(select 1 from private.join_requests t where t.plan_id=f.plan_id and t.user_id=p_into)
+   or exists(select 1 from public.attendees t where t.plan_id=f.plan_id and t.user_id=p_into)
+   or exists(select 1 from public.plans p where p.id=f.plan_id and p.owner_id=p_into));
+ update private.join_requests set user_id=p_into where user_id=p_from;
+ -- 3. The tick and the grant, unless the account has its own. A revoked grant is a ban: one on either side stays. An
+ -- account whose tester-roster entry is disabled gets no live grant, as join_by_link and answer_phone_invitation.
+ v_disabled := exists(select 1 from auth.users u where u.id=p_into
+  and exists(select 1 from private.tester_roster r where r.email = lower(u.email) and not r.enabled));
+ if not exists(select 1 from private.age_attestations where user_id=p_into) then
+  update private.age_attestations set user_id=p_into where user_id=p_from;
+ end if;
+ if not exists(select 1 from private.beta_access where user_id=p_into) then
+  insert into private.beta_access(user_id,source,plan_link_id,granted_at,revoked_at)
+   select p_into,source,plan_link_id,granted_at,revoked_at from private.beta_access
+   where user_id=p_from and (revoked_at is not null or not v_disabled);
+ else
+  update private.beta_access t set revoked_at=f.revoked_at from private.beta_access f
+   where t.user_id=p_into and t.revoked_at is null and f.user_id=p_from and f.revoked_at is not null;
+ end if;
+ -- The web account's live grant and tick go, so a fold whose user deletion then fails leaves no second account that
+ -- gets in; its ban stays, so that account still can't join by a link or answer an invitation.
+ delete from private.beta_access where user_id=p_from and revoked_at is null;
+ delete from private.age_attestations where user_id=p_from;
+ -- 4. The web profile.
+ delete from public.profiles where id=p_from;
+ return jsonb_build_object('moved_attendees',v_moved);
 end $$;
