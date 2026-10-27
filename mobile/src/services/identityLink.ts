@@ -29,8 +29,10 @@ export const LINK_COPY = {
 };
 const connectionCopy = "Check your connection and try again.";
 
+/** GoTrue's codes for a provider already in use: its identity, or its email, belongs to another account. */
+const TAKEN_CODES: readonly unknown[] = ["identity_already_exists", "email_exists"];
 const isTaken = (e: unknown) =>
-  typeof e === "object" && e !== null && "code" in e && (e as { code?: unknown }).code === "identity_already_exists";
+  typeof e === "object" && e !== null && "code" in e && TAKEN_CODES.includes((e as { code?: unknown }).code);
 const isConnectionFailure = (e: { status?: number }) => e.status === 0 || (e.status !== undefined && e.status >= 500);
 
 /** Saves the provider's name when the account has none; a failed save is not an error. */
@@ -94,7 +96,7 @@ export async function linkGoogle(d: GoogleLinkDeps): Promise<LinkResult> {
     if (!code && result.url) {
       // GoTrue reports a conflict after the browser round trip: error params, no code (query or fragment).
       const failure = callbackError(result.url);
-      if (failure === "identity_already_exists") return { ok: false, cancelled: false, message: LINK_COPY.googleTaken };
+      if (TAKEN_CODES.includes(failure)) return { ok: false, cancelled: false, message: LINK_COPY.googleTaken };
       if (failure) return { ok: false, cancelled: false, message: connectionCopy };
     }
     if (!code) return { ok: false, cancelled: false, message: "Unable to verify the sign-in link." };

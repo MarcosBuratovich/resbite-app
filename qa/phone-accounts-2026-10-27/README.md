@@ -65,7 +65,7 @@ None of these steps has been run. Each is done later, with the owner's approval.
    - the owner's own account gets Add your number;
    - a taken number is refused;
    - Larger Text and VoiceOver on the four new screens.
-5. **Known limit, until Plan 2's account folding.** Someone who creates a phone account by mistake while already having an Apple, Google or email account gets "already has a Resbite account". Their number is then held by the new, empty account. The owner removes that empty user in the dashboard.
+5. **Known limit, until Plan 2's account folding.** Someone who creates a phone account by mistake while already having an Apple, Google or email account gets "already has a Resbite account" when About you links Apple or Google, whether that Apple ID or Google account, or only its email, belongs to the other account. Their number is then held by the new, empty account. The owner removes that empty user in the dashboard.
 6. **Not live with this plan.**
    - Local-only checks still read `email_confirmed_at`: notification recipients, deletion requests and intents.
    - Plan 4 (push) and the deletion milestone must widen them before phone-only accounts get notices or can delete.

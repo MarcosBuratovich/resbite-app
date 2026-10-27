@@ -121,3 +121,30 @@ test("a success URL with neither code nor error is unverifiable", async () => {
   assert.deepEqual(await linkGoogle(h.d), { ok: false, cancelled: false, message: "Unable to verify the sign-in link." });
   assert.deepEqual(h.exchanged, []);
 });
+
+// GoTrue answers email_exists when the provider's email already belongs to another account: the same refusal.
+test("Apple email already used by another account, returned or thrown", async () => {
+  const returned = apple({ linkIdToken: async () => ({ error: { message: "x", code: "email_exists", status: 422 } }) });
+  assert.deepEqual(await linkApple(returned.d), { ok: false, cancelled: false, message: LINK_COPY.appleTaken });
+  const thrown = apple({
+    linkIdToken: async () => {
+      throw { code: "email_exists", status: 422 };
+    },
+  });
+  assert.deepEqual(await linkApple(thrown.d), { ok: false, cancelled: false, message: LINK_COPY.appleTaken });
+  assert.deepEqual(thrown.saved, []);
+});
+
+test("Google email already used by another account, returned, thrown or in the redirect", async () => {
+  const returned = google({ linkUrl: async () => ({ url: null, error: { message: "x", code: "email_exists", status: 422 } }) });
+  assert.deepEqual(await linkGoogle(returned.d), { ok: false, cancelled: false, message: LINK_COPY.googleTaken });
+  const thrown = google({
+    exchange: async () => {
+      throw { code: "email_exists" };
+    },
+  });
+  assert.deepEqual(await linkGoogle(thrown.d), { ok: false, cancelled: false, message: LINK_COPY.googleTaken });
+  const redirect = taken("resbite://auth/callback#error=server_error&error_code=email_exists");
+  assert.deepEqual(await linkGoogle(redirect.d), { ok: false, cancelled: false, message: LINK_COPY.googleTaken });
+  assert.deepEqual(redirect.exchanged, []);
+});
