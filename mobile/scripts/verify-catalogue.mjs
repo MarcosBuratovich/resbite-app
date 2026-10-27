@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { button, card, closeToList, createFromIdea, editEvent, heading, later, quietReminders } from "./qa-helpers.mjs";
 import { mkdir, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+const shots = join(tmpdir(), "resbite-catalogue");
 
 const additions = JSON.parse(
   await readFile(
@@ -24,6 +27,8 @@ const user = {
   role: "authenticated",
   email: "catalogue@example.invalid",
   email_confirmed_at: "2026-01-01T00:00:00Z",
+  phone: "447700900834",
+  phone_confirmed_at: "2026-01-01T00:00:00Z",
   user_metadata: { registration_details_version: 1 },
   app_metadata: {},
   created_at: "2026-01-01T00:00:00Z",
@@ -108,6 +113,7 @@ async function fixture(width = 390, preview = false) {
     if (url.pathname === "/auth/v1/user") return reply(user);
     if (url.pathname === "/auth/v1/logout")
       return route.fulfill({ status: 204 });
+    if (url.pathname === "/rest/v1/rpc/note_app_session") return route.fulfill({ status: 204, body: "" });
     if (url.pathname === "/rest/v1/rpc/account_access_status")
       return reply({ account_id: user.id, status: "approved" });
     if (url.pathname === "/rest/v1/profiles")
@@ -138,7 +144,7 @@ async function fixture(width = 390, preview = false) {
   return { page, state, close: () => context.close() };
 }
 try {
-  await mkdir("/private/tmp/resbite-catalogue", { recursive: true });
+  await mkdir(shots, { recursive: true });
   for (const width of [320, 390]) {
     const f = await fixture(width);
     await f.page.goto(`${baseURL}/create`);
@@ -152,7 +158,7 @@ try {
       f.page.getByRole("button", { name: "Coffee together", exact: true }),
     ).toHaveCount(0);
     await f.page.screenshot({
-      path: `/private/tmp/resbite-catalogue/empty-${width}.png`,
+      path: `${shots}/empty-${width}.png`,
       fullPage: true,
     });
     f.state.offline = true;
@@ -206,7 +212,7 @@ try {
       )
       .toBe(true);
     await f.page.screenshot({
-      path: `/private/tmp/resbite-catalogue/detail-${width}.png`,
+      path: `${shots}/detail-${width}.png`,
       fullPage: true,
     });
     await f.page

@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { chromium, expect } from "@playwright/test";
 const browser = await chromium.launch({ channel: "chrome", headless: true });
 const base = process.env.RESBITE_QA_URL || "http://localhost:8081";
-await mkdir("/private/tmp/resbite-registration", { recursive: true });
+const shots = join(tmpdir(), "resbite-registration");
+await mkdir(shots, { recursive: true });
 try {
   for (const width of [320, 390]) {
     const page = await browser.newPage({
@@ -12,15 +15,11 @@ try {
     });
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
-    let payload = null;
+    // Nothing here talks to Supabase: a request is recorded and refused.
+    const requests = [];
     await page.route("**/*.supabase.co/**", (route) => {
-      assert.equal(new URL(route.request().url()).pathname, "/auth/v1/signup");
-      payload = route.request().postDataJSON();
-      return route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: "{}",
-      });
+      requests.push(new URL(route.request().url()).pathname);
+      return route.abort();
     });
     await page.goto(base);
     await page.getByRole("button", { name: "Get started", exact: true }).click();
@@ -31,7 +30,7 @@ try {
       page.getByRole("heading", { name: "Little plans", exact: true }),
     ).toBeVisible();
     await page.screenshot({
-      path: `/private/tmp/resbite-registration/intro-${width}.png`,
+      path: `${shots}/intro-${width}.png`,
       fullPage: true,
     });
     // Close on the first slide returns to the landing, also when the introduction was opened directly.
@@ -59,89 +58,44 @@ try {
     ).toBeVisible();
     await page.getByRole("button", { name: "Next", exact: true }).click();
     await page.getByRole("button", { name: "Next", exact: true }).click();
+    // The last slide's Create account opens sign-up by phone, with the 18+ tick still to give.
     await page
       .getByRole("button", { name: "Create account", exact: true })
       .click();
-    await page.getByRole("button", { name: "Next", exact: true }).click();
+    await expect(page).toHaveURL(/\/auth\/phone$/);
     await expect(
-      page.getByText("Use a name between 1 and 80 characters.", {
-        exact: true,
-      }),
+      page.getByRole("heading", { name: "Your number", exact: true }),
     ).toBeVisible();
-    await page.getByLabel("Your name", { exact: true }).fill("Alex Fixture");
-    await page.getByLabel("Date of birth (optional)", { exact: true }).fill("2000-02-29");
-    await page.getByRole("button", { name: "Why we ask", exact: true }).click();
+    await expect(page.getByLabel("Mobile number", { exact: true })).toHaveValue("");
     await expect(
-      page.getByText("Date of birth is optional and is not displayed on shared plans.", { exact: true }),
-    ).toBeVisible();
-    await page.getByRole("button", { name: "Close sheet", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Close sheet", exact: true })).toHaveCount(0);
+      page.getByRole("checkbox", { name: "I’m 18 or over", exact: true }),
+    ).not.toBeChecked();
+    await expect(
+      page.getByRole("button", { name: "Send code", exact: true }),
+    ).toBeDisabled();
     await page.screenshot({
-      path: `/private/tmp/resbite-registration/about-${width}.png`,
+      path: `${shots}/phone-${width}.png`,
       fullPage: true,
     });
+    // Skip opens it from any slide, and the old registration address now leads there too.
+    await page.goto(`${base}/introduction`);
     await page.getByRole("button", { name: "Next", exact: true }).click();
-    await page.getByLabel("Phone number (optional)", { exact: true }).fill("07700900123");
-    await page.getByRole("button", { name: "Next", exact: true }).click();
+    await page.getByRole("button", { name: "Skip introduction", exact: true }).click();
+    await expect(page).toHaveURL(/\/auth\/phone$/);
     await expect(
-      page.getByText(
-        "Include your country code, for example +44 7700 900123.",
-        { exact: true },
-      ),
+      page.getByRole("heading", { name: "Your number", exact: true }),
     ).toBeVisible();
-    await page.getByLabel("Phone number (optional)", { exact: true }).fill("+44 7700 900123");
-    await page.getByRole("button", { name: "Why we ask", exact: true }).click();
+    await page.goto(`${base}/auth?mode=register`);
+    await expect(page).toHaveURL(/\/auth\/phone$/);
     await expect(
-      page.getByText("Include your country code. This does not enable SMS sign-in or send invitations.", { exact: true }),
+      page.getByRole("heading", { name: "Your number", exact: true }),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Close sheet", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Close sheet", exact: true })).toHaveCount(0);
-    await page.getByLabel("City (optional)", { exact: true }).fill("London");
-    await page.getByText("Outdoors", { exact: true }).click();
-    await page.screenshot({
-      path: `/private/tmp/resbite-registration/interests-${width}.png`,
-      fullPage: true,
-    });
-    await page.getByRole("button", { name: "Next", exact: true }).click();
-    await page
-      .getByRole("button", { name: "Previous step", exact: true })
-      .click();
-    await expect(
-      page.getByRole("heading", { name: "About you", exact: true }),
-    ).toBeFocused();
-    await expect(page.getByLabel("City (optional)", { exact: true })).toHaveValue("London");
-    await page.getByRole("button", { name: "Next", exact: true }).click();
-    await page.getByLabel("Email address", { exact: true }).fill("fixture@example.invalid");
-    await page.getByLabel("Password", { exact: true }).fill("test-password-only");
-    await page
-      .getByRole("button", { name: "Show password", exact: true })
-      .click();
-    assert.equal(
-      await page.getByLabel("Password", { exact: true }).evaluate((el) => el.type),
-      "text",
-    );
-    await page
-      .getByRole("button", { name: "Create account", exact: true })
-      .click();
-    await expect(
-      page.getByRole("heading", { name: "Check your inbox", exact: true }),
-    ).toBeFocused();
-    assert.equal(payload.data.display_name, "Alex Fixture");
-    assert.deepEqual(payload.data.registration_details, {
-      birth_date: "2000-02-29",
-      phone: "+447700900123",
-      city: "London",
-      interests: ["Outdoors"],
-    });
+    assert.deepEqual(requests, []);
     assert.deepEqual(errors, []);
-    await page.screenshot({
-      path: `/private/tmp/resbite-registration/confirm-${width}.png`,
-      fullPage: true,
-    });
     await page.close();
   }
   console.log(
-    "Registration passed at 320/390: introduction navigation, validation, retained fields, interests, password visibility, confirmation and intercepted metadata payload.",
+    "Registration passed at 320/390: introduction navigation and focus, and Create account, Skip and the old register address all opening sign-up by phone with the 18+ tick unticked; no backend requests.",
   );
 } finally {
   await browser.close();

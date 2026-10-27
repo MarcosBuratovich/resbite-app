@@ -6,6 +6,8 @@
 // request is aborted.
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { chromium, expect } from "@playwright/test";
 import {
   button,
@@ -22,7 +24,7 @@ import {
   typeDate,
 } from "./qa-helpers.mjs";
 const baseURL = process.env.RESBITE_QA_URL || "http://localhost:8081";
-const shots = "/private/tmp/resbite-steps";
+const shots = join(tmpdir(), "resbite-steps");
 await mkdir(shots, { recursive: true });
 const browser = await chromium.launch({
   channel: process.env.RESBITE_QA_BROWSER || "chrome",

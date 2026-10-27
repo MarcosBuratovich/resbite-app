@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import {readFile,mkdir} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {chromium} from '@playwright/test';
 const root=new URL('../../supabase/templates/',import.meta.url);
-const output='/private/tmp/resbite-email-previews';
+const output=join(tmpdir(),'resbite-email-previews');
 await mkdir(output,{recursive:true});
 const browser=await chromium.launch({channel:process.env.RESBITE_QA_BROWSER||'chrome',headless:true});
 try {

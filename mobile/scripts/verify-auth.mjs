@@ -14,11 +14,9 @@ try {
       errors.push(message.text());
   });
   const requests = [];
-  let signup = null;
   await page.route("**/*.supabase.co/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     requests.push(path);
-    if (path === "/auth/v1/signup") signup = route.request().postDataJSON();
     await new Promise((resolve) => setTimeout(resolve, 350));
     await route.fulfill({
       status: path === "/auth/v1/token" ? 400 : 200,
@@ -37,16 +35,24 @@ try {
   await expect(
     page.getByRole("heading", { name: "Get together", exact: true }),
   ).toBeVisible();
-  // The landing's "I have an account" opens sign-in with a valid mode (it used to pass "signin").
+  // The landing's "I have an account" opens phone sign-in; email and password stay one tap away.
   await page.getByRole("button", { name: "I have an account", exact: true }).click();
-  await expect(page).toHaveURL(/\/auth\?mode=login$/);
-  await expect(page.getByRole("heading", { name: "Welcome back", exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/auth\/phone\?intent=signin$/);
+  await expect(page.getByRole("heading", { name: "Sign in", exact: true })).toBeVisible();
   // Apple is offered on iOS only (appleSignInAvailable is false off iOS): web shows Google alone.
   const noAppleChip = async () => {
     await expect(page.getByRole("button", { name: "Continue with Google", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Continue with Apple", exact: true })).toHaveCount(0);
   };
   await noAppleChip();
+  await page.getByRole("button", { name: "Use email and password", exact: true }).click();
+  await expect(page).toHaveURL(/\/auth\?mode=login$/);
+  await expect(page.getByRole("heading", { name: "Welcome back", exact: true })).toBeVisible();
+  await noAppleChip();
+  // The old sign-up address now opens sign-up by phone.
+  await page.goto(`${base}/auth?mode=register`);
+  await expect(page).toHaveURL(/\/auth\/phone$/);
+  await expect(page.getByRole("heading", { name: "Your number", exact: true })).toBeVisible();
   await page.goto(base);
   await page.getByRole("button", { name: "Get started", exact: true }).click();
   await expect(
@@ -88,41 +94,26 @@ try {
   await expect(
     page.getByRole("heading", { name: "Welcome back", exact: true }),
   ).toBeFocused();
+  // Create account starts sign-up by phone; there is no email sign-up any more.
   await page.getByRole("button", { name: "Create account", exact: true }).click();
+  await expect(page).toHaveURL(/\/auth\/phone$/);
   await expect(
-    page.getByRole("heading", { name: "Your name?", exact: true }),
-  ).toBeFocused();
-  await page.getByLabel("Your name", { exact: true }).fill("Fixture");
-  await page.getByRole("button", { name: "Next", exact: true }).click();
-  await expect(
-    page.getByRole("heading", { name: "About you", exact: true }),
-  ).toBeFocused();
-  // Skip leaves an invalid phone behind instead of blocking sign-up (decision P7).
-  await page.getByLabel("Phone number (optional)", { exact: true }).fill("0770");
-  await page.getByRole("button", { name: "Skip", exact: true }).click();
-  await expect(
-    page.getByRole("heading", { name: "Your account", exact: true }),
+    page.getByRole("heading", { name: "Your number", exact: true }),
   ).toBeVisible();
-  await noAppleChip();
-  await page.getByLabel("Email address", { exact: true }).fill("signup-fixture@example.invalid");
-  await page.getByLabel("Password", { exact: true }).fill("fixture-password");
+  await expect(page.getByRole("checkbox", { name: "I’m 18 or over", exact: true })).toBeVisible();
+  // Close returns to /auth, which restores the reset request saved above when it regains focus.
+  await page.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(page).toHaveURL(/\/auth$/);
+  await expect(
+    page.getByRole("heading", { name: "Reset password", exact: true }),
+  ).toBeVisible();
   await page
-    .getByRole("button", { name: "Create account", exact: true })
+    .getByRole("button", { name: "Back to sign in", exact: true })
     .click();
   await expect(
-    page.getByText(
-      "If this address needs confirmation, check its inbox and spam folder for a Resbite email. If you already have an account, sign in or reset your password.",
-      { exact: true },
-    ),
+    page.getByRole("heading", { name: "Welcome back", exact: true }),
   ).toBeVisible();
-  assert.equal(requests.filter((x) => x === "/auth/v1/signup").length, 1);
-  assert.deepEqual(signup.data.registration_details, {
-    birth_date: null,
-    phone: null,
-    city: null,
-    interests: [],
-  });
-  await page.getByRole("button", { name: "I have an account", exact: true }).click();
+  assert.equal(requests.filter((x) => x === "/auth/v1/signup").length, 0);
   await page.getByLabel("Password", { exact: true }).fill("fixture-password");
   // Leave while a login response is in flight; its error must not change the previous page.
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
@@ -147,6 +138,8 @@ try {
     role: "authenticated",
     email: "fixture@example.invalid",
     email_confirmed_at: "2026-01-01T00:00:00Z",
+    phone: "447700900834",
+    phone_confirmed_at: "2026-01-01T00:00:00Z",
     app_metadata: {},
     user_metadata: { registration_details_version: 1 },
     created_at: "2026-01-01T00:00:00Z",
@@ -196,7 +189,7 @@ try {
   assert.equal(updates, 1);
   assert.deepEqual(errors, []);
   console.log(
-    "Auth fixtures passed: landing mode, no Apple chip on web, registration with Skip, validation, single-flight login, heading focus, stale response, reset return, malformed callback and recovery password save; all backend requests intercepted.",
+    "Auth fixtures passed: landing to phone sign-in, email and password one tap away, no Apple chip on web, Create account and the old register address open phone sign-up, validation, single-flight login, heading focus, stale response, reset return, malformed callback and recovery password save; all backend requests intercepted.",
   );
 } finally {
   await browser.close();

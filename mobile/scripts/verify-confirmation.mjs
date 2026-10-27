@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { chromium, expect } from "@playwright/test";
 const browser = await chromium.launch({ channel: process.env.RESBITE_QA_BROWSER || "chrome", headless: true });
 const base = process.env.RESBITE_QA_URL || "http://localhost:8081";
 const pendingKey = "resbite.pending-auth-email.v1";
-await mkdir("/private/tmp/resbite-confirmation", { recursive: true });
+const shots = join(tmpdir(), "resbite-confirmation");
+await mkdir(shots, { recursive: true });
 try {
   for (const width of [320, 390]) {
     const page = await browser.newPage({ viewport: { width, height: 844 } });
@@ -27,13 +30,11 @@ try {
           : path === "/auth/v1/token" ? { code: "flow_state_expired", message: "Invalid flow state" } : {}),
       });
     });
-    await page.goto(`${base}/auth?mode=register`);
-    await page.getByLabel("Your name", { exact: true }).fill("Confirmation Fixture");
-    await page.getByRole("button", { name: "Next", exact: true }).click();
-    await page.getByRole("button", { name: "Next", exact: true }).click();
+    // Sign-up is by phone now; an existing email account still asks for its confirmation email here.
+    await page.goto(`${base}/auth?mode=confirm`);
+    await expect(page.getByRole("heading", { name: "Confirm your email", exact: true })).toBeVisible();
     await page.getByLabel("Email address", { exact: true }).fill("confirmation@example.invalid");
-    await page.getByLabel("Password", { exact: true }).fill("fixture-password");
-    await page.getByRole("button", { name: "Create account", exact: true }).dblclick();
+    await page.getByRole("button", { name: "Resend confirmation email", exact: true }).dblclick();
     await expect(page.getByRole("heading", { name: "Check your inbox", exact: true })).toBeVisible();
     await expect(page.getByText(/If this address needs confirmation/)).toBeVisible();
     assert.ok(
@@ -44,7 +45,8 @@ try {
       }),
       "The Resend chip sits below the notice",
     );
-    assert.equal(requests.filter((r) => r.path === "/auth/v1/signup").length, 1);
+    assert.equal(requests.filter((r) => r.path === "/auth/v1/resend").length, 1);
+    assert.equal(requests.filter((r) => r.path === "/auth/v1/signup").length, 0);
     await expect(page.getByRole("button", { name: "Resend confirmation email", exact: true })).toBeDisabled();
     await expect(page.getByRole("button", { name: "Resend confirmation email", exact: true })).toHaveText(/^Resend in \d+s$/);
     await page.goto(`${base}/auth`);
@@ -67,13 +69,13 @@ try {
     resendStatus = 429;
     await page.getByRole("button", { name: "Resend confirmation email", exact: true }).dblclick();
     await expect(page.getByText(/Email requests are temporarily limited/)).toBeVisible();
-    assert.equal(requests.filter((r) => r.path === "/auth/v1/resend").length, 1);
+    assert.equal(requests.filter((r) => r.path === "/auth/v1/resend").length, 2);
     const remaining = await page.evaluate((key) => JSON.parse(sessionStorage.getItem(key)).retryAt - Date.now(), pendingKey);
     assert.ok(remaining > 115_000 && remaining <= 120_000);
     await page.reload();
     await expect(page.getByRole("button", { name: "Resend confirmation email", exact: true })).toBeDisabled();
     await expect(page.getByRole("button", { name: "Resend confirmation email", exact: true })).toHaveText(/^Resend in \d+s$/);
-    await page.screenshot({ path: `/private/tmp/resbite-confirmation/confirmation-${width}.png`, fullPage: true });
+    await page.screenshot({ path: `${shots}/confirmation-${width}.png`, fullPage: true });
     await page.getByRole("button", { name: "Use a different email", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Confirm your email", exact: true })).toBeVisible();
     assert.equal(await page.evaluate((key) => sessionStorage.getItem(key), pendingKey), null);

@@ -7,7 +7,8 @@ try {
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
-  const user = { id: '11111111-1111-4111-8111-111111111111', aud: 'authenticated', role: 'authenticated', email: 'signup@example.invalid', email_confirmed_at: '2026-01-01T00:00:00Z', created_at: '2026-01-01T00:00:00Z', app_metadata: {}, user_metadata: { registration_details_version: 1 } };
+  // A confirmed phone and a name keep Add your number and About you out of a check about the email confirmation callback.
+  const user = { id: '11111111-1111-4111-8111-111111111111', aud: 'authenticated', role: 'authenticated', email: 'signup@example.invalid', email_confirmed_at: '2026-01-01T00:00:00Z', phone: '447700900834', phone_confirmed_at: '2026-01-01T00:00:00Z', created_at: '2026-01-01T00:00:00Z', app_metadata: {}, user_metadata: { registration_details_version: 1, display_name: 'Signup Fixture' } };
   let exchanges = 0, checks = 0;
   await page.route('**/*.supabase.co/**', async route => {
     const path = new URL(route.request().url()).pathname;
@@ -20,7 +21,8 @@ try {
       checks++;
       await new Promise(resolve => setTimeout(resolve, 1800));
       body = { account_id: user.id, status: 'access_pending' };
-    } else throw Error(`Unexpected backend request: ${path}`);
+    } else if (path === '/rest/v1/rpc/note_app_session') return route.fulfill({ status: 204, body: '' });
+    else throw Error(`Unexpected backend request: ${path}`);
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   });
   await page.goto(`${base}/auth?mode=confirm`);

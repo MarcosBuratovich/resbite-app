@@ -24,6 +24,8 @@ const user = {
   app_metadata: {},
   user_metadata: { registration_details_version: 1 },
   email_confirmed_at: "2026-01-01T00:00:00Z",
+  phone: "447700900834",
+  phone_confirmed_at: "2026-01-01T00:00:00Z",
   created_at: "2026-01-01T00:00:00Z",
 };
 const expiry = Math.floor(Date.now() / 1000) + 3600;
@@ -94,6 +96,7 @@ async function fixture({ signedIn = true } = {}) {
     const reply = (body, status = 200) =>
       route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
     if (path === "/auth/v1/user") return signedIn ? reply(user) : reply({ message: "No session" }, 401);
+    if (path === "/rest/v1/rpc/note_app_session") return route.fulfill({ status: 204, body: "" });
     if (path === "/rest/v1/rpc/account_access_status") return reply({ account_id: user.id, status: "approved" });
     if (path === "/rest/v1/profiles")
       return reply({ id: user.id, display_name: url.searchParams.get("id") === `eq.${invited.owner_id}` ? "Stephen" : "Fixture", avatar_path: null, avatar_revision: 0 });
@@ -138,6 +141,7 @@ async function guestFixture({ metadata = {}, signedIn = false, kept = null, tick
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await quietReminders(page);
+  // The guest keeps the fixture's confirmed phone: without one, Add your number (verify-phone) comes before any join.
   let guest = {
     ...user,
     id: "66666666-6666-4666-8666-666666666666",
@@ -197,6 +201,7 @@ async function guestFixture({ metadata = {}, signedIn = false, kept = null, tick
       return reply(sessionFor(guest));
     }
     if (path === "/auth/v1/user") return signed ? reply(guest) : reply({ message: "No session" }, 401);
+    if (path === "/rest/v1/rpc/note_app_session") return route.fulfill({ status: 204, body: "" });
     if (path === "/rest/v1/rpc/account_access_status")
       return reply({ account_id: guest.id, status: joined ? "approved" : "access_pending" });
     if (path === "/rest/v1/rpc/join_by_link") {

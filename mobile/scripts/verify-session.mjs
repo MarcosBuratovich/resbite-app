@@ -13,6 +13,8 @@ const user = {
   app_metadata: {},
   user_metadata: { registration_details_version: 1 },
   email_confirmed_at: "2026-01-01T00:00:00Z",
+  phone: "447700900834",
+  phone_confirmed_at: "2026-01-01T00:00:00Z",
   created_at: "2026-01-01T00:00:00Z",
 };
 const expires_at = Math.floor(Date.now() / 1000) + 3600;
@@ -64,6 +66,7 @@ try {
         body: JSON.stringify(body),
       });
     if (path === "/auth/v1/user") return reply(user);
+    if (path === "/rest/v1/rpc/note_app_session") return route.fulfill({ status: 204, body: "" });
     if (path === "/rest/v1/rpc/account_access_status") return reply({ account_id: user.id, status: "approved" });
     if (path === "/rest/v1/profiles")
       return reply({ id: user.id, display_name: "Fixture", photo_path: null });

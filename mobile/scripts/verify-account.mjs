@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { chromium, expect } from "@playwright/test";
 const browser = await chromium.launch({ channel: "chrome", headless: true });
 const base = process.env.RESBITE_QA_URL || "http://localhost:8081";
-await mkdir("/private/tmp/resbite-account", { recursive: true });
+const shots = join(tmpdir(), "resbite-account");
+await mkdir(shots, { recursive: true });
 async function fixture(
   width,
   access = "approved",
@@ -18,6 +21,9 @@ async function fixture(
     user_metadata: metadata,
     created_at: "2026-01-01T00:00:00Z",
     email_confirmed_at: "2026-01-01T00:00:00Z",
+    // A confirmed phone keeps these accounts past Add your number (verify-phone covers the gate).
+    phone: "447700900834",
+    phone_confirmed_at: "2026-01-01T00:00:00Z",
   };
   const expires_at = Math.floor(Date.now() / 1000) + 3600;
   const token = [
@@ -74,6 +80,8 @@ async function fixture(
         body: JSON.stringify(value),
       });
     if (path === "/auth/v1/user") return reply(user);
+    if (path === "/rest/v1/rpc/note_app_session")
+      return route.fulfill({ status: 204, body: "" });
     if (path === "/rest/v1/rpc/account_access_status")
       return reply(
         failAccess
@@ -147,9 +155,20 @@ try {
   for (const width of [320, 390]) {
     const f = await fixture(width),
       { page } = f;
+    // No details step on the way in any more (CI-P11): an approved account without a profile goes to Profile,
+    // its name taken from the account.
     await page.goto(`${base}/account`);
     await expect(
-      page.getByRole("heading", { name: "About you", exact: true }),
+      page.getByRole("heading", { name: "Profile", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByLabel("What should we call you?", { exact: true }),
+    ).toHaveValue("Google Fixture");
+    assert.equal(f.writes.length, 0);
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await page.getByText("Account details", { exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "Account details", exact: true }),
     ).toBeVisible();
     await page
       .getByRole("button", { name: "About these details", exact: true })
@@ -170,22 +189,28 @@ try {
     await page.getByLabel("City (optional)", { exact: true }).fill("London");
     await page.getByText("Outdoors", { exact: true }).click();
     await page.screenshot({
-      path: `/private/tmp/resbite-account/details-${width}.png`,
+      path: `${shots}/details-${width}.png`,
       fullPage: true,
     });
+    // The reply is lost after the write lands: the re-read confirms it.
     f.loseReply();
     await page
       .getByRole("button", { name: "Save", exact: true })
       .click();
     await expect(
-      page.getByRole("heading", { name: "Profile", exact: true }),
+      page.getByText("Account details saved.", { exact: true }),
     ).toBeVisible();
-    await expect(
-      page.getByLabel("What should we call you?", { exact: true }),
-    ).toHaveValue("Google Fixture");
     assert.equal(f.writes.length, 1);
-    await page.getByRole("button", { name: "Save", exact: true }).click();
-    await page.getByText("Account details", { exact: true }).click();
+    assert.deepEqual(f.writes[0], {
+      birth_date: "2000-02-29",
+      phone: "+447700900123",
+      city: "London",
+      interests: ["Outdoors"],
+    });
+    await page.reload();
+    await expect(
+      page.getByRole("heading", { name: "Account details", exact: true }),
+    ).toBeVisible();
     await expect(
       page.getByLabel("City (optional)", { exact: true }),
     ).toHaveValue("London");
@@ -229,7 +254,7 @@ try {
     invitation,
   );
   await page.screenshot({
-    path: "/private/tmp/resbite-account/access-pending.png",
+    path: `${shots}/access-pending.png`,
     fullPage: true,
   });
   f.failAccess(true);
@@ -242,13 +267,10 @@ try {
   assert.equal(f.claims(), 0);
   f.failAccess(false);
   f.access("approved");
+  // Approved with a phone and a profile: straight on to the kept invitation, with no details step between.
   await page
     .getByRole("button", { name: "Check again", exact: true })
     .click();
-  await expect(
-    page.getByRole("heading", { name: "About you", exact: true }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Skip", exact: true }).click();
   // The claim lands on the invitation (GI1: not answered yet, so the exact place waits for a reply).
   await expect(page.getByRole("heading", { name: "Coffee evening", exact: true })).toBeVisible();
   await expect(page.getByText("Exact address after you reply", { exact: true })).toBeVisible();
@@ -297,7 +319,7 @@ try {
   assert.deepEqual(restored.errors, []);
   await restored.page.close();
   console.log(
-    "Account onboarding/edit/removal/lost-reply checks passed at 320/390px; pending access, retry, skip and invitation preservation passed. All backend requests intercepted.",
+    "Account checks passed at 320/390px: Profile first with the account's name and no details step, details edit/removal/lost reply; pending access, retry and invitation preservation through approval. All backend requests intercepted.",
   );
 } finally {
   await browser.close();

@@ -3,9 +3,11 @@
 // Preview chip. Every Supabase request is aborted.
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { chromium, expect } from "@playwright/test";
 const base = process.env.RESBITE_QA_URL || "http://localhost:8081";
-const out = "/private/tmp/resbite-kit";
+const out = join(tmpdir(), "resbite-kit");
 await mkdir(out, { recursive: true });
 const browser = await chromium.launch({
   channel: process.env.RESBITE_QA_BROWSER || "chrome",

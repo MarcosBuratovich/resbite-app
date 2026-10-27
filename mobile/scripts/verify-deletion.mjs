@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { chromium, expect } from "@playwright/test";
 const base = process.env.RESBITE_QA_URL || "http://localhost:8081";
 const enabled = process.env.RESBITE_QA_DELETION_ENABLED === "true";
@@ -86,7 +88,7 @@ try {
     "Preview must not request backend data or send OTP/deletion calls",
   );
   await page.screenshot({
-    path: "/private/tmp/resbite-deletion-preview.png",
+    path: join(tmpdir(), "resbite-deletion-preview.png"),
     fullPage: true,
   });
   if (!enabled) {
@@ -104,6 +106,8 @@ try {
       role: "authenticated",
       email: "fixture@example.invalid",
       email_confirmed_at: "2026-01-01T00:00:00Z",
+      phone: "447700900834",
+      phone_confirmed_at: "2026-01-01T00:00:00Z",
       app_metadata: { providers: ["email"] },
       user_metadata: { registration_details_version: 1 },
       created_at: "2026-01-01T00:00:00Z",
@@ -172,6 +176,7 @@ try {
           body: JSON.stringify(body),
         });
       if (path === "/auth/v1/user") return reply(current);
+      if (path === "/rest/v1/rpc/note_app_session") return route.fulfill({ status: 204, body: "" });
       if (path === "/rest/v1/rpc/account_access_status")
         return reply({ account_id: current.id, status: "approved" });
       if (path === "/rest/v1/profiles")

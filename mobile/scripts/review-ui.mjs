@@ -1,13 +1,16 @@
 // Captures every UX1, UX3 and UX4 screen at 390 and 320 px (UX3 and UX4 also with Larger Text at 320 px) with no console or page errors,
-// and keeps the gluestack keyboard-selection check. Every Supabase request is aborted, except in the GI1 and GI2 blocks at the end,
-// where requests are answered by a local stub: a signed-in organizer's link screen and Guests sheet with Remove (GI1), and a
-// signed-out guest's account screen, its Code and Name steps and a dead link (GI2).
+// and keeps the gluestack keyboard-selection check. Every Supabase request is aborted, except in the GI1, GI2 and phone blocks at the
+// end, where requests are answered by a local stub: a signed-in organizer's link screen and Guests sheet with Remove (GI1), a
+// signed-out guest's account screen, its Code and Name steps and a dead link (GI2), and phone sign-up, its code, phone sign-in,
+// About you and Add your number with its "taken" refusal.
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { button, heading, later, next, openEvent, quietReminders } from "./qa-helpers.mjs";
 const base = process.env.RESBITE_QA_URL || "http://localhost:8081";
-const out = process.env.RESBITE_QA_SHOTS || "/private/tmp/resbite-ui-audit";
+const out = process.env.RESBITE_QA_SHOTS || join(tmpdir(), "resbite-ui-audit");
 await mkdir(out, { recursive: true });
 async function addPerson(page, name, address) {
   await page.getByLabel("Person’s name", { exact: true }).fill(name);
@@ -165,8 +168,8 @@ try {
     await page.close();
   }
   // UX4 public screens at 390 and 320 px and with Larger Text at 320 px: landing, introduction,
-  // sign-in, the sign-up steps, reset, confirm and the email-link page. Supabase requests are
-  // aborted, so the browser's "Failed to load resource" lines are expected on these screens.
+  // email sign-in, reset, confirm and the email-link page (sign-up by phone is captured in the phone block).
+  // Supabase requests are aborted, so the browser's "Failed to load resource" lines are expected on these screens.
   for (const [width, large] of [[390, false], [320, false], [320, true]]) {
     const page = await browser.newPage({ viewport: { width, height: 844 }, reducedMotion: "reduce" });
     const errors = [];
@@ -204,14 +207,6 @@ try {
     await visit("intro", "Little plans");
     await button(page, "I have an account").click();
     await visit("sign-in", "Welcome back");
-    await button(page, "Create account").click();
-    await visit("sign-up-name", "Your name?");
-    await page.getByLabel("Your name", { exact: true }).fill("Alex");
-    await button(page, "Next").click();
-    await visit("sign-up-about", "About you");
-    await button(page, "Skip").click();
-    await visit("sign-up-account", "Your account");
-    await button(page, "I have an account").click();
     await button(page, "Forgot password?").click();
     await visit("reset", "Reset password");
     await button(page, "Back to sign in").click();
@@ -382,7 +377,7 @@ try {
       await page.waitForTimeout(500);
       return page.screenshot({ path: `${out}/${name}-${suffix}.png`, fullPage });
     };
-    const user = { id: "11111111-1111-4111-8111-111111111111", aud: "authenticated", role: "authenticated", email: "fixture@example.invalid", email_confirmed_at: "2026-01-01T00:00:00Z", app_metadata: {}, user_metadata: { registration_details_version: 1 }, created_at: "2026-01-01T00:00:00Z" };
+    const user = { id: "11111111-1111-4111-8111-111111111111", aud: "authenticated", role: "authenticated", email: "fixture@example.invalid", email_confirmed_at: "2026-01-01T00:00:00Z", phone: "447700900834", phone_confirmed_at: "2026-01-01T00:00:00Z", app_metadata: {}, user_metadata: { registration_details_version: 1 }, created_at: "2026-01-01T00:00:00Z" };
     const expiry = Math.floor(Date.now() / 1000) + 3600;
     const jwt = [
       Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url"),
@@ -425,6 +420,7 @@ try {
       const reply = (body, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
       if (path === "/auth/v1/user") return reply(user);
       if (path === "/rest/v1/rpc/account_access_status") return reply({ account_id: user.id, status: "approved" });
+      if (path === "/rest/v1/rpc/note_app_session") return route.fulfill({ status: 204, body: "" });
       if (path === "/rest/v1/profiles") return reply({ id: user.id, display_name: "Stephen", avatar_path: null, avatar_revision: 0 });
       if (path === "/rest/v1/activities") return reply([]);
       if (path === "/rest/v1/plans") return reply(one ? { ...plan, plan_meeting_details: null } : [{ ...plan, plan_meeting_details: null }]);
@@ -490,7 +486,8 @@ try {
         await page.screenshot({ path: `${out}/${name}-${suffix}-end.png` });
       }
     };
-    const user = { id: "66666666-6666-4666-8666-666666666666", aud: "authenticated", role: "authenticated", email: "guest@example.invalid", email_confirmed_at: "2026-01-01T00:00:00Z", app_metadata: {}, user_metadata: {}, created_at: "2026-01-01T00:00:00Z" };
+    // A confirmed phone: the Name step follows the code (without one, Add your number would, as verify-phone checks).
+    const user = { id: "66666666-6666-4666-8666-666666666666", aud: "authenticated", role: "authenticated", email: "guest@example.invalid", email_confirmed_at: "2026-01-01T00:00:00Z", phone: "447700900835", phone_confirmed_at: "2026-01-01T00:00:00Z", app_metadata: {}, user_metadata: {}, created_at: "2026-01-01T00:00:00Z" };
     const expiry = Math.floor(Date.now() / 1000) + 3600;
     const jwt = [
       Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url"),
@@ -516,6 +513,7 @@ try {
       }
       if (path === "/auth/v1/user") return signedIn ? reply(user) : reply({ message: "No session" }, 401);
       if (path === "/rest/v1/rpc/account_access_status") return reply({ account_id: user.id, status: "access_pending" });
+      if (path === "/rest/v1/rpc/note_app_session") return route.fulfill({ status: 204, body: "" });
       return reply({ message: `Unexpected ${path}` }, 400);
     });
     const open = async (path) => {
@@ -561,8 +559,130 @@ try {
     if (errors.length) throw Error(errors.join("\n"));
     await dead.close();
   }
+  // Phone accounts against a local stub, at 390 and 320 px and under Larger Text at 320 px, with nothing wider than the
+  // screen: sign-up's number step with the 18+ tick and its code step, phone sign-in, About you, and Add your number
+  // with its "taken" refusal. Stored phones are digits-only, as in auth.users.
+  for (const [width, large] of [[390, false], [320, false], [320, true]]) {
+    const suffix = large ? "large-320" : String(width);
+    const errors = [];
+    const taken = "+447700900111";
+    /** A page signed in as `user` (or signed out), its Supabase requests answered here. */
+    const phonePage = async (user = null, status = "access_pending") => {
+      // en-GB: the number field reads local numbers as GB, as on a GB phone.
+      const context = await browser.newContext({ viewport: { width, height: 844 }, reducedMotion: "reduce", locale: "en-GB", timezoneId: "Europe/London" });
+      const page = await context.newPage();
+      page.on("pageerror", (e) => errors.push(e.message));
+      page.on("console", (m) => {
+        // The taken number's 422 is the refusal under capture.
+        if (m.type() === "error" && !/Failed to load resource: the server responded with a status of 422/.test(m.text())) errors.push(m.text());
+      });
+      if (user) {
+        const expiry = Math.floor(Date.now() / 1000) + 3600;
+        const jwt = [
+          Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url"),
+          Buffer.from(JSON.stringify({ sub: user.id, exp: expiry, role: "authenticated" })).toString("base64url"),
+          "local-fixture-only",
+        ].join(".");
+        const session = { access_token: jwt, refresh_token: "local-fixture", token_type: "bearer", expires_at: expiry, expires_in: 3600, user };
+        await page.addInitScript((session) => sessionStorage.setItem("sb-ewcsgvhuojxdpaspwsrx-auth-token", JSON.stringify(session)), session);
+      }
+      await page.route("**/*.supabase.co/**", (route) => {
+        const req = route.request();
+        const path = new URL(req.url()).pathname;
+        const reply = (body, code = 200) => route.fulfill({ status: code, contentType: "application/json", body: JSON.stringify(body) });
+        if (path === "/auth/v1/otp") return reply({});
+        if (path === "/auth/v1/user" && user && req.method() === "GET") return reply(user);
+        if (path === "/auth/v1/user" && user && req.method() === "PUT")
+          return req.postDataJSON().phone === taken
+            ? reply({ code: 422, error_code: "phone_exists", msg: "A user with this phone number has already been registered" }, 422)
+            : reply({ ...user, new_phone: req.postDataJSON().phone.slice(1) });
+        if (path === "/rest/v1/rpc/account_access_status" && user) return reply({ account_id: user.id, status });
+        if (path === "/rest/v1/rpc/note_app_session") return route.fulfill({ status: 204, body: "" });
+        if (path === "/rest/v1/profiles") return reply({ id: user.id, display_name: "Stephen", avatar_path: null, avatar_revision: 0 });
+        errors.push(`Unexpected ${req.method()} ${path}`);
+        return reply({ message: `Unexpected ${path}` }, 400);
+      });
+      return page;
+    };
+    const fits = (page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+    const clipped = (page) =>
+      page.evaluate(() =>
+        [...document.querySelectorAll("[role=button],[role=checkbox],[role=heading],h1,h2,h3,input,textarea")]
+          .filter((el) => !el.closest("[aria-hidden=true]") && el.getBoundingClientRect().width > 0)
+          .filter((el) => {
+            const b = el.getBoundingClientRect();
+            return b.left < -1 || b.right > window.innerWidth + 1;
+          })
+          .map((el) => (el.getAttribute("role") || el.tagName.toLowerCase()) + " " + (el.getAttribute("aria-label") || el.textContent.trim().slice(0, 40))),
+      );
+    const open = async (page, path) => {
+      await page.goto(`${base}${path}${large ? `${path.includes("?") ? "&" : "?"}largeText=1` : ""}`);
+      if (large) await page.addStyleTag({ content: '[dir="auto"] { zoom: 1.4; }' });
+    };
+    const visit = async (page, name, title) => {
+      await expect(heading(page, title)).toBeVisible();
+      assert.ok(await fits(page), `${name} fits at ${suffix}`);
+      assert.deepEqual(await clipped(page), [], `${name} has nothing clipped at ${suffix}`);
+      await page.waitForTimeout(500);
+      await page.screenshot({ path: `${out}/${name}-${suffix}.png`, fullPage: true });
+      // Larger Text moves the footer into the scroll: capture its end too.
+      if (large) {
+        await page.mouse.move(width / 2, 400);
+        await page.mouse.wheel(0, 3000);
+        await page.waitForTimeout(300);
+        await page.screenshot({ path: `${out}/${name}-${suffix}-end.png` });
+      }
+    };
+    // Sign-up: the number with the tick given, then the code step. Sign-in has no tick.
+    const signedOut = await phonePage();
+    await open(signedOut, "/auth/phone");
+    await signedOut.getByLabel("Mobile number", { exact: true }).fill("07700 900834");
+    await signedOut.getByRole("checkbox", { name: "I’m 18 or over", exact: true }).click();
+    await expect(button(signedOut, "Send code")).toBeEnabled();
+    await visit(signedOut, "phone-signup", "Your number");
+    await button(signedOut, "Send code").click();
+    await expect(signedOut.getByText("We sent a 6-digit code to +44 7700 900834.", { exact: true })).toBeVisible();
+    await visit(signedOut, "phone-code", "Enter the code");
+    await open(signedOut, "/auth/phone?intent=signin");
+    await expect(signedOut.getByRole("checkbox")).toHaveCount(0);
+    await visit(signedOut, "phone-signin", "Sign in");
+    await signedOut.context().close();
+    // About you: a verified number and no name yet.
+    const nameless = await phonePage({
+      id: "77777777-7777-4777-8777-777777777777", aud: "authenticated", role: "authenticated", email: "",
+      phone: "447700900834", phone_confirmed_at: "2026-10-27T09:00:00Z",
+      app_metadata: { provider: "phone", providers: ["phone"] }, user_metadata: {}, created_at: "2026-10-27T09:00:00Z",
+    });
+    await open(nameless, "/");
+    await visit(nameless, "about-you", "About you");
+    await nameless.context().close();
+    // Add your number: an approved email account without a phone, then a number another account holds.
+    const phoneless = await phonePage(
+      {
+        id: "88888888-8888-4888-8888-888888888888", aud: "authenticated", role: "authenticated", email: "stephen@example.invalid",
+        email_confirmed_at: "2026-01-01T00:00:00Z", app_metadata: { provider: "email", providers: ["email"] },
+        user_metadata: { display_name: "Stephen" }, created_at: "2026-01-01T00:00:00Z",
+      },
+      "approved",
+    );
+    await open(phoneless, "/");
+    await visit(phoneless, "add-phone", "Add your number");
+    await phoneless.getByLabel("Mobile number", { exact: true }).fill("07700 900111");
+    await button(phoneless, "Send code").click();
+    await expect(
+      phoneless.getByText(
+        "This number already belongs to another Resbite account. Use a different number, or sign out and sign in with that number.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await expect(button(phoneless, "Change number")).toBeVisible();
+    await expect(button(phoneless, "Sign out")).toBeVisible();
+    await visit(phoneless, "add-phone-taken", "Add your number");
+    await phoneless.context().close();
+    if (errors.length) throw Error(errors.join("\n"));
+  }
   console.log(
-    "PASS: every UX1, UX3 and UX4 screen at 390/320 px, UX3 and UX4 under Larger Text at 320 px, GI1 Invite people, the Where step with an Area and the Guests sheet with Remove (390/320 and Larger Text at 320 px), GI2's guest account screen unticked and ticked, its Code and Name steps and a dead link (390/320 and Larger Text at 320 px, nothing wider than the screen), gluestack keyboard selection, no console/page errors. Screenshots: " + out,
+    "PASS: every UX1, UX3 and UX4 screen at 390/320 px, UX3 and UX4 under Larger Text at 320 px, GI1 Invite people, the Where step with an Area and the Guests sheet with Remove (390/320 and Larger Text at 320 px), GI2's guest account screen unticked and ticked, its Code and Name steps and a dead link, and phone sign-up (number with the tick, code), phone sign-in, About you and Add your number with its taken-number refusal (390/320 and Larger Text at 320 px, nothing wider than the screen or clipped), gluestack keyboard selection, no console/page errors. Screenshots: " + out,
   );
 } finally {
   await browser.close();
