@@ -18,69 +18,93 @@ export function isPlanUpdateTap(response: TapResponse | null): boolean {
 
 /**
  * Routes push taps. A tap is held until the session and account have settled (`ready`), dropped when signed
- * out or in preview, and otherwise resolved by an authorized refetch before navigating. The launch tap is
- * taken at most once. Reminder taps are not handled here.
+ * out or in preview, and otherwise resolved by an authorized refetch before navigating. A newer tap
+ * supersedes an older one still in flight. A tap from an account that isn't approved yet refreshes the
+ * account once; it is never held longer than `holdMs` and then goes to /account. The launch tap is taken at
+ * most once. Reminder taps are not handled here.
  */
 export function createPushTapRouter(deps: {
   context(): TapContext;
   readAuthorizedPlan(account: string, plan: string): Promise<{ id: string } | null>;
-  /** Re-reads the account (fire and forget). The context goes not-ready while it runs, then settles. */
-  refreshAccount(): void;
+  /** Re-reads the account once: true when it is now approved, false when not, null when superseded or failed. */
+  refreshAccount(): Promise<boolean | null>;
   open(destination: TapDestination): void;
+  /** How long a tap may wait for an unapproved account to settle. */
+  holdMs?: number;
 }) {
+  const holdMs = deps.holdMs ?? 10_000;
   let pending: unknown;
   let has = false;
   let launched = false;
-  let running = false;
-  let refreshed = false;
+  let generation = 0;
+  let phase: "idle" | "refreshing" | "waiting" = "idle";
+  let forced = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const finish = () => {
+    has = false;
+    pending = undefined;
+    phase = "idle";
+    forced = false;
+    if (timer) clearTimeout(timer);
+    timer = undefined;
+  };
+  const toAccount = () => {
+    finish();
+    deps.open({ pathname: "/account" });
+  };
   async function flush(): Promise<void> {
-    if (!has || running) return;
+    if (!has) return;
     const start = { ...deps.context() };
     if (!start.ready) return;
-    if (!start.account || start.preview) {
-      has = false;
-      pending = undefined;
-      refreshed = false;
-      return;
-    }
-    if (!start.approved) {
-      // Perhaps approved while the app sat in the background: refresh once and wait for it to settle.
-      if (!refreshed) {
-        refreshed = true;
-        deps.refreshAccount();
-        return;
+    if (!start.account || start.preview) return finish();
+    const mine = generation;
+    if (!start.approved && !forced) {
+      if (phase === "waiting") return toAccount();
+      if (phase === "idle") {
+        phase = "refreshing";
+        timer = setTimeout(() => {
+          if (generation === mine && has) toAccount();
+        }, holdMs);
+        void deps.refreshAccount().then(
+          (approved) => {
+            if (generation !== mine || !has) return;
+            phase = "waiting";
+            if (approved === true) forced = true;
+            else if (approved === false) return toAccount();
+            void flush();
+          },
+          () => {
+            if (generation !== mine || !has) return;
+            phase = "waiting";
+            void flush();
+          },
+        );
       }
-      has = false;
-      pending = undefined;
-      refreshed = false;
-      deps.open({ pathname: "/account" });
       return;
     }
     const data = pending;
-    has = false;
-    pending = undefined;
-    refreshed = false;
-    running = true;
+    finish();
     try {
       const result = await resolveNotificationTarget(data, {
         account: start.account,
         preview: start.preview,
         assertCurrent() {
+          // Keyed on the signed-in user, not on approval, so a refresh mid-resolve doesn't drop the tap.
           const now = deps.context();
-          if (now.account !== start.account || now.preview) throw Error("Account changed.");
+          if (generation !== mine || now.account !== start.account || now.preview) throw Error("Superseded.");
         },
         readAuthorizedPlan: deps.readAuthorizedPlan,
       });
-      deps.open(pushDestination(result));
+      if (generation === mine) deps.open(pushDestination(result));
     } catch {
-      // The account changed while checking; the tap is dropped.
-    } finally {
-      running = false;
+      // Superseded by a newer tap, or the account changed while checking; the tap is dropped.
     }
   }
-  return {
+  const taps = {
     receive(response: TapResponse | null): boolean {
       if (!isPlanUpdateTap(response)) return false;
+      generation++;
+      finish();
       pending = response!.notification.request.content.data;
       has = true;
       void flush();
@@ -93,8 +117,9 @@ export function createPushTapRouter(deps: {
       const response = read();
       if (!isPlanUpdateTap(response)) return false;
       clear();
-      return this.receive(response);
+      return taps.receive(response);
     },
     flush,
   };
+  return taps;
 }

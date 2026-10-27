@@ -248,10 +248,17 @@ export default function Plans() {
   const noticeId = typeof notice === "string" ? notice : undefined;
   const pathname = usePathname();
   const [toastNotice, setToastNotice] = useState<string>();
+  const [gone, setGone] = useState(false);
   useEffect(() => {
     // Leaving /plans ends the toast; a notice id is shown at most once.
-    if (pathname !== "/plans") setToastNotice(undefined);
-    else if (noticeId && (noticeId === "gone" || noticeId !== shownNotice)) {
+    if (pathname !== "/plans") {
+      setToastNotice(undefined);
+      setGone(false);
+    } else if (noticeId === "gone") {
+      // A tapped notification's note: shown here, then the param is cleared so Back never brings it again.
+      setGone(true);
+      router.setParams({ notice: undefined });
+    } else if (noticeId && noticeId !== shownNotice) {
       shownNotice = noticeId;
       setToastNotice(noticeId);
     }
@@ -259,15 +266,13 @@ export default function Plans() {
   const toast =
     !noticeId || toastNotice !== noticeId
       ? null
-      : noticeId === "gone"
-        ? null
-        : created === "1"
+      : created === "1"
         ? preview
           ? "Preview saved"
           : "Resbite saved"
         : null;
   // A tapped notification for an event that can't be read any more (usePushRouting).
-  const goneNote = noticeId === "gone" && toastNotice === "gone" ? INVITE_COPY.goneNotice : null;
+  const goneNote = gone ? INVITE_COPY.goneNotice : null;
   return (
     <SafeAreaView edges={["top", "left", "right"]} style={s.page}>
       <ScrollView

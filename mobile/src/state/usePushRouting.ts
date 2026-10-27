@@ -4,10 +4,11 @@ import { router, useRootNavigationState } from "expo-router";
 import { useApp } from "./AppState";
 import { useAccount } from "./AccountState";
 import { supabase } from "../services/supabase";
+import { phoneVerified } from "../domain/phone";
 import { withDeadline } from "../services/plans";
 import { createPushTapRouter, type TapContext } from "../services/pushTaps";
 
-/** Reads the plan as the signed-in person; an error or an empty read is null ("gone"). */
+/** Reads the plan with the signed-in client (as that person); an error or an empty read is null ("gone"). */
 async function readAuthorizedPlan(_account: string, plan: string): Promise<{ id: string } | null> {
   try {
     const { data, error } = await withDeadline((signal) =>
@@ -32,9 +33,8 @@ export function usePushRouting(ready: boolean) {
     ready && !restoring && !signingOut && Boolean(navigation?.key) &&
     (!session || preview || account.status !== "checking");
   const approved = account.status === "approved" && account.reviewed;
-  const refreshAccount = account.refresh;
-  const refreshRef = useRef(refreshAccount);
-  refreshRef.current = refreshAccount;
+  const accountRef = useRef(account);
+  accountRef.current = account;
   const context = useRef<TapContext>({ ready: false, account: null, approved: false, preview: false });
   context.current = {
     ready: settled,
@@ -46,7 +46,10 @@ export function usePushRouting(ready: boolean) {
   tapRouter.current ??= createPushTapRouter({
     context: () => context.current,
     readAuthorizedPlan,
-    refreshAccount: () => void refreshRef.current(),
+    refreshAccount: async () => {
+      const user = await accountRef.current.refresh();
+      return user ? accountRef.current.latestStatus() === "approved" && phoneVerified(user) : null;
+    },
     open: (destination) => router.push(destination),
   });
   useEffect(() => {

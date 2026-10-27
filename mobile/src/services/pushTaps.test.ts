@@ -10,7 +10,7 @@ const push = (data: Record<string, unknown> = { type: "plan_update", planId: PLA
 const reminder: TapResponse = {
   notification: { request: { identifier: "resbite-reminder:p1:1h", content: { data: { planId: PLAN } } } },
 };
-function setup(initial: Partial<TapContext> = {}, readable = true, onRefresh: (c: TapContext) => void = () => {}) {
+function setup(initial: Partial<TapContext> = {}, readable = true, onRefresh: (c: TapContext) => boolean | null = () => null, holdMs = 10_000) {
   const context: TapContext = { ready: true, account: "u1", approved: true, preview: false, ...initial };
   const opened: TapDestination[] = [];
   let refreshes = 0;
@@ -21,10 +21,11 @@ function setup(initial: Partial<TapContext> = {}, readable = true, onRefresh: (c
       reads.push(plan);
       return readable ? { id: plan } : null;
     },
-    refreshAccount: () => {
+    refreshAccount: async () => {
       refreshes++;
-      onRefresh(context);
+      return onRefresh(context);
     },
+    holdMs,
     open: (d) => void opened.push(d),
   });
   return { context, opened, reads, router, refreshes: () => refreshes };
@@ -95,7 +96,7 @@ test("a launch reminder is left for the reminder path", () => {
   assert.equal(t.router.launch(() => reminder, () => void cleared++), false);
   assert.equal(cleared, 0);
 });
-test("an account change while checking drops the tap", async () => {
+test("a tap whose account changes while it is being resolved is dropped", async () => {
   const t = setup();
   const router = createPushTapRouter({
     context: () => t.context,
@@ -103,7 +104,7 @@ test("an account change while checking drops the tap", async () => {
       t.context.account = "u2";
       return { id: plan };
     },
-    refreshAccount: () => {},
+    refreshAccount: async () => null,
     open: (d) => void t.opened.push(d),
   });
   router.receive(push());
@@ -111,33 +112,70 @@ test("an account change while checking drops the tap", async () => {
   assert.deepEqual(t.opened, []);
 });
 
-test("a pending account that turns approved after one refresh opens the event", async () => {
-  let t!: ReturnType<typeof setup>;
-  t = setup({ approved: false }, true, (c) => {
-    c.ready = false;
-  });
-  t.router.receive(push());
-  await settle();
-  assert.equal(t.refreshes(), 1);
-  assert.deepEqual(t.opened, []);
-  t.context.ready = true;
-  t.context.approved = true;
-  await t.router.flush();
-  assert.deepEqual(t.opened, [{ pathname: "/event", params: { plan: PLAN } }]);
-  assert.equal(t.refreshes(), 1);
-});
-test("an account that stays pending goes to /account, refreshing only once", async () => {
+test("a pending account that refreshes to approved opens the event", async () => {
   const t = setup({ approved: false }, true, (c) => {
-    c.ready = false;
+    c.approved = true;
+    return true;
   });
   t.router.receive(push());
   await settle();
-  t.context.ready = false;
-  await t.router.flush();
-  t.context.ready = true;
-  await t.router.flush();
+  assert.equal(t.refreshes(), 1);
+  assert.deepEqual(t.opened, [{ pathname: "/event", params: { plan: PLAN } }]);
+});
+test("an account that refreshes to still pending goes to /account, refreshing once", async () => {
+  const t = setup({ approved: false }, true, () => false);
+  t.router.receive(push());
+  await settle();
   await t.router.flush();
   assert.deepEqual(t.opened, [{ pathname: "/account" }]);
   assert.equal(t.refreshes(), 1);
   assert.deepEqual(t.reads, []);
+});
+test("a refresh that changes nothing still lands the tap on /account", async () => {
+  const t = setup({ approved: false }, true, () => null);
+  t.router.receive(push());
+  await settle();
+  assert.deepEqual(t.opened, [{ pathname: "/account" }]);
+  assert.equal(t.refreshes(), 1);
+});
+test("a refresh superseded while the context settles later decides on the settled status", async () => {
+  const t = setup({ approved: false }, true, (c) => {
+    c.ready = false;
+    return null;
+  });
+  t.router.receive(push());
+  await settle();
+  assert.deepEqual(t.opened, []);
+  t.context.ready = true;
+  t.context.approved = true;
+  await t.router.flush();
+  await settle();
+  assert.deepEqual(t.opened, [{ pathname: "/event", params: { plan: PLAN } }]);
+});
+test("a tap held on an account that never settles goes to /account within the cap", async () => {
+  const t = setup({ approved: false }, true, (c) => {
+    c.ready = false;
+    return null;
+  }, 20);
+  t.router.receive(push());
+  await new Promise((r) => setTimeout(r, 60));
+  assert.deepEqual(t.opened, [{ pathname: "/account" }]);
+});
+test("a newer tap supersedes one still being resolved, and nothing fires later", async () => {
+  const OTHER = "223e4567-e89b-42d3-a456-426614174000";
+  const opened: TapDestination[] = [];
+  const release: Array<() => void> = [];
+  const router = createPushTapRouter({
+    context: () => ({ ready: true, account: "u1", approved: true, preview: false }),
+    readAuthorizedPlan: (_a, plan) => new Promise((r) => release.push(() => r({ id: plan }))),
+    refreshAccount: async () => null,
+    open: (d) => void opened.push(d),
+  });
+  router.receive(push());
+  router.receive(push({ type: "plan_update", planId: OTHER, notificationId: "8" }));
+  await settle();
+  release.forEach((r) => r());
+  await settle();
+  await settle();
+  assert.deepEqual(opened, [{ pathname: "/event", params: { plan: OTHER } }]);
 });

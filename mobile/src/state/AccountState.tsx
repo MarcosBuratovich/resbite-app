@@ -38,6 +38,8 @@ const Context = createContext<
     /** Re-reads the account. Resolves with the user it read, or null when the read failed or was
      * superseded by a newer one or another account; never rejects. */
     refresh: () => Promise<User | null>;
+    /** The access status of the newest finished read (not React state, so it is current right after `refresh`). */
+    latestStatus: () => Snapshot["status"];
     acceptDetails: (user: User) => void;
     profileSaved: () => void;
   }
@@ -45,6 +47,7 @@ const Context = createContext<
   ...blank(),
   reviewed: false,
   refresh: async () => null,
+  latestStatus: () => "checking",
   acceptDetails: () => {},
   profileSaved: () => {},
 });
@@ -57,6 +60,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     generation = useRef(0),
     sessionRef = useRef(session);
   const noted = useRef<string | null>(null);
+  const latest = useRef<Snapshot["status"]>("checking");
   identity.current = accountId;
   sessionRef.current = session;
   const refresh = useCallback(async (): Promise<User | null> => {
@@ -87,6 +91,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       const profile =
         status === "approved" ? await readProfile(accountId) : null;
       assertCurrent();
+      latest.current = status;
       setSnapshot({
         accountId,
         status,
@@ -109,6 +114,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       } catch {
         return null;
       }
+      latest.current = "error";
       setSnapshot({
         ...blank(accountId),
         status: "error",
@@ -133,6 +139,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         // The phone gate is the only way in: reviewed details alone no longer open the app.
         reviewed: Boolean(value.user && phoneVerified(value.user)),
         refresh,
+        latestStatus: () => latest.current,
         acceptDetails: (user) => {
           if (user.id !== identity.current) return;
           setSnapshot((old) =>
