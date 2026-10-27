@@ -2,30 +2,34 @@ import React, { useState } from "react";
 import { Linking, Platform, Pressable, StyleSheet, View } from "react-native";
 import { Check, ContactRound, Settings2 } from "lucide-react-native";
 import { Button, Copy, ErrorNote, Field, s } from "./ui";
-import { Chip, IconButton, Tile } from "./kit";
+import { Chip, IconButton, InfoSheet, Tile } from "./kit";
 import { colors as c } from "./tokens";
 import { INVITE_COPY as T } from "../domain/inviteCopy";
-import type { ContactNumber } from "../domain/contactInvites";
+import { groupContacts, type ContactNumber } from "../domain/contactInvites";
 import type { Outcome, Sendable } from "../state/useContactInvites";
 
-const firstName = (n: ContactNumber) => n.name.split(" ")[0] || n.name;
+const chipName = (n: ContactNumber) => (n.name === n.label ? n.label : n.name.split(" ")[0] || n.name);
 
 type Contacts = ReturnType<typeof import("../state/useContactInvites").useContactInvites>;
 
-function Row({ n, on, badge, onPress }: { n: ContactNumber; on: boolean; badge: boolean; onPress: () => void }) {
+type Group = ReturnType<typeof groupContacts>[number];
+
+function Row({ g, chosen, badge, onPress }: { g: Group; chosen?: ContactNumber; badge: boolean; onPress: () => void }) {
+  const detail = chosen?.label ?? (g.numbers.length > 1 ? T.numbersCount(g.numbers.length) : g.numbers[0].label);
   return (
     <Pressable
       accessibilityRole="checkbox"
-      accessibilityLabel={`${n.name}, ${n.label}${badge ? `, ${T.onResbite}` : ""}`}
-      aria-checked={on}
+      accessibilityLabel={`${g.name}, ${detail}${badge ? `, ${T.onResbite}` : ""}`}
+      accessibilityHint={T.rowHint}
+      aria-checked={!!chosen}
       onPress={onPress}
       style={styles.row}
     >
       <View style={styles.who}>
-        <Copy style={styles.name}>{n.name}</Copy>
-        {badge ? <Chip text={T.onResbite} tone="aqua" /> : n.name !== n.label ? <Copy style={s.muted}>{n.label}</Copy> : null}
+        <Copy style={styles.name}>{g.name}</Copy>
+        {badge ? <Chip text={T.onResbite} tone="aqua" /> : g.name !== detail ? <Copy style={s.muted}>{detail}</Copy> : null}
       </View>
-      <View style={[styles.box, on && styles.boxOn]}>{on && <Check size={14} color={c.paper} />}</View>
+      <View style={[styles.box, !!chosen && styles.boxOn]}>{!!chosen && <Check size={14} color={c.paper} />}</View>
     </Pressable>
   );
 }
@@ -35,6 +39,8 @@ export function PickStep({ k, previewing }: { k: Contacts; previewing: boolean }
   const [name, setName] = useState("");
   const [number, setNumber] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
+  const [choosing, setChoosing] = useState<Group | null>(null);
+  const groups = groupContacts(k.visible);
   const web = k.access === "web" || Platform.OS === "web";
   function add() {
     const bad = k.addNumber(name, number);
@@ -44,14 +50,14 @@ export function PickStep({ k, previewing }: { k: Contacts; previewing: boolean }
       setNumber("");
     }
   }
-  const settings = () => void Linking.openSettings().catch(() => k.setError("Could not open Settings."));
+  const settings = () => void Linking.openSettings().catch(() => k.setError(T.settingsFailed));
   return (
     <View style={{ gap: 14 }}>
       {previewing && <Copy>{T.previewNotice}</Copy>}
       {k.selected.length > 0 && (
         <View style={styles.chips}>
           {k.selected.map((n) => (
-            <Chip key={n.key} text={`${firstName(n)} ✕`} label={T.removeChip(n.name)} onPress={() => k.toggle(n)} />
+            <Chip key={n.key} text={`${chipName(n)} ✕`} label={T.removeChip(n.name)} onPress={() => k.toggle(n)} />
           ))}
         </View>
       )}
@@ -74,18 +80,21 @@ export function PickStep({ k, previewing }: { k: Contacts; previewing: boolean }
           <Button title={T.allowMore} secondary disabled={k.busy} onPress={() => void k.loadContacts(0, true)} />
         </>
       )}
-      {k.skipped > 0 && <Chip text={T.skipped(k.skipped)} />}
-      {k.visible.length > 0 ? (
+      {k.skipped > 0 && <Chip text={T.skipped(k.skipped)} label={T.skippedLabel(k.skipped)} />}
+      {groups.length > 0 ? (
         <View style={[s.card, { paddingVertical: 4, paddingHorizontal: 14 }]}>
-          {k.visible.map((n) => (
-            <Row
-              key={n.key}
-              n={n}
-              on={!!k.picked[n.key]}
-              badge={k.onResbite.has(n.e164.replace(/\D/g, ""))}
-              onPress={() => k.toggle(n)}
-            />
-          ))}
+          {groups.map((g) => {
+            const chosen = k.picked[g.contact];
+            return (
+              <Row
+                key={g.contact}
+                g={g}
+                chosen={chosen}
+                badge={!!chosen && k.onResbite.has(chosen.e164.replace(/\D/g, ""))}
+                onPress={() => (g.numbers.length === 1 ? k.toggle(g.numbers[0]) : setChoosing(g))}
+              />
+            );
+          })}
         </View>
       ) : (
         k.access === "ready" && <Copy style={s.muted}>{T.noContacts}</Copy>
@@ -108,12 +117,28 @@ export function PickStep({ k, previewing }: { k: Contacts; previewing: boolean }
       <View style={{ gap: 6 }}>
         <Button
           title={T.invite(k.selected.length)}
+          hint={T.inviteHint}
           disabled={k.selected.length === 0 || k.busy || previewing}
           loading={k.busy}
           onPress={() => void k.invite()}
         />
         <Copy style={[s.muted, { textAlign: "center", fontSize: 12 }]}>{T.lookupNote}</Copy>
       </View>
+      <InfoSheet visible={!!choosing} title={T.chooseNumber} onClose={() => setChoosing(null)}>
+        {choosing?.numbers.map((n) => (
+          <Tile
+            key={n.key}
+            title={n.label}
+            subtitle={choosing.name}
+            role="checkbox"
+            selected={k.picked[n.contact]?.key === n.key}
+            onPress={() => {
+              k.choose(n);
+              setChoosing(null);
+            }}
+          />
+        ))}
+      </InfoSheet>
     </View>
   );
 }
@@ -124,10 +149,11 @@ function LinkRow({ item, onSend }: { item: Sendable; onSend: (via: "whatsapp" | 
     <View style={styles.row}>
       <View style={styles.who}>
         <Copy style={styles.name}>{item.number.name}</Copy>
+        {item.number.name !== item.number.label && <Copy style={s.muted}>{item.number.label}</Copy>}
         {sent && <Chip icon={Check} tone="aqua" text={sent} />}
         <View style={styles.chips}>
-          <Chip text={T.whatsapp} label={`${T.whatsapp}: ${item.number.name}`} onPress={() => onSend("whatsapp")} />
-          <Chip text={T.messages} label={`${T.messages}: ${item.number.name}`} onPress={() => onSend("messages")} />
+          <Chip text={T.whatsapp} label={`${T.whatsapp}: ${item.number.name}`} hint={T.whatsappHint} onPress={() => onSend("whatsapp")} />
+          <Chip text={T.messages} label={`${T.messages}: ${item.number.name}`} hint={T.messagesHint} onPress={() => onSend("messages")} />
         </View>
       </View>
     </View>

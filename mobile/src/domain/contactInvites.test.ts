@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { contactNumbers, hostRegion, inviteMessage, newInviteCode, personalLink, smsUrl, whatsappUrl } from "./contactInvites";
+import { contactNumbers, hostRegion, inviteMessage, newInviteCode, personalLink, smsUrl, whatsappUrl, whatsappAppUrl, groupContacts } from "./contactInvites";
 import { INVITE_COPY } from "./inviteCopy";
 
 test("contactNumbers gives one entry per distinct number and counts the unparseable", () => {
@@ -65,4 +65,22 @@ test("invitedInApp joins names", () => {
   assert.equal(INVITE_COPY.invitedInApp(["Ana"]), "Ana is invited. They’ll see it in Resbite.");
   assert.equal(INVITE_COPY.invitedInApp(["Ana", "Leo"]), "Ana and Leo are invited. They’ll see it in Resbite.");
   assert.equal(INVITE_COPY.invitedInApp(["Ana", "Leo", "Mia"]), "Ana, Leo and Mia are invited. They’ll see it in Resbite.");
+});
+
+test("numbers of one contact share a contact key; two contacts with one name stay apart", () => {
+  const { numbers } = contactNumbers(
+    [
+      { fullName: "Sam", phones: [{ number: "07700 900834" }, { number: "07700 900111" }] },
+      { fullName: "Sam", phones: [{ number: "07700 900222" }] },
+    ],
+    "GB",
+  );
+  const groups = groupContacts(numbers);
+  assert.equal(groups.length, 2);
+  assert.deepEqual(groups.map((g) => g.numbers.length).sort(), [1, 2]);
+  assert.ok(groups.every((g) => g.numbers.every((n) => n.contact === g.contact)));
+});
+
+test("whatsappAppUrl opens the app with the digits and the encoded text", () => {
+  assert.equal(whatsappAppUrl("+447700900834", "a b&c"), "whatsapp://send?phone=447700900834&text=a%20b%26c");
 });

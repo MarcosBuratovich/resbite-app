@@ -11,11 +11,11 @@ import {
   newInviteCode,
   personalLink,
   smsUrl,
-  whatsappUrl,
+  whatsappAppUrl,
   type ContactNumber,
 } from "../domain/contactInvites";
 import { INVITE_COPY } from "../domain/inviteCopy";
-import { deviceRegion, parsePhone } from "../domain/phone";
+import { deviceRegion, INVALID_PHONE, parsePhone } from "../domain/phone";
 
 export const DEFAULT_ORIGIN = "https://link.resbite.com";
 const digitsOf = (e164: string) => e164.replace(/\D/g, "");
@@ -128,7 +128,7 @@ export function useContactInvites(a: {
         clearContacts();
         const web = Platform.OS === "web";
         setAccess(web ? "web" : "denied");
-        if (!web) setError(e instanceof Error ? e.message : "Contacts access is off.");
+        if (!web) setError(e instanceof Error ? e.message : INVITE_COPY.contactsOff);
       } finally {
         if (alive(ctx)) {
           working.current = false;
@@ -168,23 +168,28 @@ export function useContactInvites(a: {
   }, [all, query]);
   const selected = useMemo(() => Object.values(picked), [picked]);
 
+  /** Picks this number for its contact (replacing another of theirs); picking the same one again clears it. */
   function toggle(n: ContactNumber) {
     setPicked((old) => {
-      if (old[n.key]) {
-        const { [n.key]: _gone, ...rest } = old;
+      if (old[n.contact]?.key === n.key) {
+        const { [n.contact]: _gone, ...rest } = old;
         return rest;
       }
-      return { ...old, [n.key]: n };
+      return { ...old, [n.contact]: n };
     });
+  }
+  /** Picks this number for its contact; choosing again replaces it. */
+  function choose(n: ContactNumber) {
+    setPicked((old) => ({ ...old, [n.contact]: n }));
   }
   /** Parses a typed number with the host's region; picks it on success. Returns an error message otherwise. */
   function addNumber(name: string, input: string): string | null {
     const parsed = parsePhone(input, region);
     if (!parsed.ok) return parsed.message;
     const n = contactNumbers([{ fullName: name, phones: [{ number: parsed.e164 }] }], region).numbers[0];
-    if (!n) return "Enter a valid mobile number.";
+    if (!n) return INVALID_PHONE;
     setManual((old) => (old.some((x) => x.key === n.key) ? old : [n, ...old]));
-    setPicked((old) => ({ ...old, [n.key]: old[n.key] ?? n }));
+    setPicked((old) => ({ ...old, [n.contact]: n }));
     return null;
   }
 
@@ -241,7 +246,7 @@ export function useContactInvites(a: {
       if (!alive(ctx)) return;
       setOutcome(out);
     } catch (e) {
-      if (alive(ctx)) setError(e instanceof Error ? e.message : "Check your connection and try again.");
+      if (alive(ctx)) setError(e instanceof Error ? e.message : INVITE_COPY.offline);
     } finally {
       if (alive(ctx)) {
         working.current = false;
@@ -258,26 +263,37 @@ export function useContactInvites(a: {
     }
   }
 
+  const sending = useRef(false);
   async function send(item: Sendable, via: "whatsapp" | "messages"): Promise<string | null> {
-    if (!planId || !scope) return null;
-    const text = inviteMessage({ ...message, link: personalLink(origin, item.code) });
-    const url = via === "whatsapp" ? whatsappUrl(item.number.e164, text) : smsUrl(item.number.e164, text, Platform.OS);
+    if (!planId || !scope || sending.current) return null;
+    sending.current = true;
     const ctx = current.current;
     try {
-      await Linking.openURL(url);
-    } catch {
-      return via === "whatsapp" ? INVITE_COPY.whatsappMissing : INVITE_COPY.messagesFailed;
+      const text = inviteMessage({ ...message, link: personalLink(origin, item.code) });
+      const e164 = item.number.e164;
+      try {
+        if (via === "whatsapp") {
+          // wa.me never fails (it opens a web page), so only open the app itself, and only when it is there.
+          const url = whatsappAppUrl(e164, text);
+          if (!(await Linking.canOpenURL(url))) return INVITE_COPY.whatsappMissing;
+          await Linking.openURL(url);
+        } else await Linking.openURL(smsUrl(e164, text, Platform.OS));
+      } catch {
+        return via === "whatsapp" ? INVITE_COPY.whatsappMissing : INVITE_COPY.messagesFailed;
+      }
+      await putQuietly(scope, planId, e164, { code: item.code, name: item.number.name, sentVia: via }).catch(() => {});
+      if (alive(ctx))
+        setOutcome((o) =>
+          o && { ...o, links: o.links.map((l) => (l.number.key === item.number.key ? { ...l, sentVia: via } : l)) },
+        );
+      return null;
+    } finally {
+      sending.current = false;
     }
-    await putQuietly(scope, planId, item.number.e164, { code: item.code, name: item.number.name, sentVia: via }).catch(() => {});
-    if (alive(ctx))
-      setOutcome((o) =>
-        o && { ...o, links: o.links.map((l) => (l.number.key === item.number.key ? { ...l, sentVia: via } : l)) },
-      );
-    return null;
   }
 
   return {
     region, access, visible, selected, picked, onResbite, query, setQuery, more, limited, skipped, offset,
-    busy, error, setError, notice, setNotice, outcome, loadContacts, toggle, addNumber, invite, send,
+    busy, error, setError, notice, setNotice, outcome, loadContacts, toggle, choose, addNumber, invite, send,
   };
 }

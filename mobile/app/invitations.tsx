@@ -47,7 +47,7 @@ export default function Invitations() {
     scope: preview ? undefined : userId,
     userPhone: user?.phone,
     message: {
-      host: host ?? "Your host",
+      host: host ?? INVITE_COPY.hostFallback,
       title: plan?.title.trim() ?? "",
       when: plan ? linkDate(plan.starts_at, plan.ends_at) : "",
     },

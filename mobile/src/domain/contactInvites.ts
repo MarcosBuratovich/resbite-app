@@ -5,6 +5,8 @@ export type ContactNumber = {
   key: string;
   name: string;
   e164: string;
+  /** The contact this number belongs to: the first kept number of its address-book row. */
+  contact: string;
   /** Calling code, e.g. "44". */
   country: string;
   label: string;
@@ -18,6 +20,7 @@ export function contactNumbers(rows: ContactRow[], region: string): { numbers: C
   let skipped = 0;
   for (const row of rows) {
     const fullName = row.fullName?.trim() ?? "";
+    let contact = "";
     for (const phone of row.phones) {
       const parsed = parsePhone(phone.number, region);
       if (!parsed.ok) {
@@ -26,10 +29,12 @@ export function contactNumbers(rows: ContactRow[], region: string): { numbers: C
       }
       if (seen.has(parsed.e164)) continue;
       const label = formatPhone(parsed.e164);
+      contact = contact || parsed.e164;
       seen.set(parsed.e164, {
         key: parsed.e164,
         name: fullName || label,
         e164: parsed.e164,
+        contact,
         country: parsePhoneNumberFromString(parsed.e164)?.countryCallingCode ?? "",
         label,
       });
@@ -37,6 +42,17 @@ export function contactNumbers(rows: ContactRow[], region: string): { numbers: C
   }
   const numbers = [...seen.values()].sort((a, b) => a.name.localeCompare(b.name) || a.e164.localeCompare(b.e164));
   return { numbers, skipped };
+}
+
+/** One entry per contact, in the order its first number appears; a contact may hold several numbers. */
+export function groupContacts(numbers: ContactNumber[]): { contact: string; name: string; numbers: ContactNumber[] }[] {
+  const groups = new Map<string, { contact: string; name: string; numbers: ContactNumber[] }>();
+  for (const n of numbers) {
+    const g = groups.get(n.contact);
+    if (g) g.numbers.push(n);
+    else groups.set(n.contact, { contact: n.contact, name: n.name, numbers: [n] });
+  }
+  return [...groups.values()];
 }
 
 /** The region of the host's own verified phone (digits only), else the fallback. */
@@ -74,6 +90,11 @@ export function inviteMessage(a: { host: string; title: string; when: string; li
 
 export function whatsappUrl(e164: string, text: string): string {
   return `https://wa.me/${e164.replace(/\D/g, "")}?text=${encodeURIComponent(text)}`;
+}
+
+/** Opens the WhatsApp app itself (wa.me is a web page that opens in the browser when the app is missing). */
+export function whatsappAppUrl(e164: string, text: string): string {
+  return `whatsapp://send?phone=${e164.replace(/\D/g, "")}&text=${encodeURIComponent(text)}`;
 }
 
 export function smsUrl(e164: string, text: string, platform: string = "ios"): string {
