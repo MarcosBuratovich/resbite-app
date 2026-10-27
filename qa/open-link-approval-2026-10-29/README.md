@@ -8,13 +8,13 @@
 
 - **Database (one hosted-compatible migration):** the open event link no longer admits anyone. Whoever answers through it becomes a waiting request in `private.join_requests`, one per person per event, with their answer. Waiting people never get an `attendees` row or a live access grant; the host's approval is the only path to both. The owner and people already on the event are never turned into requests.
   - Asking: `request_to_join(p_code, p_name, p_response, p_terms_version)`, `my_join_request(p_code)`, `my_join_requests()` and `change_join_answer(p_plan, p_response)` (a waiting person changes their answer).
-  - Deciding: `plan_join_requests(p_plan)` lists a host's waiting people; `decide_join_request(p_plan, p_user, p_approve)` approves (the person becomes a normal guest with their answer and gets a `join_approved` notice) or declines (nothing is queued).
+  - Deciding: `plan_join_requests(p_plan)` lists a host's waiting people while the event is open (a cancelled or started event lists nobody, and its requests stay waiting); `decide_join_request(p_plan, p_user, p_approve)` approves (the person becomes a normal guest with their answer and gets a `join_approved` notice) or declines (nothing is queued).
   - A turned-off link, a cancelled or started event, an organizer who may no longer use the app, a revoked grant or a disabled roster row refuse a request (`42501` "Invitation unavailable").
   - `claim_plan_link`, `join_by_link` and `fold_web_account` are redefined. The first two now make a waiting request instead of a guest, which is what an old build calls. The fold moves a web-only account's requests over.
   - The outbox gains `join_request` (to the host, the requester as actor) and `join_approved` (to the requester, the host as actor); `beta_access` gains the source `approval`.
 - **Link site (`links/`):** `/r/<code>` takes the personal page's steps in open mode: any number can answer, and the answer waits. A person who answered before sees their waiting answer when they open the link again and can change it. A declined person sees "You weren't added to this resbite." A Can't go answer shows the personal page's Can't go screen. The calling code defaults to 44, with an "Outside the UK?" hint. "I have Resbite: open the app" stays.
-- **App:** opening a link in the app, or answering it, makes a waiting request. A waiting screen (`/waiting?plan=`) shows the request, lets the person change the answer and shows "approved" or "not added". The 18+ tick appears inline when the server asks for it. Someone whose access is still pending sees their requests on Account.
-- **Host:** the event page shows "Waiting for you" with each request's name, answer, "via event link", the last digits of the number, and Approve and Decline. The link card (Share, Copy, Turn off) moved from the invitations screen to the event page. A failed decision shows its reason.
+- **App:** opening a link in the app, or answering it, makes a waiting request. A waiting screen (`/waiting?plan=`) shows the request and lets the person change the answer. An approved request goes straight to the event page; a declined one says "You weren't added to this resbite." The 18+ tick appears inline when the server asks for it. Someone whose access is still pending sees their requests on Account. The host opening their own link lands on their event.
+- **Host:** the event page shows "Waiting for you" with each request's name, answer, "via event link", the last two digits of the number, and Approve and Decline, while the event is open (not on a cancelled or started one). The link card (Share, Copy, Turn off) moved from the invitations screen to the event page. A failed decision shows its reason: the event started or was cancelled, the person can't be added, or someone already answered.
 - The build calls are in `knowledge-base/08-decisions.md` ("Open-link approval, 28 October 2026").
 
 ## Files and hashes
@@ -59,20 +59,26 @@ None of these steps has been run. Each is done later, with the owner's approval.
    - Decline another person: they see "You weren't added to this resbite." and cannot ask again on the same link. After the host turns the link off and makes a new one, they can ask again.
    - Turn the link off: people already approved stay on the event.
    - Open the link in the app as a person who already has Resbite: they see the same waiting state, and can change their answer while waiting.
+   - The host taps their own `/r/` link (from WhatsApp): it opens the event page.
 5. **Old builds.**
-   - An old TestFlight build opening a `/r/` link now creates a waiting request quietly. It receives the event's id but holds no attendee row, so the event page says it isn't available. The host sees the request; the person is told nothing.
+   - An old TestFlight build opening a `/r/` link now creates a waiting request quietly. It receives the event's id but holds no attendee row, so the event page says it isn't available. The host sees the request; the person is told nothing. Build 8 behaves this way.
+   - **Build 10 needs confirming.** GI2's flow on build 10 waits after `join_by_link` for the account to read as approved. A new guest's account now stays unapproved until the host approves, so a new guest may sit on "Joining…". Check this on build 10.
    - A former tester who is already on an event but lost access cannot get it back through the link, because there is nothing for the host to approve: they are an attendee already, so the link makes no request.
    - Ask testers to update to the new build.
 6. **Known limits.**
    - The beta is UK-based, so the open page defaults to calling code 44 and no host country is stored.
    - Waiting people see only what the web page shows. The exact place, other guests and meeting details stay hidden until approval.
 7. **Rollback.**
-   - Roll back the app build and the link site first (serve the previous build and redeploy the previous link site), so no new request is made while the database changes.
-   - Then run `supabase/rollback/20261029120000_open_link_approval.rollback.sql` in one transaction, with the owner's approval: `begin; \i supabase/rollback/20261029120000_open_link_approval.rollback.sql; commit;`.
+   - **Which build: keep serving the current build.** No build has Plans 1 and 2 without Plan 3, so serving an older build would also take away the phone gate (Add your number) and contact invitations.
+   - **Link site first:** redeploy the Plan 2 link site, so no new request is made while the database changes. Its `/r/` page is GI1's sheet, which hands off to the app instead of asking to join.
+   - Then run `supabase/rollback/20261029120000_open_link_approval.rollback.sql` in one transaction, with the owner's approval: `begin; \i supabase/rollback/20261029120000_open_link_approval.rollback.sql; commit;`. It stops, changing nothing, if the contact-invitations rollback has already run.
    - **Order with Plan 2:** this rollback runs before the contact-invitations rollback, never after it. The contact-invitations rollback drops `fold_web_account` and `private.phone_invitations`, and its two checks cannot go back while request notices or approval grants exist; only this file clears them.
-   - Approved guests keep their places and their access: every approval grant becomes a link grant on the same row (live stays live, revoked stays revoked, so a ban stays a ban). Their answers stay.
-   - Request notices (`join_request`, `join_approved`) are deleted, delivered or not. The requests table is dropped, so waiting and declined people lose their request. A waiting person taps the link again and, while it is live and the event open, the restored functions put them straight on the event, as before this migration.
-   - **Declined people can join again.** After a rollback, someone the host declined can join through any link that is still live (the GI1 and GI2 behaviour). Before rolling back, turn off the links that matter.
+   - **What still works on the current build:** phone sign-in and Add your number, contact invitations and personal links, creating, editing and answering events, the guest list, and the Event link card's Share, Copy and Turn off.
+   - **What stops working on the current build:** its open-link path, the waiting screen and Waiting for you call functions that no longer exist. Opening a `/r/` link in the app and the waiting screen show "Check your connection and try again."; Waiting for you and the request lists on My resbites and Account are empty. A link opened in the app stays kept, as for a lost connection, so the app returns to it on a cold start until the person taps "Go to My resbites". A shared event link therefore admits nobody on this build: invite people by number (personal links) instead.
+   - Approved guests keep their places and their access: every approval grant becomes a link grant on the same row (live stays live, revoked stays revoked, so a ban stays a ban, and its times stay). Their answers stay.
+   - Request notices (`join_request`, `join_approved`) are deleted, delivered or not. The requests table is dropped, so waiting and declined people lose their request.
+   - **Waiting web-only people cannot tap the link again to join.** The rolled-back `/r/` page is GI1's sheet, which hands off to the app, and the current build's open-link path no longer works. Only old builds join straight from the link, through the `claim_plan_link` and `join_by_link` bodies the rollback restores. To bring a waiting person in, the host invites their number from Invite people.
+   - **Declined people can join again from an old build.** After a rollback, someone the host declined can join through any link that is still live, from a build that calls `claim_plan_link` or `join_by_link` (the GI1 and GI2 behaviour). Before rolling back, turn off the links that matter.
 
 ## Open items for the owner
 
@@ -84,16 +90,23 @@ These were parked rather than fixed. None blocks the rollout.
 3. **A declined person can ask once more after a rotation.** If a person is declined, the host turns the link off and a new link is made, the person can ask again (once per link).
 4. **Waiting people need a name.** The app sends the About you name with the request, because a waiting phone account has no profile. The spec said "no name".
 
-**Small fixes parked for a final fix wave**
-5. `change_join_answer` lost its `if not found` raise after the update: if the event is deleted or cancelled between its checks and the update, it answers instead of refusing.
-6. When a fold moves a web-only account over, its undelivered `join_request` notices keep a null actor (the actor foreign key is set null on delete).
-7. An eligible caller without a profile who comes through `claim_plan_link` gets a raw `23503` (this was already so in GI1), and `claim_plan_link` does not check the organizer's eligibility for such callers.
-8. There is no concurrency script for a request racing a decision. `decide-join-concurrency.sh` covers two decisions racing.
+**Small fixes parked**
+5. When a fold moves a web-only account over, its undelivered `join_request` notices keep a null actor (the actor foreign key is set null on delete).
+6. An eligible caller without a profile who comes through `claim_plan_link` gets a raw `23503` (this was already so in GI1), and `claim_plan_link` does not check the organizer's eligibility for such callers.
+7. There is no concurrency script for a request racing a decision. `decide-join-concurrency.sh` covers two decisions racing.
+
+**For Plan 4 (notifications)**
+8. `notification_recipient_eligible` needs widening to phone-only recipients, or `join_approved` misses most open-link guests.
+9. The recipient check should drop `join_request` rows whose request is no longer waiting.
+10. After a fold, consider carrying the requester's name in the outbox detail.
 
 **Clean-up parked**
-9. App services: `mine()` and `forPlan` coerce a missing string to an empty one instead of rejecting; `change()` does not check the status; there is no test for a decide error or a null image; `forPlan` swallows a catch like `readInvited` does; one inline prop type.
-10. App screens: a change of answer racing a refresh; `mine()`'s catch is silent; hook dependencies on the load; copy 8b and 8c; the link card's placement; the Account screen does not clear requests on an account switch; `joinView` imports from `services/contactInvites`.
-11. Web page: `page.js` and the GI1 sheet styles are no longer used by open pages; `.button.secondary` is defined in both `page.css` and `personal.css`; the open branches could be grouped in a mode object; the lookup after verifying delays the answer step slightly.
+11. App services: `mine()` and `forPlan` coerce a missing string to an empty one instead of rejecting; `change()` does not check the status; there is no test for a null image; `forPlan` swallows a catch like `readInvited` does; one inline prop type.
+12. App screens: a change of answer racing a refresh; `mine()`'s catch is silent; hook dependencies on the load; copy 8b and 8c; the link card's placement; the Account screen does not clear requests on an account switch; `joinView` imports from `services/contactInvites`.
+13. Web page: `page.js` and the GI1 sheet styles are no longer used by open pages; `.button.secondary` is defined in both `page.css` and `personal.css`; the open branches could be grouped in a mode object; the lookup after verifying delays the answer step slightly.
+
+**Cosmetic**
+14. A waiting person's card in the app (My resbites, Account, the waiting screen) shows the placeholder, not the event's cover photo, because storage row security does not let them read it.
 
 ## Not done here
 
