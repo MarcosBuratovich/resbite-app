@@ -12,7 +12,7 @@ function harness(overrides: Partial<AppleSignInDeps> = {}) {
     requestCredential: [],
     signInWithIdToken: [],
   };
-  const credential: AppleCredential = { identityToken: "tok", fullName: { givenName: "Ana", familyName: "Lima" } };
+  const credential: AppleCredential = { identityToken: "tok", email: null, fullName: { givenName: "Ana", familyName: "Lima" } };
   const d: AppleSignInDeps = {
     randomUUID: () => "raw-uuid",
     sha256: async (text) => `sha256(${text})`,
@@ -37,7 +37,7 @@ test("hashes the nonce for Apple and sends the raw nonce to Supabase", async () 
 });
 
 test("a missing identity token is an error with the connection copy", async () => {
-  const h = harness({ requestCredential: async () => ({ identityToken: null, fullName: null }) });
+  const h = harness({ requestCredential: async () => ({ identityToken: null, email: null, fullName: null }) });
   assert.deepEqual(await signInWithApple(h.d), {
     ok: false,
     cancelled: false,

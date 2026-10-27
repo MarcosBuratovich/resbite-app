@@ -4,6 +4,7 @@
 
 export type AppleCredential = {
   identityToken: string | null;
+  email: string | null;
   fullName: { givenName: string | null; familyName: string | null } | null;
 };
 export type AppleSignInDeps = {
@@ -68,7 +69,7 @@ export const appleSignInDeps: AppleSignInDeps = {
       requestedScopes: [AppleAuthenticationScope.FULL_NAME, AppleAuthenticationScope.EMAIL],
       nonce: hashedNonce,
     });
-    return { identityToken: credential.identityToken, fullName: credential.fullName };
+    return { identityToken: credential.identityToken, email: credential.email, fullName: credential.fullName };
   },
   signInWithIdToken: (args) => {
     const { supabase } = require("./supabase") as typeof import("./supabase");
