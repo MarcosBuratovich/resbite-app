@@ -97,6 +97,7 @@ function lifecycleHarness() {
     people = createPeopleStore(disk),
     events: string[] = [],
     places: string[] = [],
+    invites: string[] = [],
     device: string[] = [];
   let auth = async () => {
       events.push("auth");
@@ -121,7 +122,9 @@ function lifecycleHarness() {
       device.push(`calendar:${scope}`);
     },
     clearPhoto: () => photo(),
-    clearInviteCodes: async () => {},
+    clearInviteCodes: async (scope) => {
+      invites.push(scope);
+    },
     clearCovers: async (scope) => {
       events.push(`covers:${scope}`);
     },
@@ -147,6 +150,7 @@ function lifecycleHarness() {
     people,
     events,
     places,
+    invites,
     device,
     setAuth: (fn: () => Promise<void>) => {
       auth = fn;
@@ -312,6 +316,16 @@ test("sign-out clears recent places for the account and for preview", async () =
   p.life.update({ account: "owner", preview: true });
   await p.life.signOut();
   assert.deepEqual(p.places, ["preview"]);
+});
+test("sign-out clears the personal invitation codes for the account and for preview only", async () => {
+  const h = lifecycleHarness();
+  h.life.update({ account: "owner", preview: false });
+  await h.life.signOut();
+  assert.deepEqual(h.invites, ["owner"]);
+  const p = lifecycleHarness();
+  p.life.update({ account: "owner", preview: true });
+  await p.life.signOut();
+  assert.deepEqual(p.invites, ["preview"]);
 });
 test("a failed recent-places clear fails sign-out before auth sign-out", async () => {
   const events: string[] = [];

@@ -30,7 +30,9 @@ function setup() {
     clearPhoto: async (s) => {
       calls.push(`photo:${s}`);
     },
-    clearInviteCodes: async () => {},
+    clearInviteCodes: async (s) => {
+      calls.push(`invites:${s}`);
+    },
     clearCovers: async (s) => {
       calls.push(`covers:${s}`);
     },
@@ -68,6 +70,7 @@ test("deletion clears drafts as well as scoped data before local-only signout", 
     "drafts:a",
     "people:a",
     "places:a",
+    "invites:a",
     "reminders:a",
     "calendar:a",
     "photo:a",

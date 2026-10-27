@@ -125,8 +125,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const previewRef = useRef(preview);
   const [lifecycle] = useState(() =>
     createSessionLifecycle({
-      suspend: peopleStore.suspend,
-      resume: peopleStore.resume,
+      suspend: (scope) => {
+        peopleStore.suspend(scope);
+        inviteCodeStore.suspend(scope);
+      },
+      resume: (scope) => {
+        peopleStore.resume(scope);
+        inviteCodeStore.resume(scope);
+      },
       clearPeople: peopleStore.clear,
       clearRecentPlaces: (scope) => recentPlaces.clear(scope),
       clearInviteCodes: (scope) => inviteCodeStore.clear(scope),
