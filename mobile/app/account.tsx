@@ -1,18 +1,21 @@
-import React from "react";
+import React, { useCallback, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Redirect, router } from "expo-router";
+import { Redirect, router, useFocusEffect } from "expo-router";
 import { Hourglass, LogOut, Mail, MailCheck, RefreshCw, ShieldCheck, Ticket, UserRound } from "lucide-react-native";
 import { useApp } from "../src/state/AppState";
 import { useAccount } from "../src/state/AccountState";
 import { Button, Copy, ErrorNote, Title, s } from "../src/design/ui";
 import { Chip, StatusCard } from "../src/design/kit";
+import { RequestCard } from "../src/design/GuestSteps";
 import { categoryPalette, colors as c, fonts } from "../src/design/tokens";
 import { accessState, accessTitles, type AccessState } from "../src/domain/accountCopy";
 import { isLinkCode, pendingInviteParams } from "../src/domain/appLinks";
 import { accountGate } from "../src/domain/accountRoute";
 import { nameFromSession } from "../src/domain/guestAccount";
 import { formatPhone, phoneVerified } from "../src/domain/phone";
+import { INVITE_COPY } from "../src/domain/inviteCopy";
+import { joinRequestGateway, type MyRequest } from "../src/services/joinRequests";
 
 const icons: Record<AccessState, typeof ShieldCheck> = {
   checking: ShieldCheck,
@@ -26,7 +29,8 @@ const icons: Record<AccessState, typeof ShieldCheck> = {
  * and chips for the actions. Before any of it, the phone gate (accountGate): an approved or waiting
  * account without a verified phone goes to Add your number, and one with a phone but no name (and
  * no profile) to About you. Details are no longer asked for here; they stay optional in Account
- * details.
+ * details. Plan 3: while waiting for access, the account's open-link requests are listed under the card
+ * (as in My resbites); a failed read leaves the list as it was, without a message.
  */
 export default function Account() {
   const {
@@ -41,6 +45,23 @@ export default function Account() {
     restoreInvite,
   } = useApp();
   const { status, user, profileReady, error, refresh } = useAccount();
+  const [requests, setRequests] = useState<MyRequest[]>([]);
+  const accountId = session?.user.id;
+  useFocusEffect(
+    useCallback(() => {
+      if (!accountId || preview || status !== "access_pending") return;
+      let live = true;
+      void joinRequestGateway.mine().then(
+        (rows) => {
+          if (live) setRequests(rows);
+        },
+        () => {},
+      );
+      return () => {
+        live = false;
+      };
+    }, [accountId, preview, status]),
+  );
   if (preview) return <Redirect href="/create" />;
   if (!session && !restoring) return <Redirect href="/auth" />;
   const gate = session
@@ -167,6 +188,16 @@ export default function Account() {
           </>
         )}
         {checking && <View style={styles.chips}>{signOutChip}</View>}
+        {!checking && status === "access_pending" && requests.length > 0 && (
+          <View style={styles.requests}>
+            <Copy accessibilityRole="header" style={styles.heading}>
+              {INVITE_COPY.invitationsHeading}
+            </Copy>
+            {requests.map((request) => (
+              <RequestCard key={request.plan_id} request={request} />
+            ))}
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -176,4 +207,7 @@ const styles = StyleSheet.create({
   email: { fontFamily: fonts.medium, textAlign: "center" },
   line: { textAlign: "center", color: c.muted },
   chips: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 8 },
+  // As My resbites' Invitations.
+  requests: { gap: 12 },
+  heading: { fontFamily: fonts.display, fontSize: 22 },
 });

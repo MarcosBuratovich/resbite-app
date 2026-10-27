@@ -12,6 +12,7 @@ import { TermsLine, TickRow } from "../src/design/TickRow";
 import { colors as c } from "../src/design/tokens";
 import { claimInvitation } from "../src/services/rsvp";
 import { joinRequestGateway } from "../src/services/joinRequests";
+import { offline } from "../src/services/contactInvites";
 import { isInviteToken, isLinkCode } from "../src/domain/appLinks";
 import { accountGate } from "../src/domain/accountRoute";
 import { incompleteInvitation, isClaimRefusal } from "../src/domain/eventLinks";
@@ -122,11 +123,12 @@ export default function Invite() {
       active = false;
     };
   }, [identity, ready, account.status, signingOut]);
+  // Routes on a settled read only: a refresh another read superseded resolves while that one is still checking.
   useEffect(() => {
-    if (!handoff?.read) return;
+    if (!handoff?.read || account.status === "checking") return;
     if (approved) router.replace({ pathname: "/event", params: { plan: handoff.plan } });
     else router.replace("/account");
-  }, [handoff, approved]);
+  }, [handoff, approved, account.status]);
   const claim = useCallback(
     async (begin: () => Run) => {
       if (!userId || preview || signingOut || !ready || handingOff.current || (asking.current && !terms.current))
@@ -156,7 +158,7 @@ export default function Invite() {
                 await joinRequestGateway
                   .request(keep, "pending", name ?? undefined, terms.current ?? undefined)
                   .catch((e: unknown) => {
-                    refused = joinRefusedForGood(e instanceof Error ? e.message : INVITE_COPY.offline);
+                    refused = joinRefusedForGood(e instanceof Error ? e.message : offline);
                     throw e;
                   }),
               );

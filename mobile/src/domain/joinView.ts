@@ -1,7 +1,8 @@
 import type { JoinState } from "../services/joinRequests";
+import { offline } from "../services/contactInvites";
 import { eventPicture, type EventPicture } from "./events";
 import { INVITE_COPY } from "./inviteCopy";
-import { answerKey, type AnswerKey } from "./rsvp";
+import type { AnswerKey } from "./rsvp";
 
 // Plan 3: an open event link opened in the app. Its answer is a request the host approves or declines;
 // these turn a request's state into where the app goes, the words it shows and the chip in My resbites.
@@ -43,11 +44,6 @@ export function requestResponse(key: AnswerKey): "accepted" | "maybe" | "decline
   return key === "going" ? "accepted" : key === "maybe" ? "maybe" : "declined";
 }
 
-/** The control's selection for a request's stored answer; none while it is still "pending". */
-export function requestAnswer(response: string): AnswerKey | null {
-  return answerKey(response);
-}
-
 /** The link's image (`invitation_page` and `my_join_requests`): a cover, an idea's artwork, or the mark. */
 export function linkPicture(image: { kind: string; ref: string | null } | null | undefined): EventPicture {
   const ref = image?.ref || null;
@@ -78,5 +74,6 @@ export function joinStep(message: string): "tick" | null {
  * a tick still to give (joinStep).
  */
 export function joinRefusedForGood(message: string): boolean {
-  return message !== INVITE_COPY.offline && joinStep(message) === null;
+  // The gateway's own word for a lost connection (joinErrorMessage), so the two can't drift apart.
+  return message !== offline && joinStep(message) === null;
 }

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  ANSWER_OPTIONS,
   answerKey,
   canReadSample,
   cantGoResponse,
@@ -116,4 +117,17 @@ test("UX2: Maybe is its own answer; Can’t go after Maybe declines", () => {
   assert.equal(responseFor("cant", "pending"), "declined");
   // Only Going opens the sample chat.
   assert.equal(canReadSample({ ...snapshot, attendee: { response: "maybe", version: 2 } }), false);
+});
+
+test("the answer control's three options, shared by the invitation rows and the waiting screen", () => {
+  assert.deepEqual(ANSWER_OPTIONS, [
+    { key: "going", text: "Going" },
+    { key: "maybe", text: "Maybe" },
+    { key: "cant", text: "Can’t go" },
+  ]);
+  // Each option's key is one answerKey reads back from a stored response.
+  assert.deepEqual(
+    ["accepted", "maybe", "declined"].map(answerKey),
+    ANSWER_OPTIONS.map((o) => o.key),
+  );
 });

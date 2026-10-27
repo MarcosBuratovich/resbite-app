@@ -25,9 +25,9 @@ import {
   withoutInvitations,
 } from "../../src/domain/eventView";
 import { INVITE_COPY } from "../../src/domain/inviteCopy";
-import { areaLine, linkPicture, requestChip } from "../../src/domain/joinView";
+import { RequestCard } from "../../src/design/GuestSteps";
 import { joinRequestGateway, type MyRequest } from "../../src/services/joinRequests";
-import { reconcileRsvp, responseFor, type AnswerKey, type RsvpAttempt } from "../../src/domain/rsvp";
+import { ANSWER_OPTIONS, reconcileRsvp, responseFor, type AnswerKey, type RsvpAttempt } from "../../src/domain/rsvp";
 import { readRsvp, writeRsvp } from "../../src/services/rsvp";
 import { canDiscardDraft } from "../../src/domain/draftAutosave";
 import { confirmDiscardDraft } from "../../src/state/usePlanEditor";
@@ -304,11 +304,7 @@ export default function Plans() {
                   />
                   <Segmented
                     label={INVITE_COPY.yourAnswer(p.title)}
-                    options={[
-                      { key: "going", text: "Going" },
-                      { key: "maybe", text: "Maybe" },
-                      { key: "cant", text: "Can’t go" },
-                    ] as const}
+                    options={ANSWER_OPTIONS}
                     value={null}
                     disabled={answering !== null}
                     onChange={(key) => void answer(p, key)}
@@ -317,26 +313,9 @@ export default function Plans() {
                 </View>
               );
             })}
-            {waiting.map((q) => {
-              const chip = requestChip(q);
-              const place = areaLine(q.area);
-              return (
-                <CoverCard
-                  key={`request-${q.plan_id}`}
-                  picture={linkPicture(q.image)}
-                  title={q.title}
-                  startsAt={q.starts_at || null}
-                  endsAt={q.ends_at}
-                  place={place}
-                  chips={[{ key: chip.text, text: chip.text, tone: chip.tone }]}
-                  label={cardLabel(
-                    { title: q.title, startsAt: q.starts_at || null, endsAt: q.ends_at, place: place ?? "", chips: [chip.text] },
-                    new Date(now),
-                  )}
-                  onPress={() => router.push({ pathname: "/waiting", params: { plan: q.plan_id } })}
-                />
-              );
-            })}
+            {waiting.map((q) => (
+              <RequestCard key={`request-${q.plan_id}`} request={q} now={new Date(now)} />
+            ))}
           </View>
         )}
         <Segmented

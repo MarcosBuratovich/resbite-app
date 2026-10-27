@@ -38,6 +38,13 @@ export function reconcileRsvp(
 
 export type AnswerKey = "going" | "maybe" | "cant";
 
+/** The answer control's options (Segmented), for an invitation's row and an open-link request alike. */
+export const ANSWER_OPTIONS = [
+  { key: "going", text: "Going" },
+  { key: "maybe", text: "Maybe" },
+  { key: "cant", text: "Can’t go" },
+] as const satisfies readonly { key: AnswerKey; text: string }[];
+
 /** The answer control's selected option for a stored response (UX2: Going / Maybe; UX3-D7: Can’t go). */
 export function answerKey(response: string): AnswerKey | null {
   if (response === "accepted") return "going";

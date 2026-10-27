@@ -10,18 +10,20 @@ import { useApp } from "../src/state/AppState";
 import { useAccount } from "../src/state/AccountState";
 import { useFocusedRefresh, type Run } from "../src/state/useFocusedRefresh";
 import { joinRequestGateway, type MyRequest } from "../src/services/joinRequests";
+import { offline } from "../src/services/contactInvites";
 import { INVITE_COPY } from "../src/domain/inviteCopy";
-import { requestAnswer, requestResponse, waitingCopy } from "../src/domain/joinView";
-import type { AnswerKey } from "../src/domain/rsvp";
+import { requestResponse, waitingCopy } from "../src/domain/joinView";
+import { ANSWER_OPTIONS, answerKey, type AnswerKey } from "../src/domain/rsvp";
 
-const failure = (e: unknown) => (e instanceof Error ? e.message : INVITE_COPY.offline);
+const failure = (e: unknown) => (e instanceof Error ? e.message : offline);
 
 /**
  * Plan 3: an open link's request (/waiting?plan=), read from my_join_requests. Waiting: the invitation's card,
  * "Waiting for <host>", the answer (change_join_answer) and Done. Declined: "You weren’t added to this resbite."
  * When the request isn't listed any more (approved, or the event is gone) the screen replaces itself with the
  * event. Approval grants access, so an account still read as waiting is read again first, and goes to /account
- * if it still waits. Reachable while the account waits for access (session-guarded in _layout).
+ * if it still waits. Reachable while the account waits for access (session-guarded in _layout). Without a plan
+ * it leaves as Done does.
  */
 export default function Waiting() {
   const { plan } = useLocalSearchParams<{ plan?: string }>();
@@ -69,11 +71,16 @@ export default function Waiting() {
     [identity],
   );
   const { refresh, begin } = useFocusedRefresh(load, { identity });
+  // Routes on a settled read only: a refresh another read superseded resolves while that one is still checking.
   useEffect(() => {
-    if (handoff !== "read" || !plan) return;
+    if (handoff !== "read" || !plan || account.status === "checking") return;
     if (approved) router.replace({ pathname: "/event", params: { plan } });
     else router.replace("/account");
-  }, [handoff, approved]);
+  }, [handoff, approved, account.status]);
+  useEffect(() => {
+    if (plan || account.status === "checking") return;
+    router.replace(approved ? "/plans" : "/account");
+  }, [plan, approved, account.status]);
 
   async function choose(key: AnswerKey) {
     if (!plan || !request || saving) return;
@@ -114,17 +121,14 @@ export default function Waiting() {
               area={request.area}
               host={request.host}
               image={request.image}
+              showHost={request.status === "waiting"}
             />
             {copy.body ? <Copy>{copy.body}</Copy> : null}
             {copy.answerable ? (
               <Segmented
                 label={INVITE_COPY.yourAnswer(request.title)}
-                options={[
-                  { key: "going", text: "Going" },
-                  { key: "maybe", text: "Maybe" },
-                  { key: "cant", text: "Can’t go" },
-                ] as const}
-                value={saving ?? requestAnswer(request.response)}
+                options={ANSWER_OPTIONS}
+                value={saving ?? answerKey(request.response)}
                 disabled={saving !== null || handoff !== null}
                 onChange={(key) => void choose(key)}
               />

@@ -6,13 +6,13 @@ import {
   joinRefusedForGood,
   joinStep,
   linkPicture,
-  requestAnswer,
   requestChip,
   requestResponse,
   waitingCopy,
 } from "./joinView";
 import { INVITE_COPY } from "./inviteCopy";
 import { joinErrorMessage } from "../services/joinRequests";
+import { offline } from "../services/contactInvites";
 
 test("the open link's words", () => {
   assert.equal(INVITE_COPY.waitingFor("Sam"), "Waiting for Sam");
@@ -56,15 +56,10 @@ test("the waiting screen's words by state; only a waiting request can change its
   });
 });
 
-test("answers map both ways, and Can’t go declines (never withdrawn) while waiting", () => {
+test("Can’t go declines (never withdrawn) while waiting", () => {
   assert.equal(requestResponse("going"), "accepted");
   assert.equal(requestResponse("maybe"), "maybe");
   assert.equal(requestResponse("cant"), "declined");
-  assert.equal(requestAnswer("pending"), null);
-  assert.equal(requestAnswer("accepted"), "going");
-  assert.equal(requestAnswer("maybe"), "maybe");
-  assert.equal(requestAnswer("declined"), "cant");
-  assert.equal(requestAnswer(""), null);
 });
 
 test("the link's image becomes the event's picture", () => {
@@ -103,5 +98,7 @@ test("only a lost connection, or a tick still to give, keeps the kept code", () 
   assert.equal(joinRefusedForGood(joinErrorMessage({ code: "22023", message: "Age confirmation required" })), false);
   assert.equal(joinRefusedForGood(joinErrorMessage({ code: "08006" })), false);
   assert.equal(joinRefusedForGood(joinErrorMessage(new Error("abort"))), false);
-  assert.equal(joinRefusedForGood(INVITE_COPY.offline), false);
+  // The gateway's own word for a lost connection, never a copy of it.
+  assert.equal(joinRefusedForGood(offline), false);
+  assert.equal(joinRefusedForGood(`${offline} `), true);
 });

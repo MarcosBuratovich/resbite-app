@@ -1,16 +1,20 @@
 import React, { useRef } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { router } from "expo-router";
 import { Ticket } from "lucide-react-native";
 import { Button, Copy, ErrorNote, TextAction } from "./ui";
 import { CoverCard, StatusCard, StepScreen, useFocusOnChange } from "./kit";
 import { categoryPalette, colors as c } from "./tokens";
 import { GUEST_COPY, stateSentence } from "../domain/guestAccount";
 import { INVITE_COPY } from "../domain/inviteCopy";
-import { areaLine, linkPicture } from "../domain/joinView";
+import { cardLabel } from "../domain/eventView";
+import { areaLine, linkPicture, requestChip } from "../domain/joinView";
+import type { MyRequest } from "../services/joinRequests";
 import type { CardState, GuestAccount } from "../state/useGuestAccount";
 
-// The open event link signed out (app/invite.tsx, plan 3): the invitation's card, then Sign up to reply or
-// I have an account. GI2's Email, Code and Name steps are retired in favour of phone sign-in.
+// The open event link's screens (plan 3). Signed out (app/invite.tsx): the invitation's card, then Sign up to
+// reply or I have an account; GI2's Email, Code and Name steps are retired in favour of phone sign-in. Also the
+// card the waiting screen shows (LinkCard) and a request's row (RequestCard).
 
 const connectionCopy = "Check your connection and try again.";
 
@@ -84,7 +88,8 @@ function InvitationCard({ card, onRetry }: { card: CardState; onRetry: () => voi
 
 /**
  * What an open link shows before the host lets someone in (CI-P4): "<Host> invited you", the title, the time,
- * the rough area and the picture. Never the place. Also the waiting screen's card.
+ * the rough area and the picture. Never the place. Also the waiting screen's card, which drops the byline once
+ * the host declined (`showHost` false).
  */
 export function LinkCard({
   title,
@@ -93,6 +98,7 @@ export function LinkCard({
   area,
   host,
   image,
+  showHost = true,
 }: {
   title?: string;
   startsAt?: string | null;
@@ -100,6 +106,7 @@ export function LinkCard({
   area?: string | null;
   host?: string;
   image?: { kind: string; ref: string | null } | null;
+  showHost?: boolean;
 }) {
   return (
     <CoverCard
@@ -108,8 +115,33 @@ export function LinkCard({
       startsAt={startsAt || null}
       endsAt={endsAt ?? null}
       place={areaLine(area)}
-      byline={INVITE_COPY.invitedYou(host?.trim() || INVITE_COPY.hostFallback)}
+      byline={showHost ? INVITE_COPY.invitedYou(host?.trim() || INVITE_COPY.hostFallback) : undefined}
       heading={false}
+    />
+  );
+}
+
+/**
+ * A request's row, in My resbites' Invitations and on the waiting-for-access screen: its card with "Waiting for
+ * <host>" or "Not added"; tapping opens /waiting?plan=.
+ */
+export function RequestCard({ request, now = new Date() }: { request: MyRequest; now?: Date }) {
+  const chip = requestChip(request);
+  const place = areaLine(request.area);
+  const startsAt = request.starts_at || null;
+  return (
+    <CoverCard
+      picture={linkPicture(request.image)}
+      title={request.title}
+      startsAt={startsAt}
+      endsAt={request.ends_at}
+      place={place}
+      chips={[{ key: chip.text, text: chip.text, tone: chip.tone }]}
+      label={cardLabel(
+        { title: request.title, startsAt, endsAt: request.ends_at, place: place ?? "", chips: [chip.text] },
+        now,
+      )}
+      onPress={() => router.push({ pathname: "/waiting", params: { plan: request.plan_id } })}
     />
   );
 }
