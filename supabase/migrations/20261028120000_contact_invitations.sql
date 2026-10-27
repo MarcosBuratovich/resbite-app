@@ -4,7 +4,7 @@
 -- get an in-app invitation, everyone else a personal link whose code the database keeps only as a hash.
 -- Hosted-compatible: depends only on the migrations listed in supabase/tests/hosted-baseline/migrations.txt plus
 -- 20261027120000_phone_accounts.sql.
--- Rollback: supabase/rollback/20261028120000_contact_invitations.rollback.sql (added with the last part of this file's work).
+-- Rollback: supabase/rollback/20261028120000_contact_invitations.rollback.sql.
 
 -- One personal invitation per number per event. code_hash is sha256 of the 22-character code made on the host's phone;
 -- the code itself is never stored. user_id/answered_at say who answered it. check_count/check_window limit wrong
@@ -322,3 +322,53 @@ grant execute on function private.personal_invitation_page(text), public.persona
  private.check_invited_number(text,text), public.check_invited_number(text,text) to anon, authenticated;
 grant execute on function private.answer_phone_invitation(text,text,text,text), public.answer_phone_invitation(text,text,text,text),
  private.my_phone_invitation(text), public.my_phone_invitation(text) to authenticated;
+
+-- Folding (plan Task 3). An account that adds a number already held by a web-only account (one that answered on the
+-- web and never used the app) takes that account's answers, invitations, 18+ tick and grant; the
+-- fold-phone-account Edge Function then deletes the web-only user. Refuses (22023) the same account on both sides, an
+-- account that has used the app or organizes an event, and a target that doesn't exist. A source already folded or
+-- deleted moves nothing, so a retry is safe. Both users' locks are taken in uuid order before any row.
+create function private.fold_web_account(p_from uuid, p_into uuid) returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_moved integer;
+begin
+ if p_from is null or p_into is null or p_from=p_into then raise exception 'Invalid accounts' using errcode='22023'; end if;
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(least(p_from,p_into)::text,47));
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(greatest(p_from,p_into)::text,47));
+ if not exists(select 1 from auth.users where id=p_into) then raise exception 'Unknown account' using errcode='22023'; end if;
+ if private.used_app(p_from) then raise exception 'The account has used the app' using errcode='22023'; end if;
+ if exists(select 1 from public.plans where owner_id=p_from) then raise exception 'The account organizes events' using errcode='22023'; end if;
+ -- Add your number comes before About you, so the account may have no profile yet: it takes the name given on the web.
+ insert into public.profiles(id,display_name) select p_into, display_name from public.profiles where id=p_from
+  on conflict (id) do nothing;
+ -- 1. Places: where the account is already on the event, or organizes it, its own place stays and the web one goes.
+ delete from public.attendees f where f.user_id=p_from
+  and (exists(select 1 from public.attendees t where t.plan_id=f.plan_id and t.user_id=p_into)
+   or exists(select 1 from public.plans p where p.id=f.plan_id and p.owner_id=p_into));
+ update public.attendees set user_id=p_into where user_id=p_from;
+ get diagnostics v_moved = row_count;
+ -- 2. Invitations.
+ update private.phone_invitations set user_id=p_into where user_id=p_from;
+ -- 3. The tick and the grant, unless the account has its own. A revoked grant is a ban: one on either side stays.
+ if not exists(select 1 from private.age_attestations where user_id=p_into) then
+  update private.age_attestations set user_id=p_into where user_id=p_from;
+ end if;
+ if not exists(select 1 from private.beta_access where user_id=p_into) then
+  update private.beta_access set user_id=p_into where user_id=p_from;
+ else
+  update private.beta_access t set revoked_at=f.revoked_at from private.beta_access f
+   where t.user_id=p_into and t.revoked_at is null and f.user_id=p_from and f.revoked_at is not null;
+ end if;
+ -- 4. The web profile.
+ delete from public.profiles where id=p_from;
+ return jsonb_build_object('moved_attendees',v_moved);
+end $$;
+create function public.fold_web_account(p_from uuid, p_into uuid) returns jsonb language sql security invoker set search_path = '' as $$
+ select private.fold_web_account(p_from,p_into)
+$$;
+revoke all on function private.fold_web_account(uuid,uuid), public.fold_web_account(uuid,uuid)
+ from public, anon, authenticated, service_role;
+-- The Edge Function calls the façade through REST with the service-role key. The hosted project has not given
+-- service_role the private schema (20260918001316_account_deletion_lifecycle.sql, which does, is not applied there);
+-- the only private function it can then reach besides the fold is valid_categories(), which every role may call.
+grant usage on schema private to service_role;
+grant execute on function private.fold_web_account(uuid,uuid), public.fold_web_account(uuid,uuid) to service_role;

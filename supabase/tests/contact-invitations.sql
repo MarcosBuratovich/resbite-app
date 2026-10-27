@@ -440,4 +440,143 @@ reset role;
 do $$ begin
  if exists(select 1 from private.beta_access where user_id='d1000000-0000-4000-8000-000000000007') or exists(select 1 from public.attendees where user_id='d1000000-0000-4000-8000-000000000007') then raise exception 'Disabled tester got access'; end if;
 end $$;
+
+-- Folding a web-only account (plan 2, Task 3). 10 answered on the web: a place on the Picnic (through the J invitation)
+-- and on the Supper, where 11 already is, an 18+ tick and an invitation grant. 11 is an email account with a profile and
+-- nothing else. 12 is a web-only account whose grant was revoked (a ban), folded into 13, an email account with a live
+-- grant and no profile yet. 14 has used the app; 15 organizes an event; 16 is a web-only guest on 11's own event.
+reset role;
+insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) values
+ ('d1000000-0000-4000-8000-000000000010',null,null,'447700900210',now()),
+ ('d1000000-0000-4000-8000-000000000011','fold-into@example.test',now(),null,null),
+ ('d1000000-0000-4000-8000-000000000012',null,null,'447700900212',now()),
+ ('d1000000-0000-4000-8000-000000000013','fold-banned@example.test',now(),null,null),
+ ('d1000000-0000-4000-8000-000000000014',null,null,'447700900214',now()),
+ ('d1000000-0000-4000-8000-000000000015',null,null,'447700900215',now()),
+ ('d1000000-0000-4000-8000-000000000016',null,null,'447700900216',now());
+insert into public.profiles(id,display_name) values
+ ('d1000000-0000-4000-8000-000000000010','Web Sam'),('d1000000-0000-4000-8000-000000000011','Email Ana'),
+ ('d1000000-0000-4000-8000-000000000012','Web Lee'),('d1000000-0000-4000-8000-000000000014','App Kim'),
+ ('d1000000-0000-4000-8000-000000000015','Web Host'),('d1000000-0000-4000-8000-000000000016','Web Max');
+insert into private.age_attestations(user_id,terms_version) values ('d1000000-0000-4000-8000-000000000010','2026-10');
+insert into private.beta_access(user_id,source,revoked_at) values
+ ('d1000000-0000-4000-8000-000000000010','invitation',null),('d1000000-0000-4000-8000-000000000012','invitation',now()),
+ ('d1000000-0000-4000-8000-000000000013','maintainer',null);
+insert into private.app_sessions(user_id) values ('d1000000-0000-4000-8000-000000000014');
+insert into public.plans(id,owner_id,title,starts_at,time_zone,place_label,categories) values
+ ('d1100000-0000-4000-8000-000000000010','d1000000-0000-4000-8000-000000000001','Supper','2099-06-04 19:00+00','UTC','Hall',array['community']),
+ ('d1100000-0000-4000-8000-000000000011','d1000000-0000-4000-8000-000000000011','Ana''s walk','2099-06-05 10:00+00','UTC','Hill',array['community']),
+ ('d1100000-0000-4000-8000-000000000015','d1000000-0000-4000-8000-000000000015','Web party','2099-06-06 20:00+00','UTC','Home',array['community']);
+insert into public.attendees(plan_id,user_id,response) values
+ ('d1100000-0000-4000-8000-000000000001','d1000000-0000-4000-8000-000000000010','accepted'),
+ ('d1100000-0000-4000-8000-000000000010','d1000000-0000-4000-8000-000000000010','maybe'),
+ ('d1100000-0000-4000-8000-000000000010','d1000000-0000-4000-8000-000000000011','declined'),
+ ('d1100000-0000-4000-8000-000000000001','d1000000-0000-4000-8000-000000000012','accepted'),
+ ('d1100000-0000-4000-8000-000000000011','d1000000-0000-4000-8000-000000000016','accepted');
+insert into private.phone_invitations(plan_id,phone,country,code_hash,invited_by,user_id,answered_at) values
+ ('d1100000-0000-4000-8000-000000000001','447700900210','44',extensions.digest(repeat('J',22),'sha256'),'d1000000-0000-4000-8000-000000000001','d1000000-0000-4000-8000-000000000010',now());
+
+-- fold: only the service role may call it
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"d1000000-0000-4000-8000-000000000011","role":"authenticated"}',true);
+do $$ begin
+ begin perform public.fold_web_account('d1000000-0000-4000-8000-000000000010','d1000000-0000-4000-8000-000000000011'); raise exception 'authenticated folded';
+ exception when insufficient_privilege then null; end;
+ begin perform private.fold_web_account('d1000000-0000-4000-8000-000000000010','d1000000-0000-4000-8000-000000000011'); raise exception 'authenticated folded through the private body';
+ exception when insufficient_privilege then null; end;
+end $$;
+reset role;
+set local role anon;
+do $$ begin
+ begin perform public.fold_web_account('d1000000-0000-4000-8000-000000000010','d1000000-0000-4000-8000-000000000011'); raise exception 'anon folded';
+ exception when insufficient_privilege then null; end;
+end $$;
+reset role;
+
+-- fold: refusals (22023), which change nothing
+set local role service_role;
+do $$ begin
+ begin perform public.fold_web_account('d1000000-0000-4000-8000-000000000010','d1000000-0000-4000-8000-000000000010'); raise exception 'Folded into itself';
+ exception when invalid_parameter_value then null; end;
+ begin perform public.fold_web_account('d1000000-0000-4000-8000-000000000014','d1000000-0000-4000-8000-000000000011'); raise exception 'Folded an account that used the app';
+ exception when invalid_parameter_value then null; end;
+ begin perform public.fold_web_account('d1000000-0000-4000-8000-000000000015','d1000000-0000-4000-8000-000000000011'); raise exception 'Folded an organizer';
+ exception when invalid_parameter_value then null; end;
+ begin perform public.fold_web_account('d1000000-0000-4000-8000-000000000010','d1000000-0000-4000-8000-0000000000ff'); raise exception 'Folded into a missing account';
+ exception when invalid_parameter_value then null; end;
+end $$;
+reset role;
+do $$ begin
+ if (select count(*) from public.attendees where user_id='d1000000-0000-4000-8000-000000000010')<>2
+  or not exists(select 1 from public.profiles where id='d1000000-0000-4000-8000-000000000014')
+  or not exists(select 1 from public.profiles where id='d1000000-0000-4000-8000-000000000015') then raise exception 'A refused fold changed something'; end if;
+end $$;
+
+-- fold: the web-only account's places, invitation, tick and grant move; where the account is already on the event its
+-- own answer stays; the web profile goes, and the user is left for the Edge Function to delete
+set local role service_role;
+do $$ declare r jsonb; begin
+ r := public.fold_web_account('d1000000-0000-4000-8000-000000000010','d1000000-0000-4000-8000-000000000011');
+ if r<>'{"moved_attendees":1}'::jsonb then raise exception 'Fold returned %', r; end if;
+end $$;
+reset role;
+do $$ begin
+ if (select response from public.attendees where plan_id='d1100000-0000-4000-8000-000000000001' and user_id='d1000000-0000-4000-8000-000000000011') is distinct from 'accepted'
+  or (select response from public.attendees where plan_id='d1100000-0000-4000-8000-000000000010' and user_id='d1000000-0000-4000-8000-000000000011') is distinct from 'declined'
+  then raise exception 'Places not folded'; end if;
+ if exists(select 1 from public.attendees where user_id='d1000000-0000-4000-8000-000000000010') then raise exception 'Web places left behind'; end if;
+ if (select user_id from private.phone_invitations where code_hash=extensions.digest(repeat('J',22),'sha256')) is distinct from 'd1000000-0000-4000-8000-000000000011' then raise exception 'Invitation not moved'; end if;
+ if (select terms_version from private.age_attestations where user_id='d1000000-0000-4000-8000-000000000011') is distinct from '2026-10'
+  or exists(select 1 from private.age_attestations where user_id='d1000000-0000-4000-8000-000000000010') then raise exception 'Tick not moved'; end if;
+ if (select source from private.beta_access where user_id='d1000000-0000-4000-8000-000000000011' and revoked_at is null) is distinct from 'invitation'
+  or exists(select 1 from private.beta_access where user_id='d1000000-0000-4000-8000-000000000010') then raise exception 'Grant not moved'; end if;
+ if not private.user_eligible('d1000000-0000-4000-8000-000000000011') then raise exception 'The moved grant should let the account in'; end if;
+ if exists(select 1 from public.profiles where id='d1000000-0000-4000-8000-000000000010') then raise exception 'Web profile not deleted'; end if;
+ if (select display_name from public.profiles where id='d1000000-0000-4000-8000-000000000011') is distinct from 'Email Ana' then raise exception 'The account''s own name changed'; end if;
+ if not exists(select 1 from auth.users where id='d1000000-0000-4000-8000-000000000010') then raise exception 'The fold deleted the user'; end if;
+end $$;
+
+-- fold: again, and once the user is deleted, moves nothing
+set local role service_role;
+do $$ declare r jsonb; begin
+ r := public.fold_web_account('d1000000-0000-4000-8000-000000000010','d1000000-0000-4000-8000-000000000011');
+ if r<>'{"moved_attendees":0}'::jsonb then raise exception 'Second fold returned %', r; end if;
+end $$;
+reset role;
+delete from auth.users where id='d1000000-0000-4000-8000-000000000010';
+set local role service_role;
+do $$ declare r jsonb; begin
+ r := public.fold_web_account('d1000000-0000-4000-8000-000000000010','d1000000-0000-4000-8000-000000000011');
+ if r<>'{"moved_attendees":0}'::jsonb then raise exception 'Fold of a deleted account returned %', r; end if;
+end $$;
+reset role;
+do $$ begin
+ if (select count(*) from public.attendees where user_id='d1000000-0000-4000-8000-000000000011')<>2
+  or (select source from private.beta_access where user_id='d1000000-0000-4000-8000-000000000011' and revoked_at is null) is distinct from 'invitation'
+  then raise exception 'A repeated fold changed the account'; end if;
+end $$;
+
+-- fold: a ban on the web account carries over to a live grant, and an account with no profile yet takes the web name
+set local role service_role;
+do $$ declare r jsonb; begin
+ r := public.fold_web_account('d1000000-0000-4000-8000-000000000012','d1000000-0000-4000-8000-000000000013');
+ if r<>'{"moved_attendees":1}'::jsonb then raise exception 'Banned fold returned %', r; end if;
+end $$;
+reset role;
+do $$ begin
+ if (select revoked_at from private.beta_access where user_id='d1000000-0000-4000-8000-000000000013') is null then raise exception 'The ban did not carry over'; end if;
+ if (select display_name from public.profiles where id='d1000000-0000-4000-8000-000000000013') is distinct from 'Web Lee' then raise exception 'The web name did not carry over'; end if;
+ if (select response from public.attendees where plan_id='d1100000-0000-4000-8000-000000000001' and user_id='d1000000-0000-4000-8000-000000000013') is distinct from 'accepted' then raise exception 'Place not moved to the new profile'; end if;
+end $$;
+
+-- fold: a web place on the account's own event is dropped, not turned into the organizer's own place
+set local role service_role;
+do $$ declare r jsonb; begin
+ r := public.fold_web_account('d1000000-0000-4000-8000-000000000016','d1000000-0000-4000-8000-000000000011');
+ if r<>'{"moved_attendees":0}'::jsonb then raise exception 'Organizer fold returned %', r; end if;
+end $$;
+reset role;
+do $$ begin
+ if exists(select 1 from public.attendees where plan_id='d1100000-0000-4000-8000-000000000011') then raise exception 'The organizer became their own guest'; end if;
+end $$;
 rollback;
