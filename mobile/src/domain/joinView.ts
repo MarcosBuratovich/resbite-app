@@ -60,10 +60,23 @@ export function areaLine(area: string | null | undefined): string | null {
   return area?.trim() || null;
 }
 
+/** request_to_join's 22023 for an account with no 18+ tick stored yet (joinErrorMessage passes it as it is). */
+const AGE_REQUIRED = "Age confirmation required";
+
+/**
+ * A refused request the person can still fix on the invite screen: "tick" when the server has no 18+ tick for
+ * the account, so the screen asks for it and sends the request again with the Terms version. A missing name
+ * can't happen there (the About you gate comes first and the request carries its name), so it has no step.
+ */
+export function joinStep(message: string): "tick" | null {
+  return message === AGE_REQUIRED ? "tick" : null;
+}
+
 /**
  * A request refused by the server (the link is off, the event started or was cancelled, or the account can't ask)
- * is final: the kept code goes, so a restart doesn't open the same error. Only a lost connection keeps it.
+ * is final: the kept code goes, so a restart doesn't open the same error. A lost connection keeps it, and so does
+ * a tick still to give (joinStep).
  */
 export function joinRefusedForGood(message: string): boolean {
-  return message !== INVITE_COPY.offline;
+  return message !== INVITE_COPY.offline && joinStep(message) === null;
 }

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, ScrollView } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { useAccount } from "../src/state/AccountState";
@@ -8,16 +8,18 @@ import { useFocusedRefresh, type Run } from "../src/state/useFocusedRefresh";
 import { useGuestAccount } from "../src/state/useGuestAccount";
 import { Back, Button, Copy, Title, ErrorNote, s } from "../src/design/ui";
 import { GuestScreen } from "../src/design/GuestSteps";
+import { TermsLine, TickRow } from "../src/design/TickRow";
 import { colors as c } from "../src/design/tokens";
 import { claimInvitation } from "../src/services/rsvp";
 import { joinRequestGateway } from "../src/services/joinRequests";
 import { isInviteToken, isLinkCode } from "../src/domain/appLinks";
 import { accountGate } from "../src/domain/accountRoute";
 import { incompleteInvitation, isClaimRefusal } from "../src/domain/eventLinks";
-import { GUEST_COPY, nameFromSession } from "../src/domain/guestAccount";
+import { GUEST_COPY, TERMS_VERSION, nameFromSession } from "../src/domain/guestAccount";
 import { INVITE_COPY } from "../src/domain/inviteCopy";
-import { joinDestination, joinRefusedForGood } from "../src/domain/joinView";
+import { joinDestination, joinRefusedForGood, joinStep } from "../src/domain/joinView";
 import { phoneVerified } from "../src/domain/phone";
+import { PHONE_COPY } from "../src/domain/phoneCopy";
 
 type Target = { pathname: "/event" | "/waiting"; params: { plan: string } };
 
@@ -30,8 +32,9 @@ type Target = { pathname: "/event" | "/waiting"; params: { plan: string } };
  * Plan 3: an event link no longer lets anyone in by itself. Signed out it shows the invitation with Sign up to
  * reply and I have an account (useGuestAccount, GuestScreen). Signed in, approved or still waiting for access,
  * once the phone gate is clear (accountGate, run by /account first) it sends a request (request_to_join,
- * "pending"): the owner and existing guests land on the event, anyone else on /waiting. A per-person link keeps
- * GI1's claim for approved accounts.
+ * "pending"): the owner and existing guests land on the event, anyone else on /waiting. An account with no 18+
+ * tick stored gets the tick here (as on sign-up), and Continue sends the request again with the Terms version.
+ * A per-person link keeps GI1's claim for approved accounts.
  */
 export default function Invite() {
   const { token, code, plan } = useLocalSearchParams<{
@@ -70,6 +73,12 @@ export default function Invite() {
   // been let in since: the account is read again, then the event opens, or /account when it still waits.
   const [handoff, setHandoff] = useState<{ plan: string; read: boolean } | null>(null);
   const handingOff = useRef(false);
+  // The server has no 18+ tick for this account (joinStep): the tick shows, and the request waits for Continue,
+  // which sends it again with the Terms version. Focus and foreground re-runs don't resend it meanwhile.
+  const [askTick, setAskTick] = useState(false);
+  const [ticked, setTicked] = useState(false);
+  const asking = useRef(false);
+  const terms = useRef<string | null>(null);
   const remember = useRef(rememberInvite);
   remember.current = rememberInvite;
   const retained = useRef<{ identity: string; promise: Promise<void> } | null>(null);
@@ -84,6 +93,10 @@ export default function Invite() {
   }
   useEffect(() => {
     setError(null);
+    asking.current = false;
+    terms.current = null;
+    setAskTick(false);
+    setTicked(false);
     if (signingOut) {
       retained.current = null;
       return;
@@ -116,7 +129,8 @@ export default function Invite() {
   }, [handoff, approved]);
   const claim = useCallback(
     async (begin: () => Run) => {
-      if (!userId || preview || signingOut || !ready || handingOff.current) return;
+      if (!userId || preview || signingOut || !ready || handingOff.current || (asking.current && !terms.current))
+        return;
       const { valid, assertSession } = begin();
       setBusy(true);
       setError(null);
@@ -139,10 +153,12 @@ export default function Invite() {
           target = token
             ? { pathname: "/event", params: { plan: await claimInvitation(keep) } }
             : joinDestination(
-                await joinRequestGateway.request(keep, "pending", name ?? undefined).catch((e: unknown) => {
-                  refused = joinRefusedForGood(e instanceof Error ? e.message : INVITE_COPY.offline);
-                  throw e;
-                }),
+                await joinRequestGateway
+                  .request(keep, "pending", name ?? undefined, terms.current ?? undefined)
+                  .catch((e: unknown) => {
+                    refused = joinRefusedForGood(e instanceof Error ? e.message : INVITE_COPY.offline);
+                    throw e;
+                  }),
               );
           if (!valid()) return;
           resolved.current = { identity, target };
@@ -163,9 +179,23 @@ export default function Invite() {
         router.replace(target);
       } catch (e) {
         const message = e instanceof Error ? e.message : "Invitation unavailable.";
+        // No 18+ tick stored: not an error to leave, but the tick to give (the kept code stays).
+        if (!token && keep && joinStep(message) === "tick") {
+          if (valid()) {
+            asking.current = true;
+            terms.current = null;
+            setAskTick(true);
+          }
+          return;
+        }
         // A refusal for good drops the kept link (a malformed one was never kept), so a restart opens the app
         // as usual instead of this error. The message still shows.
         const final = token ? isClaimRefusal(message) : refused;
+        if (final && valid()) {
+          // Refused for good: a tick would change nothing now.
+          asking.current = false;
+          setAskTick(false);
+        }
         if (keep && final && valid()) await remember.current(null, keep).catch(() => {});
         if (valid()) setError(message);
       } finally {
@@ -175,6 +205,12 @@ export default function Invite() {
     [identity, plan, token, code, userId, preview, signingOut, ready, approved, name],
   );
   const { refresh } = useFocusedRefresh(claim, { identity });
+  /** After the tick: the request again, with the Terms version the sign-up tick records (TERMS_VERSION). */
+  function continueTicked() {
+    if (!ticked || busy) return;
+    terms.current = TERMS_VERSION;
+    void refresh();
+  }
   // The way out of an error: the kept link (if it is this one) is dropped, then My resbites, or the account's
   // access screen while it still waits for access.
   async function leave() {
@@ -194,12 +230,39 @@ export default function Invite() {
           </>
         )}
         {preview && <Copy>Preview cannot claim invitations or send an RSVP.</Copy>}
+        {askTick && (
+          <View style={styles.tick}>
+            <TickRow
+              label={GUEST_COPY.tick}
+              hint={GUEST_COPY.terms}
+              checked={ticked}
+              onChange={(next) => {
+                setTicked(next);
+                // Unticked again: re-runs must not send the Terms version until Continue.
+                if (!next) terms.current = null;
+              }}
+              disabled={busy}
+            >
+              <TermsLine text={GUEST_COPY.terms} />
+            </TickRow>
+            {!ticked ? <Copy style={styles.helper}>{GUEST_COPY.ageHelper}</Copy> : null}
+          </View>
+        )}
         <ErrorNote message={error} />
-        {(busy || handoff || (session && account.status === "checking")) && (
+        {((busy && !askTick) || handoff || (session && account.status === "checking")) && (
           <ActivityIndicator accessibilityLabel="Opening your invitation" color={c.aquaDark} />
         )}
-        {session && !preview && (
-          <Button title="Refresh invitation" secondary loading={busy} onPress={() => void refresh()} />
+        {askTick ? (
+          <Button
+            title={PHONE_COPY.continue}
+            loading={busy}
+            disabled={!ticked}
+            hint={ticked ? undefined : GUEST_COPY.ageHelper}
+            onPress={continueTicked}
+          />
+        ) : (
+          session &&
+          !preview && <Button title="Refresh invitation" secondary loading={busy} onPress={() => void refresh()} />
         )}
         {!!error && session && !preview && ready && (
           <Button
@@ -212,3 +275,9 @@ export default function Invite() {
     </SafeAreaView>
   );
 }
+
+// As on sign-up's tick (app/auth/phone.tsx).
+const styles = StyleSheet.create({
+  tick: { gap: 6 },
+  helper: { color: c.muted, fontSize: 14 },
+});

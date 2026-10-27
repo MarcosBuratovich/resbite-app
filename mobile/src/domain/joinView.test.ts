@@ -4,6 +4,7 @@ import {
   areaLine,
   joinDestination,
   joinRefusedForGood,
+  joinStep,
   linkPicture,
   requestAnswer,
   requestChip,
@@ -88,9 +89,18 @@ test("the area line is trimmed, or there is none", () => {
   assert.equal(areaLine(null), null);
 });
 
-test("only a lost connection keeps the kept code for a retry", () => {
+test("a missing 18+ tick asks for the tick; every other failure has no step", () => {
+  assert.equal(joinStep(joinErrorMessage({ code: "22023", message: "Age confirmation required" })), "tick");
+  assert.equal(joinStep(joinErrorMessage({ code: "22023", message: "Invalid response" })), null);
+  assert.equal(joinStep(joinErrorMessage({ code: "42501", message: "Invitation unavailable" })), null);
+  assert.equal(joinStep(joinErrorMessage({ code: "08006" })), null);
+  assert.equal(joinStep(joinErrorMessage(new Error("Age confirmation required"))), null);
+});
+
+test("only a lost connection, or a tick still to give, keeps the kept code", () => {
   assert.equal(joinRefusedForGood(joinErrorMessage({ code: "42501", message: "Invitation unavailable" })), true);
-  assert.equal(joinRefusedForGood(joinErrorMessage({ code: "22023", message: "Age confirmation required" })), true);
+  assert.equal(joinRefusedForGood(joinErrorMessage({ code: "22023", message: "Invalid response" })), true);
+  assert.equal(joinRefusedForGood(joinErrorMessage({ code: "22023", message: "Age confirmation required" })), false);
   assert.equal(joinRefusedForGood(joinErrorMessage({ code: "08006" })), false);
   assert.equal(joinRefusedForGood(joinErrorMessage(new Error("abort"))), false);
   assert.equal(joinRefusedForGood(INVITE_COPY.offline), false);
