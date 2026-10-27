@@ -79,9 +79,10 @@ end $$;
 -- 3. Ana asks to join and, while she waits, registers her phone (the migration's rule: the foundation's
 -- body refused anyone without access); Hana registers hers. The worker expands Gil's answer and Ana's request to Hana's
 -- phone: the answer is received, the request gets a ticket and stays unsent. Hana approves Ana (an unsent, unexpanded
--- notice to her) and Kit asks on the web (another). The rollback restores every fingerprint entry exactly and deletes
--- the ledger with its rows and expanded_at; every device stays as it was, Ana's and Hana's included, and every notice
--- stays as it was, the three unsent ones unsent. The restored bodies are the earlier ones again. Rehearsed, then undone.
+-- notice to her) and Kit asks on the web (another). The open-link rollback, tried first, refuses and changes nothing.
+-- The push rollback restores every fingerprint entry exactly and deletes the ledger with its rows and expanded_at;
+-- every device stays as it was, Ana's and Hana's included, and every notice stays as it was, the three unsent ones
+-- unsent. The restored bodies are the earlier ones again. Rehearsed, then undone.
 begin;
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"da000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
@@ -135,6 +136,36 @@ do $$ begin
  or (select count(*) from private.device_endpoints where user_id in ('da000000-0000-4000-8000-000000000001',
      'da000000-0000-4000-8000-000000000002','da000000-0000-4000-8000-000000000003'))<>3 then
   raise exception 'Rehearsal data missing before the rollback';
+ end if;
+end $$;
+-- The open-link rollback, tried now, while push delivery is installed, stops at its guard with its message and changes
+-- nothing. The whole file runs as text (the harness passes the repository's path as resbite_repo); every fingerprint
+-- entry and every request, notice, ledger row and grant is compared before and after.
+\set push_rehearsal_open_link `cat :'resbite_repo'/supabase/rollback/20261029120000_open_link_approval.rollback.sql`
+create temporary table push_rehearsal_open_link on commit drop as select :'push_rehearsal_open_link'::text as script;
+create temporary table push_rehearsal_before_open_link on commit drop as
+ select name, definition from private.push_rehearsal_snapshot()
+ union all select 'request', to_jsonb(j)::text from private.join_requests j
+ union all select 'notice', to_jsonb(o)::text from private.notification_outbox o
+ union all select 'delivery', to_jsonb(d)::text from private.notification_deliveries d
+ union all select 'grant', to_jsonb(b)::text from private.beta_access b;
+do $$ begin
+ execute (select script from push_rehearsal_open_link);
+ raise exception 'The open-link rollback ran while push delivery was installed';
+exception when raise_exception then
+ if sqlerrm is distinct from 'Run the push delivery rollback (20261030120000) first' then raise; end if;
+end $$;
+create temporary table push_rehearsal_after_open_link on commit drop as
+ select name, definition from private.push_rehearsal_snapshot()
+ union all select 'request', to_jsonb(j)::text from private.join_requests j
+ union all select 'notice', to_jsonb(o)::text from private.notification_outbox o
+ union all select 'delivery', to_jsonb(d)::text from private.notification_deliveries d
+ union all select 'grant', to_jsonb(b)::text from private.beta_access b;
+do $$ begin
+ if exists(select * from push_rehearsal_before_open_link except select * from push_rehearsal_after_open_link)
+ or exists(select * from push_rehearsal_after_open_link except select * from push_rehearsal_before_open_link)
+ or (select count(*) from push_rehearsal_before_open_link)<>(select count(*) from push_rehearsal_after_open_link) then
+  raise exception 'The refused open-link rollback changed something';
  end if;
 end $$;
 -- Every device and notice as it is now (kept outside both schemas, so not in the fingerprint), the notices without the

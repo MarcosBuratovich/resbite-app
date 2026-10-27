@@ -20,7 +20,8 @@ cleanup() { "$pg_bin/pg_ctl" -D "$work/data" -m immediate stop >/dev/null 2>&1 |
 trap cleanup EXIT
 "$pg_bin/initdb" -D "$work/data" -A trust -U postgres >/dev/null
 "$pg_bin/pg_ctl" -D "$work/data" -l "$work/postgres.log" -o "-k $work -h '' -p 55437" -w start >/dev/null
-psql_args=(-X -v ON_ERROR_STOP=1 -h "$work" -p 55437 -U postgres -d postgres)
+# resbite_repo lets a test read a repository file as text (a rehearsal runs a rollback it expects to refuse).
+psql_args=(-X -v ON_ERROR_STOP=1 -v resbite_repo="$repo" -h "$work" -p 55437 -U postgres -d postgres)
 run_sql() { "$pg_bin/psql" "${psql_args[@]}" -f "$1" >>"$work/tests.log"; }
 run_sql "$repo/supabase/tests/local/bootstrap.sql"
 if [ "$mode" = full ]; then

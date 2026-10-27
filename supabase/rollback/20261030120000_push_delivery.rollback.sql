@@ -28,9 +28,10 @@
 -- restores plan 3's fold, which moves requests in that table, so it has to come back first. Run after that file, this
 -- one would put plan 3's fold back over that file's, and every fold would fail on the missing table. Nor may that file
 -- run while the push objects are in place: notification_recipient_eligible() reads private.join_requests, and nothing
--- in the catalog ties a function's body to a table, so the drop goes through and the sender's claim then fails
--- whenever it has a notice to check, as does its check before each send. The guard below stops this file when that
--- rollback has already run (private.join_requests is gone); it changes nothing.
+-- in the catalog ties a function's body to a table, so the drop would go through and the sender's claim would then
+-- fail whenever it had a notice to check, as would its check before each send; that file's guard refuses while
+-- private.notification_deliveries exists. The guard below stops this file when that rollback has already run
+-- (private.join_requests is gone); it changes nothing.
 
 do $$ begin
  if to_regclass('private.join_requests') is null then raise exception 'Run this before the open-link approval rollback'; end if;

@@ -26,9 +26,13 @@
 -- instead of no one, updating a table that is gone, and would widen that file's two checks again. That file's checks
 -- also cannot go back while request notices or approval grants exist, and only this file clears them. The guard
 -- below stops this file when that rollback has already run (private.phone_invitations is gone); it changes nothing.
+-- Push delivery: run supabase/rollback/20261030120000_push_delivery.rollback.sql first, because push's send-time
+-- audience check reads private.join_requests, which this file drops, and that file puts back plan 3's fold, which this
+-- file then replaces; the guard also stops this file while private.notification_deliveries exists, changing nothing.
 
 do $$ begin
  if to_regclass('private.phone_invitations') is null then raise exception 'Run this before the contact-invitations rollback'; end if;
+ if to_regclass('private.notification_deliveries') is not null then raise exception 'Run the push delivery rollback (20261030120000) first'; end if;
 end $$;
 
 -- Asking and deciding.

@@ -22,7 +22,9 @@
 | File | sha256 |
 | --- | --- |
 | `supabase/migrations/20261029120000_open_link_approval.sql` | `5cd7f723bdd7119d3133c225d1186031e2ec265a054a208e7fef40de9c7f50a0` |
-| `supabase/rollback/20261029120000_open_link_approval.rollback.sql` | `9f2fe2cb213301136a6d08164f3ab83660d9bdb2c080069d8b278d0843571fee` |
+| `supabase/rollback/20261029120000_open_link_approval.rollback.sql` | `9d8e720d9c3bee60bc05cab9f922e6baca6cfc0a9a1deaca4b88cc1aadf5a867` |
+
+The rollback's hash changed with Plan 4 (push delivery): it now refuses, changing nothing, while push delivery is installed (`private.notification_deliveries` exists), so `supabase/rollback/20261030120000_push_delivery.rollback.sql` must run first.
 
 Hosted order: this migration is applied **straight after** `20261028120000_contact_invitations.sql`, which follows `20261027120000_phone_accounts.sql`; none of the three is applied yet. Their runbooks are [`qa/phone-accounts-2026-10-27/README.md`](../phone-accounts-2026-10-27/README.md) and [`qa/contact-invites-2026-10-28/README.md`](../contact-invites-2026-10-28/README.md); finish their migration steps first.
 
@@ -80,6 +82,7 @@ None of these steps has been run. Each is done later, with the owner's approval.
    - **Which build: keep serving the current build.** No build has Plans 1 and 2 without Plan 3, so serving an older build would also take away the phone gate (Add your number) and contact invitations.
    - **Link site first:** redeploy the Plan 2 link site, so the web page stops making requests while the database changes. Its `/r/` page is GI1's sheet, which hands off to the app instead of asking to join. The current app can still make a request from a link until the rollback runs; the rollback deletes it with the rest.
    - Then run `supabase/rollback/20261029120000_open_link_approval.rollback.sql` in one transaction, with the owner's approval: `begin; \i supabase/rollback/20261029120000_open_link_approval.rollback.sql; commit;`. It stops, changing nothing, if the contact-invitations rollback has already run.
+   - **Order with Plan 4:** if push delivery (`20261030120000_push_delivery.sql`) is applied, run its rollback first; this rollback stops, changing nothing, while `private.notification_deliveries` exists.
    - **Order with Plan 2:** this rollback runs before the contact-invitations rollback, never after it. The contact-invitations rollback drops `fold_web_account` and `private.phone_invitations`, and its two checks cannot go back while request notices or approval grants exist; only this file clears them.
    - **What still works on the current build:** phone sign-in and Add your number, contact invitations and personal links, creating, editing and answering events, the guest list, and the Event link card's Share, Copy and Turn off.
    - **What stops working on the current build:** its open-link path, the waiting screen and Waiting for you call functions that no longer exist. Opening a `/r/` link in the app and the waiting screen show "Check your connection and try again."; Waiting for you and the request list on Account are empty; My resbites keeps showing the last list it read until the app is restarted, then shows none. A link opened in the app stays kept, as for a lost connection, so the app returns to it on a cold start until the person taps "Go to My resbites". A shared event link therefore admits nobody on this build: invite people by number (personal links) instead.
