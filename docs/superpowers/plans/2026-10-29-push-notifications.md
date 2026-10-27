@@ -73,7 +73,7 @@ The app does four things:
 - **Final state in both modes**, matching the latest local definitions unless this list changes them:
   - `private.notification_deliveries` (the ledger);
   - `private.notification_outbox.expanded_at`;
-  - `private.register_device` (the token regex body) and `public.register_device`;
+  - `private.register_device` (the token regex body) and `public.register_device`. One change: instead of `require_tester()`, it accepts any signed-in account that is confirmed (email or phone), not anonymous, not banned and not deleting (42501 otherwise). That way, a person waiting for a host's approval can register and receive `join_approved`. Who gets what is still decided at claim time by `notification_recipient_eligible`;
   - `public.unregister_device`;
   - `private.claim_notification_deliveries` (the `20261014130000` body), `validate_notification_delivery` and `finish_notification_delivery`, with their public service-role façades and grants as in `20260918001308`.
 - **`private.notification_recipient_eligible(o private.notification_outbox, recipient uuid) returns boolean`.** Keep the existing signature (check `20261022120001` for it). It's true when all of these hold:
@@ -95,6 +95,7 @@ The app does four things:
     - A waiting request's notice expands to the host's endpoint.
     - After `decide_join_request` (either way), the claim marks the leased or pending ledger row `suppressed`, and a new claim sends nothing (Review Focus 2).
   - **Devices:**
+    - A phone-only account waiting for access (no grant) can call `register_device`. After `decide_join_request` approves it, its `join_approved` notice expands to that endpoint. Banned and anonymous callers get 42501.
     - `register_device` by user A, then by user B with the same token, rebinds it. A's pending ledger row for that endpoint becomes `suppressed` (Review Focus 1).
     - `unregister_device` removes only the caller's token.
     - anon has no execute on either function.
@@ -180,7 +181,7 @@ The rehearsal is the plan 3 model: a whole-schema fingerprint before, the exact 
   - `update({account, preview})` runs on every session change, and `reconcile()` after sign-in, on app foreground and after the permission changes.
   - `signOut` awaits `beforeSignOut()` before `auth.signOut()`.
   - Account switching follows the same order.
-  - Web and preview never register.
+  - Web and preview never register. An account waiting for access (`access_pending`) does register, so it can receive the approval.
 
 - [ ] **Step 1:** Write failing tests with a fake `expo-notifications`, fake secure storage and a fake RPC:
   - permission granted gives `register(account, token, "ios")`;
@@ -200,6 +201,7 @@ The rehearsal is the plan 3 model: a whole-schema fingerprint before, the exact 
   - `mobile/src/state/useEventDevice.ts`.
   - `mobile/src/domain/eventDevice.ts`.
   - `mobile/app/(tabs)/plans.tsx`: after `created=1`, and after an answer from an Invitations row.
+  - `mobile/app/waiting.tsx`: after a Going or Maybe answer.
   - `mobile/app/notifications.tsx`.
   - `mobile/src/domain/notifications.ts` and its tests.
   - `mobile/src/services/reminderPrefsStore.ts`, if the asked flag needs a rename.
@@ -207,7 +209,7 @@ The rehearsal is the plan 3 model: a whole-schema fingerprint before, the exact 
 **Interfaces:**
 - **One ask.** The device-local `asked` flag the reminders sheet already uses is the single flag. The ask shows when all of these hold: permission is `undetermined`, the flag isn't set, and the moment has come. Any of these is the moment:
   - the organizer on an event page, or after creating an event (My resbites with `created=1`);
-  - a person who just answered Going or Maybe, on the event page or from an Invitations row.
+  - a person who just answered Going or Maybe, on the event page, from an Invitations row, or on the waiting screen (`mobile/app/waiting.tsx`, an open-link request).
 
   Showing the ask sets the flag. "Not now" never blocks anything.
 - **Copy** (`mobile/src/domain/notifications.ts`), replacing the reminders sheet's:
