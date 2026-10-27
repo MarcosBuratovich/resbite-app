@@ -28,6 +28,7 @@ import {
 import { askForReminders, remindersFor, setRemindersEnabled } from "../src/services/deviceReminders";
 import { permissionChip } from "../src/domain/accountCopy";
 import { usePushRegistration } from "../src/state/usePushRegistration";
+import { deviceMirror } from "../src/services/deviceMirror";
 
 export default function Notifications() {
   const { preview, session, captureSession } = useApp();
@@ -108,7 +109,13 @@ export default function Notifications() {
   const detail = permission ? permissionDetail(permission, delivery) : null;
   const permissionTitle = permissionChip(permission, busy);
   // Plan 4: the Updates card shows the real state, and the one button that changes it.
-  const updates = updatesChip({ enabled: delivery, permission, push: pushStatus });
+  // QA seam (browser only, development builds): expo web can't register for push, so a script sets the state.
+  const qa = Platform.OS === "web" ? deviceMirror()?.updates : undefined;
+  const updates = updatesChip({
+    enabled: qa ? qa.delivery : delivery,
+    permission: qa ? qa.permission : permission,
+    push: qa ? qa.push : pushStatus,
+  });
   const [acting, setActing] = useState(false);
   const openSettings = async () => {
     try {
