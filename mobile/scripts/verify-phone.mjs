@@ -1,6 +1,6 @@
-// Phone accounts in headless Chrome: sign-up by number and code with the 18+ tick and the 000000 test-mode swap,
-// sign-in with a number that has no account, the Add your number gate with a taken number, and an interrupted
-// sign-up. Every Supabase request is answered by the fixture below; any other path fails the run.
+// Phone accounts in headless Chrome: sign-up by number and code with the 18+ tick, 000000 refused in live mode and
+// swapped in test mode, sign-in with a number that has no account, the Add your number gate with a taken number and
+// its Sign out, and an interrupted sign-up. Every Supabase request is answered by the fixture below; any other path fails the run.
 // auth.users.phone is digits-only ("447700900834"), so the fixtures store it that way too.
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
@@ -67,6 +67,8 @@ async function fixture({ user = null, access = "access_pending", profile = null,
     );
   }
   let otpReply = null;
+  // Live mode: no stored code, so exchange_test_code returns null and the app checks 000000 as typed.
+  let live = false;
   await page.route("**/*.supabase.co/**", async (route) => {
     const req = route.request();
     const method = req.method();
@@ -127,7 +129,7 @@ async function fixture({ user = null, access = "access_pending", profile = null,
     if (path === "/rest/v1/rpc/exchange_test_code") {
       // Slow enough to see the code step while it checks 000000.
       await new Promise((resolve) => setTimeout(resolve, 400));
-      return reply(STORED_CODE);
+      return reply(live ? null : STORED_CODE);
     }
     if (path === "/rest/v1/rpc/note_app_session" || path === "/rest/v1/rpc/attest_age")
       return route.fulfill({ status: 204, body: "" });
@@ -143,6 +145,7 @@ async function fixture({ user = null, access = "access_pending", profile = null,
     unexpected,
     state,
     otp: (next) => (otpReply = next),
+    live: (next) => (live = next),
     calls: (method, path) => log.filter((x) => x.method === method && x.path === path),
     index: (predicate) => log.findIndex(predicate),
     async done() {
@@ -226,6 +229,28 @@ try {
     assert.equal(wrong.length, 1);
     assert.deepEqual([wrong[0].body.phone, wrong[0].body.token, wrong[0].body.type], [NUMBER, "111111", "sms"]);
     assert.equal(f.calls("POST", "/rest/v1/rpc/exchange_test_code").length, 0, "only 000000 is exchanged");
+    // 000000 in live mode (no stored code): exchange_test_code returns null, the app checks 000000 as typed, and
+    // GoTrue refuses it. A wrong code: the mismatch copy, the cells empty, no session, no tick attested.
+    f.live(true);
+    await codeField(page).fill("000000");
+    // The earlier refusal goes while it checks, so the copy below is this code's.
+    await expect(page.getByLabel("Checking the code", { exact: true })).toBeVisible();
+    await expect(page.getByText(COPY.mismatch, { exact: true })).toHaveCount(0);
+    await expect(page.getByText(COPY.mismatch, { exact: true })).toBeVisible();
+    await expect(codeField(page)).toHaveValue("");
+    assert.equal(await cells(page), "");
+    await expect(heading(page, "Enter the code")).toBeVisible();
+    await expect(page).toHaveURL(/\/auth\/phone$/);
+    const liveExchange = f.calls("POST", "/rest/v1/rpc/exchange_test_code");
+    assert.equal(liveExchange.length, 1);
+    assert.deepEqual(liveExchange[0].body, { p_phone: NUMBER, p_code: "000000" });
+    const liveVerify = f.calls("POST", "/auth/v1/verify");
+    assert.equal(liveVerify.length, 2);
+    assert.deepEqual([liveVerify[1].body.phone, liveVerify[1].body.token, liveVerify[1].body.type], [NUMBER, "000000", "sms"]);
+    assert.equal(await page.evaluate((key) => sessionStorage.getItem(key), STORAGE_KEY), null, "no session after a refused 000000");
+    assert.equal(f.calls("POST", "/rest/v1/rpc/attest_age").length, 0, "no tick is attested without a session");
+    await noTestCode(page, "the code step after a refused 000000");
+    f.live(false);
     // 000000 in test mode: swapped for the stored code, verified, then the tick is attested once signed in.
     await codeField(page).fill("000000");
     await expect(page.getByLabel("Checking the code", { exact: true })).toBeVisible();
@@ -233,7 +258,7 @@ try {
     await noTestCode(page, "the code step holding 000000");
     await expect(heading(page, "About you")).toBeVisible();
     await expect(page).toHaveURL(/\/about-you$/);
-    const exchange = f.index((x) => x.path === "/rest/v1/rpc/exchange_test_code");
+    const exchange = f.log.findLastIndex((x) => x.path === "/rest/v1/rpc/exchange_test_code");
     const verify = f.index((x) => x.path === "/auth/v1/verify" && x.body.token === STORED_CODE);
     await expect.poll(() => f.calls("POST", "/rest/v1/rpc/attest_age").length).toBe(1);
     const attest = f.index((x) => x.path === "/rest/v1/rpc/attest_age");
@@ -241,7 +266,7 @@ try {
     assert.deepEqual([f.log[verify].body.phone, f.log[verify].body.type], [NUMBER, "sms"]);
     assert.deepEqual(f.log[attest].body, { p_terms_version: "2026-10" });
     assert.ok(exchange < verify && verify < attest, "exchange, then verify, then attest");
-    assert.equal(f.calls("POST", "/auth/v1/verify").length, 2, "000000 itself is never sent to verify");
+    assert.equal(f.calls("POST", "/auth/v1/verify").length, 3, "in test mode the stored code is verified, not 000000");
     await expect.poll(() => f.calls("POST", "/rest/v1/rpc/note_app_session").length).toBe(1);
     await noTestCode(page, "About you");
     // 4. Interrupted sign-up: reopening the app with a verified number and no name lands on About you again.
@@ -293,21 +318,22 @@ try {
   }
 
   // 3. Add your number: an approved email account without a phone, a taken number, then a good one with 000000.
+  const phoneless = () => ({
+    access: "approved",
+    profile: { display_name: "Sam Fixture", avatar_path: null, avatar_revision: 0 },
+    user: {
+      id: "11111111-1111-4111-8111-111111111111",
+      aud: "authenticated",
+      role: "authenticated",
+      email: "fixture@example.invalid",
+      email_confirmed_at: "2026-01-01T00:00:00Z",
+      app_metadata: { provider: "email", providers: ["email"] },
+      user_metadata: { display_name: "Sam Fixture" },
+      created_at: "2026-01-01T00:00:00Z",
+    },
+  });
   {
-    const f = await fixture({
-        access: "approved",
-        profile: { display_name: "Sam Fixture", avatar_path: null, avatar_revision: 0 },
-        user: {
-          id: "11111111-1111-4111-8111-111111111111",
-          aud: "authenticated",
-          role: "authenticated",
-          email: "fixture@example.invalid",
-          email_confirmed_at: "2026-01-01T00:00:00Z",
-          app_metadata: { provider: "email", providers: ["email"] },
-          user_metadata: { display_name: "Sam Fixture" },
-          created_at: "2026-01-01T00:00:00Z",
-        },
-      }),
+    const f = await fixture(phoneless()),
       { page } = f;
     await page.goto(base);
     await expect(heading(page, "Add your number")).toBeVisible();
@@ -345,6 +371,25 @@ try {
     await f.done();
   }
 
+  // 3b. The gate's other exit: after the taken refusal, Sign out ends the session on the server and on this device.
+  {
+    const f = await fixture(phoneless()),
+      { page } = f;
+    await page.goto(base);
+    await expect(heading(page, "Add your number")).toBeVisible();
+    await numberField(page).fill("07700 900111");
+    await button(page, "Send code").click();
+    await expect(page.getByText(COPY.taken, { exact: true })).toBeVisible();
+    assert.equal(f.calls("POST", "/auth/v1/logout").length, 0);
+    await button(page, "Sign out").click();
+    await expect.poll(() => f.calls("POST", "/auth/v1/logout").length).toBe(1);
+    await expect(heading(page, "Get together")).toBeVisible();
+    await expect(button(page, "I have an account")).toBeVisible();
+    await expect(heading(page, "Add your number")).toHaveCount(0);
+    await expect.poll(() => page.evaluate((key) => sessionStorage.getItem(key), STORAGE_KEY)).toBe(null);
+    await f.done();
+  }
+
   // 4. An interrupted sign-up, restored from storage: a verified number, no name and no profile opens on About you,
   // also after a reload.
   {
@@ -373,7 +418,7 @@ try {
   }
 
   console.log(
-    "PASS: phone sign-up (tick, invalid number, +44 number, wrong code, 000000 swap → verify → attest_age, About you → name → /account), sign-in with an unknown number → Create an account, Add your number with a taken number then phone_change, interrupted sign-up restored on About you, and no 000000 on any screen. All Supabase requests intercepted.",
+    "PASS: phone sign-up (tick, invalid number, +44 number, wrong code, 000000 refused in live mode, 000000 swap in test mode → verify → attest_age, About you → name → /account), sign-in with an unknown number → Create an account, Add your number with a taken number then phone_change, Sign out from the taken refusal, interrupted sign-up restored on About you, and no 000000 on any screen. All Supabase requests intercepted.",
   );
 } finally {
   await browser.close();

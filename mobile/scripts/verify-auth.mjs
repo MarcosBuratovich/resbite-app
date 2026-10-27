@@ -94,6 +94,8 @@ try {
   await expect(
     page.getByRole("heading", { name: "Welcome back", exact: true }),
   ).toBeFocused();
+  // Drop the reset request saved above, so the return from sign-up below doesn't depend on it.
+  await page.evaluate(() => sessionStorage.removeItem("resbite.pending-auth-email.v1"));
   // Create account starts sign-up by phone; there is no email sign-up any more.
   await page.getByRole("button", { name: "Create account", exact: true }).click();
   await expect(page).toHaveURL(/\/auth\/phone$/);
@@ -101,27 +103,24 @@ try {
     page.getByRole("heading", { name: "Your number", exact: true }),
   ).toBeVisible();
   await expect(page.getByRole("checkbox", { name: "I’m 18 or over", exact: true })).toBeVisible();
-  // Close returns to /auth, which restores the reset request saved above when it regains focus.
+  // Close returns to sign-in.
   await page.getByRole("button", { name: "Close", exact: true }).click();
   await expect(page).toHaveURL(/\/auth$/);
-  await expect(
-    page.getByRole("heading", { name: "Reset password", exact: true }),
-  ).toBeVisible();
-  await page
-    .getByRole("button", { name: "Back to sign in", exact: true })
-    .click();
   await expect(
     page.getByRole("heading", { name: "Welcome back", exact: true }),
   ).toBeVisible();
   assert.equal(requests.filter((x) => x === "/auth/v1/signup").length, 0);
+  await expect(page.getByLabel("Email address", { exact: true })).toHaveValue("fixture@example.invalid");
   await page.getByLabel("Password", { exact: true }).fill("fixture-password");
   // Leave while a login response is in flight; its error must not change the previous page.
+  const logins = requests.filter((x) => x === "/auth/v1/token").length;
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page.getByRole("button", { name: "Close", exact: true }).click();
   await expect(
     page.getByText("Preview the design", { exact: true }),
   ).toBeVisible();
   await page.waitForTimeout(600);
+  assert.equal(requests.filter((x) => x === "/auth/v1/token").length, logins + 1, "the login was in flight");
   await expect(
     page.getByText("Invalid login credentials", { exact: true }),
   ).toHaveCount(0);
