@@ -76,7 +76,7 @@ async function fixture(width = 390, preview = false) {
   const context = await browser.newContext({
     viewport: { width, height: 844 },
   });
-  // Event pages would otherwise ask "Get reminders?" (verify-event covers it).
+  // Event pages would otherwise ask "Get notified?" (verify-event covers it).
   await quietReminders(context);
   const page = await context.newPage();
   const state = {

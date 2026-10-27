@@ -4,7 +4,7 @@ import { button, createFromIdea, later, openEvent, quietReminders } from "./qa-h
 const browser = await chromium.launch({ channel: "chrome", headless: true });
 try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
-  // The event page would otherwise ask "Get reminders?".
+  // The event page would otherwise ask "Get notified?".
   await quietReminders(page);
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));

@@ -126,8 +126,10 @@ const PAT = { phone: "447700900222", e164: "+447700900222", name: "Pat Lee", cod
 const UNSTORED = { phone: "447700900333", e164: "+447700900333", label: "+44 7700 900333" };
 const CODE_STORE = `resbite.invite-codes.v1.${user.id}`;
 const PERSONAL_CODE = /^[A-Za-z0-9_-]{22}$/;
-const GET_REMINDERS =
-  "Resbite can remind you 1 day and 1 hour before your resbites. Reminders are set on this phone, and only show the name and time.";
+// Plan 4: the one notification ask (NOTIFICATION_ASK), which replaced UX3's "Get reminders?".
+const ASK_TITLE = "Get notified?";
+const ASK_BODY =
+  "Resbite can tell you when people answer or ask to join, when a resbite changes or gets a note, and before it starts.";
 /** Brings the page back to the foreground: the event and this phone's reminder state are read again. */
 const foreground = (page) =>
   page.evaluate(() => {
@@ -1027,9 +1029,11 @@ try {
   // The cover card shows the end.
   await expect(device.getByText("15:00 – 17:00", { exact: true })).toBeVisible();
   // The organizer's first visit asks once, before iPhone's prompt.
-  await expect(device.getByRole("heading", { name: "Get reminders?", exact: true })).toBeVisible();
-  await expect(device.getByText(GET_REMINDERS, { exact: true })).toBeVisible();
-  await device.getByRole("button", { name: "Allow reminders", exact: true }).click();
+  await expect(device.getByRole("heading", { name: ASK_TITLE, exact: true })).toBeVisible();
+  await expect(device.getByText(ASK_BODY, { exact: true })).toBeVisible();
+  await expect(device.getByRole("button", { name: "Not now", exact: true })).toBeVisible();
+  assert.equal(await device.evaluate(() => globalThis.__resbiteDevice.permission), "undetermined");
+  await device.getByRole("button", { name: "Turn on notifications", exact: true }).click();
   await sheetClosed(device);
   assert.equal(await device.evaluate(() => globalThis.__resbiteDevice.permission), "granted");
   const remindersOn = device.getByRole("button", { name: "Reminders on, 1 day and 1 hour before", exact: true });
@@ -1100,9 +1104,9 @@ try {
   await expect(
     device.getByText("Couldn’t open device settings. Please open Settings on your phone.", { exact: true }),
   ).toBeVisible();
-  await expect(device.getByRole("heading", { name: "Get reminders?", exact: true })).toHaveCount(0);
+  await expect(device.getByRole("heading", { name: ASK_TITLE, exact: true })).toHaveCount(0);
   console.log(
-    "PASS: organizer: Get reminders? once, two reminders with the name and time only, the per-event switch, Add to calendar without Meeting details, Update calendar after a time change, the iOS 17 note, Settings when the permission is off.",
+    "PASS: organizer: Get notified? once, two reminders with the name and time only, the per-event switch, Add to calendar without Meeting details, Update calendar after a time change, the iOS 17 note, Settings when the permission is off.",
   );
 
   // A guest: no sheet before answering; right after Going it asks, without holding up the answer.
@@ -1115,10 +1119,16 @@ try {
   await expect(guest.getByRole("heading", { name: "Board games", exact: true })).toBeVisible();
   await expect(guest.getByText(LOCKED, { exact: true })).toBeVisible();
   await guest.waitForTimeout(500); // a sheet would appear within this settle time
-  await expect(guest.getByRole("heading", { name: "Get reminders?", exact: true })).toHaveCount(0);
+  await expect(guest.getByRole("heading", { name: ASK_TITLE, exact: true })).toHaveCount(0);
+  // Can’t go never asks (and doesn't use up the ask).
+  await guest.getByRole("radio", { name: "Can’t go", exact: true }).click();
+  await expect(guest.getByRole("radio", { name: "Can’t go", exact: true })).toBeChecked();
+  await guest.waitForTimeout(500);
+  await expect(guest.getByRole("heading", { name: ASK_TITLE, exact: true })).toHaveCount(0);
   await guest.getByRole("radio", { name: "Going", exact: true }).click();
   await expect(guest.getByText("Your response is saved.", { exact: true })).toBeVisible();
-  await expect(guest.getByRole("heading", { name: "Get reminders?", exact: true })).toBeVisible();
+  await expect(guest.getByRole("heading", { name: ASK_TITLE, exact: true })).toBeVisible();
+  await expect(guest.getByText(ASK_BODY, { exact: true })).toBeVisible();
   await guest.getByRole("button", { name: "Not now", exact: true }).click();
   await sheetClosed(guest);
   await expect(guest.getByRole("radio", { name: "Going", exact: true })).toBeChecked();
@@ -1127,7 +1137,7 @@ try {
   // "Not now" leaves Reminders off; it isn't asked again; the chip can turn them on.
   await foreground(guest);
   await guest.waitForTimeout(500);
-  await expect(guest.getByRole("heading", { name: "Get reminders?", exact: true })).toHaveCount(0);
+  await expect(guest.getByRole("heading", { name: ASK_TITLE, exact: true })).toHaveCount(0);
   await guest.getByRole("button", { name: "Reminders off", exact: true }).click();
   await expect(guest.getByRole("button", { name: "Reminders on, 1 day and 1 hour before", exact: true })).toBeVisible();
   await expect.poll(async () => (await remindersFor(guest, invited.id)).length).toBe(2);
@@ -1139,7 +1149,7 @@ try {
   await phone.close();
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: guest: Get reminders? only after answering Going, Not now leaves Reminders off without asking again, the chip turns them on, Can’t go removes them.",
+    "PASS: guest: Get notified? only after answering Going (never Can’t go), Not now leaves Reminders off without asking again, the chip turns them on, Can’t go removes them.",
   );
 } finally {
   await browser.close();

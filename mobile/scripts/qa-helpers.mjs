@@ -34,7 +34,7 @@ export async function typeDate(page, value) {
   await field.fill(value);
 }
 /**
- * UX3: the event page asks "Get reminders?" the first time an organizer or a Going or Maybe guest opens one
+ * UX3: the event page asks "Get notified?" the first time an organizer or a Going or Maybe guest opens one
  * while the phone's permission was never answered. Scripts that aren't about reminders answer it up front on
  * the development fake (`__resbiteDevice`): "denied" schedules nothing, reads nothing and never asks.
  * `target` is a page or a browser context.

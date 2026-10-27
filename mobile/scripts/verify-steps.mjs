@@ -39,7 +39,7 @@ async function preview({ width = 390, query = "", time, reducedMotion = "reduce"
   });
   const page = await context.newPage();
   page.on("pageerror", (e) => errors.push(e.message));
-  // Opening a card shows the event page, which would otherwise ask "Get reminders?" (verify-event covers it).
+  // Opening a card shows the event page, which would otherwise ask "Get notified?" (verify-event covers it).
   await quietReminders(context);
   if (time) await page.clock.setFixedTime(time);
   // Records which CSS animations start and, every frame, the step body's opacity and transform,

@@ -12,7 +12,7 @@ import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium, expect } from "@playwright/test";
-import { button, heading, later, next, openEvent, quietReminders, visible } from "./qa-helpers.mjs";
+import { button, createFromIdea, heading, later, next, openEvent, quietReminders, visible } from "./qa-helpers.mjs";
 const base = process.env.RESBITE_QA_URL || "http://localhost:8081";
 const out = process.env.RESBITE_QA_SHOTS || join(tmpdir(), "resbite-ui-audit");
 await mkdir(out, { recursive: true });
@@ -26,7 +26,7 @@ const browser = await chromium.launch({ channel: process.env.RESBITE_QA_BROWSER 
 try {
   for (const width of [390, 320]) {
     const page = await browser.newPage({ viewport: { width, height: 844 }, reducedMotion: "reduce" });
-    // The event page would otherwise open "Get reminders?" over the capture.
+    // The event page would otherwise open "Get notified?" over the capture.
     await quietReminders(page);
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
@@ -268,7 +268,7 @@ try {
   // Larger Text at 320 px (forced layouts plus scaled text, as in verify-kit): rows, top row and sheets.
   {
     const page = await browser.newPage({ viewport: { width: 320, height: 844 }, reducedMotion: "reduce" });
-    // The event page would otherwise ask "Get reminders?".
+    // The event page would otherwise ask "Get notified?".
     await quietReminders(page);
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
@@ -838,8 +838,126 @@ try {
     await phoneless.context().close();
     if (errors.length) throw Error(errors.join("\n"));
   }
+  // Plan 4: "Get notified?" (after creating an event, in preview where the permission was never asked) and
+  // Notification settings' Updates card in each state a signed-in phone can show (the web seam,
+  // `__resbiteDevice.updates`), at 390 and 320 px and under Larger Text at 320 px: nothing wider than the screen
+  // or clipped, and the ask's buttons and the card's button at least 44 pt.
+  for (const [width, large] of [[390, false], [320, false], [320, true]]) {
+    const suffix = large ? "large-320" : String(width);
+    const errors = [];
+    const fits = (page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+    const clipped = (page) =>
+      page.evaluate(() =>
+        [...document.querySelectorAll("[role=button],[role=switch],[role=heading],h1,h2,h3")]
+          .filter((el) => !el.closest("[aria-hidden=true]") && el.getBoundingClientRect().width > 0)
+          .filter((el) => {
+            const b = el.getBoundingClientRect();
+            return b.left < -1 || b.right > window.innerWidth + 1;
+          })
+          .map((el) => (el.getAttribute("role") || el.tagName.toLowerCase()) + " " + (el.getAttribute("aria-label") || el.textContent.trim().slice(0, 40))),
+      );
+    const settle = async (page, name) => {
+      assert.ok(await fits(page), `${name} fits at ${suffix}`);
+      assert.deepEqual(await clipped(page), [], `${name} has nothing clipped at ${suffix}`);
+      assert.ok(!(await page.locator("body").innerText()).includes("000000"), `${name} has no 000000`);
+      await page.waitForTimeout(500);
+      await page.screenshot({ path: `${out}/${name}-${suffix}.png` });
+    };
+    const zoom = async (page) => {
+      if (large) await page.addStyleTag({ content: '[dir="auto"] { zoom: 1.4; }' });
+    };
+    const watch = (page) => {
+      page.on("pageerror", (e) => errors.push(e.message));
+      page.on("console", (m) => {
+        if (m.type() === "error" && !/Failed to load resource/.test(m.text())) errors.push(m.text());
+      });
+    };
+    // The ask, in preview (no quietReminders: the permission is unanswered).
+    {
+      const page = await browser.newPage({ viewport: { width, height: 844 }, reducedMotion: "reduce" });
+      watch(page);
+      await page.route("**/*.supabase.co/**", (r) => r.abort());
+      await page.goto(`${base}/${large ? "?largeText=1" : ""}`);
+      await zoom(page);
+      await page.getByText("Preview the design", { exact: true }).click();
+      await page.getByRole("tab", { name: "Create", exact: true }).click();
+      await page.getByRole("button", { name: "Coffee together", exact: true }).click();
+      await button(page, "Use idea").click();
+      await createFromIdea(page, "Test café");
+      await later(page);
+      await expect(page.getByRole("heading", { name: "Get notified?", exact: true })).toBeVisible();
+      for (const name of ["Turn on notifications", "Not now"]) {
+        const box = await page.getByRole("button", { name, exact: true }).boundingBox();
+        assert.ok(box && box.height >= 44, `${name} is at least 44pt at ${suffix}`);
+      }
+      await settle(page, "notification-ask");
+      await page.close();
+    }
+    // The Updates card, signed in.
+    const user = {
+      id: "11111111-1111-4111-8111-111111111111",
+      aud: "authenticated",
+      role: "authenticated",
+      email: "fixture@example.invalid",
+      email_confirmed_at: "2026-01-01T00:00:00Z",
+      phone: "447700900834",
+      phone_confirmed_at: "2026-01-01T00:00:00Z",
+      app_metadata: {},
+      user_metadata: { registration_details_version: 1 },
+      created_at: "2026-01-01T00:00:00Z",
+    };
+    const expiry = Math.floor(Date.now() / 1000) + 3600;
+    const jwt = [
+      Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url"),
+      Buffer.from(JSON.stringify({ sub: user.id, exp: expiry, role: "authenticated" })).toString("base64url"),
+      "local-fixture-only",
+    ].join(".");
+    const session = { access_token: jwt, refresh_token: "local-fixture", token_type: "bearer", expires_at: expiry, expires_in: 3600, user };
+    for (const [name, updates, chip] of [
+      ["not-asked", { delivery: true, permission: "undetermined", push: "permission-off" }, "Not asked yet"],
+      ["off-in-settings", { delivery: true, permission: "denied", push: "permission-off" }, "Off in Settings"],
+      ["on", { delivery: true, permission: "granted", push: "registered" }, "On"],
+      ["not-set-up", { delivery: true, permission: "granted", push: "failed" }, "Not set up yet"],
+      ["checking", { delivery: true, permission: "granted", push: null }, "Checking…"],
+    ]) {
+      const context = await browser.newContext({ viewport: { width, height: 844 }, reducedMotion: "reduce" });
+      const page = await context.newPage();
+      watch(page);
+      await page.addInitScript(
+        ({ session, updates }) => {
+          sessionStorage.setItem("sb-ewcsgvhuojxdpaspwsrx-auth-token", JSON.stringify(session));
+          globalThis.__resbiteDevice = { reminders: [], calendar: [], permission: "undetermined", updates };
+        },
+        { session, updates },
+      );
+      await page.route("**/*.supabase.co/**", (route) => {
+        const path = new URL(route.request().url()).pathname;
+        const reply = (body) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+        if (path === "/auth/v1/user") return reply(user);
+        if (path === "/rest/v1/rpc/note_app_session") return route.fulfill({ status: 204, body: "" });
+        if (path === "/rest/v1/rpc/account_access_status") return reply({ account_id: user.id, status: "approved" });
+        if (path === "/rest/v1/profiles") return reply({ id: user.id, display_name: "Stephen", avatar_path: null, avatar_revision: 0 });
+        if (path === "/rest/v1/plans" || path === "/rest/v1/attendees") return reply([]);
+        errors.push(`Unexpected ${path}`);
+        return route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ message: path }) });
+      });
+      await page.goto(`${base}/notifications${large ? "?largeText=1" : ""}`);
+      await zoom(page);
+      await expect(heading(page, "Notifications")).toBeVisible();
+      await expect(page.getByText(chip, { exact: true })).toBeVisible();
+      for (const label of ["Turn on notifications", "Open device settings", "Try setting up notifications again"]) {
+        const action = page.getByRole("button", { name: label, exact: true });
+        if ((await action.count()) === 0) continue;
+        const box = await action.boundingBox();
+        assert.ok(box && box.height >= 44, `${label} is at least 44pt at ${suffix}`);
+      }
+      await settle(page, `notification-settings-${name}`);
+      await context.close();
+    }
+    if (errors.length) throw Error(errors.join("\n"));
+  }
   console.log(
-    "PASS: every UX1, UX3 and UX4 screen at 390/320 px, UX3 and UX4 under Larger Text at 320 px, the Where step with an Area, Invite people (Pick with three numbers and On Resbite, Almost there, no link section), the event page's Waiting for you and Event link card, the Guests sheet with Remove and the Invited group, My resbites with an Invitations card and open-link requests, the /waiting screen waiting and declined (390/320 and Larger Text at 320 px, nothing wider than the screen or clipped), the signed-out invitation and a dead link, an account waiting for access with its Invitations, the inline 18+ tick (ticked and not), and phone sign-up (number with the tick, code), phone sign-in, About you, and Add your number with its taken-number refusal, the fold offer and its code step (390/320 and Larger Text at 320 px, nothing wider than the screen or clipped), gluestack keyboard selection, no console/page errors. Screenshots: " + out,
+    "PASS: Get notified? and Notification settings (each Updates state) at 390/320 px and Larger Text at 320 px, and every UX1, UX3 and UX4 screen at 390/320 px, UX3 and UX4 under Larger Text at 320 px, the Where step with an Area, Invite people (Pick with three numbers and On Resbite, Almost there, no link section), the event page's Waiting for you and Event link card, the Guests sheet with Remove and the Invited group, My resbites with an Invitations card and open-link requests, the /waiting screen waiting and declined (390/320 and Larger Text at 320 px, nothing wider than the screen or clipped), the signed-out invitation and a dead link, an account waiting for access with its Invitations, the inline 18+ tick (ticked and not), and phone sign-up (number with the tick, code), phone sign-in, About you, and Add your number with its taken-number refusal, the fold offer and its code step (390/320 and Larger Text at 320 px, nothing wider than the screen or clipped), gluestack keyboard selection, no console/page errors. Screenshots: " + out,
   );
 } finally {
   await browser.close();

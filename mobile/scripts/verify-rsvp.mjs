@@ -54,7 +54,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  // Answering Going would otherwise ask "Get reminders?" (verify-event covers it).
+  // Answering Going would otherwise ask "Get notified?" (verify-event covers it).
   await quietReminders(page);
   await page.addInitScript(
     (session) =>

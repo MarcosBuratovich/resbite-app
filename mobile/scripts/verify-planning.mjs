@@ -7,6 +7,7 @@ import {
   card,
   cancelFromList,
   close,
+  createFromIdea,
   createSteps,
   editEvent,
   expectCancelled,
@@ -31,7 +32,7 @@ const newPage = async (options = {}) => {
     viewport: { width: 390, height: 844 },
     ...options,
   });
-  // Saves land on the event page, which would otherwise ask "Get reminders?" (verify-event covers it).
+  // Saves land on the event page, which would otherwise ask "Get notified?" (verify-event covers it).
   await quietReminders(context);
   const page = await context.newPage();
   page.on("pageerror", (error) => errors.push(error.message));
@@ -121,6 +122,49 @@ try {
     "PASS: preview create/edit/cancel, validation, draft and leave protection, invitation block.",
   );
   await page.context().close();
+
+  // Plan 4: the organizer is asked "Get notified?" once, after creating an event, and not again after Not now.
+  // This context leaves the phone's permission unanswered (the others answer it up front, quietReminders).
+  {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const asked = await context.newPage();
+    asked.on("pageerror", (error) => errors.push(error.message));
+    await asked.route("**/*.supabase.co/**", (route) => route.abort());
+    await asked.goto(baseURL);
+    await asked.getByText("Preview the design", { exact: true }).click();
+    const askTitle = asked.getByRole("heading", { name: "Get notified?", exact: true });
+    const create = async (place) => {
+      await asked.getByRole("tab", { name: "Create", exact: true }).click();
+      await asked.getByRole("button", { name: "Coffee together", exact: true }).click();
+      await asked.getByRole("button", { name: "Use idea", exact: true }).click();
+      await createFromIdea(asked, place);
+      await later(asked);
+    };
+    await create("The garden café");
+    await expect(askTitle).toBeVisible();
+    await expect(
+      asked.getByText(
+        "Resbite can tell you when people answer or ask to join, when a resbite changes or gets a note, and before it starts.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    for (const name of ["Turn on notifications", "Not now"]) {
+      const target = asked.getByRole("button", { name, exact: true });
+      await expect(target).toBeVisible();
+      assert.ok((await heightOf(target)) >= 44, `${name} is at least 44pt`);
+    }
+    assert.ok(!(await asked.locator("body").innerText()).includes("000000"), "No 000000 in the ask");
+    await asked.getByRole("button", { name: "Not now", exact: true }).click();
+    await expect(askTitle).toHaveCount(0);
+    assert.equal(await asked.evaluate(() => globalThis.__resbiteDevice.permission), "undetermined");
+    // A second event does not bring it back.
+    await create("The park");
+    await expect(heading(asked, "My resbites")).toBeVisible();
+    await asked.waitForTimeout(600); // the ask would appear within this settle time
+    await expect(askTitle).toHaveCount(0);
+    await context.close();
+    console.log("PASS: the organizer is asked Get notified? once after creating an event (copy, 44pt buttons), and not again after Not now.");
+  }
 
   {
     const legacy = await newPage();

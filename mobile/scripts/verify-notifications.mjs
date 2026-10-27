@@ -29,8 +29,8 @@ try {
   await expect(
     page.getByRole("heading", { name: "Notifications", exact: true }),
   ).toBeVisible();
-  // UX3: updates from organizers stay "Not active yet"; reminders are set on this phone, with a real switch.
-  await expect(page.getByText("Updates from organizers", { exact: true })).toBeVisible();
+  // UX3: reminders are set on this phone, with a real switch. Plan 4: the Updates card is "Not active yet" in preview.
+  await expect(page.getByText("Updates", { exact: true })).toBeVisible();
   await expect(page.getByText("Not active yet", { exact: true })).toBeVisible();
   await expect(page.getByText("Design preview", { exact: true })).toBeVisible();
   const reminders = page.getByRole("switch", { name: "Event reminders", exact: true });
@@ -89,7 +89,105 @@ try {
   ).toBeVisible();
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: Notifications preview at 320px: the Event reminders switch (kept on this phone), Updates from organizers not active yet, the About sheet; no permission prompts or backend calls.",
+    "PASS: Notifications preview at 320px: the Event reminders switch (kept on this phone), the Updates card not active yet, the About sheet; no permission prompts or backend calls.",
+  );
+
+  // Plan 4: signed in, Notification settings' Updates card shows the real state and its one button. Expo web
+  // has no push, so a script sets the card's state on the development fake (`__resbiteDevice.updates`, read on
+  // web only). "Not active yet" is what the build shows with no seam at all.
+  const user = {
+    id: "11111111-1111-4111-8111-111111111111",
+    aud: "authenticated",
+    role: "authenticated",
+    email: "fixture@example.invalid",
+    email_confirmed_at: "2026-01-01T00:00:00Z",
+    phone: "447700900834",
+    phone_confirmed_at: "2026-01-01T00:00:00Z",
+    app_metadata: {},
+    user_metadata: { registration_details_version: 1 },
+    created_at: "2026-01-01T00:00:00Z",
+  };
+  const expiry = Math.floor(Date.now() / 1000) + 3600;
+  const jwt = [
+    Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url"),
+    Buffer.from(JSON.stringify({ sub: user.id, exp: expiry, role: "authenticated" })).toString("base64url"),
+    "local-fixture-only",
+  ].join(".");
+  const session = {
+    access_token: jwt,
+    refresh_token: "local-fixture",
+    token_type: "bearer",
+    expires_at: expiry,
+    expires_in: 3600,
+    user,
+  };
+  const TURN_ON = "Turn on notifications";
+  const states = [
+    { name: "no seam", updates: undefined, chip: "Not active yet", button: null },
+    { name: "web build", updates: { delivery: true, permission: "granted", push: "disabled" }, chip: "Not active yet", button: null },
+    { name: "not asked", updates: { delivery: true, permission: "undetermined", push: "permission-off" }, chip: "Not asked yet", button: TURN_ON },
+    { name: "checking permission", updates: { delivery: true, permission: null, push: "registered" }, chip: "Checking…", button: null },
+    { name: "checking account", updates: { delivery: true, permission: "granted", push: null }, chip: "Checking…", button: null },
+    { name: "on", updates: { delivery: true, permission: "granted", push: "registered" }, chip: "On", button: null },
+    { name: "off in Settings", updates: { delivery: true, permission: "denied", push: "permission-off" }, chip: "Off in Settings", button: "Open device settings" },
+    { name: "not set up", updates: { delivery: true, permission: "granted", push: "failed" }, chip: "Not set up yet", button: "Try setting up notifications again" },
+  ];
+  const actions = ["Open device settings", TURN_ON, "Try setting up notifications again"];
+  for (const width of [390, 320]) {
+    for (const state of states) {
+      const context = await browser.newContext({ viewport: { width, height: 844 } });
+      const signedIn = await context.newPage();
+      const failures = [];
+      signedIn.on("pageerror", (e) => failures.push(e.message));
+      await signedIn.addInitScript(
+        ({ session, updates }) => {
+          sessionStorage.setItem("sb-ewcsgvhuojxdpaspwsrx-auth-token", JSON.stringify(session));
+          globalThis.__resbiteDevice = { reminders: [], calendar: [], permission: "undetermined", updates };
+        },
+        { session, updates: state.updates },
+      );
+      await signedIn.route("**/*.supabase.co/**", (route) => {
+        const path = new URL(route.request().url()).pathname;
+        const reply = (body) =>
+          route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+        if (path === "/auth/v1/user") return reply(user);
+        if (path === "/rest/v1/rpc/note_app_session") return route.fulfill({ status: 204, body: "" });
+        if (path === "/rest/v1/rpc/account_access_status") return reply({ account_id: user.id, status: "approved" });
+        if (path === "/rest/v1/profiles")
+          return reply({ id: user.id, display_name: "Stephen", avatar_path: null, avatar_revision: 0 });
+        if (path === "/rest/v1/plans" || path === "/rest/v1/attendees") return reply([]);
+        return route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ message: path }) });
+      });
+      await signedIn.goto(`${process.env.RESBITE_QA_URL || "http://localhost:8081"}/notifications`);
+      const at = `${state.name} at ${width}px`;
+      await expect(signedIn.getByRole("heading", { name: "Notifications", exact: true })).toBeVisible();
+      await expect(signedIn.getByText("Updates", { exact: true })).toBeVisible();
+      await expect(signedIn.getByText(state.chip, { exact: true }), at).toBeVisible();
+      // The card's one button, and no other action.
+      for (const name of actions) {
+        const found = signedIn.getByRole("button", { name, exact: true });
+        if (name === state.button) {
+          await expect(found, at).toHaveCount(1);
+          const box = await found.boundingBox();
+          assert.ok(box && box.height >= 44 && box.width >= 44, `${at}: ${name} is at least 44pt (${box?.width}x${box?.height})`);
+          assert.ok(box.x >= 0 && box.x + box.width <= width, `${at}: ${name} fits the screen`);
+        } else await expect(found, at).toHaveCount(0);
+      }
+      // The reminders switch is unchanged and still reachable.
+      await expect(signedIn.getByRole("switch", { name: "Event reminders", exact: true }), at).toBeVisible();
+      const text = await signedIn.locator("body").innerText();
+      assert.ok(!text.includes("000000"), `${at}: no 000000 on the screen`);
+      if (state.button === TURN_ON) {
+        // Web's fake asks and allows; the card stays as set (the seam holds the state).
+        await signedIn.getByRole("button", { name: TURN_ON, exact: true }).click();
+        await expect.poll(() => signedIn.evaluate(() => globalThis.__resbiteDevice.permission)).toBe("granted");
+      }
+      assert.deepEqual(failures, [], at);
+      await context.close();
+    }
+  }
+  console.log(
+    "PASS: Updates card signed in at 390px and 320px: Not active yet (no seam, and the web build), Not asked yet with Turn on notifications, Checking… (permission or account), On, Off in Settings with one Settings button, Not set up yet with Try again; each button 44pt and on screen; no 000000.",
   );
 } finally {
   await browser.close();

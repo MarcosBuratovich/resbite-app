@@ -74,7 +74,7 @@ try {
   // 1. Preview: a chosen cover stays in memory and shows on the plan card.
   const preview = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
   preview.on("pageerror", (e) => errors.push(e.message));
-  // Event pages would otherwise ask "Get reminders?" (verify-event covers it).
+  // Event pages would otherwise ask "Get notified?" (verify-event covers it).
   await quietReminders(preview);
   await preview.route("**/*.supabase.co/**", (route) => route.abort());
   await preview.goto(baseURL);
