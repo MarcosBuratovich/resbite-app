@@ -7,8 +7,8 @@
 -- Section 2 explains them. They come first because section 1 bodies and policies (parsed when created) refer to them.
 create table public.plan_admins(
  plan_id uuid not null references public.plans(id) on delete cascade,
- user_id uuid not null references public.profiles(id),
- appointed_by uuid not null references public.profiles(id),
+ user_id uuid not null references public.profiles(id) on delete cascade,
+ appointed_by uuid not null references public.profiles(id) on delete cascade,
  appointed_at timestamptz not null default now(),
  primary key (plan_id,user_id)
 );
@@ -105,7 +105,7 @@ begin
  v_next:=v_att.version+1;
  update public.attendees set response=p_response,version=v_next,updated_at=now() where plan_id=p_plan and user_id=v_uid;
  -- CR-P15: Can't go ends the admin role. The notice goes to every host but the one answering (CR-D15).
- if p_response='declined' then delete from public.plan_admins where plan_id=p_plan and user_id=v_uid; end if;
+ if p_response in ('declined','withdrawn') then delete from public.plan_admins where plan_id=p_plan and user_id=v_uid; end if;
  insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,detail)
  select p_plan,h,'rsvp','rsvp:'||p_plan||':'||v_uid||':'||v_next||case when h=v_plan.owner_id then '' else ':'||h end,v_uid,p_response from private.host_ids(p_plan) h where h<>v_uid on conflict do nothing;
  return v_next;
@@ -337,6 +337,7 @@ begin
   end if;
  end if;
  update private.phone_invitations set user_id=v_uid, answered_at=now() where id=v_inv.id;
+ if p_response='declined' then delete from public.plan_admins where plan_id=v_plan.id and user_id=v_uid; end if;
  insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,detail)
   select v_plan.id,h,'rsvp','rsvp:'||v_plan.id||':'||v_uid||':'||v_att.version||case when h=v_plan.owner_id then '' else ':'||h end,v_uid,p_response from private.host_ids(v_plan.id) h where h<>v_uid on conflict do nothing;
  return jsonb_build_object('response',p_response,'plan_id',v_plan.id);
@@ -617,6 +618,10 @@ declare v_uid uuid;
 begin
  v_uid := private.require_link_owner(p_plan);
  if p_user=v_uid then raise exception 'The organizer cannot be removed' using errcode='22023'; end if;
+ -- Only the owner removes an admin.
+ if exists(select 1 from public.plan_admins where plan_id=p_plan and user_id=p_user) and not exists(select 1 from public.plans where id=p_plan and owner_id=v_uid) then
+  raise exception 'Owner required' using errcode='42501';
+ end if;
  update private.invitations set revoked_at=now() where plan_id=p_plan and claimed_by=p_user and revoked_at is null;
  update private.phone_invitations set revoked_at=now(), code_hash=null where plan_id=p_plan and user_id=p_user;
  delete from public.plan_admins where plan_id=p_plan and user_id=p_user;

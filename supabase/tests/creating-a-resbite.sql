@@ -327,6 +327,10 @@ do $$ begin
   raise exception 'A plain guest invited'; exception when insufficient_privilege then null; end;
  begin perform public.remove_guest('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000007'); raise exception 'A plain guest removed a guest';
  exception when insufficient_privilege then null; end;
+ begin perform public.change_plan_v3('e1100000-0000-4000-8000-000000000003',1,'Admin night','',array['community'],'2099-06-03 19:00+00','2099-06-03 22:00+00','UTC','Other park','');
+  raise exception 'A plain guest changed the plan'; exception when insufficient_privilege then null; end;
+ begin perform public.decide_join_request('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000006',true); raise exception 'A plain guest decided a request';
+ exception when insufficient_privilege then null; end;
  begin perform public.plan_phone_invitations('e1100000-0000-4000-8000-000000000003'); raise exception 'A plain guest listed invitations';
  exception when insufficient_privilege then null; end;
  begin perform public.plan_join_requests('e1100000-0000-4000-8000-000000000003'); raise exception 'A plain guest listed requests';
@@ -428,6 +432,14 @@ end $$;
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 select public.appoint_admin('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000005');
+-- An admin cannot remove another admin.
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+do $$ begin
+ begin perform public.remove_guest('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000005'); raise exception 'An admin removed an admin';
+ exception when insufficient_privilege then if sqlerrm<>'Owner required' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+ if not exists(select 1 from public.plan_admins where plan_id='e1100000-0000-4000-8000-000000000003' and user_id='e1000000-0000-4000-8000-000000000005') then raise exception 'The admin row went anyway'; end if;
+end $$;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 select public.remove_guest('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000005');
 reset role;
 do $$ begin
@@ -446,6 +458,50 @@ do $$ begin
  if not exists(select 1 from public.attendees where plan_id='e1100000-0000-4000-8000-000000000003' and user_id='e1000000-0000-4000-8000-000000000006') then raise exception 'remove_admin removed the guest'; end if;
  if (select count(*) from private.notification_outbox where kind='admin_added' and recipient_id='e1000000-0000-4000-8000-000000000006')<>1
   then raise exception 'remove_admin should queue nothing more'; end if;
+end $$;
+
+-- Can't go through the invited number ends the role too (08 is invited by number before they have an account).
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.invite_contacts('e1100000-0000-4000-8000-000000000003', jsonb_build_array(jsonb_build_object('phone','447700900608','country','44','code',repeat('M',22))));
+reset role;
+insert into auth.users(id,phone,phone_confirmed_at) values ('e1000000-0000-4000-8000-000000000008','447700900608',now());
+insert into public.profiles(id,display_name) values ('e1000000-0000-4000-8000-000000000008','Invitee eight');
+insert into private.age_attestations(user_id,terms_version) values ('e1000000-0000-4000-8000-000000000008','2026-09');
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000008","role":"authenticated"}',true);
+select public.answer_phone_invitation(repeat('M',22),null,'accepted','2026-10');
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.appoint_admin('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000008');
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000008","role":"authenticated"}',true);
+select public.plan_link('e1100000-0000-4000-8000-000000000003');
+select public.answer_phone_invitation(repeat('M',22),null,'declined','2026-10');
+do $$ begin
+ begin perform public.plan_link('e1100000-0000-4000-8000-000000000003'); raise exception 'A declined phone admin still reads the link';
+ exception when insufficient_privilege then if sqlerrm<>'Active plan host required' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+end $$;
+reset role;
+do $$ begin
+ if exists(select 1 from public.plan_admins where user_id='e1000000-0000-4000-8000-000000000008') then raise exception 'Declining by number kept the role'; end if;
+end $$;
+
+-- Withdrawing ends it as well (04 is made a Going guest and an admin directly).
+update public.attendees set response='accepted' where plan_id='e1100000-0000-4000-8000-000000000003' and user_id='e1000000-0000-4000-8000-000000000004';
+insert into public.plan_admins(plan_id,user_id,appointed_by) values('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000004','e1000000-0000-4000-8000-000000000001');
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000004","role":"authenticated"}',true);
+select public.respond('e1100000-0000-4000-8000-000000000003','withdrawn',2);
+reset role;
+do $$ begin
+ if exists(select 1 from public.plan_admins where user_id='e1000000-0000-4000-8000-000000000004') then raise exception 'Withdrawing kept the role'; end if;
+end $$;
+
+-- Deleting an account that is an admin (or appointed one) removes the rows instead of failing.
+insert into public.plan_admins(plan_id,user_id,appointed_by) values('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000004','e1000000-0000-4000-8000-000000000001');
+delete from public.attendees where user_id='e1000000-0000-4000-8000-000000000004';
+delete from public.profiles where id='e1000000-0000-4000-8000-000000000004';
+do $$ begin
+ if exists(select 1 from public.plan_admins where user_id='e1000000-0000-4000-8000-000000000004') then raise exception 'The admin row outlived the profile'; end if;
 end $$;
 
 -- The admin answers Can't go: the role ends with the answer.
