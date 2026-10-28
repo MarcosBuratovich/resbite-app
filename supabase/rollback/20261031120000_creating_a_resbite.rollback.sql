@@ -18,7 +18,7 @@
 --     guest of a rolled occurrence whose invitation notice had not gone out is never told of it (they still find the
 --     occurrence in My resbites). Delivered rows go too; sent pushes are not recalled. Rows younger than a day are the
 --     ones the sender could still send: run this just after the sender has drained the outbox to lose none.
--- It restores verbatim, each from the file named above it, the 23 functions the migration redefined, with the grants
+-- It restores verbatim, each from the file named above it, the 26 functions the migration redefined, with the grants
 -- and public wrappers they already have (create or replace keeps both), and the three plan-covers storage policies
 -- from 20261007200000_plan_covers.sql. The outbox kind check comes back from 20261029120000_open_link_approval.sql
 -- and the detail check from 20261014120000_ux2_rules.sql.
@@ -583,6 +583,66 @@ begin
  update private.phone_invitations set revoked_at=now(), code_hash=null where plan_id=p_plan and user_id=p_user;
  delete from public.attendees where plan_id=p_plan and user_id=p_user;
 end $$;
+
+-- invite_contacts (20261028120000_contact_invitations.sql)
+create or replace function private.invite_contacts(p_plan uuid, p_invites jsonb) returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := private.require_link_owner(p_plan); v_item jsonb; v_phone text; v_country text; v_code text; v_holder uuid;
+ v_kind text; v_out jsonb := '[]'::jsonb;
+begin
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_uid::text,47));
+ if jsonb_typeof(p_invites) is distinct from 'array' or jsonb_array_length(p_invites)>50 then
+  raise exception 'Invalid invitations' using errcode='22023';
+ end if;
+ -- The kind of each item tells the host who is On Resbite, so invitations spend the same daily budget as lookups.
+ perform private.charge_lookup(v_uid,jsonb_array_length(p_invites));
+ for v_item in select value from jsonb_array_elements(p_invites) loop
+  if jsonb_typeof(v_item) is distinct from 'object' or jsonb_typeof(v_item->'phone') is distinct from 'string'
+   or jsonb_typeof(v_item->'country') is distinct from 'string' or jsonb_typeof(v_item->'code') is distinct from 'string' then
+   raise exception 'Invalid invitation' using errcode='22023';
+  end if;
+  v_phone := private.phone_digits(v_item->>'phone');
+  v_country := v_item->>'country';
+  v_code := v_item->>'code';
+  if v_phone !~ '^[1-9][0-9]{6,14}$' or v_country !~ '^[1-9][0-9]{0,2}$' or v_code !~ '^[A-Za-z0-9_-]{22}$' then
+   raise exception 'Invalid invitation' using errcode='22023';
+  end if;
+  select id into v_holder from auth.users where phone=v_phone and phone_confirmed_at is not null;
+  if v_holder=v_uid or (v_holder is null and v_phone=(select private.phone_digits(phone) from auth.users where id=v_uid)) then
+   v_kind := 'self';
+  elsif v_holder is not null and exists(select 1 from public.attendees where plan_id=p_plan and user_id=v_holder) then
+   v_kind := 'already';
+  elsif v_holder is not null and private.user_eligible(v_holder) and private.used_app(v_holder)
+   and exists(select 1 from public.profiles where id=v_holder) then
+   v_kind := 'app';
+   insert into public.attendees(plan_id,user_id) values(p_plan,v_holder) on conflict do nothing;
+   insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id)
+    values(p_plan,v_holder,'invited','invited:'||p_plan||':'||v_holder,v_uid) on conflict do nothing;
+   update private.phone_invitations set revoked_at=now(), code_hash=null
+    where plan_id=p_plan and phone=v_phone and revoked_at is null;
+  else
+   v_kind := 'link';
+   insert into private.phone_invitations(plan_id,phone,country,code_hash,invited_by)
+    values(p_plan,v_phone,v_country,extensions.digest(v_code,'sha256'),v_uid)
+    on conflict (plan_id,phone) do update set country=excluded.country, code_hash=excluded.code_hash, revoked_at=null,
+     user_id=case when private.phone_invitations.revoked_at is null then private.phone_invitations.user_id end,
+     answered_at=case when private.phone_invitations.revoked_at is null then private.phone_invitations.answered_at end;
+  end if;
+  v_out := v_out || jsonb_build_array(jsonb_build_object('phone',v_phone,'kind',v_kind));
+ end loop;
+ return v_out;
+end $$;
+
+-- can_see_guests (20261014120000_ux2_rules.sql)
+create or replace function private.can_see_guests(p_plan uuid) returns boolean language sql stable security definer set search_path = '' as $$
+ select private.eligible() and exists(select 1 from public.plans p where p.id=p_plan and (p.owner_id=auth.uid()
+  or exists(select 1 from public.attendees a where a.plan_id=p.id and a.user_id=auth.uid() and a.response<>'pending')))
+$$;
+
+-- can_read_meeting_details (20261015120000_ux3_event_details.sql)
+create or replace function private.can_read_meeting_details(p_plan uuid) returns boolean language sql stable security definer set search_path = '' as $$
+ select private.eligible() and exists(select 1 from public.plans p where p.id=p_plan and (p.owner_id=auth.uid()
+  or exists(select 1 from public.attendees a where a.plan_id=p.id and a.user_id=auth.uid() and a.response in ('accepted','maybe'))))
+$$;
 
 -- request_join (20261029120000_open_link_approval.sql)
 create or replace function private.request_join(p_uid uuid, p_link private.plan_links, p_plan public.plans, p_response text) returns jsonb

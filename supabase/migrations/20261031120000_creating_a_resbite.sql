@@ -36,7 +36,9 @@ revoke all on function private.is_host(uuid,uuid), private.host_ids(uuid) from p
 -- 1. The end is the boundary
 -- CR-D14: a resbite accepts changes until it ends, not until it starts. The end is ends_at, or starts_at when there is
 -- none. Every function that refused from the start refuses from the end instead, with its error text unchanged; each
--- body below is the latest hosted one with that one comparison changed (and, for change_plan_v3, the start check).
+-- body below is the latest hosted one with that comparison changed (and, for change_plan_v3, the start check). Several
+-- bodies also widen an owner check to every host or send a host notice to every host (CR-D8, CR-P17): section 2 lists
+-- them; those changes are made here, in place, so each function keeps one definition.
 -- Unchanged: set_guest_note keeps its own window (end, or start + 1 hour) and create_plan_v3 still wants a future start.
 -- Each keeps the grants and the public wrapper it already has. The storage policies call plan_end, so authenticated
 -- may execute it.
@@ -106,7 +108,7 @@ begin
  if v_att.response=p_response then return v_att.version; end if;
  v_next:=v_att.version+1;
  update public.attendees set response=p_response,version=v_next,updated_at=now() where plan_id=p_plan and user_id=v_uid;
- -- CR-P15: Can't go ends the admin role. The notice goes to every host but the one answering (CR-D15).
+ -- CR-P15: Can't go ends the admin role. The notice goes to every host but the one answering (CR-P17).
  if p_response in ('declined','withdrawn') then delete from public.plan_admins where plan_id=p_plan and user_id=v_uid; end if;
  insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,detail)
  select p_plan,h,'rsvp','rsvp:'||p_plan||':'||v_uid||':'||v_next||case when h=v_plan.owner_id then '' else ':'||h end,v_uid,p_response from private.host_ids(p_plan) h where h<>v_uid on conflict do nothing;
@@ -215,12 +217,12 @@ begin
 end $$;
 
 -- A host (the organizer or an admin) of an active event that has not ended: the gate of the link, the invitations and the
--- waiting list.
+-- waiting list. The error text stays 'Active plan owner required': the current build matches that text.
 create or replace function private.require_link_owner(p_plan uuid) returns uuid language plpgsql set search_path = '' as $$
 declare v_uid uuid := private.require_tester();
 begin
  perform 1 from public.plans where id=p_plan and private.is_host(id,v_uid) and status='active' and private.plan_end(starts_at,ends_at)>now() for update;
- if not found then raise exception 'Active plan host required' using errcode='42501'; end if;
+ if not found then raise exception 'Active plan owner required' using errcode='42501'; end if;
  return v_uid;
 end $$;
 
@@ -535,12 +537,15 @@ create policy resbite_cover_update on storage.objects for update to authenticate
 );
 
 -- 2. Admins
--- CR-D8, CR-D15, CR-P15, CR-P17: the owner appoints Going guests as admins. An admin does everything a host does except
--- appoint or remove admins. The table and the helpers private.is_host / private.host_ids are at the top of this file
--- (section 1 refers to them); the owner checks they widen are edited in place in section 1 (require_link_owner, respond,
--- claim_invite, answer_phone_invitation, the cover setters, plan_join_requests, notification_recipient_eligible and the
--- two storage policies). Host notices go to every host but the actor, one row each. The recipient id ends the dedupe key
--- of an admin's row; the owner's row keeps the key it always had, so existing keys and their tests are unchanged.
+-- CR-D8, CR-D15, CR-P15, CR-P17: the owner appoints Going guests who use the app as admins. An admin does everything a
+-- host does except appoint or remove admins, or remove the owner. The table and the helpers private.is_host /
+-- private.host_ids are at the top of this file (section 1 refers to them); the owner checks they widen are edited in
+-- place in section 1 (change_plan_v3, require_link_owner, respond, claim_invite, answer_phone_invitation, the cover
+-- setters, plan_join_requests and the two storage policies), at the end of section 4 (notification_recipient_eligible)
+-- and below (can_see_guests, can_read_meeting_details, plan_phone_invitations, remove_guest, invite_contacts,
+-- set_guest_note, request_join). Host notices go to every host but the actor, one row each. The recipient id ends the
+-- dedupe key of an admin's row; the owner's row keeps the key it always had, so existing keys and their tests are
+-- unchanged.
 
 -- The outbox: 'admin_added' (to the new admin, the owner as actor), with a null detail like the other plain kinds; and
 -- (section 5) 'invited' with the detail 'again', the invitation to a repeating resbite's next occurrence.
@@ -555,7 +560,8 @@ alter table private.notification_outbox add constraint notification_outbox_detai
  or (kind='rsvp' and detail in ('accepted','maybe','declined','withdrawn'))
  or (kind='invited' and detail='again'));
 
--- The owner appoints a guest who is going; asking again changes nothing and tells nobody twice.
+-- The owner appoints a guest who is going and uses the app (an admin hosts from the app); asking again changes nothing
+-- and tells nobody twice.
 create function private.appoint_admin(p_plan uuid, p_user uuid) returns void language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester(); v_plan public.plans; v_added integer;
 begin
@@ -566,6 +572,7 @@ begin
  if p_user is null or not exists(select 1 from public.attendees where plan_id=p_plan and user_id=p_user and response='accepted') then
   raise exception 'Only a guest who is going can be an admin' using errcode='22023';
  end if;
+ if not private.used_app(p_user) then raise exception 'Only a guest who uses the app can be an admin' using errcode='22023'; end if;
  insert into public.plan_admins(plan_id,user_id,appointed_by) values(p_plan,p_user,v_uid) on conflict do nothing;
  get diagnostics v_added = row_count;
  if v_added=1 then
@@ -591,6 +598,21 @@ revoke all on function private.appoint_admin(uuid,uuid), public.appoint_admin(uu
  from public, anon, authenticated, service_role;
 grant execute on function private.appoint_admin(uuid,uuid), public.appoint_admin(uuid,uuid), private.remove_admin(uuid,uuid), public.remove_admin(uuid,uuid) to authenticated;
 
+-- What a host sees. An admin's own reply may be pending (on a rolled occurrence every guest starts pending, its admins
+-- included), yet a host sees the guests and the meeting details, which the editor reads and saves back. The
+-- 20261014120000_ux2_rules and 20261015120000_ux3_event_details bodies, with a plan_admins row admitted beside the
+-- owner. attendee_read, plan_admins_read, can_read_profile and meeting_details_read call them; their grants are kept.
+create or replace function private.can_see_guests(p_plan uuid) returns boolean language sql stable security definer set search_path = '' as $$
+ select private.eligible() and exists(select 1 from public.plans p where p.id=p_plan and (p.owner_id=auth.uid()
+  or exists(select 1 from public.plan_admins pa where pa.plan_id=p.id and pa.user_id=auth.uid())
+  or exists(select 1 from public.attendees a where a.plan_id=p.id and a.user_id=auth.uid() and a.response<>'pending')))
+$$;
+create or replace function private.can_read_meeting_details(p_plan uuid) returns boolean language sql stable security definer set search_path = '' as $$
+ select private.eligible() and exists(select 1 from public.plans p where p.id=p_plan and (p.owner_id=auth.uid()
+  or exists(select 1 from public.plan_admins pa where pa.plan_id=p.id and pa.user_id=auth.uid())
+  or exists(select 1 from public.attendees a where a.plan_id=p.id and a.user_id=auth.uid() and a.response in ('accepted','maybe'))))
+$$;
+
 -- The host's list of invitations: the 20261028120000_contact_invitations body, for any host.
 create or replace function private.plan_phone_invitations(p_plan uuid) returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester();
@@ -602,19 +624,75 @@ begin
 end $$;
 
 -- Removing a guest who is an admin ends the admin role too. The 20261028120000_contact_invitations body, plus that.
+-- Nobody removes the organizer: the organizer asking is invalid (22023, as before), an admin asking is refused (42501).
+-- Only the owner removes another admin; an admin may remove themself.
 create or replace function private.remove_guest(p_plan uuid,p_user uuid) returns void language plpgsql security definer set search_path = '' as $$
-declare v_uid uuid;
+declare v_uid uuid; v_owner uuid;
 begin
  v_uid := private.require_link_owner(p_plan);
- if p_user=v_uid then raise exception 'The organizer cannot be removed' using errcode='22023'; end if;
- -- Only the owner removes an admin.
- if exists(select 1 from public.plan_admins where plan_id=p_plan and user_id=p_user) and not exists(select 1 from public.plans where id=p_plan and owner_id=v_uid) then
+ select owner_id into v_owner from public.plans where id=p_plan;
+ if p_user=v_owner then
+  if v_uid=v_owner then raise exception 'The organizer cannot be removed' using errcode='22023'; end if;
+  raise exception 'The organizer cannot be removed' using errcode='42501';
+ end if;
+ if p_user<>v_uid and v_uid is distinct from v_owner and exists(select 1 from public.plan_admins where plan_id=p_plan and user_id=p_user) then
   raise exception 'Owner required' using errcode='42501';
  end if;
  update private.invitations set revoked_at=now() where plan_id=p_plan and claimed_by=p_user and revoked_at is null;
  update private.phone_invitations set revoked_at=now(), code_hash=null where plan_id=p_plan and user_id=p_user;
  delete from public.plan_admins where plan_id=p_plan and user_id=p_user;
  delete from public.attendees where plan_id=p_plan and user_id=p_user;
+end $$;
+
+-- Inviting by number, for any host (require_link_owner admits the admins). The 20261028120000_contact_invitations body;
+-- 'self' still means the caller's own number, so when an admin invites the organizer's number it is 'already' (the
+-- organizer is on the event as its host): no attendee row, no notice.
+create or replace function private.invite_contacts(p_plan uuid, p_invites jsonb) returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := private.require_link_owner(p_plan); v_item jsonb; v_phone text; v_country text; v_code text; v_holder uuid;
+ v_kind text; v_out jsonb := '[]'::jsonb;
+begin
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_uid::text,47));
+ if jsonb_typeof(p_invites) is distinct from 'array' or jsonb_array_length(p_invites)>50 then
+  raise exception 'Invalid invitations' using errcode='22023';
+ end if;
+ -- The kind of each item tells the host who is On Resbite, so invitations spend the same daily budget as lookups.
+ perform private.charge_lookup(v_uid,jsonb_array_length(p_invites));
+ for v_item in select value from jsonb_array_elements(p_invites) loop
+  if jsonb_typeof(v_item) is distinct from 'object' or jsonb_typeof(v_item->'phone') is distinct from 'string'
+   or jsonb_typeof(v_item->'country') is distinct from 'string' or jsonb_typeof(v_item->'code') is distinct from 'string' then
+   raise exception 'Invalid invitation' using errcode='22023';
+  end if;
+  v_phone := private.phone_digits(v_item->>'phone');
+  v_country := v_item->>'country';
+  v_code := v_item->>'code';
+  if v_phone !~ '^[1-9][0-9]{6,14}$' or v_country !~ '^[1-9][0-9]{0,2}$' or v_code !~ '^[A-Za-z0-9_-]{22}$' then
+   raise exception 'Invalid invitation' using errcode='22023';
+  end if;
+  select id into v_holder from auth.users where phone=v_phone and phone_confirmed_at is not null;
+  if v_holder=v_uid or (v_holder is null and v_phone=(select private.phone_digits(phone) from auth.users where id=v_uid)) then
+   v_kind := 'self';
+  elsif v_holder is not null and (v_holder=(select owner_id from public.plans where id=p_plan)
+   or exists(select 1 from public.attendees where plan_id=p_plan and user_id=v_holder)) then
+   v_kind := 'already';
+  elsif v_holder is not null and private.user_eligible(v_holder) and private.used_app(v_holder)
+   and exists(select 1 from public.profiles where id=v_holder) then
+   v_kind := 'app';
+   insert into public.attendees(plan_id,user_id) values(p_plan,v_holder) on conflict do nothing;
+   insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id)
+    values(p_plan,v_holder,'invited','invited:'||p_plan||':'||v_holder,v_uid) on conflict do nothing;
+   update private.phone_invitations set revoked_at=now(), code_hash=null
+    where plan_id=p_plan and phone=v_phone and revoked_at is null;
+  else
+   v_kind := 'link';
+   insert into private.phone_invitations(plan_id,phone,country,code_hash,invited_by)
+    values(p_plan,v_phone,v_country,extensions.digest(v_code,'sha256'),v_uid)
+    on conflict (plan_id,phone) do update set country=excluded.country, code_hash=excluded.code_hash, revoked_at=null,
+     user_id=case when private.phone_invitations.revoked_at is null then private.phone_invitations.user_id end,
+     answered_at=case when private.phone_invitations.revoked_at is null then private.phone_invitations.answered_at end;
+  end if;
+  v_out := v_out || jsonb_build_array(jsonb_build_object('phone',v_phone,'kind',v_kind));
+ end loop;
+ return v_out;
 end $$;
 
 -- The note to guests: any host posts it. The 20261015120000_ux3_event_details body; the notice goes to each guest who may
@@ -768,7 +846,9 @@ begin
    latitude=null,longitude=null,repeat_weeks=p_repeat_weeks,version=v_next,
    area=case when p_area is null then v_plan.area else btrim(p_area) end
   where id=p_plan;
-  perform private.write_meeting_details(p_plan,coalesce(p_note,''));
+  -- A null note leaves the meeting details as they are (as change_plan_v2 keeps them for an old build); an empty one
+  -- removes them.
+  if p_note is not null then perform private.write_meeting_details(p_plan,p_note); end if;
   if v_time or v_place then
    insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,detail)
    select p_plan,r.id,'plan_changed','plan:'||p_plan||':'||v_next||':'||r.id,v_uid,
@@ -804,7 +884,8 @@ grant execute on function
 
 -- 4. Mutes (CR-D9, CR-P7, CR-P24)
 -- "Mute this resbite": one row per person and series, so the mute carries to the next occurrence of a repeating resbite.
--- notification_recipient_eligible (section 1) skips the muted. Clients read their own rows and write through set_plan_mute.
+-- notification_recipient_eligible (at the end of this section) skips the muted. Clients read their own rows and write
+-- through set_plan_mute.
 create table public.plan_mutes (
  series_id uuid not null,
  user_id uuid not null references public.profiles(id) on delete cascade,
@@ -837,9 +918,11 @@ $$;
 revoke all on function private.set_plan_mute(uuid,boolean), public.set_plan_mute(uuid,boolean) from public, anon, authenticated, service_role;
 grant execute on function private.set_plan_mute(uuid,boolean), public.set_plan_mute(uuid,boolean) to authenticated;
 
--- The one definition of notification_recipient_eligible. It carries the end boundary for a request's notice (section 1), is_host
--- (section 0/2) and the mute clause. It sits here because it reads plans.series_id (section 3) and plan_mutes (this section);
--- it stays a SQL function so the planner can inline it into the sender's query.
+-- The one definition of notification_recipient_eligible. It carries the end boundary for a request's notice (section 1),
+-- is_host (section 0/2) and the mute clause. It sits here because it reads plans.series_id (section 3) and plan_mutes
+-- (this section). It stays a SQL function, as its previous definition was. The host notices (rsvp, invitation,
+-- join_request) go only to someone who is still a host: an admin removed, or who answered Can't go, after the row was
+-- queued is not told.
 create or replace function private.notification_recipient_eligible(p_outbox bigint) returns boolean
 language sql stable security definer set search_path='' as $$
  select exists (
@@ -849,6 +932,7 @@ language sql stable security definer set search_path='' as $$
  and private.user_eligible(o.recipient_id) and not private.deletion_pending(o.recipient_id)
  and (private.is_host(plan.id,o.recipient_id) or exists(select 1 from public.attendees a where a.plan_id=plan.id and a.user_id=o.recipient_id
   and (o.kind not in ('plan_changed','guest_note') or a.response in ('accepted','maybe','pending'))))
+ and (o.kind not in ('rsvp','invitation','join_request') or private.is_host(plan.id,o.recipient_id))
  and o.created_at>now()-interval '24 hours'
  and not exists(select 1 from public.plan_mutes m where m.series_id=plan.series_id and m.user_id=o.recipient_id)
  and (o.kind<>'join_request' or (plan.status='active' and private.plan_end(plan.starts_at,plan.ends_at)>now()
@@ -875,11 +959,13 @@ revoke all on function private.next_occurrence(timestamptz,text,integer) from pu
 
 -- For each plan with a rule and no next yet that has ended or was cancelled with its rule kept: the next occurrence is
 -- the first one, counting on from this one, that has not ended (a plan left behind catches up instead of creating
--- occurrences in the past). It copies the plan, its meeting details, its admins and everyone invited in the app who
--- didn't withdraw, as pending invitations, and queues the invitation push for each of them but the admins (CR-P24;
--- the owner is never an attendee). A plan whose organizer may no longer use the app (no owner, leaving, removed or
--- banned) is not rolled; it catches up if they come back. The rows are locked with skip locked and repeats_from is
--- unique, so two runs at once, or a retry, create one next occurrence; the loser's unique violation is caught.
+-- occurrences in the past). It copies the plan, its meeting details, and as pending invitations every guest who didn't
+-- withdraw and uses the app (private.used_app), may still use it and is not leaving; a guest who only ever answered on
+-- the web is not asked again. The admins among them stay admins. It queues the invitation push for each guest it
+-- copied but the admins (CR-P24; the owner is never an attendee). A plan whose organizer may no longer use the app (no
+-- owner, leaving, removed or banned) is not rolled; it catches up if they come back. The rows are locked with skip
+-- locked and repeats_from is unique, so two runs at once, or a retry, create one next occurrence; the loser's unique
+-- violation is caught.
 create function private.roll_repeating_plans() returns integer language plpgsql security definer set search_path = '' as $$
 declare p public.plans; v_id uuid; v_start timestamptz; v_end timestamptz; v_steps integer; v_count integer := 0; v_constraint text;
 begin
@@ -913,8 +999,10 @@ begin
     p.latitude,p.longitude,p.area,p.guest_note,p.guest_note_at,p.cover_path,p.cover_revision,p.cover_description,p.has_meeting_details,p.repeat_weeks,
     p.series_id,p.id,'active',1);
    insert into public.plan_meeting_details(plan_id,note) select v_id,note from public.plan_meeting_details where plan_id=p.id;
-   insert into public.plan_admins(plan_id,user_id,appointed_by,appointed_at) select v_id,user_id,appointed_by,now() from public.plan_admins where plan_id=p.id;
-   insert into public.attendees(plan_id,user_id,response,version) select v_id,user_id,'pending',1 from public.attendees where plan_id=p.id and response<>'withdrawn';
+   insert into public.attendees(plan_id,user_id,response,version) select v_id,user_id,'pending',1 from public.attendees
+    where plan_id=p.id and response<>'withdrawn' and private.used_app(user_id) and private.user_eligible(user_id) and not private.deletion_pending(user_id);
+   insert into public.plan_admins(plan_id,user_id,appointed_by,appointed_at) select v_id,pa.user_id,pa.appointed_by,now() from public.plan_admins pa
+    where pa.plan_id=p.id and exists(select 1 from public.attendees a where a.plan_id=v_id and a.user_id=pa.user_id);
    insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,detail)
    select v_id,a.user_id,'invited','invited:'||v_id||':'||a.user_id,p.owner_id,'again'
    from public.attendees a

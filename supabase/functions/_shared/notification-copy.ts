@@ -1,6 +1,8 @@
 /**
  * UX2 notification text (spec "Notification wording", UX2-D4). The heading is the event title and the body
- * says what happened and who did it. It never contains the place, the Meeting details, the Note to guests
+ * says what happened and who did it, with two exceptions: admin_added leads with who made you an admin and
+ * puts the event title underneath, and the invitation to a repeating resbite's next occurrence reads
+ * "<title> is on again" over its time. It never contains the place, the Meeting details, the Note to guests
  * itself, the description or the cover description (UX3). Anything missing or unexpected falls back to the
  * generic text.
  */

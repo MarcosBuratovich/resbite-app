@@ -1,15 +1,16 @@
 -- Rehearsal checks for 20261031120000_creating_a_resbite (hosted-baseline mode only).
--- 1. Against the fingerprint .before.sql took: the migration removed nothing, redefined exactly the 23 functions it
+-- 1. Against the fingerprint .before.sql took: the migration removed nothing, redefined exactly the 26 functions it
 -- says and the two outbox checks, and added only the admins, the mutes, the plans columns, the repeat objects and the
 -- functions it names (changed nothing else, every grant and the private schema's included).
 do $$ declare v_added text[]; v_removed text[]; v_changed text[]; v_expected text[];
 begin
  v_expected := array['constraint private.notification_outbox notification_outbox_detail_check',
   'constraint private.notification_outbox notification_outbox_kind_check']
-  || array(select 'definition private.'||f from unnest(array['answer_phone_invitation(text,text,text,text)','change_join_answer(uuid,text)',
+  || array(select 'definition private.'||f from unnest(array['answer_phone_invitation(text,text,text,text)',
+   'can_read_meeting_details(uuid)','can_see_guests(uuid)','change_join_answer(uuid,text)',
    'change_plan_v3(uuid,integer,text,text,text[],timestamp with time zone,timestamp with time zone,text,text,text,boolean,boolean,text)',
    'check_invited_number(text,text)','claim_invite(text)','claim_plan_link(text)','create_invite(uuid,uuid,text,text)',
-   'invitation_page(text)','join_by_link(text,text,text)','my_join_requests()','notification_recipient_eligible(bigint)',
+   'invitation_page(text)','invite_contacts(uuid,jsonb)','join_by_link(text,text,text)','my_join_requests()','notification_recipient_eligible(bigint)',
    'personal_invitation_page(text)','plan_join_requests(uuid)','plan_phone_invitations(uuid)','remove_guest(uuid,uuid)',
    'request_join(uuid,private.plan_links,public.plans,text)','request_to_join(text,text,text,text)','require_link_owner(uuid)',
    'respond(uuid,text,integer)','revoke_invite(uuid)','set_guest_note(uuid,text)','set_plan_cover_description(uuid,text,bigint)',

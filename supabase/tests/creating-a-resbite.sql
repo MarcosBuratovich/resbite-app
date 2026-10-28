@@ -146,12 +146,12 @@ do $$ begin
   raise exception 'Ended plan changed';
  exception when invalid_parameter_value then if sqlerrm<>'Plan unavailable' then raise exception 'Wrong message: %', sqlerrm; end if; end;
  begin perform public.plan_link('e1100000-0000-4000-8000-000000000001'); raise exception 'Link read on an ended plan';
- exception when insufficient_privilege then if sqlerrm<>'Active plan host required' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+ exception when insufficient_privilege then if sqlerrm<>'Active plan owner required' then raise exception 'Wrong message: %', sqlerrm; end if; end;
  begin perform public.invite_contacts('e1100000-0000-4000-8000-000000000001', jsonb_build_array(jsonb_build_object('phone','447700900699','country','44','code',repeat('L',22))));
   raise exception 'Invited to an ended plan';
- exception when insufficient_privilege then if sqlerrm<>'Active plan host required' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+ exception when insufficient_privilege then if sqlerrm<>'Active plan owner required' then raise exception 'Wrong message: %', sqlerrm; end if; end;
  begin perform public.decide_join_request('e1100000-0000-4000-8000-000000000001','e1000000-0000-4000-8000-000000000007',true); raise exception 'Decided on an ended plan';
- exception when insufficient_privilege then if sqlerrm<>'Active plan host required' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+ exception when insufficient_privilege then if sqlerrm<>'Active plan owner required' then raise exception 'Wrong message: %', sqlerrm; end if; end;
  begin perform public.create_invite('e1200000-0000-4000-8000-000000000003','e1100000-0000-4000-8000-000000000001',repeat('c',64)); raise exception 'Invite created on an ended plan';
  exception when invalid_parameter_value then if sqlerrm<>'Plan unavailable' then raise exception 'Wrong message: %', sqlerrm; end if; end;
  begin perform public.revoke_invite('e1200000-0000-4000-8000-000000000001'); raise exception 'Invite revoked on an ended plan';
@@ -234,12 +234,13 @@ do $$ begin
 end $$;
 rollback;
 
--- Slice 2: admins (CR-D8, CR-D15). The owner appoints Going guests; an admin does everything a host does except appoint
--- or remove admins. Users: 01 owner, 02 admin (appointed), 03 a Maybe guest, 04 a plain guest, 05 a second admin,
--- 06 a phone-only requester, 07 a guest an admin removes.
+-- Slice 2: admins (CR-D8, CR-D15). The owner appoints Going guests who use the app; an admin does everything a host
+-- does except appoint or remove admins, or remove the owner. Users: 01 owner (with a confirmed number), 02 admin
+-- (appointed), 03 a Maybe guest, 04 a plain guest, 05 a second admin, 06 a phone-only requester, 07 a Going guest who
+-- has never used the app, whom an admin removes. 01, 02, 05, 06 and 08 have used the app; 03, 04 and 07 have not.
 begin;
 insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) values
- ('e1000000-0000-4000-8000-000000000001','cr1-owner@resbite-test.invalid',now(),null,null),
+ ('e1000000-0000-4000-8000-000000000001','cr1-owner@resbite-test.invalid',now(),'447700900601',now()),
  ('e1000000-0000-4000-8000-000000000002','cr1-guest-a@resbite-test.invalid',now(),null,null),
  ('e1000000-0000-4000-8000-000000000003','cr1-guest-b@resbite-test.invalid',now(),null,null),
  ('e1000000-0000-4000-8000-000000000004','cr1-guest-c@resbite-test.invalid',now(),null,null),
@@ -254,6 +255,7 @@ insert into public.profiles(id,display_name) values
  ('e1000000-0000-4000-8000-000000000005','Admin D'),('e1000000-0000-4000-8000-000000000006','Requester six'),
  ('e1000000-0000-4000-8000-000000000007','Guest E');
 insert into private.age_attestations(user_id,terms_version) values ('e1000000-0000-4000-8000-000000000006','2026-09');
+insert into private.app_sessions(user_id) select ('e1000000-0000-4000-8000-0000000000'||n)::uuid from unnest(array['01','02','05','06']) n;
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 select public.create_plan_v3('e1100000-0000-4000-8000-000000000003','Admin night','',array['community'],null,
@@ -286,6 +288,9 @@ do $$ begin
  perform public.appoint_admin('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000002');
  begin perform public.appoint_admin('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000003'); raise exception 'A Maybe guest was appointed';
  exception when invalid_parameter_value then if sqlerrm<>'Only a guest who is going can be an admin' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+ -- Going, but never used the app: an admin hosts from the app.
+ begin perform public.appoint_admin('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000007'); raise exception 'A guest who never used the app was appointed';
+ exception when invalid_parameter_value then if sqlerrm<>'Only a guest who uses the app can be an admin' then raise exception 'Wrong message: %', sqlerrm; end if; end;
  begin perform public.appoint_admin('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000001'); raise exception 'The owner appointed themself';
  exception when invalid_parameter_value then null; end;
  begin perform public.appoint_admin('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000099'); raise exception 'A stranger was appointed';
@@ -322,7 +327,7 @@ end $$;
 select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000004","role":"authenticated"}',true);
 do $$ begin
  begin perform public.plan_link('e1100000-0000-4000-8000-000000000003'); raise exception 'A plain guest read the link';
- exception when insufficient_privilege then if sqlerrm<>'Active plan host required' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+ exception when insufficient_privilege then if sqlerrm<>'Active plan owner required' then raise exception 'Wrong message: %', sqlerrm; end if; end;
  begin perform public.invite_contacts('e1100000-0000-4000-8000-000000000003', jsonb_build_array(jsonb_build_object('phone','447700900699','country','44','code',repeat('L',22))));
   raise exception 'A plain guest invited'; exception when insufficient_privilege then null; end;
  begin perform public.remove_guest('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000007'); raise exception 'A plain guest removed a guest';
@@ -374,6 +379,11 @@ do $$ declare r jsonb; begin
  if exists(select 1 from public.attendees where plan_id='e1100000-0000-4000-8000-000000000003' and user_id='e1000000-0000-4000-8000-000000000007')
   then raise exception 'The admin could not remove a guest'; end if;
  if public.set_guest_note('e1100000-0000-4000-8000-000000000003','Bring a coat')->>'guest_note'<>'Bring a coat' then raise exception 'The admin could not write the note'; end if;
+ -- The organizer is never a guest: their number is 'already' for an admin, and an admin cannot remove them.
+ r := public.invite_contacts('e1100000-0000-4000-8000-000000000003', jsonb_build_array(jsonb_build_object('phone','447700900601','country','44','code',repeat('N',22))));
+ if r->0->>'kind' is distinct from 'already' then raise exception 'The organizer''s number should be already for an admin: %', r; end if;
+ begin perform public.remove_guest('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000001'); raise exception 'An admin removed the organizer';
+ exception when insufficient_privilege then if sqlerrm<>'The organizer cannot be removed' then raise exception 'Wrong message: %', sqlerrm; end if; end;
  -- The cover: the object stays in the owner's folder, the uploader is the admin.
  insert into storage.objects(bucket_id,name) values('plan-covers','e1000000-0000-4000-8000-000000000001/e1100000-0000-4000-8000-000000000003/a.jpg');
  if public.set_plan_cover_if_current('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000001/e1100000-0000-4000-8000-000000000003/a.jpg',null,0)->>'cover_revision' is null
@@ -385,6 +395,10 @@ do $$ declare r jsonb; begin
 end $$;
 reset role;
 do $$ begin
+ if exists(select 1 from public.attendees where plan_id='e1100000-0000-4000-8000-000000000003' and user_id='e1000000-0000-4000-8000-000000000001')
+  or exists(select 1 from private.notification_outbox where plan_id='e1100000-0000-4000-8000-000000000003' and kind='invited' and recipient_id='e1000000-0000-4000-8000-000000000001')
+  or exists(select 1 from private.phone_invitations where plan_id='e1100000-0000-4000-8000-000000000003' and phone='447700900601')
+  then raise exception 'The admin made the organizer a guest'; end if;
  -- The admin's note reached the owner and the guests; the admin was the actor, so not the admin.
  if (select count(*) from private.notification_outbox where plan_id='e1100000-0000-4000-8000-000000000003' and kind='guest_note' and recipient_id='e1000000-0000-4000-8000-000000000001')<>1
   then raise exception 'The owner should get the admin''s note notice'; end if;
@@ -405,6 +419,15 @@ do $$ declare o bigint; begin
  select id into o from private.notification_outbox where plan_id='e1100000-0000-4000-8000-000000000003' and kind='rsvp' and actor_id='e1000000-0000-4000-8000-000000000004'
   and recipient_id='e1000000-0000-4000-8000-000000000002';
  if not private.notification_recipient_eligible(o) then raise exception 'The admin''s rsvp notice should be eligible'; end if;
+ -- Demoted (the inner block is undone): still a Going guest, no longer told of answers.
+ begin
+  delete from public.plan_admins where plan_id='e1100000-0000-4000-8000-000000000003' and user_id='e1000000-0000-4000-8000-000000000002';
+  if (select response from public.attendees where plan_id='e1100000-0000-4000-8000-000000000003' and user_id='e1000000-0000-4000-8000-000000000002')<>'accepted'
+   then raise exception 'The demoted admin should still be going'; end if;
+  if private.notification_recipient_eligible(o) then raise exception 'An rsvp notice to a demoted admin is eligible'; end if;
+  raise exception 'cr1-undo';
+ exception when raise_exception then if sqlerrm<>'cr1-undo' then raise; end if; end;
+ if not private.notification_recipient_eligible(o) then raise exception 'The demotion was not undone'; end if;
 end $$;
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
@@ -468,6 +491,7 @@ reset role;
 insert into auth.users(id,phone,phone_confirmed_at) values ('e1000000-0000-4000-8000-000000000008','447700900608',now());
 insert into public.profiles(id,display_name) values ('e1000000-0000-4000-8000-000000000008','Invitee eight');
 insert into private.age_attestations(user_id,terms_version) values ('e1000000-0000-4000-8000-000000000008','2026-09');
+insert into private.app_sessions(user_id) values ('e1000000-0000-4000-8000-000000000008');
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000008","role":"authenticated"}',true);
 select public.answer_phone_invitation(repeat('M',22),null,'accepted','2026-10');
@@ -478,7 +502,7 @@ select public.plan_link('e1100000-0000-4000-8000-000000000003');
 select public.answer_phone_invitation(repeat('M',22),null,'declined','2026-10');
 do $$ begin
  begin perform public.plan_link('e1100000-0000-4000-8000-000000000003'); raise exception 'A declined phone admin still reads the link';
- exception when insufficient_privilege then if sqlerrm<>'Active plan host required' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+ exception when insufficient_privilege then if sqlerrm<>'Active plan owner required' then raise exception 'Wrong message: %', sqlerrm; end if; end;
 end $$;
 reset role;
 do $$ begin
@@ -510,11 +534,24 @@ select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-00000000
 select public.respond('e1100000-0000-4000-8000-000000000003','declined',2);
 do $$ begin
  begin perform public.plan_link('e1100000-0000-4000-8000-000000000003'); raise exception 'A declined admin still reads the link';
- exception when insufficient_privilege then if sqlerrm<>'Active plan host required' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+ exception when insufficient_privilege then if sqlerrm<>'Active plan owner required' then raise exception 'Wrong message: %', sqlerrm; end if; end;
 end $$;
 reset role;
 do $$ begin
  if exists(select 1 from public.plan_admins where user_id='e1000000-0000-4000-8000-000000000002') then raise exception 'The declined admin kept the role'; end if;
+end $$;
+
+-- An admin may remove themself: their guest row and their admin row go (06, appointed again).
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.appoint_admin('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000006');
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000006","role":"authenticated"}',true);
+select public.remove_guest('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000006');
+reset role;
+do $$ begin
+ if exists(select 1 from public.plan_admins where plan_id='e1100000-0000-4000-8000-000000000003' and user_id='e1000000-0000-4000-8000-000000000006')
+  or exists(select 1 from public.attendees where plan_id='e1100000-0000-4000-8000-000000000003' and user_id='e1000000-0000-4000-8000-000000000006')
+  then raise exception 'The admin could not remove themself'; end if;
 end $$;
 rollback;
 
@@ -745,6 +782,18 @@ do $$ declare s timestamptz := (select starts_at from public.plans where id='e11
  exception when invalid_parameter_value then if sqlerrm<>'Plan unavailable' then raise exception 'Wrong message: %', sqlerrm; end if; end;
  if public.change_plan_v3('e1100000-0000-4000-8000-000000000014',2,'Running','',array['community'],s,now()+interval '3 hours','UTC','Park','')<>3
   then raise exception 'v3 could not extend a running plan'; end if;
+ -- The meeting details: a text sets them, a null note leaves them as they are, an empty one removes them.
+ perform public.change_plan_v4('e1100000-0000-4000-8000-000000000014',3,'Running','',array['community'],s,now()+interval '3 hours','UTC','Park',false,null,'Door code 1234','');
+ if (select note from public.plan_meeting_details where plan_id='e1100000-0000-4000-8000-000000000014') is distinct from 'Door code 1234' then raise exception 'The meeting details were not set'; end if;
+ if public.change_plan_v4('e1100000-0000-4000-8000-000000000014',4,'Running','',array['community'],s,now()+interval '3 hours','UTC','Other park',false,null,null,'')<>5
+  then raise exception 'A change with a null note failed'; end if;
+ if (select note from public.plan_meeting_details where plan_id='e1100000-0000-4000-8000-000000000014') is distinct from 'Door code 1234'
+  or not (select has_meeting_details from public.plans where id='e1100000-0000-4000-8000-000000000014')
+  or (select place_label from public.plans where id='e1100000-0000-4000-8000-000000000014')<>'Other park'
+  then raise exception 'A null note changed the meeting details'; end if;
+ perform public.change_plan_v4('e1100000-0000-4000-8000-000000000014',5,'Running','',array['community'],s,now()+interval '3 hours','UTC','Other park',false,null,'','');
+ if exists(select 1 from public.plan_meeting_details where plan_id='e1100000-0000-4000-8000-000000000014')
+  or (select has_meeting_details from public.plans where id='e1100000-0000-4000-8000-000000000014') then raise exception 'An empty note did not remove the meeting details'; end if;
 end $$;
 reset role;
 
@@ -860,7 +909,8 @@ rollback;
 
 -- Slice 5: repeats (CR-D16, CR-P22 to CR-P26). Users: 01 owner, 02 admin (Going), 03 a Going guest who mutes, 04 a
 -- Can't-go guest, 05 a pending guest, 06 a guest who withdrew, 07 a guest invited to the next occurrence only, 08 a
--- stranger, 09 an organizer who is leaving. The roll uses the real now(), so its checks are relative to it.
+-- stranger, 09 an organizer who is leaving, 10 a Going guest who never used the app (they answered on the web), 11 a
+-- Maybe guest who is leaving. The roll uses the real now(), so its checks are relative to it.
 begin;
 insert into auth.users(id,email,email_confirmed_at) values
  ('e1000000-0000-4000-8000-000000000001','cr1-owner@resbite-test.invalid',now()),
@@ -871,17 +921,23 @@ insert into auth.users(id,email,email_confirmed_at) values
  ('e1000000-0000-4000-8000-000000000006','cr1-guest-e@resbite-test.invalid',now()),
  ('e1000000-0000-4000-8000-000000000007','cr1-guest-f@resbite-test.invalid',now()),
  ('e1000000-0000-4000-8000-000000000008','cr1-stranger@resbite-test.invalid',now()),
- ('e1000000-0000-4000-8000-000000000009','cr1-leaving@resbite-test.invalid',now());
+ ('e1000000-0000-4000-8000-000000000009','cr1-leaving@resbite-test.invalid',now()),
+ ('e1000000-0000-4000-8000-000000000010','cr1-web-only@resbite-test.invalid',now()),
+ ('e1000000-0000-4000-8000-000000000011','cr1-leaving-guest@resbite-test.invalid',now());
 insert into private.tester_roster(email) values ('cr1-owner@resbite-test.invalid'),('cr1-guest-a@resbite-test.invalid'),
  ('cr1-guest-b@resbite-test.invalid'),('cr1-guest-c@resbite-test.invalid'),('cr1-guest-d@resbite-test.invalid'),
  ('cr1-guest-e@resbite-test.invalid'),('cr1-guest-f@resbite-test.invalid'),('cr1-stranger@resbite-test.invalid'),
- ('cr1-leaving@resbite-test.invalid');
+ ('cr1-leaving@resbite-test.invalid'),('cr1-web-only@resbite-test.invalid'),('cr1-leaving-guest@resbite-test.invalid');
 insert into public.profiles(id,display_name) values
  ('e1000000-0000-4000-8000-000000000001','Owner'),('e1000000-0000-4000-8000-000000000002','Admin A'),
  ('e1000000-0000-4000-8000-000000000003','Guest B'),('e1000000-0000-4000-8000-000000000004','Guest C'),
  ('e1000000-0000-4000-8000-000000000005','Guest D'),('e1000000-0000-4000-8000-000000000006','Guest E'),
  ('e1000000-0000-4000-8000-000000000007','Guest F'),('e1000000-0000-4000-8000-000000000008','Stranger'),
- ('e1000000-0000-4000-8000-000000000009','Leaving organizer');
+ ('e1000000-0000-4000-8000-000000000009','Leaving organizer'),('e1000000-0000-4000-8000-000000000010','Web only');
+insert into public.profiles(id,display_name,deletion_requested_at) values ('e1000000-0000-4000-8000-000000000011','Leaving guest',now());
+-- Everyone but 10 has used the app (11 too, before asking to leave).
+insert into private.app_sessions(user_id) select ('e1000000-0000-4000-8000-0000000000'||n)::uuid
+ from unnest(array['01','02','03','04','05','06','07','08','09','11']) n;
 
 -- The next occurrence keeps the local time across the clock changes (Europe/London goes back on 25 Oct 2026 and
 -- forward on 28 Mar 2027); with no change in between it is exactly 7 or 14 days on.
@@ -943,14 +999,17 @@ select public.create_plan_v4('e1100000-0000-4000-8000-000000000036','Leaving',''
  '2099-06-04 18:00+00','2099-06-04 20:00+00','UTC','Park',false,1::smallint,'');
 reset role;
 
--- 30's people: an admin who is Going, a Going guest, a Can't-go guest, a pending guest and one who withdrew. The Going
--- guest mutes it. A cover photo with a description and a note to guests.
+-- 30's people: an admin who is Going, a Going guest, a Can't-go guest, a pending guest, one who withdrew, a Going guest
+-- who never used the app and a Maybe guest who is leaving. The Going guest mutes it. A cover photo with a description
+-- and a note to guests.
 insert into public.attendees(plan_id,user_id,response) values
  ('e1100000-0000-4000-8000-000000000030','e1000000-0000-4000-8000-000000000002','accepted'),
  ('e1100000-0000-4000-8000-000000000030','e1000000-0000-4000-8000-000000000003','accepted'),
  ('e1100000-0000-4000-8000-000000000030','e1000000-0000-4000-8000-000000000004','declined'),
  ('e1100000-0000-4000-8000-000000000030','e1000000-0000-4000-8000-000000000005','pending'),
- ('e1100000-0000-4000-8000-000000000030','e1000000-0000-4000-8000-000000000006','withdrawn');
+ ('e1100000-0000-4000-8000-000000000030','e1000000-0000-4000-8000-000000000006','withdrawn'),
+ ('e1100000-0000-4000-8000-000000000030','e1000000-0000-4000-8000-000000000010','accepted'),
+ ('e1100000-0000-4000-8000-000000000030','e1000000-0000-4000-8000-000000000011','maybe');
 insert into public.plan_admins(plan_id,user_id,appointed_by,appointed_at) values
  ('e1100000-0000-4000-8000-000000000030','e1000000-0000-4000-8000-000000000002','e1000000-0000-4000-8000-000000000001',now()-interval '20 days');
 set local role authenticated;
@@ -994,10 +1053,14 @@ do $$ declare o public.plans; n public.plans; begin
  if (select count(*) from public.plan_admins where plan_id=n.id and user_id='e1000000-0000-4000-8000-000000000002'
    and appointed_by='e1000000-0000-4000-8000-000000000001' and appointed_at=now())<>1
   or (select count(*) from public.plan_admins where plan_id=n.id)<>1 then raise exception 'The admin did not carry'; end if;
- -- Everyone but the one who withdrew, the admin among them, asked again.
+ -- Everyone who uses the app and didn't withdraw, the admin among them, asked again; not the guest who only answered on
+ -- the web, nor the one who is leaving.
  if (select array_agg(user_id order by user_id) from public.attendees where plan_id=n.id)<>array['e1000000-0000-4000-8000-000000000002',
    'e1000000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000004','e1000000-0000-4000-8000-000000000005']::uuid[]
   then raise exception 'Wrong people carried'; end if;
+ if exists(select 1 from public.attendees where plan_id=n.id and user_id in ('e1000000-0000-4000-8000-000000000010','e1000000-0000-4000-8000-000000000011'))
+  or exists(select 1 from private.notification_outbox where plan_id=n.id and recipient_id in ('e1000000-0000-4000-8000-000000000010','e1000000-0000-4000-8000-000000000011'))
+  then raise exception 'A web-only or leaving guest was carried or told'; end if;
  if exists(select 1 from public.attendees where plan_id=n.id and (response<>'pending' or version<>1)) then raise exception 'Replies did not start empty'; end if;
  -- The invitation push: one each for the three guests; none for the admin or the owner.
  if (select array_agg(recipient_id order by recipient_id) from private.notification_outbox where plan_id=n.id)<>array[
@@ -1013,7 +1076,7 @@ do $$ declare o public.plans; n public.plans; begin
   or not private.notification_recipient_eligible((select id from private.notification_outbox where plan_id=n.id and recipient_id='e1000000-0000-4000-8000-000000000005'))
   then raise exception 'An unmuted guest would not be told'; end if;
  -- This occurrence keeps its own people and replies.
- if o.status<>'active' or o.repeats_from is not null or (select count(*) from public.attendees where plan_id=o.id and response<>'pending')<>4
+ if o.status<>'active' or o.repeats_from is not null or (select count(*) from public.attendees where plan_id=o.id and response<>'pending')<>6
   then raise exception 'The ended occurrence changed'; end if;
 end $$;
 
@@ -1022,6 +1085,25 @@ do $$ begin
  if private.roll_repeating_plans()<>0 then raise exception 'A second roll created something'; end if;
  if (select count(*) from public.plans where series_id='e1100000-0000-4000-8000-000000000030')<>2 then raise exception 'More than one next occurrence'; end if;
 end $$;
+
+-- On the next occurrence the carried admin's own reply is pending, yet as a host they read the meeting details (which
+-- the editor saves back) and see the guests; a pending guest still sees only themself and no details.
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+do $$ declare n uuid := (select id from public.plans where repeats_from='e1100000-0000-4000-8000-000000000030'); begin
+ if n is null then raise exception 'The carried admin cannot read the next occurrence'; end if;
+ if (select response from public.attendees where plan_id=n and user_id='e1000000-0000-4000-8000-000000000002') is distinct from 'pending'
+  then raise exception 'The carried admin should still be pending'; end if;
+ if (select note from public.plan_meeting_details where plan_id=n) is distinct from 'Ring the bell' then raise exception 'The carried admin cannot read the meeting details'; end if;
+ if (select count(*) from public.attendees where plan_id=n)<>4 then raise exception 'The carried admin does not see the guests'; end if;
+end $$;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000005","role":"authenticated"}',true);
+do $$ declare n uuid := (select id from public.plans where repeats_from='e1100000-0000-4000-8000-000000000030'); begin
+ if n is null then raise exception 'The pending guest cannot read the next occurrence'; end if;
+ if exists(select 1 from public.plan_meeting_details where plan_id=n) then raise exception 'A pending guest reads the meeting details'; end if;
+ if (select count(*) from public.attendees where plan_id=n)<>1 then raise exception 'A pending guest sees the other guests'; end if;
+end $$;
+reset role;
 
 -- The next occurrence shares the photo: a guest invited to it only (07) reads the object in 30's folder; a guest of
 -- both reads it; a stranger does not.
