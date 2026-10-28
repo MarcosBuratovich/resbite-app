@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The resbite, guest</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="resbite.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&amp;family=Quicksand:wght@600;700&amp;display=swap">
+<style>body{margin:0}a{color:#343043}a:hover{color:#245F60}</style>
+</helmet>
+<div class="phone" style="width: 390px; height: 844px">
+  <div class="scroll">
+    <div class="hero">
+      <button class="circle" aria-label="Back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-8 8"/></svg>Cover photo
+    </div>
+    <div class="content">
+      <h1>Board game night</h1>
+      <span class="byline">Hosted by Ana</span>
+      <div class="info">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+        <span class="text"><span class="label">When</span><span class="value">Thu 30 Oct · 19:00 to 22:00</span><span class="sub">Every Thursday</span></span>
+      </div>
+      <button class="info">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+        <span class="text"><span class="label">Where</span><span class="value">Ana's flat, Palermo</span></span>
+        <svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+      <div class="info note">
+        <span class="text"><span class="label">Note to guests</span><span class="value">Ring the top bell</span></span>
+      </div>
+      <button class="card people">
+        <span class="text">
+          <span class="counts">Going 6 · Can't go 1</span>
+          <span class="who"><span class="avatars"><span class="avatar">L</span><span class="avatar">M</span><span class="avatar">S</span><span class="avatar">N</span></span>Leo, Marta, Sol and 3 more</span>
+        </span>
+        <svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+      <p class="copy">Bring a few games and some snacks. Everyone takes a turn choosing what to play.</p>
+      <div class="chips">
+        <span class="chip cat-intellectual">Intellectual</span>
+        <span class="chip cat-community">Community</span>
+      </div>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="pill reply"><span>You're going</span><span class="change">Change</span></button>
+    <button class="pill"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>More</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

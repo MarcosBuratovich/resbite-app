@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>When sheet</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="resbite.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&amp;family=Quicksand:wght@600;700&amp;display=swap">
+<style>body{margin:0}a{color:#343043}a:hover{color:#245F60}</style>
+</helmet>
+<div class="phone" style="width: 390px; height: 844px">
+  <header class="task-bar">
+    <button class="circle" aria-label="Close"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <h1>New resbite</h1>
+  </header>
+  <div class="scroll">
+    <div class="cover"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-8 8"/></svg>Photo from the idea</div>
+    <div class="form">
+      <button class="link">Change photo</button>
+      <label class="card"><span class="label">Title</span><span class="value name">Board game night</span></label>
+      <label class="card"><span class="label">Description (optional)</span><span class="value placeholder">Add a description</span></label>
+    </div>
+  </div>
+  <div class="dim"></div>
+  <section class="sheet" aria-label="When">
+    <div class="grabber"></div>
+    <h2><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>When</h2>
+    <button class="card row-card"><span class="text"><span class="label">Date</span><span class="value">Thu 30 Oct</span></span><svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+    <button class="card row-card"><span class="text"><span class="label">Start time</span><span class="value">19:00</span></span><svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+    <button class="card row-card"><span class="text"><span class="label">End time</span><span class="value">22:00</span></span><svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+    <span class="section-label">Quick duration</span>
+    <div class="chips">
+      <button class="chip">30 min</button>
+      <button class="chip">1 h</button>
+      <button class="chip">2 h</button>
+      <button class="chip on">3 h</button>
+      <button class="chip">All day</button>
+    </div>
+    <span class="hint">The chat closes 7 days after the end time.</span>
+    <span class="section-label">Repeats</span>
+    <div class="seg" role="group" aria-label="Repeats">
+      <button>Doesn't repeat</button>
+      <button class="on">Every week</button>
+      <button>Every 2 weeks</button>
+    </div>
+    <button class="btn">Done</button>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

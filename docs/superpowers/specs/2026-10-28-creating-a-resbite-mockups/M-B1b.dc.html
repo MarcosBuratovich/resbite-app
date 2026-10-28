@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Discard this resbite?</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="resbite.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&amp;family=Quicksand:wght@600;700&amp;display=swap">
+<style>body{margin:0}a{color:#343043}a:hover{color:#245F60}</style>
+</helmet>
+<div class="phone" style="width: 390px; height: 844px">
+  <header class="task-bar">
+    <button class="circle" aria-label="Close"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <h1>New resbite</h1>
+  </header>
+  <div class="scroll">
+    <div class="cover"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-8 8"/></svg>Photo from the idea</div>
+    <div class="form">
+      <button class="link">Change photo</button>
+      <label class="card"><span class="label">Title</span><span class="value name">Board game night</span></label>
+      <label class="card"><span class="label">Description (optional)</span><span class="value placeholder">Add a description</span></label>
+      <button class="card row-card">
+        <span class="icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></span>
+        <span class="text"><span class="label">When</span><span class="value">Thu 30 Oct · 19:00 to 22:00</span><span class="hint">Every week</span></span>
+        <svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+      <button class="card row-card">
+        <span class="icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></span>
+        <span class="text"><span class="label">Where</span><span class="value">My house</span></span>
+        <svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="dim"></div>
+  <section class="sheet dialog" aria-label="Discard this resbite?">
+    <div class="grabber"></div>
+    <h2>Discard this resbite?</h2>
+    <p class="copy">Your resbite isn't created yet. If you close it now, what you entered will be lost.</p>
+    <button class="text-action" style="color: #A33142; text-decoration: none; font-size: 16px">Discard</button>
+    <button class="btn">Keep editing</button>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic { renderVals() { return {}; } }
+</script>
+</body>
+</html>

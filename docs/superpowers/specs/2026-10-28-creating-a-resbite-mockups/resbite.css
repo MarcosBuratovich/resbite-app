@@ -1,0 +1,129 @@
+:root{
+  --ink:#343043;--muted:#777180;--aqua:#89CAC7;--aqua-soft:#E8F6F3;--aqua-dark:#245F60;
+  --cream:#FAF5F0;--paper:#FFFFFF;--pink:#EBA1AC;--pink-soft:#FCEAEC;--purple:#BFB5BF;--purple-soft:#F0EDF4;
+  --surface:#F7F4F7;--line:#E9E5E9;--error:#A33142;--page:#FAF9F7;
+  --shadow-card:0 2px 3px rgba(64,44,65,.025),0 8px 22px rgba(64,44,65,.065);
+  --shadow-small:0 2px 5px rgba(64,44,65,.07);
+  --shadow-button:0 2px 0 rgba(178,105,127,.2),0 6px 14px rgba(178,105,127,.18);
+}
+*{box-sizing:border-box}
+button{font:inherit;color:inherit}
+.phone{width:390px;height:844px;background:var(--page);color:var(--ink);font-family:Montserrat,system-ui,sans-serif;font-size:15px;line-height:23px;position:relative;overflow:hidden;display:flex;flex-direction:column}
+.task-bar{height:98px;padding:54px 16px 0;display:flex;align-items:center;justify-content:center;position:relative;flex:none}
+.task-bar h1{margin:0;font:600 17px/22px Montserrat,sans-serif}
+.circle{width:44px;height:44px;border-radius:22px;background:var(--paper);box-shadow:var(--shadow-small);display:flex;align-items:center;justify-content:center;border:0;padding:0;color:var(--ink);cursor:pointer}
+.task-bar .circle{position:absolute;left:16px;top:54px}
+.scroll{flex:1;overflow:hidden;display:flex;flex-direction:column}
+.cover{height:124px;background:var(--aqua-soft);display:flex;align-items:center;justify-content:center;gap:8px;color:var(--aqua-dark);font:600 13px/18px Montserrat,sans-serif;flex:none}
+.form{padding:12px 20px 0;display:flex;flex-direction:column;gap:10px}
+.link{color:var(--ink);font:600 13px/18px Montserrat,sans-serif;text-decoration:underline;text-underline-offset:3px;align-self:flex-start;background:none;border:0;padding:0;cursor:pointer}
+.card{background:var(--paper);border:1px solid #EFEAF0;border-radius:24px;box-shadow:var(--shadow-card);padding:10px 18px;display:flex;flex-direction:column;gap:1px;text-align:left}
+.card .label{font:400 12px/16px Montserrat,sans-serif;color:var(--muted)}
+.card .value{font:400 17px/24px Montserrat,sans-serif;color:var(--ink)}
+.card .value.name{font:700 22px/28px Quicksand,Montserrat,sans-serif}
+.card .placeholder{color:var(--muted)}
+.row-card{flex-direction:row;align-items:center;gap:14px;cursor:pointer;padding:10px 14px 10px 16px;width:100%;border-width:1px;border-style:solid;border-color:#EFEAF0}
+.row-card .icon{width:36px;height:36px;border-radius:18px;background:var(--surface);display:flex;align-items:center;justify-content:center;flex:none;color:var(--ink)}
+.row-card .text{flex:1;display:flex;flex-direction:column;gap:1px;min-width:0}
+.row-card .value{font:600 16px/22px Montserrat,sans-serif}
+.row-card .value.open{font-weight:700}
+.open-item{border:1.5px dashed var(--purple);box-shadow:none;background:#FFFDFC}
+.missing{border:2px solid var(--error);box-shadow:none}
+.missing-label{font:600 13px/18px Montserrat,sans-serif;color:var(--error);margin:2px 0 -4px 4px}
+.chev{color:var(--muted);flex:none}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:6px 14px;border-radius:999px;background:var(--cream);border:1px solid transparent;font:400 13px/18px Montserrat,sans-serif;color:var(--muted);cursor:pointer}
+.chip.on{font-weight:600;color:var(--ink);background:var(--paper);border-color:var(--ink)}
+.chip.cat-intellectual{background:#F0EDF4;color:#665381;font-weight:600;border-color:transparent}
+.chip.cat-community{background:#FAF5F0;color:#7A4E2D;font-weight:600;border-color:#E9DFD4}
+.section-label{font:600 13px/18px Montserrat,sans-serif;color:var(--muted);margin-top:2px}
+.footer{flex:none;padding:12px 24px 26px;border-top:1px solid var(--line);background:var(--paper);display:flex;flex-direction:column;gap:8px;align-items:stretch}
+.btn{min-height:62px;border-radius:31px;padding:0 24px;background:var(--pink);border:1px solid #F8CBD0;box-shadow:var(--shadow-button);font:700 18px/24px Montserrat,sans-serif;color:var(--ink);display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer;text-decoration:none}
+.btn.secondary{background:var(--paper);border-color:#E5DBE9;box-shadow:var(--shadow-small)}
+.btn.destructive{background:var(--error);border-color:var(--error);color:#fff;box-shadow:none}
+.text-action{background:none;border:0;font:600 15px/23px Montserrat,sans-serif;color:var(--ink);text-decoration:underline;text-underline-offset:3px;padding:6px;cursor:pointer;align-self:center}
+.error-line{font:600 13px/18px Montserrat,sans-serif;color:var(--error);text-align:center}
+.banner{background:var(--purple-soft);border-radius:18px;padding:12px 16px;font:400 14px/20px Montserrat,sans-serif;color:var(--ink)}
+.hint{font:400 13px/18px Montserrat,sans-serif;color:var(--muted)}
+.dim{position:absolute;inset:0;background:rgba(52,48,67,.45)}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--paper);border-radius:28px 28px 0 0;padding:10px 24px 30px;display:flex;flex-direction:column;gap:12px;box-shadow:0 -8px 30px rgba(64,44,65,.18)}
+.grabber{width:36px;height:5px;border-radius:3px;background:var(--line);align-self:center;margin-bottom:4px}
+.sheet h2{margin:0;font:700 24px/30px Quicksand,Montserrat,sans-serif;display:flex;align-items:center;gap:10px}
+.seg{display:flex;gap:4px;padding:4px;border-radius:22px;background:var(--surface)}
+.seg button{flex:1;min-height:44px;border-radius:22px;border:0;background:none;font:400 14px/18px Montserrat,sans-serif;color:var(--muted);cursor:pointer;padding:0 8px}
+.seg button.on{background:var(--paper);color:var(--ink);font-weight:600;box-shadow:var(--shadow-small)}
+.radio-row{display:flex;align-items:center;gap:14px;min-height:56px;padding:6px 2px;cursor:pointer;background:none;border:0;text-align:left;width:100%}
+.radio{width:24px;height:24px;border-radius:12px;border:2px solid var(--ink);display:flex;align-items:center;justify-content:center;flex:none}
+.radio.on::after{content:"";width:12px;height:12px;border-radius:6px;background:var(--ink)}
+.radio-row .text{display:flex;flex-direction:column;gap:1px}
+.radio-row .value{font:600 16px/22px Montserrat,sans-serif;color:var(--ink)}
+.radio-row .sub{font:400 13px/18px Montserrat,sans-serif;color:var(--muted)}
+.hero{height:230px;background:var(--aqua-soft);position:relative;flex:none;display:flex;align-items:center;justify-content:center;gap:8px;color:var(--aqua-dark);font:600 13px/18px Montserrat,sans-serif}
+.hero .circle{position:absolute;left:16px;top:54px}
+.content{padding:16px 20px 0;display:flex;flex-direction:column;gap:10px}
+.content h1{margin:0;font:700 28px/34px Quicksand,Montserrat,sans-serif}
+.tag{align-self:flex-start;background:var(--aqua-soft);color:var(--aqua-dark);font:600 13px/18px Montserrat,sans-serif;padding:4px 12px;border-radius:999px}
+.byline{font:400 14px/20px Montserrat,sans-serif;color:var(--muted)}
+.info{display:flex;align-items:center;gap:14px;background:none;border:0;padding:2px 0;text-align:left;width:100%}
+.info .icon{width:24px;height:24px;flex:none;color:var(--ink)}
+.info .text{flex:1;display:flex;flex-direction:column;gap:0;min-width:0}
+.info .label{font:400 12px/16px Montserrat,sans-serif;color:var(--muted)}
+.info .value{font:600 16px/22px Montserrat,sans-serif;color:var(--ink)}
+.info .sub{font:400 14px/20px Montserrat,sans-serif;color:var(--ink)}
+.note .value{font:400 15px/22px Montserrat,sans-serif}
+.people{flex-direction:row;align-items:center;gap:12px;padding:12px 14px 12px 18px;cursor:pointer;width:100%}
+.people .text{flex:1;display:flex;flex-direction:column;gap:6px;min-width:0}
+.people .counts{font:700 15px/20px Montserrat,sans-serif;color:var(--ink)}
+.people .counts .more{font-weight:400;color:var(--muted)}
+.people .who{display:flex;align-items:center;gap:8px;font:400 13px/18px Montserrat,sans-serif;color:var(--muted)}
+.avatars{display:flex}
+.avatar{width:28px;height:28px;border-radius:14px;background:var(--aqua-soft);border:2px solid var(--paper);display:flex;align-items:center;justify-content:center;font:700 11px/1 Montserrat,sans-serif;color:var(--aqua-dark);margin-left:-8px}
+.avatar:first-child{margin-left:0}
+.copy{font:400 15px/22px Montserrat,sans-serif;color:var(--ink);margin:0}
+.actions{flex:none;display:flex;gap:10px;padding:12px 16px 26px;border-top:1px solid var(--line);background:var(--paper)}
+.pill{min-height:56px;border-radius:28px;display:flex;align-items:center;justify-content:center;gap:8px;font:700 16px/20px Montserrat,sans-serif;flex:1;border:1.5px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer;padding:0 14px;text-decoration:none}
+.pill.primary{background:var(--pink);border-color:#F8CBD0;box-shadow:var(--shadow-button)}
+.pill.reply{flex:2;justify-content:space-between;font-weight:400;padding:0 18px}
+.pill.reply .change{font-weight:700;text-decoration:underline;text-underline-offset:3px}
+.menu{display:flex;flex-direction:column}
+.menu-row{display:flex;align-items:center;gap:16px;min-height:60px;font:600 16px/22px Montserrat,sans-serif;color:var(--ink);background:none;border:0;border-bottom:1px solid var(--line);padding:0 4px;width:100%;text-align:left;cursor:pointer}
+.menu-row:last-child{border-bottom:0}
+.menu-row.danger{color:var(--error)}
+.menu-row .icon{width:24px;height:24px;flex:none}
+.menu-sep{height:8px;background:var(--surface);margin:0 -24px}
+.group-title{font:700 13px/18px Montserrat,sans-serif;color:var(--muted);letter-spacing:.4px;text-transform:uppercase;margin:6px 0 0}
+.person{display:flex;align-items:center;gap:12px;min-height:56px;padding:6px 0}
+.person .name{flex:1;font:600 15px/20px Montserrat,sans-serif;display:flex;flex-direction:column;gap:1px}
+.person .name .sub{font:400 12px/16px Montserrat,sans-serif;color:var(--muted)}
+.person .avatar{width:36px;height:36px;border-radius:18px;margin:0;font-size:13px}
+button.person{width:100%;background:none;border:0;text-align:left;cursor:pointer;color:var(--ink)}
+.dots{width:40px;height:40px;border-radius:20px;border:0;background:none;display:flex;align-items:center;justify-content:center;color:var(--muted);cursor:pointer;flex:none;margin-right:-8px}
+.person .chev{margin-right:-2px}
+.swipe{position:relative;overflow:hidden;margin:0 -20px;padding:0 20px}
+.swipe .person{transform:translateX(-184px)}
+.swipe-actions{position:absolute;top:0;right:0;bottom:0;display:flex}
+.swipe-actions button{width:92px;border:0;font:600 13px/18px Montserrat,sans-serif;cursor:pointer;padding:0 6px}
+.swipe-actions .admin{background:var(--purple-soft);color:var(--ink)}
+.swipe-actions .remove{background:var(--error);color:#fff}
+.person-head{display:flex;align-items:center;gap:12px}
+.person-head .avatar{width:44px;height:44px;border-radius:22px;margin:0;font-size:15px}
+.person-head .name{display:flex;flex-direction:column}
+.person-head .name b{font:700 18px/24px Quicksand,Montserrat,sans-serif}
+.person-head .name span{font:400 13px/18px Montserrat,sans-serif;color:var(--muted)}
+.mini{min-height:36px;padding:0 14px;border-radius:18px;border:1.5px solid var(--line);background:var(--paper);font:600 13px/18px Montserrat,sans-serif;color:var(--ink);cursor:pointer}
+.mini.quiet{border-color:transparent;color:var(--muted)}
+.badge{font:600 11px/16px Montserrat,sans-serif;color:var(--aqua-dark);background:var(--aqua-soft);border-radius:999px;padding:1px 8px}
+.list{padding:0 20px;display:flex;flex-direction:column;gap:2px}
+.divider{height:1px;background:var(--line)}
+.center{align-items:center;text-align:center}
+.moment{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:0 24px}
+.moment h1{margin:0;font:700 36px/42px Quicksand,Montserrat,sans-serif}
+.mini-card{width:100%;background:var(--paper);border:1px solid #EFEAF0;border-radius:28px;box-shadow:var(--shadow-card);overflow:hidden;display:flex;flex-direction:column}
+.mini-card .cover{height:120px;border-radius:0}
+.mini-card .body{padding:14px 18px 16px;display:flex;flex-direction:column;gap:8px}
+.mini-card .title{font:700 22px/28px Quicksand,Montserrat,sans-serif}
+.mini-card .line{display:flex;align-items:center;gap:10px;font:400 15px/22px Montserrat,sans-serif}
+.mini-card .line .icon{width:22px;height:22px;flex:none}
+.dialog{display:flex;flex-direction:column;gap:12px}
+.dialog h2{font:700 22px/28px Quicksand,Montserrat,sans-serif}
+.dialog p{margin:0}
