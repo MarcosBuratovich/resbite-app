@@ -505,27 +505,7 @@ begin
    and not private.deletion_pending(j.user_id)),'[]'::jsonb);
 end $$;
 
--- A request's notice goes out only while the event has not ended; nothing goes to someone who muted the series (section 4).
--- plpgsql, so the body is not checked until it runs: it reads plans.series_id (section 3) and plan_mutes (section 4).
-create or replace function private.notification_recipient_eligible(p_outbox bigint) returns boolean
-language plpgsql stable security definer set search_path='' as $$
-begin
- return exists (
- select 1 from private.notification_outbox o
- join public.plans plan on plan.id=o.plan_id
- where o.id=p_outbox
- and private.user_eligible(o.recipient_id) and not private.deletion_pending(o.recipient_id)
- and (private.is_host(plan.id,o.recipient_id) or exists(select 1 from public.attendees a where a.plan_id=plan.id and a.user_id=o.recipient_id
-  and (o.kind not in ('plan_changed','guest_note') or a.response in ('accepted','maybe','pending'))))
- and o.created_at>now()-interval '24 hours'
- and not exists(select 1 from public.plan_mutes m where m.series_id=plan.series_id and m.user_id=o.recipient_id)
- and (o.kind<>'join_request' or (plan.status='active' and private.plan_end(plan.starts_at,plan.ends_at)>now()
-  and exists(select 1 from private.join_requests j where j.plan_id=o.plan_id and j.user_id=o.actor_id
-   and j.status='waiting' and j.created_at<=o.created_at)
-  and not exists(select 1 from public.attendees a where a.plan_id=o.plan_id and a.user_id=o.actor_id)
-  and not private.deletion_pending(o.actor_id)))
- );
-end $$;
+-- notification_recipient_eligible is redefined at the end of section 4: it reads plans.series_id and plan_mutes.
 
 -- The two upload policies of the plan-covers bucket, open until the end instead of the start, to any host: the object
 -- stays in the owner's folder (the first path segment is the plan's owner), the uploader is the owner or an admin. (resbite_cover_read is unchanged.)
@@ -852,3 +832,25 @@ create function public.set_plan_mute(p_plan uuid, p_muted boolean) returns boole
 $$;
 revoke all on function private.set_plan_mute(uuid,boolean), public.set_plan_mute(uuid,boolean) from public, anon, authenticated, service_role;
 grant execute on function private.set_plan_mute(uuid,boolean), public.set_plan_mute(uuid,boolean) to authenticated;
+
+-- The one definition of notification_recipient_eligible. It carries the end boundary for a request's notice (section 1), is_host
+-- (section 0/2) and the mute clause. It sits here because it reads plans.series_id (section 3) and plan_mutes (this section);
+-- it stays a SQL function so the planner can inline it into the sender's query.
+create or replace function private.notification_recipient_eligible(p_outbox bigint) returns boolean
+language sql stable security definer set search_path='' as $$
+ select exists (
+ select 1 from private.notification_outbox o
+ join public.plans plan on plan.id=o.plan_id
+ where o.id=p_outbox
+ and private.user_eligible(o.recipient_id) and not private.deletion_pending(o.recipient_id)
+ and (private.is_host(plan.id,o.recipient_id) or exists(select 1 from public.attendees a where a.plan_id=plan.id and a.user_id=o.recipient_id
+  and (o.kind not in ('plan_changed','guest_note') or a.response in ('accepted','maybe','pending'))))
+ and o.created_at>now()-interval '24 hours'
+ and not exists(select 1 from public.plan_mutes m where m.series_id=plan.series_id and m.user_id=o.recipient_id)
+ and (o.kind<>'join_request' or (plan.status='active' and private.plan_end(plan.starts_at,plan.ends_at)>now()
+  and exists(select 1 from private.join_requests j where j.plan_id=o.plan_id and j.user_id=o.actor_id
+   and j.status='waiting' and j.created_at<=o.created_at)
+  and not exists(select 1 from public.attendees a where a.plan_id=o.plan_id and a.user_id=o.actor_id)
+  and not private.deletion_pending(o.actor_id)))
+ )
+$$;
