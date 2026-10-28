@@ -3,6 +3,36 @@
 -- Hosted-compatible: depends only on the migrations in supabase/tests/hosted-baseline/migrations.txt
 -- Rollback: supabase/rollback/20261031120000_creating_a_resbite.rollback.sql
 
+-- 0. The host helpers (CR-D8)
+-- Section 2 explains them. They come first because section 1 bodies and policies (parsed when created) refer to them.
+create table public.plan_admins(
+ plan_id uuid not null references public.plans(id) on delete cascade,
+ user_id uuid not null references public.profiles(id),
+ appointed_by uuid not null references public.profiles(id),
+ appointed_at timestamptz not null default now(),
+ primary key (plan_id,user_id)
+);
+create index plan_admins_user_idx on public.plan_admins(user_id);
+alter table public.plan_admins enable row level security;
+revoke all on public.plan_admins from public, anon, authenticated, service_role;
+grant select on public.plan_admins to authenticated;
+create policy plan_admins_read on public.plan_admins for select to authenticated using (private.can_read_plan(plan_id));
+
+-- The owner, or an admin the owner appointed.
+create function private.is_host(p_plan uuid, p_user uuid) returns boolean language sql stable security definer set search_path = '' as $$
+ select exists(select 1 from public.plans where id=p_plan and owner_id=p_user)
+  or exists(select 1 from public.plan_admins where plan_id=p_plan and user_id=p_user)
+$$;
+-- The owner, then the admins in the order they were appointed.
+create function private.host_ids(p_plan uuid) returns setof uuid language sql stable security definer set search_path = '' as $$
+ select h.id from (
+  select owner_id as id, 0 as rank, null::timestamptz as at from public.plans where id=p_plan and owner_id is not null
+  union all
+  select user_id, 1, appointed_at from public.plan_admins where plan_id=p_plan) h
+ order by h.rank, h.at, h.id
+$$;
+revoke all on function private.is_host(uuid,uuid), private.host_ids(uuid) from public, anon, authenticated, service_role;
+
 -- 1. The end is the boundary
 -- CR-D14: a resbite accepts changes until it ends, not until it starts. The end is ends_at, or starts_at when there is
 -- none. Every function that refused from the start refuses from the end instead, with its error text unchanged; each
@@ -23,7 +53,7 @@ declare v_uid uuid := private.require_tester(); v_plan public.plans; v_next inte
  v_time boolean; v_place boolean; v_ends timestamptz;
 begin
  select * into v_plan from public.plans where id=p_plan for update;
- if not found or v_plan.owner_id is distinct from v_uid then raise exception 'Owner required' using errcode='42501'; end if;
+ if not found or not private.is_host(p_plan,v_uid) then raise exception 'Owner required' using errcode='42501'; end if;
  if v_plan.status<>'active' or private.plan_end(v_plan.starts_at,v_plan.ends_at)<=now() then raise exception 'Plan unavailable' using errcode='22023'; end if;
  if p_version is distinct from v_plan.version then raise exception 'Plan changed; refresh' using errcode='40001'; end if;
  if not v_cancel and (p_start is null or (p_start<=now() and p_start is distinct from v_plan.starts_at) or not exists(select 1 from pg_catalog.pg_timezone_names where name=p_zone)) then raise exception 'Invalid future schedule' using errcode='22023'; end if;
@@ -74,8 +104,10 @@ begin
  if v_att.response=p_response then return v_att.version; end if;
  v_next:=v_att.version+1;
  update public.attendees set response=p_response,version=v_next,updated_at=now() where plan_id=p_plan and user_id=v_uid;
+ -- CR-P15: Can't go ends the admin role. The notice goes to every host but the one answering (CR-D15).
+ if p_response='declined' then delete from public.plan_admins where plan_id=p_plan and user_id=v_uid; end if;
  insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,detail)
- values(p_plan,v_plan.owner_id,'rsvp','rsvp:'||p_plan||':'||v_uid||':'||v_next,v_uid,p_response) on conflict do nothing;
+ select p_plan,h,'rsvp','rsvp:'||p_plan||':'||v_uid||':'||v_next||case when h=v_plan.owner_id then '' else ':'||h end,v_uid,p_response from private.host_ids(p_plan) h where h<>v_uid on conflict do nothing;
  return v_next;
 end $$;
 
@@ -93,7 +125,8 @@ begin
  if v_inv.claimed_by=v_uid then return v_inv.plan_id; end if;
  update private.invitations set claimed_by=v_uid where id=v_inv.id;
  insert into public.attendees(plan_id,user_id) values(v_inv.plan_id,v_uid) on conflict do nothing;
- insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id) values(v_inv.plan_id,v_plan.owner_id,'invitation','invite:'||v_inv.id,v_uid) on conflict do nothing;
+ insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id)
+  select v_inv.plan_id,h,'invitation','invite:'||v_inv.id||case when h=v_plan.owner_id then '' else ':'||h end,v_uid from private.host_ids(v_inv.plan_id) h where h<>v_uid on conflict do nothing;
  return v_inv.plan_id;
 end $$;
 
@@ -136,9 +169,9 @@ declare v_uid uuid := private.require_tester(); v_plan public.plans;
 begin
  if p_expected_revision is null or p_expected_revision<0 then raise exception 'Invalid cover revision' using errcode='22023'; end if;
  select * into v_plan from public.plans where id=p_plan for update;
- if not found or v_plan.owner_id<>v_uid then raise exception 'Owner required' using errcode='42501'; end if;
+ if not found or not private.is_host(p_plan,v_uid) then raise exception 'Owner required' using errcode='42501'; end if;
  if v_plan.status<>'active' or private.plan_end(v_plan.starts_at,v_plan.ends_at)<=now() then raise exception 'Plan unavailable' using errcode='22023'; end if;
- if p_path is not null and (p_path !~ ('^'||v_uid::text||'/'||p_plan::text||'/[A-Za-z0-9-]+\.jpg$') or not exists(
+ if p_path is not null and (p_path !~ ('^'||v_plan.owner_id::text||'/'||p_plan::text||'/[A-Za-z0-9-]+\.jpg$') or not exists(
    select 1 from storage.objects where bucket_id='plan-covers' and name=p_path)) then
   raise exception 'Own uploaded cover required' using errcode='42501';
  end if;
@@ -163,7 +196,7 @@ begin
  if p_expected_revision is null or p_expected_revision<0 then raise exception 'Invalid cover revision' using errcode='22023'; end if;
  if char_length(v_text)>200 then raise exception 'Photo description too long' using errcode='22023'; end if;
  select * into v_plan from public.plans where id=p_plan for update;
- if not found or v_plan.owner_id<>v_uid then raise exception 'Owner required' using errcode='42501'; end if;
+ if not found or not private.is_host(p_plan,v_uid) then raise exception 'Owner required' using errcode='42501'; end if;
  if v_plan.status<>'active' or private.plan_end(v_plan.starts_at,v_plan.ends_at)<=now() then raise exception 'Plan unavailable' using errcode='22023'; end if;
  if v_plan.cover_revision=p_expected_revision then
   if v_plan.cover_path is null and v_text<>'' then raise exception 'Add a cover photo first' using errcode='22023'; end if;
@@ -179,12 +212,13 @@ begin
  return jsonb_build_object('cover_path',v_plan.cover_path,'cover_description',v_plan.cover_description,'cover_revision',v_plan.cover_revision);
 end $$;
 
--- The organizer of an active event that has not ended: the gate of the link, the invitations and the waiting list.
+-- A host (the organizer or an admin) of an active event that has not ended: the gate of the link, the invitations and the
+-- waiting list.
 create or replace function private.require_link_owner(p_plan uuid) returns uuid language plpgsql set search_path = '' as $$
 declare v_uid uuid := private.require_tester();
 begin
- perform 1 from public.plans where id=p_plan and owner_id=v_uid and status='active' and private.plan_end(starts_at,ends_at)>now() for update;
- if not found then raise exception 'Active plan owner required' using errcode='42501'; end if;
+ perform 1 from public.plans where id=p_plan and private.is_host(id,v_uid) and status='active' and private.plan_end(starts_at,ends_at)>now() for update;
+ if not found then raise exception 'Active plan host required' using errcode='42501'; end if;
  return v_uid;
 end $$;
 
@@ -304,7 +338,7 @@ begin
  end if;
  update private.phone_invitations set user_id=v_uid, answered_at=now() where id=v_inv.id;
  insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,detail)
-  values(v_plan.id,v_plan.owner_id,'rsvp','rsvp:'||v_plan.id||':'||v_uid||':'||v_att.version,v_uid,p_response) on conflict do nothing;
+  select v_plan.id,h,'rsvp','rsvp:'||v_plan.id||':'||v_uid||':'||v_att.version||case when h=v_plan.owner_id then '' else ':'||h end,v_uid,p_response from private.host_ids(v_plan.id) h where h<>v_uid on conflict do nothing;
  return jsonb_build_object('response',p_response,'plan_id',v_plan.id);
 end $$;
 
@@ -458,7 +492,7 @@ end $$;
 create or replace function private.plan_join_requests(p_plan uuid) returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester();
 begin
- if not exists(select 1 from public.plans where id=p_plan and owner_id=v_uid) then raise exception 'Plan owner required' using errcode='42501'; end if;
+ if not private.is_host(p_plan,v_uid) then raise exception 'Plan owner required' using errcode='42501'; end if;
  if not exists(select 1 from public.plans where id=p_plan and status='active' and private.plan_end(starts_at,ends_at)>now()) then return '[]'::jsonb; end if;
  return coalesce((select jsonb_agg(jsonb_build_object('user_id',j.user_id,'name',(select display_name from public.profiles where id=j.user_id),
    'response',j.response,'ending',(select nullif(right(u.phone,2),'') from auth.users u where u.id=j.user_id),'created_at',j.created_at)
@@ -476,7 +510,7 @@ language sql stable security definer set search_path='' as $$
  join public.plans plan on plan.id=o.plan_id
  where o.id=p_outbox
  and private.user_eligible(o.recipient_id) and not private.deletion_pending(o.recipient_id)
- and (plan.owner_id=o.recipient_id or exists(select 1 from public.attendees a where a.plan_id=plan.id and a.user_id=o.recipient_id
+ and (private.is_host(plan.id,o.recipient_id) or exists(select 1 from public.attendees a where a.plan_id=plan.id and a.user_id=o.recipient_id
   and (o.kind not in ('plan_changed','guest_note') or a.response in ('accepted','maybe','pending'))))
  and o.created_at>now()-interval '24 hours'
  and (o.kind<>'join_request' or (plan.status='active' and private.plan_end(plan.starts_at,plan.ends_at)>now()
@@ -487,23 +521,163 @@ language sql stable security definer set search_path='' as $$
  )
 $$;
 
--- The two upload policies of the plan-covers bucket, open until the end instead of the start. (resbite_cover_read is unchanged.)
+-- The two upload policies of the plan-covers bucket, open until the end instead of the start, to any host: the object
+-- stays in the owner's folder (the first path segment is the plan's owner), the uploader is the owner or an admin. (resbite_cover_read is unchanged.)
 drop policy resbite_cover_insert on storage.objects;
 drop policy resbite_cover_update on storage.objects;
 create policy resbite_cover_insert on storage.objects for insert to authenticated with check (
  bucket_id='plan-covers' and (select private.eligible())
- and (storage.foldername(name))[1]=(select auth.uid())::text
  and exists(select 1 from public.plans p where p.id::text=(storage.foldername(name))[2]
-  and p.owner_id=(select auth.uid()) and p.status='active' and private.plan_end(p.starts_at,p.ends_at)>now())
+  and p.owner_id::text=(storage.foldername(name))[1]
+  and (p.owner_id=(select auth.uid()) or exists(select 1 from public.plan_admins pa where pa.plan_id=p.id and pa.user_id=(select auth.uid())))
+  and p.status='active' and private.plan_end(p.starts_at,p.ends_at)>now())
 );
 create policy resbite_cover_update on storage.objects for update to authenticated using (
  bucket_id='plan-covers' and (select private.eligible())
- and (storage.foldername(name))[1]=(select auth.uid())::text
  and exists(select 1 from public.plans p where p.id::text=(storage.foldername(name))[2]
-  and p.owner_id=(select auth.uid()) and p.status='active' and private.plan_end(p.starts_at,p.ends_at)>now())
+  and p.owner_id::text=(storage.foldername(name))[1]
+  and (p.owner_id=(select auth.uid()) or exists(select 1 from public.plan_admins pa where pa.plan_id=p.id and pa.user_id=(select auth.uid())))
+  and p.status='active' and private.plan_end(p.starts_at,p.ends_at)>now())
 ) with check (
  bucket_id='plan-covers' and (select private.eligible())
- and (storage.foldername(name))[1]=(select auth.uid())::text
  and exists(select 1 from public.plans p where p.id::text=(storage.foldername(name))[2]
-  and p.owner_id=(select auth.uid()) and p.status='active' and private.plan_end(p.starts_at,p.ends_at)>now())
+  and p.owner_id::text=(storage.foldername(name))[1]
+  and (p.owner_id=(select auth.uid()) or exists(select 1 from public.plan_admins pa where pa.plan_id=p.id and pa.user_id=(select auth.uid())))
+  and p.status='active' and private.plan_end(p.starts_at,p.ends_at)>now())
 );
+
+-- 2. Admins
+-- CR-D8, CR-D15, CR-P15, CR-P17: the owner appoints Going guests as admins. An admin does everything a host does except
+-- appoint or remove admins. The table and the helpers private.is_host / private.host_ids are at the top of this file
+-- (section 1 refers to them); the owner checks they widen are edited in place in section 1 (require_link_owner, respond,
+-- claim_invite, answer_phone_invitation, the cover setters, plan_join_requests, notification_recipient_eligible and the
+-- two storage policies). Host notices go to every host but the actor, one row each. The recipient id ends the dedupe key
+-- of an admin's row; the owner's row keeps the key it always had, so existing keys and their tests are unchanged.
+
+-- The outbox: 'admin_added' (to the new admin, the owner as actor), with a null detail like the other plain kinds.
+-- The checks are replaced by exact name, keeping every existing value.
+alter table private.notification_outbox drop constraint notification_outbox_kind_check;
+alter table private.notification_outbox add constraint notification_outbox_kind_check
+ check (kind in ('invitation','rsvp','plan_changed','plan_cancelled','guest_note','invited','join_request','join_approved','admin_added'));
+alter table private.notification_outbox drop constraint notification_outbox_detail_check;
+alter table private.notification_outbox add constraint notification_outbox_detail_check check (
+ detail is null
+ or (kind='plan_changed' and detail in ('time','place','time_place'))
+ or (kind='rsvp' and detail in ('accepted','maybe','declined','withdrawn')));
+
+-- The owner appoints a guest who is going; asking again changes nothing and tells nobody twice.
+create function private.appoint_admin(p_plan uuid, p_user uuid) returns void language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := private.require_tester(); v_plan public.plans; v_added integer;
+begin
+ select * into v_plan from public.plans where id=p_plan for update;
+ if not found or v_plan.owner_id<>v_uid or v_plan.status<>'active' or private.plan_end(v_plan.starts_at,v_plan.ends_at)<=now() then
+  raise exception 'Owner required' using errcode='42501';
+ end if;
+ if p_user is null or not exists(select 1 from public.attendees where plan_id=p_plan and user_id=p_user and response='accepted') then
+  raise exception 'Only a guest who is going can be an admin' using errcode='22023';
+ end if;
+ insert into public.plan_admins(plan_id,user_id,appointed_by) values(p_plan,p_user,v_uid) on conflict do nothing;
+ get diagnostics v_added = row_count;
+ if v_added=1 then
+  insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,detail)
+  values(p_plan,p_user,'admin_added','admin:'||p_plan||':'||p_user||':'||extract(epoch from now())::bigint,v_uid,null) on conflict do nothing;
+ end if;
+end $$;
+-- The owner takes the role back; the guest stays on the event and is told nothing.
+create function private.remove_admin(p_plan uuid, p_user uuid) returns void language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := private.require_tester();
+begin
+ perform 1 from public.plans where id=p_plan and owner_id=v_uid for update;
+ if not found then raise exception 'Owner required' using errcode='42501'; end if;
+ delete from public.plan_admins where plan_id=p_plan and user_id=p_user;
+end $$;
+create function public.appoint_admin(p_plan uuid, p_user uuid) returns void language sql security invoker set search_path = '' as $$
+ select private.appoint_admin(p_plan,p_user)
+$$;
+create function public.remove_admin(p_plan uuid, p_user uuid) returns void language sql security invoker set search_path = '' as $$
+ select private.remove_admin(p_plan,p_user)
+$$;
+revoke all on function private.appoint_admin(uuid,uuid), public.appoint_admin(uuid,uuid), private.remove_admin(uuid,uuid), public.remove_admin(uuid,uuid)
+ from public, anon, authenticated, service_role;
+grant execute on function private.appoint_admin(uuid,uuid), public.appoint_admin(uuid,uuid), private.remove_admin(uuid,uuid), public.remove_admin(uuid,uuid) to authenticated;
+
+-- The host's list of invitations: the 20261028120000_contact_invitations body, for any host.
+create or replace function private.plan_phone_invitations(p_plan uuid) returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_uid uuid := private.require_tester();
+begin
+ if not private.is_host(p_plan,v_uid) then raise exception 'Plan owner required' using errcode='42501'; end if;
+ return coalesce((select jsonb_agg(jsonb_build_object('phone',i.phone,'country',i.country,'answered',i.answered_at is not null,
+   'response',(select a.response from public.attendees a where a.plan_id=i.plan_id and a.user_id=i.user_id)) order by i.created_at,i.phone)
+  from private.phone_invitations i where i.plan_id=p_plan and i.revoked_at is null),'[]'::jsonb);
+end $$;
+
+-- Removing a guest who is an admin ends the admin role too. The 20261028120000_contact_invitations body, plus that.
+create or replace function private.remove_guest(p_plan uuid,p_user uuid) returns void language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid;
+begin
+ v_uid := private.require_link_owner(p_plan);
+ if p_user=v_uid then raise exception 'The organizer cannot be removed' using errcode='22023'; end if;
+ update private.invitations set revoked_at=now() where plan_id=p_plan and claimed_by=p_user and revoked_at is null;
+ update private.phone_invitations set revoked_at=now(), code_hash=null where plan_id=p_plan and user_id=p_user;
+ delete from public.plan_admins where plan_id=p_plan and user_id=p_user;
+ delete from public.attendees where plan_id=p_plan and user_id=p_user;
+end $$;
+
+-- The note to guests: any host posts it. The 20261015120000_ux3_event_details body; the notice goes to each guest who may
+-- come and to each host, but not to the one posting.
+create or replace function private.set_guest_note(p_plan uuid,p_note text) returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := private.require_tester(); v_plan public.plans; v_text text := btrim(coalesce(p_note,'')); v_at timestamptz;
+begin
+ if char_length(v_text)>280 then raise exception 'Note too long' using errcode='22023'; end if;
+ select * into v_plan from public.plans where id=p_plan for update;
+ if not found or not private.is_host(p_plan,v_uid) then raise exception 'Owner required' using errcode='42501'; end if;
+ if v_plan.status<>'active' or now()>=coalesce(v_plan.ends_at,v_plan.starts_at+interval '1 hour') then
+  raise exception 'Plan unavailable' using errcode='22023';
+ end if;
+ if v_text=v_plan.guest_note then
+  return jsonb_build_object('guest_note',v_plan.guest_note,'guest_note_at',v_plan.guest_note_at);
+ end if;
+ v_at := case when v_text='' then null else pg_catalog.clock_timestamp() end;
+ update public.plans set guest_note=v_text,guest_note_at=v_at where id=p_plan;
+ if v_text<>'' then
+  insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id)
+  select p_plan,r.id,'guest_note','note:'||p_plan||':'||pg_catalog.to_char(v_at,'YYYYMMDDHH24MISSUS')||':'||r.id,v_uid
+  from (select a.user_id as id from public.attendees a where a.plan_id=p_plan and a.response in ('accepted','maybe','pending')
+   union select h from private.host_ids(p_plan) h) r
+  where r.id<>v_uid
+  on conflict do nothing;
+ end if;
+ return jsonb_build_object('guest_note',v_text,'guest_note_at',v_at);
+end $$;
+
+-- A request to join tells every host. The 20261029120000_open_link_approval body, only the notice changed.
+create or replace function private.request_join(p_uid uuid, p_link private.plan_links, p_plan public.plans, p_response text) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare v_resp text; v_req private.join_requests; v_created timestamptz;
+begin
+ if p_plan.owner_id=p_uid then return jsonb_build_object('state','owner','plan_id',p_plan.id,'response',null); end if;
+ select response into v_resp from public.attendees where plan_id=p_plan.id and user_id=p_uid;
+ if found then return jsonb_build_object('state','already','plan_id',p_plan.id,'response',v_resp); end if;
+ select * into v_req from private.join_requests where plan_id=p_plan.id and user_id=p_uid for update;
+ if found and v_req.status='declined' and v_req.plan_link_id is not distinct from p_link.id then
+  return jsonb_build_object('state','declined','plan_id',p_plan.id,'response',v_req.response);
+ end if;
+ if found and v_req.status='waiting' then
+  update private.join_requests set response=case when p_response='pending' then response else p_response end, plan_link_id=p_link.id
+   where plan_id=p_plan.id and user_id=p_uid returning response into v_resp;
+  return jsonb_build_object('state','waiting','plan_id',p_plan.id,'response',v_resp);
+ end if;
+ if found then
+  update private.join_requests set response=case when p_response='pending' then response else p_response end,
+   plan_link_id=p_link.id, status='waiting', created_at=now(), decided_at=null
+   where plan_id=p_plan.id and user_id=p_uid returning created_at, response into v_created, v_resp;
+ else
+  insert into private.join_requests(plan_id,user_id,plan_link_id,response) values(p_plan.id,p_uid,p_link.id,p_response)
+   returning created_at, response into v_created, v_resp;
+ end if;
+ insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id)
+  select p_plan.id,h,'join_request',
+   'join:'||p_plan.id||':'||p_uid||':'||coalesce(p_link.id::text,'')||':'||extract(epoch from v_created)||case when h=p_plan.owner_id then '' else ':'||h end,p_uid
+  from private.host_ids(p_plan.id) h where h<>p_uid on conflict do nothing;
+ return jsonb_build_object('state','waiting','plan_id',p_plan.id,'response',v_resp);
+end $$;

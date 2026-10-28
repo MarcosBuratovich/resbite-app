@@ -111,3 +111,15 @@ test("the new kinds never reveal a place, note, description or phone number", ()
     }
   }
 });
+
+test("admin_added names who made you an admin, under the actor's line, with the event title as the body", () => {
+  assert.deepEqual(
+    notificationCopy({ ...base, kind: "admin_added", detail: null, actor_name: "Marcos", title: "Board game night" }),
+    { title: "Marcos made you an admin", body: "Board game night" },
+  );
+  assert.deepEqual(
+    notificationCopy({ ...base, kind: "admin_added", actor_name: "  ", title: "Board game night" }),
+    { title: "Someone made you an admin", body: "Board game night" },
+  );
+  assert.deepEqual(notificationCopy({ ...base, kind: "admin_added", title: "  " }), GENERIC_COPY);
+});

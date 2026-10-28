@@ -87,6 +87,9 @@ function body(input: CopyInput): string | null {
 
 export function notificationCopy(input: CopyInput): Copy {
   const title = input.title?.trim();
+  // The one notice that leads with who did it: the plan's title is the line underneath.
+  if (input.kind === "admin_added")
+    return title ? { title: `${input.actor_name?.trim() || "Someone"} made you an admin`, body: title } : GENERIC_COPY;
   const text = title ? body(input) : null;
   return title && text ? { title, body: text } : GENERIC_COPY;
 }
