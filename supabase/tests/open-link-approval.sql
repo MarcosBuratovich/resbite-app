@@ -234,7 +234,7 @@ do $$ declare r jsonb; begin
  r := public.my_join_request(repeat('A',22));
  if r->>'state' is distinct from 'open' or r->>'title' is distinct from 'Picnic' or r->>'host' is distinct from 'Host' or r->>'area' is distinct from 'Riverside'
   or r->'request' is distinct from '{"status":"waiting","response":"accepted"}'::jsonb or r->'member' is distinct from 'null'::jsonb then raise exception 'my_join_request was %', r; end if;
- if r::text like '%Secret Park%' or r::text like '%place%' then raise exception 'my_join_request leaks the place: %', r; end if;
+ if r::text like '%Secret Park%' or r::text like '%place_label%' then raise exception 'my_join_request leaks the place: %', r; end if;
  r := public.my_join_requests();
  if jsonb_array_length(r) is distinct from 1 or r->0->>'plan_id' is distinct from 'd2100000-0000-4000-8000-000000000001' or r->0->>'title' is distinct from 'Picnic' or r->0->>'host' is distinct from 'Host'
   or r->0->>'area' is distinct from 'Riverside' or r->0->'image' is distinct from '{"kind":"mark","ref":""}'::jsonb or r->0->>'response' is distinct from 'accepted' or r->0->>'status' is distinct from 'waiting'

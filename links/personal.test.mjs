@@ -40,8 +40,9 @@ test("data attributes carry the client's inputs, and the key appears only there"
   const main = html.match(/<main [^>]*>/)[0];
   for (const [name, value] of [["supabase-url", options.supabaseUrl], ["publishable-key", options.publishableKey], ["code", code],
     ["country", "44"], ["ending", "34"], ["host", "Marcos"], ["terms-version", "2026-10"], ["app-store-url", options.appStoreUrl],
-    ["starts-at", "2099-11-02T13:00:00+00:00"]])
+    ["ends-at", "2099-11-02T16:00:00+00:00"]])
     assert.ok(main.includes(`data-${name}="${value}"`), name);
+  assert.ok(!main.includes("data-starts-at"), "the end replaces the start");
   assert.equal(html.split(options.publishableKey).length, 2, "exactly once");
   assert.ok(html.indexOf(options.publishableKey) > html.indexOf("<main"));
 });
@@ -182,4 +183,13 @@ test("the note names the invitation's calling code; the open page has no note", 
   assert.ok(renderPersonalPage({ ...open, country: "54", ending: "34" }, options).includes("This invitation is for a +54 number ending ••34."));
   const html = renderOpenLinkPage(open, options);
   assert.ok(!html.includes("This invitation is for") && !html.includes('class="note"'));
+test("without an end, data-ends-at is the start", () => {
+  const html = renderPersonalPage({ ...open, ends_at: null }, options);
+  assert.ok(html.match(/<main [^>]*>/)[0].includes('data-ends-at="2099-11-02T13:00:00+00:00"'));
+});
+
+test("the personal page shows the repeat line and Place to be decided under the time", () => {
+  const html = renderPersonalPage({ ...open, repeat_weeks: 2, place_tbd: true }, options);
+  assert.ok(html.includes('<p class="detail">Every other Monday</p>'));
+  assert.ok(html.includes('<p class="detail">Place to be decided</p>'));
 });

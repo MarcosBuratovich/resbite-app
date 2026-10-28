@@ -51,6 +51,24 @@ export function formatWhen(startsAt, endsAt, timeZone) {
   return `${day.format(start)}, ${range}`;
 }
 
+/**
+ * "Every Thursday" for a weekly plan, "Every other Thursday" every two weeks; null without a repeat rule. The weekday is
+ * the start's in the plan's own time zone.
+ */
+export function repeatLine(startsAt, timeZone, repeatWeeks) {
+  if (repeatWeeks === null || repeatWeeks === undefined) return null;
+  const start = new Date(startsAt);
+  if (Number.isNaN(start.getTime())) return null;
+  let zone = timeZone || "UTC";
+  try {
+    new Intl.DateTimeFormat("en-GB", { timeZone: zone });
+  } catch {
+    zone = "UTC";
+  }
+  const weekday = new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: zone }).format(start);
+  return Number(repeatWeeks) === 2 ? `Every other ${weekday}` : `Every ${weekday}`;
+}
+
 /** "Fri 23 Oct, 19:30 · Invited by Stephen" for the chat preview. Never the area or the place. */
 export function previewDescription(data) {
   return `${formatWhen(data.starts_at, null, data.time_zone)} · Invited by ${data.host}`;

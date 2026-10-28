@@ -224,7 +224,8 @@ begin
  return v_uid;
 end $$;
 
--- The public pages say 'happened' from the end.
+-- The public pages say 'happened' from the end. 6. Web payloads: the open payloads also carry place_tbd and repeat_weeks
+-- (the pages say "Place to be decided" and "Every Thursday" from them); my_join_request reuses invitation_page.
 create or replace function private.invitation_page(p_code text) returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare v_link private.plan_links; v_plan public.plans; v_host text; v_going integer; v_state text;
 begin
@@ -238,7 +239,7 @@ begin
  if v_state<>'open' then return jsonb_build_object('state',v_state,'host',v_host,'title',v_plan.title); end if;
  select count(*) into v_going from public.attendees where plan_id=v_plan.id and response='accepted';
  return jsonb_build_object('state','open','host',v_host,'title',v_plan.title,'starts_at',v_plan.starts_at,'ends_at',v_plan.ends_at,
-  'time_zone',v_plan.time_zone,'area',v_plan.area,'going',v_going,
+  'time_zone',v_plan.time_zone,'area',v_plan.area,'place_tbd',v_plan.place_tbd,'repeat_weeks',v_plan.repeat_weeks,'going',v_going,
   'image',case when v_plan.cover_path is not null then jsonb_build_object('kind','cover','ref',v_plan.cover_path)
    when v_plan.activity_id is not null then jsonb_build_object('kind','activity','ref',v_plan.activity_id)
    else jsonb_build_object('kind','mark','ref','') end);
@@ -257,7 +258,7 @@ begin
  if v_state<>'open' then return jsonb_build_object('state',v_state,'host',v_host,'title',v_plan.title); end if;
  select count(*) into v_going from public.attendees where plan_id=v_plan.id and response='accepted';
  return jsonb_build_object('state','open','host',v_host,'title',v_plan.title,'starts_at',v_plan.starts_at,'ends_at',v_plan.ends_at,
-  'time_zone',v_plan.time_zone,'area',v_plan.area,'going',v_going,
+  'time_zone',v_plan.time_zone,'area',v_plan.area,'place_tbd',v_plan.place_tbd,'repeat_weeks',v_plan.repeat_weeks,'going',v_going,
   'image',case when v_plan.cover_path is not null then jsonb_build_object('kind','cover','ref',v_plan.cover_path)
    when v_plan.activity_id is not null then jsonb_build_object('kind','activity','ref',v_plan.activity_id)
    else jsonb_build_object('kind','mark','ref','') end,
@@ -890,40 +891,43 @@ begin
   order by o.id
   for update of o skip locked
  loop
-  v_steps := 1;
-  loop
-   v_start := private.next_occurrence(p.starts_at,p.time_zone,p.repeat_weeks*v_steps);
-   v_end := private.next_occurrence(p.ends_at,p.time_zone,p.repeat_weeks*v_steps);
-   -- A start in a spring-forward gap lands an hour later, so an end just after the gap would come before it: keep the length.
-   if v_end<=v_start then v_end := v_start+(p.ends_at-p.starts_at); end if;
-   exit when private.plan_end(v_start,v_end)>now() or v_steps>=600;
-   v_steps := v_steps+1;
-  end loop;
-  -- More than 600 repeats behind: give up on this plan.
-  continue when private.plan_end(v_start,v_end)<=now();
-  v_id := gen_random_uuid();
+  -- Each plan has its own block: a plan that cannot roll (a bad time zone, say) is skipped with a warning, the rest roll.
   begin
-   -- The cover trigger starts cover_revision at 0 again; title and categories are given, so the activity trigger keeps them.
-   insert into public.plans(id,owner_id,activity_id,title,description,categories,starts_at,ends_at,time_zone,place_label,place_tbd,
-    latitude,longitude,area,guest_note,guest_note_at,cover_path,cover_revision,cover_description,has_meeting_details,repeat_weeks,
-    series_id,repeats_from,status,version)
-   values(v_id,p.owner_id,p.activity_id,p.title,p.description,p.categories,v_start,v_end,p.time_zone,p.place_label,p.place_tbd,
-    p.latitude,p.longitude,p.area,p.guest_note,p.guest_note_at,p.cover_path,p.cover_revision,p.cover_description,p.has_meeting_details,p.repeat_weeks,
-    p.series_id,p.id,'active',1);
-   insert into public.plan_meeting_details(plan_id,note) select v_id,note from public.plan_meeting_details where plan_id=p.id;
-   insert into public.plan_admins(plan_id,user_id,appointed_by,appointed_at) select v_id,user_id,appointed_by,now() from public.plan_admins where plan_id=p.id;
-   insert into public.attendees(plan_id,user_id,response,version) select v_id,user_id,'pending',1 from public.attendees where plan_id=p.id and response<>'withdrawn';
-   insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,detail)
-   select v_id,a.user_id,'invited','invited:'||v_id||':'||a.user_id,p.owner_id,'again'
-   from public.attendees a
-   where a.plan_id=v_id and a.user_id<>p.owner_id
-    and not exists(select 1 from public.plan_admins pa where pa.plan_id=v_id and pa.user_id=a.user_id)
-   on conflict do nothing;
-   v_count := v_count+1;
+    v_steps := 1;
+    loop
+     v_start := private.next_occurrence(p.starts_at,p.time_zone,p.repeat_weeks*v_steps);
+     v_end := private.next_occurrence(p.ends_at,p.time_zone,p.repeat_weeks*v_steps);
+     -- A start in a spring-forward gap lands an hour later, so an end just after the gap would come before it: keep the length.
+     if v_end<=v_start then v_end := v_start+(p.ends_at-p.starts_at); end if;
+     exit when private.plan_end(v_start,v_end)>now() or v_steps>=600;
+     v_steps := v_steps+1;
+    end loop;
+    -- More than 600 repeats behind: give up on this plan.
+    continue when private.plan_end(v_start,v_end)<=now();
+    v_id := gen_random_uuid();
+     -- The cover trigger starts cover_revision at 0 again; title and categories are given, so the activity trigger keeps them.
+     insert into public.plans(id,owner_id,activity_id,title,description,categories,starts_at,ends_at,time_zone,place_label,place_tbd,
+      latitude,longitude,area,guest_note,guest_note_at,cover_path,cover_revision,cover_description,has_meeting_details,repeat_weeks,
+      series_id,repeats_from,status,version)
+     values(v_id,p.owner_id,p.activity_id,p.title,p.description,p.categories,v_start,v_end,p.time_zone,p.place_label,p.place_tbd,
+      p.latitude,p.longitude,p.area,p.guest_note,p.guest_note_at,p.cover_path,p.cover_revision,p.cover_description,p.has_meeting_details,p.repeat_weeks,
+      p.series_id,p.id,'active',1);
+     insert into public.plan_meeting_details(plan_id,note) select v_id,note from public.plan_meeting_details where plan_id=p.id;
+     insert into public.plan_admins(plan_id,user_id,appointed_by,appointed_at) select v_id,user_id,appointed_by,now() from public.plan_admins where plan_id=p.id;
+     insert into public.attendees(plan_id,user_id,response,version) select v_id,user_id,'pending',1 from public.attendees where plan_id=p.id and response<>'withdrawn';
+     insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,detail)
+     select v_id,a.user_id,'invited','invited:'||v_id||':'||a.user_id,p.owner_id,'again'
+     from public.attendees a
+     where a.plan_id=v_id and a.user_id<>p.owner_id
+      and not exists(select 1 from public.plan_admins pa where pa.plan_id=v_id and pa.user_id=a.user_id)
+     on conflict do nothing;
+     v_count := v_count+1;
   exception when unique_violation then
    -- Another run created this plan's next occurrence first; anything else is a real error.
    get stacked diagnostics v_constraint = constraint_name;
    if v_constraint is distinct from 'plans_repeats_from_key' then raise; end if;
+  when others then
+   raise warning 'roll_repeating_plans: plan % skipped: %', p.id, sqlerrm;
   end;
  end loop;
  return v_count;

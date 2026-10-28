@@ -386,8 +386,8 @@ export const keptKey = (code) => `${KEPT_PREFIX}${code}`;
  * What the page stores for one invitation: the session, the full number this page verified for this code, and when
  * the event starts (ms since 1970), after which the entry is dropped.
  */
-export function keptEntry(session, phone, startsAt) {
-  return { session, phone, until: Number.isFinite(startsAt) ? startsAt : null };
+export function keptEntry(session, phone, endsAt) {
+  return { session, phone, until: Number.isFinite(endsAt) ? endsAt : null };
 }
 
 function readEntry(storage, key) {

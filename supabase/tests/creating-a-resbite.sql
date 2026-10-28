@@ -1041,6 +1041,26 @@ do $$ begin
  if exists(select 1 from storage.objects where bucket_id='plan-covers') then raise exception 'A stranger reads the cover'; end if;
 end $$;
 
+reset role;
+-- 6. Web payloads: the open pages say whether the place is to be decided and how the plan repeats (30's next occurrence weekly, 31 every other week, place to be decided).
+-- 30 has rolled: its next occurrence is the open weekly plan.
+insert into private.plan_links(plan_id,code)
+ select id,repeat('W',22) from public.plans where repeats_from='e1100000-0000-4000-8000-000000000030';
+insert into private.plan_links(plan_id,code) values ('e1100000-0000-4000-8000-000000000031',repeat('V',22));
+do $$ declare a jsonb; b jsonb; begin
+ a := private.invitation_page(repeat('W',22)); b := private.invitation_page(repeat('V',22));
+ if a->>'state'<>'open' or (a->>'repeat_weeks')::int is distinct from 1 or (a->>'place_tbd')::boolean is distinct from false then raise exception 'Weekly plan payload wrong: %', a; end if;
+ if (b->>'repeat_weeks')::int is distinct from 2 or (b->>'place_tbd')::boolean is distinct from true then raise exception 'To-be-decided plan payload wrong: %', b; end if;
+end $$;
+-- A personal invitation carries the same two fields.
+insert into private.phone_invitations(plan_id,code_hash,phone,country,invited_by)
+ select 'e1100000-0000-4000-8000-000000000031',extensions.digest(repeat('U',22),'sha256'),'447700900611','44','e1000000-0000-4000-8000-000000000001';
+do $$ declare c jsonb; begin
+ c := private.personal_invitation_page(repeat('U',22));
+ if c->>'state'<>'open' or (c->>'repeat_weeks')::int is distinct from 2 or (c->>'place_tbd')::boolean is distinct from true then raise exception 'Personal payload wrong: %', c; end if;
+end $$;
+set local role authenticated;
+
 -- Cancel just this one (31, 37) rolls; cancel and stop repeating (32) does not; Doesn't repeat on Edit (33) does not.
 select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 select public.change_plan_v4('e1100000-0000-4000-8000-000000000031',1,null,null,null,null,null,null,null,null,null,null,null,true);
@@ -1075,4 +1095,23 @@ do $$ declare n public.plans; begin
  if not found or n.starts_at<>'2099-03-29 01:30+00' or n.ends_at<>'2099-03-29 02:15+00'
   then raise exception 'The clock change inverted the next occurrence: %', to_jsonb(n); end if;
 end $$;
+
+-- One plan that cannot be rolled does not stop the others: 38's time zone is invalid, 39 is fine. The call rolls 39 only.
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+set local role authenticated;
+select public.create_plan_v4('e1100000-0000-4000-8000-000000000038','Broken zone','',array['community'],null,
+ '2099-06-04 18:00+00','2099-06-04 20:00+00','UTC','Park',false,1::smallint,'');
+select public.create_plan_v4('e1100000-0000-4000-8000-000000000039','Fine','',array['community'],null,
+ '2099-06-04 18:00+00','2099-06-04 20:00+00','UTC','Park',false,1::smallint,'');
+reset role;
+update public.plans set starts_at=now()-interval '3 days 2 hours',ends_at=now()-interval '3 days' where id in ('e1100000-0000-4000-8000-000000000038','e1100000-0000-4000-8000-000000000039');
+update public.plans set time_zone='Nowhere/Invalid' where id='e1100000-0000-4000-8000-000000000038';
+-- The skipped plan's warning is expected; keep the output clean.
+set local client_min_messages=error;
+do $$ begin
+ if private.roll_repeating_plans()<>1 then raise exception 'Expected only the valid plan to roll'; end if;
+ if not exists(select 1 from public.plans where repeats_from='e1100000-0000-4000-8000-000000000039') then raise exception 'The valid plan did not roll after the broken one'; end if;
+ if exists(select 1 from public.plans where repeats_from='e1100000-0000-4000-8000-000000000038') then raise exception 'The broken plan rolled'; end if;
+end $$;
+set local client_min_messages=warning;
 rollback;

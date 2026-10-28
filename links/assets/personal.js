@@ -77,8 +77,8 @@ function start(main, answerButton) {
   const ending = data.ending || "";
   const host = data.host || "";
   const termsVersion = data.termsVersion || "";
-  // When the event starts the answer closes, and the kept session goes with it.
-  const startsAt = Date.parse(data.startsAt || "");
+  // When the event ends (the start, with no end) the answer closes, and the kept session goes with it.
+  const endsAt = Date.parse(data.endsAt || "");
   const termsUrl = httpsUrl(data.termsUrl);
   const privacyUrl = httpsUrl(data.privacyUrl);
   const appUrl = httpsUrl(data.appStoreUrl);
@@ -350,14 +350,14 @@ function start(main, answerButton) {
   // event has started go, whatever their code; this one goes too once its event starts.
   const storage = pageStorage();
   sweepKept(storage, Date.now());
-  if (Number.isFinite(startsAt) && startsAt <= Date.now()) dropKept(storage, code);
+  if (Number.isFinite(endsAt) && endsAt <= Date.now()) dropKept(storage, code);
   const kept = readKept(storage, code, Date.now());
   let session = kept?.session ?? null;
   let verifiedPhone = kept?.phone ?? null;
   function keep(value) {
     session = value;
     // Not kept when storage refuses: this visit still works; the next one asks for the code again.
-    writeKept(storage, code, keptEntry(value, verifiedPhone, startsAt));
+    writeKept(storage, code, keptEntry(value, verifiedPhone, endsAt));
   }
   function forget() {
     session = null;

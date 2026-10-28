@@ -1,6 +1,6 @@
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { formatWhen, previewDescription, renderClosedPage, pageHeaders, isLinkCode, PAGE_CSP } from "./server/lib/render.mjs";
+import { formatWhen, repeatLine, previewDescription, renderClosedPage, pageHeaders, isLinkCode, PAGE_CSP } from "./server/lib/render.mjs";
 import { readInvitationPage, signCoverUrl } from "./server/lib/supabase.mjs";
 import { renderOpenLinkPage, personalCsp } from "./server/lib/personal.mjs";
 import { pageOptions } from "./server/lib/options.mjs";
@@ -67,7 +67,7 @@ test("the open page carries the personal page's data attributes, with mode open,
   const main = html.match(/<main [^>]*>/)[0];
   for (const [name, value] of [["supabase-url", linkOptions.supabaseUrl], ["publishable-key", linkOptions.publishableKey], ["code", code],
     ["mode", "open"], ["country", "44"], ["host", "Stephen"], ["terms-version", "2026-10"], ["terms-url", linkOptions.termsUrl],
-    ["privacy-url", linkOptions.privacyUrl], ["app-store-url", linkOptions.appStoreUrl], ["starts-at", open.starts_at]])
+    ["privacy-url", linkOptions.privacyUrl], ["app-store-url", linkOptions.appStoreUrl], ["ends-at", open.ends_at]])
     assert.ok(main.includes(`data-${name}="${value}"`), name);
   assert.ok(!html.includes("data-ending") && !html.includes("••34"), "no number to match");
   assert.equal(html.split(linkOptions.publishableKey).length, 2, "the key appears once");
@@ -375,4 +375,21 @@ test("with no bundled mark the last resort is an empty 204, still with the heade
   assert.equal(res.statusCode, 204);
   assert.equal(res.body, "");
   imageHeaders(res);
+});
+
+test("repeatLine: null without a rule, Every Thursday weekly, Every other Thursday every two weeks, in the plan's zone", () => {
+  assert.equal(repeatLine("2026-10-29T19:00:00Z", "Europe/London", null), null);
+  assert.equal(repeatLine("2026-10-29T19:00:00Z", "Europe/London", undefined), null);
+  assert.equal(repeatLine("2026-10-29T19:00:00Z", "Europe/London", 1), "Every Thursday");
+  assert.equal(repeatLine("2026-10-29T19:00:00Z", "Europe/London", 2), "Every other Thursday");
+  // 23:30 UTC on Thursday is already Friday in Sydney.
+  assert.equal(repeatLine("2026-10-29T23:30:00Z", "Australia/Sydney", 1), "Every Friday");
+});
+
+test("the open page says Every Thursday for a weekly plan and Place to be decided from the flag", () => {
+  const html = renderOpenLinkPage({ ...open, starts_at: "2099-10-22T18:30:00+00:00", ends_at: null, repeat_weeks: 1, place_tbd: true }, linkOptions);
+  assert.ok(html.includes('<p class="detail">Every Thursday</p>'));
+  assert.ok(html.includes('<p class="detail">Place to be decided</p>'));
+  const plain = renderOpenLinkPage({ ...open, repeat_weeks: null, place_tbd: false }, linkOptions);
+  assert.ok(!plain.includes("Every ") && !plain.includes("Place to be decided"));
 });

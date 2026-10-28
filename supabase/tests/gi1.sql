@@ -141,7 +141,8 @@ do $$ declare p jsonb; begin
  if p->'image'<>'{"kind":"activity","ref":"gi1-film"}'::jsonb then raise exception 'Image wrong: %', p; end if;
  -- Nothing private leaves: no place, Meeting details, note, description or names.
  if p::text ~ 'Secret' or p::text ~ '4512' or p::text ~ 'Cinema' or p::text ~ 'Ana' or p::text ~ 'Tom' then raise exception 'Private text in the page read: %', p; end if;
- if (select count(*) from jsonb_object_keys(p))<>9 then raise exception 'Unexpected keys: %', p; end if;
+ -- 11 keys: the nine of GI1 plus place_tbd and repeat_weeks (creating-a-resbite).
+ if (select count(*) from jsonb_object_keys(p))<>11 then raise exception 'Unexpected keys: %', p; end if;
  -- An event with no activity and no cover shows the mark; no area gives an empty string.
  p := public.invitation_page((select code from gi1_codes where name='plain'));
  if p->'image'<>'{"kind":"mark","ref":""}'::jsonb or p->>'area'<>'' or (p->>'going')::int<>0 or p->'ends_at'<>'null'::jsonb then raise exception 'Plain page wrong: %', p; end if;

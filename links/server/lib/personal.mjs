@@ -2,7 +2,7 @@
 // Pure: data in, HTML out. It uses only the keys personal_invitation_page returns, which never include the place
 // or the full number. The steps after the first (confirm, code, answer, get the app) are filled by /personal.js.
 // An open link /r/<code> whose event is open renders the same steps in open mode (open-link approval, plan 3).
-import { PAGE_CSP, formatWhen, pageHeaders, previewDescription, smartBanner } from "./render.mjs";
+import { PAGE_CSP, formatWhen, pageHeaders, previewDescription, repeatLine, smartBanner } from "./render.mjs";
 
 /** The /r/ CSP with the one Supabase host the page may call. Without a usable URL the page cannot connect at all. */
 export function personalCsp(supabaseUrl) {
@@ -40,6 +40,7 @@ export const PERSONAL_WORDS = {
   happened: "This resbite has already happened.",
   inactive: "This invitation is no longer active.",
   inactiveHint: "Ask whoever sent it for a new link.",
+  placeTbd: "Place to be decided",
   plan: "Plan your own with Resbite.",
   // The open link's way into the app (GI1's words), for people who already have Resbite.
   haveApp: "I have Resbite: open the app",
@@ -119,6 +120,9 @@ function stepsBody(data, image, options, mode) {
   const w = PERSONAL_WORDS;
   const open = mode === "open";
   const when = formatWhen(data.starts_at, data.ends_at, data.time_zone);
+  const repeat = repeatLine(data.starts_at, data.time_zone, data.repeat_weeks);
+  const repeatHtml = repeat ? `\n        <p class="detail">${escape(repeat)}</p>` : "";
+  const tbd = data.place_tbd === true ? `\n        <p class="detail">${escape(w.placeTbd)}</p>` : "";
   const area = data.area ? `\n        <p class="detail">${escape(data.area)}</p>` : "";
   const attrs = {
     "supabase-url": options.supabaseUrl,
@@ -130,8 +134,8 @@ function stepsBody(data, image, options, mode) {
     "terms-url": options.termsUrl,
     "privacy-url": options.privacyUrl,
     "app-store-url": options.appStoreUrl,
-    // The script drops the session it keeps for this invitation once the event has started.
-    "starts-at": data.starts_at,
+    // The script drops the session it keeps for this invitation once the event has ended (the start when it has no end).
+    "ends-at": data.ends_at || data.starts_at,
   };
   const dataAttrs = Object.entries(attrs)
     .map(([name, value]) => `data-${name}="${escape(value)}"`)
@@ -145,7 +149,7 @@ function stepsBody(data, image, options, mode) {
         <p class="invited"><span class="dot" aria-hidden="true"></span>${escape(w.invited(data.host))}</p>
         <img class="hero" src="${escape(image)}" alt="" />
         <h1>${escape(data.title)}</h1>
-        <p class="detail">${escape(when)}</p>${area}
+        <p class="detail">${escape(when)}</p>${repeatHtml}${tbd}${area}
         <p class="detail">${escape(w.going(data.going))}</p>${note}
         <p><button type="button" class="button" id="answer">${w.answer}</button></p>${after}
       </section>
