@@ -17,3 +17,6 @@ supabase/.temp/
 
 # Claude Code worktrees
 .claude/worktrees/
+
+# Git worktrees for isolated plan execution
+.worktrees/
