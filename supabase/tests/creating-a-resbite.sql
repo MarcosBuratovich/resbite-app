@@ -97,6 +97,11 @@ select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-00000000
 select public.request_to_join((select code from cr1_codes where name='link'),null,'accepted',null);
 select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000007","role":"authenticated"}',true);
 select public.request_to_join((select code from cr1_codes where name='link'),null,'maybe',null);
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000004","role":"authenticated"}',true);
+do $$ begin
+ if not exists(select 1 from jsonb_array_elements(public.my_join_requests()) e where e->>'plan_id'='e1100000-0000-4000-8000-000000000001') then raise exception 'Waiting request missing from my_join_requests while running'; end if;
+ if public.change_join_answer('e1100000-0000-4000-8000-000000000001','maybe')->>'response'<>'maybe' then raise exception 'change_join_answer failed while running'; end if;
+end $$;
 select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000012","role":"authenticated"}',true);
 do $$ begin
  if public.join_by_link((select code from cr1_codes where name='link'),'Newcomer','2026-10') is distinct from 'e1100000-0000-4000-8000-000000000001'::uuid then raise exception 'join_by_link failed while running'; end if;
@@ -173,6 +178,12 @@ do $$ begin
  exception when insufficient_privilege then if sqlerrm<>'Invitation unavailable' then raise exception 'Wrong message: %', sqlerrm; end if; end;
  begin perform public.claim_invite(repeat('b',64)); raise exception 'Ended plan claimed by invite';
  exception when insufficient_privilege then null; end;
+end $$;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000004","role":"authenticated"}',true);
+do $$ begin
+ if exists(select 1 from jsonb_array_elements(public.my_join_requests()) e where e->>'plan_id'='e1100000-0000-4000-8000-000000000001') then raise exception 'my_join_requests lists a request after the end'; end if;
+ begin perform public.change_join_answer('e1100000-0000-4000-8000-000000000001','declined'); raise exception 'Answer changed after the end';
+ exception when insufficient_privilege then if sqlerrm<>'Invitation unavailable' then raise exception 'Wrong message: %', sqlerrm; end if; end;
 end $$;
 select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000008","role":"authenticated"}',true);
 do $$ begin

@@ -420,6 +420,40 @@ begin
  return private.request_join(v_uid,v_link,v_plan,p_response);
 end $$;
 
+-- The waiting screens follow the end too.
+create or replace function private.my_join_requests() returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_uid uuid := auth.uid();
+begin
+ if v_uid is null then raise exception 'Sign-in required' using errcode='42501'; end if;
+ return coalesce((select jsonb_agg(jsonb_build_object('plan_id',p.id,'title',p.title,'starts_at',p.starts_at,'ends_at',p.ends_at,
+   'time_zone',p.time_zone,'host',(select display_name from public.profiles where id=p.owner_id),'area',p.area,
+   'image',case when p.cover_path is not null then jsonb_build_object('kind','cover','ref',p.cover_path)
+    when p.activity_id is not null then jsonb_build_object('kind','activity','ref',p.activity_id)
+    else jsonb_build_object('kind','mark','ref','') end,
+   'response',j.response,'status',j.status) order by p.starts_at,p.id)
+  from private.join_requests j join public.plans p on p.id=j.plan_id
+  where j.user_id=v_uid and j.status in ('waiting','declined') and p.owner_id is not null and p.status='active' and private.plan_end(p.starts_at,p.ends_at)>now()
+   and not exists(select 1 from public.attendees a where a.plan_id=p.id and a.user_id=v_uid)),'[]'::jsonb);
+end $$;
+
+create or replace function private.change_join_answer(p_plan uuid, p_response text) returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := auth.uid();
+begin
+ if v_uid is null then raise exception 'Sign-in required' using errcode='42501'; end if;
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_uid::text,47));
+ if p_response is null or p_response not in ('pending','accepted','maybe','declined') then raise exception 'Invalid response' using errcode='22023'; end if;
+ if not exists(select 1 from private.join_requests where plan_id=p_plan and user_id=v_uid and status='waiting')
+ or exists(select 1 from public.attendees where plan_id=p_plan and user_id=v_uid) then
+  raise exception 'Request already decided' using errcode='22023';
+ end if;
+ if not exists(select 1 from public.plans where id=p_plan and status='active' and private.plan_end(starts_at,ends_at)>now()) then
+  raise exception 'Invitation unavailable' using errcode='42501';
+ end if;
+ update private.join_requests set response=p_response where plan_id=p_plan and user_id=v_uid and status='waiting';
+ if not found then raise exception 'Request already decided' using errcode='22023'; end if;
+ return jsonb_build_object('status','waiting','response',p_response);
+end $$;
+
 -- The waiting list is empty from the end.
 create or replace function private.plan_join_requests(p_plan uuid) returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester();
