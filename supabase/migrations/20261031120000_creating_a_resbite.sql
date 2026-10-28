@@ -74,7 +74,7 @@ begin
   v_time := p_start is distinct from v_plan.starts_at or p_zone is distinct from v_plan.time_zone;
   v_place := btrim(p_place) is distinct from v_plan.place_label;
   update public.plans set title=btrim(p_title),description=coalesce(p_description,''),categories=p_categories,
-   starts_at=p_start,ends_at=v_ends,time_zone=p_zone,place_label=btrim(p_place),latitude=null,longitude=null,version=v_next,
+   starts_at=p_start,ends_at=v_ends,time_zone=p_zone,place_label=btrim(p_place),place_tbd=false,latitude=null,longitude=null,version=v_next,
    area=case when p_area is null then v_plan.area else btrim(p_area) end
   where id=p_plan;
   perform private.write_meeting_details(p_plan,coalesce(p_note,''));
@@ -710,6 +710,8 @@ revoke all on function private.plans_default_series() from public, anon, authent
 create trigger plans_default_series before insert on public.plans for each row execute function private.plans_default_series();
 alter table public.plans add column repeats_from uuid references public.plans(id);
 create unique index plans_repeats_from_key on public.plans(repeats_from);
+-- To be decided is the whole place: no other label, no coordinates. The old build (change_plan_v3) clears the flag when it saves a place.
+alter table public.plans add constraint plans_place_tbd_valid check (not place_tbd or (place_label = 'To be decided' and latitude is null and longitude is null));
 
 create function private.create_plan_v4(p_id uuid,p_title text,p_description text,p_categories text[],p_activity text,p_start timestamptz,p_ends timestamptz,p_zone text,p_place text,p_place_tbd boolean,p_repeat_weeks smallint,p_note text default '',p_lat double precision default null,p_lon double precision default null,p_area text default null)
 returns uuid language plpgsql security definer set search_path = '' as $$
@@ -771,8 +773,8 @@ begin
   if p_ends<=now() then raise exception 'Plan unavailable' using errcode='22023'; end if;
   if p_ends<=p_start or p_ends>p_start+interval '48 hours' then raise exception 'Invalid end time' using errcode='22023'; end if;
   if p_repeat_weeks is not null and p_repeat_weeks not in (1,2) then raise exception 'Invalid repeat' using errcode='22023'; end if;
-  -- A zone change at the same instant moves the shown time, so it counts as a time change; so does choosing or dropping To be decided for the place.
-  v_time := p_start is distinct from v_plan.starts_at or p_zone is distinct from v_plan.time_zone;
+  -- A zone change at the same instant moves the shown time, and a new end changes when it finishes, so both count as a time change; choosing or dropping To be decided for the place.
+  v_time := p_start is distinct from v_plan.starts_at or p_zone is distinct from v_plan.time_zone or p_ends is distinct from v_plan.ends_at;
   v_place := v_tbd is distinct from v_plan.place_tbd or (not v_tbd and btrim(p_place) is distinct from v_plan.place_label);
   update public.plans set title=btrim(p_title),description=coalesce(p_description,''),categories=p_categories,
    starts_at=p_start,ends_at=p_ends,time_zone=p_zone,place_label=case when v_tbd then 'To be decided' else btrim(p_place) end,place_tbd=v_tbd,

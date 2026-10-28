@@ -645,18 +645,31 @@ end $$;
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 select public.change_plan_v4('e1100000-0000-4000-8000-000000000012',2,'Repeats','',array['community'],'2099-06-04 19:00+00','2099-06-04 22:00+00','UTC','New park',false,1::smallint,'bring a coat','');
-select public.change_plan_v4('e1100000-0000-4000-8000-000000000012',3,'Renamed','More',array['community','creative'],'2099-06-04 19:00+00','2099-06-04 23:00+00','UTC','New park',false,1::smallint,'a note','Soho');
+select public.change_plan_v4('e1100000-0000-4000-8000-000000000012',3,'Renamed','More',array['community','creative'],'2099-06-04 19:00+00','2099-06-04 22:00+00','UTC','New park',false,1::smallint,'a note','Soho');
 reset role;
 do $$ begin
  if (select count(*) from private.notification_outbox where plan_id='e1100000-0000-4000-8000-000000000012')<>4 then raise exception 'A repeat-only or text-only change sent a notice'; end if;
  if (select repeat_weeks from public.plans where id='e1100000-0000-4000-8000-000000000012')<>1 then raise exception 'The repeat did not change'; end if;
  if (select version from public.plans where id='e1100000-0000-4000-8000-000000000012')<>4 then raise exception 'Version not bumped'; end if;
 end $$;
+-- A new end alone is a time change (v4): the same recipients as a start change are told, with detail 'time'.
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.change_plan_v4('e1100000-0000-4000-8000-000000000012',4,'Renamed','More',array['community','creative'],'2099-06-04 19:00+00','2099-06-04 23:00+00','UTC','New park',false,1::smallint,'a note','Soho');
+reset role;
+do $$ declare d text; begin
+ for d in select unnest(array['e1000000-0000-4000-8000-000000000002','e1000000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000004','e1000000-0000-4000-8000-000000000006']) loop
+  if (select count(*) from private.notification_outbox where plan_id='e1100000-0000-4000-8000-000000000012' and kind='plan_changed' and detail='time' and recipient_id=d::uuid)<>1
+   then raise exception 'Recipient % was not told of the new end', d; end if;
+ end loop;
+ if exists(select 1 from private.notification_outbox where plan_id='e1100000-0000-4000-8000-000000000012' and kind='plan_changed' and detail='time' and recipient_id in ('e1000000-0000-4000-8000-000000000001','e1000000-0000-4000-8000-000000000005'))
+  then raise exception 'The owner or the declined guest was told of the end'; end if;
+end $$;
 -- Setting the place to be decided is a place change; the admin hears of it from the owner too.
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
-select public.change_plan_v4('e1100000-0000-4000-8000-000000000012',4,'Renamed','More',array['community','creative'],'2099-06-04 19:00+00','2099-06-04 23:00+00','UTC','',true,1::smallint,'a note','Soho');
-select public.change_plan_v4('e1100000-0000-4000-8000-000000000012',5,'Renamed','More',array['community','creative'],'2099-06-04 20:00+00','2099-06-04 23:00+00','UTC','Cafe',false,1::smallint,'a note','Soho');
+select public.change_plan_v4('e1100000-0000-4000-8000-000000000012',5,'Renamed','More',array['community','creative'],'2099-06-04 19:00+00','2099-06-04 23:00+00','UTC','',true,1::smallint,'a note','Soho');
+select public.change_plan_v4('e1100000-0000-4000-8000-000000000012',6,'Renamed','More',array['community','creative'],'2099-06-04 20:00+00','2099-06-04 23:00+00','UTC','Cafe',false,1::smallint,'a note','Soho');
 reset role;
 do $$ begin
  if (select place_label||place_tbd::text from public.plans where id='e1100000-0000-4000-8000-000000000012')<>'Cafefalse' then raise exception 'Place not stored'; end if;
@@ -668,11 +681,27 @@ do $$ begin
   then raise exception 'The owner got a notice of their own change'; end if;
 end $$;
 
+-- The old build (v3) saving a To be decided plan stores a real place and clears the flag; the table refuses the mix.
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.change_plan_v4('e1100000-0000-4000-8000-000000000013',1,'Repeats too','',array['community'],'2099-06-05 19:00+00','2099-06-05 22:00+00','UTC','',true,1::smallint,'','');
+do $$ begin
+ if (select place_tbd from public.plans where id='e1100000-0000-4000-8000-000000000013') is not true then raise exception 'The plan is not To be decided'; end if;
+ if public.change_plan_v3('e1100000-0000-4000-8000-000000000013',2,'Repeats too','',array['community'],'2099-06-05 19:00+00','2099-06-05 22:00+00','UTC','Real park','')<>3 then raise exception 'v3 did not save'; end if;
+end $$;
+reset role;
+do $$ begin
+ if (select place_label||place_tbd::text from public.plans where id='e1100000-0000-4000-8000-000000000013')<>'Real parkfalse' then raise exception 'v3 left the flag on a real place'; end if;
+ begin update public.plans set place_tbd=true where id='e1100000-0000-4000-8000-000000000013';
+  raise exception 'To be decided with a real label was stored';
+ exception when check_violation then null; end;
+end $$;
+
 -- Cancelling: the admin with stop-repeating ends the series; without it the repeat stays.
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
-select public.change_plan_v4('e1100000-0000-4000-8000-000000000012',6,null,null,null,null,null,null,null,null,null,null,null,true,true);
-select public.change_plan_v4('e1100000-0000-4000-8000-000000000013',1,null,null,null,null,null,null,null,null,null,null,null,true);
+select public.change_plan_v4('e1100000-0000-4000-8000-000000000012',7,null,null,null,null,null,null,null,null,null,null,null,true,true);
+select public.change_plan_v4('e1100000-0000-4000-8000-000000000013',3,null,null,null,null,null,null,null,null,null,null,null,true);
 reset role;
 do $$ declare d text; begin
  if (select status||coalesce(repeat_weeks::text,'-') from public.plans where id='e1100000-0000-4000-8000-000000000012')<>'cancelled-' then raise exception 'Stop repeating did not clear the repeat'; end if;
@@ -688,7 +717,7 @@ end $$;
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 do $$ begin
- begin perform public.change_plan_v4('e1100000-0000-4000-8000-000000000012',7,'Repeats','',array['community'],'2099-06-04 19:00+00','2099-06-04 22:00+00','UTC','Park',false,null,'','');
+ begin perform public.change_plan_v4('e1100000-0000-4000-8000-000000000012',8,'Repeats','',array['community'],'2099-06-04 19:00+00','2099-06-04 22:00+00','UTC','Park',false,null,'','');
   raise exception 'A cancelled plan was changed';
  exception when invalid_parameter_value then if sqlerrm<>'Plan unavailable' then raise exception 'Wrong message: %', sqlerrm; end if; end;
 end $$;
