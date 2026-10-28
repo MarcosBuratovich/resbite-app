@@ -7,6 +7,7 @@ import { phoneCodeDeps, sendPhoneCode, verifyPhoneCode, type PhonePurpose } from
 import { foldLanded, foldNext, foldPhoneAccount, retryFold, phoneFoldDeps, sendFoldCode, type FoldClientDeps } from "../services/phoneFold";
 import { clearAttestation, rememberAttestation } from "../services/phoneAccount";
 import { useAccount } from "./AccountState";
+import { usePushRegistration } from "./usePushRegistration";
 
 const RESEND_MS = 60_000;
 
@@ -16,6 +17,7 @@ const RESEND_MS = 60_000;
  */
 export function usePhoneVerification(purpose: PhonePurpose) {
   const { refresh } = useAccount();
+  const { reconcilePush } = usePushRegistration();
   const [step, setStep] = useState<"number" | "code">("number");
   const [input, setInputState] = useState("");
   const [e164, setE164] = useState<string | null>(null);
@@ -161,6 +163,8 @@ export function usePhoneVerification(purpose: PhonePurpose) {
         working.current = false;
         verifying.current = false;
         if (landed) {
+          // The fold may have just created this account's profile, which registering the phone for push needs.
+          void reconcilePush();
           router.replace("/account");
           return true;
         }
