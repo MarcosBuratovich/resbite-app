@@ -2,7 +2,7 @@
 
 - **Spec:** [Contact invitations design](../../docs/superpowers/specs/2026-10-27-contact-invitations-design.md), decision CI-D9 and flow 6. Open-link approval is plan 3 of 4 (plan 1 is phone accounts, plan 2 contact invitations).
 - **Plan:** [Open-link approval plan](../../docs/superpowers/plans/2026-10-28-open-link-approval.md).
-- **Code:** branch `open-link-approval`, commits `154c97b` (the plan) to the merge into `main`. **The migration is live on the hosted project since 28 October 2026 (see "Hosted migration" below); nothing is applied to the Auth dashboard, Vercel, EAS or TestFlight.**
+- **Code:** branch `open-link-approval`, commits `154c97b` (the plan) to the merge into `main`. **The migration is live on the hosted project since 28 October 2026 (see "Hosted migration" below); the link site is deployed the same day; nothing is applied to the Auth dashboard, EAS or TestFlight.**
 
 ## What is built
 
@@ -58,7 +58,7 @@ The commands:
 
 ## Rollout runbook
 
-Step 1 (the migration) is done. None of the other steps has been run; each is done later, with the owner's approval.
+Steps 1 (the migration) and 2 (the link site) are done. None of the other steps has been run; each is done later, with the owner's approval.
 
 **Order.** The migration ships after `20261028120000_contact_invitations.sql` and before the new app build: the new app calls RPCs that only exist after the migration. The link site is redeployed with, or just after, the migration (step 2).
 
@@ -68,7 +68,7 @@ Step 1 (the migration) is done. None of the other steps has been run; each is do
    - Take hosted before/after snapshots into this directory (the model is `supabase/tests/hosted-baseline/20261029120000_open_link_approval.before.sql` and `.after.sql`).
    - Apply it, then run the advisors.
    - Append the line to `supabase/tests/hosted-baseline/migrations.txt` with its hosted version.
-2. **Link site.**
+2. **Link site.** Deployed on 28 October 2026 with Plan 2's step 3; see [that record](../contact-invites-2026-10-28/README.md) for the deployment ids and the live checks.
    - The `/r/` open page changes, so regenerate and deploy `links/` (`links/generate.mjs`).
    - On the first Vercel preview, check that `/personal-flow.mjs` is served with a JavaScript MIME type (for example `curl -sI <preview>/personal-flow.mjs`). This is Plan 2's open item and still stands: the browser checks use a local server, and it has not been seen on Vercel. Check that `/r/<code>` loads its script as well.
    - The Vercel variables from Plan 2's step 3 (`TERMS_URL`, `PRIVACY_URL`, `APP_STORE_URL`, `TERMS_VERSION`) serve the open page too. The firewall rate limit on `/r/*` already exists.

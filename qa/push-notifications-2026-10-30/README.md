@@ -2,7 +2,7 @@
 
 - **Spec:** [Contact invitations design](../../docs/superpowers/specs/2026-10-27-contact-invitations-design.md), decision CI-D11 and the "Notifications" section. Push notifications are plan 4 of 4 (plan 1 phone accounts, plan 2 contact invitations, plan 3 open-link approval).
 - **Plan:** [Push notifications plan](../../docs/superpowers/plans/2026-10-29-push-notifications.md).
-- **Code:** branch `push-notifications`, taken from `main` at `ffc876f`. **The four migrations are live on the hosted project since 28 October 2026 (see "Hosted migration" below); nothing is applied to Apple, Expo, EAS, Vercel or TestFlight, and nothing is deployed.** Every hosted, Apple, Expo and EAS step below needs the owner's approval when it is done.
+- **Code:** branch `push-notifications`, taken from `main` at `ffc876f`. **The four migrations are live on the hosted project since 28 October 2026 (see "Hosted migration" below); the sender is deployed, released and scheduled the same day; nothing is applied to Apple, EAS or TestFlight.** Every hosted, Apple, Expo and EAS step below needs the owner's approval when it is done.
 - The calls made during the build are in `knowledge-base/08-decisions.md` ("Push notifications, 29 October 2026").
 
 ## What is built
@@ -60,7 +60,7 @@ Run on Linux on 27 October 2026 at `7195b47` (the later commits add one call aft
 
 ## Rollout runbook
 
-Step 3 (the migrations) is done. None of the other steps has been run; each is done later, with the owner's approval.
+Steps 2 (the Expo token), 3 (the migrations) and 4 (the sender) are done. None of the other steps has been run; each is done later, with the owner's approval.
 
 **Order.** Apple and Expo credentials first, then the four migrations, then the sender, then the app build. The new app calls `unregister_device`, which exists only after the migration; the sender sends nothing until its release switch is flipped, the secrets are set and the schedule exists.
 
@@ -89,7 +89,14 @@ Step 3 (the migrations) is done. None of the other steps has been run; each is d
      ```sql
      update private.notification_outbox set expanded_at = now(), delivered_at = now() where delivered_at is null and created_at <= now() - interval '24 hours';
      ```
-4. **Sender.**
+4. **Sender.** Done on 28 October 2026, with the owner's approval:
+   - `DELIVERY_RELEASE_APPROVED` flipped in `8e29f14`; deployed once, released, with `--no-verify-jwt` (the function is `ACTIVE`, `verify_jwt` false).
+   - Function secrets: `EXPO_ACCESS_TOKEN` (the owner's, step 2), `NOTIFICATION_WORKER_SECRET` (64 random hex characters, generated on the dev box and never displayed), `NOTIFICATION_DELIVERY_ENABLED` (`false` while checking, then `true`).
+   - Checked before the schedule: no secret or a wrong secret gets 401; the right secret got `{"disabled":true,"processed":0}` while delivery was off.
+   - Vault: `deliver_notifications_url` (75 characters, the function URL) and `deliver_notifications_secret` (64 characters). The owner ran the Vault writes and the schedule script from their shell, since the assistant's safety check doesn't let it write secret stores or create recurring jobs. A first paste wrapped across lines and stored the secret empty; it was refilled with `vault.update_secret` before anything read it.
+   - Schedule: `supabase/ops/schedule-deliver-notifications.sql` ran through `supabase db query --linked -f`, creating job 1 `deliver-notifications` (every minute) and installing `pg_cron` 1.6.4 and `pg_net`.
+   - **Checked:** the first runs (11:38 and 11:39 UTC) succeeded in `cron.job_run_details`, and each `net._http_response` was HTTP 200 `{"disabled":false,"processed":0}`, so the Vault secret matches the function's. The 21 old outbox notices (15 to 22 October) were expanded and closed by those runs with no deliveries, because no device is registered; the optional clean-up in step 3 was not needed.
+   The original steps, for a redeploy or a rotation:
    1. Deploy `deliver-notifications` without JWT verification (the handler checks the worker secret, not a user JWT): `supabase functions deploy deliver-notifications --no-verify-jwt --project-ref <ref>`.
    2. Set the function secrets: `NOTIFICATION_WORKER_SECRET` (random, 32+ characters), `EXPO_ACCESS_TOKEN` and `NOTIFICATION_DELIVERY_ENABLED`. Keep `NOTIFICATION_DELIVERY_ENABLED=false` for now.
    3. Flip `DELIVERY_RELEASE_APPROVED` to `true` in `supabase/functions/deliver-notifications/index.ts`, as a one-line commit with the owner's approval, and deploy again with the same command as 4.1, `--no-verify-jwt` included: there is no `supabase/config.toml`, so a deploy without the flag turns JWT verification back on and the schedule's calls are refused. Delivery needs the constant and the secret together.

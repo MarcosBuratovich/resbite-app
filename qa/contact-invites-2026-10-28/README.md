@@ -2,7 +2,7 @@
 
 - **Spec:** [Contact invitations design](../../docs/superpowers/specs/2026-10-27-contact-invitations-design.md), decisions CI-D1 to CI-D13 and proposals CI-P1 to CI-P13. Contact invitations are plan 2 of 4 (plan 1 is phone accounts).
 - **Plan:** [Contact invitations plan](../../docs/superpowers/plans/2026-10-28-contact-invites.md).
-- **Code:** branch `contact-invites`, commits `2c6113e` (the plan) to `386d453` (Tasks 1 to 12), the records of Task 13 (`28a9f99`), then the final review's fixes (`76efa6f` to `cd70cf7`) and these records' update. **The migration is live on the hosted project since 28 October 2026 (see "Hosted migration" below); nothing is applied to the Auth dashboard, Vercel, EAS or TestFlight, and the fold function is not deployed.**
+- **Code:** branch `contact-invites`, commits `2c6113e` (the plan) to `386d453` (Tasks 1 to 12), the records of Task 13 (`28a9f99`), then the final review's fixes (`76efa6f` to `cd70cf7`) and these records' update. **The migration is live on the hosted project since 28 October 2026 (see "Hosted migration" below); nothing is applied to the Auth dashboard, Vercel, EAS or TestFlight, the fold function and the link site are deployed since 28 October 2026 (steps 2 and 3).**
 
 ## What is built
 
@@ -41,7 +41,7 @@ Hosted order: this migration is applied **straight after** `20261027120000_phone
 
 ## Rollout runbook
 
-Step 1 (the migration) is done. None of the other steps has been run; each is done later, with the owner's approval.
+Steps 1 (the migration) and 2 (the fold function) are done, and step 3 (the link site) apart from its variables and firewall rule. None of the other steps has been run; each is done later, with the owner's approval.
 
 **Precondition (one person, one account):** the fold function (step 2) is deployed and released before, or together with, the link-site deploy (step 3) and the app build that sends personal links (step 4). Without it, an existing tester who answers a personal link on the web gets a second, web-only account holding their number, and Add your number then refuses that number with nothing to fold it into. If the fold can't go out first, hold personal links to existing testers (people who already have a Resbite account) until it does; people new to Resbite may get them.
 
@@ -51,11 +51,11 @@ Step 1 (the migration) is done. None of the other steps has been run; each is do
    - Take hosted before/after snapshots into this directory.
    - Apply it, then run the advisors.
    - Append the line to `supabase/tests/hosted-baseline/migrations.txt` with its hosted version.
-2. **Fold function.**
+2. **Fold function.** Done on 28 October 2026: `PHONE_FOLD_RELEASE_APPROVED` flipped in `a21c0f9` with the owner's approval, then `supabase functions deploy fold-phone-account --no-verify-jwt --project-ref ewcsgvhuojxdpaspwsrx`. Checked: the function is `ACTIVE` with `verify_jwt` false, and a made-up token gets the handler's own 401 (`{"error":"unauthorized"}`), not the 503 of the gated build.
    - Flip `PHONE_FOLD_RELEASE_APPROVED` to `true` in `supabase/functions/_shared/fold-release.ts`, in a reviewed commit, with the owner's approval.
    - Deploy with `supabase functions deploy fold-phone-account --no-verify-jwt`. It must deploy with `verify_jwt = false`, as its README says (the handler verifies both tokens itself).
    - Until then the app shows `foldOff` with no Retry: an undeployed function answers 404 and a deployed one that is still gated off answers 503, and the app maps both to `foldOff`.
-3. **Link site.**
+3. **Link site.** Done on 28 October 2026, apart from the variables and the firewall rule below: generated with `links/generate.mjs https://link.resbite.com QY833VTUWL com.resbite.app <dir>`, linked with `npx vercel link --yes --project resbite-link --scope creamos` (the `.env.local` it writes deleted), a preview deployment checked, then `npx vercel deploy --prod --yes --scope creamos` (`dpl_Aiz9F7XNWvbqpfcZcymcu8n8Tnph`; the previous production deployment, for a rollback, is `dpl_8BcMzfGmd8oNue7kQaoLQ1T9hiEC`). Checked live: `/i/<unknown>` and `/r/<unknown>` answer 200 "no longer active" with `no-store`, `no-referrer`, `noindex` and the strict CSP; `/r/<code>/image` is `image/png`; `/personal-flow.mjs` is `application/javascript` (on the preview too, which closes Plan 2's MIME question); the Apple link file lists `/invite` and `/r/*`; `/invite` is 200; `/` redirects to `www.resbite.com`. Still the owner's: `TERMS_URL` and `PRIVACY_URL` are unset because `www.resbite.com` has no terms or privacy page yet (the page then shows the words without links; `TERMS_VERSION` defaults to `2026-10`), and the `/i/*` firewall rule.
    - Regenerate and deploy `links/` (`links/generate.mjs`).
    - Set the Vercel environment variables: `TERMS_URL`, `PRIVACY_URL` and `APP_STORE_URL` (the TestFlight invite), and `TERMS_VERSION` (default `2026-10`). `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` and `LINK_ORIGIN` are already set for `/r/*`.
    - On the first Vercel preview, check that `/personal-flow.mjs` is served with a JavaScript MIME type (for example `curl -sI <preview>/personal-flow.mjs`). The browser check used a local server; this has not been seen on Vercel.

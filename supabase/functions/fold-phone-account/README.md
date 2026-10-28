@@ -1,6 +1,6 @@
-# fold-phone-account — prepared, not deployed
+# fold-phone-account — deployed 28 October 2026
 
-Source-gated off by `PHONE_FOLD_RELEASE_APPROVED` in `_shared/fold-release.ts` (stays `false`; no environment flag can activate it). It is flipped only in a reviewed commit, with the owner's approval, as a step of the [contact invitations runbook](../../../qa/contact-invites-2026-10-28/README.md). Until then the app shows its "not switched on" copy (`foldOff`), with no Retry, whether the function is not deployed (404) or deployed and still gated off (503).
+Source-gated by `PHONE_FOLD_RELEASE_APPROVED` in `_shared/fold-release.ts` (no environment flag can activate it). The owner released it on 28 October 2026 (`a21c0f9`), and it is deployed on the hosted project with `verify_jwt = false`; see step 2 of the [contact invitations runbook](../../../qa/contact-invites-2026-10-28/README.md). Set the constant back to `false` and redeploy to take it down. While gated off the app shows its "not switched on" copy (`foldOff`), with no Retry, whether the function is not deployed (404) or deployed and still gated off (503).
 
 When an existing account adds a phone number held by a web-only account, the app proves ownership through an isolated auth client and sends that account's access token (the foreign token). POST `{ foreign_token, phone }` with the caller's session token in `Authorization`.
 

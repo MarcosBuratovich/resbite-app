@@ -1,6 +1,6 @@
-# Disabled notification worker preparation
+# Notification worker — live since 28 October 2026
 
-This worker is **hard disabled** by `DELIVERY_RELEASE_APPROVED = false`. No environment change alone enables delivery. No deployment or schedule is created by these files. The mobile capability remains disabled.
+Released by the owner on 28 October 2026 (`DELIVERY_RELEASE_APPROVED = true`, `8e29f14`), deployed with `verify_jwt = false` and called every minute by `pg_cron` (step 4 of the [push runbook](../../../qa/push-notifications-2026-10-30/README.md)). Delivery needs both the constant and `NOTIFICATION_DELIVERY_ENABLED=true`; set the secret to `false` to pause, or the constant back to `false` and redeploy to stop. Phones register only with a build that has `EXPO_PUBLIC_PUSH_ENABLED=true`.
 
 The service-only SQL RPCs expand each event once into a unique event/endpoint ledger, lease jobs, validate current eligible participant and exact endpoint binding before provider access, and conditionally commit results. Tokens never go to a client or logs. A token rebound after validation and before the network call cannot be atomically fenced across Postgres and Expo; generic text contains no person, place, message, or invitation secret, and all plan reads still require server authorization. A lost provider reply or expired send lease becomes `unknown`, requiring investigation rather than risking an automatic duplicate. Definitively rejected transient requests use bounded backoff. Receipt polling preserves the ticket and never resends the notification. Provider acceptance is not proof of receipt or reading. Outbox `delivered_at` means all endpoint work is terminal, including suppression/failure.
 
