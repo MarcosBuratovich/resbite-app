@@ -505,10 +505,12 @@ begin
    and not private.deletion_pending(j.user_id)),'[]'::jsonb);
 end $$;
 
--- A request's notice goes out only while the event has not ended.
+-- A request's notice goes out only while the event has not ended; nothing goes to someone who muted the series (section 4).
+-- plpgsql, so the body is not checked until it runs: it reads plans.series_id (section 3) and plan_mutes (section 4).
 create or replace function private.notification_recipient_eligible(p_outbox bigint) returns boolean
-language sql stable security definer set search_path='' as $$
- select exists (
+language plpgsql stable security definer set search_path='' as $$
+begin
+ return exists (
  select 1 from private.notification_outbox o
  join public.plans plan on plan.id=o.plan_id
  where o.id=p_outbox
@@ -516,13 +518,14 @@ language sql stable security definer set search_path='' as $$
  and (private.is_host(plan.id,o.recipient_id) or exists(select 1 from public.attendees a where a.plan_id=plan.id and a.user_id=o.recipient_id
   and (o.kind not in ('plan_changed','guest_note') or a.response in ('accepted','maybe','pending'))))
  and o.created_at>now()-interval '24 hours'
+ and not exists(select 1 from public.plan_mutes m where m.series_id=plan.series_id and m.user_id=o.recipient_id)
  and (o.kind<>'join_request' or (plan.status='active' and private.plan_end(plan.starts_at,plan.ends_at)>now()
   and exists(select 1 from private.join_requests j where j.plan_id=o.plan_id and j.user_id=o.actor_id
    and j.status='waiting' and j.created_at<=o.created_at)
   and not exists(select 1 from public.attendees a where a.plan_id=o.plan_id and a.user_id=o.actor_id)
   and not private.deletion_pending(o.actor_id)))
- )
-$$;
+ );
+end $$;
 
 -- The two upload policies of the plan-covers bucket, open until the end instead of the start, to any host: the object
 -- stays in the owner's folder (the first path segment is the plan's owner), the uploader is the owner or an admin. (resbite_cover_read is unchanged.)
@@ -814,3 +817,38 @@ grant execute on function
  private.change_plan_v4(uuid,integer,text,text,text[],timestamptz,timestamptz,text,text,boolean,smallint,text,text,boolean,boolean),
  public.change_plan_v4(uuid,integer,text,text,text[],timestamptz,timestamptz,text,text,boolean,smallint,text,text,boolean,boolean)
  to authenticated;
+
+-- 4. Mutes (CR-D9, CR-P7, CR-P24)
+-- "Mute this resbite": one row per person and series, so the mute carries to the next occurrence of a repeating resbite.
+-- notification_recipient_eligible (section 1) skips the muted. Clients read their own rows and write through set_plan_mute.
+create table public.plan_mutes (
+ series_id uuid not null,
+ user_id uuid not null references public.profiles(id) on delete cascade,
+ muted_at timestamptz not null default now(),
+ primary key (series_id, user_id)
+);
+alter table public.plan_mutes enable row level security;
+create policy plan_mutes_own on public.plan_mutes for select to authenticated using (user_id = (select auth.uid()));
+revoke all on public.plan_mutes from public, anon, authenticated, service_role;
+grant select on public.plan_mutes to authenticated;
+
+create function private.set_plan_mute(p_plan uuid, p_muted boolean) returns boolean language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := private.require_tester(); v_series uuid;
+begin
+ select series_id into v_series from public.plans where id=p_plan;
+ if v_series is null or not (private.is_host(p_plan,v_uid)
+  or exists(select 1 from public.attendees a where a.plan_id=p_plan and a.user_id=v_uid)) then
+  raise exception 'Host or attendee required' using errcode='42501';
+ end if;
+ if p_muted then
+  insert into public.plan_mutes(series_id,user_id) values(v_series,v_uid) on conflict do nothing;
+ else
+  delete from public.plan_mutes where series_id=v_series and user_id=v_uid;
+ end if;
+ return p_muted;
+end $$;
+create function public.set_plan_mute(p_plan uuid, p_muted boolean) returns boolean language sql security invoker set search_path = '' as $$
+ select private.set_plan_mute(p_plan,p_muted)
+$$;
+revoke all on function private.set_plan_mute(uuid,boolean), public.set_plan_mute(uuid,boolean) from public, anon, authenticated, service_role;
+grant execute on function private.set_plan_mute(uuid,boolean), public.set_plan_mute(uuid,boolean) to authenticated;

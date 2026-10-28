@@ -763,3 +763,97 @@ do $$ begin
  end if;
 end $$;
 rollback;
+
+-- Slice 4: mutes (CR-D9, CR-P7, CR-P24). Users: 01 owner, 02 a Going guest, 03 another Going guest, 04 a stranger.
+begin;
+insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) values
+ ('e1000000-0000-4000-8000-000000000001','cr1-owner@resbite-test.invalid',now(),null,null),
+ ('e1000000-0000-4000-8000-000000000002','cr1-guest-a@resbite-test.invalid',now(),null,null),
+ ('e1000000-0000-4000-8000-000000000003','cr1-guest-b@resbite-test.invalid',now(),null,null),
+ ('e1000000-0000-4000-8000-000000000004','cr1-guest-c@resbite-test.invalid',now(),null,null);
+insert into private.tester_roster(email) values ('cr1-owner@resbite-test.invalid'),('cr1-guest-a@resbite-test.invalid'),
+ ('cr1-guest-b@resbite-test.invalid'),('cr1-guest-c@resbite-test.invalid');
+insert into public.profiles(id,display_name) values
+ ('e1000000-0000-4000-8000-000000000001','Owner'),('e1000000-0000-4000-8000-000000000002','Guest A'),
+ ('e1000000-0000-4000-8000-000000000003','Guest B'),('e1000000-0000-4000-8000-000000000004','Stranger');
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.create_plan_v3('e1100000-0000-4000-8000-000000000020','Mute night','',array['community'],null,
+ '2099-06-06 19:00+00','2099-06-06 22:00+00','UTC','Park','');
+reset role;
+insert into public.attendees(plan_id,user_id,response) values
+ ('e1100000-0000-4000-8000-000000000020','e1000000-0000-4000-8000-000000000002','accepted'),
+ ('e1100000-0000-4000-8000-000000000020','e1000000-0000-4000-8000-000000000003','accepted');
+
+do $$ begin
+ if has_function_privilege('anon','public.set_plan_mute(uuid,boolean)','execute') then raise exception 'anon can execute set_plan_mute'; end if;
+ if not has_function_privilege('authenticated','public.set_plan_mute(uuid,boolean)','execute') then raise exception 'authenticated cannot execute set_plan_mute'; end if;
+ if has_table_privilege('authenticated','public.plan_mutes','insert') or has_table_privilege('authenticated','public.plan_mutes','update')
+  or has_table_privilege('authenticated','public.plan_mutes','delete') then raise exception 'Clients can write plan_mutes directly'; end if;
+end $$;
+
+-- A stranger cannot mute.
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000004","role":"authenticated"}',true);
+do $$ begin
+ begin perform public.set_plan_mute('e1100000-0000-4000-8000-000000000020',true);
+  raise exception 'A stranger muted the plan';
+ exception when insufficient_privilege then null; end;
+end $$;
+reset role;
+
+-- Before the mute: fresh notices to the guest and the owner are eligible.
+insert into private.notification_outbox(plan_id,recipient_id,kind,actor_id,dedupe_key) values
+ ('e1100000-0000-4000-8000-000000000020','e1000000-0000-4000-8000-000000000002','plan_changed','e1000000-0000-4000-8000-000000000001','cr1-mute-a'),
+ ('e1100000-0000-4000-8000-000000000020','e1000000-0000-4000-8000-000000000001','rsvp','e1000000-0000-4000-8000-000000000002','cr1-mute-b'),
+ ('e1100000-0000-4000-8000-000000000020','e1000000-0000-4000-8000-000000000003','plan_changed','e1000000-0000-4000-8000-000000000001','cr1-mute-c');
+do $$ begin
+ if not private.notification_recipient_eligible((select id from private.notification_outbox where dedupe_key='cr1-mute-a'))
+  or not private.notification_recipient_eligible((select id from private.notification_outbox where dedupe_key='cr1-mute-b'))
+  then raise exception 'Notices were not eligible before any mute'; end if;
+end $$;
+
+-- A Going guest mutes: true, one row, and their notices stop.
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+do $$ begin
+ if public.set_plan_mute('e1100000-0000-4000-8000-000000000020',true) is not true then raise exception 'mute did not return true'; end if;
+ if public.set_plan_mute('e1100000-0000-4000-8000-000000000020',true) is not true then raise exception 'a second mute did not return true'; end if;
+end $$;
+reset role;
+do $$ begin
+ if (select count(*) from public.plan_mutes where user_id='e1000000-0000-4000-8000-000000000002'
+   and series_id=(select series_id from public.plans where id='e1100000-0000-4000-8000-000000000020'))<>1 then raise exception 'Expected one mute row'; end if;
+ if private.notification_recipient_eligible((select id from private.notification_outbox where dedupe_key='cr1-mute-a')) then raise exception 'plan_changed to a muted guest is eligible'; end if;
+ if not private.notification_recipient_eligible((select id from private.notification_outbox where dedupe_key='cr1-mute-c')) then raise exception 'The mute silenced another guest'; end if;
+end $$;
+
+-- The owner mutes too: an rsvp notice to the muted owner is not eligible.
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.set_plan_mute('e1100000-0000-4000-8000-000000000020',true);
+reset role;
+do $$ begin
+ if private.notification_recipient_eligible((select id from private.notification_outbox where dedupe_key='cr1-mute-b')) then raise exception 'rsvp to a muted owner is eligible'; end if;
+end $$;
+
+-- Each person reads only their own row.
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+do $$ begin
+ if (select count(*) from public.plan_mutes)<>1 or (select user_id from public.plan_mutes)<>'e1000000-0000-4000-8000-000000000002'
+  then raise exception 'The guest did not see exactly their own mute'; end if;
+ if exists(select 1 from public.plan_mutes where user_id='e1000000-0000-4000-8000-000000000001') then raise exception 'The guest saw the owner''s mute'; end if;
+end $$;
+
+-- Unmute: true, the row goes, and notices flow again.
+do $$ begin
+ if public.set_plan_mute('e1100000-0000-4000-8000-000000000020',false) is not false then raise exception 'unmute did not return false'; end if;
+end $$;
+reset role;
+do $$ begin
+ if exists(select 1 from public.plan_mutes where user_id='e1000000-0000-4000-8000-000000000002') then raise exception 'Unmute left the row'; end if;
+ if not exists(select 1 from public.plan_mutes where user_id='e1000000-0000-4000-8000-000000000001') then raise exception 'Unmute removed the owner''s row'; end if;
+ if not private.notification_recipient_eligible((select id from private.notification_outbox where dedupe_key='cr1-mute-a')) then raise exception 'Notice still blocked after unmute'; end if;
+end $$;
+rollback;
