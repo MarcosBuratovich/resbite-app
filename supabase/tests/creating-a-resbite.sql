@@ -517,3 +517,220 @@ do $$ begin
  if exists(select 1 from public.plan_admins where user_id='e1000000-0000-4000-8000-000000000002') then raise exception 'The declined admin kept the role'; end if;
 end $$;
 rollback;
+
+-- Slice 3: plans v4 (CR-D6, CR-P9, CR-D16, CR-D15, CR-P17, CR-P18). Users: 01 owner, 02 admin, 03 Going guest, 04 pending
+-- guest, 05 declined guest, 06 Maybe guest, 07 a plain stranger.
+begin;
+insert into auth.users(id,email,email_confirmed_at) values
+ ('e1000000-0000-4000-8000-000000000001','cr1-owner@resbite-test.invalid',now()),
+ ('e1000000-0000-4000-8000-000000000002','cr1-guest-a@resbite-test.invalid',now()),
+ ('e1000000-0000-4000-8000-000000000003','cr1-guest-b@resbite-test.invalid',now()),
+ ('e1000000-0000-4000-8000-000000000004','cr1-guest-c@resbite-test.invalid',now()),
+ ('e1000000-0000-4000-8000-000000000005','cr1-guest-d@resbite-test.invalid',now()),
+ ('e1000000-0000-4000-8000-000000000006','cr1-guest-e@resbite-test.invalid',now());
+insert into private.tester_roster(email) values ('cr1-owner@resbite-test.invalid'),('cr1-guest-a@resbite-test.invalid'),
+ ('cr1-guest-b@resbite-test.invalid'),('cr1-guest-c@resbite-test.invalid'),('cr1-guest-d@resbite-test.invalid'),('cr1-guest-e@resbite-test.invalid');
+insert into public.profiles(id,display_name) values
+ ('e1000000-0000-4000-8000-000000000001','Owner'),('e1000000-0000-4000-8000-000000000002','Admin A'),
+ ('e1000000-0000-4000-8000-000000000003','Guest B'),('e1000000-0000-4000-8000-000000000004','Guest C'),
+ ('e1000000-0000-4000-8000-000000000005','Guest D'),('e1000000-0000-4000-8000-000000000006','Guest E');
+
+-- Creating.
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+do $$ begin
+ begin perform public.create_plan_v4('e1100000-0000-4000-8000-000000000010','No end','',array['community'],null,'2099-06-04 19:00+00',null,'UTC','Park',false,null,'');
+  raise exception 'A plan without an end was created';
+ exception when invalid_parameter_value then if sqlerrm<>'End time required' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+ begin perform public.create_plan_v4('e1100000-0000-4000-8000-000000000010','Long','',array['community'],null,'2099-06-04 19:00+00','2099-06-07 19:00+00','UTC','Park',false,null,'');
+  raise exception 'A three day plan was created';
+ exception when invalid_parameter_value then if sqlerrm<>'Invalid end time' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+ begin perform public.create_plan_v4('e1100000-0000-4000-8000-000000000010','Backwards','',array['community'],null,'2099-06-04 19:00+00','2099-06-04 19:00+00','UTC','Park',false,null,'');
+  raise exception 'An empty plan was created';
+ exception when invalid_parameter_value then if sqlerrm<>'Invalid end time' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+ begin perform public.create_plan_v4('e1100000-0000-4000-8000-000000000010','Past','',array['community'],null,'2020-06-04 19:00+00','2020-06-04 21:00+00','UTC','Park',false,null,'');
+  raise exception 'A plan in the past was created';
+ exception when invalid_parameter_value then if sqlerrm<>'Invalid future schedule' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+ begin perform public.create_plan_v4('e1100000-0000-4000-8000-000000000010','Three','',array['community'],null,'2099-06-04 19:00+00','2099-06-04 22:00+00','UTC','Park',false,3::smallint,'');
+  raise exception 'Repeat 3 was accepted';
+ exception when invalid_parameter_value then null; end;
+ -- To be decided: the label is fixed, the place is empty.
+ if public.create_plan_v4('e1100000-0000-4000-8000-000000000011','Place later','',array['community'],null,'2099-06-04 19:00+00','2099-06-04 22:00+00','UTC','',true,1::smallint,'',51.5,-0.1)
+  <>'e1100000-0000-4000-8000-000000000011'::uuid then raise exception 'Wrong id'; end if;
+ if public.create_plan_v4('e1100000-0000-4000-8000-000000000011','Place later','',array['community'],null,'2099-06-04 19:00+00','2099-06-04 22:00+00','UTC','',true,1::smallint,'',51.5,-0.1)
+  <>'e1100000-0000-4000-8000-000000000011'::uuid then raise exception 'The retry returned another id'; end if;
+ begin perform public.create_plan_v4('e1100000-0000-4000-8000-000000000011','Place later','',array['community'],null,'2099-06-04 19:00+00','2099-06-04 22:00+00','UTC','',true,2::smallint,'',51.5,-0.1);
+  raise exception 'A changed retry was accepted';
+ exception when invalid_parameter_value then if sqlerrm<>'Creation identifier already used' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+ begin perform public.create_plan_v4('e1100000-0000-4000-8000-000000000011','Place later','',array['community'],null,'2099-06-04 19:00+00','2099-06-04 21:00+00','UTC','',true,1::smallint,'',51.5,-0.1);
+  raise exception 'A retry with another end was accepted';
+ exception when invalid_parameter_value then if sqlerrm<>'Creation identifier already used' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+ perform public.create_plan_v4('e1100000-0000-4000-8000-000000000012','Repeats','',array['community'],null,'2099-06-04 19:00+00','2099-06-04 22:00+00','UTC','Park',false,2::smallint,'bring a coat');
+ perform public.create_plan_v4('e1100000-0000-4000-8000-000000000013','Repeats too','',array['community'],null,'2099-06-05 19:00+00','2099-06-05 22:00+00','UTC','Park',false,1::smallint,'');
+ perform public.create_plan_v4('e1100000-0000-4000-8000-000000000014','Running','',array['community'],null,'2099-06-06 19:00+00','2099-06-06 22:00+00','UTC','Park',false,null,'');
+end $$;
+reset role;
+do $$ declare p public.plans; begin
+ select * into p from public.plans where id='e1100000-0000-4000-8000-000000000011';
+ if p.place_label<>'To be decided' or not p.place_tbd or p.series_id<>p.id or p.repeats_from is not null or p.latitude is not null or p.longitude is not null or p.repeat_weeks<>1
+  then raise exception 'Wrong To be decided row: %', to_jsonb(p); end if;
+ if (select series_id from public.plans where id='e1100000-0000-4000-8000-000000000012')<>'e1100000-0000-4000-8000-000000000012'::uuid then raise exception 'series_id is not the id'; end if;
+ if (select note from public.plan_meeting_details where plan_id='e1100000-0000-4000-8000-000000000012')<>'bring a coat' then raise exception 'The note was lost'; end if;
+ if not has_function_privilege('authenticated','public.create_plan_v4(uuid,text,text,text[],text,timestamptz,timestamptz,text,text,boolean,smallint,text,double precision,double precision,text)','execute')
+  or has_function_privilege('anon','public.create_plan_v4(uuid,text,text,text[],text,timestamptz,timestamptz,text,text,boolean,smallint,text,double precision,double precision,text)','execute')
+  or not has_function_privilege('authenticated','public.change_plan_v4(uuid,integer,text,text,text[],timestamptz,timestamptz,text,text,boolean,smallint,text,text,boolean,boolean)','execute')
+  or has_function_privilege('anon','public.change_plan_v4(uuid,integer,text,text,text[],timestamptz,timestamptz,text,text,boolean,smallint,text,text,boolean,boolean)','execute')
+  then raise exception 'Wrong grants on the v4 functions'; end if;
+end $$;
+
+-- Roster for the notices: 02 admin (Going), 03 Going, 04 pending, 05 declined, 06 Maybe.
+insert into public.attendees(plan_id,user_id,response)
+ select p,u,r from unnest(array['e1100000-0000-4000-8000-000000000012','e1100000-0000-4000-8000-000000000013','e1100000-0000-4000-8000-000000000014']::uuid[]) p,
+ (values ('e1000000-0000-4000-8000-000000000002'::uuid,'accepted'),('e1000000-0000-4000-8000-000000000003','accepted'),('e1000000-0000-4000-8000-000000000004','pending'),
+  ('e1000000-0000-4000-8000-000000000005','declined'),('e1000000-0000-4000-8000-000000000006','maybe')) g(u,r);
+insert into public.plan_admins(plan_id,user_id,appointed_by)
+ select p,'e1000000-0000-4000-8000-000000000002','e1000000-0000-4000-8000-000000000001'
+ from unnest(array['e1100000-0000-4000-8000-000000000012','e1100000-0000-4000-8000-000000000013','e1100000-0000-4000-8000-000000000014']::uuid[]) p;
+
+-- plan_admins: a pending guest lists none, a Going guest sees the admin.
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000004","role":"authenticated"}',true);
+do $$ begin
+ if (select count(*) from public.plan_admins where plan_id='e1100000-0000-4000-8000-000000000012')<>0 then raise exception 'A pending guest lists the admins'; end if;
+end $$;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
+do $$ begin
+ if (select count(*) from public.plan_admins where plan_id='e1100000-0000-4000-8000-000000000012')<>1 then raise exception 'A Going guest should see the admin'; end if;
+end $$;
+-- A guest is not a host.
+do $$ begin
+ begin perform public.change_plan_v4('e1100000-0000-4000-8000-000000000012',1,'Repeats','',array['community'],'2099-06-04 19:00+00','2099-06-04 22:00+00','UTC','Park',false,2::smallint,'','');
+  raise exception 'A guest changed the plan';
+ exception when insufficient_privilege then if sqlerrm<>'Host required' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+ begin perform public.change_plan_v4('e1100000-0000-4000-8000-000000000012',1,null,null,null,null,null,null,null,null,null,null,null,true);
+  raise exception 'A guest cancelled the plan';
+ exception when insufficient_privilege then if sqlerrm<>'Host required' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+end $$;
+
+-- The admin moves the place: the owner and the guests who may come hear of it, the admin and the declined guest do not.
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+do $$ begin
+ if public.change_plan_v4('e1100000-0000-4000-8000-000000000012',1,'Repeats','',array['community'],'2099-06-04 19:00+00','2099-06-04 22:00+00','UTC','New park',false,2::smallint,'bring a coat','')<>2
+  then raise exception 'The admin could not change the place'; end if;
+ begin perform public.change_plan_v4('e1100000-0000-4000-8000-000000000012',1,'Repeats','',array['community'],'2099-06-04 19:00+00','2099-06-04 22:00+00','UTC','Again',false,2::smallint,'','');
+  raise exception 'A stale version was accepted';
+ exception when serialization_failure then null; end;
+ begin perform public.change_plan_v4('e1100000-0000-4000-8000-000000000012',2,'Repeats','',array['community'],'2099-06-04 19:00+00',null,'UTC','Again',false,2::smallint,'','');
+  raise exception 'An edit without an end was accepted';
+ exception when invalid_parameter_value then if sqlerrm<>'End time required' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+ begin perform public.change_plan_v4('e1100000-0000-4000-8000-000000000012',2,'Repeats','',array['community'],'2099-06-04 19:00+00','2099-06-07 19:00+00','UTC','Again',false,2::smallint,'','');
+  raise exception 'A three day end was accepted';
+ exception when invalid_parameter_value then if sqlerrm<>'Invalid end time' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+ begin perform public.change_plan_v4('e1100000-0000-4000-8000-000000000012',2,'Repeats','',array['community'],'2099-06-04 19:00+00','2099-06-04 22:00+00','UTC','Again',false,3::smallint,'','');
+  raise exception 'Repeat 3 was accepted';
+ exception when invalid_parameter_value then null; end;
+end $$;
+reset role;
+do $$ declare d text; begin
+ for d in select unnest(array['e1000000-0000-4000-8000-000000000001','e1000000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000004','e1000000-0000-4000-8000-000000000006']) loop
+  if (select count(*) from private.notification_outbox where plan_id='e1100000-0000-4000-8000-000000000012' and kind='plan_changed' and detail='place' and recipient_id=d::uuid and actor_id='e1000000-0000-4000-8000-000000000002')<>1
+   then raise exception 'Recipient % was not told of the place', d; end if;
+ end loop;
+ if exists(select 1 from private.notification_outbox where plan_id='e1100000-0000-4000-8000-000000000012' and kind='plan_changed' and recipient_id in ('e1000000-0000-4000-8000-000000000002','e1000000-0000-4000-8000-000000000005'))
+  then raise exception 'The admin or the declined guest was told'; end if;
+ if (select count(*) from private.notification_outbox where plan_id='e1100000-0000-4000-8000-000000000012' and kind='plan_changed')<>4 then raise exception 'Wrong number of change notices'; end if;
+end $$;
+
+-- The owner changes only the repeat: nothing is sent. Title, note and end alone send nothing either.
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.change_plan_v4('e1100000-0000-4000-8000-000000000012',2,'Repeats','',array['community'],'2099-06-04 19:00+00','2099-06-04 22:00+00','UTC','New park',false,1::smallint,'bring a coat','');
+select public.change_plan_v4('e1100000-0000-4000-8000-000000000012',3,'Renamed','More',array['community','creative'],'2099-06-04 19:00+00','2099-06-04 23:00+00','UTC','New park',false,1::smallint,'a note','Soho');
+reset role;
+do $$ begin
+ if (select count(*) from private.notification_outbox where plan_id='e1100000-0000-4000-8000-000000000012')<>4 then raise exception 'A repeat-only or text-only change sent a notice'; end if;
+ if (select repeat_weeks from public.plans where id='e1100000-0000-4000-8000-000000000012')<>1 then raise exception 'The repeat did not change'; end if;
+ if (select version from public.plans where id='e1100000-0000-4000-8000-000000000012')<>4 then raise exception 'Version not bumped'; end if;
+end $$;
+-- Setting the place to be decided is a place change; the admin hears of it from the owner too.
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.change_plan_v4('e1100000-0000-4000-8000-000000000012',4,'Renamed','More',array['community','creative'],'2099-06-04 19:00+00','2099-06-04 23:00+00','UTC','',true,1::smallint,'a note','Soho');
+select public.change_plan_v4('e1100000-0000-4000-8000-000000000012',5,'Renamed','More',array['community','creative'],'2099-06-04 20:00+00','2099-06-04 23:00+00','UTC','Cafe',false,1::smallint,'a note','Soho');
+reset role;
+do $$ begin
+ if (select place_label||place_tbd::text from public.plans where id='e1100000-0000-4000-8000-000000000012')<>'Cafefalse' then raise exception 'Place not stored'; end if;
+ if (select count(*) from private.notification_outbox where plan_id='e1100000-0000-4000-8000-000000000012' and kind='plan_changed' and recipient_id='e1000000-0000-4000-8000-000000000002' and detail='place')<>1
+  then raise exception 'The admin should be told of the to-be-decided place'; end if;
+ if (select count(*) from private.notification_outbox where plan_id='e1100000-0000-4000-8000-000000000012' and kind='plan_changed' and recipient_id='e1000000-0000-4000-8000-000000000002' and detail='time_place')<>1
+  then raise exception 'The admin should be told of the time and place'; end if;
+ if (select count(*) from private.notification_outbox where plan_id='e1100000-0000-4000-8000-000000000012' and kind='plan_changed' and recipient_id='e1000000-0000-4000-8000-000000000001')<>1
+  then raise exception 'The owner got a notice of their own change'; end if;
+end $$;
+
+-- Cancelling: the admin with stop-repeating ends the series; without it the repeat stays.
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+select public.change_plan_v4('e1100000-0000-4000-8000-000000000012',6,null,null,null,null,null,null,null,null,null,null,null,true,true);
+select public.change_plan_v4('e1100000-0000-4000-8000-000000000013',1,null,null,null,null,null,null,null,null,null,null,null,true);
+reset role;
+do $$ declare d text; begin
+ if (select status||coalesce(repeat_weeks::text,'-') from public.plans where id='e1100000-0000-4000-8000-000000000012')<>'cancelled-' then raise exception 'Stop repeating did not clear the repeat'; end if;
+ if (select status||repeat_weeks::text from public.plans where id='e1100000-0000-4000-8000-000000000013')<>'cancelled1' then raise exception 'A plain cancel changed the repeat'; end if;
+ for d in select unnest(array['e1000000-0000-4000-8000-000000000001','e1000000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000004','e1000000-0000-4000-8000-000000000005','e1000000-0000-4000-8000-000000000006']) loop
+  if (select count(*) from private.notification_outbox where plan_id='e1100000-0000-4000-8000-000000000012' and kind='plan_cancelled' and recipient_id=d::uuid)<>1
+   then raise exception 'Recipient % was not told of the cancellation', d; end if;
+ end loop;
+ if exists(select 1 from private.notification_outbox where plan_id in ('e1100000-0000-4000-8000-000000000012','e1100000-0000-4000-8000-000000000013') and kind='plan_cancelled' and recipient_id='e1000000-0000-4000-8000-000000000002')
+  then raise exception 'The admin was told of their own cancellation'; end if;
+ if (select count(*) from private.notification_outbox where plan_id='e1100000-0000-4000-8000-000000000013' and kind='plan_cancelled')<>5 then raise exception 'Wrong number of cancel notices'; end if;
+end $$;
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+do $$ begin
+ begin perform public.change_plan_v4('e1100000-0000-4000-8000-000000000012',7,'Repeats','',array['community'],'2099-06-04 19:00+00','2099-06-04 22:00+00','UTC','Park',false,null,'','');
+  raise exception 'A cancelled plan was changed';
+ exception when invalid_parameter_value then if sqlerrm<>'Plan unavailable' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+end $$;
+reset role;
+
+-- A running plan (started an hour ago): the same start with a later end is fine, an end in the past is not.
+update public.plans set starts_at=now()-interval '1 hour', ends_at=now()+interval '1 hour' where id='e1100000-0000-4000-8000-000000000014';
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+do $$ declare s timestamptz := (select starts_at from public.plans where id='e1100000-0000-4000-8000-000000000014'); begin
+ if public.change_plan_v4('e1100000-0000-4000-8000-000000000014',1,'Running','',array['community'],s,now()+interval '2 hours','UTC','Park',false,null,'','')<>2
+  then raise exception 'A running plan could not get a later end'; end if;
+ begin perform public.change_plan_v4('e1100000-0000-4000-8000-000000000014',2,'Running','',array['community'],s,now()-interval '5 minutes','UTC','Park',false,null,'','');
+  raise exception 'A running plan was given an end in the past';
+ exception when invalid_parameter_value then if sqlerrm<>'Plan unavailable' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+ begin perform public.change_plan_v4('e1100000-0000-4000-8000-000000000014',2,'Running','',array['community'],s,null,'UTC','Park',false,null,'','');
+  raise exception 'A running plan was given no end';
+ exception when invalid_parameter_value then if sqlerrm<>'End time required' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+ -- The old build: v3 with no end, or an end in the past, on a running plan.
+ begin perform public.change_plan_v3('e1100000-0000-4000-8000-000000000014',2,'Running','',array['community'],s,null,'UTC','Park','');
+  raise exception 'v3 closed a running plan with no end';
+ exception when invalid_parameter_value then if sqlerrm<>'Plan unavailable' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+ begin perform public.change_plan_v3('e1100000-0000-4000-8000-000000000014',2,'Running','',array['community'],s,now()-interval '5 minutes','UTC','Park','');
+  raise exception 'v3 ended a running plan in the past';
+ exception when invalid_parameter_value then if sqlerrm<>'Plan unavailable' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+ if public.change_plan_v3('e1100000-0000-4000-8000-000000000014',2,'Running','',array['community'],s,now()+interval '3 hours','UTC','Park','')<>3
+  then raise exception 'v3 could not extend a running plan'; end if;
+end $$;
+reset role;
+
+-- A cover path is never built from a missing owner. The column is nullable only where the deletion migration is applied,
+-- so the check runs only there (the hosted baseline keeps it NOT NULL).
+do $$ begin
+ if (select is_nullable from information_schema.columns where table_schema='public' and table_name='plans' and column_name='owner_id')='YES' then
+  update public.plans set owner_id=null where id='e1100000-0000-4000-8000-000000000014';
+  insert into storage.objects(bucket_id,name) values('plan-covers','x/e1100000-0000-4000-8000-000000000014/a.jpg');
+  set local role authenticated;
+  perform set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+  begin perform public.set_plan_cover_if_current('e1100000-0000-4000-8000-000000000014','x/e1100000-0000-4000-8000-000000000014/a.jpg',null,0);
+   raise exception 'A cover was set on a plan with no owner';
+  exception when insufficient_privilege then if sqlerrm<>'Own uploaded cover required' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+  reset role;
+ end if;
+end $$;
+rollback;

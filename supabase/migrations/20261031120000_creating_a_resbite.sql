@@ -16,7 +16,7 @@ create index plan_admins_user_idx on public.plan_admins(user_id);
 alter table public.plan_admins enable row level security;
 revoke all on public.plan_admins from public, anon, authenticated, service_role;
 grant select on public.plan_admins to authenticated;
-create policy plan_admins_read on public.plan_admins for select to authenticated using (private.can_read_plan(plan_id));
+create policy plan_admins_read on public.plan_admins for select to authenticated using (private.can_read_plan(plan_id) and (user_id=(select auth.uid()) or private.can_see_guests(plan_id)));
 
 -- The owner, or an admin the owner appointed.
 create function private.is_host(p_plan uuid, p_user uuid) returns boolean language sql stable security definer set search_path = '' as $$
@@ -59,6 +59,8 @@ begin
  if not v_cancel and (p_start is null or (p_start<=now() and p_start is distinct from v_plan.starts_at) or not exists(select 1 from pg_catalog.pg_timezone_names where name=p_zone)) then raise exception 'Invalid future schedule' using errcode='22023'; end if;
  v_ends := case when p_keep_length then p_start+(v_plan.ends_at-v_plan.starts_at) else p_ends end;
  if not v_cancel and v_ends is not null and v_ends<=p_start then raise exception 'The end must be after the start' using errcode='22023'; end if;
+ -- A running plan keeps running: an old build saving it without an end, or with one that has passed, would close it at once.
+ if not v_cancel and v_plan.starts_at<=now() and (v_ends is null or v_ends<=now()) then raise exception 'Plan unavailable' using errcode='22023'; end if;
  v_next := v_plan.version+1;
  if v_cancel then
   -- Terminal; the other arguments are ignored.
@@ -171,7 +173,7 @@ begin
  select * into v_plan from public.plans where id=p_plan for update;
  if not found or not private.is_host(p_plan,v_uid) then raise exception 'Owner required' using errcode='42501'; end if;
  if v_plan.status<>'active' or private.plan_end(v_plan.starts_at,v_plan.ends_at)<=now() then raise exception 'Plan unavailable' using errcode='22023'; end if;
- if p_path is not null and (p_path !~ ('^'||v_plan.owner_id::text||'/'||p_plan::text||'/[A-Za-z0-9-]+\.jpg$') or not exists(
+ if p_path is not null and (v_plan.owner_id is null or p_path !~ ('^'||v_plan.owner_id::text||'/'||p_plan::text||'/[A-Za-z0-9-]+\.jpg$') or not exists(
    select 1 from storage.objects where bucket_id='plan-covers' and name=p_path)) then
   raise exception 'Own uploaded cover required' using errcode='42501';
  end if;
@@ -686,3 +688,127 @@ begin
   from private.host_ids(p_plan.id) h where h<>p_uid on conflict do nothing;
  return jsonb_build_object('state','waiting','plan_id',p_plan.id,'response',v_resp);
 end $$;
+
+-- 3. Plans v4
+-- CR-D6 (the end is required), CR-P9 (To be decided is a stored flag), CR-D16 / CR-P23 / P25 / P26 (the repeat rule),
+-- CR-D15 (hosts cancel), CR-P17 (a change by an admin is also told to the owner and the other admins, never to whoever
+-- made it), CR-P18 (the people told of a new time or place are the guests who are Going, Maybe or have not answered).
+-- v3 stays as section 1 left it so the current build keeps working.
+alter table public.plans add column place_tbd boolean not null default false;
+alter table public.plans add column repeat_weeks smallint check (repeat_weeks in (1, 2));
+alter table public.plans add column series_id uuid;
+update public.plans set series_id = id;
+alter table public.plans alter column series_id set not null;
+create index plans_series_idx on public.plans(series_id);
+-- A plan made by v3 (or any insert that names no series) starts its own series.
+create function private.plans_default_series() returns trigger language plpgsql set search_path = '' as $$
+begin
+ new.series_id := coalesce(new.series_id,new.id);
+ return new;
+end $$;
+revoke all on function private.plans_default_series() from public, anon, authenticated, service_role;
+create trigger plans_default_series before insert on public.plans for each row execute function private.plans_default_series();
+alter table public.plans add column repeats_from uuid references public.plans(id);
+create unique index plans_repeats_from_key on public.plans(repeats_from);
+
+create function private.create_plan_v4(p_id uuid,p_title text,p_description text,p_categories text[],p_activity text,p_start timestamptz,p_ends timestamptz,p_zone text,p_place text,p_place_tbd boolean,p_repeat_weeks smallint,p_note text default '',p_lat double precision default null,p_lon double precision default null,p_area text default null)
+returns uuid language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := private.require_tester(); v_existing public.plans; v_tbd boolean := coalesce(p_place_tbd,false);
+ v_label text := case when coalesce(p_place_tbd,false) then 'To be decided' else btrim(p_place) end;
+begin
+ -- Serialize repeated creation IDs; a retry must match the original payload exactly.
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(p_id::text,0));
+ select * into v_existing from public.plans where id=p_id;
+ if found then
+  if v_existing.owner_id is distinct from v_uid or v_existing.title is distinct from btrim(p_title)
+  or v_existing.description is distinct from coalesce(p_description,'') or v_existing.categories is distinct from p_categories
+  or v_existing.activity_id is distinct from p_activity or v_existing.starts_at is distinct from p_start
+  or v_existing.ends_at is distinct from p_ends
+  or v_existing.time_zone is distinct from p_zone or v_existing.place_label is distinct from v_label
+  or v_existing.place_tbd is distinct from v_tbd or v_existing.repeat_weeks is distinct from p_repeat_weeks
+  or coalesce((select note from public.plan_meeting_details where plan_id=p_id),'') is distinct from coalesce(p_note,'')
+  or v_existing.area is distinct from coalesce(btrim(p_area),'')
+  or v_existing.latitude is distinct from (case when v_tbd then null else p_lat end)
+  or v_existing.longitude is distinct from (case when v_tbd then null else p_lon end) then
+   raise exception 'Creation identifier already used' using errcode='22023';
+  end if;
+  return p_id;
+ end if;
+ if p_title is null or p_categories is null then raise exception 'Title and categories required' using errcode='23502'; end if;
+ if p_start is null or p_start<=now() or not exists(select 1 from pg_catalog.pg_timezone_names where name=p_zone) then raise exception 'Invalid future schedule' using errcode='22023'; end if;
+ if p_ends is null then raise exception 'End time required' using errcode='22023'; end if;
+ if p_ends<=p_start or p_ends>p_start+interval '48 hours' then raise exception 'Invalid end time' using errcode='22023'; end if;
+ if p_repeat_weeks is not null and p_repeat_weeks not in (1,2) then raise exception 'Invalid repeat' using errcode='22023'; end if;
+ if p_activity is not null and not exists(select 1 from public.activities where id=p_activity and published) then raise exception 'Activity unavailable' using errcode='22023'; end if;
+ insert into public.plans(id,owner_id,activity_id,title,description,categories,starts_at,ends_at,time_zone,place_label,place_tbd,latitude,longitude,area,repeat_weeks,series_id)
+ values(p_id,v_uid,p_activity,btrim(p_title),coalesce(p_description,''),p_categories,p_start,p_ends,p_zone,v_label,v_tbd,
+  case when v_tbd then null else p_lat end,case when v_tbd then null else p_lon end,coalesce(btrim(p_area),''),p_repeat_weeks,p_id);
+ perform private.write_meeting_details(p_id,coalesce(p_note,''));
+ return p_id;
+end $$;
+
+create function private.change_plan_v4(p_plan uuid,p_version integer,p_title text,p_description text,p_categories text[],p_start timestamptz,p_ends timestamptz,p_zone text,p_place text,p_place_tbd boolean,p_repeat_weeks smallint,p_note text,p_area text,p_cancel boolean default false,p_stop_repeating boolean default false)
+returns integer language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := private.require_tester(); v_plan public.plans; v_next integer; v_cancel boolean := coalesce(p_cancel,false);
+ v_time boolean; v_place boolean; v_tbd boolean := coalesce(p_place_tbd,false);
+begin
+ select * into v_plan from public.plans where id=p_plan for update;
+ if not found or not private.is_host(p_plan,v_uid) then raise exception 'Host required' using errcode='42501'; end if;
+ if v_plan.status<>'active' or private.plan_end(v_plan.starts_at,v_plan.ends_at)<=now() then raise exception 'Plan unavailable' using errcode='22023'; end if;
+ if p_version is distinct from v_plan.version then raise exception 'Plan changed; refresh' using errcode='40001'; end if;
+ v_next := v_plan.version+1;
+ if v_cancel then
+  -- Terminal; the other arguments are ignored. The repeat ends with it when asked to.
+  update public.plans set status='cancelled',version=v_next,repeat_weeks=case when coalesce(p_stop_repeating,false) then null else repeat_weeks end where id=p_plan;
+  update private.invitations set revoked_at=now() where plan_id=p_plan and revoked_at is null;
+  insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id)
+  select p_plan,r.id,'plan_cancelled','plan:'||p_plan||':'||v_next||':'||r.id,v_uid
+  from (select a.user_id as id from public.attendees a where a.plan_id=p_plan union select h from private.host_ids(p_plan) h) r
+  where r.id<>v_uid on conflict do nothing;
+ else
+  if p_start is null or (p_start<=now() and p_start is distinct from v_plan.starts_at) or not exists(select 1 from pg_catalog.pg_timezone_names where name=p_zone) then raise exception 'Invalid future schedule' using errcode='22023'; end if;
+  if p_ends is null then raise exception 'End time required' using errcode='22023'; end if;
+  if p_ends<=now() then raise exception 'Plan unavailable' using errcode='22023'; end if;
+  if p_ends<=p_start or p_ends>p_start+interval '48 hours' then raise exception 'Invalid end time' using errcode='22023'; end if;
+  if p_repeat_weeks is not null and p_repeat_weeks not in (1,2) then raise exception 'Invalid repeat' using errcode='22023'; end if;
+  -- A zone change at the same instant moves the shown time, so it counts as a time change; so does choosing or dropping To be decided for the place.
+  v_time := p_start is distinct from v_plan.starts_at or p_zone is distinct from v_plan.time_zone;
+  v_place := v_tbd is distinct from v_plan.place_tbd or (not v_tbd and btrim(p_place) is distinct from v_plan.place_label);
+  update public.plans set title=btrim(p_title),description=coalesce(p_description,''),categories=p_categories,
+   starts_at=p_start,ends_at=p_ends,time_zone=p_zone,place_label=case when v_tbd then 'To be decided' else btrim(p_place) end,place_tbd=v_tbd,
+   latitude=null,longitude=null,repeat_weeks=p_repeat_weeks,version=v_next,
+   area=case when p_area is null then v_plan.area else btrim(p_area) end
+  where id=p_plan;
+  perform private.write_meeting_details(p_plan,coalesce(p_note,''));
+  if v_time or v_place then
+   insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,detail)
+   select p_plan,r.id,'plan_changed','plan:'||p_plan||':'||v_next||':'||r.id,v_uid,
+    case when v_time and v_place then 'time_place' when v_time then 'time' else 'place' end
+   from (select a.user_id as id from public.attendees a where a.plan_id=p_plan and a.response in ('accepted','maybe','pending')
+    union select h from private.host_ids(p_plan) h) r
+   where r.id<>v_uid on conflict do nothing;
+  end if;
+ end if;
+ return v_next;
+end $$;
+
+create function public.create_plan_v4(p_id uuid,p_title text,p_description text,p_categories text[],p_activity text,p_start timestamptz,p_ends timestamptz,p_zone text,p_place text,p_place_tbd boolean,p_repeat_weeks smallint,p_note text default '',p_lat double precision default null,p_lon double precision default null,p_area text default null)
+returns uuid language sql security invoker set search_path='' as $$
+ select private.create_plan_v4(p_id,p_title,p_description,p_categories,p_activity,p_start,p_ends,p_zone,p_place,p_place_tbd,p_repeat_weeks,p_note,p_lat,p_lon,p_area)
+$$;
+create function public.change_plan_v4(p_plan uuid,p_version integer,p_title text,p_description text,p_categories text[],p_start timestamptz,p_ends timestamptz,p_zone text,p_place text,p_place_tbd boolean,p_repeat_weeks smallint,p_note text,p_area text,p_cancel boolean default false,p_stop_repeating boolean default false)
+returns integer language sql security invoker set search_path='' as $$
+ select private.change_plan_v4(p_plan,p_version,p_title,p_description,p_categories,p_start,p_ends,p_zone,p_place,p_place_tbd,p_repeat_weeks,p_note,p_area,p_cancel,p_stop_repeating)
+$$;
+revoke all on function
+ private.create_plan_v4(uuid,text,text,text[],text,timestamptz,timestamptz,text,text,boolean,smallint,text,double precision,double precision,text),
+ public.create_plan_v4(uuid,text,text,text[],text,timestamptz,timestamptz,text,text,boolean,smallint,text,double precision,double precision,text),
+ private.change_plan_v4(uuid,integer,text,text,text[],timestamptz,timestamptz,text,text,boolean,smallint,text,text,boolean,boolean),
+ public.change_plan_v4(uuid,integer,text,text,text[],timestamptz,timestamptz,text,text,boolean,smallint,text,text,boolean,boolean)
+ from public, anon, authenticated, service_role;
+grant execute on function
+ private.create_plan_v4(uuid,text,text,text[],text,timestamptz,timestamptz,text,text,boolean,smallint,text,double precision,double precision,text),
+ public.create_plan_v4(uuid,text,text,text[],text,timestamptz,timestamptz,text,text,boolean,smallint,text,double precision,double precision,text),
+ private.change_plan_v4(uuid,integer,text,text,text[],timestamptz,timestamptz,text,text,boolean,smallint,text,text,boolean,boolean),
+ public.change_plan_v4(uuid,integer,text,text,text[],timestamptz,timestamptz,text,text,boolean,smallint,text,text,boolean,boolean)
+ to authenticated;
