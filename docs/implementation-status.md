@@ -2,6 +2,8 @@
 
 **Current summary — 7 October 2026:** see the [development handoff](development-handoff-2026-10-07.md) for completed/live work, local-only preparations, fresh checks and remaining milestones. B0 remains in progress. The dated journal below begins on 17 September and preserves historical evidence.
 
+**Creating a resbite, 28 October 2026:** the database for creating a resbite (hosts and admins, the end as the boundary, To be decided, repeating resbites, mutes) is built locally as `supabase/migrations/20261031120000_creating_a_resbite.sql`; nothing is applied to the hosted project, Vercel or TestFlight. The owner's approvals, the file's sha256 and the rollback are in [`qa/creating-a-resbite-2026-10-31/README.md`](../qa/creating-a-resbite-2026-10-31/README.md).
+
 This document records the mobile foundation and successive implementation milestones. It is **not yet an accepted standalone two-person test release**. The current development target is the [expanded private beta](milestones/2026-09-23-expanded-private-beta.md), selected on 23 September; older scope/access statements below are historical and superseded by dated updates.
 
 ## Created and verified

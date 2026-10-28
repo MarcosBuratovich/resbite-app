@@ -893,35 +893,35 @@ begin
  loop
   -- Each plan has its own block: a plan that cannot roll (a bad time zone, say) is skipped with a warning, the rest roll.
   begin
-    v_steps := 1;
-    loop
-     v_start := private.next_occurrence(p.starts_at,p.time_zone,p.repeat_weeks*v_steps);
-     v_end := private.next_occurrence(p.ends_at,p.time_zone,p.repeat_weeks*v_steps);
-     -- A start in a spring-forward gap lands an hour later, so an end just after the gap would come before it: keep the length.
-     if v_end<=v_start then v_end := v_start+(p.ends_at-p.starts_at); end if;
-     exit when private.plan_end(v_start,v_end)>now() or v_steps>=600;
-     v_steps := v_steps+1;
-    end loop;
-    -- More than 600 repeats behind: give up on this plan.
-    continue when private.plan_end(v_start,v_end)<=now();
-    v_id := gen_random_uuid();
-     -- The cover trigger starts cover_revision at 0 again; title and categories are given, so the activity trigger keeps them.
-     insert into public.plans(id,owner_id,activity_id,title,description,categories,starts_at,ends_at,time_zone,place_label,place_tbd,
-      latitude,longitude,area,guest_note,guest_note_at,cover_path,cover_revision,cover_description,has_meeting_details,repeat_weeks,
-      series_id,repeats_from,status,version)
-     values(v_id,p.owner_id,p.activity_id,p.title,p.description,p.categories,v_start,v_end,p.time_zone,p.place_label,p.place_tbd,
-      p.latitude,p.longitude,p.area,p.guest_note,p.guest_note_at,p.cover_path,p.cover_revision,p.cover_description,p.has_meeting_details,p.repeat_weeks,
-      p.series_id,p.id,'active',1);
-     insert into public.plan_meeting_details(plan_id,note) select v_id,note from public.plan_meeting_details where plan_id=p.id;
-     insert into public.plan_admins(plan_id,user_id,appointed_by,appointed_at) select v_id,user_id,appointed_by,now() from public.plan_admins where plan_id=p.id;
-     insert into public.attendees(plan_id,user_id,response,version) select v_id,user_id,'pending',1 from public.attendees where plan_id=p.id and response<>'withdrawn';
-     insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,detail)
-     select v_id,a.user_id,'invited','invited:'||v_id||':'||a.user_id,p.owner_id,'again'
-     from public.attendees a
-     where a.plan_id=v_id and a.user_id<>p.owner_id
-      and not exists(select 1 from public.plan_admins pa where pa.plan_id=v_id and pa.user_id=a.user_id)
-     on conflict do nothing;
-     v_count := v_count+1;
+   v_steps := 1;
+   loop
+    v_start := private.next_occurrence(p.starts_at,p.time_zone,p.repeat_weeks*v_steps);
+    v_end := private.next_occurrence(p.ends_at,p.time_zone,p.repeat_weeks*v_steps);
+    -- A start in a spring-forward gap lands an hour later, so an end just after the gap would come before it: keep the length.
+    if v_end<=v_start then v_end := v_start+(p.ends_at-p.starts_at); end if;
+    exit when private.plan_end(v_start,v_end)>now() or v_steps>=600;
+    v_steps := v_steps+1;
+   end loop;
+   -- More than 600 repeats behind: give up on this plan.
+   continue when private.plan_end(v_start,v_end)<=now();
+   v_id := gen_random_uuid();
+   -- The cover trigger starts cover_revision at 0 again; title and categories are given, so the activity trigger keeps them.
+   insert into public.plans(id,owner_id,activity_id,title,description,categories,starts_at,ends_at,time_zone,place_label,place_tbd,
+    latitude,longitude,area,guest_note,guest_note_at,cover_path,cover_revision,cover_description,has_meeting_details,repeat_weeks,
+    series_id,repeats_from,status,version)
+   values(v_id,p.owner_id,p.activity_id,p.title,p.description,p.categories,v_start,v_end,p.time_zone,p.place_label,p.place_tbd,
+    p.latitude,p.longitude,p.area,p.guest_note,p.guest_note_at,p.cover_path,p.cover_revision,p.cover_description,p.has_meeting_details,p.repeat_weeks,
+    p.series_id,p.id,'active',1);
+   insert into public.plan_meeting_details(plan_id,note) select v_id,note from public.plan_meeting_details where plan_id=p.id;
+   insert into public.plan_admins(plan_id,user_id,appointed_by,appointed_at) select v_id,user_id,appointed_by,now() from public.plan_admins where plan_id=p.id;
+   insert into public.attendees(plan_id,user_id,response,version) select v_id,user_id,'pending',1 from public.attendees where plan_id=p.id and response<>'withdrawn';
+   insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,detail)
+   select v_id,a.user_id,'invited','invited:'||v_id||':'||a.user_id,p.owner_id,'again'
+   from public.attendees a
+   where a.plan_id=v_id and a.user_id<>p.owner_id
+    and not exists(select 1 from public.plan_admins pa where pa.plan_id=v_id and pa.user_id=a.user_id)
+   on conflict do nothing;
+   v_count := v_count+1;
   exception when unique_violation then
    -- Another run created this plan's next occurrence first: skip it quietly. Any other unique violation skips the plan with a warning.
    get stacked diagnostics v_constraint = constraint_name;
