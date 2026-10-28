@@ -7,7 +7,7 @@
 --   - the outbox's expanded_at column, and the comment the migration put on its delivered_at;
 --   - every function the migration created: the send-time audience notification_recipient_eligible(), the sender's
 --     claim_notification_deliveries(), validate_notification_delivery() and finish_notification_delivery(), and
---     unregister_device().
+--     unregister_device() with its private body.
 -- It restores verbatim register_device() and its public façade from
 -- 20260917190517_resbite_private_tester_foundation.sql, with that file's grants (the hosted project has never run the
 -- 20260918001308_notification_delivery_preparation body; the migration replaced the façade with the same text), and
@@ -21,8 +21,8 @@
 -- before this ran. Folded accounts stay folded: a notice a fold gave to the app account keeps it.
 -- Sender and builds: unschedule the sender first (select cron.unschedule('deliver-notifications'); see
 -- supabase/ops/schedule-deliver-notifications.sql): once this has run, the functions it calls no longer exist. App
--- builds with push turned on call unregister_device() at sign-out, which no longer exists, and register_device()
--- refuses an account without access again.
+-- builds with push turned on call unregister_device() at sign-out, which no longer exists: the server's answer (404)
+-- still lets them sign out. register_device() refuses an account without access again.
 -- Order: run it before supabase/rollback/20261029120000_open_link_approval.rollback.sql, never after it. That file
 -- restores the 20261028120000_contact_invitations fold_web_account() and drops private.join_requests; this one
 -- restores plan 3's fold, which moves requests in that table, so it has to come back first. Run after that file, this
@@ -37,8 +37,9 @@ do $$ begin
  if to_regclass('private.join_requests') is null then raise exception 'Run this before the open-link approval rollback'; end if;
 end $$;
 
--- The sender's functions, unregistering, and the send-time audience.
+-- The sender's functions, unregistering (the façade, then its body), and the send-time audience.
 drop function public.unregister_device(text);
+drop function private.unregister_device(text);
 drop function public.finish_notification_delivery(uuid,uuid,text,text,integer);
 drop function public.validate_notification_delivery(uuid,uuid);
 drop function public.claim_notification_deliveries(integer);

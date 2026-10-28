@@ -1,12 +1,14 @@
 -- Rehearsal checks for 20261030120000_push_delivery (hosted-baseline mode only).
 -- 1. Against the fingerprint: the migration added exactly the delivery ledger (with its columns, indexes and
--- constraints), the outbox's expanded_at, a comment on the outbox's delivered_at and five functions; redefined exactly
+-- constraints), the outbox's expanded_at, a comment on the outbox's delivered_at and six functions (unregister_device's
+-- private body and its public façade among them); redefined exactly
 -- register_device() and fold_web_account() (public.register_device() is replaced with the same text, and every grant
 -- it repeats comes out as it was); removed nothing; changed nothing else (every grant and the private schema's
 -- included) and wrote no rows.
 do $$ declare v_fns text[] := array['private.notification_recipient_eligible(bigint)',
   'public.claim_notification_deliveries(integer)','public.validate_notification_delivery(uuid,uuid)',
-  'public.finish_notification_delivery(uuid,uuid,text,text,integer)','public.unregister_device(text)'];
+  'public.finish_notification_delivery(uuid,uuid,text,text,integer)','private.unregister_device(text)',
+  'public.unregister_device(text)'];
  v_columns text[] := array['id','outbox_id','token','endpoint_updated_at','state','attempts','next_attempt_at',
   'lease_id','lease_until','ticket_id','ticket_created_at'];
  v_added text[]; v_removed text[]; v_changed text[]; v_expected text[];
@@ -70,19 +72,28 @@ do $$ declare r text; f text; begin
   if not has_function_privilege('service_role',f,'execute') or has_function_privilege('anon',f,'execute')
   or has_function_privilege('authenticated',f,'execute') then raise exception '% grants wrong', f; end if;
  end loop;
- foreach f in array array['private.register_device(text,text)','public.register_device(text,text)','public.unregister_device(text)'] loop
+ foreach f in array array['private.register_device(text,text)','public.register_device(text,text)',
+  'private.unregister_device(text)','public.unregister_device(text)'] loop
   if not has_function_privilege('authenticated',f,'execute') or has_function_privilege('anon',f,'execute') then
    raise exception '% grants wrong', f;
   end if;
  end loop;
+ -- The house pattern: the private body a definer with an empty search path, the public façade an invoker.
+ if not (select prosecdef and proconfig @> array['search_path=""'] from pg_catalog.pg_proc
+   where oid='private.unregister_device(text)'::regprocedure)
+ or (select prosecdef from pg_catalog.pg_proc where oid='public.unregister_device(text)'::regprocedure) then
+  raise exception 'unregister_device is not a private definer behind an invoker façade';
+ end if;
 end $$;
 -- 3. Ana asks to join and, while she waits, registers her phone (the migration's rule: the foundation's
 -- body refused anyone without access); Hana registers hers. The worker expands Gil's answer and Ana's request to Hana's
 -- phone: the answer is received, the request gets a ticket and stays unsent. Hana approves Ana (an unsent, unexpanded
--- notice to her) and Kit asks on the web (another). The open-link rollback, tried first, refuses and changes nothing.
+-- notice to her) and Kit asks on the web (another). The open-link rollback, tried first, refuses and changes nothing:
+-- its text is there, and its push guard comes before anything it drops, updates or deletes.
 -- The push rollback restores every fingerprint entry exactly and deletes the ledger with its rows and expanded_at;
 -- every device stays as it was, Ana's and Hana's included, and every notice stays as it was, the three unsent ones
--- unsent. The restored bodies are the earlier ones again. Rehearsed, then undone.
+-- unsent. The restored bodies are the earlier ones again. Then the open-link rollback runs, in the documented order,
+-- and goes through. Rehearsed, then undone.
 begin;
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"da000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
@@ -143,6 +154,25 @@ end $$;
 -- entry and every request, notice, ledger row and grant is compared before and after.
 \set push_rehearsal_open_link `cat :'resbite_repo'/supabase/rollback/20261029120000_open_link_approval.rollback.sql`
 create temporary table push_rehearsal_open_link on commit drop as select :'push_rehearsal_open_link'::text as script;
+-- The text is that rollback with its push guard, and the guard's DO block comes before its first drop, update or
+-- delete (its comments left out: they mention all three). Refusing first is what leaves everything as it was.
+do $check$ declare v_code text; v_do integer; v_guard integer; v_end integer; v_first integer;
+begin
+ if coalesce(length(btrim((select script from push_rehearsal_open_link))),0)=0 then
+  raise exception 'The open-link rollback text is empty';
+ end if;
+ v_code := regexp_replace((select script from push_rehearsal_open_link),'--[^\n]*','','g');
+ v_do := strpos(v_code,'do $$ begin');
+ v_guard := strpos(v_code,'if to_regclass(''private.notification_deliveries'') is not null then raise exception '
+  ||'''Run the push delivery rollback (20261030120000) first''; end if;');
+ v_end := strpos(v_code,'end $$;');
+ v_first := regexp_instr(v_code,'\m(drop|update|delete)\M',1,1,0,'i');
+ if v_guard=0 then raise exception 'The open-link rollback has no push guard'; end if;
+ if v_do=0 or v_end=0 or v_first=0 or not (v_do<v_guard and v_guard<v_end and v_end<v_first) then
+  raise exception 'The open-link rollback''s push guard is not in a DO block before its first change (do %, guard %, end %, change %)',
+   v_do, v_guard, v_end, v_first;
+ end if;
+end $check$;
 create temporary table push_rehearsal_before_open_link on commit drop as
  select name, definition from private.push_rehearsal_snapshot()
  union all select 'request', to_jsonb(j)::text from private.join_requests j
@@ -235,6 +265,19 @@ do $$ begin
  or (select count(*) from private.notification_outbox where plan_id='db000000-0000-4000-8000-000000000001'
    and kind='join_request' and actor_id is null)<>1 then
   raise exception 'The restored fold is not plan 3''s';
+ end if;
+end $$;
+-- Now the open-link rollback, in the documented order (after the push rollback): it goes through, and what it removes
+-- is gone.
+\ir ../../rollback/20261029120000_open_link_approval.rollback.sql
+do $$ begin
+ if pg_catalog.to_regclass('private.join_requests') is not null
+ or pg_catalog.to_regprocedure('public.request_to_join(text,text,text,text)') is not null
+ or pg_catalog.to_regprocedure('public.decide_join_request(uuid,uuid,boolean)') is not null
+ or pg_catalog.to_regprocedure('public.my_join_requests()') is not null
+ or exists(select 1 from private.notification_outbox where kind in ('join_request','join_approved'))
+ or exists(select 1 from private.beta_access where source='approval') then
+  raise exception 'The open-link rollback after the push rollback did not go through';
  end if;
 end $$;
 rollback;

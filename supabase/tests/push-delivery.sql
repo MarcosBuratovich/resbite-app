@@ -330,13 +330,16 @@ do $$ declare v text; begin
  end if;
 end $$;
 
--- A removed guest gets nothing: Zoe's Note to guests is queued, the host removes her, and the claim sends her nothing.
+-- A removed guest gets nothing: Zoe's Note to guests and a change of time are queued, the host removes her, and the
+-- claim sends her neither.
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"f4000000-0000-4000-8000-000000000025","role":"authenticated"}',true);
 select public.register_device('ExpoPushToken[zoe]','ios');
 reset role;
 insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id) values
  ('f4100000-0000-4000-8000-000000000001','f4000000-0000-4000-8000-000000000025','guest_note','push:zoe','f4000000-0000-4000-8000-000000000001');
+insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,detail) values
+ ('f4100000-0000-4000-8000-000000000001','f4000000-0000-4000-8000-000000000025','plan_changed','push:zoe-change','f4000000-0000-4000-8000-000000000001','time');
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"f4000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 select public.remove_guest('f4100000-0000-4000-8000-000000000001','f4000000-0000-4000-8000-000000000025');
@@ -347,7 +350,10 @@ do $$ begin
  or exists(select 1 from private.notification_deliveries where token='ExpoPushToken[zoe]') then
   raise exception 'A removed guest was sent a notice';
  end if;
- if (select delivered_at from private.notification_outbox where dedupe_key='push:zoe') is null then raise exception 'The removed guest''s notice is still open'; end if;
+ if exists(select 1 from private.notification_outbox where dedupe_key in ('push:zoe','push:zoe-change') and delivered_at is null)
+ or (select count(*) from private.notification_outbox where dedupe_key in ('push:zoe','push:zoe-change'))<>2 then
+  raise exception 'A removed guest''s notice is still open';
+ end if;
 end $$;
 
 -- Two accounts on one phone (Review Focus 1). Amy registers the phone; her change notice is claimed and retried (pending).
@@ -401,7 +407,7 @@ do $$ declare j jsonb; begin
  if not public.validate_notification_delivery((j->>'id')::uuid,(j->>'lease_id')::uuid) then raise exception 'Registering the same binding again fenced the send'; end if;
 end $$;
 
--- unregister_device removes only the caller's own token.
+-- unregister_device removes only the caller's own token (its body is private, behind the public façade).
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"f4000000-0000-4000-8000-000000000010","role":"authenticated"}',true);
 select public.unregister_device('ExpoPushToken[hana]');
@@ -424,11 +430,12 @@ end $$;
 reset role;
 do $$ begin
  if has_function_privilege('anon','public.register_device(text,text)','execute') or has_function_privilege('anon','private.register_device(text,text)','execute')
-  or has_function_privilege('anon','public.unregister_device(text)','execute') then
+  or has_function_privilege('anon','public.unregister_device(text)','execute') or has_function_privilege('anon','private.unregister_device(text)','execute') then
   raise exception 'anon may call a device function';
  end if;
  if not has_function_privilege('authenticated','public.register_device(text,text)','execute') or not has_function_privilege('authenticated','private.register_device(text,text)','execute')
-  or not has_function_privilege('authenticated','public.unregister_device(text)','execute') then
+  or not has_function_privilege('authenticated','public.unregister_device(text)','execute')
+  or not has_function_privilege('authenticated','private.unregister_device(text)','execute') then
   raise exception 'A signed-in account may not call a device function';
  end if;
 end $$;
@@ -513,10 +520,13 @@ do $$ declare f text; r text; begin
   if has_function_privilege(r,'private.notification_recipient_eligible(bigint)','execute') then raise exception '% may call the audience check', r; end if;
   if has_table_privilege(r,'private.notification_deliveries','select,insert,update,delete') then raise exception '% may touch the ledger', r; end if;
  end loop;
- if (select prosecdef from pg_proc where oid='public.register_device(text,text)'::regprocedure) then raise exception 'public.register_device is a definer'; end if;
+ if (select prosecdef from pg_proc where oid='public.register_device(text,text)'::regprocedure)
+ or (select prosecdef from pg_proc where oid='public.unregister_device(text)'::regprocedure) then
+  raise exception 'A public device façade is a definer';
+ end if;
  if not (select prosecdef and proconfig @> array['search_path=""'] from pg_proc where oid='private.register_device(text,text)'::regprocedure)
- or not (select prosecdef and proconfig @> array['search_path=""'] from pg_proc where oid='public.unregister_device(text)'::regprocedure) then
-  raise exception 'A device function is not a definer with an empty search path';
+ or not (select prosecdef and proconfig @> array['search_path=""'] from pg_proc where oid='private.unregister_device(text)'::regprocedure) then
+  raise exception 'A private device body is not a definer with an empty search path';
  end if;
  if not (select relrowsecurity from pg_class where oid='private.notification_deliveries'::regclass) then raise exception 'The ledger has no RLS'; end if;
  if has_function_privilege('anon','public.fold_web_account(uuid,uuid)','execute') or has_function_privilege('authenticated','public.fold_web_account(uuid,uuid)','execute')

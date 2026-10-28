@@ -3,9 +3,10 @@
 -- One file for the hosted project with every push piece of the local-only
 -- 20260918001308_notification_delivery_preparation.sql, 20261014130000_ux2_notification_wording.sql,
 -- 20261015130000_ux3_note_delivery.sql and the delivery half of 20261022120001_gi2_local_delivery_and_deletion.sql:
--- the delivery ledger, expanded_at, the claim, validate and finish worker functions, unregister_device, the token rules
--- of register_device and the send-time audience. Delivery is widened to phone-only accounts, a person waiting for a
--- host's approval may register a device, and folding a web account carries its unsent notices.
+-- the delivery ledger, expanded_at, the claim, validate and finish worker functions, unregister_device (its body now
+-- private, behind a public façade), the token rules of register_device and the send-time audience. Delivery is
+-- widened to phone-only accounts, a person waiting for a host's approval may register a device, and folding a web
+-- account carries its unsent notices.
 -- The deletion lifecycle stays local-only: this file creates and redefines none of its objects.
 -- Hosted-compatible: depends only on the migrations listed in supabase/tests/hosted-baseline/migrations.txt plus
 -- 20261027120000_phone_accounts.sql, 20261028120000_contact_invitations.sql and 20261029120000_open_link_approval.sql.
@@ -175,17 +176,20 @@ begin
  and not exists(select 1 from private.notification_deliveries x where x.outbox_id=o.id and x.state in ('pending','sending','ticket'));
 end $$;
 
+revoke all on function public.claim_notification_deliveries(integer),public.validate_notification_delivery(uuid,uuid),public.finish_notification_delivery(uuid,uuid,text,text,integer) from public,anon,authenticated;
+grant execute on function public.claim_notification_deliveries(integer),public.validate_notification_delivery(uuid,uuid),public.finish_notification_delivery(uuid,uuid,text,text,integer) to service_role;
+
 -- Cleanup works even after roster removal/deletion request, but cannot remove another user's endpoint.
--- The 20260918001308_notification_delivery_preparation body, verbatim.
-create or replace function public.unregister_device(p_token text) returns void language plpgsql security definer set search_path='' as $$
+-- The 20260918001308_notification_delivery_preparation body, verbatim, as a private definer behind a public
+-- invoker façade (the house pattern, as register_device); in full mode the façade replaces that file's definer.
+create or replace function private.unregister_device(p_token text) returns void language plpgsql security definer set search_path='' as $$
 begin
  if auth.uid() is null then raise exception 'Authentication required' using errcode='42501'; end if;
  delete from private.device_endpoints where token=p_token and user_id=auth.uid();
 end $$;
-revoke all on function public.claim_notification_deliveries(integer),public.validate_notification_delivery(uuid,uuid),public.finish_notification_delivery(uuid,uuid,text,text,integer) from public,anon,authenticated;
-grant execute on function public.claim_notification_deliveries(integer),public.validate_notification_delivery(uuid,uuid),public.finish_notification_delivery(uuid,uuid,text,text,integer) to service_role;
-revoke all on function public.unregister_device(text) from public,anon,authenticated;
-grant execute on function public.unregister_device(text) to authenticated;
+create or replace function public.unregister_device(p_token text) returns void language sql security invoker set search_path='' as $$ select private.unregister_device(p_token) $$;
+revoke all on function private.unregister_device(text),public.unregister_device(text) from public,anon,authenticated;
+grant execute on function private.unregister_device(text),public.unregister_device(text) to authenticated;
 
 -- Folding a web-only account carries the notices it caused that haven't gone out yet: they name the app account, which
 -- now holds its requests and answers, instead of nobody once the web profile is deleted (a join_request about a moved

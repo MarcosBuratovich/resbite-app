@@ -7,8 +7,10 @@
 -- prepare_deletion_intent(uuid,uuid,uuid,text,text), each keeping its grants, and revokes service_role's execute
 -- on the public.request_account_deletion wrapper. It re-points eligible() at user_eligible() itself, so it is safe
 -- to run after 20260918001316, whose eligible() is roster-only.
--- It goes live with the notification sender and the deletion milestone, after each has its own owner approval,
--- never with the GI2 release, and is applied after those files: they would otherwise put back roster-only bodies.
+-- For push it is superseded by 20261030120000_push_delivery.sql: never apply it after that migration, because its
+-- notification_recipient_eligible() would bring back the email-only audience. The deletion milestone must split its
+-- deletion half out into a file of its own, without notification_recipient_eligible(). Never with the GI2 release;
+-- applied after the deletion files above, which would otherwise put back roster-only bodies.
 
 -- The 20261027120000_phone_accounts body, verbatim: a confirmed email or phone (a roster row needs the confirmed
 -- email), and the leaving check delegated to
