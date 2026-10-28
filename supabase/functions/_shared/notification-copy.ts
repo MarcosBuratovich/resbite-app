@@ -90,6 +90,11 @@ export function notificationCopy(input: CopyInput): Copy {
   // The one notice that leads with who did it: the plan's title is the line underneath.
   if (input.kind === "admin_added")
     return title ? { title: `${input.actor_name?.trim() || "Someone"} made you an admin`, body: title } : GENERIC_COPY;
+  // The next occurrence of a repeating resbite (CR-P24): the title says it is on again, the body says when.
+  if (input.kind === "invited" && input.detail === "again") {
+    const time = eventTime(input.starts_at, input.time_zone);
+    return title && time ? { title: `${title} is on again`, body: time } : GENERIC_COPY;
+  }
   const text = title ? body(input) : null;
   return title && text ? { title, body: text } : GENERIC_COPY;
 }

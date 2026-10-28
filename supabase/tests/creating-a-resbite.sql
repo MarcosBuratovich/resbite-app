@@ -857,3 +857,222 @@ do $$ begin
  if not private.notification_recipient_eligible((select id from private.notification_outbox where dedupe_key='cr1-mute-a')) then raise exception 'Notice still blocked after unmute'; end if;
 end $$;
 rollback;
+
+-- Slice 5: repeats (CR-D16, CR-P22 to CR-P26). Users: 01 owner, 02 admin (Going), 03 a Going guest who mutes, 04 a
+-- Can't-go guest, 05 a pending guest, 06 a guest who withdrew, 07 a guest invited to the next occurrence only, 08 a
+-- stranger, 09 an organizer who is leaving. The roll uses the real now(), so its checks are relative to it.
+begin;
+insert into auth.users(id,email,email_confirmed_at) values
+ ('e1000000-0000-4000-8000-000000000001','cr1-owner@resbite-test.invalid',now()),
+ ('e1000000-0000-4000-8000-000000000002','cr1-guest-a@resbite-test.invalid',now()),
+ ('e1000000-0000-4000-8000-000000000003','cr1-guest-b@resbite-test.invalid',now()),
+ ('e1000000-0000-4000-8000-000000000004','cr1-guest-c@resbite-test.invalid',now()),
+ ('e1000000-0000-4000-8000-000000000005','cr1-guest-d@resbite-test.invalid',now()),
+ ('e1000000-0000-4000-8000-000000000006','cr1-guest-e@resbite-test.invalid',now()),
+ ('e1000000-0000-4000-8000-000000000007','cr1-guest-f@resbite-test.invalid',now()),
+ ('e1000000-0000-4000-8000-000000000008','cr1-stranger@resbite-test.invalid',now()),
+ ('e1000000-0000-4000-8000-000000000009','cr1-leaving@resbite-test.invalid',now());
+insert into private.tester_roster(email) values ('cr1-owner@resbite-test.invalid'),('cr1-guest-a@resbite-test.invalid'),
+ ('cr1-guest-b@resbite-test.invalid'),('cr1-guest-c@resbite-test.invalid'),('cr1-guest-d@resbite-test.invalid'),
+ ('cr1-guest-e@resbite-test.invalid'),('cr1-guest-f@resbite-test.invalid'),('cr1-stranger@resbite-test.invalid'),
+ ('cr1-leaving@resbite-test.invalid');
+insert into public.profiles(id,display_name) values
+ ('e1000000-0000-4000-8000-000000000001','Owner'),('e1000000-0000-4000-8000-000000000002','Admin A'),
+ ('e1000000-0000-4000-8000-000000000003','Guest B'),('e1000000-0000-4000-8000-000000000004','Guest C'),
+ ('e1000000-0000-4000-8000-000000000005','Guest D'),('e1000000-0000-4000-8000-000000000006','Guest E'),
+ ('e1000000-0000-4000-8000-000000000007','Guest F'),('e1000000-0000-4000-8000-000000000008','Stranger'),
+ ('e1000000-0000-4000-8000-000000000009','Leaving organizer');
+
+-- The next occurrence keeps the local time across the clock changes (Europe/London goes back on 25 Oct 2026 and
+-- forward on 28 Mar 2027); with no change in between it is exactly 7 or 14 days on.
+do $$ begin
+ if private.next_occurrence('2026-10-22 18:00+00','Europe/London',1)<>'2026-10-29 19:00+00'::timestamptz
+  then raise exception 'Across the October change: %', private.next_occurrence('2026-10-22 18:00+00','Europe/London',1); end if;
+ if private.next_occurrence('2027-03-25 19:00+00','Europe/London',1)<>'2027-04-01 18:00+00'::timestamptz
+  then raise exception 'Across the March change: %', private.next_occurrence('2027-03-25 19:00+00','Europe/London',1); end if;
+ if private.next_occurrence('2026-10-22 18:00+00','Europe/London',2)<>'2026-11-05 19:00+00'::timestamptz
+  or private.next_occurrence('2027-03-25 19:00+00','Europe/London',2)<>'2027-04-08 18:00+00'::timestamptz
+  then raise exception 'Two weeks across a clock change moved the local time'; end if;
+ if private.next_occurrence('2026-06-04 18:00+00','Europe/London',1)<>'2026-06-11 18:00+00'::timestamptz
+  or private.next_occurrence('2026-06-04 18:00+00','Europe/London',2)<>'2026-06-18 18:00+00'::timestamptz
+  then raise exception 'Without a clock change the next is not 7 or 14 days on'; end if;
+ if private.next_occurrence(null,'Europe/London',1) is not null then raise exception 'A missing end gained one'; end if;
+end $$;
+
+-- Only the database runs the roll (pg_cron, as postgres): no API role may execute either function.
+do $$ declare r text; begin
+ foreach r in array array['anon','authenticated','service_role'] loop
+  if has_function_privilege(r,'private.roll_repeating_plans()','execute') or has_function_privilege(r,'private.next_occurrence(timestamptz,text,integer)','execute')
+   then raise exception '% can execute the roll or its helper', r; end if;
+ end loop;
+end $$;
+set local role anon;
+select set_config('request.jwt.claims','{"role":"anon"}',true);
+do $$ begin
+ begin perform private.roll_repeating_plans(); raise exception 'anon ran the roll';
+ exception when insufficient_privilege then null; end;
+end $$;
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+do $$ begin
+ begin perform private.roll_repeating_plans(); raise exception 'authenticated ran the roll';
+ exception when insufficient_privilege then null; end;
+end $$;
+
+-- The plans, all made in the future as the app makes them; the test then moves some into the past.
+-- 30 weekly on Thursdays 19:00 to 22:00 London (rolls after it ends); 31 every two weeks, place to be decided (cancelled
+-- just this once); 32 cancelled with stop repeating; 33 Doesn't repeat after an edit; 34 ended 30 days ago; 35 an old
+-- plan with no end; 36 the leaving organizer's; 37 Sundays 01:30 to 02:15 London, the week before the clocks go forward
+-- on 29 Mar 2099 (cancelled just this once).
+select public.create_plan_v4('e1100000-0000-4000-8000-000000000030','Board game night','Bring a game',array['community'],null,
+ '2099-06-04 18:00+00','2099-06-04 21:00+00','Europe/London','Park',false,1::smallint,'Ring the bell',51.5,-0.1,'Soho');
+select public.create_plan_v4('e1100000-0000-4000-8000-000000000031','Quiz','',array['community'],null,
+ '2099-06-11 18:00+00','2099-06-11 21:00+00','Europe/London','',true,2::smallint,'');
+select public.create_plan_v4('e1100000-0000-4000-8000-000000000032','Stopped','',array['community'],null,
+ '2099-06-11 18:00+00','2099-06-11 21:00+00','Europe/London','Park',false,1::smallint,'');
+select public.create_plan_v4('e1100000-0000-4000-8000-000000000033','No longer repeats','',array['community'],null,
+ '2099-06-11 18:00+00','2099-06-11 21:00+00','Europe/London','Park',false,1::smallint,'');
+select public.create_plan_v4('e1100000-0000-4000-8000-000000000034','Long ago','',array['community'],null,
+ '2099-06-04 18:00+00','2099-06-04 20:00+00','UTC','Park',false,1::smallint,'');
+select public.create_plan_v4('e1100000-0000-4000-8000-000000000035','No end','',array['community'],null,
+ '2099-06-04 18:00+00','2099-06-04 20:00+00','UTC','Park',false,1::smallint,'');
+select public.create_plan_v4('e1100000-0000-4000-8000-000000000037','Late night','',array['community'],null,
+ '2099-03-22 01:30+00','2099-03-22 02:15+00','Europe/London','Park',false,1::smallint,'');
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000009","role":"authenticated"}',true);
+select public.create_plan_v4('e1100000-0000-4000-8000-000000000036','Leaving','',array['community'],null,
+ '2099-06-04 18:00+00','2099-06-04 20:00+00','UTC','Park',false,1::smallint,'');
+reset role;
+
+-- 30's people: an admin who is Going, a Going guest, a Can't-go guest, a pending guest and one who withdrew. The Going
+-- guest mutes it. A cover photo with a description and a note to guests.
+insert into public.attendees(plan_id,user_id,response) values
+ ('e1100000-0000-4000-8000-000000000030','e1000000-0000-4000-8000-000000000002','accepted'),
+ ('e1100000-0000-4000-8000-000000000030','e1000000-0000-4000-8000-000000000003','accepted'),
+ ('e1100000-0000-4000-8000-000000000030','e1000000-0000-4000-8000-000000000004','declined'),
+ ('e1100000-0000-4000-8000-000000000030','e1000000-0000-4000-8000-000000000005','pending'),
+ ('e1100000-0000-4000-8000-000000000030','e1000000-0000-4000-8000-000000000006','withdrawn');
+insert into public.plan_admins(plan_id,user_id,appointed_by,appointed_at) values
+ ('e1100000-0000-4000-8000-000000000030','e1000000-0000-4000-8000-000000000002','e1000000-0000-4000-8000-000000000001',now()-interval '20 days');
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
+select public.set_plan_mute('e1100000-0000-4000-8000-000000000030',true);
+reset role;
+insert into storage.objects(bucket_id,name) values('plan-covers','e1000000-0000-4000-8000-000000000001/e1100000-0000-4000-8000-000000000030/a.jpg');
+update public.plans set cover_path='e1000000-0000-4000-8000-000000000001/e1100000-0000-4000-8000-000000000030/a.jpg' where id='e1100000-0000-4000-8000-000000000030';
+update public.plans set cover_description='The board',guest_note='Doors at seven',guest_note_at=now()-interval '9 days' where id='e1100000-0000-4000-8000-000000000030';
+-- Last week: the Thursday a week before the latest Thursday (today counts), 19:00 to 22:00 London.
+do $$ declare d date := (now() at time zone 'Europe/London')::date; begin
+ d := d-((extract(isodow from d)::int-4+7)%7)-7;
+ update public.plans set starts_at=(d+time '19:00') at time zone 'Europe/London',ends_at=(d+time '22:00') at time zone 'Europe/London'
+  where id='e1100000-0000-4000-8000-000000000030';
+end $$;
+
+-- The roll: one plan has ended, so one next occurrence.
+do $$ declare o public.plans; n public.plans; begin
+ if private.roll_repeating_plans()<>1 then raise exception 'Expected exactly one plan rolled'; end if;
+ select * into o from public.plans where id='e1100000-0000-4000-8000-000000000030';
+ select * into n from public.plans where repeats_from='e1100000-0000-4000-8000-000000000030';
+ if not found then raise exception 'No next occurrence'; end if;
+ if n.id=o.id or n.series_id<>o.series_id or n.series_id<>'e1100000-0000-4000-8000-000000000030'::uuid then raise exception 'Wrong series: %', to_jsonb(n); end if;
+ -- Thursday, 19:00 to 22:00 London.
+ if (n.starts_at at time zone 'Europe/London')::time<>'19:00' or (n.ends_at at time zone 'Europe/London')::time<>'22:00'
+  then raise exception 'Not 19:00 to 22:00 London: % to %', n.starts_at, n.ends_at; end if;
+ if extract(dow from n.starts_at at time zone 'Europe/London')<>4 then raise exception 'Not a Thursday: %', n.starts_at; end if;
+ -- The first occurrence after now: it has not ended, the one a week before it has, and it is at most a week away. It
+ -- starts in the future, unless this runs on a Thursday evening in London, when it is the one under way.
+ if n.ends_at<=now() then raise exception 'The next occurrence has already ended: %', n.ends_at; end if;
+ if private.next_occurrence(n.ends_at,'Europe/London',-1)>now() then raise exception 'Not the first occurrence after now: %', n.starts_at; end if;
+ if n.starts_at<=now() and extract(dow from now() at time zone 'Europe/London')<>4 then raise exception 'The next occurrence starts in the past: %', n.starts_at; end if;
+ if n.starts_at>now()+interval '7 days' then raise exception 'The next occurrence is more than a week away: %', n.starts_at; end if;
+ -- The details carry; the counters start again.
+ if n.owner_id<>o.owner_id or n.activity_id is not null or n.title<>'Board game night' or n.description<>'Bring a game' or n.categories<>array['community']
+  or n.time_zone<>'Europe/London' or n.place_label<>'Park' or n.place_tbd or n.latitude<>51.5 or n.longitude<>-0.1 or n.area<>'Soho'
+  or n.guest_note<>'Doors at seven' or n.guest_note_at<>o.guest_note_at or n.cover_path<>o.cover_path or n.cover_description<>'The board'
+  or n.cover_revision<>0 or not n.has_meeting_details or n.repeat_weeks<>1 or n.status<>'active' or n.version<>1
+  then raise exception 'Wrong copy: %', to_jsonb(n); end if;
+ if (select note from public.plan_meeting_details where plan_id=n.id) is distinct from 'Ring the bell' then raise exception 'Meeting details not carried'; end if;
+ if (select count(*) from public.plan_admins where plan_id=n.id and user_id='e1000000-0000-4000-8000-000000000002'
+   and appointed_by='e1000000-0000-4000-8000-000000000001' and appointed_at=now())<>1
+  or (select count(*) from public.plan_admins where plan_id=n.id)<>1 then raise exception 'The admin did not carry'; end if;
+ -- Everyone but the one who withdrew, the admin among them, asked again.
+ if (select array_agg(user_id order by user_id) from public.attendees where plan_id=n.id)<>array['e1000000-0000-4000-8000-000000000002',
+   'e1000000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000004','e1000000-0000-4000-8000-000000000005']::uuid[]
+  then raise exception 'Wrong people carried'; end if;
+ if exists(select 1 from public.attendees where plan_id=n.id and (response<>'pending' or version<>1)) then raise exception 'Replies did not start empty'; end if;
+ -- The invitation push: one each for the three guests; none for the admin or the owner.
+ if (select array_agg(recipient_id order by recipient_id) from private.notification_outbox where plan_id=n.id)<>array[
+   'e1000000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000004','e1000000-0000-4000-8000-000000000005']::uuid[]
+  then raise exception 'Wrong recipients'; end if;
+ if exists(select 1 from private.notification_outbox where plan_id=n.id and (kind<>'invited' or detail is distinct from 'again'
+   or actor_id<>'e1000000-0000-4000-8000-000000000001' or dedupe_key<>'invited:'||n.id||':'||recipient_id))
+  then raise exception 'Wrong invitation rows'; end if;
+ -- The mute is on the series, so it carries.
+ if private.notification_recipient_eligible((select id from private.notification_outbox where plan_id=n.id and recipient_id='e1000000-0000-4000-8000-000000000003'))
+  then raise exception 'The muted guest would be told'; end if;
+ if not private.notification_recipient_eligible((select id from private.notification_outbox where plan_id=n.id and recipient_id='e1000000-0000-4000-8000-000000000004'))
+  or not private.notification_recipient_eligible((select id from private.notification_outbox where plan_id=n.id and recipient_id='e1000000-0000-4000-8000-000000000005'))
+  then raise exception 'An unmuted guest would not be told'; end if;
+ -- This occurrence keeps its own people and replies.
+ if o.status<>'active' or o.repeats_from is not null or (select count(*) from public.attendees where plan_id=o.id and response<>'pending')<>4
+  then raise exception 'The ended occurrence changed'; end if;
+end $$;
+
+-- Again: nothing more, still one next.
+do $$ begin
+ if private.roll_repeating_plans()<>0 then raise exception 'A second roll created something'; end if;
+ if (select count(*) from public.plans where series_id='e1100000-0000-4000-8000-000000000030')<>2 then raise exception 'More than one next occurrence'; end if;
+end $$;
+
+-- The next occurrence shares the photo: a guest invited to it only (07) reads the object in 30's folder; a guest of
+-- both reads it; a stranger does not.
+insert into public.attendees(plan_id,user_id) select id,'e1000000-0000-4000-8000-000000000007' from public.plans where repeats_from='e1100000-0000-4000-8000-000000000030';
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000007","role":"authenticated"}',true);
+do $$ begin
+ if (select count(*) from storage.objects where bucket_id='plan-covers' and name='e1000000-0000-4000-8000-000000000001/e1100000-0000-4000-8000-000000000030/a.jpg')<>1
+  then raise exception 'A guest of the next occurrence cannot read its cover'; end if;
+end $$;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
+do $$ begin
+ if (select count(*) from storage.objects where bucket_id='plan-covers')<>1 then raise exception 'A guest of both cannot read the cover'; end if;
+end $$;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000008","role":"authenticated"}',true);
+do $$ begin
+ if exists(select 1 from storage.objects where bucket_id='plan-covers') then raise exception 'A stranger reads the cover'; end if;
+end $$;
+
+-- Cancel just this one (31, 37) rolls; cancel and stop repeating (32) does not; Doesn't repeat on Edit (33) does not.
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.change_plan_v4('e1100000-0000-4000-8000-000000000031',1,null,null,null,null,null,null,null,null,null,null,null,true);
+select public.change_plan_v4('e1100000-0000-4000-8000-000000000037',1,null,null,null,null,null,null,null,null,null,null,null,true);
+select public.change_plan_v4('e1100000-0000-4000-8000-000000000032',1,null,null,null,null,null,null,null,null,null,null,null,true,true);
+select public.change_plan_v4('e1100000-0000-4000-8000-000000000033',1,'No longer repeats','',array['community'],'2099-06-11 18:00+00','2099-06-11 21:00+00',
+ 'Europe/London','Park',false,null,'','');
+reset role;
+update public.plans set starts_at=now()-interval '8 days',ends_at=now()-interval '8 days'+interval '2 hours'
+ where id in ('e1100000-0000-4000-8000-000000000033','e1100000-0000-4000-8000-000000000036');
+-- 34's last occurrence ended 30 days ago; 35, with no end, started ten days ago; 36's organizer is leaving.
+update public.plans set starts_at=now()-interval '30 days 2 hours',ends_at=now()-interval '30 days' where id='e1100000-0000-4000-8000-000000000034';
+update public.plans set starts_at=now()-interval '10 days',ends_at=null where id='e1100000-0000-4000-8000-000000000035';
+update public.profiles set deletion_requested_at=now() where id='e1000000-0000-4000-8000-000000000009';
+do $$ declare n public.plans; begin
+ if private.roll_repeating_plans()<>4 then raise exception 'Expected four plans rolled (31, 34, 35, 37)'; end if;
+ select * into n from public.plans where repeats_from='e1100000-0000-4000-8000-000000000031';
+ if not found or n.starts_at<>'2099-06-25 18:00+00' or n.ends_at<>'2099-06-25 21:00+00' or n.status<>'active' or n.repeat_weeks<>2
+  or not n.place_tbd or n.place_label<>'To be decided' or n.latitude is not null then raise exception 'Cancel just this one did not roll two weeks on: %', to_jsonb(n); end if;
+ if exists(select 1 from public.plans where repeats_from in ('e1100000-0000-4000-8000-000000000032','e1100000-0000-4000-8000-000000000033','e1100000-0000-4000-8000-000000000036'))
+  then raise exception 'A stopped, non-repeating or leaving organizer''s plan rolled'; end if;
+ -- Catching up: the first occurrence after now, not the one a week after the last.
+ select * into n from public.plans where repeats_from='e1100000-0000-4000-8000-000000000034';
+ if not found or n.starts_at<=now() or n.starts_at>now()+interval '7 days' or n.ends_at-n.starts_at<>interval '2 hours'
+  then raise exception 'The long-ago plan did not catch up: %', to_jsonb(n); end if;
+ select * into n from public.plans where repeats_from='e1100000-0000-4000-8000-000000000035';
+ if not found or n.ends_at is not null or n.starts_at<=now() or n.starts_at>now()+interval '7 days'
+  then raise exception 'The plan with no end did not roll from its start: %', to_jsonb(n); end if;
+ -- 01:30 does not exist on 29 Mar 2099 in London, so the start is 01:30 GMT (02:30 BST); 02:15 BST would come before it,
+ -- so the end keeps the 45 minutes.
+ select * into n from public.plans where repeats_from='e1100000-0000-4000-8000-000000000037';
+ if not found or n.starts_at<>'2099-03-29 01:30+00' or n.ends_at<>'2099-03-29 02:15+00'
+  then raise exception 'The clock change inverted the next occurrence: %', to_jsonb(n); end if;
+end $$;
+rollback;

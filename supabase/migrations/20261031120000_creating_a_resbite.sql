@@ -508,7 +508,8 @@ end $$;
 -- notification_recipient_eligible is redefined at the end of section 4: it reads plans.series_id and plan_mutes.
 
 -- The two upload policies of the plan-covers bucket, open until the end instead of the start, to any host: the object
--- stays in the owner's folder (the first path segment is the plan's owner), the uploader is the owner or an admin. (resbite_cover_read is unchanged.)
+-- stays in the owner's folder (the first path segment is the plan's owner), the uploader is the owner or an admin.
+-- (resbite_cover_read is widened in section 5, for the next occurrence of a repeating resbite.)
 drop policy resbite_cover_insert on storage.objects;
 drop policy resbite_cover_update on storage.objects;
 create policy resbite_cover_insert on storage.objects for insert to authenticated with check (
@@ -540,7 +541,8 @@ create policy resbite_cover_update on storage.objects for update to authenticate
 -- two storage policies). Host notices go to every host but the actor, one row each. The recipient id ends the dedupe key
 -- of an admin's row; the owner's row keeps the key it always had, so existing keys and their tests are unchanged.
 
--- The outbox: 'admin_added' (to the new admin, the owner as actor), with a null detail like the other plain kinds.
+-- The outbox: 'admin_added' (to the new admin, the owner as actor), with a null detail like the other plain kinds; and
+-- (section 5) 'invited' with the detail 'again', the invitation to a repeating resbite's next occurrence.
 -- The checks are replaced by exact name, keeping every existing value.
 alter table private.notification_outbox drop constraint notification_outbox_kind_check;
 alter table private.notification_outbox add constraint notification_outbox_kind_check
@@ -549,7 +551,8 @@ alter table private.notification_outbox drop constraint notification_outbox_deta
 alter table private.notification_outbox add constraint notification_outbox_detail_check check (
  detail is null
  or (kind='plan_changed' and detail in ('time','place','time_place'))
- or (kind='rsvp' and detail in ('accepted','maybe','declined','withdrawn')));
+ or (kind='rsvp' and detail in ('accepted','maybe','declined','withdrawn'))
+ or (kind='invited' and detail='again'));
 
 -- The owner appoints a guest who is going; asking again changes nothing and tells nobody twice.
 create function private.appoint_admin(p_plan uuid, p_user uuid) returns void language plpgsql security definer set search_path = '' as $$
@@ -854,3 +857,87 @@ language sql stable security definer set search_path='' as $$
   and not private.deletion_pending(o.actor_id)))
  )
 $$;
+
+-- 5. Repeats (CR-D16, CR-P22 to CR-P26)
+-- A repeating resbite is an ordinary resbite with a repeat rule (section 3). When it ends, or is cancelled on its own,
+-- the roll creates the next occurrence, one or two weeks on at the same local time in the plan's time_zone, so the
+-- clocks changing don't move it. Nothing is created beyond the next one. pg_cron runs the roll every five minutes as
+-- postgres (supabase/ops/schedule-roll-repeating-plans.sql, owner-run); no API role may execute it. The outbox detail
+-- 'again' for 'invited' is allowed in section 2's check.
+
+-- The same local time p_weeks weeks on.
+create function private.next_occurrence(p_at timestamptz, p_zone text, p_weeks integer) returns timestamptz
+language sql stable security definer set search_path = '' as $$
+ select ((p_at at time zone p_zone) + make_interval(weeks => p_weeks)) at time zone p_zone
+$$;
+revoke all on function private.next_occurrence(timestamptz,text,integer) from public, anon, authenticated, service_role;
+
+-- For each plan with a rule and no next yet that has ended or was cancelled with its rule kept: the next occurrence is
+-- the first one, counting on from this one, that has not ended (a plan left behind catches up instead of creating
+-- occurrences in the past). It copies the plan, its meeting details, its admins and everyone invited in the app who
+-- didn't withdraw, as pending invitations, and queues the invitation push for each of them but the admins (CR-P24;
+-- the owner is never an attendee). A plan whose organizer may no longer use the app (no owner, leaving, removed or
+-- banned) is not rolled; it catches up if they come back. The rows are locked with skip locked and repeats_from is
+-- unique, so two runs at once, or a retry, create one next occurrence; the loser's unique violation is caught.
+create function private.roll_repeating_plans() returns integer language plpgsql security definer set search_path = '' as $$
+declare p public.plans; v_id uuid; v_start timestamptz; v_end timestamptz; v_steps integer; v_count integer := 0; v_constraint text;
+begin
+ for p in
+  select o.* from public.plans o
+  where o.repeat_weeks is not null and (o.status='cancelled' or private.plan_end(o.starts_at,o.ends_at)<=now())
+   and not exists(select 1 from public.plans n where n.repeats_from=o.id)
+   and private.user_eligible(o.owner_id)
+  order by o.id
+  for update of o skip locked
+ loop
+  v_steps := 1;
+  loop
+   v_start := private.next_occurrence(p.starts_at,p.time_zone,p.repeat_weeks*v_steps);
+   v_end := private.next_occurrence(p.ends_at,p.time_zone,p.repeat_weeks*v_steps);
+   -- A start in a spring-forward gap lands an hour later, so an end just after the gap would come before it: keep the length.
+   if v_end<=v_start then v_end := v_start+(p.ends_at-p.starts_at); end if;
+   exit when private.plan_end(v_start,v_end)>now() or v_steps>=600;
+   v_steps := v_steps+1;
+  end loop;
+  -- More than 600 repeats behind: give up on this plan.
+  continue when private.plan_end(v_start,v_end)<=now();
+  v_id := gen_random_uuid();
+  begin
+   -- The cover trigger starts cover_revision at 0 again; title and categories are given, so the activity trigger keeps them.
+   insert into public.plans(id,owner_id,activity_id,title,description,categories,starts_at,ends_at,time_zone,place_label,place_tbd,
+    latitude,longitude,area,guest_note,guest_note_at,cover_path,cover_revision,cover_description,has_meeting_details,repeat_weeks,
+    series_id,repeats_from,status,version)
+   values(v_id,p.owner_id,p.activity_id,p.title,p.description,p.categories,v_start,v_end,p.time_zone,p.place_label,p.place_tbd,
+    p.latitude,p.longitude,p.area,p.guest_note,p.guest_note_at,p.cover_path,p.cover_revision,p.cover_description,p.has_meeting_details,p.repeat_weeks,
+    p.series_id,p.id,'active',1);
+   insert into public.plan_meeting_details(plan_id,note) select v_id,note from public.plan_meeting_details where plan_id=p.id;
+   insert into public.plan_admins(plan_id,user_id,appointed_by,appointed_at) select v_id,user_id,appointed_by,now() from public.plan_admins where plan_id=p.id;
+   insert into public.attendees(plan_id,user_id,response,version) select v_id,user_id,'pending',1 from public.attendees where plan_id=p.id and response<>'withdrawn';
+   insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,detail)
+   select v_id,a.user_id,'invited','invited:'||v_id||':'||a.user_id,p.owner_id,'again'
+   from public.attendees a
+   where a.plan_id=v_id and a.user_id<>p.owner_id
+    and not exists(select 1 from public.plan_admins pa where pa.plan_id=v_id and pa.user_id=a.user_id)
+   on conflict do nothing;
+   v_count := v_count+1;
+  exception when unique_violation then
+   -- Another run created this plan's next occurrence first; anything else is a real error.
+   get stacked diagnostics v_constraint = constraint_name;
+   if v_constraint is distinct from 'plans_repeats_from_key' then raise; end if;
+  end;
+ end loop;
+ return v_count;
+end $$;
+revoke all on function private.roll_repeating_plans() from public, anon, authenticated, service_role;
+
+-- The next occurrence shares the photo: its cover_path names the object in the first occurrence's folder. The
+-- 20261007200000_plan_covers read policy grants a reader only through the plan whose id is that folder, so a guest
+-- invited to a later occurrence alone could not read it. Now any plan the reader can read (plans row-level security
+-- applies) whose cover_path names the object, kept in that plan owner's folder, grants the read; the owner still reads
+-- their own uploads through the folder's plan.
+drop policy resbite_cover_read on storage.objects;
+create policy resbite_cover_read on storage.objects for select to authenticated using (
+ bucket_id='plan-covers' and (select private.eligible()) and exists(
+  select 1 from public.plans p where p.owner_id::text=(storage.foldername(name))[1]
+   and ((p.id::text=(storage.foldername(name))[2] and p.owner_id=(select auth.uid())) or p.cover_path=name))
+);

@@ -123,3 +123,13 @@ test("admin_added names who made you an admin, under the actor's line, with the 
   );
   assert.deepEqual(notificationCopy({ ...base, kind: "admin_added", title: "  " }), GENERIC_COPY);
 });
+
+test("invited again: the title says it is on again and the body is the start in the event's time zone", () => {
+  const again = { ...base, kind: "invited", detail: "again", title: "Board game night", starts_at: "2026-11-05T19:00:00Z", time_zone: "Europe/London" };
+  assert.deepEqual(notificationCopy(again), { title: "Board game night is on again", body: "Thu 5 Nov, 19:00" });
+  assert.equal(notificationCopy({ ...again, starts_at: "2026-10-22T18:00:00Z" }).body, "Thu 22 Oct, 19:00");
+  // No name is needed; without a usable start or title it falls back.
+  assert.deepEqual(notificationCopy({ ...again, actor_name: null }), { title: "Board game night is on again", body: "Thu 5 Nov, 19:00" });
+  for (const input of [{ ...again, starts_at: null }, { ...again, time_zone: "Not/AZone" }, { ...again, title: "  " }])
+    assert.deepEqual(notificationCopy(input), GENERIC_COPY, JSON.stringify(input));
+});
