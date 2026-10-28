@@ -13,6 +13,8 @@
 //     a tap opens /waiting?plan=.
 //  4. The waiting-for-access screen (an account the beta hasn't approved) lists its requests the same way.
 //  6. Test mode's 000000 shows nowhere.
+//  Plan 4: a waiting account whose stored answer is Going or Maybe (given on the web, say) is asked "Get notified?"
+//  once on /waiting without changing it, while the phone's permission was never asked for; Can’t go isn't.
 // (4 and 5 of the brief, the host's Waiting for you and the Event link card, are in verify-event.)
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
@@ -67,6 +69,10 @@ const card = {
   status: "waiting",
 };
 const pending = (page) => page.evaluate(() => sessionStorage.getItem("resbite.pending-invite"));
+// Plan 4: the one notification ask, and its own device flag in this account's reminder switches.
+const ASK_TITLE = "Get notified?";
+const asked = (page) =>
+  page.evaluate((id) => JSON.parse(sessionStorage.getItem(`resbite.reminder-prefs.v1.${id}`) ?? "{}").notificationsAsked ?? false, user.id);
 const path = (page) => new URL(page.url()).pathname;
 const param = (page, name) => new URL(page.url()).searchParams.get(name);
 
@@ -91,11 +97,12 @@ async function noTestCode(page, where) {
  * my_join_requests returns; request_to_join adds to it for a new code and answers by code. With `decided`
  * ("approved" or "declined"), the host answers the request just before the person changes their answer.
  */
-async function fixture({ signedIn = true, access = "approved", requests = [], kept = null, decided = null } = {}) {
+async function fixture({ signedIn = true, access = "approved", requests = [], kept = null, decided = null, quiet = true } = {}) {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  await quietReminders(page);
+  // `quiet: false` leaves the phone's permission never asked for ("undetermined"), so the notification ask can come.
+  if (quiet) await quietReminders(page);
   await page.addInitScript(
     ({ session, kept }) => {
       if (sessionStorage.getItem("fixture-seeded")) return;
@@ -406,6 +413,48 @@ try {
     assert.deepEqual(errors, []);
     await page.close();
     console.log("PASS: the waiting-for-access screen shows no Invitations heading without requests.");
+  }
+  for (const [stored, label, asks] of [
+    ["accepted", "Going", true],
+    ["maybe", "Maybe", true],
+    ["declined", "Can’t go", false],
+  ]) {
+    // Answered on the web, then signed in here while still waiting: the phone's permission was never asked for and
+    // the ask's flag is unset. The stored answer is the moment, with nothing changed on this screen.
+    const { page, errors, state } = await fixture({
+      access: "access_pending",
+      quiet: false,
+      requests: [{ ...card, host: "Sam", status: "waiting", response: stored }],
+    });
+    await page.goto(`${base}/waiting?plan=${PLAN}`);
+    await expect(heading(page, "Waiting for Sam")).toBeVisible();
+    await expect(page.getByRole("radio", { name: label, exact: true })).toBeChecked();
+    assert.equal(await page.evaluate(() => globalThis.__resbiteDevice.permission), "undetermined");
+    if (asks) {
+      await expect(heading(page, ASK_TITLE)).toBeVisible();
+      await expect.poll(() => asked(page)).toBe(true);
+      await button(page, "Not now").click();
+      await expect(heading(page, ASK_TITLE)).toHaveCount(0);
+      await expect(page.getByRole("radio", { name: label, exact: true })).toBeChecked();
+      // Once: opening the screen again doesn't ask again.
+      await page.reload();
+      await expect(heading(page, "Waiting for Sam")).toBeVisible();
+      await page.waitForTimeout(500); // a sheet would appear within this settle time
+      await expect(heading(page, ASK_TITLE)).toHaveCount(0);
+    } else {
+      await page.waitForTimeout(500); // a sheet would appear within this settle time
+      await expect(heading(page, ASK_TITLE)).toHaveCount(0);
+      assert.equal(await asked(page), false, "Can’t go doesn't use up the ask");
+    }
+    assert.deepEqual(state.changes, [], "the answer was not changed");
+    assert.equal(await page.evaluate(() => globalThis.__resbiteDevice.permission), "undetermined");
+    assert.deepEqual(errors, []);
+    await page.close();
+    console.log(
+      asks
+        ? `PASS: a waiting account with ${label} stored (permission never asked, the flag unset) is asked "Get notified?" on /waiting without changing its answer, once: Not now, then opening the screen again, doesn't ask again.`
+        : `PASS: a waiting account with ${label} stored is not asked on /waiting, and the ask's flag stays unset.`,
+    );
   }
 } finally {
   await browser.close();
