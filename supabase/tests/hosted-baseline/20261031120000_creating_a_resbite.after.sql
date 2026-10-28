@@ -1,5 +1,51 @@
 -- Rehearsal checks for 20261031120000_creating_a_resbite (hosted-baseline mode only).
--- 1. The columns, the tables, the functions and the series the migration backfilled for the seeded plan.
+-- 1. Against the fingerprint .before.sql took: the migration removed nothing, redefined exactly the 23 functions it
+-- says and the two outbox checks, and added only the admins, the mutes, the plans columns, the repeat objects and the
+-- functions it names (changed nothing else, every grant and the private schema's included).
+do $$ declare v_added text[]; v_removed text[]; v_changed text[]; v_expected text[];
+begin
+ v_expected := array['constraint private.notification_outbox notification_outbox_detail_check',
+  'constraint private.notification_outbox notification_outbox_kind_check']
+  || array(select 'definition private.'||f from unnest(array['answer_phone_invitation(text,text,text,text)','change_join_answer(uuid,text)',
+   'change_plan_v3(uuid,integer,text,text,text[],timestamp with time zone,timestamp with time zone,text,text,text,boolean,boolean,text)',
+   'check_invited_number(text,text)','claim_invite(text)','claim_plan_link(text)','create_invite(uuid,uuid,text,text)',
+   'invitation_page(text)','join_by_link(text,text,text)','my_join_requests()','notification_recipient_eligible(bigint)',
+   'personal_invitation_page(text)','plan_join_requests(uuid)','plan_phone_invitations(uuid)','remove_guest(uuid,uuid)',
+   'request_join(uuid,private.plan_links,public.plans,text)','request_to_join(text,text,text,text)','require_link_owner(uuid)',
+   'respond(uuid,text,integer)','revoke_invite(uuid)','set_guest_note(uuid,text)','set_plan_cover_description(uuid,text,bigint)',
+   'set_plan_cover_if_current(uuid,text,text,bigint)']) f);
+ select coalesce(array_agg(n.name order by n.name),'{}') into v_added from private.cr_rehearsal_snapshot() n
+  where not exists(select 1 from private.cr_rehearsal_baseline b where b.name=n.name);
+ select coalesce(array_agg(b.name order by b.name),'{}') into v_removed from private.cr_rehearsal_baseline b
+  where not exists(select 1 from private.cr_rehearsal_snapshot() n where n.name=b.name);
+ select coalesce(array_agg(b.name order by b.name),'{}') into v_changed from private.cr_rehearsal_baseline b
+  join private.cr_rehearsal_snapshot() n on n.name=b.name where b.definition is distinct from n.definition;
+ if v_removed<>'{}' then raise exception 'The apply removed %', v_removed; end if;
+ if v_changed is distinct from array(select e from unnest(v_expected) e order by e) then
+  raise exception 'The apply changed % (expected %)', v_changed, v_expected;
+ end if;
+ -- Everything added belongs to the admins, the mutes, the four plans columns, the repeat objects or the new functions
+ -- (each with its grants).
+ select coalesce(array_agg(a order by a),'{}') into v_added from unnest(v_added) a
+  where a !~ '^(column|constraint|index|relation|policy|trigger) (public\.)?(plan_admins|plan_mutes)'
+   and a !~ '^column public\.plans\.(place_tbd|repeat_weeks|series_id|repeats_from)$'
+   and a !~ '^constraint public\.plans plans_(place_tbd_valid|repeats_from_fkey|repeat_weeks_check)$'
+   and a !~ '^(index|relation) public\.plans_(repeats_from_key|series_idx)$'
+   and a !~ '^trigger public\.plans plans_default_series$'
+   and a !~ '^(definition|grants) (private|public)\.(appoint_admin|remove_admin|set_plan_mute|create_plan_v4|change_plan_v4|plan_end|is_host|host_ids|next_occurrence|roll_repeating_plans|plans_default_series)\(';
+ if v_added<>'{}' then raise exception 'The apply added unexpected objects: %', v_added; end if;
+ -- The storage policies: the three cover ones changed, no other.
+ if (select array_agg(p.policyname::text order by p.policyname::text) from (
+   (select policyname, cmd, roles::text, qual, with_check from pg_catalog.pg_policies where schemaname='storage' and tablename='objects'
+    except select policyname, cmd, roles, qual, with_check from private.cr_rehearsal_policies)
+   union all
+   (select policyname, cmd, roles, qual, with_check from private.cr_rehearsal_policies
+    except select policyname, cmd, roles::text, qual, with_check from pg_catalog.pg_policies where schemaname='storage' and tablename='objects')) p)
+  is distinct from array['resbite_cover_insert','resbite_cover_insert','resbite_cover_read','resbite_cover_read','resbite_cover_update','resbite_cover_update'] then
+  raise exception 'The apply changed storage policies other than the three cover ones';
+ end if;
+end $$;
+-- 2. The columns, the tables, the functions and the series the migration backfilled for the seeded plan.
 do $$ begin
  if (select count(*) from information_schema.columns where table_schema='public' and table_name='plans'
    and column_name in ('place_tbd','repeat_weeks','series_id','repeats_from'))<>4 then
@@ -28,7 +74,7 @@ do $$ begin
   raise exception 'A private body is not a definer';
  end if;
 end $$;
--- 2. Grants: the roll for nobody (the cron job runs it as postgres); the admin, mute and v4 functions for signed-in
+-- 3. Grants: the roll for nobody (the cron job runs it as postgres); the admin, mute and v4 functions for signed-in
 -- accounts only, never anon.
 do $$ declare r text; f text; begin
  foreach r in array array['anon','authenticated','service_role'] loop
@@ -51,7 +97,7 @@ do $$ declare r text; f text; begin
   raise exception 'plan_end grants wrong';
  end if;
 end $$;
--- 3. The outbox accepts the new values and still refuses others; the cover policies are in place.
+-- 4. The outbox accepts the new values and still refuses others; the cover policies are in place.
 do $$ begin
  if (select pg_catalog.pg_get_constraintdef(oid) from pg_catalog.pg_constraint where conname='notification_outbox_kind_check') not like '%admin_added%'
  or (select pg_catalog.pg_get_constraintdef(oid) from pg_catalog.pg_constraint where conname='notification_outbox_detail_check') not like '%again%' then
@@ -68,7 +114,7 @@ do $$ begin
   raise exception 'The cover policies are missing';
  end if;
 end $$;
--- 4. The running event is open now: the public page counts from the end.
+-- 5. The running event is open now: the public page counts from the end, and says happened once the end has passed.
 do $$ begin
  if public.invitation_page(repeat('C',22))->>'state' is distinct from 'open' then
   raise exception 'The public page does not say open while the event runs: %', public.invitation_page(repeat('C',22));
@@ -76,7 +122,89 @@ do $$ begin
  if not (public.invitation_page(repeat('C',22)) ? 'place_tbd') or not (public.invitation_page(repeat('C',22)) ? 'repeat_weeks') then
   raise exception 'The open page does not carry place_tbd and repeat_weeks';
  end if;
+ update public.plans set starts_at=now()-interval '3 hours',ends_at=now()-interval '1 hour' where id='df000000-0000-4000-8000-000000000001';
+ if public.invitation_page(repeat('C',22))->>'state' is distinct from 'happened' then
+  raise exception 'The public page does not say happened once the end has passed: %', public.invitation_page(repeat('C',22));
+ end if;
+ update public.plans set starts_at=now()-interval '1 hour',ends_at=now()+interval '1 hour' where id='df000000-0000-4000-8000-000000000001';
 end $$;
--- 5. Remove the seed so later tests start clean.
+-- 6. The rollback, rehearsed and undone. Seed what it deletes (an admin appointed, a mute, the two outbox rows it clears,
+-- a repeat rule), try the guards (it refuses after the push rollback or the open-link rollback has run, and the push
+-- rollback refuses while this migration is in place), then run it: every fingerprint entry and every cover policy is
+-- back, the seeded plan stays, and what the migration added is gone.
+begin;
+insert into auth.users(id,email,email_confirmed_at) values ('de000000-0000-4000-8000-000000000002','creating-rehearsal-guest@resbite-test.invalid',now());
+insert into public.profiles(id,display_name) values ('de000000-0000-4000-8000-000000000002','Rehearsal guest');
+insert into public.attendees(plan_id,user_id,response) values ('df000000-0000-4000-8000-000000000001','de000000-0000-4000-8000-000000000002','accepted');
+insert into public.plan_admins(plan_id,user_id,appointed_by) values ('df000000-0000-4000-8000-000000000001','de000000-0000-4000-8000-000000000002','de000000-0000-4000-8000-000000000001');
+insert into public.plan_mutes(series_id,user_id) values ('df000000-0000-4000-8000-000000000001','de000000-0000-4000-8000-000000000002');
+update public.plans set repeat_weeks=1 where id='df000000-0000-4000-8000-000000000001';
+insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id) values
+ ('df000000-0000-4000-8000-000000000001','de000000-0000-4000-8000-000000000002','admin_added','creating-rehearsal:admin','de000000-0000-4000-8000-000000000001');
+insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,detail) values
+ ('df000000-0000-4000-8000-000000000001','de000000-0000-4000-8000-000000000002','invited','creating-rehearsal:again','de000000-0000-4000-8000-000000000001','again');
+\set cr_rehearsal_rollback `cat :'resbite_repo'/supabase/rollback/20261031120000_creating_a_resbite.rollback.sql`
+\set cr_rehearsal_push `cat :'resbite_repo'/supabase/rollback/20261030120000_push_delivery.rollback.sql`
+create temporary table cr_rehearsal_scripts on commit drop as select :'cr_rehearsal_rollback'::text as rollback, :'cr_rehearsal_push'::text as push;
+do $$ begin
+ if coalesce(length(btrim((select rollback from cr_rehearsal_scripts))),0)=0 or coalesce(length(btrim((select push from cr_rehearsal_scripts))),0)=0 then
+  raise exception 'A rollback text is empty';
+ end if;
+ -- The push rollback refuses while this migration is in place.
+ begin
+  execute (select push from cr_rehearsal_scripts);
+  raise exception 'The push rollback ran while the creating-a-resbite objects exist';
+ exception when raise_exception then
+  if sqlerrm is distinct from 'Run the creating-a-resbite rollback (20261031120000) first' then raise; end if;
+ end;
+ -- This rollback refuses once the push rollback, or the open-link rollback, has run (their tables stand in, renamed).
+ alter table private.notification_deliveries rename to cr_rehearsal_deliveries;
+ begin
+  execute (select rollback from cr_rehearsal_scripts);
+  raise exception 'The creating-a-resbite rollback ran after the push rollback';
+ exception when raise_exception then
+  if sqlerrm is distinct from 'Run the creating-a-resbite rollback before the push delivery rollback' then raise; end if;
+ end;
+ alter table private.cr_rehearsal_deliveries rename to notification_deliveries;
+ alter table private.join_requests rename to cr_rehearsal_requests;
+ begin
+  execute (select rollback from cr_rehearsal_scripts);
+  raise exception 'The creating-a-resbite rollback ran after the open-link rollback';
+ exception when raise_exception then
+  if sqlerrm is distinct from 'Run the creating-a-resbite rollback before the open-link approval rollback' then raise; end if;
+ end;
+ alter table private.cr_rehearsal_requests rename to join_requests;
+ -- The refusals changed nothing.
+ if not exists(select 1 from public.plan_admins) or not exists(select 1 from private.notification_outbox where kind='admin_added') then
+  raise exception 'A refused rollback changed something';
+ end if;
+end $$;
+\ir ../../rollback/20261031120000_creating_a_resbite.rollback.sql
+do $$ declare item record; begin
+ for item in
+  select coalesce(b.name,n.name) as name, b.definition as before, n.definition as after
+  from private.cr_rehearsal_baseline b full join private.cr_rehearsal_snapshot() n on n.name=b.name
+ loop
+  if item.before is distinct from item.after then raise exception 'Rollback did not restore %', item.name; end if;
+ end loop;
+ if exists((select policyname, cmd, roles::text, qual, with_check from pg_catalog.pg_policies where schemaname='storage' and tablename='objects'
+    except select policyname, cmd, roles, qual, with_check from private.cr_rehearsal_policies)
+  union all (select policyname, cmd, roles, qual, with_check from private.cr_rehearsal_policies
+    except select policyname, cmd, roles::text, qual, with_check from pg_catalog.pg_policies where schemaname='storage' and tablename='objects')) then
+  raise exception 'Rollback did not restore the storage policies';
+ end if;
+ if exists(select 1 from private.notification_outbox where kind='admin_added' or detail='again') then
+  raise exception 'Rollback left the outbox rows the earlier checks refuse';
+ end if;
+ if not exists(select 1 from public.plans where id='df000000-0000-4000-8000-000000000001')
+ or not exists(select 1 from public.attendees where plan_id='df000000-0000-4000-8000-000000000001' and user_id='de000000-0000-4000-8000-000000000002') then
+  raise exception 'Rollback lost the plan or its guest';
+ end if;
+end $$;
+rollback;
+-- 7. Remove the seed and the rehearsal helpers so later tests start clean.
 delete from public.plans where id='df000000-0000-4000-8000-000000000001';
-delete from auth.users where id='de000000-0000-4000-8000-000000000001';
+delete from auth.users where id in ('de000000-0000-4000-8000-000000000001','de000000-0000-4000-8000-000000000002');
+drop table private.cr_rehearsal_policies;
+drop table private.cr_rehearsal_baseline;
+drop function private.cr_rehearsal_snapshot();

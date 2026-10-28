@@ -32,9 +32,13 @@
 -- fail whenever it had a notice to check, as would its check before each send; that file's guard refuses while
 -- private.notification_deliveries exists. The guard below stops this file when that rollback has already run
 -- (private.join_requests is gone); it changes nothing.
+-- Creating a resbite: run supabase/rollback/20261031120000_creating_a_resbite.rollback.sql before this file, because
+-- that migration redefines notification_recipient_eligible() and the guard below stops this file while
+-- public.plan_admins exists (the drop would take the function the creating-a-resbite rollback restores).
 
 do $$ begin
  if to_regclass('private.join_requests') is null then raise exception 'Run this before the open-link approval rollback'; end if;
+ if to_regclass('public.plan_admins') is not null then raise exception 'Run the creating-a-resbite rollback (20261031120000) first'; end if;
 end $$;
 
 -- The sender's functions, unregistering (the façade, then its body), and the send-time audience.

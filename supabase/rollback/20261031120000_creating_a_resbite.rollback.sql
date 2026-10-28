@@ -14,6 +14,10 @@
 --     last, plan_end;
 --   - every 'admin_added' outbox row, and every 'invited' row with the detail 'again' (the invitations to a next
 --     occurrence), delivered or not, so the earlier kind and detail checks can come back.
+--     The choice: a row not yet sent goes with them. A new admin whose notice had not gone out is never told, and a
+--     guest of a rolled occurrence whose invitation notice had not gone out is never told of it (they still find the
+--     occurrence in My resbites). Delivered rows go too; sent pushes are not recalled. Rows younger than a day are the
+--     ones the sender could still send: run this just after the sender has drained the outbox to lose none.
 -- It restores verbatim, each from the file named above it, the 23 functions the migration redefined, with the grants
 -- and public wrappers they already have (create or replace keeps both), and the three plan-covers storage policies
 -- from 20261007200000_plan_covers.sql. The outbox kind check comes back from 20261029120000_open_link_approval.sql
