@@ -18,8 +18,8 @@ test("destructive entry points stay disabled with all environment flags enabled"
   };
   globalThis.fetch = async () => { networkCalls++; throw Error("No backend call allowed before release"); };
   try {
-    // fold-phone-account deletes the web-only user it folds, so it is gated the same way (PHONE_FOLD_RELEASE_APPROVED).
-    for (const entry of ["delete-account", "cleanup-account", "purge-deletion-receipts", "cleanup-profile-photos", "fold-phone-account"]) {
+    // fold-phone-account was gated the same way until its release (PHONE_FOLD_RELEASE_APPROVED, 28 October 2026).
+    for (const entry of ["delete-account", "cleanup-account", "purge-deletion-receipts", "cleanup-profile-photos"]) {
       handler = undefined;
       await import(`../${entry}/index.ts`);
       assert.ok(handler, `${entry} registered its handler`);
