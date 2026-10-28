@@ -29,15 +29,15 @@ The merge fills the final values. The "current" values were taken on the branch 
 | `supabase/migrations/20261027120000_phone_accounts.sql` | `208f399152d394460941272ffdeffaa1189883ff251ed37d77a3ab69367f5ddc` |
 | `supabase/migrations/20261028120000_contact_invitations.sql` | `78147f2beb73c28b01e19e1bb95fde17c4b96b9da4d4b0ae7b14d2c8514361b4` |
 | `supabase/migrations/20261029120000_open_link_approval.sql` | `5cd7f723bdd7119d3133c225d1186031e2ec265a054a208e7fef40de9c7f50a0` |
-| `supabase/migrations/20261030120000_push_delivery.sql` | `<sha256 — filled at merge>` (current: `70782289707c91d7e6455e6370f9bf2f182080095809db4204fb23f1d6ef9b19`) |
-| `supabase/rollback/20261030120000_push_delivery.rollback.sql` | `<sha256 — filled at merge>` (current: `5430f89f915b7a8d18703deee6eefe66de8ef2b41e2b7d4b185e3143632ce81e`) |
-| `supabase/rollback/20261029120000_open_link_approval.rollback.sql` | `<sha256 — filled at merge>` (current: `9d8e720d9c3bee60bc05cab9f922e6baca6cfc0a9a1deaca4b88cc1aadf5a867`; it changed with this plan, because it now refuses while push is installed) |
+| `supabase/migrations/20261030120000_push_delivery.sql` | `70782289707c91d7e6455e6370f9bf2f182080095809db4204fb23f1d6ef9b19` |
+| `supabase/rollback/20261030120000_push_delivery.rollback.sql` | `5430f89f915b7a8d18703deee6eefe66de8ef2b41e2b7d4b185e3143632ce81e` |
+| `supabase/rollback/20261029120000_open_link_approval.rollback.sql` | `9d8e720d9c3bee60bc05cab9f922e6baca6cfc0a9a1deaca4b88cc1aadf5a867` (it changed with this plan, because it now refuses while push is installed) |
 
 The first three rows are the earlier plans' migrations; their hashes are in their own runbooks and have not changed.
 
 ## Final local checks
 
-`<filled at merge>`. The commands:
+Run on Linux on 27 October 2026 at `7195b47` (the later commits add one call after a fold, fix two doc lines and this runbook; `npm run check` and `verify-phone`, `verify-account` and `verify-signup-callback` were re-run after them). All passed: database full mode 30 PASS and hosted-baseline mode with the four candidates 20 PASS (both rollback rehearsals included); worker tests; `npm run check` 549 tests; both link-page checks; the iOS export; and every `mobile/scripts/verify-*.mjs` and `review-ui.mjs` against Expo web, each on its first run. The commands:
 
 - `cd mobile && npm run check`.
 - `./scripts/test-database-docker.sh` (full mode; includes `supabase/tests/push-delivery.sql`).
@@ -79,7 +79,7 @@ None of these steps has been run. Each is done later, with the owner's approval.
 4. **Sender.**
    1. Deploy `deliver-notifications` without JWT verification (the handler checks the worker secret, not a user JWT): `supabase functions deploy deliver-notifications --no-verify-jwt --project-ref <ref>`.
    2. Set the function secrets: `NOTIFICATION_WORKER_SECRET` (random, 32+ characters), `EXPO_ACCESS_TOKEN` and `NOTIFICATION_DELIVERY_ENABLED`. Keep `NOTIFICATION_DELIVERY_ENABLED=false` for now.
-   3. Flip `DELIVERY_RELEASE_APPROVED` to `true` in `supabase/functions/deliver-notifications/index.ts`, as a one-line commit with the owner's approval, and deploy again. Delivery needs the constant and the secret together.
+   3. Flip `DELIVERY_RELEASE_APPROVED` to `true` in `supabase/functions/deliver-notifications/index.ts`, as a one-line commit with the owner's approval, and deploy again with the same command as 4.1, `--no-verify-jwt` included: there is no `supabase/config.toml`, so a deploy without the flag turns JWT verification back on and the schedule's calls are refused. Delivery needs the constant and the secret together.
    4. Create the two Vault secrets: `deliver_notifications_url` (`https://<project-ref>.supabase.co/functions/v1/deliver-notifications`) and `deliver_notifications_secret` (the same value as `NOTIFICATION_WORKER_SECRET`).
    5. Set `NOTIFICATION_DELIVERY_ENABLED=true`.
    6. Run `supabase/ops/schedule-deliver-notifications.sql` once in the hosted SQL editor. It calls the function every minute.
@@ -91,7 +91,7 @@ None of these steps has been run. Each is done later, with the owner's approval.
       select status_code, content, created from net._http_response order by created desc limit 5;
       ```
 
-      Each run should succeed, and each response be HTTP 200 with `"disabled":false` once released (4.3 and 4.5 done; `{"disabled":true,"processed":0}` before that). A 401 means the secret is wrong: the Vault secret `deliver_notifications_secret` doesn't match `NOTIFICATION_WORKER_SECRET`, or that is shorter than 32 characters.
+      Each run should succeed, and each response be HTTP 200 with `"disabled":false` once released (4.3 and 4.5 done; `{"disabled":true,"processed":0}` before that). A 401 means either the function was deployed without `--no-verify-jwt` (the gateway refuses the call before the handler runs; redeploy with the 4.1 command), or the secret is wrong: the Vault secret `deliver_notifications_secret` doesn't match `NOTIFICATION_WORKER_SECRET`, or that is shorter than 32 characters.
    - `pg_net` keeps the request, including the `Authorization` header with the secret, in `net.http_request_queue` while a request is pending. That is the documented pattern, but it means the secret sits in a table the dashboard can read for a moment; rotate it (new function secret and new Vault secret together) if that matters.
    - Named jobs need `pg_cron` 1.3 or later. Hosted has it; check `select extname, extversion from pg_extension where extname = 'pg_cron';` if the script fails.
 5. **App.** Set `EXPO_PUBLIC_PUSH_ENABLED=true` in the EAS production environment, then build. This is the same build as plans 1 to 3 (it carries all four plans). The APNs key from step 1 must already be in EAS credentials. Without the variable the build neither registers a token nor claims updates are on.
@@ -114,8 +114,8 @@ None of these steps has been run. Each is done later, with the owner's approval.
 8. **Rollback.**
    1. Unschedule the cron: `select cron.unschedule('deliver-notifications');`.
    2. Set `NOTIFICATION_DELIVERY_ENABLED=false`.
-   3. Run `supabase/rollback/20261030120000_push_delivery.rollback.sql` in one transaction with the owner's approval: `begin; \i supabase/rollback/20261030120000_push_delivery.rollback.sql; commit;`. sha256 `<sha256 — filled at merge>`.
-      - **It runs before the open-link rollback.** `supabase/rollback/20261029120000_open_link_approval.rollback.sql` (sha256 `<sha256 — filled at merge>`) now refuses to run while push is installed ("Run the push delivery rollback (20261030120000) first"). The reason: the push audience check reads `private.join_requests`, which the open-link rollback drops, and the push rollback restores the open-link fold that the open-link rollback then replaces.
+   3. Run `supabase/rollback/20261030120000_push_delivery.rollback.sql` in one transaction with the owner's approval: `begin; \i supabase/rollback/20261030120000_push_delivery.rollback.sql; commit;`. sha256 `5430f89f915b7a8d18703deee6eefe66de8ef2b41e2b7d4b185e3143632ce81e`.
+      - **It runs before the open-link rollback.** `supabase/rollback/20261029120000_open_link_approval.rollback.sql` (sha256 `9d8e720d9c3bee60bc05cab9f922e6baca6cfc0a9a1deaca4b88cc1aadf5a867`) now refuses to run while push is installed ("Run the push delivery rollback (20261030120000) first"). The reason: the push audience check reads `private.join_requests`, which the open-link rollback drops, and the push rollback restores the open-link fold that the open-link rollback then replaces.
       - Registered devices stay. Undelivered notices stay in the outbox, unsent; if the migration is applied again, unsent notices under a day old are expanded again.
    4. After the rollback, sign-out still works on builds with `EXPO_PUBLIC_PUSH_ENABLED`: `unregister_device` is gone, so the server answers 404, and any server answer releases sign-out. Those builds keep calling `register_device`, which then works for testers only (the foundation body): accounts that are only waiting for approval are refused, and the app handles that quietly (the chip reads "Not set up yet" and the app tries again later). Notification settings may still say "On" while nothing is sent.
 

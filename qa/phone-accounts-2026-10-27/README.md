@@ -17,7 +17,7 @@
 | the same, at Task 11 (before the final review's fixes) | `c2f39f7e20fa4ccf39bc9a72a8081dc758118db257e6e27b7debc67651a3bf13` |
 | `supabase/rollback/20261027120000_phone_accounts.rollback.sql` | `1c4b54f7e1c70a39c7b1082fa28e9d6cbae7188df9efbd9af398b17c92f6bea2` |
 | the same, at Task 11 | `a0826a92590d90c5f7ee50f08959de3792d88e1f29dd97826ebea3771261b266` |
-| `supabase/migrations/20261022120001_gi2_local_delivery_and_deletion.sql` (local-only GI2 companion), now | `f48b5ca74e8b7460f413ed76e9bd85113cc88e6a462af4cb73aa7f665a01aba5` |
+| `supabase/migrations/20261022120001_gi2_local_delivery_and_deletion.sql` (local-only GI2 companion), now | `6eddfbee848dbab9272f909c95d096a45cdd2212a1c5d739c7d555e8f63d7d08` |
 | the same, before this work | `0bbcba8e6eab16491fb1a2eec7fb5551b4af9723d66a6a58ac07ab2ebb671e5a` |
 | its rollback, now | `4d5db49ad841c53f996ee76ddee07bce5414bf1c4237fa1e6531d71e4b6888e1` |
 | the same, before this work | `df7a68fba12885049103b3a5c833358b8ea18d935055f261c8a71bb8bb86ed81` |
