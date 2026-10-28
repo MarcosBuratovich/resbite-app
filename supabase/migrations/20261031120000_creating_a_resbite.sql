@@ -923,9 +923,11 @@ begin
      on conflict do nothing;
      v_count := v_count+1;
   exception when unique_violation then
-   -- Another run created this plan's next occurrence first; anything else is a real error.
+   -- Another run created this plan's next occurrence first: skip it quietly. Any other unique violation skips the plan with a warning.
    get stacked diagnostics v_constraint = constraint_name;
-   if v_constraint is distinct from 'plans_repeats_from_key' then raise; end if;
+   if v_constraint is distinct from 'plans_repeats_from_key' then
+    raise warning 'roll_repeating_plans: plan % skipped: %', p.id, sqlerrm;
+   end if;
   when others then
    raise warning 'roll_repeating_plans: plan % skipped: %', p.id, sqlerrm;
   end;
