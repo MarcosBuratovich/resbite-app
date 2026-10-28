@@ -7,11 +7,11 @@
 ## What is built
 
 - **One hosted-compatible migration**, `20261031120000_creating_a_resbite.sql`, depending only on the files in `supabase/tests/hosted-baseline/migrations.txt`:
-  - Hosts: `public.plan_admins`, `private.is_host`, `private.host_ids`, `appoint_admin` and `remove_admin`; every owner check that a host may now pass is widened.
+  - Hosts: `public.plan_admins`, `private.is_host`, `private.host_ids`, `appoint_admin` and `remove_admin` (a Going guest who uses the app); every owner check that a host may now pass is widened, and hosts see the guests and the meeting details whatever their own reply. `require_link_owner` keeps its error text `Active plan owner required`, which the current TestFlight build matches. Nobody but the owner can remove the owner, and an admin cannot invite them as a guest.
   - The end is the boundary: `private.plan_end`; answers, changes, invitations, covers and the public pages count from the end, not the start.
   - Plans v4: `create_plan_v4` and `change_plan_v4` (a required end, To be decided, the repeat rule, cancelling by hosts). `create_plan_v3` and `change_plan_v3` stay, so the current build keeps working.
   - Mutes: `public.plan_mutes` and `set_plan_mute`; the sender's audience check skips the muted.
-  - Repeats: `next_occurrence` and `roll_repeating_plans`, run by a pg_cron job (step 7), and the cover read policy widened for the next occurrence.
+  - Repeats: `next_occurrence` and `roll_repeating_plans`, run by a pg_cron job (step 7), and the cover read policy widened for the next occurrence. The roll asks again only the guests who use the app and may still use it.
 - **Outbox:** new kind `admin_added` and the detail `again` for `invited`.
 - **Also changed in this branch (no hosted effect until deployed):** the `deliver-notifications` copy module (`supabase/functions/_shared/notification-copy.ts`) and the link site `links/` (the pages say "happened" from the end, "Every Thursday", "Place to be decided").
 - The details are in `supabase/README.md`, "Creating a resbite (CR)".
@@ -20,8 +20,8 @@
 
 | File | sha256 |
 | --- | --- |
-| `supabase/migrations/20261031120000_creating_a_resbite.sql` | `fedeb77e2d226310252eacdef1b4770bf8690c71ac8f1ab905fcb8d4377f2b25` |
-| `supabase/rollback/20261031120000_creating_a_resbite.rollback.sql` | `03a81da810bfc7eb99876742f9ca685c607183de80bad3185b1fb341b940e500` |
+| `supabase/migrations/20261031120000_creating_a_resbite.sql` | `1a55f9b3f09420d07332242de32172425f4b621175a1f95247ffda7d7d6735f2` |
+| `supabase/rollback/20261031120000_creating_a_resbite.rollback.sql` | `e43100c0ad04c4a6ed810b9ca319851e00f483f71ce7e09834da7bf1132c4d1e` |
 | `supabase/rollback/20261030120000_push_delivery.rollback.sql` (edited by this plan: its guard now refuses while `public.plan_admins` exists) | `bd3e356095fb5ae64af6f1189e5fb4e877efb38961f1fcfa90789e9577c75558` (it was `5430f89f915b7a8d18703deee6eefe66de8ef2b41e2b7d4b185e3143632ce81e`) |
 | `supabase/ops/schedule-roll-repeating-plans.sql` | `3a8202877260008723648dc4723b36aedb6d772f809b2552997765773040d74e` |
 | `supabase/tests/hosted-baseline/20261031120000_creating_a_resbite.before.sql`, `.after.sql` | the rehearsal pair, run locally only |
@@ -56,7 +56,7 @@ Recompute before asking for approval (`sha256sum <file>`): approve by file name 
    - The migration takes brief locks on `plans` (new columns, a trigger, two indexes) and on `notification_outbox` (two check constraints).
 3. **After snapshot and advisors.**
    - The same three commands into `hosted-after.json`, `hosted-counts-after.json` and `hosted-storage-policies-after.json`.
-   - Compare `hosted-after.json` with a local replay of `migrations.txt` plus this file. Compared with the before snapshot the apply adds the objects of the admins, the mutes, the four `plans` columns (`place_tbd`, `repeat_weeks`, `series_id`, `repeats_from`) with their constraints and indexes, the `plans_default_series` trigger and 16 functions with their grants; it changes 23 function definitions and the two outbox check constraints (no grant changes); and removes nothing. The storage policies change in exactly `resbite_cover_insert`, `resbite_cover_update` and `resbite_cover_read`. `.after.sql` asserts all of it. Every existing table keeps its row count, with `plan_admins` and `plan_mutes` at 0.
+   - Compare `hosted-after.json` with a local replay of `migrations.txt` plus this file. Compared with the before snapshot the apply adds the objects of the admins, the mutes, the four `plans` columns (`place_tbd`, `repeat_weeks`, `series_id`, `repeats_from`) with their constraints and indexes, the `plans_default_series` trigger and 16 functions with their grants; it changes 26 function definitions (among them `can_see_guests`, `can_read_meeting_details` and `invite_contacts`) and the two outbox check constraints (no grant changes); and removes nothing. The storage policies change in exactly `resbite_cover_insert`, `resbite_cover_update` and `resbite_cover_read`. `.after.sql` asserts all of it. Every existing table keeps its row count, with `plan_admins` and `plan_mutes` at 0.
    - Run the Supabase advisors and compare with the push runbook's `hosted-advisors-after.json` (**confirm what is expected from the real snapshots**). No new WARN or ERROR is expected. Likely INFO notices: unused indexes (`plan_admins_user_idx`, `plans_series_idx` and `plans_repeats_from_key`) and unindexed foreign keys (`plan_admins.appointed_by` and `plan_mutes.user_id`). No new `SECURITY DEFINER` function is executable by `anon`, and `roll_repeating_plans` by nobody. Stop and compare if anything else appears.
    - Append `20261031120000_creating_a_resbite.sql   20261031120000` to `supabase/tests/hosted-baseline/migrations.txt`, and run `./scripts/test-database-docker.sh --hosted-baseline` (no candidates).
 4. **Redeploy `deliver-notifications`** (the copy module changed: the `admin_added` notice and the `invited` notice with the detail `again`). With the owner's approval, from the repository root:
@@ -81,7 +81,14 @@ Recompute before asking for approval (`sha256sum <file>`): approve by file name 
    '
    ```
 
-   - It enables `pg_cron` if absent, removes any job named `roll-repeating-plans`, and schedules it every five minutes as `postgres`.
+   - It enables `pg_cron` if absent, removes any job named `roll-repeating-plans`, and schedules it every five minutes.
+   - **Check the job's role** at once:
+
+     ```
+     select jobname, username from cron.job where jobname = 'roll-repeating-plans';
+     ```
+
+     pg_cron runs a job as the role that scheduled it, so `username` must be a role that may execute `private.roll_repeating_plans()`, which no API role may: `postgres`, the role the SQL editor uses. If it shows any other role (the CLI may connect as a login role of its own), unschedule the job (below) and schedule it again by pasting `supabase/ops/schedule-roll-repeating-plans.sql` into the SQL editor, then check again.
    - **Check** a few minutes later:
 
      ```
@@ -100,7 +107,7 @@ Only with the owner's approval, in one transaction, **before** the other rollbac
 
 1. Unschedule the job, if it was created (this does not fail when it was not): `select cron.unschedule(jobid) from cron.job where jobname = 'roll-repeating-plans';`.
 2. `begin; \i supabase/rollback/20261031120000_creating_a_resbite.rollback.sql; commit;` (sha256 above). It stops with a message, changing nothing, if the push-delivery or open-link-approval rollback has already run. The order is enforced both ways: **this plan edited `supabase/rollback/20261030120000_push_delivery.rollback.sql`** (new sha256 in the table above) so its guard stops it while `public.plan_admins` exists ("Run the creating-a-resbite rollback (20261031120000) first"). Run this one first, then push (`20261030120000`), then open-link approval (`20261029120000`).
-3. It deletes: the admins (the owner is the only host again), the mutes, the repeat rule and its columns (rolled occurrences stay as ordinary resbites), `place_tbd` (a To be decided place stays the label "To be decided"), the v4 functions, the `admin_added` outbox rows and the `again` invitations, sent or not (a guest of a rolled occurrence whose notice had not gone out is never told; run it just after the sender has drained the outbox to lose none); and it restores the 23 redefined functions, the three cover policies and the two outbox checks to their previous bodies.
+3. It deletes: the admins (the owner is the only host again), the mutes, the repeat rule and its columns (rolled occurrences stay as ordinary resbites), `place_tbd` (a To be decided place stays the label "To be decided"), the v4 functions, the `admin_added` outbox rows and the `again` invitations, sent or not (a guest of a rolled occurrence whose notice had not gone out is never told; run it just after the sender has drained the outbox to lose none); and it restores the 26 redefined functions, the three cover policies and the two outbox checks to their previous bodies.
 4. After it, a resbite is open until its start again, not its end: one that is running stops accepting answers and changes at once. Builds made with this plan call functions that no longer exist (`create_plan_v4`, `change_plan_v4`, `set_plan_mute`, `appoint_admin`, `remove_admin`): creating, editing and muting fail until the old build is back. Redeploy `links/` from the previous commit (it reads `place_tbd` and `repeat_weeks`, which then are missing, and shows neither) and the previous `deliver-notifications`.
 
 ## Not done here
