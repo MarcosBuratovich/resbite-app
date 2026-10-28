@@ -8,8 +8,10 @@ import {
   linkPicture,
   requestChip,
   requestResponse,
+  waitingAskResponse,
   waitingCopy,
 } from "./joinView";
+import { askMoment } from "./notifications";
 import { INVITE_COPY } from "./inviteCopy";
 import { joinErrorMessage } from "../services/joinRequests";
 import { offline } from "../services/contactInvites";
@@ -102,4 +104,20 @@ test("only a lost connection, or a tick still to give, keeps the kept code", () 
   // The gateway's own word for a lost connection, never a copy of it.
   assert.equal(joinRefusedForGood(offline), false);
   assert.equal(joinRefusedForGood(`${offline} `), true);
+});
+
+test("the waiting screen asks from the stored answer too, not only one changed there", () => {
+  const waiting = (response: string) => ({ status: "waiting" as const, response });
+  // Answered on the web, then signed in here: the stored Going or Maybe is the moment, with nothing changed.
+  assert.equal(waitingAskResponse(null, waiting("accepted")), "accepted");
+  assert.equal(waitingAskResponse(null, waiting("maybe")), "maybe");
+  assert.ok(askMoment({ response: waitingAskResponse(null, waiting("accepted")) }));
+  assert.ok(askMoment({ response: waitingAskResponse(null, waiting("maybe")) }));
+  // Can’t go stored, a declined request, or nothing read yet: no moment.
+  assert.ok(!askMoment({ response: waitingAskResponse(null, waiting("declined")) }));
+  assert.equal(waitingAskResponse(null, { status: "declined", response: "accepted" }), null);
+  assert.equal(waitingAskResponse(null, null), null);
+  // An answer saved here wins over the stored one, either way.
+  assert.equal(waitingAskResponse("declined", waiting("accepted")), "declined");
+  assert.equal(waitingAskResponse("maybe", waiting("declined")), "maybe");
 });

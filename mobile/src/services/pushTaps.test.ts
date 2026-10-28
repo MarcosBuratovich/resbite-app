@@ -183,3 +183,53 @@ test("a newer tap supersedes one still being resolved, and nothing fires later",
   await settle();
   assert.deepEqual(opened, [{ pathname: "/event", params: { plan: OTHER } }]);
 });
+
+test("a read that failed opens the event, whose page retries; an empty read is gone", async () => {
+  const opened: TapDestination[] = [];
+  let read: () => Promise<{ id: string } | null> = async () => Promise.reject(Error("Network request failed"));
+  const router = createPushTapRouter({
+    context: () => ({ ready: true, account: "u1", approved: true, preview: false }),
+    readAuthorizedPlan: () => read(),
+    refreshAccount: async () => null,
+    open: (d) => void opened.push(d),
+  });
+  // Offline or timed out: not "gone".
+  router.receive(push());
+  await settle();
+  assert.deepEqual(opened, [{ pathname: "/event", params: { plan: PLAN } }]);
+  // An empty read (removed, declined, gone): My resbites with the note, as before.
+  read = async () => null;
+  router.receive(push());
+  await settle();
+  assert.equal(opened.length, 2);
+  assert.equal(opened[1].pathname, "/plans");
+  assert.match(JSON.stringify(opened[1].params), /^\{"notice":"gone","n":"[0-9a-z]+"\}$/);
+});
+test("a failed read for a tap superseded or an account changed meanwhile goes nowhere", async () => {
+  const OTHER = "223e4567-e89b-42d3-a456-426614174000";
+  const context: TapContext = { ready: true, account: "u1", approved: true, preview: false };
+  const opened: TapDestination[] = [];
+  const fail: Array<() => void> = [];
+  const router = createPushTapRouter({
+    context: () => context,
+    readAuthorizedPlan: (_a, plan) =>
+      plan === PLAN ? new Promise((_, reject) => fail.push(() => reject(Error("timeout")))) : Promise.resolve({ id: plan }),
+    refreshAccount: async () => null,
+    open: (d) => void opened.push(d),
+  });
+  // A newer tap supersedes it before its read fails.
+  router.receive(push());
+  await settle();
+  router.receive(push({ type: "plan_update", planId: OTHER, notificationId: "8" }));
+  await settle();
+  fail.shift()!();
+  await settle();
+  assert.deepEqual(opened, [{ pathname: "/event", params: { plan: OTHER } }]);
+  // The account changes before its read fails.
+  router.receive(push());
+  await settle();
+  context.account = "u2";
+  fail.shift()!();
+  await settle();
+  assert.deepEqual(opened, [{ pathname: "/event", params: { plan: OTHER } }]);
+});

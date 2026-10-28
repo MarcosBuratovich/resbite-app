@@ -4,6 +4,7 @@ import { router, useFocusEffect } from "expo-router";
 import * as Crypto from "expo-crypto";
 import { useAccount } from "./AccountState";
 import { useApp } from "./AppState";
+import { usePushRegistration } from "./usePushRegistration";
 import { detailsFromMetadata } from "../domain/registration";
 import { pendingInviteParams } from "../domain/appLinks";
 import {
@@ -35,6 +36,7 @@ export function useProfile() {
     signingOut,
   } = useApp();
   const account = useAccount();
+  const { reconcilePush } = usePushRegistration();
   const scope = preview ? "preview" : (session?.user.id ?? "");
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false),
@@ -153,7 +155,11 @@ export function useProfile() {
     setError(null);
     try {
       check();
+      const first = !account.profileReady;
       if (!preview) await saveProfile(value, scope);
+      // Plan 4: the first save makes the profile a device needs (register_device), so this phone registers now
+      // rather than on the next foreground. It never asks for permission.
+      if (!preview && first) void reconcilePush();
       check();
       dirty.current = false;
       setName(value);

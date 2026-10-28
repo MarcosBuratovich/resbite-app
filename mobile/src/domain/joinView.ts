@@ -44,6 +44,18 @@ export function requestResponse(key: AnswerKey): "accepted" | "maybe" | "decline
   return key === "going" ? "accepted" : key === "maybe" ? "maybe" : "declined";
 }
 
+/**
+ * Plan 4: the answer that brings the notification ask on the waiting screen (askMoment): the one just saved there,
+ * else the stored answer of a request still waiting, given on the web before signing in here, say. A stored Going
+ * or Maybe asks once; Can’t go and a declined request never do.
+ */
+export function waitingAskResponse(
+  saved: string | null,
+  request: { status: RequestStatus; response: string } | null,
+): string | null {
+  return saved ?? (request?.status === "waiting" ? request.response : null);
+}
+
 /** The link's image (`invitation_page` and `my_join_requests`): a cover, an idea's artwork, or the mark. */
 export function linkPicture(image: { kind: string; ref: string | null } | null | undefined): EventPicture {
   const ref = image?.ref || null;

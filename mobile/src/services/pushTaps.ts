@@ -19,12 +19,15 @@ export function isPlanUpdateTap(response: TapResponse | null): boolean {
 /**
  * Routes push taps. A tap is held until the session and account have settled (`ready`), dropped when signed
  * out or in preview, and otherwise resolved by an authorized refetch before navigating. A newer tap
- * supersedes an older one still in flight. A tap from an account that isn't approved yet refreshes the
- * account once; it is never held longer than `holdMs` and then goes to /account. The launch tap is taken at
- * most once. Reminder taps are not handled here.
+ * supersedes an older one still in flight. An empty read lands on My resbites with the gone note; a read that
+ * failed opens the event, whose page has its own retry and offline states. A tap from an account that isn't
+ * approved yet refreshes the account once; it is never held longer than `holdMs` and then goes to /account.
+ * The launch tap is taken at most once. Reminder taps are not handled here.
  */
 export function createPushTapRouter(deps: {
   context(): TapContext;
+  /** The plan as this account may read it: null for an empty read (removed, declined, gone); rejects when the
+   * read itself failed (offline, timed out, a server error). */
   readAuthorizedPlan(account: string, plan: string): Promise<{ id: string } | null>;
   /** Re-reads the account once: true when it is now approved, false when not, null when superseded or failed. */
   refreshAccount(): Promise<boolean | null>;
@@ -84,21 +87,40 @@ export function createPushTapRouter(deps: {
     }
     const data = pending;
     finish();
+    // Keyed on the signed-in user, not on approval, so a refresh mid-resolve doesn't drop the tap.
+    const assertCurrent = () => {
+      const now = deps.context();
+      if (generation !== mine || now.account !== start.account || now.preview) throw Error("Superseded.");
+    };
+    // The plan whose read failed, as opposed to an empty read.
+    const failed: { plan?: string } = {};
+    let result: string | null;
     try {
-      const result = await resolveNotificationTarget(data, {
+      result = await resolveNotificationTarget(data, {
         account: start.account,
         preview: start.preview,
-        assertCurrent() {
-          // Keyed on the signed-in user, not on approval, so a refresh mid-resolve doesn't drop the tap.
-          const now = deps.context();
-          if (generation !== mine || now.account !== start.account || now.preview) throw Error("Superseded.");
+        assertCurrent,
+        async readAuthorizedPlan(account, plan) {
+          try {
+            return await deps.readAuthorizedPlan(account, plan);
+          } catch (error) {
+            failed.plan = plan;
+            throw error;
+          }
         },
-        readAuthorizedPlan: deps.readAuthorizedPlan,
       });
-      if (generation === mine) deps.open(pushDestination(result));
     } catch {
-      // Superseded by a newer tap, or the account changed while checking; the tap is dropped.
+      // Superseded by a newer tap, or the account changed while checking: the tap is dropped. A read that failed
+      // (offline, timed out) isn't "gone": the tap opens the event, which has its own retry and offline states.
+      if (!failed.plan) return;
+      try {
+        assertCurrent();
+      } catch {
+        return;
+      }
+      result = failed.plan;
     }
+    if (generation === mine) deps.open(pushDestination(result));
   }
   const taps = {
     receive(response: TapResponse | null): boolean {

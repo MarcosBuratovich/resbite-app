@@ -23,6 +23,7 @@ import { clearCalendarRecords } from "../services/deviceCalendar";
 import { clearAttestation } from "../services/phoneAccount";
 import { supabase, storage } from "../services/supabase";
 import { pushSession, usePushForeground } from "./usePushRegistration";
+import { clearShownPushes } from "../services/pushDevice";
 import type { Plan } from "../domain/plans";
 /** Kept as an alias for existing screens; the type lives in the domain layer. */
 export type LocalPlan = Plan;
@@ -130,6 +131,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // Plan 4: this phone's push endpoint goes first, with the account's own session.
       blockPush: pushSession.hold,
       clearPush: pushSession.clear,
+      clearShownPushes,
       authSignOut: async (localOnly) => {
         const { error } = await supabase.auth.signOut(
           localOnly ? { scope: "local" } : undefined,

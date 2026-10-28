@@ -5,7 +5,9 @@ import {
   createPushDeviceAdapter,
   createPushSession,
   createSessionTokens,
+  isServerAnswer,
   pushEnabled,
+  pushRpc,
   type SessionSource,
 } from "./pushDevice";
 
@@ -42,15 +44,33 @@ const signedIn = (account: string, accessToken = `jwt-${account}`) => ({
   access_token: accessToken,
 });
 
-// One phone: fake expo-notifications, fake secure storage, a fake RPC and a fake supabase.auth behind the real
-// session binding, wired the way AppState wires the real ones (sessionLifecycle for sign-out, every session
-// change mirrored to the push session).
+// One phone: fake expo-notifications, fake secure storage, a fake server behind the real RPC client (pushRpc), and a
+// fake supabase.auth behind the real session binding, wired the way AppState wires the real ones (sessionLifecycle
+// for sign-out, every session change mirrored to the push session).
 function phone(options: { platform?: string; enabled?: boolean } = {}) {
   const disk = new Map<string, string>();
   const events: string[] = [];
   const supabase = fakeAuth();
   let permission = ios(2);
-  let offline = false;
+  // "down": no connection (fetch rejects); "hang": the server never answers (the request times out).
+  let network: "up" | "down" | "hang" = "up";
+  const answers: Partial<Record<string, number>> = {};
+  const server = (async (input: string | URL | Request, init?: RequestInit) => {
+    await rpcGate;
+    if (network === "down") throw new TypeError("Network request failed");
+    if (network === "hang")
+      return new Promise<Response>((_, reject) => {
+        const signal = init?.signal;
+        const abort = () => reject(new DOMException("The operation was aborted.", "AbortError"));
+        if (signal?.aborted) abort();
+        else signal?.addEventListener("abort", abort);
+      });
+    const name = String(input).split("/").pop()!;
+    const args = JSON.parse(String(init?.body)) as Record<string, string>;
+    const accessToken = (init?.headers as Record<string, string>).Authorization.replace(/^Bearer /, "");
+    events.push([name, accessToken, args.p_token, args.p_platform].filter(Boolean).join(":"));
+    return new Response(null, { status: answers[name] ?? 204 });
+  }) as typeof fetch;
   let authGate: Promise<void> = Promise.resolve();
   let rpcGate: Promise<void> = Promise.resolve();
   let unreadable = false;
@@ -81,11 +101,7 @@ function phone(options: { platform?: string; enabled?: boolean } = {}) {
     },
     projectId: () => "project-1",
     ...createSessionTokens(supabase.auth),
-    rpc: async (accessToken, name, args) => {
-      await rpcGate;
-      if (offline) throw Error("offline");
-      events.push([name, accessToken, args.p_token, args.p_platform].filter(Boolean).join(":"));
-    },
+    rpc: pushRpc("https://test.supabase.co", "test-key", server, 50),
   });
   const push = createPushSession(adapter, options.enabled ?? true);
   let current: string | null = null;
@@ -149,7 +165,15 @@ function phone(options: { platform?: string; enabled?: boolean } = {}) {
       permission = ios(status);
     },
     setOffline: (value: boolean) => {
-      offline = value;
+      network = value ? "down" : "up";
+    },
+    /** The server never answers: each request times out. */
+    setHanging: () => {
+      network = "hang";
+    },
+    /** The server answers this function with `status` (204 otherwise). */
+    answer: (name: string, status: number) => {
+      answers[name] = status;
     },
     holdAuth: (gate: Promise<void>) => {
       authGate = gate;
@@ -488,4 +512,66 @@ test("a damaged record doesn't block registering: the current account registers 
     assert.deepEqual(JSON.parse(p.disk.get(JOURNAL)!), { account: "a", token, phase: "registered" }, name);
     assert.equal(p.push.status(), "registered", name);
   }
+});
+
+test("any answer from the server to unregister lets sign-out go ahead and forgets the record", async () => {
+  // 404: no such function after the push rollback (PGRST202); 401: the session expired; 403; 500: a server error.
+  for (const status of [404, 401, 403, 500]) {
+    const p = phone();
+    await p.signIn("a");
+    p.answer("unregister_device", status);
+    await p.lifecycle.signOut();
+    await p.settle();
+    const name = String(status);
+    assert.deepEqual(
+      p.rpc(),
+      [`register_device:jwt-a:${token}:ios`, `unregister_device:jwt-a:${token}`, "auth.signOut"],
+      name,
+    );
+    assert.ok(p.events.includes("clear:people"), name);
+    assert.equal(p.journal(), null, name);
+    assert.equal(p.push.status(), "disabled", name);
+  }
+});
+
+test("sign-out is refused only when unregister never reached the server: offline, or no answer in time", async () => {
+  for (const [name, cut] of [
+    ["network error", (p: ReturnType<typeof phone>) => p.setOffline(true)],
+    ["timeout", (p: ReturnType<typeof phone>) => p.setHanging()],
+  ] as const) {
+    const p = phone();
+    await p.signIn("a");
+    cut(p);
+    const refused = await p.lifecycle.signOut().then(
+      () => null,
+      (error: unknown) => error,
+    );
+    assert.equal(
+      signOutNotice(refused, true),
+      "Couldn’t sign out. Connect to the internet and try again, so this phone stops getting your notifications.",
+      name,
+    );
+    assert.ok(!p.events.includes("auth.signOut"), name);
+    assert.ok(!p.events.includes("clear:people"), name);
+    assert.deepEqual(p.journal(), { account: "a", token, phase: "removing" }, name);
+  }
+});
+
+test("the RPC client tells a server answer from a request that never got one", async () => {
+  const answering = (status: number) => pushRpc("https://x.supabase.co", "k", (async () => new Response(null, { status })) as typeof fetch);
+  await answering(204)("jwt", "unregister_device", { p_token: token });
+  for (const status of [400, 401, 403, 404, 500, 503]) {
+    const error = await answering(status)("jwt", "unregister_device", { p_token: token }).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    assert.ok(isServerAnswer(error), String(status));
+  }
+  const offline = await pushRpc("https://x.supabase.co", "k", (async () => {
+    throw new TypeError("Network request failed");
+  }) as typeof fetch)("jwt", "unregister_device", { p_token: token }).then(
+    () => null,
+    (e: unknown) => e,
+  );
+  assert.ok(offline instanceof TypeError && !isServerAnswer(offline));
 });

@@ -14,7 +14,7 @@ import { useNotificationAsk } from "../src/state/useNotificationAsk";
 import { joinRequestGateway, RequestDecided, type MyRequest } from "../src/services/joinRequests";
 import { offline } from "../src/services/contactInvites";
 import { INVITE_COPY } from "../src/domain/inviteCopy";
-import { requestResponse, waitingCopy } from "../src/domain/joinView";
+import { requestResponse, waitingAskResponse, waitingCopy } from "../src/domain/joinView";
 import { ANSWER_OPTIONS, answerKey, type AnswerKey } from "../src/domain/rsvp";
 
 const failure = (e: unknown) => (e instanceof Error ? e.message : offline);
@@ -26,8 +26,8 @@ const failure = (e: unknown) => (e instanceof Error ? e.message : offline);
  * When the request isn't listed any more (approved, or the event is gone) the screen replaces itself with the
  * event. Approval grants access, so an account still read as waiting is read again first, and goes to /account
  * if it still waits. Reachable while the account waits for access (session-guarded in _layout). Without a plan
- * it leaves as Done does. Plan 4: a Going or Maybe answer here brings "Get notified?" (the host's approval
- * is sent as a notification).
+ * it leaves as Done does. Plan 4: a Going or Maybe answer, stored (given on the web, say) or changed here,
+ * brings "Get notified?" once (the host's approval is sent as a notification).
  */
 export default function Waiting() {
   const { plan } = useLocalSearchParams<{ plan?: string }>();
@@ -38,15 +38,22 @@ export default function Waiting() {
   approvedNow.current = approved;
   const identity = `${session?.user.id ?? ""}:${plan ?? ""}`;
   const [request, setRequest] = useState<MyRequest | null>(null);
+  // Whose request that is (account and plan), so another one's answer never brings the ask.
+  const [requestFor, setRequestFor] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(plan));
   const [saving, setSaving] = useState<AnswerKey | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [handoff, setHandoff] = useState<"reading" | "read" | null>(null);
   const leaving = useRef(false);
-  // The answer just saved here, for the notification ask.
+  // The answer just saved here; without one, the stored answer of a request still waiting brings the ask.
   const [answered, setAnswered] = useState<{ identity: string; response: string } | null>(null);
-  const ask = useNotificationAsk({ response: answered?.identity === identity ? answered.response : null });
+  const ask = useNotificationAsk({
+    response: waitingAskResponse(
+      answered?.identity === identity ? answered.response : null,
+      requestFor === identity ? request : null,
+    ),
+  });
 
   const load = useCallback(
     async (begin: () => Run) => {
@@ -67,6 +74,7 @@ export default function Waiting() {
           return;
         }
         setRequest(found);
+        setRequestFor(identity);
         // Decided meanwhile: an error from changing the answer no longer applies.
         if (found.status !== "waiting") setError(null);
       } catch (e) {

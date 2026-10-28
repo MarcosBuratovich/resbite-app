@@ -8,21 +8,20 @@ import { phoneVerified } from "../domain/phone";
 import { withDeadline } from "../services/plans";
 import { createPushTapRouter, type TapContext } from "../services/pushTaps";
 
-/** Reads the plan with the signed-in client (as that person); an error or an empty read is null ("gone"). */
+/** Reads the plan with the signed-in client (as that person). An empty read is null ("gone"); a read that
+ * fails (offline, timed out, a server error) rejects, and the tap opens the event, which retries. */
 async function readAuthorizedPlan(_account: string, plan: string): Promise<{ id: string } | null> {
-  try {
-    const { data, error } = await withDeadline((signal) =>
-      supabase.from("plans").select("id").eq("id", plan).abortSignal(signal).maybeSingle(),
-    );
-    return error ? null : (data ?? null);
-  } catch {
-    return null;
-  }
+  const { data, error } = await withDeadline((signal) =>
+    supabase.from("plans").select("id").eq("id", plan).abortSignal(signal).maybeSingle(),
+  );
+  if (error) throw error;
+  return data ?? null;
 }
 
 /**
  * Opens the event when a Resbite push is tapped, while running or from a cold start. Waits for the session
- * and account to settle and the navigator to mount; an unreadable event lands on My resbites with a note.
+ * and account to settle and the navigator to mount; an event that reads empty lands on My resbites with a note,
+ * and one whose read failed opens the event page (its own retry and offline states).
  * `ready` is false while the root layout holds the navigator back.
  */
 export function usePushRouting(ready: boolean) {

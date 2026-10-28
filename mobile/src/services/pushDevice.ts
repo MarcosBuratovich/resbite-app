@@ -37,8 +37,51 @@ export type PushDeviceDeps = {
   sessionFor(account: string): Promise<string | null>;
   /** The account whose session is live on this phone now, or null. */
   liveAccount(): Promise<string | null>;
+  /** Rejects with `serverAnswered(status)` when the server answers with an error status (pushRpc). */
   rpc(accessToken: string, name: Rpc, args: Record<string, string>): Promise<void>;
 };
+
+/** The server answered a device request with an error status: any HTTP response that isn't 2xx. */
+export function serverAnswered(status: number): Error {
+  return Object.assign(Error(`Notification setup failed (${status}).`), { serverAnswer: status });
+}
+/** Whether a device request reached the server and was answered (serverAnswered), as opposed to never reaching
+ * it: offline, or no answer in time. */
+export const isServerAnswer = (error: unknown): boolean =>
+  typeof (error as { serverAnswer?: unknown } | null)?.serverAnswer === "number";
+
+/**
+ * The device RPCs over PostgREST, each with the access token it is given. Any HTTP response that isn't 2xx
+ * rejects with serverAnswered(status); a request that gets no answer (offline, or none within `timeoutMs`)
+ * rejects with fetch's own error.
+ */
+export function pushRpc(
+  url: string,
+  key: string,
+  send: typeof fetch = (input, init) => fetch(input, init),
+  timeoutMs = 15000,
+): PushDeviceDeps["rpc"] {
+  return async (accessToken, name, args) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let response: Response;
+    try {
+      response = await send(`${url}/rest/v1/rpc/${name}`, {
+        method: "POST",
+        headers: {
+          apikey: key,
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(args),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!response.ok) throw serverAnswered(response.status);
+  };
+}
 
 export function createPushDeviceAdapter(deps: PushDeviceDeps): PushRegistrationAdapter {
   const platform =
@@ -126,14 +169,17 @@ export function createPushSession(adapter: PushRegistrationAdapter, enabled: boo
   function reconcile(): Promise<void> {
     if (holds || leaving) return Promise.resolve();
     if (queued) return queued;
-    const scheduled: Promise<void> = (running ?? Promise.resolve()).then(() => {
+    // Settled either way: a rejection can never leave `queued` or `running` set for good.
+    const next = () => {
       queued = null;
       const current = run();
       running = current;
-      return current.then(() => {
+      const settled = () => {
         if (running === current) running = null;
-      });
-    });
+      };
+      return current.then(settled, settled);
+    };
+    const scheduled: Promise<void> = (running ?? Promise.resolve()).then(next, next);
     queued = scheduled;
     return scheduled;
   }
@@ -190,9 +236,10 @@ export function createPushSession(adapter: PushRegistrationAdapter, enabled: boo
         if (--holds === 0 && !leaving && registrable(followed)) void reconcile();
       };
     },
-    /** Sign-out, before auth sign-out: removes this phone's endpoint with the account's own session. An
-     * offline failure keeps the journal and fails sign-out; deleting the account forgets it instead, as the
-     * server removed the account's endpoints when it accepted the deletion. */
+    /** Sign-out, before auth sign-out: removes this phone's endpoint with the account's own session. A request
+     * that never reached the server (offline, timed out) keeps the journal and fails sign-out; any answer from
+     * the server lets it go ahead. Deleting the account forgets it instead, as the server removed the account's
+     * endpoints when it accepted the deletion. */
     async clear(deleteAccount: boolean): Promise<void> {
       if (leaving) await leaving;
       try {
@@ -201,6 +248,13 @@ export function createPushSession(adapter: PushRegistrationAdapter, enabled: boo
         if (isUnreadableRecord(error)) {
           // A damaged record never locks anyone out of signing out. A token it may have named is cleared by
           // the next registration's rebind, or by the sender on DeviceNotRegistered.
+          await adapter.writeJournal(null).catch(() => {});
+          return;
+        }
+        if (isServerAnswer(error)) {
+          // The server answered (an error, an expired session, or no such function after a rollback), so
+          // retrying can't help, and locking the person in is worse: this phone's part is done. An endpoint
+          // still bound on the server is rebound by the next account that registers here.
           await adapter.writeJournal(null).catch(() => {});
           return;
         }
@@ -274,24 +328,49 @@ export function nativePushDeps(): PushDeviceDeps {
       return Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
     },
     ...createSessionTokens(supabase.auth),
-    async rpc(accessToken, name, args) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 15000);
-      try {
-        const response = await fetch(`${url}/rest/v1/rpc/${name}`, {
-          method: "POST",
-          headers: {
-            apikey: key,
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(args),
-          signal: controller.signal,
-        });
-        if (!response.ok) throw Error(`Notification setup failed (${response.status}).`);
-      } finally {
-        clearTimeout(timer);
-      }
-    },
+    rpc: pushRpc(url, key),
   };
+}
+
+type Presented = { request: { identifier: string; content: { data?: Record<string, unknown> | null } } };
+/** The part of expo-notifications that clears what is shown in Notification Center. */
+export type ShownNotifications = {
+  getPresentedNotificationsAsync(): Promise<Presented[]>;
+  dismissNotificationAsync(identifier: string): Promise<void>;
+};
+
+/**
+ * Sign-out (sessionLifecycle): dismisses the pushes from Resbite's sender (`data.type` "plan_update") still shown
+ * on this phone, so the next account never sees the last one's titles. Reminders go with clearReminders; anything
+ * else is left alone. Each one is tried. It rejects when one couldn't be dismissed, or after `waitMs` so it never
+ * holds sign-out up; sign-out ignores that.
+ */
+export async function dismissShownPushes(notifications: ShownNotifications, waitMs = 3000): Promise<void> {
+  const work = (async () => {
+    let failed = false;
+    for (const shown of await notifications.getPresentedNotificationsAsync())
+      if (shown.request.content.data?.type === "plan_update")
+        await notifications.dismissNotificationAsync(shown.request.identifier).catch(() => {
+          failed = true;
+        });
+    if (failed) throw Error("Some notifications couldn’t be cleared on this phone.");
+  })();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(Error("Clearing notifications took too long.")), waitMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** The live dismissal, through expo-notifications (required lazily). Web shows no pushes. */
+export function clearShownPushes(): Promise<void> {
+  const { Platform } = require("react-native") as typeof import("react-native");
+  if (Platform.OS === "web") return Promise.resolve();
+  return dismissShownPushes(require("expo-notifications") as typeof import("expo-notifications"));
 }

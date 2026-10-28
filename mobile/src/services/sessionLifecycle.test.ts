@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createPendingInviteStore } from "./pendingInviteStore";
 import { createSessionLifecycle, signOutNotice } from "./sessionLifecycle";
 import { createPeopleStore } from "./peopleStore";
+import { dismissShownPushes, type ShownNotifications } from "./pushDevice";
 function deferred() {
   let resolve!: () => void;
   const promise = new Promise<void>((r) => {
@@ -445,4 +446,80 @@ test("a push cleanup failure refuses sign-out first, with its own notice; other 
     signOutNotice(failed, false),
     "You are signed out on this device, but server sign-out could not be confirmed. Other sessions may still be active. Sign in again to manage your account.",
   );
+});
+
+test("sign-out dismisses the pushes still shown, after removing the endpoint and before auth sign-out, and never fails for it", async () => {
+  const PLAN = "123e4567-e89b-42d3-a456-426614174000";
+  const shown = (identifier: string, data: Record<string, unknown> | null) => ({ request: { identifier, content: { data } } });
+  const tray = [
+    shown("remote-1", { type: "plan_update", planId: PLAN, notificationId: "7" }),
+    shown("resbite-reminder:p1:1h", { planId: PLAN, at: 1 }),
+    shown("remote-2", { type: "other" }),
+    shown("remote-3", { type: "plan_update", planId: PLAN, notificationId: "8" }),
+    shown("remote-4", null),
+  ];
+  function signOutWith(notifications: (events: string[]) => ShownNotifications, preview = false, waitMs?: number) {
+    const events: string[] = [];
+    const life = createSessionLifecycle({
+      suspend: () => {},
+      resume: () => {},
+      clearPeople: async () => {},
+      clearRecentPlaces: async () => {},
+      clearReminders: async () => {
+        events.push("reminders");
+      },
+      clearCalendarRecords: async () => {},
+      clearPhoto: async () => {},
+      clearInviteCodes: async () => {},
+      clearCovers: async () => {},
+      blockPending: () => () => {},
+      clearPending: async () => {},
+      blockPush: () => () => {},
+      clearPush: async () => {
+        events.push("push");
+      },
+      clearShownPushes: () => dismissShownPushes(notifications(events), waitMs),
+      authSignOut: async () => {
+        events.push("auth");
+      },
+      finish: () => {
+        events.push("finish");
+      },
+      busy: () => {},
+    });
+    life.update({ account: "owner", preview });
+    return life.signOut().then(() => events);
+  }
+  const fake =
+    (options: { failOn?: string; list?: () => Promise<ReturnType<typeof shown>[]> } = {}) =>
+    (events: string[]): ShownNotifications => ({
+      getPresentedNotificationsAsync: options.list ?? (async () => tray),
+      dismissNotificationAsync: async (id) => {
+        events.push(`dismiss:${id}`);
+        if (id === options.failOn) throw Error("busy");
+      },
+    });
+  // Only the sender's pushes ("plan_update") go; reminders are cleared with the reminders, the rest is left.
+  assert.deepEqual(await signOutWith(fake()), ["push", "reminders", "dismiss:remote-1", "dismiss:remote-3", "auth", "finish"]);
+  // One that can't be dismissed doesn't stop the others, nor sign-out.
+  assert.deepEqual(await signOutWith(fake({ failOn: "remote-1" })), [
+    "push",
+    "reminders",
+    "dismiss:remote-1",
+    "dismiss:remote-3",
+    "auth",
+    "finish",
+  ]);
+  // The tray can't be read, or never answers: sign-out goes ahead anyway.
+  const unreadable = fake({ list: async () => Promise.reject(Error("unavailable")) });
+  assert.deepEqual(await signOutWith(unreadable), ["push", "reminders", "auth", "finish"]);
+  const hanging = fake({ list: () => new Promise(() => {}) });
+  assert.deepEqual(await signOutWith(hanging, false, 10), ["push", "reminders", "auth", "finish"]);
+  // A synchronous throw is ignored too.
+  const throwing = () => {
+    throw Error("no module");
+  };
+  assert.deepEqual(await signOutWith(throwing), ["push", "reminders", "auth", "finish"]);
+  // Leaving preview signs nobody out and touches no notification.
+  assert.deepEqual(await signOutWith(fake(), true), ["reminders", "finish"]);
 });

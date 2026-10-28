@@ -36,9 +36,12 @@ type Dependencies = {
    * register the account again). */
   blockPush?: () => () => void;
   /** Plan 4: removes this phone's push endpoint with the account's own session, first, before auth
-   * sign-out. A failure fails sign-out with nothing cleared (account deletion, or a damaged record,
-   * forgets it instead). */
+   * sign-out. A failure (the request never reached the server) fails sign-out with nothing cleared; a server
+   * answer, account deletion or a damaged record forgets it instead. */
   clearPush?: (deleteAccount: boolean) => Promise<void>;
+  /** Plan 4: dismisses the account's pushes still shown on this phone, just before auth sign-out. Best effort:
+   * its failure never fails sign-out. */
+  clearShownPushes?: () => Promise<void>;
   clearDrafts?: (scope: string) => Promise<void>;
   authSignOut: (localOnly?: boolean) => Promise<void>;
   finish: (preview: boolean) => void;
@@ -141,7 +144,17 @@ export function createSessionLifecycle(deps: Dependencies) {
           if (!original.preview) {
             await deps.clearPending();
             current();
-            if (original.account) await deps.authSignOut(deleteAccount);
+            if (original.account) {
+              // After the endpoint's removal: the account's pushes still shown go too, so the next account never
+              // sees their titles.
+              try {
+                await deps.clearShownPushes?.();
+              } catch {
+                // Best effort: a push left in Notification Center never keeps anyone signed in.
+              }
+              current();
+              await deps.authSignOut(deleteAccount);
+            }
             // SIGNED_OUT may already have delivered a null session.
             if (
               context.preview ||

@@ -6,6 +6,7 @@ import { useAccount } from "../src/state/AccountState";
 import { useApp } from "../src/state/AppState";
 import { useFocusedRefresh, type Run } from "../src/state/useFocusedRefresh";
 import { useGuestAccount } from "../src/state/useGuestAccount";
+import { usePushRegistration } from "../src/state/usePushRegistration";
 import { Back, Button, Copy, Title, ErrorNote, s } from "../src/design/ui";
 import { GuestScreen } from "../src/design/GuestSteps";
 import { TermsLine, TickRow } from "../src/design/TickRow";
@@ -63,6 +64,7 @@ export default function Invite() {
     }) === null;
   const ready = accountReady || (!token && gateClear);
   const guest = useGuestAccount({ code, token });
+  const { reconcilePush } = usePushRegistration();
   const userId = session?.user.id;
   const identity = `${userId}:${token}:${code}:${plan}:${preview}`;
   const currentIdentity = useRef(identity);
@@ -162,6 +164,9 @@ export default function Invite() {
                     throw e;
                   }),
               );
+          // Plan 4: a request makes the profile of an account that had none, which a device needs (register_device):
+          // this phone registers now rather than on the next foreground. It never asks for permission.
+          if (!token) void reconcilePush();
           if (!valid()) return;
           resolved.current = { identity, target };
         }
