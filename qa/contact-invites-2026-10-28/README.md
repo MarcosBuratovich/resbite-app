@@ -2,7 +2,7 @@
 
 - **Spec:** [Contact invitations design](../../docs/superpowers/specs/2026-10-27-contact-invitations-design.md), decisions CI-D1 to CI-D13 and proposals CI-P1 to CI-P13. Contact invitations are plan 2 of 4 (plan 1 is phone accounts).
 - **Plan:** [Contact invitations plan](../../docs/superpowers/plans/2026-10-28-contact-invites.md).
-- **Code:** branch `contact-invites`, commits `2c6113e` (the plan) to `386d453` (Tasks 1 to 12), the records of Task 13 (`28a9f99`), then the final review's fixes (`76efa6f` to `cd70cf7`) and these records' update. **Nothing is applied to the hosted project, the Auth dashboard, Vercel, EAS or TestFlight.** This directory will hold the hosted before/after snapshots when the migration is applied.
+- **Code:** branch `contact-invites`, commits `2c6113e` (the plan) to `386d453` (Tasks 1 to 12), the records of Task 13 (`28a9f99`), then the final review's fixes (`76efa6f` to `cd70cf7`) and these records' update. **The migration is live on the hosted project since 28 October 2026 (see "Hosted migration" below); nothing is applied to the Auth dashboard, Vercel, EAS or TestFlight, and the fold function is not deployed.**
 
 ## What is built
 
@@ -19,7 +19,7 @@
 | `supabase/migrations/20261028120000_contact_invitations.sql` | `78147f2beb73c28b01e19e1bb95fde17c4b96b9da4d4b0ae7b14d2c8514361b4` |
 | `supabase/rollback/20261028120000_contact_invitations.rollback.sql` | `a8c8b741c52cb09e69dc2000a9038824b22eab1a2d6e7aa5871f2e823a77c4c6` |
 
-Hosted order: this migration is applied **straight after** `20261027120000_phone_accounts.sql`, which is also not applied yet. Its runbook is [`qa/phone-accounts-2026-10-27/README.md`](../phone-accounts-2026-10-27/README.md); finish that runbook's step 1 first.
+Hosted order: this migration is applied **straight after** `20261027120000_phone_accounts.sql`; both are live since 28 October 2026. Its runbook is [`qa/phone-accounts-2026-10-27/README.md`](../phone-accounts-2026-10-27/README.md); finish that runbook's step 1 first.
 
 ## Final local checks (at `cd70cf7`, run on Linux)
 
@@ -29,13 +29,23 @@ Hosted order: this migration is applied **straight after** `20261027120000_phone
 - Worker tests: `node --import ./mobile/node_modules/tsx/dist/loader.mjs --test supabase/functions/_shared/*.test.ts`: 69 of 69 pass.
 - Browser QA: `cd mobile && node --import tsx ../links/verify-personal.mjs` passes (headless Chrome: the whole `/i/<code>` journey, Not you? Sign out, and the kept session per code, with every request intercepted). With Expo web on port 8081, `verify-contact-invites.mjs`, `verify-phone.mjs`, `verify-event.mjs` and `review-ui.mjs` pass.
 
+## Hosted migration (applied 28 October 2026)
+
+`20261028120000_contact_invitations.sql` (sha256 `78147f2beb73c28b01e19e1bb95fde17c4b96b9da4d4b0ae7b14d2c8514361b4`) is live on project `ewcsgvhuojxdpaspwsrx` as hosted version `20261028120000`, the second of the four contact-invitation migrations. The owner approved the four by file name and sha256 in chat on 28 October 2026, and they were applied in order the same morning.
+
+- **How:** `supabase db query --linked -f` on the file wrapped in `begin;` and `commit;`, then `supabase migration repair --status applied 20261028120000`, so the hosted version is the file's own. Not `supabase db push`: it would also push the local-only migrations.
+- **Before** (`hosted-before.json`): every function, table, policy, trigger, constraint and index in `public` and `private` (`supabase/ops/hosted-fingerprint.sql`) matched a local replay of `migrations.txt` plus `20261027120000_phone_accounts.sql`, 211 of 211 objects. The only difference is hosted's default `service_role` grant on 14 older `public` objects.
+- **After** (`hosted-after.json`): matched the local replay of this file, 245 of 245, with no new grant difference. Every existing table kept its row count (`supabase/ops/hosted-counts.sql`).
+- **Advisors** (`hosted-advisors-after.json`): new are INFO "RLS enabled, no policy" on `private.lookup_usage` and `private.phone_invitations`; WARN that `anon` and `authenticated` can execute the definers `public.personal_invitation_page` and `public.check_invited_number`, which is intended (the link page calls them before the guest has an account, like `invitation_page`); and INFO that two foreign keys on `private.phone_invitations` (`invited_by`, `user_id`) have no covering index (see the owner items).
+- `supabase/tests/hosted-baseline/migrations.txt` carries the line, and `./scripts/test-database-docker.sh --hosted-baseline` (no candidates) passes with 16 `PASS` lines.
+
 ## Rollout runbook
 
-None of these steps has been run. Each is done later, with the owner's approval.
+Step 1 (the migration) is done. None of the other steps has been run; each is done later, with the owner's approval.
 
 **Precondition (one person, one account):** the fold function (step 2) is deployed and released before, or together with, the link-site deploy (step 3) and the app build that sends personal links (step 4). Without it, an existing tester who answers a personal link on the web gets a second, web-only account holding their number, and Add your number then refuses that number with nothing to fold it into. If the fold can't go out first, hold personal links to existing testers (people who already have a Resbite account) until it does; people new to Resbite may get them.
 
-1. **Migration.**
+1. **Migration.** Done on 28 October 2026 (see "Hosted migration" above).
    - The owner approves by file name and sha256 of `20261028120000_contact_invitations.sql` (above).
    - It goes straight after `20261027120000_phone_accounts.sql`.
    - Take hosted before/after snapshots into this directory.
@@ -77,6 +87,7 @@ None of these steps has been run. Each is done later, with the owner's approval.
 2. If the event is cancelled while someone is mid-flow, the page says "That isn't the number <host> invited".
 3. A host's personal links live on their phone; another phone mints a new link and the old one stops working.
 4. Personal links reach existing testers only once the fold is released (the precondition above).
+5. The hosted advisors note that `private.phone_invitations` has no index covering its `invited_by` and `user_id` foreign keys. The table is small, so this is harmless for the beta; a later migration can add the two indexes if it grows.
 
 ## Not done here
 

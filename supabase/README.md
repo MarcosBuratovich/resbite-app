@@ -94,9 +94,9 @@ Run `../scripts/test-database.sh --hosted-baseline` before applying a migration 
 - `plans_track_cover_revision` (BEFORE INSERT OR UPDATE, `private.track_cover_revision`) owns the counter: it is 0 on insert, increases by one whenever `cover_path` changes, and otherwise stays as it was.
 - `redact_deleting_owner_plan` (the `plans_redact_deleting_owner` trigger) now also sets `cover_path` to null while the owner is being deleted. Removing the owner's `plan-covers` objects is still the deletion worker's job; see the [recovery ledger](../qa/deletion-recovery-ledger.md).
 
-## Phone accounts — local, not deployed (27 October 2026)
+## Phone accounts — live (applied 28 October 2026)
 
-`20261027120000_phone_accounts.sql` is hosted-compatible but **not applied**; rollout steps (owner approval by file name and sha256, Auth dashboard settings, the maintainer grant, rollback) are in the [runbook](../qa/phone-accounts-2026-10-27/README.md). Rollback: `supabase/rollback/20261027120000_phone_accounts.rollback.sql`.
+`20261027120000_phone_accounts.sql` is **live** (hosted version `20261027120000`, applied 28 October 2026 after the owner's approval by file name and sha256); the other rollout steps (Auth dashboard settings, the maintainer grant, rollback) are in the [runbook](../qa/phone-accounts-2026-10-27/README.md). Rollback: `supabase/rollback/20261027120000_phone_accounts.rollback.sql`.
 
 - **Test mode.** `private.phone_mode` holds one row; `test_mode` is true until set false, and a missing row counts as live mode. `private.test_codes` holds the latest code per number (digits only) and `private.test_mode_log` records what test mode did without the full number (`user_id` is a plain uuid, no foreign key; for an exchange it is the number's holder, else the one account adding it through `phone_change`). All three are closed to clients. Switching test mode off also empties `test_codes`, revokes every session and reviews the log and new identities (runbook step 7).
 - `public.send_sms_hook(event jsonb)` is Auth's Send SMS hook (`SECURITY DEFINER`, `search_path = ''`, executable by `supabase_auth_admin` only). In test mode it stores the code Auth generated instead of sending it; with test mode off it refuses until a real sender replaces its body.
@@ -107,9 +107,9 @@ Run `../scripts/test-database.sh --hosted-baseline` before applying a migration 
 - **Local-only companion.** `20261022120001_gi2_local_delivery_and_deletion.sql` has the same `user_eligible` rule; its rollback changed in the header only. Roll the companion back before this migration, never the companion alone (that leaves `eligible()` roster-only).
 - **Still reading `email_confirmed_at`:** notification recipients, deletion requests and intents (local-only).
 
-## Contact invitations: local, not deployed (28 October 2026)
+## Contact invitations: migration live (applied 28 October 2026)
 
-`20261028120000_contact_invitations.sql` is hosted-compatible but **not applied**. It must be applied straight after `20261027120000_phone_accounts.sql`, which is not applied either. Owner approval by file name and sha256; the steps and the rollback are in the [runbook](../qa/contact-invites-2026-10-28/README.md). Rollback: `supabase/rollback/20261028120000_contact_invitations.rollback.sql`.
+`20261028120000_contact_invitations.sql` is **live** (hosted version `20261028120000`, applied 28 October 2026 straight after `20261027120000_phone_accounts.sql`, after the owner's approval by file name and sha256). The other steps and the rollback are in the [runbook](../qa/contact-invites-2026-10-28/README.md). Rollback: `supabase/rollback/20261028120000_contact_invitations.rollback.sql`.
 
 - **Tables.** `private.phone_invitations` (one row per plan and number; `code_hash` is the sha256 of a code made on the host's phone, never the code), `private.lookup_usage` (the daily budget). Both closed to clients. Deleting an account clears `phone_invitations.user_id` and `invited_by` (the invitation stays) and removes its `lookup_usage` row. The outbox gains an `invited` kind and `beta_access` a source `invitation`.
 - **Host side, `authenticated`.** `contacts_on_resbite(p_phones)` returns the numbers that belong to people on Resbite (eligible, used the app, with a profile). `invite_contacts(p_plan, p_invites)` invites in the app (people on Resbite, whose live personal link on that event then stops working) or records a personal link (everyone else; a revoked one comes back with no answer). Both are charged to one budget of 500 numbers per person per UTC day under a per-user lock; over it is `22023` "Try again tomorrow." `plan_phone_invitations(p_plan)` lists them for the host; `revoke_phone_invitation(p_plan, p_phone)` withdraws one.
@@ -117,9 +117,9 @@ Run `../scripts/test-database.sh --hosted-baseline` before applying a migration 
 - **Fold.** `public.fold_web_account(p_from, p_into)` is a single `SECURITY DEFINER` function executable only by `service_role` (no `private` front, no schema grant). It refuses (`22023`) when the web account used the app or owns a plan; it moves attendee rows, invitation rows and the access record, and keeps only a ban on the folded account. The Edge Function `fold-phone-account` calls it (a `22023` refusal becomes 409) and is switched off in source ([README](functions/fold-phone-account/README.md)).
 - `remove_guest` is redefined to also withdraw the guest's personal invitation; the rollback restores GI1's body verbatim and removes the grants made by invitations (`invitation` grants and `invited` outbox rows).
 
-## Open-link approval: local, not deployed (29 October 2026)
+## Open-link approval: migration live (applied 28 October 2026)
 
-`20261029120000_open_link_approval.sql` is hosted-compatible but **not applied**. It must be applied straight after `20261028120000_contact_invitations.sql`, which follows `20261027120000_phone_accounts.sql`; neither is applied either. Owner approval by file name and sha256; the steps and the rollback are in the [runbook](../qa/open-link-approval-2026-10-29/README.md). Rollback: `supabase/rollback/20261029120000_open_link_approval.rollback.sql`, run before the contact-invitations rollback, never after it. Tests: `tests/open-link-approval.sql` and the concurrency script `tests/local/decide-join-concurrency.sh`.
+`20261029120000_open_link_approval.sql` is **live** (hosted version `20261029120000`, applied 28 October 2026 straight after `20261028120000_contact_invitations.sql`, after the owner's approval by file name and sha256). The other steps and the rollback are in the [runbook](../qa/open-link-approval-2026-10-29/README.md). Rollback: `supabase/rollback/20261029120000_open_link_approval.rollback.sql`, run before the contact-invitations rollback, never after it. Tests: `tests/open-link-approval.sql` and the concurrency script `tests/local/decide-join-concurrency.sh`.
 
 - **Table.** `private.join_requests` (one row per plan and person: the `response`, a `status` of waiting, approved or declined, and the link of the latest request), closed to clients. Waiting people hold no `attendees` row and no live grant. The outbox gains `join_request` and `join_approved` kinds and `beta_access` a source `approval`.
 - **Asking, `authenticated`.** `request_to_join(p_code, p_name, p_response, p_terms_version)` makes or updates the caller's request on a live link to an open event (an active event that hasn't started, whose organizer may still use the app; otherwise `42501` "Invitation unavailable"); the owner and people already on the event get `owner` or `already` and nothing is written. `my_join_request(p_code)` and `my_join_requests()` read the caller's requests; `change_join_answer(p_plan, p_response)` changes the answer of a waiting request. A stored answer is never replaced by `pending`.
@@ -128,9 +128,9 @@ Run `../scripts/test-database.sh --hosted-baseline` before applying a migration 
 - **Rollback.** Deletes every request and the request and approval notices, turns `approval` grants into `link` grants (approved guests keep their access), restores the three redefined functions and the two checks byte for byte, and drops the new functions. It stops, changing nothing, if the contact-invitations rollback has already run.
 
 
-## Push delivery: local, not deployed (30 October 2026)
+## Push delivery: migration live (applied 28 October 2026)
 
-`20261030120000_push_delivery.sql` is hosted-compatible but **not applied**. It goes straight after `20261029120000_open_link_approval.sql` (which follows `20261028120000_contact_invitations.sql` and `20261027120000_phone_accounts.sql`; none of the four is applied). Owner approval by file name and sha256; the steps and the rollback are in the [runbook](../qa/push-notifications-2026-10-30/README.md). Rollback: `supabase/rollback/20261030120000_push_delivery.rollback.sql`, run before the open-link rollback, which refuses while push is installed. Tests: `tests/push-delivery.sql`, and the rollback rehearsal in `tests/hosted-baseline/20261030120000_push_delivery.before.sql` and `.after.sql`.
+`20261030120000_push_delivery.sql` is **live** (hosted version `20261030120000`, applied 28 October 2026 straight after `20261029120000_open_link_approval.sql`, after the owner's approval by file name and sha256). The sender is not deployed. The other steps and the rollback are in the [runbook](../qa/push-notifications-2026-10-30/README.md). Rollback: `supabase/rollback/20261030120000_push_delivery.rollback.sql`, run before the open-link rollback, which refuses while push is installed. Tests: `tests/push-delivery.sql`, and the rollback rehearsal in `tests/hosted-baseline/20261030120000_push_delivery.before.sql` and `.after.sql`.
 
 - **One file for the push parts** of the local-only `20260918001308`, `20261014130000`, `20261015130000` and `20261022120001`. Never apply those four to hosted: this migration replaces their push parts, and `20261022120001` would bring back the email-only audience if applied after it (the deletion milestone must split it, without `notification_recipient_eligible`). It creates or redefines no deletion object.
 - **Ledger.** `private.notification_deliveries` (one row per notice and device) and `notification_outbox.expanded_at`, closed to clients. It applies in two modes (a hosted baseline, and after every local file) and ends with the same definitions.
@@ -142,10 +142,12 @@ Run `../scripts/test-database.sh --hosted-baseline` before applying a migration 
 
 ### Hosted-baseline commands
 
-`tests/hosted-baseline/tests.txt` assumes every pending candidate is applied: a test is listed once its migration is, so a shorter list of candidates fails at the first test whose migration is missing (`push-delivery.sql` today). Always pass all pending candidates in order:
+The four contact-invitation migrations are in `migrations.txt` since 28 October 2026, so nothing is pending:
 
 ```
-./scripts/test-database-docker.sh --hosted-baseline supabase/migrations/20261027120000_phone_accounts.sql supabase/migrations/20261028120000_contact_invitations.sql supabase/migrations/20261029120000_open_link_approval.sql supabase/migrations/20261030120000_push_delivery.sql
+./scripts/test-database-docker.sh --hosted-baseline
 ```
 
-The plan 1 to 3 runbooks use this command too. When a candidate is applied to hosted and added to `migrations.txt`, drop it from the list.
+`tests/hosted-baseline/tests.txt` assumes every pending candidate is applied: a test is listed once its migration is, so pass all pending candidates in order. The four-candidate commands in the plan 1 to 4 runbooks record the checks made before the apply; they no longer run, because those files are now part of the baseline.
+
+Hosted snapshots compare the live schema with a local replay: `ops/hosted-fingerprint.sql` and `ops/hosted-counts.sql` are read-only. Apply a hosted migration by name (`supabase db query --linked -f`, wrapped in one transaction, then `supabase migration repair --status applied <version>`), never with `supabase db push`, which would also push the local-only files.

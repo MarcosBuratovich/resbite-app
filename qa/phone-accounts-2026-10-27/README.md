@@ -2,7 +2,7 @@
 
 - **Spec:** [Contact invitations design](../../docs/superpowers/specs/2026-10-27-contact-invitations-design.md), agreed with the owner on 27 October with decisions CI-D1 to CI-D13 and the accepted proposals CI-P1 to CI-P13. Phone accounts are plan 1 of 4.
 - **Plan:** [Phone accounts plan](../../docs/superpowers/plans/2026-10-27-phone-accounts.md).
-- **Code:** branch `contact-invitations`, commits `afd5dd2` to `7fe57ad` (Tasks 1 to 10), the records (`4271375`) and the final review's fixes (`cf3d514` to `4af532b` in code, then `e80e48e` and this record's update in documents), on top of the spec (`d730b00`) and the plan (`9073afc`). **Nothing is applied to the hosted project, the Auth dashboard, EAS or TestFlight.** This directory will hold the hosted before/after snapshots when the migration is applied.
+- **Code:** branch `contact-invitations`, commits `afd5dd2` to `7fe57ad` (Tasks 1 to 10), the records (`4271375`) and the final review's fixes (`cf3d514` to `4af532b` in code, then `e80e48e` and this record's update in documents), on top of the spec (`d730b00`) and the plan (`9073afc`). **The migration is live on the hosted project since 28 October 2026 (see "Hosted migration" below); nothing is applied to the Auth dashboard, EAS or TestFlight.**
 
 ## What is built
 
@@ -34,11 +34,22 @@ The final review's fixes changed the migration and its rollback: the migration a
 - Worker tests: `node --import ./mobile/node_modules/tsx/dist/loader.mjs --test supabase/functions/_shared/*.test.ts`: 59 of 59 pass. (This machine's Node lacks TypeScript stripping, hence tsx.)
 - Browser QA: Expo web started with `EXPO_PUBLIC_SUPABASE_URL=https://ewcsgvhuojxdpaspwsrx.supabase.co EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=qa-fixture-key`, with every request intercepted. `verify-phone.mjs` covers sign-up, sign-in, Add your number, a taken number, 000000 refused in live mode, Sign out at the gate, a lost verify reply at Add your number and About you's reason for a dimmed Continue; `verify-auth.mjs`, `verify-account.mjs` and `verify-links.mjs` pass too. The new screens are captured by `review-ui`.
 
+## Hosted migration (applied 28 October 2026)
+
+`20261027120000_phone_accounts.sql` (sha256 `208f399152d394460941272ffdeffaa1189883ff251ed37d77a3ab69367f5ddc`) is live on project `ewcsgvhuojxdpaspwsrx` as hosted version `20261027120000`, the first of the four contact-invitation migrations. The owner approved the four by file name and sha256 in chat on 28 October 2026, and they were applied in order the same morning.
+
+- **How:** `supabase db query --linked -f` on the file wrapped in `begin;` and `commit;`, then `supabase migration repair --status applied 20261027120000`, so the hosted version is the file's own. Not `supabase db push`: it would also push the local-only migrations.
+- **Before** (`hosted-before.json`): every function, table, policy, trigger, constraint and index in `public` and `private` (`supabase/ops/hosted-fingerprint.sql`) matched a local replay of `migrations.txt`, 185 of 185 objects. The only difference is hosted's default `service_role` grant on 14 older `public` objects.
+- **After** (`hosted-after.json`): matched the local replay of this file, 211 of 211, with no new grant difference. Every existing table kept its row count (`supabase/ops/hosted-counts.sql`).
+- **Advisors** (`hosted-advisors-after.json`): new are INFO "RLS enabled, no policy" on `private.app_sessions`, `private.phone_mode`, `private.test_codes` and `private.test_mode_log` (deny-all, like every private table), and WARN that `anon` and `authenticated` can execute the definer `public.exchange_test_code`. That is intended: the app calls it before sign-in, and it returns null unless test mode is on.
+- `private.phone_mode` holds its one row with `test_mode = true`. It has no effect until step 2 turns phone sign-in on in the Auth dashboard.
+- `supabase/tests/hosted-baseline/migrations.txt` carries the line, and `./scripts/test-database-docker.sh --hosted-baseline` (no candidates) passes with 16 `PASS` lines.
+
 ## Rollout runbook
 
-None of these steps has been run. Each is done later, with the owner's approval.
+Step 1 (the migration) is done. None of the other steps has been run; each is done later, with the owner's approval.
 
-1. **Migration.**
+1. **Migration.** Done on 28 October 2026 (see "Hosted migration" above).
    - The owner approves by file name and sha256 of `20261027120000_phone_accounts.sql`.
    - Take hosted before/after snapshots into this directory.
    - Apply it, then run the advisors.

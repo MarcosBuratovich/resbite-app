@@ -12,3 +12,7 @@
 20261015120000_ux3_event_details.sql                   20261016125958
 20261021120000_gi1_event_links.sql                     20261021165314
 20261022120000_gi2_guest_accounts.sql                  20261022113838
+20261027120000_phone_accounts.sql                      20261027120000
+20261028120000_contact_invitations.sql                 20261028120000
+20261029120000_open_link_approval.sql                  20261029120000
+20261030120000_push_delivery.sql                       20261030120000

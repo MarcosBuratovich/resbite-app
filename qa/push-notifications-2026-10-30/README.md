@@ -2,7 +2,7 @@
 
 - **Spec:** [Contact invitations design](../../docs/superpowers/specs/2026-10-27-contact-invitations-design.md), decision CI-D11 and the "Notifications" section. Push notifications are plan 4 of 4 (plan 1 phone accounts, plan 2 contact invitations, plan 3 open-link approval).
 - **Plan:** [Push notifications plan](../../docs/superpowers/plans/2026-10-29-push-notifications.md).
-- **Code:** branch `push-notifications`, taken from `main` at `ffc876f`. **Nothing is applied to the hosted project, Apple, Expo, EAS, Vercel or TestFlight, and nothing is deployed.** Every hosted, Apple, Expo and EAS step below needs the owner's approval when it is done.
+- **Code:** branch `push-notifications`, taken from `main` at `ffc876f`. **The four migrations are live on the hosted project since 28 October 2026 (see "Hosted migration" below); nothing is applied to Apple, Expo, EAS, Vercel or TestFlight, and nothing is deployed.** Every hosted, Apple, Expo and EAS step below needs the owner's approval when it is done.
 - The calls made during the build are in `knowledge-base/08-decisions.md` ("Push notifications, 29 October 2026").
 
 ## What is built
@@ -45,9 +45,22 @@ Run on Linux on 27 October 2026 at `7195b47` (the later commits add one call aft
 - Worker tests: `node --import ./mobile/node_modules/tsx/dist/loader.mjs --test supabase/functions/_shared/*.test.ts`.
 - Browser checks on Expo web (Task 7), every `*.supabase.co` request intercepted.
 
+## Hosted migration (applied 28 October 2026)
+
+`20261030120000_push_delivery.sql` (sha256 `70782289707c91d7e6455e6370f9bf2f182080095809db4204fb23f1d6ef9b19`) is live on project `ewcsgvhuojxdpaspwsrx` as hosted version `20261030120000`, the last of the four contact-invitation migrations. The owner approved the four by file name and sha256 in chat on 28 October 2026, and they were applied in order the same morning.
+
+- **How:** `supabase db query --linked -f` on the file wrapped in `begin;` and `commit;`, then `supabase migration repair --status applied 20261030120000`, so the hosted version is the file's own. Not `supabase db push`: it would also push the local-only migrations.
+- **Before** (`hosted-before.json`): every function, table, policy, trigger, constraint and index in `public` and `private` (`supabase/ops/hosted-fingerprint.sql`) matched a local replay of `migrations.txt` plus the other three files, 268 of 268 objects. The only difference is hosted's default `service_role` grant on 14 older `public` objects.
+- **After** (`hosted-after.json`): matched the local replay of this file, 282 of 282. Every existing table kept its row count (`supabase/ops/hosted-counts.sql`).
+- **Grants:** `public.unregister_device(text)` also carries hosted's default `service_role` grant (15 objects now), as `register_device` already did. That is harmless: the private definer behind it is granted to `authenticated` only.
+- **Advisors** (`hosted-advisors-after.json`): new are INFO "RLS enabled, no policy" on `private.notification_deliveries` and INFO that `notification_deliveries_due_idx` is unused so far.
+- **History:** 16 rows, the twelve earlier ones and the four new ones. None of the local-only `20260918001308`, `20261014130000`, `20261015130000` or `20261022120001` is applied, and the deletion lifecycle is not on hosted.
+- **Backlog:** 21 unsent outbox notices, all from 15 to 22 October, with `expanded_at` null; no device is registered. The optional clean-up under step 3's **Backlog** has not been run.
+- `supabase/tests/hosted-baseline/migrations.txt` carries the line, and `./scripts/test-database-docker.sh --hosted-baseline` (no candidates) passes with 16 `PASS` lines.
+
 ## Rollout runbook
 
-None of these steps has been run. Each is done later, with the owner's approval.
+Step 3 (the migrations) is done. None of the other steps has been run; each is done later, with the owner's approval.
 
 **Order.** Apple and Expo credentials first, then the four migrations, then the sender, then the app build. The new app calls `unregister_device`, which exists only after the migration; the sender sends nothing until its release switch is flipped, the secrets are set and the schedule exists.
 
@@ -56,7 +69,7 @@ None of these steps has been run. Each is done later, with the owner's approval.
    - The owner adds it to EAS credentials for `com.resbite.app` (`eas credentials`), following the Expo SDK 57 push setup guide.
    - `mobile/app.json` needs no change: the `expo-notifications` plugin adds `aps-environment` to the native build.
 2. **Expo.** Create an Expo access token for the sender; it becomes the function secret `EXPO_ACCESS_TOKEN`.
-3. **Migrations,** in this order, each with the owner's approval by file name and sha256 (the table above):
+3. **Migrations:** done on 28 October 2026 (see "Hosted migration" above), in this order, each approved by file name and sha256 (the table above):
    1. `20261027120000_phone_accounts`
    2. `20261028120000_contact_invitations`
    3. `20261029120000_open_link_approval`

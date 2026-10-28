@@ -2,7 +2,7 @@
 
 - **Spec:** [Contact invitations design](../../docs/superpowers/specs/2026-10-27-contact-invitations-design.md), decision CI-D9 and flow 6. Open-link approval is plan 3 of 4 (plan 1 is phone accounts, plan 2 contact invitations).
 - **Plan:** [Open-link approval plan](../../docs/superpowers/plans/2026-10-28-open-link-approval.md).
-- **Code:** branch `open-link-approval`, commits `154c97b` (the plan) to the merge into `main`. **Nothing is applied to the hosted project, the Auth dashboard, Vercel, EAS or TestFlight.** This directory will hold the hosted before/after snapshots when the migration is applied.
+- **Code:** branch `open-link-approval`, commits `154c97b` (the plan) to the merge into `main`. **The migration is live on the hosted project since 28 October 2026 (see "Hosted migration" below); nothing is applied to the Auth dashboard, Vercel, EAS or TestFlight.**
 
 ## What is built
 
@@ -45,13 +45,24 @@ The commands:
 - Worker tests: `node --import ./mobile/node_modules/tsx/dist/loader.mjs --test supabase/functions/_shared/*.test.ts`.
 - Browser QA, every request intercepted: `cd mobile && node --import tsx ../links/verify-personal.mjs` and `node --import tsx ../links/verify-open-link.mjs` (headless Chrome), then the app's `mobile/scripts/verify-*.mjs` checks against Expo web on port 8081 with `EXPO_PUBLIC_SUPABASE_URL=https://ewcsgvhuojxdpaspwsrx.supabase.co EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=qa-fixture-key npx expo start --web --port 8081`.
 
+## Hosted migration (applied 28 October 2026)
+
+`20261029120000_open_link_approval.sql` (sha256 `5cd7f723bdd7119d3133c225d1186031e2ec265a054a208e7fef40de9c7f50a0`) is live on project `ewcsgvhuojxdpaspwsrx` as hosted version `20261029120000`, the third of the four contact-invitation migrations. The owner approved the four by file name and sha256 in chat on 28 October 2026, and they were applied in order the same morning.
+
+- **How:** `supabase db query --linked -f` on the file wrapped in `begin;` and `commit;`, then `supabase migration repair --status applied 20261029120000`, so the hosted version is the file's own. Not `supabase db push`: it would also push the local-only migrations.
+- **Before** (`hosted-before.json`): every function, table, policy, trigger, constraint and index in `public` and `private` (`supabase/ops/hosted-fingerprint.sql`) matched a local replay of `migrations.txt` plus the phone-accounts and contact-invitations files, 245 of 245 objects. The only difference is hosted's default `service_role` grant on 14 older `public` objects.
+- **After** (`hosted-after.json`): matched the local replay of this file, 268 of 268, with no new grant difference. Every existing table kept its row count (`supabase/ops/hosted-counts.sql`).
+- **Advisors** (`hosted-advisors-after.json`): new are INFO "RLS enabled, no policy" on `private.join_requests` and INFO that its two indexes are unused so far (a new, empty table).
+- **Old builds, from now until the new build:** a GI1 or GI2 build that opens a `/r/` link makes a waiting request, which hosts on those builds can't see (step 5). The link site (step 2) and the build (step 3) are still to do.
+- `supabase/tests/hosted-baseline/migrations.txt` carries the line, and `./scripts/test-database-docker.sh --hosted-baseline` (no candidates) passes with 16 `PASS` lines.
+
 ## Rollout runbook
 
-None of these steps has been run. Each is done later, with the owner's approval.
+Step 1 (the migration) is done. None of the other steps has been run; each is done later, with the owner's approval.
 
 **Order.** The migration ships after `20261028120000_contact_invitations.sql` and before the new app build: the new app calls RPCs that only exist after the migration. The link site is redeployed with, or just after, the migration (step 2).
 
-1. **Migration.**
+1. **Migration.** Done on 28 October 2026 (see "Hosted migration" above).
    - The owner approves by file name and sha256 of `20261029120000_open_link_approval.sql` (above).
    - It goes straight after `20261028120000_contact_invitations.sql`.
    - Take hosted before/after snapshots into this directory (the model is `supabase/tests/hosted-baseline/20261029120000_open_link_approval.before.sql` and `.after.sql`).
