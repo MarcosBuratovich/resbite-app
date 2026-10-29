@@ -110,3 +110,18 @@ test("a definite refusal clears the entry", async () => {
   assert.deepEqual(await reconcilePendingCreate("a", gateway, journal), { plan: null });
   assert.equal(await journal.read("a"), null);
 });
+
+test("a failed read after the reconcile keeps the entry", async () => {
+  let reads = 0;
+  const { journal, gateway } = setup({
+    read: async () => {
+      if (++reads === 2) throw new Error("offline");
+      return plan;
+    },
+  });
+  await journal.put("a", entry);
+  assert.deepEqual(await reconcilePendingCreate("a", gateway, journal), { plan: null });
+  assert.deepEqual(await journal.read("a"), entry);
+  assert.deepEqual(await reconcilePendingCreate("a", gateway, journal), { plan });
+  assert.equal(await journal.read("a"), null);
+});

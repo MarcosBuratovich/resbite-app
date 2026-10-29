@@ -4,6 +4,8 @@ import type { PlanWrite } from "../domain/plans";
 /** The one create this device has started and not yet seen finish (spec CR-P13). */
 export type PendingCreate = { requestId: string; write: PlanWrite; savedAt: string };
 
+export type JournalStore = ReturnType<typeof createJournalStore>;
+
 // Serialize operations so reading, journaling and clearing one scope cannot race.
 export function createJournalStore(store: KeyStore) {
   let queue: Promise<unknown> = Promise.resolve();
@@ -30,11 +32,3 @@ export function createJournalStore(store: KeyStore) {
     clear: (scope: string): Promise<void> => run(() => store.removeItem(key(scope))),
   };
 }
-
-// The app's storage is loaded on first use, so the store and its tests do not pull in the native modules.
-const appStorage = (): KeyStore => require("./supabase").storage;
-export const createJournal = createJournalStore({
-  getItem: (k) => appStorage().getItem(k),
-  setItem: (k, v) => appStorage().setItem(k, v),
-  removeItem: (k) => appStorage().removeItem(k),
-});
