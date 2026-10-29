@@ -538,7 +538,7 @@ try {
     await page.context().close();
   }
 
-  // Plan 4: the organizer is asked "Get notified?" once, after creating an event, and not again after Not now.
+  // Plan 4: the organizer is asked "Get notified?" once, after creating an event, and not again after Not now; saved places are remembered.
   // This context leaves the phone's permission unanswered (the others answer it up front, quietReminders).
   {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
@@ -557,10 +557,8 @@ try {
     };
     await create("The garden café");
     // Recent places (UX-P6): a successful save remembers its place on this device.
-    // SKIPPED, a defect in usePlanForm (Task 8): create() remembers the place only outside preview, so a preview
-    // create leaves "resbite.recent-places.v1.preview" empty (verify-people expects it too). Reported for a ruling.
     const recent = () => asked.evaluate(() => sessionStorage.getItem("resbite.recent-places.v1.preview"));
-    console.log(`SKIP: preview create remembers its place (Task 8 defect); the store reads ${await recent()}.`);
+    await expect.poll(recent).toBe(JSON.stringify(["The garden café"]));
     await expect(askTitle).toBeVisible();
     await expect(
       asked.getByText(
@@ -580,10 +578,11 @@ try {
     // A second event does not bring it back, and its place joins the recent ones.
     await create("The park");
     await expect(heading(asked, "My resbites")).toBeVisible();
+    await expect.poll(recent).toBe(JSON.stringify(["The park", "The garden café"]));
     await asked.waitForTimeout(600); // the ask would appear within this settle time
     await expect(askTitle).toHaveCount(0);
     await context.close();
-    console.log("PASS: the organizer is asked Get notified? once after creating an event (copy, 44pt buttons), and not again after Not now.");
+    console.log("PASS: the organizer is asked Get notified? once after creating an event (copy, 44pt buttons), and not again after Not now; saved places are remembered.");
   }
 
   // The foreground refresh of My resbites: offline retention, retry and the hidden tab.
@@ -709,10 +708,7 @@ try {
     assert.equal(state.changes.length, 1);
     assert.equal(state.changes[0].p_ends, "2099-03-01T17:30:00.000Z");
     assert.equal(state.changes[0].p_start, "2099-03-01T15:00:00.000Z");
-    // SKIPPED, a defect in detailsFromForm (Task 2): the Meeting details are sent as typed, not trimmed
-    // (the old editor trimmed them; the area is trimmed). Reported for a ruling.
-    console.log(`SKIP: Meeting details sent trimmed (Task 2 defect); p_note was ${JSON.stringify(state.changes[0].p_note)}.`);
-    assert.equal(state.changes[0].p_note.trim(), "Gate code 9876");
+    assert.equal(state.changes[0].p_note, "Gate code 9876");
     assert.equal(state.changes[0].p_area, "Near Old Street");
     await expect(page.getByText("15:00 – 17:30", { exact: true })).toBeVisible();
     // Clearing the area sends "" (cleared), never null (which leaves it as it is).
@@ -726,7 +722,7 @@ try {
     assert.equal(state.changes.length, 2);
     assert.equal(state.changes[1].p_area, "");
     assert.deepEqual(state.unexpected, []);
-    console.log("PASS: an edit sends the end as p_ends, the area trimmed, and the area \"\" when cleared.");
+    console.log("PASS: an edit sends the end as p_ends, the Meeting details and the area trimmed, and the area \"\" when cleared.");
     await page.context().close();
   }
   assert.deepEqual(errors, []);

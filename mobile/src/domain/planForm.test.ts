@@ -110,6 +110,8 @@ test("detailsFromForm and timeOrPlaceChanged", () => {
     ends_at: "2026-10-24T21:00:00.000Z", place_label: "Park", place_tbd: false, repeat_weeks: 1,
     note: "gate", area: "Hyde", time_zone: L,
   });
+  const spaced = detailsFromForm({ ...full, meetingDetails: "  \nGate 9 \n\n", area: "  Near Old Street " }, L);
+  assert.deepEqual([spaced.note, spaced.area], ["Gate 9", "Near Old Street"]);
   const tbd = detailsFromForm({ ...full, place: "x", placeTbd: true }, L);
   assert.deepEqual([tbd.place_label, tbd.place_tbd], ["To be decided", true]);
   assert.equal(timeOrPlaceChanged(d, { ...d, title: "Other", note: "z", area: "q" }), false);

@@ -184,8 +184,8 @@ export function detailsFromForm(form: PlanForm, zone: string): PlanDetails {
     place_label: form.placeTbd ? PLAN_COPY.toBeDecided : form.place.trim(),
     place_tbd: form.placeTbd,
     repeat_weeks: form.repeatWeeks,
-    note: form.meetingDetails,
-    area: form.area,
+    note: form.meetingDetails.trim(),
+    area: form.area.trim(),
     time_zone: zone,
   };
 }

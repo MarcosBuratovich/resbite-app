@@ -223,13 +223,12 @@ try {
     await expect(f.page.getByLabel("Name your resbite", { exact: true })).toHaveValue("Published coffee");
     f.state.rows = [];
     await foreground(f.page);
-    // SKIPPED, for a ruling: the plan screen opened from an idea keeps its form and its Create when the idea is
-    // withdrawn meanwhile (nothing on it re-reads the idea); the old editor closed and the idea page said "Activity
-    // unavailable". Reported as a concern.
+    // The idea is withdrawn while the plan screen is open from it: the screen stays with the host's work, and
+    // Create stays available (the server decides for a live account).
     await f.page.waitForTimeout(300);
-    console.log(
-      `SKIP: plan screen closes when its idea is withdrawn; Create buttons showing: ${await f.page.getByRole("button", { name: "Create", exact: true }).count()}.`,
-    );
+    await expect(heading(f.page, "New resbite")).toBeVisible();
+    await expect(f.page.getByLabel("Name your resbite", { exact: true })).toHaveValue("Published coffee");
+    await expect(f.page.getByRole("button", { name: "Create", exact: true })).toBeEnabled();
     await f.page.goto(`${baseURL}/activity/painting`);
     await expect(
       f.page.getByText("Activity unavailable", { exact: true }),

@@ -258,6 +258,8 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
         version: 1,
       };
       setLocalPlans((all) => (all.some((p) => p.id === plan.id) ? all : [plan, ...all]));
+      if (!form.placeTbd && form.place.trim())
+        void recentPlaces.remember(scope!, form.place.trim(), assertSession).catch(() => {});
     } else {
       if (!journaled) {
         try {

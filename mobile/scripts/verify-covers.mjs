@@ -136,7 +136,7 @@ try {
       const rows = [...plans.values()].filter((p) => !id || p.id === id);
       return reply(req.headers().accept?.includes("object") ? (rows[0] ?? null) : rows);
     }
-    if (path === "/rest/v1/rpc/create_plan_v3") {
+    if (path === "/rest/v1/rpc/create_plan_v4") {
       const b = req.postDataJSON();
       plans.set(b.p_id, {
         cover_description: "",
@@ -150,6 +150,8 @@ try {
         ends_at: b.p_ends,
         time_zone: b.p_zone,
         place_label: b.p_place,
+        place_tbd: b.p_place_tbd,
+        repeat_weeks: b.p_repeat_weeks,
         area: b.p_area ?? "",
         // UX3: Meeting details are read from their own table, embedded for the organizer.
         note: "",
@@ -160,7 +162,7 @@ try {
         cover_path: null,
         cover_revision: 0,
       });
-      return reply(b.p_id);
+      return reply(null);
     }
     if (path.startsWith("/storage/v1/object/sign/plan-covers/") && req.method() === "POST")
       return reply({ signedURL: "/object/sign/plan-covers/fixture.jpg?token=fixture" });
@@ -232,7 +234,7 @@ try {
   assert.equal(uploads.length, 1);
   assert.match(uploads[0], new RegExp(`^${user.id}/${plan.id}/[0-9a-f-]+\\.jpg$`));
   assert.equal(plan.cover_path, null);
-  // Edit opens at Review, which offers the pending-cover recovery.
+  // Edit opens the plan screen, whose cover area offers the pending-cover recovery.
   await editEvent(page, "Garden picnic");
   await button(page, "Retry cover").click();
   await expect(page.getByText("Cover photo saved.", { exact: true })).toBeVisible();
@@ -240,7 +242,6 @@ try {
   assert.equal(plan.cover_revision, 1);
   assert.equal(uploads.at(-1), uploads[0], "Retry uploads to the same path");
   assert.equal(uploads.length, 2, "Retry uploaded the journaled bytes once more to the same path");
-  await button(page, "Edit photo").click();
   await page.getByRole("button", { name: "Remove cover photo", exact: true }).click();
   await expect(
     page.getByText("Cover photo removed. The previous file stays in private storage until cleanup is available.", { exact: true }),
@@ -266,7 +267,7 @@ try {
   await (await swim).setFiles({ name: "swim.png", mimeType: "image/png", buffer: await syntheticPng(page, 1600, 900) });
   await page.getByRole("button", { name: "Describe photo", exact: true }).click();
   await page.getByLabel("Photo description", { exact: true }).fill("Two swimmers at the jetty");
-  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByRole("button", { name: "Save", exact: true, disabled: false }).click();
   assert.equal(descriptionCalls.length, 0, "Nothing is sent before the resbite exists");
   await createPlan(page, { place: "Lake", categories: ["Natural"] });
   await later(page);
@@ -274,12 +275,11 @@ try {
   assert.deepEqual(descriptionCalls, [{ p_description: "Two swimmers at the jetty", p_expected_revision: 1 }]);
   assert.equal(swimPlan.cover_description, "Two swimmers at the jetty");
   await expect(page.getByRole("button", { name: /, Photo: Two swimmers at the jetty$/ })).toBeVisible();
-  // A saved event: Review reads the description; editing it saves at once against the current revision.
+  // A saved event: the plan screen reads the description; editing it saves at once against the current revision.
   await editEvent(page, "Lake swim");
-  await button(page, "Edit photo, Two swimmers at the jetty").click();
   await page.getByRole("button", { name: "Edit photo description, Two swimmers at the jetty", exact: true }).click();
   await page.getByLabel("Photo description", { exact: true }).fill("Three swimmers at the jetty");
-  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByRole("button", { name: "Save", exact: true, disabled: false }).click();
   await expect(page.getByText("Photo description saved.", { exact: true })).toBeVisible();
   assert.deepEqual(descriptionCalls.at(-1), { p_description: "Three swimmers at the jetty", p_expected_revision: 2 });
   assert.equal(swimPlan.cover_revision, 3);
@@ -296,7 +296,7 @@ try {
   swimPlan.cover_revision++;
   await page.getByRole("button", { name: "Describe photo", exact: true }).click();
   await page.getByLabel("Photo description", { exact: true }).fill("Four swimmers");
-  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByRole("button", { name: "Save", exact: true, disabled: false }).click();
   await expect(
     page.getByText("The photo changed elsewhere. Reopen this resbite, then describe it again.", { exact: true }),
   ).toBeVisible();
@@ -320,7 +320,6 @@ try {
   assert.deepEqual(await coverKeys(), [], "A confirmed cover leaves nothing behind");
   failNextLink = true;
   await editEvent(page, "Garden picnic");
-  await button(page, "Edit photo").click();
   const leftover = page.waitForEvent("filechooser");
   await page.getByRole("button", { name: "Change cover photo", exact: true }).click();
   await (await leftover).setFiles({ name: "left.png", mimeType: "image/png", buffer: await syntheticPng(page, 1200, 800) });

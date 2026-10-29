@@ -82,9 +82,9 @@ try {
   ).toBeVisible();
   await button(page, "Back").click();
   await page.getByRole("tab", { name: "Profile", exact: true }).click();
-  // SKIPPED, a defect in usePlanForm (Task 8): a preview create does not remember its place (see verify-planning).
-  console.log(
-    `SKIP: preview create remembers its place; the store reads ${await page.evaluate(() => sessionStorage.getItem("resbite.recent-places.v1.preview"))}.`,
+  assert.equal(
+    await page.evaluate(() => sessionStorage.getItem("resbite.recent-places.v1.preview")),
+    JSON.stringify(["Test café"]),
   );
   await page
     .getByRole("button", { name: "Leave preview", exact: true })
