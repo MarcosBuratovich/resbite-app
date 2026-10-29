@@ -3,6 +3,8 @@
 -- international spellings (+54 9 11 ... and +54 11 ...), and the key folds them into one.
 -- Hosted-compatible: depends only on the migrations listed in supabase/tests/hosted-baseline/migrations.txt.
 -- Rollback: supabase/rollback/20261030130000_phone_key.rollback.sql.
+-- Older Argentine accounts are not rewritten here: supabase/ops/rewrite-older-argentine-accounts.sql does it, owner-run
+-- at the release (see section 4).
 
 -- 1. The key and its variants
 
@@ -84,7 +86,9 @@ end $$;
 --  - open_link_approval's guest list: right(u.phone,2) shows the last two digits of an account; not a comparison.
 --  - private.phone_digits (phone_accounts) only defines the digits helper; push_delivery has no phone comparisons.
 
--- Returns the keys of the sent numbers that belong to people On Resbite (sorted, distinct), not the accounts' digits.
+-- Returns, for each sent number that belongs to someone On Resbite, its digits as sent and its key (sorted, distinct):
+-- only values the caller sent or their keys, never an account's own digits. The current build matches by the digits it
+-- sent; the next one by key.
 create or replace function private.contacts_on_resbite(p_phones text[]) returns text[] language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester(); v_n int := coalesce(cardinality(p_phones),0); v_out text[];
 begin
@@ -93,14 +97,18 @@ begin
  if v_n=0 then return array[]::text[]; end if;
  perform private.charge_lookup(v_uid,v_n);
  select coalesce(array_agg(d order by d),array[]::text[]) into v_out from (
-  select distinct k as d from (select private.phone_key(x) as k from unnest(p_phones) x) s
-  where k<>'' and exists(select 1 from auth.users u where u.phone = any(private.phone_variants(s.k))
+  select distinct v.d from (select private.phone_digits(x) as g, private.phone_key(x) as k from unnest(p_phones) x) s
+  cross join lateral (values (s.g), (s.k)) v(d)
+  where s.k<>'' and exists(select 1 from auth.users u where u.phone = any(private.phone_variants(s.k))
    and u.phone_confirmed_at is not null and u.id<>v_uid
    and private.user_eligible(u.id) and private.used_app(u.id)
    and exists(select 1 from public.profiles p where p.id=u.id))) t;
  return v_out;
 end $$;
 
+-- Each result carries the number's digits as the caller sent them (the current build matches results to its items by
+-- those); the invitation is stored and compared by key. Of two accounts holding both spellings of one number, the
+-- caller comes first, then the 9 form.
 create or replace function private.invite_contacts(p_plan uuid, p_invites jsonb) returns jsonb language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := private.require_link_owner(p_plan); v_item jsonb; v_phone text; v_country text; v_code text; v_holder uuid;
  v_kind text; v_out jsonb := '[]'::jsonb;
@@ -123,7 +131,7 @@ begin
    raise exception 'Invalid invitation' using errcode='22023';
   end if;
   select id into v_holder from auth.users where phone = any(private.phone_variants(v_phone)) and phone_confirmed_at is not null
-   order by phone=v_phone desc limit 1;
+   order by id = v_uid desc, phone <> v_phone desc limit 1;
   if v_holder=v_uid or (v_holder is null and v_phone=(select private.phone_key(phone) from auth.users where id=v_uid)) then
    v_kind := 'self';
   elsif v_holder is not null and exists(select 1 from public.attendees where plan_id=p_plan and user_id=v_holder) then
@@ -144,7 +152,7 @@ begin
      user_id=case when private.phone_invitations.revoked_at is null then private.phone_invitations.user_id end,
      answered_at=case when private.phone_invitations.revoked_at is null then private.phone_invitations.answered_at end;
   end if;
-  v_out := v_out || jsonb_build_array(jsonb_build_object('phone',v_phone,'kind',v_kind));
+  v_out := v_out || jsonb_build_array(jsonb_build_object('phone',private.phone_digits(v_item->>'phone'),'kind',v_kind));
  end loop;
  return v_out;
 end $$;
@@ -240,12 +248,12 @@ begin
 end $$;
 
 -- 4. Existing rows
--- Invitations: where one plan holds the same number in two spellings, keep the answered one, then the live one, then the
--- newest, and delete the rest; then store every invitation by key.
+-- Invitations: where one plan holds the same number in two spellings, keep the live one (not revoked), among live ones
+-- the answered one, else the newest, and delete the rest; then store every invitation by key.
 delete from private.phone_invitations where id in (
  select id from (
   select id, row_number() over (partition by plan_id, private.phone_key(phone)
-   order by user_id is not null desc, revoked_at is null desc, created_at desc, id) rn
+   order by revoked_at is null desc, user_id is not null desc, created_at desc, id) rn
   from private.phone_invitations) d
  where rn > 1);
 update private.phone_invitations set phone = private.phone_key(phone) where phone <> private.phone_key(phone);
@@ -253,29 +261,16 @@ update private.phone_invitations set phone = private.phone_key(phone) where phon
 -- Test-mode codes were stored by the old digits and live ten minutes; drop them.
 delete from private.test_codes;
 
--- Accounts: an older Argentine number (54 and ten digits) becomes its 549 form unless another account already holds
--- that form (those pairs stay as they are). The rewrites are recorded so the rollback can put the numbers back.
+-- Accounts are NOT rewritten here: the current build signs in with the digits it was made with, so the older Argentine
+-- numbers (54 and ten digits) are rewritten to their 549 form by the owner-run, re-runnable
+-- supabase/ops/rewrite-older-argentine-accounts.sql at the release of the build that sends the 9 form. This table is
+-- that script's record, so the rollback can put the numbers back. It is temporary: the owner drops it once no
+-- rollback is wanted (the runbook's last step). It is empty after this migration.
 create table private.phone_rewrites (
- user_id uuid primary key,
+ user_id uuid primary key references auth.users(id) on delete cascade,
  old_phone text not null,
  new_phone text not null,
  rewritten_at timestamptz not null default now()
 );
 alter table private.phone_rewrites enable row level security;
 revoke all on private.phone_rewrites from public, anon, authenticated;
-insert into private.phone_rewrites(user_id, old_phone, new_phone)
- select u.id, u.phone, '549' || substr(u.phone, 3) from auth.users u
- where u.phone ~ '^54[0-9]{10}$'
-  and not exists(select 1 from auth.users v where v.phone = '549' || substr(u.phone, 3));
-update auth.users u set phone = r.new_phone from private.phone_rewrites r where r.user_id = u.id;
-update auth.users set phone_change = '549' || substr(phone_change, 3)
- where phone_change ~ '^54[0-9]{10}$'
-  and not exists(select 1 from auth.users v where v.phone = '549' || substr(auth.users.phone_change, 3));
--- The hosted project also keeps the number in the phone identity; the local harness has no identities table.
-do $$ begin
- if to_regclass('auth.identities') is not null then
-  execute $x$ update auth.identities i set identity_data = jsonb_set(i.identity_data, '{phone}', to_jsonb(r.new_phone))
-   from private.phone_rewrites r
-   where i.user_id = r.user_id and i.provider = 'phone' and i.identity_data->>'phone' = r.old_phone $x$;
- end if;
-end $$;

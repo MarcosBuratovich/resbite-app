@@ -46,10 +46,12 @@ do $$ begin
 end $$;
 -- 3. the invitation functions compare by key
 -- d2..11 host (9 form), d2..12 contact On Resbite (older form), d2..13 invitee (9 form, no profile).
+-- The lookup returns each matching sent number's digits as sent and its key; invite_contacts returns the digits as sent
+-- (the current build matches its results by them) and stores the key.
 insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) values
  ('d2000000-0000-4000-8000-000000000011',null,null,'5491112340011',now()),
  ('d2000000-0000-4000-8000-000000000012',null,null,'541112340012',now()),
- ('d2000000-0000-4000-8000-000000000013',null,null,'5491199998888',now());
+ ('d2000000-0000-4000-8000-000000000013',null,null,'5491112348888',now());
 insert into public.profiles(id,display_name) values
  ('d2000000-0000-4000-8000-000000000011','Host'),('d2000000-0000-4000-8000-000000000012','Contact');
 insert into private.beta_access(user_id,source) values
@@ -61,29 +63,31 @@ insert into public.plans(id,owner_id,title,starts_at,time_zone,place_label,categ
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000011","role":"authenticated"}',true);
 do $$ declare r text[]; j jsonb; begin
- r := public.contacts_on_resbite(array['+54 9 11 1234 0012','+54 11 1234 0012','+54 9 11 9999 8888']);
- if r<>array['541112340012'] then raise exception 'Lookup must return the key once, found through variants'; end if;
+ r := public.contacts_on_resbite(array['+54 9 11 1234 0012','+54 11 1234 0012','+54 9 11 1234 8888']);
+ if r<>array['541112340012','5491112340012'] then raise exception 'Lookup must return the digits as sent and the key, once each, found through variants: %', r; end if;
+ r := public.contacts_on_resbite(array['+54 11 1234 0012']);
+ if r<>array['541112340012'] then raise exception 'Lookup must return only what was sent (and its key): %', r; end if;
  j := public.invite_contacts('d2100000-0000-4000-8000-000000000001', jsonb_build_array(
   jsonb_build_object('phone','+5491112340012','country','54','code',repeat('K',22)),
   jsonb_build_object('phone','+54 11 1234 0011','country','54','code',repeat('L',22)),
-  jsonb_build_object('phone','+541199998888','country','54','code',repeat('M',22))));
- if j->0->>'kind'<>'app' or j->0->>'phone'<>'541112340012' then raise exception 'Holder not found by variants, or key not returned'; end if;
- if j->1->>'kind'<>'self' then raise exception 'The host''s own number in the other form is self'; end if;
- if j->2->>'kind'<>'link' or j->2->>'phone'<>'541199998888' then raise exception 'Link invitation not keyed'; end if;
+  jsonb_build_object('phone','+541112348888','country','54','code',repeat('M',22))));
+ if j->0->>'kind'<>'app' or j->0->>'phone'<>'5491112340012' then raise exception 'Holder not found by variants, or not the digits as sent: %', j->0; end if;
+ if j->1->>'kind'<>'self' or j->1->>'phone'<>'541112340011' then raise exception 'The host''s own number in the other form is self'; end if;
+ if j->2->>'kind'<>'link' or j->2->>'phone'<>'541112348888' then raise exception 'Link invitation not returned by its digits'; end if;
  j := public.invite_contacts('d2100000-0000-4000-8000-000000000001', jsonb_build_array(
-  jsonb_build_object('phone','+54 9 11 9999 8888','country','54','code',repeat('N',22))));
- if j->0->>'kind'<>'link' then raise exception 'Inviting the 9 form again is the same link'; end if;
+  jsonb_build_object('phone','+54 9 11 1234 8888','country','54','code',repeat('N',22))));
+ if j->0->>'kind'<>'link' or j->0->>'phone'<>'5491112348888' then raise exception 'Inviting the 9 form again is the same link, returned by its digits as sent: %', j->0; end if;
 end $$;
 reset role;
 do $$ begin
- if (select count(*) from private.phone_invitations where plan_id='d2100000-0000-4000-8000-000000000001' and phone='541199998888')<>1 then raise exception 'One row per key'; end if;
+ if (select count(*) from private.phone_invitations where plan_id='d2100000-0000-4000-8000-000000000001' and phone='541112348888')<>1 then raise exception 'One row per key'; end if;
  if (select count(*) from private.phone_invitations where plan_id='d2100000-0000-4000-8000-000000000001')<>1 then raise exception 'Only the link invitation is a row'; end if;
 end $$;
 set local role anon;
 do $$ begin
- if not public.check_invited_number(repeat('N',22),'+5491199998888') then raise exception '9 form must match'; end if;
- if not public.check_invited_number(repeat('N',22),'+541199998888') then raise exception 'No-9 form must match'; end if;
- if public.check_invited_number(repeat('N',22),'+541199998889') then raise exception 'Another number matched'; end if;
+ if not public.check_invited_number(repeat('N',22),'+5491112348888') then raise exception '9 form must match'; end if;
+ if not public.check_invited_number(repeat('N',22),'+541112348888') then raise exception 'No-9 form must match'; end if;
+ if public.check_invited_number(repeat('N',22),'+541112348889') then raise exception 'Another number matched'; end if;
 end $$;
 reset role;
 set local role authenticated;
@@ -93,15 +97,57 @@ do $$ begin
 end $$;
 reset role;
 do $$ begin
- if (select user_id from private.phone_invitations where plan_id='d2100000-0000-4000-8000-000000000001' and phone='541199998888') is distinct from 'd2000000-0000-4000-8000-000000000013' then raise exception 'The invitee with the 9 form must be attached'; end if;
+ if (select user_id from private.phone_invitations where plan_id='d2100000-0000-4000-8000-000000000001' and phone='541112348888') is distinct from 'd2000000-0000-4000-8000-000000000013' then raise exception 'The invitee with the 9 form must be attached'; end if;
 end $$;
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000011","role":"authenticated"}',true);
 do $$ begin
- perform public.revoke_phone_invitation('d2100000-0000-4000-8000-000000000001','+54 9 11 9999 8888');
+ perform public.revoke_phone_invitation('d2100000-0000-4000-8000-000000000001','+54 9 11 1234 8888');
 end $$;
 reset role;
 do $$ begin
- if (select revoked_at from private.phone_invitations where plan_id='d2100000-0000-4000-8000-000000000001' and phone='541199998888') is null then raise exception 'Revoking with the 9 form must revoke the key''s row'; end if;
+ if (select revoked_at from private.phone_invitations where plan_id='d2100000-0000-4000-8000-000000000001' and phone='541112348888') is null then raise exception 'Revoking with the 9 form must revoke the key''s row'; end if;
+end $$;
+-- 4. Two accounts holding both spellings of one number: the caller comes first, then the 9 form.
+-- d2..14 holds the host's number without the 9; d2..15 (without the 9) and d2..16 (with it) share another number.
+-- All three are On Resbite.
+insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) values
+ ('d2000000-0000-4000-8000-000000000014',null,null,'541112340011',now()),
+ ('d2000000-0000-4000-8000-000000000015',null,null,'541112340015',now()),
+ ('d2000000-0000-4000-8000-000000000016',null,null,'5491112340015',now());
+insert into public.profiles(id,display_name) values
+ ('d2000000-0000-4000-8000-000000000014','Host twin'),('d2000000-0000-4000-8000-000000000015','Older'),
+ ('d2000000-0000-4000-8000-000000000016','Newer');
+insert into private.beta_access(user_id,source) values
+ ('d2000000-0000-4000-8000-000000000014','maintainer'),('d2000000-0000-4000-8000-000000000015','maintainer'),
+ ('d2000000-0000-4000-8000-000000000016','maintainer');
+insert into private.app_sessions(user_id) values
+ ('d2000000-0000-4000-8000-000000000014'),('d2000000-0000-4000-8000-000000000015'),('d2000000-0000-4000-8000-000000000016');
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000011","role":"authenticated"}',true);
+do $$ declare r text[]; j jsonb; begin
+ -- Both accounts of the pair are On Resbite; the lookup still returns only what was sent.
+ r := public.contacts_on_resbite(array['+54 11 1234 0015']);
+ if r<>array['541112340015'] then raise exception 'Lookup must not return an account''s own digits: %', r; end if;
+ j := public.invite_contacts('d2100000-0000-4000-8000-000000000001', jsonb_build_array(
+  jsonb_build_object('phone','+54 11 1234 0011','country','54','code',repeat('P',22)),
+  jsonb_build_object('phone','+54 9 11 1234 0011','country','54','code',repeat('Q',22)),
+  jsonb_build_object('phone','+54 11 1234 0015','country','54','code',repeat('S',22))));
+ if j->0->>'kind'<>'self' or j->1->>'kind'<>'self' then raise exception 'The host holding the 9 form is self in either spelling: %', j; end if;
+ if j->2->>'kind'<>'app' or j->2->>'phone'<>'541112340015' then raise exception 'Of the pair, one holder is invited in the app: %', j->2; end if;
+end $$;
+reset role;
+do $$ begin
+ if exists(select 1 from public.attendees where plan_id='d2100000-0000-4000-8000-000000000001' and user_id='d2000000-0000-4000-8000-000000000014') then
+  raise exception 'The host''s number must not invite its other holder';
+ end if;
+ if not exists(select 1 from public.attendees where plan_id='d2100000-0000-4000-8000-000000000001' and user_id='d2000000-0000-4000-8000-000000000016')
+ or exists(select 1 from public.attendees where plan_id='d2100000-0000-4000-8000-000000000001' and user_id='d2000000-0000-4000-8000-000000000015') then
+  raise exception 'The 9-form holder must be the one invited in the app';
+ end if;
+ if exists(select 1 from private.phone_invitations where plan_id='d2100000-0000-4000-8000-000000000001'
+   and phone in ('541112340011','541112340015')) then
+  raise exception 'Self and in-app invitations are not rows';
+ end if;
 end $$;
 rollback;

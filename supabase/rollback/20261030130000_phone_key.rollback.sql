@@ -1,10 +1,26 @@
 -- Rollback for 20261030130000_phone_key.sql (the phone key). Run as one transaction, only with the owner's approval:
 --   begin; \i supabase/rollback/20261030130000_phone_key.rollback.sql; commit;
--- It restores what the migration replaced (the two test-mode functions) and drops every function the migration created.
--- The drops stay at the end: restores come above them.
--- It also puts the rewritten accounts' phone numbers (and their phone identities) back from private.phone_rewrites.
--- It does NOT put the re-keyed invitations back (a key is the old digits for every number except an Argentine mobile
--- saved with the 9, and the collapsed duplicates are gone) and it does not restore phone_change values.
+-- First it counts the older numbers it would put back that another account now holds; if there is any, it stops before
+-- any change with "N older numbers are now held by other accounts; settle them first" (the count only, never a number).
+-- It restores the seven functions the migration replaced (the two test-mode functions, send_sms_hook and
+-- exchange_test_code, and the five invitation functions) and drops every function the migration created. The drops
+-- stay at the end: restores come above them.
+-- It puts the accounts rewritten by supabase/ops/rewrite-older-argentine-accounts.sql back (their phone numbers and
+-- their phone identities) from private.phone_rewrites, then drops that table.
+-- It does NOT restore:
+--  - the re-keyed invitations: a key is the old digits for every number except an Argentine mobile saved with the 9, so
+--    after a rollback an invitation saved with the 9 matches only the spelling without it; the collapsed duplicates
+--    are gone;
+--  - private.test_codes, which the migration emptied (a code lives ten minutes);
+--  - phone_change values, which the script rewrites without recording them.
+
+do $$ declare v_taken bigint; begin
+ select count(*) into v_taken from private.phone_rewrites r
+  where exists(select 1 from auth.users v where v.phone = r.old_phone and v.id <> r.user_id);
+ if v_taken > 0 then
+  raise exception '% older numbers are now held by other accounts; settle them first', v_taken;
+ end if;
+end $$;
 
 create or replace function public.send_sms_hook(event jsonb) returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
