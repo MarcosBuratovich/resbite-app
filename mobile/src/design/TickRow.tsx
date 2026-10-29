@@ -15,6 +15,7 @@ export function TickRow({
   onChange,
   hint,
   disabled = false,
+  role = "checkbox",
   children,
 }: {
   label: string;
@@ -22,12 +23,14 @@ export function TickRow({
   onChange: (next: boolean) => void;
   hint?: string;
   disabled?: boolean;
+  /** "radio" for a row that is one of a group of choices (the Where sheet's places); the tick looks the same. */
+  role?: "checkbox" | "radio";
   children?: React.ReactNode;
 }) {
   return (
     <View style={styles.wrap}>
       <Pressable
-        accessibilityRole="checkbox"
+        accessibilityRole={role}
         accessibilityLabel={label}
         accessibilityHint={hint}
         accessibilityState={{ checked, disabled }}

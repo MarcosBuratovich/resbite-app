@@ -70,6 +70,7 @@ export function WhereSheet({
           {recent.map((place) => (
             <TickRow
               key={place}
+              role="radio"
               label={place}
               checked={chosen === place}
               onChange={(on) => {
@@ -86,6 +87,7 @@ export function WhereSheet({
         </>
       )}
       <TickRow
+        role="radio"
         label={PLAN_COPY.toBeDecided}
         checked={draft.placeTbd}
         onChange={(on) => {
