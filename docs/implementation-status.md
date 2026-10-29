@@ -717,3 +717,12 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
 **For the owner.** The new words to approve (the ask's failure line, the chip states and Try again, the About sheet's lead lines and six events, the "Updates" renames, the three new push bodies) and the parked items are in the runbook. `20261022120001` must be split before the deletion milestone, without `notification_recipient_eligible`.
 
 **Next.** The owner's approvals, in the runbook's order; then the deletion milestone.
+
+## Phone key (29 October 2026)
+
+**Plan 1 of 2 built on the `pk1-server` branch (from `main` at `5e70de7`); nothing is applied to the hosted project, Vercel, EAS or TestFlight.** An Argentine mobile has two spellings (`+54 9 11 ...` and `+54 11 ...`); invitations and accounts now match by a "phone key" that folds them into one ([spec](superpowers/specs/2026-10-29-phone-key-design.md); [plan 1](superpowers/plans/2026-10-29-phone-key-1-server.md); [plan 2, the clients](superpowers/plans/2026-10-29-phone-key-2-clients.md)). The runbook is [`qa/phone-key-2026-10-29/README.md`](../qa/phone-key-2026-10-29/README.md).
+
+- **Database.** `supabase/migrations/20261030130000_phone_key.sql` (hosted-compatible): `private.phone_key` and `private.phone_variants`; seven redefinitions (`send_sms_hook`, `exchange_test_code`, `contacts_on_resbite`, `invite_contacts`, `revoke_phone_invitation`, `check_invited_number`, `answer_phone_invitation`); invitations re-keyed, test codes emptied; older Argentine accounts rewritten to the `549` form and logged in `private.phone_rewrites` (collision pairs stay). Rollback: `supabase/rollback/20261030130000_phone_key.rollback.sql`.
+- **Records.** The hosted-baseline rehearsal checks the data changes, the shape (exactly what the migration adds and redefines) and the rollback, run in a savepoint. Hashes are in the runbook.
+
+**Next.** The owner's approvals in the runbook's order; plan 2 (clients).

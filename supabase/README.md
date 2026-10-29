@@ -140,6 +140,15 @@ Run `../scripts/test-database.sh --hosted-baseline` before applying a migration 
 - **Sender and schedule.** The Edge Function is [`functions/deliver-notifications`](functions/deliver-notifications/README.md) (hard-disabled in source until the owner flips `DELIVERY_RELEASE_APPROVED`). `ops/schedule-deliver-notifications.sql` is an owner-run script, not a migration and not in any test list: it needs `pg_cron` 1.3 or later, `pg_net` and two Vault secrets, and `pg_net` keeps the request (with the secret) in `net.http_request_queue` while it is pending.
 - **Still local-only:** the account-deletion lifecycle, with its own approvals.
 
+## Phone key — not yet applied
+
+`20261030130000_phone_key.sql` is **not applied** to hosted; it needs the owner's approval by file name and sha256. The steps, the counts to take before and after, and the rollback are in the [runbook](../qa/phone-key-2026-10-29/README.md).
+
+- **Two functions.** `private.phone_key(text)` (the digits of a number, with an Argentine mobile's `549` folded to `54`) and `private.phone_variants(text)` (the spellings a key can be stored under), both for nobody.
+- **Seven redefinitions** that compare by key: `send_sms_hook`, `exchange_test_code`, `contacts_on_resbite`, `invite_contacts`, `revoke_phone_invitation`, `check_invited_number` and `answer_phone_invitation`.
+- **Data.** Invitations re-keyed (duplicates in two spellings collapsed), `private.test_codes` emptied, and `private.phone_rewrites` logging each older Argentine account (`54` and ten digits) rewritten to its `549` form, except where another account holds that form.
+- **Rollback:** `rollback/20261030130000_phone_key.rollback.sql` restores the account numbers from the log, the seven bodies, and drops the log and the two functions; it does not restore the re-keyed invitations or the test codes.
+
 ### Hosted-baseline commands
 
 The four contact-invitation migrations are in `migrations.txt` since 28 October 2026, so nothing is pending:
