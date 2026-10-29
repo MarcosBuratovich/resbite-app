@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as Crypto from "expo-crypto";
 import { useApp } from "./AppState";
-import { chooseNormalizedPhoto } from "../services/photo";
+import { chooseNormalizedPhoto, toBase64 } from "../services/photo";
 import {
   CoverDescriptionConflict,
   coverDescriptionGateway,
   coverGateway,
   planCoverStore,
   signedCovers,
+  takeDownloadedCover,
 } from "../services/planCovers";
 import { finishVersionedPhotoChange, type PhotoChange } from "../services/profilePhotoStore";
 import {
@@ -35,6 +36,11 @@ export type CoverControls = {
   describe(text: string): Promise<string | null>;
   /** Resolves once the change in flight (a photo being chosen or removed, a description saving) has finished. */
   idle(): Promise<void>;
+  /**
+   * Before the resbite exists: takes a photo downloaded to this device (Do this again's copy of the original's)
+   * as the chosen one, with its description, so `commitAfterCreate` uploads it as a chosen photo.
+   */
+  adopt(downloaded: string, description: string): Promise<void>;
   commitAfterCreate(planId: string): Promise<CoverOutcome>;
 };
 
@@ -291,6 +297,14 @@ export function useCoverPhoto(options: {
     () => undefined,
     () => undefined,
   );
+  async function adopt(downloaded: string, text: string): Promise<void> {
+    if (preview || planId) throw Error("Only a new resbite takes a downloaded photo.");
+    const bytes = await takeDownloadedCover(downloaded);
+    const shown = `data:image/jpeg;base64,${toBase64(bytes)}`;
+    chosen.current = { bytes, uri: shown };
+    if (mounted.current) setUri(shown);
+    setDescription(text.trim().slice(0, COVER_DESCRIPTION_MAX));
+  }
   async function commitAfterCreate(newPlanId: string): Promise<CoverOutcome> {
     const photo = chosen.current;
     if (preview || !photo || !ownerId) return "none";
@@ -335,5 +349,5 @@ export function useCoverPhoto(options: {
       return "pending";
     }
   }
-  return { uri, description, pending, busy, ready, message, choose, remove, retry, keep, describe, idle, commitAfterCreate };
+  return { uri, description, pending, busy, ready, message, choose, remove, retry, keep, describe, idle, adopt, commitAfterCreate };
 }

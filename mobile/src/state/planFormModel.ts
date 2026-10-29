@@ -109,3 +109,12 @@ export function editChangesTimeOrPlace(form: PlanForm, zone: string, original: P
   if (missingItems(form).length > 0) return false;
   return timeOrPlaceChanged(savedDetails(original, zone), editWrite(form, zone, original).details);
 }
+
+/**
+ * Where a new resbite's photo comes from once it exists: the photo chosen on the screen; else, for Do this again,
+ * a copy of the original's (uploaded into the new resbite's own folder); else none.
+ */
+export function newCoverSource(mode: PlanFormMode, chosen: boolean, originalPath: string | null): "chosen" | "copy" | "none" {
+  if (chosen) return "chosen";
+  return mode === "again" && originalPath ? "copy" : "none";
+}

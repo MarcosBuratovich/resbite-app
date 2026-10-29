@@ -1,7 +1,7 @@
 // Browser QA for CE2 cover photos. Every Supabase request is intercepted; nothing is uploaded.
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
-import { button, closeToList, createPlan, editEvent, heading, later, openEvent, quietReminders } from "./qa-helpers.mjs";
+import { button, closeToList, createPlan, editEvent, fillSettled, heading, later, openEvent, quietReminders } from "./qa-helpers.mjs";
 const baseURL = process.env.RESBITE_QA_URL || "http://localhost:8081";
 const browser = await chromium.launch({
   channel: process.env.RESBITE_QA_BROWSER || "chrome",
@@ -136,6 +136,8 @@ try {
   const plans = new Map();
   const uploads = [];
   const descriptionCalls = [];
+  // Every set_plan_cover_if_current call, in order.
+  const links = [];
   let failNextLink = true;
   let coverBytes = Buffer.alloc(0);
   await page.route("**/*.supabase.co/**", async (route) => {
@@ -199,7 +201,11 @@ try {
     if (path === "/rest/v1/rpc/set_plan_cover_if_current") {
       assert.equal(req.headers().authorization, `Bearer ${token}`);
       const { p_plan, p_path, p_expected_path, p_expected_revision } = req.postDataJSON();
+      links.push({ p_plan, p_path, p_expected_path, p_expected_revision });
       const plan = plans.get(p_plan);
+      // As the server does: a cover only from the plan's own folder, and only one that was uploaded.
+      if (p_path !== null && (!p_path.startsWith(`${user.id}/${p_plan}/`) || !uploads.includes(p_path)))
+        return reply({ code: "42501", message: "Own uploaded cover required" }, 403);
       if (failNextLink) {
         failNextLink = false;
         return reply({ message: "Temporary failure" }, 503);
@@ -327,6 +333,47 @@ try {
   await page.getByRole("button", { name: "Close sheet", exact: true }).click();
   await closeToList(page);
   console.log("PASS: photo description: saved after a new event's photo, edited at once, cleared by a new photo, conflict kept in the sheet.");
+
+  // Do this again: the original's photo is downloaded and uploaded into the NEW resbite's own folder, set there and
+  // described there; the original keeps its own.
+  plan.cover_description = "A red blanket on the grass";
+  const originalCover = { path: plan.cover_path, revision: plan.cover_revision, description: plan.cover_description };
+  const uploadsBefore = uploads.length;
+  const linksBefore = links.length;
+  const describedBefore = descriptionCalls.length;
+  await openEvent(page, "Garden picnic");
+  await button(page, "More actions").click();
+  await button(page, "Do this again").click();
+  await expect(heading(page, "New resbite")).toBeVisible();
+  // The original's picture shows, with its description, before the copy exists.
+  await expect(page.getByRole("button", { name: "Edit photo description, A red blanket on the grass", exact: true })).toBeVisible();
+  await fillSettled(page.getByLabel("Title", { exact: true }), "Garden picnic again");
+  await createPlan(page, { place: "Riverside park" });
+  await expect(heading(page, "It’s on!")).toBeVisible();
+  const copy = [...plans.values()].find((p) => p.title === "Garden picnic again");
+  assert.ok(copy, "The copy was created");
+  await expect.poll(() => copy.cover_description).toBe("A red blanket on the grass");
+  assert.equal(uploads.length, uploadsBefore + 1, "One upload, for the copy");
+  assert.match(uploads.at(-1), new RegExp(`^${user.id}/${copy.id}/[0-9a-f-]+\\.jpg$`), "Uploaded into the new resbite's folder");
+  assert.deepEqual(links.slice(linksBefore), [
+    { p_plan: copy.id, p_path: uploads.at(-1), p_expected_path: null, p_expected_revision: 0 },
+  ]);
+  assert.equal(copy.cover_path, uploads.at(-1));
+  assert.deepEqual(descriptionCalls.slice(describedBefore), [
+    { p_description: "A red blanket on the grass", p_expected_revision: 1 },
+  ]);
+  assert.deepEqual(
+    { path: plan.cover_path, revision: plan.cover_revision, description: plan.cover_description },
+    originalCover,
+    "The original keeps its own cover",
+  );
+  // It’s on! shows the copied picture with its description, and no cover notice.
+  await expect(page.locator('img[src^="data:image/jpeg"]').first()).toBeAttached();
+  await expect(page.getByRole("img", { name: "A red blanket on the grass", exact: true }).first()).toBeAttached();
+  await expect(page.getByText(/^Your resbite is saved, but/)).toHaveCount(0);
+  await later(page);
+  await expect(page.getByRole("button", { name: /^Garden picnic again, .*, Photo: A red blanket on the grass$/ })).toBeVisible();
+  console.log("PASS: Do this again copies the original's photo: one upload and one set_plan_cover_if_current, both in the new resbite's own folder, then its description; the original keeps its own; It’s on! shows the picture.");
 
   // 3. A pending cover change is cleared from the device by sign-out.
   const coverKeys = () =>

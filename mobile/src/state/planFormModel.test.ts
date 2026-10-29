@@ -7,6 +7,7 @@ import {
   editWrite,
   hasUnsavedChanges,
   modeFor,
+  newCoverSource,
   submitCheck,
 } from "./planFormModel";
 import { EMPTY_FORM, type PlanForm } from "../domain/planForm";
@@ -155,4 +156,15 @@ test("editChangesTimeOrPlace is true for a moved start or place, false for other
   assert.equal(editChangesTimeOrPlace({ ...complete, place: "Park" }, "UTC", original), true);
   assert.equal(editChangesTimeOrPlace({ ...complete, placeTbd: true }, "UTC", original), true);
   assert.equal(editChangesTimeOrPlace({ ...complete, date: null }, "UTC", original), false);
+});
+
+test("newCoverSource: the chosen photo, else Do this again copies the original's, else none", () => {
+  const original = "owner/plan-1/cover.jpg";
+  assert.equal(newCoverSource("again", false, original), "copy");
+  assert.equal(newCoverSource("again", true, original), "chosen");
+  assert.equal(newCoverSource("again", false, null), "none");
+  for (const mode of ["blank", "idea"] as const) {
+    assert.equal(newCoverSource(mode, false, original), "none", mode);
+    assert.equal(newCoverSource(mode, true, null), "chosen", mode);
+  }
 });

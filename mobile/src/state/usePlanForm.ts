@@ -13,6 +13,7 @@ import {
   editWrite,
   hasUnsavedChanges,
   modeFor,
+  newCoverSource,
   submitCheck,
   type PlanFormMode,
   type SubmitCheck,
@@ -35,7 +36,7 @@ import { readGuests } from "../services/rsvp";
 import { recentPlaces } from "../services/recentPlaces";
 import { createJournal } from "../services/journal";
 import { syncReminders } from "../services/deviceReminders";
-import { coverDescriptionGateway, coverGateway, signedCovers } from "../services/planCovers";
+import { coverDescriptionGateway, downloadCover, signedCovers } from "../services/planCovers";
 
 export type PlanFormController = {
   mode: PlanFormMode;
@@ -72,7 +73,7 @@ export type PlanFormController = {
 const deviceZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 const messageOf = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
 
-/** The picture an "again" plan starts with: the original's cover, copied to the new plan unless a new photo is chosen. */
+/** The picture an "again" plan starts with: the original's cover, copied into the new plan unless a new photo is chosen. */
 type CoverFallback = { path: string; uri: string | null; description: string };
 
 /**
@@ -228,15 +229,19 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
     },
   };
 
-  // A new resbite from "again" takes the original's picture unless a new one was chosen.
-  async function copyFallbackCover(planId: string, description: string) {
-    if (!ownerId || !fallback) return;
-    await coverGateway(ownerId, planId).link(fallback.path, null, 0);
-    const text = description.trim();
-    if (!text) return;
-    const gateway = coverDescriptionGateway(ownerId, planId);
-    const current = await gateway.read();
-    if (current) await gateway.save(text, current.revision);
+  /**
+   * The new resbite's photo, through the one cover pipeline (upload, set, description): the photo chosen here, or
+   * for Do this again the original's, downloaded and taken as chosen. A copy that fails says so, as an upload does.
+   */
+  async function coverAfterCreate(live: CoverControls, planId: string): Promise<CoverOutcome> {
+    if (newCoverSource(mode, live.uri !== null, fallback?.path ?? null) === "copy") {
+      try {
+        await live.adopt(await downloadCover(fallback!.path), live.description || fallback!.description);
+      } catch {
+        return "failed";
+      }
+    }
+    return live.commitAfterCreate(planId).catch((): CoverOutcome => "failed");
   }
 
   async function create(assertSession: () => void) {
@@ -282,11 +287,8 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
         throw e;
       }
       // The plan exists from here on; what follows never turns the create into a failure.
-      const withNew = live.uri !== null;
-      const outcome = await live.commitAfterCreate(write.id).catch((): CoverOutcome => "failed");
+      const outcome = await coverAfterCreate(live, write.id);
       if (mounted.current) setCoverOutcome(outcome);
-      if (!withNew)
-        await copyFallbackCover(write.id, live.description || fallback?.description || "").catch(() => {});
       const noteFailed = note ? await setGuestNote(write.id, note).then(() => null, (e) => messageOf(e, PLAN_COPY.unconfirmed)) : null;
       if (!form.placeTbd && form.place.trim())
         void recentPlaces.remember(scope!, form.place.trim(), assertSession).catch(() => {});
@@ -376,8 +378,9 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
     }
   }
 
+  // Do this again shows the original's picture until it is replaced or copied; a failed copy shows none.
   const shownCover: CoverControls =
-    fallback && !cover.uri
+    fallback && !cover.uri && coverOutcome !== "failed"
       ? { ...cover, uri: fallback.uri, description: cover.description || fallback.description }
       : cover;
 

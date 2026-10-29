@@ -6,7 +6,7 @@ import {
   createPhotoChangeStore,
   type VersionedPhotoGateway,
 } from "./profilePhotoStore";
-import { fromBase64, toBase64, MAX_PHOTO_BYTES } from "./photo";
+import { fromBase64, stripJpegMetadata, toBase64, MAX_PHOTO_BYTES } from "./photo";
 import { createCoverJournalIndex, createIndexedCoverStore } from "./coverJournalIndex";
 import { createSignedUrlCache } from "./signedUrlCache";
 import { COVER_BUCKET, coverPhotoLayout } from "../domain/covers";
@@ -60,6 +60,46 @@ export const signedCovers = createSignedUrlCache(async (path) => {
   if (error) throw error;
   return data.signedUrl;
 });
+
+const COPY_FILE = "resbite-cover-copy.jpg";
+
+/**
+ * Do this again: the original's cover, downloaded to this device so the new resbite can upload it into its own
+ * folder (the server takes a cover only from there). A cache file; on the web, a blob URL.
+ */
+export async function downloadCover(path: string): Promise<string> {
+  const url = await signedCovers.get(path);
+  if (Platform.OS === "web") {
+    const response = await fetch(url);
+    if (!response.ok) throw Error(`The cover could not be downloaded (${response.status}).`);
+    return URL.createObjectURL(await response.blob());
+  }
+  const { File, Paths } = await import("expo-file-system");
+  const file = await File.downloadFileAsync(url, new File(Paths.cache, COPY_FILE), { idempotent: true });
+  return file.uri;
+}
+
+/** The bytes of a cover `downloadCover` put on this device, checked as a clean JPEG; the download goes once read. */
+export async function takeDownloadedCover(uri: string): Promise<Uint8Array> {
+  let bytes: Uint8Array;
+  if (Platform.OS === "web") {
+    try {
+      const response = await fetch(uri);
+      bytes = new Uint8Array(await response.arrayBuffer());
+    } finally {
+      URL.revokeObjectURL(uri);
+    }
+  } else {
+    const { File } = await import("expo-file-system");
+    const file = new File(uri);
+    try {
+      bytes = await file.bytes();
+    } finally {
+      if (file.exists) file.delete();
+    }
+  }
+  return stripJpegMetadata(bytes);
+}
 
 /** Cover reads and writes bound to the organizer's captured session. */
 export function coverGateway(ownerId: string, planId: string): VersionedPhotoGateway {
