@@ -71,6 +71,8 @@ export type EventSnapshot = {
   /** The organizer's name, for an invitee's guest area; null for the organizer. */
   organizer: string | null;
   guests: Guest[];
+  /** The ids of the people the host made admins. */
+  admins: string[];
 };
 
 /**
@@ -129,5 +131,6 @@ export async function readEvent(planId: string, userId: string): Promise<EventSn
     attendee = own.data;
     organizer = host.data?.display_name ?? null;
   }
-  return { plan: planFromRow(plan.data), attendee, organizer, guests };
+  const mapped = planFromRow(plan.data);
+  return { plan: mapped, attendee, organizer, guests, admins: mapped.admins };
 }

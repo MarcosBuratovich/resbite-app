@@ -1,50 +1,5 @@
-import type { NotificationPermission } from "./notifications";
-
-// UX3 event page: the reminders chip (spec "Calendar and reminders", UX3-D4). The calendar chip's wording comes
-// from `needsCalendarUpdate` (calendarEvent.ts). Plan 4: the ask is the notification ask (`shouldAsk`,
-// notifications.ts), which replaced "Get reminders?".
-
-/** What a tap on the reminders chip does. */
-export type ReminderChipAction = "mute" | "unmute" | "ask" | "settings" | "notifications";
-export type ReminderChip = { on: boolean; text: string; label: string; hint: string; action: ReminderChipAction };
-
-const off = (action: ReminderChipAction, hint: string): ReminderChip => ({
-  on: false,
-  text: "Reminders off",
-  label: "Reminders off",
-  hint,
-  action,
-});
-
-/**
- * The event's "Reminders on" / "Reminders off" chip. It is on only with the permission (`allowed`), the
- * Notifications switch on and this event not muted. A tap mutes or unmutes this event on this phone. When
- * reminders are switched off on Notifications it opens Notifications; when iPhone was never asked ("Not
- * now"), it asks; when the permission is off, it opens Settings.
- */
-export function reminderChip(state: {
-  permission: NotificationPermission;
-  /** Full or quiet permission (`remindersAllowed`). */
-  allowed: boolean;
-  /** The Notifications screen's "Event reminders" switch. */
-  enabled: boolean;
-  /** This event's reminders are switched off on this phone. */
-  muted: boolean;
-}): ReminderChip {
-  if (!state.enabled) return off("notifications", "Opens Notifications, where reminders are switched off");
-  if (state.allowed)
-    return state.muted
-      ? off("unmute", "Turns reminders on for this resbite")
-      : {
-          on: true,
-          text: "Reminders on",
-          label: "Reminders on, 1 day and 1 hour before",
-          hint: "Turns reminders off for this resbite",
-          action: "mute",
-        };
-  if (state.permission === "undetermined") return off("ask", "Asks to allow reminders");
-  return off("settings", "Opens Settings to allow notifications");
-}
+// UX3 event page: the calendar action's wording comes from `needsCalendarUpdate` (calendarEvent.ts). Plan 4: the ask is
+// the notification ask (`shouldAsk`, notifications.ts), which replaced "Get reminders?". Plan 3: the mute is the server's.
 
 /**
  * Controller ruling P10: iPhone's add-event form opens without a permission only on iOS 17 or later; older

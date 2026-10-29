@@ -42,7 +42,7 @@ const original: Plan = {
   place_tbd: false,
   repeat_weeks: null,
   series_id: "s",
-  repeats_from: null,
+  repeats_from: null, admins: [],
 };
 
 test("modeFor reads the params in order: plan, again, activity, else blank", () => {

@@ -15,7 +15,7 @@ const plan: Plan = {
   id: "p", activity_id: null, title: "Walk", description: "d", categories: ["natural"],
   starts_at: "2026-10-24T18:00:00.000Z", ends_at: "2026-10-24T21:00:00.000Z", place_label: "Park", note: "gate",
   status: "active", version: 1, time_zone: L, area: "Hyde", guest_note: "hi", repeat_weeks: 2,
-  place_tbd: false, series_id: "s", repeats_from: null,
+  place_tbd: false, series_id: "s", repeats_from: null, admins: [],
 };
 
 test("the empty form pre-fills nothing", () => {

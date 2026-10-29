@@ -39,11 +39,14 @@ export type Plan = {
   repeat_weeks: 1 | 2 | null;
   series_id: string;
   repeats_from: string | null;
+  /** Plan 3: the ids of the people the host made admins (the embed `plan_admins(user_id)`); [] when none. */
+  admins: string[];
 };
 
-/** A plans row read with its Meeting details embedded as `plan_meeting_details(note)`. */
-export type PlanRow = Omit<Plan, "note"> & {
+/** A plans row read with its Meeting details embedded as `plan_meeting_details(note)` and its admins as `plan_admins(user_id)`. */
+export type PlanRow = Omit<Plan, "note" | "admins"> & {
   note?: string | null;
+  plan_admins?: { user_id: string }[] | null;
   plan_meeting_details?: { note: string | null } | { note: string | null }[] | null;
 };
 
@@ -52,9 +55,9 @@ export type PlanRow = Omit<Plan, "note"> & {
  * returns to the organizer and Going or Maybe guests; the row's own note column is always empty now.
  */
 export function planFromRow(row: PlanRow): Plan {
-  const { plan_meeting_details: embedded, ...plan } = row;
+  const { plan_meeting_details: embedded, plan_admins: admins, ...plan } = row;
   const details = Array.isArray(embedded) ? embedded[0] : embedded;
-  return { ...plan, note: details?.note ?? "" };
+  return { ...plan, note: details?.note ?? "", admins: (admins ?? []).map((a) => a.user_id) };
 }
 
 export type PlanDetails = EventFields &

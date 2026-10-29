@@ -156,7 +156,14 @@ export function createFakeReminderAdapter(mirror: DeviceMirror | null = deviceMi
 }
 
 /** A plan as the reminder sync reads it: My resbites' rows, or preview's plans on the device. */
-export type ReminderPlanRow = { id: string; title: string; starts_at: string; status: string; owner_id?: string };
+export type ReminderPlanRow = {
+  id: string;
+  title: string;
+  starts_at: string;
+  status: string;
+  owner_id?: string;
+  series_id?: string;
+};
 
 /** What reminders are planned from: the person's plans, with their own answer on each. */
 export function reminderSources(
@@ -173,6 +180,7 @@ export function reminderSources(
     // Preview has no accounts: everything on the device is the person's own.
     owner: who.preview || (who.userId !== null && plan.owner_id === who.userId),
     response: responses.get(plan.id) ?? null,
+    series: plan.series_id ?? null,
   }));
 }
 
@@ -190,6 +198,8 @@ type SyncDependencies = {
   prefs: (scope: string) => Promise<ReminderPrefs>;
   /** The signed-in person's upcoming plans and their own answers. A failure leaves the phone unchanged. */
   readSources: (userId: string, now: Date) => Promise<ReminderSource[]>;
+  /** The series this person has muted on the server. A failure leaves the phone unchanged. */
+  mutedSeries: () => Promise<ReadonlySet<string>>;
   now?: () => Date;
 };
 
@@ -214,11 +224,12 @@ export function createReminderSync(deps: SyncDependencies) {
     const prefs = await deps.prefs(key);
     if (!prefs.enabled) return [];
     const at = now();
-    const sources =
-      scope.preview || !scope.userId
-        ? reminderSources(plans, [], scope)
-        : await deps.readSources(scope.userId, at);
-    return plannedReminders(sources, { now: at, enabled: prefs.enabled, muted: new Set(prefs.muted) });
+    // Mutes live on the server; plans kept on the device (preview) have none.
+    const online = !scope.preview && scope.userId;
+    const sources = online ? await deps.readSources(scope.userId!, at) : reminderSources(plans, [], scope);
+    const series = online ? await deps.mutedSeries() : new Set<string>();
+    const muted = new Set(sources.filter((s) => s.series && series.has(s.series)).map((s) => s.id));
+    return plannedReminders(sources, { now: at, enabled: prefs.enabled, muted });
   }
   return {
     sync(scope: ReminderScope): Promise<void> {

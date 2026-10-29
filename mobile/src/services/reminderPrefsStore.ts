@@ -1,9 +1,8 @@
 import type { KeyStore } from "./secureChunks";
 
-/** UX3 reminder switches (all reminders on or off, events muted one by one) and the ask's flags. */
+/** UX3 reminder switches (all reminders on or off) and the ask's flags. Mutes live on the server (Plan 3). */
 export type ReminderPrefs = {
   enabled: boolean;
-  muted: string[];
   /** UX3's "Get reminders?" was shown. Kept as stored: nothing sets or reads it since Plan 4. */
   asked: boolean;
   /**
@@ -12,12 +11,10 @@ export type ReminderPrefs = {
    */
   notificationsAsked: boolean;
 };
-/** The most muted events kept; the oldest mute drops off first. */
-export const MUTED_MAX = 200;
-const defaults = (): ReminderPrefs => ({ enabled: true, muted: [], asked: false, notificationsAsked: false });
+const defaults = (): ReminderPrefs => ({ enabled: true, asked: false, notificationsAsked: false });
 
 // UX3: the account's reminder switches, on this device only, cleared at sign-out and account deletion.
-// A convenience: unreadable data reads as the defaults (reminders on, none muted, not asked yet).
+// A convenience: unreadable data reads as the defaults (reminders on, not asked yet).
 export function createReminderPrefsStore(storage: KeyStore) {
   let queue: Promise<unknown> = Promise.resolve();
   const run = <T>(work: () => Promise<T>): Promise<T> => {
@@ -35,12 +32,10 @@ export function createReminderPrefsStore(storage: KeyStore) {
       return defaults();
     }
     if (typeof saved !== "object" || saved === null) return defaults();
-    const { enabled, muted, asked, notificationsAsked } = saved as Record<string, unknown>;
+    // A `muted` list stored by an older version is ignored: mutes are the server's now.
+    const { enabled, asked, notificationsAsked } = saved as Record<string, unknown>;
     return {
       enabled: typeof enabled === "boolean" ? enabled : true,
-      muted: Array.isArray(muted)
-        ? [...new Set(muted.filter((id): id is string => typeof id === "string" && id !== ""))].slice(-MUTED_MAX)
-        : [],
       asked: asked === true,
       notificationsAsked: notificationsAsked === true,
     };
@@ -57,16 +52,6 @@ export function createReminderPrefsStore(storage: KeyStore) {
     read: (scope: string): Promise<ReminderPrefs> => run(() => read(scope)).catch(defaults),
     setEnabled: (scope: string, enabled: boolean, assertCurrent: () => void = () => {}) =>
       change(scope, (prefs) => ({ ...prefs, enabled }), assertCurrent),
-    /** Mutes or unmutes one event's reminders; the newest mute is kept last. */
-    setMuted: (scope: string, planId: string, muted: boolean, assertCurrent: () => void = () => {}) =>
-      change(
-        scope,
-        (prefs) => {
-          const others = prefs.muted.filter((id) => id !== planId);
-          return { ...prefs, muted: muted ? [...others, planId].slice(-MUTED_MAX) : others };
-        },
-        assertCurrent,
-      ),
     /** The notification ask was shown on this phone; UX3's `asked` is left as it was. */
     markNotificationsAsked: (scope: string, assertCurrent: () => void = () => {}) =>
       change(scope, (prefs) => ({ ...prefs, notificationsAsked: true }), assertCurrent),

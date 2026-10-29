@@ -196,7 +196,7 @@ const source = (id: string, hoursAhead: number, extra: Partial<ReminderSource> =
   ...extra,
 });
 
-function syncHarness(options: { permission?: string; prefs?: Partial<ReminderPrefs> } = {}) {
+function syncHarness(options: { permission?: string; prefs?: Partial<ReminderPrefs>; mutedSeries?: string[] } = {}) {
   const phone = mirror();
   phone.permission = (options.permission ?? "granted") as DeviceMirror["permission"];
   const previewPhone = mirror();
@@ -208,7 +208,8 @@ function syncHarness(options: { permission?: string; prefs?: Partial<ReminderPre
   };
   let sources: () => Promise<ReminderSource[]> = async () => [source("p1", 48)];
   const reads: string[] = [];
-  const prefs: ReminderPrefs = { enabled: true, muted: [], asked: true, notificationsAsked: true, ...options.prefs };
+  const prefs: ReminderPrefs = { enabled: true, asked: true, notificationsAsked: true, ...options.prefs };
+  const mutedSeries = new Set(options.mutedSeries ?? []);
   const sync = createReminderSync({
     service: (preview) => services[preview ? "preview" : "phone"],
     prefs: async (scope) => {
@@ -219,10 +220,15 @@ function syncHarness(options: { permission?: string; prefs?: Partial<ReminderPre
       reads.push(`plans:${userId}`);
       return sources();
     },
+    mutedSeries: async () => {
+      reads.push("mutes");
+      return mutedSeries;
+    },
     now: () => NOW,
   });
   return {
     sync,
+    mutedSeries,
     phone,
     previewPhone,
     reads,
@@ -242,12 +248,15 @@ test("a sync sets the two reminders for the person's events, honouring the switc
     source("own", 48),
     source("going", 30, { owner: false, response: "accepted" }),
     source("cant", 30, { owner: false, response: "declined" }),
-    source("muted", 30),
+    source("muted", 30, { series: "s1" }),
+    source("sibling", 30, { series: "s1" }),
+    source("other", 40, { series: "s2" }),
   ]);
-  h.prefs.muted = ["muted"];
+  h.mutedSeries.add("s1");
   await h.sync.sync({ userId: "me", preview: false });
-  assert.deepEqual(h.ids(), ["going:1d", "own:1d", "going:1h", "own:1h"]);
-  assert.deepEqual(h.reads, ["prefs:me", "plans:me"]);
+  assert.deepEqual(h.ids(), ["going:1d", "other:1d", "own:1d", "going:1h", "other:1h", "own:1h"]);
+  // The server's mutes are read once a sync; the series, not the plan, is what is muted.
+  assert.deepEqual(h.reads, ["prefs:me", "plans:me", "mutes"]);
   h.prefs.enabled = false;
   await h.sync.sync({ userId: "me", preview: false });
   assert.deepEqual(h.ids(), []);
@@ -279,7 +288,24 @@ test("signed out, the phone keeps no reminders", async () => {
   await h.sync.sync({ userId: "me", preview: false });
   await h.sync.sync({ userId: null, preview: false });
   assert.deepEqual(h.ids(), []);
-  assert.deepEqual(h.reads, ["prefs:me", "plans:me"]);
+  assert.deepEqual(h.reads, ["prefs:me", "plans:me", "mutes"]);
+});
+
+test("a failed read of the mutes leaves the phone's reminders as they were", async () => {
+  const h = syncHarness();
+  await h.sync.sync({ userId: "me", preview: false });
+  assert.deepEqual(h.ids(), ["p1:1d", "p1:1h"]);
+  const failing = createReminderSync({
+    service: () => createReminderService(createFakeReminderAdapter(h.phone)),
+    prefs: async () => ({ enabled: true, asked: true, notificationsAsked: true }),
+    readSources: async () => [source("p1", 48, { series: "s1" })],
+    mutedSeries: async () => {
+      throw Error("offline");
+    },
+    now: () => NOW,
+  });
+  await assert.rejects(failing.sync({ userId: "me", preview: false }), /offline/);
+  assert.deepEqual(h.ids(), ["p1:1d", "p1:1h"]);
 });
 
 test("preview syncs its own plans on its fake, and reuses them when a call passes none", async () => {
@@ -288,11 +314,7 @@ test("preview syncs its own plans on its fake, and reuses them when a call passe
   await h.sync.sync({ userId: "me", preview: true, localPlans });
   assert.deepEqual(h.ids(h.previewPhone), ["local:1d", "local:1h"]);
   assert.deepEqual(h.ids(), []);
-  assert.deepEqual(h.reads, ["prefs:preview"]);
-  h.prefs.muted = ["local"];
-  await h.sync.sync({ userId: "me", preview: true });
-  assert.deepEqual(h.ids(h.previewPhone), []);
-  h.prefs.muted = [];
+  assert.deepEqual(h.reads, ["prefs:preview"]); // preview has no server mutes to read
   await h.sync.sync({ userId: "me", preview: true });
   assert.deepEqual(h.ids(h.previewPhone), ["local:1d", "local:1h"]);
   await h.sync.clear("preview");
@@ -426,6 +448,7 @@ test("while Resbite is open, a reminder shows as a banner without sound or badge
       if (name === "expo-notifications") return notifications;
       if (name === "../domain/reminders") return domain;
       if (name === "./supabase") return { storage: {}, supabase: {} };
+      if (name === "./mutes") return { readMutedSeries: () => undefined };
       if (name === "./plans") return { withDeadline: () => undefined };
       if (name === "./reminderPrefsStore") return { createReminderPrefsStore: () => ({}) };
       if (name === "./reminders")

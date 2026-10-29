@@ -7,6 +7,9 @@ import { reconcileRsvp, type Response, type RsvpAttempt } from "../domain/rsvp";
 import { planGateway } from "../services/plans";
 import { readEvent, readGuests, readRsvp, writeRsvp, type EventSnapshot, type Guest } from "../services/rsvp";
 import { syncReminders } from "../services/deviceReminders";
+import { appointAdmin, removeAdmin } from "../services/admins";
+import { readMutedSeries, setPlanMute } from "../services/mutes";
+import { EVENT_COPY, viewerRole, type Viewer } from "../domain/eventPage";
 import { storedFor } from "../domain/contactInvites";
 import { contactInviteGateway } from "../services/contactInvites";
 import { inviteCodeStore, type StoredInvite } from "../services/inviteCodeStore";
@@ -22,10 +25,14 @@ export type InvitedPerson = {
   stored: StoredInvite | null;
 };
 
-export type EventRole = "owner" | "invitee";
 export type EventPage = {
   plan: LocalPlan | null;
-  role: EventRole | null;
+  /** The signed-in person's part in this resbite: its host, an admin the host appointed, or a guest. */
+  role: Viewer | null;
+  /** The ids of the people the host made admins. */
+  admins: string[];
+  /** This person has muted this resbite's series: the server keeps it, so it holds on every phone. */
+  muted: boolean;
   attendee: EventSnapshot["attendee"];
   organizer: string | null;
   guests: Guest[];
@@ -39,7 +46,10 @@ export type EventPage = {
   pending: RsvpAttempt | null;
   load: () => Promise<void>;
   respond: (value: Response, retry?: RsvpAttempt) => Promise<void>;
-  cancel: () => Promise<void>;
+  cancel: (opts?: { stopRepeating?: boolean }) => Promise<void>;
+  mute: (muted: boolean) => Promise<void>;
+  appoint: (userId: string) => Promise<void>;
+  demote: (userId: string) => Promise<void>;
   setNotice: (notice: string | null) => void;
 };
 
@@ -64,12 +74,14 @@ export function useEvent(planId: string | undefined): EventPage {
   const [pending, setPending] = useState<RsvpAttempt | null>(null);
   const [invited, setInvited] = useState<InvitedPerson[]>([]);
   const [requests, setRequests] = useState<HostRequest[]>([]);
+  const [mutedSeries, setMutedSeries] = useState<Set<string>>(new Set());
   // UX3: this phone's reminders follow every event load, answer and cancellation; failures wait for the next sync.
   const syncDevice = () => void syncReminders({ userId: userId ?? null, preview }).catch(() => {});
   useEffect(() => {
     setSnapshot(null);
     setInvited([]);
     setRequests([]);
+    setMutedSeries(new Set());
     setPending(null);
     setNotice(null);
     setError(null);
@@ -90,7 +102,10 @@ export function useEvent(planId: string | undefined): EventPage {
         // Likewise the waiting list: the event still opens if it can't be read.
         const waiting =
           next.plan.owner_id === userId ? await joinRequestGateway.forPlan(planId).catch(() => []) : [];
+        // Likewise the mute: a failed read leaves the resbite unmuted on screen, and the next load tries again.
+        const muted = await readMutedSeries().catch(() => new Set<string>());
         if (valid()) {
+          setMutedSeries(muted);
           setInvited(people);
           setRequests(waiting);
           setSnapshot(next);
@@ -116,7 +131,9 @@ export function useEvent(planId: string | undefined): EventPage {
     focused,
   } = useFocusedRefresh(read, { identity, onBackground: () => setFresh(false) });
   const plan = preview ? (localPlans.find((p) => p.id === planId) ?? null) : (snapshot?.plan ?? null);
-  const role: EventRole | null = !plan ? null : preview || plan.owner_id === userId ? "owner" : "invitee";
+  const admins = snapshot?.admins ?? [];
+  const role: Viewer | null = !plan ? null : preview ? "owner" : viewerRole(plan, userId ?? null, admins);
+  const muted = plan !== null && mutedSeries.has(plan.series_id);
   async function respond(value: Response, retry?: RsvpAttempt) {
     const current = snapshot;
     const attendee = current?.attendee;
@@ -154,6 +171,7 @@ export function useEvent(planId: string | undefined): EventPage {
         plan: confirmed.plan,
         attendee: confirmed.attendee,
         organizer: old?.organizer ?? null,
+        admins: confirmed.plan.admins,
         guests: (old?.guests ?? []).map((g) =>
           g.userId === userId ? { ...g, response: confirmed.attendee.response } : g,
         ),
@@ -191,7 +209,7 @@ export function useEvent(planId: string | undefined): EventPage {
       }
     }
   }
-  async function cancel() {
+  async function cancel(opts?: { stopRepeating?: boolean }) {
     const target = plan;
     if (!target || working.current) return;
     working.current = true;
@@ -205,7 +223,7 @@ export function useEvent(planId: string | undefined): EventPage {
         setLocalPlans((all) =>
           all.map((x) => (x.id === target.id ? { ...x, status: "cancelled", version: x.version + 1 } : x)),
         );
-      else await cancelPlan(planGateway, { id: target.id, version: target.version });
+      else await cancelPlan(planGateway, { id: target.id, version: target.version, stopRepeating: opts?.stopRepeating });
     } catch (e) {
       failure = e instanceof PlanSaveError ? e.message : "Could not cancel. Refresh and try again.";
       // As on My resbites: a definite failure reloads first; an uncertain one keeps what is shown.
@@ -215,14 +233,50 @@ export function useEvent(planId: string | undefined): EventPage {
     if (reload) await load();
     if (failure) setError(failure);
     else {
-      setNotice(preview ? "Preview plan cancelled." : "Your plan is cancelled.");
+      setNotice(preview ? "Preview plan cancelled." : EVENT_COPY.cancelled);
       syncDevice();
     }
     setBusy(false);
   }
+  /** Mutes or unmutes this resbite's series on the server; the page shows the state the server answers with. */
+  async function mute(next: boolean) {
+    const target = plan;
+    if (!target || preview || !accountReady || working.current) return;
+    const valid = () => currentIdentity.current === identity;
+    setError(null);
+    try {
+      const now = await setPlanMute(target.id, next);
+      if (!valid()) return;
+      setMutedSeries((old) => {
+        const series = new Set(old);
+        if (now) series.add(target.series_id);
+        else series.delete(target.series_id);
+        return series;
+      });
+      syncDevice();
+    } catch {
+      if (valid()) setError("Could not change the mute. Check your connection and try again.");
+    }
+  }
+  /** The host's: make a guest an admin, or take it back. The list is read again so it shows what the server holds. */
+  async function changeAdmin(userId: string, appointing: boolean) {
+    const target = plan;
+    if (!target || preview || !accountReady || working.current) return;
+    const valid = () => currentIdentity.current === identity;
+    setError(null);
+    try {
+      await (appointing ? appointAdmin : removeAdmin)(target.id, userId);
+    } catch {
+      if (valid()) setError("Could not change admins. Check your connection and try again.");
+      return;
+    }
+    if (valid()) await load();
+  }
   return {
     plan,
     role,
+    admins,
+    muted,
     attendee: snapshot?.attendee ?? null,
     organizer: snapshot?.organizer ?? null,
     guests: snapshot?.guests ?? [],
@@ -236,6 +290,9 @@ export function useEvent(planId: string | undefined): EventPage {
     load,
     respond,
     cancel,
+    mute,
+    appoint: (userId) => changeAdmin(userId, true),
+    demote: (userId) => changeAdmin(userId, false),
     setNotice,
   };
 }

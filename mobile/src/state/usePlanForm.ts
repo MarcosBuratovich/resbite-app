@@ -177,7 +177,7 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
         if (!active) return;
         if (!plan) throw new Error(PLAN_COPY.loadFailed);
         if (mode === "edit") {
-          if (!canEditPlan(plan, ownerId ?? undefined, preview)) throw new Error(PLAN_COPY.notEditable);
+          if (!canEditPlan(plan, ownerId ?? undefined, preview, Date.now(), plan.admins)) throw new Error(PLAN_COPY.notEditable);
           const guests = preview ? [] : await readGuests(plan.id);
           if (!active) return;
           setGuestCount(countNotified(guests));
@@ -271,7 +271,7 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
         ...write.details,
         guest_note: note,
         series_id: "",
-        repeats_from: null,
+        repeats_from: null, admins: [],
         status: "active",
         version: 1,
       };
@@ -309,7 +309,7 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
         status: "active",
         version: 1,
         series_id: "",
-        repeats_from: null,
+        repeats_from: null, admins: [],
       };
     }
     // This phone's reminders follow the new plan now, not at the next app-active.
@@ -348,7 +348,7 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
     const now = check();
     if (now.missing.length > 0 || now.videoFields.length > 0) return;
     if (!scope || (mode === "edit" && !original)) return;
-    if (mode === "edit" && original && !canEditPlan(original, ownerId ?? undefined, preview)) {
+    if (mode === "edit" && original && !canEditPlan(original, ownerId ?? undefined, preview, Date.now(), original.admins)) {
       setError(PLAN_COPY.notEditable);
       return;
     }

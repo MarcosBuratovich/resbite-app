@@ -118,7 +118,7 @@ test("a landed pre-custom-events pending create is acknowledged, not a conflict"
         version: 1,
         status: "active",
         series_id: "series-1",
-        repeats_from: null,
+        repeats_from: null, admins: [],
         ...legacyDetails,
       }),
       () => creates++,

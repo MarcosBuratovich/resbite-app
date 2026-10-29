@@ -8,6 +8,8 @@ export type ReminderSource = {
   status: string;
   owner: boolean;
   response: string | null;
+  /** The plan's series, which a mute belongs to; absent for plans kept on the device. */
+  series?: string | null;
 };
 export type Reminder = { id: string; planId: string; at: Date; body: string };
 export type ScheduledReminder = { id: string; at: number | null; body: string };

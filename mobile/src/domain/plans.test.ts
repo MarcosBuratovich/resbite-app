@@ -29,7 +29,7 @@ const plan: Plan = {
   place_tbd: false,
   repeat_weeks: null,
   series_id: "series-1",
-  repeats_from: null,
+  repeats_from: null, admins: [],
 };
 const details = {
   title: plan.title,
@@ -89,12 +89,16 @@ test("Meeting details come from their embedded table, and the embed never reache
   const shown = planFromRow({ ...row, plan_meeting_details: { note: "Door code 4521" } });
   assert.equal(shown.note, "Door code 4521");
   assert.equal("plan_meeting_details" in shown, false);
-  assert.deepEqual(shown, { ...row, note: "Door code 4521" });
+  assert.deepEqual(shown, { ...row, note: "Door code 4521", admins: [] });
   // Not readable (pending, Can’t go) or none at all: the database embeds null.
   assert.equal(planFromRow({ ...row, plan_meeting_details: null }).note, "");
   assert.equal(planFromRow({ ...row, plan_meeting_details: undefined }).note, "");
   assert.equal(planFromRow({ ...row, plan_meeting_details: [] }).note, "");
   assert.equal(planFromRow({ ...row, plan_meeting_details: [{ note: "Gate B" }] }).note, "Gate B");
+  // The admins come from the embed `plan_admins(user_id)`; none embedded is none.
+  assert.deepEqual(planFromRow({ ...row, plan_admins: [{ user_id: "u1" }, { user_id: "u2" }] }).admins, ["u1", "u2"]);
+  assert.deepEqual(planFromRow({ ...row, plan_admins: null }).admins, []);
+  assert.equal("plan_admins" in planFromRow({ ...row, plan_admins: [] }), false);
   // A read without the embed (select *) shows no Meeting details, whatever the old column holds.
   assert.equal(planFromRow({ ...row, note: "stale" }).note, "");
   assert.equal(planFromRow({ ...row, plan_meeting_details: { note: null } }).note, "");
@@ -279,11 +283,11 @@ test("the To be decided flag and the repeat rule are part of the saved details",
   assert.equal(samePlanDetails(plan, { ...details, place_tbd: true }), false);
 });
 
-test("the plan read selects the flag, the repeat rule and the series columns", async () => {
+test("the plan read selects the flag, the repeat rule, the series columns and the admins embed", async () => {
   const { readFileSync } = await import("node:fs");
   const source = readFileSync(new URL("../services/plans.ts", import.meta.url), "utf8");
   const columns = /const planColumns =\s*"([^"]+)"/.exec(source)?.[1].split(",") ?? [];
-  for (const name of ["place_tbd", "repeat_weeks", "series_id", "repeats_from"])
+  for (const name of ["place_tbd", "repeat_weeks", "series_id", "repeats_from", "plan_admins(user_id)"])
     assert.ok(columns.includes(name), `planColumns lacks ${name}`);
 });
 

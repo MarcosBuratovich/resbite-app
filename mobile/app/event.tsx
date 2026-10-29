@@ -22,7 +22,6 @@ import {
 import { Button, Copy, ErrorNote, Reveal, s } from "../src/design/ui";
 import { AvatarStack, Chip, chipToneFor, CoverCard, IconButton, InfoSheet, Segmented, Tile } from "../src/design/kit";
 import { PreviewNotice } from "../src/design/Chrome";
-import { EventDeviceChips } from "../src/design/EventDeviceChips";
 import { NotificationAsk } from "../src/design/NotificationAsk";
 import { GuestNoteCard, GuestNoteSheet, MeetingDetails } from "../src/design/EventNotes";
 import { categoryIcons } from "../src/design/categories";
@@ -346,18 +345,15 @@ export default function EventPage() {
         />
         {/* Only while an answer can still bring the place. */}
         {!place.exact && allowed && <Copy style={s.muted}>{EXACT_ADDRESS_LATER}</Copy>}
-        {(device.shown || url) && (
+        {url && (
           <View style={styles.chips}>
-            <EventDeviceChips device={device} />
-            {url && (
-              <Chip
-                icon={MapPin}
-                tone="aqua"
-                text="Open in Maps"
-                label={`Open ${current.place_label.trim()} in Maps`}
-                onPress={() => openMaps(url)}
-              />
-            )}
+            <Chip
+              icon={MapPin}
+              tone="aqua"
+              text="Open in Maps"
+              label={`Open ${current.place_label.trim()} in Maps`}
+              onPress={() => openMaps(url)}
+            />
           </View>
         )}
         <ErrorNote message={device.error} />

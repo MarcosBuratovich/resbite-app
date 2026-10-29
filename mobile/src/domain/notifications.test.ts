@@ -86,7 +86,7 @@ test("a phone that said Not now to UX3’s Get reminders? is still asked once, w
       );
   // Shown once: never again; UX3's flag is left as it was.
   const shown = await store.markNotificationsAsked("owner");
-  assert.deepEqual(shown, { enabled: true, muted: [], asked: true, notificationsAsked: true });
+  assert.deepEqual(shown, { enabled: true, asked: true, notificationsAsked: true });
   assert.equal(shouldAsk({ permission: "undetermined", notificationsAsked: shown.notificationsAsked, owner: true }), false);
 });
 

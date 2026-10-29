@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 import { storage, supabase } from "./supabase";
 import { withDeadline } from "./plans";
+import { readMutedSeries } from "./mutes";
 import type { NotificationPermission } from "../domain/notifications";
 import { REMINDER_PREFIX } from "../domain/reminders";
 import { createReminderPrefsStore, type ReminderPrefs } from "./reminderPrefsStore";
@@ -33,7 +34,7 @@ async function readSources(userId: string, now: Date) {
     withDeadline((signal) =>
       supabase
         .from("plans")
-        .select("id,title,starts_at,status,owner_id")
+        .select("id,title,starts_at,status,owner_id,series_id")
         .eq("status", "active")
         .gt("starts_at", now.toISOString())
         .abortSignal(signal),
@@ -47,7 +48,7 @@ async function readSources(userId: string, now: Date) {
   return reminderSources(plans.data ?? [], answers.data ?? [], { userId, preview: false });
 }
 
-const reminders = createReminderSync({ service: serviceFor, prefs: (scope) => prefs.read(scope), readSources });
+const reminders = createReminderSync({ service: serviceFor, prefs: (scope) => prefs.read(scope), readSources, mutedSeries: readMutedSeries });
 
 /**
  * Reconciles this phone's reminders with the person's events: when Resbite opens or comes back, and after
@@ -79,7 +80,7 @@ export const remindersFor = (scope: ReminderScope): Promise<ReminderPrefs> => {
   const key = deviceScope(scope);
   return key
     ? prefs.read(key)
-    : Promise.resolve({ enabled: true, muted: [], asked: false, notificationsAsked: false });
+    : Promise.resolve({ enabled: true, asked: false, notificationsAsked: false });
 };
 
 /** The "Event reminders" switch. Re-syncs, so turning it off removes them and on sets them again. */
@@ -89,18 +90,6 @@ export async function setRemindersEnabled(
   assertCurrent?: () => void,
 ): Promise<ReminderPrefs> {
   const next = await prefs.setEnabled(prefsScope(scope), on, assertCurrent);
-  void syncReminders(scope).catch(() => {});
-  return next;
-}
-
-/** One event's "Reminders on" / "Reminders off" chip. Re-syncs. */
-export async function muteReminders(
-  scope: ReminderScope,
-  planId: string,
-  muted: boolean,
-  assertCurrent?: () => void,
-): Promise<ReminderPrefs> {
-  const next = await prefs.setMuted(prefsScope(scope), planId, muted, assertCurrent);
   void syncReminders(scope).catch(() => {});
   return next;
 }

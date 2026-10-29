@@ -39,7 +39,7 @@ const plan: Plan = {
   place_tbd: false,
   repeat_weeks: null,
   series_id: "series-1",
-  repeats_from: null,
+  repeats_from: null, admins: [],
 };
 
 function setup(gateway: Partial<PlanGateway>) {
