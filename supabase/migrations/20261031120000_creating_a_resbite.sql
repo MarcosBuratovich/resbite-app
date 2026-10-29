@@ -18,17 +18,19 @@ revoke all on public.plan_admins from public, anon, authenticated, service_role;
 grant select on public.plan_admins to authenticated;
 create policy plan_admins_read on public.plan_admins for select to authenticated using (private.can_read_plan(plan_id) and (user_id=(select auth.uid()) or private.can_see_guests(plan_id)));
 
--- The owner, or an admin the owner appointed.
+-- The owner, or an admin the owner appointed who is still a guest (a revoked invitation leaves no ghost host).
 create function private.is_host(p_plan uuid, p_user uuid) returns boolean language sql stable security definer set search_path = '' as $$
  select exists(select 1 from public.plans where id=p_plan and owner_id=p_user)
-  or exists(select 1 from public.plan_admins where plan_id=p_plan and user_id=p_user)
+  or exists(select 1 from public.plan_admins pa where pa.plan_id=p_plan and pa.user_id=p_user
+   and exists(select 1 from public.attendees a where a.plan_id=pa.plan_id and a.user_id=pa.user_id and a.response<>'withdrawn'))
 $$;
 -- The owner, then the admins in the order they were appointed.
 create function private.host_ids(p_plan uuid) returns setof uuid language sql stable security definer set search_path = '' as $$
  select h.id from (
   select owner_id as id, 0 as rank, null::timestamptz as at from public.plans where id=p_plan and owner_id is not null
   union all
-  select user_id, 1, appointed_at from public.plan_admins where plan_id=p_plan) h
+  select pa.user_id, 1, pa.appointed_at from public.plan_admins pa where pa.plan_id=p_plan
+   and exists(select 1 from public.attendees a where a.plan_id=pa.plan_id and a.user_id=pa.user_id and a.response<>'withdrawn')) h
  order by h.rank, h.at, h.id
 $$;
 revoke all on function private.is_host(uuid,uuid), private.host_ids(uuid) from public, anon, authenticated, service_role;
@@ -162,6 +164,7 @@ begin
  select * into v_inv from private.invitations where id=p_id for update;
  update private.invitations set revoked_at=now() where id=p_id;
  if v_inv.claimed_by is not null and not exists(select 1 from private.invitations where plan_id=v_plan and claimed_by=v_inv.claimed_by and revoked_at is null) then
+  delete from public.plan_admins where plan_id=v_plan and user_id=v_inv.claimed_by;
   delete from public.attendees where plan_id=v_plan and user_id=v_inv.claimed_by;
  end if;
 end $$;
@@ -218,6 +221,19 @@ end $$;
 
 -- A host (the organizer or an admin) of an active event that has not ended: the gate of the link, the invitations and the
 -- waiting list. The error text stays 'Active plan owner required': the current build matches that text.
+-- revoke_phone_invitation: the latest body is 20261030130000_phone_key.sql's; revoking also ends the admin role.
+create or replace function private.revoke_phone_invitation(p_plan uuid, p_phone text) returns void language plpgsql security definer set search_path = '' as $$
+declare v_user uuid;
+begin
+ perform private.require_link_owner(p_plan);
+ update private.phone_invitations set revoked_at=now(), code_hash=null
+  where plan_id=p_plan and phone=private.phone_key(p_phone) returning user_id into v_user;
+ if v_user is not null then
+  delete from public.plan_admins where plan_id=p_plan and user_id=v_user;
+  delete from public.attendees where plan_id=p_plan and user_id=v_user;
+ end if;
+end $$;
+
 create or replace function private.require_link_owner(p_plan uuid) returns uuid language plpgsql set search_path = '' as $$
 declare v_uid uuid := private.require_tester();
 begin

@@ -1,5 +1,5 @@
 -- Rehearsal checks for 20261031120000_creating_a_resbite (hosted-baseline mode only).
--- 1. Against the fingerprint .before.sql took: the migration removed nothing, redefined exactly the 26 functions it
+-- 1. Against the fingerprint .before.sql took: the migration removed nothing, redefined exactly the 27 functions it
 -- says and the two outbox checks, and added only the admins, the mutes, the plans columns, the repeat objects and the
 -- functions it names (changed nothing else, every grant and the private schema's included).
 do $$ declare v_added text[]; v_removed text[]; v_changed text[]; v_expected text[];
@@ -13,7 +13,7 @@ begin
    'invitation_page(text)','invite_contacts(uuid,jsonb)','join_by_link(text,text,text)','my_join_requests()','notification_recipient_eligible(bigint)',
    'personal_invitation_page(text)','plan_join_requests(uuid)','plan_phone_invitations(uuid)','remove_guest(uuid,uuid)',
    'request_join(uuid,private.plan_links,public.plans,text)','request_to_join(text,text,text,text)','require_link_owner(uuid)',
-   'respond(uuid,text,integer)','revoke_invite(uuid)','set_guest_note(uuid,text)','set_plan_cover_description(uuid,text,bigint)',
+   'respond(uuid,text,integer)','revoke_invite(uuid)','revoke_phone_invitation(uuid,text)','set_guest_note(uuid,text)','set_plan_cover_description(uuid,text,bigint)',
    'set_plan_cover_if_current(uuid,text,text,bigint)']) f);
  select coalesce(array_agg(n.name order by n.name),'{}') into v_added from private.cr_rehearsal_snapshot() n
   where not exists(select 1 from private.cr_rehearsal_baseline b where b.name=n.name);

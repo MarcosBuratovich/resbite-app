@@ -18,7 +18,7 @@
 --     guest of a rolled occurrence whose invitation notice had not gone out is never told of it (they still find the
 --     occurrence in My resbites). Delivered rows go too; sent pushes are not recalled. Rows younger than a day are the
 --     ones the sender could still send: run this just after the sender has drained the outbox to lose none.
--- It restores verbatim, each from the file named above it, the 26 functions the migration redefined, with the grants
+-- It restores verbatim, each from the file named above it, the 27 functions the migration redefined, with the grants
 -- and public wrappers they already have (create or replace keeps both), and the three plan-covers storage policies
 -- from 20261007200000_plan_covers.sql. The outbox kind check comes back from 20261029120000_open_link_approval.sql
 -- and the detail check from 20261014120000_ux2_rules.sql.
@@ -196,6 +196,16 @@ begin
  if v_inv.claimed_by is not null and not exists(select 1 from private.invitations where plan_id=v_plan and claimed_by=v_inv.claimed_by and revoked_at is null) then
   delete from public.attendees where plan_id=v_plan and user_id=v_inv.claimed_by;
  end if;
+end $$;
+
+-- revoke_phone_invitation (20261030130000_phone_key.sql)
+create or replace function private.revoke_phone_invitation(p_plan uuid, p_phone text) returns void language plpgsql security definer set search_path = '' as $$
+declare v_user uuid;
+begin
+ perform private.require_link_owner(p_plan);
+ update private.phone_invitations set revoked_at=now(), code_hash=null
+  where plan_id=p_plan and phone=private.phone_key(p_phone) returning user_id into v_user;
+ if v_user is not null then delete from public.attendees where plan_id=p_plan and user_id=v_user; end if;
 end $$;
 
 -- set_plan_cover_if_current (20261007200000_plan_covers.sql)

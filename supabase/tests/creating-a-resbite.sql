@@ -323,6 +323,67 @@ do $$ begin
  exception when insufficient_privilege then if sqlerrm<>'Owner required' then raise exception 'Wrong message: %', sqlerrm; end if; end;
 end $$;
 
+-- A revoked invitation ends an admin role: no ghost host. Users 21 (invited by phone) and 22 (invited by link) are
+-- Going admins; 23 is a pending invitee; 24 is an admin the owner removes.
+reset role;
+insert into auth.users(id,email,email_confirmed_at) values
+ ('e1000000-0000-4000-8000-000000000021','cr1-ghost-a@resbite-test.invalid',now()),
+ ('e1000000-0000-4000-8000-000000000022','cr1-ghost-b@resbite-test.invalid',now()),
+ ('e1000000-0000-4000-8000-000000000023','cr1-ghost-c@resbite-test.invalid',now()),
+ ('e1000000-0000-4000-8000-000000000024','cr1-ghost-d@resbite-test.invalid',now());
+insert into public.profiles(id,display_name) values
+ ('e1000000-0000-4000-8000-000000000021','Ghost A'),('e1000000-0000-4000-8000-000000000022','Ghost B'),
+ ('e1000000-0000-4000-8000-000000000023','Pending C'),('e1000000-0000-4000-8000-000000000024','Admin D');
+insert into public.attendees(plan_id,user_id,response) values
+ ('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000021','accepted'),
+ ('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000022','accepted'),
+ ('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000023','pending'),
+ ('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000024','accepted');
+insert into public.plan_admins(plan_id,user_id,appointed_by) values
+ ('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000021','e1000000-0000-4000-8000-000000000001'),
+ ('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000022','e1000000-0000-4000-8000-000000000001'),
+ ('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000024','e1000000-0000-4000-8000-000000000001');
+insert into private.phone_invitations(plan_id,code_hash,phone,country,invited_by,user_id)
+ values('e1100000-0000-4000-8000-000000000003',extensions.digest(repeat('G',22),'sha256'),'447700900621','44','e1000000-0000-4000-8000-000000000001','e1000000-0000-4000-8000-000000000021');
+insert into private.invitations(id,plan_id,token_hash,claimed_by)
+ values('e1200000-0000-4000-8000-000000000022','e1100000-0000-4000-8000-000000000003',extensions.digest('ghost-b','sha256'),'e1000000-0000-4000-8000-000000000022');
+do $$ begin
+ if not private.is_host('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000021')
+  or not private.is_host('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000022') then raise exception 'The new admins should be hosts'; end if;
+end $$;
+
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.revoke_phone_invitation('e1100000-0000-4000-8000-000000000003','447700900621');
+select public.revoke_invite('e1200000-0000-4000-8000-000000000022');
+-- The owner takes a role back from an admin who remains.
+select public.remove_admin('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000024');
+reset role;
+do $$ declare u text; begin
+ foreach u in array array['e1000000-0000-4000-8000-000000000021','e1000000-0000-4000-8000-000000000022'] loop
+  if exists(select 1 from public.attendees where plan_id='e1100000-0000-4000-8000-000000000003' and user_id=u::uuid) then raise exception 'The revoked guest % is still a guest', u; end if;
+  if exists(select 1 from public.plan_admins where plan_id='e1100000-0000-4000-8000-000000000003' and user_id=u::uuid) then raise exception 'The revoked guest % kept the admin role', u; end if;
+  if private.is_host('e1100000-0000-4000-8000-000000000003',u::uuid) then raise exception 'The revoked guest % is still a host', u; end if;
+  if u::uuid in (select private.host_ids('e1100000-0000-4000-8000-000000000003')) then raise exception 'host_ids still lists %', u; end if;
+ end loop;
+ -- remove_admin works: the guest stays, the role goes; a pending invitee and a stranger were never hosts.
+ if exists(select 1 from public.plan_admins where plan_id='e1100000-0000-4000-8000-000000000003' and user_id='e1000000-0000-4000-8000-000000000024')
+  or private.is_host('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000024')
+  or not exists(select 1 from public.attendees where plan_id='e1100000-0000-4000-8000-000000000003' and user_id='e1000000-0000-4000-8000-000000000024')
+  then raise exception 'remove_admin should end the role and keep the guest'; end if;
+ if private.is_host('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000023')
+  or private.is_host('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000099') then raise exception 'A pending invitee or a stranger is a host'; end if;
+ if (select array_agg(h) from private.host_ids('e1100000-0000-4000-8000-000000000003') h)<>array['e1000000-0000-4000-8000-000000000001','e1000000-0000-4000-8000-000000000002']::uuid[]
+  then raise exception 'host_ids should be the owner and the remaining admin'; end if;
+ -- Defence in depth: an admin row without a guest row (or a withdrawn one) is not a host.
+ insert into public.plan_admins(plan_id,user_id,appointed_by) values('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000023','e1000000-0000-4000-8000-000000000001');
+ update public.attendees set response='withdrawn' where plan_id='e1100000-0000-4000-8000-000000000003' and user_id='e1000000-0000-4000-8000-000000000023';
+ if private.is_host('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000023')
+  or 'e1000000-0000-4000-8000-000000000023'::uuid in (select private.host_ids('e1100000-0000-4000-8000-000000000003')) then raise exception 'A withdrawn guest with a stray admin row is a host'; end if;
+ delete from public.plan_admins where plan_id='e1100000-0000-4000-8000-000000000003' and user_id='e1000000-0000-4000-8000-000000000023';
+end $$;
+set local role authenticated;
+
 -- A plain guest is not a host.
 select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000004","role":"authenticated"}',true);
 do $$ begin
