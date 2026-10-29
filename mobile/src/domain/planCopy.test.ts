@@ -36,3 +36,8 @@ test("the Create tab copy", () => {
 test("the notice for a create that went through", () => {
   assert.equal(createdNotice("Coffee together"), "Coffee together is created.");
 });
+
+test("the past start and the withdrawn idea", () => {
+  assert.equal(PLAN_COPY.whenInFuture, "Choose a date and time in the future.");
+  assert.equal(PLAN_COPY.ideaGone, "That idea is no longer available. Create the resbite on its own.");
+});

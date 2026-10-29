@@ -1,5 +1,6 @@
 import type { CategoryKey } from "./categories";
 import type { EventFields } from "./events";
+import { PLAN_COPY } from "./planCopy";
 
 /** A resbite as stored on the server (CE1: it carries its own event text). */
 export type Plan = {
@@ -135,6 +136,8 @@ export class PlanSaveError extends Error {
     message: string,
     public uncertain = false,
     public latest?: Plan | null,
+    /** "past": the start is not in the future; "idea": the idea the create started from is withdrawn. */
+    public reason?: "past" | "idea",
   ) {
     super(message);
   }
@@ -167,7 +170,7 @@ export async function writePlan(
         latest = await gateway.read(write.id);
       } catch {
         throw new PlanSaveError(
-          "We couldn’t check the latest plan. Your draft is here. Retry when you’re connected.",
+          "We couldn’t check the latest version of this resbite. Your changes are still here. Retry when you’re connected.",
           true,
         );
       }
@@ -178,31 +181,37 @@ export async function writePlan(
       )
         return;
       throw new PlanSaveError(
-        "This plan changed since you opened it. Your draft is still here. Review the saved details before trying again.",
+        "This resbite changed since you opened it. Review the saved details before trying again.",
         false,
         latest,
       );
     }
     if (code === "42501" || code === "PGRST301") {
       throw new PlanSaveError(
-        "Your account can’t save this plan. Private tester access may still be closed. Your draft is unchanged.",
+        "Your account can’t save this resbite. Private tester access may still be closed. Your changes are still here.",
       );
     }
     if (code === "22023" && /^End time/.test(errorMessage(error))) {
       throw new PlanSaveError("Add an end time.");
     }
+    if (code === "22023" && /^Invalid future schedule/.test(errorMessage(error))) {
+      throw new PlanSaveError(PLAN_COPY.whenInFuture, false, undefined, "past");
+    }
+    if (code === "22023" && /^Activity unavailable/.test(errorMessage(error))) {
+      throw new PlanSaveError(PLAN_COPY.ideaGone, false, undefined, "idea");
+    }
     if (code === "22023") {
       throw new PlanSaveError(
-        "This plan or idea is no longer available for these changes. Your draft is unchanged; check My resbites before trying again.",
+        "This resbite is no longer available for these changes. Your changes are still here; check My resbites before trying again.",
       );
     }
     if (/^(22|23)/.test(code)) {
       throw new PlanSaveError(
-        "Check the name, categories, date, meeting place and note, then try again. Your draft is unchanged.",
+        "Check the name, categories, date, place and notes, then try again. Your changes are still here.",
       );
     }
     throw new PlanSaveError(
-      "We couldn’t confirm the save. Your draft is kept here. Retry the same save when you’re connected; don’t create another plan yet.",
+      "We couldn’t confirm the save. Your changes are still here. Retry the same save when you’re connected; don’t create another resbite yet.",
       true,
     );
   }
@@ -218,7 +227,7 @@ export async function reconcilePlan(
     current = await gateway.read(write.id);
   } catch {
     throw new PlanSaveError(
-      "We couldn’t check the saved plan. Your draft and original save are kept. Try again when connected.",
+      "We couldn’t check the saved resbite. The save is kept on this phone. Try again when you’re connected.",
       true,
     );
   }

@@ -286,3 +286,106 @@ test("the plan read selects the flag, the repeat rule and the series columns", a
   for (const name of ["place_tbd", "repeat_weeks", "series_id", "repeats_from"])
     assert.ok(columns.includes(name), `planColumns lacks ${name}`);
 });
+
+const refusing = (code: string, message = "") =>
+  gateway({
+    create: async () => {
+      throw { code, message };
+    },
+    update: async () => {
+      throw { code, message };
+    },
+  });
+const refusal = async (code: string, message = "", version?: number) => {
+  try {
+    await writePlan(refusing(code, message), { id: plan.id, activityId: "coffee", details, version });
+  } catch (e) {
+    assert.ok(e instanceof PlanSaveError);
+    return { message: e.message, uncertain: e.uncertain, reason: e.reason };
+  }
+  assert.fail("the write was refused");
+};
+
+test("a start in the past says so, with the same words as the When row", async () => {
+  assert.deepEqual(await refusal("22023", "Invalid future schedule"), {
+    message: "Choose a date and time in the future.",
+    uncertain: false,
+    reason: "past",
+  });
+  assert.equal((await refusal("22023", "Invalid future schedule", 3)).message, "Choose a date and time in the future.");
+});
+
+test("a withdrawn idea says to create the resbite on its own", async () => {
+  assert.deepEqual(await refusal("22023", "Activity unavailable"), {
+    message: "That idea is no longer available. Create the resbite on its own.",
+    uncertain: false,
+    reason: "idea",
+  });
+});
+
+test("the save messages speak of the resbite and the host's changes, never a draft", async () => {
+  assert.equal(
+    (await refusal("22023", "Plan unavailable")).message,
+    "This resbite is no longer available for these changes. Your changes are still here; check My resbites before trying again.",
+  );
+  assert.equal(
+    (await refusal("42501")).message,
+    "Your account can’t save this resbite. Private tester access may still be closed. Your changes are still here.",
+  );
+  assert.equal(
+    (await refusal("23514")).message,
+    "Check the name, categories, date, place and notes, then try again. Your changes are still here.",
+  );
+  assert.deepEqual(await refusal("", "Network lost"), {
+    message: "We couldn’t confirm the save. Your changes are still here. Retry the same save when you’re connected; don’t create another resbite yet.",
+    uncertain: true,
+    reason: undefined,
+  });
+  await assert.rejects(
+    writePlan(
+      gateway({
+        update: async () => {
+          throw { code: "40001" };
+        },
+        read: async () => {
+          throw new Error("Offline");
+        },
+      }),
+      { id: plan.id, activityId: null, details, version: 3 },
+    ),
+    (e: unknown) =>
+      e instanceof PlanSaveError &&
+      e.uncertain &&
+      e.message === "We couldn’t check the latest version of this resbite. Your changes are still here. Retry when you’re connected.",
+  );
+  await assert.rejects(
+    writePlan(
+      gateway({
+        update: async () => {
+          throw { code: "40001" };
+        },
+        read: async () => ({ ...plan, version: 5, title: "Moved on" }),
+      }),
+      { id: plan.id, activityId: null, details, version: 3 },
+    ),
+    (e: unknown) =>
+      e instanceof PlanSaveError &&
+      !e.uncertain &&
+      e.latest?.title === "Moved on" &&
+      e.message === "This resbite changed since you opened it. Review the saved details before trying again.",
+  );
+  await assert.rejects(
+    reconcilePlan(
+      gateway({
+        read: async () => {
+          throw new Error("Offline");
+        },
+      }),
+      { id: plan.id, activityId: null, details },
+    ),
+    (e: unknown) =>
+      e instanceof PlanSaveError &&
+      e.uncertain &&
+      e.message === "We couldn’t check the saved resbite. The save is kept on this phone. Try again when you’re connected.",
+  );
+});

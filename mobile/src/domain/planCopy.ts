@@ -68,6 +68,8 @@ export const PLAN_COPY = {
   whenRowMessage: "Add a date and time",
   placeRowMessage: "Add a place or choose “To be decided”",
   categoriesRowMessage: "Choose one or two categories",
+  whenInFuture: "Choose a date and time in the future.",
+  ideaGone: "That idea is no longer available. Create the resbite on its own.",
   saveAndNotify: "Save and notify",
   notifyTold: "will be told about changes to the date, time or place.",
 } as const;
