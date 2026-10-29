@@ -21,6 +21,9 @@ import {
   TopicRow,
   type CardChip,
 } from "../src/design/kit";
+import { GrabberSheet } from "../src/design/GrabberSheet";
+import { OpenRow } from "../src/design/OpenRow";
+import { TaskScreen } from "../src/design/TaskScreen";
 import { categoryIcons } from "../src/design/categories";
 import { Button, Copy, Title, s } from "../src/design/ui";
 import { cardLabel, reviewLabels } from "../src/domain/eventView";
@@ -43,6 +46,8 @@ function Gallery() {
   const [segment, setSegment] = useState<"upcoming" | "past">("upcoming");
   const [sheet, setSheet] = useState(false);
   const [step, setStep] = useState(false);
+  const [task, setTask] = useState(false);
+  const [grabber, setGrabber] = useState(false);
   const [pressed, setPressed] = useState("");
   const [field, setField] = useState("");
   const now = new Date();
@@ -59,6 +64,17 @@ function Gallery() {
       >
         <Copy>Step content sits here.</Copy>
       </StepScreen>
+    );
+  if (task)
+    return (
+      <TaskScreen
+        title="New resbite"
+        onClose={() => setTask(false)}
+        line="Add a date and time to go on."
+        footer={<Button title="Save" onPress={() => setTask(false)} />}
+      >
+        <Copy>Task content sits here.</Copy>
+      </TaskScreen>
     );
   return (
     <SafeAreaView style={s.page}>
@@ -146,7 +162,39 @@ function Gallery() {
           title="It’s on!"
           startsAt={startsAt}
           place="Riverside park"
+          extra="Weekly"
         />
+        <View style={{ gap: 10 }}>
+          <OpenRow
+            icon={CalendarDays}
+            label="When"
+            placeholder="Add a date and time"
+            value={null}
+            state="missing"
+            message="Add a date and time to go on"
+            accessibilityLabel="When, Add a date and time"
+            onPress={() => setPressed("when")}
+          />
+          <OpenRow
+            icon={MapPin}
+            label="Where"
+            placeholder="Add a place"
+            value={null}
+            state="open"
+            accessibilityLabel="Where, Add a place"
+            onPress={() => setPressed("where")}
+          />
+          <OpenRow
+            icon={MapPin}
+            label="Place"
+            placeholder="Add a place"
+            value="Riverside park"
+            hint="Tap to change"
+            state="filled"
+            accessibilityLabel="Place, Riverside park, change it"
+            onPress={() => setPressed("place")}
+          />
+        </View>
         <AvatarStack names={["Alex", "Bea", "Cai", "Dee"]} label="4 going" onPress={() => setPressed("guests")} />
         <Segmented
           label="Show"
@@ -177,11 +225,16 @@ function Gallery() {
           </View>
         </StatusCard>
         <Button title="Show step screen" secondary onPress={() => setStep(true)} />
+        <Button title="Show task screen" secondary onPress={() => setTask(true)} />
+        <Button title="Show sheet" secondary onPress={() => setGrabber(true)} />
         {pressed ? <Copy accessibilityLiveRegion="polite">{`Pressed ${pressed}`}</Copy> : null}
       </ScrollView>
       <InfoSheet visible={sheet} title="Cover photos" onClose={() => setSheet(false)}>
         <Copy>Only add photos you’re comfortable sharing with the people you invite.</Copy>
       </InfoSheet>
+      <GrabberSheet visible={grabber} title="When" icon={CalendarDays} onClose={() => setGrabber(false)}>
+        <Copy>Sheet content sits here.</Copy>
+      </GrabberSheet>
     </SafeAreaView>
   );
 }

@@ -121,8 +121,51 @@ try {
     await expect(page.getByText("Check your inbox", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Check your inbox", exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Resend confirmation email", exact: true })).toHaveText("Resend");
+    // OpenRow: one button per row; a missing row shows its message above the card and says it as the hint.
+    const when = page.getByRole("button", { name: "When, Add a date and time", exact: true });
+    await expect(when).toBeVisible();
+    await expect(page.getByText("Add a date and time to go on", { exact: true })).toBeVisible();
+    await expect(when.getByText("Add a date and time", { exact: true })).toBeVisible();
+    assert.ok((await size(when)).height >= 44, "OpenRow is at least 44 pt");
+    const where = page.getByRole("button", { name: "Where, Add a place", exact: true });
+    await expect(where).toBeVisible();
+    await expect(page.getByText("Add a place to go on", { exact: true })).toHaveCount(0);
+    const filled = page.getByRole("button", { name: "Place, Riverside park, change it", exact: true });
+    await expect(filled).toContainText("Riverside park");
+    await expect(filled).toContainText("Tap to change");
+    await when.click();
+    await expect(page.getByText("Pressed when", { exact: true })).toBeVisible();
+    // CoverCard extra: appended to the time line.
+    await expect(page.getByText("10:00 · Weekly", { exact: false })).toHaveCount(1);
+    // GrabberSheet: a heading, a grabber that closes it, no X; the page behind stays.
+    await page.getByRole("button", { name: "Show sheet", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "When", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Close", exact: true })).toHaveCount(0);
+    await expect(page.getByText("Sheet content sits here.", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Close sheet", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "When", exact: true })).toHaveCount(0);
     assert.equal(await fitsWidth(page, '[data-testid="kit"]'), true, `Kit fits ${width} px`);
     await page.screenshot({ path: `${out}/kit-${width}.png`, fullPage: true });
+    // TaskScreen: the X at the left in a 44 pt circle, a header title, the line and the pinned footer.
+    await page.getByRole("button", { name: "Show task screen", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "New resbite", exact: true })).toBeVisible();
+    const closeTask = page.getByRole("button", { name: "Close", exact: true });
+    const closeBox = await size(closeTask);
+    assert.ok(closeBox.width === 44 && closeBox.height === 44, "The X is a 44 pt circle");
+    const titleBox = await size(page.getByRole("heading", { name: "New resbite", exact: true }));
+    assert.ok(closeBox.x < titleBox.x, "The X sits at the left of the title");
+    await expect(page.getByText("Add a date and time to go on.", { exact: true })).toBeVisible();
+    assert.equal(
+      await page.evaluate(() =>
+        document.querySelector('[data-testid="task-scroll"]').contains(document.querySelector('[data-testid="task-footer"]')),
+      ),
+      false,
+      "The footer is pinned outside the scroll view",
+    );
+    assert.equal(await fitsWidth(page, '[data-testid="task-screen"]'), true, `The task screen fits ${width} px`);
+    await page.screenshot({ path: `${out}/task-${width}.png` });
+    await closeTask.click();
+    await expect(page.getByRole("heading", { name: "Kit", exact: true })).toBeVisible();
     // StepScreen: progress, a big question title, Previous step and Close, and the pinned pill.
     await page.getByRole("button", { name: "Show step screen", exact: true }).click();
     await expect(page.getByRole("progressbar", { name: "Step 2 of 4", exact: true })).toBeVisible();
@@ -186,7 +229,7 @@ try {
   }
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: kit roles, labels, selected states and 44 pt targets at 390/320 (with UX4 rows, field and status cards); Larger Text at 320; Preview chip and sheet. Screenshots: " +
+    "PASS: kit roles, labels, selected states and 44 pt targets at 390/320 (with UX4 rows, field and status cards, and the plan-screen kit: task screen, grabber sheet, open rows); Larger Text at 320; Preview chip and sheet. Screenshots: " +
       out,
   );
 } finally {

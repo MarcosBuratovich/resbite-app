@@ -316,6 +316,7 @@ export function CoverCard({
   endsAt,
   place,
   byline,
+  extra,
   chips = [],
   label,
   onPress,
@@ -333,6 +334,8 @@ export function CoverCard({
   endsAt?: string | null;
   place: string | null;
   byline?: string;
+  /** Appended to the time line, for example the repeat rule. */
+  extra?: string;
   chips?: readonly CardChip[];
   label?: string;
   onPress?: () => void;
@@ -396,7 +399,7 @@ export function CoverCard({
           "date",
           <>
             <DateBadge startsAt={startsAt} />
-            <Copy style={styles.cardLine}>{time || "Date to choose"}</Copy>
+            <Copy style={styles.cardLine}>{(time || "Date to choose") + (extra ? ` · ${extra}` : "")}</Copy>
           </>,
           [styles.dateRow, largeText && styles.stacked],
           // The badge is hidden from assistive tech. Pressable and Review modes say the date in
