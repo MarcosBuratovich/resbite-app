@@ -64,6 +64,13 @@ export function hostRegion(userPhone: string | null | undefined, fallback: strin
   return (userPhone ? regionOf(userPhone) : null) ?? fallback;
 }
 
+/** The stored entry for a number: the exact send form, else one saved under another spelling of the same key. */
+export function storedFor<T>(stored: Record<string, T>, e164: string): T | undefined {
+  if (stored[e164] !== undefined) return stored[e164];
+  const key = phoneKey(e164);
+  return Object.entries(stored).find(([k]) => phoneKey(k) === key)?.[1];
+}
+
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
 /** base64url without padding (16 bytes give 22 characters). No Buffer: this runs in React Native. */

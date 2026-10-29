@@ -7,6 +7,7 @@ import { reconcileRsvp, type Response, type RsvpAttempt } from "../domain/rsvp";
 import { planGateway } from "../services/plans";
 import { readEvent, readGuests, readRsvp, writeRsvp, type EventSnapshot, type Guest } from "../services/rsvp";
 import { syncReminders } from "../services/deviceReminders";
+import { storedFor } from "../domain/contactInvites";
 import { contactInviteGateway } from "../services/contactInvites";
 import { inviteCodeStore, type StoredInvite } from "../services/inviteCodeStore";
 import { formatPhone, phoneSendForm } from "../domain/phone";
@@ -248,7 +249,7 @@ async function readInvited(planId: string, userId: string): Promise<InvitedPerso
     .filter((r) => !r.answered)
     .map((r) => {
       const e164 = phoneSendForm(r.phone);
-      const saved = stored[e164] ?? null;
+      const saved = storedFor(stored, e164) ?? null;
       return { phone: r.phone, e164, country: r.country, name: saved?.name?.trim() || formatPhone(e164), stored: saved };
     });
 }

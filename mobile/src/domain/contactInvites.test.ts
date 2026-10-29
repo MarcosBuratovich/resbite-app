@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { contactNumbers, hostRegion, inviteMessage, newInviteCode, personalLink, sendOrder, smsUrl, whatsappUrl, whatsappAppUrl, groupContacts } from "./contactInvites";
+import { contactNumbers, hostRegion, inviteMessage, newInviteCode, personalLink, sendOrder, smsUrl, whatsappUrl, whatsappAppUrl, groupContacts, storedFor } from "./contactInvites";
 import { INVITE_COPY } from "./inviteCopy";
 
 test("contactNumbers gives one entry per distinct number and counts the unparseable", () => {
@@ -118,4 +118,11 @@ test("a contact without a code takes the host's region; one with + keeps its own
 test("hostRegion reads an Argentine host's number with or without the 9", () => {
   assert.equal(hostRegion("5491112341234", "GB"), "AR");
   assert.equal(hostRegion("541112341234", "GB"), "AR");
+});
+
+test("storedFor finds a saved code by the exact send form, else by key under the 9-less spelling", () => {
+  const stored = { "+5491112341234": "exact", "+541198765432": "old" };
+  assert.equal(storedFor(stored, "+5491112341234"), "exact");
+  assert.equal(storedFor(stored, "+5491198765432"), "old");
+  assert.equal(storedFor(stored, "+447700900111"), undefined);
 });

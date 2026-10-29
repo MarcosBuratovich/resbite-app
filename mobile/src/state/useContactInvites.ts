@@ -9,6 +9,7 @@ import {
   contactNumbers,
   hostRegion,
   newInviteCode,
+  storedFor,
   type ContactNumber,
 } from "../domain/contactInvites";
 import { INVITE_COPY } from "../domain/inviteCopy";
@@ -38,6 +39,8 @@ export function useContactInvites(a: {
   // The region a number without a country code is read in: the host's own, until the host picks another.
   const [assumedRegion, setAssumedRegionState] = useState(hostDefault);
   const regionChosen = useRef(false);
+  // The region of the last completed read from offset 0: a different assumed region means a re-read is due.
+  const loadedRegion = useRef<string | null>(null);
   useEffect(() => {
     if (!regionChosen.current) setAssumedRegionState(hostDefault);
   }, [hostDefault]);
@@ -92,6 +95,7 @@ export function useContactInvites(a: {
     touched.current = false;
     checked.current = new Set();
     regionChosen.current = false;
+    loadedRegion.current = null;
     setAssumedRegionState(hostDefault);
   }, [context]);
 
@@ -127,6 +131,7 @@ export function useContactInvites(a: {
         setOffset(page.nextOffset);
         setMore(page.more);
         setLimited(page.limited);
+        if (!next) loadedRegion.current = assumedRegion;
         setAccess("ready");
       } catch (e) {
         if (!alive(ctx)) return;
@@ -201,15 +206,17 @@ export function useContactInvites(a: {
   /** Chooses the region for numbers without a code and reads the contacts again in it. */
   function setAssumedRegion(next: string) {
     regionChosen.current = true;
+    if (next !== assumedRegion) {
+      // Picks made under the old region would sit beside the same people re-picked under their new keys.
+      setPicked({});
+      setManual([]);
+    }
     setAssumedRegionState(next);
   }
   // A region chosen after the contacts were read: read them again from the start in the new region.
-  const readIn = useRef(assumedRegion);
   useEffect(() => {
-    if (readIn.current === assumedRegion) return;
-    readIn.current = assumedRegion;
-    if (access === "ready") void loadContacts(0);
-  }, [assumedRegion, access, loadContacts]);
+    if (access === "ready" && !busy && loadedRegion.current !== assumedRegion) void loadContacts(0);
+  }, [assumedRegion, access, busy, loadContacts]);
 
   // "On Resbite" for the picked numbers only, after 400 ms without a change.
   useEffect(() => {
@@ -243,7 +250,7 @@ export function useContactInvites(a: {
       const items = selected.map((n) => ({
         phone: digitsOf(n.e164),
         country: n.country,
-        code: stored[n.e164]?.code ?? newInviteCode(getRandomBytes(16)),
+        code: storedFor(stored, n.e164)?.code ?? newInviteCode(getRandomBytes(16)),
       }));
       const results = await contactInviteGateway.invite(planId, items);
       if (!alive(ctx)) return;
@@ -251,7 +258,7 @@ export function useContactInvites(a: {
       for (const [i, n] of selected.entries()) {
         const kind: InviteKind | undefined = results.find((r) => phoneKey(r.phone) === n.key)?.kind;
         if (kind === "link") {
-          const prior = stored[n.e164];
+          const prior = storedFor(stored, n.e164);
           const value: StoredInvite = { code: items[i].code, name: n.name, sentVia: prior?.code === items[i].code ? prior.sentVia : undefined };
           await putInviteQuietly(scope, planId, n.e164, value);
           out.links.push({ number: n, code: items[i].code, sentVia: value.sentVia });
