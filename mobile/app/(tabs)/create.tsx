@@ -65,7 +65,9 @@ export default function Create() {
             </View>
           </View>
           <PreviewNotice />
-          <Title>{PLAN_COPY.createHeading}</Title>
+          <Copy accessibilityRole="header" style={styles.question}>
+            {PLAN_COPY.createHeading}
+          </Copy>
           <Button title={PLAN_COPY.startFromScratch} secondary onPress={() => router.push("/arrange")} />
           <Copy>{PLAN_COPY.orStartFromIdea}</Copy>
           {searching && (
@@ -160,6 +162,7 @@ export default function Create() {
 const styles = StyleSheet.create({
   top: { padding: 24, gap: 20 },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  question: { fontFamily: fonts.display, fontSize: 22 },
   headerActions: { flexDirection: "row", gap: 8 },
   search: {
     flexDirection: "row",

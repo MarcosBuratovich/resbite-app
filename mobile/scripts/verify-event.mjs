@@ -402,7 +402,7 @@ try {
       plan.guest_note_at = body.p_note ? new Date().toISOString() : null;
       return reply({ guest_note: plan.guest_note, guest_note_at: plan.guest_note_at });
     }
-    if (path === "/rest/v1/rpc/change_plan_v3") {
+    if (path === "/rest/v1/rpc/change_plan_v4") {
       const body = req.postDataJSON();
       const plan = plans.get(body.p_plan);
       if (body.p_cancel) {
@@ -427,6 +427,8 @@ try {
         ends_at: body.p_ends,
         time_zone: body.p_zone,
         place_label: body.p_place.trim(),
+        place_tbd: body.p_place_tbd,
+        repeat_weeks: body.p_repeat_weeks,
         note: body.p_note,
         area: body.p_area ?? plan.area,
         version: plan.version + 1,
@@ -736,55 +738,34 @@ try {
   await maps.click();
   await expect(page.getByText("Couldn’t open Maps.", { exact: true })).toHaveCount(0);
   assert.equal(await page.evaluate(() => window.__opened), "https://maps.apple.com/?q=Fixture%20caf%C3%A9");
-  // Edit opens creation at Review.
+  // Edit opens the plan screen on this resbite; nothing is changed yet, so Save waits.
   await page.getByRole("button", { name: "Edit Coffee evening", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Looks good?", exact: true })).toBeVisible();
-  await expect(visible(page.getByRole("button", { name: "Save", exact: true }))).toBeDisabled();
+  await expect(page.getByRole("heading", { name: "Edit resbite", exact: true })).toBeVisible();
+  await expect(visible(page.getByRole("button", { name: /^Save/ }))).toBeDisabled();
   await visible(page.getByRole("button", { name: "Close", exact: true })).click();
   await expect(page.getByRole("heading", { name: "Coffee evening", exact: true })).toBeVisible();
-  // Do this again: a new draft with the text, place and note, never the date or the idea; it opens at When.
+  // Do this again: the plan screen opens on a copy with the text, place and Meeting details, never the date or the idea.
   await page.getByRole("button", { name: "More actions", exact: true }).click();
-  // A quick double tap (both taps before the first copy is written) opens exactly one editor.
+  // A quick double tap opens exactly one plan screen.
   await page.getByRole("button", { name: "Do this again", exact: true }).evaluate((tile) => {
     tile.click();
     tile.click();
   });
-  await expect(page.getByRole("heading", { name: "When?", exact: true })).toBeVisible();
-  await page.waitForTimeout(500); // a second editor would be pushed within this settle time
-  await expect(page.getByTestId("step-screen")).toHaveCount(1);
-  await expect(page.getByRole("progressbar", { name: "Step 2 of 4", exact: true })).toBeVisible();
-  const draft = JSON.parse(
-    await page.evaluate((key) => sessionStorage.getItem(key), `resbite.drafts.v1.${user.id}`),
-  ).find((d) => d.key === "new");
-  assert.deepEqual(
-    [draft.title, draft.description, draft.categories, draft.place, draft.note, draft.start, draft.activityId, draft.pending],
-    ["Coffee evening", "Bring a book", ["community", "uplifting"], "Fixture café", "Window table", "", null, null],
-  );
-  // The start is unset, so When says "Choose a day" and no day chip is selected (never a picked-looking
-  // date that isn't set). Choosing Tomorrow and a time lets Next go on.
-  await expect(visible(page.getByRole("button", { name: "Choose a day", exact: true }))).toBeVisible();
-  await expect(visible(page.locator('[role="button"][aria-selected="true"]'))).toHaveCount(0);
-  await visible(page.getByRole("button", { name: /^Tomorrow, / })).click();
-  await expect(visible(page.getByRole("button", { name: "Choose a day", exact: true }))).toHaveCount(0);
-  await visible(page.getByRole("button", { name: / at 18:00$/ })).click();
-  await visible(page.getByRole("button", { name: "Next", exact: true })).click();
-  await expect(page.getByRole("heading", { name: "Where?", exact: true })).toBeVisible();
-  await visible(page.getByRole("button", { name: "Previous step", exact: true })).click();
-  await expect(page.getByRole("heading", { name: "When?", exact: true })).toBeVisible();
-  await visible(page.getByRole("button", { name: "Previous step", exact: true })).click();
-  await expect(page.getByLabel("Name", { exact: true })).toHaveValue("Coffee evening");
-  page.once("dialog", (dialog) => dialog.accept());
+  await expect(page.getByRole("heading", { name: "New resbite", exact: true })).toBeVisible();
+  await page.waitForTimeout(500); // a second screen would be pushed within this settle time
+  await expect(page.getByTestId("task-screen")).toHaveCount(1);
+  await expect(page.getByLabel("Name your resbite", { exact: true })).toHaveValue("Coffee evening");
+  await expect(page.getByLabel("What you’ll do together (optional)", { exact: true })).toHaveValue("Bring a book");
+  // When is empty (a copy never takes the date), Where keeps the place.
+  await expect(visible(page.getByRole("button", { name: "When, Add a date and time", exact: true }))).toBeVisible();
+  await expect(visible(page.getByRole("button", { name: "Where, Fixture café", exact: true }))).toBeVisible();
+  for (const category of ["Community", "Uplifting"])
+    await expect(visible(page.getByRole("button", { name: category, exact: true }))).toHaveAttribute("aria-selected", "true");
+  await visible(page.getByRole("button", { name: "Where, Fixture café", exact: true })).click();
+  await expect(visible(page.getByLabel("Meeting details", { exact: true }))).toHaveValue("Window table");
+  await visible(page.getByRole("button", { name: "Close sheet", exact: true })).click();
+  // Nothing has been changed: the X leaves at once.
   await visible(page.getByRole("button", { name: "Close", exact: true })).click();
-  // Doing it again over an unfinished new draft asks first; dismissing keeps the draft.
-  await page.getByRole("button", { name: "More actions", exact: true }).click();
-  let asked = "";
-  page.once("dialog", (dialog) => {
-    asked = dialog.message();
-    void dialog.dismiss();
-  });
-  await page.getByRole("button", { name: "Do this again", exact: true }).click();
-  await expect.poll(() => asked).toBe("Replace the unfinished resbite draft on this device?");
-  await page.getByRole("button", { name: "Close sheet", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Coffee evening", exact: true })).toBeVisible();
   // An unconfirmed cancel keeps what is shown and offers the organizer a refresh that reloads.
   await expect(page.getByRole("button", { name: "Refresh event", exact: true })).toHaveCount(0);
@@ -835,7 +816,7 @@ try {
   await expect(page.getByText("Ana Diaz", { exact: true })).toHaveCount(0);
   plans.delete(started.id);
   console.log(
-    "PASS: organizer event page: the exact place and no Choose people (GI-D3); guests (GI1: Remove asks first and says they can ask to join again and the organizer decides, says a lost reply, reloads the list; invitees have no Remove); the Invited group (Plan 2: unanswered only, by stored name or number, WhatsApp and Messages on each row with the last-used first, the stored code either way or a fresh one kept for the other app when WhatsApp won't open, Remove calls revoke_phone_invitation), Waiting for you (open-link approval: name, answer and ••34; Approve sends decide_join_request true and the row leaves; Decline asks first then sends false; an already-decided request says so; none on a cancelled or started event) above the Event link card (Share text with the date and link, Copy link, Turn off asks first and gives a new link, a lost turn-off reply says so and reads the link again, an approved guest joins the guest list, nothing stored; invitees have neither), Open in Maps (and its failure note), Edit at Review, Do this again at When with a replace guard, an unconfirmed cancel with Refresh event, cancel.",
+    "PASS: organizer event page: the exact place and no Choose people (GI-D3); guests (GI1: Remove asks first and says they can ask to join again and the organizer decides, says a lost reply, reloads the list; invitees have no Remove); the Invited group (Plan 2: unanswered only, by stored name or number, WhatsApp and Messages on each row with the last-used first, the stored code either way or a fresh one kept for the other app when WhatsApp won't open, Remove calls revoke_phone_invitation), Waiting for you (open-link approval: name, answer and ••34; Approve sends decide_join_request true and the row leaves; Decline asks first then sends false; an already-decided request says so; none on a cancelled or started event) above the Event link card (Share text with the date and link, Copy link, Turn off asks first and gives a new link, a lost turn-off reply says so and reads the link again, an approved guest joins the guest list, nothing stored; invitees have neither), Open in Maps (and its failure note), Edit on the plan screen, Do this again on the plan screen with When empty, an unconfirmed cancel with Refresh event, cancel.",
   );
 
   // UX2-D1: a saved edit returns to its event page with "Changes saved"; Back then leaves for My resbites.
@@ -853,12 +834,9 @@ try {
   await tPage.goto(`${base}/event?plan=${edited.id}`);
   await expect(tPage.getByRole("heading", { name: "Picnic", exact: true })).toBeVisible();
   await tPage.getByRole("button", { name: "Edit Picnic", exact: true }).click();
-  await expect(tPage.getByRole("heading", { name: "Looks good?", exact: true })).toBeVisible();
-  await visible(tPage.getByRole("button", { name: "Edit name, Picnic", exact: true })).click();
-  await visible(tPage.getByLabel("Name", { exact: true })).fill("Picnic by the lake");
-  await visible(tPage.getByRole("button", { name: "Done", exact: true })).click();
-  await expect(tPage.getByRole("heading", { name: "Looks good?", exact: true })).toBeVisible();
-  await visible(tPage.getByRole("button", { name: "Save", exact: true })).click();
+  await expect(tPage.getByRole("heading", { name: "Edit resbite", exact: true })).toBeVisible();
+  await visible(tPage.getByLabel("Name your resbite", { exact: true })).fill("Picnic by the lake");
+  await visible(tPage.getByRole("button", { name: /^Save/ })).click();
   await expect(tPage.getByRole("heading", { name: "Picnic by the lake", exact: true })).toBeVisible();
   await expect(tPage.getByText("Changes saved", { exact: true })).toBeVisible();
   await expect(tPage).toHaveURL(new RegExp(`/event\\?plan=${edited.id}`));

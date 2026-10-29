@@ -80,7 +80,6 @@ export default function EventPage() {
   const [more, setMore] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [guestsOpen, setGuestsOpen] = useState(false);
-  const [moreError, setMoreError] = useState<string | null>(null);
   const [mapsError, setMapsError] = useState<string | null>(null);
   const [noteOpen, setNoteOpen] = useState(false);
   // GI1: the organizer removes a guest from the Guests sheet.
@@ -91,7 +90,11 @@ export default function EventPage() {
   // Codes made here since the Invited list was read, by number: when WhatsApp won't open, Messages then sends the
   // same new link instead of making another one.
   const minted = useRef<Record<string, NonNullable<InvitedPerson["stored"]>>>({});
-  // One Do this again at a time: a quick double tap must not write two copies or stack two editors.
+  // One Do this again at a time: a quick double tap must not stack two plan screens. Back on this page lets it go again.
+  const againOpen = useRef(false);
+  useEffect(() => {
+    if (pathname === "/event") againOpen.current = false;
+  }, [pathname]);
   // Open-link approval: one decision at a time; the user it is for, and what went wrong.
   const [deciding, setDeciding] = useState<string | null>(null);
   const [decideError, setDecideError] = useState<string | null>(null);
@@ -150,6 +153,8 @@ export default function EventPage() {
 
   // Do this again: the plan screen opens on a copy of this resbite, with no date yet.
   function again() {
+    if (againOpen.current) return;
+    againOpen.current = true;
     setMore(false);
     router.push({ pathname: "/arrange", params: { again: current.id } });
   }
@@ -435,7 +440,6 @@ export default function EventPage() {
               disabled={busy}
               onPress={() => {
                 setConfirming(false);
-                setMoreError(null);
                 setMore(true);
               }}
             />
@@ -573,7 +577,6 @@ export default function EventPage() {
           hint="Copies the name, description, photo, categories, place and meeting details"
           onPress={again}
         />
-        <ErrorNote message={moreError} />
         {editable &&
           (confirming ? (
             <View style={styles.confirm}>

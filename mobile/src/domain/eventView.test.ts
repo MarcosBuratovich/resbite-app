@@ -1,14 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  againConflict,
-  againDraft,
-  BLANK_DRAFT_BASELINE,
   cardChips,
   cardLabel,
   coverNotice,
   dateBadgeParts,
-  draftRoute,
   eventPlace,
   EXACT_ADDRESS_LATER,
   groupPlans,
@@ -148,94 +144,6 @@ test("Open in Maps uses saved coordinates, then a typed coordinate pair, else th
   // Out-of-range numbers are a name, not coordinates.
   assert.equal(mapsUrl({ place_label: "95.1, 10.0" }), "https://maps.apple.com/?q=95.1%2C%2010.0");
   assert.equal(mapsUrl({ place_label: "  " }), null);
-});
-
-const plan: Plan = {
-  id: "p1",
-  activity_id: "coffee-together",
-  title: "Coffee evening",
-  description: "Bring a book",
-  categories: ["community", "uplifting"],
-  starts_at: "2026-09-01T15:00:00Z",
-  time_zone: "UTC",
-  place_label: "Fixture café",
-  note: "Window table",
-  place_tbd: false,
-  repeat_weeks: null,
-  series_id: "series-1",
-  repeats_from: null,
-  status: "cancelled",
-  version: 4,
-  owner_id: "u1",
-  cover_path: "u1/p1/a.jpg",
-  cover_revision: 2,
-};
-const options = { scope: "u1", requestId: "r1", zone: "Europe/London", now: new Date("2026-10-07T12:00:00Z") };
-
-test("Do this again copies the event text, place, area, Meeting details, never the date, end, guests, cover or idea", () => {
-  const draft = againDraft(plan, options);
-  assert.deepEqual(draft, {
-    schema: 1,
-    scope: "u1",
-    key: "new",
-    activityId: null,
-    requestId: "r1",
-    original: null,
-    initial: BLANK_DRAFT_BASELINE,
-    title: "Coffee evening",
-    description: "Bring a book",
-    categories: ["community", "uplifting"],
-    start: "",
-    place: "Fixture café",
-    area: "",
-    note: "Window table",
-    zone: "Europe/London",
-    pending: null,
-    updatedAt: "2026-10-07T12:00:00.000Z",
-  });
-  assert.notEqual(draft.categories, plan.categories, "The categories are a copy");
-  // The again-draft has text in it, so it is dirty against the all-empty baseline and must be saved or cleared.
-  const snapshot = JSON.stringify([draft.title, draft.description, draft.categories, draft.start, draft.place, draft.note]);
-  assert.notEqual(snapshot, draft.initial);
-});
-
-test("Do this again copies the area too (GI1), and an event without one gives an empty area", () => {
-  assert.equal(againDraft({ ...plan, area: "Near Old Street" }, options).area, "Near Old Street");
-  assert.equal(againDraft({ ...plan, area: "" }, options).area, "");
-  // An event read before GI1 has no area at all.
-  assert.equal(againDraft(plan, options).area, "");
-});
-
-test("Do this again never replaces an unconfirmed save and asks before replacing a draft", () => {
-  const draft = againDraft(plan, options);
-  const write = {
-    id: "r1",
-    activityId: "coffee-together",
-    details: {
-      title: "Coffee evening",
-      description: "",
-      categories: plan.categories,
-      starts_at: "2099-01-01T10:00:00Z",
-      ends_at: "2099-01-01T11:00:00Z",
-      place_tbd: false,
-      repeat_weeks: null,
-      area: "",
-      time_zone: "UTC",
-      place_label: "Fixture café",
-      note: "",
-    },
-  };
-  assert.equal(againConflict([]), "none");
-  assert.equal(againConflict([{ ...draft, key: "edit-p1" }, { ...draft, key: "new-coffee-together" }]), "none");
-  assert.equal(againConflict([draft]), "replace");
-  assert.equal(againConflict([{ ...draft, pending: write }]), "blocked");
-});
-
-test("drafts reopen the editor that wrote them", () => {
-  assert.deepEqual(draftRoute({ key: "edit-p1", planId: "p1", activityId: "coffee-together" }), { plan: "p1" });
-  assert.deepEqual(draftRoute({ key: "new-coffee-together", activityId: "coffee-together" }), { activity: "coffee-together" });
-  assert.deepEqual(draftRoute({ key: "new", activityId: "coffee-together" }), {});
-  assert.deepEqual(draftRoute({ key: "new", activityId: null }), {});
 });
 
 test("cover outcomes keep their action wording", () => {

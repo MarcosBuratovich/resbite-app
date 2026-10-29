@@ -11,8 +11,8 @@ function setup() {
     resume: (s) => {
       calls.push(`resume:${s}`);
     },
-    clearDrafts: async (s) => {
-      calls.push(`drafts:${s}`);
+    clearJournal: async (s) => {
+      calls.push(`journal:${s}`);
       if (fail) throw Error("locked");
     },
     clearPeople: async (s) => {
@@ -59,7 +59,7 @@ function setup() {
     },
   };
 }
-test("deletion clears drafts as well as scoped data before local-only signout", async () => {
+test("deletion clears the create journal as well as scoped data before local-only signout", async () => {
   const h = setup();
   const old = h.life.capture();
   const result = h.life.finishAccountDeletion("a");
@@ -67,7 +67,7 @@ test("deletion clears drafts as well as scoped data before local-only signout", 
   await result;
   assert.deepEqual(h.calls, [
     "suspend:a",
-    "drafts:a",
+    "journal:a",
     "people:a",
     "places:a",
     "invites:a",
@@ -120,7 +120,7 @@ test("ordinary signout failure cannot resume a deletion-blocked account", async 
     resume: (scope) => {
       resumed.push(scope);
     },
-    clearDrafts: async () => {
+    clearJournal: async () => {
       throw Error("storage locked");
     },
     clearPeople: async () => {

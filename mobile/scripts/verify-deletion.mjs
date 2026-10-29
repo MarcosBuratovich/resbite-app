@@ -146,8 +146,8 @@ try {
           JSON.stringify({ groups: [], plans: {}, invitations: [] }),
         );
         sessionStorage.setItem(
-          `resbite.drafts.v1.${user.id}`,
-          "deletion-fixture-draft",
+          `resbite.create-journal.v1.${user.id}`,
+          "deletion-fixture-journal",
         );
         sessionStorage.setItem("resbite.pending-invite", "a".repeat(64));
       },
@@ -263,7 +263,7 @@ try {
     assert.ok(statusCount >= 2);
     const remaining = await page.evaluate(
       (id) => ({
-        draft: sessionStorage.getItem(`resbite.drafts.v1.${id}`),
+        journal: sessionStorage.getItem(`resbite.create-journal.v1.${id}`),
         people: sessionStorage.getItem(`resbite.people.v1.${id}`),
         invite: sessionStorage.getItem("resbite.pending-invite"),
         session: sessionStorage.getItem("sb-ewcsgvhuojxdpaspwsrx-auth-token"),
@@ -271,7 +271,7 @@ try {
       }),
       user.id,
     );
-    assert.equal(remaining.draft, null);
+    assert.equal(remaining.journal, null);
     assert.equal(remaining.people, null);
     assert.equal(remaining.invite, null);
     assert.equal(remaining.session, null);
@@ -286,7 +286,7 @@ try {
     assert.equal(requestCount, 1);
     assert.equal(proofCount, 1);
     assert.ok(statusCount >= 3);
-    // Fresh synthetic account session: OTP plus a failed local draft cleanup.
+    // Fresh synthetic account session: OTP plus a failed local journal cleanup.
     accepted = null;
     await page.evaluate(
       ({ session, user }) => {
@@ -295,7 +295,7 @@ try {
           "sb-ewcsgvhuojxdpaspwsrx-auth-token",
           JSON.stringify(session),
         );
-        sessionStorage.setItem(`resbite.drafts.v1.${user.id}`, "retry-draft");
+        sessionStorage.setItem(`resbite.create-journal.v1.${user.id}`, "retry-journal");
       },
       { session, user },
     );
@@ -320,7 +320,7 @@ try {
       const original = Storage.prototype.removeItem;
       let fail = true;
       Storage.prototype.removeItem = function (key) {
-        if (fail && key.startsWith("resbite.drafts.v1.")) {
+        if (fail && key.startsWith("resbite.create-journal.v1.")) {
           fail = false;
           throw Error(
             "Fixture cleanup locked. Check deletion status to retry.",
@@ -348,7 +348,7 @@ try {
     assert.equal(proofCount, 2);
     assert.equal(
       await page.evaluate(
-        (id) => sessionStorage.getItem(`resbite.drafts.v1.${id}`),
+        (id) => sessionStorage.getItem(`resbite.create-journal.v1.${id}`),
         user.id,
       ),
       null,

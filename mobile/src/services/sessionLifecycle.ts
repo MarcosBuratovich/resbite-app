@@ -42,7 +42,7 @@ type Dependencies = {
   /** Plan 4: dismisses the account's pushes still shown on this phone, just before auth sign-out. Best effort:
    * its failure never fails sign-out. */
   clearShownPushes?: () => Promise<void>;
-  clearDrafts?: (scope: string) => Promise<void>;
+  clearJournal?: (scope: string) => Promise<void>;
   authSignOut: (localOnly?: boolean) => Promise<void>;
   finish: (preview: boolean) => void;
   busy: (value: boolean) => void;
@@ -121,9 +121,9 @@ export function createSessionLifecycle(deps: Dependencies) {
           }
           if (scope) {
             if (deleteAccount) {
-              if (!deps.clearDrafts)
-                throw Error("Draft cleanup is unavailable.");
-              await deps.clearDrafts(scope);
+              if (!deps.clearJournal)
+                throw Error("Journal cleanup is unavailable.");
+              await deps.clearJournal(scope);
               current();
             }
             await deps.clearPeople(scope);

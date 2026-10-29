@@ -12,7 +12,7 @@ import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium, expect } from "@playwright/test";
-import { button, createFromIdea, heading, later, next, openEvent, quietReminders, visible } from "./qa-helpers.mjs";
+import { button, createPlan, fillPlan, heading, later, openEvent, openWhen, openWhere, quietReminders, visible } from "./qa-helpers.mjs";
 const base = process.env.RESBITE_QA_URL || "http://localhost:8081";
 const out = process.env.RESBITE_QA_SHOTS || join(tmpdir(), "resbite-ui-audit");
 await mkdir(out, { recursive: true });
@@ -45,43 +45,36 @@ try {
     await page.getByText("Preview the design", { exact: true }).click();
     await expect(heading(page, "Create")).toBeVisible();
     await shot("create");
-    // Idea detail, and an idea opening at Review.
+    // Idea detail, and an idea opening on the plan screen.
     await page.getByRole("button", { name: "Coffee together", exact: true }).click();
     await expect(heading(page, "Coffee together")).toBeVisible();
     await shot("idea");
     await button(page, "Use idea").click();
-    await expect(heading(page, "Looks good?")).toBeVisible();
-    await shot("review-idea");
+    await expect(heading(page, "New resbite")).toBeVisible();
+    await shot("plan-idea");
     await button(page, "Close").click();
     await button(page, "Back").click();
     // My resbites, empty.
     await page.getByRole("tab", { name: "My resbites", exact: true }).click();
     await expect(page.getByText("Nothing planned", { exact: true })).toBeVisible();
     await shot("plans-empty");
-    // The four steps, Review, the Invite screen and invitations.
+    // The plan screen, its sheets, the It’s on! moment and invitations.
     await button(page, "New resbite").click();
-    await shot("step-what");
-    await page.getByLabel("Name", { exact: true }).fill("Picnic in the park");
-    await next(page);
-    await shot("step-when");
-    // UX3: an end time on When, Meeting details on Where.
-    await button(page, "Add an end time").click();
-    await expect(page.getByLabel("End date and time (local)", { exact: true })).toBeVisible();
-    await shot("step-when-end");
-    await next(page);
-    await page.getByLabel("Meeting place", { exact: true }).fill("Riverside park");
-    await page.getByLabel("Meeting details (optional)", { exact: true }).fill("By the big oak near the north gate. Gate code 4512.");
-    await shot("step-where");
-    // GI1: the optional Area, shown before people reply.
-    await page.getByLabel("Area, shown before people reply", { exact: true }).fill("Near the north gate, Victoria Park");
-    assert.ok(await fits(), `step-where-area-${width} fits at ${width} px`);
-    await shot("step-where-area");
-    await next(page);
-    await page.getByRole("checkbox", { name: "Natural", exact: true }).click();
-    await shot("step-vibe");
-    await next(page);
-    await shot("step-review");
-    await button(page, "Create preview").click();
+    await shot("plan-blank");
+    await page.getByLabel("Name your resbite", { exact: true }).fill("Picnic in the park");
+    await fillPlan(page, { date: "2099-03-01", start: "10:00", end: "12:00" });
+    await shot("plan-when");
+    // Meeting details and the Area (GI1) live in the Where sheet.
+    await openWhere(page);
+    await page.getByLabel("Where", { exact: true }).fill("Riverside park");
+    await page.getByLabel("Meeting details", { exact: true }).fill("By the big oak near the north gate. Gate code 4512.");
+    await page.getByLabel("Area people see before they reply", { exact: true }).fill("Near the north gate, Victoria Park");
+    assert.ok(await fits(), `sheet-where fits at ${width} px`);
+    await shot("sheet-where");
+    await button(page, "Done").click();
+    await button(page, "Natural").click();
+    await shot("plan-filled");
+    await button(page, "Create").click();
     await expect(heading(page, "It’s on!")).toBeVisible();
     await shot("invite-screen");
     await button(page, "Invite people").click();
@@ -286,14 +279,7 @@ try {
     await page.getByText("Preview the design", { exact: true }).click();
     await page.getByRole("tab", { name: "My resbites", exact: true }).click();
     await button(page, "New resbite").click();
-    await page.getByLabel("Name", { exact: true }).fill("Picnic in the park");
-    await next(page);
-    await next(page);
-    await page.getByLabel("Meeting place", { exact: true }).fill("Riverside park");
-    await next(page);
-    await page.getByRole("checkbox", { name: "Natural", exact: true }).click();
-    await next(page);
-    await button(page, "Create preview").click();
+    await createPlan(page, { title: "Picnic in the park", place: "Riverside park", categories: ["Natural"] });
     await button(page, "Invite people").click();
     // The preview's Invite people (the Pick step and the note that preview can't invite) and its ⓘ sheet.
     await expect(heading(page, "Invite people")).toBeVisible();
@@ -338,21 +324,19 @@ try {
     await page.getByText("Preview the design", { exact: true }).click();
     await page.getByRole("tab", { name: "My resbites", exact: true }).click();
     await button(page, "New resbite").click();
-    await page.getByLabel("Name", { exact: true }).fill("Picnic in the park");
-    await next(page);
-    await button(page, "Add an end time").click();
-    assert.ok(await fits(), "When with an end fits at 320 px under Larger Text");
-    await shot("step-when-end");
-    await next(page);
-    await page.getByLabel("Meeting place", { exact: true }).fill("Riverside park");
-    await page.getByLabel("Meeting details (optional)", { exact: true }).fill("By the big oak near the north gate. Gate code 4512.");
-    await page.getByLabel("Area, shown before people reply", { exact: true }).fill("Near the north gate, Victoria Park");
+    await page.getByLabel("Name your resbite", { exact: true }).fill("Picnic in the park");
+    await fillPlan(page, { date: "2099-03-01", start: "10:00", end: "12:00" });
+    assert.ok(await fits(), "When fits at 320 px under Larger Text");
+    await shot("plan-when");
+    await openWhere(page);
+    await page.getByLabel("Where", { exact: true }).fill("Riverside park");
+    await page.getByLabel("Meeting details", { exact: true }).fill("By the big oak near the north gate. Gate code 4512.");
+    await page.getByLabel("Area people see before they reply", { exact: true }).fill("Near the north gate, Victoria Park");
     assert.ok(await fits(), "Where with Meeting details and an Area fits at 320 px under Larger Text");
-    await shot("step-where");
-    await next(page);
-    await page.getByRole("checkbox", { name: "Natural", exact: true }).click();
-    await next(page);
-    await button(page, "Create preview").click();
+    await shot("sheet-where");
+    await button(page, "Done").click();
+    await button(page, "Natural").click();
+    await button(page, "Create").click();
     await later(page);
     await openEvent(page, "Picnic in the park");
     await expect(heading(page, "Picnic in the park")).toBeVisible();
@@ -883,7 +867,7 @@ try {
       await page.getByRole("tab", { name: "Create", exact: true }).click();
       await page.getByRole("button", { name: "Coffee together", exact: true }).click();
       await button(page, "Use idea").click();
-      await createFromIdea(page, "Test café");
+      await createPlan(page, { place: "Test café" });
       await later(page);
       await expect(page.getByRole("heading", { name: "Get notified?", exact: true })).toBeVisible();
       for (const name of ["Turn on notifications", "Not now"]) {

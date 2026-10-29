@@ -122,7 +122,7 @@ function phone(options: { platform?: string; enabled?: boolean } = {}) {
     clearCalendarRecords: async () => {},
     clearPhoto: async () => {},
     clearCovers: async () => {},
-    clearDrafts: async () => {},
+    clearJournal: async () => {},
     blockPending: () => () => {},
     clearPending: async () => {},
     blockPush: push.hold,

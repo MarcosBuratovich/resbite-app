@@ -71,3 +71,8 @@ export const PLAN_COPY = {
   saveAndNotify: "Save and notify",
   notifyTold: "will be told about changes to the date, time or place.",
 } as const;
+
+/** The notice My resbites shows when a create whose reply was lost turns out to have gone through. */
+export function createdNotice(title: string): string {
+  return `${title} is created.`;
+}

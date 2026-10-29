@@ -940,6 +940,7 @@ export function FieldCard({
   minHeight = 78,
   multiline = false,
   accessory,
+  error = false,
   onFocus,
   onBlur,
   ...props
@@ -952,11 +953,13 @@ export function FieldCard({
   display?: boolean;
   minHeight?: number;
   accessory?: React.ReactNode;
+  /** The missing treatment: a 2 pt error border in place of the card's own. */
+  error?: boolean;
 }) {
   const [focused, setFocused] = React.useState(false);
   const left = circle ? 16 : 20;
   return (
-    <View style={[styles.inputCard, focused && styles.inputCardFocused]}>
+    <View style={[styles.inputCard, focused && styles.inputCardFocused, error && styles.inputCardError]}>
       <TextInput
         accessibilityLabel={label}
         placeholderTextColor={c.muted}
@@ -1158,6 +1161,7 @@ const styles = StyleSheet.create({
     boxShadow: depth.card,
   },
   inputCardFocused: { borderColor: c.aquaDark, boxShadow: `0 0 0 1px ${c.aquaDark}` },
+  inputCardError: { borderWidth: 2, borderColor: c.error, boxShadow: depth.card },
   noOutline: { outlineStyle: "solid", outlineWidth: 0 },
   input: { paddingRight: 20, color: c.ink, borderRadius: r.panel },
   inputName: { fontFamily: fonts.display, fontSize: 24, paddingVertical: 14 },

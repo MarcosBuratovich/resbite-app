@@ -273,20 +273,19 @@ export default function Arrange() {
               {rowMessage("name")}
             </Copy>
           )}
-          <View style={need("name") && styles.red}>
-            <FieldCard
-              label={PLAN_COPY.namePlaceholder}
-              icon={Pencil}
-              display
-              multiline
-              minHeight={64}
-              placeholder={PLAN_COPY.namePlaceholder}
-              value={f.title}
-              onChangeText={(text) => form.set("title", text)}
-              maxLength={TITLE_MAX}
-              editable={!form.busy}
-            />
-          </View>
+          <FieldCard
+            error={need("name")}
+            label={PLAN_COPY.namePlaceholder}
+            icon={Pencil}
+            display
+            multiline
+            minHeight={64}
+            placeholder={PLAN_COPY.namePlaceholder}
+            value={f.title}
+            onChangeText={(text) => form.set("title", text)}
+            maxLength={TITLE_MAX}
+            editable={!form.busy}
+          />
           {videoAt("title") && <ErrorNote message={VIDEO_CALL_MESSAGE} />}
         </View>
 

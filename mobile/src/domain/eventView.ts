@@ -2,7 +2,6 @@ import { categoryLabels, type CategoryKey } from "./categories";
 import type { Plan } from "./plans";
 import { spokenDate, spokenDateTime } from "./schedule";
 import { spokenRange } from "./eventTime";
-import type { PlanDraft } from "../services/draftStore";
 
 // Wording and grouping for cover cards, Review, My resbites and the event page (UX1).
 const BADGE_DAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"] as const;
@@ -218,54 +217,6 @@ export function mapsUrl(place: { place_label: string; latitude?: number | null; 
   if (typed && Math.abs(Number(typed[1])) <= 90 && Math.abs(Number(typed[2])) <= 180)
     return `https://maps.apple.com/?ll=${typed[1]},${typed[2]}&${query}`;
   return `https://maps.apple.com/?${query}`;
-}
-
-/** An all-empty baseline: such a draft stays dirty until every field is cleared. Order: title, description, categories, start, place, note. */
-export const BLANK_DRAFT_BASELINE = JSON.stringify(["", "", [], "", "", ""]);
-
-/**
- * "Do this again" (benchmark row 5): a new blank-type draft (key "new") with the title,
- * description, categories, place, area (GI1) and Meeting details (`note`) copied. It never copies the date,
- * the end time (UX3), the Note to guests, guests or cover, and it has no source idea
- * (activityId null), so it opens at When.
- */
-export function againDraft(
-  plan: Plan,
-  options: { scope: string; requestId: string; zone: string; now: Date },
-): PlanDraft {
-  return {
-    schema: 1,
-    scope: options.scope,
-    key: "new",
-    activityId: null,
-    requestId: options.requestId,
-    original: null,
-    initial: BLANK_DRAFT_BASELINE,
-    title: plan.title,
-    description: plan.description,
-    categories: [...plan.categories],
-    start: "",
-    place: plan.place_label,
-    area: plan.area ?? "",
-    note: plan.note,
-    zone: options.zone,
-    pending: null,
-    updatedAt: options.now.toISOString(),
-  };
-}
-
-/** An unconfirmed new save must never be overwritten; an unfinished new draft is replaced only after asking. */
-export function againConflict(drafts: readonly PlanDraft[]): "none" | "replace" | "blocked" {
-  const existing = drafts.find((draft) => draft.key === "new");
-  if (!existing) return "none";
-  return existing.pending ? "blocked" : "replace";
-}
-
-/** Route params that reopen the editor that wrote a draft (its key is derived from them). */
-export function draftRoute(draft: Pick<PlanDraft, "key" | "planId" | "activityId">): { plan?: string; activity?: string } {
-  if (draft.planId) return { plan: draft.planId };
-  if (draft.key === "new" || !draft.activityId) return {};
-  return { activity: draft.activityId };
 }
 
 /** Cover failure notices keep their wording because they ask for action. */

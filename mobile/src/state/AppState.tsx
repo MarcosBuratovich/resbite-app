@@ -1,4 +1,4 @@
-import { drafts } from "../services/drafts";
+import { createJournal } from "../services/journal";
 import React, {
   createContext,
   useContext,
@@ -127,7 +127,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         clearAttestation();
         await pendingStore.clear();
       },
-      clearDrafts: drafts.clearScope,
+      clearJournal: createJournal.clear,
       // Plan 4: this phone's push endpoint goes first, with the account's own session.
       blockPush: pushSession.hold,
       clearPush: pushSession.clear,

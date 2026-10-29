@@ -1,4 +1,4 @@
-// Shared browser QA steps for the UX1 creation flow and My resbites.
+// Shared browser QA steps for the plan screen (create and edit) and My resbites.
 import { expect } from "@playwright/test";
 
 /** Ignores matches on screens hidden underneath in the stack. */
@@ -7,16 +7,12 @@ export const heading = (page, name) => visible(page.getByRole("heading", { name,
 export const button = (page, name) =>
   visible(page.getByRole("button", { name, exact: typeof name === "string" }));
 
-/** The step pill: "Next" going forward ("Review" on Vibe), "Done" when returning to Review. */
-export async function next(page) {
-  await button(page, /^(Next|Review|Done)$/).click();
-}
 export async function close(page) {
   await button(page, "Close").click();
 }
 /**
- * Fills a field that has just appeared on a new step. A fill in the step's first moments can land on an input
- * that is then redrawn from the editor's state, so the text is lost; this fills again until the value holds.
+ * Fills a field that has just appeared (a sheet opening, a screen loading). A fill in its first moments can land on
+ * an input that is then redrawn from the form's state, so the text is lost; this fills again until the value holds.
  */
 export async function fillSettled(field, value) {
   await expect(async () => {
@@ -24,14 +20,6 @@ export async function fillSettled(field, value) {
     await field.page().waitForTimeout(150);
     await expect(field).toHaveValue(value, { timeout: 100 });
   }).toPass({ timeout: 5000 });
-}
-/** Web QA types dates into "Date and time (local)", the When step's first card ("Choose a day" first while unset). */
-export async function typeDate(page, value) {
-  const field = visible(page.getByLabel("Date and time (local)", { exact: true }));
-  const choose = button(page, "Choose a day");
-  await field.or(choose).first().waitFor();
-  if (await choose.count()) await choose.click();
-  await field.fill(value);
 }
 /**
  * UX3: the event page asks "Get notified?" the first time an organizer or a Going or Maybe guest opens one
@@ -59,32 +47,48 @@ export async function heightOf(locator) {
   if (!box) throw Error("The element is not rendered");
   return box.height;
 }
-/** What → When → Where → Vibe → Review for a new event. */
-export async function createSteps(page, { name, when, place, note, categories = [] }) {
-  await page.getByLabel("Name", { exact: true }).fill(name);
-  await next(page);
-  if (when) await typeDate(page, when);
-  await next(page);
-  await page.getByLabel("Meeting place", { exact: true }).fill(place);
-  if (note) await page.getByLabel("Meeting details (optional)", { exact: true }).fill(note);
-  await next(page);
-  for (const category of categories) await page.getByRole("checkbox", { name: category, exact: true }).click();
-  await next(page);
-  await expect(heading(page, "Looks good?")).toBeVisible();
+/** Opens the When sheet from the plan screen's When row. */
+export async function openWhen(page) {
+  await button(page, /^When, /).click();
+  await expect(heading(page, "When")).toBeVisible();
 }
-/** An idea opens at Review. Create jumps to the missing place, then Done returns to Review. */
-export async function createFromIdea(page, place, submit = "Create preview") {
-  await expect(heading(page, "Looks good?")).toBeVisible();
-  await button(page, submit).click();
-  await expect(page.getByText("Add a meeting place.", { exact: true })).toBeVisible();
-  await page.getByLabel("Meeting place", { exact: true }).fill(place);
-  await next(page);
+/** Opens the Where sheet from the plan screen's Where row. */
+export async function openWhere(page) {
+  await button(page, /^Where, /).click();
+  await expect(heading(page, "Where")).toBeVisible();
+}
+/**
+ * Fills the plan screen with what is given: the name, the When sheet (the typed YYYY-MM-DD and HH:mm fields of
+ * the web path), the Where sheet and the categories. The start goes in before the end, as the sheet moves the end
+ * with the start.
+ */
+export async function fillPlan(page, { title, date, start, end, place, categories = [] }) {
+  if (title !== undefined) await fillSettled(page.getByLabel("Name your resbite", { exact: true }), title);
+  if (date !== undefined) {
+    await openWhen(page);
+    await fillSettled(visible(page.getByLabel("Date", { exact: true })), date);
+    await fillSettled(visible(page.getByLabel("Start time", { exact: true })), start);
+    await fillSettled(visible(page.getByLabel("End time", { exact: true })), end);
+    await button(page, "Done").click();
+    await expect(heading(page, "When")).toHaveCount(0);
+  }
+  if (place !== undefined) {
+    await openWhere(page);
+    await fillSettled(visible(page.getByLabel("Where", { exact: true })), place);
+    await button(page, "Done").click();
+    await expect(heading(page, "Where")).toHaveCount(0);
+  }
+  for (const category of categories) await button(page, category).click();
+}
+/** Fills the plan screen (an idea's name and categories stay) and presses Create; the date defaults to a far one. */
+export async function createPlan(page, plan, submit = "Create") {
+  await fillPlan(page, { date: "2099-03-01", start: "10:00", end: "11:00", ...plan });
   await button(page, submit).click();
 }
-/** The Invite screen after creating, then "Later" back to My resbites. */
+/** The It’s on! moment after creating, then "Not now" back to My resbites. */
 export async function later(page) {
   await expect(heading(page, "It’s on!")).toBeVisible();
-  await button(page, "Later").click();
+  await button(page, "Not now").click();
 }
 
 // --- My resbites helpers: cards open the event page, where the actions now live (UX1) ---
@@ -100,7 +104,7 @@ export async function openEvent(page, title) {
 export async function editEvent(page, title) {
   await openEvent(page, title);
   await button(page, `Edit ${title}`).click();
-  await expect(heading(page, "Looks good?")).toBeVisible();
+  await expect(heading(page, "Edit resbite")).toBeVisible();
 }
 export async function inviteFromList(page, title, notice) {
   await openEvent(page, title);

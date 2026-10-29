@@ -50,7 +50,7 @@ try {
       );
       sessionStorage.setItem("resbite.pending-invite", "a".repeat(64));
       sessionStorage.setItem(
-        `resbite.drafts.v1.${user.id}`,
+        `resbite.create-journal.v1.${user.id}`,
         "retained-fixture",
       );
     },
@@ -103,7 +103,7 @@ try {
   );
   assert.equal(
     await page.evaluate(
-      (id) => sessionStorage.getItem(`resbite.drafts.v1.${id}`),
+      (id) => sessionStorage.getItem(`resbite.create-journal.v1.${id}`),
       user.id,
     ),
     "retained-fixture",
@@ -121,7 +121,7 @@ try {
   assert.equal(attempts, 2);
   assert.deepEqual(errors, []);
   console.log(
-    "Session fixture passed: remote sign-out failure remains visible after local session removal, independent success works, local groups/invite cleared and account drafts retained; no live auth requests.",
+    "Session fixture passed: remote sign-out failure remains visible after local session removal, independent success works, local groups/invite cleared and the account’s pending-create journal retained; no live auth requests.",
   );
 } finally {
   await browser.close();

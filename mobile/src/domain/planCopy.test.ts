@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PLAN_COPY } from "./planCopy.ts";
+import { PLAN_COPY, createdNotice } from "./planCopy.ts";
 
 test("the copy keeps its curly apostrophes and quotes", () => {
   assert.equal(PLAN_COPY.descriptionPlaceholder, "What you’ll do together (optional)");
@@ -31,4 +31,8 @@ test("the Create tab copy", () => {
   assert.equal(PLAN_COPY.createHeading, "What do you want to do?");
   assert.equal(PLAN_COPY.startFromScratch, "Start from scratch");
   assert.equal(PLAN_COPY.orStartFromIdea, "Or start from an idea");
+});
+
+test("the notice for a create that went through", () => {
+  assert.equal(createdNotice("Coffee together"), "Coffee together is created.");
 });

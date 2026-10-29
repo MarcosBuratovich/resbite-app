@@ -1,7 +1,7 @@
 // Browser QA for CE2 cover photos. Every Supabase request is intercepted; nothing is uploaded.
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
-import { button, closeToList, editEvent, later, next, quietReminders } from "./qa-helpers.mjs";
+import { button, closeToList, createPlan, editEvent, later, quietReminders } from "./qa-helpers.mjs";
 const baseURL = process.env.RESBITE_QA_URL || "http://localhost:8081";
 const browser = await chromium.launch({
   channel: process.env.RESBITE_QA_BROWSER || "chrome",
@@ -81,7 +81,7 @@ try {
   await preview.getByText("Preview the design", { exact: true }).click();
   await preview.getByRole("tab", { name: "My resbites", exact: true }).click();
   await preview.getByRole("button", { name: "New resbite", exact: true }).click();
-  await preview.getByLabel("Name", { exact: true }).fill("Cover picnic");
+  await preview.getByLabel("Name your resbite", { exact: true }).fill("Cover picnic");
   const previewChooser = preview.waitForEvent("filechooser");
   await preview.getByRole("button", { name: "Add cover photo", exact: true }).click();
   await (await previewChooser).setFiles({
@@ -94,13 +94,7 @@ try {
   await preview.getByLabel("Photo description", { exact: true }).fill("  Two mugs on a sill  ");
   await preview.getByRole("button", { name: "Save", exact: true }).click();
   await expect(preview.getByRole("button", { name: "Edit photo description, Two mugs on a sill", exact: true })).toBeVisible();
-  await next(preview);
-  await next(preview);
-  await preview.getByLabel("Meeting place", { exact: true }).fill("Riverside park");
-  await next(preview);
-  await preview.getByRole("checkbox", { name: "Natural", exact: true }).click();
-  await next(preview);
-  await button(preview, "Create preview").click();
+  await createPlan(preview, { place: "Riverside park", categories: ["Natural"] });
   await later(preview);
   await expect(preview.getByText("Cover picnic", { exact: true })).toBeVisible();
   await expect(preview.locator('img[src^="data:image/jpeg"]').first()).toBeAttached();
@@ -222,18 +216,12 @@ try {
   });
   await page.goto(`${baseURL}/plans`);
   await page.getByRole("button", { name: "New resbite", exact: true }).click();
-  await page.getByLabel("Name", { exact: true }).fill("Garden picnic");
+  await page.getByLabel("Name your resbite", { exact: true }).fill("Garden picnic");
   const chooser = page.waitForEvent("filechooser");
   await page.getByRole("button", { name: "Add cover photo", exact: true }).click();
   await (await chooser).setFiles({ name: "wide.png", mimeType: "image/png", buffer: await syntheticPng(page, 4000, 1200) });
   await expect(page.getByText("Your cover uploads after the resbite is saved.", { exact: true })).toBeVisible();
-  await next(page);
-  await next(page);
-  await page.getByLabel("Meeting place", { exact: true }).fill("Riverside park");
-  await next(page);
-  await page.getByRole("checkbox", { name: "Natural", exact: true }).click();
-  await next(page);
-  await button(page, "Create").click();
+  await createPlan(page, { place: "Riverside park", categories: ["Natural"] });
   const coverPending = "Your resbite is saved, but its cover photo hasn’t uploaded yet. Open Edit plan to retry.";
   // The Invite screen shows the cover notice; Later carries it to My resbites.
   await expect(page.getByText(coverPending, { exact: true })).toBeVisible();
@@ -272,7 +260,7 @@ try {
   // UX2 photo description: held with a new event's photo and saved right after it; edited at once on a
   // saved event; cleared by a new photo; a conflict keeps the sheet and the typed text.
   await page.getByRole("button", { name: "New resbite", exact: true }).click();
-  await page.getByLabel("Name", { exact: true }).fill("Lake swim");
+  await page.getByLabel("Name your resbite", { exact: true }).fill("Lake swim");
   const swim = page.waitForEvent("filechooser");
   await page.getByRole("button", { name: "Add cover photo", exact: true }).click();
   await (await swim).setFiles({ name: "swim.png", mimeType: "image/png", buffer: await syntheticPng(page, 1600, 900) });
@@ -280,13 +268,7 @@ try {
   await page.getByLabel("Photo description", { exact: true }).fill("Two swimmers at the jetty");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   assert.equal(descriptionCalls.length, 0, "Nothing is sent before the resbite exists");
-  await next(page);
-  await next(page);
-  await page.getByLabel("Meeting place", { exact: true }).fill("Lake");
-  await next(page);
-  await page.getByRole("checkbox", { name: "Natural", exact: true }).click();
-  await next(page);
-  await button(page, "Create").click();
+  await createPlan(page, { place: "Lake", categories: ["Natural"] });
   await later(page);
   const swimPlan = [...plans.values()].find((p) => p.title === "Lake swim");
   assert.deepEqual(descriptionCalls, [{ p_description: "Two swimmers at the jetty", p_expected_revision: 1 }]);
