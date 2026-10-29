@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { router } from "expo-router";
 import { useNavigation, usePreventRemove } from "expo-router/react-navigation";
 import * as Crypto from "expo-crypto";
@@ -11,9 +11,11 @@ import {
   createWrite,
   editChangesTimeOrPlace,
   editWrite,
+  hasUnsavedChanges,
   modeFor,
   submitCheck,
   type PlanFormMode,
+  type SubmitCheck,
 } from "./planFormModel";
 import { fieldsFromActivity } from "../domain/events";
 import {
@@ -47,6 +49,10 @@ export type PlanFormController = {
   attempted: boolean;
   missing: MissingItem[];
   videoFields: PlanFormField[];
+  /** The start is not in the future (then `when` is in `missing`). */
+  whenPast: boolean;
+  /** The check a save runs now; `missing`, `videoFields` and `whenPast` are the same as of the last render. */
+  check(): SubmitCheck;
   zone: string;
   cover: CoverControls;
   /** Edit: guests a change reaches (accepted, maybe, pending). */
@@ -64,7 +70,6 @@ export type PlanFormController = {
 };
 
 const deviceZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
-const sameForm = (a: PlanForm, b: PlanForm) => JSON.stringify(a) === JSON.stringify(b);
 const messageOf = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
 
 /** The picture an "again" plan starts with: the original's cover, copied to the new plan unless a new photo is chosen. */
@@ -104,20 +109,23 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<Plan | null>(null);
   const [coverOutcome, setCoverOutcome] = useState<CoverOutcome>("none");
+  // The idea a create carries; dropped when the server says it was withdrawn, so the next Create goes without it.
+  const [ideaId, setIdeaId] = useState<string | null>(mode === "idea" ? (params.activity ?? null) : null);
 
+  // Preview keeps plans in memory, so the resbite being edited is there on the first render, photo and all.
+  const editedId = mode === "edit" ? (params.plan ?? null) : null;
+  const previewPlan = preview && editedId ? (localPlans.find((p) => p.id === editedId) ?? null) : null;
+  const updatePreviewPlan = (change: Partial<Plan>) => {
+    // Only an edit changes a saved resbite's photo; a new one (Do this again too) holds its photo until Create.
+    if (editedId) setLocalPlans((all) => all.map((p) => (p.id === editedId ? { ...p, ...change } : p)));
+  };
   const cover = useCoverPhoto({
-    planId: mode === "edit" ? (params.plan ?? null) : null,
+    planId: editedId,
     preview,
-    previewUri: preview && original ? (original.cover_path ?? null) : null,
-    previewDescription: preview && original ? (original.cover_description ?? "") : "",
-    onPreviewChange: (uri) => {
-      if (original)
-        setLocalPlans((all) => all.map((p) => (p.id === original.id ? { ...p, cover_path: uri } : p)));
-    },
-    onPreviewDescribe: (text) => {
-      if (original)
-        setLocalPlans((all) => all.map((p) => (p.id === original.id ? { ...p, cover_description: text } : p)));
-    },
+    previewUri: previewPlan?.cover_path ?? null,
+    previewDescription: previewPlan?.cover_description ?? "",
+    onPreviewChange: (uri) => updatePreviewPlan({ cover_path: uri }),
+    onPreviewDescribe: (text) => updatePreviewPlan({ cover_description: text }),
   });
   const coverRef = useRef(cover);
   coverRef.current = cover;
@@ -193,8 +201,10 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
     // Reads once per plan and account, not when context refreshes.
   }, [mode, sourceId, scope]);
 
-  const dirty = !sameForm(form, initial);
-  const { missing, videoFields } = useMemo(() => submitCheck(form), [form]);
+  const dirty = hasUnsavedChanges(mode, form, initial, cover);
+  // Read at every render: whether the start has passed depends on the time, not only on the form.
+  const check = () => submitCheck(form, zone, Date.now(), mode === "edit" ? original : null);
+  const { missing, videoFields, past: whenPast } = check();
   const timeOrPlaceChanged = mode === "edit" && original ? editChangesTimeOrPlace(form, zone, original) : false;
 
   // The leave guard keeps the navigation action until the host decides.
@@ -236,7 +246,7 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
     const journaled = stored && stored.requestId === requestId.current ? stored : null;
     const write: PlanWrite =
       journaled?.write ??
-      createWrite(form, zone, requestId.current, mode === "idea" ? (params.activity ?? null) : (original?.activity_id ?? null));
+      createWrite(form, zone, requestId.current, mode, ideaId);
     const note = form.guestNote.trim();
     let plan: Plan;
     if (preview) {
@@ -323,13 +333,18 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
   }
 
   async function submit() {
-    if (saving.current || cover.busy || created) return;
+    if (saving.current || created) return;
     setAttempted(true);
-    const check = submitCheck(form);
-    if (check.missing.length > 0 || check.videoFields.length > 0) return;
+    const now = check();
+    if (now.missing.length > 0 || now.videoFields.length > 0) return;
     if (!scope || (mode === "edit" && !original)) return;
     if (mode === "edit" && original && !canEditPlan(original, ownerId ?? undefined, preview)) {
       setError(PLAN_COPY.notEditable);
+      return;
+    }
+    // Nothing changed: Save leaves as a save does, without writing and without a notice.
+    if (mode === "edit" && original && !dirty) {
+      router.dismissTo({ pathname: "/event", params: { plan: original.id } });
       return;
     }
     // Captured before the first await so a sign-out during the save is detected.
@@ -338,12 +353,22 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
     setBusy(true);
     setError(null);
     try {
+      // A photo still being chosen, removed or described finishes first, so the save goes with it.
+      await coverRef.current.idle();
       if (mode === "edit") await edit(original!);
       else await create(assertSession);
     } catch (e) {
       if (mounted.current) {
-        // Note failures after an edit's plan saved carry their own message; a save error maps as writePlan did.
-        setError(e instanceof PlanSaveError ? e.message : messageOf(e, PLAN_COPY.unconfirmed));
+        if (mode === "edit" && e instanceof PlanSaveError && e.latest) {
+          // Someone saved first: show their version, from which the next Save starts.
+          setOriginal(e.latest);
+          begin(formFromPlan(e.latest));
+          setError(PLAN_COPY.editConflict);
+        } else {
+          if (e instanceof PlanSaveError && e.reason === "idea") setIdeaId(null);
+          // Note failures after an edit's plan saved carry their own message; a save error maps as writePlan did.
+          setError(e instanceof PlanSaveError ? e.message : messageOf(e, PLAN_COPY.unconfirmed));
+        }
       }
     } finally {
       saving.current = false;
@@ -368,6 +393,8 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
     attempted,
     missing,
     videoFields,
+    whenPast,
+    check,
     zone,
     cover: shownCover,
     notifyCount: guestCount,

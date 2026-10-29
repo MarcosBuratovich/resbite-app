@@ -61,7 +61,7 @@ try {
     // The plan screen, its sheets, the It’s on! moment and invitations.
     await button(page, "New resbite").click();
     await shot("plan-blank");
-    await page.getByLabel("Name your resbite", { exact: true }).fill("Picnic in the park");
+    await page.getByLabel("Title", { exact: true }).fill("Picnic in the park");
     await fillPlan(page, { date: "2099-03-01", start: "10:00", end: "12:00" });
     await shot("plan-when");
     // Meeting details and the Area (GI1) live in the Where sheet.
@@ -324,7 +324,7 @@ try {
     await page.getByText("Preview the design", { exact: true }).click();
     await page.getByRole("tab", { name: "My resbites", exact: true }).click();
     await button(page, "New resbite").click();
-    await page.getByLabel("Name your resbite", { exact: true }).fill("Picnic in the park");
+    await page.getByLabel("Title", { exact: true }).fill("Picnic in the park");
     await fillPlan(page, { date: "2099-03-01", start: "10:00", end: "12:00" });
     assert.ok(await fits(), "When fits at 320 px under Larger Text");
     await shot("plan-when");

@@ -59,3 +59,14 @@ test("the notices and errors of saving and loading", () => {
   assert.equal(PLAN_COPY.notProtected, "Couldn’t protect this save on your device. Nothing was sent; try again.");
   assert.equal(PLAN_COPY.unconfirmed, "We couldn’t confirm the save. Retry when you’re connected.");
 });
+
+test("the fields' names, as the mockup labels them", () => {
+  assert.equal(PLAN_COPY.titleLabel, "Title");
+  assert.equal(PLAN_COPY.descriptionLabel, "Description (optional)");
+  assert.equal(PLAN_COPY.noteLabel, "Note to guests (optional)");
+  assert.equal(PLAN_COPY.categoriesLabel, "Categories · choose one or two");
+});
+
+test("an edit that met a newer save", () => {
+  assert.equal(PLAN_COPY.editConflict, "The saved details changed and are shown now. Make your change again.");
+});

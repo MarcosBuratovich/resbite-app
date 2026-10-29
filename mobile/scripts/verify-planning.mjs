@@ -62,6 +62,22 @@ async function previewPage(options) {
   await page.getByText("Preview the design", { exact: true }).click();
   return page;
 }
+/** A PNG drawn in the page, for the cover chooser. */
+async function syntheticPng(page, width, height) {
+  const base64 = await page.evaluate(
+    ([w, h]) => {
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#81b29a";
+      ctx.fillRect(0, 0, w, h);
+      return canvas.toDataURL("image/png").split(",")[1];
+    },
+    [width, height],
+  );
+  return Buffer.from(base64, "base64");
+}
 /** My resbites → the "New resbite" button → a blank plan screen. */
 async function newResbite(page) {
   await page.getByRole("tab", { name: "My resbites", exact: true }).click();
@@ -158,7 +174,17 @@ const planFromChange = (plan, write) => ({
  */
 async function signedInPage({ plans = [], guests = [], failJournal = false, ...options } = {}) {
   const page = await newPage({ timezoneId: "UTC", ...options });
-  const state = { plans: [...plans], creates: [], changes: [], unexpected: [], holdCreate: false, dropFirstCreate: false, planReads: 0 };
+  const state = {
+    plans: [...plans],
+    creates: [],
+    changes: [],
+    unexpected: [],
+    holdCreate: false,
+    dropFirstCreate: false,
+    planReads: 0,
+    // Someone else's save that lands just before the next change: that change then meets a 40001.
+    conflictNextChange: null,
+  };
   if (failJournal)
     await page.addInitScript(() => {
       const set = Storage.prototype.setItem;
@@ -207,6 +233,11 @@ async function signedInPage({ plans = [], guests = [], failJournal = false, ...o
       const write = request.postDataJSON();
       state.changes.push(write);
       const at = state.plans.findIndex((p) => p.id === write.p_plan);
+      if (state.conflictNextChange) {
+        state.plans[at] = { ...state.plans[at], ...state.conflictNextChange, version: state.plans[at].version + 1 };
+        state.conflictNextChange = null;
+        return reply({ code: "40001", message: "Plan changed; refresh" }, 409);
+      }
       assert.equal(write.p_version, state.plans[at].version);
       state.plans[at] = planFromChange(state.plans[at], write);
       return reply(state.plans[at].version);
@@ -244,7 +275,7 @@ try {
     await page.getByRole("button", { name: "Coffee together", exact: true }).click();
     await page.getByRole("button", { name: "Use idea", exact: true }).click();
     await expect(heading(page, "New resbite")).toBeVisible();
-    await expect(page.getByLabel("Name your resbite", { exact: true })).toHaveValue("Coffee together");
+    await expect(page.getByLabel("Title", { exact: true })).toHaveValue("Coffee together");
     await expect(button(page, "When, Add a date and time")).toBeVisible();
     await expect(button(page, "Where, Add a place")).toBeVisible();
     await button(page, "Create").click();
@@ -300,8 +331,9 @@ try {
 
     // Edit in the same session: the first screen after creating is the same plan screen with Save.
     await editEvent(page, "Coffee together");
-    await expect(button(page, "Save")).toBeDisabled();
-    await fillSettled(page.getByLabel("Name your resbite", { exact: true }), "Coffee together, late");
+    // Save is never disabled.
+    await expect(button(page, "Save")).toBeEnabled();
+    await fillSettled(page.getByLabel("Title", { exact: true }), "Coffee together, late");
     await button(page, "Save").click();
     await expect(page.getByText("Preview changes saved", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Back", exact: true }).click();
@@ -342,15 +374,27 @@ try {
       page.getByText("Four things are missing: a name, a date and time, a place, and one or two categories.", { exact: true }),
     ).toBeVisible();
     assert.equal(state.creates.length, 0, "A refused Create sends nothing");
+    // A start in the past: the When row says so in its own words, the line counts it, and nothing is sent.
     await fillPlan(page, {
       title: "Garden picnic",
-      date: "2099-04-05",
+      date: "2020-04-05",
       start: "10:00",
       end: "12:00",
       place: "Riverside park",
       categories: ["Natural", "Community"],
     });
     await expect(button(page, "Creative")).toHaveAttribute("aria-disabled", "true");
+    await button(page, "Create").click();
+    await expect(page.getByText("One thing is missing: a date and time.", { exact: true })).toBeVisible();
+    await expect(page.getByText("Choose a date and time in the future.", { exact: true })).toBeVisible();
+    assert.equal(
+      await button(page, /^When, /).evaluate((el) => getComputedStyle(el).borderTopColor),
+      ERROR_RED,
+      "The past When row is red",
+    );
+    assert.equal(state.creates.length, 0, "A past start sends nothing");
+    await fillPlan(page, { date: "2099-04-05", start: "10:00", end: "12:00" });
+    await expect(page.getByText("Choose a date and time in the future.", { exact: true })).toHaveCount(0);
     await button(page, "Create").click();
     await expect(heading(page, "It’s on!")).toBeVisible();
     assert.equal(state.creates.length, 1);
@@ -368,7 +412,7 @@ try {
     await expectCategories(page, "Garden picnic", "Natural · Community");
     assert.equal(await page.evaluate((k) => sessionStorage.getItem(k), journalKey), null, "The journal is cleared");
     assert.deepEqual(state.unexpected, []);
-    console.log("PASS: from scratch, Create names four missing things and the create_plan_v4 call carries p_place_tbd false, p_repeat_weeks null and an ends_at.");
+    console.log("PASS: from scratch, Create names four missing things; a past start reddens When with Choose a date and time in the future. and sends nothing; the create_plan_v4 call carries p_place_tbd false, p_repeat_weeks null and an ends_at.");
     await page.context().close();
   }
 
@@ -390,7 +434,7 @@ try {
     await expect(heading(page, "My resbites")).toBeVisible();
     await expect(heading(page, "Discard this resbite?")).toHaveCount(0);
     await newResbite(page);
-    const name = page.getByLabel("Name your resbite", { exact: true });
+    const name = page.getByLabel("Title", { exact: true });
     await fillSettled(name, "Garden picnic");
     await close(page);
     await expect(heading(page, "Discard this resbite?")).toBeVisible();
@@ -403,7 +447,17 @@ try {
     await button(page, "Discard").click();
     await expect(heading(page, "New resbite")).toHaveCount(0);
     await expect(heading(page, "My resbites")).toBeVisible();
-    console.log("PASS: the discard sheet appears after a keystroke, Keep editing keeps the text, Discard leaves; an untouched screen leaves at once.");
+    // A chosen photo is something entered too: closing asks before it is lost.
+    await newResbite(page);
+    const chooser = page.waitForEvent("filechooser");
+    await button(page, "Add cover photo").click();
+    await (await chooser).setFiles({ name: "cover.png", mimeType: "image/png", buffer: await syntheticPng(page, 640, 480) });
+    await expect(page.getByText("Preview cover stays in memory. Nothing is uploaded.", { exact: true })).toBeVisible();
+    await close(page);
+    await expect(heading(page, "Discard this resbite?")).toBeVisible();
+    await button(page, "Discard").click();
+    await expect(heading(page, "My resbites")).toBeVisible();
+    console.log("PASS: the discard sheet appears after a keystroke or a chosen photo, Keep editing keeps the text, Discard leaves; an untouched screen leaves at once.");
     await page.context().close();
   }
 
@@ -419,7 +473,7 @@ try {
       place: "Riverside park",
       categories: ["Natural"],
     });
-    const description = page.getByLabel("What you’ll do together (optional)", { exact: true });
+    const description = page.getByLabel("Description (optional)", { exact: true });
     await fillSettled(description, "Join us on https://zoom.us/j/123456789");
     await button(page, "Create").click();
     const refusal = page.getByText("Resbite is for meeting in person. Take out the video-call link.", { exact: true });
@@ -446,14 +500,13 @@ try {
     await page.goto(`${baseURL}/arrange?plan=${plan.id}`);
     await expect(heading(page, "Edit resbite")).toBeVisible();
     await expect(page.getByText("2 people will be told about changes to the date, time or place.", { exact: true })).toBeVisible();
-    await expect(button(page, "Save")).toBeDisabled();
-    await fillSettled(page.getByLabel("Name your resbite", { exact: true }), "Coffee morning");
+    // A resbite made before ends existed: Save is enabled, and tapping it names the When row and waits.
     await expect(button(page, "Save")).toBeEnabled();
-    // Without an end the When row is incomplete: Save names it and waits.
     await button(page, "Save").click();
     await expect(page.getByText("One thing is missing: a date and time.", { exact: true })).toBeVisible();
     await expect(page.getByText("Add a date and time", { exact: true }).first()).toBeVisible();
     assert.equal(state.changes.length, 0);
+    await fillSettled(page.getByLabel("Title", { exact: true }), "Coffee morning");
     await openWhen(page);
     await expect(visible(page.getByLabel("Start time", { exact: true }))).toHaveValue("15:00");
     await expect(visible(page.getByLabel("End time", { exact: true }))).toHaveValue("");
@@ -470,14 +523,54 @@ try {
     assert.equal(state.changes[0].p_ends, "2099-03-01T16:00:00.000Z");
     assert.equal(state.changes[0].p_start, "2099-03-01T15:00:00.000Z");
     assert.equal(state.changes[0].p_version, 1);
+    // Unchanged, its times as the server writes them (+00:00): the button reads Save, and Save goes back to the
+    // event page without writing.
+    await button(page, "Edit Coffee morning").click();
+    await expect(heading(page, "Edit resbite")).toBeVisible();
+    await expect(button(page, /^Save and notify/)).toHaveCount(0);
+    await button(page, "Save").click();
+    await expect(heading(page, "Edit resbite")).toHaveCount(0);
+    await expect(heading(page, "Coffee morning")).toBeVisible();
+    assert.equal(state.changes.length, 1, "An unchanged Save writes nothing");
     // A change to the name alone does not tell anyone: the button stays Save.
     await button(page, "Edit Coffee morning").click();
-    await expect(button(page, "Save")).toBeDisabled();
-    await fillSettled(page.getByLabel("Name your resbite", { exact: true }), "Coffee afternoon");
-    await expect(button(page, "Save", { exact: true })).toBeEnabled();
+    await fillSettled(page.getByLabel("Title", { exact: true }), "Coffee afternoon");
+    await expect(button(page, "Save")).toBeEnabled();
     await expect(button(page, /^Save and notify/)).toHaveCount(0);
     assert.deepEqual(state.unexpected, []);
-    console.log("PASS: edit shows the banner 2 people will be told…; a resbite without an end reads Add a date and time until an end is set; a time change reads Save and notify 2 people, a title change reads Save.");
+    console.log("PASS: edit shows the banner 2 people will be told…; Save is never disabled: a resbite without an end reads Add a date and time until an end is set, an unchanged Save writes nothing; a time change reads Save and notify 2 people, a title change reads Save.");
+    await page.context().close();
+  }
+
+  // 6b. An edit that meets a newer save: the newer details are shown with a message, nothing is lost silently,
+  // and the change made again saves against the newer version.
+  {
+    const plan = planOf({ ends_at: "2099-03-01T16:00:00+00:00" });
+    const { page, state } = await signedInPage({ plans: [plan] });
+    state.conflictNextChange = { title: "Coffee at the bakery", place_label: "The bakery" };
+    await page.goto(`${baseURL}/arrange?plan=${plan.id}`);
+    await expect(heading(page, "Edit resbite")).toBeVisible();
+    const title = page.getByLabel("Title", { exact: true });
+    await expect(title).toHaveValue("Coffee evening");
+    await fillSettled(title, "Coffee by the river");
+    await button(page, "Save").click();
+    await expect(
+      page.getByText("The saved details changed and are shown now. Make your change again.", { exact: true }),
+    ).toBeVisible();
+    await expect(title).toHaveValue("Coffee at the bakery");
+    await expect(button(page, "Where, The bakery")).toBeVisible();
+    assert.equal(state.changes.length, 1);
+    assert.equal(state.changes[0].p_version, 1);
+    // The screen now holds version 2 and nothing unsaved: the X would leave at once. The change, made again, saves.
+    await fillSettled(title, "Coffee by the river");
+    await button(page, "Save").click();
+    await expect(heading(page, "Coffee by the river")).toBeVisible();
+    assert.equal(state.changes.length, 2);
+    assert.equal(state.changes[1].p_version, 2, "The second Save goes against the newer version");
+    assert.equal(state.changes[1].p_place, "The bakery", "It keeps the newer place");
+    assert.equal(state.plans[0].version, 3);
+    assert.deepEqual(state.unexpected, []);
+    console.log("PASS: an edit that meets a 40001 shows the newer title and place with The saved details changed and are shown now. Make your change again.; the change made again saves against version 2.");
     await page.context().close();
   }
 
@@ -563,7 +656,7 @@ try {
       page.getByText("Couldn’t protect this save on your device. Nothing was sent; try again.", { exact: true }),
     ).toBeVisible();
     assert.equal(state.creates.length, 0, "A create that could not be journaled is not sent");
-    await expect(page.getByLabel("Name your resbite", { exact: true })).toHaveValue("Garden picnic");
+    await expect(page.getByLabel("Title", { exact: true })).toHaveValue("Garden picnic");
     await expect(button(page, "Where, Riverside park")).toBeVisible();
     assert.deepEqual(state.unexpected, []);
     await page.context().close();
@@ -580,7 +673,7 @@ try {
     await expect(line).toHaveAttribute("aria-live", "polite");
     await expect(page.getByText("Add a name", { exact: true })).toBeFocused();
     // With a name, the first red row is When.
-    await fillSettled(page.getByLabel("Name your resbite", { exact: true }), "Garden picnic");
+    await fillSettled(page.getByLabel("Title", { exact: true }), "Garden picnic");
     await button(page, "Create").click();
     await expect(page.getByText("Three things are missing: a date and time, a place, and one or two categories.", { exact: true })).toBeVisible();
     await expect(button(page, "When, Add a date and time")).toBeFocused();

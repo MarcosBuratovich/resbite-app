@@ -68,6 +68,20 @@ function focusNode(node: View | Text | null) {
   if (handle) AccessibilityInfo.setAccessibilityFocus(handle);
 }
 
+/**
+ * The video-call message under a field. iOS announces it on a refused save and the web's alert role speaks it;
+ * on Android a live region speaks what appears in it, so there the wrapper stays mounted, collapsed while empty.
+ */
+function VideoNote({ show }: { show: boolean }) {
+  const note = show ? <ErrorNote message={VIDEO_CALL_MESSAGE} /> : null;
+  if (Platform.OS !== "android") return note;
+  return (
+    <View accessibilityLiveRegion="polite" style={show ? undefined : styles.collapsed}>
+      {note}
+    </View>
+  );
+}
+
 export default function Arrange() {
   const { activity, plan, again } = useLocalSearchParams<{ activity?: string; plan?: string; again?: string }>();
   const form = usePlanForm({ activity, plan, again });
@@ -138,7 +152,8 @@ export default function Arrange() {
   }
 
   function press() {
-    if (missing.length > 0 || videoFields.length > 0) setRefusals((n) => n + 1);
+    const now = form.check();
+    if (now.missing.length > 0 || now.videoFields.length > 0) setRefusals((n) => n + 1);
     void form.submit();
   }
 
@@ -154,7 +169,11 @@ export default function Arrange() {
     const frame = requestAnimationFrame(() => {
       if (y !== undefined) scroll.current?.scrollTo({ y: Math.max(0, y - 8), animated: !reduceMotion });
     });
-    if (!first) return () => cancelAnimationFrame(frame);
+    if (!first) {
+      // A video-call link alone: iOS says the message (Android's live region around the note speaks it).
+      if (Platform.OS === "ios") announce(VIDEO_CALL_MESSAGE);
+      return () => cancelAnimationFrame(frame);
+    }
     // Android speaks the footer line through its live region; only iOS needs the explicit announcement.
     if (Platform.OS === "ios") announce(missingLine(missing) ?? "");
     const target = { name: nameMessage, categories: categoriesMessage, when: whenRow, where: whereRow };
@@ -226,8 +245,9 @@ export default function Arrange() {
     );
 
   const f = form.form;
+  // Do this again starts on its own, as the created resbite will: no idea's picture.
   const picture = eventPicture({
-    activity_id: mode === "idea" ? (activity ?? null) : (form.original?.activity_id ?? null),
+    activity_id: mode === "idea" ? (activity ?? null) : edit ? (form.original?.activity_id ?? null) : null,
     categories: f.categories,
   });
   const rowState = (item: MissingItem, filled: boolean): OpenRowState =>
@@ -251,7 +271,6 @@ export default function Arrange() {
               title={button}
               onPress={press}
               loading={form.busy}
-              disabled={form.cover.busy || (edit && !form.dirty)}
             />
           </>
         }
@@ -275,7 +294,7 @@ export default function Arrange() {
           )}
           <FieldCard
             error={need("name")}
-            label={PLAN_COPY.namePlaceholder}
+            label={PLAN_COPY.titleLabel}
             icon={Pencil}
             display
             multiline
@@ -286,12 +305,12 @@ export default function Arrange() {
             maxLength={TITLE_MAX}
             editable={!form.busy}
           />
-          {videoAt("title") && <ErrorNote message={VIDEO_CALL_MESSAGE} />}
+          <VideoNote show={videoAt("title")} />
         </View>
 
         <View onLayout={at("description")} style={styles.block}>
           <FieldCard
-            label={PLAN_COPY.descriptionPlaceholder}
+            label={PLAN_COPY.descriptionLabel}
             icon={TextAlignStart}
             multiline
             minHeight={64}
@@ -301,7 +320,7 @@ export default function Arrange() {
             maxLength={DESCRIPTION_MAX}
             editable={!form.busy}
           />
-          {videoAt("description") && <ErrorNote message={VIDEO_CALL_MESSAGE} />}
+          <VideoNote show={videoAt("description")} />
         </View>
 
         <OpenRow
@@ -311,7 +330,7 @@ export default function Arrange() {
           value={when?.line ?? null}
           hint={when?.repeat}
           state={rowState("when", Boolean(when))}
-          message={rowMessage("when")}
+          message={form.whenPast ? PLAN_COPY.whenInFuture : rowMessage("when")}
           accessibilityLabel={`${PLAN_COPY.when}, ${when ? [when.line, when.repeat].filter(Boolean).join(", ") : PLAN_COPY.whenPlaceholder}`}
           rowRef={whenRow}
           onLayout={at("when")}
@@ -329,12 +348,12 @@ export default function Arrange() {
             rowRef={whereRow}
             onPress={openWhere}
           />
-          {(videoAt("place") || videoAt("area") || videoAt("meetingDetails")) && <ErrorNote message={VIDEO_CALL_MESSAGE} />}
+          <VideoNote show={videoAt("place") || videoAt("area") || videoAt("meetingDetails")} />
         </View>
 
         <View onLayout={at("note")} style={styles.block}>
           <FieldCard
-            label={PLAN_COPY.notePlaceholder}
+            label={PLAN_COPY.noteLabel}
             icon={StickyNote}
             multiline
             minHeight={64}
@@ -344,7 +363,7 @@ export default function Arrange() {
             maxLength={GUEST_NOTE_MAX}
             editable={!form.busy}
           />
-          {videoAt("guestNote") && <ErrorNote message={VIDEO_CALL_MESSAGE} />}
+          <VideoNote show={videoAt("guestNote")} />
         </View>
 
         <View onLayout={at("categories")} style={styles.block}>
@@ -355,7 +374,7 @@ export default function Arrange() {
           )}
           <View style={[styles.categories, need("categories") && styles.red]}>
             <Copy accessibilityRole="header" style={styles.categoriesTitle}>
-              {PLAN_COPY.categoriesPlaceholder}
+              {PLAN_COPY.categoriesLabel}
             </Copy>
             <View style={styles.chips}>
               {categoryKeys.map((key) => {
@@ -412,6 +431,8 @@ export default function Arrange() {
 
 const styles = StyleSheet.create({
   block: { gap: 6 },
+  // An empty live region takes no room: it gives back the block's gap.
+  collapsed: { marginTop: -6 },
   link: { alignSelf: "flex-start" },
   message: { fontFamily: fonts.medium, fontSize: 13, lineHeight: 18, color: c.error, marginLeft: 4 },
   // The missing treatment of a card: a 2 pt error border, the message above it.

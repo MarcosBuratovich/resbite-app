@@ -7,12 +7,15 @@ export const PLAN_COPY = {
   editTitle: "Edit resbite",
   close: "Close",
   loading: "Loading",
+  titleLabel: "Title",
+  descriptionLabel: "Description (optional)",
+  noteLabel: "Note to guests (optional)",
+  categoriesLabel: "Categories · choose one or two",
   namePlaceholder: "Name your resbite",
   descriptionPlaceholder: "What you’ll do together (optional)",
   whenPlaceholder: "Add a date and time",
   placePlaceholder: "Add a place",
   notePlaceholder: "Add a note",
-  categoriesPlaceholder: "Choose one or two",
   categoriesFull: "Two categories are already chosen",
   changePhoto: "Change photo",
   create: "Create",
@@ -87,6 +90,7 @@ export const PLAN_COPY = {
   ideaUnavailable: "This idea isn’t available right now.",
   notProtected: "Couldn’t protect this save on your device. Nothing was sent; try again.",
   unconfirmed: "We couldn’t confirm the save. Retry when you’re connected.",
+  editConflict: "The saved details changed and are shown now. Make your change again.",
 } as const;
 
 /** The notice My resbites shows when a create whose reply was lost turns out to have gone through. */

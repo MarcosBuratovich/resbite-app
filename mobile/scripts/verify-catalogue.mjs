@@ -220,14 +220,14 @@ try {
       .click();
     // An idea opens the plan screen with the idea's own text in the name.
     await expect(heading(f.page, "New resbite")).toBeVisible();
-    await expect(f.page.getByLabel("Name your resbite", { exact: true })).toHaveValue("Published coffee");
+    await expect(f.page.getByLabel("Title", { exact: true })).toHaveValue("Published coffee");
     f.state.rows = [];
     await foreground(f.page);
     // The idea is withdrawn while the plan screen is open from it: the screen stays with the host's work, and
     // Create stays available (the server decides for a live account).
     await f.page.waitForTimeout(300);
     await expect(heading(f.page, "New resbite")).toBeVisible();
-    await expect(f.page.getByLabel("Name your resbite", { exact: true })).toHaveValue("Published coffee");
+    await expect(f.page.getByLabel("Title", { exact: true })).toHaveValue("Published coffee");
     await expect(f.page.getByRole("button", { name: "Create", exact: true })).toBeEnabled();
     await f.page.goto(`${baseURL}/activity/painting`);
     await expect(
@@ -241,7 +241,7 @@ try {
       f.page.getByText("This idea isn’t available right now.", { exact: true }),
     ).toBeVisible();
     await expect(
-      f.page.getByLabel("Name your resbite", { exact: true }),
+      f.page.getByLabel("Title", { exact: true }),
     ).toHaveCount(0);
     await f.close();
   }
@@ -327,7 +327,7 @@ try {
       }),
     ).toBeVisible();
     await editEvent(preview.page, item.title);
-    await expect(preview.page.getByLabel("Name your resbite", { exact: true })).toHaveValue(item.title);
+    await expect(preview.page.getByLabel("Title", { exact: true })).toHaveValue(item.title);
     await expect(button(preview.page, `Where, Fixture place for ${item.title}`)).toBeVisible();
     await closeToList(preview.page);
     await preview.page

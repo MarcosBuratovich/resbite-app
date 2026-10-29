@@ -19,19 +19,56 @@ export function modeFor(params: { activity?: string; plan?: string; again?: stri
   return "blank";
 }
 
-/** What stops a save: missing items and fields that carry a video-call link. A save runs only when both are empty. */
-export function submitCheck(form: PlanForm): { missing: MissingItem[]; videoFields: PlanFormField[] } {
-  return { missing: missingItems(form), videoFields: videoLinkFields(form) };
+export type SubmitCheck = {
+  missing: MissingItem[];
+  videoFields: PlanFormField[];
+  /** The start is not in the future: `when` is in `missing`, and its row says so in its own words. */
+  past: boolean;
+};
+
+const SCREEN_ORDER: MissingItem[] = ["name", "when", "place", "categories"];
+
+/**
+ * What stops a save: missing items, a start that is not after `now`, and fields that carry a video-call link.
+ * A save runs only when `missing` and `videoFields` are both empty. A past start counts as the `when` item
+ * (All day today starts at 00:00, so it is past). An edit's start is read as `editWrite` would save it.
+ */
+export function submitCheck(form: PlanForm, zone: string, now = Date.now(), original: Plan | null = null): SubmitCheck {
+  const missing = missingItems(form);
+  const videoFields = videoLinkFields(form);
+  if (missing.includes("when")) return { missing, videoFields, past: false };
+  const starts = original ? editWrite(form, zone, original).details.starts_at : detailsFromForm(form, zone).starts_at;
+  const past = Date.parse(starts) <= now;
+  return { missing: past ? SCREEN_ORDER.filter((item) => item === "when" || missing.includes(item)) : missing, videoFields, past };
 }
 
-/** The create of a complete form; `requestId` is the new plan's id, so a retry is the same create. */
+/**
+ * The create of a complete form; `requestId` is the new plan's id, so a retry is the same create. Only a create
+ * from an idea carries the idea: Do this again and Start from scratch start on their own.
+ */
 export function createWrite(
   form: PlanForm,
   zone: string,
   requestId: string,
-  activityId: string | null = null,
+  mode: PlanFormMode,
+  ideaId: string | null = null,
 ): PlanWrite {
-  return { id: requestId, activityId, details: detailsFromForm(form, zone) };
+  return { id: requestId, activityId: mode === "idea" ? ideaId : null, details: detailsFromForm(form, zone) };
+}
+
+/**
+ * Whether closing the screen would lose something: a changed field, or, before the resbite exists, a chosen
+ * photo or a typed photo description (`cover` is the photo chosen on this screen, not an inherited one).
+ * An existing resbite saves its photo at once, so for an edit only the fields count.
+ */
+export function hasUnsavedChanges(
+  mode: PlanFormMode,
+  form: PlanForm,
+  initial: PlanForm,
+  cover: { uri: string | null; description: string },
+): boolean {
+  if (JSON.stringify(form) !== JSON.stringify(initial)) return true;
+  return mode !== "edit" && (cover.uri !== null || cover.description.trim() !== "");
 }
 
 /**

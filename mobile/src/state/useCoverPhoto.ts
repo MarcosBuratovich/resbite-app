@@ -33,6 +33,8 @@ export type CoverControls = {
   keep(): Promise<void>;
   /** Saves the description (or holds it until the resbite exists). Resolves to an error message, or null. */
   describe(text: string): Promise<string | null>;
+  /** Resolves once the change in flight (a photo being chosen or removed, a description saving) has finished. */
+  idle(): Promise<void>;
   commitAfterCreate(planId: string): Promise<CoverOutcome>;
 };
 
@@ -82,6 +84,8 @@ export function useCoverPhoto(options: {
     setDescriptionState(text);
   };
   const working = useRef(false);
+  // The change in flight, for a save that waits for it (`idle`). Never rejects.
+  const inFlight = useRef<Promise<unknown>>(Promise.resolve());
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -135,15 +139,19 @@ export function useCoverPhoto(options: {
     working.current = true;
     setBusy(true);
     setMessage(null);
-    try {
-      await action(check);
-    } catch (e) {
-      if (mounted.current)
-        setMessage(e instanceof Error ? e.message : coverPhotoLayout.copy.unconfirmed);
-    } finally {
-      working.current = false;
-      if (mounted.current) setBusy(false);
-    }
+    const job = (async () => {
+      try {
+        await action(check);
+      } catch (e) {
+        if (mounted.current)
+          setMessage(e instanceof Error ? e.message : coverPhotoLayout.copy.unconfirmed);
+      } finally {
+        working.current = false;
+        if (mounted.current) setBusy(false);
+      }
+    })();
+    inFlight.current = job;
+    await job;
   }
   async function finish(change: PhotoChange, check: () => void) {
     const result = await finishVersionedPhotoChange(
@@ -260,21 +268,29 @@ export function useCoverPhoto(options: {
     working.current = true;
     setBusy(true);
     setMessage(null);
-    try {
-      const result = await coverDescriptionGateway(ownerId, planId).save(next, saved.current.revision);
-      check();
-      saved.current = { path: result.path, revision: result.revision };
-      setDescription(result.description);
-      setMessage(result.description ? "Photo description saved." : "Photo description removed.");
-      return null;
-    } catch (e) {
-      // A lost reply is safe to retry: the same text at the next revision is acknowledged.
-      return e instanceof CoverDescriptionConflict ? DESCRIPTION_CONFLICT : DESCRIPTION_UNCONFIRMED;
-    } finally {
-      working.current = false;
-      if (mounted.current) setBusy(false);
-    }
+    const job = (async (): Promise<string | null> => {
+      try {
+        const result = await coverDescriptionGateway(ownerId, planId).save(next, saved.current.revision);
+        check();
+        saved.current = { path: result.path, revision: result.revision };
+        setDescription(result.description);
+        setMessage(result.description ? "Photo description saved." : "Photo description removed.");
+        return null;
+      } catch (e) {
+        // A lost reply is safe to retry: the same text at the next revision is acknowledged.
+        return e instanceof CoverDescriptionConflict ? DESCRIPTION_CONFLICT : DESCRIPTION_UNCONFIRMED;
+      } finally {
+        working.current = false;
+        if (mounted.current) setBusy(false);
+      }
+    })();
+    inFlight.current = job;
+    return job;
   }
+  const idle = () => inFlight.current.then(
+    () => undefined,
+    () => undefined,
+  );
   async function commitAfterCreate(newPlanId: string): Promise<CoverOutcome> {
     const photo = chosen.current;
     if (preview || !photo || !ownerId) return "none";
@@ -319,5 +335,5 @@ export function useCoverPhoto(options: {
       return "pending";
     }
   }
-  return { uri, description, pending, busy, ready, message, choose, remove, retry, keep, describe, commitAfterCreate };
+  return { uri, description, pending, busy, ready, message, choose, remove, retry, keep, describe, idle, commitAfterCreate };
 }

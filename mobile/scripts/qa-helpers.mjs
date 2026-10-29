@@ -63,7 +63,7 @@ export async function openWhere(page) {
  * with the start.
  */
 export async function fillPlan(page, { title, date, start, end, place, categories = [] }) {
-  if (title !== undefined) await fillSettled(page.getByLabel("Name your resbite", { exact: true }), title);
+  if (title !== undefined) await fillSettled(page.getByLabel("Title", { exact: true }), title);
   if (date !== undefined) {
     await openWhen(page);
     await fillSettled(visible(page.getByLabel("Date", { exact: true })), date);

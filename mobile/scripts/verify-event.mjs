@@ -738,12 +738,18 @@ try {
   await maps.click();
   await expect(page.getByText("Couldn’t open Maps.", { exact: true })).toHaveCount(0);
   assert.equal(await page.evaluate(() => window.__opened), "https://maps.apple.com/?q=Fixture%20caf%C3%A9");
-  // Edit opens the plan screen on this resbite; nothing is changed yet, so Save waits.
+  // Edit opens the plan screen on this resbite. Save is never disabled: with nothing changed (the server's own
+  // time format included) it reads Save and goes back to the event page as a save does, writing nothing.
   await page.getByRole("button", { name: "Edit Coffee evening", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Edit resbite", exact: true })).toBeVisible();
-  await expect(visible(page.getByRole("button", { name: /^Save/ }))).toBeDisabled();
-  await visible(page.getByRole("button", { name: "Close", exact: true })).click();
+  const editsBefore = edits.length;
+  const save = visible(page.getByRole("button", { name: "Save", exact: true }));
+  await expect(save).toBeEnabled();
+  await save.click();
   await expect(page.getByRole("heading", { name: "Coffee evening", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Edit resbite", exact: true })).toHaveCount(0);
+  assert.equal(edits.length, editsBefore, "An unchanged Save writes nothing");
+  await expect(page.getByText("Changes saved", { exact: true })).toHaveCount(0);
   // Do this again: the plan screen opens on a copy with the text, place and Meeting details, never the date or the idea.
   await page.getByRole("button", { name: "More actions", exact: true }).click();
   // A quick double tap opens exactly one plan screen.
@@ -754,8 +760,8 @@ try {
   await expect(page.getByRole("heading", { name: "New resbite", exact: true })).toBeVisible();
   await page.waitForTimeout(500); // a second screen would be pushed within this settle time
   await expect(page.getByTestId("task-screen")).toHaveCount(1);
-  await expect(page.getByLabel("Name your resbite", { exact: true })).toHaveValue("Coffee evening");
-  await expect(page.getByLabel("What you’ll do together (optional)", { exact: true })).toHaveValue("Bring a book");
+  await expect(page.getByLabel("Title", { exact: true })).toHaveValue("Coffee evening");
+  await expect(page.getByLabel("Description (optional)", { exact: true })).toHaveValue("Bring a book");
   // When is empty (a copy never takes the date), Where keeps the place.
   await expect(visible(page.getByRole("button", { name: "When, Add a date and time", exact: true }))).toBeVisible();
   await expect(visible(page.getByRole("button", { name: "Where, Fixture café", exact: true }))).toBeVisible();
@@ -816,7 +822,7 @@ try {
   await expect(page.getByText("Ana Diaz", { exact: true })).toHaveCount(0);
   plans.delete(started.id);
   console.log(
-    "PASS: organizer event page: the exact place and no Choose people (GI-D3); guests (GI1: Remove asks first and says they can ask to join again and the organizer decides, says a lost reply, reloads the list; invitees have no Remove); the Invited group (Plan 2: unanswered only, by stored name or number, WhatsApp and Messages on each row with the last-used first, the stored code either way or a fresh one kept for the other app when WhatsApp won't open, Remove calls revoke_phone_invitation), Waiting for you (open-link approval: name, answer and ••34; Approve sends decide_join_request true and the row leaves; Decline asks first then sends false; an already-decided request says so; none on a cancelled or started event) above the Event link card (Share text with the date and link, Copy link, Turn off asks first and gives a new link, a lost turn-off reply says so and reads the link again, an approved guest joins the guest list, nothing stored; invitees have neither), Open in Maps (and its failure note), Edit on the plan screen, Do this again on the plan screen with When empty, an unconfirmed cancel with Refresh event, cancel.",
+    "PASS: organizer event page: the exact place and no Choose people (GI-D3); guests (GI1: Remove asks first and says they can ask to join again and the organizer decides, says a lost reply, reloads the list; invitees have no Remove); the Invited group (Plan 2: unanswered only, by stored name or number, WhatsApp and Messages on each row with the last-used first, the stored code either way or a fresh one kept for the other app when WhatsApp won't open, Remove calls revoke_phone_invitation), Waiting for you (open-link approval: name, answer and ••34; Approve sends decide_join_request true and the row leaves; Decline asks first then sends false; an already-decided request says so; none on a cancelled or started event) above the Event link card (Share text with the date and link, Copy link, Turn off asks first and gives a new link, a lost turn-off reply says so and reads the link again, an approved guest joins the guest list, nothing stored; invitees have neither), Open in Maps (and its failure note), Edit on the plan screen (an unchanged Save writes nothing), Do this again on the plan screen with When empty, an unconfirmed cancel with Refresh event, cancel.",
   );
 
   // UX2-D1: a saved edit returns to its event page with "Changes saved"; Back then leaves for My resbites.
@@ -835,7 +841,7 @@ try {
   await expect(tPage.getByRole("heading", { name: "Picnic", exact: true })).toBeVisible();
   await tPage.getByRole("button", { name: "Edit Picnic", exact: true }).click();
   await expect(tPage.getByRole("heading", { name: "Edit resbite", exact: true })).toBeVisible();
-  await visible(tPage.getByLabel("Name your resbite", { exact: true })).fill("Picnic by the lake");
+  await visible(tPage.getByLabel("Title", { exact: true })).fill("Picnic by the lake");
   await visible(tPage.getByRole("button", { name: /^Save/ })).click();
   await expect(tPage.getByRole("heading", { name: "Picnic by the lake", exact: true })).toBeVisible();
   await expect(tPage.getByText("Changes saved", { exact: true })).toBeVisible();
