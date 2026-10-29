@@ -506,3 +506,53 @@ Plan 4 of 4 for contact invitations ([plan](../docs/superpowers/plans/2026-10-29
 21. **`unregister_device` follows the house pattern.** Its body is `private.unregister_device`, a security definer with an empty search path, behind a public SQL invoker façade, as `register_device` is; both are granted to `authenticated` only. Its behaviour is unchanged: it deletes only the caller's own row. Also: the app registers once the profile exists (after a request to join, which makes a waiting account's profile, and after the first profile save), since `register_device` needs one.
 
 Each push rollout step needs the owner's explicit approval.
+
+## Creating a resbite (CR), 28 October 2026
+
+Creating a resbite ([spec](../docs/superpowers/specs/2026-10-28-creating-a-resbite-design.md)) is built in three plans: the database, the plan screen, and the resbite page with More and the people list. One line each; the spec holds the reasons.
+
+**Decisions.**
+- **CR-D1.** Build Option B with the dev brief's rules; the wireframes set the layout, and where a brief rule and a wireframe differ the brief wins.
+- **CR-D2.** Inviting is the contact-invitation flow already on `main` (in-app invitations, personal WhatsApp/Messages links, the open link with host approval), not the brief's single shared link.
+- **CR-D3.** Maybe stays (UX2 added it everywhere); the brief's Going-and-Can’t-go-only rule is dropped.
+- **CR-D4.** A cancellation notice goes to everyone invited (UX2), not only to people going.
+- **CR-D5.** No drafts: a resbite exists or is discarded; closing with changes asks “Discard this resbite?”.
+- **CR-D6.** The end time is required for every new or edited resbite, with duration shortcuts; older resbites keep their start only until edited.
+- **CR-D7.** No Chat row until the CH flow is built; the page leaves its place at the end.
+- **CR-D8.** Admins are in: the owner appoints them from the people list (Make admin, Remove as admin on a Going guest); they can do everything the owner can except remove the owner or manage admins.
+- **CR-D9.** Mute this resbite is in, per person.
+- **CR-D10.** Where offers recent places and “To be decided” now; address search and saved places wait for a places service.
+- **CR-D11.** No “Report this resbite” row until the report flow exists.
+- **CR-D12.** Video-call links (Google Meet, Zoom, Teams) are refused in any text field.
+- **CR-D13.** iOS first; Android back and swipe-to-close are specified so the Android build does the same later.
+- **CR-D14.** A resbite stops accepting changes at its end time, not its start: edit, cancel, invite, replies, requests and removals all work until the end.
+- **CR-D15.** Admins may cancel the resbite; guests never can.
+- **CR-D16.** A resbite can repeat (“every Thursday”): a Repeats choice on the When sheet, the next occurrence created by itself (CR-P22 to CR-P26).
+
+**Calls made while writing the spec.**
+- **CR-P1.** The plan screen also carries Description and Categories (one or two of the seven approved), so “Start from scratch” can fill what an idea would.
+- **CR-P2.** Area and Meeting details live at the bottom of the Where sheet, both optional.
+- **CR-P3.** The open event link leaves the resbite page: Share, Copy link and Turn off move into the Invite screen under the contacts.
+- **CR-P4.** The people row shows Going, Maybe (when any) and Can’t go counts, plus invited and waiting for hosts; it opens a full-page people list in groups, with one three-dots sheet per person.
+- **CR-P5.** Superseded by CR-D15.
+- **CR-P6.** Superseded by CR-P18.
+- **CR-P7.** Mute silences that resbite’s pushes and reminders for the person who taps it, stored on the server; the global reminders switch stays in Notifications settings.
+- **CR-P8.** Video-call detection matches meet.google.com, zoom.us, teams.microsoft.com and teams.live.com in every text field, on Create and on Save, with a message in place.
+- **CR-P9.** “To be decided” is a stored flag on the plan, so every surface can say “Place to be decided” and Maps is never offered.
+- **CR-P10.** Do this again opens the plan screen pre-filled with everything but When; it is the main action after the end and sits in More before.
+- **CR-P11.** Headers follow GL 13: the idea and the resbite are content pages, New resbite and Edit resbite are tasks, When, Where, More and the discard question are sheets, It’s on! is a moment.
+- **CR-P12.** The “Reminders on” chip goes; reminders stay automatic for hosts, admins and people going or Maybe, and Mute stops them for one resbite.
+- **CR-P13.** The idempotent-create journal stays, so Create can be retried safely after a lost connection.
+- **CR-P14.** All day sets 00:00 to 23:59 of the chosen date; an end may cross midnight and then shows its date.
+- **CR-P15.** An admin keeps the reply they had; More has Change my reply in the sheet itself, and Can’t go ends the admin role at once.
+- **CR-P16.** Invited, not answered yet holds app invitations (Remove) and personal links (Send again, Remove); Send again shows only for links this phone sent.
+- **CR-P17.** Admins get the notices the owner gets as host; a change by an admin is told to the owner and other admins, never to whoever made it.
+- **CR-P18.** “Save and notify N people” counts the people the database will tell; the button says Save when neither time nor place changed.
+- **CR-P19.** A guest who hasn’t answered sees the Going · Maybe · Can’t go control as the bottom row and no More; once answered, the reply with Change, and More.
+- **CR-P20.** A resbite ends the same day or the next (one Date row); longer resbites are not supported in this build.
+- **CR-P21.** After the end the page is read-only: hosts see Do this again alone, a guest sees the reply as text, and More is not shown.
+- **CR-P22.** Repeating resbites roll one occurrence ahead when one ends or is cancelled on its own, with no end date; each occurrence is its own resbite.
+- **CR-P23.** Repeats is set at the bottom of the When sheet (Doesn’t repeat, Every week, Every 2 weeks); the page shows “Every Thursday” on a second line.
+- **CR-P24.** The next occurrence carries everyone invited in the app (except people removed) and the admins, with replies empty; link-only invitees are not carried.
+- **CR-P25.** Edit changes this occurrence and the next is copied from it; Cancel on a repeating resbite offers “Cancel just this one” and “Cancel this and stop repeating”.
+- **CR-P26.** Repeats are stored as repeat_weeks, series_id and repeats_from, rolled by a private function run by pg_cron every five minutes from an owner-run script; mutes are keyed by series.
