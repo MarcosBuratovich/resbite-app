@@ -1,10 +1,13 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Linking, Platform, Pressable, StyleSheet, View } from "react-native";
 import { Check, ContactRound, Settings2 } from "lucide-react-native";
-import { Button, Copy, ErrorNote, Field, s } from "./ui";
+import { Button, Copy, ErrorNote, Field, TextAction, s } from "./ui";
+import { CountryButton } from "./PhoneField";
+import { CountrySheet } from "./CountrySheet";
 import { Chip, IconButton, InfoSheet, Tile } from "./kit";
 import { colors as c } from "./tokens";
 import { INVITE_COPY as T } from "../domain/inviteCopy";
+import { countryByRegion } from "../domain/countries";
 import { groupContacts, type ContactNumber } from "../domain/contactInvites";
 import type { Outcome, Sendable } from "../state/useContactInvites";
 
@@ -40,10 +43,14 @@ export function PickStep({ k, previewing }: { k: Contacts; previewing: boolean }
   const [number, setNumber] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
   const [choosing, setChoosing] = useState<Group | null>(null);
+  const [region, setRegion] = useState(k.assumedRegion);
+  // The card starts at the assumed country and follows it when that changes (it may load after the first render).
+  useEffect(() => setRegion(k.assumedRegion), [k.assumedRegion]);
+  const [sheet, setSheet] = useState<"assumed" | "card" | null>(null);
   const groups = groupContacts(k.visible);
   const web = k.access === "web" || Platform.OS === "web";
   function add() {
-    const bad = k.addNumber(name, number);
+    const bad = k.addNumber(name, number, region);
     setProblem(bad);
     if (!bad) {
       setName("");
@@ -62,6 +69,10 @@ export function PickStep({ k, previewing }: { k: Contacts; previewing: boolean }
         </View>
       )}
       <Field label={T.search} value={k.query} onChangeText={k.setQuery} />
+      <View style={styles.inline}>
+        <Copy style={[s.muted, { flex: 1 }]}>{T.assumed(countryByRegion(k.assumedRegion)?.name ?? k.assumedRegion)}</Copy>
+        <TextAction title={T.change} onPress={() => setSheet("assumed")} />
+      </View>
       <ErrorNote message={k.error} />
       {!web && (
         <View style={styles.inline}>
@@ -90,7 +101,7 @@ export function PickStep({ k, previewing }: { k: Contacts; previewing: boolean }
                 key={g.contact}
                 g={g}
                 chosen={chosen}
-                badge={!!chosen && k.onResbite.has(chosen.e164.replace(/\D/g, ""))}
+                badge={!!chosen && k.onResbite.has(chosen.key)}
                 onPress={() => (g.numbers.length === 1 ? k.toggle(g.numbers[0]) : setChoosing(g))}
               />
             );
@@ -103,14 +114,19 @@ export function PickStep({ k, previewing }: { k: Contacts; previewing: boolean }
       <View style={[s.card, { padding: 16, gap: 12 }]}>
         <Copy style={styles.heading}>{T.addNumber}</Copy>
         <Field label={T.nameLabel} value={name} onChangeText={setName} maxLength={80} />
-        <Field
-          label={T.numberLabel}
-          value={number}
-          onChangeText={setNumber}
-          keyboardType="phone-pad"
-          autoComplete="tel"
-          textContentType="telephoneNumber"
-        />
+        <View style={[styles.inline, { alignItems: "flex-end" }]}>
+          <CountryButton region={region} onPress={() => setSheet("card")} />
+          <View style={{ flex: 1 }}>
+            <Field
+              label={T.numberLabel}
+              value={number}
+              onChangeText={setNumber}
+              keyboardType="phone-pad"
+              autoComplete="tel"
+              textContentType="telephoneNumber"
+            />
+          </View>
+        </View>
         <ErrorNote message={problem} />
         <Button title={T.addButton} secondary disabled={!number.trim()} onPress={add} />
       </View>
@@ -124,6 +140,12 @@ export function PickStep({ k, previewing }: { k: Contacts; previewing: boolean }
         />
         <Copy style={[s.muted, { textAlign: "center", fontSize: 12 }]}>{T.lookupNote}</Copy>
       </View>
+      <CountrySheet
+        visible={sheet !== null}
+        region={sheet === "card" ? region : k.assumedRegion}
+        onPick={(picked) => (sheet === "card" ? setRegion(picked) : k.setAssumedRegion(picked))}
+        onClose={() => setSheet(null)}
+      />
       <InfoSheet visible={!!choosing} title={T.chooseNumber} onClose={() => setChoosing(null)}>
         {choosing?.numbers.map((n) => (
           <Tile

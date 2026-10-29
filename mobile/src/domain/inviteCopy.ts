@@ -21,6 +21,8 @@ export const INVITE_COPY = {
   linkNote: "Each link only works for that person’s number.",
   done: "Done",
   addNumber: "Add a number",
+  assumed: (country: string) => `Numbers without a country code are read as ${country}.`,
+  change: "Change",
   chooseNumber: "Which number?",
   skipped: (n: number) => `${n} skipped`,
   invitedGroup: "Invited",

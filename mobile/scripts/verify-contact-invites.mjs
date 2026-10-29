@@ -242,7 +242,8 @@ async function fixture({ user = host, width = 390, foldStatus = 200 } = {}) {
     // Open-link approval: nobody has answered the event link (the host's Waiting for you and My resbites' requests
     // are empty; verify-event and verify-open-link-app cover them).
     if (path === "/rest/v1/rpc/plan_join_requests" || path === "/rest/v1/rpc/my_join_requests") return reply([]);
-    if (path === "/rest/v1/rpc/contacts_on_resbite") return reply(body.p_phones.filter((p) => state.onResbite.has(p)));
+    // lookupReply answers the lookup as given (the server answers an Argentine mobile by its key, without the 9).
+    if (path === "/rest/v1/rpc/contacts_on_resbite") return reply(state.lookupReply ?? body.p_phones.filter((p) => state.onResbite.has(p)));
     if (path === "/rest/v1/rpc/invite_contacts") {
       assert.equal(body.p_plan, coffee.id);
       return reply(
@@ -359,6 +360,30 @@ async function addNumber(page, p) {
 }
 
 try {
+  // 0. The assumption line: local numbers are read as the host's region (GB), Change moves it, and the typed-number
+  // card has its own country button. 11 1234 1234 as Argentina is the mobile form 5491112341234; the lookup is answered
+  // with the key 541112341234, which marks the row On Resbite.
+  {
+    const f = await fixture(),
+      { page } = f;
+    f.state.lookupReply = ["541112341234"];
+    await page.goto(`${base}/event?plan=${coffee.id}`);
+    await button(page, "Invite someone").click();
+    await expect(heading(page, "Invite people")).toBeVisible();
+    await expect(page.getByText("Numbers without a country code are read as United Kingdom.", { exact: true })).toBeVisible();
+    await button(page, "Change").click();
+    await page.getByLabel("Search countries", { exact: true }).fill("Argentina");
+    await page.getByRole("button", { name: "Argentina +54", exact: true }).click();
+    await expect(page.getByText("Numbers without a country code are read as Argentina.", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Country: Argentina, +54", exact: true })).toBeVisible();
+    await page.getByLabel("Name (optional)", { exact: true }).fill("Ines");
+    await page.getByLabel("Phone number", { exact: true }).fill("11 1234 1234");
+    await button(page, "Add").click();
+    await expect(page.getByLabel("Remove Ines", { exact: true })).toBeVisible();
+    await expect.poll(() => f.calls("/rest/v1/rpc/contacts_on_resbite").some((x) => JSON.stringify(x.body).includes('"5491112341234"'))).toBe(true);
+    await expect(visible(page.getByText("On Resbite", { exact: true }))).toHaveCount(1);
+    await f.done();
+  }
   // 1–5 and 8: the host invites three contacts to Coffee evening, sends two links, invites one again, then manages
   // the Invited group on the event page.
   let benCode, cyCode;
