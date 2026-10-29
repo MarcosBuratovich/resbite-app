@@ -6,13 +6,14 @@ import {
   editChangesTimeOrPlace,
   editWrite,
   hasUnsavedChanges,
+  locksAfterFailure,
   modeFor,
   newCoverSource,
   previewCover,
   submitCheck,
 } from "./planFormModel";
 import { EMPTY_FORM, type PlanForm } from "../domain/planForm";
-import type { Plan } from "../domain/plans";
+import { PlanSaveError, type Plan } from "../domain/plans";
 
 const complete: PlanForm = {
   ...EMPTY_FORM,
@@ -87,6 +88,28 @@ test("submitCheck reads an edit's start in the plan's own zone while it is uncha
   // From Tokyo the wall clock 12:30 would be 03:30 UTC (past); the plan's own zone keeps it at 12:30 UTC.
   assert.equal(submitCheck(form, "Asia/Tokyo", NOW, soon).past, false);
   assert.equal(submitCheck(form, "Asia/Tokyo", NOW).past, true);
+});
+
+test("an edit passes an unchanged past start, and refuses a past start the edit chose", () => {
+  const running: Plan = { ...original, starts_at: "2026-10-29T10:00:00.000Z", ends_at: "2026-10-29T14:00:00.000Z" };
+  const form = { ...complete, date: "2026-10-29", start: "10:00", end: "14:00" };
+  assert.deepEqual(submitCheck(form, "UTC", NOW, running), { missing: [], videoFields: [], past: false });
+  // Changing the start to another past time is refused; so is the same form as a create.
+  assert.deepEqual(submitCheck({ ...form, start: "09:00" }, "UTC", NOW, running), { missing: ["when"], videoFields: [], past: true });
+  assert.equal(submitCheck(form, "UTC", NOW).past, true);
+  // Changing only the end keeps the start unchanged, so it passes.
+  assert.equal(submitCheck({ ...form, end: "15:00" }, "UTC", NOW, running).past, false);
+});
+
+test("only a create whose outcome is unknown locks the form", () => {
+  const unknown = new PlanSaveError("lost", true);
+  assert.equal(locksAfterFailure("blank", unknown), true);
+  assert.equal(locksAfterFailure("idea", unknown), true);
+  assert.equal(locksAfterFailure("again", unknown), true);
+  assert.equal(locksAfterFailure("edit", unknown), false);
+  assert.equal(locksAfterFailure("blank", new PlanSaveError("refused", false)), false);
+  assert.equal(locksAfterFailure("blank", new Error("stray")), false);
+  assert.equal(locksAfterFailure("blank", null), false);
 });
 
 test("createWrite uses the request id, and only an idea's create carries the idea", () => {

@@ -785,9 +785,14 @@ export function useFocusOnChange(target: React.RefObject<Text | null>, key: unkn
   }, [target, key]);
 }
 
-/** Announces a short message on iOS and Android. On the web, ErrorNote's alert role announces it. */
-export function announce(message: string) {
-  if (Platform.OS !== "web") AccessibilityInfo.announceForAccessibility(message);
+/**
+ * Announces a short message on iOS and Android. On the web, ErrorNote's alert role announces it.
+ * `queue` waits for the announcement before it instead of cutting it off (iOS only; Android queues anyway).
+ */
+export function announce(message: string, queue = false) {
+  if (Platform.OS === "web") return;
+  if (queue) AccessibilityInfo.announceForAccessibilityWithOptions(message, { queue: true });
+  else AccessibilityInfo.announceForAccessibility(message);
 }
 
 const ROSE = "#963F58";

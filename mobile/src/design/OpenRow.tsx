@@ -21,6 +21,7 @@ export function OpenRow({
   state,
   message,
   onPress,
+  disabled,
   accessibilityLabel,
   rowRef,
   onLayout,
@@ -33,6 +34,8 @@ export function OpenRow({
   state: OpenRowState;
   message?: string | null;
   onPress: () => void;
+  /** Read-only: the row shows its value and takes no tap. */
+  disabled?: boolean;
   accessibilityLabel: string;
   /** The row's button (accessibility focus lands here); `onLayout` is the whole row (scroll to its y). */
   rowRef?: React.RefObject<View | null>;
@@ -56,6 +59,8 @@ export function OpenRow({
         accessibilityLabel={accessibilityLabel}
         accessibilityHint={showMessage ? message! : undefined}
         onPress={onPress}
+        disabled={disabled}
+        accessibilityState={disabled ? { disabled: true } : undefined}
         style={({ pressed }) => [
           styles.card,
           open && styles.open,

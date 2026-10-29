@@ -12,6 +12,7 @@ import {
   editChangesTimeOrPlace,
   editWrite,
   hasUnsavedChanges,
+  locksAfterFailure,
   modeFor,
   newCoverSource,
   previewCover,
@@ -62,6 +63,10 @@ export type PlanFormController = {
   /** Edit: the form changes the start, end, zone or place. */
   timeOrPlaceChanged: boolean;
   busy: boolean;
+  /** A create ended without a known outcome: the fields are read-only until Create finds out. */
+  locked: boolean;
+  /** The idea a create carries; null in the other modes and once the server says the idea is withdrawn. */
+  ideaId: string | null;
   error: string | null;
   /** Set when a new resbite exists. */
   created: Plan | null;
@@ -108,6 +113,7 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
   const [fallback, setFallback] = useState<CoverFallback | null>(null);
   const [attempted, setAttempted] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [locked, setLocked] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<Plan | null>(null);
   const [coverOutcome, setCoverOutcome] = useState<CoverOutcome>("none");
@@ -365,11 +371,19 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
       if (mounted.current) {
         if (mode === "edit" && e instanceof PlanSaveError && e.latest) {
           // Someone saved first: show their version, from which the next Save starts.
-          setOriginal(e.latest);
-          begin(formFromPlan(e.latest));
+          const latest = e.latest;
+          setOriginal(latest);
+          begin(formFromPlan(latest));
           setError(PLAN_COPY.editConflict);
+          // The guests a change reaches may have moved with it: read them again, as on load.
+          if (!preview)
+            void readGuests(latest.id).then(
+              (guests) => mounted.current && setGuestCount(countNotified(guests)),
+              () => {},
+            );
         } else {
           if (e instanceof PlanSaveError && e.reason === "idea") setIdeaId(null);
+          setLocked(locksAfterFailure(mode, e));
           // Note failures after an edit's plan saved carry their own message; a save error maps as writePlan did.
           setError(e instanceof PlanSaveError ? e.message : messageOf(e, PLAN_COPY.unconfirmed));
         }
@@ -405,6 +419,8 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
     notifyCount: guestCount,
     timeOrPlaceChanged,
     busy,
+    locked,
+    ideaId,
     error,
     created,
     coverOutcome,

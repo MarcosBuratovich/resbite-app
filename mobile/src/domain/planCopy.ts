@@ -89,6 +89,7 @@ export const PLAN_COPY = {
   notEditable: "Only the organizer can edit an upcoming, active plan.",
   ideaUnavailable: "This idea isn’t available right now.",
   notProtected: "Couldn’t protect this save on your device. Nothing was sent; try again.",
+  uncertainCreate: "Your resbite may already be created. Check your connection and tap Create to find out.",
   unconfirmed: "We couldn’t confirm the save. Retry when you’re connected.",
   editConflict: "The saved details changed and are shown now. Make your change again.",
 } as const;

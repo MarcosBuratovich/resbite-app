@@ -6,7 +6,7 @@ import {
   type PlanForm,
 } from "../domain/planForm";
 import { PLAN_COPY } from "../domain/planCopy";
-import type { Plan, PlanDetails, PlanWrite } from "../domain/plans";
+import { PlanSaveError, type Plan, type PlanDetails, type PlanWrite } from "../domain/plans";
 import { videoLinkFields, type PlanFormField } from "../domain/videoLinks";
 
 export type PlanFormMode = "idea" | "blank" | "edit" | "again";
@@ -31,15 +31,28 @@ const SCREEN_ORDER: MissingItem[] = ["name", "when", "place", "categories"];
 /**
  * What stops a save: missing items, a start that is not after `now`, and fields that carry a video-call link.
  * A save runs only when `missing` and `videoFields` are both empty. A past start counts as the `when` item
- * (All day today starts at 00:00, so it is past). An edit's start is read as `editWrite` would save it.
+ * (All day today starts at 00:00, so it is past). An edit's start is read as `editWrite` would save it, and
+ * only a start the edit changed can be past.
  */
 export function submitCheck(form: PlanForm, zone: string, now = Date.now(), original: Plan | null = null): SubmitCheck {
   const missing = missingItems(form);
   const videoFields = videoLinkFields(form);
   if (missing.includes("when")) return { missing, videoFields, past: false };
   const starts = original ? editWrite(form, zone, original).details.starts_at : detailsFromForm(form, zone).starts_at;
-  const past = Date.parse(starts) <= now;
+  // An edit that leaves the start as it was passes: the plan may have begun while the host was editing, and a
+  // save with an unchanged start is accepted.
+  const unchanged = original !== null && Date.parse(starts) === Date.parse(original.starts_at);
+  const past = !unchanged && Date.parse(starts) <= now;
   return { missing: past ? SCREEN_ORDER.filter((item) => item === "when" || missing.includes(item)) : missing, videoFields, past };
+}
+
+/**
+ * Whether a failed save locks the form: a create whose outcome is unknown. The journal keeps the write, so the
+ * retry repeats it; edits made in between would be dropped silently, so the fields stop taking them. An edit
+ * writes nothing the retry reuses, so it never locks.
+ */
+export function locksAfterFailure(mode: PlanFormMode, error: unknown): boolean {
+  return mode !== "edit" && error instanceof PlanSaveError && error.uncertain;
 }
 
 /**

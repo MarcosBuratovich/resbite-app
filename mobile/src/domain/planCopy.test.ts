@@ -33,6 +33,13 @@ test("the Create tab copy", () => {
   assert.equal(PLAN_COPY.orStartFromIdea, "Or start from an idea");
 });
 
+test("the line after a create with an unknown outcome", () => {
+  assert.equal(
+    PLAN_COPY.uncertainCreate,
+    "Your resbite may already be created. Check your connection and tap Create to find out.",
+  );
+});
+
 test("the notice for a create that went through", () => {
   assert.equal(createdNotice("Coffee together"), "Coffee together is created.");
 });

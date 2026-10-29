@@ -120,7 +120,8 @@ export default function Arrange() {
   const videoAt = (field: PlanFormField) => videoFields.includes(field);
   const where = form.form.placeTbd ? PLAN_COPY.toBeDecided : form.form.place.trim() || null;
   const when = whenRowText(form.form, form.zone);
-  const line = attempted ? missingLine(missing) : null;
+  // After a create with an unknown outcome the footer says so; the form is read-only until Create finds out.
+  const line = form.locked ? PLAN_COPY.uncertainCreate : attempted ? missingLine(missing) : null;
   const banner = edit ? notifyBanner(form.notifyCount) : null;
   const full = form.form.categories.length >= 2;
 
@@ -187,7 +188,11 @@ export default function Arrange() {
       return () => cancelAnimationFrame(frame);
     }
     // Android speaks the footer line through its live region; only iOS needs the explicit announcement.
-    if (Platform.OS === "ios") announce(missingLine(missing) ?? "");
+    // A video-call link as well: its message is queued behind the missing line, so both are heard.
+    if (Platform.OS === "ios") {
+      announce(missingLine(missing) ?? "");
+      if (videoFields.length > 0) announce(VIDEO_CALL_MESSAGE, true);
+    }
     const target = { name: nameMessage, categories: categoriesMessage, when: whenRow, where: whereRow };
     const node = (target as Partial<Record<Block, React.RefObject<View | Text | null>>>)[block]?.current ?? null;
     const timer = setTimeout(() => focusNode(node), Platform.OS === "web" ? 50 : FOCUS_AFTER_ANNOUNCE_MS);
@@ -259,7 +264,7 @@ export default function Arrange() {
   const f = form.form;
   // Do this again starts on its own, as the created resbite will: no idea's picture.
   const picture = eventPicture({
-    activity_id: mode === "idea" ? (activity ?? null) : edit ? (form.original?.activity_id ?? null) : null,
+    activity_id: mode === "idea" ? form.ideaId : edit ? (form.original?.activity_id ?? null) : null,
     categories: f.categories,
   });
   const rowState = (item: MissingItem, filled: boolean): OpenRowState =>
@@ -276,7 +281,7 @@ export default function Arrange() {
         scrollRef={scroll}
         footer={
           <>
-            <ErrorNote message={form.error} />
+            <ErrorNote message={form.locked ? null : form.error} />
             <Button
               large
               icon={false}
@@ -288,14 +293,14 @@ export default function Arrange() {
         }
       >
         <PreviewNotice dismissible={false} />
-        <CoverPicker cover={form.cover} fallback={picture} disabled={form.busy} />
+        <CoverPicker cover={form.cover} fallback={picture} disabled={form.busy || form.locked} />
         {banner && (
           <View style={styles.banner}>
             <Copy style={styles.bannerText}>{banner}</Copy>
           </View>
         )}
         <View style={styles.link}>
-          <TextAction title={PLAN_COPY.changePhoto} onPress={() => void form.cover.choose()} disabled={form.busy} />
+          <TextAction title={PLAN_COPY.changePhoto} onPress={() => void form.cover.choose()} disabled={form.busy || form.locked} />
         </View>
 
         <View onLayout={at("name")} style={styles.block}>
@@ -316,7 +321,7 @@ export default function Arrange() {
             value={f.title}
             onChangeText={(text) => form.set("title", text)}
             maxLength={TITLE_MAX}
-            editable={!form.busy}
+            editable={!form.busy && !form.locked}
           />
           <VideoNote show={videoAt("title")} />
         </View>
@@ -332,7 +337,7 @@ export default function Arrange() {
             value={f.description}
             onChangeText={(text) => form.set("description", text)}
             maxLength={DESCRIPTION_MAX}
-            editable={!form.busy}
+            editable={!form.busy && !form.locked}
           />
           <VideoNote show={videoAt("description")} />
         </View>
@@ -348,6 +353,7 @@ export default function Arrange() {
           accessibilityLabel={`${PLAN_COPY.when}, ${when ? [when.line, when.repeat].filter(Boolean).join(", ") : PLAN_COPY.whenPlaceholder}`}
           rowRef={whenRow}
           onLayout={at("when")}
+          disabled={form.locked}
           onPress={() => setWhenOpen(true)}
         />
         <View onLayout={at("where")} style={styles.block}>
@@ -360,6 +366,7 @@ export default function Arrange() {
             message={rowMessage("place")}
             accessibilityLabel={`${PLAN_COPY.where}, ${where ?? PLAN_COPY.placePlaceholder}`}
             rowRef={whereRow}
+            disabled={form.locked}
             onPress={openWhere}
           />
           <VideoNote show={videoAt("place") || videoAt("area") || videoAt("meetingDetails")} />
@@ -376,7 +383,7 @@ export default function Arrange() {
             value={f.guestNote}
             onChangeText={(text) => form.set("guestNote", text)}
             maxLength={GUEST_NOTE_MAX}
-            editable={!form.busy}
+            editable={!form.busy && !form.locked}
           />
           <VideoNote show={videoAt("guestNote")} />
         </View>
@@ -401,7 +408,7 @@ export default function Arrange() {
                     category={key}
                     text={categoryLabels[key]}
                     selected={selected}
-                    disabled={refused || form.busy}
+                    disabled={refused || form.busy || form.locked}
                     hint={refused ? PLAN_COPY.categoriesFull : undefined}
                     onPress={() => form.set("categories", toggleCategory(f.categories, key))}
                   />
