@@ -134,3 +134,17 @@ test("the gateway reads PostgREST's 400 with code 22023 as a refusal, and only t
     globalThis.fetch = realFetch;
   }
 });
+
+test("an older Argentine web account folds into an app that typed the 9 form, and keeps the web account's digits", async () => {
+  const older: U = { id: "web", phone: "541112341234", phone_confirmed_at: "2026-10-01T00:00:00Z" };
+  const { deps, calls } = setup({}, { mine: caller, theirs: older });
+  assert.equal((await handleFold(req({ foreign_token: "theirs", phone: "+54 9 11 1234 1234" }), deps)).status, 200);
+  assert.ok(calls.includes("phone:me:541112341234"));
+});
+
+test("a 9-form web account folds into an app that typed the no-9 form", async () => {
+  const newer: U = { id: "web", phone: "5491112341234", phone_confirmed_at: "2026-10-01T00:00:00Z" };
+  const { deps, calls } = setup({}, { mine: caller, theirs: newer });
+  assert.equal((await handleFold(req({ foreign_token: "theirs", phone: "+54 11 1234 1234" }), deps)).status, 200);
+  assert.ok(calls.includes("phone:me:5491112341234"));
+});

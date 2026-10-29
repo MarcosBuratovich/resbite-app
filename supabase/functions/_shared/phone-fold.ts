@@ -1,3 +1,5 @@
+import { phoneKey } from "./phone-key.ts";
+
 export type FoldUser = { id: string; phone: string | null; phone_confirmed_at: string | null };
 
 export type FoldDeps = {
@@ -33,8 +35,8 @@ export async function handleFold(request: Request, deps: FoldDeps): Promise<Resp
     return json(401, { error: "unauthorized" });
   }
   if (!caller || !foreign) return json(401, { error: "unauthorized" });
-  const digits = typeof body.phone === "string" ? body.phone.replace(/\D/g, "") : "";
-  if (!digits || !foreign.phone_confirmed_at || (foreign.phone ?? "").replace(/\D/g, "") !== digits) {
+  const key = phoneKey(typeof body.phone === "string" ? body.phone : "");
+  if (!key || !foreign.phone_confirmed_at || phoneKey(foreign.phone) !== key) {
     return json(403, { error: "forbidden" });
   }
   if (caller.id === foreign.id) return json(409, { error: "conflict" });
@@ -42,7 +44,7 @@ export async function handleFold(request: Request, deps: FoldDeps): Promise<Resp
   try {
     await deps.fold(foreign.id, caller.id);
     await deps.deleteUser(foreign.id);
-    await deps.setPhone(caller.id, digits);
+    await deps.setPhone(caller.id, (foreign.phone ?? "").replace(/\D/g, ""));
   } catch (error) {
     if (error instanceof FoldRefused) return json(409, { error: "conflict" });
     return json(500, { error: "failed" });
