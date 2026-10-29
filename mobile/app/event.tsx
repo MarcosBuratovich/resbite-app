@@ -180,7 +180,7 @@ export default function EventPage() {
   // An admin who can't go stops being one on the server; the page reloads and shows the guest view.
   const afterMoreReply = async (saved: Response) => {
     closeMore();
-    if (role === "admin" && saved === "declined") await event.load();
+    if (role === "admin" && (saved === "declined" || saved === "withdrawn")) await event.load();
   };
   const question = cancelQuestion(current, zone);
   function cancelResbite(stop: boolean) {

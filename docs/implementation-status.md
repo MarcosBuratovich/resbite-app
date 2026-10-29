@@ -759,5 +759,3 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
 5. The cron job from `supabase/ops/schedule-roll-repeating-plans.sql`, run from the owner’s shell, only after steps 1 to 4.
 
 **Checks only a phone can give.** The native cover copy on Do this again; the missing-information announcement against the focus delay under VoiceOver; the native date and time pickers; Android back and swipe on the sheets and the It’s on! moment; the video-call refusal announcement; the More sheet and the people list under VoiceOver.
-
-**Known gap found by the browser checks.** An admin who was Going and picks Can’t go sends `withdrawn`; the database ends their admin part for `declined` and `withdrawn` alike, but the page reloads only after `declined`, so it keeps the admin view until the next refresh (`afterMoreReply` in `app/event.tsx`).

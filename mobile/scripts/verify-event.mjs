@@ -189,7 +189,7 @@ async function open(world = {}) {
         assert.equal(body.p_version, state.attendee.version);
         state.attendee = { version: state.attendee.version + 1, response: body.p_response };
         // The server ends an admin's part when they can’t go.
-        if (viewer === "admin" && body.p_response === "declined") state.admins = [];
+        if (viewer === "admin" && ["declined", "withdrawn"].includes(body.p_response)) state.admins = [];
         return reply(state.attendee.version);
       }
       case "change_plan_v4":
@@ -396,7 +396,7 @@ try {
   pass("running: the owner still has Edit and More; a guest’s Going is accepted (respond {p_response: accepted, p_version: 1}) and the bar reads You’re going");
 
   // --- An admin ---
-  // This admin answered Maybe, so Can’t go is sent as "declined" (after Going it is "withdrawn": see the known defect below).
+  // This admin answered Maybe, so Can’t go is sent as "declined" (after Going it is "withdrawn", below).
   const adminFixture = { viewer: "admin", attendee: { version: 1, response: "maybe" }, guests: [ALEX, BEA] };
   await scenario("admin", adminFixture, async (f) => {
     const { page } = f;
@@ -420,26 +420,20 @@ try {
   });
   pass("admin: You’re an admin; Invite, Edit, More; Change my reply and Cancel resbite among the rows; Can’t go → respond {p_response: declined}, then the guest page (Hosted by Ana, You can’t go, no Invite)");
 
-  // KNOWN DEFECT (reported, not fixed here): an admin who was Going sends "withdrawn" for Can’t go (cantGoResponse), the
-  // server drops their admin part for "declined" and "withdrawn" alike (the respond function), but app/event.tsx
-  // `afterMoreReply` reloads only for "declined". The page stays on the admin view with Invite, Edit and More.
-  let defect = false;
-  try {
-    await scenario("admin, was Going", { viewer: "admin", attendee: { version: 1, response: "accepted" }, guests: [ALEX, BEA] }, async (f) => {
-      const { page } = f;
-      await goto(f, `/event?plan=${PLAN_ID}`);
-      await btn(page, "More").click();
-      await btn(page, "Change my reply").click();
-      await page.getByRole("radio", { name: "Can’t go", exact: true }).click();
-      await expect.poll(() => f.rpcs("respond")).toEqual([{ p_plan: PLAN_ID, p_response: "withdrawn", p_version: 1 }]);
-      await expect(text(page, "Hosted by Ana")).toBeVisible();
-      await expect(btn(page, "Invite")).toHaveCount(0);
-    });
-    pass("admin who was Going: Can’t go (withdrawn) → the guest page");
-  } catch (e) {
-    defect = true;
-    console.log(`FAIL (KNOWN DEFECT, reported to the controller): admin who was Going: Can’t go sends withdrawn but the page stays on the admin view. ${String(e.message).split("\n")[0]}`);
-  }
+  // An admin who was Going sends "withdrawn" for Can’t go; the server ends their admin part for it as for "declined",
+  // and the page reloads into the guest view.
+  await scenario("admin, was Going", { viewer: "admin", attendee: { version: 1, response: "accepted" }, guests: [ALEX, BEA] }, async (f) => {
+    const { page } = f;
+    await goto(f, `/event?plan=${PLAN_ID}`);
+    await btn(page, "More").click();
+    await btn(page, "Change my reply").click();
+    await page.getByRole("radio", { name: "Can’t go", exact: true }).click();
+    await expect.poll(() => f.rpcs("respond")).toEqual([{ p_plan: PLAN_ID, p_response: "withdrawn", p_version: 1 }]);
+    await expect(text(page, "Hosted by Ana")).toBeVisible();
+    await expect(text(page, "You’re an admin")).toHaveCount(0);
+    await expect(btn(page, "Invite")).toHaveCount(0);
+  });
+  pass("admin who was Going: Can’t go sends respond {p_response: withdrawn}, then the guest page (Hosted by Ana, no Invite)");
 
   // --- A guest ---
   await scenario(
@@ -577,7 +571,6 @@ try {
   pass("idea: Back sits over the image, the chips, description and tips follow; Use idea opens the plan screen with ?activity=painting");
 
   assert.deepEqual(errors, []);
-  if (defect) process.exitCode = 1;
 } finally {
   await browser.close();
 }
