@@ -162,6 +162,49 @@ try {
     await expect(page.getByRole("heading", { name: "When", exact: true })).toHaveCount(0);
     assert.equal(await fitsWidth(page, '[data-testid="kit"]'), true, `Kit fits ${width} px`);
     await page.screenshot({ path: `${out}/kit-${width}.png`, fullPage: true });
+    // ActionBar: one action spans the width; the pill is 56 pt tall and labelled by its title.
+    const going = await size(page.getByRole("button", { name: "I’m going", exact: true }));
+    assert.ok(going.height >= 56 && going.width >= width - 100, "A single action spans the bar (inside the gallery's 20 pt and the bar's 16 pt padding)");
+    // ContentPage: Back floats over the cover, the title is a header, the bar is solid once scrolled, the pills are fixed.
+    await page.getByRole("button", { name: "Show content page", exact: true }).click();
+    const back = page.getByRole("button", { name: "Back", exact: true });
+    const backBox = await size(back);
+    assert.ok(backBox.width === 44 && backBox.height === 44, "Back is a 44 pt circle");
+    assert.ok(backBox.y < 120 && backBox.x < 40, "Back floats at the top left over the cover");
+    const pageTitle = page.getByRole("heading", { name: "Picnic in the park", exact: true });
+    await expect(pageTitle).toBeVisible();
+    await expect(pageTitle).toBeFocused();
+    await expect(page.getByRole("img", { name: "A picnic blanket under a tree", exact: true })).toBeVisible();
+    for (const name of ["Invite", "More"]) {
+      const pill = await size(page.getByRole("button", { name, exact: true }));
+      assert.ok(pill.height >= 56, `${name} is a 56 pt pill`);
+    }
+    const change = page.getByRole("button", { name: "Change your answer", exact: true });
+    await expect(change).toContainText("Change");
+    assert.ok((await size(change)).height >= 44, "Change your answer is at least 44 pt");
+    await expect(page.getByText("You’re going", { exact: true })).toBeVisible();
+    const barOpacity = () => page.getByTestId("content-bar").evaluate((el) => getComputedStyle(el).opacity);
+    assert.equal(await barOpacity(), "0", "The solid bar is hidden while the cover shows");
+    const moreY = (await size(page.getByRole("button", { name: "More", exact: true }))).y;
+    await page.getByTestId("content-scroll").evaluate((el) => { el.scrollTop = 600; });
+    await expect.poll(barOpacity).toBe("1");
+    assert.equal((await size(page.getByRole("button", { name: "More", exact: true }))).y, moreY, "The pills stay fixed while the page scrolls");
+    await expect(page.getByTestId("content-bar")).toContainText("Picnic in the park");
+    assert.equal(await fitsWidth(page, '[data-testid="content-page"]'), true, `The content page fits ${width} px`);
+    await page.screenshot({ path: `${out}/content-${width}.png` });
+    // MenuRow in a sheet with no title: named by its label, 60 pt rows, a destructive row, an 8 pt separator.
+    await page.getByRole("button", { name: "More", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "More", exact: true })).toHaveCount(0);
+    await expect(page.getByLabel("More", { exact: true }).filter({ has: page.getByText("Share the link") })).toHaveCount(1);
+    const share = await size(page.getByRole("button", { name: "Share the link", exact: true }));
+    assert.ok(share.height >= 60, "A menu row is 60 pt");
+    const cancel = page.getByRole("button", { name: "Cancel this resbite, for everyone", exact: true });
+    assert.ok((await size(cancel)).height >= 60, "The destructive row is 60 pt");
+    assert.equal(await cancel.getByText("Cancel this resbite").evaluate((el) => getComputedStyle(el).color), "rgb(163, 49, 66)", "The destructive row is in the error colour");
+    assert.equal((await size(page.getByTestId("menu-separator"))).height, 8, "The separator is an 8 pt band");
+    await page.getByRole("button", { name: "Close sheet", exact: true }).click();
+    await page.getByRole("button", { name: "Back", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Kit", exact: true })).toBeVisible();
     // TaskScreen: the X at the left in a 44 pt circle, a header title, the line and the pinned footer.
     await page.getByRole("button", { name: "Show task screen", exact: true }).click();
     await expect(page.getByRole("heading", { name: "New resbite", exact: true })).toBeVisible();
@@ -251,7 +294,7 @@ try {
   }
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: kit roles, labels, selected states and 44 pt targets at 390/320 (with UX4 rows, field and status cards, and the plan-screen kit: task screen, grabber sheet, open rows); Larger Text at 320; Preview chip and sheet. Screenshots: " +
+    "PASS: kit roles, labels, selected states and 44 pt targets at 390/320 (with UX4 rows, field and status cards, and the plan-screen kit: task screen, grabber sheet, open rows, content page, action bar, menu rows); Larger Text at 320; Preview chip and sheet. Screenshots: " +
       out,
   );
 } finally {

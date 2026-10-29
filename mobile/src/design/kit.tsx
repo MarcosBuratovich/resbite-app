@@ -286,7 +286,8 @@ export function DateBadge({ startsAt }: { startsAt: string | null }) {
 
 export type CardChip = { key: string; text: string; tone?: ChipTone; category?: CategoryKey; icon?: LucideIcon };
 
-function CoverArt({ picture, uri }: { picture: EventPicture; uri?: string | null }) {
+/** The picture a cover card and a content page show: the photo, else the idea artwork or the category icon on its tint. */
+export function CoverArt({ picture, uri }: { picture: EventPicture; uri?: string | null }) {
   if (uri)
     return <Image source={{ uri }} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityIgnoresInvertColors />;
   const basic = picture.kind === "cover" ? picture.fallback : picture;

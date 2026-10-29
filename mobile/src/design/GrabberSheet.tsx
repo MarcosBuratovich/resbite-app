@@ -23,10 +23,11 @@ export function GrabberSheet({
   children,
 }: {
   visible: boolean;
-  title: string;
+  /** Optional: a menu (More) has no heading; give it a `label` instead. */
+  title?: string;
   icon?: LucideIcon;
   onClose: () => void;
-  /** The sheet's spoken name when it differs from the title. */
+  /** The sheet's spoken name when it differs from the title, or when there is no title. */
   label?: string;
   /** Fixed under the scrolling content, above the home indicator (a sheet's Done); it never scrolls away. */
   footer?: React.ReactNode;
@@ -68,16 +69,18 @@ export function GrabberSheet({
             >
               <View style={styles.grabber} />
             </Pressable>
-            <View style={styles.heading}>
-              {Icon ? (
-                <View aria-hidden importantForAccessibility="no-hide-descendants">
-                  <Icon size={24} color={c.ink} />
-                </View>
-              ) : null}
-              <Text accessibilityRole="header" style={[styles.title, !largeText && styles.titleLine]}>
-                {title}
-              </Text>
-            </View>
+            {title ? (
+              <View style={styles.heading}>
+                {Icon ? (
+                  <View aria-hidden importantForAccessibility="no-hide-descendants">
+                    <Icon size={24} color={c.ink} />
+                  </View>
+                ) : null}
+                <Text accessibilityRole="header" style={[styles.title, !largeText && styles.titleLine]}>
+                  {title}
+                </Text>
+              </View>
+            ) : null}
           </View>
           <ScrollView testID="sheet-scroll" contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
             {children}

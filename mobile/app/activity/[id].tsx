@@ -1,19 +1,20 @@
 import React from "react";
-import { ActivityIndicator, Image, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { ArrowLeft, Clock3 } from "lucide-react-native";
-import { activityArtwork } from "../../src/services/catalogue";
-import { Button, Copy, ErrorNote, Title, Reveal, s, useLargeText } from "../../src/design/ui";
+import { eventPicture } from "../../src/domain/events";
+import { Button, Copy, ErrorNote, Title, s, useLargeText } from "../../src/design/ui";
 import { Chip, IconButton } from "../../src/design/kit";
+import { ContentPage } from "../../src/design/ContentPage";
 import { useCatalogue } from "../../src/state/useCatalogue";
 import { useApp } from "../../src/state/AppState";
-import { categoryPalette, colors as c, r } from "../../src/design/tokens";
+import { colors as c, r } from "../../src/design/tokens";
 import { PreviewNotice } from "../../src/design/Chrome";
 import { categoryIcons } from "../../src/design/categories";
 import { categoryLabels } from "../../src/domain/categories";
 
-/** Idea detail (spec "Create tab and idea detail"): picture, title, chips, description, numbered tips, "Use idea". */
+/** Idea detail (CR-02): a content page with the picture, name, chips, description and tips; "Use idea" is fixed at the bottom. */
 export default function Detail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { preview } = useApp();
@@ -53,50 +54,39 @@ export default function Detail() {
     );
   const planAction = (
     <View style={[s.actionFooter, largeText && { paddingHorizontal: 0, borderTopWidth: 0 }]}>
-      <Button title="Use idea" onPress={() => router.push({ pathname: "/arrange", params: { activity: a.id } })} />
+      <Button large title="Use idea" onPress={() => router.push({ pathname: "/arrange", params: { activity: a.id } })} />
     </View>
   );
   return (
-    <SafeAreaView style={s.page}>
-      <ScrollView contentContainerStyle={[s.body, { paddingBottom: 28 }]}>
-        {top}
-        <Reveal>
-          <View style={[styles.picture, { backgroundColor: categoryPalette[a.categories[0] ?? "community"].tint }]}>
-            <Image
-              accessibilityLabel={a.title}
-              source={activityArtwork(a)}
-              style={{ width: "100%", height: 230 }}
-              resizeMode="contain"
-            />
-          </View>
-        </Reveal>
-        <Title>{a.title}</Title>
-        <View style={styles.chips}>
-          {a.categories.map((key) => (
-            <Chip key={key} text={categoryLabels[key]} icon={categoryIcons[key]} category={key} />
-          ))}
-          {a.durationMinutes !== null && <Chip icon={Clock3} text={`${a.durationMinutes} minutes`} />}
-        </View>
-        <Copy>{a.description}</Copy>
-        {a.tips.map((tip, i) => (
-          <View key={i} style={styles.tip}>
-            <View style={styles.tipNumber}>
-              <Copy style={{ fontSize: 12, color: c.aquaDark }}>{i + 1}</Copy>
-            </View>
-            <Copy style={{ flex: 1, fontSize: 14 }}>{tip}</Copy>
-          </View>
+    <ContentPage
+      title={a.title}
+      picture={eventPicture({ activity_id: a.id, categories: a.categories })}
+      pictureLabel={a.title}
+      onBack={back}
+      bottom={planAction}
+    >
+      <View style={styles.chips}>
+        {a.categories.map((key) => (
+          <Chip key={key} text={categoryLabels[key]} icon={categoryIcons[key]} category={key} />
         ))}
-        {preview && <Copy style={s.muted}>Activity content approved for the owner-only beta.</Copy>}
-        {largeText && planAction}
-      </ScrollView>
-      {!largeText && planAction}
-    </SafeAreaView>
+        {a.durationMinutes !== null && <Chip icon={Clock3} text={`${a.durationMinutes} minutes`} />}
+      </View>
+      <Copy>{a.description}</Copy>
+      {a.tips.map((tip, i) => (
+        <View key={i} style={styles.tip}>
+          <View style={styles.tipNumber}>
+            <Copy style={{ fontSize: 12, color: c.aquaDark }}>{i + 1}</Copy>
+          </View>
+          <Copy style={{ flex: 1, fontSize: 14 }}>{tip}</Copy>
+        </View>
+      ))}
+      {preview && <Copy style={s.muted}>Activity content approved for the owner-only beta.</Copy>}
+    </ContentPage>
   );
 }
 
 const styles = StyleSheet.create({
   top: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  picture: { borderRadius: r.card, alignItems: "center", padding: 20, overflow: "hidden" },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   tip: {
     flexDirection: "row",

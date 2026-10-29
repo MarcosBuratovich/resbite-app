@@ -2,7 +2,23 @@ import React, { useState } from "react";
 import { ScrollView, View } from "react-native";
 import { Redirect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { CalendarDays, Eye, Info, LogOut, Mail, MailCheck, MapPin, Pencil, Smartphone, Users } from "lucide-react-native";
+import {
+  CalendarDays,
+  Eye,
+  Info,
+  LogOut,
+  Mail,
+  MailCheck,
+  MapPin,
+  Pencil,
+  Share2,
+  Smartphone,
+  Trash2,
+  UserPlus,
+  Users,
+  Ellipsis,
+  Check,
+} from "lucide-react-native";
 import {
   AvatarStack,
   Chip,
@@ -21,7 +37,10 @@ import {
   TopicRow,
   type CardChip,
 } from "../src/design/kit";
+import { ActionBar, ReplyPill } from "../src/design/ActionBar";
+import { ContentPage } from "../src/design/ContentPage";
 import { GrabberSheet } from "../src/design/GrabberSheet";
+import { MenuRow, MenuSeparator } from "../src/design/MenuRow";
 import { OpenRow } from "../src/design/OpenRow";
 import { TaskScreen } from "../src/design/TaskScreen";
 import { categoryIcons } from "../src/design/categories";
@@ -48,6 +67,8 @@ function Gallery() {
   const [step, setStep] = useState(false);
   const [task, setTask] = useState(false);
   const [grabber, setGrabber] = useState(false);
+  const [page, setPage] = useState(false);
+  const [menu, setMenu] = useState(false);
   const [pressed, setPressed] = useState("");
   const [field, setField] = useState("");
   const now = new Date();
@@ -64,6 +85,33 @@ function Gallery() {
       >
         <Copy>Step content sits here.</Copy>
       </StepScreen>
+    );
+  if (page)
+    return (
+      <ContentPage
+        title="Picnic in the park"
+        picture={{ kind: "placeholder", category: "natural" }}
+        pictureLabel="A picnic blanket under a tree"
+        onBack={() => setPage(false)}
+        bottom={
+          <ActionBar
+            lead={<ReplyPill text="You’re going" onChange={() => setPressed("change")} />}
+            actions={[
+              { key: "invite", title: "Invite", icon: UserPlus, onPress: () => setPressed("invite") },
+              { key: "more", title: "More", icon: Ellipsis, onPress: () => setMenu(true) },
+            ]}
+          />
+        }
+      >
+        {Array.from({ length: 30 }, (_, i) => (
+          <Copy key={i}>{`Page paragraph ${i + 1} sits here so the cover can scroll away.`}</Copy>
+        ))}
+        <GrabberSheet visible={menu} label="More" onClose={() => setMenu(false)}>
+          <MenuRow title="Share the link" icon={Share2} onPress={() => setPressed("share")} />
+          <MenuSeparator />
+          <MenuRow title="Cancel this resbite" label="Cancel this resbite, for everyone" icon={Trash2} destructive onPress={() => setPressed("cancel")} />
+        </GrabberSheet>
+      </ContentPage>
     );
   if (task)
     return (
@@ -227,6 +275,9 @@ function Gallery() {
         <Button title="Show step screen" secondary onPress={() => setStep(true)} />
         <Button title="Show task screen" secondary onPress={() => setTask(true)} />
         <Button title="Show sheet" secondary onPress={() => setGrabber(true)} />
+        <Button title="Show content page" secondary onPress={() => setPage(true)} />
+        <ActionBar actions={[{ key: "going", title: "I’m going", icon: Check, primary: true, onPress: () => setPressed("going") }]} />
+        <ReplyPill text="No reply yet" />
         {pressed ? <Copy accessibilityLiveRegion="polite">{`Pressed ${pressed}`}</Copy> : null}
       </ScrollView>
       <InfoSheet visible={sheet} title="Cover photos" onClose={() => setSheet(false)}>
