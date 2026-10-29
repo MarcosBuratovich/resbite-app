@@ -78,9 +78,9 @@ try {
       "Edit vibe, Natural and Community",
     ])
       await expect(page.getByRole("button", { name, exact: true })).toBeVisible();
-    // Static CoverCard (heading mode): the badge is hidden, so the date row says the date.
+    // Static CoverCard (heading mode): the badge is hidden, so the date row says the date, then the repeat.
     await expect(page.getByRole("heading", { name: "It’s on!", exact: true })).toBeVisible();
-    await expect(page.getByLabel("Saturday 10 October 2099 at 10:00", { exact: true })).toHaveCount(1);
+    await expect(page.getByLabel("Saturday 10 October 2099 at 10:00, Weekly", { exact: true })).toHaveCount(1);
     // CoverCard focus: keyboard focus draws an in-card ring that overflow cannot clip.
     await page.keyboard.press("Tab");
     await card.focus();
