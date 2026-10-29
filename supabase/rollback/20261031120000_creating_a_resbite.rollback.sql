@@ -9,9 +9,9 @@
 --     plans_place_tbd_valid constraint and the plans_default_series trigger. Occurrences the roll already created stay
 --     as ordinary resbites, each with its guests, its admins gone, and no longer repeating; a plan marked To be decided
 --     keeps the label 'To be decided' and is an ordinary place again (it has no map point);
---   - every function the migration created: appoint_admin, remove_admin, set_plan_mute, create_plan_v4 and
---     change_plan_v4 (each with its public wrapper), next_occurrence, roll_repeating_plans, plans_default_series and,
---     last, plan_end;
+--   - every function the migration created: appoint_admin, remove_admin, set_plan_mute, plan_people_counts,
+--     create_plan_v4 and change_plan_v4 (each with its public wrapper), next_occurrence, roll_repeating_plans,
+--     plans_default_series and, last, plan_end;
 --   - every 'admin_added' outbox row, and every 'invited' row with the detail 'again' (the invitations to a next
 --     occurrence), delivered or not, so the earlier kind and detail checks can come back.
 --     The choice: a row not yet sent goes with them. A new admin whose notice had not gone out is never told, and a
@@ -25,7 +25,8 @@
 -- Kept: the plans, guests and answers; the occurrences the roll created. A resbite is open until its start again, not
 -- until its end: one that has started but not ended stops accepting answers and changes the moment this runs.
 -- Builds: once this has run, app builds made with this plan call functions that no longer exist (create_plan_v4,
--- change_plan_v4, set_plan_mute, appoint_admin, remove_admin); see the runbook, qa/creating-a-resbite-2026-10-31/README.md.
+-- change_plan_v4, set_plan_mute, appoint_admin, remove_admin, plan_people_counts); see the runbook,
+-- qa/creating-a-resbite-2026-10-31/README.md.
 -- Order: run it first of the rollbacks. The phone key (supabase/rollback/20261030130000_phone_key.rollback.sql), push
 -- delivery (supabase/rollback/20261030120000_push_delivery.rollback.sql) and open-link approval
 -- (supabase/rollback/20261029120000_open_link_approval.rollback.sql) come after it, in that order: the three contact
@@ -727,6 +728,10 @@ drop function private.plans_default_series();
 drop index public.plans_repeats_from_key;
 drop index public.plans_series_idx;
 alter table public.plans drop column repeats_from, drop column series_id, drop column repeat_weeks, drop column place_tbd;
+
+-- The people counts (they call is_host, so they go before it).
+drop function public.plan_people_counts(uuid);
+drop function private.plan_people_counts(uuid);
 
 -- Admins and the helpers; plan_end goes last, nothing reads it any more.
 drop function public.remove_admin(uuid,uuid);

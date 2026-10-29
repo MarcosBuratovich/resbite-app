@@ -1258,3 +1258,71 @@ do $$ begin
 end $$;
 set local client_min_messages=warning;
 rollback;
+
+-- Slice 6: the people counts (CR-P4). An invitee who hasn't answered reads only their own guest row (UX-P5), so the
+-- page asks plan_people_counts for the numbers. Users: 01 owner, 02 admin (Going), 03 Going, 04 Maybe, 05 Can't go
+-- (declined), 06 Can't go after Going (withdrawn), 07 an invitee who hasn't answered, 08 a stranger.
+begin;
+insert into auth.users(id,email,email_confirmed_at)
+ select ('e1000000-0000-4000-8000-0000000000'||n)::uuid,'cr1-count-'||n||'@resbite-test.invalid',now()
+ from unnest(array['01','02','03','04','05','06','07','08']) n;
+insert into private.tester_roster(email) select 'cr1-count-'||n||'@resbite-test.invalid' from unnest(array['01','02','03','04','05','06','07','08']) n;
+insert into public.profiles(id,display_name)
+ select ('e1000000-0000-4000-8000-0000000000'||n)::uuid,'Counted '||n from unnest(array['01','02','03','04','05','06','07','08']) n;
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.create_plan_v3('e1100000-0000-4000-8000-000000000040','Count night','',array['community'],null,
+ '2099-06-08 19:00+00','2099-06-08 22:00+00','UTC','Park','');
+reset role;
+insert into public.attendees(plan_id,user_id,response) values
+ ('e1100000-0000-4000-8000-000000000040','e1000000-0000-4000-8000-000000000002','accepted'),
+ ('e1100000-0000-4000-8000-000000000040','e1000000-0000-4000-8000-000000000003','accepted'),
+ ('e1100000-0000-4000-8000-000000000040','e1000000-0000-4000-8000-000000000004','maybe'),
+ ('e1100000-0000-4000-8000-000000000040','e1000000-0000-4000-8000-000000000005','declined'),
+ ('e1100000-0000-4000-8000-000000000040','e1000000-0000-4000-8000-000000000006','withdrawn'),
+ ('e1100000-0000-4000-8000-000000000040','e1000000-0000-4000-8000-000000000007','pending');
+insert into public.plan_admins(plan_id,user_id,appointed_by) values
+ ('e1100000-0000-4000-8000-000000000040','e1000000-0000-4000-8000-000000000002','e1000000-0000-4000-8000-000000000001');
+
+-- Signed-in people only.
+do $$ begin
+ if has_function_privilege('anon','public.plan_people_counts(uuid)','execute') or has_function_privilege('anon','private.plan_people_counts(uuid)','execute')
+  then raise exception 'anon can execute plan_people_counts'; end if;
+ if not has_function_privilege('authenticated','public.plan_people_counts(uuid)','execute') then raise exception 'authenticated cannot execute plan_people_counts'; end if;
+end $$;
+
+-- The invitee who hasn't answered sees only their own guest row, yet reads the counts: two going, one maybe, two can't
+-- go (declined and withdrawn alike); their own pending row counts nowhere and the owner has no guest row.
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000007","role":"authenticated"}',true);
+do $$ declare r jsonb; begin
+ if (select count(*) from public.attendees where plan_id='e1100000-0000-4000-8000-000000000040')<>1 then
+  raise exception 'The unanswered invitee read more than their own guest row'; end if;
+ r := public.plan_people_counts('e1100000-0000-4000-8000-000000000040');
+ if r is distinct from '{"going":2,"maybe":1,"cant_go":2}'::jsonb then raise exception 'Counts for the unanswered invitee wrong: %', r; end if;
+end $$;
+-- The owner, the admin and the guests who answered (any answer) read the same numbers.
+do $$ declare v text; r jsonb; begin
+ foreach v in array array['01','02','03','04','05','06'] loop
+  perform set_config('request.jwt.claims',json_build_object('sub','e1000000-0000-4000-8000-0000000000'||v,'role','authenticated')::text,true);
+  r := public.plan_people_counts('e1100000-0000-4000-8000-000000000040');
+  if r is distinct from '{"going":2,"maybe":1,"cant_go":2}'::jsonb then raise exception 'Counts for % wrong: %', v, r; end if;
+ end loop;
+end $$;
+-- The counts follow the answers: the invitee answers Going.
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000007","role":"authenticated"}',true);
+do $$ declare r jsonb; begin
+ perform public.respond('e1100000-0000-4000-8000-000000000040','accepted',1);
+ r := public.plan_people_counts('e1100000-0000-4000-8000-000000000040');
+ if r is distinct from '{"going":3,"maybe":1,"cant_go":2}'::jsonb then raise exception 'Counts after answering wrong: %', r; end if;
+end $$;
+-- A stranger is refused, for this plan and for one that doesn't exist.
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000008","role":"authenticated"}',true);
+do $$ begin
+ begin perform public.plan_people_counts('e1100000-0000-4000-8000-000000000040'); raise exception 'A stranger read the counts';
+ exception when insufficient_privilege then if sqlerrm<>'Not invited' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+ begin perform public.plan_people_counts('e1100000-0000-4000-8000-000000000099'); raise exception 'A stranger read the counts of a missing plan';
+ exception when insufficient_privilege then if sqlerrm<>'Not invited' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+end $$;
+reset role;
+rollback;

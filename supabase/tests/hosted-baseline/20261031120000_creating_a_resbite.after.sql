@@ -33,7 +33,7 @@ begin
    and a !~ '^constraint public\.plans plans_(place_tbd_valid|repeats_from_fkey|repeat_weeks_check)$'
    and a !~ '^(index|relation) public\.plans_(repeats_from_key|series_idx)$'
    and a !~ '^trigger public\.plans plans_default_series$'
-   and a !~ '^(definition|grants) (private|public)\.(appoint_admin|remove_admin|set_plan_mute|create_plan_v4|change_plan_v4|plan_end|is_host|host_ids|next_occurrence|roll_repeating_plans|plans_default_series)\(';
+   and a !~ '^(definition|grants) (private|public)\.(appoint_admin|remove_admin|set_plan_mute|plan_people_counts|create_plan_v4|change_plan_v4|plan_end|is_host|host_ids|next_occurrence|roll_repeating_plans|plans_default_series)\(';
  if v_added<>'{}' then raise exception 'The apply added unexpected objects: %', v_added; end if;
  -- The storage policies: the three cover ones changed, no other.
  if (select array_agg(p.policyname::text order by p.policyname::text) from (
@@ -69,14 +69,15 @@ do $$ begin
  if exists(select 1 from pg_catalog.pg_proc where oid in (
    'private.plan_end(timestamptz,timestamptz)'::regprocedure,'private.is_host(uuid,uuid)'::regprocedure,
    'private.host_ids(uuid)'::regprocedure,'private.next_occurrence(timestamptz,text,integer)'::regprocedure,
+   'private.plan_people_counts(uuid)'::regprocedure,
    'private.create_plan_v4(uuid,text,text,text[],text,timestamptz,timestamptz,text,text,boolean,smallint,text,double precision,double precision,text)'::regprocedure,
    'public.change_plan_v4(uuid,integer,text,text,text[],timestamptz,timestamptz,text,text,boolean,smallint,text,text,boolean,boolean)'::regprocedure)
-   and not prosecdef and proname in ('is_host','host_ids','next_occurrence','create_plan_v4')) then
+   and not prosecdef and proname in ('is_host','host_ids','next_occurrence','create_plan_v4','plan_people_counts')) then
   raise exception 'A private body is not a definer';
  end if;
 end $$;
--- 3. Grants: the roll for nobody (the cron job runs it as postgres); the admin, mute and v4 functions for signed-in
--- accounts only, never anon.
+-- 3. Grants: the roll for nobody (the cron job runs it as postgres); the admin, mute, people-count and v4 functions for
+-- signed-in accounts only, never anon.
 do $$ declare r text; f text; begin
  foreach r in array array['anon','authenticated','service_role'] loop
   if has_function_privilege(r,'private.roll_repeating_plans()','execute') then raise exception '% may run the roll', r; end if;
@@ -86,6 +87,7 @@ do $$ declare r text; f text; begin
   end if;
  end loop;
  foreach f in array array['public.appoint_admin(uuid,uuid)','public.remove_admin(uuid,uuid)','public.set_plan_mute(uuid,boolean)',
+  'public.plan_people_counts(uuid)','private.plan_people_counts(uuid)',
   'public.create_plan_v4(uuid,text,text,text[],text,timestamptz,timestamptz,text,text,boolean,smallint,text,double precision,double precision,text)',
   'public.change_plan_v4(uuid,integer,text,text,text[],timestamptz,timestamptz,text,text,boolean,smallint,text,text,boolean,boolean)']
  loop

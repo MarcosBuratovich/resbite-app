@@ -629,6 +629,26 @@ create or replace function private.can_read_meeting_details(p_plan uuid) returns
   or exists(select 1 from public.attendees a where a.plan_id=p.id and a.user_id=auth.uid() and a.response in ('accepted','maybe'))))
 $$;
 
+-- The resbite page's counts (CR-P4) for everyone on it. An invitee who hasn't answered reads only their own guest row
+-- (UX-P5, attendee_read), yet the page tells them how many are going, maybe and can't go, as the public pages tell anyone
+-- with the link how many are going. Only the numbers, no names. A host or anyone with a guest row (whatever the reply) may
+-- ask; anyone else is refused (42501 'Not invited').
+create function private.plan_people_counts(p_plan uuid) returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_uid uuid := private.require_tester();
+begin
+ if not (private.is_host(p_plan,v_uid) or exists(select 1 from public.attendees a where a.plan_id=p_plan and a.user_id=v_uid)) then
+  raise exception 'Not invited' using errcode='42501';
+ end if;
+ return (select jsonb_build_object('going',count(*) filter (where a.response='accepted'),'maybe',count(*) filter (where a.response='maybe'),
+   'cant_go',count(*) filter (where a.response in ('declined','withdrawn')))
+  from public.attendees a where a.plan_id=p_plan);
+end $$;
+create function public.plan_people_counts(p_plan uuid) returns jsonb language sql stable security invoker set search_path = '' as $$
+ select private.plan_people_counts(p_plan)
+$$;
+revoke all on function private.plan_people_counts(uuid), public.plan_people_counts(uuid) from public, anon, authenticated, service_role;
+grant execute on function private.plan_people_counts(uuid), public.plan_people_counts(uuid) to authenticated;
+
 -- The host's list of invitations: the 20261028120000_contact_invitations body, for any host.
 create or replace function private.plan_phone_invitations(p_plan uuid) returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester();
