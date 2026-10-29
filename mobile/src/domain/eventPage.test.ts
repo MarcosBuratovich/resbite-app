@@ -9,6 +9,8 @@ import {
   moreRows,
   namesLine,
   pageState,
+  showsNames,
+  stateChip,
   peopleCounts,
   peopleGroups,
   peopleRowText,
@@ -224,4 +226,21 @@ test("EVENT_COPY pins the page, sheet and list words", () => {
       EVENT_COPY.cancelResbite, EVENT_COPY.yourAnswer, EVENT_COPY.cancelled, EVENT_COPY.shareLink,
     ],
   );
+});
+
+test("showsNames: hosts always, guests once they have answered", () => {
+  assert.equal(showsNames("owner", null), true);
+  assert.equal(showsNames("admin", "pending"), true);
+  assert.equal(showsNames("guest", null), false);
+  assert.equal(showsNames("guest", "pending"), false);
+  for (const r of ["accepted", "maybe", "declined", "withdrawn"]) assert.equal(showsNames("guest", r), true);
+});
+
+test("stateChip: Cancelled, Ended or none", () => {
+  const now = Date.parse("2026-10-30T12:00:00Z");
+  const plan = { status: "active", starts_at: "2026-10-31T18:00:00Z", ends_at: null };
+  assert.equal(stateChip(plan, now), null);
+  assert.equal(stateChip({ ...plan, starts_at: "2026-10-01T18:00:00Z" }, now), "Ended");
+  assert.equal(stateChip({ ...plan, status: "cancelled" }, now), "Cancelled");
+  assert.equal(stateChip({ ...plan, status: "cancelled", starts_at: "2026-10-01T18:00:00Z" }, now), "Cancelled");
 });

@@ -54,6 +54,8 @@ export const EVENT_COPY = {
   change: "Change",
   doThisAgain: "Do this again",
   addToCalendar: "Add to calendar",
+  updateCalendar: "Update calendar",
+  cancelledChip: "Cancelled",
   mute: "Mute this resbite",
   unmute: "Unmute this resbite",
   changeMyReply: "Change my reply",
@@ -87,6 +89,17 @@ export function pageState(plan: Timed & { status: string }, now = Date.now()): P
 }
 
 const answered = (response: string | null) => response !== null && response !== "pending";
+
+/** The state chip under the title: Cancelled, Ended, or none while the resbite is open. */
+export function stateChip(plan: Timed & { status: string }, now = Date.now()): typeof EVENT_COPY.cancelledChip | typeof EVENT_COPY.ended | null {
+  const state = pageState(plan, now);
+  return state === "cancelled" ? EVENT_COPY.cancelledChip : state === "ended" ? EVENT_COPY.ended : null;
+}
+
+/** Who sees the names of those going and may open the people list: the hosts, and guests who have answered. */
+export function showsNames(role: Viewer, response: string | null): boolean {
+  return role !== "guest" || answered(response);
+}
 
 export type BottomRow =
   | { kind: "host" }

@@ -104,6 +104,7 @@ export function Button({
   hint,
   large = false,
   destructive = false,
+  errorInk = false,
   mark: Mark,
 }: {
   title: string;
@@ -118,6 +119,8 @@ export function Button({
   large?: boolean;
   /** A red button with a white label, for a permanent action (Delete account). */
   destructive?: boolean;
+  /** A secondary button whose label is in the error colour (a permanent choice beside a red one). */
+  errorInk?: boolean;
   /** A mark before the label (GI2: Apple's logo on "Continue with Apple"). */
   mark?: LucideIcon;
 }) {
@@ -127,7 +130,7 @@ export function Button({
   const anim = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
   }));
-  const ink = destructive ? c.paper : c.ink;
+  const ink = destructive ? c.paper : errorInk ? c.error : c.ink;
   return (
     <Animated.View style={anim}>
       <GluestackButton

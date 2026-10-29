@@ -4,17 +4,24 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams, usePathname } from "expo-router";
 import {
   ArrowLeft,
+  Bell,
+  BellOff,
   Calendar,
+  CalendarPlus,
+  CalendarX,
   Check,
   ChevronRight,
+  Copy as CopyIcon,
   Ellipsis,
   MapPin,
+  MessageCircle,
   Pencil,
   RefreshCw,
   Repeat,
   Send,
 } from "lucide-react-native";
 import { Button, Copy, ErrorNote, Reveal, s } from "../src/design/ui";
+import { MenuRow, MenuSeparator } from "../src/design/MenuRow";
 import { ActionBar, ReplyPill, type BarAction } from "../src/design/ActionBar";
 import { AvatarStack, Chip, chipToneFor, IconButton, Segmented } from "../src/design/kit";
 import { ContentPage } from "../src/design/ContentPage";
@@ -27,10 +34,11 @@ import { colors as c, fonts, space } from "../src/design/tokens";
 import { categoryLabels } from "../src/domain/categories";
 import { eventPicture } from "../src/domain/events";
 import { meetingDetailsView } from "../src/domain/eventDetails";
-import { cardChips, coverNotice, mapsUrl } from "../src/domain/eventView";
+import { coverNotice, mapsUrl } from "../src/domain/eventView";
 import {
   bottomRow,
   byline,
+  cancelQuestion,
   EVENT_COPY,
   hostLabel,
   moreRows,
@@ -39,9 +47,10 @@ import {
   peopleCounts,
   peopleRowText,
   placeLine,
+  showsNames,
+  stateChip,
   whenLines,
 } from "../src/domain/eventPage";
-import { canEditPlan } from "../src/domain/plans";
 import { ANSWER_OPTIONS, answerKey, canRespond, responseFor } from "../src/domain/rsvp";
 import { useApp } from "../src/state/AppState";
 import { useEvent } from "../src/state/useEvent";
@@ -56,7 +65,7 @@ const deviceZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 /** One page for both roles (spec CR-06, CR-06a, CR-07): /event?plan=<id>. */
 export default function EventPage() {
   const { plan: planId, notice, cover } = useLocalSearchParams<{ plan?: string; notice?: string; cover?: string }>();
-  const { session, preview } = useApp();
+  const { preview } = useApp();
   const event = useEvent(planId);
   const pathname = usePathname();
   const [toast, setToast] = useState<string>();
@@ -69,6 +78,8 @@ export default function EventPage() {
     }
   }, [notice, pathname]);
   const [moreOpen, setMoreOpen] = useState(false);
+  // The More sheet changes its own content (GL 5): the rows, the answer control, or the cancel question.
+  const [moreView, setMoreView] = useState<"rows" | "reply" | "cancel">("rows");
   const [answerOpen, setAnswerOpen] = useState(false);
   const [mapsError, setMapsError] = useState<string | null>(null);
   // One Do this again at a time: a quick double tap must not stack two plan screens. Back on this page lets it go again.
@@ -106,13 +117,7 @@ export default function EventPage() {
   const when = whenLines(current, zone);
   const where = placeLine(current, { role, response });
   const mapsTarget = where.maps ? mapsUrl(current) : null;
-  const chips = cardChips({
-    owner: host,
-    status: current.status,
-    response,
-    starts_at: current.starts_at,
-    ends_at: current.ends_at,
-  }).filter((text) => text === "Cancelled" || text === "Ended");
+  const stateText = stateChip(current);
   // UX3-D5/D6: Meeting details reach only the organizer and Going or Maybe guests (the database sends them
   // only to them); the Note to guests is pinned for everyone.
   const details = meetingDetailsView({
@@ -126,16 +131,18 @@ export default function EventPage() {
   const tag = hostLabel(role);
   const organizer = event.organizer?.trim();
   const counts = peopleCounts({ guests, invited, requests });
-  const answeredGuest = host || (response !== null && response !== "pending");
+  const answeredGuest = showsNames(role, response);
   const going = guests.filter((g) => g.response === "accepted").map((g) => g.name);
   const row = bottomRow({ role, state, response });
-  const hasMore = moreRows({ role, state, muted: event.muted, response }).length > 0;
+  const rows = moreRows({ role, state, muted: event.muted, response });
+  const hasMore = rows.length > 0;
+  const closeMore = () => setMoreOpen(false);
 
   // Do this again: the plan screen opens on a copy of this resbite, with no date yet.
   function again() {
     if (againOpen.current) return;
     againOpen.current = true;
-    setMoreOpen(false);
+    closeMore();
     router.push({ pathname: "/arrange", params: { again: current.id } });
   }
   function invite() {
@@ -154,24 +161,82 @@ export default function EventPage() {
     // /guests arrives with the people list (Task 6); until its route exists the typed route does not know it.
     router.push({ pathname: "/guests" as never, params: { plan: current.id } });
   }
-  const answerControl = (after?: () => void) =>
+  const answerControl = (after?: () => void | Promise<void>) =>
     attendee ? (
       <Segmented
         label={EVENT_COPY.yourAnswer}
         options={ANSWER_OPTIONS}
         value={answerKey(attendee.response)}
         onChange={(key) => {
-          void event.respond(responseFor(key, attendee.response));
-          after?.();
+          void (async () => {
+            await event.respond(responseFor(key, attendee.response));
+            await after?.();
+          })();
         }}
         disabled={busy || !fresh || pending !== null}
       />
     ) : null;
+  // An admin who can't go stops being one on the server; the page reloads and shows the guest view.
+  const afterMoreReply = async () => {
+    closeMore();
+    if (role === "admin" && response !== null) await event.load();
+  };
+  const question = cancelQuestion(current, zone);
+  function cancelResbite(stop: boolean) {
+    closeMore();
+    void event.cancel({ stopRepeating: stop });
+  }
+  const calendarTitle = device.calendarUpdate ? EVENT_COPY.updateCalendar : EVENT_COPY.addToCalendar;
+  const acting = event.acting !== null;
+  const moreRow = (row: (typeof rows)[number]) => {
+    switch (row) {
+      case "calendar":
+        return (
+          <MenuRow
+            key={row}
+            title={calendarTitle}
+            icon={CalendarPlus}
+            onPress={() => {
+              closeMore();
+              device.addToCalendar();
+            }}
+          />
+        );
+      case "mute":
+      case "unmute":
+        return (
+          <MenuRow
+            key={row}
+            title={row === "mute" ? EVENT_COPY.mute : EVENT_COPY.unmute}
+            icon={row === "mute" ? BellOff : Bell}
+            onPress={() => {
+              if (!acting) void event.mute(row === "mute");
+            }}
+          />
+        );
+      case "again":
+        return <MenuRow key={row} title={EVENT_COPY.doThisAgain} icon={CopyIcon} onPress={again} />;
+      case "changeReply":
+        return attendee ? (
+          <MenuRow key={row} title={EVENT_COPY.changeMyReply} icon={MessageCircle} onPress={() => setMoreView("reply")} />
+        ) : null;
+      case "cancel":
+        return (
+          <React.Fragment key={row}>
+            <MenuSeparator />
+            <MenuRow title={EVENT_COPY.cancelResbite} icon={CalendarX} destructive onPress={() => setMoreView("cancel")} />
+          </React.Fragment>
+        );
+    }
+  };
   const more: BarAction = {
     key: "more",
     title: EVENT_COPY.moreButton,
     icon: Ellipsis,
-    onPress: () => setMoreOpen(true),
+    onPress: () => {
+      setMoreView("rows");
+      setMoreOpen(true);
+    },
   };
 
   let bottom: React.ReactNode = null;
@@ -226,11 +291,9 @@ export default function EventPage() {
           </Reveal>
         )}
         <ErrorNote message={coverNotice(cover)} />
-        {chips.length > 0 && (
+        {!!stateText && (
           <View style={styles.chips}>
-            {chips.map((text) => (
-              <Chip key={text} text={text} tone={chipToneFor(text)} />
-            ))}
+            <Chip text={stateText} tone={chipToneFor(stateText)} />
           </View>
         )}
         {tag ? (
@@ -297,8 +360,33 @@ export default function EventPage() {
         )}
       </ContentPage>
       <NotificationAsk ask={device.ask} />
-      {/* Task 5 fills the More sheet: its rows come from moreRows(). */}
-      <GrabberSheet visible={moreOpen} label={EVENT_COPY.moreButton} onClose={() => setMoreOpen(false)} />
+      <GrabberSheet
+        visible={moreOpen}
+        title={moreView === "reply" ? EVENT_COPY.yourAnswer : moreView === "cancel" ? question.title : undefined}
+        label={EVENT_COPY.moreButton}
+        onClose={closeMore}
+      >
+        {moreView === "rows" && rows.map(moreRow)}
+        {moreView === "reply" && answerControl(afterMoreReply)}
+        {moreView === "cancel" && (
+          <>
+            {!!question.line && <Copy>{question.line}</Copy>}
+            {question.actions.map((action) => (
+              <Button
+                key={action.key}
+                large
+                icon={false}
+                title={action.title}
+                destructive={!action.stop}
+                secondary={action.stop}
+                errorInk={action.stop}
+                onPress={() => cancelResbite(action.stop)}
+              />
+            ))}
+            <Button large icon={false} secondary title={question.keep} onPress={() => setMoreView("rows")} />
+          </>
+        )}
+      </GrabberSheet>
       <GrabberSheet visible={answerOpen} title={EVENT_COPY.yourAnswer} onClose={() => setAnswerOpen(false)}>
         {answerControl(() => setAnswerOpen(false))}
       </GrabberSheet>

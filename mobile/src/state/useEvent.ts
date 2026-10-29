@@ -44,6 +44,8 @@ export type EventPage = {
   error: string | null;
   notice: string | null;
   pending: RsvpAttempt | null;
+  /** Which side action is running (mute or an admin change), so two taps cannot overlap. */
+  acting: "mute" | "admin" | null;
   load: () => Promise<void>;
   respond: (value: Response, retry?: RsvpAttempt) => Promise<void>;
   cancel: (opts?: { stopRepeating?: boolean }) => Promise<void>;
@@ -72,6 +74,8 @@ export function useEvent(planId: string | undefined): EventPage {
   const [busy, setBusy] = useState(!preview),
     [fresh, setFresh] = useState(false);
   const [pending, setPending] = useState<RsvpAttempt | null>(null);
+  const [acting, setActing] = useState<"mute" | "admin" | null>(null);
+  const actingRef = useRef(false);
   const [invited, setInvited] = useState<InvitedPerson[]>([]);
   const [requests, setRequests] = useState<HostRequest[]>([]);
   const [mutedSeries, setMutedSeries] = useState<Set<string>>(new Set());
@@ -87,6 +91,8 @@ export function useEvent(planId: string | undefined): EventPage {
     setError(null);
     setFresh(false);
     working.current = false;
+    actingRef.current = false;
+    setActing(null);
   }, [identity]);
   const read = useCallback(
     async (begin: () => Run) => {
@@ -241,8 +247,10 @@ export function useEvent(planId: string | undefined): EventPage {
   /** Mutes or unmutes this resbite's series on the server; the page shows the state the server answers with. */
   async function mute(next: boolean) {
     const target = plan;
-    if (!target || preview || !accountReady || working.current) return;
+    if (!target || preview || !accountReady || working.current || actingRef.current) return;
     const valid = () => currentIdentity.current === identity;
+    actingRef.current = true;
+    setActing("mute");
     setError(null);
     try {
       const now = await setPlanMute(target.id, next);
@@ -256,21 +264,35 @@ export function useEvent(planId: string | undefined): EventPage {
       syncDevice();
     } catch {
       if (valid()) setError("Could not change the mute. Check your connection and try again.");
+    } finally {
+      if (valid()) {
+        actingRef.current = false;
+        setActing(null);
+      }
     }
   }
   /** The host's: make a guest an admin, or take it back. The list is read again so it shows what the server holds. */
   async function changeAdmin(userId: string, appointing: boolean) {
     const target = plan;
-    if (!target || preview || !accountReady || working.current) return;
+    if (!target || preview || !accountReady || working.current || actingRef.current) return;
     const valid = () => currentIdentity.current === identity;
+    actingRef.current = true;
+    setActing("admin");
     setError(null);
+    let changed = false;
     try {
       await (appointing ? appointAdmin : removeAdmin)(target.id, userId);
+      changed = true;
     } catch {
       if (valid()) setError("Could not change admins. Check your connection and try again.");
-      return;
+    } finally {
+      if (valid()) {
+        actingRef.current = false;
+        setActing(null);
+      }
     }
-    if (valid()) await load();
+    // The reload runs once the action has settled, so it is never skipped as "working".
+    if (changed && valid()) await load();
   }
   return {
     plan,
@@ -287,6 +309,7 @@ export function useEvent(planId: string | undefined): EventPage {
     error,
     notice,
     pending,
+    acting,
     load,
     respond,
     cancel,
