@@ -291,6 +291,17 @@ const visible = (locator) => locator.filter({ visible: true });
 const heading = (page, name) => visible(page.getByRole("heading", { name, exact: true }));
 const button = (page, name) => visible(page.getByRole("button", { name, exact: true }));
 const text = (page, value) => visible(page.getByText(value, { exact: true }));
+/**
+ * The number input keeps most of its field's width: the country sits on its own row above it, so a narrow phone
+ * still has room to type (at least 70% of the .field around #number).
+ */
+async function numberFillsField(page, width) {
+  const [input, field] = await page.evaluate(() => {
+    const el = document.getElementById("number");
+    return [el.getBoundingClientRect().width, el.closest(".field").getBoundingClientRect().width];
+  });
+  assert.ok(field > 0 && input >= 0.7 * field, `the number input is ${input}px of its ${field}px field at ${width}px`);
+}
 /** Focus is on the step's heading. */
 const focused = async (page, name) =>
   expect.poll(() => page.evaluate(() => (/^H[1-6]$/.test(document.activeElement?.tagName) ? document.activeElement.textContent : null))).toBe(name);
@@ -318,6 +329,10 @@ try {
     const country = page.getByLabel("Country", { exact: true });
     await expect(country).toHaveValue("GB");
     await expect(country.locator("option:checked")).toHaveText("United Kingdom +44");
+    // The country's own visible label, above the number's field.
+    await expect(text(page, "Country")).toBeVisible();
+    assert.equal(await country.getAttribute("aria-label"), null, "the visible label names the select");
+    await numberFillsField(page, 390);
     assert.match((await number.getAttribute("aria-describedby")) ?? "", /^confirm-error$/, "no hint about numbers from outside the UK");
     await expect(page.getByText("Outside the UK?")).toHaveCount(0);
     await expect(tick).not.toBeChecked();
@@ -621,7 +636,7 @@ try {
     await f.done();
   }
 
-  // 5. The narrow screen: nothing scrolls sideways on the steps.
+  // 5. The narrow screen: nothing scrolls sideways on the steps, and the number keeps most of its field.
   {
     const f = await fixture({ width: 320 }),
       { page } = f;
@@ -629,11 +644,12 @@ try {
     await button(page, "Answer").click();
     await expect(heading(page, COPY.confirm)).toBeVisible();
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "no sideways scroll at 320");
+    await numberFillsField(page, 320);
     await f.done();
   }
 
   console.log(
-    "PASS: /i/<code> in headless Chrome: Answer → the 18+ tick → a wrong number (checked, no code) → the right number (Argentina chosen, then +44 typed: the dropdown follows the number; sent whole) → the name's label and helper → /otp → a wrong code → 000000 exchanged then verified with the stored code → name and Going → answer_phone_invitation → direction A (benefits, Get Resbite → app store, Not now); a reload restores the answer (refreshing an expired session first) and changing it to Can't go shows the softer screen; cancelled, happened and inactive pages have no form; Not you? Sign out (on the answer and done steps: a local logout with the token, the kept entry cleared, back to the invitation, even when the logout fails); the session is kept per code with the full verified number until the event starts, so another code's, another number's (same last two digits) and a started event's are never restored; the server still refuses a hand-edited other number; too many tries; a lost connection; focus on each step's heading; no 000000 anywhere; no request beyond the page's origin and the intercepted Supabase host.",
+    "PASS: /i/<code> in headless Chrome: Answer → the 18+ tick → a wrong number (checked, no code) → the right number (Argentina chosen, then +44 typed: the dropdown follows the number; sent whole) → the name's label and helper → /otp → a wrong code → 000000 exchanged then verified with the stored code → name and Going → answer_phone_invitation → direction A (benefits, Get Resbite → app store, Not now); a reload restores the answer (refreshing an expired session first) and changing it to Can't go shows the softer screen; cancelled, happened and inactive pages have no form; Not you? Sign out (on the answer and done steps: a local logout with the token, the kept entry cleared, back to the invitation, even when the logout fails); the session is kept per code with the full verified number until the event starts, so another code's, another number's (same last two digits) and a started event's are never restored; the server still refuses a hand-edited other number; too many tries; a lost connection; focus on each step's heading; no 000000 anywhere; no request beyond the page's origin and the intercepted Supabase host; the country on its own labelled row, so the number input keeps at least 70% of its field at 390 and 320px.",
   );
 } finally {
   await browser?.close();

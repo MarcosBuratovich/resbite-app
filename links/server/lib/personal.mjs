@@ -102,7 +102,7 @@ function documentHtml({ title, description, image, csp, banner, body, script }) 
 ${banner ? `    ${banner}\n` : ""}    <link rel="icon" href="/resbite-mark.png" />
     <link rel="stylesheet" href="/page.css" />
     <link rel="stylesheet" href="/personal.css" />
-${script ? '    <script src="/libphonenumber-min.js"></script>\n' : ""}  </head>
+${script ? '    <script defer src="/libphonenumber-min.js"></script>\n' : ""}  </head>
   <body>
 ${body}
 ${script ? '    <script type="module" src="/personal.js"></script>\n' : ""}  </body>

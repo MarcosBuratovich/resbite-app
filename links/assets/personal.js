@@ -23,6 +23,7 @@ import {
   openDoneScreen,
   readKept,
   regionForCallingCode,
+  regionOfLanguages,
   rpcError,
   sameNumber,
   screenForRequest,
@@ -106,14 +107,15 @@ function start(main, answerButton) {
     terms.append(url ? h("a", { href: url, target: "_blank", rel: "noopener noreferrer", text: part }) : part);
   }
   const ageHelper = h("p", { id: "age-helper", class: "helper", text: C.ageHelper });
-  // The country the number is read with: the invitation's calling code, or for the open link the browser's country.
+  // The country the number is read with: the invitation's calling code, or for the open link the browser's region
+  // (the first of its languages that names one).
   const lib = window.libphonenumber;
   const has = (region) => COUNTRIES.some((c) => c.region === region);
-  const browserRegion = (navigator.language || "").split("-")[1]?.toUpperCase();
+  const browserRegion = regionOfLanguages([...(navigator.languages ?? []), navigator.language]);
   const defaultRegion = open ? (has(browserRegion) ? browserRegion : "GB") : (lib && regionForCallingCode(data.country, lib)) || "GB";
   const countrySelect = h(
     "select",
-    { id: "country", "aria-label": C.countryLabel },
+    { id: "country" },
     COUNTRIES.map((c) => h("option", { value: c.region, text: C.countryOption(c.name, c.code) })),
   );
   countrySelect.value = defaultRegion;
@@ -141,7 +143,9 @@ function start(main, answerButton) {
     "form",
     { novalidate: true, onsubmit: onSend },
     h("div", { class: "agree" }, h("div", { class: "tick" }, tick, h("label", { for: "tick", text: C.tick })), terms, ageHelper),
-    h("div", { class: "field number" }, h("label", { for: "number", text: C.numberField }), countrySelect, number),
+    // The country on its own row, so the number keeps the field's width on a narrow phone.
+    h("div", { class: "field" }, h("label", { for: "country", text: C.countryLabel }), countrySelect),
+    h("div", { class: "field" }, h("label", { for: "number", text: C.numberField }), number),
     confirmError,
     sendButton,
   );
@@ -173,7 +177,7 @@ function start(main, answerButton) {
   // Not you? On a shared computer the next person can end the session kept here.
   const signOutButton = () => h("button", { type: "button", class: "link signout", text: C.signOut, onclick: onSignOut });
   const nameInput = h("input", { id: "name", autocomplete: "name", maxlength: "80", "aria-describedby": "name-helper answer-error" });
-  const nameHelper = h("p", { id: "name-helper", class: "helper", text: C.nameHelper(host) });
+  const nameHelper = h("p", { id: "name-helper", class: "helper under-field", text: C.nameHelper(host) });
   const nameField = h("div", {}, h("div", { class: "field" }, h("label", { for: "name", text: C.nameField }), nameInput), nameHelper);
   const labels = { accepted: C.going, maybe: C.maybe, declined: C.cantGo };
   const radios = RESPONSES.map((value) =>
@@ -403,6 +407,8 @@ function start(main, answerButton) {
 
   async function onSend(event) {
     event.preventDefault();
+    // Without the phone library (its file didn't load) no number can be read: "send" then gives the connection error
+    // (C.connection), not "Enter a valid mobile number.", and nothing is sent.
     if (!begin({ type: "send", input: number.value, region: countrySelect.value, lib })) return;
     const phone = state.phone;
     // The open link takes any number: the code goes straight to it.

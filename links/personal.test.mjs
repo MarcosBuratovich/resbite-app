@@ -168,8 +168,9 @@ test("the image route serves a personal invitation's picture from personal_invit
   }
 });
 
-test("the library bundle's script tag comes before the module tag, on the personal and the open page", () => {
-  const tag = '<script src="/libphonenumber-min.js"></script>';
+test("the library bundle's script tag is deferred and comes before the module tag, on the personal and the open page", () => {
+  // A deferred classic script runs before a later module script (both wait for the parse, in document order).
+  const tag = '<script defer src="/libphonenumber-min.js"></script>';
   for (const html of [renderPersonalPage(open, options), renderOpenLinkPage(open, options)]) {
     assert.ok(html.includes(tag));
     assert.ok(html.indexOf(tag) < html.indexOf('<script type="module" src="/personal.js"></script>'));

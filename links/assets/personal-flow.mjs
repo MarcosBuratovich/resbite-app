@@ -119,6 +119,22 @@ export function phoneSendForm(input) {
 // the main country is chosen here: the preferred region when it has the code, else the first of getCountries().
 const MAIN_REGIONS = ["US", "GB", "RU", "AU", "IT", "FI", "NO", "MA", "GP", "CW"];
 
+/**
+ * The browser's region, from its language tags in order (navigator.languages, then navigator.language): the first
+ * subtag after the language that is exactly two letters, as the app's deviceRegion reads the device locale. "en-GB"
+ * gives GB and "zh-Hans-CN" gives CN; "es-419" and "en" give nothing, so the next tag is read; null when none names one.
+ */
+export function regionOfLanguages(tags) {
+  for (const tag of tags ?? []) {
+    const region = String(tag ?? "")
+      .split("-")
+      .slice(1)
+      .find((part) => /^[A-Za-z]{2}$/.test(part));
+    if (region) return region.toUpperCase();
+  }
+  return null;
+}
+
 /** The main country of a calling code ("1" gives US), or null for an unknown code. */
 export function regionForCallingCode(code, lib) {
   const has = (region) => {
@@ -242,6 +258,9 @@ export function next(state, event) {
     case "send": {
       if (!at("confirm") || s.busy) return s;
       if (!s.ticked) return { ...s, error: "ageHelper" };
+      // No phone library (its file didn't load): no number can be read, so the page asks to check the connection
+      // rather than calling every number invalid.
+      if (!event.lib) return { ...s, error: "connection", phone: null };
       const phone = composeNumber(event.input, event.region, event.lib);
       if (!phone) return { ...s, error: "invalidNumber", phone: null };
       return { ...s, busy: true, error: null, phone, number: formatNumber(phone, event.lib) };

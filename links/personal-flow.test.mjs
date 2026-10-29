@@ -9,6 +9,7 @@ import {
   phoneKey,
   phoneSendForm,
   regionForCallingCode,
+  regionOfLanguages,
   maskNumber,
   formatCountdown,
   PAGE_COPY,
@@ -80,6 +81,24 @@ test("send stores the send form and its international spelling", () => {
   assert.equal(s.phone, "+5491112341234");
   assert.equal(s.number, "+54 9 11 1234 1234");
   assert.equal(s.busy, true);
+});
+
+test("send without the phone library is the connection error, not an invalid number, and sends nothing", () => {
+  const confirm = { ...initialState(), step: "confirm", ticked: true };
+  const s = next(confirm, { type: "send", input: "07700 900834", region: "GB", lib: undefined });
+  assert.deepEqual([s.busy, s.error, s.phone], [false, "connection", null]);
+  assert.equal(errorText(s.error, "Marcos"), "Check your connection and try again.");
+  // The tick still comes first.
+  assert.equal(next({ ...confirm, ticked: false }, { type: "send", input: "07700 900834", region: "GB" }).error, "ageHelper");
+});
+
+test("regionOfLanguages: the first two-letter subtag after the language, tag by tag", () => {
+  const rows = [
+    [["en-GB"], "GB"], [["es-AR"], "AR"], [["zh-Hans-CN"], "CN"], [["es-419"], null], [["en"], null],
+    [["en", "es-AR"], "AR"], [["es-419", "pt-br"], "BR"], [["de-DE", "en-US"], "DE"], [[], null], [undefined, null],
+    [[undefined, "fr-FR"], "FR"],
+  ];
+  for (const [tags, region] of rows) assert.equal(regionOfLanguages(tags), region, JSON.stringify(tags));
 });
 
 test("regionForCallingCode", () => {

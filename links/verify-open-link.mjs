@@ -743,20 +743,24 @@ try {
     await f.done();
   }
 
-  // 7. The dropdown starts at the browser's country: es-AR shows Argentina +54.
-  {
-    const f = await fixture({ locale: "es-AR" }),
+  // 7. The dropdown starts at the browser's region: es-AR shows Argentina +54; "en" names no region, so the page
+  // falls back to the United Kingdom.
+  for (const [locale, region, label] of [
+    ["es-AR", "AR", "Argentina +54"],
+    ["en", "GB", "United Kingdom +44"],
+  ]) {
+    const f = await fixture({ locale }),
       { page } = f;
     await page.goto(`${ORIGIN}/r/${CODE}`);
     await button(page, "Answer").click();
     const country = page.getByLabel("Country", { exact: true });
-    await expect(country).toHaveValue("AR");
-    await expect(country.locator("option:checked")).toHaveText("Argentina +54");
+    await expect(country).toHaveValue(region);
+    await expect(country.locator("option:checked")).toHaveText(label);
     await f.done();
   }
 
   console.log(
-    "PASS: /r/<code> in headless Chrome, open mode: Answer → the 18+ tick → a +1 number sent as typed and a UK number with the page's 44 (no number check; a country dropdown that starts at the UK, or at the browser's country: es-AR shows Argentina +54) → 000000 exchanged then verified → the name and Going → request_to_join with exact bodies → Waiting for Marcos with the get-the-app block; on another browser, right after the code, my_join_request shows a waiting answer (no request_to_join), Not added or already in; a reload restores the waiting answer through my_join_request and changing it sends request_to_join again with no name (one request, the latest answer), as does a request made in the app (pending); Can't go while waiting is the personal page's Can't go screen, on the reply and on a reload; I have Resbite: open the app stays on the first screen; declined shows You weren't added with only Plan your own; a guest or the owner sees You're on this resbite with Open Resbite and Get Resbite; a decline or an approval landing mid-change shows the same screens; a turned-off link refuses the answer; Not you? Sign out ends the kept session; closed links keep GI1's pages and the strict CSP; no 000000 anywhere; no request beyond the page's origin and the intercepted Supabase host; nothing scrolls sideways at 320.",
+    "PASS: /r/<code> in headless Chrome, open mode: Answer → the 18+ tick → a +1 number sent as typed and a UK number with the page's 44 (no number check; a country dropdown that starts at the UK, or at the browser's region: es-AR shows Argentina +54, and en, which names none, the United Kingdom +44) → 000000 exchanged then verified → the name and Going → request_to_join with exact bodies → Waiting for Marcos with the get-the-app block; on another browser, right after the code, my_join_request shows a waiting answer (no request_to_join), Not added or already in; a reload restores the waiting answer through my_join_request and changing it sends request_to_join again with no name (one request, the latest answer), as does a request made in the app (pending); Can't go while waiting is the personal page's Can't go screen, on the reply and on a reload; I have Resbite: open the app stays on the first screen; declined shows You weren't added with only Plan your own; a guest or the owner sees You're on this resbite with Open Resbite and Get Resbite; a decline or an approval landing mid-change shows the same screens; a turned-off link refuses the answer; Not you? Sign out ends the kept session; closed links keep GI1's pages and the strict CSP; no 000000 anywhere; no request beyond the page's origin and the intercepted Supabase host; nothing scrolls sideways at 320.",
   );
 } finally {
   await browser?.close();
