@@ -100,12 +100,12 @@ const legacyGateway = (
   read,
   create: async (write) => onCreate(write.details),
   update: async () => {},
-  cancel: async () => {},
+  cancel: async () => 4,
 });
 
 test("a landed pre-custom-events pending create is acknowledged, not a conflict", async () => {
   let creates = 0;
-  // Kept by a build older than UX3 as well, so it has no end time.
+  // Kept by a build older than UX3 as well; the fixture carries an end so it is a complete v4 write.
   const details = { ...legacyDetails, ...completeEventFields({}, legacyEventFields(idea)) } as PlanDetails;
   await reconcilePlan(
     legacyGateway(
@@ -130,7 +130,7 @@ test("a landed pre-custom-events pending create is acknowledged, not a conflict"
 
 test("a pre-custom-events pending create that never landed is retried with an empty description", async () => {
   const sent: unknown[] = [];
-  // Kept by a build older than UX3 as well, so it has no end time.
+  // Kept by a build older than UX3 as well; the fixture carries an end so it is a complete v4 write.
   const details = { ...legacyDetails, ...completeEventFields({}, legacyEventFields(idea)) } as PlanDetails;
   await reconcilePlan(
     legacyGateway(async () => null, (d) => sent.push(d)),

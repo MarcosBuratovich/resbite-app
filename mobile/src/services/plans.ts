@@ -84,7 +84,7 @@ export const planGateway: PlanGateway = {
     if (error) throw error;
   },
   async cancel({ id, version, stopRepeating }) {
-    const { error } = await withDeadline((signal) =>
+    const { data, error } = await withDeadline((signal) =>
       supabase
         .rpc("change_plan_v4", {
           p_plan: id,
@@ -106,6 +106,7 @@ export const planGateway: PlanGateway = {
         .abortSignal(signal),
     );
     if (error) throw error;
+    return data as number;
   },
 };
 

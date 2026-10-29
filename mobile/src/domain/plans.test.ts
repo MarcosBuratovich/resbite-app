@@ -48,7 +48,7 @@ const gateway = (overrides: Partial<PlanGateway>): PlanGateway => ({
   read: async () => plan,
   create: async () => {},
   update: async () => {},
-  cancel: async () => {},
+  cancel: async () => 4,
   ...overrides,
 });
 
@@ -204,7 +204,10 @@ const recorded = () => {
   const g = gateway({
     create: async (w) => void calls.push({ method: "create", arg: w }),
     update: async (w) => void calls.push({ method: "update", arg: w }),
-    cancel: async (c) => void calls.push({ method: "cancel", arg: c }),
+    cancel: async (c) => {
+      calls.push({ method: "cancel", arg: c });
+      return c.version + 1;
+    },
   });
   return { calls, g };
 };
@@ -227,8 +230,8 @@ test("a To be decided create reaches the gateway with its label, the flag and th
 
 test("cancelling passes stopRepeating through to the gateway", async () => {
   const { calls, g } = recorded();
-  await cancelPlan(g, { id: plan.id, version: 3, stopRepeating: true });
-  await cancelPlan(g, { id: plan.id, version: 3 });
+  assert.equal(await cancelPlan(g, { id: plan.id, version: 3, stopRepeating: true }), 4);
+  assert.equal(await cancelPlan(g, { id: plan.id, version: 3 }), 4);
   assert.deepEqual(calls, [
     { method: "cancel", arg: { id: plan.id, version: 3, stopRepeating: true } },
     { method: "cancel", arg: { id: plan.id, version: 3 } },
@@ -255,4 +258,23 @@ test("a missing end time maps to Add an end time; other 22023 errors keep their 
     writePlan(failing("Invalid end time"), write),
     (e: unknown) => e instanceof PlanSaveError && /no longer available/.test(e.message),
   );
+});
+
+test("a lost reply that the read shows cancelled returns the cancelled version", async () => {
+  const version = await cancelPlan(
+    gateway({
+      cancel: async () => {
+        throw new Error("Network lost");
+      },
+      read: async () => ({ ...plan, status: "cancelled", version: 9 }),
+    }),
+    plan,
+  );
+  assert.equal(version, 9);
+});
+
+test("the To be decided flag and the repeat rule are part of the saved details", () => {
+  assert.equal(samePlanDetails(plan, { ...details, repeat_weeks: 1 }), false);
+  assert.equal(samePlanDetails({ ...plan, repeat_weeks: 2 }, { ...details, repeat_weeks: 2 }), true);
+  assert.equal(samePlanDetails(plan, { ...details, place_tbd: true }), false);
 });

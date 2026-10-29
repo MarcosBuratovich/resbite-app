@@ -135,7 +135,7 @@ test("a lost edit response is confirmed by matching saved details and version", 
     create: async () => {
       throw new Error("must not create");
     },
-    cancel: async () => {},
+    cancel: async () => 4,
     update: async () => {
       updates++;
       throw { code: "40001" };
@@ -152,7 +152,7 @@ test("conflicting or cancelled plans cannot be silently overwritten or acknowled
   ]) {
     const gateway: PlanGateway = {
       create: async () => {},
-      cancel: async () => {},
+      cancel: async () => 4,
       update: async () => {
         throw { code: "40001" };
       },
@@ -178,7 +178,7 @@ test("unknown save failures remain uncertain; denied access is a definite failur
           create: async () => {
             throw error;
           },
-          cancel: async () => {},
+          cancel: async () => 4,
           update: async () => {},
           read: async () => null,
         },

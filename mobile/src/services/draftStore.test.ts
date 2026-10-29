@@ -146,7 +146,10 @@ test("restart recovery preserves conflicts and cannot write when reconciliation 
         read: async () => ({ ...plan, version: 3, note: "Changed" }),
         create: mutate,
         update: mutate,
-        cancel: mutate,
+        cancel: async () => {
+          writes++;
+          return 0;
+        },
       },
       write,
     ),
@@ -160,7 +163,10 @@ test("restart recovery preserves conflicts and cannot write when reconciliation 
         },
         create: mutate,
         update: mutate,
-        cancel: mutate,
+        cancel: async () => {
+          writes++;
+          return 0;
+        },
       },
       write,
     ),

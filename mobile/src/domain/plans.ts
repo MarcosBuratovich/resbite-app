@@ -108,6 +108,8 @@ export function samePlanDetails(plan: Plan, details: PlanDetails): boolean {
     plan.time_zone === details.time_zone &&
     plan.place_label.trim() === details.place_label.trim() &&
     plan.note === details.note &&
+    plan.place_tbd === details.place_tbd &&
+    plan.repeat_weeks === details.repeat_weeks &&
     // A save kept before GI1 has no area and leaves the stored one unchanged, so any area matches it.
     (details.area === undefined || (plan.area ?? "").trim() === details.area.trim())
   );
@@ -125,7 +127,7 @@ export type PlanGateway = {
   read: (id: string) => Promise<Plan | null>;
   create: (write: PlanWrite) => Promise<void>;
   update: (write: PlanWrite) => Promise<void>;
-  cancel: (plan: { id: string; version: number; stopRepeating?: boolean }) => Promise<void>;
+  cancel: (plan: { id: string; version: number; stopRepeating?: boolean }) => Promise<number>;
 };
 
 export class PlanSaveError extends Error {
@@ -247,11 +249,10 @@ export async function reconcilePlan(
 export async function cancelPlan(
   gateway: PlanGateway,
   plan: { id: string; version: number; stopRepeating?: boolean },
-): Promise<void> {
+): Promise<number> {
   let failure: unknown;
   try {
-    await gateway.cancel(plan);
-    return;
+    return await gateway.cancel(plan);
   } catch (error) {
     failure = error;
   }
@@ -264,7 +265,7 @@ export async function cancelPlan(
       true,
     );
   }
-  if (latest?.status === "cancelled") return;
+  if (latest?.status === "cancelled") return latest.version;
   const code = errorCode(failure);
   if (code === "42501" || code === "PGRST301")
     throw new PlanSaveError("Your account can’t cancel this plan.", false, latest);
