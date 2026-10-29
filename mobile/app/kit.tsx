@@ -232,7 +232,13 @@ function Gallery() {
       <InfoSheet visible={sheet} title="Cover photos" onClose={() => setSheet(false)}>
         <Copy>Only add photos you’re comfortable sharing with the people you invite.</Copy>
       </InfoSheet>
-      <GrabberSheet visible={grabber} title="When" icon={CalendarDays} onClose={() => setGrabber(false)}>
+      <GrabberSheet
+        visible={grabber}
+        title="When"
+        icon={CalendarDays}
+        onClose={() => setGrabber(false)}
+        footer={<Button title="Done" onPress={() => setGrabber(false)} />}
+      >
         <Copy>Sheet content sits here.</Copy>
       </GrabberSheet>
     </SafeAreaView>

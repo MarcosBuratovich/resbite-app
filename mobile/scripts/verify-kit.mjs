@@ -142,6 +142,22 @@ try {
     await expect(page.getByRole("heading", { name: "When", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Close", exact: true })).toHaveCount(0);
     await expect(page.getByText("Sheet content sits here.", { exact: true })).toBeVisible();
+    // The footer's Done is fixed under the scroll view, not inside it (CR-B2).
+    await expect(page.getByRole("button", { name: "Done", exact: true })).toBeVisible();
+    assert.equal(
+      await page.evaluate(() =>
+        document.querySelector('[data-testid="sheet-scroll"]').contains(document.querySelector('[data-testid="sheet-footer"]')),
+      ),
+      false,
+      "The sheet's footer is outside its scroll view",
+    );
+    assert.equal(
+      await page.evaluate(() => document.querySelector('[data-testid="sheet-footer"]').contains(
+        [...document.querySelectorAll('[role="button"]')].find((b) => b.textContent === "Done"),
+      )),
+      true,
+      "Done is in the sheet's footer",
+    );
     await page.getByRole("button", { name: "Close sheet", exact: true }).click();
     await expect(page.getByRole("heading", { name: "When", exact: true })).toHaveCount(0);
     assert.equal(await fitsWidth(page, '[data-testid="kit"]'), true, `Kit fits ${width} px`);

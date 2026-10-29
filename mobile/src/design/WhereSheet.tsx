@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet } from "react-native";
 import { Compass, MapPin, TextAlignStart } from "lucide-react-native";
 import { Button, Copy } from "./ui";
 import { FieldCard } from "./kit";
 import { GrabberSheet } from "./GrabberSheet";
 import { TickRow } from "./TickRow";
-import { colors as c, fonts, space } from "./tokens";
+import { colors as c, fonts } from "./tokens";
 import { AREA_MAX, MEETING_DETAILS_MAX } from "../domain/eventDetails";
 import { PLAN_COPY } from "../domain/planCopy";
 import type { PlanForm } from "../domain/planForm";
@@ -46,7 +46,21 @@ export function WhereSheet({
   };
 
   return (
-    <GrabberSheet visible={visible} title={PLAN_COPY.where} icon={MapPin} onClose={onClose}>
+    <GrabberSheet
+      visible={visible}
+      title={PLAN_COPY.where}
+      icon={MapPin}
+      onClose={onClose}
+      footer={
+        <Button
+          large
+          icon={false}
+          title={PLAN_COPY.done}
+          disabled={!ready}
+          onPress={() => onDone({ ...draft, place: draft.placeTbd ? "" : draft.place.trim() })}
+        />
+      }
+    >
       <FieldCard
         label={PLAN_COPY.where}
         icon={MapPin}
@@ -101,15 +115,6 @@ export function WhereSheet({
         onChangeText={(meetingDetails) => setDraft((d) => ({ ...d, meetingDetails }))}
         maxLength={MEETING_DETAILS_MAX}
       />
-      <View style={styles.done}>
-        <Button
-          large
-          icon={false}
-          title={PLAN_COPY.done}
-          disabled={!ready}
-          onPress={() => onDone({ ...draft, place: draft.placeTbd ? "" : draft.place.trim() })}
-        />
-      </View>
     </GrabberSheet>
   );
 }
@@ -117,5 +122,4 @@ export function WhereSheet({
 const styles = StyleSheet.create({
   section: { fontFamily: fonts.medium, fontSize: 13, color: c.muted, marginTop: 4 },
   hint: { fontSize: 13, color: c.muted },
-  done: { marginTop: space.m },
 });

@@ -19,6 +19,7 @@ export function GrabberSheet({
   icon: Icon,
   onClose,
   label,
+  footer,
   children,
 }: {
   visible: boolean;
@@ -27,6 +28,8 @@ export function GrabberSheet({
   onClose: () => void;
   /** The sheet's spoken name when it differs from the title. */
   label?: string;
+  /** Fixed under the scrolling content, above the home indicator (a sheet's Done); it never scrolls away. */
+  footer?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   const reduce = useReduceMotion();
@@ -76,9 +79,14 @@ export function GrabberSheet({
               </Text>
             </View>
           </View>
-          <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+          <ScrollView testID="sheet-scroll" contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
             {children}
           </ScrollView>
+          {footer ? (
+            <View testID="sheet-footer" style={styles.footer}>
+              {footer}
+            </View>
+          ) : null}
         </SafeAreaView>
       </KeyboardAvoidingView>
     </Modal>
@@ -100,5 +108,6 @@ const styles = StyleSheet.create({
   heading: { flexDirection: "row", alignItems: "center", gap: 10 },
   title: { flex: 1, fontFamily: fonts.display, fontSize: 24, color: c.ink },
   titleLine: { lineHeight: 30 },
+  footer: { paddingHorizontal: space.xl, paddingTop: space.s, paddingBottom: space.m },
   body: { paddingHorizontal: space.xl, paddingTop: space.m, paddingBottom: 30, gap: space.m },
 });

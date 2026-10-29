@@ -5,7 +5,7 @@ import { Button, Copy } from "./ui";
 import { Chip, Segmented } from "./kit";
 import { GrabberSheet } from "./GrabberSheet";
 import { PickerCard } from "./SchedulePicker";
-import { colors as c, fonts, space } from "./tokens";
+import { colors as c, fonts } from "./tokens";
 import { PLAN_COPY } from "../domain/planCopy";
 import { EMPTY_FORM, applyDuration, moveStart, type PlanForm } from "../domain/planForm";
 import { addDays, localDay } from "../domain/schedule";
@@ -63,7 +63,13 @@ export function WhenSheet({
   };
 
   return (
-    <GrabberSheet visible={visible} title={PLAN_COPY.when} icon={Calendar} onClose={onClose}>
+    <GrabberSheet
+      visible={visible}
+      title={PLAN_COPY.when}
+      icon={Calendar}
+      onClose={onClose}
+      footer={<Button large icon={false} title={PLAN_COPY.done} disabled={!complete} onPress={() => onDone(draft)} />}
+    >
       <PickerCard
         kind="date"
         label={PLAN_COPY.date}
@@ -114,9 +120,6 @@ export function WhenSheet({
         value={keyOf(draft.repeatWeeks)}
         onChange={(key) => setDraft((d) => ({ ...d, repeatWeeks: key === "1" ? 1 : key === "2" ? 2 : null }))}
       />
-      <View style={styles.done}>
-        <Button large icon={false} title={PLAN_COPY.done} disabled={!complete} onPress={() => onDone(draft)} />
-      </View>
     </GrabberSheet>
   );
 }
@@ -125,5 +128,4 @@ const styles = StyleSheet.create({
   section: { fontFamily: fonts.medium, fontSize: 13, color: c.muted, marginTop: 4 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   note: { fontSize: 13, color: c.muted },
-  done: { marginTop: space.m },
 });
