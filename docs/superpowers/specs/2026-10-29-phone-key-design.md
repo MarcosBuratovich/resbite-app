@@ -126,11 +126,10 @@ One migration, `supabase/migrations/20261030130000_phone_key.sql`, with its roll
 
 ## Rollout (each step needs the owner's approval)
 
-1. The migration, approved by file name and sha256, applied with `supabase db query --linked -f` and `migration repair --status applied`, with before/after snapshots as the earlier runbooks.
-2. The link site deploy (Vercel `resbite-link`).
-3. `fold-phone-account` redeploy.
-4. The TestFlight build.
-5. In the same sitting as step 4, the owner-run `supabase/ops/rewrite-older-argentine-accounts.sql` (approved by sha256 with the migration), then the counts again.
+1. The migration, approved by file name and sha256, applied with `supabase db query --linked -f` and `migration repair --status applied`, with before/after snapshots as the earlier runbooks; any time after approval (the current build keeps working against it).
+2. `fold-phone-account` redeploy.
+3. In one sitting: the link site deploy (Vercel `resbite-link`), then the TestFlight build, then the owner-run `supabase/ops/rewrite-older-argentine-accounts.sql` (approved by sha256 with the migration).
+4. The counts again, after every run of the script.
 
 The migration's version `20261030130000` sits before the unmerged `20261031120000_creating_a_resbite.sql`. That branch redefines `invite_contacts`; when it is rebased on `main`, its body must start from this migration's version of the function, and its hosted rehearsal then replays with this migration applied first.
 
