@@ -16,7 +16,7 @@ export async function withDeadline<T>(
 
 // UX3: Meeting details come from their own table, embedded only for people allowed to read them.
 const planColumns =
-  "id,activity_id,title,description,categories,starts_at,ends_at,time_zone,place_label,status,version,owner_id,has_meeting_details,guest_note,guest_note_at,area,plan_meeting_details(note)";
+  "id,activity_id,title,description,categories,starts_at,ends_at,time_zone,place_label,status,version,owner_id,has_meeting_details,guest_note,guest_note_at,area,place_tbd,repeat_weeks,series_id,repeats_from,plan_meeting_details(note)";
 
 /** The event page's and editor's plan read: every column plus the Meeting details this person may read. */
 export const planWithDetails = "*,plan_meeting_details(note)";

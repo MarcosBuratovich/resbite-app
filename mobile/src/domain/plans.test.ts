@@ -278,3 +278,11 @@ test("the To be decided flag and the repeat rule are part of the saved details",
   assert.equal(samePlanDetails({ ...plan, repeat_weeks: 2 }, { ...details, repeat_weeks: 2 }), true);
   assert.equal(samePlanDetails(plan, { ...details, place_tbd: true }), false);
 });
+
+test("the plan read selects the flag, the repeat rule and the series columns", async () => {
+  const { readFileSync } = await import("node:fs");
+  const source = readFileSync(new URL("../services/plans.ts", import.meta.url), "utf8");
+  const columns = /const planColumns =\s*"([^"]+)"/.exec(source)?.[1].split(",") ?? [];
+  for (const name of ["place_tbd", "repeat_weeks", "series_id", "repeats_from"])
+    assert.ok(columns.includes(name), `planColumns lacks ${name}`);
+});
