@@ -4,6 +4,9 @@ import { ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { Copy, ErrorNote, Title, s } from "../src/design/ui";
+import { fonts } from "../src/design/tokens";
+import { EventLinkCard } from "../src/design/EventLinkCard";
+import { EVENT_COPY } from "../src/domain/eventPage";
 import { IconButton, InfoSheet } from "../src/design/kit";
 import { PickStep, SendStep } from "../src/design/ContactPicker";
 import { PreviewNotice } from "../src/design/Chrome";
@@ -21,7 +24,7 @@ const unavailable = "Only the organizer can invite people to an upcoming, active
 
 /**
  * "Invite people" (/invitations?plan=<id>): the organizer picks phone contacts or adds numbers to invite, then
- * sends each person's own link. The event link (Share, Copy and Turn off) lives on the event page.
+ * sends each person's own link. The event link (Share, Copy and Turn off) follows the contacts.
  */
 export default function Invitations() {
   const { plan: planId } = useLocalSearchParams<{ plan: string }>();
@@ -106,6 +109,14 @@ export default function Invitations() {
             onDone={() => (router.canGoBack() ? router.back() : router.replace("/plans"))}
           />
         )}
+        {plan && !preview && (
+          <View style={styles.link}>
+            <Copy accessibilityRole="header" style={styles.linkHeading}>
+              {EVENT_COPY.shareLink}
+            </Copy>
+            <EventLinkCard plan={plan} />
+          </View>
+        )}
         <ErrorNote message={error} />
         {loading && !plan && <Copy accessibilityLiveRegion="polite">Loading this resbite…</Copy>}
         {!loading && !preview && !plan && (
@@ -124,5 +135,7 @@ export default function Invitations() {
 }
 
 const styles = StyleSheet.create({
+  link: { gap: 12, marginTop: 8 },
+  linkHeading: { fontFamily: fonts.display, fontSize: 22 },
   top: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
 });

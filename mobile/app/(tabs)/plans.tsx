@@ -7,7 +7,7 @@ import { artwork } from "../../src/services/catalogue";
 import { eventPicture } from "../../src/domain/events";
 import { supabase } from "../../src/services/supabase";
 import { useApp, LocalPlan } from "../../src/state/AppState";
-import { Copy, Title, ErrorNote, Reveal, s, useLargeText } from "../../src/design/ui";
+import { Copy, Title, ErrorNote, Reveal, TextAction, s, useLargeText } from "../../src/design/ui";
 import { Chip, chipToneFor, CoverCard, Fab, IconButton, Segmented, Tile } from "../../src/design/kit";
 import { fonts } from "../../src/design/tokens";
 import { PreviewNotice } from "../../src/design/Chrome";
@@ -22,6 +22,7 @@ import {
   invitationCards,
   withoutInvitations,
 } from "../../src/domain/eventView";
+import { EVENT_COPY } from "../../src/domain/eventPage";
 import { INVITE_COPY } from "../../src/domain/inviteCopy";
 import { RequestCard } from "../../src/design/GuestSteps";
 import { NotificationAsk } from "../../src/design/NotificationAsk";
@@ -281,7 +282,7 @@ export default function Plans() {
             {invitations.map((p) => {
               const host = hosts[p.owner_id ?? ""]?.trim() || INVITE_COPY.hostFallback;
               const place = eventPlace({ owner: false, response: "pending", place: p.place_label, area: p.area }).line;
-              const chips = cardChips({ owner: false, status: p.status, response: "pending" });
+              const chips = cardChips({ owner: false, status: p.status, response: "pending", starts_at: p.starts_at, ends_at: p.ends_at }, now);
               return (
                 <View key={p.id} style={{ gap: 8 }}>
                   <CoverCard
@@ -368,25 +369,33 @@ export default function Plans() {
             const owner = preview || p.owner_id === session?.user.id;
             const mine = attendees.find((a) => a.plan_id === p.id && a.user_id === session?.user.id);
             const going = attendees.filter((a) => a.plan_id === p.id && a.response === "accepted").length;
-            const chips = cardChips({ owner, status: p.status, response: mine?.response ?? "pending", going });
+            const chips = cardChips(
+              { owner, status: p.status, response: mine?.response ?? "pending", going, starts_at: p.starts_at, ends_at: p.ends_at },
+              now,
+            );
             // GI1: as on the event page, an invitee who hasn’t answered sees the area (or no place), never the place.
             const place = eventPlace({ owner, response: mine?.response ?? null, place: p.place_label, area: p.area }).line;
+            const over = owner && p.status === "active" && chips[0] === EVENT_COPY.ended;
             return (
-              <CoverCard
-                key={p.id}
-                picture={eventPicture(p)}
-                title={p.title}
-                startsAt={p.starts_at}
-                endsAt={p.ends_at}
-                place={place}
-                dimmed={p.status === "cancelled"}
-                chips={chips.map((text) => ({ key: text, text, tone: chipToneFor(text) }))}
-                label={cardLabel(
-                  { title: p.title, startsAt: p.starts_at, endsAt: p.ends_at, place: place ?? "", chips, photo: p.cover_description },
-                  new Date(now),
-                )}
-                onPress={() => open(p)}
-              />
+              <View key={p.id} style={{ gap: 4 }}>
+                <CoverCard
+                  picture={eventPicture(p)}
+                  title={p.title}
+                  startsAt={p.starts_at}
+                  endsAt={p.ends_at}
+                  place={place}
+                  dimmed={p.status === "cancelled"}
+                  chips={chips.map((text) => ({ key: text, text, tone: chipToneFor(text) }))}
+                  label={cardLabel(
+                    { title: p.title, startsAt: p.starts_at, endsAt: p.ends_at, place: place ?? "", chips, photo: p.cover_description },
+                    new Date(now),
+                  )}
+                  onPress={() => open(p)}
+                />
+                {over ? (
+                  <TextAction title={EVENT_COPY.doThisAgain} onPress={() => router.push({ pathname: "/arrange", params: { again: p.id } })} />
+                ) : null}
+              </View>
             );
           })
         )}

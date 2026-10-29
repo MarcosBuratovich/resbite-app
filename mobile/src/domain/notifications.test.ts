@@ -173,7 +173,7 @@ test("Updates: every action is a labelled button", () => {
   });
 });
 
-test("the About sheet lists the six events in the spec’s words", () => {
+test("the About sheet lists the eight events in the spec’s words", () => {
   assert.deepEqual(NOTIFICATION_EVENTS, [
     "A new invitation, to the person invited.",
     "An answer, to the host: “Sam is going.”",
@@ -181,6 +181,8 @@ test("the About sheet lists the six events in the spec’s words", () => {
     "Approved, to the person who asked. Declined isn’t sent.",
     "A change of time or place, and a cancellation, to the people invited.",
     "A Note to guests.",
+    "Being made an admin, to that person.",
+    "A repeating resbite’s next date, to everyone invited.",
   ]);
   assert.equal(notificationEventsLead(true), "Resbite sends updates for:");
   assert.equal(notificationEventsLead(false), "Once updates are on, Resbite sends them for:");

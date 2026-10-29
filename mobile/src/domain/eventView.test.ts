@@ -311,4 +311,8 @@ test("an event stays in Upcoming until its end, and a card past its end says End
   assert.deepEqual(cardChips({ ...over, owner: true, going: 2 }, now), ["Ended", "Hosting", "2 going"]);
   assert.deepEqual(cardChips({ ...running, owner: true, going: 2 }, now), ["Hosting", "2 going"]);
   assert.deepEqual(cardChips({ ...over, owner: true, status: "cancelled" }, now), ["Cancelled", "Hosting"]);
+  // The end itself is the boundary: at the end it is over.
+  const atEnd = { id: "atEnd", status: "active", starts_at: "2026-10-07T10:00:00Z", ends_at: "2026-10-07T12:00:00Z" };
+  assert.deepEqual(groupPlans([atEnd], now).past.map((p) => p.id), ["atEnd"]);
+  assert.deepEqual(cardChips({ ...atEnd, owner: true }, now), ["Ended", "Hosting"]);
 });

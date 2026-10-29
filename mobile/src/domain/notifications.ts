@@ -21,7 +21,7 @@ export const notificationDelivery = {
     "This build does not send plan or RSVP notifications. Open My resbites to check the latest details and responses.",
 };
 
-/** The About sheet: what updates are sent for (the spec's six events, CI "Notifications"). */
+/** The About sheet: what updates are sent for (the spec's events, CI "Notifications"). */
 export const NOTIFICATION_EVENTS = [
   "A new invitation, to the person invited.",
   "An answer, to the host: “Sam is going.”",
@@ -29,6 +29,8 @@ export const NOTIFICATION_EVENTS = [
   "Approved, to the person who asked. Declined isn’t sent.",
   "A change of time or place, and a cancellation, to the people invited.",
   "A Note to guests.",
+  "Being made an admin, to that person.",
+  "A repeating resbite’s next date, to everyone invited.",
 ] as const;
 /** The line before NOTIFICATION_EVENTS, once updates are sent and while they aren't yet. */
 export const notificationEventsLead = (delivery: boolean) =>
