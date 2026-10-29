@@ -22,4 +22,26 @@ do $$ begin
  exception when insufficient_privilege or undefined_function then null; end;
 end $$;
 reset role;
+-- 2. test mode stores and finds codes by key
+update private.phone_mode set test_mode=true;
+insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) values
+ ('d2000000-0000-4000-8000-000000000001',null,null,'541112345678',now()),
+ ('d2000000-0000-4000-8000-000000000002',null,null,'5491112349999',now());
+set local role supabase_auth_admin;
+do $$ begin
+ if public.send_sms_hook('{"user":{"id":"d2000000-0000-4000-8000-000000000001","phone":"5491112345678"},"sms":{"otp":"123456"}}') <> '{}'::jsonb then raise exception 'Hook refused an AR mobile'; end if;
+end $$;
+reset role;
+do $$ begin
+ if (select phone from private.test_codes where otp='123456')<>'541112345678' then raise exception 'Code must be stored by key'; end if;
+end $$;
+set local role anon;
+do $$ begin
+ if public.exchange_test_code('+54 11 1234 5678','000000') is distinct from '123456' then raise exception 'No-9 form must find the code'; end if;
+ if public.exchange_test_code('+54 9 11 1234 5678','000000') is distinct from '123456' then raise exception '9 form must find the code'; end if;
+end $$;
+reset role;
+do $$ begin
+ if (select count(*) from private.test_mode_log where kind='exchanged' and user_id='d2000000-0000-4000-8000-000000000001')<>2 then raise exception 'The older account must be named as the holder through variants'; end if;
+end $$;
 rollback;
