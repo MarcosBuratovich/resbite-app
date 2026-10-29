@@ -34,6 +34,7 @@ export function OpenRow({
   message?: string | null;
   onPress: () => void;
   accessibilityLabel: string;
+  /** The row's button (accessibility focus lands here); `onLayout` is the whole row (scroll to its y). */
   rowRef?: React.RefObject<View | null>;
   onLayout?: (event: LayoutChangeEvent) => void;
 }) {
@@ -42,9 +43,15 @@ export function OpenRow({
   const showMessage = missing && !!message;
   const text = value || placeholder;
   return (
-    <View ref={rowRef} onLayout={onLayout} style={styles.wrap}>
-      {showMessage && <Copy style={styles.message}>{message}</Copy>}
+    <View onLayout={onLayout} style={styles.wrap}>
+      {showMessage && (
+        // The button's hint says it; hiding the visible copy stops VoiceOver speaking it twice.
+        <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          <Copy style={styles.message}>{message}</Copy>
+        </View>
+      )}
       <ScalePressable
+        ref={rowRef}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
         accessibilityHint={showMessage ? message! : undefined}

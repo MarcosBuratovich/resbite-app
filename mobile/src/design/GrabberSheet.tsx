@@ -2,8 +2,8 @@ import React from "react";
 import { KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import type { LucideIcon } from "lucide-react-native";
-import { colors as c, r, space } from "./tokens";
-import { s, useReduceMotion } from "./ui";
+import { colors as c, fonts, r, space } from "./tokens";
+import { useLargeText, useReduceMotion } from "./ui";
 
 /** How far down a swipe on the grabber or heading must travel before it closes the sheet. */
 const CLOSE_DISTANCE = 60;
@@ -30,6 +30,7 @@ export function GrabberSheet({
   children?: React.ReactNode;
 }) {
   const reduce = useReduceMotion();
+  const largeText = useLargeText();
   const close = React.useRef(onClose);
   close.current = onClose;
   const swipe = React.useMemo(
@@ -70,7 +71,7 @@ export function GrabberSheet({
                   <Icon size={24} color={c.ink} />
                 </View>
               ) : null}
-              <Text accessibilityRole="header" style={[s.title, styles.title]}>
+              <Text accessibilityRole="header" style={[styles.title, !largeText && styles.titleLine]}>
                 {title}
               </Text>
             </View>
@@ -97,6 +98,7 @@ const styles = StyleSheet.create({
   grabberHit: { alignSelf: "center", paddingVertical: 4, paddingHorizontal: 12 },
   grabber: { width: 36, height: 5, borderRadius: 3, backgroundColor: c.line },
   heading: { flexDirection: "row", alignItems: "center", gap: 10 },
-  title: { flex: 1, fontSize: 24, lineHeight: 30 },
+  title: { flex: 1, fontFamily: fonts.display, fontSize: 24, color: c.ink },
+  titleLine: { lineHeight: 30 },
   body: { paddingHorizontal: space.xl, paddingTop: space.m, paddingBottom: 30, gap: space.m },
 });

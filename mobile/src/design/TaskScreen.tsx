@@ -3,7 +3,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } fr
 import { SafeAreaView } from "react-native-safe-area-context";
 import { X } from "lucide-react-native";
 import { IconButton } from "./kit";
-import { Copy, s } from "./ui";
+import { Copy, s, useLargeText } from "./ui";
 import { colors as c, fonts, space } from "./tokens";
 
 /**
@@ -30,13 +30,19 @@ export function TaskScreen({
   titleRef?: React.RefObject<Text | null>;
   children: React.ReactNode;
 }) {
+  const largeText = useLargeText();
   return (
     <SafeAreaView testID="task-screen" style={s.page}>
       <View style={styles.bar}>
         <View style={styles.close}>
           <IconButton icon={X} label={closeLabel} onPress={onClose} />
         </View>
-        <Text ref={titleRef} accessibilityRole="header" numberOfLines={2} style={styles.title}>
+        <Text
+          ref={titleRef}
+          accessibilityRole="header"
+          numberOfLines={largeText ? undefined : 2}
+          style={[styles.title, !largeText && styles.titleLine]}
+        >
           {title}
         </Text>
       </View>
@@ -71,11 +77,11 @@ const styles = StyleSheet.create({
   title: {
     fontFamily: fonts.medium,
     fontSize: 17,
-    lineHeight: 22,
     color: c.ink,
     textAlign: "center",
     marginHorizontal: 60 - 16,
   },
+  titleLine: { lineHeight: 22 },
   body: { paddingHorizontal: 20, paddingTop: space.m, paddingBottom: space.xl, gap: 10 },
   footer: {
     paddingHorizontal: space.xl,

@@ -45,12 +45,8 @@ import { progressLabel } from "../domain/steps";
  * (spec principle 8). `outerStyle` carries layout; `style` is the pressable's own look.
  * Exported for the creation steps' own chips, tiles and cards (PlanSteps).
  */
-export function ScalePressable({
-  outerStyle,
-  onPressIn,
-  onPressOut,
-  ...props
-}: PressableProps & { outerStyle?: StyleProp<ViewStyle> }) {
+export const ScalePressable = React.forwardRef<View, PressableProps & { outerStyle?: StyleProp<ViewStyle> }>(
+function ScalePressable({ outerStyle, onPressIn, onPressOut, ...props }, ref) {
   const reduce = useReduceMotion();
   const policy = motionPolicy(reduce);
   const scale = useSharedValue(1);
@@ -59,6 +55,7 @@ export function ScalePressable({
     <Animated.View style={[outerStyle, anim]}>
       <Pressable
         {...props}
+        ref={ref}
         onPressIn={(e) => {
           scale.value = withTiming(policy.pressScale, { duration: 90 });
           onPressIn?.(e);
@@ -72,7 +69,7 @@ export function ScalePressable({
       />
     </Animated.View>
   );
-}
+});
 
 export type ChipTone = "neutral" | "aqua" | "pink" | "status";
 const tones: Record<ChipTone, { tint: string; ink: string }> = {

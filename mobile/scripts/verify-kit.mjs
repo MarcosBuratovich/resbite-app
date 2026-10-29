@@ -212,6 +212,12 @@ try {
       "The pill moves inline under Larger Text",
     );
     assert.equal(await fitsWidth(page, '[data-testid="step-screen"]'), true, "The step screen fits 320 px");
+    await page.getByRole("button", { name: "Close", exact: true }).click();
+    // Larger Text: the task title drops its fixed line height and is not clamped.
+    await page.getByRole("button", { name: "Show task screen", exact: true }).click();
+    const taskTitle = page.getByRole("heading", { name: "New resbite", exact: true });
+    assert.equal(await taskTitle.evaluate((el) => getComputedStyle(el).lineHeight), "normal", "The task title has no fixed line height");
+    assert.equal(await taskTitle.evaluate((el) => getComputedStyle(el).webkitLineClamp || "none"), "none", "The task title is not clamped");
     await page.close();
   }
   // Preview chip: a small header chip whose sheet explains preview and offers Exit preview.
