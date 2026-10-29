@@ -726,4 +726,8 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
 - **Older Argentine accounts.** Rewritten to the `549` form not by the migration but by the owner-run, re-runnable `supabase/ops/rewrite-older-argentine-accounts.sql`, at the TestFlight release, and recorded in `private.phone_rewrites` (collision pairs stay).
 - **Records.** The hosted-baseline rehearsal checks the data changes, the shape (exactly what the migration adds and redefines), the rewrite script (run twice: the second run changes nothing) and the rollback (its refusal and its run), in a savepoint. Hashes are in the runbook.
 
-**Next.** The owner's approvals in the runbook's order; plan 2 (clients).
+- **App (plan 2, `pk2-clients`).** The phone key and send form in `mobile/src/domain/phone.ts`; a generated country list; a country chooser (`CountrySheet`, `CountryButton` in `PhoneField`) on sign-up, sign-in and Add your number, defaulting to the device region (else United Kingdom); contacts deduplicated by key, the picker's "Numbers without a country code are read as {country}. Change" line and a country button on a typed number; invitations sent by send form.
+- **Link page.** A country dropdown (default from the invitation's calling code, or the browser's region on an open link, else United Kingdom; a `+` number switches it); the name field "Your name" with its helper; the note "This invitation is for a +{code} number ending ••{ending}."; the site generator copies `/libphonenumber-min.js` and writes `/countries.mjs`.
+- **Rollout.** The runbook's "Plan 2" section: the link-site deploy, the TestFlight release and the rewrite script are one sitting; the iPhone checks (an Argentine number typed three ways, a US number with Argentina chosen, a contact saved without a code). Nothing is deployed.
+
+**Next.** The owner's approvals in the runbook's order, then the one sitting (page, build, script).
