@@ -1,7 +1,7 @@
 import type { CategoryKey } from "./categories";
 import type { EventFields } from "./events";
 import { PLAN_COPY } from "./planCopy";
-import { planEnd } from "./eventPage";
+import { planEnd } from "./planEnd";
 
 /** A resbite as stored on the server (CE1: it carries its own event text). */
 export type Plan = {

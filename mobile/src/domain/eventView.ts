@@ -2,7 +2,7 @@ import { categoryLabels, type CategoryKey } from "./categories";
 import type { Plan } from "./plans";
 import { spokenDate, spokenDateTime } from "./schedule";
 import { spokenRange } from "./eventTime";
-import { planEnd } from "./eventPage";
+import { planEnd } from "./planEnd";
 
 // Wording and grouping for cover cards, Review, My resbites and the event page (UX1).
 const BADGE_DAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"] as const;

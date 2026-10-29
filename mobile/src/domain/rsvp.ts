@@ -1,5 +1,5 @@
 import type { Plan as LocalPlan } from "./plans";
-import { planEnd } from "./eventPage";
+import { planEnd } from "./planEnd";
 export type Response = "accepted" | "maybe" | "declined" | "withdrawn";
 export type RsvpSnapshot = {
   plan: LocalPlan;

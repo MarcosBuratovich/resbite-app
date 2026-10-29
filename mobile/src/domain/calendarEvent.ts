@@ -1,4 +1,4 @@
-import { planEnd } from "./eventPage";
+import { planEnd } from "./planEnd";
 import { DEFAULT_LENGTH_MS } from "./eventTime";
 
 // UX3 Add to calendar (spec "Calendar and reminders", UX3-D8). Resbite fills iPhone's own form; the person saves.

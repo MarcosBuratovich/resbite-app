@@ -3,6 +3,7 @@ import type { HostRequest } from "../services/joinRequests";
 import type { InvitedPerson } from "../state/useEvent";
 import { ANSWER_OPTIONS } from "./rsvp";
 import { EXACT_ADDRESS_LATER, eventPlace } from "./eventView";
+import { planEnd } from "./planEnd";
 import { repeatLine, whenLine } from "./whenText";
 
 /** Every word the resbite page, its More sheet and the people list say. */
@@ -67,10 +68,7 @@ const optionText = (key: "going" | "maybe" | "cant") => ANSWER_OPTIONS.find((o) 
 
 type Timed = { starts_at: string; ends_at?: string | null };
 
-/** The end in ms, or the start when there is none: the one boundary between "open" and "ended". */
-export function planEnd(plan: Timed): number {
-  return Date.parse(plan.ends_at ?? plan.starts_at);
-}
+export { planEnd };
 
 export type Viewer = "owner" | "admin" | "guest";
 export function viewerRole(plan: { owner_id?: string }, userId: string | null, admins: readonly string[]): Viewer {
