@@ -1,9 +1,14 @@
 // The personal invitation page's step logic (contact invitations, Task 11): number matching, the step reducer,
 // the error mapping and the page's words. Run from mobile/: node --import tsx ../links/personal-flow.test.mjs
 import test from "node:test";
+// Bare "libphonenumber-js/min" does not resolve from links/ (node_modules lives under mobile/), so the path is explicit.
+import * as lib from "../mobile/node_modules/libphonenumber-js/min/index.js";
 import assert from "node:assert/strict";
 import {
   composeNumber,
+  phoneKey,
+  phoneSendForm,
+  regionForCallingCode,
   maskNumber,
   formatCountdown,
   PAGE_COPY,
@@ -37,36 +42,57 @@ import { PHONE_CODE_COPY } from "../mobile/src/services/phoneCode.ts";
 import { PHONE_COPY } from "../mobile/src/domain/phoneCopy.ts";
 import { INVALID_PHONE } from "../mobile/src/domain/phone.ts";
 
-test("composeNumber: local, +, and 00 forms of the same number all match the invitation (Review Focus 2)", () => {
-  assert.equal(composeNumber("07700 900834", "44"), "+447700900834");
-  assert.equal(composeNumber("+44 7700 900834", "44"), "+447700900834");
-  assert.equal(composeNumber("0044 7700 900834", "44"), "+447700900834");
-  assert.equal(composeNumber("7700 900834", "44"), "+447700900834");
-  assert.equal(composeNumber(" (0)7700-900.834 ", "44"), "+447700900834");
-  // + and 00 are used as typed: another country's number is not rewritten to the invitation's.
-  assert.equal(composeNumber("+1 (415) 555-0100", "44"), "+14155550100");
-  assert.equal(composeNumber("001 415 555 0100", "44"), "+14155550100");
+test("composeNumber parses with the chosen country and returns the send form", () => {
+  const rows = [
+    ["+54 9 11 1234 1234", "GB", "+5491112341234"], ["+54 11 1234 1234", "GB", "+5491112341234"],
+    ["011 15 1234 1234", "AR", "+5491112341234"], ["11 1234 1234", "AR", "+5491112341234"],
+    ["+54 9 351 123 4567", "AR", "+5493511234567"], ["(305) 555-0123", "US", "+13055550123"],
+    ["+1 305 555 0123", "AR", "+13055550123"], ["07700 900834", "GB", "+447700900834"],
+    ["+44 (0) 7700 900834", "AR", "+447700900834"], ["00 44 7700 900834", "AR", "+447700900834"],
+    ["123", "AR", null], ["abc", "AR", null], ["", "GB", null],
+  ];
+  for (const [input, region, out] of rows) assert.equal(composeNumber(input, region, lib), out, `${input} (${region})`);
+  assert.equal(composeNumber(undefined, "GB", lib), null);
 });
 
-test("composeNumber: a national (0) after the calling code is dropped", () => {
-  assert.equal(composeNumber("+44 (0) 7700 900834", "44"), "+447700900834");
-  assert.equal(composeNumber("+44(0)7700900834", "44"), "+447700900834");
-  assert.equal(composeNumber("0044 (0) 7700 900834", "44"), "+447700900834");
-  assert.equal(composeNumber("+44 (0)20 7946 0000", "44"), "+442079460000");
-  // Only a lone 0 in brackets: an area code in brackets is part of the number.
-  assert.equal(composeNumber("+1 (415) 555-0100", "44"), "+14155550100");
+test("the key and the send form", () => {
+  const rows = [
+    ["+5491112341234", "541112341234"], ["+541112341234", "541112341234"], ["5491112341234", "541112341234"],
+    ["+54 9 11 1234 1234", "541112341234"], ["+5493511234567", "543511234567"], ["+13055550123", "13055550123"],
+    ["+447700900834", "447700900834"], ["549123456789", "549123456789"], [null, ""], ["abc", ""],
+  ];
+  for (const [input, key] of rows) assert.equal(phoneKey(input), key, String(input));
+  assert.equal(phoneSendForm("541112341234"), "+5491112341234");
+  assert.equal(phoneSendForm("+541112341234"), "+5491112341234");
+  assert.equal(phoneSendForm("+5491112341234"), "+5491112341234");
+  assert.equal(phoneSendForm("+447700900834"), "+447700900834");
+  assert.equal(phoneSendForm("13055550123"), "+13055550123");
 });
 
-test("composeNumber: too short, too long, letters or no usable country give null", () => {
-  assert.equal(composeNumber("12", "44"), null);
-  assert.equal(composeNumber("", "44"), null);
-  assert.equal(composeNumber("000000", "44"), null);
-  assert.equal(composeNumber("+123456", "44"), null);
-  assert.equal(composeNumber("+1234567890123456", "44"), null);
-  assert.equal(composeNumber("07700 9OO834", "44"), null);
-  assert.equal(composeNumber("07700 900834", ""), null);
-  assert.equal(composeNumber("07700 900834", "4444"), null);
-  assert.equal(composeNumber(undefined, "44"), null);
+test("sameNumber compares keys", () => {
+  assert.equal(sameNumber({ phone: "+5491112341234" }, { phone: "+541112341234" }), true);
+  assert.equal(sameNumber({ phone: "+447700900834" }, { phone: "+447700900835" }), false);
+});
+
+test("send stores the send form and its international spelling", () => {
+  const s = next({ ...initialState(), step: "confirm", ticked: true }, { type: "send", input: "11 1234 1234", region: "AR", lib });
+  assert.equal(s.phone, "+5491112341234");
+  assert.equal(s.number, "+54 9 11 1234 1234");
+  assert.equal(s.busy, true);
+});
+
+test("regionForCallingCode", () => {
+  assert.equal(regionForCallingCode("1", lib), "US");
+  assert.equal(regionForCallingCode("54", lib), "AR");
+  assert.equal(regionForCallingCode("999", lib), null);
+});
+
+test("the words", () => {
+  assert.equal(PAGE_COPY.nameField, "Your name");
+  assert.equal(PAGE_COPY.nameHelper("Ana"), "This is how Ana and the other guests will see you.");
+  assert.equal(PAGE_COPY.countryLabel, "Country");
+  assert.equal(PAGE_COPY.countryOption("Argentina", "54"), "Argentina +54");
+  assert.equal(PAGE_COPY.outsideUk, undefined);
 });
 
 test("maskNumber shows the calling code and the last three digits", () => {
@@ -88,7 +114,6 @@ test("the copy is the mockup's and the app's words", () => {
   assert.equal(c.verify, "Verify");
   assert.equal(c.mismatch, "That code doesn’t match. Try again.");
   assert.equal(c.verified("34"), "✓ Verified · ••34");
-  assert.equal(c.nameField, "Your first name");
   assert.deepEqual([c.going, c.maybe, c.cantGo], ["Going", "Maybe", "Can’t go"]);
   assert.equal(c.sendAnswer, "Send answer");
   assert.equal(c.hostSees("Marcos"), "Marcos will see your answer.");
@@ -129,7 +154,6 @@ test("the copy is the mockup's and the app's words", () => {
 
 test("the open link's words (plan 3): the number hint, waiting, not added and already in", () => {
   const c = PAGE_COPY;
-  assert.equal(c.outsideUk, "Outside the UK? Start with + and your country code.");
   // Anyone can answer an open link, so the number step says what the app's number step says.
   assert.equal(c.numberHint, PHONE_COPY.numberHint);
   assert.equal(c.waitingHeading("Marcos"), "Waiting for Marcos");
@@ -164,8 +188,8 @@ test("the reducer's happy path: invite → confirm → code → answer → done"
   assert.equal(s.step, "confirm");
   s = next(s, { type: "tick", ticked: true });
   assert.equal(s.ticked, true);
-  s = next(s, { type: "send", input: "07700 900834", country: "44" });
-  assert.deepEqual([s.step, s.busy, s.phone, s.number, s.error], ["confirm", true, "+447700900834", "07700 900834", null]);
+  s = next(s, { type: "send", input: "07700 900834", region: "GB", lib });
+  assert.deepEqual([s.step, s.busy, s.phone, s.number, s.error], ["confirm", true, "+447700900834", "+44 7700 900834", null]);
   s = next(s, { type: "checked", matches: true });
   assert.deepEqual([s.step, s.busy], ["confirm", true], "still busy: the code is being sent");
   s = next(s, { type: "sent", at: 1000 });
@@ -185,20 +209,20 @@ test("the reducer's happy path: invite → confirm → code → answer → done"
 test("the reducer holds errors: tick, number, wrong number, code, name and answer", () => {
   const confirm = run([{ type: "open" }]);
   // No tick: nothing is sent.
-  let s = next(confirm, { type: "send", input: "07700 900834", country: "44" });
+  let s = next(confirm, { type: "send", input: "07700 900834", region: "GB", lib });
   assert.deepEqual([s.busy, s.error, s.phone], [false, "ageHelper", null]);
   s = next(s, { type: "tick", ticked: true });
   assert.equal(s.error, null, "ticking clears the age error");
   // An unusable number.
-  s = next(s, { type: "send", input: "12", country: "44" });
+  s = next(s, { type: "send", input: "12", region: "GB", lib });
   assert.deepEqual([s.busy, s.error], [false, "invalidNumber"]);
   // A number that isn't the invited one: no code, the error, the step kept.
-  s = next(next(s, { type: "send", input: "07700 900111", country: "44" }), { type: "checked", matches: false });
+  s = next(next(s, { type: "send", input: "07700 900111", region: "GB", lib }), { type: "checked", matches: false });
   assert.deepEqual([s.step, s.busy, s.error, s.phone], ["confirm", false, "wrongNumber", null]);
   // A failure while checking or sending.
-  s = next(next(s, { type: "send", input: "07700 900834", country: "44" }), { type: "fail", error: "tooMany" });
+  s = next(next(s, { type: "send", input: "07700 900834", region: "GB", lib }), { type: "fail", error: "tooMany" });
   assert.deepEqual([s.step, s.busy, s.error], ["confirm", false, "tooMany"]);
-  s = run([{ type: "send", input: "07700 900834", country: "44" }, { type: "checked", matches: true }, { type: "sent", at: 5 }], s);
+  s = run([{ type: "send", input: "07700 900834", region: "GB", lib }, { type: "checked", matches: true }, { type: "sent", at: 5 }], s);
   assert.equal(s.error, null);
   // Codes: too short is a mismatch without a request; a refused code keeps the step.
   s = next(s, { type: "verify", code: "12" });
@@ -227,17 +251,17 @@ test("the reducer holds errors: tick, number, wrong number, code, name and answe
 
 test("the reducer ignores events out of step and while busy", () => {
   const invite = initialState();
-  for (const event of [{ type: "send", input: "07700 900834", country: "44" }, { type: "verify", code: "123456" }, { type: "submit", name: "Sam" }, { type: "change" }, { type: "bogus" }])
+  for (const event of [{ type: "send", input: "07700 900834", region: "GB", lib }, { type: "verify", code: "123456" }, { type: "submit", name: "Sam" }, { type: "change" }, { type: "bogus" }])
     assert.equal(next(invite, event), invite, event.type);
-  const busy = run([{ type: "open" }, { type: "tick", ticked: true }, { type: "send", input: "07700 900834", country: "44" }]);
-  assert.equal(next(busy, { type: "send", input: "07700 900111", country: "44" }), busy, "no second send while one runs");
+  const busy = run([{ type: "open" }, { type: "tick", ticked: true }, { type: "send", input: "07700 900834", region: "GB", lib }]);
+  assert.equal(next(busy, { type: "send", input: "07700 900111", region: "GB", lib }), busy, "no second send while one runs");
   assert.equal(next(busy, { type: "tick", ticked: false }), busy, "the tick is locked while sending");
   const answer = run([{ type: "restore", response: null, phone: "+447700900834" }]);
   assert.equal(next(answer, { type: "choose", response: "yes" }), answer, "only accepted, maybe or declined");
 });
 
 test("a new code: resend waits for the reply and restarts the countdown; Change number goes back", () => {
-  const code = run([{ type: "open" }, { type: "tick", ticked: true }, { type: "send", input: "07700 900834", country: "44" }, { type: "checked", matches: true }, { type: "sent", at: 1000 }]);
+  const code = run([{ type: "open" }, { type: "tick", ticked: true }, { type: "send", input: "07700 900834", region: "GB", lib }, { type: "checked", matches: true }, { type: "sent", at: 1000 }]);
   let s = next(code, { type: "resend" });
   assert.deepEqual([s.step, s.busy], ["code", true]);
   assert.equal(next(s, { type: "resend" }), s, "one at a time");
@@ -352,13 +376,13 @@ test("open link: request_to_join's reply maps to the same screens; anything else
 });
 
 test("open link: the path has no number check and ends waiting", () => {
-  let s = run([{ type: "open" }, { type: "tick", ticked: true }, { type: "send", input: "+1 (415) 555-0100", country: "44" }]);
+  let s = run([{ type: "open" }, { type: "tick", ticked: true }, { type: "send", input: "+1 (415) 555-0100", region: "GB", lib }]);
   assert.deepEqual([s.step, s.busy, s.phone], ["confirm", true, "+14155550100"], "+ is used as typed, outside the UK");
   // The code goes straight away: nothing is checked against an invited number.
   s = next(s, { type: "sent", at: 1000 });
   assert.deepEqual([s.step, s.busy], ["code", false]);
   s = next(s, { type: "back" });
-  s = run([{ type: "send", input: "07700 900834", country: "44" }, { type: "sent", at: 2000 }], s);
+  s = run([{ type: "send", input: "07700 900834", region: "GB", lib }, { type: "sent", at: 2000 }], s);
   assert.deepEqual([s.step, s.phone], ["code", "+447700900834"], "a number without + takes the page's 44");
   s = run([{ type: "verify", code: "123456" }, { type: "verified" }], s);
   assert.deepEqual([s.step, s.join, s.response, needsName(s)], ["answer", null, null, true]);
@@ -436,7 +460,7 @@ test("open link: a waiting Can't go is drawn as the personal page's Can't go; Go
 });
 
 test("open link: right after verifying, a person who already asked or is on the event lands on that screen", () => {
-  const atCode = run([{ type: "open" }, { type: "tick", ticked: true }, { type: "send", input: "07700 900834", country: "44" }, { type: "sent", at: 1 }, { type: "verify", code: "123456" }]);
+  const atCode = run([{ type: "open" }, { type: "tick", ticked: true }, { type: "send", input: "07700 900834", region: "GB", lib }, { type: "sent", at: 1 }, { type: "verify", code: "123456" }]);
   assert.deepEqual([atCode.step, atCode.busy], ["code", true]);
   // my_join_request after the code: waiting brings the stored answer back, ready to change, with no name to give.
   const waiting = next(atCode, { type: "verified", ...screenForReturn({ state: "open", member: null, request: { status: "waiting", response: "accepted" } }) });
@@ -517,6 +541,7 @@ test("a kept session for another number is not restored, even with the same last
   assert.equal(storage.getItem(keptKey(CODE_A)), null, "and it is dropped");
   assert.equal(sameNumber(session("+447700900834"), { phone: "+447700900834" }), true);
   assert.equal(sameNumber(session("447700900834"), { phone: "+44 7700 900834" }), true, "digits, however written");
+  assert.equal(sameNumber(session("541112341234"), { phone: "+5491112341234" }), true, "the Argentine 9 folds");
   assert.equal(sameNumber(session("+447700900534"), { phone: "+447700900834" }), false);
   assert.equal(sameNumber(session(null), { phone: null }), false, "no number is never a match");
   // Without a known start the entry can't be dropped on time, so it is never restored.

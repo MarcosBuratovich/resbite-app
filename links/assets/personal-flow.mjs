@@ -1,6 +1,8 @@
-// The personal invitation page's pure step logic (contact invitations, Task 11): the page's words, matching a typed
-// number to the invitation's country, the step reducer and the mapping of server replies to words. No DOM, storage
-// or network here; /personal.js does those. Tested under node by links/personal-flow.test.mjs.
+// The personal invitation page's pure step logic (contact invitations, Task 11): the page's words, the phone key and
+// the send form, reading a typed number with the phone library, the step reducer and the mapping of server replies to
+// words. No DOM, storage or network here, and no imports: the browser loads this file as is, so the library arrives
+// as an argument (`lib`: parsePhoneNumberFromString, getCountries, getCountryCallingCode). /personal.js does the
+// rest. Tested under node by links/personal-flow.test.mjs. The key rules mirror mobile/src/domain/phone.ts.
 // The open link /r/<code> runs the same steps in open mode (open-link approval, plan 3): any number can answer, and
 // the answer becomes a request that waits for the host, so the last step is one of three screens (`join`).
 
@@ -23,6 +25,8 @@ export const PAGE_COPY = {
   terms: "I agree to the Terms and Privacy Policy.",
   ageHelper: "Resbite is for people aged 18 and over.",
   numberField: "Mobile number",
+  countryLabel: "Country",
+  countryOption: (name, code) => `${name} +${code}`,
   send: "Send code",
   invalidNumber: "Enter a valid mobile number.",
   wrongNumber: (host) => `That isn’t the number ${host} invited.`,
@@ -38,7 +42,8 @@ export const PAGE_COPY = {
   resend: "Send a new code",
   changeNumber: "Change number",
   verified: (ending) => `✓ Verified · ••${ending}`,
-  nameField: "Your first name",
+  nameField: "Your name",
+  nameHelper: (host) => `This is how ${host} and the other guests will see you.`,
   nameRule: "Use a name between 1 and 80 characters.",
   answerLegend: "Your answer",
   going: "Going",
@@ -69,7 +74,6 @@ export const PAGE_COPY = {
   signOut: "Not you? Sign out",
   // The open link (plan 3). Its number step names no invited number: it says what the app's number step says.
   numberHint: "We’ll text you a 6-digit code.",
-  outsideUk: "Outside the UK? Start with + and your country code.",
   waitingHeading: (host) => `Waiting for ${host}`,
   waitingBody: (host) => `${host} will confirm your spot.`,
   notAdded: "You weren’t added to this resbite.",
@@ -98,27 +102,49 @@ export const RESEND_DELAY_MS = 60_000;
 const CODE_LIFETIME_MS = 600_000;
 const MAX_NAME = 80;
 
+/** The phone key: the digits, with an Argentine mobile's `549` + ten digits folded to `54` + those ten. */
+export function phoneKey(input) {
+  const digits = (typeof input === "string" ? input : "").replace(/\D/g, "");
+  return /^549\d{10}$/.test(digits) ? `54${digits.slice(3)}` : digits;
+}
+
+/** The E.164 form to send to: the key, with the Argentine mobile 9 put back. Takes a key or any number. */
+export function phoneSendForm(input) {
+  const key = phoneKey(input);
+  return /^54\d{10}$/.test(key) ? `+549${key.slice(2)}` : `+${key}`;
+}
+
+// The calling codes several countries share, each with the country the library itself treats as main. The page's
+// `lib` is the browser bundle's global, which exposes no metadata (the app reads country_calling_codes[code][0]), so
+// the main country is chosen here: the preferred region when it has the code, else the first of getCountries().
+const MAIN_REGIONS = ["US", "GB", "RU", "AU", "IT", "FI", "NO"];
+
+/** The main country of a calling code ("1" gives US), or null for an unknown code. */
+export function regionForCallingCode(code, lib) {
+  const has = (region) => {
+    try {
+      return String(lib.getCountryCallingCode(region)) === String(code);
+    } catch {
+      return false;
+    }
+  };
+  return MAIN_REGIONS.find(has) ?? lib.getCountries().find(has) ?? null;
+}
+
 /**
- * The typed number in international form, or null. "+…" is used as typed and "00…" becomes "+…"; anything else
- * is the invitation's calling code plus the digits without leading zeros ("07700 900834" with 44 is +447700900834).
- * A national "(0)" written after the calling code is dropped ("+44 (0) 7700 900834" is +447700900834).
- * Spaces, dashes, dots and brackets are allowed; any other character, fewer than 7 digits or more than 15 is null.
+ * The typed number as the send form, or null. It is read with the library as `region` writes it ("+" and "00" numbers
+ * as typed, whatever `region` says) and must be possible (isPossible, not isValid: the UK fiction range is possible).
  */
-export function composeNumber(input, country) {
-  const text = (typeof input === "string" ? input.trim() : "").replace(/^(\+|00)(\s*\d{1,3})\s*\(\s*0\s*\)/, "$1$2 ");
-  if (!/^\+?[\d\s().-]+$/.test(text)) return null;
-  const digits = text.replace(/\D/g, "");
-  let number;
-  if (text.startsWith("+")) number = digits;
-  else if (digits.startsWith("00")) number = digits.slice(2);
-  else {
-    if (!/^\d{1,3}$/.test(country ?? "")) return null;
-    const national = digits.replace(/^0+/, "");
-    if (national.length < 7) return null;
-    number = country + national;
-  }
-  if (number.replace(/^0+/, "").length < 7 || number.length > 15) return null;
-  return `+${number}`;
+export function composeNumber(input, region, lib) {
+  const text = typeof input === "string" ? input.trim() : "";
+  if (!text) return null;
+  const parsed = lib.parsePhoneNumberFromString(text, region);
+  return parsed && parsed.isPossible() ? phoneSendForm(parsed.number) : null;
+}
+
+/** The number in international spelling ("+54 9 11 1234 1234"); the number itself when the library can't read it. */
+export function formatNumber(e164, lib) {
+  return lib.parsePhoneNumberFromString(e164)?.formatInternational() ?? e164;
 }
 
 /** "+44 ••• 834": the calling code and the last three digits of the confirmed number; null without one. */
@@ -216,9 +242,9 @@ export function next(state, event) {
     case "send": {
       if (!at("confirm") || s.busy) return s;
       if (!s.ticked) return { ...s, error: "ageHelper" };
-      const phone = composeNumber(event.input, event.country);
+      const phone = composeNumber(event.input, event.region, event.lib);
       if (!phone) return { ...s, error: "invalidNumber", phone: null };
-      return { ...s, busy: true, error: null, phone, number: String(event.input).trim() };
+      return { ...s, busy: true, error: null, phone, number: formatNumber(phone, event.lib) };
     }
     case "checked":
       if (!at("confirm") || !s.busy) return s;
@@ -337,8 +363,6 @@ export function sessionExpired(session, now) {
 export const KEPT_PREFIX = "resbite.personal.session.";
 export const keptKey = (code) => `${KEPT_PREFIX}${code}`;
 
-const digitsOf = (phone) => (typeof phone === "string" ? phone.replace(/\D/g, "") : "");
-
 /**
  * What the page stores for one invitation: the session, the full number this page verified for this code, and when
  * the event starts (ms since 1970), after which the entry is dropped.
@@ -359,8 +383,8 @@ function readEntry(storage, key) {
   }
 }
 
-/** True when the session belongs to exactly the number this page verified for the code: every digit, not an ending. */
-export const sameNumber = (session, entry) => Boolean(digitsOf(entry?.phone)) && digitsOf(session?.phone) === digitsOf(entry?.phone);
+/** True when the session belongs to the number this page verified for the code: the same phone key, not an ending. */
+export const sameNumber = (session, entry) => phoneKey(entry?.phone) !== "" && phoneKey(session?.phone) === phoneKey(entry?.phone);
 
 /**
  * The entry kept for this code, or null. An entry that is malformed, whose event has started, or whose session holds
