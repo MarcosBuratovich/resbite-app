@@ -3,6 +3,7 @@ export const PLAN_COPY = {
   newTitle: "New resbite",
   editTitle: "Edit resbite",
   close: "Close",
+  loading: "Loading",
   namePlaceholder: "Name your resbite",
   descriptionPlaceholder: "What you’ll do together (optional)",
   whenPlaceholder: "Add a date and time",

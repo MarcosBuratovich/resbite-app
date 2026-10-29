@@ -15,7 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { usePreventRemove } from "expo-router/react-navigation";
 import { Calendar, MapPin, Pencil, Send, StickyNote, TextAlignStart } from "lucide-react-native";
-import { Button, Copy, ErrorNote, TextAction, useLargeText, useReduceMotion, s } from "../src/design/ui";
+import { Button, Copy, ErrorNote, TextAction, useReduceMotion, s } from "../src/design/ui";
 import { colors as c, fonts, r, space } from "../src/design/tokens";
 import { PreviewNotice } from "../src/design/Chrome";
 import { Chip, CoverCard, FieldCard, announce, focusHeading } from "../src/design/kit";
@@ -45,6 +45,12 @@ const BLOCK_OF_FIELD: Record<PlanFormField, Block> = {
   guestNote: "note",
 };
 
+/**
+ * On iOS moving focus interrupts speech, so the row takes focus only after the announced line has
+ * been spoken. A first guess: the owner's device check tunes it.
+ */
+const FOCUS_AFTER_ANNOUNCE_MS = 1200;
+
 /** Moves VoiceOver (native) or keyboard focus (web) to a node. */
 function focusNode(node: View | Text | null) {
   if (!node) return;
@@ -62,7 +68,6 @@ export default function Arrange() {
   const { activity, plan, again } = useLocalSearchParams<{ activity?: string; plan?: string; again?: string }>();
   const form = usePlanForm({ activity, plan, again });
   const reduceMotion = useReduceMotion();
-  const largeText = useLargeText();
   const scroll = useRef<ScrollView>(null);
   const itsOnTitle = useRef<Text>(null);
   const positions = useRef<Partial<Record<Block, number>>>({});
@@ -85,7 +90,7 @@ export default function Arrange() {
   const when = whenRowText(form.form, form.zone);
   const line = attempted ? missingLine(missing) : null;
   const banner = edit ? notifyBanner(form.notifyCount) : null;
-  const full = !validToggle(form.form.categories);
+  const full = form.form.categories.length >= 2;
 
   const close = () => (router.canGoBack() ? router.back() : router.replace("/plans"));
   const later = () => setLeaving((now) => now ?? "later");
@@ -137,10 +142,11 @@ export default function Arrange() {
       if (y !== undefined) scroll.current?.scrollTo({ y: Math.max(0, y - 8), animated: !reduceMotion });
     });
     if (!first) return () => cancelAnimationFrame(frame);
-    announce(missingLine(missing) ?? "");
+    // Android speaks the footer line through its live region; only iOS needs the explicit announcement.
+    if (Platform.OS === "ios") announce(missingLine(missing) ?? "");
     const target = { name: nameMessage, categories: categoriesMessage, when: whenRow, where: whereRow };
     const node = (target as Partial<Record<Block, React.RefObject<View | Text | null>>>)[block]?.current ?? null;
-    const timer = setTimeout(() => focusNode(node), Platform.OS === "web" || reduceMotion ? 50 : 350);
+    const timer = setTimeout(() => focusNode(node), Platform.OS === "web" ? 50 : FOCUS_AFTER_ANNOUNCE_MS);
     return () => {
       cancelAnimationFrame(frame);
       clearTimeout(timer);
@@ -152,11 +158,7 @@ export default function Arrange() {
     return (
       <SafeAreaView testID="its-on" style={s.page}>
         <ScrollView contentContainerStyle={styles.moment}>
-          <Text
-            ref={itsOnTitle}
-            accessibilityRole="header"
-            style={[styles.itsOn, largeText && { lineHeight: undefined }]}
-          >
+          <Text ref={itsOnTitle} accessibilityRole="header" style={styles.itsOn}>
             {PLAN_COPY.itsOn}
           </Text>
           <CoverCard
@@ -192,16 +194,22 @@ export default function Arrange() {
   const title = edit ? PLAN_COPY.editTitle : PLAN_COPY.newTitle;
   if (form.loading || form.loadError)
     return (
-      <TaskScreen
-        title={title}
-        onClose={close}
-        closeLabel={PLAN_COPY.close}
-        // The same ref as the form below: the form's ScrollView replaces this one, and the ref must follow it.
-        scrollRef={scroll}
-        footer={form.loadError ? <Button large icon={false} title={PLAN_COPY.close} onPress={close} /> : null}
-      >
-        {form.loadError ? <ErrorNote message={form.loadError} /> : <ActivityIndicator color={c.aquaDark} />}
-      </TaskScreen>
+      // The same root as the form below (a Fragment), so React keeps the screen and its ScrollView.
+      <>
+        <TaskScreen
+          title={title}
+          onClose={close}
+          closeLabel={PLAN_COPY.close}
+          scrollRef={scroll}
+          footer={form.loadError ? <Button large icon={false} title={PLAN_COPY.close} onPress={close} /> : null}
+        >
+          {form.loadError ? (
+            <ErrorNote message={form.loadError} />
+          ) : (
+            <ActivityIndicator accessibilityLabel={PLAN_COPY.loading} color={c.aquaDark} />
+          )}
+        </TaskScreen>
+      </>
     );
 
   const f = form.form;
@@ -369,11 +377,6 @@ export default function Arrange() {
       </GrabberSheet>
     </>
   );
-}
-
-/** Two categories are chosen: the others are refused (a third tap does nothing). */
-function validToggle(categories: readonly string[]) {
-  return categories.length < 2;
 }
 
 const styles = StyleSheet.create({

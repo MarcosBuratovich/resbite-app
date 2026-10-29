@@ -45,7 +45,7 @@ const progressLabel = (step: number, total: number) => `Step ${step} of ${total}
 /**
  * A Pressable that scales on press, like Button, and does not scale under Reduce Motion
  * (spec principle 8). `outerStyle` carries layout; `style` is the pressable's own look.
- * Exported for the creation steps' own chips, tiles and cards (PlanSteps).
+ * Exported for other screens' own chips, tiles and cards.
  */
 export const ScalePressable = React.forwardRef<View, PressableProps & { outerStyle?: StyleProp<ViewStyle> }>(
 function ScalePressable({ outerStyle, onPressIn, onPressOut, ...props }, ref) {

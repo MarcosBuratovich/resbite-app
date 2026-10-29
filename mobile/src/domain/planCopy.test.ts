@@ -14,6 +14,7 @@ test("the copy keeps its curly apostrophes and quotes", () => {
 test("titles, buttons and durations", () => {
   assert.equal(PLAN_COPY.newTitle, "New resbite");
   assert.equal(PLAN_COPY.editTitle, "Edit resbite");
+  assert.equal(PLAN_COPY.loading, "Loading");
   assert.deepEqual(
     [PLAN_COPY.d30, PLAN_COPY.d60, PLAN_COPY.d120, PLAN_COPY.d180, PLAN_COPY.allDay],
     ["30 min", "1 h", "2 h", "3 h", "All day"],
