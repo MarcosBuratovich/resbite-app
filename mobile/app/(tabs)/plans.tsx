@@ -64,22 +64,7 @@ export default function Plans() {
     // The last answer confirmed from an Invitations row: Going or Maybe brings the notification ask.
     [answered, setAnswered] = useState<{ scope: string; response: string } | null>(null);
   const scope = preview ? "preview" : session?.user.id;
-  // A create whose reply was lost is finished here, by reading first; the notice says it exists.
   const [createdTitle, setCreatedTitle] = useState<string | null>(null);
-  useFocusEffect(
-    useCallback(() => {
-      let active = true;
-      if (scope && scope !== "preview")
-        void reconcilePendingCreate(scope, planGateway, createJournal)
-          .then(({ plan }) => {
-            if (active && plan) setCreatedTitle(plan.title);
-          })
-          .catch(() => {});
-      return () => {
-        active = false;
-      };
-    }, [scope]),
-  );
   const identity = useRef(scope);
   identity.current = scope;
   const [loadedFor, setLoadedFor] = useState<string>();
@@ -90,6 +75,7 @@ export default function Plans() {
     setRequests([]);
     setHosts({});
     setLoadedFor(undefined);
+    setCreatedTitle(null);
     setError(null);
     setBusy(false);
   }, [scope]);
@@ -170,6 +156,24 @@ export default function Plans() {
         request.current = null;
       };
     }, [refresh]),
+  );
+  // A create whose reply was lost is finished here, by reading first; the notice says it exists.
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      if (scope && scope !== "preview")
+        void reconcilePendingCreate(scope, planGateway, createJournal)
+          .then(({ plan }) => {
+            if (!active || !plan) return;
+            setCreatedTitle(plan.title);
+            // A create the reconcile just sent may have landed after this focus's list read: read again.
+            void refresh();
+          })
+          .catch(() => {});
+      return () => {
+        active = false;
+      };
+    }, [scope, refresh]),
   );
   const list = preview ? localPlans : loadedFor === session?.user.id && session ? plans : [];
   const now = Date.now();

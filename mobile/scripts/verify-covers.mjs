@@ -225,7 +225,7 @@ try {
   await expect(page.getByText("Your cover uploads after the resbite is saved.", { exact: true })).toBeVisible();
   await createPlan(page, { place: "Riverside park", categories: ["Natural"] });
   const coverPending = "Your resbite is saved, but its cover photo hasn’t uploaded yet. Open Edit plan to retry.";
-  // The Invite screen shows the cover notice; Later carries it to My resbites.
+  // The It’s on! moment shows the cover notice; Not now carries it to My resbites.
   await expect(page.getByText(coverPending, { exact: true })).toBeVisible();
   await later(page);
   await expect(page.getByText(coverPending, { exact: true })).toBeVisible();

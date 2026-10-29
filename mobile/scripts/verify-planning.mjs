@@ -156,7 +156,7 @@ const planFromChange = (plan, write) => ({
  */
 async function signedInPage({ plans = [], guests = [], failJournal = false, ...options } = {}) {
   const page = await newPage({ timezoneId: "UTC", ...options });
-  const state = { plans: [...plans], creates: [], changes: [], unexpected: [], holdCreate: false, planReads: 0 };
+  const state = { plans: [...plans], creates: [], changes: [], unexpected: [], holdCreate: false, dropFirstCreate: false, planReads: 0 };
   if (failJournal)
     await page.addInitScript(() => {
       const set = Storage.prototype.setItem;
@@ -195,6 +195,8 @@ async function signedInPage({ plans = [], guests = [], failJournal = false, ...o
     if (url.pathname === "/rest/v1/rpc/create_plan_v4") {
       const write = request.postDataJSON();
       state.creates.push(write);
+      // The first create never lands and never answers; later ones land.
+      if (state.dropFirstCreate && state.creates.length === 1) return new Promise(() => {});
       state.plans.push(planFromCreate(write));
       if (state.holdCreate) return new Promise(() => {});
       return reply(null);
@@ -224,6 +226,17 @@ try {
   // rows; the When and Where sheets keep Done off until they are complete; the plan is created.
   {
     const page = await previewPage();
+    // A later resbite already on the list, so "on top" means something.
+    await newResbite(page);
+    await createPlan(page, {
+      title: "Garden picnic",
+      date: "2099-04-05",
+      start: "10:00",
+      end: "12:00",
+      place: "Riverside park",
+      categories: ["Natural"],
+    });
+    await later(page);
     await page.getByRole("tab", { name: "Create", exact: true }).click();
     await expect(page.getByText("Or start from an idea", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Coffee together", exact: true }).click();
@@ -275,6 +288,7 @@ try {
     await expect(heading(page, "My resbites")).toBeVisible();
     await expect(card(page, "Coffee together").first()).toBeVisible();
     assert.equal(await card(page, "Coffee together").count(), 1);
+    assert.ok(await inOrder(page, [card(page, "Coffee together"), card(page, "Garden picnic")]), "The earlier resbite is on top");
     console.log("PASS: from an idea, Create names the missing date and place and reddens both rows; the When sheet needs date, start and end (3 h, Every week); Where accepts To be decided; It’s on! ends in Every week and the resbite is on My resbites.");
 
     // Edit in the same session: the first screen after creating is the same plan screen with Save.
@@ -491,6 +505,39 @@ try {
     assert.deepEqual(state.unexpected, []);
     await page.context().close();
     console.log("PASS: a create_plan_v4 reply that never arrives, then a reload: the reconcile read finds the plan, one create_plan_v4 call in total, and My resbites says “Garden picnic is created.”");
+  }
+  // The re-send path: the first create never landed, so the list read at focus finds nothing; the reconcile sends the
+  // create itself, and My resbites reads the list again to show the tile.
+  {
+    const { page, state } = await signedInPage();
+    state.dropFirstCreate = true;
+    await page.goto(`${baseURL}/plans`);
+    await expect(heading(page, "My resbites")).toBeVisible();
+    await page.getByRole("tab", { name: "Create", exact: true }).click();
+    await page.getByRole("button", { name: "Start from scratch", exact: true }).click();
+    await createPlan(page, {
+      title: "Garden picnic",
+      date: "2099-04-05",
+      start: "10:00",
+      end: "12:00",
+      place: "Riverside park",
+      categories: ["Natural"],
+    });
+    await expect.poll(() => state.creates.length).toBe(1);
+    assert.equal(state.plans.length, 0, "The first create never landed");
+    await page.reload();
+    await expect(heading(page, "New resbite")).toBeVisible();
+    await close(page);
+    await expect(heading(page, "My resbites")).toBeVisible();
+    await expect(page.getByText("Garden picnic is created.", { exact: true })).toBeVisible();
+    await expect(card(page, "Garden picnic")).toBeVisible();
+    assert.equal(state.creates.length, 2, "The held create and the reconcile's own");
+    assert.equal(state.creates[1].p_id, state.creates[0].p_id, "The reconcile re-sends the same plan");
+    assert.equal(state.plans.length, 1);
+    await expect.poll(() => page.evaluate((k) => sessionStorage.getItem(k), journalKey)).toBe(null);
+    assert.deepEqual(state.unexpected, []);
+    await page.context().close();
+    console.log("PASS: a create that never landed is re-sent once by the reconcile, and My resbites shows the notice and the tile (two create_plan_v4 calls in total).");
   }
   {
     const { page, state } = await signedInPage({ failJournal: true });
