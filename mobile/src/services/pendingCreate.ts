@@ -15,9 +15,11 @@ export async function reconcilePendingCreate(
   try {
     await reconcilePlan(gateway, entry.write);
   } catch (error) {
-    if (error instanceof PlanSaveError && error.uncertain) return { plan: null };
+    // A stray error says nothing about the outcome: keep the entry for the next launch.
+    if (!(error instanceof PlanSaveError) || error.uncertain) return { plan: null };
+    // A definite refusal drops the entry; when the plan exists but moved on, that newer plan is the answer.
     await journal.clear(scope);
-    return { plan: null };
+    return { plan: error.latest ?? null };
   }
   // A failed read here keeps the entry: the next launch finds the plan and clears it then.
   let plan: Plan | null;

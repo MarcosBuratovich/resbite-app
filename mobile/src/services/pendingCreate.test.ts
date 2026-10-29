@@ -125,3 +125,22 @@ test("a failed read after the reconcile keeps the entry", async () => {
   assert.deepEqual(await reconcilePendingCreate("a", gateway, journal), { plan });
   assert.equal(await journal.read("a"), null);
 });
+
+test("a stray error keeps the entry", async () => {
+  const { journal, gateway } = setup({
+    create: async () => {
+      throw new TypeError("boom");
+    },
+  });
+  await journal.put("a", entry);
+  assert.deepEqual(await reconcilePendingCreate("a", gateway, journal), { plan: null });
+  assert.deepEqual(await journal.read("a"), entry);
+});
+
+test("a plan that moved on is returned and the entry is cleared", async () => {
+  const moved: Plan = { ...plan, version: 5, title: "Changed by someone" };
+  const { journal, gateway } = setup({ read: async () => moved });
+  await journal.put("a", entry);
+  assert.deepEqual(await reconcilePendingCreate("a", gateway, journal), { plan: moved });
+  assert.equal(await journal.read("a"), null);
+});

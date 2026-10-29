@@ -60,6 +60,8 @@ test("an unreadable or malformed value reads as empty", async () => {
   assert.equal(await journal.read("account-a"), null);
   values.set("resbite.create-journal.v1.account-a", '{"requestId":3}');
   assert.equal(await journal.read("account-a"), null);
+  values.set("resbite.create-journal.v1.account-a", '{"requestId":"r","write":{"id":7}}');
+  assert.equal(await journal.read("account-a"), null);
   values.set("resbite.create-journal.v1.account-a", "null");
   assert.equal(await journal.read("account-a"), null);
 });

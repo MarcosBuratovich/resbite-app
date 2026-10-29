@@ -22,7 +22,7 @@ export function createJournalStore(store: KeyStore) {
           const raw = await store.getItem(key(scope));
           if (!raw) return null;
           const entry = JSON.parse(raw) as PendingCreate;
-          return entry && typeof entry.requestId === "string" && entry.write ? entry : null;
+          return entry && typeof entry.requestId === "string" && typeof entry.write?.id === "string" ? entry : null;
         } catch {
           return null;
         }
