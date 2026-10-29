@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Branch `pk2-clients` from `main` once plan 1 (`pk1-server`) has merged, or from `pk1-server`'s head if it has not: the app and page follow plan 1's server contract (`contacts_on_resbite` and `invite_contacts` return keys).
+- Branch `pk2-clients` from `main` once plan 1 (`pk1-server`) has merged, or from `pk1-server`'s head if it has not: the app and page follow plan 1's server contract as built: `invite_contacts` returns each item's `phone` as the digits the caller sent (keys are stored and compared server-side); `contacts_on_resbite` returns, for every sent number that belongs to someone On Resbite, both its digits as sent and its key, distinct and sorted. Matching by key on the client works with both.
 - **The key:** digits only; `549` followed by exactly ten digits becomes `54` followed by those ten; everything else is the digits as they are; empty input gives `""`. **The send form** of a key: `+549` + the ten digits when the key is `54` + ten digits, else `+` + the key. Both exist twice, in `mobile/src/domain/phone.ts` and `links/assets/personal-flow.mjs`, with the same test rows.
 - Parsing typed numbers stays `parsePhoneNumberFromString(input, region)` with `isPossible()`, never `isValid()` (the UK fiction range used in testing is possible, not valid). No mobile-only check.
 - Copy, verbatim from the spec: dropdown entry `Argentina +54`; dropdown label `Country`; search field `Search countries`; picker line `Numbers without a country code are read as {country}.` with the action `Change`; invitation note `This invitation is for a +{code} number ending ••{ending}.`; name field `Your name`; name helper `This is how {host} and the other guests will see you.`; invalid number `Enter a valid mobile number.` (unchanged). No flags. English country names only.
@@ -164,7 +164,7 @@ git commit -m "Phone key: the country chooser on sign-up, sign-in and Add your n
 - Modify: `mobile/src/domain/contactInvites.test.ts`
 - Modify: `mobile/src/state/useContactInvites.ts:37,112,183-191,196-205,213-240`
 - Modify: `mobile/src/state/useEvent.ts:241-253`
-- Modify: `mobile/src/services/contactInvites.test.ts` (if it asserts `onResbite` or `invite` shapes, the values are keys now)
+- Modify: `mobile/src/services/contactInvites.test.ts` (if it asserts `onResbite` or `invite` shapes: the lookup returns the sent digits and their keys, the invite returns the digits as sent)
 
 **Interfaces:**
 - Consumes: Task 1.
@@ -378,7 +378,7 @@ git commit -m "Phone key: the page's country dropdown, name helper and the libra
 
 - [ ] **Step 1: Write the runbook's plan 2 section**
 
-What the app and the page now do (the chooser and its defaults, the assumption line, the name helper, the note), the owner's steps in order after the migration: generate and deploy the link site (`links/generate.mjs https://link.resbite.com QY833VTUWL com.resbite.app <dir>`, `npx vercel link --yes --project resbite-link --scope creamos` with its `.env.local` deleted, a preview checked for `/libphonenumber-min.js` and `/countries.mjs` served as JavaScript, then `npx vercel deploy --prod --yes --scope creamos`), then the TestFlight build; and the iPhone checks (an Argentine number typed three ways on the page and in the app; a US number with Argentina chosen; a contact saved without a code). Note the current build's loss (the On Resbite badge for Argentine contacts saved with the 9) until the new build.
+What the app and the page now do (the chooser and its defaults, the assumption line, the name helper, the note), the owner's steps in order after the migration: generate and deploy the link site (`links/generate.mjs https://link.resbite.com QY833VTUWL com.resbite.app <dir>`, `npx vercel link --yes --project resbite-link --scope creamos` with its `.env.local` deleted, a preview checked for `/libphonenumber-min.js` and `/countries.mjs` served as JavaScript, then `npx vercel deploy --prod --yes --scope creamos`), then the TestFlight build, **with the owner-run `supabase/ops/rewrite-older-argentine-accounts.sql` in the same sitting as both** (plan 1's runbook puts the link-site deploy before the script; correct it so the web deploy, the TestFlight release and the script are one sitting, and the tester note names the web page as well as the app); fix plan 1's step 8 so its "every other table keeps its count" exempts the tables tester activity moves (sessions, codes, logs, lookups); change "saved with the 9" to "every 9-form invitation (saved with the 9 or dialled as 011 15 …)" in the runbook and in the spec's backward-compatibility bullet; and the iPhone checks (an Argentine number typed three ways on the page and in the app; a US number with Argentina chosen; a contact saved without a code). Note the current build's loss (the On Resbite badge for Argentine contacts saved with the 9) until the new build.
 
 - [ ] **Step 2: Run the whole chain once more**
 
