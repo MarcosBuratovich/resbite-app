@@ -189,6 +189,29 @@ const tick = (page) => page.getByRole("checkbox", { name: "I’m 18 or over", ex
 const cells = (page) => codeField(page).evaluate((input) => input.previousElementSibling?.textContent ?? null);
 
 try {
+  // 0. The country chooser: Argentina's send form with the 9, and a typed +44 number switching the country.
+  {
+    const f = await fixture(),
+      { page } = f;
+    await page.goto(`${base}/auth/phone`);
+    await expect(heading(page, "Your number")).toBeVisible();
+    await page.getByRole("button", { name: /^Country:/ }).click();
+    await page.getByLabel("Search countries", { exact: true }).fill("Argentina");
+    await page.getByRole("button", { name: "Argentina +54", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Country: Argentina, +54", exact: true })).toBeVisible();
+    await numberField(page).fill("11 1234 1234");
+    await tick(page).click();
+    await button(page, "Send code").click();
+    await expect(heading(page, "Enter the code")).toBeVisible();
+    const sent = f.calls("POST", "/auth/v1/otp");
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].body.phone, "+5491112341234", "Argentina is sent in its form with the 9");
+    await button(page, "Change number").click();
+    await numberField(page).fill("+44 7700 900834");
+    await expect(page.getByRole("button", { name: "Country: United Kingdom, +44", exact: true })).toBeVisible();
+    await f.done();
+  }
+
   // 1. Sign-up from the landing: the tick, a bad number, a wrong code, 000000 in test mode, then a name.
   {
     const f = await fixture(),
@@ -461,7 +484,7 @@ try {
   }
 
   console.log(
-    "PASS: phone sign-up (tick, invalid number, +44 number, wrong code, 000000 refused in live mode, 000000 swap in test mode → verify → attest_age, About you → name → /account), sign-in with an unknown number → Create an account, Add your number with a taken number then phone_change, Sign out from the taken refusal, a wrong code and a lost verify reply at Add your number, interrupted sign-up restored on About you, and no 000000 on any screen. All Supabase requests intercepted.",
+    "PASS: phone sign-up (the country chooser: Argentina sent with the 9, a typed +44 number switching the country; tick, invalid number, +44 number, wrong code, 000000 refused in live mode, 000000 swap in test mode → verify → attest_age, About you → name → /account), sign-in with an unknown number → Create an account, Add your number with a taken number then phone_change, Sign out from the taken refusal, a wrong code and a lost verify reply at Add your number, interrupted sign-up restored on About you, and no 000000 on any screen. All Supabase requests intercepted.",
   );
 } finally {
   await browser.close();

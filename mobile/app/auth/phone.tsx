@@ -88,6 +88,8 @@ export default function PhoneAuth() {
         <>
           <PhoneField
             value={phone.input}
+            region={phone.region}
+            onRegionChange={phone.setRegion}
             onChangeText={phone.setInput}
             editable={!phone.busy}
             returnKeyType="send"

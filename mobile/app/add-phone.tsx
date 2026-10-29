@@ -58,6 +58,8 @@ export default function AddPhone() {
               <Copy>{PHONE_COPY.addBody}</Copy>
               <PhoneField
                 value={phone.input}
+                region={phone.region}
+                onRegionChange={phone.setRegion}
                 onChangeText={phone.setInput}
                 editable={!phone.busy}
                 returnKeyType="send"

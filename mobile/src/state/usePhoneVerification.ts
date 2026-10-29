@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { TextInput } from "react-native";
 import { router } from "expo-router";
-import { deviceRegion, parsePhone, phoneVerified, samePhone } from "../domain/phone";
+import { deviceRegion, parsePhone, phoneSendForm, phoneVerified, regionOf, samePhone } from "../domain/phone";
 import { TERMS_VERSION } from "../domain/guestAccount";
 import { phoneCodeDeps, sendPhoneCode, verifyPhoneCode, type PhonePurpose } from "../services/phoneCode";
 import { foldLanded, foldNext, foldPhoneAccount, retryFold, phoneFoldDeps, sendFoldCode, type FoldClientDeps } from "../services/phoneFold";
@@ -20,6 +20,7 @@ export function usePhoneVerification(purpose: PhonePurpose) {
   const { reconcilePush } = usePushRegistration();
   const [step, setStep] = useState<"number" | "code">("number");
   const [input, setInputState] = useState("");
+  const [region, setRegion] = useState(() => deviceRegion());
   const [e164, setE164] = useState<string | null>(null);
   const [ticked, setTicked] = useState(false);
   const [digits, setDigits] = useState("");
@@ -114,10 +115,17 @@ export function usePhoneVerification(purpose: PhonePurpose) {
     input,
     setInput(value: string) {
       setInputState(value);
+      // A number typed with its +code names its own country.
+      if (value.trim().startsWith("+")) {
+        const known = regionOf(value);
+        if (known) setRegion(known);
+      }
       setError(null);
       setReason(null);
     },
     e164,
+    region,
+    setRegion,
     ticked,
     setTicked,
     digits,
@@ -132,14 +140,15 @@ export function usePhoneVerification(purpose: PhonePurpose) {
     reason,
     async send() {
       if (working.current || (purpose === "signup" && !ticked)) return;
-      const parsed = parsePhone(input, deviceRegion());
+      const parsed = parsePhone(input, region);
       if (!parsed.ok) {
         setError(parsed.message);
         setReason(null);
         return;
       }
-      setE164(parsed.e164);
-      await sendTo(parsed.e164);
+      const sendForm = phoneSendForm(parsed.e164);
+      setE164(sendForm);
+      await sendTo(sendForm);
     },
     async verify(code: string) {
       if (working.current || !e164 || foldBlocked) return false;
