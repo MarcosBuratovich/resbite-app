@@ -20,6 +20,10 @@ export function useReconcileCreate() {
       .then(({ plan }) => {
         if (plan) setCreatedPlan({ scope, title: plan.title });
       })
-      .catch(() => {});
+      .catch(() => {
+        // A read that failed (offline at launch) says nothing about the outcome: the next mount of the tabs or
+        // the next account change tries again.
+        if (ran.current === scope) ran.current = undefined;
+      });
   }, [scope, setCreatedPlan]);
 }
