@@ -13,10 +13,16 @@ export function countryLabel(c: Country): string {
   return `${c.name} +${c.code}`;
 }
 
-/** Countries whose name or calling code contains the query (case-insensitive, trimmed, a leading + ignored). */
+/** Lower case without accents (combining marks dropped): "cote" finds "Côte d’Ivoire", "turkiye" "Türkiye". */
+const fold = (text: string) => text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+
+/**
+ * Countries whose name or calling code contains the query (case- and accent-insensitive, trimmed, a leading +
+ * ignored).
+ */
 export function searchCountries(query: string): Country[] {
-  const q = query.trim().toLowerCase();
+  const q = fold(query.trim());
   if (!q) return [...COUNTRIES];
   const digits = q.replace(/^\+/, "");
-  return COUNTRIES.filter((c) => c.name.toLowerCase().includes(q) || (digits !== "" && c.code.includes(digits)));
+  return COUNTRIES.filter((c) => fold(c.name).includes(q) || (digits !== "" && c.code.includes(digits)));
 }

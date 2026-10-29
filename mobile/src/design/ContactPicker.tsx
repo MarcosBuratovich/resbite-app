@@ -8,6 +8,7 @@ import { Chip, IconButton, InfoSheet, Tile } from "./kit";
 import { colors as c } from "./tokens";
 import { INVITE_COPY as T } from "../domain/inviteCopy";
 import { countryByRegion } from "../domain/countries";
+import { regionOf } from "../domain/phone";
 import { groupContacts, type ContactNumber } from "../domain/contactInvites";
 import type { Outcome, Sendable } from "../state/useContactInvites";
 
@@ -55,6 +56,14 @@ export function PickStep({ k, previewing }: { k: Contacts; previewing: boolean }
     if (!bad) {
       setName("");
       setNumber("");
+    }
+  }
+  function typeNumber(value: string) {
+    setNumber(value);
+    // A number typed with its +code names its own country: the card's button follows it, as on sign-up.
+    if (value.trim().startsWith("+")) {
+      const known = regionOf(value);
+      if (known) setRegion(known);
     }
   }
   const settings = () => void Linking.openSettings().catch(() => k.setError(T.settingsFailed));
@@ -115,12 +124,12 @@ export function PickStep({ k, previewing }: { k: Contacts; previewing: boolean }
         <Copy style={styles.heading}>{T.addNumber}</Copy>
         <Field label={T.nameLabel} value={name} onChangeText={setName} maxLength={80} />
         <View style={[styles.inline, { alignItems: "flex-end" }]}>
-          <CountryButton region={region} onPress={() => setSheet("card")} />
+          <CountryButton region={region} onPress={() => setSheet("card")} style={styles.cardCountry} />
           <View style={{ flex: 1 }}>
             <Field
               label={T.numberLabel}
               value={number}
-              onChangeText={setNumber}
+              onChangeText={typeNumber}
               keyboardType="phone-pad"
               autoComplete="tel"
               textContentType="telephoneNumber"
@@ -224,6 +233,8 @@ export function SendStep({
 const styles = StyleSheet.create({
   chips: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 },
   inline: { flexDirection: "row", alignItems: "center", gap: 8 },
+  // As tall as the kit's field (s.field), so the button lines up with the number's input beside it.
+  cardCountry: { minHeight: 50 },
   row: {
     flexDirection: "row",
     alignItems: "center",

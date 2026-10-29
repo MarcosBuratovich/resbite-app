@@ -55,6 +55,23 @@ test("the phone key folds the Argentine mobile 9 and nothing else", () => {
   for (const [input, key] of rows) assert.equal(phoneKey(input), key, String(input));
 });
 
+test("typed to international: the spec's table through parsePhone with the chosen country, then the send form", () => {
+  // The same rows as links/personal-flow.test.mjs's composeNumber.
+  const rows: [string, string, string | null][] = [
+    ["+54 9 11 1234 1234", "GB", "+5491112341234"], ["+54 11 1234 1234", "GB", "+5491112341234"],
+    ["011 15 1234 1234", "AR", "+5491112341234"], ["11 1234 1234", "AR", "+5491112341234"],
+    ["+54 9 351 123 4567", "AR", "+5493511234567"], ["(305) 555-0123", "US", "+13055550123"],
+    ["+1 305 555 0123", "AR", "+13055550123"], ["07700 900834", "GB", "+447700900834"],
+    ["+44 (0) 7700 900834", "AR", "+447700900834"], ["00 44 7700 900834", "AR", "+447700900834"],
+    ["123", "AR", null], ["abc", "AR", null],
+  ];
+  for (const [input, region, out] of rows) {
+    const parsed = parsePhone(input, region);
+    if (out === null) assert.deepEqual(parsed, { ok: false, message: INVALID_PHONE }, `${input} (${region})`);
+    else assert.equal(parsed.ok ? phoneSendForm(parsed.e164) : null, out, `${input} (${region})`);
+  }
+});
+
 test("the send form puts the 9 back", () => {
   assert.equal(phoneSendForm("541112341234"), "+5491112341234");
   assert.equal(phoneSendForm("+541112341234"), "+5491112341234");

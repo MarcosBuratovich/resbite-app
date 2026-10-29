@@ -24,3 +24,15 @@ test("search matches name or code, trimmed and case-insensitive", () => {
   assert.ok(searchCountries("54").some((c) => c.region === "AR"));
   assert.equal(searchCountries("").length, COUNTRIES.length);
 });
+
+test("search ignores accents on both sides", () => {
+  const rows: [string, string, string][] = [
+    ["turkiye", "TR", "Türkiye"], ["cote", "CI", "Côte d’Ivoire"], ["curacao", "CW", "Curaçao"],
+    ["sao tome", "ST", "São Tomé & Príncipe"], ["reunion", "RE", "Réunion"], ["aland", "AX", "Åland Islands"],
+    ["Türkiye", "TR", "Türkiye"], ["CÔTE", "CI", "Côte d’Ivoire"],
+  ];
+  for (const [query, region, name] of rows) {
+    const found = searchCountries(query).find((c) => c.region === region);
+    assert.equal(found?.name, name, query);
+  }
+});

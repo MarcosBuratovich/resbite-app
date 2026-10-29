@@ -376,13 +376,32 @@ try {
     await page.getByRole("button", { name: "Argentina +54", exact: true }).click();
     await expect(page.getByText("Numbers without a country code are read as Argentina.", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Country: Argentina, +54", exact: true })).toBeVisible();
+    // The card's country button is a 44pt target, as tall as the number's input beside it and level with it.
+    const countryBox = await page.getByRole("button", { name: "Country: Argentina, +54", exact: true }).boundingBox();
+    const inputBox = await page.getByLabel("Phone number", { exact: true }).boundingBox();
+    assert.ok(countryBox.height >= 44, `the country button is ${countryBox.height} tall`);
+    assert.ok(Math.abs(countryBox.height - inputBox.height) <= 1, `button ${countryBox.height}, input ${inputBox.height}`);
+    assert.ok(Math.abs(countryBox.y + countryBox.height - (inputBox.y + inputBox.height)) <= 1, "level with the input");
     await page.getByLabel("Name (optional)", { exact: true }).fill("Ines");
     await page.getByLabel("Phone number", { exact: true }).fill("11 1234 1234");
     await button(page, "Add").click();
     await expect(page.getByLabel("Remove Ines", { exact: true })).toBeVisible();
     await expect.poll(() => f.calls("/rest/v1/rpc/contacts_on_resbite").some((x) => JSON.stringify(x.body).includes('"5491112341234"'))).toBe(true);
     await expect(visible(page.getByText("On Resbite", { exact: true }))).toHaveCount(1);
+    // A number typed with + names its own country: the card's button follows it.
+    await page.getByLabel("Phone number", { exact: true }).fill("+1 305 555 0123");
+    await expect(page.getByRole("button", { name: "Country: United States, +1", exact: true })).toBeVisible();
+    // Another assumed country re-reads the contacts, but a typed number (read with the card's own country) stays picked.
+    await button(page, "Change").click();
+    await page.getByLabel("Search countries", { exact: true }).fill("United Kingdom");
+    await page.getByRole("button", { name: "United Kingdom +44", exact: true }).click();
+    await expect(page.getByText("Numbers without a country code are read as United Kingdom.", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Remove Ines", { exact: true })).toBeVisible();
+    await expect(button(page, "Invite 1")).toBeEnabled();
     await f.done();
+    console.log(
+      "PASS: the assumption line (United Kingdom, then Argentina by Change: 11 1234 1234 is +54 9 11 1234 1234, On Resbite by its key); the card's country button (44 tall or more, as tall as the input and level with it) follows a typed +1 305 555 0123 (Country: United States, +1); a typed number stays picked when the assumed country changes again.",
+    );
   }
   // 1–5 and 8: the host invites three contacts to Coffee evening, sends two links, invites one again, then manages
   // the Invited group on the event page.

@@ -1,5 +1,5 @@
 import React from "react";
-import { Pressable, StyleSheet, View, type TextInputProps } from "react-native";
+import { Pressable, StyleSheet, View, type StyleProp, type TextInputProps, type ViewStyle } from "react-native";
 import { ChevronDown, Phone } from "lucide-react-native";
 import { FieldCard } from "./kit";
 import { CountrySheet } from "./CountrySheet";
@@ -8,8 +8,8 @@ import { colors as c, fonts, r } from "./tokens";
 import { countryByRegion } from "../domain/countries";
 import { PHONE_COPY } from "../domain/phoneCopy";
 
-/** The country button before the number: "+54" and a chevron; the name is in its label. */
-export function CountryButton({ region, onPress }: { region: string; onPress: () => void }) {
+/** The country button before the number: "+54" and a chevron; the name is in its label. At least 44 tall. */
+export function CountryButton({ region, onPress, style }: { region: string; onPress: () => void; style?: StyleProp<ViewStyle> }) {
   const country = countryByRegion(region);
   const code = country?.code ?? "";
   return (
@@ -17,7 +17,7 @@ export function CountryButton({ region, onPress }: { region: string; onPress: ()
       accessibilityRole="button"
       accessibilityLabel={PHONE_COPY.countryButton(country?.name ?? region, code)}
       onPress={onPress}
-      style={({ pressed }) => [styles.button, { opacity: pressed ? 0.7 : 1 }]}
+      style={({ pressed }) => [styles.button, style, { opacity: pressed ? 0.7 : 1 }]}
     >
       <Copy style={styles.code}>+{code}</Copy>
       <ChevronDown size={16} strokeWidth={2.2} color={c.muted} />
@@ -60,6 +60,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 4,
     minWidth: 44,
+    minHeight: 44,
     paddingHorizontal: 12,
     borderRadius: r.panel,
     backgroundColor: c.paper,

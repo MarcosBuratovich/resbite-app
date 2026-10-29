@@ -207,9 +207,10 @@ export function useContactInvites(a: {
   function setAssumedRegion(next: string) {
     regionChosen.current = true;
     if (next !== assumedRegion) {
-      // Picks made under the old region would sit beside the same people re-picked under their new keys.
-      setPicked({});
-      setManual([]);
+      // Contacts' picks were read under the old region and would sit beside the same people re-picked under their new
+      // keys, so they go. Typed numbers were read with the card's own country: they and their picks stay.
+      const typed = (n: ContactNumber) => manual.some((m) => m.key === n.key && m.contact === n.contact);
+      setPicked((old) => Object.fromEntries(Object.entries(old).filter(([, n]) => typed(n))));
     }
     setAssumedRegionState(next);
   }
@@ -247,7 +248,11 @@ export function useContactInvites(a: {
     setError(null);
     try {
       const stored = await inviteCodeStore.get(scope, planId);
-      const items = selected.map((n) => ({
+      // One item per key (the first pick wins): a typed number equal to a contact's other number has a pick of its
+      // own, and two items with one key would land on one invitation, leaving the first link shown dead.
+      const seen = new Set<string>();
+      const unique = selected.filter((n) => !seen.has(n.key) && !!seen.add(n.key));
+      const items = unique.map((n) => ({
         phone: digitsOf(n.e164),
         country: n.country,
         code: storedFor(stored, n.e164)?.code ?? newInviteCode(getRandomBytes(16)),
@@ -255,7 +260,7 @@ export function useContactInvites(a: {
       const results = await contactInviteGateway.invite(planId, items);
       if (!alive(ctx)) return;
       const out: Outcome = { inApp: [], already: [], links: [] };
-      for (const [i, n] of selected.entries()) {
+      for (const [i, n] of unique.entries()) {
         const kind: InviteKind | undefined = results.find((r) => phoneKey(r.phone) === n.key)?.kind;
         if (kind === "link") {
           const prior = storedFor(stored, n.e164);
