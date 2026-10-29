@@ -86,6 +86,10 @@ const plan: Plan = {
   time_zone: "UTC",
   place_label: "The café",
   note: "Bring a book",
+  place_tbd: false,
+  repeat_weeks: null,
+  series_id: "series-1",
+  repeats_from: null,
 };
 const change: PlanWrite = {
   id: plan.id,
@@ -96,7 +100,9 @@ const change: PlanWrite = {
     description: "",
     categories: ["community", "uplifting"],
     starts_at: plan.starts_at,
-    ends_at: null,
+    ends_at: "2099-01-01T17:00:00Z",
+    place_tbd: false,
+    repeat_weeks: null,
     area: "",
     time_zone: "UTC",
     place_label: "The park",

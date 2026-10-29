@@ -15,6 +15,7 @@ const plan: Plan = {
   id: "p", activity_id: null, title: "Walk", description: "d", categories: ["natural"],
   starts_at: "2026-10-24T18:00:00.000Z", ends_at: "2026-10-24T21:00:00.000Z", place_label: "Park", note: "gate",
   status: "active", version: 1, time_zone: L, area: "Hyde", guest_note: "hi", repeat_weeks: 2,
+  place_tbd: false, series_id: "s", repeats_from: null,
 };
 
 test("the empty form pre-fills nothing", () => {
@@ -110,7 +111,7 @@ test("detailsFromForm and timeOrPlaceChanged", () => {
   assert.deepEqual([tbd.place_label, tbd.place_tbd], ["To be decided", true]);
   assert.equal(timeOrPlaceChanged(d, { ...d, title: "Other", note: "z", area: "q" }), false);
   assert.equal(timeOrPlaceChanged(d, { ...d, starts_at: "2026-10-24T19:00:00.000Z" }), true);
-  assert.equal(timeOrPlaceChanged(d, { ...d, ends_at: null }), true);
+  assert.equal(timeOrPlaceChanged(d, { ...d, ends_at: "2026-10-24T22:00:00.000Z" }), true);
   assert.equal(timeOrPlaceChanged(d, { ...d, time_zone: "UTC" }), true);
   assert.equal(timeOrPlaceChanged(d, { ...d, place_label: "Pub" }), true);
   assert.equal(timeOrPlaceChanged(d, { ...d, place_tbd: true }), true);

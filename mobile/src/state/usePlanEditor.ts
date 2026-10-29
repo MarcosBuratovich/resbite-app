@@ -629,7 +629,9 @@ export function usePlanEditor({
           categories: fields.categories,
           starts_at: date!.toISOString(),
           // UX3: the optional end from the When step (validated above), or none.
-          ends_at: parseLocalDateTime(end)?.toISOString() ?? null,
+          ends_at: parseLocalDateTime(end)?.toISOString() ?? "",
+          place_tbd: false,
+          repeat_weeks: null,
           // An unchanged start keeps the event's own zone, so an edit from another zone is not a time change.
           time_zone:
             original && Date.parse(original.starts_at) === date!.getTime()
@@ -685,6 +687,8 @@ export function usePlanEditor({
             cover_path: cover.uri,
             cover_description: cover.description,
             ...write.details,
+            series_id: "",
+            repeats_from: null,
             status: "active",
             version: 1,
           };

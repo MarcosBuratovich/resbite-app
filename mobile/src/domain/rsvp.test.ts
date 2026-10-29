@@ -22,6 +22,10 @@ const snapshot: RsvpSnapshot = {
     note: "",
     status: "active",
     version: 1,
+    place_tbd: false,
+    repeat_weeks: null,
+    series_id: "series-1",
+    repeats_from: null,
   },
   attendee: { response: "pending", version: 1 },
 };

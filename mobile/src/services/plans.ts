@@ -40,17 +40,18 @@ export const planGateway: PlanGateway = {
   async create({ id, activityId, details }) {
     const { error } = await withDeadline((signal) =>
       supabase
-        .rpc("create_plan_v3", {
+        .rpc("create_plan_v4", {
           p_id: id,
           p_title: details.title,
           p_description: details.description,
           p_categories: details.categories,
           p_activity: activityId,
           p_start: details.starts_at,
-          // A save kept on the device before UX3 has no end; v3 needs the argument.
-          p_ends: details.ends_at ?? null,
+          p_ends: details.ends_at,
           p_zone: details.time_zone,
           p_place: details.place_label,
+          p_place_tbd: details.place_tbd,
+          p_repeat_weeks: details.repeat_weeks,
           p_note: details.note,
           p_area: sentArea(details.area),
         })
@@ -61,28 +62,31 @@ export const planGateway: PlanGateway = {
   async update({ id, version, details }) {
     const { error } = await withDeadline((signal) =>
       supabase
-        .rpc("change_plan_v3", {
+        .rpc("change_plan_v4", {
           p_plan: id,
           p_version: version,
           p_title: details.title,
           p_description: details.description,
           p_categories: details.categories,
           p_start: details.starts_at,
-          p_ends: details.ends_at ?? null,
+          p_ends: details.ends_at,
           p_zone: details.time_zone,
           p_place: details.place_label,
+          p_place_tbd: details.place_tbd,
+          p_repeat_weeks: details.repeat_weeks,
           p_note: details.note,
-          p_cancel: false,
           p_area: sentArea(details.area),
+          p_cancel: false,
+          p_stop_repeating: false,
         })
         .abortSignal(signal),
     );
     if (error) throw error;
   },
-  async cancel({ id, version }) {
+  async cancel({ id, version, stopRepeating }) {
     const { error } = await withDeadline((signal) =>
       supabase
-        .rpc("change_plan_v3", {
+        .rpc("change_plan_v4", {
           p_plan: id,
           p_version: version,
           p_title: null,
@@ -92,8 +96,12 @@ export const planGateway: PlanGateway = {
           p_ends: null,
           p_zone: null,
           p_place: null,
+          p_place_tbd: null,
+          p_repeat_weeks: null,
           p_note: null,
+          p_area: null,
           p_cancel: true,
+          p_stop_repeating: Boolean(stopRepeating),
         })
         .abortSignal(signal),
     );

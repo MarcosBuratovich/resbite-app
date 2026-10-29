@@ -22,16 +22,23 @@ const plan: Plan = {
   status: "active",
   version: 3,
   starts_at: "2099-01-01T15:00:00Z",
+  ends_at: "2099-01-01T17:00:00Z",
   time_zone: "UTC",
   place_label: "Riverside park",
   note: "",
+  place_tbd: false,
+  repeat_weeks: null,
+  series_id: "series-1",
+  repeats_from: null,
 };
 const details = {
   title: plan.title,
   description: plan.description,
   categories: plan.categories,
   starts_at: plan.starts_at,
-  ends_at: null,
+  ends_at: "2099-01-01T17:00:00Z",
+  place_tbd: false,
+  repeat_weeks: null as 1 | 2 | null,
   area: "",
   time_zone: "UTC",
   place_label: plan.place_label,
@@ -64,24 +71,17 @@ test("the area (GI1) is part of the saved details, trimmed; a save kept before G
   assert.equal(samePlanDetails(near, older as typeof details), true);
 });
 
-test("the end time is part of the saved details: the same instant, or none on both", () => {
-  const ending = { ...plan, ends_at: "2099-01-01T17:00:00Z" };
-  assert.equal(samePlanDetails(ending, { ...details, ends_at: "2099-01-01T17:00:00.000Z" }), true);
-  assert.equal(samePlanDetails(ending, { ...details, ends_at: "2099-01-01T18:00:00Z" }), false);
-  assert.equal(samePlanDetails(ending, details), false);
-  assert.equal(samePlanDetails({ ...plan, ends_at: null }, details), true);
-  // A plan read before UX3 has no ends_at at all; a save kept on the device before UX3 has none either.
-  assert.equal(samePlanDetails(plan, details), true);
-  const { ends_at: _none, ...older } = details;
-  assert.equal(samePlanDetails(plan, older as typeof details), true);
-  assert.equal(samePlanDetails(ending, older as typeof details), false);
+test("the end time is part of the saved details: the same instant", () => {
+  assert.equal(samePlanDetails(plan, { ...details, ends_at: "2099-01-01T17:00:00.000Z" }), true);
+  assert.equal(samePlanDetails(plan, { ...details, ends_at: "2099-01-01T18:00:00Z" }), false);
+  // A plan read before UX3 has no end; it never matches a save that has one.
+  assert.equal(samePlanDetails({ ...plan, ends_at: null }, details), false);
 });
 
 test("Meeting details come from their embedded table, and the embed never reaches the Plan", () => {
   const row = {
     ...plan,
     note: "",
-    ends_at: null,
     has_meeting_details: true,
     guest_note: "Running late",
     guest_note_at: "2099-01-01T14:00:00Z",
@@ -196,5 +196,63 @@ test("cancel conflicts and denials are definite; an unreadable outcome is uncert
       plan,
     ),
     (e: unknown) => e instanceof PlanSaveError && e.uncertain,
+  );
+});
+
+const recorded = () => {
+  const calls: { method: string; arg: unknown }[] = [];
+  const g = gateway({
+    create: async (w) => void calls.push({ method: "create", arg: w }),
+    update: async (w) => void calls.push({ method: "update", arg: w }),
+    cancel: async (c) => void calls.push({ method: "cancel", arg: c }),
+  });
+  return { calls, g };
+};
+
+test("a To be decided create reaches the gateway with its label, the flag and the repeat rule", async () => {
+  const { calls, g } = recorded();
+  const write: PlanWrite = {
+    id: plan.id,
+    activityId: null,
+    details: { ...details, place_label: "To be decided", place_tbd: true, repeat_weeks: 2 },
+  };
+  await writePlan(g, write);
+  assert.deepEqual(calls, [{ method: "create", arg: write }]);
+  const sent = (calls[0]!.arg as PlanWrite).details;
+  assert.equal(sent.place_label, "To be decided");
+  assert.equal(sent.place_tbd, true);
+  assert.equal(sent.repeat_weeks, 2);
+  assert.equal(sent.ends_at, details.ends_at);
+});
+
+test("cancelling passes stopRepeating through to the gateway", async () => {
+  const { calls, g } = recorded();
+  await cancelPlan(g, { id: plan.id, version: 3, stopRepeating: true });
+  await cancelPlan(g, { id: plan.id, version: 3 });
+  assert.deepEqual(calls, [
+    { method: "cancel", arg: { id: plan.id, version: 3, stopRepeating: true } },
+    { method: "cancel", arg: { id: plan.id, version: 3 } },
+  ]);
+});
+
+test("a missing end time maps to Add an end time; other 22023 errors keep their message", async () => {
+  const write: PlanWrite = { id: plan.id, activityId: null, details };
+  const failing = (message: string) =>
+    gateway({
+      create: async () => {
+        throw { code: "22023", message };
+      },
+    });
+  await assert.rejects(
+    writePlan(failing("End time required"), write),
+    (e: unknown) => e instanceof PlanSaveError && e.message === "Add an end time." && !e.uncertain,
+  );
+  await assert.rejects(
+    writePlan(failing("Plan unavailable"), write),
+    (e: unknown) => e instanceof PlanSaveError && /no longer available/.test(e.message),
+  );
+  await assert.rejects(
+    writePlan(failing("Invalid end time"), write),
+    (e: unknown) => e instanceof PlanSaveError && /no longer available/.test(e.message),
   );
 });

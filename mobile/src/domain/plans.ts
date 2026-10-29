@@ -33,10 +33,10 @@ export type Plan = {
   has_meeting_details?: boolean;
   /** GI1 area shown to anyone with the event's link before they reply: "" when none, absent before GI1. */
   area?: string;
-  place_tbd?: boolean;
-  repeat_weeks?: 1 | 2 | null;
-  series_id?: string;
-  repeats_from?: string | null;
+  place_tbd: boolean;
+  repeat_weeks: 1 | 2 | null;
+  series_id: string;
+  repeats_from: string | null;
 };
 
 /** A plans row read with its Meeting details embedded as `plan_meeting_details(note)`. */
@@ -58,11 +58,11 @@ export function planFromRow(row: PlanRow): Plan {
 export type PlanDetails = EventFields &
   Pick<Plan, "starts_at" | "place_label" | "note"> & {
     time_zone: string;
-    ends_at: string | null;
+    ends_at: string;
     /** GI1 area (trimmed). A save kept on the device before GI1 has none: the stored area stays as it is. */
     area: string;
-    place_tbd?: boolean;
-    repeat_weeks?: 1 | 2 | null;
+    place_tbd: boolean;
+    repeat_weeks: 1 | 2 | null;
   };
 
 export function canEditPlan(
@@ -125,7 +125,7 @@ export type PlanGateway = {
   read: (id: string) => Promise<Plan | null>;
   create: (write: PlanWrite) => Promise<void>;
   update: (write: PlanWrite) => Promise<void>;
-  cancel: (plan: { id: string; version: number }) => Promise<void>;
+  cancel: (plan: { id: string; version: number; stopRepeating?: boolean }) => Promise<void>;
 };
 
 export class PlanSaveError extends Error {
@@ -141,6 +141,11 @@ export class PlanSaveError extends Error {
 const errorCode = (error: unknown) =>
   typeof error === "object" && error !== null && "code" in error
     ? String(error.code)
+    : "";
+
+const errorMessage = (error: unknown) =>
+  typeof error === "object" && error !== null && "message" in error
+    ? String(error.message)
     : "";
 
 // A conflict never silently overwrites somebody else's newer plan. A lost reply
@@ -180,6 +185,9 @@ export async function writePlan(
       throw new PlanSaveError(
         "Your account can’t save this plan. Private tester access may still be closed. Your draft is unchanged.",
       );
+    }
+    if (code === "22023" && /^End time/.test(errorMessage(error))) {
+      throw new PlanSaveError("Add an end time.");
     }
     if (code === "22023") {
       throw new PlanSaveError(
@@ -238,7 +246,7 @@ export async function reconcilePlan(
 // plan is success, so a lost or repeated reply never shows a false error.
 export async function cancelPlan(
   gateway: PlanGateway,
-  plan: { id: string; version: number },
+  plan: { id: string; version: number; stopRepeating?: boolean },
 ): Promise<void> {
   let failure: unknown;
   try {

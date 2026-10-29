@@ -89,6 +89,9 @@ const legacyDetails = {
   time_zone: "UTC",
   place_label: "Riverside park",
   note: "Bring paint",
+  ends_at: "2099-01-01T16:00:00Z",
+  place_tbd: false,
+  repeat_weeks: null,
 };
 const legacyGateway = (
   read: PlanGateway["read"],
@@ -114,6 +117,8 @@ test("a landed pre-custom-events pending create is acknowledged, not a conflict"
         categories: ["creative", "mindful"],
         version: 1,
         status: "active",
+        series_id: "series-1",
+        repeats_from: null,
         ...legacyDetails,
       }),
       () => creates++,
