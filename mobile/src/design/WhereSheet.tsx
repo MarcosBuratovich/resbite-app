@@ -34,18 +34,14 @@ export function WhereSheet({
   onClose: () => void;
 }) {
   const [draft, setDraft] = useState<WhereValue>(value);
-  // The recent row that filled the field; typing lets go of it.
-  const [chosen, setChosen] = useState<string | null>(null);
   useEffect(() => {
     if (!visible) return;
     setDraft(value);
-    setChosen(value.placeTbd ? null : (recent.find((p) => p === value.place) ?? null));
     // The sheet starts from the plan's value each time it opens.
   }, [visible]);
 
   const ready = draft.placeTbd || draft.place.trim() !== "";
   const choose = (place: string) => {
-    setChosen(place);
     setDraft((d) => ({ ...d, place, placeTbd: false }));
   };
 
@@ -59,7 +55,6 @@ export function WhereSheet({
         placeholder={PLAN_COPY.placeSearch}
         value={draft.place}
         onChangeText={(place) => {
-          setChosen(null);
           setDraft((d) => ({ ...d, place, placeTbd: false }));
         }}
         maxLength={PLACE_MAX}
@@ -72,13 +67,10 @@ export function WhereSheet({
               key={place}
               role="radio"
               label={place}
-              checked={chosen === place}
+              checked={!draft.placeTbd && draft.place.trim() === place}
               onChange={(on) => {
                 if (on) choose(place);
-                else {
-                  setChosen(null);
-                  setDraft((d) => ({ ...d, place: "" }));
-                }
+                else setDraft((d) => ({ ...d, place: "" }));
               }}
             >
               <Copy style={styles.hint}>{PLAN_COPY.recent}</Copy>
@@ -91,7 +83,6 @@ export function WhereSheet({
         label={PLAN_COPY.toBeDecided}
         checked={draft.placeTbd}
         onChange={(on) => {
-          setChosen(null);
           setDraft((d) => (on ? { ...d, place: "", placeTbd: true } : { ...d, placeTbd: false }));
         }}
       >

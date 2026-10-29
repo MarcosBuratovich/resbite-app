@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Platform, Pressable, StyleSheet, TextInput, View, useWindowDimensions } from "react-native";
 import DateTimePicker, { DateTimePickerAndroid } from "@react-native-community/datetimepicker";
 import { ChevronRight } from "lucide-react-native";
-import { Copy } from "./ui";
+import { Copy, useLargeText } from "./ui";
 import { colors as c, depth, fonts, r } from "./tokens";
 import { localDateTime, parseLocalDateTime } from "../domain/plans";
 import { addDays, localDay } from "../domain/schedule";
@@ -41,6 +41,7 @@ export function PickerCard({
   onPick: (value: string) => void;
 }) {
   const { fontScale } = useWindowDimensions();
+  const largeText = useLargeText();
   const [focused, setFocused] = useState(false);
   const [draft, setDraft] = useState(value ?? "");
   useEffect(() => setDraft(value ?? ""), [value]);
@@ -100,7 +101,7 @@ export function PickerCard({
       >
         <View style={styles.text}>
           <Copy style={styles.label}>{label}</Copy>
-          <Copy style={text === null ? [styles.value, { color: c.muted }] : styles.value}>{shown}</Copy>
+          <Copy style={{ ...styles.value, ...(largeText ? {} : styles.valueLine), ...(text === null ? { color: c.muted } : {}) }}>{shown}</Copy>
         </View>
         <ChevronRight size={20} color={c.muted} aria-hidden />
       </Pressable>
@@ -140,6 +141,7 @@ const styles = StyleSheet.create({
   noOutline: { outlineStyle: "solid", outlineWidth: 0 },
   text: { flex: 1, gap: 2 },
   label: { fontFamily: fonts.medium, fontSize: 13, color: c.muted },
-  value: { fontFamily: fonts.display, fontSize: 20, lineHeight: 26 },
+  value: { fontFamily: fonts.display, fontSize: 20 },
+  valueLine: { lineHeight: 26 },
   input: { fontFamily: fonts.display, fontSize: 20, color: c.ink, paddingVertical: 4, minHeight: 36 },
 });
