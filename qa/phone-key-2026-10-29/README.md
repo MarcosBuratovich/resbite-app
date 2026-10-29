@@ -2,7 +2,7 @@
 
 - **Spec:** [Phone key design](../../docs/superpowers/specs/2026-10-29-phone-key-design.md).
 - **Plans:** [plan 1, the server](../../docs/superpowers/plans/2026-10-29-phone-key-1-server.md) (this one) and [plan 2, the clients](../../docs/superpowers/plans/2026-10-29-phone-key-2-clients.md).
-- **Code:** branch `pk1-server`, taken from `main` at `5e70de7`. **Nothing is applied to the hosted project, Vercel, EAS or TestFlight.** Every hosted, Vercel, EAS and TestFlight step below needs the owner's approval when it is done.
+- **Code:** branch `pk1-server`, taken from `main` at `5e70de7`. **The migration is live on the hosted project since 29 October 2026 (hosted version `20261030130000`, applied after the owner's approval by file name and sha256; see "Applied" below). Nothing is applied to Vercel, EAS or TestFlight; the fold function is not redeployed yet and the rewrite script has not run.** Every hosted, Vercel, EAS and TestFlight step below needs the owner's approval when it is done.
 
 ## What is built
 
@@ -90,6 +90,14 @@ The merge fills the final values. The values here were taken on the branch at th
 
      The owner reads the ids in the SQL editor; no number is pasted anywhere (chat, this runbook, a ticket), and the ids are not recorded here.
 9. **The record stays until a later migration drops it.** `private.phone_rewrites` is never dropped by hand: a drop by hand would leave hosted unlike a local replay of `migrations.txt` and break the rollback's pre-check, which reads the table. When the owner declares the rollback window closed (plan 2's clients rely on the key and no rollback will be run), a later migration is written that drops the table, with its own approval, rehearsal and runbook. The rollback is meaningful only while the table exists; once that migration is applied, this rollback is retired.
+
+## Applied (29 October 2026)
+
+- The owner approved `20261030130000_phone_key.sql` by file name and sha256 `d7cf188f…14667` in chat, after checking the three hashes with `sha256sum`.
+- Step 2 (before): `hosted-before.json`, `hosted-counts-before.json`; accounts `ar_without_9` 2, `ar_with_9` 2, `collisions` 0, `with_phone` 4; invitations 5, duplicate groups 0, test codes 5; `has_table_privilege('auth.identities','UPDATE')` true. Hosted migration list: last applied `20261030120000`.
+- Step 3: applied with `supabase db query --linked -f` (the file wrapped in `begin;`/`commit;`), then `supabase migration repair --status applied 20261030130000 --linked --yes`; the line added to `supabase/tests/hosted-baseline/migrations.txt`.
+- Step 4 (after): `hosted-after.json`, `hosted-counts-after.json`. Fingerprint against before: six entries added (`private.phone_key(text)`, `private.phone_variants(text)`, `private.phone_rewrites` with its primary key, its index and its `user_id` foreign key), the seven redefinitions changed (`send_sms_hook`, `exchange_test_code`, `contacts_on_resbite`, `invite_contacts`, `revoke_phone_invitation`, `check_invited_number`, `answer_phone_invitation`), nothing removed. Counts: `private.test_codes` 5 → 0, `private.phone_rewrites` new with 0 rows, every other table unchanged; invitations 5 with 0 un-keyed rows; the accounts query unchanged (2, 2, 0, 4).
+- Not done at this step: the fold function redeploy (step 5), plan 2's build and sitting (step 6), the rewrite script (step 7).
 
 ## Plan 2: the app and the page
 
