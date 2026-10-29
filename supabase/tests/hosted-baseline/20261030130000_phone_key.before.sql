@@ -1,6 +1,7 @@
 -- Rehearsal for 20261030130000_phone_key (hosted-baseline mode only); .after.sql removes everything here.
 -- 1. Data in the pre-migration shape: accounts with older Argentine numbers (one to rewrite, one already right, a
--- colliding pair that both stay, one with a pending number change to rewrite too) and a UK account that is untouched.
+-- colliding pair that both stay, one with a pending number change to rewrite too) and a UK account that is untouched,
+-- for the owner-run rewrite script the after file runs.
 insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) values
  ('e2000000-0000-4000-8000-000000000001',null,null,'541112340001',now()),
  ('e2000000-0000-4000-8000-000000000002',null,null,'5491112340002',now()),
@@ -10,16 +11,45 @@ insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) val
  ('e2000000-0000-4000-8000-000000000006',null,null,'541112340006',now());
 update auth.users set phone_change='541112340066' where id='e2000000-0000-4000-8000-000000000006';
 insert into public.profiles(id,display_name) values ('e2000000-0000-4000-8000-000000000005','Rehearsal owner');
+-- The hosted project keeps the number in the phone identity too. The local harness has no auth.identities, so a minimal
+-- stand-in (marked by its comment, for the after file's clean-up) lets the script's and the rollback's guarded identity
+-- updates run; where the table exists, only the two rows are added.
+do $$ begin
+ if to_regclass('auth.identities') is null then
+  create table auth.identities(id uuid primary key default gen_random_uuid(), user_id uuid not null, provider text not null,
+   provider_id text not null, identity_data jsonb not null, created_at timestamptz default now());
+  comment on table auth.identities is 'phone key rehearsal stand-in';
+ end if;
+end $$;
+insert into auth.identities(user_id,provider,provider_id,identity_data) values
+ ('e2000000-0000-4000-8000-000000000001','phone','e2000000-0000-4000-8000-000000000001',
+  '{"sub":"e2000000-0000-4000-8000-000000000001","phone":"541112340001","phone_verified":true}'),
+ ('e2000000-0000-4000-8000-000000000006','phone','e2000000-0000-4000-8000-000000000006',
+  '{"sub":"e2000000-0000-4000-8000-000000000006","phone":"541112340006","phone_verified":true}');
 
--- 2. One plan with a duplicate pair (the same number in two spellings: the earlier unanswered one and the later
--- answered one) and a lone invitation, plus a test code.
+-- 2. One plan with two duplicate pairs (the same number in two spellings) and a lone invitation, plus a test code:
+-- 7777, both live: the earlier unanswered one and the later answered one;
+-- 6666, a revoked, answered one (no code) and a newer live re-invite in the other spelling with the only code.
 insert into public.plans(id,owner_id,title,starts_at,time_zone,place_label,categories) values
  ('e2100000-0000-4000-8000-000000000001','e2000000-0000-4000-8000-000000000005','Rehearsal key picnic','2099-07-01 12:00+00','UTC','Park',array['community']);
 insert into private.phone_invitations(plan_id,phone,country,invited_by,user_id,answered_at,created_at) values
  ('e2100000-0000-4000-8000-000000000001','541112347777','54','e2000000-0000-4000-8000-000000000005',null,null,now()-interval '2 days'),
  ('e2100000-0000-4000-8000-000000000001','5491112347777','54','e2000000-0000-4000-8000-000000000005','e2000000-0000-4000-8000-000000000002',now()-interval '1 day',now()-interval '1 day'),
  ('e2100000-0000-4000-8000-000000000001','5491112348888','54','e2000000-0000-4000-8000-000000000005',null,null,now());
+insert into private.phone_invitations(plan_id,phone,country,invited_by,user_id,answered_at,created_at,revoked_at,code_hash) values
+ ('e2100000-0000-4000-8000-000000000001','541112346666','54','e2000000-0000-4000-8000-000000000005',
+  'e2000000-0000-4000-8000-000000000004',now()-interval '3 days',now()-interval '4 days',now()-interval '2 days',null),
+ ('e2100000-0000-4000-8000-000000000001','5491112346666','54','e2000000-0000-4000-8000-000000000005',
+  null,null,now()-interval '1 hour',null,extensions.digest(repeat('R',22),'sha256'));
 insert into private.test_codes(phone,otp,sent_at) values ('5491112340001','111111',now());
+-- The runbook's count of duplicate groups, taken before the apply (private.phone_key does not exist yet, so the key is
+-- written inline): the two pairs.
+do $$ begin
+ if (select count(*) from (select plan_id, regexp_replace(regexp_replace(phone,'[^0-9]','','g'),'^549([0-9]{10})$','54\1')
+   from private.phone_invitations group by 1,2 having count(*)>1) d)<>2 then
+  raise exception 'The runbook''s duplicate count is not the two pairs';
+ end if;
+end $$;
 
 -- 3. A fingerprint of both schemas the app uses, private and public: every function's definition and grants; every
 -- relation's kind, row security and grants; every column's type, nullability, default, identity, generation,
