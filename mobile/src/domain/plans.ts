@@ -33,6 +33,10 @@ export type Plan = {
   has_meeting_details?: boolean;
   /** GI1 area shown to anyone with the event's link before they reply: "" when none, absent before GI1. */
   area?: string;
+  place_tbd?: boolean;
+  repeat_weeks?: 1 | 2 | null;
+  series_id?: string;
+  repeats_from?: string | null;
 };
 
 /** A plans row read with its Meeting details embedded as `plan_meeting_details(note)`. */
@@ -57,6 +61,8 @@ export type PlanDetails = EventFields &
     ends_at: string | null;
     /** GI1 area (trimmed). A save kept on the device before GI1 has none: the stored area stays as it is. */
     area: string;
+    place_tbd?: boolean;
+    repeat_weeks?: 1 | 2 | null;
   };
 
 export function canEditPlan(
