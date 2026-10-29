@@ -16,14 +16,17 @@ import type { InvitedPerson } from "./useEvent";
  * fresh one when this phone has none for them (the logic the resbite page held, moved for the people list).
  * `sentHere` holds the numbers (E.164, the store's key) this phone has a code for, so Send again is offered only
  * where it can reuse the link. `busy` is the phone being worked on, `error` what went wrong; `reload` runs when a
- * fresh invitation turned out to be something else (an app invitation), so the list is read again.
+ * fresh invitation turned out to be something else (an app invitation), so the list is read again. `resend`
+ * answers whether the link went out (false: `error` says why).
  */
 export function useResend(
   plan: { id: string; title: string; starts_at: string; ends_at?: string | null },
   reload?: () => Promise<void>,
 ): {
-  resend: (person: InvitedPerson, via: "whatsapp" | "messages") => Promise<void>;
+  resend: (person: InvitedPerson, via: "whatsapp" | "messages") => Promise<boolean>;
   sentHere: ReadonlySet<string>;
+  /** The host removed this invitation: its stored code and anything minted here are dropped. */
+  forget: (e164: string) => Promise<void>;
   busy: string | null;
   error: string | null;
 } {
@@ -35,21 +38,31 @@ export function useResend(
   // Codes made here since the list was read, by number: when WhatsApp won't open, Messages then sends the same new
   // link instead of making another one.
   const minted = useRef<Record<string, NonNullable<InvitedPerson["stored"]>>>({});
-  useEffect(() => {
+  const refreshSent = useCallback(async () => {
     if (!scope) return;
-    let live = true;
-    inviteCodeStore.get(scope, plan.id).then(
-      (stored) => live && setSentHere(new Set(Object.keys(stored))),
-      () => {},
-    );
-    return () => {
-      live = false;
-    };
+    const stored = await inviteCodeStore.get(scope, plan.id).catch(() => null);
+    if (stored && live.current) setSentHere(new Set(Object.keys(stored)));
   }, [scope, plan.id]);
+  const live = useRef(true);
+  useEffect(() => {
+    live.current = true;
+    void refreshSent();
+    return () => {
+      live.current = false;
+    };
+  }, [refreshSent]);
+  const forget = useCallback(
+    async (e164: string) => {
+      delete minted.current[e164];
+      if (scope) await inviteCodeStore.remove(scope, plan.id, e164).catch(() => {});
+      await refreshSent();
+    },
+    [scope, plan.id, refreshSent],
+  );
 
   const resend = useCallback(
     async (person: InvitedPerson, via: "whatsapp" | "messages") => {
-      if (busy || !scope) return;
+      if (busy || !scope) return false;
       setBusy(person.phone);
       setError(null);
       try {
@@ -66,7 +79,7 @@ export function useResend(
           ]);
           if (result?.kind !== "link") {
             await reload?.();
-            return;
+            return true;
           }
           saved = { code, name: person.name };
           minted.current[person.e164] = saved;
@@ -86,14 +99,20 @@ export function useResend(
             when: linkDate(plan.starts_at, plan.ends_at ?? null),
           },
         });
-        if (failure) setError(failure);
+        if (failure) {
+          setError(failure);
+          return false;
+        }
+        await refreshSent();
+        return true;
       } catch (e) {
         setError(e instanceof Error ? e.message : INVITE_COPY.offline);
+        return false;
       } finally {
         setBusy(null);
       }
     },
-    [busy, scope, plan.id, plan.title, plan.starts_at, plan.ends_at, reload],
+    [busy, scope, plan.id, plan.title, plan.starts_at, plan.ends_at, reload, refreshSent],
   );
-  return { resend, sentHere, busy, error };
+  return { resend, sentHere, forget, busy, error };
 }

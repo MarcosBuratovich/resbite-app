@@ -153,6 +153,7 @@ function Navigation() {
               options={{ presentation: "fullScreenModal", animation: reduced ? "fade" : "slide_from_bottom" }}
             />
             <Stack.Screen name="event" />
+            <Stack.Screen name="guests" />
             <Stack.Screen name="people" />
             <Stack.Screen name="invitations" />
             <Stack.Screen name="notifications" />

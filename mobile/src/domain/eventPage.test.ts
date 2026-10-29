@@ -173,7 +173,7 @@ test("peopleGroups for an owner", () => {
     invited: [linkPerson("111", "Dan", "whatsapp"), linkPerson("222", "Eve", "messages"), linkPerson("333", "Fay")],
     requests: [request("r1", "Rae")],
     admins: ["adm"],
-    sentHere: new Set(["111", "333"]),
+    sentHere: new Set(["+44111", "+44333", "222"]),
   });
   assert.deepEqual(groups.map((g) => g.title), [
     "Going · 2", "Maybe · 1", "Can’t go · 1", "Invited, not answered yet · 4", "Waiting for you · 1",
@@ -186,6 +186,7 @@ test("peopleGroups for an owner", () => {
   assert.deepEqual(cant[0].actions, ["remove"]);
   assert.deepEqual(invited[0], { key: "link:111", name: "Dan", status: "Invited by WhatsApp", admin: false, kind: "linkInvite", phone: "111", actions: ["sendAgain", "removeInvite"] });
   assert.equal(invited[1].status, "Invited by Messages");
+  // The store is keyed by E.164: Eve's national number matches the set but her E.164 does not.
   assert.deepEqual(invited[1].actions, ["removeInvite"]);
   assert.equal(invited[2].status, "Invited by link");
   assert.deepEqual(invited[2].actions, ["sendAgain", "removeInvite"]);

@@ -47,6 +47,7 @@ export const EVENT_COPY = {
   remove: "Remove",
   approve: "Approve",
   decline: "Decline",
+  keepPerson: "Keep",
   adminBadge: "Admin",
   invite: "Invite",
   edit: "Edit",
@@ -265,7 +266,7 @@ export function peopleGroups(i: {
     admin: false,
     kind: "linkInvite",
     phone: p.phone,
-    actions: i.sentHere.has(p.phone) ? ["sendAgain", "removeInvite"] : ["removeInvite"],
+    actions: i.sentHere.has(p.e164) ? ["sendAgain", "removeInvite"] : ["removeInvite"],
   }));
   const appRows: PersonRow[] = inGroup(i.guests, "pending").map((g) => ({
     key: `app:${g.userId}`,

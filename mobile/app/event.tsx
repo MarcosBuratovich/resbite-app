@@ -158,8 +158,7 @@ export default function EventPage() {
     Linking.openURL(target).catch(() => setMapsError("Couldn’t open Maps."));
   }
   function openPeople() {
-    // /guests arrives with the people list (Task 6); until its route exists the typed route does not know it.
-    router.push({ pathname: "/guests" as never, params: { plan: current.id } });
+    router.push({ pathname: "/guests", params: { plan: current.id } });
   }
   const acting = event.acting !== null;
   const answerControl = (after?: (saved: Response) => void | Promise<void>) =>

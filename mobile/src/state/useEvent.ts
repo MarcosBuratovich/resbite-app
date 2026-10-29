@@ -50,8 +50,9 @@ export type EventPage = {
   respond: (value: Response, retry?: RsvpAttempt) => Promise<boolean>;
   cancel: (opts?: { stopRepeating?: boolean }) => Promise<void>;
   mute: (muted: boolean) => Promise<void>;
-  appoint: (userId: string) => Promise<void>;
-  demote: (userId: string) => Promise<void>;
+  /** Both answer whether the server made the change (false: `error` says why). */
+  appoint: (userId: string) => Promise<boolean>;
+  demote: (userId: string) => Promise<boolean>;
   setNotice: (notice: string | null) => void;
 };
 
@@ -276,9 +277,9 @@ export function useEvent(planId: string | undefined): EventPage {
     }
   }
   /** The host's: make a guest an admin, or take it back. The list is read again so it shows what the server holds. */
-  async function changeAdmin(userId: string, appointing: boolean) {
+  async function changeAdmin(userId: string, appointing: boolean): Promise<boolean> {
     const target = plan;
-    if (!target || preview || !accountReady || working.current || actingRef.current) return;
+    if (!target || preview || !accountReady || working.current || actingRef.current) return false;
     const valid = () => currentIdentity.current === identity;
     actingRef.current = true;
     setActing("admin");
@@ -297,6 +298,7 @@ export function useEvent(planId: string | undefined): EventPage {
     }
     // The reload runs once the action has settled, so it is never skipped as "working".
     if (changed && valid()) await load();
+    return changed;
   }
   return {
     plan,
