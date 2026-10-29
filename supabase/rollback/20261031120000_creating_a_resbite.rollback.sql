@@ -26,13 +26,17 @@
 -- until its end: one that has started but not ended stops accepting answers and changes the moment this runs.
 -- Builds: once this has run, app builds made with this plan call functions that no longer exist (create_plan_v4,
 -- change_plan_v4, set_plan_mute, appoint_admin, remove_admin); see the runbook, qa/creating-a-resbite-2026-10-31/README.md.
--- Order: run it first of the rollbacks. Push delivery (supabase/rollback/20261030120000_push_delivery.rollback.sql) and
--- open-link approval (supabase/rollback/20261029120000_open_link_approval.rollback.sql) come after it, in that order:
--- the push rollback drops notification_recipient_eligible(), which this file would bring back, and the restored
--- request and join bodies here read private.join_requests, which the open-link rollback drops. The guard below stops
--- this file when either rollback has already run; it changes nothing.
+-- Order: run it first of the rollbacks. The phone key (supabase/rollback/20261030130000_phone_key.rollback.sql), push
+-- delivery (supabase/rollback/20261030120000_push_delivery.rollback.sql) and open-link approval
+-- (supabase/rollback/20261029120000_open_link_approval.rollback.sql) come after it, in that order: the three contact
+-- bodies restored here (invite_contacts, check_invited_number, answer_phone_invitation) are the phone-key ones and call
+-- private.phone_key() and phone_variants(), which the phone-key rollback drops; the push rollback drops
+-- notification_recipient_eligible(), which this file would bring back; and the restored request and join bodies here
+-- read private.join_requests, which the open-link rollback drops. The guard below stops this file when any of the three
+-- has already run; it changes nothing.
 
 do $$ begin
+ if to_regprocedure('private.phone_key(text)') is null then raise exception 'Run the creating-a-resbite rollback before the phone-key rollback'; end if;
  if to_regclass('private.notification_deliveries') is null then raise exception 'Run the creating-a-resbite rollback before the push delivery rollback'; end if;
  if to_regclass('private.join_requests') is null then raise exception 'Run the creating-a-resbite rollback before the open-link approval rollback'; end if;
 end $$;
@@ -295,7 +299,7 @@ begin
   'ending',right(v_inv.phone,2),'country',v_inv.country);
 end $$;
 
--- check_invited_number (20261028120000_contact_invitations.sql)
+-- check_invited_number (20261030130000_phone_key.sql)
 create or replace function private.check_invited_number(p_code text, p_phone text) returns boolean language plpgsql security definer set search_path = '' as $$
 declare v_inv private.phone_invitations; v_count int;
 begin
@@ -310,10 +314,10 @@ begin
   where id=v_inv.id and (check_window is null or check_window<=now()-interval '1 hour' or check_count<10)
   returning check_count into v_count;
  if v_count is null then raise exception 'Too many tries. Try again later.' using errcode='22023'; end if;
- return private.phone_digits(p_phone)=v_inv.phone;
+ return private.phone_key(p_phone)=v_inv.phone;
 end $$;
 
--- answer_phone_invitation (20261028120000_contact_invitations.sql)
+-- answer_phone_invitation (20261030130000_phone_key.sql)
 create or replace function private.answer_phone_invitation(p_code text, p_name text, p_response text, p_terms_version text) returns jsonb
 language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := auth.uid(); v_inv private.phone_invitations; v_plan public.plans; v_has_profile boolean; v_att public.attendees; v_next integer;
@@ -324,7 +328,7 @@ begin
  select * into v_inv from private.phone_invitations where code_hash=extensions.digest(p_code,'sha256') and revoked_at is null;
  if not found then raise exception 'Invitation unavailable' using errcode='42501'; end if;
  if not exists(select 1 from auth.users u where u.id=v_uid and u.phone_confirmed_at is not null
-  and private.phone_digits(u.phone)=v_inv.phone and not coalesce(u.is_anonymous,false)
+  and private.phone_key(u.phone)=v_inv.phone and not coalesce(u.is_anonymous,false)
   and (u.banned_until is null or u.banned_until<=now())) or private.deletion_pending(v_uid) then
   raise exception 'That isn''t the invited number.' using errcode='42501';
  end if;
@@ -584,7 +588,7 @@ begin
  delete from public.attendees where plan_id=p_plan and user_id=p_user;
 end $$;
 
--- invite_contacts (20261028120000_contact_invitations.sql)
+-- invite_contacts (20261030130000_phone_key.sql)
 create or replace function private.invite_contacts(p_plan uuid, p_invites jsonb) returns jsonb language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := private.require_link_owner(p_plan); v_item jsonb; v_phone text; v_country text; v_code text; v_holder uuid;
  v_kind text; v_out jsonb := '[]'::jsonb;
@@ -600,14 +604,15 @@ begin
    or jsonb_typeof(v_item->'country') is distinct from 'string' or jsonb_typeof(v_item->'code') is distinct from 'string' then
    raise exception 'Invalid invitation' using errcode='22023';
   end if;
-  v_phone := private.phone_digits(v_item->>'phone');
+  v_phone := private.phone_key(v_item->>'phone');
   v_country := v_item->>'country';
   v_code := v_item->>'code';
   if v_phone !~ '^[1-9][0-9]{6,14}$' or v_country !~ '^[1-9][0-9]{0,2}$' or v_code !~ '^[A-Za-z0-9_-]{22}$' then
    raise exception 'Invalid invitation' using errcode='22023';
   end if;
-  select id into v_holder from auth.users where phone=v_phone and phone_confirmed_at is not null;
-  if v_holder=v_uid or (v_holder is null and v_phone=(select private.phone_digits(phone) from auth.users where id=v_uid)) then
+  select id into v_holder from auth.users where phone = any(private.phone_variants(v_phone)) and phone_confirmed_at is not null
+   order by id = v_uid desc, phone <> v_phone desc limit 1;
+  if v_holder=v_uid or (v_holder is null and v_phone=(select private.phone_key(phone) from auth.users where id=v_uid)) then
    v_kind := 'self';
   elsif v_holder is not null and exists(select 1 from public.attendees where plan_id=p_plan and user_id=v_holder) then
    v_kind := 'already';
@@ -627,7 +632,7 @@ begin
      user_id=case when private.phone_invitations.revoked_at is null then private.phone_invitations.user_id end,
      answered_at=case when private.phone_invitations.revoked_at is null then private.phone_invitations.answered_at end;
   end if;
-  v_out := v_out || jsonb_build_array(jsonb_build_object('phone',v_phone,'kind',v_kind));
+  v_out := v_out || jsonb_build_array(jsonb_build_object('phone',private.phone_digits(v_item->>'phone'),'kind',v_kind));
  end loop;
  return v_out;
 end $$;

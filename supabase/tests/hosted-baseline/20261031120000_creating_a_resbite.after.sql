@@ -130,8 +130,8 @@ do $$ begin
  update public.plans set starts_at=now()-interval '1 hour',ends_at=now()+interval '1 hour' where id='df000000-0000-4000-8000-000000000001';
 end $$;
 -- 6. The rollback, rehearsed and undone. Seed what it deletes (an admin appointed, a mute, the two outbox rows it clears,
--- a repeat rule), try the guards (it refuses after the push rollback or the open-link rollback has run, and the push
--- rollback refuses while this migration is in place), then run it: every fingerprint entry and every cover policy is
+-- a repeat rule), try the guards (it refuses after the phone-key, push or open-link rollback has run, and the phone-key and
+-- push rollbacks refuse while this migration is in place), then run it: every fingerprint entry and every cover policy is
 -- back, the seeded plan stays, and what the migration added is gone.
 begin;
 insert into auth.users(id,email,email_confirmed_at) values ('de000000-0000-4000-8000-000000000002','creating-rehearsal-guest@resbite-test.invalid',now());
@@ -146,9 +146,11 @@ insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,act
  ('df000000-0000-4000-8000-000000000001','de000000-0000-4000-8000-000000000002','invited','creating-rehearsal:again','de000000-0000-4000-8000-000000000001','again');
 \set cr_rehearsal_rollback `cat :'resbite_repo'/supabase/rollback/20261031120000_creating_a_resbite.rollback.sql`
 \set cr_rehearsal_push `cat :'resbite_repo'/supabase/rollback/20261030120000_push_delivery.rollback.sql`
-create temporary table cr_rehearsal_scripts on commit drop as select :'cr_rehearsal_rollback'::text as rollback, :'cr_rehearsal_push'::text as push;
+\set cr_rehearsal_pk `cat :'resbite_repo'/supabase/rollback/20261030130000_phone_key.rollback.sql`
+create temporary table cr_rehearsal_scripts on commit drop as select :'cr_rehearsal_rollback'::text as rollback, :'cr_rehearsal_push'::text as push, :'cr_rehearsal_pk'::text as pk;
 do $$ begin
- if coalesce(length(btrim((select rollback from cr_rehearsal_scripts))),0)=0 or coalesce(length(btrim((select push from cr_rehearsal_scripts))),0)=0 then
+ if coalesce(length(btrim((select rollback from cr_rehearsal_scripts))),0)=0 or coalesce(length(btrim((select push from cr_rehearsal_scripts))),0)=0
+  or coalesce(length(btrim((select pk from cr_rehearsal_scripts))),0)=0 then
   raise exception 'A rollback text is empty';
  end if;
  -- The push rollback refuses while this migration is in place.
@@ -158,7 +160,23 @@ do $$ begin
  exception when raise_exception then
   if sqlerrm is distinct from 'Run the creating-a-resbite rollback (20261031120000) first' then raise; end if;
  end;
- -- This rollback refuses once the push rollback, or the open-link rollback, has run (their tables stand in, renamed).
+ -- The phone-key rollback refuses while this migration is in place.
+ begin
+  execute (select pk from cr_rehearsal_scripts);
+  raise exception 'The phone-key rollback ran while the creating-a-resbite objects exist';
+ exception when raise_exception then
+  if sqlerrm is distinct from 'Run the creating-a-resbite rollback (20261031120000) first' then raise; end if;
+ end;
+ -- This rollback refuses once the phone-key rollback (its phone_key() stands in, renamed), the push rollback or the
+ -- open-link rollback (their tables stand in, renamed) has run.
+ alter function private.phone_key(text) rename to cr_rehearsal_phone_key;
+ begin
+  execute (select rollback from cr_rehearsal_scripts);
+  raise exception 'The creating-a-resbite rollback ran after the phone-key rollback';
+ exception when raise_exception then
+  if sqlerrm is distinct from 'Run the creating-a-resbite rollback before the phone-key rollback' then raise; end if;
+ end;
+ alter function private.cr_rehearsal_phone_key(text) rename to phone_key;
  alter table private.notification_deliveries rename to cr_rehearsal_deliveries;
  begin
   execute (select rollback from cr_rehearsal_scripts);

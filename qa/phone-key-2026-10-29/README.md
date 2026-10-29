@@ -24,7 +24,7 @@ The merge fills the final values. The values here were taken on the branch at th
 | File | sha256 |
 | --- | --- |
 | `supabase/migrations/20261030130000_phone_key.sql` | `d7cf188f6b63d14453a2b34d6c8c85838ed196d7a06e01e3bd94c66ae0a14667` |
-| `supabase/rollback/20261030130000_phone_key.rollback.sql` | `a955455f81ce12e4c24f3c37adad1f5aa369eb0188e1d049cc0b388ed32ff2c9` |
+| `supabase/rollback/20261030130000_phone_key.rollback.sql` | `b474310fa6bae25368d995f3c6855b0686402d70a3ca8cbb90962c7eaf34d68a` |
 | `supabase/ops/rewrite-older-argentine-accounts.sql` | `58d23febc7ae40e3eac50f55e2c391000a9fff9d7f4d9df0928a6e04bf0e73a9` |
 
 ## Local checks
@@ -134,12 +134,13 @@ What the clients now do (branch `pk2-clients`, from plan 1's head):
 
 ## Rebase note
 
-`cr1-database`'s `20261031120000_creating_a_resbite.sql` redefines `invite_contacts`. When that branch is rebased onto this one, its body must start from this migration's version (the comparison by key), not from `20261028120000_contact_invitations.sql`; otherwise the rebase would bring back the bare-digits comparison.
+Done on 29 October 2026: `cr1-database` was rebased onto this. Its `invite_contacts`, `check_invited_number` and `answer_phone_invitation` start from this migration's bodies (the comparison by key) with that plan's changes on top, its rollback restores these bodies, and this rollback gained a guard that refuses while `public.plan_admins` exists (run the creating-a-resbite rollback first); the rollback's sha256 below changed with it.
 
 ## Rollback
 
-Run `supabase/rollback/20261030130000_phone_key.rollback.sql` in one transaction with the owner's approval: `begin; \i supabase/rollback/20261030130000_phone_key.rollback.sql; commit;`. sha256 `a955455f81ce12e4c24f3c37adad1f5aa369eb0188e1d049cc0b388ed32ff2c9`.
+Run `supabase/rollback/20261030130000_phone_key.rollback.sql` in one transaction with the owner's approval: `begin; \i supabase/rollback/20261030130000_phone_key.rollback.sql; commit;`. sha256 `b474310fa6bae25368d995f3c6855b0686402d70a3ca8cbb90962c7eaf34d68a`.
 
+- **Order.** Once `20261031120000_creating_a_resbite.sql` is applied, run its rollback first: this file stops with "Run the creating-a-resbite rollback (20261031120000) first" while `public.plan_admins` exists.
 - **Pre-check first.** It counts the recorded older numbers that another account now holds. If there is any, it stops before any change with "N older numbers are now held by other accounts; settle them first" (the count only, never a number); the owner settles those accounts and runs it again.
 - It puts the accounts rewritten by the script back (their numbers and phone identities) from `private.phone_rewrites`, drops that table, restores the seven earlier bodies (the two test-mode functions and the five invitation functions) and drops `private.phone_variants` and `private.phone_key`. Before the script has run, the record is empty and the rollback changes no account.
 - **It does not restore** the re-keyed invitations (a key is the old digits for every number except an Argentine mobile saved with the 9, so after a rollback a 9-form invitation (saved with the 9 or dialled as 011 15 …) matches only the spelling without it; the collapsed duplicates are deleted), the emptied `private.test_codes`, or any `phone_change` value.

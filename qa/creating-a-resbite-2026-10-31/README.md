@@ -14,15 +14,17 @@
   - Repeats: `next_occurrence` and `roll_repeating_plans`, run by a pg_cron job (step 7), and the cover read policy widened for the next occurrence. The roll asks again only the guests who use the app and may still use it.
 - **Outbox:** new kind `admin_added` and the detail `again` for `invited`.
 - **Also changed in this branch (no hosted effect until deployed):** the `deliver-notifications` copy module (`supabase/functions/_shared/notification-copy.ts`) and the link site `links/` (the pages say "happened" from the end, "Every Thursday", "Place to be decided").
+- **Rebased on the phone key (29 October 2026):** the branch sits on `main` after `20261030130000_phone_key.sql` went live. `invite_contacts`, `check_invited_number` and `answer_phone_invitation` start from that migration's bodies (numbers matched by key) with this plan's changes on top; the rollback restores those bodies; and `supabase/rollback/20261030130000_phone_key.rollback.sql` gained the guard the push rollback has (it refuses while `public.plan_admins` exists), so its sha256 changed.
 - The details are in `supabase/README.md`, "Creating a resbite (CR)".
 
 ## Files and hashes
 
 | File | sha256 |
 | --- | --- |
-| `supabase/migrations/20261031120000_creating_a_resbite.sql` | `1a55f9b3f09420d07332242de32172425f4b621175a1f95247ffda7d7d6735f2` |
-| `supabase/rollback/20261031120000_creating_a_resbite.rollback.sql` | `e43100c0ad04c4a6ed810b9ca319851e00f483f71ce7e09834da7bf1132c4d1e` |
+| `supabase/migrations/20261031120000_creating_a_resbite.sql` | `daa5a4d6f6f951856c86cbc6cf7fb7428a744b8b419175036d8894027430ffcc` |
+| `supabase/rollback/20261031120000_creating_a_resbite.rollback.sql` | `28ff6b7671123dab574e738a0758cae7a2d0ba11f98f5bfbfb2cf482fa8ceb26` |
 | `supabase/rollback/20261030120000_push_delivery.rollback.sql` (edited by this plan: its guard now refuses while `public.plan_admins` exists) | `bd3e356095fb5ae64af6f1189e5fb4e877efb38961f1fcfa90789e9577c75558` (it was `5430f89f915b7a8d18703deee6eefe66de8ef2b41e2b7d4b185e3143632ce81e`) |
+| `supabase/rollback/20261030130000_phone_key.rollback.sql` (edited by this plan: its guard now refuses while `public.plan_admins` exists) | `b474310fa6bae25368d995f3c6855b0686402d70a3ca8cbb90962c7eaf34d68a` (it was `a955455f81ce12e4c24f3c37adad1f5aa369eb0188e1d049cc0b388ed32ff2c9`) |
 | `supabase/ops/schedule-roll-repeating-plans.sql` | `3a8202877260008723648dc4723b36aedb6d772f809b2552997765773040d74e` |
 | `supabase/tests/hosted-baseline/20261031120000_creating_a_resbite.before.sql`, `.after.sql` | the rehearsal pair, run locally only |
 
@@ -32,7 +34,7 @@ Recompute before asking for approval (`sha256sum <file>`): approve by file name 
 
 - `./scripts/test-database-docker.sh --hosted-baseline supabase/migrations/20261031120000_creating_a_resbite.sql`: the before file passes against the hosted baseline, the migration applies, the after file passes, `creating-a-resbite.sql` and every earlier baseline test pass.
 - `./scripts/test-database-docker.sh` (full mode) passes.
-- The rehearsal's `.after.sql` runs the rollback between `begin` and `rollback` and proves the fingerprint and the cover policies are back, that the guards refuse after the push or open-link rollback (and the push rollback refuses while this migration stands), and that the seeded plan and guest stay. Separately, the rollback, applied after the migration on the Docker database, restores the fingerprint of the baseline (functions with their grants, relations, columns, indexes, constraints, policies, triggers, comments, and the storage policies) exactly, and `gi1.sql`, `ux2.sql`, `contact-invitations.sql`, `open-link-approval.sql` and `push-delivery.sql` as they were before this plan then pass.
+- The rehearsal's `.after.sql` runs the rollback between `begin` and `rollback` and proves the fingerprint and the cover policies are back, that the guards refuse after the phone-key, push or open-link rollback (and the phone-key and push rollbacks refuse while this migration stands), and that the seeded plan and guest stay. Separately, the rollback, applied after the migration on the Docker database, restores the fingerprint of the baseline (functions with their grants, relations, columns, indexes, constraints, policies, triggers, comments, and the storage policies) exactly, and `gi1.sql`, `ux2.sql`, `contact-invitations.sql`, `open-link-approval.sql` and `push-delivery.sql` as they were before this plan then pass.
 
 ## Rollout runbook
 
@@ -42,7 +44,7 @@ Recompute before asking for approval (`sha256sum <file>`): approve by file name 
    - `supabase db query --linked -f supabase/ops/hosted-fingerprint.sql -o json > qa/creating-a-resbite-2026-10-31/hosted-before.json`
    - `supabase db query --linked -f supabase/ops/hosted-counts.sql -o json > qa/creating-a-resbite-2026-10-31/hosted-counts-before.json`
    - The storage policies, which the fingerprint (`public` and `private` only) does not cover, with `supabase db query --linked -o json "select policyname, cmd, qual, with_check from pg_policies where schemaname = 'storage' order by policyname" > qa/creating-a-resbite-2026-10-31/hosted-storage-policies-before.json`.
-   - Compare the fingerprint with a local replay of `migrations.txt` (what hosted runs, the sixteen files). The push runbook's last comparison matched 282 of 282 objects, with hosted's default `service_role` grant on 14 older `public` objects and `public.unregister_device(text)` as the only differences; **confirm these figures from the real snapshot before approving**. Stop if anything else differs.
+   - Compare the fingerprint with a local replay of `migrations.txt` (what hosted runs, the seventeen files). The push runbook's last comparison matched 282 of 282 objects, with hosted's default `service_role` grant on 14 older `public` objects and `public.unregister_device(text)` as the only differences; **confirm these figures from the real snapshot before approving**. Stop if anything else differs.
 2. **Migration** (owner approves by file name and sha256, above). Never `supabase db push`: it would also push the local-only migrations. From the repository root, apply a copy wrapped in one transaction, then record it:
 
    ```
@@ -106,8 +108,8 @@ Recompute before asking for approval (`sha256sum <file>`): approve by file name 
 Only with the owner's approval, in one transaction, **before** the other rollbacks:
 
 1. Unschedule the job, if it was created (this does not fail when it was not): `select cron.unschedule(jobid) from cron.job where jobname = 'roll-repeating-plans';`.
-2. `begin; \i supabase/rollback/20261031120000_creating_a_resbite.rollback.sql; commit;` (sha256 above). It stops with a message, changing nothing, if the push-delivery or open-link-approval rollback has already run. The order is enforced both ways: **this plan edited `supabase/rollback/20261030120000_push_delivery.rollback.sql`** (new sha256 in the table above) so its guard stops it while `public.plan_admins` exists ("Run the creating-a-resbite rollback (20261031120000) first"). Run this one first, then push (`20261030120000`), then open-link approval (`20261029120000`).
-3. It deletes: the admins (the owner is the only host again), the mutes, the repeat rule and its columns (rolled occurrences stay as ordinary resbites), `place_tbd` (a To be decided place stays the label "To be decided"), the v4 functions, the `admin_added` outbox rows and the `again` invitations, sent or not (a guest of a rolled occurrence whose notice had not gone out is never told; run it just after the sender has drained the outbox to lose none); and it restores the 26 redefined functions, the three cover policies and the two outbox checks to their previous bodies.
+2. `begin; \i supabase/rollback/20261031120000_creating_a_resbite.rollback.sql; commit;` (sha256 above). It stops with a message, changing nothing, if the phone-key, push-delivery or open-link-approval rollback has already run. The order is enforced both ways: **this plan edited `supabase/rollback/20261030120000_push_delivery.rollback.sql` and `supabase/rollback/20261030130000_phone_key.rollback.sql`** (new sha256s in the table above) so their guards stop them while `public.plan_admins` exists ("Run the creating-a-resbite rollback (20261031120000) first"). Run this one first, then the phone key (`20261030130000`), then push (`20261030120000`), then open-link approval (`20261029120000`).
+3. It deletes: the admins (the owner is the only host again), the mutes, the repeat rule and its columns (rolled occurrences stay as ordinary resbites), `place_tbd` (a To be decided place stays the label "To be decided"), the v4 functions, the `admin_added` outbox rows and the `again` invitations, sent or not (a guest of a rolled occurrence whose notice had not gone out is never told; run it just after the sender has drained the outbox to lose none); and it restores the 26 redefined functions, the three cover policies and the two outbox checks to their previous bodies (for `invite_contacts`, `check_invited_number` and `answer_phone_invitation`, the phone-key bodies of `20261030130000`).
 4. After it, a resbite is open until its start again, not its end: one that is running stops accepting answers and changes at once. Builds made with this plan call functions that no longer exist (`create_plan_v4`, `change_plan_v4`, `set_plan_mute`, `appoint_admin`, `remove_admin`): creating, editing and muting fail until the old build is back. Redeploy `links/` from the previous commit (it reads `place_tbd` and `repeat_weeks`, which then are missing, and shows neither) and the previous `deliver-notifications`.
 
 ## Not done here

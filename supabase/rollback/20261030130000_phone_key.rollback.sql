@@ -13,6 +13,14 @@
 --    are gone;
 --  - private.test_codes, which the migration emptied (a code lives ten minutes);
 --  - phone_change values, which the script rewrites without recording them.
+-- Creating a resbite: run supabase/rollback/20261031120000_creating_a_resbite.rollback.sql before this file. That
+-- migration redefines invite_contacts, check_invited_number and answer_phone_invitation from the bodies below, and its
+-- rollback puts these bodies back, which call phone_key() and phone_variants(); the guard stops this file while
+-- public.plan_admins exists (the drops at the end would take the functions those restored bodies call).
+
+do $$ begin
+ if to_regclass('public.plan_admins') is not null then raise exception 'Run the creating-a-resbite rollback (20261031120000) first'; end if;
+end $$;
 
 do $$ declare v_taken bigint; begin
  select count(*) into v_taken from private.phone_rewrites r

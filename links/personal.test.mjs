@@ -183,6 +183,8 @@ test("the note names the invitation's calling code; the open page has no note", 
   assert.ok(renderPersonalPage({ ...open, country: "54", ending: "34" }, options).includes("This invitation is for a +54 number ending ••34."));
   const html = renderOpenLinkPage(open, options);
   assert.ok(!html.includes("This invitation is for") && !html.includes('class="note"'));
+});
+
 test("without an end, data-ends-at is the start", () => {
   const html = renderPersonalPage({ ...open, ends_at: null }, options);
   assert.ok(html.match(/<main [^>]*>/)[0].includes('data-ends-at="2099-11-02T13:00:00+00:00"'));
