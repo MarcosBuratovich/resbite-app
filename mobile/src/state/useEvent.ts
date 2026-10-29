@@ -54,6 +54,7 @@ export type EventPage = {
   appoint: (userId: string) => Promise<boolean>;
   demote: (userId: string) => Promise<boolean>;
   setNotice: (notice: string | null) => void;
+  clearError: () => void;
 };
 
 /**
@@ -323,6 +324,7 @@ export function useEvent(planId: string | undefined): EventPage {
     appoint: (userId) => changeAdmin(userId, true),
     demote: (userId) => changeAdmin(userId, false),
     setNotice,
+    clearError: () => setError(null),
   };
 }
 

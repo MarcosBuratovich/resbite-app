@@ -67,6 +67,8 @@ export const EVENT_COPY = {
   when: "When",
   where: "Where",
   noteToGuests: "Note to guests",
+  back: "Back",
+  loading: "Loading this resbite",
 } as const;
 
 const SEPARATOR = " · ";

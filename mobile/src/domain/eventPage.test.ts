@@ -217,14 +217,14 @@ test("EVENT_COPY pins the page, sheet and list words", () => {
       "People", "Actions for ", "Make admin", "Remove as admin", "Remove from this resbite", "Send again on WhatsApp",
       "Send again on Messages", "Remove", "Approve", "Decline", "Admin", "Invite", "Edit", "More", "Change",
       "Do this again", "Add to calendar", "Mute this resbite", "Unmute this resbite", "Change my reply",
-      "Cancel resbite", "Your answer", "Your resbite is cancelled.", "Or share the event link", "Update calendar", "Cancelled",
+      "Cancel resbite", "Your answer", "Your resbite is cancelled.", "Or share the event link", "Update calendar", "Cancelled", "Back", "Loading this resbite",
     ],
     [
       EVENT_COPY.people, EVENT_COPY.actionsFor, EVENT_COPY.makeAdmin, EVENT_COPY.removeAdmin, EVENT_COPY.removeFromResbite,
       EVENT_COPY.sendAgainWhatsApp, EVENT_COPY.sendAgainMessages, EVENT_COPY.remove, EVENT_COPY.approve, EVENT_COPY.decline,
       EVENT_COPY.adminBadge, EVENT_COPY.invite, EVENT_COPY.edit, EVENT_COPY.moreButton, EVENT_COPY.change,
       EVENT_COPY.doThisAgain, EVENT_COPY.addToCalendar, EVENT_COPY.mute, EVENT_COPY.unmute, EVENT_COPY.changeMyReply,
-      EVENT_COPY.cancelResbite, EVENT_COPY.yourAnswer, EVENT_COPY.cancelled, EVENT_COPY.shareLink, EVENT_COPY.updateCalendar, EVENT_COPY.cancelledChip,
+      EVENT_COPY.cancelResbite, EVENT_COPY.yourAnswer, EVENT_COPY.cancelled, EVENT_COPY.shareLink, EVENT_COPY.updateCalendar, EVENT_COPY.cancelledChip, EVENT_COPY.back, EVENT_COPY.loading,
     ],
   );
 });

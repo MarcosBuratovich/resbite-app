@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { ArrowLeft, Check, Ellipsis, Send, UserMinus, UserPlus, X } from "lucide-react-native";
 import type { LucideIcon } from "lucide-react-native";
-import { Button, Copy, ErrorNote, s, useLargeText } from "../src/design/ui";
+import { Button, Copy, ErrorNote, s } from "../src/design/ui";
 import { IconButton, focusHeading } from "../src/design/kit";
 import { GrabberSheet } from "../src/design/GrabberSheet";
 import { MenuRow, MenuSeparator } from "../src/design/MenuRow";
@@ -32,10 +32,10 @@ const ACTION_ICON: Partial<Record<PersonAction, LucideIcon>> = {
 export default function Guests() {
   const { plan: planId } = useLocalSearchParams<{ plan?: string }>();
   const event = useEvent(planId);
-  return event.plan ? <People event={event} plan={event.plan} /> : <Bar error={event.error} />;
+  return event.plan ? <People event={event} plan={event.plan} /> : <Bar error={event.error} loading={event.busy && !event.error} />;
 }
 
-function Bar({ error = null }: { error?: string | null }) {
+function Bar({ error = null, loading = false }: { error?: string | null; loading?: boolean }) {
   const insets = useSafeAreaInsets();
   const title = useRef<Text | null>(null);
   useEffect(() => {
@@ -44,9 +44,9 @@ function Bar({ error = null }: { error?: string | null }) {
   }, []);
   return (
     <View style={s.page}>
-      <View style={[styles.bar, { height: insets.top + 56, paddingTop: insets.top }]}>
+      <View style={[styles.bar, { minHeight: insets.top + 56, paddingTop: insets.top }]}>
         <View style={[styles.back, { top: insets.top + 6 }]}>
-          <IconButton icon={ArrowLeft} label="Back" onPress={() => router.back()} />
+          <IconButton icon={ArrowLeft} label={EVENT_COPY.back} onPress={() => router.back()} />
         </View>
         <Text ref={title} accessibilityRole="header" style={styles.barTitle}>
           {EVENT_COPY.people}
@@ -54,6 +54,7 @@ function Bar({ error = null }: { error?: string | null }) {
       </View>
       <View style={{ paddingHorizontal: 20 }}>
         <ErrorNote message={error} />
+        {loading ? <ActivityIndicator accessibilityLabel={EVENT_COPY.loading} color={c.aquaDark} /> : null}
       </View>
     </View>
   );
@@ -79,6 +80,8 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
   const off = working || event.acting !== null || resend.busy !== null;
   const open = (row: PersonRow) => {
     setError(null);
+    resend.clearError();
+    event.clearError();
     setSheet({ row, view: "menu" });
   };
   const close = () => {
@@ -86,8 +89,8 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
     setSheet(null);
     setError(null);
   };
-  /** One action at a time; on success the sheet closes and the list is read again, on failure the sheet says why. */
-  async function run(task: () => Promise<boolean | void>) {
+  /** One action at a time; on success the sheet closes and the list is read again (unless the action already did), on failure the sheet says why. */
+  async function run(task: () => Promise<boolean | void>, reload = true) {
     if (off) return;
     setWorking(true);
     setError(null);
@@ -95,7 +98,7 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
       const done = await task();
       if (done === false) return;
       setSheet(null);
-      await event.load();
+      if (reload) await event.load();
     } catch (e) {
       setError(e instanceof Error ? e.message : INVITE_COPY.offline);
     } finally {
@@ -106,9 +109,9 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
   const perform = (row: PersonRow, action: PersonAction) => {
     switch (action) {
       case "makeAdmin":
-        return run(() => event.appoint(row.userId!));
+        return run(() => event.appoint(row.userId!), false);
       case "removeAdmin":
-        return run(() => event.demote(row.userId!));
+        return run(() => event.demote(row.userId!), false);
       case "approve":
         return run(async () => void (await joinRequestGateway.decide(plan.id, row.userId!, true)));
     }
@@ -185,7 +188,7 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
                           via={via}
                           onPress={() => {
                             const person = invitee(current);
-                            if (person) void run(() => resend.resend(person, via));
+                            if (person) void run(() => resend.resend(person, via), false);
                           }}
                         />
                       ))

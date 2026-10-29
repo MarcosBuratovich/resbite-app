@@ -29,6 +29,7 @@ export function useResend(
   forget: (e164: string) => Promise<void>;
   busy: string | null;
   error: string | null;
+  clearError: () => void;
 } {
   const { session, preview } = useApp();
   const scope = preview ? "preview" : session?.user.id;
@@ -114,5 +115,6 @@ export function useResend(
     },
     [busy, scope, plan.id, plan.title, plan.starts_at, plan.ends_at, reload, refreshSent],
   );
-  return { resend, sentHere, forget, busy, error };
+  const clearError = useCallback(() => setError(null), []);
+  return { resend, sentHere, forget, busy, error, clearError };
 }
