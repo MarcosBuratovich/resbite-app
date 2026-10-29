@@ -9,7 +9,7 @@ import { readEvent, readGuests, readRsvp, writeRsvp, type EventSnapshot, type Gu
 import { syncReminders } from "../services/deviceReminders";
 import { contactInviteGateway } from "../services/contactInvites";
 import { inviteCodeStore, type StoredInvite } from "../services/inviteCodeStore";
-import { formatPhone } from "../domain/phone";
+import { formatPhone, phoneSendForm } from "../domain/phone";
 import { joinRequestGateway, type HostRequest } from "../services/joinRequests";
 
 /** Someone the host invited by personal link who hasn't answered: the stored name, else the number. */
@@ -247,7 +247,7 @@ async function readInvited(planId: string, userId: string): Promise<InvitedPerso
   return rows
     .filter((r) => !r.answered)
     .map((r) => {
-      const e164 = `+${r.phone}`;
+      const e164 = phoneSendForm(r.phone);
       const saved = stored[e164] ?? null;
       return { phone: r.phone, e164, country: r.country, name: saved?.name?.trim() || formatPhone(e164), stored: saved };
     });

@@ -12,7 +12,7 @@ import {
   type ContactNumber,
 } from "../domain/contactInvites";
 import { INVITE_COPY } from "../domain/inviteCopy";
-import { deviceRegion, INVALID_PHONE, parsePhone } from "../domain/phone";
+import { deviceRegion, INVALID_PHONE, parsePhone, phoneKey } from "../domain/phone";
 
 export const DEFAULT_ORIGIN = "https://link.resbite.com";
 const digitsOf = (e164: string) => e164.replace(/\D/g, "");
@@ -34,7 +34,13 @@ export function useContactInvites(a: {
   enabled: boolean;
 }) {
   const { planId, scope, userPhone, message, enabled } = a;
-  const region = useMemo(() => hostRegion(userPhone, deviceRegion()), [userPhone]);
+  const hostDefault = useMemo(() => hostRegion(userPhone, deviceRegion()), [userPhone]);
+  // The region a number without a country code is read in: the host's own, until the host picks another.
+  const [assumedRegion, setAssumedRegionState] = useState(hostDefault);
+  const regionChosen = useRef(false);
+  useEffect(() => {
+    if (!regionChosen.current) setAssumedRegionState(hostDefault);
+  }, [hostDefault]);
   const origin = process.env.EXPO_PUBLIC_INVITATION_ORIGIN || DEFAULT_ORIGIN;
   const context = `${scope ?? ""}:${planId ?? ""}`;
   const current = useRef(context);
@@ -85,6 +91,8 @@ export function useContactInvites(a: {
     working.current = false;
     touched.current = false;
     checked.current = new Set();
+    regionChosen.current = false;
+    setAssumedRegionState(hostDefault);
   }, [context]);
 
   const clearContacts = useCallback(() => {
@@ -109,7 +117,7 @@ export function useContactInvites(a: {
         if (expand) await expandContactAccess();
         const page = await readPhoneRows(next, !expand && next === 0);
         if (!alive(ctx)) return;
-        const { numbers, skipped: bad } = contactNumbers(page.rows, region);
+        const { numbers, skipped: bad } = contactNumbers(page.rows, assumedRegion);
         setLoaded((old) => {
           if (!next) return numbers;
           const seen = new Set(old.map((n) => n.key));
@@ -133,7 +141,7 @@ export function useContactInvites(a: {
         }
       }
     },
-    [enabled, region, clearContacts],
+    [enabled, assumedRegion, clearContacts],
   );
 
   // Coming back from Settings: the allowed contacts may have changed, so read them again.
@@ -180,27 +188,41 @@ export function useContactInvites(a: {
     setPicked((old) => ({ ...old, [n.contact]: n }));
   }
   /** Parses a typed number with the host's region; picks it on success. Returns an error message otherwise. */
-  function addNumber(name: string, input: string): string | null {
-    const parsed = parsePhone(input, region);
+  function addNumber(name: string, input: string, region?: string): string | null {
+    const parsed = parsePhone(input, region ?? assumedRegion);
     if (!parsed.ok) return parsed.message;
-    const n = contactNumbers([{ fullName: name, phones: [{ number: parsed.e164 }] }], region).numbers[0];
+    const n = contactNumbers([{ fullName: name, phones: [{ number: parsed.e164 }] }], region ?? assumedRegion).numbers[0];
     if (!n) return INVALID_PHONE;
     setManual((old) => (old.some((x) => x.key === n.key) ? old : [n, ...old]));
     setPicked((old) => ({ ...old, [n.contact]: n }));
     return null;
   }
 
+  /** Chooses the region for numbers without a code and reads the contacts again in it. */
+  function setAssumedRegion(next: string) {
+    regionChosen.current = true;
+    setAssumedRegionState(next);
+  }
+  // A region chosen after the contacts were read: read them again from the start in the new region.
+  const readIn = useRef(assumedRegion);
+  useEffect(() => {
+    if (readIn.current === assumedRegion) return;
+    readIn.current = assumedRegion;
+    if (access === "ready") void loadContacts(0);
+  }, [assumedRegion, access, loadContacts]);
+
   // "On Resbite" for the picked numbers only, after 400 ms without a change.
   useEffect(() => {
     if (!enabled || !planId) return;
-    const fresh = selected.map((n) => digitsOf(n.e164)).filter((d) => !checked.current.has(d));
-    if (!fresh.length) return;
+    const pending = selected.filter((n) => !checked.current.has(n.key));
+    if (!pending.length) return;
+    const fresh = pending.map((n) => digitsOf(n.e164));
     const ctx = current.current;
     const timer = setTimeout(() => {
       contactInviteGateway.onResbite(fresh).then(
         (found) => {
           if (!alive(ctx)) return;
-          fresh.forEach((d) => checked.current.add(d));
+          pending.forEach((n) => checked.current.add(n.key));
           setOnResbite((old) => new Set([...old, ...found]));
         },
         // The badge is a convenience: without it every pick is still invited correctly.
@@ -227,7 +249,7 @@ export function useContactInvites(a: {
       if (!alive(ctx)) return;
       const out: Outcome = { inApp: [], already: [], links: [] };
       for (const [i, n] of selected.entries()) {
-        const kind: InviteKind | undefined = results.find((r) => r.phone === items[i].phone)?.kind;
+        const kind: InviteKind | undefined = results.find((r) => phoneKey(r.phone) === n.key)?.kind;
         if (kind === "link") {
           const prior = stored[n.e164];
           const value: StoredInvite = { code: items[i].code, name: n.name, sentVia: prior?.code === items[i].code ? prior.sentVia : undefined };
@@ -279,7 +301,7 @@ export function useContactInvites(a: {
   }
 
   return {
-    region, access, visible, selected, picked, onResbite, query, setQuery, more, limited, skipped, offset,
+    assumedRegion, setAssumedRegion, access, visible, selected, picked, onResbite, query, setQuery, more, limited, skipped, offset,
     busy, error, setError, notice, setNotice, outcome, loadContacts, toggle, choose, addNumber, invite, send,
   };
 }

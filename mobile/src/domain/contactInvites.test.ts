@@ -17,7 +17,7 @@ test("contactNumbers gives one entry per distinct number and counts the unparsea
   assert.equal(numbers.length, 3);
   assert.deepEqual(new Set(numbers.map((n) => n.e164)).size, 3);
   assert.deepEqual(numbers.filter((n) => n.name === "Sam").map((n) => n.e164).sort(), ["+447700900111", "+447700900834"]);
-  assert.ok(numbers.every((n) => n.key === n.e164));
+  assert.ok(numbers.every((n) => n.key === n.e164.replace(/\D/g, "")));
 });
 
 test("contactNumbers reads local formats with the host region", () => {
@@ -95,4 +95,27 @@ test("Send again offers both ways, the one used last first", () => {
 test("the Invited row's controls are named for the person and the app", () => {
   assert.equal(INVITE_COPY.resendVia("WhatsApp", "Ben Ito"), "Send again on WhatsApp: Ben Ito");
   assert.equal(INVITE_COPY.resendHint("Messages", "Ben Ito"), "Opens Messages with Ben Ito’s link");
+});
+
+test("two spellings of one Argentine mobile are one contact, shown with the 9", () => {
+  const { numbers, skipped } = contactNumbers(
+    [{ fullName: "Juan", phones: [{ number: "+54 11 1234 1234" }] }, { fullName: "Juan C", phones: [{ number: "+54 9 11 1234 1234" }] },
+     { fullName: "Local", phones: [{ number: "011 15 1234 1234" }] }],
+    "AR",
+  );
+  assert.equal(skipped, 0);
+  assert.equal(numbers.length, 1);
+  assert.equal(numbers[0].key, "541112341234");
+  assert.equal(numbers[0].e164, "+5491112341234");
+  assert.equal(numbers[0].label, "+54 9 11 1234 1234");
+  assert.equal(numbers[0].country, "54");
+  assert.equal(numbers[0].name, "Juan");
+});
+test("a contact without a code takes the host's region; one with + keeps its own", () => {
+  const { numbers } = contactNumbers([{ fullName: "Kate", phones: [{ number: "305 555 0123" }, { number: "+1 305 555 0124" }] }], "AR");
+  assert.deepEqual(numbers.map((n) => n.e164), ["+13055550124", "+5493055550123"]);
+});
+test("hostRegion reads an Argentine host's number with or without the 9", () => {
+  assert.equal(hostRegion("5491112341234", "GB"), "AR");
+  assert.equal(hostRegion("541112341234", "GB"), "AR");
 });

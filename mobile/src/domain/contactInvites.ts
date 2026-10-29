@@ -1,9 +1,11 @@
-import { getCountries, getCountryCallingCode, parsePhoneNumberFromString } from "libphonenumber-js/min";
-import { formatPhone, parsePhone } from "./phone";
+import { parsePhoneNumberFromString } from "libphonenumber-js/min";
+import { formatPhone, parsePhone, phoneKey, phoneSendForm, regionOf } from "./phone";
 
 export type ContactNumber = {
+  /** The phone key: what two spellings of one number share. */
   key: string;
   name: string;
+  /** The send form: the number to dial, with an Argentine mobile's 9. */
   e164: string;
   /** The contact this number belongs to: the first kept number of its address-book row. */
   contact: string;
@@ -14,7 +16,7 @@ export type ContactNumber = {
 
 export type ContactRow = { fullName?: string | null; phones: { number: string }[] };
 
-/** One entry per distinct E.164 number (first contact wins); numbers that don't parse count as skipped. */
+/** One entry per distinct phone key (first contact wins); numbers that don't parse count as skipped. */
 export function contactNumbers(rows: ContactRow[], region: string): { numbers: ContactNumber[]; skipped: number } {
   const seen = new Map<string, ContactNumber>();
   let skipped = 0;
@@ -27,15 +29,17 @@ export function contactNumbers(rows: ContactRow[], region: string): { numbers: C
         skipped += 1;
         continue;
       }
-      if (seen.has(parsed.e164)) continue;
-      const label = formatPhone(parsed.e164);
-      contact = contact || parsed.e164;
-      seen.set(parsed.e164, {
-        key: parsed.e164,
+      const e164 = phoneSendForm(parsed.e164);
+      const key = phoneKey(e164);
+      if (seen.has(key)) continue;
+      const label = formatPhone(e164);
+      contact = contact || e164;
+      seen.set(key, {
+        key,
         name: fullName || label,
-        e164: parsed.e164,
+        e164,
         contact,
-        country: parsePhoneNumberFromString(parsed.e164)?.countryCallingCode ?? "",
+        country: parsePhoneNumberFromString(e164)?.countryCallingCode ?? "",
         label,
       });
     }
@@ -57,14 +61,7 @@ export function groupContacts(numbers: ContactNumber[]): { contact: string; name
 
 /** The region of the host's own verified phone (digits only), else the fallback. */
 export function hostRegion(userPhone: string | null | undefined, fallback: string): string {
-  const digits = (userPhone ?? "").replace(/\D/g, "");
-  if (!digits) return fallback;
-  const parsed = parsePhoneNumberFromString(`+${digits}`);
-  if (!parsed) return fallback;
-  // Fiction-range numbers (07700 900xxx) are possible but have no country: use the code's main country.
-  if (parsed.country) return parsed.country;
-  const code = parsed.countryCallingCode;
-  return getCountries().find((c) => getCountryCallingCode(c) === code) ?? fallback;
+  return (userPhone ? regionOf(userPhone) : null) ?? fallback;
 }
 
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
