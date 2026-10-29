@@ -5,6 +5,7 @@ import {
   type MissingItem,
   type PlanForm,
 } from "../domain/planForm";
+import { PLAN_COPY } from "../domain/planCopy";
 import type { Plan, PlanDetails, PlanWrite } from "../domain/plans";
 import { videoLinkFields, type PlanFormField } from "../domain/videoLinks";
 
@@ -46,7 +47,7 @@ export function editWrite(form: PlanForm, zone: string, original: Plan): PlanWri
 
 /** The notice the next screen shows after a save. */
 export function afterSaveNotice(mode: PlanFormMode): string {
-  return mode === "edit" ? "Changes saved" : "Resbite created";
+  return mode === "edit" ? PLAN_COPY.changesSaved : PLAN_COPY.resbiteCreated;
 }
 
 /** The details a plan is saved with now, for comparing against an edit. */

@@ -25,6 +25,7 @@ import {
   type MissingItem,
   type PlanForm,
 } from "../domain/planForm";
+import { PLAN_COPY } from "../domain/planCopy";
 import type { PlanFormField } from "../domain/videoLinks";
 import { canEditPlan, PlanSaveError, reconcilePlan, writePlan, type Plan, type PlanWrite } from "../domain/plans";
 import { planGateway, setGuestNote } from "../services/plans";
@@ -61,12 +62,6 @@ export type PlanFormController = {
   submit(): Promise<void>;
   leave: { asked: boolean; keep(): void; discard(): void };
 };
-
-const LOAD_FAILED = "We couldn’t load this resbite. Check your connection and try again.";
-const NOT_EDITABLE = "Only the organizer can edit an upcoming, active plan.";
-const IDEA_UNAVAILABLE = "This idea isn’t available right now.";
-const NOT_PROTECTED = "Couldn’t protect this save on your device. Nothing was sent; try again.";
-const UNCONFIRMED = "We couldn’t confirm the save. Retry when you’re connected.";
 
 const deviceZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 const sameForm = (a: PlanForm, b: PlanForm) => JSON.stringify(a) === JSON.stringify(b);
@@ -147,7 +142,7 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
       setLoadError(null);
       setLoading(false);
     } else {
-      setLoadError(IDEA_UNAVAILABLE);
+      setLoadError(PLAN_COPY.ideaUnavailable);
       setLoading(false);
     }
   }, [mode, catalogue.loading, catalogue.error, idea]);
@@ -164,9 +159,9 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
           ? (localPlans.find((p) => p.id === sourceId) ?? null)
           : await planGateway.read(sourceId!);
         if (!active) return;
-        if (!plan) throw new Error(LOAD_FAILED);
+        if (!plan) throw new Error(PLAN_COPY.loadFailed);
         if (mode === "edit") {
-          if (!canEditPlan(plan, ownerId ?? undefined, preview)) throw new Error(NOT_EDITABLE);
+          if (!canEditPlan(plan, ownerId ?? undefined, preview)) throw new Error(PLAN_COPY.notEditable);
           const guests = preview ? [] : await readGuests(plan.id);
           if (!active) return;
           setGuestCount(countNotified(guests));
@@ -187,7 +182,7 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
           }
         }
       } catch (e) {
-        if (active) setLoadError(messageOf(e, LOAD_FAILED));
+        if (active) setLoadError(messageOf(e, PLAN_COPY.loadFailed));
       } finally {
         if (active) setLoading(false);
       }
@@ -265,7 +260,7 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
         try {
           await createJournal.put(scope!, { requestId: requestId.current, write, savedAt: new Date().toISOString() });
         } catch {
-          throw new PlanSaveError(NOT_PROTECTED);
+          throw new PlanSaveError(PLAN_COPY.notProtected);
         }
       }
       try {
@@ -282,7 +277,7 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
       if (mounted.current) setCoverOutcome(outcome);
       if (!withNew)
         await copyFallbackCover(write.id, live.description || fallback?.description || "").catch(() => {});
-      const noteFailed = note ? await setGuestNote(write.id, note).then(() => null, (e) => messageOf(e, UNCONFIRMED)) : null;
+      const noteFailed = note ? await setGuestNote(write.id, note).then(() => null, (e) => messageOf(e, PLAN_COPY.unconfirmed)) : null;
       if (!form.placeTbd && form.place.trim())
         void recentPlaces.remember(scope!, form.place.trim(), assertSession).catch(() => {});
       await createJournal.clear(scope!, requestId.current).catch(() => {});
@@ -334,7 +329,7 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
     if (check.missing.length > 0 || check.videoFields.length > 0) return;
     if (!scope || (mode === "edit" && !original)) return;
     if (mode === "edit" && original && !canEditPlan(original, ownerId ?? undefined, preview)) {
-      setError(NOT_EDITABLE);
+      setError(PLAN_COPY.notEditable);
       return;
     }
     // Captured before the first await so a sign-out during the save is detected.
@@ -348,7 +343,7 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
     } catch (e) {
       if (mounted.current) {
         // Note failures after an edit's plan saved carry their own message; a save error maps as writePlan did.
-        setError(e instanceof PlanSaveError ? e.message : messageOf(e, UNCONFIRMED));
+        setError(e instanceof PlanSaveError ? e.message : messageOf(e, PLAN_COPY.unconfirmed));
       }
     } finally {
       saving.current = false;

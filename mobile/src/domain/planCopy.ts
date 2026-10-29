@@ -72,6 +72,21 @@ export const PLAN_COPY = {
   ideaGone: "That idea is no longer available. Create the resbite on its own.",
   saveAndNotify: "Save and notify",
   notifyTold: "will be told about changes to the date, time or place.",
+  person: "person",
+  people: "people",
+  oneMissing: "One thing is missing",
+  twoMissing: "Two things are missing",
+  threeMissing: "Three things are missing",
+  fourMissing: "Four things are missing",
+  and: "and",
+
+  changesSaved: "Changes saved",
+  resbiteCreated: "Resbite created",
+  loadFailed: "We couldn’t load this resbite. Check your connection and try again.",
+  notEditable: "Only the organizer can edit an upcoming, active plan.",
+  ideaUnavailable: "This idea isn’t available right now.",
+  notProtected: "Couldn’t protect this save on your device. Nothing was sent; try again.",
+  unconfirmed: "We couldn’t confirm the save. Retry when you’re connected.",
 } as const;
 
 /** The notice My resbites shows when a create whose reply was lost turns out to have gone through. */

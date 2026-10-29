@@ -56,19 +56,20 @@ const PHRASE: Record<MissingItem, string> = {
   place: PLAN_COPY.missingPlace,
   categories: PLAN_COPY.missingCategories,
 };
-const COUNT = ["", "One thing is", "Two things are", "Three things are", "Four things are"];
+const COUNT = ["", PLAN_COPY.oneMissing, PLAN_COPY.twoMissing, PLAN_COPY.threeMissing, PLAN_COPY.fourMissing];
 
 /** "Two things are missing: a date and time, and a place."; null when nothing is missing. */
 export function missingLine(items: MissingItem[]): string | null {
   if (items.length === 0) return null;
   const phrases = items.map((item) => PHRASE[item]);
+  const and = PLAN_COPY.and;
   const list =
     phrases.length === 1
       ? phrases[0]
       : phrases.length === 2
-        ? `${phrases[0]}, and ${phrases[1]}`
-        : `${phrases.slice(0, -1).join(", ")}, and ${phrases[phrases.length - 1]}`;
-  return `${COUNT[items.length]} missing: ${list}.`;
+        ? `${phrases[0]}, ${and} ${phrases[1]}`
+        : `${phrases.slice(0, -1).join(", ")}, ${and} ${phrases[phrases.length - 1]}`;
+  return `${COUNT[items.length]}: ${list}.`;
 }
 
 const ROW: Record<MissingItem, string> = {
@@ -210,7 +211,7 @@ export function notifyCount(guests: { response: string }[]): number {
   return guests.filter((g) => g.response === "accepted" || g.response === "maybe" || g.response === "pending").length;
 }
 
-const people = (n: number) => `${n} ${n === 1 ? "person" : "people"}`;
+const people = (n: number) => `${n} ${n === 1 ? PLAN_COPY.person : PLAN_COPY.people}`;
 
 export function saveLabel(n: number, changed: boolean): string {
   return !changed || n === 0 ? PLAN_COPY.save : `${PLAN_COPY.saveAndNotify} ${people(n)}`;

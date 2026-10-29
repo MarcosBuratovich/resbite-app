@@ -41,3 +41,21 @@ test("the past start and the withdrawn idea", () => {
   assert.equal(PLAN_COPY.whenInFuture, "Choose a date and time in the future.");
   assert.equal(PLAN_COPY.ideaGone, "That idea is no longer available. Create the resbite on its own.");
 });
+
+test("the words the plan screen builds its lines from", () => {
+  assert.deepEqual(
+    [PLAN_COPY.oneMissing, PLAN_COPY.twoMissing, PLAN_COPY.threeMissing, PLAN_COPY.fourMissing, PLAN_COPY.and],
+    ["One thing is missing", "Two things are missing", "Three things are missing", "Four things are missing", "and"],
+  );
+  assert.deepEqual([PLAN_COPY.person, PLAN_COPY.people], ["person", "people"]);
+});
+
+test("the notices and errors of saving and loading", () => {
+  assert.equal(PLAN_COPY.changesSaved, "Changes saved");
+  assert.equal(PLAN_COPY.resbiteCreated, "Resbite created");
+  assert.equal(PLAN_COPY.loadFailed, "We couldn’t load this resbite. Check your connection and try again.");
+  assert.equal(PLAN_COPY.notEditable, "Only the organizer can edit an upcoming, active plan.");
+  assert.equal(PLAN_COPY.ideaUnavailable, "This idea isn’t available right now.");
+  assert.equal(PLAN_COPY.notProtected, "Couldn’t protect this save on your device. Nothing was sent; try again.");
+  assert.equal(PLAN_COPY.unconfirmed, "We couldn’t confirm the save. Retry when you’re connected.");
+});
