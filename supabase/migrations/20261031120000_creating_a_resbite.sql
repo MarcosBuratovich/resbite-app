@@ -219,8 +219,6 @@ begin
  return jsonb_build_object('cover_path',v_plan.cover_path,'cover_description',v_plan.cover_description,'cover_revision',v_plan.cover_revision);
 end $$;
 
--- A host (the organizer or an admin) of an active event that has not ended: the gate of the link, the invitations and the
--- waiting list. The error text stays 'Active plan owner required': the current build matches that text.
 -- revoke_phone_invitation: the latest body is 20261030130000_phone_key.sql's; revoking also ends the admin role.
 create or replace function private.revoke_phone_invitation(p_plan uuid, p_phone text) returns void language plpgsql security definer set search_path = '' as $$
 declare v_user uuid;
@@ -234,6 +232,8 @@ begin
  end if;
 end $$;
 
+-- A host (the organizer or an admin) of an active event that has not ended: the gate of the link, the invitations and the
+-- waiting list. The error text stays 'Active plan owner required': the current build matches that text.
 create or replace function private.require_link_owner(p_plan uuid) returns uuid language plpgsql set search_path = '' as $$
 declare v_uid uuid := private.require_tester();
 begin

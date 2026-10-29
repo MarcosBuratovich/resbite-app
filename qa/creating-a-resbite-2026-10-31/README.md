@@ -22,7 +22,7 @@
 
 | File | sha256 |
 | --- | --- |
-| `supabase/migrations/20261031120000_creating_a_resbite.sql` | `06105853b1e3de504e17a015edca29e2dcdaaad22a1e48de26f1f76fc6ca8ccc` |
+| `supabase/migrations/20261031120000_creating_a_resbite.sql` | `eb1cc6678939f6d4154838e2cce04387a17efee3f2ff3addfa3fa6b2526d0869` |
 | `supabase/rollback/20261031120000_creating_a_resbite.rollback.sql` | `c68f291142ec817acb1fece1fe23851d67a8c1a7e0e579455713b5dff5a05192` |
 | `supabase/rollback/20261030120000_push_delivery.rollback.sql` (edited by this plan: its guard now refuses while `public.plan_admins` exists) | `bd3e356095fb5ae64af6f1189e5fb4e877efb38961f1fcfa90789e9577c75558` (it was `5430f89f915b7a8d18703deee6eefe66de8ef2b41e2b7d4b185e3143632ce81e`) |
 | `supabase/rollback/20261030130000_phone_key.rollback.sql` (edited by this plan: its guard now refuses while `public.plan_admins` exists) | `b474310fa6bae25368d995f3c6855b0686402d70a3ca8cbb90962c7eaf34d68a` (it was `a955455f81ce12e4c24f3c37adad1f5aa369eb0188e1d049cc0b388ed32ff2c9`) |
