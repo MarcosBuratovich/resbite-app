@@ -134,3 +134,7 @@ test("the offer is conditional and its button has its own name", () => {
   assert.equal(PHONE_COPY.foldSend, "Confirm with a code");
   assert.notEqual(PHONE_COPY.foldSend, PHONE_COPY.send);
 });
+
+test("foldLanded recognises the number by key", () => {
+  assert.equal(foldLanded({ phone: "541112341234", phone_confirmed_at: "2026-10-01T00:00:00Z" } as never, "+5491112341234"), true);
+});

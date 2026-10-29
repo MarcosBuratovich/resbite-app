@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { INVALID_PHONE, deviceRegion, formatPhone, parsePhone, phoneEnding, phoneVerified, samePhone } from "./phone";
+import { INVALID_PHONE, deviceRegion, formatPhone, parsePhone, phoneEnding, phoneKey, phoneSendForm, phoneVerified, regionForCallingCode, regionOf, samePhone } from "./phone";
 
 test("numbers parse to E.164, including the UK fiction range", () => {
   assert.deepEqual(parsePhone("07700 900834", "GB"), { ok: true, e164: "+447700900834" });
@@ -44,4 +44,38 @@ test("same phone compares digits, so stored digits match E.164", () => {
   assert.equal(samePhone("", ""), false);
   assert.equal(samePhone(null, "+447700900834"), false);
   assert.equal(samePhone(undefined, undefined), false);
+});
+
+test("the phone key folds the Argentine mobile 9 and nothing else", () => {
+  const rows: [string | null, string][] = [
+    ["+5491112341234", "541112341234"], ["+541112341234", "541112341234"], ["5491112341234", "541112341234"],
+    ["+54 9 11 1234 1234", "541112341234"], ["+5493511234567", "543511234567"], ["+13055550123", "13055550123"],
+    ["+447700900834", "447700900834"], ["549123456789", "549123456789"], [null, ""], ["abc", ""],
+  ];
+  for (const [input, key] of rows) assert.equal(phoneKey(input), key, String(input));
+});
+
+test("the send form puts the 9 back", () => {
+  assert.equal(phoneSendForm("541112341234"), "+5491112341234");
+  assert.equal(phoneSendForm("+541112341234"), "+5491112341234");
+  assert.equal(phoneSendForm("+5491112341234"), "+5491112341234");
+  assert.equal(phoneSendForm("+447700900834"), "+447700900834");
+  assert.equal(phoneSendForm("13055550123"), "+13055550123");
+});
+
+test("samePhone and formatPhone go through the key and the send form", () => {
+  assert.equal(samePhone("541112341234", "+5491112341234"), true);
+  assert.equal(samePhone("5491112341234", "+54 11 1234 1234"), true);
+  assert.equal(samePhone("447700900834", "+447700900835"), false);
+  assert.equal(formatPhone("+541112341234"), "+54 9 11 1234 1234");
+  assert.equal(formatPhone("541112341234"), "+54 9 11 1234 1234");
+});
+
+test("a calling code maps to its main country, a number to its own", () => {
+  assert.equal(regionForCallingCode("1"), "US");
+  assert.equal(regionForCallingCode("44"), "GB");
+  assert.equal(regionForCallingCode("54"), "AR");
+  assert.equal(regionForCallingCode("999"), null);
+  assert.equal(regionOf("+13055550123"), "US");
+  assert.equal(regionOf("+447700900834"), "GB"); // fiction range: no country, so the code's main one
 });
