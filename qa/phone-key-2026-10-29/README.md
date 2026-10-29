@@ -34,7 +34,7 @@ The merge fills the final values. The values here were taken on the branch at th
 
 ## Rollout runbook
 
-**Order.** The migration first, any time after approval (the current build keeps working against it); then the fold function; then, **in one sitting**, plan 2's link-site deploy, the TestFlight release and the rewrite script (in that order), then the counts again; and, when the rollback window is declared closed, a later migration that drops the record. Every step needs the owner's approval. Never `supabase db push`: it would also push the local-only migrations.
+**Order.** The migration first, any time after approval (the current build keeps working against it); then the fold function; then plan 2's TestFlight build, built and processed by Apple before the sitting but given to no tester; then, **in one sitting, minutes apart**, plan 2's link-site deploy, making that build available to the testers, and the rewrite script (in that order), then the counts again; and, when the rollback window is declared closed, a later migration that drops the record. Every step needs the owner's approval. Never `supabase db push`: it would also push the local-only migrations.
 
 **The current build during the window.** Until the new build, the current TestFlight build keeps working against the new functions: it keeps personal links and the On Resbite badge. Its only loss covers every 9-form invitation (saved with the 9 or dialled as 011 15 …), because each is stored by key: the ones the migration re-keyed and the new ones the old build sends after the migration. For those, the invited list shows the number instead of the saved name, and "send again" mints a new code.
 
@@ -72,8 +72,8 @@ The merge fills the final values. The values here were taken on the branch at th
    - `select count(*) from private.phone_invitations;` is step 2's count minus the duplicate groups' losers (one per group).
    - The step 2 accounts query again gives the same counts: the migration rewrites no account.
 5. **Fold function** (after Task 6 merges): `supabase functions deploy fold-phone-account --no-verify-jwt`. There is no `supabase/config.toml`, so a deploy without the flag turns JWT verification on.
-6. **Plan 2.** See **Plan 2: the app and the page** below. The link-site deploy, the TestFlight release and step 7 are one sitting.
-7. **The rewrite script, in the same sitting as the link-site deploy and the TestFlight release.** Once the new page is live and the new build is available to the testers:
+6. **Plan 2.** See **Plan 2: the app and the page** below. The TestFlight build is built and processed before the sitting and given to no tester; the link-site deploy, making the build available to the testers and step 7 are one sitting, minutes apart.
+7. **The rewrite script, in the same sitting as the link-site deploy and the build's release, minutes after them.** Once the new page is live and the new build is available to the testers:
    - Just before it, `hosted-counts-before-rewrite.json` (the counts command) and the step 2 accounts query, whose `ar_without_9 - collisions` is N, the expected rewrites of this run.
    - Run `supabase/ops/rewrite-older-argentine-accounts.sql` in the hosted SQL editor (it holds its own `begin;` and `commit;`; it prints counts only).
    - If an older account is made on the old build before every tester has moved, run this step again: a second run over the same accounts changes nothing.
@@ -96,24 +96,32 @@ The merge fills the final values. The values here were taken on the branch at th
 What the clients now do (branch `pk2-clients`, from plan 1's head):
 
 - **The chooser.** Sign-up, sign-in and Add your number have a country button (the country sheet). The default is the device region, else United Kingdom; a number typed with `+` switches it. Phone numbers are parsed with the phone library and sent in the send form (an Argentine mobile with the 9), so both spellings of one number reach the server as one key.
-- **Contacts.** Deduplicated by key. The picker shows "Numbers without a country code are read as {country}. Change" and a country button on a typed number. Invitations go by send form.
+- **Contacts.** Deduplicated by key. The picker shows "Numbers without a country code are read as {country}. Change" and a country button on a typed number, which a number typed with `+` switches; changing the assumed country keeps the typed numbers and their picks. Invitations go by send form, one per key.
 - **The link page.** A country dropdown: the default is the invitation's calling code, or on an open link the browser's region, else United Kingdom; a `+` number switches it. The name field is "Your name" with the helper "This is how {host} and the other guests will see you." The invitation note reads "This invitation is for a +{code} number ending ••{ending}."
 - **The site generator** copies the phone library's bundle (`/libphonenumber-min.js`) and writes `/countries.mjs`.
 
-**Owner's steps, one sitting, after the migration and the fold function (each needs approval).**
+**Owner's steps, after the migration and the fold function (each needs approval).** The build is made and processed first: Apple's processing takes 30 to 60 minutes or more, and inside the sitting it would leave the new page live that long before the script, the window in which an older Argentine account meets the new page and makes a second account (the window PK-D4's sitting exists to close). The sitting itself is the link site, the build's release and the script, minutes apart.
 
-1. **Link site.** Generate, from the repository root, with `node --import ./mobile/node_modules/tsx/dist/loader.mjs links/generate.mjs https://link.resbite.com QY833VTUWL com.resbite.app <dir>`, link with `npx vercel link --yes --project resbite-link --scope creamos` (delete the `.env.local` it writes), and deploy a preview. Check the preview serves both files as JavaScript, as the earlier runbook checked `/personal-flow.mjs`: `curl -sI <preview>/libphonenumber-min.js` and `curl -sI <preview>/countries.mjs` must each show a JavaScript `content-type` (the SPA fallback can answer 200 with HTML, which is a failure). Then `npx vercel deploy --prod --yes --scope creamos`. Note the previous production deployment id first, for a rollback: `npx vercel ls --scope creamos`, the newest Production row.
-2. **TestFlight build.** The new build, from plan 2's head, through EAS as in the earlier runbook; available to the testers.
-3. **The rewrite script** (step 7 above), with its counts (step 8). The web deploy, the release and the script are one sitting, so no tester meets the new page or build before the script, or the old build after it.
+1. **TestFlight build, before the sitting, given to no tester.** Before the upload, check in App Store Connect that automatic distribution is off for the testers' group, so the build reaches no tester when its processing ends. Then build from plan 2's head and upload through EAS as in the earlier runbook (`npx eas build --platform ios --profile production`, then `npx eas submit --platform ios --latest`), and wait until App Store Connect has finished processing the build. Nothing else changes yet: the testers keep the current build.
+2. **The sitting, minutes apart, in this order.**
+   1. **Link site.** Generate, from the repository root, with `node --import ./mobile/node_modules/tsx/dist/loader.mjs links/generate.mjs https://link.resbite.com QY833VTUWL com.resbite.app <dir>`, link with `npx vercel link --yes --project resbite-link --scope creamos` (delete the `.env.local` it writes), and deploy a preview. Check the preview serves both files as JavaScript, as the earlier runbook checked `/personal-flow.mjs`: `curl -sI <preview>/libphonenumber-min.js` and `curl -sI <preview>/countries.mjs` must each show a JavaScript `content-type` (the SPA fallback can answer 200 with HTML, which is a failure). Then `npx vercel deploy --prod --yes --scope creamos`. Note the previous production deployment id first, for a rollback: `npx vercel ls --scope creamos`, the newest Production row.
+   2. **Release the build.** In App Store Connect, add the processed build to the testers' group, so it is available to them.
+   3. **The rewrite script** (step 7 above).
+
+   The web deploy, the release and the script are minutes apart, so no tester meets the new page or build before the script, or the old build after it.
+3. **Count again** (step 8 above), after every run of the script.
 4. **Tell the testers**, naming the app and the web page: Argentine testers who signed up typing the local form use the new build (and the new page) from now on, and never sign up again.
 
 **The current build until the new build.** Its loss is the one under **The current build during the window**: for every 9-form invitation the invited list shows the number instead of the saved name, and "send again" mints a new code. (The On Resbite badge itself is kept.)
 
 **iPhone checks** (test mode: the code is 000000; synthetic numbers only):
 
-- An Argentine number typed three ways, on the page and in the app: with `+54 9`, with `+54` and no 9, and local with the area code only (Argentina chosen). All three reach the same account and the same invitation (no second account).
+- An Argentine number typed four ways, on the page and in the app: with `+54 9`, with `+54` and no 9, local with the area code only (`11 1234 1234`, Argentina chosen), and the old local spelling `011 15 1234 1234` (the trunk 0 and the mobile 15, Argentina chosen). All four reach the same account and the same invitation (no second account).
 - A US number with Argentina chosen: typed with `+1`, the country switches to the United States and the number is read as US.
+- An invitation to a `+54` number: its page opens with **Argentina +54** preselected in the dropdown.
+- A `+1` invitation (Kate, saved as `+1 305 555 0123`): its page opens with **United States +1** preselected, and `305 555 0123` typed as it is matches.
 - A contact saved without a country code: the picker shows "Numbers without a country code are read as {country}. Change"; Change switches the country, and the contact is read under it.
+- In the app, with the keyboard up in a number field (sign-up, and the picker's typed number), tap the country button: the country sheet and its search field sit above the keyboard, nothing hidden behind it.
 
 ## Rebase note
 

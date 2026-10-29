@@ -43,7 +43,7 @@ The **phone key** of a number is the digits of its international form, with thes
 | +1 305 555 0123 (Argentina chosen; "+" wins) | +13055550123 | 13055550123 |
 | 07700 900834 (United Kingdom) | +447700900834 | 447700900834 |
 | +44 (0) 7700 900834 (any) | +447700900834 | 447700900834 |
-| 00 44 7700 900834 (any) | +447700900834 | 447700900834 |
+| 00 44 7700 900834 (Argentina, or any country whose exit code is 00) | +447700900834 | 447700900834 |
 | 123 (any), "abc" (any) | refused: "Enter a valid mobile number." | — |
 
 The key is what `private.phone_invitations.phone` and `private.test_codes.phone` store, what every comparison in the database uses, and what the app and the web page compare locally. The rule exists in three places that must agree: SQL `private.phone_key(text)`, TypeScript `phoneKey()` in `mobile/src/domain/phone.ts` (used by the app and, as plain JavaScript, by `links/assets/personal-flow.mjs`), and the fold function's shared code in Deno. Only the app and the page parse what a person types (the first two columns of the table, through the phone library with the chosen country); the database and the fold function receive international digits and take the key (the last two columns). The tests follow that split: every row's "typed → international form" is a client test, every row's "international form → key" is a test in all three places, and the refused rows are client tests.
@@ -66,7 +66,7 @@ A country chooser sits before every number field, on the web and in the app.
   - open link page: the visitor's browser region when it is one the list knows, else United Kingdom (today's `OPEN_LINK_COUNTRY`);
   - app sign-up, sign-in and Add your number: the device's region (today's `deviceRegion()`);
   - the contact picker's typed number: the host's region (today's `hostRegion()`).
-- **A number typed with "+"** (or "00") is taken as typed, whatever the dropdown says, and the dropdown switches to that number's country so the two never disagree on screen.
+- **A number typed with "+"** is taken as typed, whatever the dropdown says, and the dropdown switches to that number's country so the two never disagree on screen. A number typed with "00" is taken as typed only where the chosen country's exit code is 00 (Argentina, the United Kingdom and most of Europe; the phone library's rule), and the dropdown does not follow it.
 - **Parsing** goes through the phone library with the chosen country, as the app already does: the number must be "possible" there, or the field says "Enter a valid mobile number." The web page stops using its own composing rule and gets the library's browser bundle (`libphonenumber-min.js`, 179 KB, 43 KB compressed), copied by `generate.mjs` next to the other assets and handed to the flow module as a dependency so the flow's tests keep running in Node.
 - The web page's line "Outside the UK? Start with + and your country code." goes; the dropdown replaces it.
 
@@ -84,7 +84,7 @@ A country chooser sits before every number field, on the web and in the app.
 
 ## The web page
 
-- The number step: country dropdown, then the number field, as above. The invitation page's note becomes "This invitation is for a +54 number ending ••34." (the calling code is added so a person with a foreign number sees why it will not match). The wrong-number error stays "That isn't the number Ana invited." and the existing "Not your number? Ask Ana to invite you again." line stays under it.
+- The number step: country dropdown, then the number field, as above. The invitation page's note becomes "This invitation is for a +54 number ending ••34." (the calling code is added so a person with a foreign number sees why it will not match). The wrong-number error stays "That isn't the number Ana invited." and the existing "Not your number? Ask Ana to check it." line stays under it.
 - The code goes to the send form. "We sent a 6-digit code to +54 9 11 1234 1234." formats the send form.
 - The answer step (PK-D3): the field label is **Your name** (autocomplete "name", not "given-name"), with a helper line under it: **"This is how Ana and the other guests will see you."** The 1–80 character rule and its message stay.
 - The kept-session check (`sameNumber`) and the open link's "✓ Verified · ••34" compare and show keys.
@@ -128,7 +128,7 @@ One migration, `supabase/migrations/20261030130000_phone_key.sql`, with its roll
 
 1. The migration, approved by file name and sha256, applied with `supabase db query --linked -f` and `migration repair --status applied`, with before/after snapshots as the earlier runbooks; any time after approval (the current build keeps working against it).
 2. `fold-phone-account` redeploy.
-3. In one sitting: the link site deploy (Vercel `resbite-link`), then the TestFlight build, then the owner-run `supabase/ops/rewrite-older-argentine-accounts.sql` (approved by sha256 with the migration).
+3. The TestFlight build, built and processed by Apple before the sitting (30 to 60 minutes or more) but given to no tester. Then, in one sitting, minutes apart: the link site deploy (Vercel `resbite-link`), then the build made available to the testers, then the owner-run `supabase/ops/rewrite-older-argentine-accounts.sql` (approved by sha256 with the migration).
 4. The counts again, after every run of the script.
 
 The migration's version `20261030130000` sits before the unmerged `20261031120000_creating_a_resbite.sql`. That branch redefines `invite_contacts`; when it is rebased on `main`, its body must start from this migration's version of the function, and its hosted rehearsal then replays with this migration applied first.
