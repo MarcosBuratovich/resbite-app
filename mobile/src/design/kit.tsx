@@ -402,8 +402,8 @@ export function CoverCard({
           </>,
           [styles.dateRow, largeText && styles.stacked],
           // The badge is hidden from assistive tech. Pressable and Review modes say the date in
-          // their labels; the static (heading) card says it here.
-          !onPress ? spokenWhen(startsAt, endsAt, new Date()) || undefined : undefined,
+          // their labels; the static (heading) card says it here, with the repeat when there is one.
+          !onPress ? [spokenWhen(startsAt, endsAt, new Date()), extra].filter(Boolean).join(", ") || undefined : undefined,
         )}
         {place !== null &&
           part(

@@ -34,13 +34,11 @@ const pick = (f: PlanForm): WhenValue => ({ date: f.date, start: f.start, end: f
 export function WhenSheet({
   visible,
   value,
-  zone,
   onDone,
   onClose,
 }: {
   visible: boolean;
   value: WhenValue;
-  zone: string;
   onDone: (value: WhenValue) => void;
   onClose: () => void;
 }) {

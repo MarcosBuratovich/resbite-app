@@ -280,12 +280,17 @@ try {
     await expect(button(page, "Done")).toBeDisabled();
     await page.getByRole("radio", { name: "To be decided", exact: true }).click();
     await expect(button(page, "Done")).toBeEnabled();
+    // A chosen radio stays chosen when it is tapped again.
+    await page.getByRole("radio", { name: "To be decided", exact: true }).click();
+    await expect(page.getByRole("radio", { name: "To be decided", exact: true })).toBeChecked();
     await button(page, "Done").click();
     await expect(button(page, "Where, To be decided")).toBeVisible();
     await button(page, "Create").click();
     await expect(heading(page, "It’s on!")).toBeVisible();
     await expect(page.getByText("Place to be decided", { exact: true })).toBeVisible();
     await expect(visible(page.getByText(/ · Every week$/)).first()).toBeVisible();
+    // The card says the repeat aloud too, after the date and times.
+    await expect(page.getByLabel(/from 10:00 to 13:00, Every week$/)).toHaveCount(1);
     await button(page, "Not now").click();
     await expect(heading(page, "My resbites")).toBeVisible();
     await expect(card(page, "Coffee together").first()).toBeVisible();

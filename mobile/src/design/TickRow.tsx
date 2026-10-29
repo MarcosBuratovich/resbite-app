@@ -23,7 +23,10 @@ export function TickRow({
   onChange: (next: boolean) => void;
   hint?: string;
   disabled?: boolean;
-  /** "radio" for a row that is one of a group of choices (the Where sheet's places); the tick looks the same. */
+  /**
+   * "radio" for a row that is one of a group of choices (the Where sheet's places); the tick looks the same.
+   * Tapping a chosen radio does nothing.
+   */
   role?: "checkbox" | "radio";
   children?: React.ReactNode;
 }) {
@@ -37,7 +40,11 @@ export function TickRow({
         aria-checked={checked}
         aria-disabled={disabled}
         disabled={disabled}
-        onPress={() => onChange(!checked)}
+        // A chosen radio stays chosen: another choice in its group replaces it.
+        onPress={() => {
+          if (role === "radio" && checked) return;
+          onChange(!checked);
+        }}
         style={({ pressed }) => [styles.row, { opacity: disabled ? 0.45 : pressed ? 0.7 : 1 }]}
       >
         <View style={[styles.box, checked && styles.boxOn]}>

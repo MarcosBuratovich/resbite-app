@@ -381,7 +381,6 @@ export default function Arrange() {
       <WhenSheet
         visible={whenOpen}
         value={{ date: f.date, start: f.start, end: f.end, repeatWeeks: f.repeatWeeks }}
-        zone={form.zone}
         onDone={(v) => {
           form.patch(v);
           setWhenOpen(false);

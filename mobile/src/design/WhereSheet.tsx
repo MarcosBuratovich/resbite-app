@@ -68,10 +68,7 @@ export function WhereSheet({
               role="radio"
               label={place}
               checked={!draft.placeTbd && draft.place.trim() === place}
-              onChange={(on) => {
-                if (on) choose(place);
-                else setDraft((d) => ({ ...d, place: "" }));
-              }}
+              onChange={() => choose(place)}
             >
               <Copy style={styles.hint}>{PLAN_COPY.recent}</Copy>
             </TickRow>
@@ -82,9 +79,7 @@ export function WhereSheet({
         role="radio"
         label={PLAN_COPY.toBeDecided}
         checked={draft.placeTbd}
-        onChange={(on) => {
-          setDraft((d) => (on ? { ...d, place: "", placeTbd: true } : { ...d, placeTbd: false }));
-        }}
+        onChange={() => setDraft((d) => ({ ...d, place: "", placeTbd: true }))}
       >
         <Copy style={styles.hint}>{PLAN_COPY.canChangeLater}</Copy>
       </TickRow>
