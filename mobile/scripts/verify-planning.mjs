@@ -182,6 +182,9 @@ async function signedInPage({ plans = [], guests = [], failJournal = false, ...o
     holdCreate: false,
     dropFirstCreate: false,
     planReads: 0,
+    guestReads: 0,
+    // The next create lands on the server and its reply is lost (a network failure): the outcome is unknown.
+    loseNextReply: false,
     // Someone else's save that lands just before the next change: that change then meets a 40001.
     conflictNextChange: null,
   };
@@ -210,7 +213,10 @@ async function signedInPage({ plans = [], guests = [], failJournal = false, ...o
     if (url.pathname === "/rest/v1/rpc/account_access_status") return reply({ account_id: user.id, status: "approved" });
     if (url.pathname === "/rest/v1/profiles") return reply({ id: user.id, display_name: "Fixture", avatar_path: null });
     if (url.pathname === "/rest/v1/activities") return reply([]);
-    if (url.pathname === "/rest/v1/attendees") return reply(guests);
+    if (url.pathname === "/rest/v1/attendees") {
+      state.guestReads++;
+      return reply(guests);
+    }
     if (url.pathname === "/rest/v1/plans") {
       state.planReads++;
       const id = url.searchParams.get("id")?.replace(/^eq\./, "");
@@ -226,6 +232,10 @@ async function signedInPage({ plans = [], guests = [], failJournal = false, ...o
       // The first create never lands and never answers; later ones land.
       if (state.dropFirstCreate && state.creates.length === 1) return new Promise(() => {});
       state.plans.push(planFromCreate(write));
+      if (state.loseNextReply) {
+        state.loseNextReply = false;
+        return route.abort();
+      }
       if (state.holdCreate) return new Promise(() => {});
       return reply(null);
     }
@@ -572,6 +582,8 @@ try {
     await expect(button(page, "Where, The bakery")).toBeVisible();
     assert.equal(state.changes.length, 1);
     assert.equal(state.changes[0].p_version, 1);
+    // The guests are read again with the newer details (the load read once; the reset reads again).
+    await expect.poll(() => state.guestReads).toBe(2);
     // The screen now holds version 2 and nothing unsaved: the X would leave at once. The change, made again, saves.
     await fillSettled(title, "Coffee by the river");
     await button(page, "Save").click();
@@ -605,14 +617,19 @@ try {
     const entry = JSON.parse(await page.evaluate((k) => sessionStorage.getItem(k), journalKey));
     assert.equal(entry.write.id, state.creates[0].p_id, "The journal holds the request that was sent");
     // The reply never arrives; the page is reloaded (the app is closed and opened again).
-    await page.reload();
-    await expect(heading(page, "New resbite")).toBeVisible();
-    await close(page);
+    state.holdCreate = false;
+    const readsBefore = state.planReads;
+    await page.goto(baseURL);
+    // The app opens on the Create tab; the reconcile runs there, before My resbites is ever opened.
+    await expect(heading(page, "What do you want to do?")).toBeVisible();
+    await expect.poll(() => page.evaluate((k) => sessionStorage.getItem(k), journalKey)).toBe(null);
+    assert.ok(state.planReads > readsBefore, "The reconcile read the plan while the Create tab was showing");
+    assert.equal(state.creates.length, 1, "The reconcile read found the plan: no second create_plan_v4");
+    await page.getByRole("tab", { name: "My resbites", exact: true }).click();
     await expect(heading(page, "My resbites")).toBeVisible();
     await expect(page.getByText("Garden picnic is created.", { exact: true })).toBeVisible();
     await expect(card(page, "Garden picnic")).toBeVisible();
-    assert.equal(state.creates.length, 1, "The reconcile read found the plan: no second create_plan_v4");
-    await expect.poll(() => page.evaluate((k) => sessionStorage.getItem(k), journalKey)).toBe(null);
+    assert.equal(state.creates.length, 1, "Still one create_plan_v4 call in total");
     assert.deepEqual(state.unexpected, []);
     await page.context().close();
     console.log("PASS: a create_plan_v4 reply that never arrives, then a reload: the reconcile read finds the plan, one create_plan_v4 call in total, and My resbites says “Garden picnic is created.”");
@@ -636,9 +653,11 @@ try {
     });
     await expect.poll(() => state.creates.length).toBe(1);
     assert.equal(state.plans.length, 0, "The first create never landed");
-    await page.reload();
-    await expect(heading(page, "New resbite")).toBeVisible();
-    await close(page);
+    await page.goto(baseURL);
+    await expect(heading(page, "What do you want to do?")).toBeVisible();
+    // The reconcile re-sends the create from the Create tab, before My resbites is opened.
+    await expect.poll(() => state.creates.length).toBe(2);
+    await page.getByRole("tab", { name: "My resbites", exact: true }).click();
     await expect(heading(page, "My resbites")).toBeVisible();
     await expect(page.getByText("Garden picnic is created.", { exact: true })).toBeVisible();
     await expect(card(page, "Garden picnic")).toBeVisible();
@@ -672,6 +691,40 @@ try {
     assert.deepEqual(state.unexpected, []);
     await page.context().close();
     console.log("PASS: a failed journal write sends no create, shows the error and keeps the fields.");
+  }
+
+  // 7b. An unknown outcome locks the form: read-only fields, the footer line, and Create finds out.
+  {
+    const { page, state } = await signedInPage();
+    state.loseNextReply = true;
+    await page.goto(`${baseURL}/arrange`);
+    await expect(heading(page, "New resbite")).toBeVisible();
+    await createPlan(page, {
+      title: "Garden picnic",
+      date: "2099-04-05",
+      start: "10:00",
+      end: "12:00",
+      place: "Riverside park",
+      categories: ["Natural"],
+    });
+    const uncertain = "Your resbite may already be created. Check your connection and tap Create to find out.";
+    await expect(page.getByText(uncertain, { exact: true })).toBeVisible();
+    assert.equal(state.creates.length, 1);
+    await expect(page.getByLabel("Title", { exact: true })).toHaveAttribute("readonly", "");
+    await expect(page.getByLabel("Description (optional)", { exact: true })).toHaveAttribute("readonly", "");
+    await expect(page.getByLabel("Note to guests (optional)", { exact: true })).toHaveAttribute("readonly", "");
+    await expect(page.getByRole("button", { name: /^When, / })).toBeDisabled();
+    await expect(button(page, "Where, Riverside park")).toBeDisabled();
+    await expect(button(page, "Natural")).toBeDisabled();
+    await expect(button(page, "Create")).toBeEnabled();
+    // Create again: the reconcile reads, finds the plan and never creates twice.
+    await button(page, "Create").click();
+    await expect(heading(page, "It’s on!")).toBeVisible();
+    assert.equal(state.creates.length, 1, "The retry read the plan: no second create_plan_v4");
+    await expect.poll(() => page.evaluate((k) => sessionStorage.getItem(k), journalKey)).toBe(null);
+    assert.deepEqual(state.unexpected, []);
+    await page.context().close();
+    console.log("PASS: a create whose reply is lost locks the fields (title, description, note, When, Where, categories read-only), shows Your resbite may already be created…, and Create again reads the plan and ends in It’s on! with one create_plan_v4 call.");
   }
 
   // 8. Accessibility: the missing line is a live region; focus lands on the first red row.

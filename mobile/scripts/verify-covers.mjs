@@ -187,6 +187,8 @@ try {
   const links = [];
   let failNextLink = true;
   let coverBytes = Buffer.alloc(0);
+  // The bytes stored at each path, so a signed URL serves what was stored at ITS path (not the latest upload).
+  const stored = new Map();
   await page.route("**/*.supabase.co/**", async (route) => {
     const req = route.request();
     const url = new URL(req.url());
@@ -233,15 +235,21 @@ try {
       });
       return reply(null);
     }
-    if (path.startsWith("/storage/v1/object/sign/plan-covers/") && req.method() === "POST")
-      return reply({ signedURL: "/object/sign/plan-covers/fixture.jpg?token=fixture" });
+    if (path.startsWith("/storage/v1/object/sign/plan-covers/") && req.method() === "POST") {
+      const signedPath = decodeURIComponent(path.slice("/storage/v1/object/sign/plan-covers/".length));
+      return reply({ signedURL: `/object/sign/plan-covers/fixture.jpg?token=${signedPath.replaceAll("/", "~")}` });
+    }
     if (path === "/storage/v1/object/sign/plan-covers/fixture.jpg")
-      return route.fulfill({ contentType: "image/jpeg", body: coverBytes });
+      return route.fulfill({
+        contentType: "image/jpeg",
+        body: stored.get(url.searchParams.get("token")?.replaceAll("~", "/")) ?? coverBytes,
+      });
     if (path.startsWith("/storage/v1/object/plan-covers/")) {
       const objectPath = decodeURIComponent(path.slice("/storage/v1/object/plan-covers/".length));
       const bytes = req.postDataBuffer();
       assertCleanJpeg(bytes);
       coverBytes = bytes;
+      stored.set(objectPath, bytes);
       uploads.push(objectPath);
       uploadSizes.push(jpegSize(bytes));
       return reply({ Key: `plan-covers/${objectPath}`, Id: "fixture" });
@@ -386,6 +394,22 @@ try {
   // described there; the original keeps its own.
   plan.cover_description = "A red blanket on the grass";
   const originalCover = { path: plan.cover_path, revision: plan.cover_revision, description: plan.cover_description };
+  // The original's stored photo is a distinct 640x480 one, unlike every photo uploaded so far, so the walk can tell
+  // whose bytes the copy uploaded.
+  const originalJpeg = Buffer.from(
+    await page.evaluate(() => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 640;
+      canvas.height = 480;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#c0392b";
+      ctx.fillRect(0, 0, 640, 480);
+      return canvas.toDataURL("image/jpeg", 0.9).split(",")[1];
+    }),
+    "base64",
+  );
+  stored.set(plan.cover_path, originalJpeg);
+  assert.ok(!uploadSizes.some((size) => size.width === 640 && size.height === 480), "No earlier upload is 640x480");
   const uploadsBefore = uploads.length;
   const linksBefore = links.length;
   const describedBefore = descriptionCalls.length;
@@ -407,6 +431,10 @@ try {
     { p_plan: copy.id, p_path: uploads.at(-1), p_expected_path: null, p_expected_revision: 0 },
   ]);
   assert.equal(copy.cover_path, uploads.at(-1));
+  // The copy is the ORIGINAL's bytes: the 640x480 photo, not the latest upload (a different size).
+  assert.deepEqual(uploadSizes.at(-1), { width: 640, height: 480 }, "The copy uploaded the original's photo");
+  assert.ok(Math.abs(stored.get(uploads.at(-1)).length - originalJpeg.length) < originalJpeg.length * 0.2, "About the original's length");
+  assert.notEqual(stored.get(uploads.at(-1)).length, stored.get(uploads.at(-2)).length, "Not the previous upload's bytes");
   assert.deepEqual(descriptionCalls.slice(describedBefore), [
     { p_description: "A red blanket on the grass", p_expected_revision: 1 },
   ]);
