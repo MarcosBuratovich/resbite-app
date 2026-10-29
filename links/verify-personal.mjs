@@ -305,7 +305,7 @@ try {
     await page.goto(`${ORIGIN}/i/${CODE}`);
     await expect(text(page, COPY.invited)).toBeVisible();
     await expect(heading(page, "Picnic in the park")).toBeVisible();
-    await expect(text(page, "This invitation is for the number ending ••34.")).toBeVisible();
+    await expect(text(page, "This invitation is for a +44 number ending ••34.")).toBeVisible();
     await noTestCode(page, "the invitation");
     assert.equal(f.log.length, 0, "nothing is asked of Supabase before Answer without a stored session");
     await button(page, "Answer").click();
@@ -315,6 +315,11 @@ try {
     await expect(text(page, COPY.confirmBody)).toBeVisible();
     const tick = page.getByRole("checkbox", { name: COPY.tick, exact: true });
     const number = page.getByLabel("Mobile number", { exact: true });
+    const country = page.getByLabel("Country", { exact: true });
+    await expect(country).toHaveValue("GB");
+    await expect(country.locator("option:checked")).toHaveText("United Kingdom +44");
+    assert.match((await number.getAttribute("aria-describedby")) ?? "", /^confirm-error$/, "no hint about numbers from outside the UK");
+    await expect(page.getByText("Outside the UK?")).toHaveCount(0);
     await expect(tick).not.toBeChecked();
     await expect(page.getByRole("link", { name: "Terms", exact: true })).toHaveAttribute("href", "https://www.resbite.com/terms");
     await expect(page.getByRole("link", { name: "Privacy Policy" })).toHaveCount(0);
@@ -340,12 +345,18 @@ try {
     assert.equal(f.calls("/rest/v1/rpc/check_invited_number").length, 1);
     assert.deepEqual(f.calls("/rest/v1/rpc/check_invited_number")[0].body, { p_code: CODE, p_phone: "+447700900111" });
     assert.equal(f.calls("/auth/v1/otp").length, 0, "a wrong number sends no code");
-    // The right number, typed the local way.
-    await number.fill("07700 900834");
+    // The right number: Argentina chosen, then +44 typed; the country follows the number and the number is sent whole.
+    await country.selectOption({ label: "Argentina +54" });
+    await expect(country.locator("option:checked")).toHaveText("Argentina +54");
+    await number.fill("+44 7700 900834");
+    await expect(country).toHaveValue("GB");
+    await expect(country.locator("option:checked")).toHaveText("United Kingdom +44");
+    await expect(number).toHaveValue("+44 7700 900834");
+    await number.fill("+44 (0) 7700 900834");
     await button(page, "Send code").click();
     await expect(heading(page, COPY.codeHeading)).toBeVisible();
     await focused(page, COPY.codeHeading);
-    await expect(text(page, "We sent a 6-digit code to 07700 900834.")).toBeVisible();
+    await expect(text(page, "We sent a 6-digit code to +44 7700 900834.")).toBeVisible();
     await expect(page.getByText(/^Didn’t get it\? Send a new code in [01]:\d\d$/)).toBeVisible();
     const checks = f.calls("/rest/v1/rpc/check_invited_number");
     assert.deepEqual(checks[1].body, { p_code: CODE, p_phone: "+447700900834" });
@@ -381,6 +392,11 @@ try {
     await focused(page, "Picnic in the park");
     await expect(text(page, "Mon 2 Nov, 13:00 – 16:00 · Hyde Park area")).toBeVisible();
     await expect(text(page, COPY.hostSees)).toBeVisible();
+    const nameField = page.getByLabel("Your name", { exact: true });
+    await expect(nameField).toBeVisible();
+    assert.equal(await nameField.getAttribute("autocomplete"), "name");
+    await expect(text(page, "This is how Marcos and the other guests will see you.")).toBeVisible();
+    assert.match((await nameField.getAttribute("aria-describedby")) ?? "", /\bname-helper\b/, "the helper is read with the field");
     await noTestCode(page, "the answer step");
     await button(page, "Send answer").click();
     await expect(text(page, "Choose Going, Maybe or Can’t go.")).toBeVisible();
@@ -388,7 +404,7 @@ try {
     await button(page, "Send answer").click();
     await expect(text(page, "Use a name between 1 and 80 characters.")).toBeVisible();
     assert.equal(f.calls("/rest/v1/rpc/answer_phone_invitation").length, 0);
-    await page.getByLabel("Your first name", { exact: true }).fill("Sam");
+    await page.getByLabel("Your name", { exact: true }).fill("Sam");
     await button(page, "Send answer").click();
     await expect(heading(page, COPY.going)).toBeVisible();
     await focused(page, COPY.going);
@@ -455,7 +471,7 @@ try {
     await expect(heading(page, "Picnic in the park")).toBeVisible();
     await focused(page, "Picnic in the park");
     await expect(page.getByRole("radio", { name: "Going", exact: true })).toBeChecked();
-    await expect(page.getByLabel("Your first name", { exact: true })).toBeHidden();
+    await expect(page.getByLabel("Your name", { exact: true })).toBeHidden();
     await page.getByRole("radio", { name: "Can’t go", exact: true }).check();
     await button(page, "Send answer").click();
     await expect(heading(page, COPY.cant)).toBeVisible();
@@ -573,7 +589,7 @@ try {
       { page } = f;
     await page.goto(`${ORIGIN}/i/${CODE}`);
     await expect(text(page, COPY.verified)).toBeVisible();
-    await page.getByLabel("Your first name", { exact: true }).fill("Ana");
+    await page.getByLabel("Your name", { exact: true }).fill("Ana");
     await page.getByRole("radio", { name: "Maybe", exact: true }).check();
     await button(page, "Send answer").click();
     await expect(heading(page, COPY.confirm)).toBeVisible();
@@ -590,7 +606,7 @@ try {
       { page } = f;
     await page.goto(`${ORIGIN}/i/${CODE}`);
     await expect(text(page, COPY.verified)).toBeVisible();
-    await expect(page.getByLabel("Your first name", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Your name", { exact: true })).toBeVisible();
     assert.deepEqual(f.log.map((x) => x.path), ["/rest/v1/rpc/my_phone_invitation"]);
     const stored = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), kept(CODE));
     f.state.logoutFails = true;
@@ -617,7 +633,7 @@ try {
   }
 
   console.log(
-    "PASS: /i/<code> in headless Chrome: Answer → the 18+ tick → a wrong number (checked, no code) → the right number (local form) → /otp → a wrong code → 000000 exchanged then verified with the stored code → name and Going → answer_phone_invitation → direction A (benefits, Get Resbite → app store, Not now); a reload restores the answer (refreshing an expired session first) and changing it to Can't go shows the softer screen; cancelled, happened and inactive pages have no form; Not you? Sign out (on the answer and done steps: a local logout with the token, the kept entry cleared, back to the invitation, even when the logout fails); the session is kept per code with the full verified number until the event starts, so another code's, another number's (same last two digits) and a started event's are never restored; the server still refuses a hand-edited other number; too many tries; a lost connection; focus on each step's heading; no 000000 anywhere; no request beyond the page's origin and the intercepted Supabase host.",
+    "PASS: /i/<code> in headless Chrome: Answer → the 18+ tick → a wrong number (checked, no code) → the right number (Argentina chosen, then +44 typed: the dropdown follows the number; sent whole) → the name's label and helper → /otp → a wrong code → 000000 exchanged then verified with the stored code → name and Going → answer_phone_invitation → direction A (benefits, Get Resbite → app store, Not now); a reload restores the answer (refreshing an expired session first) and changing it to Can't go shows the softer screen; cancelled, happened and inactive pages have no form; Not you? Sign out (on the answer and done steps: a local logout with the token, the kept entry cleared, back to the invitation, even when the logout fails); the session is kept per code with the full verified number until the event starts, so another code's, another number's (same last two digits) and a started event's are never restored; the server still refuses a hand-edited other number; too many tries; a lost connection; focus on each step's heading; no 000000 anywhere; no request beyond the page's origin and the intercepted Supabase host.",
   );
 } finally {
   await browser?.close();

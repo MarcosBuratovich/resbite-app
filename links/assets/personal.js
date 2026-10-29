@@ -22,6 +22,7 @@ import {
   next,
   openDoneScreen,
   readKept,
+  regionForCallingCode,
   rpcError,
   sameNumber,
   screenForRequest,
@@ -34,6 +35,7 @@ import {
   verifyError,
   writeKept,
 } from "./personal-flow.mjs";
+import COUNTRIES from "./countries.mjs";
 
 /** A small element builder: `text` sets textContent, `on…` adds a listener, true sets an empty attribute. */
 function h(tag, props = {}, ...children) {
@@ -70,7 +72,7 @@ function start(main, answerButton) {
   const code = data.code || "";
   // The open link names no number: no ending to match, and the page's calling code for numbers typed without +.
   const open = data.mode === "open";
-  const country = data.country || "";
+  const callingCode = data.country || "";
   const ending = data.ending || "";
   const host = data.host || "";
   const termsVersion = data.termsVersion || "";
@@ -104,16 +106,42 @@ function start(main, answerButton) {
     terms.append(url ? h("a", { href: url, target: "_blank", rel: "noopener noreferrer", text: part }) : part);
   }
   const ageHelper = h("p", { id: "age-helper", class: "helper", text: C.ageHelper });
-  const number = h("input", { id: "number", type: "tel", inputmode: "tel", autocomplete: "tel", "aria-describedby": open ? "number-hint confirm-error" : "confirm-error" });
-  const numberHint = open ? h("p", { id: "number-hint", class: "muted", text: C.outsideUk }) : null;
+  // The country the number is read with: the invitation's calling code, or for the open link the browser's country.
+  const lib = window.libphonenumber;
+  const has = (region) => COUNTRIES.some((c) => c.region === region);
+  const browserRegion = (navigator.language || "").split("-")[1]?.toUpperCase();
+  const defaultRegion = open ? (has(browserRegion) ? browserRegion : "GB") : (lib && regionForCallingCode(data.country, lib)) || "GB";
+  const countrySelect = h(
+    "select",
+    { id: "country", "aria-label": C.countryLabel },
+    COUNTRIES.map((c) => h("option", { value: c.region, text: C.countryOption(c.name, c.code) })),
+  );
+  countrySelect.value = defaultRegion;
+  const number = h("input", {
+    id: "number",
+    type: "tel",
+    inputmode: "tel",
+    autocomplete: "tel",
+    "aria-describedby": "confirm-error",
+    // A number typed with + names its own country: the dropdown follows it.
+    oninput: () => {
+      const value = number.value.trim();
+      if (!value.startsWith("+") || !lib) return;
+      const parsed = lib.parsePhoneNumberFromString(value);
+      // The library names no country for a number it can't place (the UK's fiction range, say) but still knows the
+      // calling code: keep the chosen country when it has that code, else take the code's main country.
+      const chosen = COUNTRIES.find((c) => c.region === countrySelect.value);
+      const region = parsed?.country ?? (parsed?.countryCallingCode && chosen?.code !== String(parsed.countryCallingCode) ? regionForCallingCode(parsed.countryCallingCode, lib) : null);
+      if (region && has(region)) countrySelect.value = region;
+    },
+  });
   const confirmError = h("p", { id: "confirm-error", class: "error" });
   const sendButton = h("button", { type: "submit", class: "button", text: C.send });
   const confirmForm = h(
     "form",
     { novalidate: true, onsubmit: onSend },
     h("div", { class: "agree" }, h("div", { class: "tick" }, tick, h("label", { for: "tick", text: C.tick })), terms, ageHelper),
-    h("div", { class: "field" }, h("label", { for: "number", text: C.numberField }), number),
-    numberHint,
+    h("div", { class: "field number" }, h("label", { for: "number", text: C.numberField }), countrySelect, number),
     confirmError,
     sendButton,
   );
@@ -144,8 +172,9 @@ function start(main, answerButton) {
   const answerHeading = h("h1", { tabindex: "-1", text: title });
   // Not you? On a shared computer the next person can end the session kept here.
   const signOutButton = () => h("button", { type: "button", class: "link signout", text: C.signOut, onclick: onSignOut });
-  const nameInput = h("input", { id: "name", autocomplete: "given-name", maxlength: "80", "aria-describedby": "answer-error" });
-  const nameField = h("div", { class: "field" }, h("label", { for: "name", text: C.nameField }), nameInput);
+  const nameInput = h("input", { id: "name", autocomplete: "name", maxlength: "80", "aria-describedby": "name-helper answer-error" });
+  const nameHelper = h("p", { id: "name-helper", class: "helper", text: C.nameHelper(host) });
+  const nameField = h("div", {}, h("div", { class: "field" }, h("label", { for: "name", text: C.nameField }), nameInput), nameHelper);
   const labels = { accepted: C.going, maybe: C.maybe, declined: C.cantGo };
   const radios = RESPONSES.map((value) =>
     h("input", { type: "radio", name: "response", value, onchange: () => dispatch({ type: "choose", response: value }) }),
@@ -266,7 +295,7 @@ function start(main, answerButton) {
       doneHost.textContent = declined ? C.hostSees(host) : C.hostCanSee(host);
       pitch.hidden = declined || !s.pitch;
       soft.hidden = !declined;
-      const masked = maskNumber(s.phone, country);
+      const masked = maskNumber(s.phone, callingCode);
       waitingLine.textContent = masked ? C.waiting(masked) : "";
       waitingLine.hidden = !masked;
     }
@@ -374,7 +403,7 @@ function start(main, answerButton) {
 
   async function onSend(event) {
     event.preventDefault();
-    if (!begin({ type: "send", input: number.value, country })) return;
+    if (!begin({ type: "send", input: number.value, region: countrySelect.value, lib })) return;
     const phone = state.phone;
     // The open link takes any number: the code goes straight to it.
     if (!open) {

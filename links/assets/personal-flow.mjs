@@ -117,7 +117,7 @@ export function phoneSendForm(input) {
 // The calling codes several countries share, each with the country the library itself treats as main. The page's
 // `lib` is the browser bundle's global, which exposes no metadata (the app reads country_calling_codes[code][0]), so
 // the main country is chosen here: the preferred region when it has the code, else the first of getCountries().
-const MAIN_REGIONS = ["US", "GB", "RU", "AU", "IT", "FI", "NO"];
+const MAIN_REGIONS = ["US", "GB", "RU", "AU", "IT", "FI", "NO", "MA", "GP", "CW"];
 
 /** The main country of a calling code ("1" gives US), or null for an unknown code. */
 export function regionForCallingCode(code, lib) {
@@ -137,7 +137,7 @@ export function regionForCallingCode(code, lib) {
  */
 export function composeNumber(input, region, lib) {
   const text = typeof input === "string" ? input.trim() : "";
-  if (!text) return null;
+  if (!text || !lib) return null;
   const parsed = lib.parsePhoneNumberFromString(text, region);
   return parsed && parsed.isPossible() ? phoneSendForm(parsed.number) : null;
 }

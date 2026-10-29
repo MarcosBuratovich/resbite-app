@@ -62,6 +62,11 @@ export async function generate(originValue, teamId, bundleId, output) {
   for (const name of await readdir(resolve(source, "server", "api"))) await copyFile(resolve(source, "server", "api", name), resolve(root, "api", name));
   for (const name of await readdir(resolve(source, "server", "lib"))) await copyFile(resolve(source, "server", "lib", name), resolve(root, "lib", name));
   for (const name of ["page.css", "page.js", "personal.js", "personal-flow.mjs", "personal.css"]) await write(name, await readFile(resolve(source, "assets", name)));
+  // The phone library's browser bundle (a classic script defining window.libphonenumber) and the country list as a
+  // module: the CSP's script-src is 'self' and connect-src is Supabase only, so the list ships as code, never fetched.
+  await write("libphonenumber-min.js", await readFile(resolve(source, "../mobile/node_modules/libphonenumber-js/bundle/libphonenumber-min.js")));
+  const countries = JSON.parse(await readFile(resolve(source, "../mobile/src/domain/countries.json"), "utf8"));
+  await write("countries.mjs", `export default ${JSON.stringify(countries)};\n`);
   for (const name of await readdir(resolve(source, "../mobile/assets/activities")))
     if (name.endsWith(".png")) await copyFile(resolve(source, "../mobile/assets/activities", name), resolve(root, "activities", name));
   await write(

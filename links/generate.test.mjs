@@ -105,3 +105,16 @@ test("the event page's functions, assets and routes are part of the site (GI1)",
     await cleanup();
   }
 });
+
+test("the site carries the phone library bundle and the country list as a module", async () => {
+  const { out, cleanup } = await site();
+  try {
+    const bundle = await readFile(join(out, "libphonenumber-min.js"), "utf8");
+    assert.ok(bundle.length > 100_000, "the browser bundle is copied");
+    const countries = await readFile(join(out, "countries.mjs"), "utf8");
+    assert.ok(countries.startsWith("export default ["));
+    assert.ok(countries.includes('"Argentina"'));
+  } finally {
+    await cleanup();
+  }
+});

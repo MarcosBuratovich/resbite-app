@@ -30,7 +30,7 @@ export function personalHeaders(supabaseUrl) {
 /** The page's own words, in one place. Task 11's script carries its step strings in personal-flow.mjs. */
 export const PERSONAL_WORDS = {
   invited: (host) => `${host} invited you`,
-  forNumber: (ending) => `This invitation is for the number ending ••${ending}.`,
+  forNumber: (code, ending) => `This invitation is for a +${code} number ending ••${ending}.`,
   answer: "Answer",
   notYours: (host) => `Not your number? Ask ${host} to check it.`,
   going: (n) => (n > 0 ? `${n} going` : "Be one of the first"),
@@ -102,7 +102,7 @@ function documentHtml({ title, description, image, csp, banner, body, script }) 
 ${banner ? `    ${banner}\n` : ""}    <link rel="icon" href="/resbite-mark.png" />
     <link rel="stylesheet" href="/page.css" />
     <link rel="stylesheet" href="/personal.css" />
-  </head>
+${script ? '    <script src="/libphonenumber-min.js"></script>\n' : ""}  </head>
   <body>
 ${body}
 ${script ? '    <script type="module" src="/personal.js"></script>\n' : ""}  </body>
@@ -136,7 +136,7 @@ function stepsBody(data, image, options, mode) {
   const dataAttrs = Object.entries(attrs)
     .map(([name, value]) => `data-${name}="${escape(value)}"`)
     .join(" ");
-  const note = open ? "" : `\n        <p class="note">${escape(w.forNumber(data.ending))}</p>`;
+  const note = open ? "" : `\n        <p class="note">${escape(w.forNumber(data.country, data.ending))}</p>`;
   const after = open
     ? `\n        <p><a class="button secondary" id="open-app" href="resbite://r/${escape(options.code)}">${w.haveApp}</a></p>`
     : `\n        <p class="muted">${escape(w.notYours(data.host))}</p>`;

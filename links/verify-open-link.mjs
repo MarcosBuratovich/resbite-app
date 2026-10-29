@@ -36,7 +36,6 @@ const COPY = {
   invited: "Marcos invited you",
   confirm: "Confirm it’s you",
   numberHint: "We’ll text you a 6-digit code.",
-  outsideUk: "Outside the UK? Start with + and your country code.",
   tick: "I’m 18 or over",
   codeHeading: "Enter the code",
   verified: "✓ Verified · ••34",
@@ -141,8 +140,8 @@ const jwt = (sub, n) =>
  * same and also puts a kept entry in the page's storage before the first load, as the script stores it. Anyone with a
  * request or a place has a profile unless `hasProfile` says otherwise.
  */
-async function fixture({ people = [], seeds = [], width = 390 } = {}) {
-  const context = await browser.newContext({ viewport: { width, height: 844 }, reducedMotion: "reduce", locale: "en-GB" });
+async function fixture({ people = [], seeds = [], width = 390, locale = "en-GB" } = {}) {
+  const context = await browser.newContext({ viewport: { width, height: 844 }, reducedMotion: "reduce", locale });
   const page = await context.newPage();
   const state = {
     accounts: new Map(),
@@ -403,22 +402,24 @@ try {
     await expect(heading(page, COPY.confirm)).toBeVisible();
     await focused(page, COPY.confirm);
     await expect(text(page, COPY.numberHint)).toBeVisible();
-    await expect(text(page, COPY.outsideUk)).toBeVisible();
+    await expect(page.getByText("Outside the UK?")).toHaveCount(0);
     await expect(page.getByText(/invited\. We’ll text it a code/)).toHaveCount(0);
     const tick = page.getByRole("checkbox", { name: COPY.tick, exact: true });
     const number = page.getByLabel("Mobile number", { exact: true });
-    assert.match(await number.getAttribute("aria-describedby"), /\bnumber-hint\b/, "the hint is read with the field");
+    await expect(page.getByLabel("Country", { exact: true }).locator("option:checked")).toHaveText("United Kingdom +44");
     await expect(button(page, "Send code")).toBeDisabled();
     await tick.check();
     // From abroad: + and the country code, sent as typed.
     await number.fill("+1 (415) 555-0100");
     await button(page, "Send code").click();
     await expect(heading(page, COPY.codeHeading)).toBeVisible();
-    await expect(text(page, "We sent a 6-digit code to +1 (415) 555-0100.")).toBeVisible();
+    await expect(text(page, "We sent a 6-digit code to +1 415 555 0100.")).toBeVisible();
     await button(page, "Change number").click();
     await expect(heading(page, COPY.confirm)).toBeVisible();
     await expect(tick).toBeChecked();
-    // A UK number without +: the page's 44.
+    // The +1 number moved the dropdown to the United States; a UK number without + is read with the country chosen.
+    await expect(page.getByLabel("Country", { exact: true })).toHaveValue("US");
+    await page.getByLabel("Country", { exact: true }).selectOption({ label: "United Kingdom +44" });
     await number.fill("07700 900834");
     await button(page, "Send code").click();
     await expect(heading(page, COPY.codeHeading)).toBeVisible();
@@ -454,7 +455,7 @@ try {
     await expect(text(page, "Use a name between 1 and 80 characters.")).toBeVisible();
     assert.equal(f.calls("/rest/v1/rpc/request_to_join").length, 0, "a first answer needs a name");
     assert.equal(f.user(SAM).hasProfile, false, "and the server would ask for one: no profile yet");
-    await page.getByLabel("Your first name", { exact: true }).fill("Sam");
+    await page.getByLabel("Your name", { exact: true }).fill("Sam");
     await button(page, "Send answer").click();
     await waitingScreen(page);
     await focused(page, COPY.waiting);
@@ -527,7 +528,7 @@ try {
     assert.deepEqual([lookup.body, lookup.auth], [{ p_code: CODE }, `Bearer ${[...f.state.access.keys()].at(-1)}`]);
     await button(page, "Change answer").click();
     await expect(page.getByRole("radio", { name: "Going", exact: true })).toBeChecked();
-    await expect(page.getByLabel("Your first name", { exact: true })).toBeHidden();
+    await expect(page.getByLabel("Your name", { exact: true })).toBeHidden();
     await expect(text(page, COPY.verified)).toBeVisible();
     assert.deepEqual(await page.evaluate(() => Object.keys(localStorage)), [kept(CODE)], "kept for this browser from now on");
     await noTestCode(page, "the looked-up waiting answer");
@@ -543,7 +544,7 @@ try {
     await button(page, COPY.signOut).click();
     await verifyAs("07700 900333");
     await expect(heading(page, "Picnic in the park")).toBeVisible();
-    await expect(page.getByLabel("Your first name", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Your name", { exact: true })).toBeVisible();
     assert.equal(f.calls("/rest/v1/rpc/my_join_request").length, 4, "one lookup per verified number");
     assert.equal(f.calls("/rest/v1/rpc/request_to_join").length, 0, "nobody was asked to answer again");
     await f.done();
@@ -562,7 +563,7 @@ try {
     await expect(heading(page, "Picnic in the park")).toBeVisible();
     await focused(page, "Picnic in the park");
     await expect(page.getByRole("radio", { name: "Going", exact: true })).toBeChecked();
-    await expect(page.getByLabel("Your first name", { exact: true })).toBeHidden();
+    await expect(page.getByLabel("Your name", { exact: true })).toBeHidden();
     await page.getByRole("radio", { name: "Maybe", exact: true }).check();
     await button(page, "Send answer").click();
     await waitingScreen(page);
@@ -604,7 +605,7 @@ try {
     await waitingScreen(page);
     await button(page, "Change answer").click();
     for (const answer of ["Going", "Maybe", "Can’t go"]) await expect(page.getByRole("radio", { name: answer, exact: true })).not.toBeChecked();
-    await expect(page.getByLabel("Your first name", { exact: true })).toBeHidden();
+    await expect(page.getByLabel("Your name", { exact: true })).toBeHidden();
     await expect(text(page, COPY.verified)).toBeVisible();
     await page.getByRole("radio", { name: "Going", exact: true }).check();
     await button(page, "Send answer").click();
@@ -710,11 +711,11 @@ try {
       { page } = f;
     await page.goto(`${ORIGIN}/r/${CODE}`);
     await expect(text(page, COPY.verified)).toBeVisible();
-    await expect(page.getByLabel("Your first name", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Your name", { exact: true })).toBeVisible();
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "no sideways scroll at 320 (answer)");
     await button(page, COPY.signOut).click();
     await button(page, "Answer").click();
-    await expect(text(page, COPY.outsideUk)).toBeVisible();
+    await expect(page.getByLabel("Country", { exact: true })).toBeVisible();
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "no sideways scroll at 320 (number)");
     await noTestCode(page, "the narrow number step");
     await f.done();
@@ -742,8 +743,20 @@ try {
     await f.done();
   }
 
+  // 7. The dropdown starts at the browser's country: es-AR shows Argentina +54.
+  {
+    const f = await fixture({ locale: "es-AR" }),
+      { page } = f;
+    await page.goto(`${ORIGIN}/r/${CODE}`);
+    await button(page, "Answer").click();
+    const country = page.getByLabel("Country", { exact: true });
+    await expect(country).toHaveValue("AR");
+    await expect(country.locator("option:checked")).toHaveText("Argentina +54");
+    await f.done();
+  }
+
   console.log(
-    "PASS: /r/<code> in headless Chrome, open mode: Answer → the 18+ tick → a +1 number sent as typed and a UK number with the page's 44 (no number check, the Outside the UK hint) → 000000 exchanged then verified → the name and Going → request_to_join with exact bodies → Waiting for Marcos with the get-the-app block; on another browser, right after the code, my_join_request shows a waiting answer (no request_to_join), Not added or already in; a reload restores the waiting answer through my_join_request and changing it sends request_to_join again with no name (one request, the latest answer), as does a request made in the app (pending); Can't go while waiting is the personal page's Can't go screen, on the reply and on a reload; I have Resbite: open the app stays on the first screen; declined shows You weren't added with only Plan your own; a guest or the owner sees You're on this resbite with Open Resbite and Get Resbite; a decline or an approval landing mid-change shows the same screens; a turned-off link refuses the answer; Not you? Sign out ends the kept session; closed links keep GI1's pages and the strict CSP; no 000000 anywhere; no request beyond the page's origin and the intercepted Supabase host; nothing scrolls sideways at 320.",
+    "PASS: /r/<code> in headless Chrome, open mode: Answer → the 18+ tick → a +1 number sent as typed and a UK number with the page's 44 (no number check; a country dropdown that starts at the UK, or at the browser's country: es-AR shows Argentina +54) → 000000 exchanged then verified → the name and Going → request_to_join with exact bodies → Waiting for Marcos with the get-the-app block; on another browser, right after the code, my_join_request shows a waiting answer (no request_to_join), Not added or already in; a reload restores the waiting answer through my_join_request and changing it sends request_to_join again with no name (one request, the latest answer), as does a request made in the app (pending); Can't go while waiting is the personal page's Can't go screen, on the reply and on a reload; I have Resbite: open the app stays on the first screen; declined shows You weren't added with only Plan your own; a guest or the owner sees You're on this resbite with Open Resbite and Get Resbite; a decline or an approval landing mid-change shows the same screens; a turned-off link refuses the answer; Not you? Sign out ends the kept session; closed links keep GI1's pages and the strict CSP; no 000000 anywhere; no request beyond the page's origin and the intercepted Supabase host; nothing scrolls sideways at 320.",
   );
 } finally {
   await browser?.close();

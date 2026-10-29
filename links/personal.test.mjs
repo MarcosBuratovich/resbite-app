@@ -1,7 +1,7 @@
 // The personal invitation page /i/<code> (contact invitations, Task 10). Run from mobile/: node --test ../links/personal.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { renderPersonalPage, personalHeaders, personalCsp } from "./server/lib/personal.mjs";
+import { renderPersonalPage, renderOpenLinkPage, personalHeaders, personalCsp } from "./server/lib/personal.mjs";
 import { PAGE_CSP } from "./server/lib/render.mjs";
 import { readPersonalInvitation } from "./server/lib/supabase.mjs";
 import personal from "./server/api/personal.mjs";
@@ -24,7 +24,7 @@ const open = {
 test("the open page is screen 1: host, picture, title, time, area, going, ending and Answer", () => {
   const html = renderPersonalPage(open, options);
   for (const text of ["Marcos invited you", "Picnic in the park", "Mon 2 Nov, 13:00 – 16:00", "Hyde Park area", "4 going",
-    "This invitation is for the number ending ••34.", "Answer", "Not your number? Ask Marcos to check it."])
+    "This invitation is for a +44 number ending ••34.", "Answer", "Not your number? Ask Marcos to check it."])
     assert.ok(html.includes(text), text);
   assert.ok(html.includes(`src="https://link.resbite.com/i/${code}/image"`) || html.includes(`src="/i/${code}/image"`));
   assert.equal((html.match(/<h1/g) || []).length, 1);
@@ -166,4 +166,19 @@ test("the image route serves a personal invitation's picture from personal_invit
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("the library bundle's script tag comes before the module tag, on the personal and the open page", () => {
+  const tag = '<script src="/libphonenumber-min.js"></script>';
+  for (const html of [renderPersonalPage(open, options), renderOpenLinkPage(open, options)]) {
+    assert.ok(html.includes(tag));
+    assert.ok(html.indexOf(tag) < html.indexOf('<script type="module" src="/personal.js"></script>'));
+  }
+  assert.ok(!renderPersonalPage({ state: "cancelled", host: "Marcos", title: "T" }, options).includes("libphonenumber"));
+});
+
+test("the note names the invitation's calling code; the open page has no note", () => {
+  assert.ok(renderPersonalPage({ ...open, country: "54", ending: "34" }, options).includes("This invitation is for a +54 number ending ••34."));
+  const html = renderOpenLinkPage(open, options);
+  assert.ok(!html.includes("This invitation is for") && !html.includes('class="note"'));
 });

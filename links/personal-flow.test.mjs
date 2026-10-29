@@ -53,6 +53,7 @@ test("composeNumber parses with the chosen country and returns the send form", (
   ];
   for (const [input, region, out] of rows) assert.equal(composeNumber(input, region, lib), out, `${input} (${region})`);
   assert.equal(composeNumber(undefined, "GB", lib), null);
+  assert.equal(composeNumber("07700 900834", "GB", undefined), null, "no library, no send form");
 });
 
 test("the key and the send form", () => {
@@ -84,6 +85,9 @@ test("send stores the send form and its international spelling", () => {
 test("regionForCallingCode", () => {
   assert.equal(regionForCallingCode("1", lib), "US");
   assert.equal(regionForCallingCode("54", lib), "AR");
+  assert.equal(regionForCallingCode("212", lib), "MA");
+  assert.equal(regionForCallingCode("590", lib), "GP");
+  assert.equal(regionForCallingCode("599", lib), "CW");
   assert.equal(regionForCallingCode("999", lib), null);
 });
 
