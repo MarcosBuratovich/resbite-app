@@ -5,7 +5,7 @@ import * as Crypto from "expo-crypto";
 import type { NavigationAction } from "expo-router/react-navigation";
 import { useApp } from "./AppState";
 import { useCatalogue } from "./useCatalogue";
-import { useCoverPhoto, type CoverControls } from "./useCoverPhoto";
+import { useCoverPhoto, type CoverControls, type CoverOutcome } from "./useCoverPhoto";
 import {
   afterSaveNotice,
   createWrite,
@@ -31,6 +31,7 @@ import { planGateway, setGuestNote } from "../services/plans";
 import { readGuests } from "../services/rsvp";
 import { recentPlaces } from "../services/recentPlaces";
 import { createJournal } from "../services/journal";
+import { syncReminders } from "../services/deviceReminders";
 import { coverDescriptionGateway, coverGateway, signedCovers } from "../services/planCovers";
 
 export type PlanFormController = {
@@ -55,6 +56,8 @@ export type PlanFormController = {
   error: string | null;
   /** Set when a new resbite exists. */
   created: Plan | null;
+  /** How the new resbite's cover photo went; "none" until created or without a photo. */
+  coverOutcome: CoverOutcome;
   submit(): Promise<void>;
   leave: { asked: boolean; keep(): void; discard(): void };
 };
@@ -105,6 +108,7 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<Plan | null>(null);
+  const [coverOutcome, setCoverOutcome] = useState<CoverOutcome>("none");
 
   const cover = useCoverPhoto({
     planId: mode === "edit" ? (params.plan ?? null) : null,
@@ -267,12 +271,13 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
         else await writePlan(planGateway, write);
       } catch (e) {
         // A definite refusal wrote nothing; an uncertain one keeps the journal for the retry and the next launch.
-        if (!(e instanceof PlanSaveError) || !e.uncertain) await createJournal.clear(scope!).catch(() => {});
+        if (e instanceof PlanSaveError && !e.uncertain) await createJournal.clear(scope!).catch(() => {});
         throw e;
       }
       // The plan exists from here on; what follows never turns the create into a failure.
       const withNew = live.uri !== null;
-      await live.commitAfterCreate(write.id).catch(() => {});
+      const outcome = await live.commitAfterCreate(write.id).catch((): CoverOutcome => "failed");
+      if (mounted.current) setCoverOutcome(outcome);
       if (!withNew)
         await copyFallbackCover(write.id, live.description || fallback?.description || "").catch(() => {});
       const noteFailed = note ? await setGuestNote(write.id, note).then(() => null, (e) => messageOf(e, UNCONFIRMED)) : null;
@@ -290,6 +295,8 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
         repeats_from: null,
       };
     }
+    // This phone's reminders follow the new plan now, not at the next app-active.
+    void syncReminders({ userId: ownerId, preview }).catch(() => {});
     if (mounted.current) setCreated(plan);
   }
 
@@ -311,6 +318,7 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
     }
     // The saved plan is the new baseline, so the guard lets the screen go.
     if (mounted.current) setInitial(form);
+    void syncReminders({ userId: ownerId, preview }).catch(() => {});
     router.dismissTo({
       pathname: "/event",
       params: { plan: plan.id, notice: afterSaveNotice("edit") },
@@ -318,7 +326,7 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
   }
 
   async function submit() {
-    if (saving.current || cover.busy) return;
+    if (saving.current || cover.busy || created) return;
     setAttempted(true);
     const check = submitCheck(form);
     if (check.missing.length > 0 || check.videoFields.length > 0) return;
@@ -370,6 +378,7 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
     busy,
     error,
     created,
+    coverOutcome,
     submit,
     leave,
   };

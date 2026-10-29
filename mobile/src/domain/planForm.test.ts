@@ -66,6 +66,9 @@ test("whenRowText", () => {
   assert.deepEqual(whenRowText(full, L), { line: "Sat 24 Oct · 19:00 to 22:00", repeat: null });
   assert.deepEqual(whenRowText({ ...full, repeatWeeks: 2 }, L), { line: "Sat 24 Oct · 19:00 to 22:00", repeat: "Every 2 weeks" });
   assert.equal(whenRowText({ ...full, repeatWeeks: 1 }, L)?.repeat, "Every week");
+  // Made before ends existed: the start only, and `when` stays missing until an end is chosen.
+  assert.deepEqual(whenRowText({ ...full, end: null }, L), { line: "Sat 24 Oct · 19:00", repeat: null });
+  assert.equal(whenRowText({ ...full, start: null }, L), null);
 });
 
 test("applyDuration", () => {

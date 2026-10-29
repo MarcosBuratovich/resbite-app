@@ -32,7 +32,7 @@ import { joinRequestGateway, type MyRequest } from "../../src/services/joinReque
 import { ANSWER_OPTIONS, reconcileRsvp, responseFor, type AnswerKey, type RsvpAttempt } from "../../src/domain/rsvp";
 import { readRsvp, writeRsvp } from "../../src/services/rsvp";
 import { canDiscardDraft } from "../../src/domain/draftAutosave";
-import { confirmDiscardDraft } from "../../src/state/usePlanEditor";
+import { confirmDiscardDraft } from "../../src/state/confirmDiscardDraft";
 
 // The last save notice already shown, so a remount or web history restoring the same URL never
 // repeats a saved toast. Each save passes a fresh `notice` id.

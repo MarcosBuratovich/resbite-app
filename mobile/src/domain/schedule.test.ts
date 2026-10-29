@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   addDays,
-  defaultStart,
   joinLocal,
   localDay,
   pickedValue,
@@ -96,20 +95,6 @@ test("values keep the editor's local YYYY-MM-DD HH:mm format", () =>
       spokenDateTime(new Date(2099, 2, 1, 15, 0), new Date("2026-10-07T12:00:00Z")),
       "Sunday 1 March 2099 at 15:00",
     );
-  }));
-
-test("a new resbite starts tomorrow at 10:00, a calendar day ahead in the device's zone", () =>
-  inZone("Europe/London", () => {
-    // Not "now + 24 hours" at the current minute (iPhone check: "Tomorrow" with a 22:56 chip).
-    assert.equal(defaultStart(new Date("2026-10-07T22:56:00+01:00")), "2026-10-08 10:00");
-    assert.equal(defaultStart(new Date("2026-10-07T00:01:00+01:00")), "2026-10-08 10:00");
-    // 23:30 the night the clocks go forward: now + 24 h would be Monday.
-    assert.equal(defaultStart(new Date("2027-03-27T23:30:00Z")), "2027-03-28 10:00");
-    // It is one of the quick chips on the Tomorrow tile, so both read as selected.
-    const now = new Date("2026-10-07T22:56:00+01:00");
-    const { day, time } = splitLocal(defaultStart(now));
-    assert.equal(day, quickDays(now)[1].day);
-    assert.ok(quickTimes(day, now).some((t) => t.time === time && !t.disabled));
   }));
 
 test("the native picker opens on the chosen day, else on the current value, else tomorrow at 10:00", () =>

@@ -148,7 +148,10 @@ function Navigation() {
           >
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="activity/[id]" />
-            <Stack.Screen name="arrange" />
+            <Stack.Screen
+              name="arrange"
+              options={{ presentation: "fullScreenModal", animation: reduced ? "fade" : "slide_from_bottom" }}
+            />
             <Stack.Screen name="event" />
             <Stack.Screen name="people" />
             <Stack.Screen name="invitations" />

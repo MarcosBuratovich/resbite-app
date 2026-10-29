@@ -57,11 +57,10 @@ export function TaskScreen({
           {children}
         </ScrollView>
         <View testID="task-footer" style={styles.footer}>
-          {line ? (
-            <Copy accessibilityLiveRegion="polite" style={styles.line}>
-              {line}
-            </Copy>
-          ) : null}
+          {/* Always mounted, so a line that appears is announced as a change (iOS ignores one that mounts with its text). */}
+          <Copy accessibilityLiveRegion="polite" style={line ? styles.line : { ...styles.line, ...styles.lineEmpty }}>
+            {line ?? ""}
+          </Copy>
           {footer}
         </View>
       </KeyboardAvoidingView>
@@ -93,4 +92,6 @@ const styles = StyleSheet.create({
     backgroundColor: c.paper,
   },
   line: { fontFamily: fonts.medium, fontSize: 13, lineHeight: 18, color: c.error, textAlign: "center" },
+  // Empty, the line takes no room: the negative margin cancels the footer's gap.
+  lineEmpty: { height: 0, marginTop: -space.s },
 });

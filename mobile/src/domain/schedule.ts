@@ -95,18 +95,13 @@ export function joinLocal(day: string, time: string): string {
 /** The time a new resbite starts at, and the picker's time when none is chosen yet. */
 export const DEFAULT_TIME = "10:00";
 
-/** A new resbite starts tomorrow at 10:00 local time (a quick day and a quick time), never "now + 24 hours". */
-export function defaultStart(now: Date): string {
-  return joinLocal(localDay(addDays(now, 1)), DEFAULT_TIME);
-}
-
 /** Where the native picker opens: the chosen day at the chosen time (or 10:00), else the current value, else tomorrow at 10:00. */
 export function pickerSeed(value: string, day: string | null, now: Date): Date {
   const time = splitLocal(value).time ?? DEFAULT_TIME;
   return (
     (day ? parseLocalDateTime(joinLocal(day, time)) : null) ??
     parseLocalDateTime(value) ??
-    parseLocalDateTime(defaultStart(now)) ??
+    parseLocalDateTime(joinLocal(localDay(addDays(now, 1)), DEFAULT_TIME)) ??
     addDays(now, 1)
   );
 }

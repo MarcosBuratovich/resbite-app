@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from "react";
 import { Alert, Linking, Platform, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams, usePathname } from "expo-router";
-import * as Crypto from "expo-crypto";
 import { getRandomBytes } from "expo-crypto";
 import { newInviteCode, sendOrder } from "../src/domain/contactInvites";
 import {
@@ -32,8 +31,6 @@ import { categoryLabels } from "../src/domain/categories";
 import { eventPicture } from "../src/domain/events";
 import { canPostGuestNote, meetingDetailsView } from "../src/domain/eventDetails";
 import {
-  againConflict,
-  againDraft,
   cardChips,
   coverNotice,
   eventPlace,
@@ -49,7 +46,6 @@ import { WaitingForYou } from "../src/design/WaitingForYou";
 import { joinRequestGateway, type HostRequest } from "../src/services/joinRequests";
 import { canEditPlan } from "../src/domain/plans";
 import { answerKey, canReadSample, canRespond, responseFor } from "../src/domain/rsvp";
-import { drafts } from "../src/services/drafts";
 import { setGuestNote } from "../src/services/plans";
 import { invitationGateway } from "../src/services/invitations";
 import { contactInviteGateway } from "../src/services/contactInvites";
@@ -96,7 +92,6 @@ export default function EventPage() {
   // same new link instead of making another one.
   const minted = useRef<Record<string, NonNullable<InvitedPerson["stored"]>>>({});
   // One Do this again at a time: a quick double tap must not write two copies or stack two editors.
-  const againBusy = useRef(false);
   // Open-link approval: one decision at a time; the user it is for, and what went wrong.
   const [deciding, setDeciding] = useState<string | null>(null);
   const [decideError, setDecideError] = useState<string | null>(null);
@@ -153,56 +148,10 @@ export default function EventPage() {
   const guestNote = current.guest_note?.trim() ?? "";
   const canNote = owner && canPostGuestNote(current, Date.now());
 
-  function ask(message: string, accept: string, onAccept: () => void) {
-    if (Platform.OS === "web") {
-      if (window.confirm(message)) onAccept();
-    } else
-      Alert.alert(message, undefined, [
-        { text: "Keep draft", style: "cancel" },
-        { text: accept, onPress: onAccept },
-      ]);
-  }
-  // Do this again (benchmark row 5): never over an unconfirmed save, and only after asking over a draft.
-  async function again() {
-    if (!scope || againBusy.current) return;
-    againBusy.current = true;
-    setMoreError(null);
-    // Held while the drafts are read, and by start() until the editor is pushed or the copy
-    // fails. start() takes it synchronously, so no tap gets in between the check and the copy.
-    const start = async () => {
-      againBusy.current = true;
-      try {
-        await drafts.put(
-          againDraft(current, {
-            scope,
-            requestId: Crypto.randomUUID(),
-            zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            now: new Date(),
-          }),
-        );
-        setMore(false);
-        router.push("/arrange");
-      } catch {
-        setMoreError("Couldn’t start a copy on this device. Try again.");
-      } finally {
-        againBusy.current = false;
-      }
-    };
-    let conflict: ReturnType<typeof againConflict>;
-    try {
-      conflict = againConflict(await drafts.list(scope));
-    } catch {
-      againBusy.current = false;
-      setMoreError("Couldn’t start a copy on this device. Try again.");
-      return;
-    }
-    // Released while asking: the question is modal, and Replace runs start(), which takes it again.
-    againBusy.current = false;
-    if (conflict === "blocked")
-      setMoreError("Finish the new resbite that’s waiting on this device first. Open it from My resbites.");
-    else if (conflict === "replace")
-      ask("Replace the unfinished resbite draft on this device?", "Replace", () => void start());
-    else await start();
+  // Do this again: the plan screen opens on a copy of this resbite, with no date yet.
+  function again() {
+    setMore(false);
+    router.push({ pathname: "/arrange", params: { again: current.id } });
   }
   function invite() {
     if (preview) {
@@ -621,8 +570,8 @@ export default function EventPage() {
         <Tile
           icon={Repeat}
           title="Do this again"
-          hint="Copies the name, description, vibe, place and Meeting details into a new draft"
-          onPress={() => void again()}
+          hint="Copies the name, description, photo, categories, place and meeting details"
+          onPress={again}
         />
         <ErrorNote message={moreError} />
         {editable &&

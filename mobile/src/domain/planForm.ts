@@ -113,14 +113,16 @@ export function formInstants(form: PlanForm, zone: string): { starts_at: string;
   return { starts_at: instantIn(form.date, form.start, zone), ends_at: instantIn(endDate, form.end, zone) };
 }
 
-/** The When row's text: the line, and the repeat choice when there is one; null while incomplete. */
+/**
+ * The When row's text: the line, and the repeat choice when there is one. A start without an end
+ * (a resbite made before ends existed) shows the start only; null while there is no date and start.
+ */
 export function whenRowText(form: PlanForm, zone: string): { line: string; repeat: string | null } | null {
   const instants = formInstants(form, zone);
-  if (!instants) return null;
-  return {
-    line: whenLine(instants.starts_at, instants.ends_at, zone),
-    repeat: form.repeatWeeks ? repeatChoice(form.repeatWeeks) : null,
-  };
+  const repeat = form.repeatWeeks ? repeatChoice(form.repeatWeeks) : null;
+  if (instants) return { line: whenLine(instants.starts_at, instants.ends_at, zone), repeat };
+  if (!form.date || !form.start) return null;
+  return { line: whenLine(instantIn(form.date, form.start, zone), null, zone), repeat };
 }
 
 /** Sets the end from the start; "allDay" is 00:00 to 23:59. Without a start a number does nothing. */

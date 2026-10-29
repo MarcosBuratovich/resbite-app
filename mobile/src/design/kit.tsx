@@ -35,7 +35,9 @@ import type { CategoryKey } from "../domain/categories";
 import type { EventPicture } from "../domain/events";
 import { dateBadgeParts, spokenWhen, type CoverCardPart } from "../domain/eventView";
 import { timeRange } from "../domain/eventTime";
-import { progressLabel } from "../domain/steps";
+
+/** "Step 2 of 4" for the step screens' progress bar. */
+const progressLabel = (step: number, total: number) => `Step ${step} of ${total}`;
 
 // UX1 component kit (spec "Component kit"). States use aria-* props: react-native-web
 // 0.21 ignores accessibilityState, while React Native maps aria-* on iOS.
