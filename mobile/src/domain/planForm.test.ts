@@ -100,7 +100,8 @@ test("forms from an idea, a plan and a plan again", () => {
   assert.deepEqual([tbd.place, tbd.placeTbd], ["", true]);
   const again = formForAgain({ ...plan, repeat_weeks: 1 });
   assert.deepEqual([again.date, again.start, again.end, again.repeatWeeks], [null, null, null, null]);
-  assert.deepEqual([again.title, again.place, again.area, again.meetingDetails, again.guestNote], ["Walk", "Park", "Hyde", "gate", "hi"]);
+  // The note to guests belongs to the original occurrence; the copy starts without one.
+  assert.deepEqual([again.title, again.place, again.area, again.meetingDetails, again.guestNote], ["Walk", "Park", "Hyde", "gate", ""]);
 });
 
 test("detailsFromForm and timeOrPlaceChanged", () => {
@@ -120,6 +121,20 @@ test("detailsFromForm and timeOrPlaceChanged", () => {
   assert.equal(timeOrPlaceChanged(d, { ...d, time_zone: "UTC" }), true);
   assert.equal(timeOrPlaceChanged(d, { ...d, place_label: "Pub" }), true);
   assert.equal(timeOrPlaceChanged(d, { ...d, place_tbd: true }), true);
+});
+
+test("timeOrPlaceChanged compares instants, not the way they are written", () => {
+  const form = detailsFromForm(full, L);
+  // As the server sends them back: the same instants written with +00:00.
+  const saved = { ...form, starts_at: "2026-10-24T18:00:00+00:00", ends_at: "2026-10-24T21:00:00+00:00" };
+  assert.equal(form.starts_at, "2026-10-24T18:00:00.000Z");
+  assert.equal(timeOrPlaceChanged(saved, form), false);
+  assert.equal(timeOrPlaceChanged(saved, { ...form, title: "Night walk" }), false);
+  assert.equal(timeOrPlaceChanged(saved, { ...form, ends_at: "2026-10-24T22:00:00.000Z" }), true);
+  assert.equal(timeOrPlaceChanged(saved, { ...form, starts_at: "2026-10-24T18:30:00.000Z" }), true);
+  // A resbite saved before ends existed: adding an end is a change; none on either side is not.
+  assert.equal(timeOrPlaceChanged({ ...saved, ends_at: "" }, form), true);
+  assert.equal(timeOrPlaceChanged({ ...saved, ends_at: "" }, { ...form, ends_at: "" }), false);
 });
 
 test("detailsFromForm refuses an incomplete form", () => {

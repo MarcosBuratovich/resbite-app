@@ -95,6 +95,8 @@ const session = {
   expires_in: 3600,
   user,
 };
+/** A time as the server writes it back (`+00:00`), never the app's `.000Z`: the fixture must not hide the difference. */
+const serverTime = (iso) => (iso ? new Date(iso).toISOString().replace(/\.\d{3}Z$/, "+00:00") : iso);
 const planOf = (overrides = {}) => ({
   id: "22222222-2222-4222-8222-222222222222",
   activity_id: null,
@@ -102,7 +104,7 @@ const planOf = (overrides = {}) => ({
   description: "",
   categories: ["community", "uplifting"],
   owner_id: user.id,
-  starts_at: "2099-03-01T15:00:00.000Z",
+  starts_at: "2099-03-01T15:00:00+00:00",
   ends_at: null,
   time_zone: "UTC",
   place_label: "Original café",
@@ -124,8 +126,8 @@ const planFromCreate = (write) =>
     title: write.p_title,
     description: write.p_description,
     categories: write.p_categories,
-    starts_at: write.p_start,
-    ends_at: write.p_ends,
+    starts_at: serverTime(write.p_start),
+    ends_at: serverTime(write.p_ends),
     time_zone: write.p_zone,
     place_label: write.p_place,
     place_tbd: write.p_place_tbd,
@@ -138,8 +140,8 @@ const planFromChange = (plan, write) => ({
   title: write.p_title,
   description: write.p_description,
   categories: write.p_categories,
-  starts_at: write.p_start,
-  ends_at: write.p_ends,
+  starts_at: serverTime(write.p_start),
+  ends_at: serverTime(write.p_ends),
   time_zone: write.p_zone,
   place_label: write.p_place,
   place_tbd: write.p_place_tbd,
@@ -731,7 +733,7 @@ try {
   // The end time, the area and the Meeting details over the network: the edit sends p_ends, the trimmed
   // note and area, and the area "" when it is cleared.
   {
-    const plan = planOf({ ends_at: "2099-03-01T16:00:00.000Z", area: "Near the river", note: "Gate code 4512" });
+    const plan = planOf({ ends_at: "2099-03-01T16:00:00+00:00", area: "Near the river", note: "Gate code 4512" });
     const { page, state } = await signedInPage({ plans: [plan] });
     await page.goto(`${baseURL}/arrange?plan=${plan.id}`);
     await expect(heading(page, "Edit resbite")).toBeVisible();

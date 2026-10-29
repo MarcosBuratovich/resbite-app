@@ -166,9 +166,9 @@ export function formFromPlan(plan: Plan): PlanForm {
   };
 }
 
-/** Do it again: everything but the when. */
+/** Do it again (spec rule 1, CR-P10): the text, the place and the categories; never the when or the note to guests. */
 export function formForAgain(plan: Plan): PlanForm {
-  return { ...formFromPlan(plan), date: null, start: null, end: null, repeatWeeks: null };
+  return { ...formFromPlan(plan), date: null, start: null, end: null, repeatWeeks: null, guestNote: "" };
 }
 
 /** The details a complete form saves. Callers run `missingItems` first; an incomplete form throws. */
@@ -190,11 +190,15 @@ export function detailsFromForm(form: PlanForm, zone: string): PlanDetails {
   };
 }
 
+/** Two times are the same instant; absent ("" or null) matches only absent. The server writes `+00:00`, the app `.000Z`. */
+const sameInstant = (a: string | null | undefined, b: string | null | undefined) =>
+  !a || !b ? !a === !b : Date.parse(a) === Date.parse(b);
+
 /** Whether a save changes what guests plan around: start, end, zone or place. */
 export function timeOrPlaceChanged(before: PlanDetails, after: PlanDetails): boolean {
   return (
-    before.starts_at !== after.starts_at ||
-    (before.ends_at ?? null) !== (after.ends_at ?? null) ||
+    !sameInstant(before.starts_at, after.starts_at) ||
+    !sameInstant(before.ends_at, after.ends_at) ||
     before.time_zone !== after.time_zone ||
     before.place_label !== after.place_label ||
     (before.place_tbd ?? false) !== (after.place_tbd ?? false)

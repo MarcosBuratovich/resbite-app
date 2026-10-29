@@ -85,6 +85,15 @@ test("afterSaveNotice", () => {
   assert.equal(afterSaveNotice("idea"), "Resbite created");
 });
 
+test("editChangesTimeOrPlace reads the server's +00:00 times as the same instants as the form's", () => {
+  // As the server sends a plan: +00:00, not the app's .000Z.
+  const fromServer: Plan = { ...original, starts_at: "2099-03-10T10:00:00+00:00", ends_at: "2099-03-10T11:00:00+00:00" };
+  assert.equal(editChangesTimeOrPlace({ ...complete, title: "Tea" }, "UTC", fromServer), false);
+  assert.equal(editChangesTimeOrPlace(complete, "Asia/Tokyo", fromServer), false);
+  assert.equal(editChangesTimeOrPlace({ ...complete, end: "12:00" }, "UTC", fromServer), true);
+  assert.equal(editChangesTimeOrPlace({ ...complete, start: "09:00" }, "UTC", fromServer), true);
+});
+
 test("editChangesTimeOrPlace is true for a moved start or place, false for other edits and incomplete forms", () => {
   assert.equal(editChangesTimeOrPlace(complete, "UTC", original), false);
   assert.equal(editChangesTimeOrPlace({ ...complete, title: "Tea" }, "UTC", original), false);
