@@ -142,7 +142,7 @@ Run `../scripts/test-database.sh --hosted-baseline` before applying a migration 
 
 ## Phone key — migration live (applied 29 October 2026)
 
-`20261030130000_phone_key.sql` is **live** (hosted version `20261030130000`, applied 29 October 2026 after the owner's approval by file name and sha256). The fold function is not redeployed and the rewrite script has not run yet. The steps, the counts to take before and after, and the rollback are in the [runbook](../qa/phone-key-2026-10-29/README.md).
+`20261030130000_phone_key.sql` is **live** (hosted version `20261030130000`, applied 29 October 2026 after the owner's approval by file name and sha256). The fold function was redeployed the same day (version 5, compares by key); the rewrite script runs in the release sitting. The steps, the counts to take before and after, and the rollback are in the [runbook](../qa/phone-key-2026-10-29/README.md).
 
 - **Two functions.** `private.phone_key(text)` (the digits of a number, with an Argentine mobile's `549` folded to `54`) and `private.phone_variants(text)` (the spellings a key can be stored under), both for nobody.
 - **Seven redefinitions** that compare by key: `send_sms_hook`, `exchange_test_code`, `contacts_on_resbite`, `invite_contacts`, `revoke_phone_invitation`, `check_invited_number` and `answer_phone_invitation`. What the app gets back is what it sent (`contacts_on_resbite` adds each number's key), so the current build keeps working.

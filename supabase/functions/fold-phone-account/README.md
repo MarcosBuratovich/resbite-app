@@ -1,4 +1,4 @@
-# fold-phone-account — deployed 28 October 2026
+# fold-phone-account — deployed 28 October 2026, redeployed 29 October 2026 (compares by phone key, version 5)
 
 Source-gated by `PHONE_FOLD_RELEASE_APPROVED` in `_shared/fold-release.ts` (no environment flag can activate it). The owner released it on 28 October 2026 (`a21c0f9`), and it is deployed on the hosted project with `verify_jwt = false`; see step 2 of the [contact invitations runbook](../../../qa/contact-invites-2026-10-28/README.md). Set the constant back to `false` and redeploy to take it down. While gated off the app shows its "not switched on" copy (`foldOff`), with no Retry, whether the function is not deployed (404) or deployed and still gated off (503).
 
