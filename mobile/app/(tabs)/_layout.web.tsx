@@ -2,9 +2,11 @@ import React from "react";
 import { Tabs } from "expo-router";
 import { CirclePlus, CalendarDays, Leaf, UserRound } from "lucide-react-native";
 import { colors as c, fonts } from "../../src/design/tokens";
+import { useReconcileCreate } from "../../src/state/useReconcileCreate";
 
 // Browser-only design review. iPhone and Android use the native tab layout.
 export default function WebTabLayout() {
+  useReconcileCreate();
   return (
     <Tabs
       initialRouteName="create"
