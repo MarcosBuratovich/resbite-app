@@ -14,3 +14,4 @@ phone-accounts.sql
 contact-invitations.sql
 open-link-approval.sql
 push-delivery.sql
+phone-key.sql
