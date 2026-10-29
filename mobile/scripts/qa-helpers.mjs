@@ -91,7 +91,7 @@ export async function later(page) {
   await button(page, "Not now").click();
 }
 
-// --- My resbites helpers: cards open the event page, where the actions now live (UX1) ---
+// --- My resbites helpers: cards open the resbite page, where the actions live (Invite, Edit, More) ---
 /** A My resbites card, found by its composed label ("{title}, {date}, …"). */
 export function card(page, title) {
   const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -108,15 +108,16 @@ export async function editEvent(page, title) {
 }
 export async function inviteFromList(page, title, notice) {
   await openEvent(page, title);
-  await button(page, "Invite someone").click();
+  await button(page, "Invite").click();
   await expect(page.getByText(notice, { exact: false })).toBeVisible();
   await button(page, "Back").click();
 }
-export async function cancelFromList(page, title) {
+/** `choice` is the sheet's button: "Yes, cancel resbite", or for a repeating one "Cancel just this one" / "Cancel this and stop repeating". */
+export async function cancelFromList(page, title, choice = "Yes, cancel resbite") {
   await openEvent(page, title);
-  await button(page, "More actions").click();
-  await button(page, "Cancel event").click();
-  await button(page, "Yes, cancel plan").click();
+  await button(page, "More").click();
+  await button(page, "Cancel resbite").click();
+  await button(page, choice).click();
   await expect(page.getByText(/cancelled\.$/)).toBeVisible();
   await button(page, "Back").click();
 }

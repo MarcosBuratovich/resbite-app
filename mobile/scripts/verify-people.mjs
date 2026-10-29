@@ -64,7 +64,7 @@ try {
   await later(page);
   // GI-D3: inviting from contacts is out of scope, so the event page has no Choose people; People stays on Profile.
   await openEvent(page, "Coffee together");
-  await expect(button(page, "Invite someone")).toBeVisible();
+  await expect(button(page, "Invite")).toBeVisible();
   await expect(button(page, "Choose people")).toHaveCount(0);
   await button(page, "Back").click();
   await page.getByRole("tab", { name: "Profile", exact: true }).click();
@@ -102,7 +102,7 @@ try {
   );
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: manual contact fallback, group create/edit/delete, deduplication, no Choose people on the event page (GI-D3) and exit cleanup. No network writes.",
+    "PASS: manual contact fallback, group create/edit/delete, deduplication, no Choose people on the resbite page (GI-D3) and exit cleanup. No network writes.",
   );
 } finally {
   await browser.close();

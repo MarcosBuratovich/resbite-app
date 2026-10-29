@@ -138,6 +138,7 @@ async function fixture(width = 390, preview = false) {
       if (state.offline) return reply({ message: "Offline fixture" }, 503);
       return reply(rows);
     }
+    if (url.pathname === "/rest/v1/plan_mutes") return reply([]);
     unexpected.push(`${request.method()} ${url.pathname}`);
     return route.abort();
   });
@@ -312,7 +313,11 @@ try {
       .poll(() =>
         preview.page
           .getByRole("img", { name: item.title, exact: true })
-          .evaluate((image) => image.complete && image.naturalWidth === 1536),
+          .evaluate((box) => {
+            // The content page labels the cover's box; the picture is the <img> inside it.
+            const image = box.tagName === "IMG" ? box : box.querySelector("img");
+            return Boolean(image && image.complete && image.naturalWidth === 1536);
+          }),
       )
       .toBe(true);
     await preview.page

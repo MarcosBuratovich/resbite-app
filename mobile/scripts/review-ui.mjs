@@ -1,8 +1,8 @@
 // Captures every UX1, UX3 and UX4 screen at 390 and 320 px (UX3 and UX4 also with Larger Text at 320 px) with no console or page errors,
 // and keeps the gluestack keyboard-selection check. Every Supabase request is aborted, except in the GI1, GI2 and phone blocks at the
 // end, where requests are answered by a local stub: a signed-in organizer's Invite people (Plan 2: the Pick step with three numbers,
-// one On Resbite, and Almost there; no link section), the event page's Waiting for you and Event link card (open-link approval), the Guests
-// sheet with Remove and the Invited group (WhatsApp, Messages, Remove), and My resbites with an Invitations card and the open-link requests
+// one On Resbite, the event link below them, and Almost there), the resbite page's people row, the people list with Waiting for you and
+// the Invited group and a three-dots sheet per person, and My resbites with an Invitations card and the open-link requests
 // (waiting and declined), and the /waiting screen in both states; a signed-out invitation and a dead link; an account waiting for access with its
 // Invitations and the inline 18+ tick on the invite screen; and phone sign-up,
 // its code, phone sign-in, About you, and Add your number with its "taken" refusal, the offer to bring in a web-only account and
@@ -90,7 +90,7 @@ try {
       await button(page, "Back").click();
       await page.waitForTimeout(300);
     }
-    // My resbites with a card, the event page and its More sheet (GI-D3: no Choose people on the event page).
+    // My resbites with a card, the event page and its More sheet (GI-D3: no Choose people on the resbite page).
     const card = button(page, /^Picnic in the park, /);
     await expect(card).toBeVisible();
     await shot("plans");
@@ -98,14 +98,15 @@ try {
     await expect(heading(page, "Picnic in the park")).toBeVisible();
     await shot("event");
     // UX3: the organizer posts a Note to guests; the page shows it with the Meeting details and the device chips.
-    await button(page, "Post a note to guests").click();
-    await page.getByLabel("Note to guests", { exact: true }).fill("Bring a blanket, we have the drinks covered.");
-    await shot("event-note-sheet", false);
-    await button(page, "Post").click();
-    await expect(page.getByRole("button", { name: "Close sheet" })).toHaveCount(0);
+    await button(page, "Edit Picnic in the park").click();
+    await expect(heading(page, "Edit resbite")).toBeVisible();
+    await page.getByLabel("Note to guests (optional)", { exact: true }).fill("Bring a blanket, we have the drinks covered.");
+    await shot("event-note-field");
+    await button(page, /^Save/).click();
+    await expect(heading(page, "Picnic in the park")).toBeVisible();
     await expect(page.getByText("Bring a blanket, we have the drinks covered.", { exact: true })).toBeVisible();
     await shot("event-organizer-notes");
-    await button(page, "More actions").click();
+    await button(page, "More").click();
     await shot("event-more", false);
     await button(page, "Close sheet").click();
     await expect(page.getByRole("button", { name: "Close sheet" })).toHaveCount(0);
@@ -340,19 +341,20 @@ try {
     await later(page);
     await openEvent(page, "Picnic in the park");
     await expect(heading(page, "Picnic in the park")).toBeVisible();
-    await button(page, "Post a note to guests").click();
-    await page.getByLabel("Note to guests", { exact: true }).fill("Bring a blanket, we have the drinks covered.");
-    await button(page, "Post").click();
-    await expect(page.getByRole("button", { name: "Close sheet" })).toHaveCount(0);
-    assert.ok(await fits(), "The organizer's event page fits at 320 px under Larger Text");
+    await button(page, "Edit Picnic in the park").click();
+    await expect(heading(page, "Edit resbite")).toBeVisible();
+    await page.getByLabel("Note to guests (optional)", { exact: true }).fill("Bring a blanket, we have the drinks covered.");
+    await button(page, /^Save/).click();
+    await expect(page.getByText("Bring a blanket, we have the drinks covered.", { exact: true })).toBeVisible();
+    assert.ok(await fits(), "The organizer's resbite page fits at 320 px under Larger Text");
     await shot("event-organizer-notes");
     if (errors.length) throw Error(errors.join("\n"));
     await page.close();
   }
   // Signed in as the organizer against a local stub, at 390 and 320 px and under Larger Text at 320 px, with nothing
   // wider than the screen or clipped: Invite people's Pick step with three numbers (one On Resbite; the event link
-  // is on the event page now), Almost there, the event page's Waiting for you and Event link card, the Guests sheet
-  // with Remove and the Invited group, My resbites with an Invitations card and the open-link requests, and the
+  // below the contacts), Almost there, the resbite page's people row, the people list with its Waiting for you and
+  // Invited groups and the three-dots sheets, My resbites with an Invitations card and the open-link requests, and the
   // /waiting screen waiting and declined. The browser can't read phone contacts, so the numbers are added with "Add a number".
   for (const [width, large] of [[390, false], [320, false], [320, true]]) {
     const page = await browser.newPage({ viewport: { width, height: 844 }, reducedMotion: "reduce", timezoneId: "Europe/London" });
@@ -471,6 +473,7 @@ try {
           ]);
         return reply(url.searchParams.get("plan_id") === `eq.${plan.id}` ? guests : []);
       }
+      if (path === "/rest/v1/plan_mutes") return reply([]);
       if (path === "/rest/v1/rpc/plan_link") return reply("AbCdEfGhIjKlMnOpQrStUv");
       if (path === "/rest/v1/rpc/plan_join_requests") return reply(req.postDataJSON().p_plan === plan.id ? asking : []);
       if (path === "/rest/v1/rpc/my_join_requests") return reply(mine);
@@ -492,10 +495,15 @@ try {
     };
     await open(`/invitations?plan=${plan.id}`);
     await expect(heading(page, "Invite people")).toBeVisible();
-    // The event link lives on the event page; this screen has no link section.
+    // The event link sits under the contacts, with its own heading and controls of at least 44 pt.
     await expect(button(page, "Invite 0")).toBeVisible();
+    await expect(heading(page, "Or share the event link")).toBeVisible();
     await expect(heading(page, "Event link")).toHaveCount(0);
-    await expect(button(page, "Turn off this link")).toHaveCount(0);
+    await expect(button(page, "Turn off this link")).toBeEnabled();
+    for (const name of ["Share link", "Copy link", "Turn off this link"]) {
+      const box = await button(page, name).boundingBox();
+      assert.ok(box.height >= 44 && box.width >= 44, `${name} is at least 44 pt at ${suffix}`);
+    }
     // Privacy: the screen never shows the exact place.
     await expect(page.getByText("Flat 3, 12 Old Street")).toHaveCount(0);
     await shot("invite-people-empty");
@@ -520,30 +528,42 @@ try {
     await shot("invite-people-almost");
     await open(`/event?plan=${plan.id}`);
     await expect(heading(page, "Film club: Paris, Texas")).toBeVisible();
-    // Open-link approval: Waiting for you (name, answer, last two digits; Approve and Decline) and the Event link card below.
-    await expect(heading(page, "Waiting for you")).toBeVisible();
-    await expect(page.getByText("Going · via event link · ••34", { exact: true })).toBeVisible();
-    await expect(button(page, "Approve Kim Lau")).toBeVisible();
-    await heading(page, "Waiting for you").scrollIntoViewIfNeeded();
-    await shot("event-waiting-for-you");
-    await expect(heading(page, "Event link")).toBeVisible();
-    await button(page, "Turn off this link").scrollIntoViewIfNeeded();
-    await shot("event-link-card");
-    // The card's controls stay at least 44 pt, also at 320 px under Larger Text.
-    for (const name of ["Share link", "Copy link", "Turn off this link"]) {
+    // The people row counts what the organizer sees: answers, the personal links and the app invitation not answered
+    // yet, and the open-link requests waiting.
+    const row = "Going 2 · Maybe 1 · Can’t go 0 · 3 invited · 2 waiting";
+    await expect(page.getByText(row, { exact: true })).toBeVisible();
+    await expect(heading(page, "Waiting for you")).toHaveCount(0);
+    await expect(heading(page, "Event link")).toHaveCount(0);
+    assert.ok(await fits(), `The resbite page fits at ${suffix}`);
+    await shot("event-people-row");
+    await button(page, new RegExp(`^${row}`)).click();
+    // The people list: Waiting for you (name, how they asked) and the Invited group, each person with a three-dots sheet.
+    await expect(heading(page, "People")).toBeVisible();
+    for (const group of ["Going · 2", "Maybe · 1", "Invited, not answered yet · 3", "Waiting for you · 2"])
+      await expect(heading(page, group)).toBeVisible();
+    await expect(page.getByText("Asked through the link", { exact: true })).toHaveCount(2);
+    await expect(button(page, "Actions for Kim Lau")).toBeVisible();
+    assert.ok(await fits(), `The people list fits at ${suffix}`);
+    assert.deepEqual(await clipped(), [], `The people list has nothing clipped at ${suffix}`);
+    await shot("people-list");
+    for (const name of ["Actions for Alex Rivera", "Actions for Alexandria Montgomery-Smith"]) {
       const box = await button(page, name).boundingBox();
       assert.ok(box.height >= 44 && box.width >= 44, `${name} is at least 44 pt at ${suffix}`);
     }
-    await button(page, "2 going, 1 maybe").click();
-    await expect(heading(page, "Guests")).toBeVisible();
-    await expect(button(page, "Remove Alex Rivera")).toBeVisible();
-    await shot("event-guests-remove", false);
-    // The Invited group, below the guests: WhatsApp, Messages and Remove for each personal link.
-    await heading(page, "Invited").scrollIntoViewIfNeeded();
-    await expect(button(page, "Remove Cy Lindqvist")).toBeVisible();
-    await expect(visible(page.getByRole("button", { name: /^Send again on WhatsApp: /, exact: false }))).toHaveCount(2);
-    await expect(visible(page.getByRole("button", { name: /^Send again on Messages: /, exact: false }))).toHaveCount(2);
-    await shot("event-guests-invited", false);
+    await button(page, "Actions for Alexandria Montgomery-Smith").click();
+    await expect(button(page, "Approve")).toBeVisible();
+    await expect(button(page, "Decline")).toBeVisible();
+    await shot("people-sheet-request", false);
+    await button(page, "Close sheet").click();
+    await button(page, "Actions for Alex Rivera").click();
+    await expect(button(page, "Make admin")).toBeVisible();
+    await expect(button(page, "Remove from this resbite")).toBeVisible();
+    await shot("people-sheet-guest", false);
+    await button(page, "Close sheet").click();
+    await button(page, "Actions for Cy Lindqvist").click();
+    await expect(button(page, "Remove")).toBeVisible();
+    await shot("people-sheet-invited", false);
+    await button(page, "Close sheet").click();
     // My resbites with Jo's invitation under Invitations.
     await open("/plans");
     await expect(heading(page, "Invitations")).toBeVisible();
@@ -941,7 +961,7 @@ try {
     if (errors.length) throw Error(errors.join("\n"));
   }
   console.log(
-    "PASS: Get notified? and Notification settings (each Updates state) at 390/320 px and Larger Text at 320 px, and every UX1, UX3 and UX4 screen at 390/320 px, UX3 and UX4 under Larger Text at 320 px, the Where step with an Area, Invite people (Pick with three numbers and On Resbite, Almost there, no link section), the event page's Waiting for you and Event link card, the Guests sheet with Remove and the Invited group, My resbites with an Invitations card and open-link requests, the /waiting screen waiting and declined (390/320 and Larger Text at 320 px, nothing wider than the screen or clipped), the signed-out invitation and a dead link, an account waiting for access with its Invitations, the inline 18+ tick (ticked and not), and phone sign-up (number with the tick, code), phone sign-in, About you, and Add your number with its taken-number refusal, the fold offer and its code step (390/320 and Larger Text at 320 px, nothing wider than the screen or clipped), gluestack keyboard selection, no console/page errors. Screenshots: " + out,
+    "PASS: Get notified? and Notification settings (each Updates state) at 390/320 px and Larger Text at 320 px, and every UX1, UX3 and UX4 screen at 390/320 px, UX3 and UX4 under Larger Text at 320 px, the Where step with an Area, Invite people (Pick with three numbers and On Resbite, the event link below them, Almost there), the resbite page's people row, the people list with Waiting for you and the Invited group and a three-dots sheet per person, My resbites with an Invitations card and open-link requests, the /waiting screen waiting and declined (390/320 and Larger Text at 320 px, nothing wider than the screen or clipped), the signed-out invitation and a dead link, an account waiting for access with its Invitations, the inline 18+ tick (ticked and not), and phone sign-up (number with the tick, code), phone sign-in, About you, and Add your number with its taken-number refusal, the fold offer and its code step (390/320 and Larger Text at 320 px, nothing wider than the screen or clipped), gluestack keyboard selection, no console/page errors. Screenshots: " + out,
   );
 } finally {
   await browser.close();

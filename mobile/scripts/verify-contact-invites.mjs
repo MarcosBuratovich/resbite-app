@@ -1,6 +1,6 @@
 // Contact invitations in headless Chrome (Plan 2): Invite people's Pick step (the "On Resbite" lookup for the picked
 // numbers only), Invite N with a personal code each, Almost there (in the app, WhatsApp and Messages), inviting the
-// same number again with its stored code, the event page's Invited group (WhatsApp and Messages, Remove), an Invitations card on
+// same number again with its stored code, the people list's Invited group (Send again by the app used, Remove, behind the three dots), an Invitations card on
 // My resbites answered Going, and Add your number's offer to bring in a web-only account, with no 000000 anywhere
 // and no contact's number where it doesn't belong. Every Supabase request is answered by the fixture below; any
 // other path fails the run.
@@ -238,6 +238,7 @@ async function fixture({ user = host, width = 390, foldStatus = 200 } = {}) {
         ]);
       return reply(plan === coffee.id ? state.guests : []);
     }
+    if (path === "/rest/v1/plan_mutes") return reply([]);
     if (path === "/rest/v1/rpc/plan_link") return reply("AbCdEfGhIjKlMnOpQrStUv");
     // Open-link approval: nobody has answered the event link (the host's Waiting for you and My resbites' requests
     // are empty; verify-event and verify-open-link-app cover them).
@@ -368,7 +369,7 @@ try {
       { page } = f;
     f.state.lookupReply = ["541112341234"];
     await page.goto(`${base}/event?plan=${coffee.id}`);
-    await button(page, "Invite someone").click();
+    await button(page, "Invite").click();
     await expect(heading(page, "Invite people")).toBeVisible();
     await expect(page.getByText("Numbers without a country code are read as United Kingdom.", { exact: true })).toBeVisible();
     await button(page, "Change").click();
@@ -411,12 +412,12 @@ try {
       { page } = f;
     await page.goto(`${base}/event?plan=${coffee.id}`);
     await expect(heading(page, "Coffee evening")).toBeVisible();
-    await button(page, "Invite someone").click();
+    await button(page, "Invite").click();
     await expect(heading(page, "Invite people")).toBeVisible();
-    // The Pick step: the web says contacts are in the iPhone app. The event link is on the event page now, not here.
+    // The Pick step: the web says contacts are in the iPhone app. The event link sits under it, with its own heading.
     await expect(page.getByText("Phone contacts are in the iPhone app. You can add a number below.", { exact: true })).toBeVisible();
-    await expect(heading(page, "Event link")).toHaveCount(0);
-    await expect(button(page, "Share link")).toHaveCount(0);
+    await expect(heading(page, "Or share the event link")).toBeVisible();
+    await expect(button(page, "Share link")).toBeVisible();
     await expect(button(page, "Invite 0")).toBeDisabled();
     await noTestCode(page, "the Pick step");
     // Nothing is looked up before anything is picked.
@@ -486,7 +487,7 @@ try {
     // 4. Invite people again for Ben: the stored code is sent again, and Almost there remembers WhatsApp.
     await button(page, "Done").click();
     await expect(heading(page, "Coffee evening")).toBeVisible();
-    await button(page, "Invite someone").click();
+    await button(page, "Invite").click();
     await expect(heading(page, "Invite people")).toBeVisible();
     await addNumber(page, BEN);
     await expect(row(page, BEN)).toHaveAttribute("aria-checked", "true");
@@ -496,49 +497,51 @@ try {
     assert.deepEqual(again, [{ phone: BEN.digits, country: "44", code: benCode }], "the stored code is reused");
     await expect(page.getByText("Sent on WhatsApp", { exact: true })).toBeVisible();
     await button(page, "Done").click();
-    // 5. The event page's Invited group shows Ben and Cy by name; Ana, invited in the app, is a guest.
+    // 5. The people list: Ben, Cy and Ana (invited in the app) sit in Invited, not answered yet, each with how they
+    // were invited. The row's three dots open the sheet: Send again by the app used, Remove.
     await expect(heading(page, "Coffee evening")).toBeVisible();
-    await button(page, "1 going").click();
-    await expect(heading(page, "Guests")).toBeVisible();
-    await expect(heading(page, "Not answered yet")).toBeVisible();
-    await expect(heading(page, "Invited")).toBeVisible();
+    await page.getByRole("button", { name: /^Going / }).click();
+    await expect(heading(page, "People")).toBeVisible();
+    await expect(heading(page, "Invited, not answered yet · 3")).toBeVisible();
     for (const p of [ANA, BEN, CY]) await expect(page.getByText(p.name, { exact: true })).toBeVisible();
-    for (const p of [BEN, CY]) await expect(button(page, `Remove ${p.name}`)).toBeVisible();
-    // Each row offers WhatsApp and Messages, the one used last first: WhatsApp for Ben, Messages for Cy.
-    const resend = (app, p) => button(page, `Send again on ${app}: ${p.name}`);
-    for (const p of [BEN, CY]) for (const app of ["WhatsApp", "Messages"]) await expect(resend(app, p)).toBeVisible();
-    assert.ok(
-      await inOrder(page, [resend("WhatsApp", BEN), resend("Messages", BEN), resend("Messages", CY), resend("WhatsApp", CY)]),
-      "the last-used app comes first on each row",
-    );
-    await noTestCode(page, "the Guests sheet");
-    // Send again on WhatsApp opens it with Ben's same link.
-    await resend("WhatsApp", BEN).click();
+    await expect(page.getByText("Invited by WhatsApp", { exact: true })).toBeVisible();
+    await expect(page.getByText("Invited by Messages", { exact: true })).toBeVisible();
+    await expect(page.getByText("Invited in the app", { exact: true })).toBeVisible();
+    await noTestCode(page, "the people list");
+    const actions = (p) => button(page, `Actions for ${p.name}`);
+    const sendAgain = (app) => button(page, `Send again on ${app}`);
+    // Ben was sent WhatsApp, so that is the one app offered; it opens WhatsApp with his same link.
+    await actions(BEN).click();
+    await expect(sendAgain("WhatsApp")).toBeVisible();
+    await expect(sendAgain("Messages")).toHaveCount(0);
+    await sendAgain("WhatsApp").click();
     await expect.poll(async () => (await f.opened()).length).toBe(3);
     assert.equal((await f.opened())[2], whatsapp);
-    // Where WhatsApp won't open, it says so, and Messages is right there with the same link.
+    await expect(sendAgain("WhatsApp")).toHaveCount(0);
+    // Where WhatsApp won't open, the sheet says so and stays open.
     await page.evaluate(() => (window.__blockOpen = true));
-    await resend("WhatsApp", BEN).click();
+    await actions(BEN).click();
+    await sendAgain("WhatsApp").click();
     await expect(page.getByText("WhatsApp isn’t installed. Try Messages.", { exact: true })).toBeVisible();
-    await expect(resend("Messages", BEN)).toBeEnabled();
+    await button(page, "Close sheet").click();
     await page.evaluate(() => (window.__blockOpen = false));
-    await resend("Messages", BEN).click();
+    // Cy was sent Messages: it opens Messages with Cy's same link.
+    await actions(CY).click();
+    await expect(sendAgain("WhatsApp")).toHaveCount(0);
+    await sendAgain("Messages").click();
     await expect.poll(async () => (await f.opened()).length).toBe(4);
-    assert.equal((await f.opened())[3], `sms:${BEN.e164}?body=${encodeURIComponent(MESSAGE(benCode))}`);
+    assert.equal((await f.opened())[3], `sms:${CY.e164}?body=${encodeURIComponent(MESSAGE(cyCode))}`);
     await expect(page.getByText("WhatsApp isn’t installed. Try Messages.", { exact: true })).toHaveCount(0);
     assert.equal(f.calls("/rest/v1/rpc/invite_contacts").length, 2, "a stored code is sent again without a new invite");
     // Remove asks first; Keep changes nothing; Remove turns Cy's invitation off.
-    let asked = "";
-    page.once("dialog", (d) => {
-      asked = d.message();
-      return d.dismiss();
-    });
-    await button(page, `Remove ${CY.name}`).click();
-    await expect.poll(() => asked).toBe("Remove the invitation for Cy Okafor?");
+    await actions(CY).click();
+    await button(page, "Remove").click();
+    await expect(page.getByText("Remove the invitation for Cy Okafor?", { exact: true })).toBeVisible();
+    await button(page, "Keep").click();
     await page.waitForTimeout(200);
     assert.equal(f.calls("/rest/v1/rpc/revoke_phone_invitation").length, 0);
-    page.once("dialog", (d) => d.accept());
-    await button(page, `Remove ${CY.name}`).click();
+    await button(page, "Remove").click();
+    await button(page, "Remove").click();
     await expect(page.getByText(CY.name, { exact: true })).toHaveCount(0);
     await expect(page.getByText(BEN.name, { exact: true })).toBeVisible();
     assert.deepEqual(
@@ -546,7 +549,6 @@ try {
       [{ p_plan: coffee.id, p_phone: CY.digits }],
     );
     assert.deepEqual(Object.keys((await f.stored())[coffee.id]), [BEN.e164], "Cy's code is gone from this phone");
-    await button(page, "Close sheet").click();
     // 8. A contact's number travels only in the lookup, the invite and the removal: never in an address or any
     // other request, never kept outside the host's invitation codes, and never shown on My resbites.
     for (const x of f.log) {
@@ -565,7 +567,7 @@ try {
     assert.deepEqual(await numbersShown(page, CONTACTS), [], "My resbites shows no contact's number");
     await f.done();
     console.log(
-      "PASS: Pick three numbers (the lookup carries only their digits; one On Resbite), Invite 3 with a 22-character code each, Almost there with the in-app sentence and WhatsApp/Messages for two, WhatsApp opens whatsapp://send with the personal /i/ link and says Sent on WhatsApp, a refused WhatsApp says so, Messages, inviting again reuses the stored code, the Invited group with WhatsApp and Messages on each row (last-used first; a refused WhatsApp leaves Messages beside it) and Remove (revoke_phone_invitation), and contact numbers only where they belong.",
+      "PASS: Pick three numbers (the lookup carries only their digits; one On Resbite), Invite 3 with a 22-character code each, Almost there with the in-app sentence and WhatsApp/Messages for two, WhatsApp opens whatsapp://send with the personal /i/ link and says Sent on WhatsApp, a refused WhatsApp says so, Messages, inviting again reuses the stored code, the people list's Invited group (Invited by WhatsApp or Messages; Send again only by the app used, a refused WhatsApp says so; Remove asks first, revoke_phone_invitation), and contact numbers only where they belong.",
     );
   }
 
@@ -696,7 +698,7 @@ try {
     await f.done();
   }
   console.log("PASS: a refused fold (409) shows the taken copy and an undeployed one (404) shows foldOff, with no Retry and no second verify or post.");
-  console.log("PASS: contact invitations, the Invited group, Invitations and the fold offer. All Supabase requests intercepted.");
+  console.log("PASS: contact invitations, the people list's Invited group, Invitations and the fold offer. All Supabase requests intercepted.");
 } finally {
   await browser.close();
 }

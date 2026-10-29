@@ -139,16 +139,18 @@ try {
     0,
   );
   await page.goto(`${base}/event?plan=${plan.id}`);
-  await expect(page.getByText("Answer to see who’s coming", { exact: true })).toBeVisible();
+  // An unanswered guest sees the answer control in the bottom bar, and no More.
+  await expect(page.getByRole("radiogroup", { name: "Your answer", exact: true })).toBeVisible();
   await expect(page.getByRole("radio", { name: "Maybe", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "More", exact: true })).toHaveCount(0);
   await page.getByRole("radio", { name: "Going", exact: true }).click();
   await expect(
     page.getByText("Your response is saved.", { exact: true }),
   ).toBeVisible();
   assert.equal(writes, 1);
-  await page
-    .getByRole("button", { name: "View sample conversation", exact: true })
-    .click();
+  // Going shows the reply with Change, and the accepted-only sample is open at its own address.
+  await expect(page.getByText("You’re going", { exact: true })).toBeVisible();
+  await page.goto(`${base}/sample-chat?plan=${plan.id}`);
   await expect(
     page.getByText("Sam · fictional", { exact: true }),
   ).toBeVisible();
@@ -165,19 +167,22 @@ try {
     0,
   );
   await page.goto(`${base}/event?plan=${plan.id}`);
+  // Withdrawn reads You can’t go with Change; the answer sheet holds the control.
+  await expect(page.getByText("You can’t go", { exact: true })).toBeVisible();
   conflict = true;
+  await page.getByRole("button", { name: "Change your answer", exact: true }).click();
   await page.getByRole("radio", { name: "Going", exact: true }).click();
+  // The failure is said inside the sheet (the page behind repeats it).
   await expect(
-    page.getByText(
+    page.getByTestId("sheet-scroll").getByText(
       "The plan or your response changed. Review the latest details before choosing again.",
       { exact: true },
     ),
   ).toBeVisible();
   // UX3-D7: "Can’t go" on the answer control and the status chip.
   await expect(page.getByRole("radio", { name: "Can’t go", exact: true })).toBeChecked();
-  await expect(page.getByText("Can’t go", { exact: true })).toHaveCount(2);
   // The invitation shows the plan's own text, not the bundled idea title.
-  await expect(page.getByText("Coffee evening", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Coffee evening", exact: true })).toBeVisible();
   await expect(page.getByText("Bring a book", { exact: true })).toBeVisible();
   conflict = false;
   failWithoutCommit = true;
@@ -186,6 +191,8 @@ try {
     page.getByRole("button", { name: "Retry my response", exact: true }),
   ).toBeVisible();
   await expect(page.getByRole("radio", { name: "Can’t go", exact: true })).toBeDisabled();
+  // The sheet stays open on a failure; the retry waits on the page under it.
+  await page.getByRole("button", { name: "Close sheet", exact: true }).click();
   await page
     .getByRole("button", { name: "Retry my response", exact: true })
     .click();
@@ -193,21 +200,15 @@ try {
     page.getByText("Your response is saved.", { exact: true }),
   ).toBeVisible();
   fixturePlan.status = "cancelled";
-  await page
-    .getByRole("button", { name: "Refresh invitation", exact: true })
-    .click();
-  await expect(
-    page.getByText(
-      "This plan is cancelled or has already started. Responses are closed.",
-      { exact: true },
-    ),
-  ).toBeVisible();
+  await page.reload();
+  // A cancelled resbite says so; the reply stays as text with no Change and no way to answer.
+  await expect(page.getByText("Cancelled", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Change your answer", exact: true })).toHaveCount(0);
   await expect(page.getByRole("radio", { name: "Going", exact: true })).toHaveCount(0);
   fixturePlan.status = "active";
   await page.goto(`${base}/invite?token=${"a".repeat(64)}`);
-  await expect(
-    page.getByRole("button", { name: "View sample conversation", exact: true }),
-  ).toBeVisible();
+  // The claim lands on the resbite page, where the saved answer reads You’re going.
+  await expect(page.getByText("You’re going", { exact: true })).toBeVisible();
   assert.equal(
     await page.evaluate(() => sessionStorage.getItem("resbite.pending-invite")),
     null,

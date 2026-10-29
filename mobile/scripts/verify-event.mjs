@@ -1,15 +1,18 @@
-// UX1 event page for both roles. Every Supabase request is intercepted; nothing is sent.
-// UX3: Meeting details in all three roles, the Note to guests, Add to calendar and reminders (on the
-// development fakes, `__resbiteDevice`), and the "Can’t go" wording.
-// Plan 2: the organizer's Invited group (people invited by personal link who haven't answered) with WhatsApp, Messages and
-// Remove, and an unanswered invitation's card under Invitations on My resbites.
-// Open-link approval: the organizer's Waiting for you (name, answer, ••34; Approve sends decide_join_request with
-// p_approve true and the row leaves; Decline asks first, then sends false; a request someone else decided says
-// so; none on a cancelled or started event, where nobody can be added), and the Event link card that lives on the
-// event page (Share, Copy link, Turn off this link). An invitee has neither.
+// Creating a resbite, Plan 3: the resbite page for every role and state, its More sheet, the people list and the
+// idea page. Every Supabase request is intercepted; nothing is sent. Each scenario builds its own fixture, walks
+// the screen and asserts what is visible, the roles and the requests the app made (names and arguments).
+//   owner      the page (Invite, Edit, More; You’re hosting; the people row), More (four rows, mute, cancel)
+//   repeating  Every Thursday; the two cancel choices
+//   ended      · Ended; Do this again alone; no More
+//   running    Edit is there and a guest reply is accepted
+//   admin      You’re an admin; Change my reply; Cancel resbite; Can’t go → the guest page
+//   guest      Hosted by Ana; You’re going + Change; an unanswered guest sees counts, Your answer, no More
+//   people     the groups, Make admin, Approve, Send again only for a code this phone holds
+//   idea       Back over the image, Use idea
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
-import { inOrder, quietReminders, visible } from "./qa-helpers.mjs";
+import { quietReminders } from "./qa-helpers.mjs";
+
 const base = process.env.RESBITE_QA_URL || "http://localhost:8081";
 const browser = await chromium.launch({
   channel: process.env.RESBITE_QA_BROWSER || "chrome",
@@ -41,20 +44,35 @@ const session = {
   expires_in: 3600,
   user,
 };
-const hosted = {
-  id: "22222222-2222-4222-8222-222222222222",
+
+// The plan-read select the app sends for one resbite (src/services/plans.ts `planWithDetails`).
+const PLAN_SELECT = "*,plan_meeting_details(note),plan_admins(user_id)";
+// The plan screen (after Do this again or Use idea) reads the cover columns too.
+const COVER_SELECT = "cover_path,cover_description,cover_revision";
+// ...and the named-columns read the plan gateway sends (src/services/plans.ts `planColumns`, used by the reminder sync).
+const PLAN_COLUMNS =
+  "id,activity_id,title,description,categories,starts_at,ends_at,time_zone,place_label,status,version,owner_id,has_meeting_details,guest_note,guest_note_at,area,place_tbd,repeat_weeks,series_id,repeats_from,plan_meeting_details(note),plan_admins(user_id)";
+const HOST = { id: "33333333-3333-4333-8333-333333333333", name: "Ana" };
+const PLAN_ID = "22222222-2222-4222-8222-222222222222";
+const SERIES_ID = "55555555-5555-4555-8555-555555555555";
+const hour = 3_600_000;
+const iso = (ms) => new Date(ms).toISOString();
+// 5 March 2099 is a Thursday.
+const THURSDAY = "2099-03-05T15:00:00Z";
+const basePlan = {
+  id: PLAN_ID,
   activity_id: "coffee-together",
   title: "Coffee evening",
   description: "Bring a book",
   categories: ["community", "uplifting"],
   owner_id: user.id,
-  starts_at: "2099-03-01T15:00:00Z",
-  ends_at: "2099-03-01T17:00:00Z",
+  starts_at: THURSDAY,
+  ends_at: "2099-03-05T17:00:00Z",
   time_zone: "UTC",
   place_label: "Fixture café",
-  area: "",
-  // The fixture keeps Meeting details on the plan; the stub sends them only to people who may read them.
-  note: "Window table",
+  place_tbd: false,
+  area: "Near the station",
+  note: "",
   status: "active",
   version: 1,
   cover_path: null,
@@ -62,1102 +80,504 @@ const hosted = {
   cover_description: "",
   guest_note: "",
   guest_note_at: null,
+  repeat_weeks: null,
+  series_id: SERIES_ID,
+  repeats_from: null,
+  has_meeting_details: false,
 };
-const invited = {
-  ...hosted,
-  id: "44444444-4444-4444-8444-444444444444",
-  title: "Board games",
-  owner_id: "33333333-3333-4333-8333-333333333333",
-  place_label: "Games room",
-  // GI1: the area stands in for the exact place until the invitee answers.
-  area: "Near the station",
-  note: "Gate code 4512",
-  cover_path: "33333333-3333-4333-8333-333333333333/44444444-4444-4444-8444-444444444444/a.jpg",
-  cover_revision: 1,
-  cover_description: "Two mugs on a window sill",
-  guest_note: "Bring a blanket",
-  guest_note_at: "2099-02-28T09:41:00Z",
-};
-const edited = {
-  ...hosted,
-  id: "55555555-5555-4555-8555-555555555555",
-  title: "Picnic",
-  description: "",
-  place_label: "Park",
-  note: "",
-};
-const closed = { ...invited, id: "66666666-6666-4666-8666-666666666666", title: "Closed games", status: "cancelled" };
-// An invitation with no Meeting details: nothing to unlock, so no locked line.
-const quiz = {
-  ...invited,
-  id: "77777777-7777-4777-8777-777777777777",
-  title: "Quiz night",
-  note: "",
-  guest_note: "",
-  guest_note_at: null,
-  cover_path: null,
-  cover_description: "",
-};
-// The organizer's event with an end, for reminders and the calendar.
-const lunch = {
-  ...hosted,
-  id: "88888888-8888-4888-8888-888888888888",
-  title: "Garden lunch",
-  description: "",
-  place_label: "Rose garden",
-  note: "Door code 4521",
-  ends_at: "2099-03-01T17:00:00Z",
-};
-// The organizer's event that has already started: nobody can be added now.
-const started = {
-  ...hosted,
-  id: "99999999-9999-4999-8999-999999999999",
-  title: "Morning swim",
-  description: "",
-  place_label: "Lido",
-  note: "",
-  starts_at: "2020-03-01T08:00:00Z",
-  ends_at: "2020-03-01T09:00:00Z",
-};
-const LOCKED = "Meeting details appear after you answer Going or Maybe.";
-// Plan 2: the organizer's personal links for Coffee evening. Pat's code is on this phone (sent on Messages); the
-// second number's isn't (the host changed phones); the third has answered, so it isn't in the Invited group.
+const g = (id, name, response) => ({ user_id: id, response, profiles: { display_name: name } });
+const ALEX = g("g1", "Alex", "accepted");
+const BEA = g("g2", "Bea", "accepted");
+const CY = g("g3", "Cy", "maybe");
+const DI = g("g4", "Di", "declined");
+// Pat's code is on this phone (sent on WhatsApp); the second number's isn't (the host changed phones).
 const PAT = { phone: "447700900222", e164: "+447700900222", name: "Pat Lee", code: "PatCodePatCodePatCode1" };
-const UNSTORED = { phone: "447700900333", e164: "+447700900333", label: "+44 7700 900333" };
+const UNSTORED = { phone: "447700900333", label: "+44 7700 900333" };
+const phoneRow = (phone) => ({ phone, country: "44", answered: false, response: null });
+const SAM = { user_id: "r1", name: "Sam Reed", response: "accepted", ending: "34", created_at: "2099-02-20T10:00:00Z" };
 const CODE_STORE = `resbite.invite-codes.v1.${user.id}`;
-const PERSONAL_CODE = /^[A-Za-z0-9_-]{22}$/;
-// Plan 4: the one notification ask (NOTIFICATION_ASK), which replaced UX3's "Get reminders?".
-const ASK_TITLE = "Get notified?";
-const ASK_BODY =
-  "Resbite can tell you when people answer or ask to join, when a resbite changes or gets a note, and before it starts.";
-/** Brings the page back to the foreground: the event and this phone's reminder state are read again. */
-const foreground = (page) =>
-  page.evaluate(() => {
-    for (const state of ["hidden", "visible"]) {
-      Object.defineProperty(document, "visibilityState", { configurable: true, value: state });
-      document.dispatchEvent(new Event("visibilitychange"));
-    }
-  });
-/** After an InfoSheet closes, wait until its Modal has gone before the next tap. */
-const sheetClosed = (page) => expect(page.getByRole("button", { name: "Close sheet", exact: true })).toHaveCount(0);
-/** The development fake's reminders for one event, soonest first. */
-const remindersFor = (page, planId) =>
-  page.evaluate((id) => globalThis.__resbiteDevice.reminders.filter((r) => r.id.includes(id)), planId);
 const errors = [];
-try {
+
+/**
+ * One scenario: a fresh browser context with every Supabase request answered from `world`. `world.plan` is merged
+ * over the base plan; `viewer` is "owner" (the signed-in person owns it), "admin" or "guest". Returns the page,
+ * the requests made and the state the fixture holds, so a scenario can read them.
+ */
+async function open(world = {}) {
+  const viewer = world.viewer ?? "owner";
+  const state = {
+    plan: { ...basePlan, ...(viewer === "owner" ? {} : { owner_id: HOST.id }), ...world.plan },
+    attendee: world.attendee ?? (viewer === "owner" ? null : { version: 1, response: "pending" }),
+    guests: world.guests ?? [],
+    admins: viewer === "admin" ? [user.id] : [...(world.admins ?? [])],
+    phoneInvites: world.phoneInvites ?? [],
+    requests: world.requests ?? [],
+    muted: Boolean(world.muted),
+  };
+  const log = [];
+  const planSelects = new Set();
+  const unexpected = [];
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
-  // This context isn't about reminders: the permission is answered "denied" up front, so nothing asks.
   await quietReminders(context);
   const page = await context.newPage();
   page.on("pageerror", (e) => errors.push(e.message));
-  const init = (s) => {
-    sessionStorage.setItem("sb-ewcsgvhuojxdpaspwsrx-auth-token", JSON.stringify(s));
-    window.open = (url) => {
-      if (window.__blockOpen) throw new Error("Fixture: Maps blocked");
-      window.__opened = String(url);
-      return null;
-    };
-  };
-  await page.addInitScript(init, session);
-  await page.addInitScript(() => {
-    window.fixtureShares = [];
-    window.fixtureCopies = [];
-    Object.defineProperty(navigator, "share", {
-      configurable: true,
-      value: async (payload) => {
-        window.fixtureShares.push(payload);
-      },
-    });
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: {
-        writeText: async (text) => {
-          window.fixtureCopies.push(text);
-        },
-      },
-    });
-  });
-  // The organizer's phone keeps Pat's personal code; the app's own writes are kept across reloads.
   await page.addInitScript(
-    ({ key, value }) => {
-      if (!sessionStorage.getItem(key)) sessionStorage.setItem(key, JSON.stringify(value));
+    ({ s, store }) => {
+      sessionStorage.setItem("sb-ewcsgvhuojxdpaspwsrx-auth-token", JSON.stringify(s));
+      if (store.value && !sessionStorage.getItem(store.key)) sessionStorage.setItem(store.key, JSON.stringify(store.value));
     },
-    { key: CODE_STORE, value: { [hosted.id]: { [PAT.e164]: { code: PAT.code, name: PAT.name, sentVia: "messages" } } } },
+    {
+      s: session,
+      store: {
+        key: CODE_STORE,
+        value: world.storedCodes ? { [PLAN_ID]: world.storedCodes } : null,
+      },
+    },
   );
-  const plans = new Map([
-    [hosted.id, { ...hosted }],
-    [invited.id, { ...invited }],
-    [edited.id, { ...edited }],
-    [closed.id, { ...closed }],
-    [quiz.id, { ...quiz }],
-    [lunch.id, { ...lunch }],
-  ]);
-  let attendee = { version: 1, response: "pending" };
-  let failGuests = false;
-  let failNextGuestList = false;
-  // An unconfirmed cancel: the RPC fails and so does the read that would confirm it.
-  let failCancel = false,
-    failPlanRead = false,
-    planReads = 0;
-  const responses = [];
-  const cancels = [];
-  const edits = [];
-  const editBodies = [];
-  const noteBodies = [];
-  let failNote = false;
-  // GI1: guests the organizer removed, and whether the next removal's reply is lost.
-  const removed = new Set();
-  const removeBodies = [];
-  let failRemove = false;
-  // Plan 2: Coffee evening's phone invitations, and the invite and revoke calls the organizer makes.
-  const phoneInvites = [
-    { phone: PAT.phone, country: "44", answered: false, response: null },
-    { phone: UNSTORED.phone, country: "44", answered: false, response: null },
-    { phone: "447700900444", country: "44", answered: true, response: "accepted" },
-  ];
-  const inviteBodies = [];
-  const revokeBodies = [];
-  // Open-link approval: Coffee evening's requests from the event link, the decisions the organizer makes, and
-  // the event link (turned off once for a new code).
-  const SAM = { user_id: "r1", name: "Sam Reed", response: "accepted", ending: "34", created_at: "2099-02-20T10:00:00Z" };
-  const KIM = { user_id: "r2", name: "Kim Lau", response: "maybe", ending: null, created_at: "2099-02-20T11:00:00Z" };
-  const LEE = { user_id: "r3", name: "Lee Fox", response: "declined", ending: "56", created_at: "2099-02-20T12:00:00Z" };
-  // Listed on a closed event (the stub lists it even there, so the page's own rule is what hides it).
-  const ANA = { user_id: "r4", name: "Ana Diaz", response: "accepted", ending: "78", created_at: "2099-02-20T13:00:00Z" };
-  let waiting = [SAM, KIM, LEE];
-  // The events whose requests were read, in order.
-  const requestReads = [];
-  const decisions = [];
-  const linkCalls = [];
-  const LINK_CODES = ["AAAAAAAAAAAAAAAAAAAAA1", "BBBBBBBBBBBBBBBBBBBBB2", "CCCCCCCCCCCCCCCCCCCCC3"];
-  let linkIndex = 0;
-  let failRotate = false;
-  // People the organizer approved: they join the guest list.
-  const approvedGuests = [];
-  // UX3: Meeting details live in their own table, which the database sends only to the organizer and
-  // Going or Maybe guests; every invitee may know some exist. The plans row's own note is always "".
-  const asRow = (plan) => {
-    const insider = plan.owner_id === user.id || ["accepted", "maybe"].includes(attendee.response);
-    return {
-      ...plan,
-      note: "",
-      plan_admins: [],
-      has_meeting_details: Boolean(plan.note),
-      plan_meeting_details: insider && plan.note ? { note: plan.note } : null,
-    };
-  };
-  const stub = async (route) => {
+  const rpcs = (name) => log.filter((c) => c.name === name).map((c) => c.body);
+  await page.route("**/*.supabase.co/**", async (route) => {
     const req = route.request();
     const url = new URL(req.url());
     const path = url.pathname;
     const one = req.headers().accept?.includes("object");
     const reply = (body, status = 200) =>
       route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+    const none = () => route.fulfill({ status: 204, body: "" });
     if (path === "/auth/v1/user") return reply(user);
-    if (path === "/rest/v1/rpc/note_app_session") return route.fulfill({ status: 204, body: "" });
+    if (path === "/rest/v1/rpc/note_app_session") return none();
     if (path === "/rest/v1/rpc/account_access_status") return reply({ account_id: user.id, status: "approved" });
     if (path === "/rest/v1/profiles") {
-      // My resbites reads its invitations' hosts together.
-      if (url.searchParams.get("id")?.startsWith("in."))
-        return reply(url.searchParams.get("id").includes(invited.owner_id) ? [{ id: invited.owner_id, display_name: "Jo" }] : []);
-      // The invited event's organizer; any other read is the signed-in fixture's own profile.
-      if (url.searchParams.get("id") === `eq.${invited.owner_id}`) return reply({ display_name: "Jo" });
+      if (url.searchParams.get("id") === `eq.${HOST.id}`) return reply({ display_name: HOST.name });
       return reply({ id: user.id, display_name: "Fixture", avatar_path: null, avatar_revision: 0 });
     }
-    // Cover links are not under test here; the picture falls back while its label stays.
     if (path.startsWith("/storage/v1/object/sign/")) return reply({ message: "Fixture: no signed links" }, 400);
-    if (path === "/rest/v1/activities") return reply([]);
+    if (path === "/rest/v1/activities") return reply(world.activities ?? []);
+    if (path === "/rest/v1/plan_mutes") return reply(state.muted ? [{ series_id: SERIES_ID }] : []);
     if (path === "/rest/v1/plans") {
-      planReads++;
-      if (failPlanRead) {
-        failPlanRead = false;
-        return reply({ message: "Fixture: plan read unavailable" }, 500);
-      }
-      const id = url.searchParams.get("id")?.replace(/^eq\./, "");
-      const rows = [...plans.values()].filter((p) => !id || p.id === id).map(asRow);
-      return reply(one ? (rows[0] ?? null) : rows);
+      const select = url.searchParams.get("select");
+      planSelects.add(select);
+      const insider = state.plan.owner_id === user.id || ["accepted", "maybe"].includes(state.attendee?.response);
+      const row = {
+        ...state.plan,
+        note: "",
+        has_meeting_details: Boolean(state.plan.note),
+        plan_meeting_details: insider && state.plan.note ? { note: state.plan.note } : null,
+        plan_admins: state.admins.map((user_id) => ({ user_id })),
+      };
+      return reply(one ? row : [row]);
     }
     if (path === "/rest/v1/attendees") {
-      if (one) return reply(attendee);
-      // The reminder sync's read of the person's own answers: the one fixture answer, on every invitation.
-      if (url.searchParams.get("select") === "plan_id,response")
-        return reply(
-          [...plans.values()]
-            .filter((p) => p.owner_id !== user.id)
-            .map((p) => ({ plan_id: p.id, response: attendee.response })),
-        );
-      // My resbites' read (no plan filter): here, the person's own answer (and its version) on each invitation.
-      if (url.searchParams.get("select") === "plan_id,user_id,response,version,profiles(display_name)" && !url.searchParams.has("plan_id"))
-        return reply(
-          [...plans.values()]
-            .filter((p) => p.owner_id !== user.id)
-            .map((p) => ({
-              plan_id: p.id,
-              user_id: user.id,
-              response: attendee.response,
-              version: attendee.version,
-              profiles: { display_name: "Fixture" },
-            })),
-        );
-      // 500, not 503: postgrest-js retries a 503 GET with backoff.
-      if (failGuests) return reply({ message: "Fixture: guest list unavailable" }, 500);
-      if (failNextGuestList) {
-        failNextGuestList = false;
-        return reply({ message: "Fixture: guest list unavailable" }, 500);
-      }
-      const planId = url.searchParams.get("plan_id")?.replace(/^eq\./, "");
-      const own = { user_id: user.id, response: attendee.response, profiles: { display_name: "Fixture" } };
+      const select = url.searchParams.get("select");
+      if (select === "plan_id,response") return reply(state.attendee ? [{ plan_id: PLAN_ID, response: state.attendee.response }] : []);
+      if (one) return reply(state.attendee);
+      const own = state.attendee ? [g(user.id, "Fixture", state.attendee.response)] : [];
       // The server shows an unanswered invitee only their own row (UX-P5).
-      return reply(
-        planId === hosted.id
-          ? [
-              { user_id: "g1", response: "accepted", profiles: { display_name: "Alex" } },
-              { user_id: "g2", response: "pending", profiles: { display_name: "Bea" } },
-              { user_id: "g3", response: "maybe", profiles: { display_name: "Cy" } },
-              { user_id: "g4", response: "withdrawn", profiles: { display_name: "Di" } },
-              ...approvedGuests,
-            ].filter((row) => !removed.has(row.user_id))
-          : attendee.response === "pending"
-            ? [own]
-            : [own, { user_id: "g1", response: "accepted", profiles: { display_name: "Alex" } }],
-      );
+      return reply(state.attendee?.response === "pending" ? own : [...state.guests, ...own.filter((r) => r.response !== "pending")]);
     }
-    if (path === "/rest/v1/rpc/respond") {
-      const body = req.postDataJSON();
-      responses.push(body.p_response);
-      assert.equal(body.p_version, attendee.version);
-      attendee = { version: attendee.version + 1, response: body.p_response };
-      return reply(attendee.version);
+    const rpc = /^\/rest\/v1\/rpc\/(.+)$/.exec(path)?.[1];
+    if (!rpc) {
+      unexpected.push(`${req.method()} ${path}`);
+      return reply({ message: `Unexpected ${req.method()} ${path}` }, 400);
     }
-    if (path === "/rest/v1/rpc/remove_guest") {
-      const body = req.postDataJSON();
-      removeBodies.push(body);
-      if (failRemove) {
-        failRemove = false;
-        return reply({ message: "Fixture: remove reply lost" }, 500);
+    const body = req.postData() ? req.postDataJSON() : null;
+    log.push({ name: rpc, body });
+    switch (rpc) {
+      case "set_plan_mute":
+        state.muted = body.p_muted;
+        return reply(state.muted);
+      case "respond": {
+        assert.equal(body.p_version, state.attendee.version);
+        state.attendee = { version: state.attendee.version + 1, response: body.p_response };
+        // The server ends an admin's part when they can’t go.
+        if (viewer === "admin" && body.p_response === "declined") state.admins = [];
+        return reply(state.attendee.version);
       }
-      removed.add(body.p_user);
-      return reply(null);
-    }
-    // Open-link approval: the organizer's requests and decisions, and the event link.
-    if (path === "/rest/v1/rpc/plan_join_requests") {
-      const body = req.postDataJSON();
-      requestReads.push(body.p_plan);
-      return reply(body.p_plan === hosted.id ? waiting : body.p_plan === started.id ? [ANA] : []);
-    }
-    if (path === "/rest/v1/rpc/decide_join_request") {
-      const body = req.postDataJSON();
-      decisions.push(body);
-      const request = waiting.find((r) => r.user_id === body.p_user);
-      // Lee was decided by someone else a moment ago.
-      if (body.p_user === LEE.user_id) {
-        waiting = waiting.filter((r) => r !== LEE);
-        return reply({ code: "22023", message: "Request already decided" }, 400);
-      }
-      assert.ok(request, "decided request is waiting");
-      waiting = waiting.filter((r) => r !== request);
-      if (body.p_approve)
-        approvedGuests.push({ user_id: request.user_id, response: request.response, profiles: { display_name: request.name } });
-      return reply({ status: body.p_approve ? "approved" : "declined" });
-    }
-    if (path === "/rest/v1/rpc/plan_link") {
-      linkCalls.push(req.postDataJSON());
-      return reply(LINK_CODES[linkIndex]);
-    }
-    if (path === "/rest/v1/rpc/rotate_plan_link") {
-      linkCalls.push(req.postDataJSON());
-      linkIndex++;
-      if (failRotate) {
-        failRotate = false;
-        // The turn-off happened, but its reply was lost: the card reads the link again.
-        return reply({ message: "Lost reply" }, 500);
-      }
-      return reply(LINK_CODES[linkIndex]);
-    }
-    // Plan 2: the organizer's personal links (Coffee evening only; the other events have none).
-    if (path === "/rest/v1/rpc/plan_phone_invitations") {
-      const body = req.postDataJSON();
-      return reply(body.p_plan === hosted.id ? phoneInvites : []);
-    }
-    if (path === "/rest/v1/rpc/invite_contacts") {
-      const body = req.postDataJSON();
-      inviteBodies.push(body);
-      return reply(body.p_invites.map(({ phone }) => ({ phone, kind: "link" })));
-    }
-    if (path === "/rest/v1/rpc/revoke_phone_invitation") {
-      const body = req.postDataJSON();
-      revokeBodies.push(body);
-      phoneInvites.splice(phoneInvites.findIndex((i) => i.phone === body.p_phone), 1);
-      return route.fulfill({ status: 204, body: "" });
-    }
-    if (path === "/rest/v1/rpc/set_guest_note") {
-      const body = req.postDataJSON();
-      noteBodies.push(body);
-      if (failNote) {
-        failNote = false;
-        return reply({ code: "22023", message: "Fixture: this resbite has ended" }, 400);
-      }
-      // The note never changes the event's version.
-      const plan = plans.get(body.p_plan);
-      plan.guest_note = body.p_note;
-      plan.guest_note_at = body.p_note ? new Date().toISOString() : null;
-      return reply({ guest_note: plan.guest_note, guest_note_at: plan.guest_note_at });
-    }
-    if (path === "/rest/v1/rpc/change_plan_v4") {
-      const body = req.postDataJSON();
-      const plan = plans.get(body.p_plan);
-      if (body.p_cancel) {
-        if (failCancel) {
-          failCancel = false;
-          failPlanRead = true;
-          return reply({ message: "Fixture: cancel reply lost" }, 500);
+      case "change_plan_v4":
+        if (body.p_cancel) {
+          state.plan = { ...state.plan, status: "cancelled", version: state.plan.version + 1 };
+          return reply(state.plan.version);
         }
-        cancels.push(body.p_plan);
-        plan.status = "cancelled";
-        plan.version++;
-        return reply(plan.version);
+        return reply({ message: "Fixture: edits are not under test" }, 400);
+      case "appoint_admin":
+        state.admins = [...state.admins, body.p_user];
+        return none();
+      case "remove_admin":
+        state.admins = state.admins.filter((id) => id !== body.p_user);
+        return none();
+      case "plan_phone_invitations":
+        return reply(state.phoneInvites);
+      case "plan_join_requests":
+        return reply(state.requests);
+      case "decide_join_request": {
+        const asked = state.requests.find((r) => r.user_id === body.p_user);
+        state.requests = state.requests.filter((r) => r !== asked);
+        if (body.p_approve) state.guests = [...state.guests, g(asked.user_id, asked.name, asked.response)];
+        return reply({ status: body.p_approve ? "approved" : "declined" });
       }
-      assert.equal(body.p_version, plan.version);
-      edits.push(body.p_plan);
-      editBodies.push(body);
-      Object.assign(plan, {
-        title: body.p_title.trim(),
-        description: body.p_description,
-        categories: body.p_categories,
-        starts_at: body.p_start,
-        ends_at: body.p_ends,
-        time_zone: body.p_zone,
-        place_label: body.p_place.trim(),
-        place_tbd: body.p_place_tbd,
-        repeat_weeks: body.p_repeat_weeks,
-        note: body.p_note,
-        area: body.p_area ?? plan.area,
-        version: plan.version + 1,
-      });
-      return reply(plan.version);
+      default:
+        unexpected.push(`rpc ${rpc}`);
+        return reply({ message: `Unexpected rpc ${rpc}` }, 400);
     }
-    return reply({ message: `Unexpected ${req.method()} ${path}` }, 400);
+  });
+  return {
+    page,
+    state,
+    log,
+    rpcs,
+    planSelects,
+    unexpected,
+    close: () => context.close(),
   };
-  await page.route("**/*.supabase.co/**", stub);
+}
 
-  // Organizer.
-  await page.goto(`${base}/event?plan=${hosted.id}`);
-  await expect(page.getByRole("heading", { name: "Coffee evening", exact: true })).toBeVisible();
-  await expect(page.getByText("Hosting", { exact: true })).toBeVisible();
-  await expect(page.getByText("Bring a book", { exact: true })).toBeVisible();
-  // The organizer sees the exact place. GI-D3: no Choose people entry (People stays on Profile).
-  await expect(page.getByText("Fixture café", { exact: true })).toBeVisible();
-  await expect(page.getByText("Exact address after you reply", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Invite someone", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Choose people", exact: true })).toHaveCount(0);
-  // Open-link approval: Waiting for you lists each request with the name, the answer and the phone's last two
-  // digits (no ending, no dots), above the Event link card, which is on the event page and not on Invite people.
-  const shares = () => page.evaluate(() => window.fixtureShares);
-  const copies = () => page.evaluate(() => window.fixtureCopies);
-  const linkMatch = (code) => new RegExp(`^(resbite://r/|https://[a-z0-9.-]+/r/)${code}$`);
-  const approve = (name) => page.getByRole("button", { name: `Approve ${name}`, exact: true });
-  const decline = (name) => page.getByRole("button", { name: `Decline ${name}`, exact: true });
-  await expect(page.getByRole("heading", { name: "Waiting for you", exact: true })).toBeVisible();
-  await expect(page.getByText("Sam Reed", { exact: true })).toBeVisible();
-  await expect(page.getByText("Going · via event link · ••34", { exact: true })).toBeVisible();
-  await expect(page.getByText("Kim Lau", { exact: true })).toBeVisible();
-  await expect(page.getByText("Maybe · via event link", { exact: true })).toBeVisible();
-  await expect(page.getByText("Can’t go · via event link · ••56", { exact: true })).toBeVisible();
-  await expect(page.getByText("000000")).toHaveCount(0);
-  assert.ok(
-    await inOrder(page, [
-      page.getByRole("heading", { name: "Waiting for you", exact: true }),
-      approve("Sam Reed"),
-      decline("Lee Fox"),
-      page.getByRole("heading", { name: "Event link", exact: true }),
-      page.getByRole("button", { name: "Share link", exact: true }),
-      page.getByRole("button", { name: "Copy link", exact: true }),
-      page.getByRole("button", { name: "Turn off this link", exact: true }),
-    ]),
-    "Waiting for you comes before the Event link card",
-  );
-  // Approve sends decide_join_request with p_approve true, and the row leaves.
-  await approve("Sam Reed").click();
-  await expect(page.getByText("Sam Reed", { exact: true })).toHaveCount(0);
-  assert.deepEqual(decisions, [{ p_plan: hosted.id, p_user: SAM.user_id, p_approve: true }]);
-  // The page read the event again: the approved guest is counted as going (Alex and Sam).
-  await expect(page.getByRole("button", { name: "2 going, 1 maybe", exact: true })).toBeVisible();
-  // A request someone else already decided says so, and drops off the list when the page reads it again.
-  await approve("Lee Fox").click();
-  await expect(page.getByText("Someone already answered this request.", { exact: true })).toBeVisible();
-  await expect(page.getByText("Lee Fox", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("Kim Lau", { exact: true })).toBeVisible();
-  assert.equal(decisions.length, 2);
-  // Decline asks first: Keep sends nothing; confirming sends p_approve false and the row leaves.
-  let declineAsked = "";
-  page.once("dialog", (dialog) => {
-    declineAsked = dialog.message();
-    void dialog.dismiss();
-  });
-  await decline("Kim Lau").click();
-  await expect.poll(() => declineAsked).toBe("Decline Kim Lau? They’ll see they weren’t added.");
-  await page.waitForTimeout(200);
-  assert.equal(decisions.length, 2);
-  await expect(page.getByText("Kim Lau", { exact: true })).toBeVisible();
-  page.once("dialog", (dialog) => void dialog.accept());
-  await decline("Kim Lau").click();
-  await expect(page.getByText("Kim Lau", { exact: true })).toHaveCount(0);
-  assert.deepEqual(decisions[2], { p_plan: hosted.id, p_user: KIM.user_id, p_approve: false });
-  assert.equal(decisions.length, 3);
-  await expect(page.getByRole("heading", { name: "Waiting for you", exact: true })).toHaveCount(0);
-  await expect(page.getByText("Someone already answered this request.", { exact: true })).toHaveCount(0);
-  // The Event link card: Share, Copy link and Turn off this link, read for this event only.
-  await expect(page.getByText("Anyone can answer with it, and you approve them first.", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Turn off this link", exact: true })).toBeEnabled();
-  assert.deepEqual(linkCalls, [{ p_plan: hosted.id }]);
-  await page.getByRole("button", { name: "Share link", exact: true }).click();
-  await expect.poll(async () => (await shares()).length).toBe(1);
-  const [firstShare] = await shares();
-  const shareText = firstShare.text ?? firstShare.message;
-  const shareMatch = /^Coffee evening, Sun 1 Mar, \d\d:\d\d – \d\d:\d\d\. RSVP: (.+)$/.exec(shareText);
-  assert.ok(shareMatch, `Share text: ${shareText}`);
-  assert.match(shareMatch[1], linkMatch(LINK_CODES[0]));
-  await page.getByRole("button", { name: "Copy link", exact: true }).click();
-  await expect(page.getByText("Link copied.", { exact: true })).toBeVisible();
-  assert.deepEqual(await copies(), [shareMatch[1]]);
-  // Turn off asks first: Keep changes nothing; Turn off gives a new link, which Copy then uses.
-  let turnOffAsked = "";
-  page.once("dialog", (dialog) => {
-    turnOffAsked = dialog.message();
-    void dialog.dismiss();
-  });
-  await page.getByRole("button", { name: "Turn off this link", exact: true }).click();
-  await expect.poll(() => turnOffAsked).toContain("Turn off this link?");
-  await page.waitForTimeout(200);
-  assert.equal(linkCalls.length, 1);
-  page.once("dialog", (dialog) => void dialog.accept());
-  await page.getByRole("button", { name: "Turn off this link", exact: true }).click();
-  await expect(page.getByText("The old link is off. Share this new link.", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Copy link", exact: true }).click();
-  await expect.poll(async () => (await copies()).length).toBe(2);
-  assert.match((await copies())[1], linkMatch(LINK_CODES[1]));
-  // A lost turn-off reply says so and reads the link that works now.
-  const readsBefore = linkCalls.length;
-  failRotate = true;
-  page.once("dialog", (dialog) => void dialog.accept());
-  await page.getByRole("button", { name: "Turn off this link", exact: true }).click();
-  await expect(
-    page.getByText("Couldn’t confirm the link was turned off. Check your connection and try again.", { exact: true }),
-  ).toBeVisible();
-  await expect.poll(() => linkCalls.length).toBeGreaterThan(readsBefore + 1);
-  await page.getByRole("button", { name: "Copy link", exact: true }).click();
-  await expect.poll(async () => (await copies()).length).toBe(3);
-  assert.match((await copies())[2], linkMatch(LINK_CODES[2]));
-  // The link is read from the database, never kept in browser storage.
-  const storedLinks = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
-  for (const code of LINK_CODES) assert.ok(!storedLinks.includes(code), "The link code is not stored on the device");
-  // Guests (UX2): the stack counts Going and Maybe; the sheet groups every answer.
-  await page.getByRole("button", { name: "2 going, 1 maybe", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Guests", exact: true })).toBeVisible();
-  await expect(page.getByText("Sam Reed", { exact: true })).toBeVisible();
-  for (const group of ["Going", "Maybe", "Can’t go", "Not answered yet"])
-    await expect(page.getByRole("heading", { name: group, exact: true })).toBeVisible();
-  await expect(page.getByText("Bea", { exact: true })).toBeVisible();
-  await expect(page.getByText("Can’t go now", { exact: true })).toBeVisible();
-  // GI1: the organizer removes a guest, after a question; Keep changes nothing.
-  for (const name of ["Alex", "Bea", "Cy", "Di", "Sam Reed"])
-    await expect(page.getByRole("button", { name: `Remove ${name}`, exact: true })).toBeVisible();
-  let removeAsked = "";
-  page.once("dialog", (dialog) => {
-    removeAsked = dialog.message();
-    void dialog.dismiss();
-  });
-  await page.getByRole("button", { name: "Remove Bea", exact: true }).click();
-  await expect
-    .poll(() => removeAsked)
-    .toBe("Remove Bea from this resbite? They can ask to join again with the event link, and you’ll decide.");
-  await page.waitForTimeout(200);
-  assert.deepEqual(removeBodies, []);
-  // A lost reply says so in the sheet; Bea stays listed until a removal is confirmed.
-  failRemove = true;
-  page.once("dialog", (dialog) => void dialog.accept());
-  await page.getByRole("button", { name: "Remove Bea", exact: true }).click();
-  await expect(
-    page.getByText("Couldn’t confirm this guest was removed. Check your connection and try again.", { exact: true }),
-  ).toBeVisible();
-  await expect(page.getByText("Bea", { exact: true })).toBeVisible();
-  page.once("dialog", (dialog) => void dialog.accept());
-  await page.getByRole("button", { name: "Remove Bea", exact: true }).click();
-  await expect(page.getByText("Bea", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Not answered yet", exact: true })).toHaveCount(0);
-  assert.deepEqual(removeBodies, [
-    { p_plan: hosted.id, p_user: "g2" },
-    { p_plan: hosted.id, p_user: "g2" },
-  ]);
-  // Plan 2: the Invited group, after the guests: the two who haven't answered, by the name kept on this phone or
-  // their number; the one who answered isn't listed. Each row offers WhatsApp and Messages (as Almost there does),
-  // the one used last first: Messages for Pat, whose link went that way; WhatsApp for the number with no code here.
-  const resend = (app, who) => page.getByRole("button", { name: `Send again on ${app}: ${who}`, exact: true });
-  await expect(page.getByRole("heading", { name: "Invited", exact: true })).toBeVisible();
-  await expect(page.getByText(PAT.name, { exact: true })).toBeVisible();
-  await expect(page.getByText(UNSTORED.label, { exact: true })).toBeVisible();
-  await expect(page.getByText("+44 7700 900444", { exact: true })).toHaveCount(0);
-  for (const who of [PAT.name, UNSTORED.label])
-    for (const app of ["WhatsApp", "Messages"]) await expect(visible(resend(app, who))).toHaveCount(1);
-  await expect(visible(page.getByRole("button", { name: "Send again", exact: true }))).toHaveCount(0);
-  assert.ok(
-    await inOrder(page, [
-      page.getByRole("heading", { name: "Maybe", exact: true }),
-      page.getByRole("heading", { name: "Invited", exact: true }),
-      page.getByText(PAT.name, { exact: true }),
-      resend("Messages", PAT.name),
-      resend("WhatsApp", PAT.name),
-      page.getByText(UNSTORED.label, { exact: true }),
-      resend("WhatsApp", UNSTORED.label),
-      resend("Messages", UNSTORED.label),
-    ]),
-    "the Invited group follows the guests, each row's last-used app first",
-  );
-  // Send again with the code on this phone, by Messages and then by WhatsApp: the same link both ways. Nothing is invited.
-  await resend("Messages", PAT.name).click();
-  await expect.poll(() => page.evaluate(() => window.__opened ?? null)).toMatch(/^sms:/);
-  const patText = decodeURIComponent((await page.evaluate(() => window.__opened)).replace(`sms:${PAT.e164}?body=`, ""));
-  assert.match(patText, new RegExp(`^Fixture invited you to Coffee evening, .+\\. Reply here: https://[a-z0-9.-]+/i/${PAT.code}$`));
-  await page.evaluate(() => (window.__opened = null));
-  await resend("WhatsApp", PAT.name).click();
-  await expect.poll(() => page.evaluate(() => window.__opened ?? null)).toMatch(/^whatsapp:/);
-  const patWhatsapp = await page.evaluate(() => window.__opened);
-  assert.ok(patWhatsapp.startsWith(`whatsapp://send?phone=${PAT.phone}&text=`), patWhatsapp);
-  assert.match(decodeURIComponent(patWhatsapp), new RegExp(`/i/${PAT.code}$`));
-  assert.deepEqual(inviteBodies, []);
-  // Send again without a code on this phone, where WhatsApp won't open: a fresh code for that one number, kept here,
-  // then "WhatsApp isn’t installed. Try Messages." with Messages right there, which sends that same new link.
-  await page.evaluate(() => {
-    window.__opened = null;
-    window.__blockOpen = true;
-  });
-  await resend("WhatsApp", UNSTORED.label).click();
-  await expect(page.getByText("WhatsApp isn’t installed. Try Messages.", { exact: true })).toBeVisible();
-  await expect(visible(resend("Messages", UNSTORED.label))).toBeEnabled();
-  assert.equal(inviteBodies.length, 1);
-  const [fresh] = inviteBodies[0].p_invites;
-  assert.deepEqual([inviteBodies[0].p_plan, inviteBodies[0].p_invites.length, fresh.phone, fresh.country], [hosted.id, 1, UNSTORED.phone, "44"]);
-  assert.match(fresh.code, PERSONAL_CODE);
-  await page.evaluate(() => (window.__blockOpen = false));
-  await resend("Messages", UNSTORED.label).click();
-  await expect.poll(() => page.evaluate(() => window.__opened ?? null)).toMatch(/^sms:/);
-  await expect(page.getByText("WhatsApp isn’t installed. Try Messages.", { exact: true })).toHaveCount(0);
-  const opened = await page.evaluate(() => window.__opened);
-  assert.ok(opened.startsWith(`sms:${UNSTORED.e164}?body=`), opened);
-  assert.match(decodeURIComponent(opened), new RegExp(`/i/${fresh.code}$`));
-  assert.equal(inviteBodies.length, 1, "Messages sends the code just made, not another one");
-  const kept = await page.evaluate((key) => JSON.parse(sessionStorage.getItem(key)), CODE_STORE);
-  assert.deepEqual(kept[hosted.id][UNSTORED.e164], { code: fresh.code, name: UNSTORED.label, sentVia: "messages" });
-  // Remove asks first, then turns the invitation off; its code leaves this phone.
-  let revokeAsked = "";
-  page.once("dialog", (dialog) => {
-    revokeAsked = dialog.message();
-    void dialog.accept();
-  });
-  await page.getByRole("button", { name: `Remove ${UNSTORED.label}`, exact: true }).click();
-  await expect.poll(() => revokeAsked).toBe(`Remove the invitation for ${UNSTORED.label}?`);
-  await expect(page.getByText(UNSTORED.label, { exact: true })).toHaveCount(0);
-  await expect(page.getByText(PAT.name, { exact: true })).toBeVisible();
-  for (const app of ["WhatsApp", "Messages"]) {
-    await expect(visible(resend(app, UNSTORED.label))).toHaveCount(0);
-    await expect(visible(resend(app, PAT.name))).toHaveCount(1);
+const btn = (page, name) => page.getByRole("button", { name, exact: true });
+const heading = (page, name) => page.getByRole("heading", { name, exact: true });
+const text = (page, value) => page.getByText(value, { exact: true });
+const goto = async (f, path, title = f.state.plan.title) => {
+  await f.page.goto(`${base}${path}`);
+  await expect(heading(f.page, title)).toBeVisible();
+};
+/** The bottom row's buttons, by name, in the content bar. */
+const bar = (f) => f.page.getByTestId("content-bottom");
+async function scenario(name, fixture, walk) {
+  const f = await open(fixture);
+  try {
+    await walk(f);
+    assert.deepEqual(f.unexpected, [], `${name}: unexpected requests`);
+    // Every plan read embeds the Meeting details and the admins, whichever of the two selects it uses.
+    if (fixture.noPlanRead) assert.equal(f.planSelects.size, 0, `${name}: no plan read`);
+    else assert.ok(f.planSelects.size > 0, `${name}: the plan was read`);
+    for (const select of f.planSelects)
+      assert.ok([PLAN_SELECT, PLAN_COLUMNS, COVER_SELECT].includes(select), `${name}: the plan select ${select}`);
+  } finally {
+    await f.close();
   }
-  assert.deepEqual(revokeBodies, [{ p_plan: hosted.id, p_phone: UNSTORED.phone }]);
-  const left = await page.evaluate((key) => JSON.parse(sessionStorage.getItem(key)), CODE_STORE);
-  assert.deepEqual(Object.keys(left[hosted.id]), [PAT.e164]);
-  // Open in Maps below starts from nothing opened.
-  await page.evaluate(() => (window.__opened = null));
-  await page.getByRole("button", { name: "Close sheet", exact: true }).click();
-  await sheetClosed(page);
-  // The stack still counts Going and Maybe after the reload.
-  await expect(page.getByRole("button", { name: "2 going, 1 maybe", exact: true })).toBeVisible();
-  // UX3 Meeting details: the organizer sees them, with who else can.
-  await expect(page.getByText("Meeting details · only Going & Maybe see this", { exact: true })).toBeVisible();
-  await expect(page.getByText("Window table", { exact: true })).toBeVisible();
-  await expect(page.getByText(LOCKED, { exact: true })).toHaveCount(0);
-  // UX3 Note to guests: posted from a chip, then pinned with ✎ to edit or remove it.
-  await expect(page.getByRole("button", { name: "Edit note to guests", exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "Post a note to guests", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Note to guests", exact: true })).toBeVisible();
-  const noteField = page.getByLabel("Note to guests", { exact: true });
-  await expect(noteField).toHaveAttribute("placeholder", "Running late, bring a blanket… (optional)");
-  await expect(page.getByRole("button", { name: "Post", exact: true })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Remove note", exact: true })).toHaveCount(0);
-  // Over 280 characters is refused in the sheet, before anything is sent.
-  await noteField.fill(`${"x".repeat(281)}`);
-  await page.getByRole("button", { name: "Post", exact: true }).click();
-  await expect(page.getByText("Keep the note to 280 characters.", { exact: true })).toBeVisible();
-  assert.deepEqual(noteBodies, []);
-  // A refusal from the database is said in the sheet, which stays open.
-  failNote = true;
-  await noteField.fill("Running 10 minutes late");
-  await page.getByRole("button", { name: "Post", exact: true }).click();
-  await expect(
-    page.getByText("This resbite has ended or was cancelled, so its note can’t change.", { exact: true }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Post", exact: true }).click();
-  await sheetClosed(page);
-  await expect(page.getByText("Running 10 minutes late", { exact: true })).toBeVisible();
-  await expect(page.getByText(/^Note to guests · \d{1,2}:\d{2}$/)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Post a note to guests", exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "Edit note to guests", exact: true }).click();
-  await expect(noteField).toHaveValue("Running 10 minutes late");
-  await noteField.fill("Running 15 minutes late");
-  await page.getByRole("button", { name: "Save", exact: true }).click();
-  await sheetClosed(page);
-  await expect(page.getByText("Running 15 minutes late", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Edit note to guests", exact: true }).click();
-  await page.getByRole("button", { name: "Remove note", exact: true }).click();
-  await sheetClosed(page);
-  await expect(page.getByText("Running 15 minutes late", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Post a note to guests", exact: true })).toBeVisible();
-  assert.deepEqual(
-    noteBodies.map((b) => [b.p_plan, b.p_note]),
-    [
-      [hosted.id, "Running 10 minutes late"],
-      [hosted.id, "Running 10 minutes late"],
-      [hosted.id, "Running 15 minutes late"],
-      [hosted.id, ""],
-    ],
-  );
-  assert.equal(plans.get(hosted.id).version, 1, "The note never changes the event's version");
-  // Open in Maps opens only when tapped, here with the place name.
-  assert.equal(await page.evaluate(() => window.__opened ?? null), null);
-  const maps = page.getByRole("button", { name: "Open Fixture café in Maps", exact: true });
-  await maps.click();
-  assert.equal(await page.evaluate(() => window.__opened), "https://maps.apple.com/?q=Fixture%20caf%C3%A9");
-  // A failure to open Maps is said, never swallowed; the next successful tap clears it.
-  await page.evaluate(() => {
-    window.__opened = null;
-    window.__blockOpen = true;
+}
+const pass = (line) => console.log(`PASS: ${line}`);
+
+try {
+  const going2 = [ALEX, BEA, CY, DI];
+  const hostFixture = {
+    guests: going2,
+    phoneInvites: [phoneRow(PAT.phone)],
+    requests: [SAM],
+    storedCodes: { [PAT.e164]: { code: PAT.code, name: PAT.name, sentVia: "whatsapp" } },
+  };
+
+  // --- The owner's page ---
+  await scenario("owner", hostFixture, async (f) => {
+    const { page } = f;
+    await goto(f, `/event?plan=${PLAN_ID}`);
+    await expect(text(page, "You’re hosting")).toBeVisible();
+    await expect(bar(f).getByRole("button")).toHaveText(["Invite", "Edit", "More"]);
+    await expect(btn(page, "Edit Coffee evening")).toBeVisible();
+    await expect(text(page, "Thursday 5 March 2099").or(page.getByText(/Thu 5 Mar/)).first()).toBeVisible();
+    await expect(text(page, "Fixture café")).toBeVisible();
+    await expect(text(page, "Bring a book")).toBeVisible();
+    // Going Alex and Bea, Maybe Cy, Can’t go Di, one personal link not answered, one open-link request waiting.
+    const row = "Going 2 · Maybe 1 · Can’t go 1 · 1 invited · 1 waiting";
+    await expect(text(page, row)).toBeVisible();
+    await expect(btn(page, `${row}. Alex and Bea`)).toBeVisible();
+    await expect(page.getByText("Hosted by")).toHaveCount(0);
+    assert.deepEqual(f.rpcs("plan_phone_invitations"), [{ p_plan: PLAN_ID }]);
+    assert.deepEqual(f.rpcs("plan_join_requests"), [{ p_plan: PLAN_ID }]);
+    // Invite opens the Invite screen for this resbite.
+    await btn(page, "Invite").click();
+    await expect(page).toHaveURL(new RegExp(`/invitations\\?plan=${PLAN_ID}`));
   });
-  await maps.click();
-  await expect(page.getByText("Couldn’t open Maps.", { exact: true })).toBeVisible();
-  await page.evaluate(() => {
-    window.__blockOpen = false;
+  pass("owner: Invite, Edit and More; You’re hosting; the people row reads Going 2 · Maybe 1 · Can’t go 1 · 1 invited · 1 waiting; Invite opens /invitations?plan=");
+
+  // --- More: the four rows, Mute, Cancel ---
+  await scenario("more", hostFixture, async (f) => {
+    const { page } = f;
+    await goto(f, `/event?plan=${PLAN_ID}`);
+    await btn(page, "More").click();
+    for (const row of ["Add to calendar", "Mute this resbite", "Do this again", "Cancel resbite"])
+      await expect(btn(page, row)).toBeVisible();
+    await expect(btn(page, "Change my reply")).toHaveCount(0);
+    await btn(page, "Mute this resbite").click();
+    await expect(btn(page, "Unmute this resbite")).toBeVisible();
+    await expect(btn(page, "Mute this resbite")).toHaveCount(0);
+    assert.deepEqual(f.rpcs("set_plan_mute"), [{ p_plan: PLAN_ID, p_muted: true }]);
+    await btn(page, "Unmute this resbite").click();
+    await expect(btn(page, "Mute this resbite")).toBeVisible();
+    assert.deepEqual(f.rpcs("set_plan_mute").at(-1), { p_plan: PLAN_ID, p_muted: false });
+    // The cancel question sits in the sheet; Keep resbite goes back to the rows and sends nothing.
+    await btn(page, "Cancel resbite").click();
+    await expect(heading(page, "Cancel this resbite for everyone?")).toBeVisible();
+    await expect(btn(page, "Yes, cancel resbite")).toBeVisible();
+    await expect(btn(page, "Cancel just this one")).toHaveCount(0);
+    await btn(page, "Keep resbite").click();
+    await expect(btn(page, "Cancel resbite")).toBeVisible();
+    assert.deepEqual(f.rpcs("change_plan_v4"), []);
+    await btn(page, "Cancel resbite").click();
+    await btn(page, "Yes, cancel resbite").click();
+    await expect(text(page, "Your resbite is cancelled.")).toBeVisible();
+    await expect(text(page, "Cancelled")).toBeVisible();
+    const [cancel] = f.rpcs("change_plan_v4");
+    assert.equal(f.rpcs("change_plan_v4").length, 1);
+    assert.equal(cancel.p_plan, PLAN_ID);
+    assert.equal(cancel.p_version, 1);
+    assert.equal(cancel.p_cancel, true);
+    assert.equal(cancel.p_stop_repeating, false);
   });
-  await maps.click();
-  await expect(page.getByText("Couldn’t open Maps.", { exact: true })).toHaveCount(0);
-  assert.equal(await page.evaluate(() => window.__opened), "https://maps.apple.com/?q=Fixture%20caf%C3%A9");
-  // Edit opens the plan screen on this resbite. Save is never disabled: with nothing changed (the server's own
-  // time format included) it reads Save and goes back to the event page as a save does, writing nothing.
-  await page.getByRole("button", { name: "Edit Coffee evening", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Edit resbite", exact: true })).toBeVisible();
-  const editsBefore = edits.length;
-  const save = visible(page.getByRole("button", { name: "Save", exact: true }));
-  await expect(save).toBeEnabled();
-  await save.click();
-  await expect(page.getByRole("heading", { name: "Coffee evening", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Edit resbite", exact: true })).toHaveCount(0);
-  assert.equal(edits.length, editsBefore, "An unchanged Save writes nothing");
-  await expect(page.getByText("Changes saved", { exact: true })).toHaveCount(0);
-  // Do this again: the plan screen opens on a copy with the text, place and Meeting details, never the date or the idea.
-  await page.getByRole("button", { name: "More actions", exact: true }).click();
-  // A quick double tap opens exactly one plan screen.
-  await page.getByRole("button", { name: "Do this again", exact: true }).evaluate((tile) => {
-    tile.click();
-    tile.click();
+  pass("More: the four rows; Mute this resbite → set_plan_mute {p_muted: true} and the row reads Unmute this resbite; Keep resbite sends nothing; Yes, cancel resbite → change_plan_v4 {p_cancel: true, p_stop_repeating: false}");
+
+  // --- A repeating resbite ---
+  const repeating = { plan: { repeat_weeks: 1 }, guests: going2 };
+  await scenario("repeating", repeating, async (f) => {
+    const { page } = f;
+    await goto(f, `/event?plan=${PLAN_ID}`);
+    await expect(text(page, "Every Thursday")).toBeVisible();
+    await btn(page, "More").click();
+    await btn(page, "Cancel resbite").click();
+    await expect(heading(page, "Cancel this resbite for everyone?")).toBeVisible();
+    await expect(text(page, "It repeats every Thursday. Everyone invited will be told.")).toBeVisible();
+    await expect(btn(page, "Cancel just this one")).toBeVisible();
+    await expect(btn(page, "Cancel this and stop repeating")).toBeVisible();
+    await expect(btn(page, "Yes, cancel resbite")).toHaveCount(0);
+    await btn(page, "Cancel this and stop repeating").click();
+    await expect(text(page, "Your resbite is cancelled.")).toBeVisible();
+    const [cancel] = f.rpcs("change_plan_v4");
+    assert.equal(f.rpcs("change_plan_v4").length, 1);
+    assert.equal(cancel.p_cancel, true);
+    assert.equal(cancel.p_stop_repeating, true);
   });
-  await expect(page.getByRole("heading", { name: "New resbite", exact: true })).toBeVisible();
-  await page.waitForTimeout(500); // a second screen would be pushed within this settle time
-  await expect(page.getByTestId("task-screen")).toHaveCount(1);
-  await expect(page.getByLabel("Title", { exact: true })).toHaveValue("Coffee evening");
-  await expect(page.getByLabel("Description (optional)", { exact: true })).toHaveValue("Bring a book");
-  // When is empty (a copy never takes the date), Where keeps the place.
-  await expect(visible(page.getByRole("button", { name: "When, Add a date and time", exact: true }))).toBeVisible();
-  await expect(visible(page.getByRole("button", { name: "Where, Fixture café", exact: true }))).toBeVisible();
-  for (const category of ["Community", "Uplifting"])
-    await expect(visible(page.getByRole("button", { name: category, exact: true }))).toHaveAttribute("aria-selected", "true");
-  await visible(page.getByRole("button", { name: "Where, Fixture café", exact: true })).click();
-  await expect(visible(page.getByLabel("Meeting details", { exact: true }))).toHaveValue("Window table");
-  await visible(page.getByRole("button", { name: "Close sheet", exact: true })).click();
-  // Nothing has been changed: the X leaves at once.
-  await visible(page.getByRole("button", { name: "Close", exact: true })).click();
-  await expect(page.getByRole("heading", { name: "Coffee evening", exact: true })).toBeVisible();
-  // An unconfirmed cancel keeps what is shown and offers the organizer a refresh that reloads.
-  await expect(page.getByRole("button", { name: "Refresh event", exact: true })).toHaveCount(0);
-  failCancel = true;
-  await page.getByRole("button", { name: "More actions", exact: true }).click();
-  await page.getByRole("button", { name: "Cancel event", exact: true }).click();
-  await page.getByRole("button", { name: "Yes, cancel plan", exact: true }).click();
-  const unconfirmed =
-    "We couldn’t confirm the cancellation. Check your connection and refresh before trying again.";
-  await expect(page.getByText(unconfirmed, { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Edit Coffee evening", exact: true })).toBeVisible();
-  const readsBeforeRefresh = planReads;
-  await page.getByRole("button", { name: "Refresh event", exact: true }).click();
-  await expect(page.getByText(unconfirmed, { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Refresh event", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Coffee evening", exact: true })).toBeVisible();
-  assert.equal(failPlanRead, false);
-  assert.ok(planReads > readsBeforeRefresh, "Refresh event reloads the plan");
-  assert.deepEqual(cancels, []);
-  // Cancel keeps its confirmation and semantics.
-  await page.getByRole("button", { name: "More actions", exact: true }).click();
-  await page.getByRole("button", { name: "Cancel event", exact: true }).click();
-  await expect(page.getByText("Cancel this plan for everyone?", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Yes, cancel plan", exact: true }).click();
-  await expect(page.getByText("Your plan is cancelled.", { exact: true })).toBeVisible();
-  await expect(page.getByText("Cancelled", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Edit Coffee evening", exact: true })).toHaveCount(0);
-  assert.deepEqual(cancels, [hosted.id]);
-  // A cancelled or started event: an approval would be refused, so the organizer sees no Waiting for you, even with
-  // a request listed. The plan and its requests arrive together, so once the title shows, the list has been read.
-  waiting = [ANA];
-  let requestsBefore = requestReads.length;
-  await page.reload();
-  await expect(page.getByRole("heading", { name: "Coffee evening", exact: true })).toBeVisible();
-  await expect(page.getByText("Cancelled", { exact: true })).toBeVisible();
-  assert.ok(requestReads.slice(requestsBefore).includes(hosted.id), "the cancelled event's requests were read");
-  await expect(page.getByRole("heading", { name: "Waiting for you", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Approve Ana Diaz", exact: true })).toHaveCount(0);
-  await expect(page.getByText("Ana Diaz", { exact: true })).toHaveCount(0);
-  waiting = [];
-  plans.set(started.id, { ...started });
-  requestsBefore = requestReads.length;
-  await page.goto(`${base}/event?plan=${started.id}`);
-  await expect(page.getByRole("heading", { name: "Morning swim", exact: true })).toBeVisible();
-  assert.ok(requestReads.slice(requestsBefore).includes(started.id), "the started event's requests were read");
-  await expect(page.getByRole("heading", { name: "Waiting for you", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Approve Ana Diaz", exact: true })).toHaveCount(0);
-  await expect(page.getByText("Ana Diaz", { exact: true })).toHaveCount(0);
-  plans.delete(started.id);
-  console.log(
-    "PASS: organizer event page: the exact place and no Choose people (GI-D3); guests (GI1: Remove asks first and says they can ask to join again and the organizer decides, says a lost reply, reloads the list; invitees have no Remove); the Invited group (Plan 2: unanswered only, by stored name or number, WhatsApp and Messages on each row with the last-used first, the stored code either way or a fresh one kept for the other app when WhatsApp won't open, Remove calls revoke_phone_invitation), Waiting for you (open-link approval: name, answer and ••34; Approve sends decide_join_request true and the row leaves; Decline asks first then sends false; an already-decided request says so; none on a cancelled or started event) above the Event link card (Share text with the date and link, Copy link, Turn off asks first and gives a new link, a lost turn-off reply says so and reads the link again, an approved guest joins the guest list, nothing stored; invitees have neither), Open in Maps (and its failure note), Edit on the plan screen (an unchanged Save writes nothing), Do this again on the plan screen with When empty, an unconfirmed cancel with Refresh event, cancel.",
-  );
-
-  // UX2-D1: a saved edit returns to its event page with "Changes saved"; Back then leaves for My resbites.
-  // Edited from a device in another zone: a title-only edit must keep the event's stored zone and instant.
-  const tokyo = await browser.newContext({
-    viewport: { width: 390, height: 844 },
-    reducedMotion: "reduce",
-    timezoneId: "Asia/Tokyo",
-  });
-  await quietReminders(tokyo);
-  const tPage = await tokyo.newPage();
-  tPage.on("pageerror", (e) => errors.push(e.message));
-  await tPage.addInitScript(init, session);
-  await tPage.route("**/*.supabase.co/**", stub);
-  await tPage.goto(`${base}/event?plan=${edited.id}`);
-  await expect(tPage.getByRole("heading", { name: "Picnic", exact: true })).toBeVisible();
-  await tPage.getByRole("button", { name: "Edit Picnic", exact: true }).click();
-  await expect(tPage.getByRole("heading", { name: "Edit resbite", exact: true })).toBeVisible();
-  await visible(tPage.getByLabel("Title", { exact: true })).fill("Picnic by the lake");
-  await visible(tPage.getByRole("button", { name: /^Save/ })).click();
-  await expect(tPage.getByRole("heading", { name: "Picnic by the lake", exact: true })).toBeVisible();
-  await expect(tPage.getByText("Changes saved", { exact: true })).toBeVisible();
-  await expect(tPage).toHaveURL(new RegExp(`/event\\?plan=${edited.id}`));
-  assert.deepEqual(edits, [edited.id]);
-  assert.equal(editBodies[0].p_zone, "UTC");
-  assert.equal(Date.parse(editBodies[0].p_start), Date.parse(edited.starts_at));
-  await tPage.getByRole("button", { name: "Back", exact: true }).click();
-  await expect(tPage.getByRole("heading", { name: "My resbites", exact: true })).toBeVisible();
-  await expect(tPage.getByText("Changes saved", { exact: true })).toHaveCount(0);
-  await tokyo.close();
-  console.log("PASS: a saved edit returns to its event page with Changes saved; Back goes to My resbites; a title-only edit from another time zone keeps the stored zone and instant.");
-
-  // An unanswered invitee on a closed event sees the organizer and the closed note, not "Answer to see who’s coming".
-  await page.goto(`${base}/event?plan=${closed.id}`);
-  await expect(page.getByRole("heading", { name: "Closed games", exact: true })).toBeVisible();
-  await expect(
-    page.getByText("This plan is cancelled or has already started. Responses are closed.", { exact: true }),
-  ).toBeVisible();
-  await expect(page.getByText("Jo is organizing", { exact: true })).toBeVisible();
-  await expect(page.getByText("Answer to see who’s coming", { exact: true })).toHaveCount(0);
-  // Its Meeting details can't be unlocked any more, so the locked line isn't offered.
-  await expect(page.getByText(LOCKED, { exact: true })).toHaveCount(0);
-  // GI1: the exact place stays hidden (the area shows); no answer can bring it now, so no hint and no Maps.
-  await expect(page.getByText("Near the station", { exact: true })).toBeVisible();
-  await expect(page.getByText("Games room", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("Exact address after you reply", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: /in Maps$/ })).toHaveCount(0);
-
-  // An invitation with no Meeting details shows no locked line.
-  await page.goto(`${base}/event?plan=${quiz.id}`);
-  await expect(page.getByRole("heading", { name: "Quiz night", exact: true })).toBeVisible();
-  await expect(page.getByRole("radiogroup", { name: "Your answer", exact: true })).toBeVisible();
-  await expect(page.getByText(LOCKED, { exact: true })).toHaveCount(0);
-  await expect(page.getByText(/^Meeting details/)).toHaveCount(0);
-
-  // Invitee. A failed guest read makes the whole event unavailable, never a partial page; Refresh recovers.
-  failGuests = true;
-  await page.goto(`${base}/event?plan=${invited.id}`);
-  await expect(
-    page.getByText(
-      "This invitation is unavailable, or its details could not be refreshed. Check your connection and try again.",
-      { exact: true },
-    ),
-  ).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Board games", exact: true })).toHaveCount(0);
-  failGuests = false;
-  await page.getByRole("button", { name: "Refresh invitation", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Board games", exact: true })).toBeVisible();
-  await expect(page.getByText("Invited", { exact: true })).toBeVisible();
-  // Before answering (UX-P5): the organizer only, never other guests or counts.
-  await expect(page.getByText("Answer to see who’s coming", { exact: true })).toBeVisible();
-  await expect(page.getByText("Jo is organizing", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: /going/ })).toHaveCount(0);
-  // The organizer's photo description labels the picture.
-  await expect(page.getByRole("img", { name: "Two mugs on a window sill", exact: true })).toBeVisible();
-  await expect(page.getByRole("radiogroup", { name: "Your answer", exact: true })).toBeVisible();
-  // GI1: before answering, the area stands in for the exact place, with the hint and no Open in Maps.
-  await expect(page.getByText("Near the station", { exact: true })).toBeVisible();
-  await expect(page.getByText("Games room", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("Exact address after you reply", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: /in Maps$/ })).toHaveCount(0);
-  // UX3: the pinned Note to guests is for everyone; only the organizer can change it.
-  await expect(page.getByText("Bring a blanket", { exact: true })).toBeVisible();
-  await expect(page.getByText(/^Note to guests · /)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Edit note to guests", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Post a note to guests", exact: true })).toHaveCount(0);
-  // Before answering, Meeting details are locked (the database doesn't send them) and there's no calendar.
-  await expect(page.getByText(LOCKED, { exact: true })).toBeVisible();
-  await expect(page.getByText("Gate code 4512", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Add to calendar", exact: true })).toHaveCount(0);
-  const going = page.getByRole("radio", { name: "Going", exact: true });
-  const maybe = page.getByRole("radio", { name: "Maybe", exact: true });
-  const cant = page.getByRole("radio", { name: "Can’t go", exact: true });
-  for (const option of [going, maybe, cant]) await expect(option).not.toBeChecked();
-  // The answer saves, but who's coming fails to load: the answer stays, Refresh recovers.
-  failNextGuestList = true;
-  await maybe.click();
-  await expect(page.getByText("Your response is saved.", { exact: true })).toBeVisible();
-  await expect(
-    page.getByText("Your answer is saved, but who’s coming couldn’t load. Refresh to try again.", { exact: true }),
-  ).toBeVisible();
-  await expect(maybe).toBeChecked();
-  // The answer's confirming read brings the Meeting details, and the exact place with Open in Maps.
-  await expect(page.getByText("Meeting details · Games room", { exact: true })).toBeVisible();
-  await expect(page.getByText("Games room", { exact: true })).toBeVisible();
-  await expect(page.getByText("Near the station", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("Exact address after you reply", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Open Games room in Maps", exact: true })).toBeVisible();
-  await expect(page.getByText("Gate code 4512", { exact: true })).toBeVisible();
-  await expect(page.getByText(LOCKED, { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Add to calendar", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Refresh invitation", exact: true }).click();
-  await expect(page.getByRole("button", { name: "1 going, 1 maybe", exact: true })).toBeVisible();
-  await expect(page.getByText("Answer to see who’s coming", { exact: true })).toHaveCount(0);
-  // GI1: only the organizer can remove guests.
-  await page.getByRole("button", { name: "1 going, 1 maybe", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Guests", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: /^Remove / })).toHaveCount(0);
-  await page.getByRole("button", { name: "Close sheet", exact: true }).click();
-  await sheetClosed(page);
-  // Open-link approval: an invitee sees neither Waiting for you nor the Event link card, and reads no link.
-  await expect(page.getByRole("heading", { name: "Waiting for you", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Event link", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Turn off this link", exact: true })).toHaveCount(0);
-  assert.ok(linkCalls.every((c) => c.p_plan !== invited.id), "an invited event reads no link");
-  // Going opens the sample chat and keeps the Meeting details; backing out after Going reads "Can’t go now"
-  // and locks them again.
-  await going.click();
-  await expect(going).toBeChecked();
-  await expect(page.getByRole("button", { name: "View sample conversation", exact: true })).toBeVisible();
-  await expect(page.getByText("Gate code 4512", { exact: true })).toBeVisible();
-  await expect(page.getByText("Games room", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Open Games room in Maps", exact: true })).toBeVisible();
-  await cant.click();
-  await expect(cant).toBeChecked();
-  await expect(page.getByText("Can’t go now", { exact: true })).toBeVisible();
-  // They answered, so the place and Maps stay after Can’t go.
-  await expect(page.getByText("Games room", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Open Games room in Maps", exact: true })).toBeVisible();
-  await expect(page.getByText(LOCKED, { exact: true })).toBeVisible();
-  await expect(page.getByText("Gate code 4512", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Add to calendar", exact: true })).toHaveCount(0);
-  // After Maybe, Can’t go is a plain decline.
-  await maybe.click();
-  await expect(maybe).toBeChecked();
-  await expect(page.getByText("Gate code 4512", { exact: true })).toBeVisible();
-  await cant.click();
-  await expect(cant).toBeChecked();
-  await expect(page.getByText(LOCKED, { exact: true })).toBeVisible();
-  assert.deepEqual(responses, ["maybe", "accepted", "withdrawn", "maybe", "declined"]);
-  // GI1 on My resbites: an unanswered invitation's card (Plan 2: under Invitations, from its host) shows the area,
-  // never the place (also to VoiceOver); after Going it moves to Upcoming and shows the place.
-  attendee = { version: attendee.version, response: "pending" };
-  await page.goto(`${base}/plans`);
-  await expect(page.getByRole("heading", { name: "Invitations", exact: true })).toBeVisible();
-  const invitationCard = page.getByRole("button", { name: /^Jo invited you, Board games, / });
-  const boardCard = page.getByRole("button", { name: /^Board games, / });
-  await expect(invitationCard).toBeVisible();
-  await expect(boardCard).toHaveCount(0);
-  await expect(invitationCard).toHaveAttribute("aria-label", /, Near the station, Invited, Not answered/);
-  await expect(invitationCard).not.toHaveAttribute("aria-label", /Games room/);
-  await expect(invitationCard.getByText("Near the station", { exact: true })).toBeVisible();
-  await expect(invitationCard.getByText("Games room", { exact: true })).toHaveCount(0);
-  await invitationCard.click();
-  await expect(page.getByRole("heading", { name: "Board games", exact: true })).toBeVisible();
-  await going.click();
-  await expect(going).toBeChecked();
-  await page.getByRole("button", { name: "Back", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "My resbites", exact: true })).toBeVisible();
-  await expect(invitationCard).toHaveCount(0);
-  await expect(boardCard).toHaveAttribute("aria-label", /, Games room, Invited, Going/);
-  await expect(boardCard.getByText("Games room", { exact: true })).toBeVisible();
-  await expect(boardCard.getByText("Near the station", { exact: true })).toHaveCount(0);
-  await context.close();
-  console.log(
-    "PASS: invitee: the organizer only before answering, Maybe, the list after answering (and its load failure), Can’t go now after Going, the photo label; the Note to guests; Meeting details locked, shown after Going or Maybe, locked again after Can’t go, and absent when there are none; GI1: the area, Exact address after you reply and no Maps before answering, the place and Maps after, on the event page and its My resbites card (under Invitations until answered, then in Upcoming).",
-  );
-
-  // UX3 reminders and Add to calendar, on the development fakes. A fresh context: the phone's permission
-  // was never asked for. Times are read in UTC.
-  const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce", timezoneId: "UTC" });
-  const device = await phone.newPage();
-  device.on("pageerror", (e) => errors.push(e.message));
-  await device.addInitScript(init, session);
-  await device.route("**/*.supabase.co/**", stub);
-  await device.goto(`${base}/event?plan=${lunch.id}`);
-  await expect(device.getByRole("heading", { name: "Garden lunch", exact: true })).toBeVisible();
-  // The cover card shows the end.
-  await expect(device.getByText("15:00 – 17:00", { exact: true })).toBeVisible();
-  // The organizer's first visit asks once, before iPhone's prompt.
-  await expect(device.getByRole("heading", { name: ASK_TITLE, exact: true })).toBeVisible();
-  await expect(device.getByText(ASK_BODY, { exact: true })).toBeVisible();
-  await expect(device.getByRole("button", { name: "Not now", exact: true })).toBeVisible();
-  assert.equal(await device.evaluate(() => globalThis.__resbiteDevice.permission), "undetermined");
-  await device.getByRole("button", { name: "Turn on notifications", exact: true }).click();
-  await sheetClosed(device);
-  assert.equal(await device.evaluate(() => globalThis.__resbiteDevice.permission), "granted");
-  const remindersOn = device.getByRole("button", { name: "Reminders on, 1 day and 1 hour before", exact: true });
-  await expect(remindersOn).toBeVisible();
-  // Two reminders, 1 day and 1 hour before: the name and time only, never the place or Meeting details.
-  await expect
-    .poll(() => remindersFor(device, lunch.id))
-    .toEqual([
-      { id: `resbite-reminder:${lunch.id}:1d`, at: "2099-02-28T15:00:00.000Z", body: "Tomorrow at 15:00 · Garden lunch" },
-      { id: `resbite-reminder:${lunch.id}:1h`, at: "2099-03-01T14:00:00.000Z", body: "In 1 hour · Garden lunch" },
-    ]);
-  // Reminders off for this event only, then on again.
-  await remindersOn.click();
-  await expect(device.getByRole("button", { name: "Reminders off", exact: true })).toBeVisible();
-  await expect.poll(() => remindersFor(device, lunch.id)).toEqual([]);
-  await device.getByRole("button", { name: "Reminders off", exact: true }).click();
-  await expect(remindersOn).toBeVisible();
-  await expect.poll(async () => (await remindersFor(device, lunch.id)).length).toBe(2);
-  // Add to calendar fills iPhone's form: the name, start and end, the place, no alert, never the Meeting details.
-  const calendar = () =>
-    device.evaluate(() =>
-      globalThis.__resbiteDevice.calendar.map((e) => ({
-        ...e,
-        startDate: e.startDate.toISOString(),
-        endDate: e.endDate.toISOString(),
-      })),
+  await scenario("repeating, just this one", repeating, async (f) => {
+    const { page } = f;
+    await goto(f, `/event?plan=${PLAN_ID}`);
+    await btn(page, "More").click();
+    await btn(page, "Cancel resbite").click();
+    await btn(page, "Cancel just this one").click();
+    await expect(text(page, "Your resbite is cancelled.")).toBeVisible();
+    assert.deepEqual(
+      f.rpcs("change_plan_v4").map((b) => [b.p_cancel, b.p_stop_repeating]),
+      [[true, false]],
     );
-  await device.getByRole("button", { name: "Add to calendar", exact: true }).click();
-  await expect.poll(async () => (await calendar()).length).toBe(1);
-  assert.deepEqual((await calendar())[0], {
-    title: "Garden lunch",
-    startDate: "2099-03-01T15:00:00.000Z",
-    endDate: "2099-03-01T17:00:00.000Z",
-    location: "Rose garden",
-    notes: "Added from Resbite",
-    alarms: [],
   });
-  assert.ok(!JSON.stringify(await calendar()).includes("Door code"), "No Meeting details in calendars");
-  // The organizer moves it: the chip offers Update calendar, and the reminders move too.
-  Object.assign(plans.get(lunch.id), { starts_at: "2099-03-01T16:00:00Z", ends_at: "2099-03-01T18:00:00Z" });
-  await foreground(device);
-  await expect(device.getByText("16:00 – 18:00", { exact: true })).toBeVisible();
-  await device.getByRole("button", { name: "Update calendar", exact: true }).click();
-  await expect.poll(async () => (await calendar()).length).toBe(2);
-  assert.equal((await calendar())[1].notes, "Updated. Remove the earlier entry from your calendar.");
-  assert.equal((await calendar())[1].startDate, "2099-03-01T16:00:00.000Z");
-  await expect(device.getByRole("button", { name: "Add to calendar", exact: true })).toBeVisible();
-  await expect
-    .poll(async () => (await remindersFor(device, lunch.id)).map((r) => r.body))
-    .toEqual(["Tomorrow at 16:00 · Garden lunch", "In 1 hour · Garden lunch"]);
-  // Controller ruling P10: a form that can't open (before iOS 17) is explained; nothing asks for calendar access.
-  await device.evaluate(() => {
-    globalThis.__resbiteDevice.calendar.push = () => {
-      throw Error("Fixture: the calendar form can't open");
-    };
-  });
-  await device.getByRole("button", { name: "Add to calendar", exact: true }).click();
-  await expect(
-    device.getByText("We couldn’t open your calendar. Add to calendar needs iOS 17 or later.", { exact: true }),
-  ).toBeVisible();
-  await device.evaluate(() => delete globalThis.__resbiteDevice.calendar.push);
-  // With the permission off, the phone keeps none and the chip leads to Settings (the browser has none).
-  await device.evaluate(() => (globalThis.__resbiteDevice.permission = "denied"));
-  await foreground(device);
-  await expect(device.getByRole("button", { name: "Reminders off", exact: true })).toBeVisible();
-  await expect.poll(() => device.evaluate(() => globalThis.__resbiteDevice.reminders.length)).toBe(0);
-  await device.getByRole("button", { name: "Reminders off", exact: true }).click();
-  await expect(
-    device.getByText("Couldn’t open device settings. Please open Settings on your phone.", { exact: true }),
-  ).toBeVisible();
-  await expect(device.getByRole("heading", { name: ASK_TITLE, exact: true })).toHaveCount(0);
-  console.log(
-    "PASS: organizer: Get notified? once, two reminders with the name and time only, the per-event switch, Add to calendar without Meeting details, Update calendar after a time change, the iOS 17 note, Settings when the permission is off.",
-  );
+  pass("repeating: the second When line reads Every Thursday; two cancel choices; Cancel this and stop repeating → p_stop_repeating: true; Cancel just this one → false");
 
-  // A guest: no sheet before answering; right after Going it asks, without holding up the answer.
-  attendee = { version: 1, response: "pending" };
-  const guest = await phone.newPage();
-  guest.on("pageerror", (e) => errors.push(e.message));
-  await guest.addInitScript(init, session);
-  await guest.route("**/*.supabase.co/**", stub);
-  await guest.goto(`${base}/event?plan=${invited.id}`);
-  await expect(guest.getByRole("heading", { name: "Board games", exact: true })).toBeVisible();
-  await expect(guest.getByText(LOCKED, { exact: true })).toBeVisible();
-  await guest.waitForTimeout(500); // a sheet would appear within this settle time
-  await expect(guest.getByRole("heading", { name: ASK_TITLE, exact: true })).toHaveCount(0);
-  // Can’t go never asks (and doesn't use up the ask).
-  await guest.getByRole("radio", { name: "Can’t go", exact: true }).click();
-  await expect(guest.getByRole("radio", { name: "Can’t go", exact: true })).toBeChecked();
-  await guest.waitForTimeout(500);
-  await expect(guest.getByRole("heading", { name: ASK_TITLE, exact: true })).toHaveCount(0);
-  await guest.getByRole("radio", { name: "Going", exact: true }).click();
-  await expect(guest.getByText("Your response is saved.", { exact: true })).toBeVisible();
-  await expect(guest.getByRole("heading", { name: ASK_TITLE, exact: true })).toBeVisible();
-  await expect(guest.getByText(ASK_BODY, { exact: true })).toBeVisible();
-  await guest.getByRole("button", { name: "Not now", exact: true }).click();
-  await sheetClosed(guest);
-  await expect(guest.getByRole("radio", { name: "Going", exact: true })).toBeChecked();
-  await expect(guest.getByText("Gate code 4512", { exact: true })).toBeVisible();
-  assert.equal(await guest.evaluate(() => globalThis.__resbiteDevice.permission), "undetermined");
-  // "Not now" leaves Reminders off; it isn't asked again; the chip can turn them on.
-  await foreground(guest);
-  await guest.waitForTimeout(500);
-  await expect(guest.getByRole("heading", { name: ASK_TITLE, exact: true })).toHaveCount(0);
-  await guest.getByRole("button", { name: "Reminders off", exact: true }).click();
-  await expect(guest.getByRole("button", { name: "Reminders on, 1 day and 1 hour before", exact: true })).toBeVisible();
-  await expect.poll(async () => (await remindersFor(guest, invited.id)).length).toBe(2);
-  // Can't go removes the chips and the reminders.
-  await guest.getByRole("radio", { name: "Can’t go", exact: true }).click();
-  await expect(guest.getByRole("radio", { name: "Can’t go", exact: true })).toBeChecked();
-  await expect(guest.getByRole("button", { name: "Add to calendar", exact: true })).toHaveCount(0);
-  await expect.poll(() => remindersFor(guest, invited.id)).toEqual([]);
-  // A tap on a notification for a resbite that is gone lands on My resbites with a note, shown once per tap.
-  const GONE = "That resbite isn’t available any more.";
-  const gone = guest.getByText(GONE, { exact: true });
-  const sendTo = (path) =>
-    guest.evaluate((path) => {
-      history.pushState(null, "", path);
-      dispatchEvent(new PopStateEvent("popstate"));
-    }, path);
-  await guest.goto(`${base}/plans`);
-  await expect(guest.getByRole("heading", { name: "My resbites", exact: true })).toBeVisible();
-  await expect(gone).toHaveCount(0);
-  await sendTo("/plans?notice=gone&n=test1");
-  await expect(gone).toBeVisible();
-  await guest.getByRole("button", { name: /^Board games, / }).click();
-  await expect(guest.getByRole("heading", { name: "Board games", exact: true })).toBeVisible();
-  await guest.getByRole("button", { name: "Back", exact: true }).click();
-  await expect(guest.getByRole("heading", { name: "My resbites", exact: true })).toBeVisible();
-  await guest.waitForTimeout(500);
-  await expect(gone).toHaveCount(0);
-  // A new tap carries a new id, so it shows again.
-  await sendTo("/plans?notice=gone&n=test2");
-  await expect(gone).toBeVisible();
-  await phone.close();
-  assert.deepEqual(errors, []);
-  console.log(
-    "PASS: guest: Get notified? only after answering Going (never Can’t go), Not now leaves Reminders off without asking again, the chip turns them on, Can’t go removes them; the gone note shows once per tap, not again after opening a resbite and going Back, and again for a new tap.",
+  // --- An ended resbite ---
+  await scenario(
+    "ended",
+    { plan: { starts_at: "2020-03-05T15:00:00Z", ends_at: "2020-03-05T17:00:00Z", repeat_weeks: 1 }, guests: going2 },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      await expect(page.getByText(/ · Ended$/)).toBeVisible();
+      await expect(text(page, "Ended")).toBeVisible();
+      await expect(text(page, "Every Thursday · the next one is in My resbites")).toBeVisible();
+      await expect(bar(f).getByRole("button")).toHaveText(["Do this again"]);
+      for (const gone of ["More", "Invite", "Edit Coffee evening", "Cancel resbite"]) await expect(btn(page, gone)).toHaveCount(0);
+      await btn(page, "Do this again").click();
+      await expect(page).toHaveURL(new RegExp(`/arrange\\?again=${PLAN_ID}`));
+    },
   );
+  pass("ended: the When line ends · Ended, an Ended chip, Every Thursday · the next one is in My resbites; Do this again is the only action, no More; it opens the plan screen with ?again=");
+
+  // --- A resbite that has started and not ended ---
+  const startsAgo = Date.now() - hour;
+  const running = { starts_at: iso(startsAgo), ends_at: iso(Date.now() + hour) };
+  await scenario("running (owner)", { plan: running, guests: going2 }, async (f) => {
+    const { page } = f;
+    await goto(f, `/event?plan=${PLAN_ID}`);
+    await expect(btn(page, "Edit Coffee evening")).toBeVisible();
+    await expect(btn(page, "More")).toBeVisible();
+    await expect(page.getByText(/ · Ended$/)).toHaveCount(0);
+  });
+  await scenario("running (guest)", { viewer: "guest", plan: running, guests: [ALEX] }, async (f) => {
+    const { page } = f;
+    await goto(f, `/event?plan=${PLAN_ID}`);
+    await expect(page.getByRole("radiogroup", { name: "Your answer" })).toBeVisible();
+    await page.getByRole("radio", { name: "Going", exact: true }).click();
+    await expect(text(page, "You’re going")).toBeVisible();
+    assert.deepEqual(f.rpcs("respond"), [{ p_plan: PLAN_ID, p_response: "accepted", p_version: 1 }]);
+  });
+  pass("running: the owner still has Edit and More; a guest’s Going is accepted (respond {p_response: accepted, p_version: 1}) and the bar reads You’re going");
+
+  // --- An admin ---
+  // This admin answered Maybe, so Can’t go is sent as "declined" (after Going it is "withdrawn": see the known defect below).
+  const adminFixture = { viewer: "admin", attendee: { version: 1, response: "maybe" }, guests: [ALEX, BEA] };
+  await scenario("admin", adminFixture, async (f) => {
+    const { page } = f;
+    await goto(f, `/event?plan=${PLAN_ID}`);
+    await expect(text(page, "You’re an admin")).toBeVisible();
+    await expect(text(page, "You’re hosting")).toHaveCount(0);
+    await expect(bar(f).getByRole("button")).toHaveText(["Invite", "Edit", "More"]);
+    await btn(page, "More").click();
+    for (const row of ["Add to calendar", "Mute this resbite", "Do this again", "Change my reply", "Cancel resbite"])
+      await expect(btn(page, row)).toBeVisible();
+    // Can’t go ends the admin’s part on the server; the page is read again and shows the guest view.
+    await btn(page, "Change my reply").click();
+    await expect(page.getByRole("radiogroup", { name: "Your answer" })).toBeVisible();
+    await page.getByRole("radio", { name: "Can’t go", exact: true }).click();
+    await expect(text(page, "Hosted by Ana")).toBeVisible();
+    assert.deepEqual(f.rpcs("respond"), [{ p_plan: PLAN_ID, p_response: "declined", p_version: 1 }]);
+    await expect(text(page, "You’re an admin")).toHaveCount(0);
+    await expect(btn(page, "Invite")).toHaveCount(0);
+    await expect(text(page, "You can’t go")).toBeVisible();
+    await expect(btn(page, "Cancel resbite")).toHaveCount(0);
+  });
+  pass("admin: You’re an admin; Invite, Edit, More; Change my reply and Cancel resbite among the rows; Can’t go → respond {p_response: declined}, then the guest page (Hosted by Ana, You can’t go, no Invite)");
+
+  // KNOWN DEFECT (reported, not fixed here): an admin who was Going sends "withdrawn" for Can’t go (cantGoResponse), the
+  // server drops their admin part for "declined" and "withdrawn" alike (the respond function), but app/event.tsx
+  // `afterMoreReply` reloads only for "declined". The page stays on the admin view with Invite, Edit and More.
+  let defect = false;
+  try {
+    await scenario("admin, was Going", { viewer: "admin", attendee: { version: 1, response: "accepted" }, guests: [ALEX, BEA] }, async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      await btn(page, "More").click();
+      await btn(page, "Change my reply").click();
+      await page.getByRole("radio", { name: "Can’t go", exact: true }).click();
+      await expect.poll(() => f.rpcs("respond")).toEqual([{ p_plan: PLAN_ID, p_response: "withdrawn", p_version: 1 }]);
+      await expect(text(page, "Hosted by Ana")).toBeVisible();
+      await expect(btn(page, "Invite")).toHaveCount(0);
+    });
+    pass("admin who was Going: Can’t go (withdrawn) → the guest page");
+  } catch (e) {
+    defect = true;
+    console.log(`FAIL (KNOWN DEFECT, reported to the controller): admin who was Going: Can’t go sends withdrawn but the page stays on the admin view. ${String(e.message).split("\n")[0]}`);
+  }
+
+  // --- A guest ---
+  await scenario(
+    "guest",
+    { viewer: "guest", attendee: { version: 1, response: "accepted" }, guests: [ALEX, BEA] },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      await expect(text(page, "Hosted by Ana")).toBeVisible();
+      await expect(text(page, "You’re hosting")).toHaveCount(0);
+      await expect(text(page, "You’re going")).toBeVisible();
+      await expect(page.getByText("Fixture café")).toBeVisible();
+      await expect(text(page, "Going 3 · Can’t go 0")).toBeVisible();
+      // Only Add to calendar and Mute for a guest.
+      await btn(page, "More").click();
+      await expect(btn(page, "Add to calendar")).toBeVisible();
+      await expect(btn(page, "Mute this resbite")).toBeVisible();
+      await expect(btn(page, "Cancel resbite")).toHaveCount(0);
+      await expect(btn(page, "Change my reply")).toHaveCount(0);
+      await page.getByRole("button", { name: "Close sheet" }).first().click();
+      await expect(btn(page, "Add to calendar")).toHaveCount(0);
+      // Change opens the answer sheet with the current answer; Maybe is saved and the bar follows.
+      await btn(page, "Change your answer").click();
+      await expect(page.getByRole("radiogroup", { name: "Your answer" })).toBeVisible();
+      await expect(page.getByRole("radio", { name: "Going", exact: true })).toBeChecked();
+      await page.getByRole("radio", { name: "Maybe", exact: true }).click();
+      await expect(text(page, "Maybe")).toBeVisible();
+      await expect(page.getByRole("radiogroup", { name: "Your answer" })).toHaveCount(0);
+      assert.deepEqual(f.rpcs("respond"), [{ p_plan: PLAN_ID, p_response: "maybe", p_version: 1 }]);
+      // The people row opens the people list, where a guest has no actions.
+      await page.getByRole("button", { name: /^Going 2 · Maybe 1 · Can’t go 0\./ }).click();
+      await expect(page).toHaveURL(new RegExp(`/guests\\?plan=${PLAN_ID}`));
+      await expect(heading(page, "People")).toBeVisible();
+      await expect(page.getByRole("button", { name: /^Actions for / })).toHaveCount(0);
+    },
+  );
+  await scenario("guest, not answered", { viewer: "guest", guests: [ALEX] }, async (f) => {
+    const { page } = f;
+    await goto(f, `/event?plan=${PLAN_ID}`);
+    await expect(text(page, "Hosted by Ana")).toBeVisible();
+    // Counts only: no names, no way into the people list; the area stands in for the place.
+    await expect(text(page, "Going 0 · Can’t go 0")).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Going / })).toHaveCount(0);
+    await expect(text(page, "Near the station")).toBeVisible();
+    await expect(page.getByText("Fixture café")).toHaveCount(0);
+    await expect(page.getByRole("radiogroup", { name: "Your answer" })).toBeVisible();
+    await expect(page.getByRole("radio")).toHaveText(["Going", "Maybe", "Can’t go"]);
+    await expect(btn(page, "More")).toHaveCount(0);
+    await expect(btn(page, "Change your answer")).toHaveCount(0);
+    assert.deepEqual(f.rpcs("respond"), []);
+  });
+  pass("guest: Hosted by Ana; You’re going + Change opens the answer sheet (Going selected) and Maybe saves; More has Add to calendar and Mute only; the people row opens a list without actions; an unanswered guest sees counts only, the Your answer control and no More");
+
+  // --- The people list ---
+  await scenario(
+    "people",
+    {
+      guests: going2,
+      phoneInvites: [phoneRow(PAT.phone), phoneRow(UNSTORED.phone)],
+      requests: [SAM],
+      storedCodes: { [PAT.e164]: { code: PAT.code, name: PAT.name, sentVia: "whatsapp" } },
+    },
+    async (f) => {
+      const { page } = f;
+      await page.goto(`${base}/guests?plan=${PLAN_ID}`);
+      await expect(heading(page, "People")).toBeVisible();
+      const groups = ["Going · 2", "Maybe · 1", "Can’t go · 1", "Invited, not answered yet · 2", "Waiting for you · 1"];
+      for (const group of groups) await expect(heading(page, group)).toBeVisible();
+      await expect(page.getByRole("heading")).toHaveText(["People", ...groups]);
+      await expect(text(page, "Invited by WhatsApp")).toBeVisible();
+      await expect(text(page, "Invited by link")).toBeVisible();
+      await expect(text(page, "Asked through the link")).toBeVisible();
+      // Make admin: only on a Going guest; the host then sees the badge.
+      await btn(page, "Actions for Bea").click();
+      for (const row of ["Make admin", "Remove from this resbite"]) await expect(btn(page, row)).toBeVisible();
+      await btn(page, "Make admin").click();
+      await expect(text(page, "Admin")).toBeVisible();
+      assert.deepEqual(f.rpcs("appoint_admin"), [{ p_plan: PLAN_ID, p_user: "g2" }]);
+      await btn(page, "Actions for Bea").click();
+      await expect(btn(page, "Remove as admin")).toBeVisible();
+      await page.getByRole("button", { name: "Close sheet" }).first().click();
+      await btn(page, "Actions for Cy").click();
+      await expect(btn(page, "Make admin")).toHaveCount(0);
+      await page.getByRole("button", { name: "Close sheet" }).first().click();
+      // Send again offers the app the invitation went by, and only for the code this phone holds.
+      await btn(page, "Actions for Pat Lee").click();
+      await expect(btn(page, "Send again on WhatsApp")).toBeVisible();
+      await expect(btn(page, "Send again on Messages")).toHaveCount(0);
+      await expect(btn(page, "Remove")).toBeVisible();
+      await page.getByRole("button", { name: "Close sheet" }).first().click();
+      await btn(page, `Actions for ${UNSTORED.label}`).click();
+      await expect(btn(page, "Send again on WhatsApp")).toHaveCount(0);
+      await expect(btn(page, "Send again on Messages")).toHaveCount(0);
+      await expect(btn(page, "Remove")).toBeVisible();
+      await page.getByRole("button", { name: "Close sheet" }).first().click();
+      // Approve sends the join-request decision, and Sam joins the Going group.
+      await btn(page, "Actions for Sam Reed").click();
+      await expect(btn(page, "Decline")).toBeVisible();
+      await btn(page, "Approve").click();
+      await expect(heading(page, "Waiting for you · 1")).toHaveCount(0);
+      await expect(heading(page, "Going · 3")).toBeVisible();
+      assert.deepEqual(f.rpcs("decide_join_request"), [{ p_plan: PLAN_ID, p_user: "r1", p_approve: true }]);
+    },
+  );
+  pass("people: the groups in order with counts; Actions for Bea → Make admin → appoint_admin and the Admin badge; Remove as admin offered after; Send again on WhatsApp only for the code this phone holds; Approve → decide_join_request {p_approve: true} and Sam moves to Going");
+
+  // --- The idea page ---
+  const painting = {
+    id: "painting",
+    title: "Painting",
+    categories: ["creative", "mindful"],
+    description: "Paint something together.",
+    artwork_key: "painting",
+    source_ids: ["fixture"],
+    published: true,
+    duration_minutes: 90,
+    tips: ["Bring an apron."],
+  };
+  await scenario("idea", { activities: [painting], noPlanRead: true }, async (f) => {
+    const { page } = f;
+    await goto(f, "/activity/painting", "Painting");
+    const picture = page.getByRole("img", { name: "Painting", exact: true });
+    await expect(picture).toBeVisible();
+    const [back, cover] = [await btn(page, "Back").boundingBox(), await picture.boundingBox()];
+    assert.ok(back && cover, "Back and the picture are on screen");
+    assert.ok(
+      back.x >= cover.x && back.y >= cover.y && back.x + back.width <= cover.x + cover.width && back.y + back.height <= cover.y + cover.height,
+      `Back sits over the image: ${JSON.stringify({ back, cover })}`,
+    );
+    await expect(text(page, "90 minutes")).toBeVisible();
+    await expect(text(page, "Bring an apron.")).toBeVisible();
+    await btn(page, "Use idea").click();
+    await expect(page).toHaveURL(/\/arrange\?activity=painting/);
+  });
+  pass("idea: Back sits over the image, the chips, description and tips follow; Use idea opens the plan screen with ?activity=painting");
+
+  assert.deepEqual(errors, []);
+  if (defect) process.exitCode = 1;
 } finally {
   await browser.close();
 }

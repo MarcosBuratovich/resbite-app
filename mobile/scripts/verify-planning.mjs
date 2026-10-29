@@ -257,6 +257,8 @@ async function signedInPage({ plans = [], guests = [], failJournal = false, ...o
     if (url.pathname === "/rest/v1/rpc/plan_phone_invitations") return reply([]);
     if (url.pathname === "/rest/v1/rpc/plan_join_requests" || url.pathname === "/rest/v1/rpc/my_join_requests") return reply([]);
     if (url.pathname === "/rest/v1/rpc/plan_link") return reply("AbCdEfGhIjKlMnOpQrStUv");
+    // The resbite page reads the person's muted series; none here.
+    if (url.pathname === "/rest/v1/plan_mutes") return reply([]);
     state.unexpected.push(`${request.method()} ${url.pathname}`);
     return reply({ message: "Unexpected fixture request" }, 404);
   });
@@ -349,7 +351,8 @@ try {
     await page.getByRole("button", { name: "Back", exact: true }).click();
     await expect(card(page, "Coffee together, late")).toBeVisible();
     await inviteFromList(page, "Coffee together, late", "Invitations are disabled in design preview.");
-    await cancelFromList(page, "Coffee together, late");
+    // It repeats every week, so the sheet asks which to cancel.
+    await cancelFromList(page, "Coffee together, late", "Cancel just this one");
     await expectCancelled(page, "Coffee together, late");
     await page.getByRole("tab", { name: "Wellness", exact: true }).click();
     await expect(page.getByText("Sample data", { exact: true })).toBeVisible();
@@ -853,6 +856,7 @@ try {
         return reply(request.headers().accept?.includes("object") ? row(savedPlan) : [row(savedPlan)]);
       }
       if (url.pathname === "/rest/v1/rpc/plan_join_requests" || url.pathname === "/rest/v1/rpc/my_join_requests") return reply([]);
+      if (url.pathname === "/rest/v1/plan_mutes") return reply([]);
       throw new Error(`Unexpected fixture request: ${url.pathname}`);
     });
     await fixture.goto(`${baseURL}/plans`);
@@ -921,7 +925,7 @@ try {
     assert.equal(state.changes[0].p_start, "2099-03-01T15:00:00.000Z");
     assert.equal(state.changes[0].p_note, "Gate code 9876");
     assert.equal(state.changes[0].p_area, "Near Old Street");
-    await expect(page.getByText("15:00 – 17:30", { exact: true })).toBeVisible();
+    await expect(page.getByText("Sun 1 Mar · 15:00 to 17:30", { exact: true })).toBeVisible();
     // Clearing the area sends "" (cleared), never null (which leaves it as it is).
     await button(page, "Edit Coffee evening").click();
     await openWhere(page);

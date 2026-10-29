@@ -151,7 +151,7 @@ try {
   await closeToList(preview);
   // Do this again: a photo chosen for the copy never touches the original's.
   await openEvent(preview, "Cover picnic");
-  await button(preview, "More actions").click();
+  await button(preview, "More").click();
   await button(preview, "Do this again").click();
   await expect(heading(preview, "New resbite")).toBeVisible();
   const againChooser = preview.waitForEvent("filechooser");
@@ -296,6 +296,7 @@ try {
       return reply(state());
     }
     if (path === "/auth/v1/logout") return reply({});
+    if (path === "/rest/v1/plan_mutes") return reply([]);
     return reply({ message: `Unexpected ${req.method()} ${path}` }, 400);
   });
   await page.goto(`${baseURL}/plans`);
@@ -414,7 +415,7 @@ try {
   const linksBefore = links.length;
   const describedBefore = descriptionCalls.length;
   await openEvent(page, "Garden picnic");
-  await button(page, "More actions").click();
+  await button(page, "More").click();
   await button(page, "Do this again").click();
   await expect(heading(page, "New resbite")).toBeVisible();
   // The original's picture shows, with its description, before the copy exists.
@@ -454,7 +455,7 @@ try {
   // Do this again with a photo still being prepared when Create is pressed: Create waits for it, then uploads that
   // photo (not a copy of the original's), with no description carried over from the original.
   await openEvent(page, "Garden picnic");
-  await button(page, "More actions").click();
+  await button(page, "More").click();
   await button(page, "Do this again").click();
   await expect(heading(page, "New resbite")).toBeVisible();
   await expect(page.getByRole("button", { name: "Edit photo description, A red blanket on the grass", exact: true })).toBeVisible();

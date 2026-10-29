@@ -3,7 +3,7 @@
 // (plan 3) changed what it does: an answer through the link is a request the host approves, so nobody joins by
 // opening it (verify-open-link-app covers the waiting screen, the answer, the tick and My resbites in depth).
 //  - Signed in: request_to_join ("pending"). A new person lands on /waiting?plan=, a guest ("already") or the
-//    organizer ("owner") on the event page. The kept code is cleared. A link turned off, started or cancelled
+//    organizer ("owner") on the resbite page. The kept code is cleared. A link turned off, started or cancelled
 //    says so and drops the kept code, so a restart opens the app as usual; a lost connection keeps it;
 //    "Go to My resbites" leaves either. A malformed code sends nothing. A per-person link (before GI1) that is
 //    refused, or is the organizer's own, is dropped the same way.
@@ -150,6 +150,7 @@ async function fixture({ signedIn = true } = {}) {
       if (body.p_token === OWN_TOKEN) return reply({ code: "22023", message: "Owner cannot claim own invitation" }, 400);
       return reply({ code: "42501", message: "Invitation unavailable" }, 403);
     }
+    if (path === "/rest/v1/plan_mutes") return reply([]);
     return reply({ message: `Unexpected ${req.method()} ${path}` }, 400);
   });
   return { page, errors, claims };
@@ -229,6 +230,7 @@ async function guestFixture({ metadata = {}, signedIn = false, kept = null } = {
     if (path === "/rest/v1/activities") return reply([]);
     if (path === "/rest/v1/plans") return reply(one ? null : []);
     if (path === "/rest/v1/attendees") return reply(one ? null : []);
+    if (path === "/rest/v1/plan_mutes") return reply([]);
     return reply({ message: `Unexpected ${req.method()} ${path}` }, 400);
   });
   return { page, errors, opens, joins, cardReadCount: () => cardReads };
@@ -258,7 +260,7 @@ try {
     // connection line, and the kept code is dropped, so a cold start opens the app as usual.
     await page.goto(`${base}/invite?code=${OWN}`);
     await expect(page.getByRole("heading", { name: "Book swap", exact: true })).toBeVisible();
-    await expect(page.getByText("Hosting", { exact: true })).toBeVisible();
+    await expect(page.getByText("You’re hosting", { exact: true })).toBeVisible();
     assert.equal(new URL(page.url()).pathname, "/event");
     assert.equal(new URL(page.url()).searchParams.get("plan"), own.id);
     await expect(page.getByText(lostConnection, { exact: true })).toHaveCount(0);
@@ -322,7 +324,7 @@ try {
     assert.deepEqual(errors, []);
     await page.close();
     console.log(
-      "PASS: signed in, an event link sends request_to_join and lands a new person on /waiting?plan= (code cleared), a guest on the event page, the organizer on their event (response null; code cleared, a cold start opens Create); a link turned off says so and drops the code (a cold start opens Create); a lost connection keeps it (a cold start returns to it); Go to My resbites leaves and drops it; a refused or own per-person link is dropped too; a malformed one sends nothing.",
+      "PASS: signed in, an event link sends request_to_join and lands a new person on /waiting?plan= (code cleared), a guest on the resbite page, the organizer on their event (response null; code cleared, a cold start opens Create); a link turned off says so and drops the code (a cold start opens Create); a lost connection keeps it (a cold start returns to it); Go to My resbites leaves and drops it; a refused or own per-person link is dropped too; a malformed one sends nothing.",
     );
   }
   {

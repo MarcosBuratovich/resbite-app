@@ -137,6 +137,7 @@ async function fixture(
       });
     if (path === "/rest/v1/attendees")
       return reply({ version: 1, response: "pending" });
+    if (path === "/rest/v1/plan_mutes") return reply([]);
     throw Error(`Unexpected fixture request ${path}`);
   });
   return {

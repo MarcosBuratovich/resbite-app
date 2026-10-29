@@ -1,8 +1,8 @@
-// "Invite people" (Plan 2 checks the Pick step itself, in verify-contact-invites). Open-link approval moved the
-// event's one link (Share, Copy, Turn off) to the event page (verify-event), so this screen has no link section:
-// no Event link heading, no Share/Copy/Turn off, and the link is never read. The ⓘ sheet still explains links and
-// points to the event page; nothing is kept in browser storage; 320 px with Larger Text. Every Supabase request
-// is intercepted.
+// "Invite people" (Plan 2 checks the Pick step itself, in verify-contact-invites). Plan 3: the event's one link (Share,
+// Copy, Turn off) lives on this screen again, under the contacts with its own heading "Or share the event link"
+// (and no second title); it is read once for the organizer and never for someone else's event. The ⓘ sheet points to
+// this screen and to the people list; nothing is kept in browser storage; 320 px with Larger Text. Every Supabase
+// request is intercepted.
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { button, heading } from "./qa-helpers.mjs";
@@ -60,9 +60,9 @@ const INFO = [
   "Each resbite has one invitation link. Share it anywhere: messages, email or a group chat.",
   "Anyone with the link sees the basics: who invited them, the name, the time, the area, how many are going and the picture.",
   "The exact place and Meeting details show only after they reply.",
-  "The event link, with Share, Copy and Turn off, is on the event page.",
+  "The event link, with Share, Copy and Turn off, is on the Invite screen.",
   "Turning the link off also stops any older per-person links you shared.",
-  "Answers through the link wait for your approval. You’ll see them in Waiting for you on the event page.",
+  "Answers through the link wait for your approval. Waiting for you is in the people list, from the people row on the resbite.",
   "Someone you remove can ask to join again with the link, and you’ll decide.",
 ];
 const LINK_CONTROLS = ["Share link", "Copy link", "Turn off this link"];
@@ -82,7 +82,7 @@ async function fixture({ width = 390, largeText = false } = {}) {
   await page.addInitScript((session) => {
     sessionStorage.setItem("sb-ewcsgvhuojxdpaspwsrx-auth-token", JSON.stringify(session));
   }, session);
-  const state = { links: 0, current: { ...plan } };
+  const state = { links: [], current: { ...plan } };
   await page.route("**/*.supabase.co/**", async (route) => {
     const req = route.request();
     const url = new URL(req.url());
@@ -97,10 +97,10 @@ async function fixture({ width = 390, largeText = false } = {}) {
     if (path === "/rest/v1/plans")
       return reply(req.headers().accept?.includes("object") ? state.current : [state.current]);
     if (path === "/rest/v1/attendees") return reply([]);
-    // The link is read by the event page now: this screen must not ask for it.
-    if (path === "/rest/v1/rpc/plan_link" || path === "/rest/v1/rpc/rotate_plan_link") {
-      state.links++;
-      return reply({ message: "Unexpected link request on Invite people" }, 400);
+    // The organizer's event link: read once when the card opens.
+    if (path === "/rest/v1/rpc/plan_link") {
+      state.links.push(req.postDataJSON());
+      return reply("AAAAAAAAAAAAAAAAAAAAA1");
     }
     return reply({ message: `Unmocked fixture endpoint ${path}` }, 400);
   });
@@ -113,14 +113,13 @@ try {
   {
     const { page, errors, state } = await fixture();
     await expect(heading(page, "Invite people")).toBeVisible();
-    // The Pick step only: no Event link section, no Share, Copy or Turn off, and no link is read.
+    // The Pick step, then the event link with its own heading and no second title.
     await expect(button(page, "Invite 0")).toBeVisible();
-    await expect(page.getByRole("heading")).toHaveCount(1);
+    await expect(page.getByRole("heading")).toHaveText(["Invite people", "Or share the event link"]);
     await expect(heading(page, "Event link")).toHaveCount(0);
-    for (const name of LINK_CONTROLS) await expect(button(page, name)).toHaveCount(0);
-    await expect(page.getByText("Anyone can answer with it, and you approve them first.", { exact: true })).toHaveCount(0);
-    await page.waitForTimeout(500);
-    assert.equal(state.links, 0, "Invite people reads no link");
+    for (const name of LINK_CONTROLS) await expect(button(page, name)).toBeEnabled();
+    await expect(page.getByText("Anyone can answer with it, and you approve them first.", { exact: true })).toBeVisible();
+    assert.deepEqual(state.links, [{ p_plan: plan.id }], "the link is read once, for this resbite");
     // GI1's cover card is gone, and the screen never shows the exact place.
     await expect(page.getByText("This is what people see before they reply.", { exact: true })).toHaveCount(0);
     await expect(page.getByText(/Fixture café/)).toHaveCount(0);
@@ -130,11 +129,11 @@ try {
     for (const line of INFO) await expect(page.getByText(line, { exact: true })).toBeVisible();
     await button(page, "Close sheet").click();
     await expect(heading(page, "Invitation links")).toHaveCount(0);
-    assert.equal(state.links, 0);
+    assert.equal(state.links.length, 1);
     assert.deepEqual(errors, []);
     await page.context().close();
     console.log(
-      "PASS: Invite people has no link section (no Event link heading, no Share, Copy or Turn off, no link read), no card and no exact place; the ⓘ sheet points to the event page and Waiting for you.",
+      "PASS: Invite people shows the contacts, then Or share the event link (Share link, Copy link, Turn off this link; the link read once, no second title), no card and no exact place; the ⓘ sheet points to the Invite screen and the people list.",
     );
   }
   {
@@ -148,7 +147,8 @@ try {
     await expect(button(page, "Share link")).toHaveCount(0);
     await expect(heading(page, "Event link")).toHaveCount(0);
     await expect(button(page, /^Invite \d+$/)).toHaveCount(0);
-    assert.equal(state.links, 0, "No link is read for someone else's event");
+    assert.deepEqual(state.links, [], "No link is read for someone else's event");
+    await expect(heading(page, "Or share the event link")).toHaveCount(0);
     assert.deepEqual(errors, []);
     await page.context().close();
     console.log("PASS: someone else's event shows why there is no link, and reads none.");
@@ -157,7 +157,7 @@ try {
     const { page, errors } = await fixture({ width: 320, largeText: true });
     await expect(heading(page, "Invite people")).toBeVisible();
     await expect(button(page, "Invite 0")).toBeVisible();
-    for (const name of LINK_CONTROLS) await expect(button(page, name)).toHaveCount(0);
+    for (const name of LINK_CONTROLS) await expect(button(page, name)).toBeVisible();
     const fits = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
     assert.ok(fits, "Invite people fits 320 px under Larger Text");
     const clipped = await page.evaluate(() =>
@@ -170,13 +170,13 @@ try {
         .map((el) => el.getAttribute("aria-label") || el.textContent),
     );
     assert.deepEqual(clipped, []);
-    for (const name of ["About invitation links", "Back", "Add", "Invite 0"]) {
+    for (const name of ["About invitation links", "Back", "Add", "Invite 0", ...LINK_CONTROLS]) {
       const box = await button(page, name).boundingBox();
       assert.ok(box.height >= 44 && box.width >= 44, `${name} is at least 44 pt`);
     }
     assert.deepEqual(errors, []);
     await page.context().close();
-    console.log("PASS: Invite people at 320 px with Larger Text: no sideways overflow, 44 pt targets.");
+    console.log("PASS: Invite people at 320 px with Larger Text, the link controls included: no sideways overflow, 44 pt targets.");
   }
 } finally {
   await browser.close();
