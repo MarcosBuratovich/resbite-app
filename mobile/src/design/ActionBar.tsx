@@ -19,7 +19,7 @@ export type BarAction = {
 /**
  * The fixed row of labelled pills under a content page (M-06): a decorative icon beside a bold
  * label, on a hairline over paper. One action spans the width. `lead` sits first
- * and is twice as wide: the reply pill.
+ * and takes the width the other pills leave (they size to their content): the reply pill.
  */
 export function ActionBar({ actions, lead }: { actions: BarAction[]; lead?: React.ReactNode }) {
   const largeText = useLargeText();
@@ -32,7 +32,7 @@ export function ActionBar({ actions, lead }: { actions: BarAction[]; lead?: Reac
           accessibilityRole="button"
           accessibilityLabel={label ?? title}
           onPress={onPress}
-          outerStyle={largeText ? undefined : styles.cell}
+          outerStyle={largeText ? undefined : lead ? styles.fit : styles.cell}
           style={({ pressed }) => [styles.pill, primary && styles.primary, pressed && { opacity: 0.9 }]}
         >
           <View aria-hidden importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
@@ -83,6 +83,8 @@ const styles = StyleSheet.create({
   // Under Larger Text the pills stack, each as wide as the bar.
   barStacked: { flexDirection: "column" },
   cell: { flex: 1 },
+  // Beside a lead, a pill is as wide as its label and never shrinks.
+  fit: { flexGrow: 0, flexShrink: 0 },
   pill: {
     minHeight: 56,
     borderRadius: 28,
@@ -98,7 +100,7 @@ const styles = StyleSheet.create({
   primary: { backgroundColor: c.pink, borderColor: "#F8CBD0", boxShadow: depth.button },
   label: { fontFamily: fonts.bold, fontSize: 16, color: c.ink, flexShrink: 1, textAlign: "center" },
   reply: { justifyContent: "space-between", paddingHorizontal: 18, paddingVertical: 8 },
-  replyCell: { flex: 2 },
+  replyCell: { flex: 1 },
   replyStacked: { alignSelf: "stretch" },
   replyText: { flex: 1, fontFamily: fonts.body, fontSize: 16, color: c.ink },
   line: { lineHeight: 20 },

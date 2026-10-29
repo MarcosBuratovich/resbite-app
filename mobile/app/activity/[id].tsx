@@ -4,7 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { ArrowLeft, Clock3 } from "lucide-react-native";
 import { eventPicture } from "../../src/domain/events";
-import { Button, Copy, ErrorNote, Title, s, useLargeText } from "../../src/design/ui";
+import { Button, Copy, ErrorNote, Title, s } from "../../src/design/ui";
 import { Chip, IconButton } from "../../src/design/kit";
 import { ContentPage } from "../../src/design/ContentPage";
 import { useCatalogue } from "../../src/state/useCatalogue";
@@ -18,7 +18,6 @@ import { categoryLabels } from "../../src/domain/categories";
 export default function Detail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { preview } = useApp();
-  const largeText = useLargeText();
   const catalogue = useCatalogue(id ?? "");
   const a = catalogue.items[0];
   const back = () => (router.canGoBack() ? router.back() : router.replace("/create"));
@@ -53,7 +52,7 @@ export default function Detail() {
       </SafeAreaView>
     );
   const planAction = (
-    <View style={[s.actionFooter, largeText && { paddingHorizontal: 0, borderTopWidth: 0 }]}>
+    <View style={s.actionFooter}>
       <Button large title="Use idea" onPress={() => router.push({ pathname: "/arrange", params: { activity: a.id } })} />
     </View>
   );
@@ -64,6 +63,7 @@ export default function Detail() {
       pictureLabel={a.title}
       onBack={back}
       bottom={planAction}
+      topRight={preview ? <PreviewNotice /> : undefined}
     >
       <View style={styles.chips}>
         {a.categories.map((key) => (

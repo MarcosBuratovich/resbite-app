@@ -18,7 +18,7 @@ const FADE = 60;
  * A page with a picture on top (GL 13, M-06): the cover runs to the top of the screen, Back
  * floats over it in a paper circle, and once the cover has scrolled away a solid bar with the
  * title fades in (with Reduce Motion it simply appears). The title in the body is the page's
- * heading and takes focus on mount. `bottom` is fixed under the scroll (the action bar).
+ * heading and takes focus on mount. `bottom` is fixed under the scroll (the action bar) and clears the home indicator.
  */
 export function ContentPage({
   title,
@@ -28,6 +28,7 @@ export function ContentPage({
   dimmed = false,
   onBack,
   bottom,
+  topRight,
   children,
 }: {
   title: string;
@@ -38,6 +39,8 @@ export function ContentPage({
   dimmed?: boolean;
   onBack: () => void;
   bottom?: React.ReactNode;
+  /** Floats at the top right, level with Back (the Preview chip). */
+  topRight?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   const insets = useSafeAreaInsets();
@@ -102,7 +105,12 @@ export function ContentPage({
       <View style={[styles.back, { top: insets.top + 6 }]}>
         <IconButton icon={ArrowLeft} label="Back" tone="plain" onPress={onBack} />
       </View>
-      {bottom}
+      {topRight ? <View style={[styles.topRight, { top: insets.top + 6 }]}>{topRight}</View> : null}
+      {bottom ? (
+        <View testID="content-bottom" style={{ paddingBottom: insets.bottom, backgroundColor: c.paper }}>
+          {bottom}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -126,6 +134,7 @@ const styles = StyleSheet.create({
     borderBottomColor: c.line,
   },
   barTitle: { fontFamily: fonts.medium, fontSize: 17, color: c.ink, textAlign: "center" },
+  topRight: { position: "absolute", right: 16, minHeight: 44, justifyContent: "center" },
   back: {
     position: "absolute",
     left: 16,
