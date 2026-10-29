@@ -11,9 +11,6 @@ import { Copy, Title, ErrorNote, Reveal, s, useLargeText } from "../../src/desig
 import { Chip, chipToneFor, CoverCard, Fab, IconButton, Segmented, Tile } from "../../src/design/kit";
 import { fonts } from "../../src/design/tokens";
 import { PreviewNotice } from "../../src/design/Chrome";
-import { createJournal } from "../../src/services/journal";
-import { planGateway } from "../../src/services/plans";
-import { reconcilePendingCreate } from "../../src/services/pendingCreate";
 import { createdNotice } from "../../src/domain/planCopy";
 import { planCoverStore } from "../../src/services/planCovers";
 import {
@@ -50,7 +47,7 @@ type Attendee = {
 export default function Plans() {
   const largeText = useLargeText();
   const { created, cover, notice, n } = useLocalSearchParams(),
-    { preview, localPlans, session } = useApp(),
+    { preview, localPlans, session, createdPlan } = useApp(),
     [plans, setPlans] = useState<LocalPlan[]>([]),
     [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null),
@@ -64,7 +61,8 @@ export default function Plans() {
     // The last answer confirmed from an Invitations row: Going or Maybe brings the notification ask.
     [answered, setAnswered] = useState<{ scope: string; response: string } | null>(null);
   const scope = preview ? "preview" : session?.user.id;
-  const [createdTitle, setCreatedTitle] = useState<string | null>(null);
+  // Found by the reconcile that runs when the tabs open (see useReconcileCreate), not by this screen.
+  const createdTitle = createdPlan && createdPlan.scope === scope ? createdPlan.title : null;
   const identity = useRef(scope);
   identity.current = scope;
   const [loadedFor, setLoadedFor] = useState<string>();
@@ -75,7 +73,6 @@ export default function Plans() {
     setRequests([]);
     setHosts({});
     setLoadedFor(undefined);
-    setCreatedTitle(null);
     setError(null);
     setBusy(false);
   }, [scope]);
@@ -157,24 +154,12 @@ export default function Plans() {
       };
     }, [refresh]),
   );
-  // A create whose reply was lost is finished here, by reading first; the notice says it exists.
-  useFocusEffect(
-    useCallback(() => {
-      let active = true;
-      if (scope && scope !== "preview")
-        void reconcilePendingCreate(scope, planGateway, createJournal)
-          .then(({ plan }) => {
-            if (!active || !plan) return;
-            setCreatedTitle(plan.title);
-            // A create the reconcile just sent may have landed after this focus's list read: read again.
-            void refresh();
-          })
-          .catch(() => {});
-      return () => {
-        active = false;
-      };
-    }, [scope, refresh]),
-  );
+  // A create the launch reconcile found may have landed after this screen's list read: read again.
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
+  useEffect(() => {
+    if (createdTitle) void refreshRef.current();
+  }, [createdTitle]);
   const list = preview ? localPlans : loadedFor === session?.user.id && session ? plans : [];
   const now = Date.now();
   const invitations = preview || !session ? [] : invitationCards(list, attendees, session.user.id, now);

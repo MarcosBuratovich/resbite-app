@@ -3,12 +3,14 @@ import { Platform } from "react-native";
 import { NativeTabs } from "expo-router/unstable-native-tabs";
 import * as Haptics from "expo-haptics";
 import { colors as c } from "../../src/design/tokens";
+import { useReconcileCreate } from "../../src/state/useReconcileCreate";
 
 export const unstable_settings = { initialRouteName: "create" };
 
 // Let iOS render its native glass, selection motion and accessibility behavior.
 // Keeping the navigator mounted also preserves each tab's search and form state.
 export default function TabLayout() {
+  useReconcileCreate();
   return (
     <NativeTabs
       tintColor={c.aquaDark}

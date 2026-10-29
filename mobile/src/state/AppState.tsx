@@ -45,6 +45,9 @@ const State = createContext<{
   setLocalPlans: React.Dispatch<React.SetStateAction<LocalPlan[]>>;
   signOut: () => Promise<void>;
   finishAccountDeletion: (accountId: string) => Promise<void>;
+  /** The plan a lost create turned out to have made (found by the launch reconcile), for the account it belongs to. */
+  createdPlan: { scope: string; title: string } | null;
+  setCreatedPlan: (found: { scope: string; title: string } | null) => void;
 }>({
   session: null,
   restoring: true,
@@ -63,6 +66,8 @@ const State = createContext<{
   setLocalPlans: () => {},
   signOut: async () => {},
   finishAccountDeletion: async () => {},
+  createdPlan: null,
+  setCreatedPlan: () => {},
 });
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [pendingInvite, setPendingInvite] = useState<string | null>(null);
@@ -100,6 +105,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [restoring, setRestoring] = useState(true),
     [preview, setPreview] = useState(false),
     [localPlans, setLocalPlans] = useState<LocalPlan[]>([]);
+  const [createdPlan, setCreatedPlan] = useState<{ scope: string; title: string } | null>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<string | null>(null);
   const sessionRef = useRef(session);
@@ -146,6 +152,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         previewRef.current = false;
         setPreview(false);
         setLocalPlans([]);
+        setCreatedPlan(null);
         const next = {
           account: sessionRef.current?.user.id ?? null,
           preview: false,
@@ -231,6 +238,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         captureSession,
         localPlans,
         setLocalPlans,
+        createdPlan,
+        setCreatedPlan,
         signOut,
         finishAccountDeletion: (accountId) =>
           lifecycle.finishAccountDeletion(accountId),
