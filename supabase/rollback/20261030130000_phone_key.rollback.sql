@@ -2,6 +2,9 @@
 --   begin; \i supabase/rollback/20261030130000_phone_key.rollback.sql; commit;
 -- It restores what the migration replaced (the two test-mode functions) and drops every function the migration created.
 -- The drops stay at the end: restores come above them.
+-- It also puts the rewritten accounts' phone numbers (and their phone identities) back from private.phone_rewrites.
+-- It does NOT put the re-keyed invitations back (a key is the old digits for every number except an Argentine mobile
+-- saved with the 9, and the collapsed duplicates are gone) and it does not restore phone_change values.
 
 create or replace function public.send_sms_hook(event jsonb) returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
@@ -207,6 +210,16 @@ begin
   values(v_plan.id,v_plan.owner_id,'rsvp','rsvp:'||v_plan.id||':'||v_uid||':'||v_att.version,v_uid,p_response) on conflict do nothing;
  return jsonb_build_object('response',p_response,'plan_id',v_plan.id);
 end $$;
+
+update auth.users u set phone = r.old_phone from private.phone_rewrites r where r.user_id = u.id and u.phone = r.new_phone;
+do $$ begin
+ if to_regclass('auth.identities') is not null then
+  execute $x$ update auth.identities i set identity_data = jsonb_set(i.identity_data, '{phone}', to_jsonb(r.old_phone))
+   from private.phone_rewrites r
+   where i.user_id = r.user_id and i.provider = 'phone' and i.identity_data->>'phone' = r.new_phone $x$;
+ end if;
+end $$;
+drop table private.phone_rewrites;
 
 drop function private.phone_variants(text);
 drop function private.phone_key(text);

@@ -238,3 +238,44 @@ begin
   values(v_plan.id,v_plan.owner_id,'rsvp','rsvp:'||v_plan.id||':'||v_uid||':'||v_att.version,v_uid,p_response) on conflict do nothing;
  return jsonb_build_object('response',p_response,'plan_id',v_plan.id);
 end $$;
+
+-- 4. Existing rows
+-- Invitations: where one plan holds the same number in two spellings, keep the answered one, then the live one, then the
+-- newest, and delete the rest; then store every invitation by key.
+delete from private.phone_invitations where id in (
+ select id from (
+  select id, row_number() over (partition by plan_id, private.phone_key(phone)
+   order by user_id is not null desc, revoked_at is null desc, created_at desc, id) rn
+  from private.phone_invitations) d
+ where rn > 1);
+update private.phone_invitations set phone = private.phone_key(phone) where phone <> private.phone_key(phone);
+
+-- Test-mode codes were stored by the old digits and live ten minutes; drop them.
+delete from private.test_codes;
+
+-- Accounts: an older Argentine number (54 and ten digits) becomes its 549 form unless another account already holds
+-- that form (those pairs stay as they are). The rewrites are recorded so the rollback can put the numbers back.
+create table private.phone_rewrites (
+ user_id uuid primary key,
+ old_phone text not null,
+ new_phone text not null,
+ rewritten_at timestamptz not null default now()
+);
+alter table private.phone_rewrites enable row level security;
+revoke all on private.phone_rewrites from public, anon, authenticated;
+insert into private.phone_rewrites(user_id, old_phone, new_phone)
+ select u.id, u.phone, '549' || substr(u.phone, 3) from auth.users u
+ where u.phone ~ '^54[0-9]{10}$'
+  and not exists(select 1 from auth.users v where v.phone = '549' || substr(u.phone, 3));
+update auth.users u set phone = r.new_phone from private.phone_rewrites r where r.user_id = u.id;
+update auth.users set phone_change = '549' || substr(phone_change, 3)
+ where phone_change ~ '^54[0-9]{10}$'
+  and not exists(select 1 from auth.users v where v.phone = '549' || substr(auth.users.phone_change, 3));
+-- The hosted project also keeps the number in the phone identity; the local harness has no identities table.
+do $$ begin
+ if to_regclass('auth.identities') is not null then
+  execute $x$ update auth.identities i set identity_data = jsonb_set(i.identity_data, '{phone}', to_jsonb(r.new_phone))
+   from private.phone_rewrites r
+   where i.user_id = r.user_id and i.provider = 'phone' and i.identity_data->>'phone' = r.old_phone $x$;
+ end if;
+end $$;
