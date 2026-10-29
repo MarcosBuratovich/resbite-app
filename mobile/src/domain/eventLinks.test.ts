@@ -90,7 +90,7 @@ test("turning the link off asks first, and the ⓘ sheet says what the link show
     assert.match(info, part);
   // Removing is not a ban: the sheet and the question both say so.
   assert.equal(LINK_INFO.at(-1), "Someone you remove can ask to join again with the link, and you’ll decide.");
-  assert.match(LINK_INFO.join(" "), /Answers through the link wait for your approval\./);
+  assert.ok(LINK_INFO.includes("Answers through the link wait for your approval. Waiting for you is in the people list, from the people row on the resbite."));
   assert.equal(
     removeGuestQuestion("Bea"),
     "Remove Bea from this resbite? They can ask to join again with the event link, and you’ll decide.",

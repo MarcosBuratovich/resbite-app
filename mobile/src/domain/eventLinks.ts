@@ -91,6 +91,6 @@ export const LINK_INFO = [
   "The exact place and Meeting details show only after they reply.",
   "The event link, with Share, Copy and Turn off, is on the Invite screen.",
   "Turning the link off also stops any older per-person links you shared.",
-  "Answers through the link wait for your approval. You’ll see them in Waiting for you on the event page.",
+  "Answers through the link wait for your approval. Waiting for you is in the people list, from the people row on the resbite.",
   "Someone you remove can ask to join again with the link, and you’ll decide.",
 ] as const;

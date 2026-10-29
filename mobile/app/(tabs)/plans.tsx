@@ -22,6 +22,8 @@ import {
   invitationCards,
   withoutInvitations,
 } from "../../src/domain/eventView";
+import { planFromRow, type PlanRow } from "../../src/domain/plans";
+import { planWithDetails } from "../../src/services/plans";
 import { EVENT_COPY } from "../../src/domain/eventPage";
 import { INVITE_COPY } from "../../src/domain/inviteCopy";
 import { RequestCard } from "../../src/design/GuestSteps";
@@ -95,7 +97,7 @@ export default function Plans() {
     setError(null);
     try {
       const [p, a, q] = await Promise.all([
-        supabase.from("plans").select("*").order("starts_at").abortSignal(controller.signal),
+        supabase.from("plans").select(planWithDetails).order("starts_at").abortSignal(controller.signal),
         supabase
           .from("attendees")
           .select("plan_id,user_id,response,version,profiles(display_name)")
@@ -107,7 +109,7 @@ export default function Plans() {
       if (p.error) throw p.error;
       if (a.error) throw a.error;
       setLoadedFor(uid);
-      setPlans(p.data || []);
+      setPlans(((p.data || []) as unknown as PlanRow[]).map(planFromRow));
       if (q) setRequests(q);
       // Cover changes for cancelled or started plans can never complete; drop them quietly.
       void planCoverStore.discardStaleCoverJournals(uid, p.data || []).catch(() => {});
@@ -375,7 +377,7 @@ export default function Plans() {
             );
             // GI1: as on the event page, an invitee who hasn’t answered sees the area (or no place), never the place.
             const place = eventPlace({ owner, response: mine?.response ?? null, place: p.place_label, area: p.area }).line;
-            const over = owner && p.status === "active" && chips[0] === EVENT_COPY.ended;
+            const over = (owner || (!!session?.user.id && p.admins.includes(session.user.id))) && p.status === "active" && chips[0] === EVENT_COPY.ended;
             return (
               <View key={p.id} style={{ gap: 4 }}>
                 <CoverCard

@@ -11,10 +11,17 @@ import { INVITE_COPY } from "../domain/inviteCopy";
 import { invitationGateway } from "../services/invitations";
 
 /**
- * GI1 / open-link approval: the event's one link, on the event page. Share, Copy and Turn off act on it. The
+ * GI1 / open-link approval: the event's one link, on the Invite screen. Share, Copy and Turn off act on it. The
  * code is read from the database when the card opens and after a failed turn-off, and never stored on the device.
  */
-export function EventLinkCard({ plan }: { plan: { id: string; title: string; starts_at: string; ends_at?: string | null } }) {
+export function EventLinkCard({
+  plan,
+  titled = true,
+}: {
+  plan: { id: string; title: string; starts_at: string; ends_at?: string | null };
+  /** False when the caller already has a heading above the card (the Invite screen). */
+  titled?: boolean;
+}) {
   const [code, setCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -108,7 +115,7 @@ export function EventLinkCard({ plan }: { plan: { id: string; title: string; sta
 
   return (
     <View style={{ gap: 10 }}>
-      <Title style={{ fontSize: 23 }}>{INVITE_COPY.eventLink}</Title>
+      {titled ? <Title style={{ fontSize: 23 }}>{INVITE_COPY.eventLink}</Title> : null}
       <Copy style={s.muted}>{INVITE_COPY.linkInfoLine}</Copy>
       <ErrorNote message={error} />
       {!!notice && (

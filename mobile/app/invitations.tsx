@@ -114,7 +114,7 @@ export default function Invitations() {
             <Copy accessibilityRole="header" style={styles.linkHeading}>
               {EVENT_COPY.shareLink}
             </Copy>
-            <EventLinkCard plan={plan} />
+            <EventLinkCard plan={plan} titled={false} />
           </View>
         )}
         <ErrorNote message={error} />
