@@ -8,11 +8,11 @@
 
 - **The key.** `private.phone_key(text)` keeps the digits of a number and folds an Argentine mobile's `549` plus ten digits to `54` plus those ten, so both spellings of one number give one key. Null or no digits give an empty string.
 - **The variants.** `private.phone_variants(key)` lists the spellings a key can be stored under: the key, plus its `549` form when it is `54` and ten digits. Both functions are for nobody (every grant revoked).
-- **Seven redefinitions** (`create or replace`, same signatures and grants): `send_sms_hook` and `exchange_test_code` (test-mode codes stored and found by key), and `contacts_on_resbite`, `invite_contacts`, `revoke_phone_invitation`, `check_invited_number` and `answer_phone_invitation` (invitations compared by key; a person is found under either spelling of their number). What the app gets back is what it sent: `invite_contacts` returns each number's digits as sent, and `contacts_on_resbite` each matching number's digits as sent and its key, so the current TestFlight build keeps its personal links and its On Resbite badge. Of two accounts holding both spellings of one number, `invite_contacts` takes the caller first, then the `549` form.
+- **Seven redefinitions** (`create or replace`, same signatures and grants): `send_sms_hook` and `exchange_test_code` (test-mode codes stored and found by key), and `contacts_on_resbite`, `invite_contacts`, `revoke_phone_invitation`, `check_invited_number` and `answer_phone_invitation` (invitations compared by key; a person is found under either spelling of their number). What the app gets back is what it sent: `invite_contacts` returns each number's digits as sent, and `contacts_on_resbite` each matching number's digits as sent and its key, so the current TestFlight build keeps its personal links and its On Resbite badge (its one loss is under **The current build during the window** below). Of two accounts holding both spellings of one number, `invite_contacts` takes the caller first, then the `549` form.
 - **Data changes in the migration.**
   - `private.phone_invitations`: where one plan holds the same number in two spellings, the live one (not revoked) is kept; among live ones the answered one; else the newest. Every invitation is then stored by key.
   - `private.test_codes` is emptied (the codes live ten minutes).
-  - `private.phone_rewrites` is new and **empty** (`user_id` referencing `auth.users(id) on delete cascade`, `old_phone`, `new_phone`, `rewritten_at`; closed to clients). It is temporary: the owner drops it once no rollback is wanted (step 9).
+  - `private.phone_rewrites` is new and **empty** (`user_id` referencing `auth.users(id) on delete cascade`, `old_phone`, `new_phone`, `rewritten_at`; closed to clients). It is temporary: it stays until a later migration drops it (step 9); the rollback is meaningful only while it exists.
   - **No account is rewritten by the migration.** The current build signs in with the digits an account was made with, so rewriting before the new build is out would lock its Argentine testers out.
 - **The rewrite script.** `supabase/ops/rewrite-older-argentine-accounts.sql`, owner-run, not a migration. In one transaction, every older Argentine account (`auth.users.phone` of `54` and ten digits) becomes its `549` form and is recorded in `private.phone_rewrites`, unless another account already holds that `549` form: those pairs stay as they are, for the owner to settle. A pending number change and the phone identity are rewritten too. It is idempotent and re-runnable: a second run changes nothing, and a later run covers older accounts made in between.
 - **The fold function.** The Edge Function `fold-phone-account` (Task 6) folds the two accounts of one person; it is deployed after Task 6 merges (step 5).
@@ -23,7 +23,7 @@ The merge fills the final values. The values here were taken on the branch at th
 
 | File | sha256 |
 | --- | --- |
-| `supabase/migrations/20261030130000_phone_key.sql` | `5f8273a43b5281b11c461ed386ee4eee7265f8f576faaed2314e6edbacbcb18b` |
+| `supabase/migrations/20261030130000_phone_key.sql` | `d7cf188f6b63d14453a2b34d6c8c85838ed196d7a06e01e3bd94c66ae0a14667` |
 | `supabase/rollback/20261030130000_phone_key.rollback.sql` | `a955455f81ce12e4c24f3c37adad1f5aa369eb0188e1d049cc0b388ed32ff2c9` |
 | `supabase/ops/rewrite-older-argentine-accounts.sql` | `58d23febc7ae40e3eac50f55e2c391000a9fff9d7f4d9df0928a6e04bf0e73a9` |
 
@@ -34,7 +34,9 @@ The merge fills the final values. The values here were taken on the branch at th
 
 ## Rollout runbook
 
-**Order.** The migration first, any time after approval (the current build keeps working against it); then the fold function; then plan 2's link-site deploy; then the TestFlight release; then, **in the same sitting as the release**, the rewrite script and the counts again; and, once no rollback is wanted, the record dropped. Every step needs the owner's approval. Never `supabase db push`: it would also push the local-only migrations.
+**Order.** The migration first, any time after approval (the current build keeps working against it); then the fold function; then plan 2's link-site deploy; then the TestFlight release; then, **in the same sitting as the release**, the rewrite script and the counts again; and, when the rollback window is declared closed, a later migration that drops the record. Every step needs the owner's approval. Never `supabase db push`: it would also push the local-only migrations.
+
+**The current build during the window.** Until the new build, the current TestFlight build keeps working against the new functions: it keeps personal links and the On Resbite badge. Its only loss covers every invitation to an Argentine number saved with the 9, because each is stored by key: the ones the migration re-keyed and the new ones the old build sends after the migration. For those, the invited list shows the number instead of the saved name, and "send again" mints a new code.
 
 **Argentine testers.** A tester who signed up on the old build typing the local form (an account of `54` and ten digits) must use the new build once the script has run: the old build would say "no account". They must never sign up again, which would make a second account. Tell them at the release.
 
@@ -87,7 +89,7 @@ The merge fills the final values. The values here were taken on the branch at th
      ```
 
      The owner reads the ids in the SQL editor; no number is pasted anywhere (chat, this runbook, a ticket), and the ids are not recorded here.
-9. **Drop the record once no rollback is wanted.** When the owner closes the rollback window (plan 2's clients rely on the key and no rollback will be run), owner-run: `drop table private.phone_rewrites;`. After that the rollback cannot run as written (its pre-check reads the table), and hosted snapshots differ from a local replay of `migrations.txt` by this table only; say so in the next migration's runbook.
+9. **The record stays until a later migration drops it.** `private.phone_rewrites` is never dropped by hand: a drop by hand would leave hosted unlike a local replay of `migrations.txt` and break the rollback's pre-check, which reads the table. When the owner declares the rollback window closed (plan 2's clients rely on the key and no rollback will be run), a later migration is written that drops the table, with its own approval, rehearsal and runbook. The rollback is meaningful only while the table exists; once that migration is applied, this rollback is retired.
 
 ## Rebase note
 

@@ -264,8 +264,9 @@ delete from private.test_codes;
 -- Accounts are NOT rewritten here: the current build signs in with the digits it was made with, so the older Argentine
 -- numbers (54 and ten digits) are rewritten to their 549 form by the owner-run, re-runnable
 -- supabase/ops/rewrite-older-argentine-accounts.sql at the release of the build that sends the 9 form. This table is
--- that script's record, so the rollback can put the numbers back. It is temporary: the owner drops it once no
--- rollback is wanted (the runbook's last step). It is empty after this migration.
+-- that script's record, so the rollback can put the numbers back. It is temporary: it stays until a later migration
+-- drops it, written when the rollback window is declared closed; the rollback is meaningful only while it exists. It is
+-- empty after this migration.
 create table private.phone_rewrites (
  user_id uuid primary key references auth.users(id) on delete cascade,
  old_phone text not null,
