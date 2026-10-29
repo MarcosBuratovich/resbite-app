@@ -1,6 +1,7 @@
 import type { CategoryKey } from "./categories";
 import type { EventFields } from "./events";
 import { PLAN_COPY } from "./planCopy";
+import { planEnd } from "./eventPage";
 
 /** A resbite as stored on the server (CE1: it carries its own event text). */
 export type Plan = {
@@ -71,11 +72,13 @@ export function canEditPlan(
   userId?: string,
   preview = false,
   now = Date.now(),
+  admins: readonly string[] = [],
 ) {
   return (
     plan.status === "active" &&
-    Date.parse(plan.starts_at) > now &&
-    (preview || Boolean(userId && plan.owner_id === userId))
+    planEnd(plan) > now &&
+    (preview ||
+      Boolean(userId && (plan.owner_id === userId || admins.includes(userId))))
   );
 }
 

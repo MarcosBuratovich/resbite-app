@@ -1,3 +1,4 @@
+import { planEnd } from "./eventPage";
 import { DEFAULT_LENGTH_MS } from "./eventTime";
 
 // UX3 Add to calendar (spec "Calendar and reminders", UX3-D8). Resbite fills iPhone's own form; the person saves.
@@ -51,15 +52,15 @@ export function needsCalendarUpdate(record: CalendarRecord | null | undefined, p
   );
 }
 
-/** Who sees the calendar chip: the organizer and Going or Maybe guests, on active events that haven't started. */
+/** Who sees the calendar chip: the organizer and Going or Maybe guests, on active events that haven't ended. */
 export function canAddToCalendar(
-  plan: { status: string; starts_at: string },
+  plan: { status: string; starts_at: string; ends_at?: string | null },
   view: { owner: boolean; response: string | null },
   now: number,
 ): boolean {
   return (
     plan.status === "active" &&
-    Date.parse(plan.starts_at) > now &&
+    planEnd(plan) > now &&
     (view.owner || view.response === "accepted" || view.response === "maybe")
   );
 }

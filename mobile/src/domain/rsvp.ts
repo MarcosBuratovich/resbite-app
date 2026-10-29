@@ -1,4 +1,5 @@
 import type { Plan as LocalPlan } from "./plans";
+import { planEnd } from "./eventPage";
 export type Response = "accepted" | "maybe" | "declined" | "withdrawn";
 export type RsvpSnapshot = {
   plan: LocalPlan;
@@ -12,8 +13,7 @@ export type RsvpAttempt = {
 };
 export function canRespond(snapshot: RsvpSnapshot, now = Date.now()) {
   return (
-    snapshot.plan.status === "active" &&
-    Date.parse(snapshot.plan.starts_at) > now
+    snapshot.plan.status === "active" && planEnd(snapshot.plan) > now
   );
 }
 export function canReadSample(snapshot: RsvpSnapshot, now = Date.now()) {

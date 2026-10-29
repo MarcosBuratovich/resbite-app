@@ -300,3 +300,15 @@ test("plans shown under Invitations are left out of Upcoming", () => {
   assert.deepEqual(withoutInvitations(plans, [{ id: "b" }]), [{ id: "a" }, { id: "c" }]);
   assert.deepEqual(withoutInvitations(plans, []), plans);
 });
+
+test("an event stays in Upcoming until its end, and a card past its end says Ended", () => {
+  const now = Date.parse("2026-10-07T12:00:00Z");
+  const running = { id: "running", status: "active", starts_at: "2026-10-07T11:00:00Z", ends_at: "2026-10-07T13:00:00Z" };
+  const over = { id: "over", status: "active", starts_at: "2026-10-07T09:00:00Z", ends_at: "2026-10-07T11:00:00Z" };
+  const { upcoming, past } = groupPlans([over, running], now);
+  assert.deepEqual(upcoming.map((p) => p.id), ["running"]);
+  assert.deepEqual(past.map((p) => p.id), ["over"]);
+  assert.deepEqual(cardChips({ ...over, owner: true, going: 2 }, now), ["Ended", "Hosting", "2 going"]);
+  assert.deepEqual(cardChips({ ...running, owner: true, going: 2 }, now), ["Hosting", "2 going"]);
+  assert.deepEqual(cardChips({ ...over, owner: true, status: "cancelled" }, now), ["Cancelled", "Hosting"]);
+});

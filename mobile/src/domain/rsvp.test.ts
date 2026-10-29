@@ -4,6 +4,7 @@ import {
   ANSWER_OPTIONS,
   answerKey,
   canReadSample,
+  canRespond,
   cantGoResponse,
   reconcileRsvp,
   responseFor,
@@ -134,4 +135,18 @@ test("the answer control's three options, shared by the invitation rows and the 
     ["accepted", "maybe", "declined"].map(answerKey),
     ANSWER_OPTIONS.map((o) => o.key),
   );
+});
+
+test("canRespond lasts until the end: open an hour into the event, closed a minute after it", () => {
+  const minute = 60_000;
+  const timed: RsvpSnapshot = {
+    ...snapshot,
+    plan: { ...snapshot.plan, starts_at: "2099-01-01T10:00:00Z", ends_at: "2099-01-01T12:00:00Z" },
+  };
+  const start = Date.parse("2099-01-01T10:00:00Z");
+  const end = Date.parse("2099-01-01T12:00:00Z");
+  assert.equal(canRespond(timed, start + minute), true);
+  assert.equal(canRespond(timed, end + minute), false);
+  assert.equal(canRespond({ ...timed, plan: { ...timed.plan, ends_at: null } }, start + minute), false);
+  assert.equal(canRespond({ ...timed, plan: { ...timed.plan, status: "cancelled" } }, start + minute), false);
 });

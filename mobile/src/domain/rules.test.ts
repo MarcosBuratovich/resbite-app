@@ -188,3 +188,15 @@ test("unknown save failures remain uncertain; denied access is a definite failur
     );
   }
 });
+test("an admin edits a plan until its end; a guest never does", () => {
+  const end = Date.parse(plan.starts_at);
+  const timed = { ...plan, ends_at: "2099-01-01T17:00:00Z" };
+  const during = Date.parse(timed.starts_at) + 60_000;
+  assert.equal(canEditPlan(timed, "admin", false, 0, ["admin"]), true);
+  assert.equal(canEditPlan(timed, "guest", false, 0, ["admin"]), false);
+  assert.equal(canEditPlan(timed, "owner", false, during), true);
+  assert.equal(canEditPlan(timed, "admin", false, during, ["admin"]), true);
+  assert.equal(canEditPlan(timed, "owner", false, Date.parse(timed.ends_at) + 60_000), false);
+  assert.equal(canEditPlan(timed, "admin", false, Date.parse(timed.ends_at), ["admin"]), false);
+  assert.equal(canEditPlan(plan, "owner", false, end), false);
+});

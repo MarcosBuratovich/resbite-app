@@ -56,3 +56,10 @@ test("who sees Add to calendar", () => {
   assert.equal(canAddToCalendar({ ...active, status: "cancelled" }, { owner: true, response: null }, now), false);
   assert.equal(canAddToCalendar(active, { owner: true, response: null }, Date.parse("2099-10-16T09:00:00Z")), false);
 });
+
+test("the calendar chip stays until the end, not the start", () => {
+  const timed = { status: "active", starts_at: "2099-10-16T09:00:00Z", ends_at: "2099-10-16T12:00:00Z" };
+  const host = { owner: true, response: null };
+  assert.equal(canAddToCalendar(timed, host, Date.parse("2099-10-16T10:00:00Z")), true);
+  assert.equal(canAddToCalendar(timed, host, Date.parse("2099-10-16T12:00:00Z")), false);
+});

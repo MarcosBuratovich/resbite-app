@@ -2,6 +2,7 @@ import { categoryLabels, type CategoryKey } from "./categories";
 import type { Plan } from "./plans";
 import { spokenDate, spokenDateTime } from "./schedule";
 import { spokenRange } from "./eventTime";
+import { planEnd } from "./eventPage";
 
 // Wording and grouping for cover cards, Review, My resbites and the event page (UX1).
 const BADGE_DAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"] as const;
@@ -98,9 +99,20 @@ export function guestGroups(guests: readonly GuestRow[]): GuestGroup[] {
 }
 
 /** Chips on a My resbites card: Cancelled first, then the role, then guests (host) or the answer (invitee). */
-export function cardChips(card: { owner: boolean; status: string; response?: string | null; going?: number }): string[] {
+export function cardChips(
+  card: {
+    owner: boolean;
+    status: string;
+    response?: string | null;
+    going?: number;
+    starts_at?: string;
+    ends_at?: string | null;
+  },
+  now = Date.now(),
+): string[] {
   const cancelled = card.status === "cancelled";
-  const chips = cancelled ? ["Cancelled"] : [];
+  const ended = !cancelled && card.starts_at !== undefined && planEnd({ starts_at: card.starts_at, ends_at: card.ends_at }) <= now;
+  const chips = cancelled ? ["Cancelled"] : ended ? ["Ended"] : [];
   chips.push(card.owner ? "Hosting" : "Invited");
   if (cancelled) return chips;
   if (!card.owner) chips.push(responseText(card.response));
@@ -171,13 +183,13 @@ export function reviewLabels(
   };
 }
 
-/** Upcoming: active and still ahead, soonest first. Past: started or cancelled, latest first (benchmark row 15). */
-export function groupPlans<T extends { status: string; starts_at: string }>(
+/** Upcoming: active and not yet ended, soonest first. Past: ended or cancelled, latest first (benchmark row 15). */
+export function groupPlans<T extends { status: string; starts_at: string; ends_at?: string | null }>(
   plans: readonly T[],
   now: number,
 ): { upcoming: T[]; past: T[] } {
   const at = (plan: T) => Date.parse(plan.starts_at);
-  const ahead = (plan: T) => plan.status === "active" && at(plan) > now;
+  const ahead = (plan: T) => plan.status === "active" && planEnd(plan) > now;
   return {
     upcoming: plans.filter(ahead).sort((a, b) => at(a) - at(b)),
     past: plans.filter((plan) => !ahead(plan)).sort((a, b) => at(b) - at(a)),
