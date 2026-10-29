@@ -21,8 +21,12 @@ import { PreviewNotice } from "../src/design/Chrome";
 import { Chip, CoverCard, FieldCard, announce, focusHeading } from "../src/design/kit";
 import { CoverPicker } from "../src/design/CoverPicker";
 import { GrabberSheet } from "../src/design/GrabberSheet";
+import { WhenSheet } from "../src/design/WhenSheet";
+import { WhereSheet } from "../src/design/WhereSheet";
 import { OpenRow, type OpenRowState } from "../src/design/OpenRow";
 import { TaskScreen } from "../src/design/TaskScreen";
+import { useApp } from "../src/state/AppState";
+import { recentPlaces } from "../src/services/recentPlaces";
 import { usePlanForm } from "../src/state/usePlanForm";
 import { categoryKeys, categoryLabels, toggleCategory } from "../src/domain/categories";
 import { DESCRIPTION_MAX, TITLE_MAX, eventPicture } from "../src/domain/events";
@@ -76,9 +80,11 @@ export default function Arrange() {
   const whenRow = useRef<View>(null);
   const whereRow = useRef<View>(null);
   const [refusals, setRefusals] = useState(0);
-  // Task 8 builds the When and Where sheets; until then these only record that a row was tapped.
-  const [, setWhenOpen] = useState(false);
-  const [, setWhereOpen] = useState(false);
+  const [whenOpen, setWhenOpen] = useState(false);
+  const [whereOpen, setWhereOpen] = useState(false);
+  const [recent, setRecent] = useState<string[]>([]);
+  const { preview, session } = useApp();
+  const scope = preview ? "preview" : session?.user.id;
   // Leaving the It's on! moment: the guard lets go first, then the navigation runs.
   const [leaving, setLeaving] = useState<"later" | "invite" | null>(null);
 
@@ -122,6 +128,13 @@ export default function Arrange() {
     return (event: LayoutChangeEvent) => {
       positions.current[block] = event.nativeEvent.layout.y;
     };
+  }
+
+  // The recent places are read each time the sheet opens; none when they cannot be read.
+  function openWhere() {
+    setRecent([]);
+    setWhereOpen(true);
+    if (scope) void recentPlaces.list(scope).then(setRecent, () => setRecent([]));
   }
 
   function press() {
@@ -315,7 +328,7 @@ export default function Arrange() {
             message={rowMessage("place")}
             accessibilityLabel={`${PLAN_COPY.where}, ${where ?? PLAN_COPY.placePlaceholder}`}
             rowRef={whereRow}
-            onPress={() => setWhereOpen(true)}
+            onPress={openWhere}
           />
           {(videoAt("place") || videoAt("area") || videoAt("meetingDetails")) && <ErrorNote message={VIDEO_CALL_MESSAGE} />}
         </View>
@@ -366,6 +379,26 @@ export default function Arrange() {
         </View>
       </TaskScreen>
 
+      <WhenSheet
+        visible={whenOpen}
+        value={{ date: f.date, start: f.start, end: f.end, repeatWeeks: f.repeatWeeks }}
+        zone={form.zone}
+        onDone={(v) => {
+          form.patch(v);
+          setWhenOpen(false);
+        }}
+        onClose={() => setWhenOpen(false)}
+      />
+      <WhereSheet
+        visible={whereOpen}
+        value={{ place: f.place, placeTbd: f.placeTbd, area: f.area, meetingDetails: f.meetingDetails }}
+        recent={recent}
+        onDone={(v) => {
+          form.patch(v);
+          setWhereOpen(false);
+        }}
+        onClose={() => setWhereOpen(false)}
+      />
       <GrabberSheet
         visible={form.leave.asked}
         title={edit ? PLAN_COPY.discardEditTitle : PLAN_COPY.discardCreateTitle}

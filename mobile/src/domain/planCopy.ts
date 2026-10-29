@@ -28,6 +28,7 @@ export const PLAN_COPY = {
   chatCloses: "The chat closes 7 days after the end time.",
   repeats: "Repeats",
   done: "Done",
+  notSet: "Not set",
   noRepeat: "Doesn’t repeat",
   everyWeek: "Every week",
   everyTwoWeeks: "Every 2 weeks",

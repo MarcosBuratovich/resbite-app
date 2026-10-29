@@ -24,6 +24,8 @@ export const MEETING_DETAILS_HINT = "Only people who answer Going or Maybe see t
 
 // GI1-D5: the optional area, shown to anyone with the event's link before they reply; the place is the exact one.
 export const AREA_MAX = 80;
+/** The longest meeting details (the access code, the door, who to ask for). */
+export const MEETING_DETAILS_MAX = 2000;
 export const AREA_LABEL = "Area, shown before people reply";
 export const AREA_PLACEHOLDER = "Near Old Street";
 export const AREA_HINT = "Anyone with the link sees this. The exact place shows after they reply.";
