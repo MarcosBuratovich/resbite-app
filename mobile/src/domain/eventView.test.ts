@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   cardChips,
+  showsDoAgain,
   cardLabel,
   coverNotice,
   dateBadgeParts,
@@ -315,4 +316,16 @@ test("an event stays in Upcoming until its end, and a card past its end says End
   const atEnd = { id: "atEnd", status: "active", starts_at: "2026-10-07T10:00:00Z", ends_at: "2026-10-07T12:00:00Z" };
   assert.deepEqual(groupPlans([atEnd], now).past.map((p) => p.id), ["atEnd"]);
   assert.deepEqual(cardChips({ ...atEnd, owner: true }, now), ["Ended", "Hosting"]);
+});
+
+test("Do this again shows under an ended, active resbite for its owner and admins only", () => {
+  const now = Date.parse("2026-10-07T12:00:00Z");
+  const over = { status: "active", starts_at: "2026-10-07T09:00:00Z", ends_at: "2026-10-07T11:00:00Z", owner_id: "host", admins: ["adm"] };
+  assert.equal(showsDoAgain(over, "host", now), true);
+  assert.equal(showsDoAgain(over, "adm", now), true);
+  assert.equal(showsDoAgain(over, "guest", now), false);
+  assert.equal(showsDoAgain(over, undefined, now), false);
+  assert.equal(showsDoAgain({ ...over, status: "cancelled" }, "host", now), false);
+  assert.equal(showsDoAgain({ ...over, ends_at: "2026-10-07T13:00:00Z" }, "host", now), false);
+  assert.equal(showsDoAgain(over, undefined, now, true), true);
 });

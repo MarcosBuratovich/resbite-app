@@ -289,6 +289,7 @@ test("the plan read selects the flag, the repeat rule, the series columns and th
   const columns = /const planColumns =\s*"([^"]+)"/.exec(source)?.[1].split(",") ?? [];
   for (const name of ["place_tbd", "repeat_weeks", "series_id", "repeats_from", "plan_admins(user_id)"])
     assert.ok(columns.includes(name), `planColumns lacks ${name}`);
+  assert.equal(/const planListColumns =\s*"([^"]+)"/.exec(source)?.[1], "*,plan_admins(user_id)");
 });
 
 const refusing = (code: string, message = "") =>

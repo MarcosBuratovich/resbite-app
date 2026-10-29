@@ -15,6 +15,7 @@ import { createdNotice } from "../../src/domain/planCopy";
 import { planCoverStore } from "../../src/services/planCovers";
 import {
   cardChips,
+  showsDoAgain,
   cardLabel,
   coverNotice,
   eventPlace,
@@ -23,7 +24,7 @@ import {
   withoutInvitations,
 } from "../../src/domain/eventView";
 import { planFromRow, type PlanRow } from "../../src/domain/plans";
-import { planWithDetails } from "../../src/services/plans";
+import { planListColumns } from "../../src/services/plans";
 import { EVENT_COPY } from "../../src/domain/eventPage";
 import { INVITE_COPY } from "../../src/domain/inviteCopy";
 import { RequestCard } from "../../src/design/GuestSteps";
@@ -97,7 +98,7 @@ export default function Plans() {
     setError(null);
     try {
       const [p, a, q] = await Promise.all([
-        supabase.from("plans").select(planWithDetails).order("starts_at").abortSignal(controller.signal),
+        supabase.from("plans").select(planListColumns).order("starts_at").abortSignal(controller.signal),
         supabase
           .from("attendees")
           .select("plan_id,user_id,response,version,profiles(display_name)")
@@ -377,7 +378,7 @@ export default function Plans() {
             );
             // GI1: as on the event page, an invitee who hasn’t answered sees the area (or no place), never the place.
             const place = eventPlace({ owner, response: mine?.response ?? null, place: p.place_label, area: p.area }).line;
-            const over = (owner || (!!session?.user.id && p.admins.includes(session.user.id))) && p.status === "active" && chips[0] === EVENT_COPY.ended;
+            const over = showsDoAgain(p, preview ? undefined : session?.user.id, now, preview);
             return (
               <View key={p.id} style={{ gap: 4 }}>
                 <CoverCard

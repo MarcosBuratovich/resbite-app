@@ -120,6 +120,17 @@ export function cardChips(
   return chips;
 }
 
+/** "Do this again" under an ended tile: an active plan past its end, for its host (owner or admin; a preview plan is the viewer's own). */
+export function showsDoAgain(
+  plan: { status: string; starts_at: string; ends_at?: string | null; owner_id?: string | null; admins?: readonly string[] },
+  userId: string | undefined,
+  now = Date.now(),
+  preview = false,
+): boolean {
+  if (plan.status !== "active" || planEnd(plan) > now) return false;
+  return preview || (!!userId && (plan.owner_id === userId || (plan.admins ?? []).includes(userId)));
+}
+
 /**
  * How a card's date and time read to VoiceOver: "Saturday 10 October at 10:00", or with an end (UX3)
  * "Saturday 10 October, from 10:00 to 12:00". "" when there is no valid start.
