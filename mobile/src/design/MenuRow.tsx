@@ -15,12 +15,18 @@ export function MenuRow({
   onPress,
   destructive = false,
   label,
+  busy = false,
+  disabled = false,
 }: {
   title: string;
   icon: LucideIcon;
   onPress: () => void;
   destructive?: boolean;
   label?: string;
+  /** The row's action is running: dimmed and not pressable. */
+  busy?: boolean;
+  /** Another action is running: dimmed and not pressable. */
+  disabled?: boolean;
 }) {
   const largeText = useLargeText();
   const ink = destructive ? c.error : c.ink;
@@ -28,8 +34,11 @@ export function MenuRow({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label ?? title}
+      accessibilityState={{ busy, disabled: disabled || busy }}
+      aria-busy={busy}
+      disabled={disabled || busy}
       onPress={onPress}
-      style={({ pressed }) => [styles.row, pressed && { opacity: 0.7 }]}
+      style={({ pressed }) => [styles.row, (disabled || busy) && { opacity: 0.45 }, pressed && { opacity: 0.7 }]}
     >
       <View aria-hidden importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
         <Icon size={24} strokeWidth={1.8} color={ink} />

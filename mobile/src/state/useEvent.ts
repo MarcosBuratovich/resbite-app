@@ -47,7 +47,7 @@ export type EventPage = {
   /** Which side action is running (mute or an admin change), so two taps cannot overlap. */
   acting: "mute" | "admin" | null;
   load: () => Promise<void>;
-  respond: (value: Response, retry?: RsvpAttempt) => Promise<void>;
+  respond: (value: Response, retry?: RsvpAttempt) => Promise<boolean>;
   cancel: (opts?: { stopRepeating?: boolean }) => Promise<void>;
   mute: (muted: boolean) => Promise<void>;
   appoint: (userId: string) => Promise<void>;
@@ -140,11 +140,13 @@ export function useEvent(planId: string | undefined): EventPage {
   const admins = snapshot?.admins ?? [];
   const role: Viewer | null = !plan ? null : preview ? "owner" : viewerRole(plan, userId ?? null, admins);
   const muted = plan !== null && mutedSeries.has(plan.series_id);
-  async function respond(value: Response, retry?: RsvpAttempt) {
+  /** True only when the answer is saved and confirmed, with nothing left to retry. */
+  async function respond(value: Response, retry?: RsvpAttempt): Promise<boolean> {
     const current = snapshot;
     const attendee = current?.attendee;
-    if (!current || !attendee || !userId || preview || !accountReady || working.current || !focused.current) return;
+    if (!current || !attendee || !userId || preview || !accountReady || working.current || actingRef.current || !focused.current) return false;
     working.current = true;
+    let ok = false;
     const { valid, assertSession } = begin();
     setBusy(true);
     setError(null);
@@ -159,7 +161,7 @@ export function useEvent(planId: string | undefined): EventPage {
     setPending(attempt);
     try {
       let next = await readRsvp(attempt.planId, userId);
-      if (!valid()) return;
+      if (!valid()) return false;
       const decision = reconcileRsvp(attempt, next);
       if (decision === "retry") {
         try {
@@ -168,9 +170,9 @@ export function useEvent(planId: string | undefined): EventPage {
         } catch {
           /* Confirm saved state before offering an identical retry. */
         }
-        if (!valid()) return;
+        if (!valid()) return false;
         next = await readRsvp(attempt.planId, userId);
-        if (!valid()) return;
+        if (!valid()) return false;
       }
       const confirmed = next;
       setSnapshot((old) => ({
@@ -185,6 +187,7 @@ export function useEvent(planId: string | undefined): EventPage {
       setFresh(true);
       const result = reconcileRsvp(attempt, confirmed);
       if (result === "confirmed") {
+        ok = true;
         setPending(null);
         setNotice("Your response is saved.");
         syncDevice();
@@ -214,10 +217,11 @@ export function useEvent(planId: string | undefined): EventPage {
         setBusy(false);
       }
     }
+    return ok;
   }
   async function cancel(opts?: { stopRepeating?: boolean }) {
     const target = plan;
-    if (!target || working.current) return;
+    if (!target || working.current || actingRef.current) return;
     working.current = true;
     setBusy(true);
     setError(null);

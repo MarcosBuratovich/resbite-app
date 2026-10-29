@@ -51,7 +51,7 @@ import {
   stateChip,
   whenLines,
 } from "../src/domain/eventPage";
-import { ANSWER_OPTIONS, answerKey, canRespond, responseFor } from "../src/domain/rsvp";
+import { ANSWER_OPTIONS, answerKey, canRespond, responseFor, type Response } from "../src/domain/rsvp";
 import { useApp } from "../src/state/AppState";
 import { useEvent } from "../src/state/useEvent";
 import { useEventDevice } from "../src/state/useEventDevice";
@@ -161,25 +161,27 @@ export default function EventPage() {
     // /guests arrives with the people list (Task 6); until its route exists the typed route does not know it.
     router.push({ pathname: "/guests" as never, params: { plan: current.id } });
   }
-  const answerControl = (after?: () => void | Promise<void>) =>
+  const acting = event.acting !== null;
+  const answerControl = (after?: (saved: Response) => void | Promise<void>) =>
     attendee ? (
       <Segmented
         label={EVENT_COPY.yourAnswer}
         options={ANSWER_OPTIONS}
         value={answerKey(attendee.response)}
         onChange={(key) => {
+          const value = responseFor(key, attendee.response);
           void (async () => {
-            await event.respond(responseFor(key, attendee.response));
-            await after?.();
+            // The sheet closes only on a saved answer; a failure stays in view, inside the sheet.
+            if (await event.respond(value)) await after?.(value);
           })();
         }}
-        disabled={busy || !fresh || pending !== null}
+        disabled={busy || !fresh || pending !== null || acting}
       />
     ) : null;
   // An admin who can't go stops being one on the server; the page reloads and shows the guest view.
-  const afterMoreReply = async () => {
+  const afterMoreReply = async (saved: Response) => {
     closeMore();
-    if (role === "admin" && response !== null) await event.load();
+    if (role === "admin" && saved === "declined") await event.load();
   };
   const question = cancelQuestion(current, zone);
   function cancelResbite(stop: boolean) {
@@ -187,13 +189,13 @@ export default function EventPage() {
     void event.cancel({ stopRepeating: stop });
   }
   const calendarTitle = device.calendarUpdate ? EVENT_COPY.updateCalendar : EVENT_COPY.addToCalendar;
-  const acting = event.acting !== null;
-  const moreRow = (row: (typeof rows)[number]) => {
-    switch (row) {
+  const moreRow = (name: (typeof rows)[number]) => {
+    switch (name) {
       case "calendar":
         return (
           <MenuRow
-            key={row}
+            disabled={acting}
+            key={name}
             title={calendarTitle}
             icon={CalendarPlus}
             onPress={() => {
@@ -206,25 +208,26 @@ export default function EventPage() {
       case "unmute":
         return (
           <MenuRow
-            key={row}
-            title={row === "mute" ? EVENT_COPY.mute : EVENT_COPY.unmute}
-            icon={row === "mute" ? BellOff : Bell}
+            key={name}
+            title={name === "mute" ? EVENT_COPY.mute : EVENT_COPY.unmute}
+            icon={name === "mute" ? BellOff : Bell}
+            busy={event.acting === "mute"}
             onPress={() => {
-              if (!acting) void event.mute(row === "mute");
+              void event.mute(name === "mute");
             }}
           />
         );
       case "again":
-        return <MenuRow key={row} title={EVENT_COPY.doThisAgain} icon={CopyIcon} onPress={again} />;
+        return <MenuRow key={name} title={EVENT_COPY.doThisAgain} icon={CopyIcon} disabled={acting} onPress={again} />;
       case "changeReply":
         return attendee ? (
-          <MenuRow key={row} title={EVENT_COPY.changeMyReply} icon={MessageCircle} onPress={() => setMoreView("reply")} />
+          <MenuRow key={name} title={EVENT_COPY.changeMyReply} icon={MessageCircle} disabled={acting} onPress={() => setMoreView("reply")} />
         ) : null;
       case "cancel":
         return (
-          <React.Fragment key={row}>
+          <React.Fragment key={name}>
             <MenuSeparator />
-            <MenuRow title={EVENT_COPY.cancelResbite} icon={CalendarX} destructive onPress={() => setMoreView("cancel")} />
+            <MenuRow title={EVENT_COPY.cancelResbite} icon={CalendarX} destructive disabled={acting} onPress={() => setMoreView("cancel")} />
           </React.Fragment>
         );
     }
@@ -368,6 +371,7 @@ export default function EventPage() {
       >
         {moreView === "rows" && rows.map(moreRow)}
         {moreView === "reply" && answerControl(afterMoreReply)}
+        {moreView !== "cancel" && <ErrorNote message={event.error} />}
         {moreView === "cancel" && (
           <>
             {!!question.line && <Copy>{question.line}</Copy>}
@@ -377,6 +381,7 @@ export default function EventPage() {
                 large
                 icon={false}
                 title={action.title}
+                disabled={acting}
                 destructive={!action.stop}
                 secondary={action.stop}
                 errorInk={action.stop}
@@ -389,6 +394,7 @@ export default function EventPage() {
       </GrabberSheet>
       <GrabberSheet visible={answerOpen} title={EVENT_COPY.yourAnswer} onClose={() => setAnswerOpen(false)}>
         {answerControl(() => setAnswerOpen(false))}
+        <ErrorNote message={event.error} />
       </GrabberSheet>
     </>
   );
