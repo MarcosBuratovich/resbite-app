@@ -18,7 +18,7 @@ export async function reconcilePendingCreate(
     // A stray error says nothing about the outcome: keep the entry for the next launch.
     if (!(error instanceof PlanSaveError) || error.uncertain) return { plan: null };
     // A definite refusal drops the entry; when the plan exists but moved on, that newer plan is the answer.
-    await journal.clear(scope);
+    await journal.clear(scope, entry.requestId);
     return { plan: error.latest ?? null };
   }
   // A failed read here keeps the entry: the next launch finds the plan and clears it then.
@@ -28,6 +28,6 @@ export async function reconcilePendingCreate(
   } catch {
     return { plan: null };
   }
-  await journal.clear(scope);
+  await journal.clear(scope, entry.requestId);
   return { plan };
 }

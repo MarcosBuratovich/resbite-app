@@ -53,6 +53,22 @@ test("clear removes the entry", async () => {
   assert.equal(values.size, 0);
 });
 
+test("clear with a request id drops only that create's entry", async () => {
+  const { values, storage } = memory();
+  const journal = createJournalStore(storage);
+  await journal.put("account-a", entry);
+  await journal.clear("account-a", "request-2");
+  assert.deepEqual(await journal.read("account-a"), entry, "another create's entry stays");
+  await journal.clear("account-a", "request-1");
+  assert.equal(await journal.read("account-a"), null);
+  assert.equal(values.size, 0);
+  // Nothing journaled: a clear by id is a no-op; without an id, whatever is there goes.
+  await journal.clear("account-a", "request-1");
+  await journal.put("account-a", entry);
+  await journal.clear("account-a");
+  assert.equal(values.size, 0);
+});
+
 test("an unreadable or malformed value reads as empty", async () => {
   const { values, storage } = memory();
   const journal = createJournalStore(storage);

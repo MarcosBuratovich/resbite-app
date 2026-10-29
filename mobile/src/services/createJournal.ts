@@ -15,20 +15,28 @@ export function createJournalStore(store: KeyStore) {
     return next;
   }
   const key = (scope: string) => `resbite.create-journal.v1.${scope}`;
+  async function stored(scope: string): Promise<PendingCreate | null> {
+    try {
+      const raw = await store.getItem(key(scope));
+      if (!raw) return null;
+      const entry = JSON.parse(raw) as PendingCreate;
+      return entry && typeof entry.requestId === "string" && typeof entry.write?.id === "string" ? entry : null;
+    } catch {
+      return null;
+    }
+  }
   return {
-    read: (scope: string): Promise<PendingCreate | null> =>
-      run(async () => {
-        try {
-          const raw = await store.getItem(key(scope));
-          if (!raw) return null;
-          const entry = JSON.parse(raw) as PendingCreate;
-          return entry && typeof entry.requestId === "string" && typeof entry.write?.id === "string" ? entry : null;
-        } catch {
-          return null;
-        }
-      }),
+    read: (scope: string): Promise<PendingCreate | null> => run(() => stored(scope)),
     put: (scope: string, entry: PendingCreate): Promise<void> =>
       run(() => store.setItem(key(scope), JSON.stringify(entry))),
-    clear: (scope: string): Promise<void> => run(() => store.removeItem(key(scope))),
+    /**
+     * Drops the entry. With a `requestId`, only when the entry is that create's: a create that finishes never
+     * clears another one journaled since. Without one (account deletion), whatever is there.
+     */
+    clear: (scope: string, requestId?: string): Promise<void> =>
+      run(async () => {
+        if (requestId !== undefined && (await stored(scope))?.requestId !== requestId) return;
+        await store.removeItem(key(scope));
+      }),
   };
 }

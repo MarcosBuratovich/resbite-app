@@ -273,7 +273,7 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
         else await writePlan(planGateway, write);
       } catch (e) {
         // A definite refusal wrote nothing; an uncertain one keeps the journal for the retry and the next launch.
-        if (e instanceof PlanSaveError && !e.uncertain) await createJournal.clear(scope!).catch(() => {});
+        if (e instanceof PlanSaveError && !e.uncertain) await createJournal.clear(scope!, requestId.current).catch(() => {});
         throw e;
       }
       // The plan exists from here on; what follows never turns the create into a failure.
@@ -285,7 +285,7 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
       const noteFailed = note ? await setGuestNote(write.id, note).then(() => null, (e) => messageOf(e, UNCONFIRMED)) : null;
       if (!form.placeTbd && form.place.trim())
         void recentPlaces.remember(scope!, form.place.trim(), assertSession).catch(() => {});
-      await createJournal.clear(scope!).catch(() => {});
+      await createJournal.clear(scope!, requestId.current).catch(() => {});
       if (noteFailed && mounted.current) setError(noteFailed);
       plan = (await planGateway.read(write.id).catch(() => null)) ?? {
         id: write.id,
