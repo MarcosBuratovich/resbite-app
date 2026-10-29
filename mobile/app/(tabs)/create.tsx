@@ -11,9 +11,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Redirect, router } from "expo-router";
-import { LayoutGrid, Plus, Search, Sparkles, UserRound, X } from "lucide-react-native";
+import { LayoutGrid, Search, Sparkles, UserRound, X } from "lucide-react-native";
 import { Button, Copy, ErrorNote, Title, s, useLargeText } from "../../src/design/ui";
-import { Chip, IconButton, Tile } from "../../src/design/kit";
+import { Chip, IconButton } from "../../src/design/kit";
 import { categoryPalette, colors as c, depth, fonts, r } from "../../src/design/tokens";
 import { PreviewNotice } from "../../src/design/Chrome";
 import { activityArtwork } from "../../src/services/catalogue";
@@ -21,6 +21,7 @@ import { useCatalogue } from "../../src/state/useCatalogue";
 import { filterActivities } from "../../src/domain/rules";
 import { categoryKeys, categoryLabels, type CategoryKey } from "../../src/domain/categories";
 import { categoryIcons } from "../../src/design/categories";
+import { PLAN_COPY } from "../../src/domain/planCopy";
 import { useApp } from "../../src/state/AppState";
 
 /** The Create tab (spec "Create tab and idea detail"): start from scratch, or pick an idea. */
@@ -64,6 +65,9 @@ export default function Create() {
             </View>
           </View>
           <PreviewNotice />
+          <Title>{PLAN_COPY.createHeading}</Title>
+          <Button title={PLAN_COPY.startFromScratch} secondary onPress={() => router.push("/arrange")} />
+          <Copy>{PLAN_COPY.orStartFromIdea}</Copy>
           {searching && (
             <View style={styles.search}>
               <Search size={20} color={c.muted} />
@@ -78,13 +82,6 @@ export default function Create() {
               />
             </View>
           )}
-          <Tile
-            size="large"
-            icon={Plus}
-            title="Start from scratch"
-            hint="Opens a new resbite you name yourself"
-            onPress={() => router.push("/arrange")}
-          />
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
           <Chip

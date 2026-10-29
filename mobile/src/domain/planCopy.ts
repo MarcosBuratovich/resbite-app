@@ -1,5 +1,8 @@
 /** Every string of the plan screen (CR-B1, B2, B3, B1c, B1b, CR-04, CR-05), written once. */
 export const PLAN_COPY = {
+  createHeading: "What do you want to do?",
+  startFromScratch: "Start from scratch",
+  orStartFromIdea: "Or start from an idea",
   newTitle: "New resbite",
   editTitle: "Edit resbite",
   close: "Close",

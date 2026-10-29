@@ -26,3 +26,9 @@ test("titles, buttons and durations", () => {
 test("no string uses a straight apostrophe", () => {
   for (const [key, value] of Object.entries(PLAN_COPY)) assert.ok(!value.includes("'"), key);
 });
+
+test("the Create tab copy", () => {
+  assert.equal(PLAN_COPY.createHeading, "What do you want to do?");
+  assert.equal(PLAN_COPY.startFromScratch, "Start from scratch");
+  assert.equal(PLAN_COPY.orStartFromIdea, "Or start from an idea");
+});
