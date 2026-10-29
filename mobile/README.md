@@ -40,7 +40,7 @@ Open Xcode once to accept its license and install required iOS components. Conne
 
 ## Current limits
 
-Profile save, plan creation/editing/cancellation, invitation claim and RSVP have client integration and protected database operations. Editing is restricted to future active plans owned by the organizer. The plan screen keeps what was typed after an error, asks before discarding unsaved changes, and journals a create on the device so a lost reply is finished by reading first, never by creating twice; an edit that conflicts shows the newer details. My resbites refreshes plans and RSVP responses on foreground/tab focus, preserves loaded details on a failed refresh, and offers retry. Superseded reads are cancelled and account changes clear cached results. Nothing unfinished is kept as a draft; the create journal holds one pending create per account and My resbites reconciles it on load. Completed preview plans remain memory-only and no invitations are sent.
+Profile save, plan creation/editing/cancellation, invitation claim and RSVP have client integration and protected database operations. Editing is restricted to future active plans owned by the organizer. The plan screen keeps what was typed after an error, asks before discarding unsaved changes, and journals a create on the device so a lost reply is finished by reading first, never by creating twice; an edit that conflicts shows the newer details and asks for the change again, and the next Save goes against them. My resbites refreshes plans and RSVP responses on foreground/tab focus, preserves loaded details on a failed refresh, and offers retry. Superseded reads are cancelled and account changes clear cached results. Nothing unfinished is kept as a draft; the create journal holds one pending create per account and My resbites reconciles it on load. Completed preview plans remain memory-only and no invitations are sent.
 
 Real end-to-end auth/share/RSVP remains untested. Date/time, keyboard, location and accessibility require device validation. Push dispatch, deletion/retention workflows and real-account recovery verification remain outstanding. SecureStore sessions are chunked and native device storage still needs validation. Draft content is bundled for design review only.
 
@@ -58,7 +58,7 @@ Profile supports optional system-selected photos, normalized/metadata-stripped J
 
 `node scripts/verify-profile.mjs` checks profile/photo recovery and normalization with synthetic images and intercepted uploads. `node scripts/verify-session.mjs` checks successful and failed server sign-out without real accounts.
 
-Sign-out blocks new local mutations and clears pending invitation/photo records. Plan drafts remain account-local for later recovery. If server sign-out fails after the SDK clears the local session, a persistent notice reports that uncertainty. Profile → Your data & privacy explains the current behavior and unavailable account deletion.
+Sign-out blocks new local mutations and clears pending invitation/photo records. Nothing unfinished is kept as a draft; the create journal (one pending create per account) stays on sign-out and is cleared when the account is deleted. If server sign-out fails after the SDK clears the local session, a persistent notice reports that uncertainty. Profile → Your data & privacy explains the current behavior and unavailable account deletion.
 
 See `../docs/implementation-status.md` for evidence and remaining milestones.
 
