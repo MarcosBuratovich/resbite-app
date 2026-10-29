@@ -169,14 +169,16 @@ export function formForAgain(plan: Plan): PlanForm {
   return { ...formFromPlan(plan), date: null, start: null, end: null, repeatWeeks: null };
 }
 
+/** The details a complete form saves. Callers run `missingItems` first; an incomplete form throws. */
 export function detailsFromForm(form: PlanForm, zone: string): PlanDetails {
   const instants = formInstants(form, zone);
+  if (!instants) throw new Error("detailsFromForm needs a date, a start and an end; run missingItems first");
   return {
     title: form.title.trim(),
     description: form.description,
     categories: form.categories,
-    starts_at: instants?.starts_at ?? "",
-    ends_at: instants?.ends_at ?? null,
+    starts_at: instants.starts_at,
+    ends_at: instants.ends_at,
     place_label: form.placeTbd ? PLAN_COPY.toBeDecided : form.place.trim(),
     place_tbd: form.placeTbd,
     repeat_weeks: form.repeatWeeks,

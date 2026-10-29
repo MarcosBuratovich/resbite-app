@@ -116,6 +116,18 @@ test("detailsFromForm and timeOrPlaceChanged", () => {
   assert.equal(timeOrPlaceChanged(d, { ...d, place_tbd: true }), true);
 });
 
+test("detailsFromForm refuses an incomplete form", () => {
+  assert.throws(() => detailsFromForm(EMPTY_FORM, L), /missingItems/);
+  assert.throws(() => detailsFromForm({ ...full, end: null }, L), /missingItems/);
+});
+
+test("formInstants on the London clock-change nights", () => {
+  const spring = formInstants({ ...full, date: "2026-03-29", start: "01:30", end: "03:00" }, L);
+  assert.equal(Date.parse(spring!.starts_at), Date.parse("2026-03-29T01:30:00.000Z"));
+  const autumn = formInstants({ ...full, date: "2026-10-25", start: "01:30", end: "03:00" }, L);
+  assert.equal(Date.parse(autumn!.starts_at), Date.parse("2026-10-25T01:30:00.000Z"));
+});
+
 test("notify count, save label and banner", () => {
   const guests = ["accepted", "maybe", "pending", "declined", "withdrawn"].map((response) => ({ response }));
   assert.equal(notifyCount(guests), 3);
