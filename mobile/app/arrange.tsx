@@ -82,6 +82,18 @@ function VideoNote({ show }: { show: boolean }) {
   );
 }
 
+/**
+ * The small label over a field, as the mockup shows it. The field already carries it as its accessible name, so
+ * assistive tech skips this copy and the name is not read twice.
+ */
+function FieldLabel({ text }: { text: string }) {
+  return (
+    <Copy aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.fieldLabel}>
+      {text}
+    </Copy>
+  );
+}
+
 export default function Arrange() {
   const { activity, plan, again } = useLocalSearchParams<{ activity?: string; plan?: string; again?: string }>();
   const form = usePlanForm({ activity, plan, again });
@@ -292,6 +304,7 @@ export default function Arrange() {
               {rowMessage("name")}
             </Copy>
           )}
+          <FieldLabel text={PLAN_COPY.titleLabel} />
           <FieldCard
             error={need("name")}
             label={PLAN_COPY.titleLabel}
@@ -309,6 +322,7 @@ export default function Arrange() {
         </View>
 
         <View onLayout={at("description")} style={styles.block}>
+          <FieldLabel text={PLAN_COPY.descriptionLabel} />
           <FieldCard
             label={PLAN_COPY.descriptionLabel}
             icon={TextAlignStart}
@@ -352,6 +366,7 @@ export default function Arrange() {
         </View>
 
         <View onLayout={at("note")} style={styles.block}>
+          <FieldLabel text={PLAN_COPY.noteLabel} />
           <FieldCard
             label={PLAN_COPY.noteLabel}
             icon={StickyNote}
@@ -434,6 +449,8 @@ const styles = StyleSheet.create({
   // An empty live region takes no room: it gives back the block's gap.
   collapsed: { marginTop: -6 },
   link: { alignSelf: "flex-start" },
+  // The kit's small label (the When and Where rows' own).
+  fieldLabel: { fontSize: 12, lineHeight: 16, color: c.muted, marginLeft: 4 },
   message: { fontFamily: fonts.medium, fontSize: 13, lineHeight: 18, color: c.error, marginLeft: 4 },
   // The missing treatment of a card: a 2 pt error border, the message above it.
   red: { borderWidth: 2, borderColor: c.error, borderRadius: r.panel + 2 },

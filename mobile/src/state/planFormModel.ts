@@ -110,11 +110,28 @@ export function editChangesTimeOrPlace(form: PlanForm, zone: string, original: P
   return timeOrPlaceChanged(savedDetails(original, zone), editWrite(form, zone, original).details);
 }
 
+/** The photo chosen on the plan screen (null when none) and the description typed for the picture shown. */
+export type ChosenCover = { uri: string | null; description: string };
+
 /**
  * Where a new resbite's photo comes from once it exists: the photo chosen on the screen; else, for Do this again,
- * a copy of the original's (uploaded into the new resbite's own folder); else none.
+ * a copy of the original's (uploaded into the new resbite's own folder); else none. `chosen` is what the cover
+ * holds now (its `chosenNow()`), never a render's snapshot: a photo whose choice finished while Create waited for it
+ * is not in the last render yet.
  */
-export function newCoverSource(mode: PlanFormMode, chosen: boolean, originalPath: string | null): "chosen" | "copy" | "none" {
-  if (chosen) return "chosen";
+export function newCoverSource(mode: PlanFormMode, chosen: ChosenCover, originalPath: string | null): "chosen" | "copy" | "none" {
+  if (chosen.uri !== null) return "chosen";
   return mode === "again" && originalPath ? "copy" : "none";
+}
+
+/**
+ * A preview create's picture (nothing is uploaded): the photo chosen now, with its own description; else Do this
+ * again's original, with a description typed for it or the original's.
+ */
+export function previewCover(
+  chosen: ChosenCover,
+  original: { uri: string | null; description: string } | null,
+): { cover_path: string | null; cover_description: string } {
+  if (chosen.uri !== null) return { cover_path: chosen.uri, cover_description: chosen.description };
+  return { cover_path: original?.uri ?? null, cover_description: chosen.description || original?.description || "" };
 }

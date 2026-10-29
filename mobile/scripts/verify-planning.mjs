@@ -374,6 +374,17 @@ try {
       page.getByText("Four things are missing: a name, a date and time, a place, and one or two categories.", { exact: true }),
     ).toBeVisible();
     assert.equal(state.creates.length, 0, "A refused Create sends nothing");
+    // The fields' small labels show above them, hidden from assistive tech (each field is already named by its label).
+    for (const label of ["Title", "Description (optional)", "Note to guests (optional)"]) {
+      const shown = visible(page.getByText(label, { exact: true }));
+      await expect(shown).toBeVisible();
+      await expect(shown).toHaveAttribute("aria-hidden", "true");
+      await expect(page.getByLabel(label, { exact: true })).toHaveCount(1);
+    }
+    assert.ok(
+      await inOrder(page, [visible(page.getByText("Title", { exact: true })), page.getByLabel("Title", { exact: true })]),
+      "The label sits above its field",
+    );
     // A start in the past: the When row says so in its own words, the line counts it, and nothing is sent.
     await fillPlan(page, {
       title: "Garden picnic",

@@ -75,8 +75,14 @@ export async function downloadCover(path: string): Promise<string> {
     return URL.createObjectURL(await response.blob());
   }
   const { File, Paths } = await import("expo-file-system");
-  const file = await File.downloadFileAsync(url, new File(Paths.cache, COPY_FILE), { idempotent: true });
-  return file.uri;
+  const target = new File(Paths.cache, COPY_FILE);
+  try {
+    return (await File.downloadFileAsync(url, target, { idempotent: true })).uri;
+  } catch (e) {
+    // Android writes as it receives, so a download that fails part-way can leave a partial file behind.
+    if (target.exists) target.delete();
+    throw e;
+  }
 }
 
 /** The bytes of a cover `downloadCover` put on this device, checked as a clean JPEG; the download goes once read. */

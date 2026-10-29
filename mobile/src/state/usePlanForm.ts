@@ -14,6 +14,7 @@ import {
   hasUnsavedChanges,
   modeFor,
   newCoverSource,
+  previewCover,
   submitCheck,
   type PlanFormMode,
   type SubmitCheck,
@@ -234,9 +235,11 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
    * for Do this again the original's, downloaded and taken as chosen. A copy that fails says so, as an upload does.
    */
   async function coverAfterCreate(live: CoverControls, planId: string): Promise<CoverOutcome> {
-    if (newCoverSource(mode, live.uri !== null, fallback?.path ?? null) === "copy") {
+    // Decided from what the cover holds now: a choice that finished while Create waited is not rendered yet.
+    const chosen = live.chosenNow();
+    if (newCoverSource(mode, chosen, fallback?.path ?? null) === "copy") {
       try {
-        await live.adopt(await downloadCover(fallback!.path), live.description || fallback!.description);
+        await live.adopt(await downloadCover(fallback!.path), chosen.description || fallback!.description);
       } catch {
         return "failed";
       }
@@ -258,8 +261,7 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
       plan = {
         id: write.id,
         activity_id: write.activityId,
-        cover_path: live.uri ?? fallback?.uri ?? null,
-        cover_description: live.description || fallback?.description || "",
+        ...previewCover(live.chosenNow(), fallback),
         ...write.details,
         guest_note: note,
         series_id: "",

@@ -8,6 +8,7 @@ import {
   hasUnsavedChanges,
   modeFor,
   newCoverSource,
+  previewCover,
   submitCheck,
 } from "./planFormModel";
 import { EMPTY_FORM, type PlanForm } from "../domain/planForm";
@@ -160,11 +161,39 @@ test("editChangesTimeOrPlace is true for a moved start or place, false for other
 
 test("newCoverSource: the chosen photo, else Do this again copies the original's, else none", () => {
   const original = "owner/plan-1/cover.jpg";
-  assert.equal(newCoverSource("again", false, original), "copy");
-  assert.equal(newCoverSource("again", true, original), "chosen");
-  assert.equal(newCoverSource("again", false, null), "none");
+  const none = { uri: null, description: "" };
+  const photo = { uri: "data:image/jpeg;base64,AA", description: "" };
+  assert.equal(newCoverSource("again", none, original), "copy");
+  assert.equal(newCoverSource("again", photo, original), "chosen");
+  assert.equal(newCoverSource("again", none, null), "none");
   for (const mode of ["blank", "idea"] as const) {
-    assert.equal(newCoverSource(mode, false, original), "none", mode);
-    assert.equal(newCoverSource(mode, true, null), "chosen", mode);
+    assert.equal(newCoverSource(mode, none, original), "none", mode);
+    assert.equal(newCoverSource(mode, photo, null), "chosen", mode);
   }
+});
+
+test("a photo whose choice finished while Create waited is the one used, not the original's copy", () => {
+  // The cover's refs, as its chosenNow() reads them, and the last render, which has not caught up yet.
+  const chosen = { current: null as { uri: string } | null };
+  const described = { current: "" };
+  const chosenNow = () => ({ uri: chosen.current?.uri ?? null, description: described.current });
+  const lastRender = chosenNow();
+  // The choice ends inside the wait (refs set at once; the state that renders them lands later).
+  chosen.current = { uri: "data:image/jpeg;base64,NEW" };
+  assert.equal(newCoverSource("again", lastRender, "owner/plan-1/cover.jpg"), "copy", "the stale render would copy");
+  assert.equal(newCoverSource("again", chosenNow(), "owner/plan-1/cover.jpg"), "chosen");
+  // Preview: the just-chosen photo, with its own (empty) description, not the original's.
+  const original = { uri: "data:image/jpeg;base64,OLD", description: "Two mugs" };
+  assert.deepEqual(previewCover(chosenNow(), original), { cover_path: "data:image/jpeg;base64,NEW", cover_description: "" });
+  assert.deepEqual(previewCover(lastRender, original), { cover_path: "data:image/jpeg;base64,OLD", cover_description: "Two mugs" });
+});
+
+test("previewCover: the chosen photo, else the original's with a typed description or its own, else none", () => {
+  const original = { uri: "data:image/jpeg;base64,OLD", description: "Two mugs" };
+  assert.deepEqual(previewCover({ uri: null, description: "A sill" }, original), {
+    cover_path: "data:image/jpeg;base64,OLD",
+    cover_description: "A sill",
+  });
+  assert.deepEqual(previewCover({ uri: "data:x", description: "Lake" }, original), { cover_path: "data:x", cover_description: "Lake" });
+  assert.deepEqual(previewCover({ uri: null, description: "" }, null), { cover_path: null, cover_description: "" });
 });

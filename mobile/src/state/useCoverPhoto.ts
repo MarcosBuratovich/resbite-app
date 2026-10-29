@@ -11,6 +11,7 @@ import {
   takeDownloadedCover,
 } from "../services/planCovers";
 import { finishVersionedPhotoChange, type PhotoChange } from "../services/profilePhotoStore";
+import type { ChosenCover } from "./planFormModel";
 import {
   COVER_DESCRIPTION_MAX,
   COVER_MAX_DIMENSION,
@@ -41,6 +42,11 @@ export type CoverControls = {
    * as the chosen one, with its description, so `commitAfterCreate` uploads it as a chosen photo.
    */
   adopt(downloaded: string, description: string): Promise<void>;
+  /**
+   * The photo chosen on this screen for a new resbite (null when none) and the description, as they are now: read
+   * from refs, never from the last render, so a save that has just waited for the cover sees what it finished with.
+   */
+  chosenNow(): ChosenCover;
   commitAfterCreate(planId: string): Promise<CoverOutcome>;
 };
 
@@ -200,6 +206,7 @@ export function useCoverPhoto(options: {
       check();
       if (!photo) return;
       if (preview) {
+        chosen.current = photo;
         setUri(photo.uri);
         onPreviewChange?.(photo.uri);
         setDescription("");
@@ -219,6 +226,7 @@ export function useCoverPhoto(options: {
   const remove = () =>
     run(async (check) => {
       if (preview) {
+        chosen.current = null;
         setUri(null);
         onPreviewChange?.(null);
         setDescription("");
@@ -298,8 +306,9 @@ export function useCoverPhoto(options: {
     () => undefined,
   );
   async function adopt(downloaded: string, text: string): Promise<void> {
-    if (preview || planId) throw Error("Only a new resbite takes a downloaded photo.");
+    // Taken (read, then removed from the device) before anything can refuse, so the download never lingers.
     const bytes = await takeDownloadedCover(downloaded);
+    if (preview || planId) throw Error("Only a new resbite takes a downloaded photo.");
     const shown = `data:image/jpeg;base64,${toBase64(bytes)}`;
     chosen.current = { bytes, uri: shown };
     if (mounted.current) setUri(shown);
@@ -349,5 +358,22 @@ export function useCoverPhoto(options: {
       return "pending";
     }
   }
-  return { uri, description, pending, busy, ready, message, choose, remove, retry, keep, describe, idle, adopt, commitAfterCreate };
+  const chosenNow = (): ChosenCover => ({ uri: chosen.current?.uri ?? null, description: described.current });
+  return {
+    uri,
+    description,
+    pending,
+    busy,
+    ready,
+    message,
+    choose,
+    remove,
+    retry,
+    keep,
+    describe,
+    idle,
+    adopt,
+    chosenNow,
+    commitAfterCreate,
+  };
 }

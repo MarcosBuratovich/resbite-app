@@ -1,7 +1,18 @@
 // Browser QA for CE2 cover photos. Every Supabase request is intercepted; nothing is uploaded.
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
-import { button, closeToList, createPlan, editEvent, fillSettled, heading, later, openEvent, quietReminders } from "./qa-helpers.mjs";
+import {
+  button,
+  closeToList,
+  createPlan,
+  editEvent,
+  fillPlan,
+  fillSettled,
+  heading,
+  later,
+  openEvent,
+  quietReminders,
+} from "./qa-helpers.mjs";
 const baseURL = process.env.RESBITE_QA_URL || "http://localhost:8081";
 const browser = await chromium.launch({
   channel: process.env.RESBITE_QA_BROWSER || "chrome",
@@ -50,6 +61,39 @@ async function syntheticPng(page, width, height) {
     [width, height],
   );
   return Buffer.from(base64, "base64");
+}
+/** A JPEG's pixel size, from its start-of-frame segment. */
+function jpegSize(bytes) {
+  let i = 2;
+  while (i < bytes.length) {
+    if (bytes[i++] !== 255) continue;
+    while (bytes[i] === 255) i++;
+    const marker = bytes[i++];
+    if (marker === 0 || (marker >= 208 && marker <= 215)) continue;
+    if ([192, 193, 194].includes(marker)) return { width: bytes.readUInt16BE(i + 5), height: bytes.readUInt16BE(i + 3) };
+    i += bytes.readUInt16BE(i);
+  }
+  return null;
+}
+/**
+ * Lets the script hold the photo's JPEG encoding (the last step of preparing a chosen photo on the web): with
+ * `__holdJpeg` set, the next JPEG `toBlob` waits for `__releaseJpeg()`, and `__heldJpeg` says it is waiting.
+ */
+function holdableJpeg() {
+  const toBlob = HTMLCanvasElement.prototype.toBlob;
+  HTMLCanvasElement.prototype.toBlob = function (callback, type, quality) {
+    if (!window.__holdJpeg || type !== "image/jpeg") return toBlob.call(this, callback, type, quality);
+    window.__holdJpeg = false;
+    return toBlob.call(
+      this,
+      (blob) => {
+        window.__heldJpeg = true;
+        window.__releaseJpeg = () => callback(blob);
+      },
+      type,
+      quality,
+    );
+  };
 }
 // Clean JPEG: no APPn/COM metadata, longest side <= 1600, at most 2 MB.
 function assertCleanJpeg(bytes) {
@@ -127,6 +171,7 @@ try {
   const page = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
   page.on("pageerror", (e) => errors.push(e.message));
   await quietReminders(page);
+  await page.addInitScript(holdableJpeg);
   await page.addInitScript((s) => {
     if (!sessionStorage.getItem("covers-seeded")) {
       sessionStorage.setItem("sb-ewcsgvhuojxdpaspwsrx-auth-token", JSON.stringify(s));
@@ -135,6 +180,8 @@ try {
   }, session);
   const plans = new Map();
   const uploads = [];
+  // Each upload's pixel size, in the same order.
+  const uploadSizes = [];
   const descriptionCalls = [];
   // Every set_plan_cover_if_current call, in order.
   const links = [];
@@ -196,6 +243,7 @@ try {
       assertCleanJpeg(bytes);
       coverBytes = bytes;
       uploads.push(objectPath);
+      uploadSizes.push(jpegSize(bytes));
       return reply({ Key: `plan-covers/${objectPath}`, Id: "fixture" });
     }
     if (path === "/rest/v1/rpc/set_plan_cover_if_current") {
@@ -374,6 +422,44 @@ try {
   await later(page);
   await expect(page.getByRole("button", { name: /^Garden picnic again, .*, Photo: A red blanket on the grass$/ })).toBeVisible();
   console.log("PASS: Do this again copies the original's photo: one upload and one set_plan_cover_if_current, both in the new resbite's own folder, then its description; the original keeps its own; It’s on! shows the picture.");
+
+  // Do this again with a photo still being prepared when Create is pressed: Create waits for it, then uploads that
+  // photo (not a copy of the original's), with no description carried over from the original.
+  await openEvent(page, "Garden picnic");
+  await button(page, "More actions").click();
+  await button(page, "Do this again").click();
+  await expect(heading(page, "New resbite")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Edit photo description, A red blanket on the grass", exact: true })).toBeVisible();
+  await fillSettled(page.getByLabel("Title", { exact: true }), "Garden picnic with a new photo");
+  await fillPlan(page, { date: "2099-03-01", start: "10:00", end: "11:00", place: "Riverside park" });
+  const plansBefore = plans.size;
+  const uploadsBeforeLate = uploads.length;
+  const linksBeforeLate = links.length;
+  const describedBeforeLate = descriptionCalls.length;
+  await page.evaluate(() => {
+    window.__holdJpeg = true;
+  });
+  const late = page.waitForEvent("filechooser");
+  await button(page, "Change photo").click();
+  await (await late).setFiles({ name: "late.png", mimeType: "image/png", buffer: await syntheticPng(page, 1000, 500) });
+  await page.waitForFunction(() => window.__heldJpeg === true);
+  await button(page, "Create").click();
+  await page.waitForTimeout(400); // a create would be sent within this time if Create did not wait
+  assert.equal(plans.size, plansBefore, "Nothing is created while the photo is being prepared");
+  await expect(heading(page, "It’s on!")).toHaveCount(0);
+  await page.evaluate(() => window.__releaseJpeg());
+  await expect(heading(page, "It’s on!")).toBeVisible();
+  const withNew = [...plans.values()].find((p) => p.title === "Garden picnic with a new photo");
+  assert.ok(withNew, "The resbite was created");
+  await expect.poll(() => links.length).toBe(linksBeforeLate + 1);
+  assert.equal(uploads.length, uploadsBeforeLate + 1, "One upload: the chosen photo");
+  assert.match(uploads.at(-1), new RegExp(`^${user.id}/${withNew.id}/[0-9a-f-]+\\.jpg$`));
+  assert.deepEqual(uploadSizes.at(-1), { width: 1000, height: 500 }, "The photo chosen here, not the original's");
+  assert.deepEqual(links.at(-1), { p_plan: withNew.id, p_path: uploads.at(-1), p_expected_path: null, p_expected_revision: 0 });
+  assert.deepEqual(descriptionCalls.slice(describedBeforeLate), [], "No description is carried over to a new photo");
+  assert.equal(withNew.cover_description, "");
+  await later(page);
+  console.log("PASS: a photo still being prepared when Create is pressed: Create waits (nothing sent meanwhile), then that photo (1000×500) is uploaded into the new resbite's folder, not a copy of the original's, and no description is carried over.");
 
   // 3. A pending cover change is cleared from the device by sign-out.
   const coverKeys = () =>
