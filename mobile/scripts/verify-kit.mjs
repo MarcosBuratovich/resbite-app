@@ -175,12 +175,12 @@ try {
     await expect(pageTitle).toBeVisible();
     await expect(pageTitle).toBeFocused();
     await expect(page.getByRole("img", { name: "A picnic blanket under a tree", exact: true })).toBeVisible();
-    for (const name of ["Invite", "More"]) {
+    for (const name of ["More"]) {
       const pill = await size(page.getByRole("button", { name, exact: true }));
       assert.ok(pill.height >= 56, `${name} is a 56 pt pill`);
     }
     // The lead pill takes the width the other pills leave: its text is on one line.
-    if (width === 390) assert.ok((await size(page.getByText("Going", { exact: true }))).height <= 24, "The reply text is on one line at 390");
+    if (width === 390) assert.ok((await size(page.getByText("You’re going", { exact: true }))).height <= 24, "The reply text is on one line at 390");
     // The bottom slot is the safe-area wrapper: it holds the bar and pads with the bottom inset (0 on the web).
     assert.equal(
       await page.evaluate(() => {
@@ -193,7 +193,7 @@ try {
     const change = page.getByRole("button", { name: "Change your answer", exact: true });
     await expect(change).toContainText("Change");
     assert.ok((await size(change)).height >= 44, "Change your answer is at least 44 pt");
-    await expect(page.getByText("Going", { exact: true })).toBeVisible();
+    await expect(page.getByText("You’re going", { exact: true })).toBeVisible();
     const barOpacity = () => page.getByTestId("content-bar").evaluate((el) => getComputedStyle(el).opacity);
     assert.equal(await barOpacity(), "0", "The solid bar is hidden while the cover shows");
     const moreY = (await size(page.getByRole("button", { name: "More", exact: true }))).y;

@@ -241,6 +241,7 @@ try {
     return {
       ...plan,
       note: "",
+      plan_admins: [],
       has_meeting_details: Boolean(plan.note),
       plan_meeting_details: insider && plan.note ? { note: plan.note } : null,
     };

@@ -61,6 +61,9 @@ export const EVENT_COPY = {
   yourAnswer: "Your answer",
   cancelled: "Your resbite is cancelled.",
   shareLink: "Or share the event link",
+  when: "When",
+  where: "Where",
+  noteToGuests: "Note to guests",
 } as const;
 
 const SEPARATOR = " · ";

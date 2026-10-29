@@ -14,7 +14,6 @@ import {
   Share2,
   Smartphone,
   Trash2,
-  UserPlus,
   Users,
   Ellipsis,
   Check,
@@ -95,9 +94,8 @@ function Gallery() {
         onBack={() => setPage(false)}
         bottom={
           <ActionBar
-            lead={<ReplyPill text="Going" onChange={() => setPressed("change")} />}
+            lead={<ReplyPill text="You’re going" onChange={() => setPressed("change")} />}
             actions={[
-              { key: "invite", title: "Invite", icon: UserPlus, onPress: () => setPressed("invite") },
               { key: "more", title: "More", icon: Ellipsis, onPress: () => setMenu(true) },
             ]}
           />
