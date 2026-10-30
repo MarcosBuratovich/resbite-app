@@ -110,10 +110,12 @@ export default function Plans() {
       if (p.error) throw p.error;
       if (a.error) throw a.error;
       setLoadedFor(uid);
-      setPlans(((p.data || []) as unknown as PlanRow[]).map(planFromRow));
+      const read = ((p.data || []) as unknown as PlanRow[]).map(planFromRow);
+      setPlans(read);
       if (q) setRequests(q);
-      // Cover changes for cancelled or started plans can never complete; drop them quietly.
-      void planCoverStore.discardStaleCoverJournals(uid, p.data || []).catch(() => {});
+      // Cover changes for cancelled or ended plans, or plans no longer this person's to host, can never complete: drop
+      // them quietly. The plans carry their admins, whose changes stay.
+      void planCoverStore.discardStaleCoverJournals(uid, read).catch(() => {});
       const mine = (a.data || []) as unknown as Attendee[];
       setAttendees(mine);
       // The host's name for each invitation card; without it the card says "Your host invited you".
@@ -209,7 +211,7 @@ export default function Plans() {
           plan: p.id,
           message:
             result === "unavailable"
-              ? "This plan is cancelled or has already started. Responses are closed."
+              ? EVENT_COPY.responsesClosed
               : result === "review"
                 ? "The plan or your response changed. Open it to review the latest details."
                 : "Your response is not confirmed. Try again.",

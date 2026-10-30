@@ -73,7 +73,15 @@ export type JournalStore = Pick<
   ReturnType<typeof createPhotoChangeStore>,
   "read" | "begin" | "bytes" | "clear"
 >;
-export type StalePlan = { id: string; owner_id: string; status: string; starts_at: string };
+/** A plan as My resbites reads it: with its end and its admins (`planFromRow`), who may change its cover too. */
+export type StalePlan = {
+  id: string;
+  owner_id?: string;
+  status: string;
+  starts_at: string;
+  ends_at?: string | null;
+  admins?: readonly string[];
+};
 
 /**
  * Wraps a cover journal store so every journal is findable per owner.
@@ -137,7 +145,10 @@ export function createIndexedCoverStore(
       await index.removeMany(owner, ids.filter((id) => !failed.includes(id)));
       if (failed.length) throw failure;
     },
-    /** Drop journals of listed plans that can never complete. Unlisted ids are kept. */
+    /**
+     * Drop journals of listed plans that can never complete: ended, cancelled, or no longer the person's to change (an
+     * admin's stays while they are one). Unlisted ids are kept.
+     */
     async discardStaleCoverJournals(
       owner: string,
       plans: StalePlan[],
@@ -148,7 +159,7 @@ export function createIndexedCoverStore(
         .filter(
           (p) =>
             indexed.has(p.id) &&
-            !canEditPlan(p as unknown as Plan, owner, false, now.getTime()),
+            !canEditPlan(p as unknown as Plan, owner, false, now.getTime(), p.admins ?? []),
         )
         .map((p) => p.id);
       for (const planId of stale) bump(scopeGen, coverScope(owner, planId));

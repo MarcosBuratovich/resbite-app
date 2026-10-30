@@ -16,6 +16,7 @@ import {
   COVER_DESCRIPTION_MAX,
   COVER_MAX_DIMENSION,
   coverPhotoLayout,
+  coverFolder,
   coverScope,
   coverTarget,
 } from "../domain/covers";
@@ -61,9 +62,13 @@ const DESCRIPTION_UNCONFIRMED = "The photo description didn’t save. Check your
  * - Existing resbite: changes apply at once through the versioned cover pointer; a new or removed photo
  *   clears its description (the database does the same).
  * - Preview: covers and descriptions stay in memory.
+ * The photo goes into the plan owner's folder (`ownerId`), whoever changes it; the journal stays under the signed-in
+ * person, so sign-out finds it.
  */
 export function useCoverPhoto(options: {
   planId: string | null;
+  /** The plan's owner, whose folder holds its covers (an admin uploads there too); the signed-in person when absent. */
+  ownerId?: string | null;
   preview: boolean;
   previewUri?: string | null;
   previewDescription?: string;
@@ -72,7 +77,9 @@ export function useCoverPhoto(options: {
 }): CoverControls {
   const { planId, preview, onPreviewChange, onPreviewDescribe } = options;
   const { session, captureSession } = useApp();
+  // The signed-in person: the journal's scope and the session the cover calls are bound to.
   const ownerId = session?.user.id ?? null;
+  const folderOwner = options.ownerId ?? ownerId;
   const scope = (() => {
     if (preview || !ownerId || !planId) return null;
     try {
@@ -168,7 +175,7 @@ export function useCoverPhoto(options: {
   async function finish(change: PhotoChange, check: () => void) {
     const result = await finishVersionedPhotoChange(
       change,
-      coverGateway(ownerId!, planId!),
+      coverGateway(ownerId!, planId!, folderOwner!),
       () => planCoverStore.bytes(scope!),
       check,
       coverPhotoLayout.copy,
@@ -221,7 +228,8 @@ export function useCoverPhoto(options: {
         setMessage("Your cover uploads after the resbite is saved.");
         return;
       }
-      await apply(coverTarget(scope!, Crypto.randomUUID()), photo.bytes, check);
+      // Into the owner's folder, whoever is changing it: the server takes a cover from there only.
+      await apply(coverTarget(coverFolder(folderOwner!, planId), Crypto.randomUUID()), photo.bytes, check);
     });
   const remove = () =>
     run(async (check) => {

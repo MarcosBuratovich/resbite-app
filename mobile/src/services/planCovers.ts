@@ -107,10 +107,13 @@ export async function takeDownloadedCover(uri: string): Promise<Uint8Array> {
   return stripJpegMetadata(bytes);
 }
 
-/** Cover reads and writes bound to the organizer's captured session. */
-export function coverGateway(ownerId: string, planId: string): VersionedPhotoGateway {
+/**
+ * Cover reads and writes bound to the captured session of the host making the change (`personId`). Uploads go only
+ * into the plan owner's folder (`ownerId`, the person themself unless an admin is changing it).
+ */
+export function coverGateway(personId: string, planId: string, ownerId: string = personId): VersionedPhotoGateway {
   let captured: ReturnType<typeof capturedProfileClient> | undefined;
-  const client = () => (captured ??= capturedProfileClient(ownerId));
+  const client = () => (captured ??= capturedProfileClient(personId));
   return {
     async read() {
       const bound = await client();

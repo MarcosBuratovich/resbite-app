@@ -6,7 +6,7 @@ import {
   type PhotoChange,
   type VersionedPhoto,
 } from "./profilePhotoStore.ts";
-import { coverPhotoLayout, coverScope, coverTarget } from "../domain/covers.ts";
+import { coverFolder, coverPhotoLayout, coverScope, coverTarget } from "../domain/covers.ts";
 
 const owner = "11111111-1111-4111-8111-111111111111";
 const plan = "22222222-2222-4222-8222-222222222222";
@@ -86,6 +86,28 @@ test("cover journals are scoped to one owner and plan and accept only that plan'
   await assert.rejects(store.begin(scope, { ...change, target: `${scope}/../x.jpg` }, null, noop), /invalid/);
   await assert.rejects(store.read("preview"), /Invalid photo owner/);
   assert.throws(() => coverScope(owner, "not-a-plan"), /Invalid cover owner/);
+});
+
+test("an admin's cover goes into the owner's folder, journaled under the admin", async () => {
+  // The admin (`other`) changes the owner's plan: the policies and set_plan_cover_if_current want the owner's folder.
+  const admin = other;
+  const folder = coverFolder(owner, plan);
+  const target = coverTarget(folder, "abc-123");
+  assert.equal(target, `${owner}/${plan}/abc-123.jpg`);
+  assert.notEqual(folder, coverScope(admin, plan));
+  const { storage, files } = memory();
+  const store = createPhotoChangeStore(storage, files, coverPhotoLayout);
+  const scope = coverScope(admin, plan);
+  const change: PhotoChange = { previous: `${owner}/${plan}/old.jpg`, target, expectedRevision: 3 };
+  await store.begin(scope, change, new Uint8Array([1]), noop);
+  assert.deepEqual(await store.read(scope), change);
+  // Never another plan's folder, and never a path that climbs out of the plan's.
+  await assert.rejects(store.begin(scope, { ...change, target: `${owner}/${admin}/x.jpg` }, null, noop), /invalid/);
+  await assert.rejects(store.begin(scope, { ...change, target: `${owner}/${plan}/../x.jpg` }, null, noop), /invalid/);
+  await assert.rejects(store.begin(scope, { ...change, previous: `${owner}/${admin}/old.jpg` }, null, noop), /invalid/);
+  assert.equal(coverPhotoLayout.within(scope, target), "abc-123.jpg");
+  assert.equal(coverPhotoLayout.within(scope, `${owner}/${admin}/abc-123.jpg`), null);
+  assert.throws(() => coverFolder("not-an-owner", plan), /Invalid cover owner/);
 });
 
 test("a lost attach reply is confirmed by reading back; a later retry does nothing more", async () => {

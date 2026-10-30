@@ -17,13 +17,14 @@ export type PhotoChangeCopy = {
 export type PhotoLayout = {
   validScope(scope: string): boolean;
   key(scope: string): string;
-  prefix(scope: string): string;
+  /** The rest of `path` after the storage folder a change journaled under `scope` may use, or null outside it. */
+  within(scope: string, path: string): string | null;
   copy: PhotoChangeCopy;
 };
 export const profilePhotoLayout: PhotoLayout = {
   validScope: (scope) => /^[a-zA-Z0-9-]+$/.test(scope) && scope !== "preview",
   key: (scope) => `resbite.photo.v1.${scope}`,
-  prefix: (scope) => `${scope}/`,
+  within: (scope, path) => (path.startsWith(`${scope}/`) ? path.slice(scope.length + 1) : null),
   copy: {
     unretryable:
       "This saved photo change cannot be safely retried. Choose Keep saved photo, then choose your photo again.",
@@ -66,16 +67,14 @@ export function createPhotoChangeStore(
     return next;
   }
   function validate(scope: string, change: PhotoChange) {
-    const prefix = layout.prefix(scope);
     const path = (value: unknown) =>
       value === null ||
       (typeof value === "string" &&
-        value.startsWith(prefix) &&
-        /^[a-zA-Z0-9-]+\.jpg$/.test(value.slice(prefix.length)));
+        /^[a-zA-Z0-9-]+\.jpg$/.test(layout.within(scope, value) ?? ""));
     const previous = (value: unknown) =>
       value === null ||
       (typeof value === "string" &&
-        value.startsWith(prefix) &&
+        layout.within(scope, value) !== null &&
         !value
           .split("/")
           .some((part) => !part || part === "." || part === "..") &&

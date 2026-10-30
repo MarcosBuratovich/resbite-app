@@ -185,6 +185,34 @@ test("discardStaleCoverJournals clears cancelled, started and not-owned plans on
   assert.deepEqual((await index.list(owner)).sort(), [ids[3], ids[4]].sort());
 });
 
+test("discardStaleCoverJournals keeps an admin's journal while they are one and the plan is open", async () => {
+  const log: string[] = [];
+  const { storage } = memory(log);
+  const index = createCoverJournalIndex(storage);
+  const store = createIndexedCoverStore(fakeStore(log), index);
+  const [admin, noLonger, ended] = [
+    "b0000000-0000-4000-8000-000000000001",
+    "b0000000-0000-4000-8000-000000000002",
+    "b0000000-0000-4000-8000-000000000003",
+  ];
+  for (const id of [admin, noLonger, ended]) await index.add(owner, id);
+  const now = new Date("2026-06-01T12:00:00Z");
+  const future = "2026-06-02T12:00:00Z";
+  // Someone else's plans: this person is an admin of the first and the third, no longer of the second.
+  const plans = [
+    { id: admin, owner_id: other, status: "active", starts_at: future, ends_at: "2026-06-02T14:00:00Z", admins: [owner] },
+    { id: noLonger, owner_id: other, status: "active", starts_at: future, ends_at: "2026-06-02T14:00:00Z", admins: [] },
+    { id: ended, owner_id: other, status: "active", starts_at: "2026-06-01T09:00:00Z", ends_at: "2026-06-01T11:00:00Z", admins: [owner] },
+  ];
+  log.length = 0;
+  await store.discardStaleCoverJournals(owner, plans, now);
+  assert.deepEqual(
+    log.filter((l) => l.startsWith("clear:")).sort(),
+    [noLonger, ended].map((id) => `clear:${coverScope(owner, id)}`).sort(),
+  );
+  assert.deepEqual(await index.list(owner), [admin]);
+});
+
 function realisticStore(log: string[]) {
   // Mirrors the generic store: epoch captured at call time, journal written after check().
   const journals = new Set<string>();

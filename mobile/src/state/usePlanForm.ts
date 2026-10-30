@@ -129,6 +129,9 @@ export function usePlanForm(params: { activity?: string; plan?: string; again?: 
   };
   const cover = useCoverPhoto({
     planId: editedId,
+    // An admin's new photo for this resbite goes into the owner's folder, as the server wants. (Do this again makes a
+    // resbite of the person's own, so its photo goes into their folder.)
+    ownerId: editedId ? (original?.owner_id ?? null) : null,
     preview,
     previewUri: previewPlan?.cover_path ?? null,
     previewDescription: previewPlan?.cover_description ?? "",
