@@ -98,6 +98,9 @@ try {
           ? attendee
           : [{ ...attendee, plan_id: plan.id, user_id: user.id }],
       );
+    // An invitee who hasn't answered reads the people counts from the server (plan_people_counts): here, only them.
+    if (path === "/rest/v1/rpc/plan_people_counts")
+      return reply({ going: attendee.response === "accepted" ? 1 : 0, maybe: attendee.response === "maybe" ? 1 : 0, cant_go: ["declined", "withdrawn"].includes(attendee.response) ? 1 : 0 });
     if (path === "/rest/v1/rpc/claim_invite") {
       claims++;
       assert.equal(
@@ -131,7 +134,7 @@ try {
   await page.goto(`${base}/sample-chat?plan=${plan.id}`);
   await expect(
     page.getByText(
-      "The sample is available after an accepted RSVP for a future, active plan.",
+      "The sample is available after an accepted RSVP for an active plan that hasn’t ended.",
       { exact: true },
     ),
   ).toBeVisible();
@@ -159,7 +162,7 @@ try {
   await page.reload();
   await expect(
     page.getByText(
-      "The sample is available after an accepted RSVP for a future, active plan.",
+      "The sample is available after an accepted RSVP for an active plan that hasn’t ended.",
       { exact: true },
     ),
   ).toBeVisible();

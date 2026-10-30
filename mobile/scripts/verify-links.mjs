@@ -122,6 +122,8 @@ async function fixture({ signedIn = true } = {}) {
       if (one) return reply({ version: 1, response: "pending" });
       return reply([{ user_id: user.id, plan_id: invited.id, response: "pending", profiles: { display_name: "Fixture" } }]);
     }
+    // The resbite page's counts for an invitee who hasn't answered: only them, pending, so none.
+    if (path === "/rest/v1/rpc/plan_people_counts") return reply({ going: 0, maybe: 0, cant_go: 0 });
     if (path === "/rest/v1/rpc/request_to_join") {
       const body = req.postDataJSON();
       claims.push(body);

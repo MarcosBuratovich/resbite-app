@@ -137,12 +137,12 @@ try {
     );
   }
   {
-    // Someone else's event, or one that has started: no link, and the reason.
+    // Someone else's event (not its host), or one that has ended: no link, and the reason.
     const { page, errors, state } = await fixture();
     state.current.owner_id = "33333333-3333-4333-8333-333333333333";
     await page.reload();
     await expect(
-      page.getByText("Only the organizer can invite people to an upcoming, active resbite.", { exact: true }),
+      page.getByText("Only a host can invite people to a resbite that hasn’t ended.", { exact: true }),
     ).toBeVisible();
     await expect(button(page, "Share link")).toHaveCount(0);
     await expect(heading(page, "Event link")).toHaveCount(0);

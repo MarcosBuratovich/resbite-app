@@ -138,6 +138,8 @@ async function fixture(
     if (path === "/rest/v1/attendees")
       return reply({ version: 1, response: "pending" });
     if (path === "/rest/v1/plan_mutes") return reply([]);
+    // The resbite page's counts for an invitee who hasn't answered: only them, pending, so none.
+    if (path === "/rest/v1/rpc/plan_people_counts") return reply({ going: 0, maybe: 0, cant_go: 0 });
     throw Error(`Unexpected fixture request ${path}`);
   });
   return {

@@ -97,7 +97,8 @@ try {
     await card.click();
     await expect(heading(page, "Picnic in the park")).toBeVisible();
     await shot("event");
-    // UX3: the organizer posts a Note to guests; the page shows it with the Meeting details and the device chips.
+    // UX3: the organizer posts a Note to guests through Edit; the page shows it with the Meeting details (Add to
+    // calendar and Mute are rows in More since Plan 3; the device chips are gone).
     await button(page, "Edit Picnic in the park").click();
     await expect(heading(page, "Edit resbite")).toBeVisible();
     await page.getByLabel("Note to guests (optional)", { exact: true }).fill("Bring a blanket, we have the drinks covered.");

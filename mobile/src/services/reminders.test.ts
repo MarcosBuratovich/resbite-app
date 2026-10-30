@@ -262,6 +262,20 @@ test("a sync sets the two reminders for the person's events, honouring the switc
   assert.deepEqual(h.ids(), []);
 });
 
+test("unmuting brings a resbite's reminders back at the next sync; the reminders switch stays on throughout", async () => {
+  const h = syncHarness({ mutedSeries: ["s1"] });
+  h.setSources(async () => [source("muted", 30, { series: "s1" }), source("other", 40, { series: "s2" })]);
+  await h.sync.sync({ userId: "me", preview: false });
+  assert.deepEqual(h.ids(), ["other:1d", "other:1h"]);
+  assert.equal(h.prefs.enabled, true);
+  // Unmute on the server (set_plan_mute false): the series is no longer in the person's mutes.
+  h.mutedSeries.delete("s1");
+  await h.sync.sync({ userId: "me", preview: false });
+  assert.deepEqual(h.ids(), ["muted:1d", "other:1d", "muted:1h", "other:1h"]);
+  // Muting is per series on the server; the phone's switch was never touched.
+  assert.deepEqual(h.prefs, { enabled: true, asked: true, notificationsAsked: true });
+});
+
 test("without permission nothing is scheduled, nothing is read and nothing is asked", async () => {
   for (const permission of ["undetermined", "denied"]) {
     const h = syncHarness({ permission });
