@@ -272,7 +272,7 @@ try {
     assert.equal(new URL(page.url()).pathname, "/create");
     // An inactive, started or cancelled event's link says so, and the kept code is dropped.
     const inactive = page.getByText(
-      "This invitation is no longer active, or the event has started or was cancelled.",
+      "This invitation is no longer active, or the event has ended or was cancelled.",
       { exact: true },
     );
     const refused = page.getByText(refusedLink, { exact: true });

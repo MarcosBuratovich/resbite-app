@@ -187,6 +187,23 @@ test("cancel conflicts and denials are definite; an unreadable outcome is uncert
     ),
     (e: unknown) => e instanceof PlanSaveError && !e.uncertain,
   );
+  // 22023: the resbite has ended (or is no longer active), said with the end as the boundary.
+  await assert.rejects(
+    cancelPlan(
+      gateway({
+        cancel: async () => {
+          throw { code: "22023", message: "Plan unavailable" };
+        },
+        read: async () => ({ ...plan, ends_at: "2020-01-01T17:00:00Z" }),
+      }),
+      plan,
+    ),
+    (e: unknown) =>
+      e instanceof PlanSaveError &&
+      !e.uncertain &&
+      e.message === "This resbite has ended or is no longer available." &&
+      e.latest?.ends_at === "2020-01-01T17:00:00Z",
+  );
   await assert.rejects(
     cancelPlan(
       gateway({

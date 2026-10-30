@@ -12,7 +12,7 @@
   - Plans v4: `create_plan_v4` and `change_plan_v4` (a required end, To be decided, the repeat rule, cancelling by hosts). `create_plan_v3` and `change_plan_v3` stay, so the current build keeps working.
   - Mutes: `public.plan_mutes` and `set_plan_mute`; the sender's audience check skips the muted.
   - People counts: `plan_people_counts` returns how many are going, maybe and can't go to a host or anyone with a guest row (`42501 Not invited` for anyone else), so the resbite page shows an invitee who hasn't answered the numbers without the names (they read only their own guest row).
-  - Repeats: `next_occurrence` and `roll_repeating_plans`, run by a pg_cron job (step 7), and the cover read policy widened for the next occurrence. The roll asks again only the guests who use the app and may still use it.
+  - Repeats: `next_occurrence` and `roll_repeating_plans`, run by a pg_cron job (step 7), and the cover read policy widened for the next occurrence (and for the plan's admins over its folder, which Storage's upsert check needs to let an admin upload). The roll asks again only the guests who use the app and may still use it.
 - **Outbox:** new kind `admin_added` and the detail `again` for `invited`.
 - **Also changed in this branch (no hosted effect until deployed):** the `deliver-notifications` copy module (`supabase/functions/_shared/notification-copy.ts`) and the link site `links/` (the pages say "happened" from the end, "Every Thursday", "Place to be decided").
 - **Rebased on the phone key (29 October 2026):** the branch sits on `main` after `20261030130000_phone_key.sql` went live. `invite_contacts`, `check_invited_number` and `answer_phone_invitation` start from that migration's bodies (numbers matched by key) with this plan's changes on top; the rollback restores those bodies; and `supabase/rollback/20261030130000_phone_key.rollback.sql` gained the guard the push rollback has (it refuses while `public.plan_admins` exists), so its sha256 changed.
@@ -23,7 +23,7 @@
 
 | File | sha256 |
 | --- | --- |
-| `supabase/migrations/20261031120000_creating_a_resbite.sql` | `27117f8f41a1320b35935f4f870a20639b233c430feea4976856aff220236ef7` |
+| `supabase/migrations/20261031120000_creating_a_resbite.sql` | `55144326eea47d866085d0ce024e84ef5fb7014d6d7a7ad02fb48a41988549f8` |
 | `supabase/rollback/20261031120000_creating_a_resbite.rollback.sql` | `9b1403394a3d277269964b34cb9e90bf86ab7dca4b722675e66d128eb6bb2472` |
 | `supabase/rollback/20261030120000_push_delivery.rollback.sql` (edited by this plan: its guard now refuses while `public.plan_admins` exists) | `bd3e356095fb5ae64af6f1189e5fb4e877efb38961f1fcfa90789e9577c75558` (it was `5430f89f915b7a8d18703deee6eefe66de8ef2b41e2b7d4b185e3143632ce81e`) |
 | `supabase/rollback/20261030130000_phone_key.rollback.sql` (edited by this plan: its guard now refuses while `public.plan_admins` exists) | `b474310fa6bae25368d995f3c6855b0686402d70a3ca8cbb90962c7eaf34d68a` (it was `a955455f81ce12e4c24f3c37adad1f5aa369eb0188e1d049cc0b388ed32ff2c9`) |

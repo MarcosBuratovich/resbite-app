@@ -292,7 +292,7 @@ export async function cancelPlan(
     );
   if (code === "22023")
     throw new PlanSaveError(
-      "This plan has already started or is no longer available.",
+      "This resbite has ended or is no longer available.",
       false,
       latest,
     );

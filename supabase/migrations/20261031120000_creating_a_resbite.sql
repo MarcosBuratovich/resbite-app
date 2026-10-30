@@ -528,7 +528,7 @@ end $$;
 
 -- The two upload policies of the plan-covers bucket, open until the end instead of the start, to any host: the object
 -- stays in the owner's folder (the first path segment is the plan's owner), the uploader is the owner or an admin.
--- (resbite_cover_read is widened in section 5, for the next occurrence of a repeating resbite.)
+-- (resbite_cover_read is widened in section 5, for the next occurrence of a repeating resbite and an admin's upload.)
 drop policy resbite_cover_insert on storage.objects;
 drop policy resbite_cover_update on storage.objects;
 create policy resbite_cover_insert on storage.objects for insert to authenticated with check (
@@ -1064,11 +1064,15 @@ revoke all on function private.roll_repeating_plans() from public, anon, authent
 -- The next occurrence shares the photo: its cover_path names the object in the first occurrence's folder. The
 -- 20261007200000_plan_covers read policy grants a reader only through the plan whose id is that folder, so a guest
 -- invited to a later occurrence alone could not read it. Now any plan the reader can read (plans row-level security
--- applies) whose cover_path names the object, kept in that plan owner's folder, grants the read; the owner still reads
--- their own uploads through the folder's plan.
+-- applies) whose cover_path names the object, kept in that plan owner's folder, grants the read; the owner, and an admin
+-- of the plan, read every upload in the plan's folder. An admin needs that read to upload (section 1's policies admit
+-- them): Storage authorises an upload with upsert, which the app uses so a retry can write the same name again, by
+-- an INSERT ... ON CONFLICT DO UPDATE ... RETURNING * as the uploader, and the returned row must be readable.
 drop policy resbite_cover_read on storage.objects;
 create policy resbite_cover_read on storage.objects for select to authenticated using (
  bucket_id='plan-covers' and (select private.eligible()) and exists(
   select 1 from public.plans p where p.owner_id::text=(storage.foldername(name))[1]
-   and ((p.id::text=(storage.foldername(name))[2] and p.owner_id=(select auth.uid())) or p.cover_path=name))
+   and ((p.id::text=(storage.foldername(name))[2] and (p.owner_id=(select auth.uid())
+     or exists(select 1 from public.plan_admins pa where pa.plan_id=p.id and pa.user_id=(select auth.uid()))))
+    or p.cover_path=name))
 );

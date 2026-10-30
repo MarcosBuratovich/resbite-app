@@ -3,7 +3,7 @@ import { timeRange } from "./eventTime";
 /**
  * GI1: the event's one link. What the app says when reading, turning off or joining by a link, or removing a
  * guest, fails. The database's codes: 42501 is "not a host of an active resbite that hasn't ended" for the
- * hosts' calls and "no longer active, started or cancelled" for joining; 22023 is "the organizer can't be
+ * hosts' calls and "no longer active, ended or cancelled" for joining; 22023 is "the organizer can't be
  * removed" (and, for a per-person link from before GI1, "the organizer can't claim it"). Link codes are never
  * part of a message.
  */
@@ -31,7 +31,7 @@ export function linkErrorMessage(action: LinkAction, error: unknown): string {
 }
 
 export const inactiveInvitation =
-  "This invitation is no longer active, or the event has started or was cancelled.";
+  "This invitation is no longer active, or the event has ended or was cancelled.";
 export const incompleteInvitation = "This invitation link is incomplete.";
 /** A per-person link (before GI1) opened by its own organizer. An event link just opens their event. */
 export const ownInvitation = "You organize this resbite. Open it from My resbites.";
@@ -48,7 +48,7 @@ export function claimLinkErrorMessage(error: unknown): string {
 }
 
 /**
- * A claim refused for good: the link is turned off, the event started or was cancelled, the link is malformed,
+ * A claim refused for good: the link is turned off, the event ended or was cancelled, the link is malformed,
  * or it is the organizer's own. The invite screen then drops the kept link, so a restart opens the app as
  * usual. Anything else (a lost connection or a timeout) keeps it for a retry.
  */

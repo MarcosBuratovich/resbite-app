@@ -113,7 +113,8 @@ do $$ begin
  exception when check_violation then null; end;
  if (select count(*) from pg_catalog.pg_policies where schemaname='storage' and tablename='objects'
    and policyname in ('resbite_cover_insert','resbite_cover_update','resbite_cover_read'))<>3
- or not exists(select 1 from pg_catalog.pg_policies where schemaname='storage' and policyname='resbite_cover_read' and qual like '%cover_path%') then
+ or not exists(select 1 from pg_catalog.pg_policies where schemaname='storage' and policyname='resbite_cover_read' and qual like '%cover_path%')
+ or not exists(select 1 from pg_catalog.pg_policies where schemaname='storage' and policyname='resbite_cover_read' and qual like '%plan_admins%') then
   raise exception 'The cover policies are missing';
  end if;
 end $$;

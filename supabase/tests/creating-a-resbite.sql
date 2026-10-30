@@ -1326,3 +1326,78 @@ do $$ begin
 end $$;
 reset role;
 rollback;
+
+-- Slice 7: an admin's cover upload, as Storage makes it (CR-D8). Storage authorises an upload by writing the row it will
+-- keep, as the uploader, in a transaction it then rolls back. The app uploads covers with upsert (a retry of a journaled
+-- change writes the same name again), and the upsert probe is INSERT ... ON CONFLICT DO UPDATE ... RETURNING *: the
+-- insert and update policies, and for the returned (and any conflicting) row the read policy. A plain upload is a bare
+-- INSERT. The local storage.objects stand-in gets the real table's unique (bucket_id, name) and updated_at for this slice
+-- only. Users: 01 owner, 02 admin (Going), 03 a Going guest, 08 a stranger.
+begin;
+insert into auth.users(id,email,email_confirmed_at)
+ select ('e1000000-0000-4000-8000-0000000000'||n)::uuid,'cr1-cover-'||n||'@resbite-test.invalid',now() from unnest(array['01','02','03','08']) n;
+insert into private.tester_roster(email) select 'cr1-cover-'||n||'@resbite-test.invalid' from unnest(array['01','02','03','08']) n;
+insert into public.profiles(id,display_name)
+ select ('e1000000-0000-4000-8000-0000000000'||n)::uuid,'Cover '||n from unnest(array['01','02','03','08']) n;
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.create_plan_v3('e1100000-0000-4000-8000-000000000050','Cover night','',array['community'],null,
+ '2099-06-09 19:00+00','2099-06-09 22:00+00','UTC','Park','');
+reset role;
+insert into public.attendees(plan_id,user_id,response) values
+ ('e1100000-0000-4000-8000-000000000050','e1000000-0000-4000-8000-000000000002','accepted'),
+ ('e1100000-0000-4000-8000-000000000050','e1000000-0000-4000-8000-000000000003','accepted');
+insert into public.plan_admins(plan_id,user_id,appointed_by) values
+ ('e1100000-0000-4000-8000-000000000050','e1000000-0000-4000-8000-000000000002','e1000000-0000-4000-8000-000000000001');
+create unique index cr1_objects_key on storage.objects(bucket_id,name);
+alter table storage.objects add column updated_at timestamptz default now();
+
+-- The admin: a new cover into the owner's folder (the upsert probe), the same name again (a retry), and a plain upload.
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+do $$ declare r record; begin
+ insert into storage.objects(bucket_id,name,owner)
+  values('plan-covers','e1000000-0000-4000-8000-000000000001/e1100000-0000-4000-8000-000000000050/f0000000-0000-4000-8000-000000000001.jpg','e1000000-0000-4000-8000-000000000002')
+  on conflict (bucket_id,name) do update set updated_at=now() returning * into r;
+ if r.name is distinct from 'e1000000-0000-4000-8000-000000000001/e1100000-0000-4000-8000-000000000050/f0000000-0000-4000-8000-000000000001.jpg' then
+  raise exception 'The admin''s upload returned %', r.name; end if;
+ insert into storage.objects(bucket_id,name,owner)
+  values('plan-covers','e1000000-0000-4000-8000-000000000001/e1100000-0000-4000-8000-000000000050/f0000000-0000-4000-8000-000000000001.jpg','e1000000-0000-4000-8000-000000000002')
+  on conflict (bucket_id,name) do update set updated_at=now() returning * into r;
+ insert into storage.objects(bucket_id,name,owner)
+  values('plan-covers','e1000000-0000-4000-8000-000000000001/e1100000-0000-4000-8000-000000000050/f0000000-0000-4000-8000-000000000002.jpg','e1000000-0000-4000-8000-000000000002');
+ if (select count(*) from storage.objects where name like 'e1000000-0000-4000-8000-000000000001/e1100000-0000-4000-8000-000000000050/%')<>2 then
+  raise exception 'The admin should read the two uploads in the plan''s folder'; end if;
+ -- Never into the admin's own folder: the cover policies want the owner's.
+ begin
+  insert into storage.objects(bucket_id,name,owner)
+   values('plan-covers','e1000000-0000-4000-8000-000000000002/e1100000-0000-4000-8000-000000000050/f0000000-0000-4000-8000-000000000003.jpg','e1000000-0000-4000-8000-000000000002')
+   on conflict (bucket_id,name) do update set updated_at=now() returning * into r;
+  raise exception 'An admin uploaded into their own folder';
+ exception when insufficient_privilege then null; end;
+end $$;
+-- A guest who isn't an admin, and a stranger, can neither upload into the folder nor read what is in it.
+do $$ declare v text; r record; begin
+ foreach v in array array['03','08'] loop
+  perform set_config('request.jwt.claims',json_build_object('sub','e1000000-0000-4000-8000-0000000000'||v,'role','authenticated')::text,true);
+  begin
+   insert into storage.objects(bucket_id,name,owner)
+    values('plan-covers','e1000000-0000-4000-8000-000000000001/e1100000-0000-4000-8000-000000000050/f0000000-0000-4000-8000-000000000004.jpg',('e1000000-0000-4000-8000-0000000000'||v)::uuid)
+    on conflict (bucket_id,name) do update set updated_at=now() returning * into r;
+   raise exception 'User % uploaded a cover', v;
+  exception when insufficient_privilege then null; end;
+  if exists(select 1 from storage.objects where name like 'e1000000-0000-4000-8000-000000000001/e1100000-0000-4000-8000-000000000050/%') then
+   raise exception 'User % read uploads that are not the cover', v; end if;
+ end loop;
+end $$;
+-- The owner, as before.
+select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+do $$ declare r record; begin
+ insert into storage.objects(bucket_id,name,owner)
+  values('plan-covers','e1000000-0000-4000-8000-000000000001/e1100000-0000-4000-8000-000000000050/f0000000-0000-4000-8000-000000000005.jpg','e1000000-0000-4000-8000-000000000001')
+  on conflict (bucket_id,name) do update set updated_at=now() returning * into r;
+ if (select count(*) from storage.objects where name like 'e1000000-0000-4000-8000-000000000001/e1100000-0000-4000-8000-000000000050/%')<>3 then
+  raise exception 'The owner should read the three uploads'; end if;
+end $$;
+reset role;
+rollback;

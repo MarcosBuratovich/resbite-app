@@ -16,11 +16,11 @@ import {
   TURN_OFF_TITLE,
 } from "./eventLinks";
 
-test("joining by an event link: an inactive, started or cancelled event says so; anything else is a retry", () => {
+test("joining by an event link: an inactive, ended or cancelled event says so; anything else is a retry", () => {
   assert.equal(claimLinkErrorMessage({ code: "42501", message: "Invitation unavailable" }), inactiveInvitation);
   assert.equal(
     inactiveInvitation,
-    "This invitation is no longer active, or the event has started or was cancelled.",
+    "This invitation is no longer active, or the event has ended or was cancelled.",
   );
   for (const other of [{ code: "08006" }, { message: "Failed to fetch" }, new Error("abort"), null, "x"])
     assert.equal(

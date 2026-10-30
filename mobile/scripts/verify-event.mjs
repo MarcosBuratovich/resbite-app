@@ -2,7 +2,8 @@
 // idea page. Every Supabase request is intercepted; nothing is sent. Each scenario builds its own fixture, walks
 // the screen and asserts what is visible, the roles and the requests the app made (names and arguments).
 //   owner      the page (Invite, Edit, More; You’re hosting; the people row), More (four rows, mute, cancel)
-//   cancel     a refused cancel stays in the sheet with its error; a fresh sheet shows no old error
+//   cancel     a refused cancel stays in the sheet with its error; a fresh sheet shows no old error; a cancel refused
+//              because the resbite has just ended closes the sheet over the ended page
 //   repeating  Every Thursday; the two cancel choices
 //   ended      · Ended; Do this again alone; no More; the people list without actions
 //   running    Edit is there and a guest reply is accepted
@@ -146,6 +147,8 @@ async function open(world = {}) {
     failPlanRead: Boolean(world.failPlanRead),
     // The next cancels are refused (42501), as for someone who is no longer a host.
     refuseCancels: world.refuseCancels ?? 0,
+    // The resbite ends just as the host cancels: the cancel is refused (22023) and the plan reads as ended.
+    endsOnCancel: Boolean(world.endsOnCancel),
     // appoint_admin refuses these people: they have never used the app.
     neverUsedApp: world.neverUsedApp ?? [],
     uploads: [],
@@ -247,6 +250,10 @@ async function open(world = {}) {
         return reply(state.attendee.version);
       }
       case "change_plan_v4":
+        if (body.p_cancel && state.endsOnCancel) {
+          state.plan = { ...state.plan, starts_at: iso(Date.now() - 3 * hour), ends_at: iso(Date.now() - hour) };
+          return reply({ code: "22023", message: "Plan unavailable" }, 400);
+        }
         if (body.p_cancel && state.refuseCancels > 0) {
           state.refuseCancels--;
           return reply({ code: "42501", message: "Host required" }, 403);
@@ -403,6 +410,23 @@ try {
     assert.deepEqual(f.rpcs("change_plan_v4").map((b) => b.p_cancel), [true, true]);
   });
   pass("cancel refused: Yes, cancel resbite refused (42501) keeps the question open with Your account can’t cancel this plan. inside the sheet; More opened again shows no old error; the second try cancels and closes the sheet");
+
+  // --- A cancel refused because the resbite has just ended ---
+  await scenario("cancel after the end", { ...hostFixture, endsOnCancel: true }, async (f) => {
+    const { page } = f;
+    await goto(f, `/event?plan=${PLAN_ID}`);
+    await btn(page, "More").click();
+    await btn(page, "Cancel resbite").click();
+    await btn(page, "Yes, cancel resbite").click();
+    // The reload shows the end: the question closes and the reason, said with the end, stays on the page.
+    await expect(heading(page, "Cancel this resbite for everyone?")).toHaveCount(0);
+    await expect(page.locator("[aria-modal]")).toHaveCount(0);
+    await expect(text(page, "This resbite has ended or is no longer available.")).toBeVisible();
+    await expect(page.getByText(/ · Ended$/)).toBeVisible();
+    await expect(bar(f).getByRole("button")).toHaveText(["Do this again"]);
+    assert.deepEqual(f.rpcs("change_plan_v4").map((b) => b.p_cancel), [true]);
+  });
+  pass("cancel after the end: Yes, cancel resbite refused (22023) as the resbite ends closes the sheet; the page says This resbite has ended or is no longer available. under the · Ended When line, with Do this again alone");
 
   // --- More: the four rows, Mute, Cancel ---
   await scenario("more", hostFixture, async (f) => {

@@ -90,6 +90,12 @@ export default function EventPage() {
   const { plan, role, attendee, guests, counts: serverCounts, invited, requests, busy, fresh, pending } = event;
   const device = useEventDevice(plan, { owner: role === "owner", response: attendee?.response ?? null });
   const back = () => (router.canGoBack() ? router.back() : router.replace("/plans"));
+  // More belongs to an open resbite. When a reload shows it ended or cancelled (a cancel refused because it had just
+  // ended, say), the sheet closes and the reason stays on the page.
+  const stillOpen = plan !== null && pageState(plan) === "open";
+  useEffect(() => {
+    if (moreOpen && !stillOpen) setMoreOpen(false);
+  }, [moreOpen, stillOpen]);
 
   if (!plan || !role)
     return (
