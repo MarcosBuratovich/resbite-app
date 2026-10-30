@@ -99,11 +99,11 @@ test("list and revoke call their RPCs", async () => {
 
 test("a server error becomes its message", async () => {
   const { gw } = gateway(() => ({ data: null, error: { code: "42501", message: "x" } }));
-  await assert.rejects(gw.revoke("p", "1"), { message: "Only the organizer can invite people to an upcoming resbite." });
+  await assert.rejects(gw.revoke("p", "1"), { message: "Only a host can invite people to a resbite that hasn’t ended." });
 });
 
 test("error mapping", () => {
-  assert.equal(inviteErrorMessage({ code: "42501" }), "Only the organizer can invite people to an upcoming resbite.");
+  assert.equal(inviteErrorMessage({ code: "42501" }), "Only a host can invite people to a resbite that hasn’t ended.");
   assert.equal(inviteErrorMessage({ code: "22023", message: "Try again tomorrow." }), "Try again tomorrow.");
   assert.equal(inviteErrorMessage({ code: "22023" }), "Check your connection and try again.");
   assert.equal(inviteErrorMessage(new Error("network")), "Check your connection and try again.");

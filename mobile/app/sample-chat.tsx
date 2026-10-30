@@ -5,6 +5,7 @@ import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useApp } from "../src/state/AppState";
 import { Back, Button, Copy, ErrorNote, Title, s } from "../src/design/ui";
 import { canReadSample } from "../src/domain/rsvp";
+import { planEnd } from "../src/domain/planEnd";
 import { readRsvp } from "../src/services/rsvp";
 import { sampleConversation } from "../src/content/sampleConversation";
 import { colors } from "../src/design/tokens";
@@ -23,7 +24,7 @@ export default function SampleChat() {
     const timer = setInterval(() => {
       if (Date.now() >= expiresAt) {
         setAccess(null);
-        setError("This plan has started. The sample is no longer available.");
+        setError("This plan has ended. The sample is no longer available.");
         clearInterval(timer);
       }
     }, 1000);
@@ -54,11 +55,12 @@ export default function SampleChat() {
       const snapshot = await readRsvp(plan, userId);
       if (!canReadSample(snapshot))
         throw new Error(
-          "The sample is available after an accepted RSVP for a future, active plan.",
+          "The sample is available after an accepted RSVP for an active plan that hasn’t ended.",
         );
       if (valid()) {
         setAccess(identity);
-        setExpiresAt(Date.parse(snapshot.plan.starts_at));
+        // Open until the end, as answering is (canReadSample).
+        setExpiresAt(planEnd(snapshot.plan));
       }
     } catch (e) {
       if (valid())

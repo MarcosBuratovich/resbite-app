@@ -86,7 +86,7 @@ export const PLAN_COPY = {
   changesSaved: "Changes saved",
   resbiteCreated: "Resbite created",
   loadFailed: "We couldn’t load this resbite. Check your connection and try again.",
-  notEditable: "Only the organizer can edit an upcoming, active plan.",
+  notEditable: "Only a host can edit a resbite that hasn’t ended.",
   ideaUnavailable: "This idea isn’t available right now.",
   notProtected: "Couldn’t protect this save on your device. Nothing was sent; try again.",
   uncertainCreate: "Your resbite may already be created. Check your connection and tap Create to find out.",

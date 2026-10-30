@@ -61,7 +61,7 @@ test("the notices and errors of saving and loading", () => {
   assert.equal(PLAN_COPY.changesSaved, "Changes saved");
   assert.equal(PLAN_COPY.resbiteCreated, "Resbite created");
   assert.equal(PLAN_COPY.loadFailed, "We couldn’t load this resbite. Check your connection and try again.");
-  assert.equal(PLAN_COPY.notEditable, "Only the organizer can edit an upcoming, active plan.");
+  assert.equal(PLAN_COPY.notEditable, "Only a host can edit a resbite that hasn’t ended.");
   assert.equal(PLAN_COPY.ideaUnavailable, "This idea isn’t available right now.");
   assert.equal(PLAN_COPY.notProtected, "Couldn’t protect this save on your device. Nothing was sent; try again.");
   assert.equal(PLAN_COPY.unconfirmed, "We couldn’t confirm the save. Retry when you’re connected.");

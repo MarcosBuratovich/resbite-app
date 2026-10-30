@@ -106,10 +106,8 @@ export default function People() {
         const plan = preview
           ? localPlans.find((p) => p.id === planId)
           : await planGateway.read(planId);
-        if (!plan || !canEditPlan(plan, session?.user.id, preview))
-          throw Error(
-            "Only the organizer can choose people for an upcoming active plan.",
-          );
+        if (!plan || !canEditPlan(plan, session?.user.id, preview, Date.now(), plan.admins))
+          throw Error("Only a host can choose people for a resbite that hasn’t ended.");
       }
       if (active) {
         setGroups(data.groups);

@@ -5,6 +5,8 @@ function joinNames(names: string[]): string {
 
 export const INVITE_COPY = {
   goneNotice: "That resbite isn’t available any more.",
+  /** Why the Invite screen, or an invitation, is refused: the person isn't a host, or the resbite has ended or was cancelled. */
+  hostsOnly: "Only a host can invite people to a resbite that hasn’t ended.",
   heading: "Invite people",
   search: "Search contacts",
   onResbite: "On Resbite",
@@ -81,7 +83,7 @@ export const INVITE_COPY = {
   declineQuestion: (name: string) => `Decline ${name}? They’ll see they weren’t added.`,
   // Why Approve or Decline was refused (decideErrorMessage): the event is closed, the person can't be added, or
   // someone already answered.
-  decideClosed: "This resbite has started or was cancelled, so no one can be added now.",
+  decideClosed: "This resbite has ended or was cancelled, so no one can be added now.",
   decideCannotAdd: "This person can’t be added to this resbite.",
   decideAnswered: "Someone already answered this request.",
   linkInfoLine: "Anyone can answer with it, and you approve them first.",

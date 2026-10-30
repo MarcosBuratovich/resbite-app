@@ -72,8 +72,8 @@ export function joinErrorMessage(e: unknown): string {
 
 /**
  * Why the host's Approve or Decline was refused, by the server's message (the first two share the code 42501): the
- * event started or was cancelled; the person can't be added (a ban, a disabled roster row, an account that is banned
- * or being deleted); or someone already answered the request. Anything else is the connection line.
+ * event ended or was cancelled; the person can't be added (a ban, a disabled roster row, an account that is banned or
+ * being deleted); or someone already answered the request. Anything else is the connection line.
  */
 export function decideErrorMessage(e: unknown): string {
   const message = errorField(e, "message");

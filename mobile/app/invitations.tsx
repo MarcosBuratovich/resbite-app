@@ -20,11 +20,11 @@ import { readProfile } from "../src/services/profile";
 import { canEditPlan, type Plan } from "../src/domain/plans";
 import { LINK_INFO, linkDate } from "../src/domain/eventLinks";
 
-const unavailable = "Only the organizer can invite people to an upcoming, active resbite.";
+const unavailable = INVITE_COPY.hostsOnly;
 
 /**
- * "Invite people" (/invitations?plan=<id>): the organizer picks phone contacts or adds numbers to invite, then
- * sends each person's own link. The event link (Share, Copy and Turn off) follows the contacts.
+ * "Invite people" (/invitations?plan=<id>): a host (the owner or an admin) picks phone contacts or adds numbers to
+ * invite, then sends each person's own link. The event link (Share, Copy and Turn off) follows the contacts.
  */
 export default function Invitations() {
   const { plan: planId } = useLocalSearchParams<{ plan: string }>();
@@ -63,7 +63,8 @@ export default function Invitations() {
           throw Error("Couldn’t load this resbite. Check your connection and try again.");
         }
         if (!valid()) return;
-        if (!found || !canEditPlan(found, userId, preview)) throw Error(unavailable);
+        // The plan read embeds the admins, who invite as the owner does.
+        if (!found || !canEditPlan(found, userId, preview, Date.now(), found.admins)) throw Error(unavailable);
         let name: string | null = null;
         if (!preview) {
           // The name is only for the invitation message; without it the message says "Your host".

@@ -2,8 +2,8 @@ import { timeRange } from "./eventTime";
 
 /**
  * GI1: the event's one link. What the app says when reading, turning off or joining by a link, or removing a
- * guest, fails. The database's codes: 42501 is "not the organizer of an upcoming, active resbite" for the
- * organizer's calls and "no longer active, started or cancelled" for joining; 22023 is "the organizer can't be
+ * guest, fails. The database's codes: 42501 is "not a host of an active resbite that hasn't ended" for the
+ * hosts' calls and "no longer active, started or cancelled" for joining; 22023 is "the organizer can't be
  * removed" (and, for a per-person link from before GI1, "the organizer can't claim it"). Link codes are never
  * part of a message.
  */
@@ -13,9 +13,9 @@ const errorCode = (error: unknown) =>
 export type LinkAction = "link" | "rotate" | "remove";
 
 const closed: Record<LinkAction, string> = {
-  link: "Only the organizer of an upcoming resbite can share its link. It may have started or been cancelled.",
-  rotate: "Only the organizer of an upcoming resbite can turn its link off. It may have started or been cancelled.",
-  remove: "Only the organizer of an upcoming resbite can remove guests. It may have started or been cancelled.",
+  link: "Only a host can share a resbite’s link, until it ends. It may have ended or been cancelled.",
+  rotate: "Only a host can turn a resbite’s link off, until it ends. It may have ended or been cancelled.",
+  remove: "Only a host can remove guests, until the resbite ends. It may have ended or been cancelled.",
 };
 const offline: Record<LinkAction, string> = {
   link: "Couldn’t load the link. Check your connection and try again.",

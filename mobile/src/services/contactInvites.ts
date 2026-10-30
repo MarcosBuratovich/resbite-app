@@ -1,3 +1,4 @@
+import { INVITE_COPY } from "../domain/inviteCopy";
 export type InviteKind = "app" | "link" | "self" | "already";
 export type PhoneInvitation = {
   phone: string;
@@ -24,8 +25,7 @@ export const errorField = (e: unknown, field: "code" | "message") =>
 
 export function inviteErrorMessage(e: unknown): string {
   const code = errorField(e, "code");
-  if (code === "42501")
-    return "Only the organizer can invite people to an upcoming resbite.";
+  if (code === "42501") return INVITE_COPY.hostsOnly;
   if (code === "22023") return errorField(e, "message") || offline;
   return offline;
 }

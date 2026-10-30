@@ -121,7 +121,7 @@ test("decide returns approved or declined and rejects anything else", async () =
 });
 
 test("the host's refusals map by the server's message, anything else to the connection copy", () => {
-  const closed = "This resbite has started or was cancelled, so no one can be added now.";
+  const closed = "This resbite has ended or was cancelled, so no one can be added now.";
   const cannotAdd = "This person can’t be added to this resbite.";
   const answered = "Someone already answered this request.";
   assert.equal(decideErrorMessage({ code: "42501", message: "Active plan owner required" }), closed);
@@ -141,7 +141,7 @@ test("the host's refusals map by the server's message, anything else to the conn
 
 test("decide words its failure as the host's, through both error and throw", async () => {
   for (const [message, copy] of [
-    ["Active plan owner required", "This resbite has started or was cancelled, so no one can be added now."],
+    ["Active plan owner required", "This resbite has ended or was cancelled, so no one can be added now."],
     ["Invitation unavailable", "This person can’t be added to this resbite."],
     ["Request already decided", "Someone already answered this request."],
     ["Plan owner required", offline],

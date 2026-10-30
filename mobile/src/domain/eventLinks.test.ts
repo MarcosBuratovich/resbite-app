@@ -44,10 +44,17 @@ test("a claim refused for good drops the kept link; only a connection failure ke
     assert.equal(isClaimRefusal(retry), false, retry);
 });
 
-test("the organizer's link calls name what failed, and never include the code", () => {
+test("the hosts' link calls name what failed, and never include the code", () => {
+  assert.deepEqual(
+    (["link", "rotate", "remove"] as const).map((action) => linkErrorMessage(action, { code: "42501" })),
+    [
+      "Only a host can share a resbite’s link, until it ends. It may have ended or been cancelled.",
+      "Only a host can turn a resbite’s link off, until it ends. It may have ended or been cancelled.",
+      "Only a host can remove guests, until the resbite ends. It may have ended or been cancelled.",
+    ],
+  );
   for (const action of ["link", "rotate", "remove"] as const) {
-    assert.match(linkErrorMessage(action, { code: "42501" }), /^Only the organizer of an upcoming resbite can /);
-    assert.match(linkErrorMessage(action, { code: "PGRST301" }), /^Only the organizer/);
+    assert.match(linkErrorMessage(action, { code: "PGRST301" }), /^Only a host /);
     assert.match(linkErrorMessage(action, new Error("Ab3_-xYz0123456789abcd")), /Check your connection and try again\.$/);
     assert.doesNotMatch(linkErrorMessage(action, { code: "", message: "Ab3_-xYz0123456789abcd" }), /Ab3_/);
   }
