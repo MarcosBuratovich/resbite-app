@@ -9,8 +9,6 @@ import {
   eventPlace,
   EXACT_ADDRESS_LATER,
   groupPlans,
-  guestArea,
-  guestGroups,
   invitationCards,
   mapsUrl,
   withoutInvitations,
@@ -197,61 +195,6 @@ test("the exact place hides until an invitee replies: the area (if any), the hin
   assert.equal(label("pending", "Near the station"), "Board games, date not set, Near the station, Invited");
   assert.equal(label("pending", ""), "Board games, date not set, Invited");
   assert.equal(label("accepted", "Near the station"), `Board games, date not set, ${place}, Invited`);
-});
-
-test("guest area: only the organizer until an invitee answers (UX-P5)", () => {
-  const guests = [
-    { userId: "me", name: "Fixture", response: "maybe" },
-    { userId: "g1", name: "Alex", response: "accepted" },
-    { userId: "g2", name: "Bea", response: "pending" },
-  ];
-  assert.deepEqual(guestArea({ owner: false, response: "pending", organizer: " Jo ", guests: guests.slice(0, 1) }), {
-    kind: "hidden",
-    organizer: "Jo",
-  });
-  assert.deepEqual(guestArea({ owner: false, response: null, organizer: null, guests: [] }), {
-    kind: "hidden",
-    organizer: "Tester",
-  });
-  assert.deepEqual(guestArea({ owner: false, response: "maybe", organizer: "Jo", guests }), {
-    kind: "list",
-    names: ["Alex"],
-    label: "1 going, 1 maybe",
-  });
-  assert.deepEqual(guestArea({ owner: false, response: "declined", organizer: "Jo", guests: guests.slice(1) }), {
-    kind: "list",
-    names: ["Alex"],
-    label: "1 going",
-  });
-  assert.deepEqual(guestArea({ owner: true, response: null, organizer: null, guests: [] }), { kind: "none" });
-  assert.deepEqual(guestArea({ owner: true, response: null, organizer: null, guests: guests.slice(2) }), {
-    kind: "list",
-    names: [],
-    label: "0 going",
-  });
-});
-
-test("guest groups: Going, Maybe, Can’t go, Not answered yet; empty groups hidden", () => {
-  assert.deepEqual(
-    guestGroups([
-      { userId: "a", name: "Ana", response: "pending" },
-      { userId: "b", name: "Ben", response: "withdrawn" },
-      { userId: "c", name: "Cy", response: "accepted" },
-      { userId: "d", name: "Di", response: "declined" },
-    ]),
-    [
-      { title: "Going", guests: [{ userId: "c", name: "Cy", note: null }] },
-      {
-        title: "Can’t go",
-        guests: [
-          { userId: "b", name: "Ben", note: "Can’t go now" },
-          { userId: "d", name: "Di", note: null },
-        ],
-      },
-      { title: "Not answered yet", guests: [{ userId: "a", name: "Ana", note: null }] },
-    ],
-  );
-  assert.deepEqual(guestGroups([]), []);
 });
 
 test("photo descriptions are read with cards and the Review picture; a failed description save is said", () => {

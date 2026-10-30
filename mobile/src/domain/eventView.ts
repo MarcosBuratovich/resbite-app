@@ -34,34 +34,6 @@ export function responseText(response: string | null | undefined): string {
   return "Not answered";
 }
 
-export type GuestRow = { userId: string; name: string; response: string };
-export type GuestArea =
-  | { kind: "none" }
-  | { kind: "hidden"; organizer: string }
-  | { kind: "list"; names: string[]; label: string };
-
-/**
- * The event page's guest area (UX-P5). The server already returns only an unanswered invitee's own row;
- * this says what to show: the organizer and "Answer to see who’s coming" until they answer, then the list.
- */
-export function guestArea(view: {
-  owner: boolean;
-  response: string | null;
-  organizer: string | null;
-  guests: readonly GuestRow[];
-}): GuestArea {
-  if (!view.owner && (view.response === null || view.response === "pending"))
-    return { kind: "hidden", organizer: view.organizer?.trim() || "Tester" };
-  if (view.guests.length === 0) return { kind: "none" };
-  const going = view.guests.filter((g) => g.response === "accepted");
-  const maybe = view.guests.filter((g) => g.response === "maybe").length;
-  return {
-    kind: "list",
-    names: going.map((g) => g.name),
-    label: maybe > 0 ? `${going.length} going, ${maybe} maybe` : `${going.length} going`,
-  };
-}
-
 export const EXACT_ADDRESS_LATER = "Exact address after you reply";
 
 /**
@@ -78,24 +50,6 @@ export function eventPlace(view: {
   if (!view.owner && (view.response === null || view.response === "pending"))
     return { exact: false, line: view.area?.trim() || null };
   return { exact: true, line: view.place };
-}
-
-export type GuestGroup = { title: string; guests: { userId: string; name: string; note: string | null }[] };
-const GUEST_GROUPS: readonly { title: string; responses: readonly string[] }[] = [
-  { title: "Going", responses: ["accepted"] },
-  { title: "Maybe", responses: ["maybe"] },
-  { title: "Can’t go", responses: ["declined", "withdrawn"] },
-  { title: "Not answered yet", responses: ["pending"] },
-];
-
-/** The guest sheet, grouped by answer; "Can’t go now" marks someone who backed out after Going. */
-export function guestGroups(guests: readonly GuestRow[]): GuestGroup[] {
-  return GUEST_GROUPS.map(({ title, responses }) => ({
-    title,
-    guests: guests
-      .filter((g) => responses.includes(g.response))
-      .map((g) => ({ userId: g.userId, name: g.name, note: g.response === "withdrawn" ? "Can’t go now" : null })),
-  })).filter((group) => group.guests.length > 0);
 }
 
 /** Chips on a My resbites card: Cancelled first, then the role, then guests (host) or the answer (invitee). */
