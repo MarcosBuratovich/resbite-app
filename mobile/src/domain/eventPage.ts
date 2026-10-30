@@ -69,6 +69,31 @@ export const EVENT_COPY = {
   noteToGuests: "Note to guests",
   back: "Back",
   loading: "Loading this resbite",
+  opening: "Opening your resbite…",
+  unavailable: "This resbite isn’t available.",
+  tryAgain: "Try again",
+  refreshInvitation: "Refresh invitation",
+  retryResponse: "Retry my response",
+  changesSaved: "Changes saved",
+  previewChangesSaved: "Preview changes saved",
+  mapsFailed: "Couldn’t open Maps.",
+  openInMaps: (place: string) => `Open ${place.trim()} in Maps`,
+  invitePreview: "Invitations are disabled in design preview. Real invitations need an approved tester account.",
+  previewCancelled: "Preview plan cancelled.",
+  readFailed: "This resbite couldn’t be opened. Check your connection and try again.",
+  responseSaved: "Your response is saved.",
+  guestsFailed: "Your answer is saved, but who’s coming couldn’t load. Refresh to try again.",
+  responseReview: "The plan or your response changed. Review the latest details before choosing again.",
+  responsesClosed: "This resbite is cancelled or has ended. Answers are closed.",
+  responseUnconfirmed: "Your response is not confirmed. Retry checks the saved response before trying the same choice again.",
+  responseOffline: "We could not confirm your response. Check your connection, then retry.",
+  cancelFailed: "Could not cancel. Refresh and try again.",
+  muteFailed: "Could not change the mute. Check your connection and try again.",
+  muteNotInvited: "Only someone invited to this resbite can mute it.",
+  adminsFailed: "Could not change admins. Check your connection and try again.",
+  adminNeedsApp: "Only someone who uses the app can be an admin.",
+  adminNotGoing: "Only someone who’s going can be an admin.",
+  adminsOwnerOnly: "Only the organizer can change admins.",
 } as const;
 
 const SEPARATOR = " · ";
@@ -126,12 +151,22 @@ export function bottomRow(i: { role: Viewer; state: PageState; response: string 
 }
 
 export type MoreRow = "calendar" | "mute" | "unmute" | "again" | "changeReply" | "cancel";
-export function moreRows(i: { role: Viewer; state: PageState; muted: boolean; response: string | null }): MoreRow[] {
+/**
+ * The More sheet's rows. `calendar` is UX3's rule (`canAddToCalendar`: the organizer and Going or Maybe guests), so a
+ * Can’t go guest or an admin who hasn't answered gets no Add to calendar.
+ */
+export function moreRows(i: { role: Viewer; state: PageState; muted: boolean; response: string | null; calendar: boolean }): MoreRow[] {
   if (i.state !== "open") return [];
   const mute: MoreRow = i.muted ? "unmute" : "mute";
-  if (i.role === "owner") return ["calendar", mute, "again", "cancel"];
-  if (i.role === "admin") return ["calendar", mute, "again", "changeReply", "cancel"];
-  return answered(i.response) ? ["calendar", mute] : [];
+  const rows: MoreRow[] =
+    i.role === "owner"
+      ? ["calendar", mute, "again", "cancel"]
+      : i.role === "admin"
+        ? ["calendar", mute, "again", "changeReply", "cancel"]
+        : answered(i.response)
+          ? ["calendar", mute]
+          : [];
+  return i.calendar ? rows : rows.filter((row) => row !== "calendar");
 }
 
 export function whenLines(
@@ -163,6 +198,17 @@ export function hostLabel(role: Viewer): string | null {
 export const byline = (hostName: string): string => `${EVENT_COPY.hostedBy} ${hostName}`;
 
 export type PeopleCounts = { going: number; maybe: number; cantGo: number; invited: number; waiting: number };
+/** The answers alone, as `plan_people_counts` gives them to someone who reads only their own guest row. */
+export type AnswerCounts = Pick<PeopleCounts, "going" | "maybe" | "cantGo">;
+
+/** `plan_people_counts`'s reply (`{going, maybe, cant_go}`) as AnswerCounts; anything else is refused. */
+export function answerCountsFrom(reply: unknown): AnswerCounts {
+  const count = (value: unknown) => (typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null);
+  const row = typeof reply === "object" && reply !== null ? (reply as Record<string, unknown>) : {};
+  const [going, maybe, cantGo] = [count(row.going), count(row.maybe), count(row.cant_go)];
+  if (going === null || maybe === null || cantGo === null) throw Error("Unexpected people counts");
+  return { going, maybe, cantGo };
+}
 const GROUP_RESPONSES = {
   going: ["accepted"],
   maybe: ["maybe"],
@@ -172,11 +218,17 @@ const GROUP_RESPONSES = {
 const inGroup = (guests: readonly Guest[], group: keyof typeof GROUP_RESPONSES) =>
   guests.filter((g) => (GROUP_RESPONSES[group] as readonly string[]).includes(g.response));
 
-export function peopleCounts(i: { guests: Guest[]; invited: InvitedPerson[]; requests: HostRequest[] }): PeopleCounts {
+/** The people row's numbers: from the guest rows, or from the server's `counts` when the viewer reads only their own. */
+export function peopleCounts(i: {
+  guests: Guest[];
+  invited: InvitedPerson[];
+  requests: HostRequest[];
+  counts?: AnswerCounts | null;
+}): PeopleCounts {
   return {
-    going: inGroup(i.guests, "going").length,
-    maybe: inGroup(i.guests, "maybe").length,
-    cantGo: inGroup(i.guests, "cantGo").length,
+    going: i.counts?.going ?? inGroup(i.guests, "going").length,
+    maybe: i.counts?.maybe ?? inGroup(i.guests, "maybe").length,
+    cantGo: i.counts?.cantGo ?? inGroup(i.guests, "cantGo").length,
     invited: i.invited.length + inGroup(i.guests, "pending").length,
     waiting: i.requests.length,
   };
@@ -231,6 +283,8 @@ export type PersonRow = {
   key: string;
   name: string;
   status: string | null;
+  /** The person's answer (Going, Maybe, Can’t go) for the sheet head, where the group title is out of sight; null otherwise. */
+  reply: string | null;
   admin: boolean;
   kind: "guest" | "appInvite" | "linkInvite" | "request";
   userId?: string;
@@ -241,57 +295,81 @@ export type PersonRow = {
 const inviteStatus = (via: "whatsapp" | "messages" | undefined) =>
   via === "whatsapp" ? EVENT_COPY.invitedByWhatsApp : via === "messages" ? EVENT_COPY.invitedByMessages : EVENT_COPY.invitedByLink;
 
+/**
+ * The people list's groups and each person's actions. Hosts act only while the resbite is open: after the end, or once
+ * it is cancelled, the list is read-only. Only the owner makes or removes admins (Make admin on a Going guest; Remove as
+ * admin on any admin, whatever their answer, since Maybe keeps the role and a rolled occurrence starts them pending), and
+ * only the owner removes an admin from the resbite. Send again needs this phone's code for the person (`stored`).
+ */
 export function peopleGroups(i: {
   role: Viewer;
+  state: PageState;
   guests: Guest[];
   invited: InvitedPerson[];
   requests: HostRequest[];
   admins: readonly string[];
-  sentHere: ReadonlySet<string>;
 }): { title: string; rows: PersonRow[] }[] {
   const host = i.role !== "guest";
-  const guestRow = (g: Guest, canMakeAdmin: boolean): PersonRow => {
-    const admin = i.admins.includes(g.userId);
+  const acts = host && i.state === "open";
+  const owner = i.role === "owner";
+  /** What a host may do to someone on the guest list (an answered guest or an app invitee). */
+  const guestActions = (userId: string, canMakeAdmin: boolean): PersonAction[] => {
+    if (!acts) return [];
+    const admin = i.admins.includes(userId);
     const actions: PersonAction[] = [];
-    if (i.role === "owner" && canMakeAdmin) actions.push(admin ? "removeAdmin" : "makeAdmin");
-    if (host) actions.push("remove");
-    return { key: `guest:${g.userId}`, name: g.name, status: null, admin, kind: "guest", userId: g.userId, actions };
+    if (owner && admin) actions.push("removeAdmin");
+    else if (owner && canMakeAdmin) actions.push("makeAdmin");
+    if (owner || !admin) actions.push("remove");
+    return actions;
   };
-  const answeredGroup = (title: string, group: keyof typeof GROUP_RESPONSES, canMakeAdmin: boolean) => {
-    const rows = inGroup(i.guests, group).map((g) => guestRow(g, canMakeAdmin));
-    return { title, rows };
+  const guestRow = (g: Guest, reply: string, canMakeAdmin: boolean): PersonRow => ({
+    key: `guest:${g.userId}`,
+    name: g.name,
+    status: null,
+    reply,
+    admin: i.admins.includes(g.userId),
+    kind: "guest",
+    userId: g.userId,
+    actions: guestActions(g.userId, canMakeAdmin),
+  });
+  const answeredGroup = (group: "going" | "maybe" | "cantGo", option: "going" | "maybe" | "cant") => {
+    const title = optionText(option);
+    return { title, rows: inGroup(i.guests, group).map((g) => guestRow(g, title, group === "going")) };
   };
   const linkRows: PersonRow[] = i.invited.map((p) => ({
     key: `link:${p.phone}`,
     name: p.name,
     status: inviteStatus(p.stored?.sentVia),
+    reply: null,
     admin: false,
     kind: "linkInvite",
     phone: p.phone,
-    actions: i.sentHere.has(p.e164) ? ["sendAgain", "removeInvite"] : ["removeInvite"],
+    actions: !acts ? [] : p.stored !== null ? ["sendAgain", "removeInvite"] : ["removeInvite"],
   }));
   const appRows: PersonRow[] = inGroup(i.guests, "pending").map((g) => ({
     key: `app:${g.userId}`,
     name: g.name,
     status: EVENT_COPY.invitedInApp,
-    admin: false,
+    reply: null,
+    admin: i.admins.includes(g.userId),
     kind: "appInvite",
     userId: g.userId,
-    actions: ["remove"],
+    actions: guestActions(g.userId, false),
   }));
   const requestRows: PersonRow[] = i.requests.map((r) => ({
     key: `request:${r.user_id}`,
     name: r.name,
     status: EVENT_COPY.askedThroughLink,
+    reply: null,
     admin: false,
     kind: "request",
     userId: r.user_id,
-    actions: ["approve", "decline"],
+    actions: acts ? ["approve", "decline"] : [],
   }));
   const groups = [
-    answeredGroup(optionText("going"), "going", true),
-    answeredGroup(optionText("maybe"), "maybe", false),
-    answeredGroup(optionText("cant"), "cantGo", false),
+    answeredGroup("going", "going"),
+    answeredGroup("maybe", "maybe"),
+    answeredGroup("cantGo", "cant"),
     ...(host
       ? [
           { title: EVENT_COPY.groupInvited, rows: [...linkRows, ...appRows] },

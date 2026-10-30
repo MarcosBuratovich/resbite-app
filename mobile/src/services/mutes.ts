@@ -1,4 +1,5 @@
-import { passThrough, planDeadline, type Deadline, type Rpc } from "./contactInvites";
+import { errorField, passThrough, planDeadline, type Deadline, type Rpc } from "./contactInvites";
+import { EVENT_COPY } from "../domain/eventPage";
 
 type Reply = { data: unknown; error: unknown };
 /** The viewer's own `plan_mutes` rows (row-level security keeps it to them): the `series_id` of each. */
@@ -45,3 +46,11 @@ export const muteGateway = createMuteGateway(
 
 export const setPlanMute = (planId: string, muted: boolean): Promise<boolean> => muteGateway.setMute(planId, muted);
 export const readMutedSeries = (): Promise<Set<string>> => muteGateway.mutedSeries();
+
+/**
+ * Why set_plan_mute was refused, in words: 42501 is someone who is neither a host nor on the guest list. Anything else,
+ * a lost connection included, keeps the connection line.
+ */
+export function muteErrorMessage(e: unknown): string {
+  return errorField(e, "code") === "42501" ? EVENT_COPY.muteNotInvited : EVENT_COPY.muteFailed;
+}

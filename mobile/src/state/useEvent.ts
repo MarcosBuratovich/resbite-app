@@ -7,22 +7,25 @@ import { reconcileRsvp, type Response, type RsvpAttempt } from "../domain/rsvp";
 import { planGateway } from "../services/plans";
 import { readEvent, readGuests, readRsvp, writeRsvp, type EventSnapshot, type Guest } from "../services/rsvp";
 import { syncReminders } from "../services/deviceReminders";
-import { appointAdmin, removeAdmin } from "../services/admins";
-import { readMutedSeries, setPlanMute } from "../services/mutes";
-import { EVENT_COPY, viewerRole, type Viewer } from "../domain/eventPage";
-import { storedFor } from "../domain/contactInvites";
+import { adminErrorMessage, appointAdmin, removeAdmin } from "../services/admins";
+import { muteErrorMessage, readMutedSeries, setPlanMute } from "../services/mutes";
+import { EVENT_COPY, viewerRole, type AnswerCounts, type Viewer } from "../domain/eventPage";
+import { storedEntry } from "../domain/contactInvites";
 import { contactInviteGateway } from "../services/contactInvites";
 import { inviteCodeStore, type StoredInvite } from "../services/inviteCodeStore";
 import { formatPhone, phoneSendForm } from "../domain/phone";
 import { joinRequestGateway, type HostRequest } from "../services/joinRequests";
 
-/** Someone the host invited by personal link who hasn't answered: the stored name, else the number. */
+/** Someone a host invited by personal link who hasn't answered: the stored name, else the number. */
 export type InvitedPerson = {
   phone: string;
   e164: string;
   country: string;
   name: string;
+  /** This phone's code for them, found under their number or another spelling of it; null when this phone has none. */
   stored: StoredInvite | null;
+  /** The key `stored` is saved under (the E.164, or the other spelling), so removing the invitation forgets it. */
+  storedKey: string | null;
 };
 
 export type EventPage = {
@@ -36,8 +39,11 @@ export type EventPage = {
   attendee: EventSnapshot["attendee"];
   organizer: string | null;
   guests: Guest[];
+  /** The server's Going, Maybe and Can't go numbers for a guest who hasn't answered (they read only their own row). */
+  counts: AnswerCounts | null;
+  /** Personal-link invitations not answered yet: the hosts' (the owner and the admins); empty for everyone else. */
   invited: InvitedPerson[];
-  /** Open-link answers waiting for the organizer; empty for everyone else. */
+  /** Open-link answers waiting for a host; empty for everyone else. */
   requests: HostRequest[];
   busy: boolean;
   fresh: boolean;
@@ -48,7 +54,8 @@ export type EventPage = {
   acting: "mute" | "admin" | null;
   load: () => Promise<void>;
   respond: (value: Response, retry?: RsvpAttempt) => Promise<boolean>;
-  cancel: (opts?: { stopRepeating?: boolean }) => Promise<void>;
+  /** True once the resbite is cancelled (false: `error` says why). */
+  cancel: (opts?: { stopRepeating?: boolean }) => Promise<boolean>;
   mute: (muted: boolean) => Promise<void>;
   /** Both answer whether the server made the change (false: `error` says why). */
   appoint: (userId: string) => Promise<boolean>;
@@ -105,11 +112,12 @@ export function useEvent(planId: string | undefined): EventPage {
       setError(null);
       try {
         const next = await readEvent(planId, userId);
-        // Unanswered personal links are the organizer's; this list is a convenience, so a failure leaves it empty.
-        const people = next.plan.owner_id === userId ? await readInvited(planId, userId).catch(() => []) : [];
+        // Unanswered personal links and open-link requests are every host's: the owner's and the admins'.
+        const host = next.plan.owner_id === userId || next.admins.includes(userId);
+        // The invitations list is a convenience, so a failure leaves it empty.
+        const people = host ? await readInvited(planId, userId).catch(() => []) : [];
         // Likewise the waiting list: the event still opens if it can't be read.
-        const waiting =
-          next.plan.owner_id === userId ? await joinRequestGateway.forPlan(planId).catch(() => []) : [];
+        const waiting = host ? await joinRequestGateway.forPlan(planId).catch(() => []) : [];
         // Likewise the mute: a failed read leaves the resbite unmuted on screen, and the next load tries again.
         const muted = await readMutedSeries().catch(() => new Set<string>());
         if (valid()) {
@@ -125,7 +133,7 @@ export function useEvent(planId: string | undefined): EventPage {
           setSnapshot(null);
           setInvited([]);
           setRequests([]);
-          setError(e instanceof Error ? e.message : "Invitation unavailable.");
+          setError(e instanceof Error ? e.message : EVENT_COPY.readFailed);
         }
       } finally {
         if (valid()) setBusy(false);
@@ -185,34 +193,28 @@ export function useEvent(planId: string | undefined): EventPage {
         guests: (old?.guests ?? []).map((g) =>
           g.userId === userId ? { ...g, response: confirmed.attendee.response } : g,
         ),
+        counts: old?.counts ?? null,
       }));
       setFresh(true);
       const result = reconcileRsvp(attempt, confirmed);
       if (result === "confirmed") {
         ok = true;
         setPending(null);
-        setNotice("Your response is saved.");
+        setNotice(EVENT_COPY.responseSaved);
         syncDevice();
-        // UX-P5: answering reveals who's coming; the server now returns the whole list.
+        // UX-P5: answering reveals who's coming; the server now returns the whole list, so the counts come from it.
         try {
           const list = await readGuests(attempt.planId);
-          if (valid()) setSnapshot((old) => (old ? { ...old, guests: list } : old));
+          if (valid()) setSnapshot((old) => (old ? { ...old, guests: list, counts: null } : old));
         } catch {
-          if (valid()) setError("Your answer is saved, but who’s coming couldn’t load. Refresh to try again.");
+          if (valid()) setError(EVENT_COPY.guestsFailed);
         }
       } else if (result === "review" || result === "unavailable") {
         setPending(null);
-        setError(
-          result === "review"
-            ? "The plan or your response changed. Review the latest details before choosing again."
-            : "This plan is cancelled or has already started. Responses are closed.",
-        );
-      } else
-        setError(
-          "Your response is not confirmed. Retry checks the saved response before trying the same choice again.",
-        );
+        setError(result === "review" ? EVENT_COPY.responseReview : EVENT_COPY.responsesClosed);
+      } else setError(EVENT_COPY.responseUnconfirmed);
     } catch {
-      if (valid()) setError("We could not confirm your response. Check your connection, then retry.");
+      if (valid()) setError(EVENT_COPY.responseOffline);
     } finally {
       if (currentIdentity.current === identity) {
         working.current = false;
@@ -221,9 +223,9 @@ export function useEvent(planId: string | undefined): EventPage {
     }
     return ok;
   }
-  async function cancel(opts?: { stopRepeating?: boolean }) {
+  async function cancel(opts?: { stopRepeating?: boolean }): Promise<boolean> {
     const target = plan;
-    if (!target || working.current || actingRef.current) return;
+    if (!target || working.current || actingRef.current) return false;
     working.current = true;
     setBusy(true);
     setError(null);
@@ -237,7 +239,7 @@ export function useEvent(planId: string | undefined): EventPage {
         );
       else await cancelPlan(planGateway, { id: target.id, version: target.version, stopRepeating: opts?.stopRepeating });
     } catch (e) {
-      failure = e instanceof PlanSaveError ? e.message : "Could not cancel. Refresh and try again.";
+      failure = e instanceof PlanSaveError ? e.message : EVENT_COPY.cancelFailed;
       // As on My resbites: a definite failure reloads first; an uncertain one keeps what is shown.
       reload = !preview && e instanceof PlanSaveError && !e.uncertain;
     }
@@ -245,10 +247,11 @@ export function useEvent(planId: string | undefined): EventPage {
     if (reload) await load();
     if (failure) setError(failure);
     else {
-      setNotice(preview ? "Preview plan cancelled." : EVENT_COPY.cancelled);
+      setNotice(preview ? EVENT_COPY.previewCancelled : EVENT_COPY.cancelled);
       syncDevice();
     }
     setBusy(false);
+    return failure === null;
   }
   /** Mutes or unmutes this resbite's series on the server; the page shows the state the server answers with. */
   async function mute(next: boolean) {
@@ -268,8 +271,8 @@ export function useEvent(planId: string | undefined): EventPage {
         return series;
       });
       syncDevice();
-    } catch {
-      if (valid()) setError("Could not change the mute. Check your connection and try again.");
+    } catch (e) {
+      if (valid()) setError(muteErrorMessage(e));
     } finally {
       if (valid()) {
         actingRef.current = false;
@@ -277,7 +280,7 @@ export function useEvent(planId: string | undefined): EventPage {
       }
     }
   }
-  /** The host's: make a guest an admin, or take it back. The list is read again so it shows what the server holds. */
+  /** The owner's: make a guest an admin, or take it back. The list is read again so it shows what the server holds. */
   async function changeAdmin(userId: string, appointing: boolean): Promise<boolean> {
     const target = plan;
     if (!target || preview || !accountReady || working.current || actingRef.current) return false;
@@ -289,8 +292,8 @@ export function useEvent(planId: string | undefined): EventPage {
     try {
       await (appointing ? appointAdmin : removeAdmin)(target.id, userId);
       changed = true;
-    } catch {
-      if (valid()) setError("Could not change admins. Check your connection and try again.");
+    } catch (e) {
+      if (valid()) setError(adminErrorMessage(e));
     } finally {
       if (valid()) {
         actingRef.current = false;
@@ -309,9 +312,11 @@ export function useEvent(planId: string | undefined): EventPage {
     attendee: snapshot?.attendee ?? null,
     organizer: snapshot?.organizer ?? null,
     guests: snapshot?.guests ?? [],
+    counts: snapshot?.counts ?? null,
     invited,
     requests,
-    busy,
+    // Without a plan to read nothing loads: the screens say it isn't available instead of waiting.
+    busy: busy && Boolean(planId),
     fresh: preview || fresh,
     error,
     notice,
@@ -337,7 +342,15 @@ async function readInvited(planId: string, userId: string): Promise<InvitedPerso
     .filter((r) => !r.answered)
     .map((r) => {
       const e164 = phoneSendForm(r.phone);
-      const saved = storedFor(stored, e164) ?? null;
-      return { phone: r.phone, e164, country: r.country, name: saved?.name?.trim() || formatPhone(e164), stored: saved };
+      const entry = storedEntry(stored, e164);
+      const saved = entry?.value ?? null;
+      return {
+        phone: r.phone,
+        e164,
+        country: r.country,
+        name: saved?.name?.trim() || formatPhone(e164),
+        stored: saved,
+        storedKey: entry?.key ?? null,
+      };
     });
 }

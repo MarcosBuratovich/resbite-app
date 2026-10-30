@@ -87,7 +87,7 @@ export default function EventPage() {
   useEffect(() => {
     if (pathname === "/event") againOpen.current = false;
   }, [pathname]);
-  const { plan, role, attendee, guests, invited, requests, busy, fresh, pending } = event;
+  const { plan, role, attendee, guests, counts: serverCounts, invited, requests, busy, fresh, pending } = event;
   const device = useEventDevice(plan, { owner: role === "owner", response: attendee?.response ?? null });
   const back = () => (router.canGoBack() ? router.back() : router.replace("/plans"));
 
@@ -95,15 +95,15 @@ export default function EventPage() {
     return (
       <SafeAreaView style={s.page}>
         <ScrollView contentContainerStyle={s.body}>
-          <IconButton icon={ArrowLeft} label="Back" onPress={back} />
+          <IconButton icon={ArrowLeft} label={EVENT_COPY.back} onPress={back} />
           <ErrorNote message={event.error} />
           {busy ? (
-            <Copy accessibilityLiveRegion="polite">Opening your resbite…</Copy>
+            <Copy accessibilityLiveRegion="polite">{EVENT_COPY.opening}</Copy>
           ) : (
-            !event.error && <Copy>This resbite isn’t available.</Copy>
+            !event.error && <Copy>{EVENT_COPY.unavailable}</Copy>
           )}
-          {!preview && (
-            <IconButton icon={RefreshCw} label="Refresh invitation" busy={busy} onPress={() => void event.load()} />
+          {!preview && !!planId && (
+            <IconButton icon={RefreshCw} label={EVENT_COPY.refreshInvitation} busy={busy} onPress={() => void event.load()} />
           )}
         </ScrollView>
       </SafeAreaView>
@@ -130,11 +130,12 @@ export default function EventPage() {
   const guestNote = current.guest_note?.trim() ?? "";
   const tag = hostLabel(role);
   const organizer = event.organizer?.trim();
-  const counts = peopleCounts({ guests, invited, requests });
+  // A guest who hasn't answered reads only their own row: the numbers come from the server (CR-P4).
+  const counts = peopleCounts({ guests, invited, requests, counts: serverCounts });
   const answeredGuest = showsNames(role, response);
   const going = guests.filter((g) => g.response === "accepted").map((g) => g.name);
   const row = bottomRow({ role, state, response });
-  const rows = moreRows({ role, state, muted: event.muted, response });
+  const rows = moreRows({ role, state, muted: event.muted, response, calendar: device.shown });
   const hasMore = rows.length > 0;
   const closeMore = () => setMoreOpen(false);
 
@@ -147,7 +148,7 @@ export default function EventPage() {
   }
   function invite() {
     if (preview) {
-      event.setNotice("Invitations are disabled in design preview. Real invitations need an approved tester account.");
+      event.setNotice(EVENT_COPY.invitePreview);
       return;
     }
     router.push({ pathname: "/invitations", params: { plan: current.id } });
@@ -155,7 +156,7 @@ export default function EventPage() {
   // Maps opens only when tapped (benchmark row 6); a failure is said, never swallowed.
   function openMaps(target: string) {
     setMapsError(null);
-    Linking.openURL(target).catch(() => setMapsError("Couldn’t open Maps."));
+    Linking.openURL(target).catch(() => setMapsError(EVENT_COPY.mapsFailed));
   }
   function openPeople() {
     router.push({ pathname: "/guests", params: { plan: current.id } });
@@ -183,9 +184,9 @@ export default function EventPage() {
     if (role === "admin" && (saved === "declined" || saved === "withdrawn")) await event.load();
   };
   const question = cancelQuestion(current, zone);
-  function cancelResbite(stop: boolean) {
-    closeMore();
-    void event.cancel({ stopRepeating: stop });
+  // Like the other actions, the sheet closes once the resbite is cancelled; a failure stays in view, inside the sheet.
+  async function cancelResbite(stop: boolean) {
+    if (await event.cancel({ stopRepeating: stop })) closeMore();
   }
   const calendarTitle = device.calendarUpdate ? EVENT_COPY.updateCalendar : EVENT_COPY.addToCalendar;
   const moreRow = (name: (typeof rows)[number]) => {
@@ -236,6 +237,8 @@ export default function EventPage() {
     title: EVENT_COPY.moreButton,
     icon: Ellipsis,
     onPress: () => {
+      // A fresh sheet never shows an error left from before.
+      event.clearError();
       setMoreView("rows");
       setMoreOpen(true);
     },
@@ -265,7 +268,19 @@ export default function EventPage() {
   else if (row.kind === "reply")
     bottom = (
       <ActionBar
-        lead={<ReplyPill text={row.text} onChange={row.change ? () => setAnswerOpen(true) : undefined} />}
+        lead={
+          <ReplyPill
+            text={row.text}
+            onChange={
+              row.change
+                ? () => {
+                    event.clearError();
+                    setAnswerOpen(true);
+                  }
+                : undefined
+            }
+          />
+        }
         actions={hasMore ? [more] : []}
       />
     );
@@ -288,7 +303,7 @@ export default function EventPage() {
         {!!notice && toast === notice && (
           <Reveal style={{ alignSelf: "flex-start" }}>
             <View accessibilityLiveRegion="polite">
-              <Chip icon={Check} tone="aqua" text={preview ? "Preview changes saved" : "Changes saved"} />
+              <Chip icon={Check} tone="aqua" text={preview ? EVENT_COPY.previewChangesSaved : EVENT_COPY.changesSaved} />
             </View>
           </Reveal>
         )}
@@ -318,7 +333,7 @@ export default function EventPage() {
         <PlaceRow
           text={where.text}
           onOpen={mapsTarget ? () => openMaps(mapsTarget) : undefined}
-          label={`Open ${current.place_label.trim()} in Maps`}
+          label={EVENT_COPY.openInMaps(current.place_label)}
         />
         <ErrorNote message={mapsError} />
         <ErrorNote message={device.error} />
@@ -352,13 +367,13 @@ export default function EventPage() {
           <Button
             icon={false}
             secondary
-            title="Retry my response"
+            title={EVENT_COPY.retryResponse}
             disabled={busy}
             onPress={() => void event.respond(pending.response, pending)}
           />
         )}
         {!preview && !!event.error && (
-          <Button icon={false} secondary title="Refresh invitation" disabled={busy} onPress={() => void event.load()} />
+          <Button icon={false} secondary title={EVENT_COPY.refreshInvitation} disabled={busy} onPress={() => void event.load()} />
         )}
       </ContentPage>
       <NotificationAsk ask={device.ask} />
@@ -370,7 +385,6 @@ export default function EventPage() {
       >
         {moreView === "rows" && rows.map(moreRow)}
         {moreView === "reply" && answerControl(afterMoreReply)}
-        {moreView !== "cancel" && <ErrorNote message={event.error} />}
         {moreView === "cancel" && (
           <>
             {!!question.line && <Copy>{question.line}</Copy>}
@@ -380,16 +394,27 @@ export default function EventPage() {
                 large
                 icon={false}
                 title={action.title}
-                disabled={acting}
+                disabled={acting || busy}
                 destructive={!action.stop}
                 secondary={action.stop}
                 errorInk={action.stop}
-                onPress={() => cancelResbite(action.stop)}
+                onPress={() => void cancelResbite(action.stop)}
               />
             ))}
-            <Button large icon={false} secondary title={question.keep} onPress={() => setMoreView("rows")} />
+            <Button
+              large
+              icon={false}
+              secondary
+              title={question.keep}
+              disabled={busy}
+              onPress={() => {
+                event.clearError();
+                setMoreView("rows");
+              }}
+            />
           </>
         )}
+        <ErrorNote message={event.error} />
       </GrabberSheet>
       <GrabberSheet visible={answerOpen} title={EVENT_COPY.yourAnswer} onClose={() => setAnswerOpen(false)}>
         {answerControl(() => setAnswerOpen(false))}

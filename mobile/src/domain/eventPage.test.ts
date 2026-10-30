@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   EVENT_COPY,
+  answerCountsFrom,
   bottomRow,
   byline,
   cancelQuestion,
@@ -71,16 +72,25 @@ test("replyText", () => {
 });
 
 test("moreRows by role, state and answer", () => {
-  assert.deepEqual(moreRows({ role: "owner", state: "open", muted: false, response: null }), ["calendar", "mute", "again", "cancel"]);
-  assert.deepEqual(moreRows({ role: "owner", state: "open", muted: true, response: null }), ["calendar", "unmute", "again", "cancel"]);
-  assert.deepEqual(moreRows({ role: "admin", state: "open", muted: false, response: "accepted" }), ["calendar", "mute", "again", "changeReply", "cancel"]);
-  assert.deepEqual(moreRows({ role: "guest", state: "open", muted: false, response: "maybe" }), ["calendar", "mute"]);
-  assert.deepEqual(moreRows({ role: "guest", state: "open", muted: true, response: "accepted" }), ["calendar", "unmute"]);
-  assert.deepEqual(moreRows({ role: "guest", state: "open", muted: false, response: "pending" }), []);
-  assert.deepEqual(moreRows({ role: "guest", state: "open", muted: false, response: null }), []);
+  const calendar = true;
+  assert.deepEqual(moreRows({ role: "owner", state: "open", muted: false, response: null, calendar }), ["calendar", "mute", "again", "cancel"]);
+  assert.deepEqual(moreRows({ role: "owner", state: "open", muted: true, response: null, calendar }), ["calendar", "unmute", "again", "cancel"]);
+  assert.deepEqual(moreRows({ role: "admin", state: "open", muted: false, response: "accepted", calendar }), ["calendar", "mute", "again", "changeReply", "cancel"]);
+  assert.deepEqual(moreRows({ role: "guest", state: "open", muted: false, response: "maybe", calendar }), ["calendar", "mute"]);
+  assert.deepEqual(moreRows({ role: "guest", state: "open", muted: true, response: "accepted", calendar }), ["calendar", "unmute"]);
+  assert.deepEqual(moreRows({ role: "guest", state: "open", muted: false, response: "pending", calendar }), []);
+  assert.deepEqual(moreRows({ role: "guest", state: "open", muted: false, response: null, calendar }), []);
   for (const role of ["owner", "admin", "guest"] as const)
     for (const state of ["ended", "cancelled"] as const)
-      assert.deepEqual(moreRows({ role, state, muted: false, response: "accepted" }), [], `${role} ${state}`);
+      assert.deepEqual(moreRows({ role, state, muted: false, response: "accepted", calendar }), [], `${role} ${state}`);
+});
+
+test("moreRows: Add to calendar only where UX3's calendar rule allows it", () => {
+  // A Can’t go guest, and an admin who hasn't answered (a rolled occurrence), get no calendar row (canAddToCalendar).
+  const calendar = false;
+  assert.deepEqual(moreRows({ role: "guest", state: "open", muted: false, response: "declined", calendar }), ["mute"]);
+  assert.deepEqual(moreRows({ role: "guest", state: "open", muted: true, response: "withdrawn", calendar }), ["unmute"]);
+  assert.deepEqual(moreRows({ role: "admin", state: "open", muted: false, response: "pending", calendar }), ["mute", "again", "changeReply", "cancel"]);
 });
 
 test("whenLines marks an ended event and points a repeating one to My resbites", () => {
@@ -111,12 +121,14 @@ test("hostLabel and byline", () => {
 });
 
 const guest = (userId: string, name: string, response: string) => ({ userId, name, response });
-const linkPerson = (phone: string, name: string, sentVia?: "whatsapp" | "messages") => ({
+/** Someone invited by personal link: `held` is whether this phone holds their code (with the app it went by, if any). */
+const linkPerson = (phone: string, name: string, sentVia?: "whatsapp" | "messages", held = sentVia !== undefined) => ({
   phone,
   e164: `+44${phone}`,
   country: "GB",
   name,
-  stored: sentVia ? { code: "c", name, sentVia } : null,
+  stored: held ? { code: "c", name, ...(sentVia ? { sentVia } : {}) } : null,
+  storedKey: held ? `+44${phone}` : null,
 });
 const request = (user_id: string, name: string) => ({ user_id, name, response: "accepted", ending: null, created_at: "2099-01-01T00:00:00Z" });
 
@@ -135,6 +147,23 @@ test("peopleCounts and peopleRowText", () => {
   assert.equal(peopleRowText({ ...c, maybe: 2 }, true), "Going 6 · Maybe 2 · Can’t go 1 · 2 invited · 1 waiting");
   assert.equal(peopleRowText(c, false), "Going 6 · Can’t go 1");
   assert.equal(peopleRowText({ ...c, invited: 0, waiting: 0 }, true), "Going 6 · Can’t go 1");
+});
+
+test("an unanswered guest's people row reads the server's counts, not their own row alone", () => {
+  // The server returns only their own pending row (UX-P5); plan_people_counts gives the numbers (CR-P4).
+  const own = [guest("me", "Fixture", "pending")];
+  assert.deepEqual(peopleCounts({ guests: own, invited: [], requests: [] }), { going: 0, maybe: 0, cantGo: 0, invited: 1, waiting: 0 });
+  const counts = peopleCounts({ guests: own, invited: [], requests: [], counts: { going: 2, maybe: 1, cantGo: 1 } });
+  assert.deepEqual(counts, { going: 2, maybe: 1, cantGo: 1, invited: 1, waiting: 0 });
+  assert.equal(peopleRowText(counts, false), "Going 2 · Maybe 1 · Can’t go 1");
+  // No counts (the whole list is read): the rows are counted as before.
+  assert.equal(peopleCounts({ guests: [guest("a", "A", "accepted")], invited: [], requests: [], counts: null }).going, 1);
+});
+
+test("answerCountsFrom reads plan_people_counts' reply and refuses anything else", () => {
+  assert.deepEqual(answerCountsFrom({ going: 3, maybe: 0, cant_go: 2 }), { going: 3, maybe: 0, cantGo: 2 });
+  for (const bad of [null, "3", {}, { going: 1, maybe: 0 }, { going: -1, maybe: 0, cant_go: 0 }, { going: 1.5, maybe: 0, cant_go: 0 }, { going: "1", maybe: 0, cant_go: 0 }])
+    assert.throws(() => answerCountsFrom(bad), /Unexpected people counts/, JSON.stringify(bad));
 });
 
 test("namesLine", () => {
@@ -166,49 +195,90 @@ test("cancelQuestion: one button for a single resbite, two for a repeating one",
 test("peopleGroups for an owner", () => {
   const groups = peopleGroups({
     role: "owner",
+    state: "open",
     guests: [
       guest("adm", "Leo", "accepted"), guest("g1", "Marta", "accepted"), guest("m1", "Sol", "maybe"),
       guest("c1", "Ivy", "declined"), guest("p1", "Pat", "pending"),
     ],
-    invited: [linkPerson("111", "Dan", "whatsapp"), linkPerson("222", "Eve", "messages"), linkPerson("333", "Fay")],
+    // Dan's and Fay's codes are on this phone (Fay's with no app recorded); Eve's is not.
+    invited: [linkPerson("111", "Dan", "whatsapp"), linkPerson("222", "Eve"), linkPerson("333", "Fay", undefined, true)],
     requests: [request("r1", "Rae")],
     admins: ["adm"],
-    sentHere: new Set(["+44111", "+44333", "222"]),
   });
   assert.deepEqual(groups.map((g) => g.title), [
     "Going · 2", "Maybe · 1", "Can’t go · 1", "Invited, not answered yet · 4", "Waiting for you · 1",
   ]);
   const [going, maybe, cant, invited, waiting] = groups.map((g) => g.rows);
-  assert.deepEqual(going[0], { key: "guest:adm", name: "Leo", status: null, admin: true, kind: "guest", userId: "adm", actions: ["removeAdmin", "remove"] });
+  assert.deepEqual(going[0], { key: "guest:adm", name: "Leo", status: null, reply: "Going", admin: true, kind: "guest", userId: "adm", actions: ["removeAdmin", "remove"] });
   assert.deepEqual(going[1].actions, ["makeAdmin", "remove"]);
   assert.equal(going[1].admin, false);
-  assert.deepEqual(maybe[0].actions, ["remove"]);
+  assert.deepEqual(maybe[0], { key: "guest:m1", name: "Sol", status: null, reply: "Maybe", admin: false, kind: "guest", userId: "m1", actions: ["remove"] });
   assert.deepEqual(cant[0].actions, ["remove"]);
-  assert.deepEqual(invited[0], { key: "link:111", name: "Dan", status: "Invited by WhatsApp", admin: false, kind: "linkInvite", phone: "111", actions: ["sendAgain", "removeInvite"] });
-  assert.equal(invited[1].status, "Invited by Messages");
-  // The store is keyed by E.164: Eve's national number matches the set but her E.164 does not.
+  assert.equal(cant[0].reply, "Can’t go");
+  assert.deepEqual(invited[0], { key: "link:111", name: "Dan", status: "Invited by WhatsApp", reply: null, admin: false, kind: "linkInvite", phone: "111", actions: ["sendAgain", "removeInvite"] });
+  // Send again needs this phone's code for the person, found under any spelling of their number (`stored`).
+  assert.equal(invited[1].status, "Invited by link");
   assert.deepEqual(invited[1].actions, ["removeInvite"]);
   assert.equal(invited[2].status, "Invited by link");
   assert.deepEqual(invited[2].actions, ["sendAgain", "removeInvite"]);
-  assert.deepEqual(invited[3], { key: "app:p1", name: "Pat", status: "Invited in the app", admin: false, kind: "appInvite", userId: "p1", actions: ["remove"] });
-  assert.deepEqual(waiting[0], { key: "request:r1", name: "Rae", status: "Asked through the link", admin: false, kind: "request", userId: "r1", actions: ["approve", "decline"] });
+  assert.deepEqual(invited[3], { key: "app:p1", name: "Pat", status: "Invited in the app", reply: null, admin: false, kind: "appInvite", userId: "p1", actions: ["remove"] });
+  assert.deepEqual(waiting[0], { key: "request:r1", name: "Rae", status: "Asked through the link", reply: null, admin: false, kind: "request", userId: "r1", actions: ["approve", "decline"] });
+});
+
+test("peopleGroups: the owner removes an admin's role whatever their answer; Make admin only on Going", () => {
+  // Maybe keeps the role (CR-P15); a rolled occurrence carries the admins as pending (CR-P24).
+  const groups = peopleGroups({
+    role: "owner",
+    state: "open",
+    guests: [guest("a1", "Ana", "maybe"), guest("a2", "Bo", "declined"), guest("a3", "Cy", "pending"), guest("g1", "Di", "maybe")],
+    invited: [],
+    requests: [],
+    admins: ["a1", "a2", "a3"],
+  });
+  const rows = groups.flatMap((g) => g.rows);
+  const by = (name: string) => rows.find((r) => r.name === name)!;
+  assert.deepEqual(by("Ana").actions, ["removeAdmin", "remove"]);
+  assert.deepEqual(by("Bo").actions, ["removeAdmin", "remove"]);
+  assert.deepEqual([by("Cy").kind, by("Cy").admin, by("Cy").actions], ["appInvite", true, ["removeAdmin", "remove"]]);
+  assert.deepEqual(by("Di").actions, ["remove"]);
+  assert.equal(by("Ana").admin, true);
 });
 
 test("peopleGroups for an admin and a guest", () => {
   const input = {
-    guests: [guest("g1", "Marta", "accepted"), guest("p1", "Pat", "pending")],
+    state: "open" as const,
+    guests: [guest("g1", "Marta", "accepted"), guest("a2", "Leo", "accepted"), guest("p1", "Pat", "pending"), guest("a3", "Cy", "pending")],
     invited: [linkPerson("111", "Dan")],
     requests: [request("r1", "Rae")],
-    admins: [] as string[],
-    sentHere: new Set<string>(),
+    admins: ["a2", "a3"],
   };
   const admin = peopleGroups({ ...input, role: "admin" });
-  assert.deepEqual(admin[0].rows[0].actions, ["remove"]);
-  assert.equal(admin.length, 3);
+  assert.deepEqual(admin.map((g) => g.title), ["Going · 2", "Invited, not answered yet · 3", "Waiting for you · 1"]);
+  // An admin removes guests and decides requests, but never touches another admin (CR-P15) or the admin roles.
+  assert.deepEqual(admin[0].rows.map((r) => [r.name, r.actions]), [["Marta", ["remove"]], ["Leo", []]]);
+  assert.deepEqual(admin[1].rows.map((r) => [r.name, r.actions]), [["Dan", ["removeInvite"]], ["Pat", ["remove"]], ["Cy", []]]);
+  assert.deepEqual(admin[2].rows[0].actions, ["approve", "decline"]);
   const asGuest = peopleGroups({ ...input, role: "guest" });
-  assert.deepEqual(asGuest.map((g) => g.title), ["Going · 1"]);
-  assert.deepEqual(asGuest[0].rows[0].actions, []);
+  assert.deepEqual(asGuest.map((g) => g.title), ["Going · 2"]);
+  assert.deepEqual(asGuest[0].rows.map((r) => r.actions), [[], []]);
   assert.deepEqual(peopleGroups({ ...input, guests: [], invited: [], requests: [], role: "owner" }), []);
+});
+
+test("peopleGroups after the end and once cancelled: the same groups, no actions", () => {
+  for (const state of ["ended", "cancelled"] as const) {
+    const groups = peopleGroups({
+      role: "owner",
+      state,
+      guests: [guest("adm", "Leo", "accepted"), guest("g1", "Marta", "accepted"), guest("p1", "Pat", "pending")],
+      invited: [linkPerson("111", "Dan", "whatsapp")],
+      requests: [request("r1", "Rae")],
+      admins: ["adm"],
+    });
+    assert.deepEqual(groups.map((g) => g.title), ["Going · 2", "Invited, not answered yet · 2", "Waiting for you · 1"], state);
+    assert.deepEqual(groups.flatMap((g) => g.rows.map((r) => r.actions)), [[], [], [], [], []], state);
+    // The roles still show.
+    assert.equal(groups[0].rows[0].admin, true, state);
+  }
 });
 
 test("EVENT_COPY pins the page, sheet and list words", () => {
@@ -218,6 +288,18 @@ test("EVENT_COPY pins the page, sheet and list words", () => {
       "Send again on Messages", "Remove", "Approve", "Decline", "Admin", "Invite", "Edit", "More", "Change",
       "Do this again", "Add to calendar", "Mute this resbite", "Unmute this resbite", "Change my reply",
       "Cancel resbite", "Your answer", "Your resbite is cancelled.", "Or share the event link", "Update calendar", "Cancelled", "Back", "Loading this resbite",
+      "Opening your resbite…", "This resbite isn’t available.", "Try again", "Refresh invitation", "Retry my response",
+      "Changes saved", "Preview changes saved", "Couldn’t open Maps.", "Open Fixture café in Maps",
+      "Invitations are disabled in design preview. Real invitations need an approved tester account.", "Preview plan cancelled.",
+      "This resbite couldn’t be opened. Check your connection and try again.", "Your response is saved.",
+      "Your answer is saved, but who’s coming couldn’t load. Refresh to try again.",
+      "The plan or your response changed. Review the latest details before choosing again.",
+      "This resbite is cancelled or has ended. Answers are closed.",
+      "Your response is not confirmed. Retry checks the saved response before trying the same choice again.",
+      "We could not confirm your response. Check your connection, then retry.", "Could not cancel. Refresh and try again.",
+      "Could not change the mute. Check your connection and try again.", "Only someone invited to this resbite can mute it.",
+      "Could not change admins. Check your connection and try again.", "Only someone who uses the app can be an admin.",
+      "Only someone who’s going can be an admin.", "Only the organizer can change admins.",
     ],
     [
       EVENT_COPY.people, EVENT_COPY.actionsFor, EVENT_COPY.makeAdmin, EVENT_COPY.removeAdmin, EVENT_COPY.removeFromResbite,
@@ -225,6 +307,18 @@ test("EVENT_COPY pins the page, sheet and list words", () => {
       EVENT_COPY.adminBadge, EVENT_COPY.invite, EVENT_COPY.edit, EVENT_COPY.moreButton, EVENT_COPY.change,
       EVENT_COPY.doThisAgain, EVENT_COPY.addToCalendar, EVENT_COPY.mute, EVENT_COPY.unmute, EVENT_COPY.changeMyReply,
       EVENT_COPY.cancelResbite, EVENT_COPY.yourAnswer, EVENT_COPY.cancelled, EVENT_COPY.shareLink, EVENT_COPY.updateCalendar, EVENT_COPY.cancelledChip, EVENT_COPY.back, EVENT_COPY.loading,
+      EVENT_COPY.opening, EVENT_COPY.unavailable, EVENT_COPY.tryAgain, EVENT_COPY.refreshInvitation, EVENT_COPY.retryResponse,
+      EVENT_COPY.changesSaved, EVENT_COPY.previewChangesSaved, EVENT_COPY.mapsFailed, EVENT_COPY.openInMaps(" Fixture café "),
+      EVENT_COPY.invitePreview, EVENT_COPY.previewCancelled,
+      EVENT_COPY.readFailed, EVENT_COPY.responseSaved,
+      EVENT_COPY.guestsFailed,
+      EVENT_COPY.responseReview,
+      EVENT_COPY.responsesClosed,
+      EVENT_COPY.responseUnconfirmed,
+      EVENT_COPY.responseOffline, EVENT_COPY.cancelFailed,
+      EVENT_COPY.muteFailed, EVENT_COPY.muteNotInvited,
+      EVENT_COPY.adminsFailed, EVENT_COPY.adminNeedsApp,
+      EVENT_COPY.adminNotGoing, EVENT_COPY.adminsOwnerOnly,
     ],
   );
 });

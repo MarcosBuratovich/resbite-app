@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createMuteGateway } from "./mutes";
+import { createMuteGateway, muteErrorMessage } from "./mutes";
 
 type Call = { fn: string; args: Record<string, unknown> };
 function gateway(reply: { data: unknown; error: unknown }) {
@@ -43,4 +43,10 @@ test("the muted series read turns series_id rows into a Set", async () => {
 test("a failed read of the mutes is thrown", async () => {
   const failure = { message: "offline" };
   await assert.rejects(gateway({ data: null, error: failure }).gw.mutedSeries(), (e) => e === failure);
+});
+
+test("set_plan_mute's refusal reads as plain words; anything else is the connection line", () => {
+  assert.equal(muteErrorMessage({ code: "42501", message: "Host or attendee required" }), "Only someone invited to this resbite can mute it.");
+  for (const other of [new Error("Failed to fetch"), { code: "22023", message: "x" }, null])
+    assert.equal(muteErrorMessage(other), "Could not change the mute. Check your connection and try again.");
 });

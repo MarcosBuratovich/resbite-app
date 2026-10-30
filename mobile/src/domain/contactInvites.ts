@@ -64,11 +64,20 @@ export function hostRegion(userPhone: string | null | undefined, fallback: strin
   return (userPhone ? regionOf(userPhone) : null) ?? fallback;
 }
 
+/**
+ * The stored entry for a number and the key it is saved under: the exact send form, else one saved under another
+ * spelling of the same key (so forgetting it removes that key).
+ */
+export function storedEntry<T>(stored: Record<string, T>, e164: string): { key: string; value: T } | undefined {
+  if (stored[e164] !== undefined) return { key: e164, value: stored[e164] };
+  const key = phoneKey(e164);
+  const found = Object.entries(stored).find(([k]) => phoneKey(k) === key);
+  return found ? { key: found[0], value: found[1] } : undefined;
+}
+
 /** The stored entry for a number: the exact send form, else one saved under another spelling of the same key. */
 export function storedFor<T>(stored: Record<string, T>, e164: string): T | undefined {
-  if (stored[e164] !== undefined) return stored[e164];
-  const key = phoneKey(e164);
-  return Object.entries(stored).find(([k]) => phoneKey(k) === key)?.[1];
+  return storedEntry(stored, e164)?.value;
 }
 
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";

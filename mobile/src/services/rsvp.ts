@@ -4,6 +4,7 @@ import { planFromRow, type Plan } from "../domain/plans";
 import type { RsvpAttempt, RsvpSnapshot } from "../domain/rsvp";
 import { isInviteToken } from "../domain/appLinks";
 import { claimLinkErrorMessage, incompleteInvitation } from "../domain/eventLinks";
+import { answerCountsFrom, type AnswerCounts } from "../domain/eventPage";
 const eventUnavailable =
   "This invitation is unavailable, or its details could not be refreshed. Check your connection and try again.";
 export async function readRsvp(
@@ -73,6 +74,11 @@ export type EventSnapshot = {
   guests: Guest[];
   /** The ids of the people the host made admins. */
   admins: string[];
+  /**
+   * How many are going, maybe and can't go, from the server, for an invitee who hasn't answered (they read only their
+   * own guest row); null when `guests` is the whole list.
+   */
+  counts: AnswerCounts | null;
 };
 
 /**
@@ -99,8 +105,9 @@ export async function readGuests(planId: string): Promise<Guest[]> {
 }
 
 /**
- * The event page's read. Any failed read, the guest list and the organizer's name included, makes the
- * whole event unavailable. An invitee's own row and the organizer's name are read together.
+ * The event page's read. Any failed read, the guest list, the organizer's name and the counts included, makes the
+ * whole event unavailable. An invitee's own row and the organizer's name are read together; an invitee who hasn't
+ * answered (and isn't an admin, who sees every row) also gets the counts (`plan_people_counts`, CR-P4).
  */
 export async function readEvent(planId: string, userId: string): Promise<EventSnapshot> {
   const [plan, guests] = await Promise.all([
@@ -132,5 +139,17 @@ export async function readEvent(planId: string, userId: string): Promise<EventSn
     organizer = host.data?.display_name ?? null;
   }
   const mapped = planFromRow(plan.data);
-  return { plan: mapped, attendee, organizer, guests, admins: mapped.admins };
+  let counts: AnswerCounts | null = null;
+  if (attendee?.response === "pending" && !mapped.admins.includes(userId)) {
+    const reply = await withDeadline((signal) =>
+      supabase.rpc("plan_people_counts", { p_plan: planId }).abortSignal(signal),
+    );
+    if (reply.error) throw new Error(eventUnavailable);
+    try {
+      counts = answerCountsFrom(reply.data);
+    } catch {
+      throw new Error(eventUnavailable);
+    }
+  }
+  return { plan: mapped, attendee, organizer, guests, admins: mapped.admins, counts };
 }

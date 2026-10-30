@@ -9,7 +9,7 @@ import { IconButton, focusHeading } from "../src/design/kit";
 import { GrabberSheet } from "../src/design/GrabberSheet";
 import { MenuRow, MenuSeparator } from "../src/design/MenuRow";
 import { colors as c, fonts, space } from "../src/design/tokens";
-import { EVENT_COPY, peopleGroups, type PersonAction, type PersonRow } from "../src/domain/eventPage";
+import { EVENT_COPY, pageState, peopleGroups, type PersonAction, type PersonRow } from "../src/domain/eventPage";
 import { removeGuestQuestion } from "../src/domain/eventLinks";
 import { INVITE_COPY } from "../src/domain/inviteCopy";
 import { invitationGateway } from "../src/services/invitations";
@@ -32,30 +32,44 @@ const ACTION_ICON: Partial<Record<PersonAction, LucideIcon>> = {
 export default function Guests() {
   const { plan: planId } = useLocalSearchParams<{ plan?: string }>();
   const event = useEvent(planId);
-  return event.plan ? <People event={event} plan={event.plan} /> : <Bar error={event.error} loading={event.busy && !event.error} />;
+  if (event.plan) return <People event={event} plan={event.plan} />;
+  const loading = event.busy && !event.error;
+  return (
+    <View style={s.page}>
+      <Bar planId={planId} />
+      <View style={{ paddingHorizontal: 20, gap: space.m }}>
+        <ErrorNote message={event.error} />
+        {loading ? <ActivityIndicator accessibilityLabel={EVENT_COPY.loading} color={c.aquaDark} /> : null}
+        {!loading && !event.error ? <Copy>{EVENT_COPY.unavailable}</Copy> : null}
+        {!!planId && !!event.error ? (
+          <Button icon={false} secondary title={EVENT_COPY.tryAgain} disabled={event.busy} onPress={() => void event.load()} />
+        ) : null}
+      </View>
+    </View>
+  );
 }
 
-function Bar({ error = null, loading = false }: { error?: string | null; loading?: boolean }) {
+/** The title bar. Back returns to where the list was opened from, else to the resbite (else My resbites). */
+function Bar({ planId }: { planId?: string }) {
   const insets = useSafeAreaInsets();
   const title = useRef<Text | null>(null);
   useEffect(() => {
     const frame = requestAnimationFrame(() => focusHeading(title.current));
     return () => cancelAnimationFrame(frame);
   }, []);
+  const back = () => {
+    if (router.canGoBack()) router.back();
+    else if (planId) router.replace({ pathname: "/event", params: { plan: planId } });
+    else router.replace("/plans");
+  };
   return (
-    <View style={s.page}>
-      <View style={[styles.bar, { minHeight: insets.top + 56, paddingTop: insets.top }]}>
-        <View style={[styles.back, { top: insets.top + 6 }]}>
-          <IconButton icon={ArrowLeft} label={EVENT_COPY.back} onPress={() => router.back()} />
-        </View>
-        <Text ref={title} accessibilityRole="header" style={styles.barTitle}>
-          {EVENT_COPY.people}
-        </Text>
+    <View style={[styles.bar, { minHeight: insets.top + 56, paddingTop: insets.top }]}>
+      <View style={[styles.back, { top: insets.top + 6 }]}>
+        <IconButton icon={ArrowLeft} label={EVENT_COPY.back} onPress={back} />
       </View>
-      <View style={{ paddingHorizontal: 20 }}>
-        <ErrorNote message={error} />
-        {loading ? <ActivityIndicator accessibilityLabel={EVENT_COPY.loading} color={c.aquaDark} /> : null}
-      </View>
+      <Text ref={title} accessibilityRole="header" style={styles.barTitle}>
+        {EVENT_COPY.people}
+      </Text>
     </View>
   );
 }
@@ -69,13 +83,14 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const host = role !== "guest";
+  // After the end, or once cancelled, the list stays readable but offers no actions.
   const groups = peopleGroups({
     role: role ?? "guest",
+    state: pageState(plan),
     guests,
     invited,
     requests,
     admins,
-    sentHere: resend.sentHere,
   });
   const off = working || event.acting !== null || resend.busy !== null;
   const open = (row: PersonRow) => {
@@ -121,7 +136,7 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
       if (row.kind === "linkInvite") {
         const person = invitee(row);
         await contactInviteGateway.revoke(plan.id, row.phone!);
-        if (person) await resend.forget(person.e164);
+        if (person) await resend.forget(person);
       } else await invitationGateway.removeGuest(plan.id, row.userId!);
     });
   const confirmDecline = (row: PersonRow) => run(async () => void (await joinRequestGateway.decide(plan.id, row.userId!, false)));
@@ -130,7 +145,7 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
   const shownError = error ?? resend.error ?? event.error;
   return (
     <View style={s.page}>
-      <Bar />
+      <Bar planId={plan.id} />
       <ScrollView contentContainerStyle={styles.list}>
         {!sheet && <ErrorNote message={event.error} />}
         {groups.map((group) => (
@@ -172,7 +187,8 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
               <Avatar name={current.name} big />
               <View style={{ flex: 1 }}>
                 <Text style={styles.headName}>{current.name}</Text>
-                {current.status ? <Text style={styles.headSub}>{current.status}</Text> : null}
+                {/* The group title is out of sight inside the sheet: the head says the answer, or how they were invited. */}
+                {(current.status ?? current.reply) ? <Text style={styles.headSub}>{current.status ?? current.reply}</Text> : null}
               </View>
             </View>
             {sheet?.view === "menu" ? (
@@ -212,9 +228,9 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
                 <Copy accessibilityRole="header">
                   {sheet?.view === "decline"
                     ? INVITE_COPY.declineQuestion(current.name)
-                    : current.kind === "linkInvite"
-                      ? INVITE_COPY.removeInvite(current.name)
-                      : removeGuestQuestion(current.name)}
+                    : current.kind === "guest"
+                      ? removeGuestQuestion(current.name)
+                      : INVITE_COPY.removeInvite(current.name)}
                 </Copy>
                 <Button
                   title={sheet?.view === "decline" ? EVENT_COPY.decline : EVENT_COPY.remove}
@@ -262,7 +278,8 @@ function Row({
   const text: Record<PersonAction, string> = {
     makeAdmin: EVENT_COPY.makeAdmin,
     removeAdmin: EVENT_COPY.removeAdmin,
-    remove: row.kind === "guest" || row.kind === "appInvite" ? EVENT_COPY.removeFromResbite : EVENT_COPY.remove,
+    // An answered guest is removed from the resbite; an invitation not answered yet (in the app or by link) is removed.
+    remove: row.kind === "guest" ? EVENT_COPY.removeFromResbite : EVENT_COPY.remove,
     removeInvite: EVENT_COPY.remove,
     sendAgain: via === "messages" ? EVENT_COPY.sendAgainMessages : EVENT_COPY.sendAgainWhatsApp,
     approve: EVENT_COPY.approve,

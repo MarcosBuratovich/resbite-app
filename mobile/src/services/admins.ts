@@ -1,4 +1,5 @@
-import { passThrough, planDeadline, type Deadline, type Rpc } from "./contactInvites";
+import { errorField, passThrough, planDeadline, type Deadline, type Rpc } from "./contactInvites";
+import { EVENT_COPY } from "../domain/eventPage";
 
 export type AdminGateway = {
   appoint(planId: string, userId: string): Promise<void>;
@@ -25,3 +26,19 @@ export const adminGateway = createAdminGateway(
 
 export const appointAdmin = (planId: string, userId: string): Promise<void> => adminGateway.appoint(planId, userId);
 export const removeAdmin = (planId: string, userId: string): Promise<void> => adminGateway.remove(planId, userId);
+
+/**
+ * Why appoint_admin or remove_admin was refused, in words: 42501 is "not the owner" (or the resbite is no longer open
+ * to changes); appoint_admin's two 22023s name a guest who isn't going or doesn't use the app. Anything else, a lost
+ * connection included, keeps the connection line.
+ */
+export function adminErrorMessage(e: unknown): string {
+  const code = errorField(e, "code");
+  if (code === "42501") return EVENT_COPY.adminsOwnerOnly;
+  if (code === "22023") {
+    const message = errorField(e, "message");
+    if (message === "Only a guest who uses the app can be an admin") return EVENT_COPY.adminNeedsApp;
+    if (message === "Only a guest who is going can be an admin") return EVENT_COPY.adminNotGoing;
+  }
+  return EVENT_COPY.adminsFailed;
+}

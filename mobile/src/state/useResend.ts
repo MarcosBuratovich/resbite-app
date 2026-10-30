@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { getRandomBytes } from "expo-crypto";
 import { newInviteCode } from "../domain/contactInvites";
 import { linkDate } from "../domain/eventLinks";
@@ -13,9 +13,9 @@ import type { InvitedPerson } from "./useEvent";
 
 /**
  * Send again, by the chosen app, to someone invited by personal link who hasn't answered: the stored code, or a
- * fresh one when this phone has none for them (the logic the resbite page held, moved for the people list).
- * `sentHere` holds the numbers (E.164, the store's key) this phone has a code for, so Send again is offered only
- * where it can reuse the link. `busy` is the phone being worked on, `error` what went wrong; `reload` runs when a
+ * fresh one when this phone has none for them (the logic the resbite page held, moved for the people list). The
+ * people list offers Send again only where this phone holds the code (`InvitedPerson.stored`, found under the number
+ * or another spelling of it). `busy` is the phone being worked on, `error` what went wrong; `reload` runs when a
  * fresh invitation turned out to be something else (an app invitation), so the list is read again. `resend`
  * answers whether the link went out (false: `error` says why).
  */
@@ -24,9 +24,11 @@ export function useResend(
   reload?: () => Promise<void>,
 ): {
   resend: (person: InvitedPerson, via: "whatsapp" | "messages") => Promise<boolean>;
-  sentHere: ReadonlySet<string>;
-  /** The host removed this invitation: its stored code and anything minted here are dropped. */
-  forget: (e164: string) => Promise<void>;
+  /**
+   * A host removed this invitation: its stored code (under the key it was found by, and under the number, where Send
+   * again records it) and anything minted here are dropped.
+   */
+  forget: (person: InvitedPerson) => Promise<void>;
   busy: string | null;
   error: string | null;
   clearError: () => void;
@@ -35,30 +37,17 @@ export function useResend(
   const scope = preview ? "preview" : session?.user.id;
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [sentHere, setSentHere] = useState<ReadonlySet<string>>(new Set());
   // Codes made here since the list was read, by number: when WhatsApp won't open, Messages then sends the same new
   // link instead of making another one.
   const minted = useRef<Record<string, NonNullable<InvitedPerson["stored"]>>>({});
-  const refreshSent = useCallback(async () => {
-    if (!scope) return;
-    const stored = await inviteCodeStore.get(scope, plan.id).catch(() => null);
-    if (stored && live.current) setSentHere(new Set(Object.keys(stored)));
-  }, [scope, plan.id]);
-  const live = useRef(true);
-  useEffect(() => {
-    live.current = true;
-    void refreshSent();
-    return () => {
-      live.current = false;
-    };
-  }, [refreshSent]);
   const forget = useCallback(
-    async (e164: string) => {
-      delete minted.current[e164];
-      if (scope) await inviteCodeStore.remove(scope, plan.id, e164).catch(() => {});
-      await refreshSent();
+    async (person: InvitedPerson) => {
+      delete minted.current[person.e164];
+      if (!scope) return;
+      for (const key of new Set([person.storedKey ?? person.e164, person.e164]))
+        await inviteCodeStore.remove(scope, plan.id, key).catch(() => {});
     },
-    [scope, plan.id, refreshSent],
+    [scope, plan.id],
   );
 
   const resend = useCallback(
@@ -104,7 +93,6 @@ export function useResend(
           setError(failure);
           return false;
         }
-        await refreshSent();
         return true;
       } catch (e) {
         setError(e instanceof Error ? e.message : INVITE_COPY.offline);
@@ -113,8 +101,8 @@ export function useResend(
         setBusy(null);
       }
     },
-    [busy, scope, plan.id, plan.title, plan.starts_at, plan.ends_at, reload, refreshSent],
+    [busy, scope, plan.id, plan.title, plan.starts_at, plan.ends_at, reload],
   );
   const clearError = useCallback(() => setError(null), []);
-  return { resend, sentHere, forget, busy, error, clearError };
+  return { resend, forget, busy, error, clearError };
 }

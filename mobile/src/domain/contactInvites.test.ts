@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { contactNumbers, hostRegion, inviteMessage, newInviteCode, personalLink, sendOrder, smsUrl, whatsappUrl, whatsappAppUrl, groupContacts, storedFor } from "./contactInvites";
+import { contactNumbers, hostRegion, inviteMessage, newInviteCode, personalLink, sendOrder, smsUrl, whatsappUrl, whatsappAppUrl, groupContacts, storedFor, storedEntry } from "./contactInvites";
 import { INVITE_COPY } from "./inviteCopy";
 
 test("contactNumbers gives one entry per distinct number and counts the unparseable", () => {
@@ -125,4 +125,11 @@ test("storedFor finds a saved code by the exact send form, else by key under the
   assert.equal(storedFor(stored, "+5491112341234"), "exact");
   assert.equal(storedFor(stored, "+5491198765432"), "old");
   assert.equal(storedFor(stored, "+447700900111"), undefined);
+});
+
+test("storedEntry also names the key a code is saved under, so it can be forgotten", () => {
+  const stored = { "+5491112341234": "exact", "+541198765432": "old" };
+  assert.deepEqual(storedEntry(stored, "+5491112341234"), { key: "+5491112341234", value: "exact" });
+  assert.deepEqual(storedEntry(stored, "+5491198765432"), { key: "+541198765432", value: "old" });
+  assert.equal(storedEntry(stored, "+447700900111"), undefined);
 });
