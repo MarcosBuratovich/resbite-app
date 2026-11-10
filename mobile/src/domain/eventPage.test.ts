@@ -410,9 +410,9 @@ test("the owner's row comes first under Going: Hosting, the connection actions, 
     admins: [],
     owner: { userId: "own", name: "Ana" },
   };
-  // A guest connects with the host from here (CO-P2). "Going · N" counts the guests, as the event page's people row does.
+  // A guest connects with the host from here (CO-P2). The title counts the rows shown, the owner's included.
   const asGuest = peopleGroups({ ...input, role: "guest", userId: "m1", connections: { own: "none", g1: "connected" } });
-  assert.deepEqual(asGuest.map((g) => g.title), ["Going · 1", "Maybe · 1"]);
+  assert.deepEqual(asGuest.map((g) => g.title), ["Going · 2", "Maybe · 1"]);
   assert.deepEqual(asGuest[0].rows[0], {
     key: "owner:own", name: "Ana", status: null, reply: "Hosting", admin: false, kind: "owner", userId: "own",
     connection: "none", me: false, actions: ["connect"],
@@ -420,7 +420,7 @@ test("the owner's row comes first under Going: Hosting, the connection actions, 
   assert.deepEqual(asGuest[0].rows.map((r) => r.name), ["Ana", "Marta"]);
   // The owner's own list: their row, with no dots.
   const own = peopleGroups({ ...input, role: "owner", userId: "own", connections: { g1: "none", m1: "none" } });
-  assert.deepEqual(own.map((g) => g.title), ["Going · 1", "Maybe · 1"]);
+  assert.deepEqual(own.map((g) => g.title), ["Going · 2", "Maybe · 1"]);
   assert.deepEqual([own[0].rows[0].kind, own[0].rows[0].me, own[0].rows[0].connection, own[0].rows[0].actions], ["owner", true, null, []]);
   assert.deepEqual(own[0].rows[1].actions, ["connect", "makeAdmin", "remove"]);
   // Nobody removes the owner: an admin has only the connection actions on that row, after the end as before it.
@@ -428,9 +428,9 @@ test("the owner's row comes first under Going: Hosting, the connection actions, 
     const admin = peopleGroups({ ...input, state, role: "admin", admins: ["g1"], userId: "g1", connections: { own: "requested_by_them" } });
     assert.deepEqual(admin[0].rows[0].actions, ["acceptConnection", "declineConnection"], state);
   }
-  // Nobody going yet: the owner's row still opens the list, under "Going · 0".
+  // Nobody going yet: the owner's row still opens the list, counted, so a title never reads 0 over a row.
   const quiet = peopleGroups({ ...input, guests: [guest("m1", "Sol", "maybe")], role: "owner", userId: "own", connections: {} });
-  assert.deepEqual(quiet.map((g) => [g.title, g.rows.map((r) => r.name)]), [["Going · 0", ["Ana"]], ["Maybe · 1", ["Sol"]]]);
+  assert.deepEqual(quiet.map((g) => [g.title, g.rows.map((r) => r.name)]), [["Going · 1", ["Ana"]], ["Maybe · 1", ["Sol"]]]);
   // The states unknown: the owner's row shows, with nothing to do.
   const unknown = peopleGroups({ ...input, role: "guest", userId: "m1", connections: null as Record<string, ConnectionState> | null });
   assert.deepEqual([unknown[0].rows[0].connection, unknown[0].rows[0].actions], [null, []]);

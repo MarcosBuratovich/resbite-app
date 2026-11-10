@@ -347,8 +347,8 @@ function connectionActions(state: ConnectionState | null, askable: boolean): Per
  * answered from any row.
  *
  * The owner (`owner`, null when not known or where names are hidden) heads Going, marked Hosting, so a guest connects
- * with the host here too; nobody has a host action on that row. "Going · N" still counts the guests alone, as the event
- * page's people row does, so it can read "Going · 0" over the owner.
+ * with the host here too; nobody has a host action on that row. Each group's title counts the rows shown in it, the
+ * owner's included ("Going · 6" for the owner and five guests); the event page's people row counts the guests alone.
  */
 export function peopleGroups(i: {
   role: Viewer;
@@ -393,8 +393,7 @@ export function peopleGroups(i: {
   });
   const answeredGroup = (group: "going" | "maybe" | "cantGo", option: "going" | "maybe" | "cant") => {
     const title = optionText(option);
-    const rows = inGroup(i.guests, group).map((g) => guestRow(g, title, group === "going"));
-    return { title, rows, count: rows.length };
+    return { title, rows: inGroup(i.guests, group).map((g) => guestRow(g, title, group === "going")) };
   };
   const ownerRows: PersonRow[] = i.owner
     ? [
@@ -444,17 +443,16 @@ export function peopleGroups(i: {
     me: false,
     actions: acts ? ["approve", "decline"] : [],
   }));
-  const invitedRows = [...linkRows, ...appRows];
   const groups = [
-    { ...going, rows: [...ownerRows, ...going.rows] },
+    { title: going.title, rows: [...ownerRows, ...going.rows] },
     answeredGroup("maybe", "maybe"),
     answeredGroup("cantGo", "cant"),
     ...(host
       ? [
-          { title: EVENT_COPY.groupInvited, rows: invitedRows, count: invitedRows.length },
-          { title: EVENT_COPY.groupWaiting, rows: requestRows, count: requestRows.length },
+          { title: EVENT_COPY.groupInvited, rows: [...linkRows, ...appRows] },
+          { title: EVENT_COPY.groupWaiting, rows: requestRows },
         ]
       : []),
   ];
-  return groups.filter((g) => g.rows.length > 0).map((g) => ({ title: `${g.title}${SEPARATOR}${g.count}`, rows: g.rows }));
+  return groups.filter((g) => g.rows.length > 0).map((g) => ({ title: `${g.title}${SEPARATOR}${g.rows.length}`, rows: g.rows }));
 }
