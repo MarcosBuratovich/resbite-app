@@ -204,25 +204,27 @@ test("peopleGroups for an owner", () => {
     invited: [linkPerson("111", "Dan", "whatsapp"), linkPerson("222", "Eve"), linkPerson("333", "Fay", undefined, true)],
     requests: [request("r1", "Rae")],
     admins: ["adm"],
+    userId: "u-me",
+    connections: null,
   });
   assert.deepEqual(groups.map((g) => g.title), [
     "Going · 2", "Maybe · 1", "Can’t go · 1", "Invited, not answered yet · 4", "Waiting for you · 1",
   ]);
   const [going, maybe, cant, invited, waiting] = groups.map((g) => g.rows);
-  assert.deepEqual(going[0], { key: "guest:adm", name: "Leo", status: null, reply: "Going", admin: true, kind: "guest", userId: "adm", actions: ["removeAdmin", "remove"] });
+  assert.deepEqual(going[0], { key: "guest:adm", name: "Leo", status: null, reply: "Going", admin: true, kind: "guest", userId: "adm", connection: null, me: false, actions: ["removeAdmin", "remove"] });
   assert.deepEqual(going[1].actions, ["makeAdmin", "remove"]);
   assert.equal(going[1].admin, false);
-  assert.deepEqual(maybe[0], { key: "guest:m1", name: "Sol", status: null, reply: "Maybe", admin: false, kind: "guest", userId: "m1", actions: ["remove"] });
+  assert.deepEqual(maybe[0], { key: "guest:m1", name: "Sol", status: null, reply: "Maybe", admin: false, kind: "guest", userId: "m1", connection: null, me: false, actions: ["remove"] });
   assert.deepEqual(cant[0].actions, ["remove"]);
   assert.equal(cant[0].reply, "Can’t go");
-  assert.deepEqual(invited[0], { key: "link:111", name: "Dan", status: "Invited by WhatsApp", reply: null, admin: false, kind: "linkInvite", phone: "111", actions: ["sendAgain", "removeInvite"] });
+  assert.deepEqual(invited[0], { key: "link:111", name: "Dan", status: "Invited by WhatsApp", reply: null, admin: false, kind: "linkInvite", phone: "111", connection: null, me: false, actions: ["sendAgain", "removeInvite"] });
   // Send again needs this phone's code for the person, found under any spelling of their number (`stored`).
   assert.equal(invited[1].status, "Invited by link");
   assert.deepEqual(invited[1].actions, ["removeInvite"]);
   assert.equal(invited[2].status, "Invited by link");
   assert.deepEqual(invited[2].actions, ["sendAgain", "removeInvite"]);
-  assert.deepEqual(invited[3], { key: "app:p1", name: "Pat", status: "Invited in the app", reply: null, admin: false, kind: "appInvite", userId: "p1", actions: ["remove"] });
-  assert.deepEqual(waiting[0], { key: "request:r1", name: "Rae", status: "Asked through the link", reply: null, admin: false, kind: "request", userId: "r1", actions: ["approve", "decline"] });
+  assert.deepEqual(invited[3], { key: "app:p1", name: "Pat", status: "Invited in the app", reply: null, admin: false, kind: "appInvite", userId: "p1", connection: null, me: false, actions: ["remove"] });
+  assert.deepEqual(waiting[0], { key: "request:r1", name: "Rae", status: "Asked through the link", reply: null, admin: false, kind: "request", userId: "r1", connection: null, me: false, actions: ["approve", "decline"] });
 });
 
 test("peopleGroups: the owner removes an admin's role whatever their answer; Make admin only on Going", () => {
@@ -234,6 +236,8 @@ test("peopleGroups: the owner removes an admin's role whatever their answer; Mak
     invited: [],
     requests: [],
     admins: ["a1", "a2", "a3"],
+    userId: "u-me",
+    connections: null,
   });
   const rows = groups.flatMap((g) => g.rows);
   const by = (name: string) => rows.find((r) => r.name === name)!;
@@ -251,6 +255,8 @@ test("peopleGroups for an admin and a guest", () => {
     invited: [linkPerson("111", "Dan")],
     requests: [request("r1", "Rae")],
     admins: ["a2", "a3"],
+    userId: "u-me",
+    connections: null,
   };
   const admin = peopleGroups({ ...input, role: "admin" });
   assert.deepEqual(admin.map((g) => g.title), ["Going · 2", "Invited, not answered yet · 3", "Waiting for you · 1"]);
@@ -273,12 +279,116 @@ test("peopleGroups after the end and once cancelled: the same groups, no actions
       invited: [linkPerson("111", "Dan", "whatsapp")],
       requests: [request("r1", "Rae")],
       admins: ["adm"],
+      userId: "u-me",
+      connections: null,
     });
     assert.deepEqual(groups.map((g) => g.title), ["Going · 2", "Invited, not answered yet · 2", "Waiting for you · 1"], state);
     assert.deepEqual(groups.flatMap((g) => g.rows.map((r) => r.actions)), [[], [], [], [], []], state);
     // The roles still show.
     assert.equal(groups[0].rows[0].admin, true, state);
   }
+});
+
+test("the people list offers Connect to a guest on everyone with an account but themselves", () => {
+  const groups = peopleGroups({
+    role: "guest",
+    state: "open",
+    guests: [
+      guest("u-ana", "Ana", "accepted"), guest("u-leo", "Leo", "maybe"), guest("u-sol", "Sol", "declined"),
+      guest("u-nico", "Nico", "accepted"), guest("u-ivy", "Ivy", "withdrawn"), guest("u-me", "Pedro", "accepted"),
+    ],
+    invited: [],
+    requests: [],
+    admins: [],
+    userId: "u-me",
+    connections: { "u-ana": "none", "u-leo": "connected", "u-sol": "requested_by_them", "u-nico": "requested_by_me" },
+  });
+  const row = (id: string) => groups.flatMap((g) => g.rows).find((r) => r.userId === id)!;
+  assert.deepEqual(row("u-ana").actions, ["connect"]);
+  assert.deepEqual(row("u-leo").actions, []);
+  assert.equal(row("u-leo").connection, "connected");
+  assert.deepEqual(row("u-sol").actions, ["acceptConnection", "declineConnection"]);
+  // A request refused unseen reads as sent too (CO-P3): Cancel request either way.
+  assert.deepEqual(row("u-nico").actions, ["cancelRequest"]);
+  // Someone the states leave out, once they were read, has no pair with the viewer.
+  assert.deepEqual([row("u-ivy").connection, row("u-ivy").actions], ["none", ["connect"]]);
+  assert.deepEqual([row("u-me").connection, row("u-me").me, row("u-me").actions], [null, true, []]);
+  assert.equal(row("u-ana").me, false);
+});
+
+test("with the states unknown (not read, or the read failed), the people list offers no connection actions", () => {
+  const groups = peopleGroups({
+    role: "owner",
+    state: "open",
+    guests: [guest("g1", "Marta", "accepted"), guest("m1", "Sol", "maybe")],
+    invited: [],
+    requests: [],
+    admins: [],
+    userId: "u-me",
+    connections: null,
+  });
+  assert.deepEqual(groups.flatMap((g) => g.rows.map((r) => [r.connection, r.actions])), [
+    [null, ["makeAdmin", "remove"]],
+    [null, ["remove"]],
+  ]);
+});
+
+test("hosts get the connection action before their own, and link invitees get none", () => {
+  const groups = peopleGroups({
+    role: "owner",
+    state: "open",
+    guests: [guest("g1", "Marta", "accepted"), guest("adm", "Leo", "accepted")],
+    invited: [linkPerson("111", "Dan", "whatsapp")],
+    requests: [],
+    admins: ["adm"],
+    userId: "u-me",
+    connections: { g1: "none", adm: "requested_by_them" },
+  });
+  const rows = groups.flatMap((g) => g.rows);
+  const by = (name: string) => rows.find((r) => r.name === name)!;
+  assert.deepEqual(by("Marta").actions, ["connect", "makeAdmin", "remove"]);
+  assert.deepEqual(by("Leo").actions, ["acceptConnection", "declineConnection", "removeAdmin", "remove"]);
+  assert.deepEqual([by("Dan").connection, by("Dan").me, by("Dan").actions], [null, false, ["sendAgain", "removeInvite"]]);
+});
+
+test("connecting is offered after the end, host actions are not", () => {
+  for (const state of ["ended", "cancelled"] as const) {
+    const groups = peopleGroups({
+      role: "owner",
+      state,
+      guests: [guest("g1", "Marta", "accepted"), guest("adm", "Leo", "accepted")],
+      invited: [linkPerson("111", "Dan", "whatsapp")],
+      requests: [request("r1", "Rae")],
+      admins: ["adm"],
+      userId: "u-me",
+      connections: { g1: "none", adm: "connected" },
+    });
+    assert.deepEqual(groups.flatMap((g) => g.rows.map((r) => [r.name, r.actions])), [
+      ["Marta", ["connect"]], ["Leo", []], ["Dan", []], ["Rae", []],
+    ], state);
+  }
+});
+
+test("someone who hasn't answered, or waits for approval, can't be asked; a request of theirs can still be answered", () => {
+  // CO-P2: the server refuses to ask a guest who hasn't answered ("Not on this resbite"), as the request would name the
+  // asker before they answered; an admin is a host, askable whatever their reply. Someone waiting for approval isn't on
+  // the resbite yet, so the states say nothing of them.
+  const groups = peopleGroups({
+    role: "owner",
+    state: "open",
+    guests: [guest("p1", "Pat", "pending"), guest("p2", "Quin", "pending"), guest("a3", "Cy", "pending")],
+    invited: [],
+    requests: [request("r1", "Rae")],
+    admins: ["a3"],
+    userId: "u-me",
+    connections: { p1: "none", p2: "requested_by_them", a3: "none" },
+  });
+  const rows = groups.flatMap((g) => g.rows);
+  const by = (name: string) => rows.find((r) => r.name === name)!;
+  assert.deepEqual([by("Pat").connection, by("Pat").actions], ["none", ["remove"]]);
+  assert.deepEqual(by("Quin").actions, ["acceptConnection", "declineConnection", "remove"]);
+  assert.deepEqual(by("Cy").actions, ["connect", "removeAdmin", "remove"]);
+  assert.deepEqual([by("Rae").connection, by("Rae").actions], [null, ["approve", "decline"]]);
 });
 
 test("EVENT_COPY pins the page, sheet and list words", () => {

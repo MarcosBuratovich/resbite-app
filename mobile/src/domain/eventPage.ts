@@ -1,5 +1,6 @@
 import type { Guest } from "../services/rsvp";
 import type { HostRequest } from "../services/joinRequests";
+import type { ConnectionState } from "../services/connections";
 import type { InvitedPerson } from "../state/useEvent";
 import { ANSWER_OPTIONS } from "./rsvp";
 import { EXACT_ADDRESS_LATER, eventPlace } from "./eventView";
@@ -278,7 +279,18 @@ export function cancelQuestion(plan: Timed & { repeat_weeks: 1 | 2 | null }, zon
   };
 }
 
-export type PersonAction = "makeAdmin" | "removeAdmin" | "remove" | "sendAgain" | "removeInvite" | "approve" | "decline";
+export type PersonAction =
+  | "connect"
+  | "cancelRequest"
+  | "acceptConnection"
+  | "declineConnection"
+  | "makeAdmin"
+  | "removeAdmin"
+  | "remove"
+  | "sendAgain"
+  | "removeInvite"
+  | "approve"
+  | "decline";
 export type PersonRow = {
   key: string;
   name: string;
@@ -289,17 +301,45 @@ export type PersonRow = {
   kind: "guest" | "appInvite" | "linkInvite" | "request";
   userId?: string;
   phone?: string;
+  /**
+   * The viewer's connection with this person (CO-01). Null for a row without an account (a personal link), for the
+   * viewer's own row, for someone waiting for approval (not on the resbite yet, so the server says nothing of them),
+   * and while the states are unknown.
+   */
+  connection: ConnectionState | null;
+  /** The viewer's own row: no dots, whoever they are. */
+  me: boolean;
   actions: PersonAction[];
 };
 
 const inviteStatus = (via: "whatsapp" | "messages" | undefined) =>
   via === "whatsapp" ? EVENT_COPY.invitedByWhatsApp : via === "messages" ? EVENT_COPY.invitedByMessages : EVENT_COPY.invitedByLink;
 
+/** What the viewer may do about their connection with someone (CO-01); Connect only for someone who may be asked here. */
+function connectionActions(state: ConnectionState | null, askable: boolean): PersonAction[] {
+  switch (state) {
+    case "none":
+      return askable ? ["connect"] : [];
+    case "requested_by_me":
+      return ["cancelRequest"];
+    case "requested_by_them":
+      return ["acceptConnection", "declineConnection"];
+    default:
+      return [];
+  }
+}
+
 /**
  * The people list's groups and each person's actions. Hosts act only while the resbite is open: after the end, or once
  * it is cancelled, the list is read-only. Only the owner makes or removes admins (Make admin on a Going guest; Remove as
  * admin on any admin, whatever their answer, since Maybe keeps the role and a rolled occurrence starts them pending), and
  * only the owner removes an admin from the resbite. Send again needs this phone's code for the person (`stored`).
+ *
+ * The connection actions (CO-01, CO-P2) come first, for hosts and guests alike and after the end too (CO rule 7), on
+ * every row with an account but the viewer's own (`userId`, null with nobody signed in). `connections` is the server's
+ * state with each person (`plan_connection_states`), read only where names show; null when it wasn't read or the read
+ * failed, which offers none. Someone it leaves out has no pair with the viewer. Connect is offered only to someone the
+ * server lets be asked here: a guest who has answered, or an admin; a request of theirs can be answered from any row.
  */
 export function peopleGroups(i: {
   role: Viewer;
@@ -308,10 +348,20 @@ export function peopleGroups(i: {
   invited: InvitedPerson[];
   requests: HostRequest[];
   admins: readonly string[];
+  userId: string | null;
+  connections: Record<string, ConnectionState> | null;
 }): { title: string; rows: PersonRow[] }[] {
   const host = i.role !== "guest";
   const acts = host && i.state === "open";
   const owner = i.role === "owner";
+  const connectionOf = (userId: string): ConnectionState | null =>
+    i.connections === null || userId === i.userId ? null : (i.connections[userId] ?? "none");
+  /** A row for someone with an account: their connection, and its actions before the host's; none on the viewer's own. */
+  const person = (userId: string, askable: boolean, hostActions: PersonAction[]) => {
+    const me = userId === i.userId;
+    const connection = connectionOf(userId);
+    return { userId, connection, me, actions: me ? [] : [...connectionActions(connection, askable), ...hostActions] };
+  };
   /** What a host may do to someone on the guest list (an answered guest or an app invitee). */
   const guestActions = (userId: string, canMakeAdmin: boolean): PersonAction[] => {
     if (!acts) return [];
@@ -329,8 +379,7 @@ export function peopleGroups(i: {
     reply,
     admin: i.admins.includes(g.userId),
     kind: "guest",
-    userId: g.userId,
-    actions: guestActions(g.userId, canMakeAdmin),
+    ...person(g.userId, true, guestActions(g.userId, canMakeAdmin)),
   });
   const answeredGroup = (group: "going" | "maybe" | "cantGo", option: "going" | "maybe" | "cant") => {
     const title = optionText(option);
@@ -344,8 +393,11 @@ export function peopleGroups(i: {
     admin: false,
     kind: "linkInvite",
     phone: p.phone,
+    connection: null,
+    me: false,
     actions: !acts ? [] : p.stored !== null ? ["sendAgain", "removeInvite"] : ["removeInvite"],
   }));
+  // Not answered yet: only an admin may be asked (a host, whatever their reply).
   const appRows: PersonRow[] = inGroup(i.guests, "pending").map((g) => ({
     key: `app:${g.userId}`,
     name: g.name,
@@ -353,8 +405,7 @@ export function peopleGroups(i: {
     reply: null,
     admin: i.admins.includes(g.userId),
     kind: "appInvite",
-    userId: g.userId,
-    actions: guestActions(g.userId, false),
+    ...person(g.userId, i.admins.includes(g.userId), guestActions(g.userId, false)),
   }));
   const requestRows: PersonRow[] = i.requests.map((r) => ({
     key: `request:${r.user_id}`,
@@ -364,6 +415,8 @@ export function peopleGroups(i: {
     admin: false,
     kind: "request",
     userId: r.user_id,
+    connection: null,
+    me: false,
     actions: acts ? ["approve", "decline"] : [],
   }));
   const groups = [

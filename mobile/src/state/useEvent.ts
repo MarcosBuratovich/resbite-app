@@ -9,12 +9,14 @@ import { readEvent, readGuests, readRsvp, writeRsvp, type EventSnapshot, type Gu
 import { syncReminders } from "../services/deviceReminders";
 import { adminErrorMessage, appointAdmin, removeAdmin } from "../services/admins";
 import { muteErrorMessage, readMutedSeries, setPlanMute } from "../services/mutes";
-import { EVENT_COPY, viewerRole, type AnswerCounts, type Viewer } from "../domain/eventPage";
+import { EVENT_COPY, showsNames, viewerRole, type AnswerCounts, type Viewer } from "../domain/eventPage";
 import { storedEntry } from "../domain/contactInvites";
 import { contactInviteGateway } from "../services/contactInvites";
 import { inviteCodeStore, type StoredInvite } from "../services/inviteCodeStore";
 import { formatPhone, phoneSendForm } from "../domain/phone";
 import { joinRequestGateway, type HostRequest } from "../services/joinRequests";
+import { connectionErrorMessage, connectionGateway, type ConnectionState } from "../services/connections";
+import { requestGone } from "./connectionsModel";
 
 /** Someone a host invited by personal link who hasn't answered: the stored name, else the number. */
 export type InvitedPerson = {
@@ -45,13 +47,19 @@ export type EventPage = {
   invited: InvitedPerson[];
   /** Open-link answers waiting for a host; empty for everyone else. */
   requests: HostRequest[];
+  /**
+   * The signed-in person's connection with each person on the resbite (CO-01), read where names show; null before
+   * that, where names are hidden, in the preview and after a failed read: the people list then offers no connection
+   * actions.
+   */
+  connections: Record<string, ConnectionState> | null;
   busy: boolean;
   fresh: boolean;
   error: string | null;
   notice: string | null;
   pending: RsvpAttempt | null;
-  /** Which side action is running (mute or an admin change), so two taps cannot overlap. */
-  acting: "mute" | "admin" | null;
+  /** Which side action is running (mute, an admin change or a connection one), so two taps cannot overlap. */
+  acting: "mute" | "admin" | "connection" | null;
   load: () => Promise<void>;
   respond: (value: Response, retry?: RsvpAttempt) => Promise<boolean>;
   /** True once the resbite is cancelled (false: `error` says why). */
@@ -60,6 +68,15 @@ export type EventPage = {
   /** Both answer whether the server made the change (false: `error` says why). */
   appoint: (userId: string) => Promise<boolean>;
   demote: (userId: string) => Promise<boolean>;
+  /**
+   * The people list's connection actions (CO-01); after each only the states are read again. True once the server
+   * has taken it, or when the request was no longer there to answer (withdrawn, or answered elsewhere): nothing to say,
+   * the states show where it stands. False: `error` says why.
+   */
+  connect: (userId: string) => Promise<boolean>;
+  cancelRequest: (userId: string) => Promise<boolean>;
+  acceptConnection: (userId: string) => Promise<boolean>;
+  declineConnection: (userId: string) => Promise<boolean>;
   setNotice: (notice: string | null) => void;
   clearError: () => void;
 };
@@ -83,10 +100,13 @@ export function useEvent(planId: string | undefined): EventPage {
   const [busy, setBusy] = useState(!preview),
     [fresh, setFresh] = useState(false);
   const [pending, setPending] = useState<RsvpAttempt | null>(null);
-  const [acting, setActing] = useState<"mute" | "admin" | null>(null);
+  const [acting, setActing] = useState<EventPage["acting"]>(null);
   const actingRef = useRef(false);
   const [invited, setInvited] = useState<InvitedPerson[]>([]);
   const [requests, setRequests] = useState<HostRequest[]>([]);
+  const [connections, setConnections] = useState<Record<string, ConnectionState> | null>(null);
+  // The latest read of the states wins: a whole-event read and a re-read after a connection action can overlap.
+  const statesRead = useRef(0);
   const [mutedSeries, setMutedSeries] = useState<Set<string>>(new Set());
   // UX3: this phone's reminders follow every event load, answer and cancellation; failures wait for the next sync.
   const syncDevice = () => void syncReminders({ userId: userId ?? null, preview }).catch(() => {});
@@ -94,6 +114,7 @@ export function useEvent(planId: string | undefined): EventPage {
     setSnapshot(null);
     setInvited([]);
     setRequests([]);
+    setConnections(null);
     setMutedSeries(new Set());
     setPending(null);
     setNotice(null);
@@ -114,16 +135,24 @@ export function useEvent(planId: string | undefined): EventPage {
         const next = await readEvent(planId, userId);
         // Unanswered personal links and open-link requests are every host's: the owner's and the admins'.
         const host = next.plan.owner_id === userId || next.admins.includes(userId);
+        // The connection states, only where names show (the server refuses them elsewhere), alongside the reads
+        // below. A convenience too: a failure leaves them unknown, and the list offers no connection actions.
+        const ticket = ++statesRead.current;
+        const states = showsNames(viewerRole(next.plan, userId, next.admins), next.attendee?.response ?? null)
+          ? connectionGateway.statesFor(planId).catch(() => null)
+          : Promise.resolve(null);
         // The invitations list is a convenience, so a failure leaves it empty.
         const people = host ? await readInvited(planId, userId).catch(() => []) : [];
         // Likewise the waiting list: the event still opens if it can't be read.
         const waiting = host ? await joinRequestGateway.forPlan(planId).catch(() => []) : [];
         // Likewise the mute: a failed read leaves the resbite unmuted on screen, and the next load tries again.
         const muted = await readMutedSeries().catch(() => new Set<string>());
+        const known = await states;
         if (valid()) {
           setMutedSeries(muted);
           setInvited(people);
           setRequests(waiting);
+          if (ticket === statesRead.current) setConnections(known);
           setSnapshot(next);
           setFresh(true);
           syncDevice();
@@ -133,6 +162,7 @@ export function useEvent(planId: string | undefined): EventPage {
           setSnapshot(null);
           setInvited([]);
           setRequests([]);
+          setConnections(null);
           setError(e instanceof Error ? e.message : EVENT_COPY.readFailed);
         }
       } finally {
@@ -304,6 +334,43 @@ export function useEvent(planId: string | undefined): EventPage {
     if (changed && valid()) await load();
     return changed;
   }
+  /**
+   * Ask, take back a request, accept or refuse (CO-01), then read the states again, and only them: the rest of the
+   * event hasn't changed. A request no longer there (42501 'No request', from accept and decline) is no failure: the
+   * re-read shows where it stands, as on the Connections screen. Any other failure reads nothing again: `error` says why.
+   */
+  async function changeConnection(person: string, change: "request" | "cancel" | "accept" | "decline"): Promise<boolean> {
+    const target = plan;
+    if (!target || preview || !accountReady || working.current || actingRef.current) return false;
+    const valid = () => currentIdentity.current === identity;
+    actingRef.current = true;
+    setActing("connection");
+    setError(null);
+    let settled = false;
+    try {
+      if (change === "request") await connectionGateway.request(person, target.id);
+      else await connectionGateway[change](person);
+      settled = true;
+    } catch (e) {
+      settled = requestGone(e);
+      if (valid() && !settled) setError(connectionErrorMessage(e));
+    } finally {
+      if (valid()) {
+        actingRef.current = false;
+        setActing(null);
+      }
+    }
+    if (settled && valid()) {
+      const ticket = ++statesRead.current;
+      try {
+        const states = await connectionGateway.statesFor(target.id);
+        if (valid() && ticket === statesRead.current) setConnections(states);
+      } catch {
+        // The states stay as they were (asking again is harmless); the next read of the event tries again.
+      }
+    }
+    return settled;
+  }
   return {
     plan,
     role,
@@ -315,6 +382,7 @@ export function useEvent(planId: string | undefined): EventPage {
     counts: snapshot?.counts ?? null,
     invited,
     requests,
+    connections: preview ? null : connections,
     // Without a plan to read nothing loads: the screens say it isn't available instead of waiting.
     busy: busy && Boolean(planId),
     fresh: preview || fresh,
@@ -328,6 +396,10 @@ export function useEvent(planId: string | undefined): EventPage {
     mute,
     appoint: (userId) => changeAdmin(userId, true),
     demote: (userId) => changeAdmin(userId, false),
+    connect: (userId) => changeConnection(userId, "request"),
+    cancelRequest: (userId) => changeConnection(userId, "cancel"),
+    acceptConnection: (userId) => changeConnection(userId, "accept"),
+    declineConnection: (userId) => changeConnection(userId, "decline"),
     setNotice,
     clearError: () => setError(null),
   };

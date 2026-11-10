@@ -2,23 +2,29 @@ import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
-import { ArrowLeft, Check, Ellipsis, Send, UserMinus, UserPlus, X } from "lucide-react-native";
+import { ArrowLeft, Check, Clock, Ellipsis, Link2, Send, UserMinus, UserPlus, X } from "lucide-react-native";
 import type { LucideIcon } from "lucide-react-native";
 import { Button, Copy, ErrorNote, s } from "../src/design/ui";
 import { IconButton, focusHeading } from "../src/design/kit";
 import { GrabberSheet } from "../src/design/GrabberSheet";
-import { MenuRow, MenuSeparator } from "../src/design/MenuRow";
+import { MenuLabel, MenuRow, MenuSeparator } from "../src/design/MenuRow";
 import { colors as c, fonts, space } from "../src/design/tokens";
 import { EVENT_COPY, pageState, peopleGroups, type PersonAction, type PersonRow } from "../src/domain/eventPage";
+import { CONNECTIONS_COPY } from "../src/domain/connectionsCopy";
 import { removeGuestQuestion } from "../src/domain/eventLinks";
 import { INVITE_COPY } from "../src/domain/inviteCopy";
 import { invitationGateway } from "../src/services/invitations";
 import { contactInviteGateway } from "../src/services/contactInvites";
 import { joinRequestGateway } from "../src/services/joinRequests";
+import { useApp } from "../src/state/AppState";
 import { useEvent, type EventPage } from "../src/state/useEvent";
 import { useResend } from "../src/state/useResend";
 
 const ACTION_ICON: Partial<Record<PersonAction, LucideIcon>> = {
+  connect: Link2,
+  cancelRequest: X,
+  acceptConnection: Check,
+  declineConnection: X,
   makeAdmin: UserPlus,
   removeAdmin: UserMinus,
   sendAgain: Send,
@@ -28,7 +34,10 @@ const ACTION_ICON: Partial<Record<PersonAction, LucideIcon>> = {
   removeInvite: X,
 };
 
-/** The people list (spec CR-P4, CR-P16): /guests?plan=<id>. Everyone who answered, and for hosts the rest, with a sheet of actions per person. */
+/**
+ * The people list (spec CR-P4, CR-P16, CO-01): /guests?plan=<id>. Everyone who answered, and for hosts the rest, with a
+ * sheet of actions per person: the connection ones for everyone, then the hosts' own.
+ */
 export default function Guests() {
   const { plan: planId } = useLocalSearchParams<{ plan?: string }>();
   const event = useEvent(planId);
@@ -77,13 +86,13 @@ function Bar({ planId }: { planId?: string }) {
 type Sheet = { row: PersonRow; view: "menu" | "remove" | "decline" };
 
 function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage["plan"]> }) {
-  const { role, guests, invited, requests, admins } = event;
+  const { role, guests, invited, requests, admins, connections } = event;
+  const me = useApp().session?.user.id ?? null;
   const resend = useResend(plan, event.load);
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const host = role !== "guest";
-  // After the end, or once cancelled, the list stays readable but offers no actions.
+  // After the end, or once cancelled, the hosts' actions go; connecting stays (CO rule 7).
   const groups = peopleGroups({
     role: role ?? "guest",
     state: pageState(plan),
@@ -91,6 +100,8 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
     invited,
     requests,
     admins,
+    userId: me,
+    connections,
   });
   const off = working || event.acting !== null || resend.busy !== null;
   const open = (row: PersonRow) => {
@@ -121,8 +132,17 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
     }
   }
   const invitee = (row: PersonRow) => invited.find((p) => p.phone === row.phone);
+  /** The connection actions and the admin ones read again what they changed themselves; their errors are the event's. */
   const perform = (row: PersonRow, action: PersonAction) => {
     switch (action) {
+      case "connect":
+        return run(() => event.connect(row.userId!), false);
+      case "cancelRequest":
+        return run(() => event.cancelRequest(row.userId!), false);
+      case "acceptConnection":
+        return run(() => event.acceptConnection(row.userId!), false);
+      case "declineConnection":
+        return run(() => event.declineConnection(row.userId!), false);
       case "makeAdmin":
         return run(() => event.appoint(row.userId!), false);
       case "removeAdmin":
@@ -159,15 +179,12 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
                 <View style={styles.name} accessible accessibilityLabel={nameLabel(row)}>
                   <View style={styles.nameLine}>
                     <Text style={styles.nameText}>{row.name}</Text>
-                    {row.admin ? (
-                      <View style={styles.badge}>
-                        <Text style={styles.badgeText}>{EVENT_COPY.adminBadge}</Text>
-                      </View>
-                    ) : null}
+                    {row.admin ? <Badge text={EVENT_COPY.adminBadge} /> : null}
+                    {row.connection === "connected" ? <Badge text={CONNECTIONS_COPY.connectedBadge} /> : null}
                   </View>
                   {row.status ? <Text style={styles.sub}>{row.status}</Text> : null}
                 </View>
-                {host && row.actions.length > 0 ? (
+                {!row.me && row.actions.length > 0 ? (
                   <IconButton
                     icon={Ellipsis}
                     tone="plain"
@@ -193,6 +210,7 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
             </View>
             {sheet?.view === "menu" ? (
               <View>
+                {current.connection === "connected" ? <MenuLabel title={CONNECTIONS_COPY.connectedBadge} icon={Link2} /> : null}
                 {current.actions.flatMap((action) =>
                   action === "sendAgain"
                     ? sendVias(invitee(current)?.stored?.sentVia).map((via) => (
@@ -209,6 +227,10 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
                         />
                       ))
                     : [
+                        // Asked already (or refused unseen, which reads the same, CO-P3): said, then Cancel request.
+                        ...(action === "cancelRequest"
+                          ? [<MenuLabel key="requestSent" title={CONNECTIONS_COPY.requestSent} icon={Clock} />]
+                          : []),
                         <Row
                           key={action}
                           action={action}
@@ -259,7 +281,23 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
 const sendVias = (sent?: "whatsapp" | "messages"): ("whatsapp" | "messages")[] => (sent ? [sent] : ["whatsapp", "messages"]);
 
 const nameLabel = (row: PersonRow) =>
-  [row.name, row.admin ? EVENT_COPY.adminBadge : null, row.status].filter(Boolean).join(", ");
+  [
+    row.name,
+    row.admin ? EVENT_COPY.adminBadge : null,
+    row.connection === "connected" ? CONNECTIONS_COPY.connectedBadge : null,
+    row.status,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+/** A small chip on the name line: Admin, Connected. */
+function Badge({ text }: { text: string }) {
+  return (
+    <View style={styles.badge}>
+      <Text style={styles.badgeText}>{text}</Text>
+    </View>
+  );
+}
 
 function Row({
   action,
@@ -276,6 +314,10 @@ function Row({
 }) {
   const destructive = action === "remove" || action === "removeInvite";
   const text: Record<PersonAction, string> = {
+    connect: CONNECTIONS_COPY.connect,
+    cancelRequest: CONNECTIONS_COPY.cancelRequest,
+    acceptConnection: CONNECTIONS_COPY.acceptFrom(row.name),
+    declineConnection: CONNECTIONS_COPY.notNow,
     makeAdmin: EVENT_COPY.makeAdmin,
     removeAdmin: EVENT_COPY.removeAdmin,
     // An answered guest is removed from the resbite; an invitation not answered yet (in the app or by link) is removed.
@@ -288,7 +330,14 @@ function Row({
   return (
     <>
       {destructive ? <MenuSeparator /> : null}
-      <MenuRow title={text[action]} icon={ACTION_ICON[action] ?? X} destructive={destructive} disabled={disabled} onPress={onPress} />
+      <MenuRow
+        title={text[action]}
+        hint={action === "connect" ? CONNECTIONS_COPY.connectHint(row.name) : undefined}
+        icon={ACTION_ICON[action] ?? X}
+        destructive={destructive}
+        disabled={disabled}
+        onPress={onPress}
+      />
     </>
   );
 }
