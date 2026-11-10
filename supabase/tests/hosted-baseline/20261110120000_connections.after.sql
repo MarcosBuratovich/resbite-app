@@ -1,6 +1,6 @@
 -- Rehearsal checks for 20261110120000_connections (hosted-baseline mode only).
--- 1. The two tables, with row security and the one read policy; the outbox takes the two new kinds and keeps the
--- earlier ones; the apply wrote no rows.
+-- 1. The two tables, with row security and no policies; the outbox takes the two new kinds and keeps the earlier ones;
+-- the apply wrote no rows.
 do $$ begin
  if pg_catalog.to_regclass('public.connections') is null or pg_catalog.to_regclass('private.connection_refusals') is null then
   raise exception 'The connection tables are missing';
@@ -9,9 +9,8 @@ do $$ begin
  or not (select relrowsecurity from pg_catalog.pg_class where oid='private.connection_refusals'::regclass) then
   raise exception 'A connection table has no row security';
  end if;
- if (select array_agg(policyname::text order by policyname) from pg_catalog.pg_policies
-   where schemaname in ('public','private') and tablename in ('connections','connection_refusals')) is distinct from array['connections_read'] then
-  raise exception 'The connection policies are wrong';
+ if exists(select 1 from pg_catalog.pg_policies where schemaname in ('public','private') and tablename in ('connections','connection_refusals')) then
+  raise exception 'A connection table has a policy';
  end if;
  if (select pg_catalog.pg_get_constraintdef(oid) from pg_catalog.pg_constraint where conname='notification_outbox_kind_check')
    not like '%''invitation''%''rsvp''%''plan_changed''%''plan_cancelled''%''guest_note''%''invited''%''join_request''%''join_approved''%''admin_added''%''connection_request''%''connection_accepted''%' then
@@ -23,7 +22,7 @@ do $$ begin
  end if;
 end $$;
 -- 2. Grants: the five calls, private bodies (definers) and public wrappers, for signed-in accounts only; the pair helper
--- and the refusals for nobody; the connections for reading by signed-in accounts only.
+-- and both tables for nobody.
 do $$ declare s text; f text; r text; begin
  foreach s in array array['private.','public.'] loop
   foreach f in array array['request_connection(uuid,uuid)','accept_connection(uuid)','decline_connection(uuid)',
@@ -38,12 +37,8 @@ do $$ declare s text; f text; r text; begin
  foreach r in array array['anon','authenticated','service_role'] loop
   if has_function_privilege(r,'private.pair(uuid,uuid)','execute') then raise exception '% may call pair', r; end if;
   if has_table_privilege(r,'private.connection_refusals','select,insert,update,delete') then raise exception '% may touch connection_refusals', r; end if;
-  if has_table_privilege(r,'public.connections','insert,update,delete,truncate') then raise exception '% may write connections', r; end if;
+  if has_table_privilege(r,'public.connections','select,insert,update,delete,truncate') then raise exception '% may touch connections', r; end if;
  end loop;
- if not has_table_privilege('authenticated','public.connections','select') or has_table_privilege('anon','public.connections','select')
- or has_table_privilege('service_role','public.connections','select') then
-  raise exception 'public.connections read grants wrong';
- end if;
 end $$;
 -- 3. The rollback, rehearsed and undone. Seed what it deletes (a pair, a refusal and the two notices), try its guard (it
 -- refuses once the creating-a-resbite rollback has run; plan_admins, renamed, stands in), then run it: the tables, the
