@@ -186,3 +186,79 @@ create function public.remove_connection(p_user uuid) returns void language sql 
 $$;
 revoke all on function private.remove_connection(uuid), public.remove_connection(uuid) from public, anon, authenticated, service_role;
 grant execute on function private.remove_connection(uuid), public.remove_connection(uuid) to authenticated;
+
+-- 4. What each person may read of the pair (CO-P3, CO-P6)
+-- The two read functions are the only way the app learns about pairs (section 1).
+
+-- The caller's Connections: requests to them, requests they sent, and their connections, each by name, with the other
+-- person's name and photo and the resbite they met at. title is that series' latest occurrence (the one the acceptance
+-- notice names), null when the series is gone or there is none. context, on the two request lists, is 'going' while
+-- that occurrence has not ended and both are on it (each a host, or a guest who is Going or Maybe), else 'met'.
+create function private.my_connections() returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_uid uuid := private.require_tester();
+begin
+ return (with people as (
+   select o.other, c.state, c.requested_by, c.series_id, pr.display_name as name, pr.avatar_path, pr.avatar_revision, lp.title,
+    case when lp.id is not null and private.plan_end(lp.starts_at,lp.ends_at)>now()
+     and (select bool_and(private.is_host(lp.id,u.id) or exists(select 1 from public.attendees a
+       where a.plan_id=lp.id and a.user_id=u.id and a.response in ('accepted','maybe'))) from (values (v_uid),(o.other)) u(id))
+    then 'going' else 'met' end as context
+   from public.connections c
+   cross join lateral (select case when c.user_a=v_uid then c.user_b else c.user_a end as other) o
+   join public.profiles pr on pr.id=o.other
+   left join lateral (select p.id, p.title, p.starts_at, p.ends_at from public.plans p where p.series_id=c.series_id
+    order by p.starts_at desc, p.id limit 1) lp on true
+   where c.user_a=v_uid or c.user_b=v_uid)
+  select jsonb_build_object(
+   'requests',coalesce((select jsonb_agg(jsonb_build_object('user_id',p.other,'name',p.name,'avatar_path',p.avatar_path,
+     'avatar_revision',p.avatar_revision,'series_id',p.series_id,'title',p.title,'context',p.context) order by p.name,p.other)
+    from people p where p.state='requested' and p.requested_by=p.other),'[]'::jsonb),
+   'sent',coalesce((select jsonb_agg(jsonb_build_object('user_id',p.other,'name',p.name,'avatar_path',p.avatar_path,
+     'avatar_revision',p.avatar_revision,'series_id',p.series_id,'title',p.title,'context',p.context) order by p.name,p.other)
+    from people p where p.state='requested' and p.requested_by=v_uid),'[]'::jsonb),
+   'connected',coalesce((select jsonb_agg(jsonb_build_object('user_id',p.other,'name',p.name,'avatar_path',p.avatar_path,
+     'avatar_revision',p.avatar_revision,'series_id',p.series_id,'title',p.title) order by p.name,p.other)
+    from people p where p.state='connected'),'[]'::jsonb)));
+end $$;
+create function public.my_connections() returns jsonb language sql stable security invoker set search_path = '' as $$
+ select private.my_connections()
+$$;
+revoke all on function private.my_connections(), public.my_connections() from public, anon, authenticated, service_role;
+grant execute on function private.my_connections(), public.my_connections() to authenticated;
+
+-- The people list's dots: the caller's state with each person on the resbite (its owner, its admins and every guest row,
+-- whatever the reply), the caller left out, keyed by user id. Only for someone who sees the names there. With no pair,
+-- a refusal by that person of the caller on this series reads 'requested_by_me', as if the request still stood (CO-P3:
+-- the refusal is invisible); the refuser reads 'none'.
+create function private.plan_connection_states(p_plan uuid) returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_uid uuid := private.require_tester(); v_series uuid;
+begin
+ if not private.can_see_guests(p_plan) then raise exception 'Names required' using errcode='42501'; end if;
+ select series_id into v_series from public.plans where id=p_plan;
+ return coalesce((select jsonb_object_agg(m.id::text, case
+    when c.state='connected' then 'connected'
+    when c.state='requested' and c.requested_by=v_uid then 'requested_by_me'
+    when c.state='requested' then 'requested_by_them'
+    when exists(select 1 from private.connection_refusals r where r.series_id=v_series and r.from_user=v_uid and r.to_user=m.id)
+     then 'requested_by_me'
+    else 'none' end)
+  from (select owner_id as id from public.plans where id=p_plan
+   union select user_id from public.plan_admins where plan_id=p_plan
+   union select user_id from public.attendees where plan_id=p_plan) m
+  left join public.connections c on (c.user_a,c.user_b)=(least(v_uid,m.id),greatest(v_uid,m.id))
+  where m.id is not null and m.id<>v_uid),'{}'::jsonb);
+end $$;
+create function public.plan_connection_states(p_plan uuid) returns jsonb language sql stable security invoker set search_path = '' as $$
+ select private.plan_connection_states(p_plan)
+$$;
+revoke all on function private.plan_connection_states(uuid), public.plan_connection_states(uuid) from public, anon, authenticated, service_role;
+grant execute on function private.plan_connection_states(uuid), public.plan_connection_states(uuid) to authenticated;
+
+-- Profiles: the two sides of a pair, asked or connected, read each other's name and photo (the avatar storage policy
+-- calls this too). Otherwise the 20261014120000_ux2_rules body; its grants are kept.
+create or replace function private.can_read_profile(p_id uuid) returns boolean language sql stable security definer set search_path = '' as $$
+ select private.eligible() and (p_id=auth.uid() or exists (
+ select 1 from public.plans p where private.can_read_plan(p.id) and
+ (p.owner_id=p_id or (private.can_see_guests(p.id) and exists(select 1 from public.attendees a where a.plan_id=p.id and a.user_id=p_id))))
+ or exists(select 1 from public.connections c where (c.user_a, c.user_b) = (least(auth.uid(), p_id), greatest(auth.uid(), p_id))))
+$$;

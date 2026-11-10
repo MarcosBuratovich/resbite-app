@@ -21,12 +21,12 @@ do $$ begin
   raise exception 'The apply wrote rows';
  end if;
 end $$;
--- 2. Grants: the five calls, private bodies (definers) and public wrappers, for signed-in accounts only; the pair helper
--- and both tables for nobody.
+-- 2. Grants: the five calls and the two reads, private bodies (definers) and public wrappers, for signed-in accounts
+-- only; the pair helper and both tables for nobody. The profile read rule reads the pairs.
 do $$ declare s text; f text; r text; begin
  foreach s in array array['private.','public.'] loop
   foreach f in array array['request_connection(uuid,uuid)','accept_connection(uuid)','decline_connection(uuid)',
-   'cancel_connection_request(uuid)','remove_connection(uuid)'] loop
+   'cancel_connection_request(uuid)','remove_connection(uuid)','my_connections()','plan_connection_states(uuid)'] loop
    if not has_function_privilege('authenticated',s||f,'execute') or has_function_privilege('anon',s||f,'execute')
    or has_function_privilege('service_role',s||f,'execute') then raise exception '% grants wrong', s||f; end if;
    if (select prosecdef from pg_catalog.pg_proc where oid=(s||f)::regprocedure) is distinct from (s='private.') then
@@ -34,6 +34,9 @@ do $$ declare s text; f text; r text; begin
    end if;
   end loop;
  end loop;
+ if pg_catalog.pg_get_functiondef('private.can_read_profile(uuid)'::regprocedure) not like '%public.connections%' then
+  raise exception 'can_read_profile does not read the pairs';
+ end if;
  foreach r in array array['anon','authenticated','service_role'] loop
   if has_function_privilege(r,'private.pair(uuid,uuid)','execute') then raise exception '% may call pair', r; end if;
   if has_table_privilege(r,'private.connection_refusals','select,insert,update,delete') then raise exception '% may touch connection_refusals', r; end if;
@@ -42,7 +45,8 @@ do $$ declare s text; f text; r text; begin
 end $$;
 -- 3. The rollback, rehearsed and undone. Seed what it deletes (a pair, a refusal and the two notices), try its guard (it
 -- refuses once the creating-a-resbite rollback has run; plan_admins, renamed, stands in), then run it: the tables, the
--- functions and the connection notices are gone, the kind check is the one .before.sql recorded, and the plan stays.
+-- functions and the connection notices are gone, the kind check and the profile read rule are the ones .before.sql
+-- recorded, and the plan stays.
 begin;
 insert into auth.users(id,email,email_confirmed_at) values
  ('cc000000-0000-4000-8000-000000000001','connections-rehearsal-a@resbite-test.invalid',now()),
@@ -83,7 +87,7 @@ do $$ begin
  end if;
  if exists(select 1 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
    where n.nspname in ('public','private') and p.proname in ('request_connection','accept_connection','decline_connection',
-    'cancel_connection_request','remove_connection','pair')) then
+    'cancel_connection_request','remove_connection','my_connections','plan_connection_states','pair')) then
   raise exception 'Rollback left a connection function';
  end if;
  if exists(select 1 from private.notification_outbox where kind in ('connection_request','connection_accepted')) then
@@ -93,8 +97,12 @@ do $$ begin
    is distinct from (select definition from private.co_rehearsal_kind_check) then
   raise exception 'Rollback did not restore the outbox kind check';
  end if;
+ if pg_catalog.pg_get_functiondef('private.can_read_profile(uuid)'::regprocedure) is distinct from (select definition from private.co_rehearsal_profile_rule) then
+  raise exception 'Rollback did not restore can_read_profile';
+ end if;
  if not exists(select 1 from public.plans where id='cd000000-0000-4000-8000-000000000001') then raise exception 'Rollback lost the plan'; end if;
 end $$;
 rollback;
--- 4. Remove the rehearsal helper so later tests start clean.
+-- 4. Remove the rehearsal helpers so later tests start clean.
 drop table private.co_rehearsal_kind_check;
+drop table private.co_rehearsal_profile_rule;
