@@ -25,10 +25,12 @@ alter table public.connections enable row level security;
 revoke all on public.connections from public, anon, authenticated, service_role;
 
 -- "Not now": from_user asked, to_user refused, on that series; or to_user removed the connection with from_user that
--- began there (CO-P14). from_user cannot ask to_user again from it, and is never told (CO-P3); to_user may still ask.
--- An acceptance between the two on that series clears it. Functions only.
--- hidden is what from_user sees of it on that series' people lists: false, their request still looks sent (a "Not now",
--- or asking again after one); true, they see no request (a removal, which leaves nothing they had sent, or their cancel).
+-- began there (CO-P14). from_user cannot ask to_user again from it, and is never told (CO-P3); asking from another series
+-- is a real request and clears that direction's refusals. Any acceptance between the two clears all of theirs.
+-- hidden is what from_user sees of the pair: false, their request still looks sent, on every resbite they share, and they
+-- still read to_user's profile (a "Not now", or asking again after one); true, they see no request (a removal, which
+-- leaves nothing they had sent, or their cancel). A visible refusal stands for from_user's request: to_user asking
+-- accepts it. Functions only.
 create table private.connection_refusals (
  series_id uuid not null,
  from_user uuid not null references public.profiles(id) on delete cascade,
@@ -64,10 +66,11 @@ alter table private.notification_outbox add constraint notification_outbox_kind_
 -- person asked must be on it as its owner, an admin or a guest who has answered (Going, Maybe or Can't go): someone who
 -- hasn't answered can't be asked, as the request would tell them who else is on it (UX2-D6). Attendee rows stay after
 -- the end, so connecting stays possible on an ended resbite. Returns 'requested' (asked now or before) or 'connected'
--- (connected before, or the other person had asked: asking back accepts). It never returns a refused state (CO-P3):
+-- (connected before, or the other person had asked: asking back accepts, as it does when the other person's request
+-- was refused by the caller and still looks sent to them, a visible refusal). It never returns a refused state (CO-P3):
 -- when there is no row and the person asked refused the caller on this series (a "Not now", or a removal), it returns
--- 'requested' too, and stores and sends nothing but shows the refusal as sent again, so the app shows "Request sent" as
--- for any request.
+-- 'requested' too, and stores and sends nothing but shows the caller's refusals as sent again, so the app shows
+-- "Request sent" as for any request. Refused only on other series, the request is a real one.
 create function private.request_connection(p_user uuid, p_plan uuid) returns text language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester(); v_a uuid; v_b uuid; v_series uuid; v_row public.connections; v_at timestamptz;
 begin
@@ -90,8 +93,19 @@ begin
   return 'connected';
  end if;
  -- Refused on this series: it looks sent, and nothing is stored or sent.
- update private.connection_refusals set hidden=false where series_id=v_series and from_user=v_uid and to_user=p_user;
- if found then return 'requested'; end if;
+ if exists(select 1 from private.connection_refusals where series_id=v_series and from_user=v_uid and to_user=p_user) then
+  update private.connection_refusals set hidden=false where from_user=v_uid and to_user=p_user;
+  return 'requested';
+ end if;
+ -- Refused only on other series: a real request, and those refusals go.
+ delete from private.connection_refusals where from_user=v_uid and to_user=p_user;
+ -- The other person's request, refused by the caller, still looks sent to them: it stands, and asking accepts it.
+ if exists(select 1 from private.connection_refusals where from_user=p_user and to_user=v_uid and not hidden) then
+  insert into public.connections(user_a,user_b,state,requested_by,series_id,created_at)
+   values(v_a,v_b,'requested',p_user,v_series,pg_catalog.clock_timestamp());
+  perform private.accept_connection(p_user);
+  return 'connected';
+ end if;
  -- clock_timestamp, not now(): the notice's key carries the request's time, so a request sent again after a cancel is
  -- told again even when both fall in one transaction.
  insert into public.connections(user_a,user_b,state,requested_by,series_id,created_at)
@@ -106,7 +120,7 @@ $$;
 revoke all on function private.request_connection(uuid,uuid), public.request_connection(uuid,uuid) from public, anon, authenticated, service_role;
 grant execute on function private.request_connection(uuid,uuid), public.request_connection(uuid,uuid) to authenticated;
 
--- Accepting: only the person asked. A refusal between the two on the request's series, either way, goes: they are
+-- Accepting: only the person asked. Every refusal between the two, either way, on any series, goes: they are
 -- connected now. The requester is told ("You and Ana are now connected"); the notice's resbite is
 -- the latest occurrence of the series they met at or, when that series is gone, the latest resbite the two share. With
 -- neither, the acceptance stands and nobody is told (an outbox row needs a resbite).
@@ -118,7 +132,7 @@ begin
  select * into v_row from public.connections where user_a=v_a and user_b=v_b for update;
  if not found or v_row.state<>'requested' or v_row.requested_by is distinct from p_user then raise exception 'No request' using errcode='42501'; end if;
  update public.connections set state='connected',accepted_at=pg_catalog.clock_timestamp() where user_a=v_a and user_b=v_b returning accepted_at into v_at;
- delete from private.connection_refusals where series_id=v_row.series_id and (from_user,to_user) in ((v_a,v_b),(v_b,v_a));
+ delete from private.connection_refusals where (from_user,to_user) in ((v_a,v_b),(v_b,v_a));
  select id into v_plan from public.plans where series_id=v_row.series_id order by starts_at desc,id limit 1;
  if v_plan is null then
   select p.id into v_plan from public.plans p where p.id in (
@@ -149,7 +163,8 @@ begin
  if not found or v_row.state<>'requested' or v_row.requested_by is distinct from p_user then raise exception 'No request' using errcode='42501'; end if;
  delete from public.connections where user_a=v_a and user_b=v_b;
  if v_row.series_id is not null then
-  insert into private.connection_refusals(series_id,from_user,to_user) values(v_row.series_id,p_user,v_uid) on conflict do nothing;
+  insert into private.connection_refusals(series_id,from_user,to_user) values(v_row.series_id,p_user,v_uid)
+   on conflict (series_id,from_user,to_user) do update set hidden=excluded.hidden, refused_at=excluded.refused_at;
  end if;
 end $$;
 create function public.decline_connection(p_user uuid) returns void language sql security invoker set search_path = '' as $$
@@ -189,7 +204,8 @@ begin
  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_a::text||':'||v_b::text,53));
  delete from public.connections where user_a=v_a and user_b=v_b and state='connected' returning * into v_row;
  if v_row.series_id is not null then
-  insert into private.connection_refusals(series_id,from_user,to_user,hidden) values(v_row.series_id,p_user,v_uid,true) on conflict do nothing;
+  insert into private.connection_refusals(series_id,from_user,to_user,hidden) values(v_row.series_id,p_user,v_uid,true)
+   on conflict (series_id,from_user,to_user) do update set hidden=excluded.hidden, refused_at=excluded.refused_at;
  end if;
 end $$;
 create function public.remove_connection(p_user uuid) returns void language sql security invoker set search_path = '' as $$
@@ -199,7 +215,8 @@ revoke all on function private.remove_connection(uuid), public.remove_connection
 grant execute on function private.remove_connection(uuid), public.remove_connection(uuid) to authenticated;
 
 -- 4. What each person may read of the pair (CO-P3, CO-P6)
--- The two read functions are the only way the app learns about pairs (section 1).
+-- The two read functions are the only way the app learns about pairs (section 1), and the profile rule after them the
+-- only other place that reads them: what each shows a refused requester is what they would see were their request live.
 
 -- The caller's Connections (CO-P6): the requests to them, newest first, and their connections, by name, with the other
 -- person's name and photo and the resbite they met at. Requests the caller sent are not listed: a refused one would
@@ -238,20 +255,19 @@ grant execute on function private.my_connections(), public.my_connections() to a
 
 -- The people list's dots: the caller's state with each person on the resbite (its owner, its admins and every guest row,
 -- whatever the reply), the caller left out, keyed by user id. Only for someone who sees the names there. With no pair,
--- a refusal by that person of the caller on this series reads 'requested_by_me', as if the request still stood (CO-P3:
--- the refusal is invisible), unless it is hidden (a removal, or the caller's cancel), which reads 'none'; the refuser
--- reads 'none'.
+-- a refusal by that person of the caller, on any series, reads 'requested_by_me', as if the request still stood
+-- (CO-P3: the refusal is invisible), unless it is hidden (a removal, or the caller's cancel), which reads 'none'; the
+-- refuser reads 'none'.
 create function private.plan_connection_states(p_plan uuid) returns jsonb language plpgsql stable security definer set search_path = '' as $$
-declare v_uid uuid := private.require_tester(); v_series uuid;
+declare v_uid uuid := private.require_tester();
 begin
  if not private.can_see_guests(p_plan) then raise exception 'Names required' using errcode='42501'; end if;
- select series_id into v_series from public.plans where id=p_plan;
  return coalesce((select jsonb_object_agg(m.id::text, case
     when c.state='connected' then 'connected'
     when c.state='requested' and c.requested_by=v_uid then 'requested_by_me'
     when c.state='requested' then 'requested_by_them'
-    when exists(select 1 from private.connection_refusals r where r.series_id=v_series and r.from_user=v_uid and r.to_user=m.id
-      and not r.hidden) then 'requested_by_me'
+    when exists(select 1 from private.connection_refusals r where r.from_user=v_uid and r.to_user=m.id and not r.hidden)
+     then 'requested_by_me'
     else 'none' end)
   from (select owner_id as id from public.plans where id=p_plan
    union select user_id from public.plan_admins where plan_id=p_plan
@@ -266,10 +282,12 @@ revoke all on function private.plan_connection_states(uuid), public.plan_connect
 grant execute on function private.plan_connection_states(uuid), public.plan_connection_states(uuid) to authenticated;
 
 -- Profiles: the two sides of a pair, asked or connected, read each other's name and photo (the avatar storage policy
--- calls this too). Otherwise the 20261014120000_ux2_rules body; its grants are kept.
+-- calls this too), and so does a refused requester whose request still looks sent to them (a visible refusal), as if it
+-- were live. Otherwise the 20261014120000_ux2_rules body; its grants are kept.
 create or replace function private.can_read_profile(p_id uuid) returns boolean language sql stable security definer set search_path = '' as $$
  select private.eligible() and (p_id=auth.uid() or exists (
  select 1 from public.plans p where private.can_read_plan(p.id) and
  (p.owner_id=p_id or (private.can_see_guests(p.id) and exists(select 1 from public.attendees a where a.plan_id=p.id and a.user_id=p_id))))
- or exists(select 1 from public.connections c where (c.user_a, c.user_b) = (least(auth.uid(), p_id), greatest(auth.uid(), p_id))))
+ or exists(select 1 from public.connections c where (c.user_a, c.user_b) = (least(auth.uid(), p_id), greatest(auth.uid(), p_id)))
+ or exists(select 1 from private.connection_refusals r where r.from_user = auth.uid() and r.to_user = p_id and not r.hidden))
 $$;

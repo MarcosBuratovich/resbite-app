@@ -26,7 +26,7 @@ do $$ begin
  end if;
 end $$;
 -- 2. Grants: the five calls and the two reads, private bodies (definers) and public wrappers, for signed-in accounts
--- only; the pair helper and both tables for nobody. The profile read rule reads the pairs.
+-- only; the pair helper and both tables for nobody. The profile read rule reads the pairs and the refusals.
 do $$ declare s text; f text; r text; begin
  foreach s in array array['private.','public.'] loop
   foreach f in array array['request_connection(uuid,uuid)','accept_connection(uuid)','decline_connection(uuid)',
@@ -38,8 +38,9 @@ do $$ declare s text; f text; r text; begin
    end if;
   end loop;
  end loop;
- if pg_catalog.pg_get_functiondef('private.can_read_profile(uuid)'::regprocedure) not like '%public.connections%' then
-  raise exception 'can_read_profile does not read the pairs';
+ if pg_catalog.pg_get_functiondef('private.can_read_profile(uuid)'::regprocedure) not like '%public.connections%'
+ or pg_catalog.pg_get_functiondef('private.can_read_profile(uuid)'::regprocedure) not like '%private.connection_refusals%not r.hidden%' then
+  raise exception 'can_read_profile does not read the pairs and the visible refusals';
  end if;
  foreach r in array array['anon','authenticated','service_role'] loop
   if has_function_privilege(r,'private.pair(uuid,uuid)','execute') then raise exception '% may call pair', r; end if;
