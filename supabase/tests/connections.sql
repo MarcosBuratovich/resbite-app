@@ -829,6 +829,36 @@ select public.accept_connection('f1000000-0000-4000-8000-000000000001');
 select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 select public.request_connection('f1000000-0000-4000-8000-000000000003','f1100000-0000-4000-8000-000000000001');
 
+-- A connection who may not use the app is no connection to invite, refused with the same message: 03 with the roster
+-- entry disabled, then with a deletion pending. Neither adds 03 or tells them anything.
+reset role;
+update private.tester_roster set enabled=false where email='co1-maybe@resbite-test.invalid';
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+do $$ begin
+ begin perform public.invite_contacts('f1100000-0000-4000-8000-000000000002',jsonb_build_array(jsonb_build_object('user','f1000000-0000-4000-8000-000000000003')));
+  raise exception 'A connection who is not eligible was invited';
+ exception when insufficient_privilege then if sqlerrm<>'Not a connection' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+end $$;
+reset role;
+update private.tester_roster set enabled=true where email='co1-maybe@resbite-test.invalid';
+update public.profiles set deletion_requested_at=now() where id='f1000000-0000-4000-8000-000000000003';
+set local role authenticated;
+do $$ begin
+ begin perform public.invite_contacts('f1100000-0000-4000-8000-000000000002',jsonb_build_array(jsonb_build_object('user','f1000000-0000-4000-8000-000000000003')));
+  raise exception 'A connection whose deletion is pending was invited';
+ exception when insufficient_privilege then if sqlerrm<>'Not a connection' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+end $$;
+reset role;
+update public.profiles set deletion_requested_at=null where id='f1000000-0000-4000-8000-000000000003';
+do $$ begin
+ if exists(select 1 from public.attendees where plan_id='f1100000-0000-4000-8000-000000000002' and user_id='f1000000-0000-4000-8000-000000000003')
+ or exists(select 1 from private.notification_outbox where kind='invited') then
+  raise exception 'A connection who may not use the app was added or told';
+ end if;
+end $$;
+set local role authenticated;
+
 -- Inviting a connection in the app: 01 invites 03, a connection not on Board game night. 'app': a pending guest row and
 -- the invited notice from 01. An item by user is not charged to the lookup budget.
 select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
@@ -915,16 +945,23 @@ end $$;
 
 -- The two notices go only while what they tell stands: 02's request to 03 while it is live and 02's (not tied to the
 -- resbite: 03 off Film night and muting its series is still told; not after a day); the acceptance to 02 while the two
--- are connected. The invited notice keeps the rule it had.
+-- are connected; each only while it is not older than its row (the request's created_at, the acceptance's accepted_at),
+-- the time the connection functions stamp on it. The invited notice keeps the rule it had.
 create temporary table co3_notices on commit drop as select
  (select id from private.notification_outbox where kind='connection_request' and recipient_id='f1000000-0000-4000-8000-000000000003'
    and actor_id='f1000000-0000-4000-8000-000000000002') as request,
  (select id from private.notification_outbox where kind='connection_accepted' and recipient_id='f1000000-0000-4000-8000-000000000002'
    and actor_id='f1000000-0000-4000-8000-000000000001') as accepted,
  (select id from private.notification_outbox where kind='invited' and recipient_id='f1000000-0000-4000-8000-000000000003') as invited;
-do $$ declare n co3_notices; begin
+do $$ declare n co3_notices; v_at timestamptz; begin
  select * into n from co3_notices;
  if n.request is null or n.accepted is null or n.invited is null then raise exception 'A notice is missing: %', n; end if;
+ if (select created_at from private.notification_outbox where id=n.request) is distinct from (select created_at from public.connections
+   where user_a='f1000000-0000-4000-8000-000000000002' and user_b='f1000000-0000-4000-8000-000000000003')
+ or (select created_at from private.notification_outbox where id=n.accepted) is distinct from (select accepted_at from public.connections
+   where user_a='f1000000-0000-4000-8000-000000000001' and user_b='f1000000-0000-4000-8000-000000000002') then
+  raise exception 'A connection notice is not stamped with its row''s time';
+ end if;
  if not private.notification_recipient_eligible(n.request) then raise exception 'A live request''s notice was not eligible'; end if;
  if not private.notification_recipient_eligible(n.accepted) then raise exception 'A connection''s acceptance notice was not eligible'; end if;
  if not private.notification_recipient_eligible(n.invited) then raise exception 'The invited notice was not eligible'; end if;
@@ -932,9 +969,16 @@ do $$ declare n co3_notices; begin
  insert into public.plan_mutes(series_id,user_id) values
   ((select series_id from public.plans where id='f1100000-0000-4000-8000-000000000001'),'f1000000-0000-4000-8000-000000000003');
  if not private.notification_recipient_eligible(n.request) then raise exception 'A request''s notice was tied to the resbite or its mute'; end if;
+ select created_at into v_at from private.notification_outbox where id=n.request;
  update private.notification_outbox set created_at=now()-interval '25 hours' where id=n.request;
  if private.notification_recipient_eligible(n.request) then raise exception 'A day-old request''s notice was eligible'; end if;
- update private.notification_outbox set created_at=now() where id=n.request;
+ update private.notification_outbox set created_at=v_at where id=n.request;
+ update public.connections set accepted_at=accepted_at+interval '1 second'
+  where user_a='f1000000-0000-4000-8000-000000000001' and user_b='f1000000-0000-4000-8000-000000000002';
+ if private.notification_recipient_eligible(n.accepted) then raise exception 'An acceptance notice older than the acceptance was eligible'; end if;
+ update public.connections set accepted_at=accepted_at-interval '1 second'
+  where user_a='f1000000-0000-4000-8000-000000000001' and user_b='f1000000-0000-4000-8000-000000000002';
+ if not private.notification_recipient_eligible(n.accepted) then raise exception 'The acceptance notice did not come back'; end if;
  update public.connections set requested_by='f1000000-0000-4000-8000-000000000003'
   where user_a='f1000000-0000-4000-8000-000000000002' and user_b='f1000000-0000-4000-8000-000000000003';
  if private.notification_recipient_eligible(n.request) then raise exception 'A request''s notice was eligible once the request was the other way'; end if;
@@ -943,6 +987,28 @@ do $$ declare n co3_notices; begin
  delete from public.plan_mutes where user_id='f1000000-0000-4000-8000-000000000003';
  insert into public.attendees(plan_id,user_id,response) values
   ('f1100000-0000-4000-8000-000000000001','f1000000-0000-4000-8000-000000000003','maybe');
+end $$;
+-- 02 takes the request back and, a second later (the key carries the request's time to the second), sends it again:
+-- two notices, and only the second, of the request now standing, goes.
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+select public.cancel_connection_request('f1000000-0000-4000-8000-000000000003');
+reset role;
+do $$ begin
+ if private.notification_recipient_eligible((select request from co3_notices)) then raise exception 'A cancelled request''s notice was eligible'; end if;
+end $$;
+select pg_sleep(1);
+set local role authenticated;
+select public.request_connection('f1000000-0000-4000-8000-000000000003','f1100000-0000-4000-8000-000000000001');
+reset role;
+alter table co3_notices add column again bigint;
+update co3_notices set again=(select id from private.notification_outbox where kind='connection_request'
+ and recipient_id='f1000000-0000-4000-8000-000000000003' and actor_id='f1000000-0000-4000-8000-000000000002' and id<>co3_notices.request);
+do $$ declare n co3_notices; begin
+ select * into n from co3_notices;
+ if n.again is null then raise exception 'The request sent again was not told'; end if;
+ if private.notification_recipient_eligible(n.request) then raise exception 'The notice of a request cancelled and sent again was eligible'; end if;
+ if not private.notification_recipient_eligible(n.again) then raise exception 'The notice of the request sent again was not eligible'; end if;
 end $$;
 -- 03 declines 02: the request's notice no longer goes. 01 removes 02: the acceptance's no longer goes.
 set local role authenticated;
@@ -953,7 +1019,7 @@ select public.remove_connection('f1000000-0000-4000-8000-000000000002');
 reset role;
 do $$ declare n co3_notices; begin
  select * into n from co3_notices;
- if private.notification_recipient_eligible(n.request) then raise exception 'A declined request''s notice was eligible'; end if;
+ if private.notification_recipient_eligible(n.again) then raise exception 'A declined request''s notice was eligible'; end if;
  if private.notification_recipient_eligible(n.accepted) then raise exception 'A removed connection''s acceptance notice was eligible'; end if;
 end $$;
 

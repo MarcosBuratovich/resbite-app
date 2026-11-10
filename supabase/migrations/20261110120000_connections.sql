@@ -62,7 +62,9 @@ alter table private.notification_outbox add constraint notification_outbox_kind_
 -- double tap) run one after the other: the second finds the first's row and never meets the primary key. Each notice's
 -- dedupe key ends with the time of its row, to the second (the request's created_at, the acceptance's accepted_at): a
 -- retry queues nothing twice, while a request sent again after a cancel or a removal, or a second acceptance, is told.
--- The request's key also names who asked, so two requests either way within one second are both told.
+-- The request's key also names who asked, so two requests either way within one second are both told. The notice's
+-- created_at is its row's time too, exactly, so the audience (section 5) tells a notice of the pair's current request or
+-- acceptance from one of an earlier, cancelled or removed, which is older than the row.
 
 -- Asking, from a resbite. The caller must see names there (can_see_guests: a host, or a guest who has answered), and the
 -- person asked must be on it as its owner, an admin or a guest who has answered (Going, Maybe or Can't go): someone who
@@ -111,8 +113,9 @@ begin
  -- told again even when both fall in one transaction.
  insert into public.connections(user_a,user_b,state,requested_by,series_id,created_at)
   values(v_a,v_b,'requested',v_uid,v_series,pg_catalog.clock_timestamp()) returning created_at into v_at;
- insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id)
-  values(p_plan,p_user,'connection_request','connect:'||v_a||':'||v_b||':'||v_series||':'||v_uid||':'||extract(epoch from v_at)::bigint,v_uid) on conflict do nothing;
+ insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,created_at)
+  values(p_plan,p_user,'connection_request','connect:'||v_a||':'||v_b||':'||v_series||':'||v_uid||':'||extract(epoch from v_at)::bigint,v_uid,v_at)
+  on conflict do nothing;
  return 'requested';
 end $$;
 create function public.request_connection(p_user uuid, p_plan uuid) returns text language sql security invoker set search_path = '' as $$
@@ -143,8 +146,9 @@ begin
   order by p.starts_at desc,p.id limit 1;
  end if;
  if v_plan is not null then
-  insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id)
-   values(v_plan,p_user,'connection_accepted','connected:'||v_a||':'||v_b||':'||extract(epoch from v_at)::bigint,v_uid) on conflict do nothing;
+  insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,created_at)
+   values(v_plan,p_user,'connection_accepted','connected:'||v_a||':'||v_b||':'||extract(epoch from v_at)::bigint,v_uid,v_at)
+   on conflict do nothing;
  end if;
 end $$;
 create function public.accept_connection(p_user uuid) returns void language sql security invoker set search_path = '' as $$
@@ -298,7 +302,8 @@ $$;
 -- Inviting a connection in the app (CO-P4): beside {phone, country, code}, an item may be {user}, someone the caller is
 -- connected to, invited as an On Resbite contact is: 'already' when they are on the resbite (its owner, or any guest
 -- row), else 'app' (a pending guest row and the 'invited' notice, from the caller). Anyone the caller is not connected to
--- is refused (42501 'Not a connection'), and a user that is not an id is an invalid item (22023). A {user} item's result
+-- is refused (42501 'Not a connection'), and so is a connection who may not use the app (not eligible, or leaving), with
+-- the same message so nothing about them shows; a user that is not an id is an invalid item (22023). A {user} item's result
 -- is {user, kind}, in order with the {phone, kind} ones. The 50-item cap is the whole batch's. Otherwise the
 -- 20261031120000_creating_a_resbite body; its grants are kept.
 create or replace function private.invite_contacts(p_plan uuid, p_invites jsonb) returns jsonb language plpgsql security definer set search_path = '' as $$
@@ -321,7 +326,9 @@ begin
    v_user := (v_item->>'user')::uuid;
    -- The pair's row is held while the invitation is made: a removal at the same moment goes first or waits.
    perform 1 from public.connections where (user_a,user_b)=(least(v_uid,v_user),greatest(v_uid,v_user)) and state='connected' for share;
-   if not found then raise exception 'Not a connection' using errcode='42501'; end if;
+   if not found or not private.user_eligible(v_user) or private.deletion_pending(v_user) then
+    raise exception 'Not a connection' using errcode='42501';
+   end if;
    if v_user=(select owner_id from public.plans where id=p_plan)
     or exists(select 1 from public.attendees where plan_id=p_plan and user_id=v_user) then
     v_kind := 'already';
@@ -373,9 +380,11 @@ begin
 end $$;
 
 -- The two connection notices (CO-P5) go to a side of the pair while what they tell still stands: a request while it is
--- live and still the actor's, an acceptance while the two are connected. Their resbite (plan_id) only names where the two
--- met: no membership test, and a mute does not apply. Every other kind keeps the 20261031120000_creating_a_resbite body,
--- verbatim but for the kind test that leaves the two to their own branch.
+-- live and still the actor's, an acceptance while the two are connected, and in each case only the notice of the row as
+-- it stands, not one older than it (a request cancelled and sent again, an earlier acceptance; section 3 stamps each
+-- notice with its row's time). Their resbite (plan_id) only names where the two met: no membership test, and a mute
+-- does not apply. Every other kind keeps the 20261031120000_creating_a_resbite body, verbatim but for the kind test that
+-- leaves the two to their own branch.
 create or replace function private.notification_recipient_eligible(p_outbox bigint) returns boolean
 language sql stable security definer set search_path='' as $$
  select exists (
@@ -400,8 +409,8 @@ language sql stable security definer set search_path='' as $$
  and o.created_at>now()-interval '24 hours'
  and exists(select 1 from public.connections c
   where (c.user_a,c.user_b)=(least(o.recipient_id,o.actor_id),greatest(o.recipient_id,o.actor_id))
-  and (o.kind='connection_accepted' and c.state='connected'
-   or o.kind='connection_request' and c.state='requested' and c.requested_by=o.actor_id))
+  and (o.kind='connection_accepted' and c.state='connected' and o.created_at>=c.accepted_at
+   or o.kind='connection_request' and c.state='requested' and c.requested_by=o.actor_id and o.created_at>=c.created_at))
  )
 $$;
 
