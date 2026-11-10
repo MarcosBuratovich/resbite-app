@@ -1,7 +1,7 @@
 -- Rehearsal checks for 20261110120000_connections (hosted-baseline mode only).
 -- 1. The two tables, with row security and no policies, and a refusal's hidden flag (false unless set); the outbox takes
--- the two new kinds and keeps the earlier ones; the apply wrote no rows, and made no deletion request (the lifecycle is
--- local-only).
+-- the two new kinds and keeps the earlier ones; the apply wrote no rows, and did not create request_account_deletion
+-- (the deletion lifecycle is local-only).
 do $$ begin
  if pg_catalog.to_regclass('public.connections') is null or pg_catalog.to_regclass('private.connection_refusals') is null then
   raise exception 'The connection tables are missing';
@@ -26,7 +26,7 @@ do $$ begin
   raise exception 'The apply wrote rows';
  end if;
  if pg_catalog.to_regprocedure('private.request_account_deletion(uuid,uuid,uuid,text)') is not null then
-  raise exception 'The apply made a deletion request';
+  raise exception 'The apply created request_account_deletion';
  end if;
 end $$;
 -- 2. Grants: the five calls and the two reads, private bodies (definers) and public wrappers, for signed-in accounts
@@ -84,7 +84,7 @@ rollback;
 -- 4. The rollback, rehearsed and undone. Seed what it deletes (a pair, a refusal and the two notices), try its guard (it
 -- refuses once the creating-a-resbite rollback has run; plan_admins, renamed, stands in), then run it: the tables, the
 -- functions and the connection notices are gone, the kind check, the profile read rule, invite_contacts and the notice
--- audience are the ones .before.sql recorded, no deletion request appears, and the plan stays.
+-- audience are the ones .before.sql recorded, request_account_deletion still does not exist, and the plan stays.
 begin;
 insert into auth.users(id,email,email_confirmed_at) values
  ('cc000000-0000-4000-8000-000000000001','connections-rehearsal-a@resbite-test.invalid',now()),
@@ -143,7 +143,7 @@ do $$ begin
   raise exception 'Rollback did not restore invite_contacts and notification_recipient_eligible';
  end if;
  if pg_catalog.to_regprocedure('private.request_account_deletion(uuid,uuid,uuid,text)') is not null then
-  raise exception 'Rollback made a deletion request';
+  raise exception 'Rollback created request_account_deletion';
  end if;
  if not exists(select 1 from public.plans where id='cd000000-0000-4000-8000-000000000001') then raise exception 'Rollback lost the plan'; end if;
 end $$;

@@ -15,7 +15,8 @@ create table private.co_rehearsal_functions as
 alter table private.co_rehearsal_functions enable row level security;
 
 -- 2. The pre-state: none of the migration's tables, functions or outbox kinds exist, the two functions it redefines know
--- nothing of connections, and there is no deletion request (the lifecycle is local-only), so it redefines none.
+-- nothing of connections, and request_account_deletion does not exist (the deletion lifecycle is local-only), so it
+-- redefines none.
 do $$ begin
  if pg_catalog.to_regclass('public.connections') is not null or pg_catalog.to_regclass('private.connection_refusals') is not null then
   raise exception 'The connection tables exist before the migration';
@@ -38,6 +39,6 @@ do $$ begin
   raise exception 'invite_contacts or notification_recipient_eligible already knows connections';
  end if;
  if pg_catalog.to_regprocedure('private.request_account_deletion(uuid,uuid,uuid,text)') is not null then
-  raise exception 'The hosted baseline has a deletion request';
+  raise exception 'request_account_deletion exists on the hosted baseline';
  end if;
 end $$;

@@ -60,9 +60,9 @@ alter table private.notification_outbox add constraint notification_outbox_kind_
 -- 3. Asking, accepting, refusing, cancelling and removing (CO-P2, CO-P3, CO-P5)
 -- Each function takes the pair's advisory lock first, so two calls on one pair (two people asking each other at once, a
 -- double tap) run one after the other: the second finds the first's row and never meets the primary key. Each notice's
--- dedupe key ends with the time of its row, to the second (the request's created_at, the acceptance's accepted_at): a
--- retry queues nothing twice, while a request sent again after a cancel or a removal, or a second acceptance, is told.
--- The request's key also names who asked, so two requests either way within one second are both told. The notice's
+-- dedupe key ends with the exact time of its row, as an epoch with its fraction (the request's created_at, the
+-- acceptance's accepted_at): a retry queues nothing twice, while a request sent again after a cancel or a removal, or a
+-- second acceptance, is told, however soon after the first. The request's key also names who asked. The notice's
 -- created_at is its row's time too, exactly, so the audience (section 5) tells a notice of the pair's current request or
 -- acceptance from one of an earlier, cancelled or removed, which is older than the row.
 
@@ -114,7 +114,7 @@ begin
  insert into public.connections(user_a,user_b,state,requested_by,series_id,created_at)
   values(v_a,v_b,'requested',v_uid,v_series,pg_catalog.clock_timestamp()) returning created_at into v_at;
  insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,created_at)
-  values(p_plan,p_user,'connection_request','connect:'||v_a||':'||v_b||':'||v_series||':'||v_uid||':'||extract(epoch from v_at)::bigint,v_uid,v_at)
+  values(p_plan,p_user,'connection_request','connect:'||v_a||':'||v_b||':'||v_series||':'||v_uid||':'||extract(epoch from v_at),v_uid,v_at)
   on conflict do nothing;
  return 'requested';
 end $$;
@@ -147,7 +147,7 @@ begin
  end if;
  if v_plan is not null then
   insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,created_at)
-   values(v_plan,p_user,'connection_accepted','connected:'||v_a||':'||v_b||':'||extract(epoch from v_at)::bigint,v_uid,v_at)
+   values(v_plan,p_user,'connection_accepted','connected:'||v_a||':'||v_b||':'||extract(epoch from v_at),v_uid,v_at)
    on conflict do nothing;
  end if;
 end $$;
@@ -456,9 +456,9 @@ begin
   update private.invitations set revoked_at=coalesce(revoked_at,now()),intended_email=null where plan_id=v_plan.id;
  end loop;
  update private.invitations set revoked_at=coalesce(revoked_at,now()),claimed_by=null,intended_email=null where claimed_by=p_user;
- delete from public.attendees where user_id=p_user;
  delete from public.connections where p_user in (user_a,user_b);
  delete from private.connection_refusals where from_user=p_user or to_user=p_user;
+ delete from public.attendees where user_id=p_user;
  delete from private.device_endpoints where user_id=p_user;
  delete from private.notification_outbox where recipient_id=p_user;
  return jsonb_build_object('requestId',p_request,'status','queued');
