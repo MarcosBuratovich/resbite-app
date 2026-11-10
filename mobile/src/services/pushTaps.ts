@@ -1,6 +1,6 @@
 import { REMINDER_PREFIX } from "../domain/reminders";
 import { pushDestination, type PushDestination } from "../domain/pushRoute";
-import { resolveNotificationTarget } from "./pushRegistration";
+import { parseNotificationTarget, resolveNotificationTarget } from "./pushRegistration";
 
 export type TapResponse = {
   notification: { request: { identifier: string; content: { data?: Record<string, unknown> | null } } };
@@ -13,7 +13,7 @@ export type TapDestination = PushDestination | { pathname: "/account" };
 export function isPlanUpdateTap(response: TapResponse | null): boolean {
   const request = response?.notification.request;
   if (!request || request.identifier.startsWith(REMINDER_PREFIX)) return false;
-  return request.content.data?.type === "plan_update";
+  return request.content.data?.type === "plan_update" || request.content.data?.type === "connection";
 }
 
 /**
@@ -87,6 +87,11 @@ export function createPushTapRouter(deps: {
     }
     const data = pending;
     finish();
+    // A connection tap needs no plan read: it opens Connections once the account is ready and approved.
+    if (parseNotificationTarget(data)?.kind === "connection") {
+      if (generation === mine) deps.open(pushDestination(null, "connection"));
+      return;
+    }
     // Keyed on the signed-in user, not on approval, so a refresh mid-resolve doesn't drop the tap.
     const assertCurrent = () => {
       const now = deps.context();

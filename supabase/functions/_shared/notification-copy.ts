@@ -92,6 +92,19 @@ export function notificationCopy(input: CopyInput): Copy {
   // The one notice that leads with who did it: the plan's title is the line underneath.
   if (input.kind === "admin_added")
     return title ? { title: `${input.actor_name?.trim() || "Someone"} made you an admin`, body: title } : GENERIC_COPY;
+  // The two connection notices lead with who did it; the title is the resbite the two share.
+  if (input.kind === "connection_request" || input.kind === "connection_accepted") {
+    const name = input.actor_name?.trim();
+    if (!name) return GENERIC_COPY;
+    if (input.kind === "connection_accepted")
+      return { title: `You and ${name} are now connected`, body: "You can invite each other from Invite people." };
+    if (!title) return GENERIC_COPY;
+    const start = input.starts_at ? new Date(input.starts_at).getTime() : NaN;
+    return {
+      title: `${name} wants to connect`,
+      body: Number.isFinite(start) && start > Date.now() ? `You're both going to ${title}.` : `You were both at ${title}.`,
+    };
+  }
   // The next occurrence of a repeating resbite (CR-P24): the title says it is on again, the body says when.
   if (input.kind === "invited" && input.detail === "again") {
     const time = eventTime(input.starts_at, input.time_zone);

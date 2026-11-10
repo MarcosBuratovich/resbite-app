@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   runNotifications,
   GatewayFailure,
+  payloadFor,
   type Delivery,
   type Result,
 } from "./notification-engine.ts";
@@ -195,4 +196,9 @@ test("payload uses the event title and what happened when the claim carries them
       ttl: 3600,
     },
   ]);
+});
+test("a connection notice carries the connection type, a plan notice the plan_update type", () => {
+  for (const kind of ["connection_request", "connection_accepted"])
+    assert.equal(payloadFor({ ...job, kind }).data.type, "connection");
+  assert.equal(payloadFor({ ...job, kind: "rsvp" }).data.type, "plan_update");
 });

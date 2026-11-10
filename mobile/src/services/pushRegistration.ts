@@ -158,7 +158,7 @@ export function createPushRegistration(
   };
 }
 
-export type NotificationTarget = { planId: string; notificationId: string };
+export type NotificationTarget = { kind: "plan" | "connection"; planId: string; notificationId: string };
 export function parseNotificationTarget(
   value: unknown,
 ): NotificationTarget | null {
@@ -171,7 +171,7 @@ export function parseNotificationTarget(
   )
     return null;
   if (
-    data.type !== "plan_update" ||
+    (data.type !== "plan_update" && data.type !== "connection") ||
     typeof data.planId !== "string" ||
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
       data.planId,
@@ -180,7 +180,7 @@ export function parseNotificationTarget(
     !/^[1-9][0-9]{0,18}$/.test(data.notificationId)
   )
     return null;
-  return { planId: data.planId, notificationId: data.notificationId };
+  return { kind: data.type === "connection" ? "connection" : "plan", planId: data.planId, notificationId: data.notificationId };
 }
 /** Returns only a refetched, account-authorized plan ID, never a payload-provided route. */
 export async function resolveNotificationTarget(

@@ -63,7 +63,10 @@ export function payloadFor(job: Delivery) {
     to: job.token,
     ...notificationCopy(job),
     data: {
-      type: "plan_update",
+      type:
+        job.kind === "connection_request" || job.kind === "connection_accepted"
+          ? "connection"
+          : "plan_update",
       planId: job.plan_id,
       notificationId: job.outbox_id,
     },

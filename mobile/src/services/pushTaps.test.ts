@@ -233,3 +233,23 @@ test("a failed read for a tap superseded or an account changed meanwhile goes no
   await settle();
   assert.deepEqual(opened, [{ pathname: "/event", params: { plan: OTHER } }]);
 });
+test("a connection tap opens Connections without reading a plan", async () => {
+  const t = setup();
+  assert.equal(t.router.receive(push({ type: "connection", planId: PLAN, notificationId: "7" })), true);
+  await settle();
+  assert.deepEqual(t.opened, [{ pathname: "/connections" }]);
+  assert.deepEqual(t.reads, []);
+});
+test("a connection tap waits for readiness and is dropped when signed out", async () => {
+  const t = setup({ ready: false });
+  t.router.receive(push({ type: "connection", planId: PLAN, notificationId: "7" }));
+  await settle();
+  assert.deepEqual(t.opened, []);
+  t.context.ready = true;
+  await t.router.flush();
+  assert.deepEqual(t.opened, [{ pathname: "/connections" }]);
+  const out = setup({ account: null });
+  out.router.receive(push({ type: "connection", planId: PLAN, notificationId: "7" }));
+  await settle();
+  assert.deepEqual(out.opened, []);
+});

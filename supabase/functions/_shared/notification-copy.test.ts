@@ -133,3 +133,13 @@ test("invited again: the title says it is on again and the body is the start in 
   for (const input of [{ ...again, starts_at: null }, { ...again, time_zone: "Not/AZone" }, { ...again, title: "  " }])
     assert.deepEqual(notificationCopy(input), GENERIC_COPY, JSON.stringify(input));
 });
+
+test("a connection request leads with who, and says where you met", () => {
+  assert.deepEqual(notificationCopy({ kind: "connection_request", title: "Board game night", actor_name: "Pedro", starts_at: "2099-01-01T19:00:00Z", time_zone: "UTC" }),
+    { title: "Pedro wants to connect", body: "You're both going to Board game night." });
+  assert.deepEqual(notificationCopy({ kind: "connection_request", title: "Picnic", actor_name: "Pedro", starts_at: "2020-01-01T19:00:00Z", time_zone: "UTC" }),
+    { title: "Pedro wants to connect", body: "You were both at Picnic." });
+  assert.deepEqual(notificationCopy({ kind: "connection_accepted", title: "Picnic", actor_name: "Ana" }),
+    { title: "You and Ana are now connected", body: "You can invite each other from Invite people." });
+  assert.deepEqual(notificationCopy({ kind: "connection_request", title: "Picnic", actor_name: "" }), GENERIC_COPY);
+});
