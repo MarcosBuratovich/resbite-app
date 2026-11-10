@@ -13,7 +13,7 @@ try {
   await page.getByText("Preview the design", { exact: true }).click();
   await page.getByRole("tab", { name: "Profile", exact: true }).click();
   await page
-    .getByRole("button", { name: "People & groups", exact: true })
+    .getByRole("button", { name: "People lists", exact: true })
     .click();
   await page
     .getByRole("button", { name: "Create a group", exact: true })
@@ -69,7 +69,7 @@ try {
   await button(page, "Back").click();
   await page.getByRole("tab", { name: "Profile", exact: true }).click();
   await page
-    .getByRole("button", { name: "People & groups", exact: true })
+    .getByRole("button", { name: "People lists", exact: true })
     .click();
   page.once("dialog", (d) => d.accept());
   await page

@@ -118,6 +118,8 @@ async function fixture(
     if (path === "/rest/v1/activities") return reply([]);
     // Waiting for access lists the account's open-link requests: none here.
     if (path === "/rest/v1/rpc/my_join_requests") return reply([]);
+    // Profile reads the Connections row's count of requests: nobody here.
+    if (path === "/rest/v1/rpc/my_connections") return reply({ requests: [], connected: [] });
     if (path === "/rest/v1/rpc/claim_invite") {
       claims++;
       return reply("22222222-2222-4222-8222-222222222222");

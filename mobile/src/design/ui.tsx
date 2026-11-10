@@ -102,6 +102,7 @@ export function Button({
   disabled = false,
   icon = true,
   hint,
+  label,
   large = false,
   destructive = false,
   errorInk = false,
@@ -115,6 +116,8 @@ export function Button({
   icon?: boolean;
   /** What happens beyond the title, for VoiceOver (react-native-web does not render hints). */
   hint?: string;
+  /** The spoken name when it says more than the title (whose request "Accept" is for); it starts with the title. */
+  label?: string;
   /** The creation steps' pill (steps v2): 62 pt tall with a centred, bold label. */
   large?: boolean;
   /** A red button with a white label, for a permanent action (Delete account). */
@@ -135,7 +138,7 @@ export function Button({
     <Animated.View style={anim}>
       <GluestackButton
         accessibilityRole="button"
-        accessibilityLabel={title}
+        accessibilityLabel={label ?? title}
         accessibilityHint={hint}
         accessibilityState={{ disabled: disabled || loading, busy: loading }}
         isDisabled={disabled || loading}

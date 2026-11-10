@@ -2,21 +2,26 @@ import React, { useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import { Bell, Camera, LogOut, MessageCircle, Pencil, ShieldCheck, Trash2, UserRound, Users } from "lucide-react-native";
+import { Bell, Camera, Link2, LogOut, MessageCircle, Pencil, ShieldCheck, Trash2, UserRound, Users } from "lucide-react-native";
 import { Button, Copy, ErrorNote, Title, s } from "../../src/design/ui";
 import { FieldCard, IconButton, InfoSheet, Row, RowGroup } from "../../src/design/kit";
 import { PreviewNotice } from "../../src/design/Chrome";
 import { categoryPalette, colors as c, depth, fonts, r } from "../../src/design/tokens";
+import { CONNECTIONS_COPY } from "../../src/domain/connectionsCopy";
 import { formatPhone } from "../../src/domain/phone";
+import { useConnections } from "../../src/state/useConnections";
 import { useProfile } from "../../src/state/useProfile";
 
 /**
  * Profile (UX4-D2, "B · Grouped rows"): a centred photo and name, then one card of rows, and
  * Sign out in its own card. All logic is useProfile's, unchanged. Until a name is saved the
- * name field sits in the card (first run); afterwards ✎ opens it in a sheet.
+ * name field sits in the card (first run); afterwards ✎ opens it in a sheet. Connections leads
+ * the rows, with the requests waiting as a badge (CO-P6).
  */
 export default function Profile() {
   const p = useProfile();
+  // CO-P6: the requests waiting, read on each focus; none shows before a read succeeds, or after one fails.
+  const waiting = useConnections().data?.requests.length ?? 0;
   const [editing, setEditing] = useState(false);
   const firstRun = !p.profile && !p.loading;
   const shownName = p.profile?.display_name || p.name;
@@ -159,7 +164,16 @@ export default function Profile() {
         )}
         <RowGroup>
           <Row
-            title="People & groups"
+            title={CONNECTIONS_COPY.profileRow}
+            icon={Link2}
+            tint={categoryPalette.uplifting.tint}
+            ink={categoryPalette.uplifting.ink}
+            badge={waiting > 0 ? String(waiting) : undefined}
+            label={waiting > 0 ? `${CONNECTIONS_COPY.profileRow}, ${waiting} ${waiting === 1 ? "request" : "requests"}` : undefined}
+            onPress={() => router.push("/connections")}
+          />
+          <Row
+            title={CONNECTIONS_COPY.peopleListsRow}
             icon={Users}
             tint={categoryPalette.mindful.tint}
             ink={categoryPalette.mindful.ink}

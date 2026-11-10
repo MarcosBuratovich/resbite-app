@@ -155,6 +155,7 @@ function Navigation() {
             <Stack.Screen name="event" />
             <Stack.Screen name="guests" />
             <Stack.Screen name="people" />
+            <Stack.Screen name="connections" />
             <Stack.Screen name="invitations" />
             <Stack.Screen name="notifications" />
             <Stack.Screen name="sample-chat" />

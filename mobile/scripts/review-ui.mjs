@@ -115,7 +115,7 @@ try {
     await button(page, "Back").click();
     await page.getByRole("radio", { name: "Past", exact: true }).click();
     await shot("plans-past");
-    // UX4 Profile and settings in preview, then People & groups with gluestack keyboard selection.
+    // UX4 Profile and settings in preview, then People lists with gluestack keyboard selection.
     await page.getByRole("tab", { name: "Wellness", exact: true }).click();
     await expect(heading(page, "Wellness")).toBeVisible();
     await shot("wellness");
@@ -141,7 +141,7 @@ try {
     await button(page, "Privacy").click();
     await button(page, "Profile").click();
     await expect(heading(page, "Profile")).toBeVisible();
-    await page.getByRole("button", { name: "People & groups", exact: true }).click();
+    await page.getByRole("button", { name: "People lists", exact: true }).click();
     await page.getByRole("button", { name: "Create a group", exact: true }).click();
     await shot("people");
     await page.getByLabel("Person’s name", { exact: true }).fill("Alex");
@@ -293,7 +293,7 @@ try {
     await button(page, "Back").click();
     // People opens from Profile (GI-D3: not from the event page).
     await page.getByRole("tab", { name: "Profile", exact: true }).click();
-    await page.getByRole("button", { name: "People & groups", exact: true }).click();
+    await page.getByRole("button", { name: "People lists", exact: true }).click();
     await page.getByRole("button", { name: "Create a group", exact: true }).click();
     await shot("people-empty");
     assert.ok(await fits(), "People top row fits at 320 px under Larger Text");

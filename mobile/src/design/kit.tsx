@@ -816,7 +816,10 @@ export function RowGroup({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** One settings row: a tinted icon circle, a short title and a chevron; at least 60 pt tall. */
+/**
+ * One settings row: a tinted icon circle, a short title and a chevron; at least 60 pt tall. `badge` is a short count
+ * before the chevron (Connections' pending requests); say what it counts in `label`.
+ */
 export function Row({
   title,
   icon: Icon,
@@ -825,6 +828,7 @@ export function Row({
   onPress,
   label,
   hint,
+  badge,
   destructive = false,
   chevron = !destructive,
   disabled = false,
@@ -836,6 +840,7 @@ export function Row({
   onPress: () => void;
   label?: string;
   hint?: string;
+  badge?: string;
   destructive?: boolean;
   chevron?: boolean;
   disabled?: boolean;
@@ -854,6 +859,11 @@ export function Row({
         <Icon size={20} strokeWidth={2} color={destructive ? c.error : ink} />
       </View>
       <Copy style={destructive ? [styles.rowTitle, { color: c.error }] : styles.rowTitle}>{title}</Copy>
+      {badge ? (
+        <View style={styles.rowBadge}>
+          <Text style={styles.rowBadgeText}>{badge}</Text>
+        </View>
+      ) : null}
       {chevron && <ChevronRight size={18} strokeWidth={2.2} color={c.muted} />}
     </Pressable>
   );
@@ -1157,6 +1167,8 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: space.m, minHeight: 60, paddingHorizontal: 18, paddingVertical: 8 },
   rowIcon: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
   rowTitle: { flex: 1, fontFamily: fonts.medium, fontSize: 16, color: c.ink },
+  rowBadge: { minWidth: 24, borderRadius: 12, paddingHorizontal: 7, paddingVertical: 2, backgroundColor: c.pink, alignItems: "center" },
+  rowBadgeText: { fontFamily: fonts.bold, fontSize: 13, lineHeight: 18, color: c.ink, textAlign: "center" },
   // The focus ring is the card's (a 2 pt aqua ring, web and native alike), not the browser outline.
   inputCard: {
     position: "relative",

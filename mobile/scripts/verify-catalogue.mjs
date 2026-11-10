@@ -139,6 +139,8 @@ async function fixture(width = 390, preview = false) {
       return reply(rows);
     }
     if (url.pathname === "/rest/v1/plan_mutes") return reply([]);
+    // Profile reads the Connections row's count of requests: nobody here.
+    if (url.pathname === "/rest/v1/rpc/my_connections") return reply({ requests: [], connected: [] });
     unexpected.push(`${request.method()} ${url.pathname}`);
     return route.abort();
   });
