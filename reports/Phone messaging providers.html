@@ -1,0 +1,1055 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Resbite Messaging Providers</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&display=swap">
+<style>
+  /* A wide comparison page: full-width tables, charts and card grids; running text kept to a readable measure inside them.
+     Every chart, the calculator and the scorecard are built in script from the one price list in the data block. */
+  :root {
+    --bg: #faf8fb;
+    --surface: #ffffff;
+    --ink: #221c2a;
+    --muted: #665e70;
+    --line: #e4dde9;
+    --accent: #b0255a;
+    --accent-soft: #f8e3ec;
+    --ok: #2a7a4b;
+    --ok-soft: #e1f2e7;
+    --warn: #9a6a00;
+    --warn-soft: #fbefcf;
+    --no: #b03030;
+    --no-soft: #fae0e0;
+    --s1: #b0255a;      /* chart series 1: the United Kingdom, and the recommended route */
+    --s2: #2a78d6;      /* chart series 2: Argentina */
+    --dim: #cfc7d5;     /* de-emphasised bars */
+    --grid: #ebe5ef;
+    --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    --body: "Source Sans 3", "Helvetica Neue", Arial, system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17121d; --surface: #211b29; --ink: #ede7f2; --muted: #ab9fb8; --line: #352d40;
+      --accent: #ff7fa9; --accent-soft: #3a1f2c;
+      --ok: #7fd49c; --ok-soft: #1d3426; --warn: #f0c060; --warn-soft: #3a2f12; --no: #ff8a8a; --no-soft: #3d1f1f;
+      --s1: #e0557f; --s2: #3987e5; --dim: #4a4055; --grid: #2d2536;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #17121d; --surface: #211b29; --ink: #ede7f2; --muted: #ab9fb8; --line: #352d40;
+    --accent: #ff7fa9; --accent-soft: #3a1f2c;
+    --ok: #7fd49c; --ok-soft: #1d3426; --warn: #f0c060; --warn-soft: #3a2f12; --no: #ff8a8a; --no-soft: #3d1f1f;
+    --s1: #e0557f; --s2: #3987e5; --dim: #4a4055; --grid: #2d2536;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: var(--body); font-size: 17px; line-height: 1.55;
+    margin: 0;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 0 64px;
+  }
+  .wrap { max-width: 1360px; margin: 0 auto; }
+  header { padding-block: 44px 10px; display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 28px 48px; align-items: end; }
+  .eyebrow { font-family: var(--display); font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; font-size: 12px; color: var(--accent); }
+  h1 { font-family: var(--display); font-weight: 700; font-size: clamp(32px, 4.2vw, 56px); line-height: 1.04; margin: 10px 0 16px; text-wrap: balance; letter-spacing: -0.015em; }
+  .lede { font-size: 20px; margin: 0 0 8px; max-width: 70ch; }
+  .meta { color: var(--muted); font-size: 15px; margin: 0; max-width: 70ch; }
+  h2 { font-family: var(--display); font-weight: 700; font-size: 28px; line-height: 1.12; margin: 56px 0 14px; text-wrap: balance; }
+  h3 { font-family: var(--display); font-weight: 700; font-size: 19px; margin: 24px 0 8px; }
+  p { margin: 0 0 14px; }
+  .prose { max-width: 84ch; }
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, button:focus-visible, input:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+  strong { font-weight: 600; }
+  code { font-family: var(--mono); font-size: 0.92em; background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; }
+
+  nav.jump { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 6px 0 0; font-size: 14px; }
+  nav.jump a { color: var(--muted); text-decoration: none; border-bottom: 1px solid var(--line); }
+  nav.jump a:hover { color: var(--accent); border-color: var(--accent); }
+
+  .cols { display: grid; gap: 22px 36px; align-items: start; }
+  .c-32 { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+  .c-23 { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); }
+  .c-13 { grid-template-columns: minmax(280px, 1fr) minmax(0, 2.6fr); }
+  .c-11 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+
+  .verdicts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 26px 0 8px; }
+  .verdict { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 18px 16px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .verdict .q { font-family: var(--display); font-weight: 700; font-size: 17px; line-height: 1.25; }
+  .verdict .a { font-size: 15.5px; color: var(--muted); line-height: 1.45; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; font-family: var(--display); font-weight: 700; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+  .chip.ok { background: var(--ok-soft); color: var(--ok); }
+  .chip.warn { background: var(--warn-soft); color: var(--warn); }
+  .chip.no { background: var(--no-soft); color: var(--no); }
+  .chip.mute { background: var(--line); color: var(--muted); }
+  .chip.acc { background: var(--accent); color: #fff; }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px 18px; margin: 16px 0 18px; }
+  .card h3 { margin-top: 0; }
+
+  /* scorecard */
+  .matters { display: flex; flex-wrap: wrap; gap: 8px 10px; margin: 8px 0 14px; }
+  .matters label { display: inline-flex; align-items: center; gap: 7px; font-size: 14.5px; padding: 6px 12px 6px 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); cursor: pointer; }
+  .matters label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+  .matters input { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; }
+  .score { display: inline-grid; grid-template-columns: 56px auto; gap: 8px; align-items: center; }
+  .score .bar { height: 8px; background: var(--line); border-radius: 999px; overflow: hidden; width: 56px; }
+  .score .bar i { display: block; height: 100%; background: var(--accent); }
+  .score b { font-family: var(--display); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #scorecard th:first-child { min-width: 180px; }
+  #scorecard th:nth-child(2) { min-width: 126px; }
+  #scorecard th[data-c], #scorecard td.y, #scorecard td.n, #scorecard td.u { text-align: center; padding-left: 6px; padding-right: 6px; width: 74px; }
+  #scorecard td.num small { display: block; color: var(--muted); font-size: 12.5px; }
+  td.y { color: var(--ok); font-weight: 700; } td.n { color: var(--muted); } td.u { color: var(--warn); font-weight: 600; }
+  th.on, td.on { background: var(--accent-soft); }
+  tr.rec td { background: color-mix(in oklab, var(--accent-soft) 55%, var(--surface)); }
+  tr.rec td:first-child { font-weight: 700; }
+  td .who { display: block; font-size: 13px; color: var(--muted); font-weight: 400; }
+
+  /* calculator */
+  .controls { display: grid; gap: 16px; margin: 6px 0 0; }
+  .control { display: grid; gap: 4px; min-width: 0; }
+  .control label { font-size: 14.5px; color: var(--muted); display: flex; justify-content: space-between; gap: 10px; }
+  .control label output { font-family: var(--display); font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .control input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; }
+  .control .hint { font-size: 13px; color: var(--muted); }
+  .figures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0 0 14px; }
+  .figure { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px 10px; min-width: 0; background: var(--bg); }
+  .figure .k { font-size: 13px; color: var(--muted); letter-spacing: 0.02em; }
+  .figure .v { font-family: var(--display); font-weight: 700; font-size: 30px; line-height: 1.1; margin-top: 2px; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .figure .s { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .figure.lead .v { color: var(--accent); }
+
+  .chart { position: relative; margin: 8px 0 6px; }
+  .chart svg { display: block; width: 100%; height: auto; font-family: var(--body); }
+  .chart .bar { cursor: default; }
+  .chart .bar:hover rect.mark, .chart .bar:focus rect.mark { filter: brightness(1.12); }
+  .chart .bar:focus { outline: none; }
+  .chart .bar:focus-visible rect.mark { stroke: var(--ink); stroke-width: 1.5; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 14px; color: var(--muted); margin: 4px 0 10px; }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .legend i { width: 14px; height: 10px; border-radius: 2px; display: inline-block; }
+  .legend i.s1 { background: var(--s1); } .legend i.s2 { background: var(--s2); } .legend i.dim { background: var(--dim); }
+  .legend i.s1o { background: color-mix(in oklab, var(--s1) 30%, transparent); border: 1.5px solid var(--s1); }
+  .tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--bg); font-size: 13px; line-height: 1.35; padding: 7px 10px; border-radius: 7px; max-width: 260px; box-shadow: 0 4px 14px rgba(0,0,0,0.18); z-index: 3; transform: translate(-50%, calc(-100% - 10px)); white-space: nowrap; }
+  .tip b { font-weight: 700; font-size: 14px; }
+  .tip .row { display: flex; gap: 8px; align-items: center; }
+  .tip .key { width: 12px; height: 3px; border-radius: 2px; display: inline-block; }
+
+  details.tableview { margin: 6px 0 10px; }
+  details.tableview summary { cursor: pointer; font-size: 14px; color: var(--muted); font-weight: 600; }
+  .tablewrap { overflow-x: auto; margin: 10px 0 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 10px 13px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-family: var(--display); font-weight: 700; font-size: 12.5px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+  tr:last-child td { border-bottom: 0; }
+  td.num, th.num { text-align: right; white-space: nowrap; }
+  .cap { color: var(--muted); font-size: 14px; margin: -2px 0 16px; }
+  table.score-t { min-width: 1100px; table-layout: fixed; }
+  #scorecard .chip { white-space: normal; line-height: 1.25; }
+  #scorecard th.num { white-space: normal; }
+  #scorecard th[data-c] { font-size: 11.5px; letter-spacing: 0.02em; padding-left: 4px; padding-right: 4px; }
+  table.matrix { min-width: 760px; }
+  .matrix td:first-child { font-weight: 600; white-space: nowrap; }
+  .yes { color: var(--ok); font-weight: 600; } .noo { color: var(--no); font-weight: 600; } .part { color: var(--warn); font-weight: 600; }
+
+  /* profiles */
+  .profiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; margin: 14px 0 10px; }
+  .profile { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px 18px 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .profile.rec { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .profile .head { display: flex; justify-content: space-between; gap: 10px; align-items: start; }
+  .profile h3 { margin: 0; font-size: 21px; }
+  .profile .who { color: var(--muted); font-size: 14.5px; }
+  .profile .price { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 4px 0 2px; }
+  .profile .price div { background: var(--bg); border-radius: 8px; padding: 8px 10px; }
+  .profile .price .k { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .profile .price .v { font-family: var(--display); font-weight: 700; font-size: 20px; font-variant-numeric: tabular-nums; }
+  .profile ul { margin: 0; padding-left: 18px; font-size: 14.5px; color: var(--ink); }
+  .profile li { margin-bottom: 3px; }
+  .profile .src { font-size: 13px; color: var(--muted); margin-top: auto; padding-top: 4px; }
+
+  /* why */
+  .points { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 10px 0 6px; }
+  .point { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 16px 14px; }
+  .point .n { font-family: var(--display); font-weight: 700; font-size: 26px; color: var(--accent); line-height: 1; }
+  .point .t { font-weight: 600; margin: 8px 0 4px; }
+  .point .d { font-size: 14.5px; color: var(--muted); }
+
+  /* wizard */
+  .seg button, .opts button { font: inherit; font-size: 15px; padding: 7px 13px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
+  .seg button[aria-pressed="true"], .opts button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .seg button:hover, .opts button:hover { border-color: var(--accent); }
+  .wizard .q { font-family: var(--display); font-weight: 700; font-size: 16px; margin: 14px 0 6px; }
+  .wizard .q:first-child { margin-top: 0; }
+  .opts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .diagram { overflow-x: auto; margin: 6px 0 4px; }
+  .diagram svg { display: block; width: 100%; min-width: 600px; height: auto; font-family: var(--body); color: var(--ink); }
+  .diagram .node rect { fill: var(--surface); stroke: currentColor; stroke-width: 1.2; }
+  .diagram .lane.off { opacity: 0.32; }
+  .diagram text { fill: currentColor; }
+  .diagram .lbl { font-size: 12px; fill: var(--muted); }
+  .diagram .t { font-size: 13px; font-weight: 600; }
+  .diagram .sub { font-size: 11.5px; fill: var(--muted); }
+  .diagram .edge { stroke: currentColor; stroke-width: 1.6; fill: none; }
+  .diagram .edge.hi { stroke: var(--accent); stroke-width: 2.2; }
+  .diagram .edge.dash { stroke-dasharray: 5 4; }
+  .diagram .gate text { font-size: 11px; font-weight: 700; fill: #fff; }
+  .diagram .gate.no rect { fill: var(--no); } .diagram .gate.warn rect { fill: var(--warn); } .diagram .gate.ok rect { fill: var(--ok); }
+  figcaption { font-size: 14px; color: var(--muted); margin: 6px 0 0; }
+  figure { margin: 0 0 14px; }
+  .result { border-radius: 12px; padding: 16px 18px; margin: 0; border: 1px solid var(--line); background: var(--bg); }
+  .result.ok { border-color: var(--ok); } .result.warn { border-color: var(--warn); } .result.no { border-color: var(--no); }
+  .result h4 { font-family: var(--display); font-size: 19px; margin: 8px 0 6px; }
+  .result ul { margin: 6px 0 0; padding-left: 20px; font-size: 15px; }
+  .result li { margin-bottom: 4px; }
+
+  blockquote { margin: 12px 0 16px; padding: 12px 18px; border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 10px 10px 0; font-size: 16px; }
+  blockquote p { margin: 0 0 6px; }
+  blockquote cite { display: block; font-style: normal; font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .fine { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px 18px; align-items: end; }
+  .fine label { font-size: 14px; color: var(--muted); display: grid; gap: 4px; }
+  .fine input[type=number] { font: inherit; font-size: 17px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); width: 100%; }
+  .fine .out { font-family: var(--display); font-weight: 700; font-size: 28px; color: var(--no); white-space: nowrap; }
+  .fine .why { grid-column: 1 / -1; font-size: 14px; color: var(--muted); }
+
+  ul.plain { padding-left: 20px; margin: 0 0 14px; }
+  ul.plain li { margin-bottom: 6px; }
+  .note { border: 1px dashed var(--line); border-radius: 12px; padding: 14px 18px; background: var(--surface); font-size: 15px; color: var(--muted); }
+  .note strong { color: var(--ink); }
+  footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+  @media (max-width: 980px) {
+    header, .cols, .points { grid-template-columns: 1fr; }
+    .verdicts { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 720px) {
+    body { font-size: 16px; }
+    .lede { font-size: 17px; }
+    .figures { grid-template-columns: 1fr; }
+    .figure .v { font-size: 24px; }
+    .fine { grid-template-columns: 1fr; }
+    .profile .price { grid-template-columns: 1fr; }
+  }
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">Phone verification for Resbite · prices read 3 November 2026</div>
+      <h1>Pay a few pence per code, and let the host keep sending the invitations</h1>
+      <p class="lede">Ten SMS providers, two messengers and the UK rules, compared for one job: getting a six-digit code to a phone in the United Kingdom or Argentina, and knowing what an invitation may and may not do.</p>
+      <p class="meta">List prices from each provider's own pages, in the provider's currency; Sinch's GBP price is shown with the USD figure Sinch publishes beside it. Research, not legal advice. Sourced notes in the repo under <code>research_notes/Phone messaging providers/</code>.</p>
+    </div>
+    <nav class="jump" aria-label="Sections">
+      <a href="#glance">1 · Providers at a glance</a>
+      <a href="#why">2 · Why Twilio</a>
+      <a href="#costs">3 · What a month costs</a>
+      <a href="#prices">4 · The list prices</a>
+      <a href="#profiles">5 · Provider profiles</a>
+      <a href="#channels">6 · WhatsApp and Telegram</a>
+      <a href="#invitations">7 · Invitations and the UK rules</a>
+      <a href="#next">8 · What happens next</a>
+    </nav>
+  </header>
+
+  <section class="verdicts" aria-label="The three questions">
+    <div class="verdict">
+      <span class="chip ok">Answered</span>
+      <div class="q">What do SMS providers cost?</div>
+      <div class="a">A code to a UK mobile costs USD 0.044 (Sinch) to 0.056 (Twilio) at list price; Argentina about double. 1,000 codes a month: USD 44 to 56. Products that bundle the verification double it, and Resbite does not need them.</div>
+    </div>
+    <div class="verdict">
+      <span class="chip acc">Recommendation</span>
+      <div class="q">Which provider?</div>
+      <div class="a">Twilio. Not the cheapest, but the only one that also carries WhatsApp codes through Supabase, with a free UK alphanumeric sender and published prices. Sinch if price is the only criterion. Vonage still to be priced from a browser.</div>
+    </div>
+    <div class="verdict">
+      <span class="chip no">Not as a first message</span>
+      <div class="q">Can WhatsApp, Telegram or SMS send invitations automatically?</div>
+      <div class="a">Telegram has no path. Meta's policy forbids it. SMS can, but a Resbite-sent invitation that promotes Resbite needs prior consent under UK law. The host sending from their own phone, as built, is the safe design.</div>
+    </div>
+  </section>
+
+  <!-- 1. GLANCE -->
+  <h2 id="glance">1. The providers at a glance</h2>
+  <p class="prose">Every provider that Supabase names or that a UK start-up would shortlist. Tick what matters to Resbite and the table re-ranks by how many of those criteria each provider meets, with the UK price breaking ties. A tick is a fact read on the provider's page; a question mark means the page does not say.</p>
+  <div class="matters" id="matters" role="group" aria-label="What matters">
+    <label><input type="checkbox" data-c="pubuk" checked>Published UK price</label>
+    <label><input type="checkbox" data-c="pubar" checked>Published Argentina price</label>
+    <label><input type="checkbox" data-c="cheap">UK price at or under USD 0.05</label>
+    <label><input type="checkbox" data-c="sender" checked>Free UK alphanumeric sender</label>
+    <label><input type="checkbox" data-c="builtin">Built into Supabase Auth</label>
+    <label><input type="checkbox" data-c="wa" checked>WhatsApp codes through Supabase</label>
+    <label><input type="checkbox" data-c="hook" checked>Supabase documents it for the hook</label>
+    <label><input type="checkbox" data-c="plain" checked>Plain SMS, no bundled fee</label>
+  </div>
+  <div class="tablewrap">
+    <table class="score-t" id="scorecard">
+      <colgroup><col style="width:176px"><col style="width:112px"><col style="width:190px"><col style="width:116px"><col span="8" style="width:76px"><col></colgroup>
+      <thead>
+        <tr>
+          <th>Provider</th>
+          <th>Fit</th>
+          <th class="num">Per SMS, UK<br>and Argentina</th>
+          <th class="num" id="th-month">At the calculator's volume</th>
+          <th data-c="pubuk">UK price</th>
+          <th data-c="pubar">AR price</th>
+          <th data-c="cheap">UK ≤ 0.05</th>
+          <th data-c="sender">Free sender</th>
+          <th data-c="builtin">Built-in</th>
+          <th data-c="wa">WhatsApp</th>
+          <th data-c="hook">Hook docs</th>
+          <th data-c="plain">Plain SMS</th>
+          <th>Verdict</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <p class="cap">"A month" uses the settings in section 3 (verifications a month, Argentina share, messages per verification). Providers without a readable price have no figure. Textlocal is listed because Supabase still offers it as a built-in provider; it closed on 31 July 2026.</p>
+
+  <!-- 2. WHY -->
+  <h2 id="why">2. Why Twilio, when Sinch is cheaper</h2>
+  <div class="cols c-32">
+    <div class="prose">
+      <p>On price alone Twilio loses. Its UK list price, USD 0.056 a message, is the highest of the four providers whose prices could be read, and Argentina at USD 0.1034 is 14% above Sinch's 0.0906. At 1,000 UK codes a month the whole gap between Twilio and Sinch is about USD 12. Three things that are not price decide it.</p>
+      <p><strong>WhatsApp through the same account.</strong> Supabase's phone sign-in can deliver codes on WhatsApp, where a code costs USD 0.022 in the UK and 0.026 in Argentina against 0.056 and 0.1034 by SMS, but only when the provider is Twilio or Twilio Verify. For the Argentine testers, where WhatsApp is the default messenger, that halves the per-code cost later without changing provider.</p>
+      <p><strong>A free, published UK sender.</strong> Twilio's UK alphanumeric sender ID (RESBITE on the lock screen) is free and documented as one-way. Sinch, AWS and Plivo do not publish what a sender ID costs or how to get one; AWS says a UK number takes about a week to provision.</p>
+      <p><strong>Documented twice by Supabase.</strong> Twilio is a built-in provider, and it is the provider Supabase's own Send SMS hook example is written for. Both ways of connecting are documented; nobody has to translate.</p>
+      <p><strong>Against it.</strong> The highest UK list price of the readable four; a note that "additional carrier fees may apply" without a published table (Sinch has the same note); and a per-message markup of USD 0.005 on WhatsApp. None of these moves the bill by more than a few dollars a month at the beta's volume.</p>
+      <p><strong>What would change the choice.</strong> If price is the only criterion, Sinch: SMS only, through the hook, carrier fees also unpublished. If the company already runs on AWS, AWS End User Messaging at USD 0.05. Vonage is the other Supabase built-in and its price pages refuse non-browser reads, so it deserves one look from a browser before the account is opened.</p>
+    </div>
+    <div>
+      <div class="points">
+        <div class="point"><div class="n">1 of 10</div><div class="t">Carries WhatsApp codes through Supabase</div><div class="d">Twilio and Twilio Verify only. Every other provider means SMS only, or Resbite writing its own WhatsApp integration.</div></div>
+        <div class="point"><div class="n">USD 12</div><div class="t">The gap to the cheapest, a month</div><div class="d">1,000 UK codes: Twilio USD 56, Sinch USD 44.15, AWS USD 50, Plivo about USD 51.</div></div>
+        <div class="point"><div class="n">61%</div><div class="t">Cheaper on WhatsApp than SMS, UK</div><div class="d">USD 0.022 against 0.056. Argentina: 0.026 against 0.1034, 75% cheaper.</div></div>
+      </div>
+      <div class="note" style="margin-top:14px"><strong>Verification bundles are not needed.</strong> Twilio Verify, AWS OTP, Vonage Verify and Prelude charge USD 0.045 to 0.06 per successful verification on top of the SMS because they generate and check the code. Supabase already does that for free, so Resbite buys plain SMS and pays about half.</div>
+    </div>
+  </div>
+
+  <!-- 3. COSTS -->
+  <h2 id="costs">3. What a month would cost</h2>
+  <p class="prose">Supabase charges nothing per message, so the provider's list price is the whole bill. Set the month you expect; every route recalculates, and the scorecard above picks up the same volume.</p>
+  <div class="card" id="calc">
+    <div class="cols c-13">
+      <div class="controls">
+        <h3 style="margin:0 0 4px">Your month</h3>
+        <div class="control">
+          <label for="c-n"><span>Verifications a month</span><output id="o-n">1,000</output></label>
+          <input id="c-n" type="range" min="100" max="20000" step="100" value="1000">
+          <span class="hint">Sign-ups, sign-ins on a new phone and invitation answers on the web page. The beta is in the hundreds.</span>
+        </div>
+        <div class="control">
+          <label for="c-ar"><span>Share sent to Argentina</span><output id="o-ar">25%</output></label>
+          <input id="c-ar" type="range" min="0" max="100" step="5" value="25">
+          <span class="hint">The rest goes to UK mobiles. Argentina costs about double on every provider.</span>
+        </div>
+        <div class="control">
+          <label for="c-att"><span>Messages per verification</span><output id="o-att">1.2</output></label>
+          <input id="c-att" type="range" min="1" max="2" step="0.1" value="1.2">
+          <span class="hint">Resends and retries are billed each time. Bundles charge their fee once, on success.</span>
+        </div>
+        <div class="control">
+          <label for="c-wa"><span>Codes delivered on WhatsApp</span><output id="o-wa">0%</output></label>
+          <input id="c-wa" type="range" min="0" max="100" step="5" value="0">
+          <span class="hint">Only on the Twilio route; the rest fall back to SMS. Needs a verified Meta business and WhatsApp on the person's phone.</span>
+        </div>
+      </div>
+      <div>
+        <div class="figures" aria-live="polite">
+          <div class="figure lead"><div class="k">Recommended: Twilio SMS</div><div class="v" id="f-rec">USD 0</div><div class="s" id="f-rec-s">a month</div></div>
+          <div class="figure"><div class="k">Cheapest readable list price</div><div class="v" id="f-min">USD 0</div><div class="s" id="f-min-s"></div></div>
+          <div class="figure"><div class="k">Per verification, Twilio</div><div class="v" id="f-unit">USD 0</div><div class="s" id="f-unit-s">blended UK and Argentina</div></div>
+        </div>
+        <div class="legend" aria-hidden="true"><span><i class="s1"></i>Recommended route</span><span><i class="s1o"></i>Same Twilio account, WhatsApp first</span><span><i class="dim"></i>Other routes</span></div>
+        <div class="chart" id="chart-cost" role="img" aria-label="Monthly cost by route, ranked from cheapest to dearest"></div>
+        <details class="tableview"><summary>Show as a table</summary><div class="tablewrap"><table id="table-cost"><thead><tr><th>Route</th><th class="num">Per verification</th><th class="num">A month</th><th class="num">A year</th></tr></thead><tbody></tbody></table></div></details>
+        <p class="cap">Bundles (Twilio Verify, AWS OTP) add their per-success fee to every SMS attempt. Carrier surcharges on Twilio and Sinch are not published and may add to the totals. Sender ID and number rental are left out: a UK alphanumeric sender is free on Twilio.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. PRICES -->
+  <h2 id="prices">4. The list prices, side by side</h2>
+  <div class="cols c-32">
+    <div>
+      <p class="prose">One message to a mobile number, in USD, read on 3 November 2026. Hover or tap a bar for both markets.</p>
+      <div class="legend" aria-hidden="true"><span><i class="s1"></i>United Kingdom</span><span><i class="s2"></i>Argentina</span></div>
+      <div class="chart" id="chart-unit" role="img" aria-label="Price per message by provider, United Kingdom and Argentina"></div>
+    </div>
+    <div>
+      <h3 style="margin-top:0">What the prices include, and what they don't</h3>
+      <ul class="plain">
+        <li><strong>One segment.</strong> A code is one SMS segment (up to 160 GSM characters). An invitation with a link often runs to two.</li>
+        <li><strong>Carrier fees.</strong> Sinch: "carrier fees apply", amounts not published. Twilio: "additional carrier fees may apply", no UK table. AWS and Plivo list none.</li>
+        <li><strong>Sender.</strong> Twilio's UK alphanumeric sender is free, one-way. Prelude's needs a free registration. Sinch, AWS, Plivo, Vonage, Bird and Telnyx do not publish a price.</li>
+        <li><strong>Numbers.</strong> A UK number per month: Plivo USD 0.85 local / 0.90 mobile, Twilio 1.15 / 2.50, AWS 2.00 (about a week to provision). Argentina on AWS: a support case.</li>
+        <li><strong>Argentina.</strong> Plivo's "from USD 0.0795" rises to 0.14 on some networks; Sinch's Nextel rate is USD 0.018. The other providers publish one national rate.</li>
+        <li><strong>Discounts.</strong> Twilio and Twilio Verify offer committed-use discounts only through sales (Verify from 100,000 a month). None of this matters at the beta's volume.</li>
+        <li><strong>Prelude</strong> is priced in EUR (0.025 SMS plus 0.032 per verification, UK) and is not charted.</li>
+      </ul>
+    </div>
+  </div>
+  <details class="tableview"><summary>Show as a table, with notes and sources</summary>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Provider</th><th class="num">UK</th><th class="num">Argentina</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>Sinch</td><td class="num">GBP 0.035<br>(USD 0.04415)</td><td class="num">GBP 0.0715<br>(USD 0.0906)</td><td>"Carrier fees apply", amounts not published. <a href="https://sinch.com/pricing/sms/">Sinch</a></td></tr>
+          <tr><td>AWS End User Messaging</td><td class="num">USD 0.05</td><td class="num">USD 0.09449</td><td>UK long number USD 2 a month. <a href="https://aws.amazon.com/end-user-messaging/pricing/">AWS</a></td></tr>
+          <tr><td>Plivo</td><td class="num">USD 0.0486 to 0.0563</td><td class="num">from USD 0.0795</td><td>By UK network; O2 is 0.0513 and is the figure charted. The advertised "from 0.0372" is the landline rate. <a href="https://www.plivo.com/sms/pricing/gb/">Plivo</a></td></tr>
+          <tr><td>Twilio</td><td class="num">USD 0.056</td><td class="num">USD 0.1034</td><td>UK alphanumeric sender ID free, one-way. No UK carrier fee published. <a href="https://www.twilio.com/en-us/sms/pricing/gb">Twilio</a></td></tr>
+          <tr><td>WhatsApp authentication (Meta direct)</td><td class="num">USD 0.022</td><td class="num">USD 0.026</td><td>Per delivered template message. <a href="https://developers.facebook.com/docs/whatsapp/pricing">Meta</a></td></tr>
+          <tr><td>WhatsApp via Twilio</td><td class="num">USD 0.027</td><td class="num">USD 0.031</td><td>Meta's rate plus Twilio's USD 0.005. The only WhatsApp route Supabase supports natively. <a href="https://www.twilio.com/en-us/whatsapp/pricing">Twilio</a></td></tr>
+          <tr><td>Telegram Gateway</td><td class="num">USD 0.01</td><td class="num">USD 0.01</td><td>Per delivered code, refunded if undelivered. Codes only. <a href="https://core.telegram.org/gateway">Telegram</a></td></tr>
+          <tr><td>Twilio Verify</td><td class="num">USD 0.106</td><td class="num">USD 0.1534</td><td>SMS plus USD 0.05 per successful verification. <a href="https://www.twilio.com/en-us/verify/pricing">Twilio Verify</a></td></tr>
+          <tr><td>AWS OTP</td><td class="num">USD 0.095</td><td class="num">USD 0.13949</td><td>SMS plus USD 0.045 per success. <a href="https://aws.amazon.com/end-user-messaging/pricing/">AWS</a></td></tr>
+          <tr><td>Prelude</td><td class="num">EUR 0.057</td><td class="num">not published</td><td>EUR 0.025 SMS plus EUR 0.032 per verification. <a href="https://www.prelude.so/pricing">Prelude</a></td></tr>
+          <tr><td>Vonage</td><td class="num">unread</td><td class="num">unread</td><td>Page blocks non-browser reads. Vonage Verify is EUR 0.052 per success plus the SMS. <a href="https://www.vonage.com/communications-apis/verify/pricing/">Vonage Verify</a></td></tr>
+          <tr><td>Bird, Telnyx, Infobip</td><td class="num">quote</td><td class="num">quote</td><td>US rates only, or a table with no stated unit.</td></tr>
+          <tr><td>Textlocal</td><td class="num" colspan="2">closed 31 July 2026</td><td>"Textlocal is now Webex Interact." Supabase still lists it as a built-in provider. <a href="http://webexinteract.com/textlocal/">Webex</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </details>
+
+  <!-- 5. PROFILES -->
+  <h2 id="profiles">5. Provider profiles</h2>
+  <p class="prose">What each provider is, what it charges Resbite's two markets, what comes with the price, and what its pages would not say.</p>
+  <div class="profiles">
+    <div class="profile rec">
+      <div class="head"><h3>Twilio</h3><span class="chip acc">Recommended</span></div>
+      <div class="who">US cloud-communications provider. The provider Supabase documents both as a built-in and in its Send SMS hook example.</div>
+      <div class="price"><div><div class="k">UK per SMS</div><div class="v">USD 0.056</div></div><div><div class="k">Argentina per SMS</div><div class="v">USD 0.1034</div></div></div>
+      <ul>
+        <li>UK alphanumeric sender ID free, one-way; UK numbers USD 1.15 (local) or 2.50 (mobile) a month; UK short code 0.0524 per message.</li>
+        <li>WhatsApp: Meta's rate plus USD 0.005 a message; the only WhatsApp route Supabase supports.</li>
+        <li>Twilio Verify adds USD 0.05 per successful verification: not needed.</li>
+        <li>Failed message USD 0.001. No minimum; volume discounts through sales.</li>
+        <li>Not published: UK carrier fees ("may apply").</li>
+      </ul>
+      <div class="src"><a href="https://www.twilio.com/en-us/sms/pricing/gb">UK pricing</a> · <a href="https://www.twilio.com/en-us/sms/pricing/ar">Argentina</a> · <a href="https://www.twilio.com/en-us/whatsapp/pricing">WhatsApp</a></div>
+    </div>
+    <div class="profile">
+      <div class="head"><h3>Sinch</h3><span class="chip ok">Runner-up on price</span></div>
+      <div class="who">Swedish provider with the cheapest readable UK list price. Not a Supabase built-in, so it would run through Resbite's hook.</div>
+      <div class="price"><div><div class="k">UK per SMS</div><div class="v">GBP 0.035</div></div><div><div class="k">Argentina per SMS</div><div class="v">GBP 0.0715</div></div></div>
+      <ul>
+        <li>Sinch's own USD figures: 0.04415 UK, 0.0906 Argentina; a few UK networks USD 0.044, Argentina's Nextel 0.018.</li>
+        <li>"Carrier fees apply": amounts not published, so the real UK price is above 0.035.</li>
+        <li>Not published: sender ID and UK number prices, account minimums.</li>
+        <li>WhatsApp: not through Supabase; not researched directly.</li>
+      </ul>
+      <div class="src"><a href="https://sinch.com/pricing/sms/">Sinch SMS pricing</a></div>
+    </div>
+    <div class="profile">
+      <div class="head"><h3>AWS End User Messaging</h3><span class="chip ok">Solid, more setup</span></div>
+      <div class="who">Amazon's SMS service. Flat national rates and a published price list; a sensible choice for a company already on AWS.</div>
+      <div class="price"><div><div class="k">UK per SMS</div><div class="v">USD 0.05</div></div><div><div class="k">Argentina per SMS</div><div class="v">USD 0.09449</div></div></div>
+      <ul>
+        <li>UK long number USD 2 a month, USD 0 setup, about a week to provision; an Argentine number needs a support case.</li>
+        <li>AWS OTP adds USD 0.045 per successful verification: not needed. Phone number validation USD 0.006.</li>
+        <li>Not published: UK sender ID price.</li>
+        <li>Hook only; not a Supabase built-in.</li>
+      </ul>
+      <div class="src"><a href="https://aws.amazon.com/end-user-messaging/pricing/">AWS pricing</a></div>
+    </div>
+    <div class="profile">
+      <div class="head"><h3>Plivo</h3><span class="chip ok">Competitive, variable</span></div>
+      <div class="who">US provider that prices the UK network by network, so the bill depends on the mix of EE, O2, Vodafone and Three.</div>
+      <div class="price"><div><div class="k">UK per SMS</div><div class="v">USD 0.049 to 0.056</div></div><div><div class="k">Argentina per SMS</div><div class="v">from USD 0.0795</div></div></div>
+      <ul>
+        <li>EE 0.0486, Vodafone 0.0509, O2 0.0513, other networks 0.0521, Three 0.0556. The advertised "from 0.0372" is the landline rate.</li>
+        <li>Argentina up to USD 0.14 on some networks.</li>
+        <li>UK numbers USD 0.85 (local) or 0.90 (mobile) a month, the cheapest rental read.</li>
+        <li>Not published: sender ID fee, how multi-segment messages are billed. Hook only.</li>
+      </ul>
+      <div class="src"><a href="https://www.plivo.com/sms/pricing/gb/">UK</a> · <a href="https://www.plivo.com/sms/pricing/ar/">Argentina</a></div>
+    </div>
+    <div class="profile">
+      <div class="head"><h3>Vonage</h3><span class="chip warn">Check from a browser</span></div>
+      <div class="who">Ericsson-owned provider and a Supabase built-in. Its SMS price pages refuse non-browser reads, so it could not be priced from the dev box.</div>
+      <div class="price"><div><div class="k">UK per SMS</div><div class="v">unread</div></div><div><div class="k">Argentina per SMS</div><div class="v">unread</div></div></div>
+      <ul>
+        <li>Vonage Verify: EUR 0.052 (USD 0.06084) per successful verification plus the messaging rate; no charge for failed attempts.</li>
+        <li>One of the three built-in providers Supabase still supports (with Twilio and Bird).</li>
+        <li>WhatsApp codes through Supabase: no.</li>
+      </ul>
+      <div class="src"><a href="https://www.vonage.com/communications-apis/sms/pricing/">SMS pricing</a> · <a href="https://www.vonage.com/communications-apis/verify/pricing/">Verify</a></div>
+    </div>
+    <div class="profile">
+      <div class="head"><h3>Prelude</h3><span class="chip mute">A bundle we don't need</span></div>
+      <div class="who">French verification start-up that sells the whole verification: it generates, sends and checks the code across SMS, WhatsApp, Telegram, Viber and RCS.</div>
+      <div class="price"><div><div class="k">UK per verification</div><div class="v">EUR 0.057</div></div><div><div class="k">Argentina</div><div class="v">not published</div></div></div>
+      <ul>
+        <li>EUR 0.032 per verification plus the SMS at cost (EUR 0.025 in the UK).</li>
+        <li>UK rates per message on other channels: WhatsApp EUR 0.0182, Telegram 0.012, Viber 0.007, RCS 0.0153.</li>
+        <li>UK alphanumeric sender available after a free registration. Pay as you go, no minimum; Startup plan EUR 360 a month.</li>
+        <li>Its value is the code logic Supabase already provides.</li>
+      </ul>
+      <div class="src"><a href="https://www.prelude.so/pricing">Pricing</a> · <a href="https://www.prelude.so/countries/gb">UK rates</a></div>
+    </div>
+    <div class="profile">
+      <div class="head"><h3>Bird</h3><span class="chip mute">Quote only</span></div>
+      <div class="who">Formerly MessageBird, from the Netherlands; still a Supabase built-in under that name.</div>
+      <div class="price"><div><div class="k">UK per SMS</div><div class="v">contact sales</div></div><div><div class="k">Argentina per SMS</div><div class="v">contact sales</div></div></div>
+      <ul>
+        <li>The pricing page shows US rates only; pay as you go with no deposit, plans at USD 15 (Startup) and 500 (Growth) a month.</li>
+        <li>Number rental and UK carrier fees not stated.</li>
+      </ul>
+      <div class="src"><a href="https://bird.com/en-us/pricing/sms">Bird SMS pricing</a></div>
+    </div>
+    <div class="profile">
+      <div class="head"><h3>Telnyx</h3><span class="chip mute">Quote only</span></div>
+      <div class="who">US provider with its own network. Its UK and Argentina pages return the US rate card.</div>
+      <div class="price"><div><div class="k">UK per SMS</div><div class="v">not shown</div></div><div><div class="k">Argentina per SMS</div><div class="v">not shown</div></div></div>
+      <ul>
+        <li>Billed per message part; UK and Argentine number prices not shown; the machine-readable price endpoint returns 404.</li>
+      </ul>
+      <div class="src"><a href="https://telnyx.com/pricing/messaging">Messaging pricing</a></div>
+    </div>
+    <div class="profile">
+      <div class="head"><h3>Infobip</h3><span class="chip mute">Quote only</span></div>
+      <div class="who">Croatian provider, large in Europe. Its rate table gives GB 4.4 and AR 9.7 without saying what the unit is.</div>
+      <div class="price"><div><div class="k">UK per SMS</div><div class="v">unclear</div></div><div><div class="k">Argentina per SMS</div><div class="v">unclear</div></div></div>
+      <ul>
+        <li>Probably US cents (about USD 0.044 and 0.097, in line with Sinch), but the page does not say so: do not quote it as a price.</li>
+      </ul>
+      <div class="src"><a href="https://www.infobip.com/sms/pricing">Infobip SMS pricing</a></div>
+    </div>
+    <div class="profile">
+      <div class="head"><h3>Textlocal</h3><span class="chip no">Closed</span></div>
+      <div class="who">UK bulk-SMS brand, now Webex Interact. Closed on 31 July 2026; Supabase still lists it as a community-supported built-in.</div>
+      <div class="price"><div><div class="k">UK per SMS</div><div class="v">—</div></div><div><div class="k">Argentina per SMS</div><div class="v">—</div></div></div>
+      <ul><li>Do not pick it from the Supabase list.</li></ul>
+      <div class="src"><a href="http://webexinteract.com/textlocal/">Webex Interact notice</a></div>
+    </div>
+  </div>
+
+  <!-- 6. CHANNELS -->
+  <h2 id="channels">6. WhatsApp and Telegram, as providers</h2>
+  <div class="cols c-23">
+    <div class="prose">
+      <p>Both messengers sell verification codes, both are cheaper than SMS, and both reach only the people who have the app, so SMS stays behind them. Neither carries a first message to a number that never contacted Resbite.</p>
+      <p><strong>WhatsApp</strong> is sold by Meta through its Business Platform at USD 0.022 a code in the UK and 0.026 in Argentina, per delivered message. Three routes buy it: Meta's Cloud API directly, with no markup but Resbite's own integration; Twilio, at USD 0.005 a message on top, integrated with Supabase; or a reseller such as 360dialog at EUR 49 a month per number with no markup, which beats Twilio's markup only above roughly 10,000 WhatsApp messages a month. The business must be verified by Meta with its own registered number, and a new account starts with a 250-recipient limit.</p>
+      <p><strong>Telegram Gateway</strong> sells codes at USD 0.01, refunded when not delivered, prepaid, to people who registered the number on Telegram. It carries numbers only, no free text, and its terms forbid unsolicited messages and user enumeration. Not a Supabase built-in; it is not worth building for these two markets.</p>
+      <p><strong>What this means.</strong> For the UK, SMS first. Where WhatsApp is the default messenger, as for the Argentine testers, WhatsApp codes would cut the per-code cost by about three quarters and arrive where people already look; that is the second step, through the same Twilio account. Adoption figures by country were not researched.</p>
+    </div>
+    <div class="tablewrap" style="margin-top:0">
+      <table class="matrix">
+        <thead><tr><th>Capability</th><th>SMS</th><th>WhatsApp Business Platform</th><th>Telegram Gateway</th></tr></thead>
+        <tbody>
+          <tr><td>Verification code</td><td><span class="yes">Yes</span>, any mobile</td><td><span class="yes">Yes</span>, fixed authentication template with a copy-code or one-tap button</td><td><span class="yes">Yes</span>, numeric codes only</td></tr>
+          <tr><td>Price per code, UK / AR</td><td>USD 0.044 to 0.056 / 0.08 to 0.10</td><td>USD 0.022 / 0.026, plus 0.005 via Twilio</td><td>USD 0.01 / 0.01, refunded if undelivered</td></tr>
+          <tr><td>Reaches</td><td>Every mobile number</td><td>People with WhatsApp (error 131026 otherwise; no supported pre-check)</td><td>People who registered the number on Telegram</td></tr>
+          <tr><td>Through Supabase</td><td>Built in (Twilio, Vonage, Bird) or the hook</td><td>Built in only with Twilio or Twilio Verify</td><td>The hook only</td></tr>
+          <tr><td>Free text</td><td><span class="yes">Yes</span></td><td><span class="part">Approved templates only</span>, outside a 24-hour window the person opened</td><td><span class="noo">No</span>, codes only</td></tr>
+          <tr><td>First message to a stranger's number</td><td><span class="part">Technically yes</span>; the law decides (section 7)</td><td><span class="noo">No</span>: Meta requires that the person gave the business their number and opted in</td><td><span class="noo">No</span>: bots cannot start conversations; no API addresses a phone number</td></tr>
+          <tr><td>Sender shown</td><td>Alphanumeric ID (UK, one-way) or a number</td><td>Resbite's verified business number, never the host</td><td>Telegram's gateway</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 7. INVITATIONS AND RULES -->
+  <h2 id="invitations">7. Invitations: who may send what</h2>
+  <p class="prose">The boss's third question. Pick who presses Send, the channel and what the text says; the diagram shows the path the message would take and where it is stopped, by the platform or by the law.</p>
+  <div class="card wizard" id="wizard">
+    <div class="cols c-11">
+      <div>
+        <div class="q">Who presses Send?</div>
+        <div class="opts" role="group" aria-label="Who sends" data-q="sender">
+          <button type="button" data-v="host" aria-pressed="true">The host, from their own phone</button>
+          <button type="button" data-v="resbite" aria-pressed="false">Resbite, from its servers</button>
+        </div>
+        <div class="q">Which channel?</div>
+        <div class="opts" role="group" aria-label="Channel" data-q="channel">
+          <button type="button" data-v="sms" aria-pressed="true">SMS</button>
+          <button type="button" data-v="whatsapp" aria-pressed="false">WhatsApp</button>
+          <button type="button" data-v="telegram" aria-pressed="false">Telegram</button>
+        </div>
+        <div class="q">What does the text say?</div>
+        <div class="opts" role="group" aria-label="Text" data-q="text">
+          <button type="button" data-v="neutral" aria-pressed="true">Host, event, reply link. Nothing about Resbite</button>
+          <button type="button" data-v="promo" aria-pressed="false">Adds "Get Resbite", an app link or a reward</button>
+        </div>
+        <figure style="margin-top:16px">
+          <div class="diagram">
+            <svg id="inv-svg" viewBox="0 0 760 330" role="img" aria-label="Two possible paths for an invitation: the host's own phone to the invitee's phone, or Resbite's server through a provider or platform to the invitee's phone, with the rule that stops each">
+              <defs>
+                <marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+                <marker id="arr2-hi" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker>
+              </defs>
+              <g id="lane-host" class="lane">
+                <text class="lbl" x="12" y="30">A · The host sends</text>
+                <g class="node"><rect x="12" y="48" width="130" height="58" rx="9"/><text class="t" x="77" y="72" text-anchor="middle">Host's phone</text><text class="sub" x="77" y="90" text-anchor="middle">Resbite pre-fills the text</text></g>
+                <path id="h-e1" class="edge" d="M142,77 H256" marker-end="url(#arr2)"/>
+                <text class="lbl" x="199" y="68" text-anchor="middle">opens the app</text>
+                <g class="node"><rect x="258" y="48" width="180" height="58" rx="9"/><text class="t" id="h-app" x="348" y="72" text-anchor="middle">Messages composer</text><text class="sub" id="h-app-sub" x="348" y="90" text-anchor="middle">the host presses Send</text></g>
+                <path id="h-e2" class="edge" d="M438,77 H612" marker-end="url(#arr2)"/>
+                <text class="lbl" id="h-e2-l" x="525" y="68" text-anchor="middle">one personal message</text>
+                <g class="node"><rect x="614" y="48" width="130" height="58" rx="9"/><text class="t" x="679" y="72" text-anchor="middle">Invitee's phone</text><text class="sub" x="679" y="90" text-anchor="middle">opens link.resbite.com/i/…</text></g>
+                <g id="h-gate" class="gate ok"><rect x="470" y="100" width="110" height="20" rx="10"/><text x="525" y="114" text-anchor="middle">outside PECR 22</text></g>
+              </g>
+              <g id="lane-resbite" class="lane off">
+                <text class="lbl" x="12" y="186">B · Resbite sends</text>
+                <g class="node"><rect x="12" y="204" width="130" height="58" rx="9"/><text class="t" x="77" y="228" text-anchor="middle">Resbite server</text><text class="sub" x="77" y="246" text-anchor="middle">number typed by the host</text></g>
+                <path id="r-e1" class="edge" d="M142,233 H256" marker-end="url(#arr2)"/>
+                <text class="lbl" x="199" y="224" text-anchor="middle">API call</text>
+                <g class="node"><rect x="258" y="204" width="180" height="58" rx="9"/><text class="t" id="r-plat" x="348" y="228" text-anchor="middle">SMS provider</text><text class="sub" id="r-plat-sub" x="348" y="246" text-anchor="middle">Twilio, Sinch…</text></g>
+                <path id="r-e2" class="edge" d="M438,233 H612" marker-end="url(#arr2)"/>
+                <text class="lbl" id="r-e2-l" x="525" y="224" text-anchor="middle">text from RESBITE</text>
+                <g class="node"><rect x="614" y="204" width="130" height="58" rx="9"/><text class="t" x="679" y="228" text-anchor="middle">Invitee's phone</text><text class="sub" x="679" y="246" text-anchor="middle">never heard of Resbite</text></g>
+                <g id="r-gate-plat" class="gate no" hidden><rect x="283" y="268" width="130" height="20" rx="10"/><text id="r-gate-plat-t" x="348" y="282" text-anchor="middle">Meta: opt-in first</text></g>
+                <g id="r-gate-law" class="gate warn"><rect x="455" y="268" width="140" height="20" rx="10"/><text id="r-gate-law-t" x="525" y="282" text-anchor="middle">PECR 22: uncertain</text></g>
+                <text class="lbl" id="r-note" x="12" y="318">The first message cannot carry the consent regulation 22 asks for.</text>
+              </g>
+            </svg>
+          </div>
+        </figure>
+      </div>
+      <div class="result ok" id="wiz-result" aria-live="polite">
+        <span class="chip ok" id="wiz-chip">Lowest risk</span>
+        <h4 id="wiz-title">This is the design already built</h4>
+        <p id="wiz-body"></p>
+        <ul id="wiz-rules"></ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="cols c-32" style="margin-top:22px">
+    <div class="prose">
+      <h3 style="margin-top:0">The rule that decides it</h3>
+      <blockquote>
+        <p>"A person shall neither transmit, nor instigate the transmission of, unsolicited communications for the purposes of direct marketing by means of electronic mail unless the recipient of the electronic mail has previously notified the sender that he consents for the time being to such communications being sent by, or at the instigation of, the sender."</p>
+        <cite>Privacy and Electronic Communications (EC Directive) Regulations 2003, <a href="https://www.legislation.gov.uk/uksi/2003/2426/regulation/22">regulation 22(2)</a>. "Electronic mail" includes SMS; the regulator reads it as covering WhatsApp and in-app messages too.</cite>
+      </blockquote>
+      <p><strong>Regulation 23</strong> adds that a marketing message may not hide who sent it and must give an opt-out address. <strong>The ICO on "tell a friend" schemes</strong> (search extracts; the ICO's pages refuse automated reads, so open them before quoting): asking people to forward a marketing message is "instigating" it, "you don't need to give an incentive for it to count", and refer-a-friend schemes cannot rely on the soft opt-in. On the line between service and marketing: "general branding, logos or straplines in these messages do not count as marketing", but "a key factor is likely to be the phrasing, tone and context".</p>
+      <p><strong>UK GDPR applies whatever the channel</strong>, because the invitee's number is personal data Resbite received from a third party: a lawful basis written down, an <a href="https://www.legislation.gov.uk/eur/2016/679/article/14">Article 14</a> notice "at the latest at the time of the first communication", minimisation, and a retention rule for numbers of people who never join. Codes are different: a code someone asked for is a service message outside regulations 22 and 23.</p>
+    </div>
+    <div class="card" style="margin-top:0">
+      <h3>What a breach can cost since 5 February 2026</h3>
+      <p>The Data (Use and Access) Act 2025 moved PECR onto the UK GDPR penalty scale: the higher of a fixed sum or a share of worldwide turnover.</p>
+      <div class="fine">
+        <label for="c-turn">Annual worldwide turnover, GBP<input id="c-turn" type="number" min="0" step="100000" value="500000" inputmode="numeric"></label>
+        <div><div style="font-size:13px;color:var(--muted)">Maximum fine for a regulation 22 breach</div><div class="out" id="f-fine">£17.5m</div></div>
+        <div class="why" id="f-fine-why"></div>
+      </div>
+      <p class="cap" style="margin-top:12px">Sources: <a href="https://www.legislation.gov.uk/ukpga/2025/18/section/115">DUAA 2025 s.115</a>, <a href="https://www.legislation.gov.uk/ukpga/2018/12/section/157">DPA 2018 s.157</a>, <a href="https://www.legislation.gov.uk/uksi/2026/82/regulation/2/made">S.I. 2026/82</a>. A maximum, not a typical penalty.</p>
+    </div>
+  </div>
+
+  <!-- 8. NEXT -->
+  <h2 id="next">8. What happens next</h2>
+  <div class="cols c-32">
+    <div class="prose">
+      <ul class="plain">
+        <li><strong>Open a Twilio account</strong>, register the UK alphanumeric sender, and connect it behind Resbite's existing code-sending function. That is a small piece of work; the test mode used by the testers stays as a switch.</li>
+        <li><strong>Keep the invitation design.</strong> The host sends; the text stays neutral and editable; no rewards, no "invite all contacts", no follow-up to non-users from Resbite.</li>
+        <li><strong>Two small additions for the invitee's data:</strong> a short privacy notice on the invitation page and a retention rule for numbers of people who never join. Needed whatever channel carries the invitation.</li>
+        <li><strong>Later, if volume grows:</strong> WhatsApp codes through the same Twilio account, SMS as fallback, for markets where WhatsApp is the default. And if Resbite ever wants to message invitees itself, opt-in first: a "send me updates on WhatsApp" choice on the invitation page.</li>
+      </ul>
+    </div>
+    <div class="note">
+      <strong>What could not be verified from the dev box.</strong>
+      <ul class="plain" style="margin:8px 0 0">
+        <li>ICO and Ofcom pages refuse automated reads: every ICO quotation here is a search-engine extract of the page named.</li>
+        <li>Vonage's UK and Argentina SMS prices; Bird, Telnyx and Infobip are quote-only or unreadable.</li>
+        <li>Twilio's and Sinch's carrier fees are referred to but not published; budget the list price and check the first invoice.</li>
+        <li>Whether a strictly neutral invitation sent by Resbite itself counts as direct marketing has no ICO text on point: a question for a lawyer.</li>
+      </ul>
+    </div>
+  </div>
+
+  <footer>
+    Built from <code>reports/Phone messaging providers.md</code> and the two research notes (84 sources, all accessed 3 November 2026). The charts, the calculator and the scorecard use the list prices in the table under section 4 and add nothing else. Interactive edition, 5 November 2026.
+  </footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  // ---------- Data: per message, USD, 3 November 2026 ----------
+  var SMS = [
+    { id: 'sinch',  name: 'Sinch',  uk: 0.04415, ar: 0.0906 },
+    { id: 'aws',    name: 'AWS',    uk: 0.05,    ar: 0.09449 },
+    { id: 'plivo',  name: 'Plivo',  uk: 0.0513,  ar: 0.0795 },
+    { id: 'twilio', name: 'Twilio', uk: 0.056,   ar: 0.1034 }
+  ];
+  var WA_META = { uk: 0.022, ar: 0.026 };
+  var WA_TWILIO = { uk: 0.027, ar: 0.031 };
+  var TELEGRAM = { uk: 0.01, ar: 0.01 };
+  var VERIFY_FEE = 0.05;   // Twilio Verify, per successful verification
+  var OTP_FEE = 0.045;     // AWS OTP, per successful verification
+
+  // Scorecard facts. true = read on the provider's page; false = read as absent; null = the page does not say.
+  var PROVIDERS = [
+    { id: 'twilio', name: 'Twilio', who: 'US; Supabase built-in', uk: 0.056, ar: 0.1034, ukLabel: 'USD 0.056', arLabel: 'AR USD 0.1034',
+      pubuk: true, pubar: true, cheap: false, sender: true, builtin: true, wa: true, hook: true, plain: true, verdict: ['acc', 'Recommended'] },
+    { id: 'sinch', name: 'Sinch', who: 'Sweden; via the hook', uk: 0.04415, ar: 0.0906, ukLabel: 'USD 0.04415 (GBP 0.035)', arLabel: 'AR USD 0.0906 (GBP 0.0715)',
+      pubuk: true, pubar: true, cheap: true, sender: null, builtin: false, wa: false, hook: false, plain: true, verdict: ['ok', 'Runner-up on price'] },
+    { id: 'aws', name: 'AWS End User Messaging', who: 'Amazon; via the hook', uk: 0.05, ar: 0.09449, ukLabel: 'USD 0.05', arLabel: 'AR USD 0.09449',
+      pubuk: true, pubar: true, cheap: true, sender: null, builtin: false, wa: false, hook: false, plain: true, verdict: ['ok', 'Solid, more setup'] },
+    { id: 'plivo', name: 'Plivo', who: 'US; via the hook', uk: 0.0513, ar: 0.0795, ukLabel: 'USD 0.0486 to 0.0563', arLabel: 'AR from USD 0.0795',
+      pubuk: true, pubar: true, cheap: null, sender: null, builtin: false, wa: false, hook: false, plain: true, verdict: ['ok', 'Competitive, variable'] },
+    { id: 'vonage', name: 'Vonage', who: 'Ericsson-owned; Supabase built-in', uk: null, ar: null, ukLabel: 'unread', arLabel: 'AR unread',
+      pubuk: false, pubar: false, cheap: null, sender: null, builtin: true, wa: false, hook: false, plain: true, verdict: ['warn', 'Check from a browser'] },
+    { id: 'prelude', name: 'Prelude', who: 'France; a verification bundle', uk: null, ar: null, ukLabel: 'EUR 0.057 per verification', arLabel: 'AR not published',
+      pubuk: true, pubar: false, cheap: false, sender: true, builtin: false, wa: false, hook: false, plain: false, verdict: ['mute', 'Bundle not needed'] },
+    { id: 'bird', name: 'Bird (MessageBird)', who: 'Netherlands; Supabase built-in', uk: null, ar: null, ukLabel: 'contact sales', arLabel: 'AR contact sales',
+      pubuk: false, pubar: false, cheap: null, sender: null, builtin: true, wa: false, hook: false, plain: true, verdict: ['mute', 'Quote only'] },
+    { id: 'telnyx', name: 'Telnyx', who: 'US', uk: null, ar: null, ukLabel: 'not shown', arLabel: 'AR not shown',
+      pubuk: false, pubar: false, cheap: null, sender: null, builtin: false, wa: false, hook: false, plain: true, verdict: ['mute', 'Quote only'] },
+    { id: 'infobip', name: 'Infobip', who: 'Croatia', uk: null, ar: null, ukLabel: 'unit unclear', arLabel: 'AR unit unclear',
+      pubuk: false, pubar: false, cheap: null, sender: null, builtin: false, wa: false, hook: false, plain: true, verdict: ['mute', 'Quote only'] },
+    { id: 'textlocal', name: 'Textlocal', who: 'UK; closed 31 July 2026', uk: null, ar: null, ukLabel: '—', arLabel: '—',
+      pubuk: false, pubar: false, cheap: null, sender: null, builtin: true, wa: false, hook: false, plain: null, verdict: ['no', 'Closed'] }
+  ];
+  var CRITERIA = ['pubuk', 'pubar', 'cheap', 'sender', 'builtin', 'wa', 'hook', 'plain'];
+
+  var usd0 = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+  var usd2 = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  var usd3 = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'USD', minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  var int = new Intl.NumberFormat('en-GB');
+  function money(v) { return (v >= 1000 ? usd0 : usd2).format(v).replace('US$', 'USD ').replace('$', 'USD '); }
+  function unit(v) { return usd3.format(v).replace('US$', 'USD ').replace('$', 'USD '); }
+
+  var NS = 'http://www.w3.org/2000/svg';
+  function el(tag, attrs, parent) {
+    var e = document.createElementNS(NS, tag);
+    for (var k in attrs) if (Object.prototype.hasOwnProperty.call(attrs, k)) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function txt(parent, x, y, s, attrs) {
+    var t = el('text', Object.assign({ x: x, y: y }, attrs || {}), parent);
+    t.textContent = s;
+    return t;
+  }
+  function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+  // SVG elements have no `hidden` property, so the attribute is toggled by hand.
+  function hideSvg(e, h) { if (h) e.setAttribute('hidden', ''); else e.removeAttribute('hidden'); }
+  function h(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+  // ---------- Tooltip (one per chart) ----------
+  function makeTip(host) {
+    var tip = document.createElement('div');
+    tip.className = 'tip'; tip.hidden = true; host.appendChild(tip);
+    return {
+      show: function (rows, x, y) {
+        tip.textContent = '';
+        rows.forEach(function (r) {
+          var row = document.createElement('div'); row.className = 'row';
+          if (r.color) { var k = document.createElement('i'); k.className = 'key'; k.style.background = r.color; row.appendChild(k); }
+          if (r.strong) { var b = document.createElement('b'); b.textContent = r.strong; row.appendChild(b); }
+          if (r.text) { var s = document.createElement('span'); s.textContent = r.text; row.appendChild(s); }
+          tip.appendChild(row);
+        });
+        tip.hidden = false;
+        var w = host.clientWidth, tw = tip.offsetWidth;
+        var cx = Math.max(tw / 2 + 4, Math.min(w - tw / 2 - 4, x));
+        tip.style.left = cx + 'px'; tip.style.top = y + 'px';
+      },
+      hide: function () { tip.hidden = true; }
+    };
+  }
+  function bindHover(group, host, tipApi, rowsFn, anchorFn) {
+    function at() { var a = anchorFn(); tipApi.show(rowsFn(), a.x, a.y); }
+    group.addEventListener('pointerenter', at);
+    group.addEventListener('pointerleave', tipApi.hide);
+    group.addEventListener('focus', at);
+    group.addEventListener('blur', tipApi.hide);
+  }
+
+  // ---------- Calculator state ----------
+  var inputs = { n: document.getElementById('c-n'), ar: document.getElementById('c-ar'), att: document.getElementById('c-att'), wa: document.getElementById('c-wa') };
+  var outs = { n: document.getElementById('o-n'), ar: document.getElementById('o-ar'), att: document.getElementById('o-att'), wa: document.getElementById('o-wa') };
+  function params() { return { n: +inputs.n.value, ar: +inputs.ar.value / 100, att: +inputs.att.value, wa: +inputs.wa.value / 100 }; }
+  function blendWith(p) { return function (uk, ar) { return (1 - p.ar) * uk + p.ar * ar; }; }
+
+  // ---------- 1. Scorecard ----------
+  var matters = document.getElementById('matters');
+  function activeCriteria() {
+    return Array.prototype.slice.call(matters.querySelectorAll('input')).filter(function (i) { return i.checked; }).map(function (i) { return i.dataset.c; });
+  }
+  function drawScorecard() {
+    var p = params(), blend = blendWith(p), active = activeCriteria();
+    document.getElementById('th-month').textContent = 'A month, ' + int.format(p.n) + ' codes';
+    document.querySelectorAll('#scorecard th[data-c]').forEach(function (th) { th.classList.toggle('on', active.indexOf(th.dataset.c) >= 0); });
+    var rows = PROVIDERS.map(function (pr) {
+      var met = active.filter(function (c) { return pr[c] === true; }).length;
+      var month = (pr.uk != null && pr.ar != null) ? blend(pr.uk, pr.ar) * p.att * p.n : null;
+      return { pr: pr, met: met, month: month };
+    });
+    rows.sort(function (a, b) {
+      if (b.met !== a.met) return b.met - a.met;
+      if (a.pr.uk != null && b.pr.uk != null) return a.pr.uk - b.pr.uk;
+      if (a.pr.uk != null) return -1; if (b.pr.uk != null) return 1;
+      return 0;
+    });
+    var tb = document.querySelector('#scorecard tbody'); tb.textContent = '';
+    rows.forEach(function (r) {
+      var pr = r.pr, tr = document.createElement('tr');
+      if (pr.id === 'twilio') tr.className = 'rec';
+      var tdName = h('td'); tdName.appendChild(document.createTextNode(pr.name)); tdName.appendChild(h('span', 'who', pr.who)); tr.appendChild(tdName);
+      var tdFit = h('td'); var sc = h('span', 'score'); var bar = h('span', 'bar'); var fill = document.createElement('i');
+      fill.style.width = (active.length ? 100 * r.met / active.length : 0) + '%'; bar.appendChild(fill); sc.appendChild(bar);
+      sc.appendChild(h('b', null, r.met + ' of ' + active.length)); tdFit.appendChild(sc); tr.appendChild(tdFit);
+      var tdP = h('td', 'num'); tdP.appendChild(document.createTextNode(pr.ukLabel)); tdP.appendChild(h('small', null, pr.arLabel)); tr.appendChild(tdP);
+      tr.appendChild(h('td', 'num', r.month == null ? '—' : money(r.month)));
+      CRITERIA.forEach(function (c) {
+        var v = pr[c], td = h('td', v === true ? 'y' : v === false ? 'n' : 'u', v === true ? '✓' : v === false ? '–' : '?');
+        if (active.indexOf(c) >= 0) td.classList.add('on');
+        td.setAttribute('aria-label', v === true ? 'yes' : v === false ? 'no' : 'not published');
+        tr.appendChild(td);
+      });
+      var tdV = h('td'); tdV.appendChild(h('span', 'chip ' + pr.verdict[0], pr.verdict[1])); tr.appendChild(tdV);
+      tb.appendChild(tr);
+    });
+  }
+  matters.addEventListener('change', drawScorecard);
+
+  // ---------- 3. Cost calculator ----------
+  var costHost = document.getElementById('chart-cost');
+  var costTip = makeTip(costHost);
+  function routes(p) {
+    var blend = blendWith(p);
+    var list = SMS.map(function (s) {
+      return { id: s.id, name: s.name + ' SMS', per: blend(s.uk, s.ar) * p.att, kind: s.id === 'twilio' ? 'rec' : 'dim' };
+    });
+    var tw = SMS[3];
+    list.push({ id: 'twilio-wa', name: 'Twilio, WhatsApp first', per: (p.wa * blend(WA_TWILIO.uk, WA_TWILIO.ar) + (1 - p.wa) * blend(tw.uk, tw.ar)) * p.att, kind: 'wa' });
+    list.push({ id: 'verify', name: 'Twilio Verify', per: blend(tw.uk, tw.ar) * p.att + VERIFY_FEE, kind: 'dim' });
+    list.push({ id: 'awsotp', name: 'AWS OTP', per: blend(SMS[1].uk, SMS[1].ar) * p.att + OTP_FEE, kind: 'dim' });
+    list.forEach(function (r) { r.month = r.per * p.n; });
+    list.sort(function (a, b) { return a.month - b.month; });
+    return list;
+  }
+  function niceStep(raw) {
+    var p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p;
+    return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p;
+  }
+  function drawCost() {
+    var p = params();
+    outs.n.value = int.format(p.n); outs.ar.value = Math.round(p.ar * 100) + '%'; outs.att.value = p.att.toFixed(1); outs.wa.value = Math.round(p.wa * 100) + '%';
+    var list = routes(p);
+    var rec = list.filter(function (r) { return r.id === 'twilio'; })[0];
+    var cheapest = list[0];
+    document.getElementById('f-rec').textContent = money(rec.month);
+    document.getElementById('f-rec-s').textContent = 'a month · ' + money(rec.month * 12) + ' a year';
+    document.getElementById('f-min').textContent = money(cheapest.month);
+    document.getElementById('f-min-s').textContent = cheapest.name + ', a month';
+    document.getElementById('f-unit').textContent = unit(rec.per);
+    document.getElementById('f-unit-s').textContent = p.att.toFixed(1) + ' messages, ' + Math.round(p.ar * 100) + '% Argentina';
+
+    var tb = document.querySelector('#table-cost tbody'); tb.textContent = '';
+    list.forEach(function (r) {
+      var tr = document.createElement('tr');
+      [r.name, unit(r.per), money(r.month), money(r.month * 12)].forEach(function (v, i) { tr.appendChild(h('td', i ? 'num' : null, v)); });
+      tb.appendChild(tr);
+    });
+
+    costHost.querySelectorAll('svg').forEach(function (s) { s.remove(); });
+    var W = Math.max(280, costHost.clientWidth), narrow = W < 480;
+    var labelW = narrow ? 118 : 170, right = 96, rowH = 32, top = 8;
+    var H = top + list.length * rowH + 26;
+    var svg = el('svg', { viewBox: '0 0 ' + W + ' ' + H, width: W, height: H }, costHost);
+    var max = list[list.length - 1].month;
+    var x0 = labelW, x1 = W - right, scale = (x1 - x0) / max;
+    var s1 = css('--s1'), dim = css('--dim'), gridC = css('--grid'), muted = css('--muted'), ink = css('--ink');
+    var step = niceStep(max / 4);
+    for (var v = 0; v <= max + 1e-9; v += step) {
+      var gx = x0 + v * scale;
+      el('line', { x1: gx, y1: top, x2: gx, y2: top + list.length * rowH, stroke: gridC, 'stroke-width': 1 }, svg);
+      txt(svg, gx, H - 8, v === 0 ? '0' : money(v), { 'text-anchor': 'middle', 'font-size': 11, fill: muted });
+    }
+    list.forEach(function (r, i) {
+      var y = top + i * rowH + 7, hh = rowH - 14;
+      var g = el('g', { 'class': 'bar', tabindex: 0, role: 'img', 'aria-label': r.name + ': ' + money(r.month) + ' a month, ' + unit(r.per) + ' per verification' }, svg);
+      el('rect', { x: 0, y: top + i * rowH, width: W, height: rowH, fill: 'transparent' }, g);
+      txt(g, x0 - 10, y + hh / 2 + 4, narrow ? r.name.replace('Twilio, WhatsApp first', 'Twilio, WA first') : r.name, { 'text-anchor': 'end', 'font-size': 13, fill: ink, 'font-weight': r.kind === 'rec' ? 700 : 400 });
+      var w = Math.max(2, r.month * scale);
+      var fill = r.kind === 'dim' ? dim : s1;
+      var rect = el('rect', { 'class': 'mark', x: x0, y: y, width: w, height: hh, fill: fill }, g);
+      if (r.kind === 'wa') { rect.setAttribute('fill-opacity', '0.3'); rect.setAttribute('stroke', s1); rect.setAttribute('stroke-width', '1.5'); }
+      else el('rect', { x: x0 + w - Math.min(4, w), y: y, width: Math.min(4, w), height: hh, rx: 3, fill: fill }, g);
+      txt(g, x0 + w + 8, y + hh / 2 + 4, money(r.month), { 'font-size': 13, fill: ink, 'font-weight': r.kind === 'rec' ? 700 : 400 });
+      (function (r, y, w, fill) {
+        bindHover(g, costHost, costTip, function () {
+          return [{ strong: money(r.month) + ' a month', color: fill }, { text: r.name }, { text: unit(r.per) + ' per verification · ' + money(r.month * 12) + ' a year' }];
+        }, function () { return { x: x0 + Math.min(w, x1 - x0) / 2, y: (y / H) * costHost.clientHeight }; });
+      })(r, y, w, fill);
+    });
+  }
+  Object.keys(inputs).forEach(function (k) { inputs[k].addEventListener('input', function () { drawCost(); drawScorecard(); }); });
+
+  // ---------- 4. Unit price chart ----------
+  var unitHost = document.getElementById('chart-unit');
+  var unitTip = makeTip(unitHost);
+  var UNIT_ROWS = [
+    { group: 'Plain SMS', name: 'Sinch', uk: 0.04415, ar: 0.0906 },
+    { name: 'AWS', uk: 0.05, ar: 0.09449 },
+    { name: 'Plivo (O2)', uk: 0.0513, ar: 0.0795 },
+    { name: 'Twilio', uk: 0.056, ar: 0.1034 },
+    { group: 'Messenger codes', name: 'WhatsApp, Meta direct', uk: WA_META.uk, ar: WA_META.ar },
+    { name: 'WhatsApp via Twilio', uk: WA_TWILIO.uk, ar: WA_TWILIO.ar },
+    { name: 'Telegram Gateway', uk: TELEGRAM.uk, ar: TELEGRAM.ar },
+    { group: 'Verification bundles', name: 'Twilio Verify', uk: 0.106, ar: 0.1534 },
+    { name: 'AWS OTP', uk: 0.095, ar: 0.13949 }
+  ];
+  function drawUnit() {
+    unitHost.querySelectorAll('svg').forEach(function (s) { s.remove(); });
+    var W = Math.max(280, unitHost.clientWidth), narrow = W < 480;
+    var labelW = narrow ? 120 : 175, right = 70, barH = 12, gap = 2, rowH = 36, groupH = 24, top = 4;
+    var H = top; UNIT_ROWS.forEach(function (r) { if (r.group) H += groupH; H += rowH; }); H += 26;
+    var svg = el('svg', { viewBox: '0 0 ' + W + ' ' + H, width: W, height: H }, unitHost);
+    var max = 0.16, x0 = labelW, x1 = W - right, scale = (x1 - x0) / max;
+    var s1 = css('--s1'), s2 = css('--s2'), gridC = css('--grid'), muted = css('--muted'), ink = css('--ink');
+    for (var v = 0; v <= max + 1e-9; v += 0.05) {
+      var gx = x0 + v * scale;
+      el('line', { x1: gx, y1: top, x2: gx, y2: H - 26, stroke: gridC }, svg);
+      txt(svg, gx, H - 8, v === 0 ? '0' : usd2.format(v).replace('US$', '').replace('$', ''), { 'text-anchor': 'middle', 'font-size': 11, fill: muted });
+    }
+    txt(svg, x1 + 8, H - 8, 'USD', { 'text-anchor': 'start', 'font-size': 11, fill: muted });
+    var y = top;
+    UNIT_ROWS.forEach(function (r) {
+      if (r.group) { txt(svg, 0, y + 15, r.group.toUpperCase(), { 'font-size': 11, fill: muted, 'letter-spacing': '0.06em', 'font-weight': 700 }); y += groupH; }
+      var g = el('g', { 'class': 'bar', tabindex: 0, role: 'img', 'aria-label': r.name + ': United Kingdom ' + unit(r.uk) + ', Argentina ' + unit(r.ar) + ' per message' }, svg);
+      el('rect', { x: 0, y: y, width: W, height: rowH, fill: 'transparent' }, g);
+      txt(g, x0 - 10, y + rowH / 2 + 4, narrow ? r.name.replace('WhatsApp, Meta direct', 'WhatsApp (Meta)').replace('WhatsApp via Twilio', 'WA via Twilio').replace('Telegram Gateway', 'Telegram') : r.name, { 'text-anchor': 'end', 'font-size': 13, fill: ink });
+      var yUK = y + (rowH - (2 * barH + gap)) / 2, yAR = yUK + barH + gap;
+      var wUK = r.uk * scale, wAR = r.ar * scale;
+      el('rect', { 'class': 'mark', x: x0, y: yUK, width: wUK, height: barH, fill: s1 }, g);
+      el('rect', { x: x0 + wUK - 4, y: yUK, width: 4, height: barH, rx: 3, fill: s1 }, g);
+      el('rect', { 'class': 'mark', x: x0, y: yAR, width: wAR, height: barH, fill: s2 }, g);
+      el('rect', { x: x0 + wAR - 4, y: yAR, width: 4, height: barH, rx: 3, fill: s2 }, g);
+      txt(g, x0 + wUK + 7, yUK + barH - 2, unit(r.uk).replace('USD ', ''), { 'font-size': 11.5, fill: ink });
+      (function (r, y, wAR) {
+        bindHover(g, unitHost, unitTip, function () {
+          return [{ strong: r.name }, { color: s1, text: 'United Kingdom ' + unit(r.uk) }, { color: s2, text: 'Argentina ' + unit(r.ar) }];
+        }, function () { return { x: x0 + wAR / 2, y: (y / H) * unitHost.clientHeight }; });
+      })(r, y, wAR);
+      y += rowH;
+    });
+  }
+
+  // ---------- 7. Invitation wizard ----------
+  var W = { sender: 'host', channel: 'sms', text: 'neutral' };
+  var CH = {
+    sms: { app: 'Messages composer', appSub: 'the host presses Send', plat: 'SMS provider', platSub: 'Twilio, Sinch…', edge: 'text from RESBITE' },
+    whatsapp: { app: 'WhatsApp, via wa.me link', appSub: 'click to chat, host presses Send', plat: 'WhatsApp Business Platform', platSub: 'Meta Cloud API or a reseller', edge: 'marketing template' },
+    telegram: { app: 'Telegram share sheet', appSub: 't.me/share/url, host picks the chat', plat: 'Telegram', platSub: 'Bot API or Gateway', edge: 'no route to a number' }
+  };
+  function verdict(s) {
+    if (s.sender === 'host') {
+      if (s.text === 'neutral') return {
+        level: 'ok', chip: 'Lowest risk', title: 'This is the design already built',
+        body: 'Click-to-chat, the Messages composer and the share sheet open the host’s own app with the text filled in, and the host presses Send to one person they chose. Nothing touches the Business Platform or an SMS provider, so Meta’s opt-in rule and the sender-ID controls do not apply. The text today is “{host} invited you to {title}, {when}. Reply here: {link}”: no promotion, no reward.',
+        rules: ['PECR 22 targets marketing sent or instigated by Resbite; a plain personal invitation from a friend is not obviously marketing material (inference; no ICO text on point).', 'UK GDPR still applies to the invitee’s number once it reaches Resbite: a privacy notice on the invitation page and a retention rule.', 'Cost: zero per invitation, whatever provider carries the codes.']
+      };
+      return {
+        level: 'warn', chip: 'Risk rises', title: 'Resbite would be instigating marketing',
+        body: 'The host still presses Send, but the message now carries Resbite’s pitch. The ICO’s “tell a friend” guidance says an organisation that encourages people to forward its marketing is instigating it, with or without a reward, and must comply with PECR itself. A reward or an “invite all contacts” prompt makes it clearer still.',
+        rules: ['PECR 22: consent from the invitee is needed before the message, which a first contact cannot have.', 'The soft opt-in cannot be used for refer-a-friend schemes (ICO, search extract).', 'Keep the pre-filled text neutral and editable; no rewards for inviting.']
+      };
+    }
+    if (s.channel === 'telegram') return {
+      level: 'no', chip: 'No channel', title: 'Telegram has no way to message a phone number',
+      body: 'Bots “can’t start conversations with users”; the Bot API addresses chats, never numbers; and Telegram Gateway carries only numeric codes, with terms that forbid unsolicited messages and user enumeration. There is nothing to buy or build here, whatever the text says.',
+      rules: ['The only Telegram route is the share link, where the host picks the chat: path A.']
+    };
+    if (s.channel === 'whatsapp') return {
+      level: 'no', chip: 'Ruled out by Meta', title: 'Meta’s policy stops it before UK law is reached',
+      body: 'The Business Messaging Policy allows contact only with people who gave the business their own number and opted in to messages from it. A number the host typed fails both tests. A first message must also be an approved template, and an invitation is Meta’s own example of a marketing template: per-user caps, quality ratings that pause templates, a 250-recipient start limit, and the message comes from Resbite’s business number, never from the host.',
+      rules: ['Meta Business Messaging Policy, updated 23 September 2026.', s.text === 'promo' ? 'PECR 22 would apply on top: marketing without prior consent.' : 'PECR 22 would still need answering for a neutral text (uncertain).', 'The compliant shape is opt-in first: the invitee chooses WhatsApp updates on the invitation page, and only then does Resbite message them about that event.']
+    };
+    if (s.text === 'promo') return {
+      level: 'no', chip: 'Not lawful as first contact', title: 'Direct marketing by SMS without prior consent',
+      body: 'Resbite is the sender, the content markets Resbite, and the invitee cannot have consented before the first message. Regulation 22 forbids exactly this; regulation 23 adds the identity and opt-out rules; the CAP Code and the DMCCA sit behind them. Any SMS provider will carry the text; the law is what stops it.',
+      rules: ['PECR 22 and 23.', 'Since 5 February 2026: fines up to £17.5m or 4% of worldwide turnover.', 'UK GDPR Article 14 notice and a lawful basis would be needed as well.']
+    };
+    return {
+      level: 'warn', chip: 'Uncertain', title: 'A neutral Resbite-sent text needs legal advice first',
+      body: 'There is an argument that Resbite only relays the host’s message. But no ICO text addresses it, the ICO’s service-message idea is built around existing customers, the text goes out under Resbite’s sender ID, and any growth element tips it back into marketing. Before launch: a lawyer’s view, a legitimate-interests assessment and a data protection impact assessment.',
+      rules: ['PECR 22 (is it marketing?) and 23 (sender identity, opt-out address) in any case.', 'UK GDPR: lawful basis, Article 14 notice at first contact, retention rule.', 'Costs one SMS segment per invitation at the provider’s rate, often two with a link.']
+    };
+  }
+  function drawWizard() {
+    document.querySelectorAll('#wizard .opts').forEach(function (grp) {
+      grp.querySelectorAll('button').forEach(function (b) { b.setAttribute('aria-pressed', String(W[grp.dataset.q] === b.dataset.v)); });
+    });
+    var c = CH[W.channel];
+    document.getElementById('h-app').textContent = c.app; document.getElementById('h-app-sub').textContent = c.appSub;
+    document.getElementById('r-plat').textContent = c.plat; document.getElementById('r-plat-sub').textContent = c.platSub;
+    document.getElementById('r-e2-l').textContent = c.edge;
+    var host = W.sender === 'host';
+    document.getElementById('lane-host').classList.toggle('off', !host);
+    document.getElementById('lane-resbite').classList.toggle('off', host);
+    ['h-e1', 'h-e2'].forEach(function (id) { var e = document.getElementById(id); e.classList.toggle('hi', host); e.setAttribute('marker-end', host ? 'url(#arr2-hi)' : 'url(#arr2)'); });
+    ['r-e1', 'r-e2'].forEach(function (id) { var e = document.getElementById(id); e.classList.toggle('hi', !host); e.setAttribute('marker-end', !host ? 'url(#arr2-hi)' : 'url(#arr2)'); });
+    var v = verdict(W);
+    var hg = document.getElementById('h-gate');
+    hg.setAttribute('class', 'gate ' + (W.text === 'neutral' ? 'ok' : 'warn'));
+    hg.querySelector('text').textContent = W.text === 'neutral' ? 'outside PECR 22' : 'PECR 22: instigation';
+    var pg = document.getElementById('r-gate-plat'), lg = document.getElementById('r-gate-law');
+    if (W.channel === 'whatsapp') { hideSvg(pg, false); document.getElementById('r-gate-plat-t').textContent = 'Meta: opt-in first'; }
+    else if (W.channel === 'telegram') { hideSvg(pg, false); document.getElementById('r-gate-plat-t').textContent = 'no API to a number'; }
+    else hideSvg(pg, true);
+    document.getElementById('r-e2').classList.toggle('dash', W.channel === 'telegram');
+    hideSvg(lg, W.channel === 'telegram');
+    lg.setAttribute('class', 'gate ' + (W.text === 'promo' ? 'no' : 'warn'));
+    document.getElementById('r-gate-law-t').textContent = W.text === 'promo' ? 'PECR 22: no consent' : 'PECR 22: uncertain';
+    document.getElementById('r-note').textContent = W.channel === 'telegram' ? 'Bots cannot start conversations; the Gateway carries only codes.' : (W.channel === 'whatsapp' ? 'Meta allows a first message only to someone who gave the business their number and opted in.' : 'The first message cannot carry the consent regulation 22 asks for.');
+    var res = document.getElementById('wiz-result'); res.className = 'result ' + v.level;
+    var chip = document.getElementById('wiz-chip'); chip.className = 'chip ' + v.level; chip.textContent = v.chip;
+    document.getElementById('wiz-title').textContent = v.title;
+    document.getElementById('wiz-body').textContent = v.body;
+    var ul = document.getElementById('wiz-rules'); ul.textContent = '';
+    v.rules.forEach(function (r) { ul.appendChild(h('li', null, r)); });
+  }
+  document.querySelectorAll('#wizard .opts button').forEach(function (b) {
+    b.addEventListener('click', function () { W[b.parentNode.dataset.q] = b.dataset.v; drawWizard(); });
+  });
+
+  // ---------- 7b. Fine calculator ----------
+  var turn = document.getElementById('c-turn');
+  var gbp = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 });
+  function drawFine() {
+    var t = Math.max(0, +turn.value || 0), pct = t * 0.04, fixed = 17500000;
+    var m = Math.max(pct, fixed);
+    document.getElementById('f-fine').textContent = m >= 1e6 ? '£' + (m / 1e6).toFixed(m >= 1e8 ? 0 : 1) + 'm' : gbp.format(m);
+    document.getElementById('f-fine-why').textContent = pct > fixed
+      ? '4% of ' + gbp.format(t) + ' is ' + gbp.format(pct) + ', which is higher than the fixed £17,500,000.'
+      : '4% of ' + gbp.format(t) + ' would be ' + gbp.format(pct) + ', so the fixed £17,500,000 is the higher figure. The percentage overtakes it above £437.5m of turnover.';
+  }
+  turn.addEventListener('input', drawFine);
+
+  // ---------- boot ----------
+  function drawAll() { drawCost(); drawUnit(); drawScorecard(); }
+  drawFine(); drawWizard(); drawAll();
+  var ro, t;
+  if (window.ResizeObserver) {
+    ro = new ResizeObserver(function () { clearTimeout(t); t = setTimeout(drawAll, 80); });
+    ro.observe(costHost); ro.observe(unitHost);
+  } else { window.addEventListener('resize', function () { clearTimeout(t); t = setTimeout(drawAll, 80); }); }
+  if (window.matchMedia) {
+    var mq = window.matchMedia('(prefers-color-scheme: dark)');
+    if (mq.addEventListener) mq.addEventListener('change', drawAll);
+  }
+  new MutationObserver(drawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+})();
+</script>
+</body>
+</html>
