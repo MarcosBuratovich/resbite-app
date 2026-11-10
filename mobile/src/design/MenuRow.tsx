@@ -59,11 +59,14 @@ export function MenuRow({
   );
 }
 
-/** A menu row that says where things stand rather than doing anything ("Request sent"): the row's look, muted, no button. */
+/**
+ * A menu row that says where things stand rather than doing anything ("Request sent"): the row's look, muted, no
+ * button; one element for screen readers, read as its title.
+ */
 export function MenuLabel({ title, icon: Icon }: { title: string; icon: LucideIcon }) {
   const largeText = useLargeText();
   return (
-    <View style={styles.row}>
+    <View accessible accessibilityLabel={title} style={styles.row}>
       <View aria-hidden importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
         <Icon size={24} strokeWidth={1.8} color={c.muted} />
       </View>

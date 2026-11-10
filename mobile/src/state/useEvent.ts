@@ -16,6 +16,7 @@ import { inviteCodeStore, type StoredInvite } from "../services/inviteCodeStore"
 import { formatPhone, phoneSendForm } from "../domain/phone";
 import { joinRequestGateway, type HostRequest } from "../services/joinRequests";
 import { connectionErrorMessage, connectionGateway, type ConnectionState } from "../services/connections";
+import { readProfile } from "../services/profile";
 import { requestGone } from "./connectionsModel";
 
 /** Someone a host invited by personal link who hasn't answered: the stored name, else the number. */
@@ -48,11 +49,17 @@ export type EventPage = {
   /** Open-link answers waiting for a host; empty for everyone else. */
   requests: HostRequest[];
   /**
-   * The signed-in person's connection with each person on the resbite (CO-01), read where names show; null before
-   * that, where names are hidden, in the preview and after a failed read: the people list then offers no connection
-   * actions.
+   * The signed-in person's connection with each person on the resbite (CO-01), read where names show, landing after the
+   * event when it is slower. Null before the first successful read, where names are hidden and in the preview: the
+   * people list then offers no connection actions. A failed read keeps the states read before.
    */
   connections: Record<string, ConnectionState> | null;
+  /**
+   * The owner, for the first row of the people list (a guest connects with the host there too): the organizer's name
+   * for everyone else, this account's own (from its profile) for the owner. Null where names are hidden, in the
+   * preview, and until the name is known.
+   */
+  owner: { userId: string; name: string } | null;
   busy: boolean;
   fresh: boolean;
   error: string | null;
@@ -105,6 +112,8 @@ export function useEvent(planId: string | undefined): EventPage {
   const [invited, setInvited] = useState<InvitedPerson[]>([]);
   const [requests, setRequests] = useState<HostRequest[]>([]);
   const [connections, setConnections] = useState<Record<string, ConnectionState> | null>(null);
+  /** The owner's own name, read for their row on the people list; everyone else has it as `organizer`. */
+  const [ownName, setOwnName] = useState<string | null>(null);
   // The latest read of the states wins: a whole-event read and a re-read after a connection action can overlap.
   const statesRead = useRef(0);
   const [mutedSeries, setMutedSeries] = useState<Set<string>>(new Set());
@@ -115,6 +124,7 @@ export function useEvent(planId: string | undefined): EventPage {
     setInvited([]);
     setRequests([]);
     setConnections(null);
+    setOwnName(null);
     setMutedSeries(new Set());
     setPending(null);
     setNotice(null);
@@ -135,24 +145,38 @@ export function useEvent(planId: string | undefined): EventPage {
         const next = await readEvent(planId, userId);
         // Unanswered personal links and open-link requests are every host's: the owner's and the admins'.
         const host = next.plan.owner_id === userId || next.admins.includes(userId);
-        // The connection states, only where names show (the server refuses them elsewhere), alongside the reads
-        // below. A convenience too: a failure leaves them unknown, and the list offers no connection actions.
+        // The connection states, only where names show (the server refuses them elsewhere). The event never waits
+        // for them: they land when they arrive, and only a successful read replaces them (a failure keeps those known).
         const ticket = ++statesRead.current;
-        const states = showsNames(viewerRole(next.plan, userId, next.admins), next.attendee?.response ?? null)
-          ? connectionGateway.statesFor(planId).catch(() => null)
-          : Promise.resolve(null);
+        const named = showsNames(viewerRole(next.plan, userId, next.admins), next.attendee?.response ?? null);
+        if (named)
+          void connectionGateway.statesFor(planId).then(
+            (states) => {
+              if (valid() && ticket === statesRead.current) setConnections(states);
+            },
+            () => {},
+          );
+        // Likewise the owner's own name for their row: it lands when it arrives; a failure keeps the one known.
+        if (next.plan.owner_id === userId)
+          void readProfile(userId).then(
+            (profile) => {
+              const name = profile?.display_name?.trim();
+              if (valid() && name) setOwnName(name);
+            },
+            () => {},
+          );
         // The invitations list is a convenience, so a failure leaves it empty.
         const people = host ? await readInvited(planId, userId).catch(() => []) : [];
         // Likewise the waiting list: the event still opens if it can't be read.
         const waiting = host ? await joinRequestGateway.forPlan(planId).catch(() => []) : [];
         // Likewise the mute: a failed read leaves the resbite unmuted on screen, and the next load tries again.
         const muted = await readMutedSeries().catch(() => new Set<string>());
-        const known = await states;
         if (valid()) {
           setMutedSeries(muted);
           setInvited(people);
           setRequests(waiting);
-          if (ticket === statesRead.current) setConnections(known);
+          // Names hidden: no states at all, whatever was known before.
+          if (!named && ticket === statesRead.current) setConnections(null);
           setSnapshot(next);
           setFresh(true);
           syncDevice();
@@ -162,7 +186,6 @@ export function useEvent(planId: string | undefined): EventPage {
           setSnapshot(null);
           setInvited([]);
           setRequests([]);
-          setConnections(null);
           setError(e instanceof Error ? e.message : EVENT_COPY.readFailed);
         }
       } finally {
@@ -180,6 +203,10 @@ export function useEvent(planId: string | undefined): EventPage {
   const admins = snapshot?.admins ?? [];
   const role: Viewer | null = !plan ? null : preview ? "owner" : viewerRole(plan, userId ?? null, admins);
   const muted = plan !== null && mutedSeries.has(plan.series_id);
+  const ownerId = snapshot?.plan.owner_id;
+  const ownerName = role === "owner" ? ownName : snapshot?.organizer?.trim() || null;
+  const namesShown = role !== null && showsNames(role, snapshot?.attendee?.response ?? null);
+  const owner = !preview && ownerId && ownerName && namesShown ? { userId: ownerId, name: ownerName } : null;
   /** True only when the answer is saved and confirmed, with nothing left to retry. */
   async function respond(value: Response, retry?: RsvpAttempt): Promise<boolean> {
     const current = snapshot;
@@ -383,6 +410,7 @@ export function useEvent(planId: string | undefined): EventPage {
     invited,
     requests,
     connections: preview ? null : connections,
+    owner,
     // Without a plan to read nothing loads: the screens say it isn't available instead of waiting.
     busy: busy && Boolean(planId),
     fresh: preview || fresh,

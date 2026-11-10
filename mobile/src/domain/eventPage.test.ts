@@ -21,6 +21,7 @@ import {
   viewerRole,
   whenLines,
 } from "./eventPage.ts";
+import type { ConnectionState } from "../services/connections.ts";
 
 const hour = 3_600_000;
 const start = "2099-10-15T18:00:00Z";
@@ -204,6 +205,7 @@ test("peopleGroups for an owner", () => {
     invited: [linkPerson("111", "Dan", "whatsapp"), linkPerson("222", "Eve"), linkPerson("333", "Fay", undefined, true)],
     requests: [request("r1", "Rae")],
     admins: ["adm"],
+    owner: null,
     userId: "u-me",
     connections: null,
   });
@@ -236,6 +238,7 @@ test("peopleGroups: the owner removes an admin's role whatever their answer; Mak
     invited: [],
     requests: [],
     admins: ["a1", "a2", "a3"],
+    owner: null,
     userId: "u-me",
     connections: null,
   });
@@ -255,6 +258,7 @@ test("peopleGroups for an admin and a guest", () => {
     invited: [linkPerson("111", "Dan")],
     requests: [request("r1", "Rae")],
     admins: ["a2", "a3"],
+    owner: null,
     userId: "u-me",
     connections: null,
   };
@@ -279,7 +283,8 @@ test("peopleGroups after the end and once cancelled: the same groups, no actions
       invited: [linkPerson("111", "Dan", "whatsapp")],
       requests: [request("r1", "Rae")],
       admins: ["adm"],
-      userId: "u-me",
+      owner: null,
+    userId: "u-me",
       connections: null,
     });
     assert.deepEqual(groups.map((g) => g.title), ["Going · 2", "Invited, not answered yet · 2", "Waiting for you · 1"], state);
@@ -300,6 +305,7 @@ test("the people list offers Connect to a guest on everyone with an account but 
     invited: [],
     requests: [],
     admins: [],
+    owner: null,
     userId: "u-me",
     connections: { "u-ana": "none", "u-leo": "connected", "u-sol": "requested_by_them", "u-nico": "requested_by_me" },
   });
@@ -324,6 +330,7 @@ test("with the states unknown (not read, or the read failed), the people list of
     invited: [],
     requests: [],
     admins: [],
+    owner: null,
     userId: "u-me",
     connections: null,
   });
@@ -341,6 +348,7 @@ test("hosts get the connection action before their own, and link invitees get no
     invited: [linkPerson("111", "Dan", "whatsapp")],
     requests: [],
     admins: ["adm"],
+    owner: null,
     userId: "u-me",
     connections: { g1: "none", adm: "requested_by_them" },
   });
@@ -360,7 +368,8 @@ test("connecting is offered after the end, host actions are not", () => {
       invited: [linkPerson("111", "Dan", "whatsapp")],
       requests: [request("r1", "Rae")],
       admins: ["adm"],
-      userId: "u-me",
+      owner: null,
+    userId: "u-me",
       connections: { g1: "none", adm: "connected" },
     });
     assert.deepEqual(groups.flatMap((g) => g.rows.map((r) => [r.name, r.actions])), [
@@ -380,6 +389,7 @@ test("someone who hasn't answered, or waits for approval, can't be asked; a requ
     invited: [],
     requests: [request("r1", "Rae")],
     admins: ["a3"],
+    owner: null,
     userId: "u-me",
     connections: { p1: "none", p2: "requested_by_them", a3: "none" },
   });
@@ -389,6 +399,41 @@ test("someone who hasn't answered, or waits for approval, can't be asked; a requ
   assert.deepEqual(by("Quin").actions, ["acceptConnection", "declineConnection", "remove"]);
   assert.deepEqual(by("Cy").actions, ["connect", "removeAdmin", "remove"]);
   assert.deepEqual([by("Rae").connection, by("Rae").actions], [null, ["approve", "decline"]]);
+});
+
+test("the owner's row comes first under Going: Hosting, the connection actions, never a host action", () => {
+  const input = {
+    state: "open" as const,
+    guests: [guest("g1", "Marta", "accepted"), guest("m1", "Sol", "maybe")],
+    invited: [],
+    requests: [],
+    admins: [],
+    owner: { userId: "own", name: "Ana" },
+  };
+  // A guest connects with the host from here (CO-P2). "Going · N" counts the guests, as the event page's people row does.
+  const asGuest = peopleGroups({ ...input, role: "guest", userId: "m1", connections: { own: "none", g1: "connected" } });
+  assert.deepEqual(asGuest.map((g) => g.title), ["Going · 1", "Maybe · 1"]);
+  assert.deepEqual(asGuest[0].rows[0], {
+    key: "owner:own", name: "Ana", status: null, reply: "Hosting", admin: false, kind: "owner", userId: "own",
+    connection: "none", me: false, actions: ["connect"],
+  });
+  assert.deepEqual(asGuest[0].rows.map((r) => r.name), ["Ana", "Marta"]);
+  // The owner's own list: their row, with no dots.
+  const own = peopleGroups({ ...input, role: "owner", userId: "own", connections: { g1: "none", m1: "none" } });
+  assert.deepEqual(own.map((g) => g.title), ["Going · 1", "Maybe · 1"]);
+  assert.deepEqual([own[0].rows[0].kind, own[0].rows[0].me, own[0].rows[0].connection, own[0].rows[0].actions], ["owner", true, null, []]);
+  assert.deepEqual(own[0].rows[1].actions, ["connect", "makeAdmin", "remove"]);
+  // Nobody removes the owner: an admin has only the connection actions on that row, after the end as before it.
+  for (const state of ["open", "ended"] as const) {
+    const admin = peopleGroups({ ...input, state, role: "admin", admins: ["g1"], userId: "g1", connections: { own: "requested_by_them" } });
+    assert.deepEqual(admin[0].rows[0].actions, ["acceptConnection", "declineConnection"], state);
+  }
+  // Nobody going yet: the owner's row still opens the list, under "Going · 0".
+  const quiet = peopleGroups({ ...input, guests: [guest("m1", "Sol", "maybe")], role: "owner", userId: "own", connections: {} });
+  assert.deepEqual(quiet.map((g) => [g.title, g.rows.map((r) => r.name)]), [["Going · 0", ["Ana"]], ["Maybe · 1", ["Sol"]]]);
+  // The states unknown: the owner's row shows, with nothing to do.
+  const unknown = peopleGroups({ ...input, role: "guest", userId: "m1", connections: null as Record<string, ConnectionState> | null });
+  assert.deepEqual([unknown[0].rows[0].connection, unknown[0].rows[0].actions], [null, []]);
 });
 
 test("EVENT_COPY pins the page, sheet and list words", () => {
@@ -409,7 +454,7 @@ test("EVENT_COPY pins the page, sheet and list words", () => {
       "We could not confirm your response. Check your connection, then retry.", "Could not cancel. Refresh and try again.",
       "Could not change the mute. Check your connection and try again.", "Only someone invited to this resbite can mute it.",
       "Could not change admins. Check your connection and try again.", "Only someone who uses the app can be an admin.",
-      "Only someone who’s going can be an admin.", "Only the organizer can change admins.",
+      "Only someone who’s going can be an admin.", "Only the organizer can change admins.", "Hosting",
     ],
     [
       EVENT_COPY.people, EVENT_COPY.actionsFor, EVENT_COPY.makeAdmin, EVENT_COPY.removeAdmin, EVENT_COPY.removeFromResbite,
@@ -428,7 +473,7 @@ test("EVENT_COPY pins the page, sheet and list words", () => {
       EVENT_COPY.responseOffline, EVENT_COPY.cancelFailed,
       EVENT_COPY.muteFailed, EVENT_COPY.muteNotInvited,
       EVENT_COPY.adminsFailed, EVENT_COPY.adminNeedsApp,
-      EVENT_COPY.adminNotGoing, EVENT_COPY.adminsOwnerOnly,
+      EVENT_COPY.adminNotGoing, EVENT_COPY.adminsOwnerOnly, EVENT_COPY.hostingBadge,
     ],
   );
 });

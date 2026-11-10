@@ -86,7 +86,7 @@ function Bar({ planId }: { planId?: string }) {
 type Sheet = { row: PersonRow; view: "menu" | "remove" | "decline" };
 
 function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage["plan"]> }) {
-  const { role, guests, invited, requests, admins, connections } = event;
+  const { role, guests, invited, requests, admins, owner, connections } = event;
   const me = useApp().session?.user.id ?? null;
   const resend = useResend(plan, event.load);
   const [sheet, setSheet] = useState<Sheet | null>(null);
@@ -100,6 +100,7 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
     invited,
     requests,
     admins,
+    owner,
     userId: me,
     connections,
   });
@@ -179,6 +180,7 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
                 <View style={styles.name} accessible accessibilityLabel={nameLabel(row)}>
                   <View style={styles.nameLine}>
                     <Text style={styles.nameText}>{row.name}</Text>
+                    {row.kind === "owner" ? <Badge text={EVENT_COPY.hostingBadge} /> : null}
                     {row.admin ? <Badge text={EVENT_COPY.adminBadge} /> : null}
                     {row.connection === "connected" ? <Badge text={CONNECTIONS_COPY.connectedBadge} /> : null}
                   </View>
@@ -283,6 +285,7 @@ const sendVias = (sent?: "whatsapp" | "messages"): ("whatsapp" | "messages")[] =
 const nameLabel = (row: PersonRow) =>
   [
     row.name,
+    row.kind === "owner" ? EVENT_COPY.hostingBadge : null,
     row.admin ? EVENT_COPY.adminBadge : null,
     row.connection === "connected" ? CONNECTIONS_COPY.connectedBadge : null,
     row.status,
@@ -290,7 +293,7 @@ const nameLabel = (row: PersonRow) =>
     .filter(Boolean)
     .join(", ");
 
-/** A small chip on the name line: Admin, Connected. */
+/** A small chip on the name line: Hosting, Admin, Connected. */
 function Badge({ text }: { text: string }) {
   return (
     <View style={styles.badge}>
