@@ -20,3 +20,6 @@ supabase/.temp/
 
 # Git worktrees for isolated plan execution
 .worktrees/
+
+# brainstorming visual companion sessions
+.superpowers/

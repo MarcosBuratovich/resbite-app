@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Circle of trust mockups</title>
+<style>
+body{margin:0;padding:24px 32px 48px;background:#f6f6f8;color:#1f1d2b;font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+h2{margin:0 0 6px;font-size:26px}
+.subtitle{color:#5d5a6a;max-width:72em;margin:0 0 8px}
+</style>
+</head>
+<body>
+<p class="subtitle" style="font-size:12px;letter-spacing:.3px;text-transform:uppercase">Resbite · mockups agreed with the owner on 10 November 2026 · 2 of 3</p>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&family=Quicksand:wght@600;700&display=swap">
+<style>
+.rb{--ink:#343043;--muted:#777180;--aqua:#89CAC7;--aqua-soft:#E8F6F3;--aqua-dark:#245F60;--cream:#FAF5F0;--paper:#FFFFFF;--pink:#EBA1AC;--purple:#BFB5BF;--purple-soft:#F0EDF4;--surface:#F7F4F7;--line:#E9E5E9;--error:#A33142;--page:#FAF9F7;
+ --shadow-card:0 2px 3px rgba(64,44,65,.025),0 8px 22px rgba(64,44,65,.065);--shadow-small:0 2px 5px rgba(64,44,65,.07);--shadow-button:0 2px 0 rgba(178,105,127,.2),0 6px 14px rgba(178,105,127,.18)}
+.rb *{box-sizing:border-box}
+.strip{display:flex;gap:28px;flex-wrap:wrap;justify-content:center;align-items:flex-start;margin:18px 0 8px}
+.shot{display:flex;flex-direction:column;gap:10px;align-items:center;width:360px}
+.shot .cap{font-size:13px;line-height:18px;max-width:340px;text-align:center;opacity:.8}
+.phone{width:360px;height:760px;background:var(--page);color:var(--ink);font-family:Montserrat,system-ui,sans-serif;font-size:14px;line-height:21px;position:relative;overflow:hidden;display:flex;flex-direction:column;border-radius:40px;box-shadow:0 10px 40px rgba(0,0,0,.18);border:6px solid #1b1a22}
+.task-bar{height:92px;padding:50px 16px 0;display:flex;align-items:center;justify-content:center;position:relative;flex:none}
+.task-bar h1{margin:0;font:600 17px/22px Montserrat,sans-serif;color:var(--ink)}
+.circle{width:40px;height:40px;border-radius:20px;background:var(--paper);box-shadow:var(--shadow-small);display:flex;align-items:center;justify-content:center;border:0;padding:0;color:var(--ink)}
+.task-bar .circle{position:absolute;left:16px;top:48px}
+.scroll{flex:1;overflow:hidden;display:flex;flex-direction:column}
+.list{padding:0 18px;display:flex;flex-direction:column;gap:2px}
+.group-title{font:700 12px/18px Montserrat,sans-serif;color:var(--muted);letter-spacing:.4px;text-transform:uppercase;margin:8px 0 0}
+.person{display:flex;align-items:center;gap:12px;min-height:52px;padding:5px 0}
+.person .name{flex:1;font:600 15px/20px Montserrat,sans-serif;display:flex;flex-direction:column;gap:1px;min-width:0}
+.person .name .sub{font:400 12px/16px Montserrat,sans-serif;color:var(--muted)}
+.avatar{width:36px;height:36px;border-radius:18px;background:var(--aqua-soft);display:flex;align-items:center;justify-content:center;font:700 13px/1 Montserrat,sans-serif;color:var(--aqua-dark);flex:none}
+.avatar.p{background:var(--purple-soft);color:#665381}.avatar.c{background:var(--cream);color:#7A4E2D}.avatar.k{background:#FCEAEC;color:#8A3A4A}
+.dots{width:40px;height:40px;border-radius:20px;border:0;background:none;display:flex;align-items:center;justify-content:center;color:var(--muted);flex:none;margin-right:-8px}
+.badge{font:600 11px/16px Montserrat,sans-serif;color:var(--aqua-dark);background:var(--aqua-soft);border-radius:999px;padding:1px 8px;margin-left:6px;vertical-align:middle}
+.badge.you{color:#665381;background:var(--purple-soft)}
+.hint{font:400 12px/17px Montserrat,sans-serif;color:var(--muted)}
+.card{background:var(--paper);border:1px solid #EFEAF0;border-radius:22px;box-shadow:var(--shadow-card);padding:12px 16px;display:flex;flex-direction:column;gap:6px;text-align:left}
+.row-card{flex-direction:row;align-items:center;gap:12px;padding:10px 12px 10px 14px}
+.row-card .icon{width:34px;height:34px;border-radius:17px;background:var(--surface);display:flex;align-items:center;justify-content:center;flex:none}
+.row-card .text{flex:1;display:flex;flex-direction:column;gap:0;min-width:0}
+.row-card .value{font:600 15px/20px Montserrat,sans-serif}
+.chev{color:var(--muted);flex:none}
+.check{width:24px;height:24px;border-radius:7px;border:2px solid var(--ink);display:flex;align-items:center;justify-content:center;flex:none}
+.check.on{background:var(--ink);color:#fff}
+.footer{flex:none;padding:12px 20px 24px;border-top:1px solid var(--line);background:var(--paper);display:flex;flex-direction:column;gap:8px}
+.btn{min-height:56px;border-radius:28px;padding:0 24px;background:var(--pink);border:1px solid #F8CBD0;box-shadow:var(--shadow-button);font:700 17px/22px Montserrat,sans-serif;color:var(--ink);display:flex;align-items:center;justify-content:center}
+.pills{display:flex;gap:8px}
+.pill{min-height:44px;border-radius:22px;display:flex;align-items:center;justify-content:center;gap:8px;font:700 14px/18px Montserrat,sans-serif;flex:1;border:1.5px solid var(--line);background:var(--paper);color:var(--ink)}
+.pill.primary{background:var(--pink);border-color:#F8CBD0}
+.seg{display:flex;gap:4px;padding:4px;border-radius:22px;background:var(--surface)}
+.seg span{flex:1;min-height:40px;border-radius:20px;display:flex;align-items:center;justify-content:center;font:400 13px/18px Montserrat,sans-serif;color:var(--muted);padding:0 6px;text-align:center}
+.seg span.on{background:var(--paper);color:var(--ink);font-weight:600;box-shadow:var(--shadow-small)}
+.lbl{font:600 13px/18px Montserrat,sans-serif;color:var(--ink);margin-top:4px}
+.sentence{background:var(--purple-soft);border-radius:16px;padding:10px 14px;font:400 13px/19px Montserrat,sans-serif}
+.hero{height:150px;background:var(--aqua-soft);position:relative;flex:none;display:flex;align-items:center;justify-content:center;color:var(--aqua-dark);font:600 12px/18px Montserrat,sans-serif}
+.hero .circle{position:absolute;left:16px;top:48px}
+.content{padding:14px 18px 0;display:flex;flex-direction:column;gap:10px}
+.content h1{margin:0;font:700 26px/32px Quicksand,Montserrat,sans-serif}
+.byline{font:400 13px/18px Montserrat,sans-serif;color:var(--muted)}
+.info{display:flex;align-items:center;gap:12px;padding:2px 0}
+.info .icon{width:22px;height:22px;flex:none;color:var(--ink)}
+.info .text{flex:1;display:flex;flex-direction:column;min-width:0}
+.info .label{font:400 11px/15px Montserrat,sans-serif;color:var(--muted)}
+.info .value{font:600 15px/20px Montserrat,sans-serif;color:var(--ink)}
+.people{flex-direction:row;align-items:center;gap:10px;padding:10px 12px 10px 16px}
+.people .text{flex:1;display:flex;flex-direction:column;gap:4px;min-width:0}
+.people .counts{font:700 14px/18px Montserrat,sans-serif}
+.people .counts .more{font-weight:400;color:var(--muted)}
+.avatars{display:flex}
+.avatars .avatar{width:26px;height:26px;border-radius:13px;border:2px solid var(--paper);font-size:10px;margin-left:-8px}
+.avatars .avatar:first-child{margin-left:0}
+.actions{flex:none;display:flex;gap:10px;padding:12px 16px 24px;border-top:1px solid var(--line);background:var(--paper)}
+.actions .pill{min-height:52px;border-radius:26px}
+.actions .pill.reply{flex:2;justify-content:space-between;font-weight:400;padding:0 16px}
+.actions .pill.reply b{text-decoration:underline;text-underline-offset:3px}
+.bring{border:1.5px solid var(--aqua);background:#F3FBFA}
+.tree{display:flex;flex-direction:column;gap:0;margin:2px 0 0 10px;border-left:2px solid var(--line);padding-left:12px}
+</style>
+
+<h2>Circle of trust</h2>
+<p class="subtitle">The host decides how far trust travels. Here Ana lets each guest bring one person, two levels deep: Pedro brings Clara, and Clara may bring one more. Nobody brought this way waits for approval.</p>
+
+<div class="rb strip">
+
+  <div class="shot">
+    <div class="phone">
+      <header class="task-bar"><span class="circle"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg></span><h1>Invite people</h1></header>
+      <div class="scroll"><div class="list" style="gap:8px">
+        <span class="group-title">Circle of trust</span>
+        <div class="card" style="gap:8px">
+          <span class="hint">Let the people you invite bring someone you don't know. Whoever they bring is in, without your OK.</span>
+          <span class="lbl">Each person can bring</span>
+          <div class="seg"><span>Nobody</span><span class="on">1</span><span>2</span><span>3</span></div>
+          <span class="lbl">How far it goes</span>
+          <div class="seg"><span>1 level</span><span class="on">2 levels</span><span>3 levels</span></div>
+          <div class="sentence"><b>Pedro</b> can bring 1 person, and that person can bring 1 more. Only people with a Resbite account.</div>
+        </div>
+        <span class="group-title" style="margin-top:10px">Your connections · 4</span>
+        <div class="person"><span class="avatar c">M</span><span class="name">Marta</span><span class="check on"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg></span></div>
+        <div class="person"><span class="avatar">L</span><span class="name">Lucas</span><span class="check"></span></div>
+        <span class="group-title" style="margin-top:10px">Phone contacts</span>
+        <div class="card row-card"><span class="icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg></span><span class="text"><span class="value">Choose phone contacts</span></span><span class="chev">›</span></div>
+      </div></div>
+      <div class="footer"><span class="btn">Invite 1</span></div>
+    </div>
+    <p class="cap"><b>1 · The host sets it, on Invite people.</b> Two choices and a sentence that says what they mean. Default is "Nobody", which is today's behaviour. On a group it holds for every Thursday.</p>
+  </div>
+
+  <div class="shot">
+    <div class="phone">
+      <div class="hero"><span class="circle"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></span>cover photo</div>
+      <div class="scroll"><div class="content">
+        <h1>Board game night</h1>
+        <span class="byline">Hosted by Ana</span>
+        <div class="info"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span class="text"><span class="label">When</span><span class="value">Thu 20 Nov · 19:00 to 22:00</span><span class="label">Every Thursday</span></span></div>
+        <div class="info"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.5 7-12a7 7 0 0 0-14 0c0 5.5 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg><span class="text"><span class="label">Where</span><span class="value">Ana's flat, Palermo</span></span></div>
+        <div class="card people"><span class="text"><span class="counts">Going 6 <span class="more">· Maybe 1 · Can't go 1</span></span><span class="avatars"><span class="avatar">A</span><span class="avatar p">L</span><span class="avatar c">M</span><span class="avatar k">S</span></span></span><span class="chev">›</span></div>
+        <div class="card row-card bring"><span class="icon" style="background:var(--aqua-soft);color:var(--aqua-dark)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M19 8v6M16 11h6"/></svg></span><span class="text"><span class="value">Bring someone</span><span class="hint">Ana trusts you to bring 1 person. They're in, no approval needed.</span></span><span class="chev">›</span></div>
+        <div class="card row-card"><span class="icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H8l-4 4V5z"/></svg></span><span class="text"><span class="value">Chat</span><span class="hint">Leo: I can bring the snacks</span></span><span class="chev">›</span></div>
+        <p class="hint" style="margin:0">Bring your own game if you have one. Doors open at 19:30.</p>
+      </div></div>
+      <div class="actions"><span class="pill reply">Going <b>Change</b></span><span class="pill" style="flex:1">More</span></div>
+    </div>
+    <p class="cap"><b>2 · What Pedro sees.</b> A "Bring someone" row on the resbite, only while he has an invite left. It opens the same Invite people screen, limited to one person. Once used it reads "You brought Clara".</p>
+  </div>
+
+  <div class="shot">
+    <div class="phone">
+      <header class="task-bar"><span class="circle"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></span><h1>People</h1></header>
+      <div class="scroll"><div class="list">
+        <span class="hint" style="margin:0 0 6px">Circle of trust: each person brings 1, two levels.</span>
+        <span class="group-title">Going · 8</span>
+        <div class="person"><span class="avatar">A</span><span class="name"><span>Ana <span class="badge">Hosting</span></span></span></div>
+        <div class="person"><span class="avatar p">L</span><span class="name"><span>Leo <span class="badge">Admin</span></span></span><span class="dots"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></span></div>
+        <div class="person"><span class="avatar p">P</span><span class="name">Pedro</span><span class="dots"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></span></div>
+        <div class="tree">
+          <div class="person"><span class="avatar k">C</span><span class="name"><span>Clara</span><span class="sub">Brought by Pedro</span></span><span class="dots"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></span></div>
+          <div class="tree" style="margin-left:6px">
+            <div class="person"><span class="avatar c">M</span><span class="name"><span>Martín</span><span class="sub">Brought by Clara</span></span><span class="dots"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></span></div>
+          </div>
+        </div>
+        <div class="person"><span class="avatar c">M</span><span class="name">Marta</span><span class="dots"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></span></div>
+        <div class="person"><span class="avatar k">S</span><span class="name">Sol</span><span class="dots"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></span></div>
+        <div class="person"><span class="avatar">N</span><span class="name">Nico</span><span class="dots"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></span></div>
+        <span class="group-title">Invited, not answered yet · 1</span>
+        <div class="person"><span class="avatar">J</span><span class="name"><span>Juli</span><span class="sub">Invited by WhatsApp · brought by Sol</span></span><span class="dots"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></span></div>
+      </div></div>
+    </div>
+    <p class="cap"><b>3 · What Ana sees.</b> The people list shows who brought whom, indented under the person who vouched for them. Remove works as today, and removing Pedro doesn't remove Clara.</p>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:12px">Take a look and tell me what's wrong or missing. Next screen: the group chat.</p>
+
+</body>
+</html>

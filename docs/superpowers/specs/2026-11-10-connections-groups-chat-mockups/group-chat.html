@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Group chat mockups</title>
+<style>
+body{margin:0;padding:24px 32px 48px;background:#f6f6f8;color:#1f1d2b;font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+h2{margin:0 0 6px;font-size:26px}
+.subtitle{color:#5d5a6a;max-width:72em;margin:0 0 8px}
+</style>
+</head>
+<body>
+<p class="subtitle" style="font-size:12px;letter-spacing:.3px;text-transform:uppercase">Resbite · mockups agreed with the owner on 10 November 2026 · 3 of 3</p>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&family=Quicksand:wght@600;700&display=swap">
+<style>
+.rb{--ink:#343043;--muted:#777180;--aqua:#89CAC7;--aqua-soft:#E8F6F3;--aqua-dark:#245F60;--cream:#FAF5F0;--paper:#FFFFFF;--pink:#EBA1AC;--pink-soft:#FCEAEC;--purple:#BFB5BF;--purple-soft:#F0EDF4;--surface:#F7F4F7;--line:#E9E5E9;--error:#A33142;--page:#FAF9F7;
+ --shadow-card:0 2px 3px rgba(64,44,65,.025),0 8px 22px rgba(64,44,65,.065);--shadow-small:0 2px 5px rgba(64,44,65,.07);--shadow-button:0 2px 0 rgba(178,105,127,.2),0 6px 14px rgba(178,105,127,.18)}
+.rb *{box-sizing:border-box}
+.strip{display:flex;gap:28px;flex-wrap:wrap;justify-content:center;align-items:flex-start;margin:18px 0 8px}
+.shot{display:flex;flex-direction:column;gap:10px;align-items:center;width:360px}
+.shot .cap{font-size:13px;line-height:18px;max-width:340px;text-align:center;opacity:.8}
+.phone{width:360px;height:760px;background:var(--page);color:var(--ink);font-family:Montserrat,system-ui,sans-serif;font-size:14px;line-height:20px;position:relative;overflow:hidden;display:flex;flex-direction:column;border-radius:40px;box-shadow:0 10px 40px rgba(0,0,0,.18);border:6px solid #1b1a22}
+.bar{height:96px;padding:48px 14px 0;display:flex;align-items:center;gap:10px;flex:none;background:var(--paper);border-bottom:1px solid var(--line)}
+.bar .circle{width:40px;height:40px;border-radius:20px;background:var(--paper);box-shadow:var(--shadow-small);display:flex;align-items:center;justify-content:center;flex:none}
+.bar .t{flex:1;display:flex;flex-direction:column;min-width:0}
+.bar .t b{font:700 16px/20px Quicksand,Montserrat,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar .t span{font:400 12px/16px Montserrat,sans-serif;color:var(--muted)}
+.bar .dots{width:40px;height:40px;display:flex;align-items:center;justify-content:center;color:var(--ink)}
+.pinned{display:flex;align-items:center;gap:10px;padding:8px 16px;background:var(--purple-soft);border-bottom:1px solid var(--line);font:400 13px/18px Montserrat,sans-serif;flex:none}
+.pinned .k{font:700 10px/14px Montserrat,sans-serif;letter-spacing:.5px;color:#665381;flex:none}
+.pinned .x{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.closing{padding:8px 16px;background:var(--cream);border-bottom:1px solid var(--line);font:400 13px/18px Montserrat,sans-serif;text-align:center;flex:none}
+.feed{flex:1;overflow:hidden;display:flex;flex-direction:column;gap:8px;padding:12px 14px}
+.sep{align-self:center;font:600 11px/16px Montserrat,sans-serif;color:var(--muted);letter-spacing:.4px;text-transform:uppercase;margin-top:2px}
+.sys{align-self:center;font:400 12px/16px Montserrat,sans-serif;color:var(--muted);text-align:center;max-width:90%}
+.chg{align-self:center;font:600 12px/16px Montserrat,sans-serif;color:var(--ink);border:1.5px solid var(--line);background:var(--paper);border-radius:999px;padding:6px 12px;display:flex;gap:6px;align-items:center;max-width:94%}
+.chg span{font-weight:400;color:var(--muted)}
+.ann{background:var(--purple-soft);border-radius:16px;padding:8px 12px;display:flex;flex-direction:column;gap:2px}
+.ann .k{font:700 10px/14px Montserrat,sans-serif;letter-spacing:.5px;color:#665381}
+.msg{max-width:80%;display:flex;flex-direction:column;gap:2px}
+.msg .who{font:600 11px/14px Montserrat,sans-serif;color:var(--muted);margin-left:10px}
+.msg .b{background:var(--paper);border:1px solid #EFEAF0;border-radius:18px 18px 18px 6px;padding:8px 12px;font:400 14px/19px Montserrat,sans-serif;box-shadow:var(--shadow-small)}
+.msg.me{align-self:flex-end}
+.msg.me .b{background:var(--pink-soft);border-color:#F8CBD0;border-radius:18px 18px 6px 18px}
+.msg .b.del{font-style:italic;color:var(--muted)}
+.compose{flex:none;border-top:1px solid var(--line);background:var(--paper);padding:8px 14px 22px;display:flex;flex-direction:column;gap:6px}
+.compose .to{font:400 11px/15px Montserrat,sans-serif;color:var(--muted);display:flex;justify-content:space-between;align-items:center}
+.compose .to .annb{font:600 12px/16px Montserrat,sans-serif;color:var(--ink);border:1.5px solid var(--line);border-radius:999px;padding:3px 10px}
+.compose .row{display:flex;gap:8px;align-items:center}
+.compose .field{flex:1;min-height:44px;border-radius:22px;border:1px solid var(--line);background:var(--page);padding:0 14px;display:flex;align-items:center;color:var(--muted);font:400 14px/20px Montserrat,sans-serif}
+.compose .send{width:44px;height:44px;border-radius:22px;background:var(--pink);display:flex;align-items:center;justify-content:center;flex:none;font:700 18px/1 Montserrat,sans-serif}
+.menu-pop{position:absolute;right:14px;top:92px;background:var(--paper);border-radius:18px;box-shadow:0 10px 30px rgba(64,44,65,.22);padding:4px 0;width:236px;z-index:4;border:1px solid #EFEAF0}
+.menu-pop div{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 16px;min-height:46px;font:600 14px/18px Montserrat,sans-serif;border-bottom:1px solid var(--line)}
+.menu-pop div:last-child{border-bottom:0}
+.menu-pop div small{font:400 11px/14px Montserrat,sans-serif;color:var(--muted);display:block}
+.menu-pop div.danger{color:var(--error)}
+.menu-pop .n{font:400 13px/18px Montserrat,sans-serif;color:var(--muted)}
+.dim{position:absolute;inset:0;background:rgba(52,48,67,.45);z-index:5}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--paper);border-radius:28px 28px 0 0;padding:10px 22px 26px;display:flex;flex-direction:column;gap:10px;box-shadow:0 -8px 30px rgba(64,44,65,.18);z-index:6}
+.grabber{width:36px;height:5px;border-radius:3px;background:var(--line);align-self:center}
+.sheet h2{margin:0;font:700 22px/28px Quicksand,Montserrat,sans-serif}
+.lbl{font:600 13px/18px Montserrat,sans-serif}
+.radio-row{display:flex;align-items:center;gap:12px;min-height:48px}
+.radio{width:22px;height:22px;border-radius:11px;border:2px solid var(--ink);display:flex;align-items:center;justify-content:center;flex:none}
+.radio.on::after{content:"";width:11px;height:11px;border-radius:6px;background:var(--ink)}
+.radio-row .v{font:600 15px/20px Montserrat,sans-serif}
+.radio-row .s{font:400 12px/16px Montserrat,sans-serif;color:var(--muted)}
+.ta{min-height:84px;border-radius:18px;border:1px solid var(--line);background:var(--page);padding:10px 14px;color:var(--muted);font:400 14px/20px Montserrat,sans-serif}
+.btn{min-height:52px;border-radius:26px;padding:0 24px;background:var(--pink);border:1px solid #F8CBD0;box-shadow:var(--shadow-button);font:700 16px/20px Montserrat,sans-serif;color:var(--ink);display:flex;align-items:center;justify-content:center}
+.txt{align-self:center;font:600 14px/20px Montserrat,sans-serif;text-decoration:underline;text-underline-offset:3px}
+</style>
+
+<h2>Group chat</h2>
+<p class="subtitle">One conversation for the Thursday crew that keeps going from week to week, and a one-off resbite's chat in its last 48 hours. Built on the chat brief's message styles: plain lines for people, a bordered chip for a change, a card for an announcement.</p>
+
+<div class="rb strip">
+
+  <div class="shot">
+    <div class="phone">
+      <div class="bar"><span class="circle"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></span><span class="t"><b>Board game night</b><span>Every Thursday · 9 in the group</span></span><span class="dots"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></span></div>
+      <div class="menu-pop">
+        <div>People in this group <span class="n">9</span></div>
+        <div><span>Mute chat<small>Changes and announcements still arrive</small></span></div>
+        <div>Report or block</div>
+        <div class="danger">Leave group</div>
+      </div>
+      <div class="pinned"><span class="k">PINNED</span><span class="x">Doors open at 19:30. Bring a drink!</span><span>›</span></div>
+      <div class="feed">
+        <span class="sep">Thu 6 Nov</span>
+        <span class="sys">Board game night ended · 8 came</span>
+        <span class="chg">Next one: Thu 13 Nov <span>· Ana's flat</span></span>
+        <div class="msg"><span class="who">Ana</span><span class="b">Catan expansion next week?</span></div>
+        <div class="msg"><span class="who">Leo</span><span class="b">I'll bring Azul too</span></div>
+        <span class="sep">Thu 13 Nov</span>
+        <span class="sys">Sol can't make it this week</span>
+        <span class="sys">Clara joined · brought by Pedro</span>
+        <div class="ann"><span class="k">ANNOUNCEMENT · TO EVERYONE IN THE GROUP</span><span>Doors open at 19:30. Bring a drink!</span></div>
+        <span class="chg">Ana changed the place <span>· Nico's, Villa Crespo · Tap to see</span></span>
+        <div class="msg"><span class="who">Mia</span><span class="b">Who's driving? I can give two people a lift</span></div>
+        <div class="msg me"><span class="b">Yes please!</span></div>
+      </div>
+      <div class="compose"><span class="to">To: everyone in the group, now and later</span><div class="row"><span class="field">Message</span><span class="send">↑</span></div></div>
+    </div>
+    <p class="cap"><b>1 · The group chat, seen by Pedro.</b> History runs across Thursdays, with "ended" and "Next one" lines between them. The ••• menu: people, mute, report or block, and Leave group. No closing line, because it doesn't close while the series runs.</p>
+  </div>
+
+  <div class="shot">
+    <div class="phone">
+      <div class="bar"><span class="circle"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></span><span class="t"><b>Board game night</b><span>Every Thursday · 9 in the group</span></span><span class="dots"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></span></div>
+      <div class="pinned"><span class="k">PINNED</span><span class="x">Doors open at 19:30. Bring a drink!</span><span>›</span></div>
+      <div class="feed">
+        <span class="sep">Thu 13 Nov</span>
+        <span class="sys">Sol can't make it this week</span>
+        <div class="ann"><span class="k">ANNOUNCEMENT · TO EVERYONE IN THE GROUP</span><span>Doors open at 19:30. Bring a drink!</span></div>
+        <span class="chg">You changed the place <span>· Nico's, Villa Crespo</span></span>
+        <div class="msg"><span class="who">Mia</span><span class="b">Who's driving? I can give two people a lift</span></div>
+        <div class="msg"><span class="who">Pedro</span><span class="b">Yes please!</span></div>
+        <div class="msg"><span class="who">Leo</span><span class="b del">Message deleted</span></div>
+      </div>
+      <div class="compose"><span class="to">To: everyone in the group <span class="annb">Announce</span></span><div class="row"><span class="field">Message</span><span class="send">↑</span></div></div>
+      <div class="dim"></div>
+      <section class="sheet">
+        <div class="grabber"></div>
+        <h2>New announcement</h2>
+        <span class="lbl">Who gets it</span>
+        <div class="radio-row"><span class="radio on"></span><span><span class="v">Everyone in the group</span> <span class="s">· 9</span></span></div>
+        <div class="radio-row"><span class="radio"></span><span><span class="v">Going this Thursday</span> <span class="s">· 6</span></span></div>
+        <div class="ta">Write an update for the group</div>
+        <span class="btn">Send announcement</span>
+        <span class="txt">Cancel</span>
+      </section>
+    </div>
+    <p class="cap"><b>2 · Ana's view, with Announce.</b> Only the owner and admins get the Announce button. In a group the audience is "Everyone in the group" or "Going this Thursday"; on a one-off it is "Going" or "Everyone invited". The announcement is pinned under the header.</p>
+  </div>
+
+  <div class="shot">
+    <div class="phone">
+      <div class="bar"><span class="circle"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></span><span class="t"><b>Picnic in the park</b><span>Ended · Sat 15 Nov · 7 going</span></span><span class="dots"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></span></div>
+      <div class="closing">This chat closes <b>Mon 17 Nov at 18:00</b>, in 31 hours. Any final words?</div>
+      <div class="feed">
+        <span class="sep">Sat 15 Nov</span>
+        <span class="sys">Picnic in the park ended</span>
+        <div class="msg"><span class="who">Ana</span><span class="b">Thanks for coming everyone!</span></div>
+        <div class="msg"><span class="who">Leo</span><span class="b">Best afternoon in ages</span></div>
+        <div class="msg"><span class="who">Mia</span><span class="b">Photos in the morning, promise</span></div>
+        <div class="msg me"><span class="b">Same again next month?</span></div>
+        <span class="sep">Sun 16 Nov</span>
+        <div class="msg"><span class="who">Ana</span><span class="b">Yes! I'll set it up with Do this again</span></div>
+      </div>
+      <div class="compose"><span class="to">To: people going. People who join later can read this too.</span><div class="row"><span class="field">Message</span><span class="send">↑</span></div></div>
+    </div>
+    <p class="cap"><b>3 · A one-off, after the end.</b> The line at the top counts down the 48 hours. When it reaches zero the field is replaced by "This chat closed on Mon 17 Nov. You can still read everything here", and the owner and admins see Do this again. A group chat goes read-only the same way, 48 hours after its last occurrence once the series is stopped.</p>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:12px">Take a look and tell me what's wrong or missing. After this I write the design up.</p>
+
+</body>
+</html>
