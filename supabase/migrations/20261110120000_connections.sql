@@ -53,16 +53,19 @@ alter table private.notification_outbox add constraint notification_outbox_kind_
 
 -- 3. Asking, accepting, refusing, cancelling and removing (CO-P2, CO-P3, CO-P5)
 -- Each function takes the pair's advisory lock first, so two calls on one pair (two people asking each other at once, a
--- double tap) run one after the other: the second finds the first's row and never meets the primary key.
+-- double tap) run one after the other: the second finds the first's row and never meets the primary key. Each notice's
+-- dedupe key ends with the time of its row, to the second (the request's created_at, the acceptance's accepted_at): a
+-- retry queues nothing twice, while a request sent again after a cancel or a removal, or a second acceptance, is told.
 
 -- Asking, from a resbite. The caller must see names there (can_see_guests: a host, or a guest who has answered), and the
 -- person asked must be on it as its owner, an admin or a guest who has answered (Going, Maybe or Can't go): someone who
 -- hasn't answered can't be asked, as the request would tell them who else is on it (UX2-D6). Attendee rows stay after
 -- the end, so connecting stays possible on an ended resbite. Returns 'requested' (asked now or before), 'connected'
--- (connected before, or the other person had asked: asking back accepts), or 'noop' when the person asked refused the
--- caller's request on this series: nothing is stored or sent, and the app shows "Request sent" as for 'requested'.
+-- (connected before, or the other person had asked: asking back accepts), or 'noop' when there is no row and the person
+-- asked refused the caller's request on this series: nothing is stored or sent, and the app shows "Request sent" as for
+-- 'requested'.
 create function private.request_connection(p_user uuid, p_plan uuid) returns text language plpgsql security definer set search_path = '' as $$
-declare v_uid uuid := private.require_tester(); v_a uuid; v_b uuid; v_series uuid; v_row public.connections;
+declare v_uid uuid := private.require_tester(); v_a uuid; v_b uuid; v_series uuid; v_row public.connections; v_at timestamptz;
 begin
  select p.user_a,p.user_b into v_a,v_b from private.pair(v_uid,p_user) p;
  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_a::text||':'||v_b::text,53));
@@ -74,18 +77,21 @@ begin
   raise exception 'Not on this resbite' using errcode='42501';
  end if;
  select series_id into v_series from public.plans where id=p_plan;
- if exists(select 1 from private.connection_refusals where series_id=v_series and from_user=v_uid and to_user=p_user) then return 'noop'; end if;
  select * into v_row from public.connections where user_a=v_a and user_b=v_b for update;
  if found then
   if v_row.state='connected' then return 'connected'; end if;
   if v_row.requested_by=v_uid then return 'requested'; end if;
-  -- The other person had asked: asking back is accepting.
+  -- The other person had asked: asking back is accepting, even on the series where they once refused the caller.
   perform private.accept_connection(p_user);
   return 'connected';
  end if;
- insert into public.connections(user_a,user_b,state,requested_by,series_id) values(v_a,v_b,'requested',v_uid,v_series);
+ if exists(select 1 from private.connection_refusals where series_id=v_series and from_user=v_uid and to_user=p_user) then return 'noop'; end if;
+ -- clock_timestamp, not now(): the notice's key carries the request's time, so a request sent again after a cancel is
+ -- told again even when both fall in one transaction.
+ insert into public.connections(user_a,user_b,state,requested_by,series_id,created_at)
+  values(v_a,v_b,'requested',v_uid,v_series,pg_catalog.clock_timestamp()) returning created_at into v_at;
  insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id)
-  values(p_plan,p_user,'connection_request','connect:'||v_a||':'||v_b||':'||v_series,v_uid) on conflict do nothing;
+  values(p_plan,p_user,'connection_request','connect:'||v_a||':'||v_b||':'||v_series||':'||extract(epoch from v_at)::bigint,v_uid) on conflict do nothing;
  return 'requested';
 end $$;
 create function public.request_connection(p_user uuid, p_plan uuid) returns text language sql security invoker set search_path = '' as $$
@@ -94,17 +100,17 @@ $$;
 revoke all on function private.request_connection(uuid,uuid), public.request_connection(uuid,uuid) from public, anon, authenticated, service_role;
 grant execute on function private.request_connection(uuid,uuid), public.request_connection(uuid,uuid) to authenticated;
 
--- Accepting: only the person asked. The requester is told once ("You and Ana are now connected"); the notice's resbite is
+-- Accepting: only the person asked. The requester is told ("You and Ana are now connected"); the notice's resbite is
 -- the latest occurrence of the series they met at or, when that series is gone, the latest resbite the two share. With
 -- neither, the acceptance stands and nobody is told (an outbox row needs a resbite).
 create function private.accept_connection(p_user uuid) returns void language plpgsql security definer set search_path = '' as $$
-declare v_uid uuid := private.require_tester(); v_a uuid; v_b uuid; v_row public.connections; v_plan uuid;
+declare v_uid uuid := private.require_tester(); v_a uuid; v_b uuid; v_row public.connections; v_plan uuid; v_at timestamptz;
 begin
  select p.user_a,p.user_b into v_a,v_b from private.pair(v_uid,p_user) p;
  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_a::text||':'||v_b::text,53));
  select * into v_row from public.connections where user_a=v_a and user_b=v_b for update;
  if not found or v_row.state<>'requested' or v_row.requested_by is distinct from p_user then raise exception 'No request' using errcode='42501'; end if;
- update public.connections set state='connected',accepted_at=now() where user_a=v_a and user_b=v_b;
+ update public.connections set state='connected',accepted_at=pg_catalog.clock_timestamp() where user_a=v_a and user_b=v_b returning accepted_at into v_at;
  select id into v_plan from public.plans where series_id=v_row.series_id order by starts_at desc,id limit 1;
  if v_plan is null then
   select p.id into v_plan from public.plans p where p.id in (
@@ -115,7 +121,7 @@ begin
  end if;
  if v_plan is not null then
   insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id)
-   values(v_plan,p_user,'connection_accepted','connected:'||v_a||':'||v_b,v_uid) on conflict do nothing;
+   values(v_plan,p_user,'connection_accepted','connected:'||v_a||':'||v_b||':'||extract(epoch from v_at)::bigint,v_uid) on conflict do nothing;
  end if;
 end $$;
 create function public.accept_connection(p_user uuid) returns void language sql security invoker set search_path = '' as $$

@@ -55,7 +55,7 @@ do $$ declare c public.connections; o private.notification_outbox; v_series uuid
  select * into o from private.notification_outbox where kind='connection_request';
  if o.recipient_id is distinct from 'f1000000-0000-4000-8000-000000000003' or o.actor_id is distinct from 'f1000000-0000-4000-8000-000000000002'
  or o.plan_id is distinct from 'f1100000-0000-4000-8000-000000000001' or o.detail is not null
- or o.dedupe_key is distinct from 'connect:f1000000-0000-4000-8000-000000000002:f1000000-0000-4000-8000-000000000003:'||v_series then
+ or o.dedupe_key is distinct from 'connect:f1000000-0000-4000-8000-000000000002:f1000000-0000-4000-8000-000000000003:'||v_series||':'||extract(epoch from c.created_at)::bigint then
   raise exception 'Request notice wrong: %', o;
  end if;
 end $$;
@@ -118,7 +118,7 @@ do $$ declare c public.connections; o private.notification_outbox; begin
  select * into o from private.notification_outbox where kind='connection_accepted';
  if o.recipient_id is distinct from 'f1000000-0000-4000-8000-000000000001' or o.actor_id is distinct from 'f1000000-0000-4000-8000-000000000002'
  or o.plan_id is distinct from 'f1100000-0000-4000-8000-000000000001'
- or o.dedupe_key is distinct from 'connected:f1000000-0000-4000-8000-000000000001:f1000000-0000-4000-8000-000000000002' then
+ or o.dedupe_key is distinct from 'connected:f1000000-0000-4000-8000-000000000001:f1000000-0000-4000-8000-000000000002:'||extract(epoch from c.accepted_at)::bigint then
   raise exception 'Acceptance notice wrong: %', o;
  end if;
 end $$;
@@ -142,9 +142,9 @@ reset role;
 do $$ declare c public.connections; o private.notification_outbox; begin
  select * into c from public.connections where user_a='f1000000-0000-4000-8000-000000000002' and user_b='f1000000-0000-4000-8000-000000000003';
  if c.state is distinct from 'connected' or c.accepted_at is null then raise exception 'Acceptance did not connect: %', c; end if;
- select * into o from private.notification_outbox where dedupe_key='connected:f1000000-0000-4000-8000-000000000002:f1000000-0000-4000-8000-000000000003';
- if o.kind is distinct from 'connection_accepted' or o.recipient_id is distinct from 'f1000000-0000-4000-8000-000000000002'
- or o.actor_id is distinct from 'f1000000-0000-4000-8000-000000000003' or o.plan_id is distinct from 'f1100000-0000-4000-8000-000000000001' then
+ select * into o from private.notification_outbox where kind='connection_accepted' and recipient_id='f1000000-0000-4000-8000-000000000002';
+ if o.actor_id is distinct from 'f1000000-0000-4000-8000-000000000003' or o.plan_id is distinct from 'f1100000-0000-4000-8000-000000000001'
+ or o.dedupe_key is distinct from 'connected:f1000000-0000-4000-8000-000000000002:f1000000-0000-4000-8000-000000000003:'||extract(epoch from c.accepted_at)::bigint then
   raise exception 'Acceptance notice wrong: %', o;
  end if;
 end $$;
@@ -215,6 +215,27 @@ do $$ begin
   raise exception 'The refuser''s request was not stored';
  end if;
 end $$;
+-- The refused requester asking back accepts the refuser's request, even from the series of the refusal.
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+do $$ begin
+ if public.request_connection('f1000000-0000-4000-8000-000000000006','f1100000-0000-4000-8000-000000000001') is distinct from 'connected' then
+  raise exception 'Asking back the refuser did not connect';
+ end if;
+end $$;
+reset role;
+do $$ declare c public.connections; o private.notification_outbox; begin
+ select * into c from public.connections where user_a='f1000000-0000-4000-8000-000000000002' and user_b='f1000000-0000-4000-8000-000000000006';
+ if c.state is distinct from 'connected' or c.accepted_at is null then raise exception 'Asking back the refuser did not connect: %', c; end if;
+ if (select count(*) from private.notification_outbox where kind='connection_accepted' and recipient_id='f1000000-0000-4000-8000-000000000006')<>1 then
+  raise exception 'One acceptance notice to the refuser expected';
+ end if;
+ select * into o from private.notification_outbox where kind='connection_accepted' and recipient_id='f1000000-0000-4000-8000-000000000006';
+ if o.actor_id is distinct from 'f1000000-0000-4000-8000-000000000002' or o.plan_id is distinct from 'f1100000-0000-4000-8000-000000000001'
+ or o.dedupe_key is distinct from 'connected:f1000000-0000-4000-8000-000000000002:f1000000-0000-4000-8000-000000000006:'||extract(epoch from c.accepted_at)::bigint then
+  raise exception 'Acceptance notice to the refuser wrong: %', o;
+ end if;
+end $$;
 
 -- Removing: 02 removes 03, silently and not as a refusal: 03 may ask again. Removing what isn't connected changes
 -- nothing; cancelling someone else's request changes nothing.
@@ -246,7 +267,7 @@ end $$;
 select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
 select public.cancel_connection_request('f1000000-0000-4000-8000-000000000002');
 
--- Cancelling: 02 asks 03 and takes it back; a cancelled request may be sent again.
+-- Cancelling: 02 asks 03 and takes it back; a cancelled request may be sent again, and is told again.
 select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 do $$ begin
  if public.request_connection('f1000000-0000-4000-8000-000000000003','f1100000-0000-4000-8000-000000000001') is distinct from 'requested' then
@@ -257,11 +278,32 @@ do $$ begin
   raise exception 'A cancelled request stayed';
  end if;
  perform public.cancel_connection_request('f1000000-0000-4000-8000-000000000003');
+end $$;
+reset role;
+create temporary table co1_told as select count(*) as n from private.notification_outbox
+ where kind='connection_request' and actor_id='f1000000-0000-4000-8000-000000000002' and recipient_id='f1000000-0000-4000-8000-000000000003';
+-- The notice's key carries the request's time to the second: the request sent again comes a second later.
+select pg_sleep(1);
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+do $$ begin
  if public.request_connection('f1000000-0000-4000-8000-000000000003','f1100000-0000-4000-8000-000000000001') is distinct from 'requested' then
   raise exception 'A cancelled request could not be sent again';
  end if;
- perform public.cancel_connection_request('f1000000-0000-4000-8000-000000000003');
 end $$;
+reset role;
+do $$ declare c public.connections; begin
+ select * into c from public.connections where user_a='f1000000-0000-4000-8000-000000000002' and user_b='f1000000-0000-4000-8000-000000000003';
+ if (select count(*) from private.notification_outbox where kind='connection_request' and actor_id='f1000000-0000-4000-8000-000000000002'
+   and recipient_id='f1000000-0000-4000-8000-000000000003')<>(select n from co1_told)+1
+ or not exists(select 1 from private.notification_outbox where kind='connection_request'
+   and dedupe_key='connect:f1000000-0000-4000-8000-000000000002:f1000000-0000-4000-8000-000000000003:'||c.series_id||':'||extract(epoch from c.created_at)::bigint) then
+  raise exception 'A request sent again after a cancel was not told again';
+ end if;
+end $$;
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+select public.cancel_connection_request('f1000000-0000-4000-8000-000000000003');
 reset role;
 do $$ begin
  if exists(select 1 from private.connection_refusals where to_user='f1000000-0000-4000-8000-000000000003' or from_user='f1000000-0000-4000-8000-000000000003') then
