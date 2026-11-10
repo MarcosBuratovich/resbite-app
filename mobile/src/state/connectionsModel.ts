@@ -1,4 +1,5 @@
 import type { ConnectionPerson, MyConnections } from "../services/connections";
+import { errorField } from "../services/contactInvites";
 
 /** What the person decided on the Connections screen (CO-02): a request accepted or declined, a connection removed. */
 export type ConnectionDecision = "accept" | "decline" | "remove";
@@ -27,3 +28,9 @@ function inNameOrder(connected: ConnectionPerson[], person: ConnectionPerson): C
   const at = connected.findIndex((p) => p.name.localeCompare(person.name) > 0);
   return at < 0 ? [...connected, person] : [...connected.slice(0, at), person, ...connected.slice(at)];
 }
+
+/**
+ * The server holds no such request any more: the requester withdrew it, or it was answered elsewhere (42501 'No
+ * request', from accept and decline). Nothing went wrong for the person: the list is read again and the card goes.
+ */
+export const requestGone = (e: unknown) => errorField(e, "code") === "42501" && errorField(e, "message") === "No request";

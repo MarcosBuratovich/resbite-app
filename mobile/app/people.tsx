@@ -19,6 +19,7 @@ import { Button, Copy, ErrorNote, Field, Title, s } from "../src/design/ui";
 import { Chip, IconButton, InfoSheet, Tile } from "../src/design/kit";
 import { colors as c, fonts, r } from "../src/design/tokens";
 import { PreviewNotice } from "../src/design/Chrome";
+import { CONNECTIONS_COPY } from "../src/domain/connectionsCopy";
 import { useApp } from "../src/state/AppState";
 import { peopleStore } from "../src/services/people";
 import {
@@ -347,7 +348,7 @@ export default function People() {
           <PreviewNotice dismissible={false} />
           <IconButton icon={Info} label="About people" onPress={() => setAbout(true)} />
         </View>
-        <Title>{planId ? "Choose people" : editing ? "Your group" : "People & groups"}</Title>
+        <Title>{planId ? "Choose people" : editing ? "Your group" : CONNECTIONS_COPY.peopleListsRow}</Title>
         {loading && <Copy>Loading your people…</Copy>}
         <ErrorNote message={error} />
         {!loading && !ready && <Button title="Try again" onPress={() => setRetry((n) => n + 1)} />}

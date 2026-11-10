@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applyDecision } from "./connectionsModel";
+import { applyDecision, requestGone } from "./connectionsModel";
 import type { ConnectionPerson, MyConnections } from "../services/connections";
 
 const person = (userId: string, name: string, title: string | null, context?: "going" | "met"): ConnectionPerson => ({
@@ -67,4 +67,13 @@ test("accepting someone already connected lists them once", () => {
     after.connected.map((p) => p.name),
     ["Marta", "Pedro"],
   );
+});
+
+test("a request the server no longer holds (withdrawn or already answered) is told apart from every other refusal", () => {
+  assert.equal(requestGone({ code: "42501", message: "No request", details: null, hint: null }), true);
+  assert.equal(requestGone({ code: "42501", message: "Not a connection" }), false);
+  assert.equal(requestGone({ code: "42501", message: "Names required" }), false);
+  assert.equal(requestGone({ code: "22023", message: "No request" }), false);
+  assert.equal(requestGone(new TypeError("Failed to fetch")), false);
+  assert.equal(requestGone(null), false);
 });

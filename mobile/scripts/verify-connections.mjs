@@ -7,7 +7,8 @@
 //              Connected · 3; the dots → Remove connection → the in-place confirm: Keep goes back, Remove sends
 //              remove_connection { p_user } and the row goes; Back returns to Profile, whose badge has gone
 //   decline    under Larger Text the two pills stack; a failed Accept keeps the card and says why; Not now sends
-//              decline_connection { p_user } and removes the card
+//              decline_connection { p_user } and removes the card; Accept on a request withdrawn meanwhile (42501 'No
+//              request') says nothing and reads the list again, so the card goes
 //   edges      the empty state (no footer line); a failed read offers Try again
 //   (Task 8 adds "Your connections" on Invite people below.)
 import assert from "node:assert/strict";
@@ -93,8 +94,8 @@ async function fixture({ requests = [pedro], connected = [marta, tomas], width =
     unexpected = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => {
-    // The 503s are the failures under test.
-    if (m.type() === "error" && !/Failed to load resource: the server responded with a status of 503/.test(m.text()))
+    // The 503s and the 403 ('No request') are the failures under test.
+    if (m.type() === "error" && !/Failed to load resource: the server responded with a status of (503|403)/.test(m.text()))
       errors.push(m.text());
   });
   await page.route("**/*.supabase.co/**", async (route) => {
@@ -113,6 +114,8 @@ async function fixture({ requests = [pedro], connected = [marta, tomas], width =
       route.fulfill({ status, contentType: "application/json", body: JSON.stringify(value) });
     const empty = () => route.fulfill({ status: 204, body: "" });
     const lost = () => reply({ message: "Fixture: lost connection" }, 503);
+    // As the server refuses a request it no longer holds (withdrawn, or answered elsewhere).
+    const noRequest = () => reply({ code: "42501", message: "No request", details: null, hint: null }, 403);
     if (path === "/auth/v1/user") return reply(user);
     if (path === "/rest/v1/rpc/account_access_status") return reply({ account_id: ANA, status: "approved" });
     if (path === "/rest/v1/rpc/note_app_session") return empty();
@@ -133,14 +136,14 @@ async function fixture({ requests = [pedro], connected = [marta, tomas], width =
         return lost();
       }
       const asked = state.requests.find((p) => p.user_id === body.p_user);
+      if (!asked) return noRequest();
       state.requests = state.requests.filter((p) => p.user_id !== body.p_user);
-      if (asked) {
-        const { context: _context, ...now } = asked;
-        state.connected = [...state.connected, now].sort((a, b) => a.name.localeCompare(b.name));
-      }
+      const { context: _context, ...now } = asked;
+      state.connected = [...state.connected, now].sort((a, b) => a.name.localeCompare(b.name));
       return empty();
     }
     if (path === "/rest/v1/rpc/decline_connection") {
+      if (!state.requests.some((p) => p.user_id === body.p_user)) return noRequest();
       state.requests = state.requests.filter((p) => p.user_id !== body.p_user);
       return empty();
     }
@@ -287,9 +290,23 @@ try {
     await expect(button(page, "Accept Pedro's request")).toBeVisible();
     await expect(heading(page, "Connected · 1")).toBeVisible();
     assert.deepEqual(f.calls("decline_connection").map((x) => x.body), [{ p_user: INES }]);
+
+    // Pedro withdraws his request meanwhile: Accept is refused with 'No request', which says nothing and reads the
+    // list again, so his card goes.
+    f.state.requests = [];
+    const reads = f.calls("my_connections").length;
+    await button(page, "Accept Pedro's request").click();
+    await expect(button(page, "Accept Pedro's request")).toHaveCount(0);
+    await expect(visible(page.getByRole("heading", { name: /^Requests/ }))).toHaveCount(0);
+    await expect(heading(page, "Connected · 1")).toBeVisible();
+    assert.equal(f.calls("my_connections").length, reads + 1, "the list is read again");
+    await expect(visible(page.getByText("Check your connection and try again.", { exact: true }))).toHaveCount(0);
+    await expect(visible(page.getByText("Couldn't do that. Try again.", { exact: true }))).toHaveCount(0);
+    await expect(visible(page.getByRole("alert"))).toHaveCount(0);
+    assert.deepEqual(f.calls("accept_connection").map((x) => x.body), [{ p_user: INES }, { p_user: PEDRO }]);
     await f.done();
   }
-  console.log("PASS: under Larger Text the pills stack; a failed Accept keeps the card; Not now declines.");
+  console.log("PASS: under Larger Text the pills stack; a failed Accept keeps the card; Not now declines; a withdrawn request goes quietly.");
 
   // 4. Nobody yet: the empty state and no footer line, and no badge on Profile. A failed read offers Try again, and
   // on Profile a failed read shows no badge.

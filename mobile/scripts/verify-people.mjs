@@ -15,6 +15,9 @@ try {
   await page
     .getByRole("button", { name: "People lists", exact: true })
     .click();
+  // The screen's title follows the Profile row (CO-P6).
+  await expect(page.getByRole("heading", { name: "People lists", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "People & groups", exact: true })).toHaveCount(0);
   await page
     .getByRole("button", { name: "Create a group", exact: true })
     .click();

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useApp } from "./AppState";
 import { useFocusedRefresh, type Run } from "./useFocusedRefresh";
-import { applyDecision, type ConnectionDecision } from "./connectionsModel";
+import { applyDecision, requestGone, type ConnectionDecision } from "./connectionsModel";
 import { connectionErrorMessage, connectionGateway, type MyConnections } from "../services/connections";
 
-export { applyDecision, type ConnectionDecision } from "./connectionsModel";
+export { applyDecision, requestGone, type ConnectionDecision } from "./connectionsModel";
 
 /** The preview has no account: nobody to connect with, and nothing is read or sent. */
 const NOBODY: MyConnections = { requests: [], connected: [] };
@@ -18,7 +18,10 @@ export type Connections = {
   acting: { userId: string; decision: ConnectionDecision } | null;
   error: string | null;
   load: () => Promise<void>;
-  /** Each answers whether the server took the decision (false: `error` says why, and the list is as it was). */
+  /**
+   * Each answers whether the server took the decision. False: `error` says why and the list is as it was; or, for a
+   * request no longer there (withdrawn, or answered elsewhere), no error and the list is read again.
+   */
   accept: (userId: string) => Promise<boolean>;
   decline: (userId: string) => Promise<boolean>;
   remove: (userId: string) => Promise<boolean>;
@@ -86,7 +89,8 @@ export function useConnections(): Connections {
     };
     setActing({ userId: person, decision });
     setError(null);
-    let done = false;
+    let done = false,
+      gone = false;
     try {
       if (decision === "accept") await connectionGateway.accept(person);
       else if (decision === "decline") await connectionGateway.decline(person);
@@ -95,15 +99,16 @@ export function useConnections(): Connections {
       // Even if the screen lost focus meanwhile: the server has taken it, and the next read agrees.
       if (current()) setData((old) => (old ? applyDecision(old, person, decision) : old));
     } catch (e) {
-      if (current()) setError(connectionErrorMessage(e));
+      gone = requestGone(e);
+      if (current() && !gone) setError(connectionErrorMessage(e));
     } finally {
-      if (current()) {
-        working.current = false;
-        setActing(null);
-        // Reads wait while a decision runs, and the one it stopped will not finish.
-        setBusy(false);
-      }
+      working.current = false;
+      setActing(null);
+      // Reads wait while a decision runs, and the one it stopped will not finish.
+      if (current()) setBusy(false);
     }
+    // Quietly: the read takes the card away (a read is skipped off screen, and the next focus reads anyway).
+    if (gone && current()) await load();
     return done;
   }
 
