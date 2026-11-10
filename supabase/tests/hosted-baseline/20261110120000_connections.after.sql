@@ -1,6 +1,6 @@
 -- Rehearsal checks for 20261110120000_connections (hosted-baseline mode only).
--- 1. The two tables, with row security and no policies; the outbox takes the two new kinds and keeps the earlier ones;
--- the apply wrote no rows.
+-- 1. The two tables, with row security and no policies, and a refusal's hidden flag (false unless set); the outbox takes
+-- the two new kinds and keeps the earlier ones; the apply wrote no rows.
 do $$ begin
  if pg_catalog.to_regclass('public.connections') is null or pg_catalog.to_regclass('private.connection_refusals') is null then
   raise exception 'The connection tables are missing';
@@ -8,6 +8,10 @@ do $$ begin
  if not (select relrowsecurity from pg_catalog.pg_class where oid='public.connections'::regclass)
  or not (select relrowsecurity from pg_catalog.pg_class where oid='private.connection_refusals'::regclass) then
   raise exception 'A connection table has no row security';
+ end if;
+ if not exists(select 1 from information_schema.columns where table_schema='private' and table_name='connection_refusals'
+   and column_name='hidden' and data_type='boolean' and is_nullable='NO' and column_default='false') then
+  raise exception 'connection_refusals.hidden is missing or wrong';
  end if;
  if exists(select 1 from pg_catalog.pg_policies where schemaname in ('public','private') and tablename in ('connections','connection_refusals')) then
   raise exception 'A connection table has a policy';

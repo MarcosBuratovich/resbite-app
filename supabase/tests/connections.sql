@@ -190,7 +190,7 @@ do $$ begin
   raise exception 'A declined request stayed';
  end if;
  if not exists(select 1 from private.connection_refusals where series_id=(select series_id from public.plans where id='f1100000-0000-4000-8000-000000000001')
-   and from_user='f1000000-0000-4000-8000-000000000002' and to_user='f1000000-0000-4000-8000-000000000006' and refused_at is not null)
+   and from_user='f1000000-0000-4000-8000-000000000002' and to_user='f1000000-0000-4000-8000-000000000006' and refused_at is not null and not hidden)
  or (select count(*) from private.connection_refusals)<>1 then
   raise exception 'The refusal was not kept for the series';
  end if;
@@ -268,7 +268,7 @@ do $$ begin
   raise exception 'A removed connection stayed';
  end if;
  if not exists(select 1 from private.connection_refusals where series_id=(select series_id from public.plans where id='f1100000-0000-4000-8000-000000000001')
-   and from_user='f1000000-0000-4000-8000-000000000003' and to_user='f1000000-0000-4000-8000-000000000002')
+   and from_user='f1000000-0000-4000-8000-000000000003' and to_user='f1000000-0000-4000-8000-000000000002' and hidden)
  or exists(select 1 from private.connection_refusals where from_user='f1000000-0000-4000-8000-000000000002' and to_user='f1000000-0000-4000-8000-000000000003') then
   raise exception 'The removal was not kept as a refusal of the one removed';
  end if;
@@ -403,9 +403,10 @@ do $$ begin
 end $$;
 rollback;
 
--- Slice 2: what each person may read of the pair. my_connections lists the caller's requests, sent requests and
+-- Slice 2: what each person may read of the pair. my_connections lists the requests to the caller and their
 -- connections; plan_connection_states gives the caller's state with each person on a plan, a refusal of the caller's
--- request still reading as sent (CO-P3); the two sides of a pair, asked or connected, read each other's profile.
+-- request still reading as sent (CO-P3) until they cancel it; the two sides of a pair, asked or connected, read each
+-- other's profile.
 -- Here plan f11…02 'Board game night' (its own series) has 02 and 06 Going, and 07 is a seventh person on no plan.
 begin;
 insert into auth.users(id,email,email_confirmed_at) values
@@ -447,22 +448,20 @@ select public.request_connection('f1000000-0000-4000-8000-000000000002','f110000
 select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 select public.accept_connection('f1000000-0000-4000-8000-000000000001');
 
--- my_connections: 03 has 02's request, with the resbite they met at and "You're both going"; 02 has sent 03 and is
--- connected to 01. Each entry names the other person.
+-- my_connections: 03 has 02's request, with the resbite they met at and "You're both going"; 02 has no request (the one
+-- they sent is not listed) and is connected to 01. Each entry names the other person.
 select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
 do $$ declare v_series uuid := (select series_id from public.plans where id='f1100000-0000-4000-8000-000000000001'); begin
  if public.my_connections() is distinct from jsonb_build_object(
    'requests',jsonb_build_array(jsonb_build_object('user_id','f1000000-0000-4000-8000-000000000002','name','Guest A','avatar_path',null,
     'avatar_revision',0,'series_id',v_series,'title','Film night','context','going')),
-   'sent','[]'::jsonb,'connected','[]'::jsonb) then
+   'connected','[]'::jsonb) then
   raise exception 'my_connections of the person asked wrong: %', public.my_connections();
  end if;
 end $$;
 select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 do $$ declare v_series uuid := (select series_id from public.plans where id='f1100000-0000-4000-8000-000000000001'); begin
  if public.my_connections() is distinct from jsonb_build_object('requests','[]'::jsonb,
-   'sent',jsonb_build_array(jsonb_build_object('user_id','f1000000-0000-4000-8000-000000000003','name','Guest B','avatar_path',null,
-    'avatar_revision',0,'series_id',v_series,'title','Film night','context','going')),
    'connected',jsonb_build_array(jsonb_build_object('user_id','f1000000-0000-4000-8000-000000000001','name','Owner','avatar_path',null,
     'avatar_revision',0,'series_id',v_series,'title','Film night'))) then
   raise exception 'my_connections of the requester wrong: %', public.my_connections();
@@ -523,6 +522,28 @@ do $$ begin
   raise exception 'States on another series wrong: %', public.plan_connection_states('f1100000-0000-4000-8000-000000000002');
  end if;
 end $$;
+-- 02 cancels the refused request: 02 reads none. Asking again looks sent ('requested') and reads requested_by_me, but
+-- stores and sends nothing.
+select public.cancel_connection_request('f1000000-0000-4000-8000-000000000006');
+do $$ begin
+ if public.plan_connection_states('f1100000-0000-4000-8000-000000000001')->>'f1000000-0000-4000-8000-000000000006' is distinct from 'none' then
+  raise exception 'A cancelled refused request still read as sent: %', public.plan_connection_states('f1100000-0000-4000-8000-000000000001');
+ end if;
+ if public.request_connection('f1000000-0000-4000-8000-000000000006','f1100000-0000-4000-8000-000000000001') is distinct from 'requested' then
+  raise exception 'Asking again after a refusal did not look sent';
+ end if;
+ if public.plan_connection_states('f1100000-0000-4000-8000-000000000001')->>'f1000000-0000-4000-8000-000000000006' is distinct from 'requested_by_me' then
+  raise exception 'Asking again after a refusal did not read as sent: %', public.plan_connection_states('f1100000-0000-4000-8000-000000000001');
+ end if;
+end $$;
+reset role;
+do $$ begin
+ if exists(select 1 from public.connections where user_a='f1000000-0000-4000-8000-000000000002' and user_b='f1000000-0000-4000-8000-000000000006')
+ or (select count(*) from private.notification_outbox where kind='connection_request' and recipient_id='f1000000-0000-4000-8000-000000000006')<>1 then
+  raise exception 'Asking again after a refusal stored or sent something';
+ end if;
+end $$;
+set local role authenticated;
 
 -- Profiles: 05 shares no plan with 02 and reads only their own; connected directly, 05 and 02 read each other; a
 -- request is enough too; 07 still reads nobody else. A pair with no series has no title and is only 'met'.
@@ -567,7 +588,7 @@ do $$ begin
  if public.my_connections() is distinct from jsonb_build_object(
    'requests',jsonb_build_array(jsonb_build_object('user_id','f1000000-0000-4000-8000-000000000002','name','Guest A','avatar_path',null,
     'avatar_revision',0,'series_id',null,'title',null,'context','met')),
-   'sent','[]'::jsonb,'connected','[]'::jsonb) then
+   'connected','[]'::jsonb) then
   raise exception 'A request with no series wrong: %', public.my_connections();
  end if;
 end $$;
@@ -604,11 +625,33 @@ select public.request_connection('f1000000-0000-4000-8000-000000000003','f110000
 select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
 do $$ begin
  if (select jsonb_agg(jsonb_build_array(r->>'name',r->>'title',r->>'context') order by n) from jsonb_array_elements(public.my_connections()->'requests') with ordinality e(r,n))
-   is distinct from '[["Guest A","Film night again","going"],["Owner","Film night again","going"]]'::jsonb then
-  raise exception 'Both going on the latest occurrence wrong: %', public.my_connections();
+   is distinct from '[["Owner","Film night again","going"],["Guest A","Film night again","going"]]'::jsonb then
+  raise exception 'Both going on the latest occurrence, newest request first, wrong: %', public.my_connections();
+ end if;
+end $$;
+-- 02 takes the request back and sends it again: now 02's is the newest.
+select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+select public.cancel_connection_request('f1000000-0000-4000-8000-000000000003');
+select public.request_connection('f1000000-0000-4000-8000-000000000003','f1100000-0000-4000-8000-000000000001');
+select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
+do $$ begin
+ if (select jsonb_agg(r->>'name' order by n) from jsonb_array_elements(public.my_connections()->'requests') with ordinality e(r,n))
+   is distinct from '["Guest A","Owner"]'::jsonb then
+  raise exception 'Requests not newest first: %', public.my_connections();
+ end if;
+end $$;
+-- A cancelled latest occurrence is 'met'.
+reset role;
+update public.plans set status='cancelled' where id='f1100000-0000-4000-8000-000000000003';
+set local role authenticated;
+do $$ begin
+ if (select jsonb_agg(jsonb_build_array(r->>'name',r->>'title',r->>'context') order by n) from jsonb_array_elements(public.my_connections()->'requests') with ordinality e(r,n))
+   is distinct from '[["Guest A","Film night again","met"],["Owner","Film night again","met"]]'::jsonb then
+  raise exception 'A cancelled latest occurrence wrong: %', public.my_connections();
  end if;
 end $$;
 reset role;
+update public.plans set status='active' where id='f1100000-0000-4000-8000-000000000003';
 update public.plans set starts_at=now()-interval '3 days', ends_at=now()-interval '3 days'+interval '3 hours' where id='f1100000-0000-4000-8000-000000000001';
 update public.plans set starts_at=now()-interval '3 hours', ends_at=now()-interval '1 hour' where id='f1100000-0000-4000-8000-000000000003';
 set local role authenticated;
@@ -616,6 +659,31 @@ do $$ begin
  if (select jsonb_agg(jsonb_build_array(r->>'name',r->>'title',r->>'context') order by n) from jsonb_array_elements(public.my_connections()->'requests') with ordinality e(r,n))
    is distinct from '[["Guest A","Film night again","met"],["Owner","Film night again","met"]]'::jsonb then
   raise exception 'An ended latest occurrence wrong: %', public.my_connections();
+ end if;
+end $$;
+
+-- A removal's refusal is hidden: 03 accepts 02, 02 removes 03, and 03 reads none for 02. 03 asking 02 from the series
+-- looks sent ('requested') and then reads requested_by_me, but stores and sends nothing.
+select public.accept_connection('f1000000-0000-4000-8000-000000000002');
+select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+select public.remove_connection('f1000000-0000-4000-8000-000000000003');
+select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
+do $$ begin
+ if public.plan_connection_states('f1100000-0000-4000-8000-000000000001')->>'f1000000-0000-4000-8000-000000000002' is distinct from 'none' then
+  raise exception 'The one removed read a request they did not send: %', public.plan_connection_states('f1100000-0000-4000-8000-000000000001');
+ end if;
+ if public.request_connection('f1000000-0000-4000-8000-000000000002','f1100000-0000-4000-8000-000000000001') is distinct from 'requested' then
+  raise exception 'Asking the remover did not look sent';
+ end if;
+ if public.plan_connection_states('f1100000-0000-4000-8000-000000000001')->>'f1000000-0000-4000-8000-000000000002' is distinct from 'requested_by_me' then
+  raise exception 'Asking the remover did not read as sent: %', public.plan_connection_states('f1100000-0000-4000-8000-000000000001');
+ end if;
+end $$;
+reset role;
+do $$ begin
+ if exists(select 1 from public.connections where user_a='f1000000-0000-4000-8000-000000000002' and user_b='f1000000-0000-4000-8000-000000000003')
+ or exists(select 1 from private.notification_outbox where kind='connection_request' and actor_id='f1000000-0000-4000-8000-000000000003') then
+  raise exception 'Asking the remover stored or sent something';
  end if;
 end $$;
 rollback;
