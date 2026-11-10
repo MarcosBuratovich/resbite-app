@@ -26,7 +26,8 @@ revoke all on public.connections from public, anon, authenticated, service_role;
 
 -- "Not now": from_user asked, to_user refused, on that series; or to_user removed the connection with from_user that
 -- began there (CO-P14). from_user cannot ask to_user again from it, and is never told (CO-P3); asking from another series
--- is a real request and clears that direction's refusals. Any acceptance between the two clears all of theirs.
+-- is a real request, and the refusal stays: one chance per series. Only an acceptance between the two clears refusals,
+-- all of theirs.
 -- hidden is what from_user sees of the pair: false, their request still looks sent, on every resbite they share, and they
 -- still read to_user's profile (a "Not now", or asking again after one); true, they see no request (a removal, which
 -- leaves nothing they had sent, or their cancel). A visible refusal stands for from_user's request: to_user asking
@@ -61,6 +62,7 @@ alter table private.notification_outbox add constraint notification_outbox_kind_
 -- double tap) run one after the other: the second finds the first's row and never meets the primary key. Each notice's
 -- dedupe key ends with the time of its row, to the second (the request's created_at, the acceptance's accepted_at): a
 -- retry queues nothing twice, while a request sent again after a cancel or a removal, or a second acceptance, is told.
+-- The request's key also names who asked, so two requests either way within one second are both told.
 
 -- Asking, from a resbite. The caller must see names there (can_see_guests: a host, or a guest who has answered), and the
 -- person asked must be on it as its owner, an admin or a guest who has answered (Going, Maybe or Can't go): someone who
@@ -70,7 +72,7 @@ alter table private.notification_outbox add constraint notification_outbox_kind_
 -- was refused by the caller and still looks sent to them, a visible refusal). It never returns a refused state (CO-P3):
 -- when there is no row and the person asked refused the caller on this series (a "Not now", or a removal), it returns
 -- 'requested' too, and stores and sends nothing but shows the caller's refusals as sent again, so the app shows
--- "Request sent" as for any request. Refused only on other series, the request is a real one.
+-- "Request sent" as for any request. Refused only on other series, the request is a real one, and those refusals stay.
 create function private.request_connection(p_user uuid, p_plan uuid) returns text language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester(); v_a uuid; v_b uuid; v_series uuid; v_row public.connections; v_at timestamptz;
 begin
@@ -97,8 +99,7 @@ begin
   update private.connection_refusals set hidden=false where from_user=v_uid and to_user=p_user;
   return 'requested';
  end if;
- -- Refused only on other series: a real request, and those refusals go.
- delete from private.connection_refusals where from_user=v_uid and to_user=p_user;
+ -- Refused only on other series: a real request. Those refusals stay, so asking from their series again stays quiet.
  -- The other person's request, refused by the caller, still looks sent to them: it stands, and asking accepts it.
  if exists(select 1 from private.connection_refusals where from_user=p_user and to_user=v_uid and not hidden) then
   insert into public.connections(user_a,user_b,state,requested_by,series_id,created_at)
@@ -111,7 +112,7 @@ begin
  insert into public.connections(user_a,user_b,state,requested_by,series_id,created_at)
   values(v_a,v_b,'requested',v_uid,v_series,pg_catalog.clock_timestamp()) returning created_at into v_at;
  insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id)
-  values(p_plan,p_user,'connection_request','connect:'||v_a||':'||v_b||':'||v_series||':'||extract(epoch from v_at)::bigint,v_uid) on conflict do nothing;
+  values(p_plan,p_user,'connection_request','connect:'||v_a||':'||v_b||':'||v_series||':'||v_uid||':'||extract(epoch from v_at)::bigint,v_uid) on conflict do nothing;
  return 'requested';
 end $$;
 create function public.request_connection(p_user uuid, p_plan uuid) returns text language sql security invoker set search_path = '' as $$
@@ -291,3 +292,168 @@ create or replace function private.can_read_profile(p_id uuid) returns boolean l
  or exists(select 1 from public.connections c where (c.user_a, c.user_b) = (least(auth.uid(), p_id), greatest(auth.uid(), p_id)))
  or exists(select 1 from private.connection_refusals r where r.from_user = auth.uid() and r.to_user = p_id and not r.hidden))
 $$;
+
+-- 5. Inviting a connection, the two notices' eligibility, deletion (CO-P4, CO-P5)
+
+-- Inviting a connection in the app (CO-P4): beside {phone, country, code}, an item may be {user}, someone the caller is
+-- connected to, invited as an On Resbite contact is: 'already' when they are on the resbite (its owner, or any guest
+-- row), else 'app' (a pending guest row and the 'invited' notice, from the caller). Anyone the caller is not connected to
+-- is refused (42501 'Not a connection'), and a user that is not an id is an invalid item (22023). A {user} item's result
+-- is {user, kind}, in order with the {phone, kind} ones. The 50-item cap is the whole batch's. Otherwise the
+-- 20261031120000_creating_a_resbite body; its grants are kept.
+create or replace function private.invite_contacts(p_plan uuid, p_invites jsonb) returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := private.require_link_owner(p_plan); v_item jsonb; v_phone text; v_country text; v_code text; v_holder uuid;
+ v_kind text; v_out jsonb := '[]'::jsonb; v_user uuid;
+begin
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_uid::text,47));
+ if jsonb_typeof(p_invites) is distinct from 'array' or jsonb_array_length(p_invites)>50 then
+  raise exception 'Invalid invitations' using errcode='22023';
+ end if;
+ -- The kind of each item tells the host who is On Resbite, so invitations spend the same daily budget as lookups: the
+ -- numbers only, as an item by user looks nothing up.
+ perform private.charge_lookup(v_uid,(select count(*)::int from jsonb_array_elements(p_invites) e
+  where jsonb_typeof(e.value->'user') is distinct from 'string'));
+ for v_item in select value from jsonb_array_elements(p_invites) loop
+  if jsonb_typeof(v_item->'user')='string' then
+   if v_item->>'user' !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+    raise exception 'Invalid invitation' using errcode='22023';
+   end if;
+   v_user := (v_item->>'user')::uuid;
+   -- The pair's row is held while the invitation is made: a removal at the same moment goes first or waits.
+   perform 1 from public.connections where (user_a,user_b)=(least(v_uid,v_user),greatest(v_uid,v_user)) and state='connected' for share;
+   if not found then raise exception 'Not a connection' using errcode='42501'; end if;
+   if v_user=(select owner_id from public.plans where id=p_plan)
+    or exists(select 1 from public.attendees where plan_id=p_plan and user_id=v_user) then
+    v_kind := 'already';
+   else
+    v_kind := 'app';
+    insert into public.attendees(plan_id,user_id) values(p_plan,v_user) on conflict do nothing;
+    insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id)
+     values(p_plan,v_user,'invited','invited:'||p_plan||':'||v_user,v_uid) on conflict do nothing;
+   end if;
+   v_out := v_out || jsonb_build_array(jsonb_build_object('user',v_user,'kind',v_kind));
+   continue;
+  end if;
+  if jsonb_typeof(v_item) is distinct from 'object' or jsonb_typeof(v_item->'phone') is distinct from 'string'
+   or jsonb_typeof(v_item->'country') is distinct from 'string' or jsonb_typeof(v_item->'code') is distinct from 'string' then
+   raise exception 'Invalid invitation' using errcode='22023';
+  end if;
+  v_phone := private.phone_key(v_item->>'phone');
+  v_country := v_item->>'country';
+  v_code := v_item->>'code';
+  if v_phone !~ '^[1-9][0-9]{6,14}$' or v_country !~ '^[1-9][0-9]{0,2}$' or v_code !~ '^[A-Za-z0-9_-]{22}$' then
+   raise exception 'Invalid invitation' using errcode='22023';
+  end if;
+  select id into v_holder from auth.users where phone = any(private.phone_variants(v_phone)) and phone_confirmed_at is not null
+   order by id = v_uid desc, phone <> v_phone desc limit 1;
+  if v_holder=v_uid or (v_holder is null and v_phone=(select private.phone_key(phone) from auth.users where id=v_uid)) then
+   v_kind := 'self';
+  elsif v_holder is not null and (v_holder=(select owner_id from public.plans where id=p_plan)
+   or exists(select 1 from public.attendees where plan_id=p_plan and user_id=v_holder)) then
+   v_kind := 'already';
+  elsif v_holder is not null and private.user_eligible(v_holder) and private.used_app(v_holder)
+   and exists(select 1 from public.profiles where id=v_holder) then
+   v_kind := 'app';
+   insert into public.attendees(plan_id,user_id) values(p_plan,v_holder) on conflict do nothing;
+   insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id)
+    values(p_plan,v_holder,'invited','invited:'||p_plan||':'||v_holder,v_uid) on conflict do nothing;
+   update private.phone_invitations set revoked_at=now(), code_hash=null
+    where plan_id=p_plan and phone=v_phone and revoked_at is null;
+  else
+   v_kind := 'link';
+   insert into private.phone_invitations(plan_id,phone,country,code_hash,invited_by)
+    values(p_plan,v_phone,v_country,extensions.digest(v_code,'sha256'),v_uid)
+    on conflict (plan_id,phone) do update set country=excluded.country, code_hash=excluded.code_hash, revoked_at=null,
+     user_id=case when private.phone_invitations.revoked_at is null then private.phone_invitations.user_id end,
+     answered_at=case when private.phone_invitations.revoked_at is null then private.phone_invitations.answered_at end;
+  end if;
+  v_out := v_out || jsonb_build_array(jsonb_build_object('phone',private.phone_digits(v_item->>'phone'),'kind',v_kind));
+ end loop;
+ return v_out;
+end $$;
+
+-- The two connection notices (CO-P5) go to a side of the pair while what they tell still stands: a request while it is
+-- live and still the actor's, an acceptance while the two are connected. Their resbite (plan_id) only names where the two
+-- met: no membership test, and a mute does not apply. Every other kind keeps the 20261031120000_creating_a_resbite body,
+-- verbatim but for the kind test that leaves the two to their own branch.
+create or replace function private.notification_recipient_eligible(p_outbox bigint) returns boolean
+language sql stable security definer set search_path='' as $$
+ select exists (
+ select 1 from private.notification_outbox o
+ join public.plans plan on plan.id=o.plan_id
+ where o.id=p_outbox and o.kind not in ('connection_request','connection_accepted')
+ and private.user_eligible(o.recipient_id) and not private.deletion_pending(o.recipient_id)
+ and (private.is_host(plan.id,o.recipient_id) or exists(select 1 from public.attendees a where a.plan_id=plan.id and a.user_id=o.recipient_id
+  and (o.kind not in ('plan_changed','guest_note') or a.response in ('accepted','maybe','pending'))))
+ and (o.kind not in ('rsvp','invitation','join_request') or private.is_host(plan.id,o.recipient_id))
+ and o.created_at>now()-interval '24 hours'
+ and not exists(select 1 from public.plan_mutes m where m.series_id=plan.series_id and m.user_id=o.recipient_id)
+ and (o.kind<>'join_request' or (plan.status='active' and private.plan_end(plan.starts_at,plan.ends_at)>now()
+  and exists(select 1 from private.join_requests j where j.plan_id=o.plan_id and j.user_id=o.actor_id
+   and j.status='waiting' and j.created_at<=o.created_at)
+  and not exists(select 1 from public.attendees a where a.plan_id=o.plan_id and a.user_id=o.actor_id)
+  and not private.deletion_pending(o.actor_id)))
+ ) or exists (
+ select 1 from private.notification_outbox o
+ where o.id=p_outbox and o.kind in ('connection_request','connection_accepted')
+ and private.user_eligible(o.recipient_id) and not private.deletion_pending(o.recipient_id)
+ and o.created_at>now()-interval '24 hours'
+ and exists(select 1 from public.connections c
+  where (c.user_a,c.user_b)=(least(o.recipient_id,o.actor_id),greatest(o.recipient_id,o.actor_id))
+  and (o.kind='connection_accepted' and c.state='connected'
+   or o.kind='connection_request' and c.state='requested' and c.requested_by=o.actor_id))
+ )
+$$;
+
+-- Deletion (spec, "Deletion is explicit"): the profile stays, as 'Deleted member', so the foreign keys never cascade; the
+-- account's pairs and refusals, either side, are deleted with the request. The deletion lifecycle is local-only
+-- (20261022120001_gi2_local_delivery_and_deletion; the hosted project has none of it, and 20261030120000_push_delivery
+-- keeps it so): its request function is redefined only where it exists, so this file still applies on the hosted
+-- baseline, and the release that brings deletion to hosted must carry these two deletes. Otherwise the 20261022120001
+-- body; its grants are kept.
+do $migration$ begin
+ if pg_catalog.to_regprocedure('private.request_account_deletion(uuid,uuid,uuid,text)') is not null then
+  execute $fn$
+create or replace function private.request_account_deletion(p_user uuid,p_session uuid,p_request uuid,p_recovery text)
+returns jsonb language plpgsql security definer set search_path='' as $$
+declare v_job private.account_deletion_jobs; v_plan public.plans;
+begin
+ if p_user is null or p_request is null or p_recovery is null or p_recovery !~ '^[a-f0-9]{64}$' then
+ raise exception 'Invalid deletion request' using errcode='22023'; end if;
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(p_user::text,47));
+ select * into v_job from private.account_deletion_jobs where user_id=p_user;
+ if found then
+  if v_job.request_id<>p_request or v_job.recovery_hash<>extensions.digest(p_recovery,'sha256') then
+   raise exception 'Deletion already requested' using errcode='22023'; end if;
+  return jsonb_build_object('requestId',v_job.request_id,'status',v_job.status);
+ end if;
+ -- Edge validates Auth tokens and recent AMR; SQL also requires that the proof's
+ -- session is real, belongs to this user and was freshly created, not refreshed.
+ if not exists(select 1 from auth.sessions where id=p_session and user_id=p_user and created_at>=now()-interval '5 minutes' and created_at<=now()+interval '30 seconds')
+ or not exists(select 1 from auth.users u where u.id=p_user and u.email_confirmed_at is not null and not coalesce(u.is_anonymous,false) and (exists(select 1 from private.tester_roster r where r.email=lower(u.email) and r.enabled) or private.has_live_grant(u.id)) and (u.banned_until is null or u.banned_until<=now()))
+ then raise exception 'Fresh eligible authentication required' using errcode='42501'; end if;
+ insert into private.account_deletion_jobs(request_id,user_id,recovery_hash) values(p_request,p_user,extensions.digest(p_recovery,'sha256'));
+ delete from private.tester_roster where email=(select lower(email) from auth.users where id=p_user);
+ update public.profiles set deletion_requested_at=now(),display_name='Deleted member',avatar_path=null where id=p_user;
+ -- Lock plans in a deterministic order, preserving others' access to cancellation.
+ for v_plan in select * from public.plans where owner_id=p_user order by id for update loop
+  if v_plan.status='active' and v_plan.starts_at>now() then
+   update public.plans set status='cancelled',version=version+1 where id=v_plan.id;
+   insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key)
+    select v_plan.id,a.user_id,'plan_cancelled','deletion:'||p_request||':'||v_plan.id||':'||a.user_id from public.attendees a
+    where a.plan_id=v_plan.id and a.user_id<>p_user on conflict do nothing;
+  end if;
+  update public.plans set place_label='Meeting place removed',note='',latitude=null,longitude=null where id=v_plan.id;
+  update private.invitations set revoked_at=coalesce(revoked_at,now()),intended_email=null where plan_id=v_plan.id;
+ end loop;
+ update private.invitations set revoked_at=coalesce(revoked_at,now()),claimed_by=null,intended_email=null where claimed_by=p_user;
+ delete from public.attendees where user_id=p_user;
+ delete from public.connections where p_user in (user_a,user_b);
+ delete from private.connection_refusals where from_user=p_user or to_user=p_user;
+ delete from private.device_endpoints where user_id=p_user;
+ delete from private.notification_outbox where recipient_id=p_user;
+ return jsonb_build_object('requestId',p_request,'status','queued');
+end $$;
+$fn$;
+ end if;
+end $migration$;

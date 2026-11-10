@@ -1,6 +1,7 @@
 -- Rehearsal checks for 20261110120000_connections (hosted-baseline mode only).
 -- 1. The two tables, with row security and no policies, and a refusal's hidden flag (false unless set); the outbox takes
--- the two new kinds and keeps the earlier ones; the apply wrote no rows.
+-- the two new kinds and keeps the earlier ones; the apply wrote no rows, and made no deletion request (the lifecycle is
+-- local-only).
 do $$ begin
  if pg_catalog.to_regclass('public.connections') is null or pg_catalog.to_regclass('private.connection_refusals') is null then
   raise exception 'The connection tables are missing';
@@ -24,9 +25,13 @@ do $$ begin
  or exists(select 1 from private.notification_outbox where kind in ('connection_request','connection_accepted')) then
   raise exception 'The apply wrote rows';
  end if;
+ if pg_catalog.to_regprocedure('private.request_account_deletion(uuid,uuid,uuid,text)') is not null then
+  raise exception 'The apply made a deletion request';
+ end if;
 end $$;
 -- 2. Grants: the five calls and the two reads, private bodies (definers) and public wrappers, for signed-in accounts
--- only; the pair helper and both tables for nobody. The profile read rule reads the pairs and the refusals.
+-- only; the pair helper and both tables for nobody. The profile read rule reads the pairs and the refusals; the notice
+-- audience reads the pairs; invite_contacts keeps its grants.
 do $$ declare s text; f text; r text; begin
  foreach s in array array['private.','public.'] loop
   foreach f in array array['request_connection(uuid,uuid)','accept_connection(uuid)','decline_connection(uuid)',
@@ -42,16 +47,44 @@ do $$ declare s text; f text; r text; begin
  or pg_catalog.pg_get_functiondef('private.can_read_profile(uuid)'::regprocedure) not like '%private.connection_refusals%not r.hidden%' then
   raise exception 'can_read_profile does not read the pairs and the visible refusals';
  end if;
+ if pg_catalog.pg_get_functiondef('private.notification_recipient_eligible(bigint)'::regprocedure) not like '%connection_request%public.connections%' then
+  raise exception 'notification_recipient_eligible does not read the pairs';
+ end if;
+ foreach s in array array['private.','public.'] loop
+  if not has_function_privilege('authenticated',s||'invite_contacts(uuid,jsonb)','execute')
+  or has_function_privilege('anon',s||'invite_contacts(uuid,jsonb)','execute') then raise exception '%invite_contacts grants wrong', s; end if;
+ end loop;
  foreach r in array array['anon','authenticated','service_role'] loop
   if has_function_privilege(r,'private.pair(uuid,uuid)','execute') then raise exception '% may call pair', r; end if;
   if has_table_privilege(r,'private.connection_refusals','select,insert,update,delete') then raise exception '% may touch connection_refusals', r; end if;
   if has_table_privilege(r,'public.connections','select,insert,update,delete,truncate') then raise exception '% may touch connections', r; end if;
  end loop;
 end $$;
--- 3. The rollback, rehearsed and undone. Seed what it deletes (a pair, a refusal and the two notices), try its guard (it
+-- 3. An item by user is taken and needs a connection: a host inviting someone they are not connected to is refused
+-- (42501 'Not a connection'), not read as an invalid item.
+begin;
+insert into auth.users(id,email,email_confirmed_at) values
+ ('cc000000-0000-4000-8000-000000000003','connections-rehearsal-host@resbite-test.invalid',now());
+insert into private.tester_roster(email) values ('connections-rehearsal-host@resbite-test.invalid');
+insert into public.profiles(id,display_name) values ('cc000000-0000-4000-8000-000000000003','Rehearsal host');
+insert into public.plans(id,owner_id,title,starts_at,ends_at,time_zone,place_label,categories) values
+ ('cd000000-0000-4000-8000-000000000002','cc000000-0000-4000-8000-000000000003','Rehearsal lunch',
+  now()+interval '1 day',now()+interval '1 day 2 hours','UTC','Kitchen',array['community']);
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"cc000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
+do $$ begin
+ begin
+  perform public.invite_contacts('cd000000-0000-4000-8000-000000000002',
+   jsonb_build_array(jsonb_build_object('user','cc000000-0000-4000-8000-000000000004')));
+  raise exception 'An item by user was taken without a connection';
+ exception when insufficient_privilege then if sqlerrm is distinct from 'Not a connection' then raise; end if; end;
+end $$;
+reset role;
+rollback;
+-- 4. The rollback, rehearsed and undone. Seed what it deletes (a pair, a refusal and the two notices), try its guard (it
 -- refuses once the creating-a-resbite rollback has run; plan_admins, renamed, stands in), then run it: the tables, the
--- functions and the connection notices are gone, the kind check and the profile read rule are the ones .before.sql
--- recorded, and the plan stays.
+-- functions and the connection notices are gone, the kind check, the profile read rule, invite_contacts and the notice
+-- audience are the ones .before.sql recorded, no deletion request appears, and the plan stays.
 begin;
 insert into auth.users(id,email,email_confirmed_at) values
  ('cc000000-0000-4000-8000-000000000001','connections-rehearsal-a@resbite-test.invalid',now()),
@@ -105,9 +138,17 @@ do $$ begin
  if pg_catalog.pg_get_functiondef('private.can_read_profile(uuid)'::regprocedure) is distinct from (select definition from private.co_rehearsal_profile_rule) then
   raise exception 'Rollback did not restore can_read_profile';
  end if;
+ if exists(select 1 from private.co_rehearsal_functions f
+   where pg_catalog.pg_get_functiondef(f.signature::regprocedure) is distinct from f.definition) then
+  raise exception 'Rollback did not restore invite_contacts and notification_recipient_eligible';
+ end if;
+ if pg_catalog.to_regprocedure('private.request_account_deletion(uuid,uuid,uuid,text)') is not null then
+  raise exception 'Rollback made a deletion request';
+ end if;
  if not exists(select 1 from public.plans where id='cd000000-0000-4000-8000-000000000001') then raise exception 'Rollback lost the plan'; end if;
 end $$;
 rollback;
--- 4. Remove the rehearsal helpers so later tests start clean.
+-- 5. Remove the rehearsal helpers so later tests start clean.
 drop table private.co_rehearsal_kind_check;
 drop table private.co_rehearsal_profile_rule;
+drop table private.co_rehearsal_functions;
