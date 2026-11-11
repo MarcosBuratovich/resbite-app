@@ -488,8 +488,10 @@ try {
           }),
         );
       if (path === "/rest/v1/rpc/plan_phone_invitations") return reply([...links.values()]);
-      // No connections: Invite people shows no "Your connections" (verify-connections covers them).
+      // No connections: Invite people shows no "Your connections" (verify-connections covers them), and every answered
+      // row on the people list offers Connect on Resbite.
       if (path === "/rest/v1/rpc/my_connections") return reply({ requests: [], connected: [] });
+      if (path === "/rest/v1/rpc/plan_connection_states") return reply({});
       return reply({ message: `Unexpected ${path}` }, 400);
     });
     const open = async (path) => {
@@ -542,8 +544,11 @@ try {
     await button(page, new RegExp(`^${row}`)).click();
     // The people list: Waiting for you (name, how they asked) and the Invited group, each person with a three-dots sheet.
     await expect(heading(page, "People")).toBeVisible();
-    for (const group of ["Going · 2", "Maybe · 1", "Invited, not answered yet · 3", "Waiting for you · 2"])
+    // Going counts the organizer's own Hosting row, which heads it, with Alex and Bea (Ruling 21).
+    for (const group of ["Going · 3", "Maybe · 1", "Invited, not answered yet · 3", "Waiting for you · 2"])
       await expect(heading(page, group)).toBeVisible();
+    await expect(page.getByLabel("Stephen, Hosting", { exact: true })).toBeVisible();
+    await expect(button(page, "Actions for Stephen")).toHaveCount(0);
     await expect(page.getByText("Asked through the link", { exact: true })).toHaveCount(2);
     await expect(button(page, "Actions for Kim Lau")).toBeVisible();
     assert.ok(await fits(), `The people list fits at ${suffix}`);

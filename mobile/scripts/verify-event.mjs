@@ -5,13 +5,16 @@
 //   cancel     a refused cancel stays in the sheet with its error; a fresh sheet shows no old error; a cancel refused
 //              because the resbite has just ended closes the sheet over the ended page
 //   repeating  Every Thursday; the two cancel choices
-//   ended      · Ended; Do this again alone; no More; the people list without actions
+//   ended      · Ended; Do this again alone; no More; the people list (headed by the host's own Hosting row, which
+//              Going's count includes) without host actions: only Connect on Resbite stays (CO rule 7)
 //   running    Edit is there and a guest reply is accepted
 //   admin      You’re an admin; Invite opens the contacts and the link; the invitations and requests (Approve);
 //              Edit’s new photo goes into the owner’s folder; Change my reply; Can’t go → the guest page
 //   guest      Hosted by Ana; You’re going + Change; an unanswered guest sees the server’s counts, Your answer, no More
-//   people     the groups, Make admin (and its refusal), Remove as admin on a Maybe admin, Approve, Send again only
-//              for a code this phone holds, an app invitation’s Remove
+//   people     the groups (Going counts the owner's Hosting row, Ruling 21), Make admin (and its refusal), Remove as
+//              admin on a Maybe admin, Approve, Send again only for a code this phone holds, an app invitation’s Remove
+// Nobody here is connected with the viewer (plan_connection_states answers {}), so every answered row but the
+// viewer's own, the owner's included, offers Connect on Resbite before any host action.
 //   edges      /guests and /event without a plan; Back with no history; a failed read offers Try again
 //   idea       Back over the image, Use idea
 import assert from "node:assert/strict";
@@ -284,8 +287,8 @@ async function open(world = {}) {
       // The Invite screen's event link.
       case "plan_link":
         return reply("AAAAAAAAAAAAAAAAAAAAA1");
-      // Connections (verify-connections covers them): none here, so the people know no states and Invite people
-      // shows no "Your connections".
+      // Connections: the viewer is connected with nobody here, so every answered row offers Connect on Resbite, and
+      // Invite people shows no "Your connections" (verify-connections covers it).
       case "plan_connection_states":
         return reply({});
       case "my_connections":
@@ -516,17 +519,24 @@ try {
       await expect(text(page, "Every Thursday · the next one is in My resbites")).toBeVisible();
       await expect(bar(f).getByRole("button")).toHaveText(["Do this again"]);
       for (const gone of ["More", "Invite", "Edit Coffee evening", "Cancel resbite"]) await expect(btn(page, gone)).toHaveCount(0);
-      // The people list stays readable for the host, with no actions.
+      // The people list stays readable for the host, headed by their own Hosting row (counted in Going), with no host
+      // actions: only Connect on Resbite stays after the end (CO rule 7), and nothing on the host's own row.
       await page.getByRole("button", { name: /^Going 2 · Maybe 1 · Can’t go 1\./ }).click();
-      await expect(heading(page, "Going · 2")).toBeVisible();
-      await expect(page.getByRole("button", { name: /^Actions for / })).toHaveCount(0);
+      await expect(heading(page, "Going · 3")).toBeVisible();
+      await expect(page.getByLabel("Fixture, Hosting", { exact: true })).toBeVisible();
+      await expect(btn(page, "Actions for Fixture")).toHaveCount(0);
+      await expect(page.getByRole("button", { name: /^Actions for / })).toHaveCount(4);
+      await btn(page, "Actions for Alex").click();
+      await expect(btn(page, "Connect on Resbite")).toBeVisible();
+      for (const gone of ["Make admin", "Remove from this resbite"]) await expect(btn(page, gone)).toHaveCount(0);
+      await page.getByRole("button", { name: "Close sheet" }).first().click();
       await btn(page, "Back").click();
       await expect(heading(page, "Coffee evening")).toBeVisible();
       await btn(page, "Do this again").click();
       await expect(page).toHaveURL(new RegExp(`/arrange\\?again=${PLAN_ID}`));
     },
   );
-  pass("ended: the When line ends · Ended, an Ended chip, Every Thursday · the next one is in My resbites; Do this again is the only action, no More; the people list opens without actions; Do this again opens the plan screen with ?again=");
+  pass("ended: the When line ends · Ended, an Ended chip, Every Thursday · the next one is in My resbites; Do this again is the only action, no More; the people list opens with the host's Hosting row (Going · 3) and no host actions, only Connect on Resbite; Do this again opens the plan screen with ?again=");
 
   // --- A resbite that has started and not ended ---
   const startsAgo = Date.now() - hour;
@@ -586,10 +596,20 @@ try {
     assert.deepEqual(f.rpcs("plan_people_counts"), []);
     await page.getByRole("button", { name: new RegExp(`^${row}\\.`) }).click();
     await expect(heading(page, "People")).toBeVisible();
-    const groups = ["Going · 3", "Maybe · 1", "Invited, not answered yet · 1", "Waiting for you · 1"];
+    // Going counts Ana's Hosting row, which heads it, as well as the three guests.
+    const groups = ["Going · 4", "Maybe · 1", "Invited, not answered yet · 1", "Waiting for you · 1"];
     await expect(page.getByRole("heading")).toHaveText(["People", ...groups]);
-    // Another admin: no actions for an admin who isn't the owner.
-    await expect(btn(page, "Actions for Bea")).toHaveCount(0);
+    await expect(page.getByLabel("Ana, Hosting", { exact: true })).toBeVisible();
+    // The owner's row: no host action for an admin, only Connect.
+    await btn(page, "Actions for Ana").click();
+    await expect(btn(page, "Connect on Resbite")).toBeVisible();
+    await expect(btn(page, "Remove from this resbite")).toHaveCount(0);
+    await page.getByRole("button", { name: "Close sheet" }).first().click();
+    // Another admin: no host actions for an admin who isn't the owner, only Connect.
+    await btn(page, "Actions for Bea").click();
+    await expect(btn(page, "Connect on Resbite")).toBeVisible();
+    for (const gone of ["Make admin", "Remove as admin", "Remove from this resbite"]) await expect(btn(page, gone)).toHaveCount(0);
+    await page.getByRole("button", { name: "Close sheet" }).first().click();
     await btn(page, "Actions for Alex").click();
     await expect(btn(page, "Remove from this resbite")).toBeVisible();
     await expect(btn(page, "Make admin")).toHaveCount(0);
@@ -598,10 +618,10 @@ try {
     await btn(page, "Actions for Sam Reed").click();
     await btn(page, "Approve").click();
     await expect(heading(page, "Waiting for you · 1")).toHaveCount(0);
-    await expect(heading(page, "Going · 4")).toBeVisible();
+    await expect(heading(page, "Going · 5")).toBeVisible();
     assert.deepEqual(f.rpcs("decide_join_request"), [{ p_plan: PLAN_ID, p_user: "r1", p_approve: true }]);
   });
-  pass("admin people: the row reads Going 3 · Maybe 1 · Can’t go 0 · 1 invited · 1 waiting (plan_phone_invitations and plan_join_requests read); the list has Invited and Waiting for you; no actions on another admin; Approve → decide_join_request {p_approve: true} and Sam moves to Going");
+  pass("admin people: the row reads Going 3 · Maybe 1 · Can’t go 0 · 1 invited · 1 waiting (plan_phone_invitations and plan_join_requests read); the list has Going · 4 under Ana's Hosting row, Invited and Waiting for you; only Connect on the owner and on another admin; Approve → decide_join_request {p_approve: true} and Sam moves to Going · 5");
 
   await scenario("admin cover", hostingAdmin, async (f) => {
     const { page } = f;
@@ -692,11 +712,22 @@ try {
       await expect(text(page, "Maybe")).toBeVisible();
       await expect(page.getByRole("radiogroup", { name: "Your answer" })).toHaveCount(0);
       assert.deepEqual(f.rpcs("respond"), [{ p_plan: PLAN_ID, p_response: "maybe", p_version: 1 }]);
-      // The people row opens the people list, where a guest has no actions.
+      // The people row opens the people list, headed by Ana's Hosting row (counted in Going), where a guest has no
+      // host actions: Connect on Resbite on the others' rows, the host's included, and nothing on their own.
       await page.getByRole("button", { name: /^Going 2 · Maybe 1 · Can’t go 0\./ }).click();
       await expect(page).toHaveURL(new RegExp(`/guests\\?plan=${PLAN_ID}`));
       await expect(heading(page, "People")).toBeVisible();
-      await expect(page.getByRole("button", { name: /^Actions for / })).toHaveCount(0);
+      await expect(page.getByRole("heading")).toHaveText(["People", "Going · 3", "Maybe · 1"]);
+      await expect(page.getByLabel("Ana, Hosting", { exact: true })).toBeVisible();
+      await expect(btn(page, "Actions for Fixture")).toHaveCount(0);
+      await btn(page, "Actions for Ana").click();
+      await expect(btn(page, "Connect on Resbite")).toBeVisible();
+      await expect(btn(page, "Remove from this resbite")).toHaveCount(0);
+      await page.getByRole("button", { name: "Close sheet" }).first().click();
+      await btn(page, "Actions for Bea").click();
+      await expect(btn(page, "Connect on Resbite")).toBeVisible();
+      await expect(btn(page, "Remove from this resbite")).toHaveCount(0);
+      await page.getByRole("button", { name: "Close sheet" }).first().click();
       // An answered guest reads every row: no plan_people_counts.
       assert.deepEqual(f.rpcs("plan_people_counts"), []);
     },
@@ -723,7 +754,7 @@ try {
     await expect(page.getByRole("button", { name: /^Going 3 · Maybe 1 · Can’t go 1\. Alex, Bea and Fixture$/ })).toBeVisible();
     assert.deepEqual(f.rpcs("plan_people_counts"), [{ p_plan: PLAN_ID }]);
   });
-  pass("guest: Hosted by Ana; You’re going + Change opens the answer sheet (Going selected) and Maybe saves; More has Add to calendar and Mute only; the people row opens a list without actions; an unanswered guest sees the server’s counts Going 2 · Maybe 1 · Can’t go 1 (plan_people_counts), the Your answer control and no More, and after Going the row reads Going 3 from the whole list");
+  pass("guest: Hosted by Ana; You’re going + Change opens the answer sheet (Going selected) and Maybe saves; More has Add to calendar and Mute only; the people row opens a list headed by Ana's Hosting row (Going · 3) with only Connect on the others' rows; an unanswered guest sees the server’s counts Going 2 · Maybe 1 · Can’t go 1 (plan_people_counts), the Your answer control and no More, and after Going the row reads Going 3 from the whole list");
 
   // --- The people list ---
   // Cy (Maybe) is an admin already; Alex has never used the app, so he can’t be made one; Eli is invited in the app.
@@ -742,9 +773,12 @@ try {
       const sheet = page.locator("[aria-modal]");
       await page.goto(`${base}/guests?plan=${PLAN_ID}`);
       await expect(heading(page, "People")).toBeVisible();
-      const groups = ["Going · 2", "Maybe · 1", "Can’t go · 1", "Invited, not answered yet · 3", "Waiting for you · 1"];
+      // Going counts the owner's own Hosting row, which heads it, with Alex and Bea (Ruling 21).
+      const groups = ["Going · 3", "Maybe · 1", "Can’t go · 1", "Invited, not answered yet · 3", "Waiting for you · 1"];
       for (const group of groups) await expect(heading(page, group)).toBeVisible();
       await expect(page.getByRole("heading")).toHaveText(["People", ...groups]);
+      await expect(page.getByLabel("Fixture, Hosting", { exact: true })).toBeVisible();
+      await expect(btn(page, "Actions for Fixture")).toHaveCount(0);
       await expect(text(page, "Invited by WhatsApp")).toBeVisible();
       await expect(text(page, "Invited by link")).toBeVisible();
       await expect(text(page, "Invited in the app")).toBeVisible();
@@ -753,7 +787,7 @@ try {
       // Make admin: only on a Going guest; the sheet's head says their answer; the host then sees the badge.
       await btn(page, "Actions for Bea").click();
       await expect(sheet.getByText("Going", { exact: true })).toBeVisible();
-      for (const row of ["Make admin", "Remove from this resbite"]) await expect(btn(page, row)).toBeVisible();
+      for (const row of ["Connect on Resbite", "Make admin", "Remove from this resbite"]) await expect(btn(page, row)).toBeVisible();
       await btn(page, "Make admin").click();
       await expect(text(page, "Admin")).toHaveCount(2);
       assert.deepEqual(f.rpcs("appoint_admin"), [{ p_plan: PLAN_ID, p_user: "g2" }]);
@@ -798,12 +832,12 @@ try {
       await expect(btn(page, "Decline")).toBeVisible();
       await btn(page, "Approve").click();
       await expect(heading(page, "Waiting for you · 1")).toHaveCount(0);
-      await expect(heading(page, "Going · 3")).toBeVisible();
+      await expect(heading(page, "Going · 4")).toBeVisible();
       assert.deepEqual(f.rpcs("decide_join_request"), [{ p_plan: PLAN_ID, p_user: "r1", p_approve: true }]);
       assert.deepEqual(f.rpcs("remove_guest"), []);
     },
   );
-  pass("people: the groups in order with counts; Actions for Bea (head: Going) → Make admin → appoint_admin and the Admin badge, Remove as admin offered after; Alex, who never used the app, → Only someone who uses the app can be an admin. in the sheet; Cy, a Maybe admin, → Remove as admin → remove_admin; Send again on WhatsApp only for the code this phone holds; Eli, invited in the app, → Remove and Remove the invitation for Eli?; Approve → decide_join_request {p_approve: true} and Sam moves to Going");
+  pass("people: the groups in order with counts, Going · 3 headed by the host's own Hosting row (no dots on it); Actions for Bea (head: Going) → Make admin → appoint_admin and the Admin badge, Remove as admin offered after; Alex, who never used the app, → Only someone who uses the app can be an admin. in the sheet; Cy, a Maybe admin, → Remove as admin → remove_admin; Send again on WhatsApp only for the code this phone holds; Eli, invited in the app, → Remove and Remove the invitation for Eli?; Approve → decide_join_request {p_approve: true} and Sam moves to Going");
 
   // --- Edges of the people list and the page ---
   await scenario("edges", { guests: going2, failPlanRead: true }, async (f) => {
@@ -822,7 +856,8 @@ try {
     await expect(page.getByText(/^This invitation is unavailable, or its details could not be refreshed\./)).toBeVisible();
     f.state.failPlanRead = false;
     await btn(page, "Try again").click();
-    await expect(heading(page, "Going · 2")).toBeVisible();
+    // Going counts the owner's Hosting row as well as Alex and Bea.
+    await expect(heading(page, "Going · 3")).toBeVisible();
     // Opened on its own (no history), Back goes to the resbite.
     await btn(page, "Back").click();
     await expect(page).toHaveURL(new RegExp(`/event\\?plan=${PLAN_ID}`));
