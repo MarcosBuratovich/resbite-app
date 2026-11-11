@@ -60,7 +60,7 @@ do $$ declare c public.connections; o private.notification_outbox; v_series uuid
  select * into o from private.notification_outbox where kind='connection_request';
  if o.recipient_id is distinct from 'f1000000-0000-4000-8000-000000000003' or o.actor_id is distinct from 'f1000000-0000-4000-8000-000000000002'
  or o.plan_id is distinct from 'f1100000-0000-4000-8000-000000000001' or o.detail is not null
- or o.dedupe_key is distinct from 'connect:f1000000-0000-4000-8000-000000000002:f1000000-0000-4000-8000-000000000003:'||v_series||':f1000000-0000-4000-8000-000000000002:'||extract(epoch from c.created_at) then
+ or o.dedupe_key is distinct from 'connect:f1000000-0000-4000-8000-000000000002:f1000000-0000-4000-8000-000000000003:'||v_series||':f1000000-0000-4000-8000-000000000002' then
   raise exception 'Request notice wrong: %', o;
  end if;
 end $$;
@@ -89,9 +89,22 @@ do $$ begin
  end if;
 end $$;
 reset role;
+-- The owner is on the resbite, but not while their account is being deleted: 02 asking 01, whose deletion is pending,
+-- is refused with the same message.
+update public.profiles set deletion_requested_at=now() where id='f1000000-0000-4000-8000-000000000001';
+set local role authenticated;
 do $$ begin
- if exists(select 1 from public.connections where 'f1000000-0000-4000-8000-000000000004' in (user_a,user_b) or 'f1000000-0000-4000-8000-000000000005' in (user_a,user_b))
- or exists(select 1 from private.notification_outbox where recipient_id in ('f1000000-0000-4000-8000-000000000004','f1000000-0000-4000-8000-000000000005')) then
+ begin perform public.request_connection('f1000000-0000-4000-8000-000000000001','f1100000-0000-4000-8000-000000000001');
+  raise exception 'An owner whose deletion is pending was asked';
+ exception when insufficient_privilege then if sqlerrm<>'Not on this resbite' then raise exception 'Wrong message: %', sqlerrm; end if; end;
+end $$;
+reset role;
+update public.profiles set deletion_requested_at=null where id='f1000000-0000-4000-8000-000000000001';
+do $$ begin
+ if exists(select 1 from public.connections where 'f1000000-0000-4000-8000-000000000004' in (user_a,user_b) or 'f1000000-0000-4000-8000-000000000005' in (user_a,user_b)
+   or 'f1000000-0000-4000-8000-000000000001' in (user_a,user_b))
+ or exists(select 1 from private.notification_outbox where recipient_id in ('f1000000-0000-4000-8000-000000000004','f1000000-0000-4000-8000-000000000005',
+   'f1000000-0000-4000-8000-000000000001')) then
   raise exception 'A refused request left a row or a notice';
  end if;
 end $$;
@@ -182,6 +195,10 @@ do $$ begin
   raise exception 'A request that does not exist was declined';
  exception when insufficient_privilege then if sqlerrm<>'No request' then raise exception 'Wrong message: %', sqlerrm; end if; end;
 end $$;
+-- co1_mark holds the newest outbox row before a silent act (CO-P5: not now, cancelling and removing tell nobody).
+reset role;
+create temporary table co1_mark as select coalesce(max(id),0) as id from private.notification_outbox;
+set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000006","role":"authenticated"}',true);
 select public.decline_connection('f1000000-0000-4000-8000-000000000002');
 reset role;
@@ -189,6 +206,7 @@ do $$ begin
  if exists(select 1 from public.connections where user_a='f1000000-0000-4000-8000-000000000002' and user_b='f1000000-0000-4000-8000-000000000006') then
   raise exception 'A declined request stayed';
  end if;
+ if exists(select 1 from private.notification_outbox where id>(select id from co1_mark)) then raise exception 'Declining queued a notice'; end if;
  if not exists(select 1 from private.connection_refusals where series_id=(select series_id from public.plans where id='f1100000-0000-4000-8000-000000000001')
    and from_user='f1000000-0000-4000-8000-000000000002' and to_user='f1000000-0000-4000-8000-000000000006' and refused_at is not null and not hidden)
  or (select count(*) from private.connection_refusals)<>1 then
@@ -262,6 +280,7 @@ end $$;
 -- Removing: 02 removes 03, silently. It is kept as a refusal of 03 by 02 on the series they met at (CO-P14): 03 asking
 -- 02 from it looks sent but stores and sends nothing, while 03 may ask 02 from another resbite and 02 may ask 03.
 -- Removing what isn't connected changes nothing.
+update co1_mark set id=(select coalesce(max(id),0) from private.notification_outbox);
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 select public.remove_connection('f1000000-0000-4000-8000-000000000003');
@@ -274,6 +293,7 @@ do $$ begin
  if exists(select 1 from public.connections where user_a='f1000000-0000-4000-8000-000000000002' and user_b='f1000000-0000-4000-8000-000000000003') then
   raise exception 'A removed connection stayed';
  end if;
+ if exists(select 1 from private.notification_outbox where id>(select id from co1_mark)) then raise exception 'Removing queued a notice'; end if;
  if not exists(select 1 from private.connection_refusals where series_id=(select series_id from public.plans where id='f1100000-0000-4000-8000-000000000001')
    and from_user='f1000000-0000-4000-8000-000000000003' and to_user='f1000000-0000-4000-8000-000000000002' and hidden)
  or exists(select 1 from private.connection_refusals where from_user='f1000000-0000-4000-8000-000000000002' and to_user='f1000000-0000-4000-8000-000000000003') then
@@ -312,7 +332,7 @@ do $$ declare c public.connections; o private.notification_outbox; begin
  end if;
  select * into o from private.notification_outbox where kind='connection_request' and actor_id='f1000000-0000-4000-8000-000000000003';
  if o.recipient_id is distinct from 'f1000000-0000-4000-8000-000000000002' or o.plan_id is distinct from 'f1100000-0000-4000-8000-000000000002'
- or o.dedupe_key is distinct from 'connect:f1000000-0000-4000-8000-000000000002:f1000000-0000-4000-8000-000000000003:'||c.series_id||':f1000000-0000-4000-8000-000000000003:'||extract(epoch from c.created_at) then
+ or o.dedupe_key is distinct from 'connect:f1000000-0000-4000-8000-000000000002:f1000000-0000-4000-8000-000000000003:'||c.series_id||':f1000000-0000-4000-8000-000000000003' then
   raise exception 'The request from another resbite was not told: %', o;
  end if;
  if not exists(select 1 from private.connection_refusals where series_id=(select series_id from public.plans where id='f1100000-0000-4000-8000-000000000001')
@@ -339,7 +359,7 @@ select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-00000000
 select public.cancel_connection_request('f1000000-0000-4000-8000-000000000002');
 
 -- Cancelling: 02 asks 03 from the series they met at, a real request (the refusal is of 03, not of 02), and takes it
--- back; a cancelled request may be sent again, and is told again.
+-- back, silently; a cancelled request may be sent again, but is told once per pair, series and requester (CO-R8).
 select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 do $$ begin
  if public.request_connection('f1000000-0000-4000-8000-000000000003','f1100000-0000-4000-8000-000000000001') is distinct from 'requested' then
@@ -354,6 +374,7 @@ do $$ begin
   raise exception 'The remover''s request was not stored';
  end if;
 end $$;
+update co1_mark set id=(select coalesce(max(id),0) from private.notification_outbox);
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 do $$ begin
@@ -365,25 +386,59 @@ do $$ begin
  if exists(select 1 from public.connections where user_a='f1000000-0000-4000-8000-000000000002' and user_b='f1000000-0000-4000-8000-000000000003') then
   raise exception 'A cancelled request stayed';
  end if;
+ if exists(select 1 from private.notification_outbox where id>(select id from co1_mark)) then raise exception 'Cancelling queued a notice'; end if;
 end $$;
-create temporary table co1_told as select count(*) as n from private.notification_outbox
- where kind='connection_request' and actor_id='f1000000-0000-4000-8000-000000000002' and recipient_id='f1000000-0000-4000-8000-000000000003';
--- The notice's key carries the request's exact time: the request sent again at once is told again.
+-- Ask, cancel, ask, cancel, ask (the first two above): one notice for 02's requests to 03 from Film night's series, the
+-- one queued at the start of this slice, with the static key; it goes while the request stands.
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 do $$ begin
  if public.request_connection('f1000000-0000-4000-8000-000000000003','f1100000-0000-4000-8000-000000000001') is distinct from 'requested' then
   raise exception 'A cancelled request could not be sent again';
  end if;
+ perform public.cancel_connection_request('f1000000-0000-4000-8000-000000000003');
+ if public.request_connection('f1000000-0000-4000-8000-000000000003','f1100000-0000-4000-8000-000000000001') is distinct from 'requested' then
+  raise exception 'A request cancelled twice could not be sent again';
+ end if;
 end $$;
 reset role;
-do $$ declare c public.connections; begin
+do $$ declare c public.connections; o private.notification_outbox; begin
  select * into c from public.connections where user_a='f1000000-0000-4000-8000-000000000002' and user_b='f1000000-0000-4000-8000-000000000003';
- if (select count(*) from private.notification_outbox where kind='connection_request' and actor_id='f1000000-0000-4000-8000-000000000002'
-   and recipient_id='f1000000-0000-4000-8000-000000000003')<>(select n from co1_told)+1
- or not exists(select 1 from private.notification_outbox where kind='connection_request'
-   and dedupe_key='connect:f1000000-0000-4000-8000-000000000002:f1000000-0000-4000-8000-000000000003:'||c.series_id||':f1000000-0000-4000-8000-000000000002:'||extract(epoch from c.created_at)) then
-  raise exception 'A request sent again after a cancel was not told again';
+ if c.state is distinct from 'requested' or c.requested_by is distinct from 'f1000000-0000-4000-8000-000000000002' then
+  raise exception 'The request sent again does not stand: %', c;
+ end if;
+ if (select count(*) from private.notification_outbox where kind='connection_request' and recipient_id='f1000000-0000-4000-8000-000000000003'
+   and actor_id='f1000000-0000-4000-8000-000000000002' and plan_id in (select id from public.plans where series_id=c.series_id))<>1 then
+  raise exception 'Asking, cancelling and asking again queued more than one notice: %', (select array_agg(dedupe_key order by id)
+   from private.notification_outbox where kind='connection_request' and recipient_id='f1000000-0000-4000-8000-000000000003');
+ end if;
+ select * into o from private.notification_outbox where kind='connection_request' and recipient_id='f1000000-0000-4000-8000-000000000003'
+  and actor_id='f1000000-0000-4000-8000-000000000002' and plan_id in (select id from public.plans where series_id=c.series_id);
+ if o.dedupe_key is distinct from 'connect:f1000000-0000-4000-8000-000000000002:f1000000-0000-4000-8000-000000000003:'||c.series_id||':f1000000-0000-4000-8000-000000000002' then
+  raise exception 'The one notice''s key is not the pair, the series and the requester: %', o.dedupe_key;
+ end if;
+ if not private.notification_recipient_eligible(o.id) then raise exception 'The one notice does not go while the request stands'; end if;
+end $$;
+-- From another series, Board game night (both are going), 02's request is told on its own.
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+select public.cancel_connection_request('f1000000-0000-4000-8000-000000000003');
+do $$ begin
+ if public.request_connection('f1000000-0000-4000-8000-000000000003','f1100000-0000-4000-8000-000000000002') is distinct from 'requested' then
+  raise exception 'Asking from another series did not say requested';
+ end if;
+end $$;
+reset role;
+do $$ declare c public.connections; o private.notification_outbox; begin
+ select * into c from public.connections where user_a='f1000000-0000-4000-8000-000000000002' and user_b='f1000000-0000-4000-8000-000000000003';
+ select * into o from private.notification_outbox where kind='connection_request' and recipient_id='f1000000-0000-4000-8000-000000000003'
+  and actor_id='f1000000-0000-4000-8000-000000000002' and plan_id='f1100000-0000-4000-8000-000000000002';
+ if c.series_id is distinct from (select series_id from public.plans where id='f1100000-0000-4000-8000-000000000002')
+ or o.dedupe_key is distinct from 'connect:f1000000-0000-4000-8000-000000000002:f1000000-0000-4000-8000-000000000003:'||c.series_id||':f1000000-0000-4000-8000-000000000002'
+ or not private.notification_recipient_eligible(o.id)
+ or (select count(*) from private.notification_outbox where kind='connection_request' and recipient_id='f1000000-0000-4000-8000-000000000003'
+   and actor_id='f1000000-0000-4000-8000-000000000002')<>2 then
+  raise exception 'A request from another series was not told on its own: %', o;
  end if;
 end $$;
 set local role authenticated;
@@ -415,6 +470,53 @@ do $$ begin
  if not exists(select 1 from public.connections where user_a='f1000000-0000-4000-8000-000000000002' and user_b='f1000000-0000-4000-8000-000000000003'
    and state='requested' and requested_by='f1000000-0000-4000-8000-000000000002') then
   raise exception 'The request on an ended plan was not stored';
+ end if;
+end $$;
+
+-- Two who each refused the other: 01 asks 03 and 03 says "Not now"; 01 takes it back (the refusal is hidden), so 03's
+-- request is a real one, and 01 says "Not now" to it. 03's request still looks sent to 03, so it stands: 01 asking 03
+-- accepts it, even from the series where 01's own request was refused.
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.request_connection('f1000000-0000-4000-8000-000000000003','f1100000-0000-4000-8000-000000000001');
+select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
+select public.decline_connection('f1000000-0000-4000-8000-000000000001');
+select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.cancel_connection_request('f1000000-0000-4000-8000-000000000003');
+select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
+do $$ begin
+ if public.request_connection('f1000000-0000-4000-8000-000000000001','f1100000-0000-4000-8000-000000000001') is distinct from 'requested' then
+  raise exception 'The refuser''s request after a cancel did not say requested';
+ end if;
+end $$;
+select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.decline_connection('f1000000-0000-4000-8000-000000000003');
+reset role;
+do $$ declare v_series uuid := (select series_id from public.plans where id='f1100000-0000-4000-8000-000000000001'); begin
+ if exists(select 1 from public.connections where user_a='f1000000-0000-4000-8000-000000000001' and user_b='f1000000-0000-4000-8000-000000000003')
+ or not exists(select 1 from private.connection_refusals where series_id=v_series and from_user='f1000000-0000-4000-8000-000000000001'
+   and to_user='f1000000-0000-4000-8000-000000000003' and hidden)
+ or not exists(select 1 from private.connection_refusals where series_id=v_series and from_user='f1000000-0000-4000-8000-000000000003'
+   and to_user='f1000000-0000-4000-8000-000000000001' and not hidden) then
+  raise exception 'The two refusals are not as set up';
+ end if;
+end $$;
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+do $$ begin
+ if public.request_connection('f1000000-0000-4000-8000-000000000003','f1100000-0000-4000-8000-000000000001') is distinct from 'connected' then
+  raise exception 'Asking someone whose refused request stands, from the series of one''s own refusal, did not connect';
+ end if;
+end $$;
+reset role;
+do $$ declare c public.connections; begin
+ select * into c from public.connections where user_a='f1000000-0000-4000-8000-000000000001' and user_b='f1000000-0000-4000-8000-000000000003';
+ if c.state is distinct from 'connected' or c.requested_by is distinct from 'f1000000-0000-4000-8000-000000000003' or c.accepted_at is null
+ or exists(select 1 from private.connection_refusals where (from_user,to_user) in
+   (('f1000000-0000-4000-8000-000000000001','f1000000-0000-4000-8000-000000000003'),('f1000000-0000-4000-8000-000000000003','f1000000-0000-4000-8000-000000000001')))
+ or (select count(*) from private.notification_outbox where kind='connection_accepted' and recipient_id='f1000000-0000-4000-8000-000000000003'
+   and actor_id='f1000000-0000-4000-8000-000000000001')<>1 then
+  raise exception 'The two who refused each other were not connected, or a refusal stayed: %', c;
  end if;
 end $$;
 rollback;
@@ -698,15 +800,39 @@ do $$ begin
  end if;
 end $$;
 
--- The series' latest occurrence gives the title and the context: a later one with neither of the two on it is 'met';
--- with both answered it is 'going', and a host counts as going (01 asks 03); once it has ended it is 'met'.
+-- The title and the context come from the series' latest occurrence the caller may read (CO-R9): with 03 on neither
+-- Film night nor the later 'Film night again', no title ("Met on Resbite") and 'met'; back on Film night, its title
+-- (both going); on the later one too, its title, 'met' while 02 is not on it. With both answered it is 'going', and a
+-- host counts as going (01 asks 03); once it has ended it is 'met'.
 reset role;
 insert into public.plans(id,owner_id,title,starts_at,ends_at,time_zone,place_label,categories,series_id) values
  ('f1100000-0000-4000-8000-000000000003','f1000000-0000-4000-8000-000000000001','Film night again',
   '2099-06-18 19:00+00','2099-06-18 22:00+00','UTC','Cinema',array['community'],
   (select series_id from public.plans where id='f1100000-0000-4000-8000-000000000001'));
+delete from public.attendees where plan_id='f1100000-0000-4000-8000-000000000001' and user_id='f1000000-0000-4000-8000-000000000003';
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
+do $$ begin
+ if jsonb_array_length(public.my_connections()->'requests')<>1
+ or public.my_connections()->'requests'->0->>'title' is not null
+ or public.my_connections()->'requests'->0->>'context' is distinct from 'met' then
+  raise exception 'An occurrence the caller may not read gave the title: %', public.my_connections();
+ end if;
+end $$;
+reset role;
+insert into public.attendees(plan_id,user_id,response) values
+ ('f1100000-0000-4000-8000-000000000001','f1000000-0000-4000-8000-000000000003','maybe');
+set local role authenticated;
+do $$ begin
+ if public.my_connections()->'requests'->0->>'title' is distinct from 'Film night'
+ or public.my_connections()->'requests'->0->>'context' is distinct from 'going' then
+  raise exception 'The latest occurrence the caller may read did not give the title, or the context: %', public.my_connections();
+ end if;
+end $$;
+reset role;
+insert into public.attendees(plan_id,user_id,response) values
+ ('f1100000-0000-4000-8000-000000000003','f1000000-0000-4000-8000-000000000003','maybe');
+set local role authenticated;
 do $$ begin
  if public.my_connections()->'requests'->0->>'title' is distinct from 'Film night again'
  or public.my_connections()->'requests'->0->>'context' is distinct from 'met' then
@@ -715,8 +841,7 @@ do $$ begin
 end $$;
 reset role;
 insert into public.attendees(plan_id,user_id,response) values
- ('f1100000-0000-4000-8000-000000000003','f1000000-0000-4000-8000-000000000002','accepted'),
- ('f1100000-0000-4000-8000-000000000003','f1000000-0000-4000-8000-000000000003','maybe');
+ ('f1100000-0000-4000-8000-000000000003','f1000000-0000-4000-8000-000000000002','accepted');
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 select public.request_connection('f1000000-0000-4000-8000-000000000003','f1100000-0000-4000-8000-000000000001');
@@ -951,10 +1076,11 @@ do $$ begin
  end if;
 end $$;
 
--- The two notices go only while what they tell stands: 02's request to 03 while it is live and 02's (not tied to the
--- resbite: 03 off Film night and muting its series is still told; not after a day); the acceptance to 02 while the two
--- are connected; each only while it is not older than its row (the request's created_at, the acceptance's accepted_at),
--- the time the connection functions stamp on it. The invited notice keeps the rule it had.
+-- The two notices go only while what they tell stands: 02's request to 03 while one by 02 is live (not tied to the
+-- resbite: 03 off Film night and muting its series is still told; not after a day; not held to the request's time, as
+-- one notice serves every request 02 sends 03 from that series, CO-R8); the acceptance to 02 while the two are
+-- connected, and only while it is not older than accepted_at. Each is stamped with its row's time when queued. The
+-- invited notice keeps the rule it had.
 create temporary table co3_notices on commit drop as select
  (select id from private.notification_outbox where kind='connection_request' and recipient_id='f1000000-0000-4000-8000-000000000003'
    and actor_id='f1000000-0000-4000-8000-000000000002') as request,
@@ -977,16 +1103,13 @@ do $$ declare n co3_notices; v_at timestamptz; begin
  insert into public.plan_mutes(series_id,user_id) values
   ((select series_id from public.plans where id='f1100000-0000-4000-8000-000000000001'),'f1000000-0000-4000-8000-000000000003');
  if not private.notification_recipient_eligible(n.request) then raise exception 'A request''s notice was tied to the resbite or its mute'; end if;
- -- A day old, with its row older still so that only the day stops it: 23 hours old it goes, 25 hours old it does not.
+ -- A day old: 23 hours old it goes, 25 hours old it does not. Only the notice is aged: it is older than the request
+ -- row then, which does not stop it (CO-R8); the day does.
  select created_at into v_at from private.notification_outbox where id=n.request;
- update public.connections set created_at=now()-interval '26 hours'
-  where user_a='f1000000-0000-4000-8000-000000000002' and user_b='f1000000-0000-4000-8000-000000000003';
  update private.notification_outbox set created_at=now()-interval '23 hours' where id=n.request;
  if not private.notification_recipient_eligible(n.request) then raise exception 'A request''s notice under a day old was not eligible'; end if;
  update private.notification_outbox set created_at=now()-interval '25 hours' where id=n.request;
  if private.notification_recipient_eligible(n.request) then raise exception 'A day-old request''s notice was eligible'; end if;
- update public.connections set created_at=v_at
-  where user_a='f1000000-0000-4000-8000-000000000002' and user_b='f1000000-0000-4000-8000-000000000003';
  update private.notification_outbox set created_at=v_at where id=n.request;
  select accepted_at into v_at from public.connections
   where user_a='f1000000-0000-4000-8000-000000000001' and user_b='f1000000-0000-4000-8000-000000000002';
@@ -1014,8 +1137,8 @@ do $$ declare n co3_notices; v_at timestamptz; begin
  insert into public.attendees(plan_id,user_id,response) values
   ('f1100000-0000-4000-8000-000000000001','f1000000-0000-4000-8000-000000000003','maybe');
 end $$;
--- 02 takes the request back and sends it again at once: two notices, each key with its request's exact time, and only the
--- second, of the request now standing, goes.
+-- 02 takes the request back and sends it again at once: the one notice does not go while there is no request, and goes
+-- again once it is sent again; nothing new is queued (CO-R8), though the request row is newer than its notice.
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 select public.cancel_connection_request('f1000000-0000-4000-8000-000000000003');
@@ -1026,21 +1149,17 @@ end $$;
 set local role authenticated;
 select public.request_connection('f1000000-0000-4000-8000-000000000003','f1100000-0000-4000-8000-000000000001');
 reset role;
-alter table co3_notices add column again bigint;
-update co3_notices set again=(select id from private.notification_outbox where kind='connection_request'
- and recipient_id='f1000000-0000-4000-8000-000000000003' and actor_id='f1000000-0000-4000-8000-000000000002' and id<>co3_notices.request);
 do $$ declare n co3_notices; c public.connections; begin
  select * into n from co3_notices;
  select * into c from public.connections where user_a='f1000000-0000-4000-8000-000000000002' and user_b='f1000000-0000-4000-8000-000000000003';
- if n.again is null
- or (select count(distinct dedupe_key) from private.notification_outbox where kind='connection_request'
-   and recipient_id='f1000000-0000-4000-8000-000000000003' and actor_id='f1000000-0000-4000-8000-000000000002')<>2
- or (select dedupe_key from private.notification_outbox where id=n.again) is distinct from
-   'connect:f1000000-0000-4000-8000-000000000002:f1000000-0000-4000-8000-000000000003:'||c.series_id||':f1000000-0000-4000-8000-000000000002:'||extract(epoch from c.created_at) then
-  raise exception 'The request sent again at once was not told with its own key';
+ if (select count(*) from private.notification_outbox where kind='connection_request'
+   and recipient_id='f1000000-0000-4000-8000-000000000003' and actor_id='f1000000-0000-4000-8000-000000000002')<>1
+ or (select dedupe_key from private.notification_outbox where id=n.request) is distinct from
+   'connect:f1000000-0000-4000-8000-000000000002:f1000000-0000-4000-8000-000000000003:'||c.series_id||':f1000000-0000-4000-8000-000000000002'
+ or (select created_at from private.notification_outbox where id=n.request)>=c.created_at then
+  raise exception 'The request sent again at once queued another notice, or the one notice is not the first request''s';
  end if;
- if private.notification_recipient_eligible(n.request) then raise exception 'The notice of a request cancelled and sent again was eligible'; end if;
- if not private.notification_recipient_eligible(n.again) then raise exception 'The notice of the request sent again was not eligible'; end if;
+ if not private.notification_recipient_eligible(n.request) then raise exception 'The notice of the request sent again did not go'; end if;
 end $$;
 -- 03 declines 02: the request's notice no longer goes. 01 removes 02: the acceptance's no longer goes.
 set local role authenticated;
@@ -1051,7 +1170,7 @@ select public.remove_connection('f1000000-0000-4000-8000-000000000002');
 reset role;
 do $$ declare n co3_notices; begin
  select * into n from co3_notices;
- if private.notification_recipient_eligible(n.again) then raise exception 'A declined request''s notice was eligible'; end if;
+ if private.notification_recipient_eligible(n.request) then raise exception 'A declined request''s notice was eligible'; end if;
  if private.notification_recipient_eligible(n.accepted) then raise exception 'A removed connection''s acceptance notice was eligible'; end if;
 end $$;
 

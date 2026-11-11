@@ -588,4 +588,6 @@ Connections ([spec](../docs/superpowers/specs/2026-11-10-connections-and-circles
 - **CO-R5.** The people list shows the owner first under Going, badged "Hosting", with the connection actions, and its group titles count that row; the event page's people row still counts guests only.
 - **CO-R6.** The Profile row and the People screen are both called "People lists".
 - **CO-R7.** A connection invite item (`{user}`) needs an eligible account not pending deletion, else 42501 "Not a connection".
-- **CO-R8.** The connection notices' dedupe keys carry the row's exact timestamp, so a cancelled request sent again still pushes.
+- **CO-R8.** A connection request pushes at most once per pair, series and requester, however often it is cancelled and sent again (a request is not a nudge): its dedupe key is `connect:<a>:<b>:<series>:<requester>`, with no timestamp, and its one notice goes while a request by that person stands; a request from another series gets its own. The acceptance's key keeps the acceptance's exact timestamp.
+- Rulings 2 and 17 of the build (request keys carrying the row's exact timestamp, so that a cancelled request sent again pushed again) are superseded by CO-R8 (the build's Ruling 22).
+- **CO-R9.** "Met at" on Connections names the series' latest occurrence the caller may read (owner or on its guest list), else nothing ("Met on Resbite"): a guest removed from, or not carried to, a later occurrence never reads its title.

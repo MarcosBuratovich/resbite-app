@@ -40,6 +40,9 @@ create table private.connection_refusals (
  hidden boolean not null default false,
  primary key (series_id,from_user,to_user)
 );
+-- The refusals are read by the two people (from_user and to_user) on any series, and the primary key leads with the
+-- series: this index serves those reads and covers from_user's foreign key.
+create index connection_refusals_users_idx on private.connection_refusals(from_user,to_user);
 alter table private.connection_refusals enable row level security;
 revoke all on private.connection_refusals from public, anon, authenticated;
 
@@ -59,22 +62,25 @@ alter table private.notification_outbox add constraint notification_outbox_kind_
 
 -- 3. Asking, accepting, refusing, cancelling and removing (CO-P2, CO-P3, CO-P5)
 -- Each function takes the pair's advisory lock first, so two calls on one pair (two people asking each other at once, a
--- double tap) run one after the other: the second finds the first's row and never meets the primary key. Each notice's
--- dedupe key ends with the exact time of its row, as an epoch with its fraction (the request's created_at, the
--- acceptance's accepted_at): a retry queues nothing twice, while a request sent again after a cancel or a removal, or a
--- second acceptance, is told, however soon after the first. The request's key also names who asked. The notice's
--- created_at is its row's time too, exactly, so the audience (section 5) tells a notice of the pair's current request or
--- acceptance from one of an earlier, cancelled or removed, which is older than the row.
+-- double tap) run one after the other: the second finds the first's row and never meets the primary key.
+-- The request's notice is keyed by the pair, the series asked from and who asked, and nothing else (CO-R8): it is queued
+-- once, however often the request is cancelled and sent again from that series (a request is not a nudge), and goes
+-- while a request by that person stands (section 5); asking from another series is told on its own. The acceptance's
+-- key ends with the exact time of the acceptance, as an epoch with its fraction: a retry queues nothing twice, while a
+-- second acceptance (after a removal) is told, however soon after the first. Each notice's created_at is its row's time
+-- when it is queued (for a request, the first one from that series, as nothing is queued after it), so the audience
+-- tells an acceptance notice of the pair's current connection from one of an earlier, removed one, older than the row.
 
 -- Asking, from a resbite. The caller must see names there (can_see_guests: a host, or a guest who has answered), and the
--- person asked must be on it as its owner, an admin or a guest who has answered (Going, Maybe or Can't go): someone who
--- hasn't answered can't be asked, as the request would tell them who else is on it (UX2-D6). Attendee rows stay after
--- the end, so connecting stays possible on an ended resbite. Returns 'requested' (asked now or before) or 'connected'
--- (connected before, or the other person had asked: asking back accepts, as it does when the other person's request
--- was refused by the caller and still looks sent to them, a visible refusal). It never returns a refused state (CO-P3):
--- when there is no row and the person asked refused the caller on this series (a "Not now", or a removal), it returns
--- 'requested' too, and stores and sends nothing but shows the caller's refusals as sent again, so the app shows
--- "Request sent" as for any request. Refused only on other series, the request is a real one, and those refusals stay.
+-- person asked must be on it as its owner, an admin or a guest who has answered (Going, Maybe or Can't go), and not be
+-- leaving (deletion pending), else 42501 'Not on this resbite': someone who hasn't answered can't be asked, as the
+-- request would tell them who else is on it (UX2-D6). Attendee rows stay after the end, so connecting stays possible on
+-- an ended resbite. Returns 'requested' (asked now or before) or 'connected' (connected before, or the other person had
+-- asked: asking back accepts, as it does when the other person's request was refused by the caller and still looks sent
+-- to them, a visible refusal, whatever the caller's own refusals). It never returns a refused state (CO-P3): when there
+-- is no row and the person asked refused the caller on this series (a "Not now", or a removal), it returns 'requested'
+-- too, and stores and sends nothing but shows the caller's refusals as sent again, so the app shows "Request sent" as for
+-- any request. Refused only on other series, the request is a real one, and those refusals stay.
 create function private.request_connection(p_user uuid, p_plan uuid) returns text language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester(); v_a uuid; v_b uuid; v_series uuid; v_row public.connections; v_at timestamptz;
 begin
@@ -83,7 +89,8 @@ begin
  if p_user=v_uid then raise exception 'That is you' using errcode='22023'; end if;
  if not private.can_see_guests(p_plan) then raise exception 'Names required' using errcode='42501'; end if;
  -- CH-P21 (groups and chat): on a group any guest may be asked, whatever their reply; public.chats does not exist yet.
- if not (private.is_host(p_plan,p_user)
+ -- Someone whose account is being deleted is not on it either, as its owner too (the owner's row outlives the request).
+ if private.deletion_pending(p_user) or not (private.is_host(p_plan,p_user)
   or exists(select 1 from public.attendees a where a.plan_id=p_plan and a.user_id=p_user and a.response<>'pending')) then
   raise exception 'Not on this resbite' using errcode='42501';
  end if;
@@ -96,25 +103,28 @@ begin
   perform private.accept_connection(p_user);
   return 'connected';
  end if;
- -- Refused on this series: it looks sent, and nothing is stored or sent.
- if exists(select 1 from private.connection_refusals where series_id=v_series and from_user=v_uid and to_user=p_user) then
-  update private.connection_refusals set hidden=false where from_user=v_uid and to_user=p_user;
-  return 'requested';
- end if;
- -- Refused only on other series: a real request. Those refusals stay, so asking from their series again stays quiet.
- -- The other person's request, refused by the caller, still looks sent to them: it stands, and asking accepts it.
+ -- The other person's request, refused by the caller, still looks sent to them: it stands, and asking accepts it. This
+ -- comes first: when each refused the other (the caller's refusal hidden by their cancel, so the other's request was a
+ -- real one), whoever asks next connects the two, even from the series where their own request was refused.
  if exists(select 1 from private.connection_refusals where from_user=p_user and to_user=v_uid and not hidden) then
   insert into public.connections(user_a,user_b,state,requested_by,series_id,created_at)
    values(v_a,v_b,'requested',p_user,v_series,pg_catalog.clock_timestamp());
   perform private.accept_connection(p_user);
   return 'connected';
  end if;
- -- clock_timestamp, not now(): the notice's key carries the request's time, so a request sent again after a cancel is
- -- told again even when both fall in one transaction.
+ -- Refused on this series: it looks sent, and nothing is stored or sent.
+ if exists(select 1 from private.connection_refusals where series_id=v_series and from_user=v_uid and to_user=p_user) then
+  update private.connection_refusals set hidden=false where from_user=v_uid and to_user=p_user;
+  return 'requested';
+ end if;
+ -- Refused only on other series: a real request. Those refusals stay, so asking from their series again stays quiet.
+ -- clock_timestamp, not now(): requests made in one transaction keep the order they were made in (Requests lists the
+ -- newest first). The notice is the pair's, the series' and the requester's, once (section 3's header): sent again,
+ -- the request queues nothing, and the first notice, stamped with the first request's time, stands for it.
  insert into public.connections(user_a,user_b,state,requested_by,series_id,created_at)
   values(v_a,v_b,'requested',v_uid,v_series,pg_catalog.clock_timestamp()) returning created_at into v_at;
  insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,created_at)
-  values(p_plan,p_user,'connection_request','connect:'||v_a||':'||v_b||':'||v_series||':'||v_uid||':'||extract(epoch from v_at),v_uid,v_at)
+  values(p_plan,p_user,'connection_request','connect:'||v_a||':'||v_b||':'||v_series||':'||v_uid,v_uid,v_at)
   on conflict do nothing;
  return 'requested';
 end $$;
@@ -225,9 +235,11 @@ grant execute on function private.remove_connection(uuid), public.remove_connect
 
 -- The caller's Connections (CO-P6): the requests to them, newest first, and their connections, by name, with the other
 -- person's name and photo and the resbite they met at. Requests the caller sent are not listed: a refused one would
--- vanish from such a list (CO-P3). title is that series' latest occurrence (the one the acceptance notice names), null
--- when the series is gone or there is none. context, on a request, is 'going' while that occurrence is on (not
--- cancelled, not ended) and both are on it (each a host, or a guest who is Going or Maybe), else 'met'.
+-- vanish from such a list (CO-P3). title is that series' latest occurrence the caller may read (can_read_plan: its owner
+-- or on its guest list; CO-R9), null when the series is gone or the caller may read none of it, so a guest removed or
+-- not carried to a later occurrence never reads its title (the app shows "Met on Resbite"). context, on a request, is
+-- 'going' while that occurrence is on (not cancelled, not ended) and both are on it (each a host, or a guest who is Going
+-- or Maybe), else 'met'.
 create function private.my_connections() returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester();
 begin
@@ -242,7 +254,7 @@ begin
    cross join lateral (select case when c.user_a=v_uid then c.user_b else c.user_a end as other) o
    join public.profiles pr on pr.id=o.other
    left join lateral (select p.id, p.title, p.status, p.starts_at, p.ends_at from public.plans p where p.series_id=c.series_id
-    order by p.starts_at desc, p.id limit 1) lp on true
+    and private.can_read_plan(p.id) order by p.starts_at desc, p.id limit 1) lp on true
    where c.user_a=v_uid or c.user_b=v_uid)
   select jsonb_build_object(
    'requests',coalesce((select jsonb_agg(jsonb_build_object('user_id',p.other,'name',p.name,'avatar_path',p.avatar_path,
@@ -379,12 +391,14 @@ begin
  return v_out;
 end $$;
 
--- The two connection notices (CO-P5) go to a side of the pair while what they tell still stands: a request while it is
--- live and still the actor's, an acceptance while the two are connected, and in each case only the notice of the row as
--- it stands, not one older than it (a request cancelled and sent again, an earlier acceptance; section 3 stamps each
--- notice with its row's time). Their resbite (plan_id) only names where the two met: no membership test, and a mute
--- does not apply. Every other kind keeps the 20261031120000_creating_a_resbite body, verbatim but for the kind test that
--- leaves the two to their own branch.
+-- The two connection notices (CO-P5) go to a side of the pair while what they tell still stands: a request while one by
+-- the actor is live, and an acceptance while the two are connected. A request's notice is not held to the row's time:
+-- one notice serves every request the actor sends from that series (CO-R8, section 3), so a request cancelled and sent
+-- again is not told again, but its first notice may still go while it stands. An acceptance's is: only the notice of
+-- the connection as it stands goes, not one of an earlier, removed connection (section 3 stamps it with accepted_at).
+-- Their resbite (plan_id) only names where the two met: no membership test, and a mute does not apply. Every other kind
+-- keeps the 20261031120000_creating_a_resbite body, verbatim but for the kind test that leaves the two to their own
+-- branch.
 create or replace function private.notification_recipient_eligible(p_outbox bigint) returns boolean
 language sql stable security definer set search_path='' as $$
  select exists (
@@ -410,7 +424,7 @@ language sql stable security definer set search_path='' as $$
  and exists(select 1 from public.connections c
   where (c.user_a,c.user_b)=(least(o.recipient_id,o.actor_id),greatest(o.recipient_id,o.actor_id))
   and (o.kind='connection_accepted' and c.state='connected' and o.created_at>=c.accepted_at
-   or o.kind='connection_request' and c.state='requested' and c.requested_by=o.actor_id and o.created_at>=c.created_at))
+   or o.kind='connection_request' and c.state='requested' and c.requested_by=o.actor_id))
  )
 $$;
 

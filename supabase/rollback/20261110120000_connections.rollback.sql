@@ -4,8 +4,9 @@
 --   - the five connection functions, request_connection, accept_connection, decline_connection,
 --     cancel_connection_request and remove_connection, and the two read functions, my_connections and
 --     plan_connection_states, each with its public wrapper, and private.pair();
---   - public.connections and private.connection_refusals with every row in them: every connection, request and
---     refusal is gone, and nobody is told;
+--   - public.connections and private.connection_refusals with every row in them, and their indexes with them
+--     (connections_user_b_idx, connection_refusals_users_idx): every connection, request and refusal is gone, and
+--     nobody is told;
 --   - every 'connection_request' and 'connection_accepted' outbox row, delivered or not, so the earlier kind check can
 --     come back. The choice: a row not yet sent goes with them, and that request or acceptance is never told. Delivered
 --     rows go too; sent pushes are not recalled. Rows younger than a day are the ones the sender could still send: run
