@@ -18,6 +18,10 @@
 //              line says one connection couldn't be
 //   more       nine connections bring the search field (accent-blind); the only connection picked being refused says
 //              so and stays on the Pick step; a failed read leaves the section out, with no error
+//   people     as a guest who answered Going, on Pedro's resbite's people list: the dots on the host → Connect on
+//              Resbite sends request_connection { p_user, p_plan }; the sheet then says Request sent with Cancel
+//              request, which sends cancel_connection_request { p_user } and brings Connect back; Inés's request is
+//              accepted from her dots (accept_connection { p_user }) and her row shows Connected
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { button, heading, heightOf, inOrder, quietReminders, visible } from "./qa-helpers.mjs";
@@ -33,6 +37,7 @@ const INES = "55555555-5555-4555-8555-555555555555";
 const LUCAS = "66666666-6666-4666-8666-666666666666";
 const SOFIA = "77777777-7777-4777-8777-777777777777";
 // Ana's picnic, which she hosts: the plan read of Invite people.
+const MAP_PLAN = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const PICNIC = {
   id: "88888888-8888-4888-8888-888888888888",
   activity_id: null,
@@ -98,10 +103,22 @@ const sofia = row(SOFIA, "Sofía Gil", "Board game night");
 
 /**
  * A page signed in as Ana on a stubbed Supabase whose connections change as the app accepts, declines and removes.
- * With `plan`, Ana hosts it: `guests` are its attendee rows, and invite_contacts answers as the server does, refusing
- * the whole call (42501 'Not a connection') when it holds anyone in `refuse`.
+ * With `plan`, Ana hosts it, or is a guest on it (`mine`, her own row) when someone else owns it (`names` gives the
+ * owner's name): `guests` are its attendee rows, and invite_contacts answers as the server does, refusing the whole
+ * call (42501 'Not a connection') when it holds anyone in `refuse`. `pairs` are Ana's connection states with the
+ * people there (plan_connection_states), which change as she asks, cancels and accepts from the people list.
  */
-async function fixture({ requests = [pedro], connected = [marta, tomas], width = 390, plan = null, guests = [], refuse = [] } = {}) {
+async function fixture({
+  requests = [pedro],
+  connected = [marta, tomas],
+  width = 390,
+  plan = null,
+  guests = [],
+  refuse = [],
+  mine = null,
+  names = {},
+  pairs = {},
+} = {}) {
   const context = await browser.newContext({ viewport: { width, height: 844 }, reducedMotion: "reduce", locale: "en-GB" });
   await quietReminders(context);
   const page = await context.newPage();
@@ -130,7 +147,8 @@ async function fixture({ requests = [pedro], connected = [marta, tomas], width =
     // How many of the next reads, or accepts, fail as a lost connection would.
     failReads: 0,
     failAccepts: 0,
-    guests: guests.map(({ user_id, name }) => ({ user_id, response: "pending", profiles: { display_name: name } })),
+    guests: guests.map(({ user_id, name, response = "pending" }) => ({ user_id, response, profiles: { display_name: name } })),
+    pairs: { ...pairs },
   };
   const log = [],
     errors = [],
@@ -162,11 +180,27 @@ async function fixture({ requests = [pedro], connected = [marta, tomas], width =
     if (path === "/auth/v1/user") return reply(user);
     if (path === "/rest/v1/rpc/account_access_status") return reply({ account_id: ANA, status: "approved" });
     if (path === "/rest/v1/rpc/note_app_session") return empty();
-    if (path === "/rest/v1/profiles") return reply({ id: ANA, display_name: "Ana", avatar_path: null, avatar_revision: 0 });
-    // The plan read of Invite people (one row), and the guests on it.
+    // Someone else's name (a host's, for a guest's resbite), else Ana's own profile.
+    const named = names[url.searchParams.get("id")?.replace(/^eq\./, "")];
+    if (path === "/rest/v1/profiles") return reply(named ? { display_name: named } : { id: ANA, display_name: "Ana", avatar_path: null, avatar_revision: 0 });
+    // The plan read (one row), Ana's own row when she is a guest, and the guests on it.
     if (plan && path === "/rest/v1/plans" && url.searchParams.get("id") === `eq.${plan.id}`)
       return reply({ ...plan, plan_meeting_details: null, plan_admins: [] });
-    if (plan && path === "/rest/v1/attendees" && url.searchParams.get("plan_id") === `eq.${plan.id}`) return reply(state.guests);
+    if (plan && path === "/rest/v1/attendees" && url.searchParams.get("plan_id") === `eq.${plan.id}`)
+      return reply(url.searchParams.get("select") === "version,response" ? mine : state.guests);
+    if (plan && path === "/rest/v1/rpc/plan_connection_states") {
+      assert.equal(body.p_plan, plan.id);
+      return reply(state.pairs);
+    }
+    if (plan && path === "/rest/v1/rpc/request_connection") {
+      assert.equal(body.p_plan, plan.id);
+      state.pairs[body.p_user] = "requested_by_me";
+      return reply("requested");
+    }
+    if (plan && path === "/rest/v1/rpc/cancel_connection_request") {
+      if (state.pairs[body.p_user] === "requested_by_me") delete state.pairs[body.p_user];
+      return empty();
+    }
     if (path === "/rest/v1/activities" || path === "/rest/v1/plans" || path === "/rest/v1/attendees" || path === "/rest/v1/plan_mutes")
       return reply([]);
     if (plan && path === "/rest/v1/rpc/plan_link") return reply("AbCdEfGhIjKlMnOpQrStUv");
@@ -196,6 +230,11 @@ async function fixture({ requests = [pedro], connected = [marta, tomas], width =
       if (state.failAccepts > 0) {
         state.failAccepts--;
         return lost();
+      }
+      // A request on the people list (pairs) or on the Connections screen (requests).
+      if (state.pairs[body.p_user] === "requested_by_them") {
+        state.pairs[body.p_user] = "connected";
+        return empty();
       }
       const asked = state.requests.find((p) => p.user_id === body.p_user);
       if (!asked) return noRequest();
@@ -552,7 +591,78 @@ try {
     "PASS: nine connections bring an accent-blind search above the rows; the only pick refused says Couldn't do that and keeps the Pick step; a failed read leaves the section out with no error.",
   );
 
-  console.log("PASS: Connections, and Your connections on Invite people. All Supabase requests intercepted.");
+  // 8. The people list, as a guest who answered Going on Pedro's resbite: Ana asks the host to connect, sees the
+  // request sent, cancels it, and accepts Inés's request to her.
+  {
+    const games = { ...PICNIC, id: MAP_PLAN, owner_id: PEDRO, title: "Board game night", series_id: "series-games" };
+    const f = await fixture({
+      requests: [],
+      connected: [],
+      plan: games,
+      mine: { version: 1, response: "accepted" },
+      names: { [PEDRO]: "Pedro" },
+      guests: [
+        { user_id: ANA, name: "Ana", response: "accepted" },
+        { user_id: INES, name: "Inés", response: "accepted" },
+        { user_id: TOMAS, name: "Tomás", response: "accepted" },
+      ],
+      pairs: { [INES]: "requested_by_them" },
+    }),
+      { page } = f;
+    const sheet = page.locator("[aria-modal]");
+    const closeSheet = () => button(page, "Close sheet").first().click();
+    await page.goto(`${base}/guests?plan=${MAP_PLAN}`);
+    await expect(heading(page, "People")).toBeVisible();
+    await expect(heading(page, "Going · 4")).toBeVisible();
+    await expect(page.getByLabel("Pedro, Hosting", { exact: true })).toBeVisible();
+    // Ana's own row has no dots.
+    await expect(button(page, "Actions for Ana")).toHaveCount(0);
+
+    // Connect on the host's row: the request names Pedro and this resbite.
+    await button(page, "Actions for Pedro").click();
+    await expect(sheet.getByText("Hosting", { exact: true })).toBeVisible();
+    await expect(page.getByText("Pedro decides. Then you can invite each other in the app.", { exact: true })).toBeVisible();
+    await button(page, "Connect on Resbite").click();
+    await expect(button(page, "Connect on Resbite")).toHaveCount(0);
+    assert.deepEqual(f.calls("request_connection").map((x) => x.body), [{ p_user: PEDRO, p_plan: MAP_PLAN }]);
+    // The states are read again before the sheet closes: reopened, it says Request sent, with Cancel request.
+    assert.ok(f.calls("plan_connection_states").length >= 2, "the states are read again after the request");
+    await button(page, "Actions for Pedro").click();
+    await expect(visible(sheet.getByText("Request sent", { exact: true }))).toBeVisible();
+    await expect(button(page, "Cancel request")).toBeVisible();
+    await expect(button(page, "Connect on Resbite")).toHaveCount(0);
+
+    // Cancel request: the request goes, and Connect is offered again.
+    await button(page, "Cancel request").click();
+    await expect(button(page, "Cancel request")).toHaveCount(0);
+    assert.deepEqual(f.calls("cancel_connection_request").map((x) => x.body), [{ p_user: PEDRO }]);
+    await button(page, "Actions for Pedro").click();
+    await expect(button(page, "Connect on Resbite")).toBeVisible();
+    await expect(sheet.getByText("Request sent", { exact: true })).toHaveCount(0);
+    await closeSheet();
+    await expect(button(page, "Connect on Resbite")).toHaveCount(0);
+
+    // Inés asked Ana: Accept from her dots, and her row shows Connected, with nothing left to do there.
+    await expect(page.getByLabel("Inés, Connected", { exact: true })).toHaveCount(0);
+    await button(page, "Actions for Inés").click();
+    await expect(button(page, "Not now")).toBeVisible();
+    await button(page, "Accept Inés's request").click();
+    await expect(button(page, "Accept Inés's request")).toHaveCount(0);
+    assert.deepEqual(f.calls("accept_connection").map((x) => x.body), [{ p_user: INES }]);
+    await expect(page.getByLabel("Inés, Connected", { exact: true })).toBeVisible();
+    await expect(visible(page.getByText("Connected", { exact: true }))).toHaveCount(1);
+    await expect(button(page, "Actions for Inés")).toHaveCount(0);
+    // Tomás was never asked: Connect stays on his row; nothing was declined.
+    await expect(button(page, "Actions for Tomás")).toBeVisible();
+    assert.equal(f.calls("decline_connection").length, 0);
+    await expect(visible(page.getByRole("alert"))).toHaveCount(0);
+    await f.done();
+  }
+  console.log(
+    "PASS: the people list as a guest: Connect on the host's row sends request_connection { p_user, p_plan }, then Request sent with Cancel request, which sends cancel_connection_request { p_user } and brings Connect back; Accept Inés's request sends accept_connection { p_user } and her row shows Connected.",
+  );
+
+  console.log("PASS: Connections, the people list's Connect, Cancel request and Accept, and Your connections on Invite people. All Supabase requests intercepted.");
 } finally {
   await browser.close();
 }
