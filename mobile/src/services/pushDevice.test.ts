@@ -118,6 +118,7 @@ function phone(options: { platform?: string; enabled?: boolean } = {}) {
     },
     clearRecentPlaces: async () => {},
     clearInviteCodes: async () => {},
+    clearChatQueue: async () => {},
     clearKnownNames: () => {},
     clearReminders: async () => {},
     clearCalendarRecords: async () => {},

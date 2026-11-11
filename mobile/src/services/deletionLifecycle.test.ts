@@ -33,6 +33,9 @@ function setup() {
     clearInviteCodes: async (s) => {
       calls.push(`invites:${s}`);
     },
+    clearChatQueue: async (s) => {
+      calls.push(`chat:${s}`);
+    },
     clearKnownNames: (s) => {
       calls.push(`names:${s}`);
     },
@@ -75,6 +78,7 @@ test("deletion clears the create journal as well as scoped data before local-onl
     "people:a",
     "places:a",
     "invites:a",
+    "chat:a",
     "reminders:a",
     "calendar:a",
     "photo:a",
@@ -135,6 +139,7 @@ test("ordinary signout failure cannot resume a deletion-blocked account", async 
     clearCalendarRecords: async () => {},
     clearPhoto: async () => {},
     clearInviteCodes: async () => {},
+    clearChatQueue: async () => {},
     clearKnownNames: () => {},
     clearCovers: async () => {},
     blockPending: () => () => {},

@@ -1,0 +1,400 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import type { ChatMessage, ChatNames, ChatSummary } from "../services/chat";
+import {
+  canAnnounce,
+  closedCard,
+  closingLine,
+  dayLabel,
+  defaultAudience,
+  headerLine,
+  isSeriesId,
+  linkHost,
+  linkParts,
+  messageLabel,
+  rowText,
+  systemText,
+  timeLabel,
+} from "./chatRules";
+
+const ANA = "0a000000-0000-4000-8000-000000000001";
+const LEO = "0a000000-0000-4000-8000-000000000002";
+const MIA = "0a000000-0000-4000-8000-000000000003";
+const SOL = "0a000000-0000-4000-8000-000000000004";
+const PEDRO = "0a000000-0000-4000-8000-000000000005";
+const CLARA = "0a000000-0000-4000-8000-000000000006";
+const GONE = "0a000000-0000-4000-8000-000000000007";
+const UNKNOWN = "0a000000-0000-4000-8000-000000000008";
+const names: ChatNames = { [ANA]: "Ana", [LEO]: "Leo", [MIA]: "Mia", [SOL]: "Sol", [PEDRO]: "Pedro", [CLARA]: "Clara", [GONE]: null };
+const LONDON = "Europe/London";
+const HOUR = 3_600_000;
+const MINUTE = 60_000;
+
+const msg = (over: Partial<ChatMessage> = {}): ChatMessage => ({
+  id: 1,
+  kind: "message",
+  audience: null,
+  event: null,
+  payload: null,
+  body: "I can bring the snacks",
+  state: "sent",
+  authorId: LEO,
+  createdAt: "2025-11-15T18:02:00Z",
+  updatedAt: "2025-11-15T18:02:00Z",
+  clientId: null,
+  ...over,
+});
+const sys = (event: string, payload: Record<string, unknown>) =>
+  msg({ kind: "system", event, payload, body: null, authorId: null });
+const line = (event: string, payload: Record<string, unknown>, viewer = UNKNOWN) =>
+  systemText(sys(event, payload), names, viewer, false, "Picnic in the park");
+
+const summary = (over: Partial<ChatSummary> = {}): ChatSummary => ({
+  seriesId: "0b000000-0000-4000-8000-000000000001",
+  planId: "0c000000-0000-4000-8000-000000000001",
+  title: "Picnic in the park",
+  startsAt: "2026-10-30T18:00:00Z",
+  endsAt: "2026-10-30T21:00:00Z",
+  timeZone: LONDON,
+  status: "active",
+  repeatWeeks: null,
+  isGroup: false,
+  stopped: false,
+  closesAt: "2026-11-01T21:00:00Z",
+  open: true,
+  host: false,
+  accepted: 6,
+  members: 8,
+  going: 8,
+  everyone: 9,
+  pinned: null,
+  last: null,
+  names: {},
+  mutedChat: false,
+  mutedResbite: false,
+  lastReadId: null,
+  unread: false,
+  messageCount: 0,
+  ...over,
+});
+
+test("closingLine counts whole hours down, floored, then minutes in the last hour (K-N4)", () => {
+  const closes = "2025-11-17T18:00:00Z";
+  const at = Date.parse(closes);
+  const words = (left: string) => `This chat closes Mon 17 Nov at 18:00, in ${left}. Any final words?`;
+  assert.equal(closingLine(closes, at - 31 * HOUR - 30 * MINUTE, LONDON), words("31 hours"));
+  assert.equal(closingLine(closes, at - 48 * HOUR, LONDON), words("48 hours"));
+  assert.equal(closingLine(closes, at - 2 * HOUR, LONDON), words("2 hours"));
+  assert.equal(closingLine(closes, at - HOUR - 59 * MINUTE, LONDON), words("1 hour"));
+  assert.equal(closingLine(closes, at - HOUR, LONDON), words("1 hour"));
+  assert.equal(closingLine(closes, at - 50 * MINUTE - 30_000, LONDON), words("50 minutes"));
+  assert.equal(closingLine(closes, at - 2 * MINUTE, LONDON), words("2 minutes"));
+  assert.equal(closingLine(closes, at - MINUTE, LONDON), words("1 minute"));
+  assert.equal(closingLine(closes, at - 30_000, LONDON), words("1 minute"));
+  assert.equal(closingLine(closes, at - 1, LONDON), words("1 minute"));
+});
+
+test("closingLine is null with no close time, once it has passed, and more than 48 hours away", () => {
+  const closes = "2025-11-17T18:00:00Z";
+  const at = Date.parse(closes);
+  assert.equal(closingLine(null, at, LONDON), null);
+  assert.equal(closingLine(closes, at - 49 * HOUR, LONDON), null);
+  assert.equal(closingLine(closes, at - 48 * HOUR - 1, LONDON), null);
+  assert.equal(closingLine(closes, at, LONDON), null);
+  assert.equal(closingLine(closes, at + MINUTE, LONDON), null);
+});
+
+test("closingLine writes the date and time in the plan's zone, whatever the phone's", () => {
+  const before = process.env.TZ;
+  process.env.TZ = "Pacific/Auckland";
+  try {
+    const closes = "2025-11-17T18:00:00Z";
+    assert.equal(
+      closingLine(closes, Date.parse(closes) - 31 * HOUR, LONDON),
+      "This chat closes Mon 17 Nov at 18:00, in 31 hours. Any final words?",
+    );
+    // The same instant in a Buenos Aires plan reads its own clock.
+    const ba = "2025-11-17T21:00:00Z";
+    assert.equal(
+      closingLine(ba, Date.parse(ba) - 31 * HOUR, "America/Argentina/Buenos_Aires"),
+      "This chat closes Mon 17 Nov at 18:00, in 31 hours. Any final words?",
+    );
+  } finally {
+    if (before === undefined) delete process.env.TZ;
+    else process.env.TZ = before;
+  }
+});
+
+test("dayLabel and timeLabel write the day and the clock in the zone they're given", () => {
+  assert.equal(dayLabel("2025-11-15T18:02:00Z", LONDON), "Sat 15 Nov");
+  assert.equal(timeLabel("2025-11-15T18:02:00Z", LONDON), "18:02");
+  assert.equal(timeLabel("2025-11-15T18:02:00Z", "America/Argentina/Buenos_Aires"), "15:02");
+  assert.equal(dayLabel("2025-11-15T23:30:00Z", "Europe/Madrid"), "Sun 16 Nov");
+});
+
+test("systemText: joined names the person who joined, whoever acted, and who brought them (K-B2)", () => {
+  assert.equal(line("joined", { actor: MIA, user: MIA }), "Mia joined");
+  assert.equal(line("joined", { actor: ANA, user: MIA }), "Mia joined", "a host's approval names Mia");
+  assert.equal(line("joined", { actor: MIA, user: MIA }, MIA), "You joined");
+  assert.equal(line("joined", { actor: GONE, user: GONE }), "Someone joined");
+  assert.equal(line("joined", { actor: null, user: UNKNOWN }, ANA), "Someone joined", "a uuid missing from names");
+  assert.equal(line("joined", { actor: CLARA, user: CLARA, brought_by: PEDRO }), "Clara joined · brought by Pedro");
+  assert.equal(line("joined", { actor: CLARA, user: CLARA, brought_by: PEDRO }, PEDRO), "Clara joined · brought by you");
+  assert.equal(line("joined", { actor: CLARA, user: CLARA, brought_by: PEDRO }, CLARA), "You joined · brought by Pedro");
+  assert.equal(line("joined", { actor: CLARA, user: CLARA, brought_by: null }), "Clara joined");
+  assert.equal(line("joined", { actor: CLARA, user: CLARA, brought_by: GONE }), "Clara joined", "a bringer with no name is left out");
+});
+
+test("systemText: can't go and admin lines name their person, and say You to the viewer", () => {
+  assert.equal(line("cant_go", { actor: SOL, user: SOL }), "Sol can’t make it");
+  assert.equal(line("cant_go", { actor: SOL, user: SOL }, SOL), "You can’t make it");
+  assert.equal(line("cant_go", { actor: GONE, user: GONE }), "Someone can’t make it");
+  assert.equal(line("admin", { actor: ANA, user: LEO }), "Leo is now an admin");
+  assert.equal(line("admin", { actor: ANA, user: LEO }, LEO), "You are now an admin");
+  assert.equal(line("admin", { actor: ANA, user: GONE }), "Someone is now an admin");
+});
+
+const change = (over: Record<string, unknown>) => ({
+  actor: ANA,
+  what: "time",
+  from_start: "2025-11-14T19:00:00Z",
+  to_start: "2025-11-14T19:00:00Z",
+  from_end: "2025-11-14T22:00:00Z",
+  to_end: "2025-11-14T22:00:00Z",
+  from_zone: LONDON,
+  to_zone: LONDON,
+  place_label: "Nico's, Villa Crespo",
+  ...over,
+});
+
+test("systemText: a time change reads each start in its own zone, the day only when it moves (K-S3)", () => {
+  assert.equal(line("changed", change({ to_start: "2025-11-14T19:30:00Z" })), "Ana changed the time · 19:00 → 19:30");
+  assert.equal(line("changed", change({ to_start: "2025-11-15T19:00:00Z" })), "Ana changed the time · Fri 19:00 → Sat 19:00");
+  // A move of a week or more would read the same weekday twice, so it carries the dates.
+  assert.equal(
+    line("changed", change({ to_start: "2025-11-21T19:00:00Z" })),
+    "Ana changed the time · Fri 14 Nov 19:00 → Fri 21 Nov 19:00",
+  );
+  assert.equal(line("changed", change({ to_end: "2025-11-14T23:00:00Z" })), "Ana changed the end · 22:00 → 23:00");
+  assert.equal(
+    line("changed", change({ to_end: "2025-11-15T02:00:00Z" })),
+    "Ana changed the end · Fri 22:00 → Sat 02:00",
+  );
+  assert.equal(line("changed", change({ from_end: null, to_end: "2025-11-14T23:00:00Z" })), "Ana changed the end · 23:00");
+  assert.equal(line("changed", change({ to_end: null })), "Ana changed the end");
+  // A zone fix: Madrid's 19:00 and 22:00 are London's 18:00 and 21:00, so both read the same.
+  assert.equal(
+    line("changed", change({ to_start: "2025-11-14T18:00:00Z", to_end: "2025-11-14T21:00:00Z", to_zone: "Europe/Madrid" })),
+    "Ana changed the time",
+  );
+  // The new start read in the new zone: 18:00 UTC is 19:00 in Madrid.
+  assert.equal(
+    line("changed", change({ to_start: "2025-11-14T18:30:00Z", to_zone: "Europe/Madrid" })),
+    "Ana changed the time · 19:00 → 19:30",
+  );
+});
+
+test("systemText: place, and time and place, carry the new label as the mockup shows", () => {
+  assert.equal(line("changed", change({ what: "place" })), "Ana changed the place · Nico's, Villa Crespo");
+  assert.equal(line("changed", change({ what: "place", place_label: null })), "Ana changed the place");
+  assert.equal(
+    line("changed", change({ what: "time_place", to_start: "2025-11-15T19:00:00Z" })),
+    "Ana changed the time and place · Sat 19:00 · Nico's, Villa Crespo",
+  );
+  assert.equal(
+    line("changed", change({ what: "time_place", to_start: "2025-11-15T19:00:00Z", place_label: "" })),
+    "Ana changed the time and place · Sat 19:00",
+  );
+});
+
+test("systemText: the actor reads You to the viewer, Someone with no name, and no person with no actor", () => {
+  assert.equal(line("changed", change({ what: "place" }), ANA), "You changed the place · Nico's, Villa Crespo");
+  assert.equal(line("changed", change({ to_start: "2025-11-14T19:30:00Z" }), ANA), "You changed the time · 19:00 → 19:30");
+  assert.equal(line("cancelled", { actor: ANA }, ANA), "You cancelled the resbite");
+  assert.equal(line("cancelled", { actor: ANA }), "Ana cancelled the resbite");
+  assert.equal(line("cancelled", { actor: GONE }), "Someone cancelled the resbite");
+  assert.equal(line("changed", change({ what: "place", actor: GONE })), "Someone changed the place · Nico's, Villa Crespo");
+  assert.equal(line("changed", change({ what: "place", actor: null })), "The place changed · Nico's, Villa Crespo");
+  assert.equal(line("changed", change({ actor: null, to_start: "2025-11-14T19:30:00Z" })), "The time changed · 19:00 → 19:30");
+  assert.equal(line("changed", change({ actor: null, to_end: "2025-11-14T23:00:00Z" })), "The end changed · 22:00 → 23:00");
+  assert.equal(
+    line("changed", change({ actor: null, what: "time_place", to_start: "2025-11-15T19:00:00Z" })),
+    "The time and place changed · Sat 19:00 · Nico's, Villa Crespo",
+  );
+  assert.equal(
+    line("changed", change({ actor: null, to_start: "2025-11-14T18:00:00Z", to_end: "2025-11-14T21:00:00Z", to_zone: "Europe/Madrid" })),
+    "The time changed",
+  );
+  assert.equal(line("cancelled", { actor: null }), "The resbite was cancelled");
+  assert.equal(line("cancelled", {}), "The resbite was cancelled");
+});
+
+test("systemText: an ended line names the resbite, and an event this build doesn't know gives no line", () => {
+  assert.equal(line("ended", { title: "Board game night" }), "Board game night ended");
+  assert.equal(line("ended", {}), "Picnic in the park ended");
+  assert.equal(line("something_new", { actor: ANA }), "");
+  assert.equal(systemText(msg({ kind: "system", event: null, payload: null, authorId: null }), names, ANA, false, "x"), "");
+});
+
+test("rowText: the Chat row's latest line", () => {
+  assert.equal(rowText(null, names, ANA, false), "No messages yet");
+  assert.equal(rowText(msg(), names, ANA, false), "Leo: I can bring the snacks");
+  assert.equal(rowText(msg(), names, LEO, false), "You: I can bring the snacks");
+  assert.equal(rowText(msg({ authorId: GONE }), names, ANA, false), "Someone: I can bring the snacks");
+  assert.equal(rowText(msg({ state: "deleted", body: null }), names, ANA, false), "Message deleted");
+  assert.equal(rowText(msg({ state: "deleted", body: null, authorId: null }), names, ANA, false), "Message deleted");
+  assert.equal(rowText(msg({ state: "removed", body: null }), names, ANA, false), "Message removed by an admin");
+  assert.equal(rowText(sys("cant_go", { actor: SOL, user: SOL }), names, ANA, false), "Sol can’t make it");
+  assert.equal(rowText(sys("changed", change({ what: "place" })), names, ANA, false), "You changed the place · Nico's, Villa Crespo");
+  assert.equal(
+    rowText(msg({ kind: "announcement", audience: "everyone", authorId: ANA, body: "Doors open at 19:30" }), names, LEO, false),
+    "Announcement from Ana · Doors open at 19:30",
+  );
+});
+
+test("headerLine: the date in the plan's zone and the event page's Going number (K-N7)", () => {
+  const before = Date.parse("2026-10-30T12:00:00Z");
+  assert.equal(headerLine(summary(), before), "Fri 30 Oct · 6 going", "accepted, not the audience count");
+  assert.equal(headerLine(summary({ accepted: 1 }), before), "Fri 30 Oct · 1 going");
+  // 23:30 UTC on Friday is already Saturday in Madrid.
+  assert.equal(headerLine(summary({ startsAt: "2026-10-30T23:30:00Z", endsAt: null, timeZone: "Europe/Madrid" }), before), "Sat 31 Oct · 6 going");
+  const picnic = summary({ startsAt: "2025-11-15T13:00:00Z", endsAt: "2025-11-15T17:00:00Z", accepted: 7 });
+  assert.equal(headerLine(picnic, Date.parse("2025-11-15T16:59:00Z")), "Sat 15 Nov · 7 going");
+  assert.equal(headerLine(picnic, Date.parse("2025-11-15T17:00:00Z")), "Ended · Sat 15 Nov · 7 going");
+  // With no end time, the start is the end.
+  assert.equal(headerLine(summary({ endsAt: null }), Date.parse("2026-10-30T18:00:00Z")), "Ended · Fri 30 Oct · 6 going");
+});
+
+test("defaultAudience and canAnnounce", () => {
+  assert.equal(defaultAudience(summary()), "going");
+  assert.equal(defaultAudience(summary({ isGroup: true })), "everyone");
+  assert.equal(canAnnounce(summary({ host: true })), true);
+  assert.equal(canAnnounce(summary({ host: true, open: false })), false);
+  assert.equal(canAnnounce(summary({ host: false })), false);
+});
+
+test("closedCard: a cancelled one-off, and a closed one with its date in the plan's zone", () => {
+  assert.deepEqual(closedCard(summary({ status: "cancelled", closesAt: null, open: false })), {
+    line: "This chat is read-only because the resbite was cancelled.",
+    why: null,
+  });
+  const why = "Resbite chats close 48 hours after the resbite, so the plan stays offline. You can still read everything here.";
+  assert.deepEqual(closedCard(summary({ closesAt: "2025-11-17T18:00:00Z", open: false })), {
+    line: "This chat closed on Mon 17 Nov.",
+    why,
+  });
+  assert.deepEqual(closedCard(summary({ closesAt: "2025-11-17T23:30:00Z", timeZone: "Europe/Madrid", open: false })), {
+    line: "This chat closed on Tue 18 Nov.",
+    why,
+  });
+  // No close time and not cancelled: still a closed card, with no date to give.
+  assert.deepEqual(closedCard(summary({ closesAt: null, open: false })), { line: "This chat is closed.", why: null });
+});
+
+test("linkParts links http and https only, and linkHost names the host (K-N14)", () => {
+  assert.deepEqual(linkParts("https://example.com/x"), [{ text: "https://example.com/x", href: "https://example.com/x" }]);
+  assert.equal(linkHost("https://example.com/x"), "example.com");
+  assert.deepEqual(linkParts("Menu: http://example.com/menu?day=1#top see you"), [
+    { text: "Menu: " },
+    { text: "http://example.com/menu?day=1#top", href: "http://example.com/menu?day=1#top" },
+    { text: " see you" },
+  ]);
+  assert.deepEqual(linkParts("ftp://example.com"), [{ text: "ftp://example.com" }]);
+  assert.deepEqual(linkParts("javascript:alert(1)"), [{ text: "javascript:alert(1)" }]);
+  assert.deepEqual(linkParts("Call 07700 900123"), [{ text: "Call 07700 900123" }]);
+  assert.deepEqual(linkParts("+44 7700 900123 or tel:+447700900123"), [{ text: "+44 7700 900123 or tel:+447700900123" }]);
+  assert.deepEqual(linkParts(""), []);
+});
+
+test("linkParts leaves a host with a non-ASCII letter, or its punycode, as plain text (Decision 15)", () => {
+  const cyrillic = "https://exаmple.com/login";
+  assert.deepEqual(linkParts(cyrillic), [{ text: cyrillic }]);
+  assert.deepEqual(linkParts(`see ${cyrillic} now`), [{ text: `see ${cyrillic} now` }]);
+  assert.deepEqual(linkParts("https://xn--exmple-4nf.com/login"), [{ text: "https://xn--exmple-4nf.com/login" }]);
+  assert.deepEqual(linkParts("https://ex%D0%B0mple.com/"), [{ text: "https://ex%D0%B0mple.com/" }]);
+  // The path may carry any letter; only the host matters.
+  assert.deepEqual(linkParts("https://example.com/café"), [{ text: "https://example.com/café", href: "https://example.com/café" }]);
+});
+
+test("linkParts trims the punctuation around a link and finds more than one", () => {
+  assert.deepEqual(linkParts("Look: https://example.com/x."), [
+    { text: "Look: " },
+    { text: "https://example.com/x", href: "https://example.com/x" },
+    { text: "." },
+  ]);
+  assert.deepEqual(linkParts("(https://example.com/x)"), [
+    { text: "(" },
+    { text: "https://example.com/x", href: "https://example.com/x" },
+    { text: ")" },
+  ]);
+  assert.deepEqual(linkParts("https://en.wikipedia.org/wiki/Azul_(game)"), [
+    { text: "https://en.wikipedia.org/wiki/Azul_(game)", href: "https://en.wikipedia.org/wiki/Azul_(game)" },
+  ]);
+  assert.deepEqual(linkParts("https://a.example, https://b.example!"), [
+    { text: "https://a.example", href: "https://a.example" },
+    { text: ", " },
+    { text: "https://b.example", href: "https://b.example" },
+    { text: "!" },
+  ]);
+  assert.deepEqual(linkParts("nothttps://example.com"), [{ text: "nothttps://example.com" }]);
+  assert.deepEqual(linkParts("https://"), [{ text: "https://" }]);
+  assert.deepEqual(linkParts("line one\nhttps://example.com"), [
+    { text: "line one\n" },
+    { text: "https://example.com", href: "https://example.com" },
+  ]);
+});
+
+test("linkHost lowercases, drops the port and the user part, so the confirm names the real host", () => {
+  assert.equal(linkHost("HTTPS://Example.COM:8080/Path"), "example.com");
+  assert.equal(linkHost("https://google.com@evil.example/login"), "evil.example");
+  assert.equal(linkHost("https://example.com./x"), "example.com");
+  assert.equal(linkHost("ftp://example.com"), "");
+  assert.equal(linkHost("not a link"), "");
+});
+
+test("messageLabel: author, text and time, the day when it isn't today, You and the send state (K-S14)", () => {
+  const sunday = Date.parse("2025-11-16T12:00:00Z");
+  const saturday = Date.parse("2025-11-15T20:00:00Z");
+  assert.equal(messageLabel(msg(), names, ANA, saturday, LONDON), "Leo, I can bring the snacks, 18:02");
+  assert.equal(messageLabel(msg(), names, ANA, sunday, LONDON), "Leo, I can bring the snacks, Sat 15 Nov, 18:02");
+  assert.equal(messageLabel(msg(), names, ANA, saturday, "America/Argentina/Buenos_Aires"), "Leo, I can bring the snacks, 15:02");
+  assert.equal(messageLabel(msg({ authorId: GONE }), names, ANA, saturday, LONDON), "Someone, I can bring the snacks, 18:02");
+  const mine = msg({ authorId: ANA, body: "On my way" });
+  assert.equal(messageLabel(mine, names, ANA, saturday, LONDON), "You, On my way, 18:02");
+  assert.equal(messageLabel(mine, names, ANA, saturday, LONDON, "sending"), "You, On my way, 18:02, Sending…");
+  assert.equal(messageLabel(mine, names, ANA, saturday, LONDON, "failed"), "You, On my way, 18:02, Not sent. Tap to retry.");
+  assert.equal(messageLabel(msg({ state: "deleted", body: null }), names, ANA, saturday, LONDON), "Leo, Message deleted, 18:02");
+  assert.equal(messageLabel(msg({ state: "removed", body: null }), names, ANA, saturday, LONDON), "Leo, Message removed by an admin, 18:02");
+});
+
+test("messageLabel: a system line is Resbite's, an announcement says its audience in words", () => {
+  const saturday = Date.parse("2025-11-15T20:00:00Z");
+  assert.equal(messageLabel(sys("joined", { actor: MIA, user: MIA }), names, ANA, saturday, LONDON), "Resbite: Mia joined");
+  assert.equal(messageLabel(sys("joined", { actor: MIA, user: MIA }), names, MIA, saturday, LONDON), "Resbite: You joined");
+  const announcement = (audience: "going" | "everyone") =>
+    msg({ kind: "announcement", audience, authorId: ANA, body: "Doors open at 19:30" });
+  assert.equal(
+    messageLabel(announcement("everyone"), names, LEO, saturday, LONDON),
+    "Announcement to everyone invited, Ana, Doors open at 19:30, 18:02",
+  );
+  assert.equal(
+    messageLabel(announcement("going"), names, LEO, saturday, LONDON),
+    "Announcement to people going, Ana, Doors open at 19:30, 18:02",
+  );
+  assert.equal(
+    messageLabel(announcement("going"), names, ANA, saturday, LONDON, "sending"),
+    "Announcement to people going, You, Doors open at 19:30, 18:02, Sending…",
+  );
+});
+
+test("isSeriesId accepts a series uuid as the server writes it and nothing else (K-N14)", () => {
+  assert.equal(isSeriesId("0b000000-0000-4000-8000-000000000001"), true);
+  assert.equal(isSeriesId("123e4567-e89b-42d3-a456-426614174000"), true);
+  // The server writes lowercase, and the channel's topic check takes lowercase only.
+  assert.equal(isSeriesId("123E4567-E89B-42D3-A456-426614174000"), false);
+  for (const bad of ["", "not-a-uuid", "123e4567-e89b-42d3-a456-42661417400", "123e4567-e89b-42d3-a456-4266141740000",
+    " 123e4567-e89b-42d3-a456-426614174000", "123e4567e89b42d3a456426614174000", "chat:123e4567-e89b-42d3-a456-426614174000"])
+    assert.equal(isSeriesId(bad), false, bad);
+  for (const bad of [undefined, null, 7, ["123e4567-e89b-42d3-a456-426614174000"], {}])
+    assert.equal(isSeriesId(bad), false);
+});

@@ -1,0 +1,324 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { chatErrorMessage, createChatGateway, isChatClosed, isNotInChat } from "./chat";
+
+type Call = { fn: string; args: Record<string, unknown> };
+function gateway(data: unknown = null, error: unknown = null) {
+  const calls: Call[] = [];
+  const gw = createChatGateway(async (fn, args) => {
+    calls.push({ fn, args });
+    return { data, error };
+  });
+  return { calls, gw };
+}
+
+const SERIES = "0b000000-0000-4000-8000-000000000001";
+const PLAN = "0c000000-0000-4000-8000-000000000001";
+const ANA = "0a000000-0000-4000-8000-000000000001";
+const LEO = "0a000000-0000-4000-8000-000000000002";
+const CLIENT = "0d000000-0000-4000-8000-000000000001";
+
+const row = (over: Record<string, unknown> = {}) => ({
+  id: 41,
+  kind: "message",
+  audience: null,
+  event: null,
+  payload: null,
+  body: "I can bring the snacks",
+  state: "sent",
+  author_id: LEO,
+  created_at: "2025-11-15T18:02:00+00:00",
+  updated_at: "2025-11-15T18:02:00+00:00",
+  ...over,
+});
+const message = (over: Record<string, unknown> = {}) => ({
+  id: 41,
+  kind: "message",
+  audience: null,
+  event: null,
+  payload: null,
+  body: "I can bring the snacks",
+  state: "sent",
+  authorId: LEO,
+  createdAt: "2025-11-15T18:02:00+00:00",
+  updatedAt: "2025-11-15T18:02:00+00:00",
+  clientId: null,
+  ...over,
+});
+
+test("summary sends chat_summary with the series and reads the server's answer in camelCase", async () => {
+  const pinned = row({ id: 40, kind: "announcement", audience: "everyone", author_id: ANA, body: "Doors open at 19:30" });
+  const { calls, gw } = gateway({
+    series_id: SERIES,
+    plan_id: PLAN,
+    title: "Picnic in the park",
+    starts_at: "2025-11-15T13:00:00+00:00",
+    ends_at: "2025-11-15T17:00:00+00:00",
+    time_zone: "Europe/London",
+    status: "active",
+    repeat_weeks: null,
+    is_group: false,
+    stopped: false,
+    closes_at: "2025-11-17T17:00:00+00:00",
+    open: true,
+    host: true,
+    accepted: 6,
+    members: 8,
+    going: 8,
+    everyone: 9,
+    pinned,
+    last: row(),
+    names: { [ANA]: "Ana", [LEO]: "Leo" },
+    muted_chat: true,
+    muted_resbite: false,
+    last_read_id: 39,
+    unread: true,
+    message_count: 23,
+  });
+  assert.deepEqual(await gw.summary(SERIES), {
+    seriesId: SERIES,
+    planId: PLAN,
+    title: "Picnic in the park",
+    startsAt: "2025-11-15T13:00:00+00:00",
+    endsAt: "2025-11-15T17:00:00+00:00",
+    timeZone: "Europe/London",
+    status: "active",
+    repeatWeeks: null,
+    isGroup: false,
+    stopped: false,
+    closesAt: "2025-11-17T17:00:00+00:00",
+    open: true,
+    host: true,
+    accepted: 6,
+    members: 8,
+    going: 8,
+    everyone: 9,
+    pinned: message({ id: 40, kind: "announcement", audience: "everyone", authorId: ANA, body: "Doors open at 19:30" }),
+    last: message(),
+    names: { [ANA]: "Ana", [LEO]: "Leo" },
+    mutedChat: true,
+    mutedResbite: false,
+    lastReadId: 39,
+    unread: true,
+    messageCount: 23,
+  });
+  assert.deepEqual(calls, [{ fn: "chat_summary", args: { p_series: SERIES } }]);
+});
+
+test("summary reads a group's repeat, no pin, no last line and no read mark", async () => {
+  const { gw } = gateway({
+    series_id: SERIES,
+    plan_id: PLAN,
+    title: "Board game night",
+    starts_at: "2025-11-13T19:00:00+00:00",
+    ends_at: null,
+    time_zone: "Europe/London",
+    status: "active",
+    repeat_weeks: 1,
+    is_group: true,
+    stopped: false,
+    closes_at: null,
+    open: true,
+    host: false,
+    accepted: 6,
+    members: 9,
+    going: 6,
+    everyone: 9,
+    pinned: null,
+    last: null,
+    names: {},
+    muted_chat: false,
+    muted_resbite: false,
+    last_read_id: null,
+    unread: false,
+    message_count: 0,
+  });
+  const s = await gw.summary(SERIES);
+  assert.equal(s.repeatWeeks, 1);
+  assert.equal(s.isGroup, true);
+  assert.equal(s.endsAt, null);
+  assert.equal(s.closesAt, null);
+  assert.equal(s.pinned, null);
+  assert.equal(s.last, null);
+  assert.equal(s.lastReadId, null);
+});
+
+test("messages sends chat_messages with the series, the page's end and its size, and returns a page", async () => {
+  const system = row({
+    id: 42,
+    kind: "system",
+    event: "joined",
+    payload: { actor: ANA, user: ANA },
+    body: null,
+    author_id: null,
+  });
+  const { calls, gw } = gateway({
+    rows: [row({ client_id: CLIENT, author_id: ANA }), system],
+    names: { [ANA]: "Ana", [LEO]: null },
+    as_of: "2025-11-15T18:05:00.123+00:00",
+  });
+  assert.deepEqual(await gw.messages(SERIES), {
+    rows: [
+      message({ clientId: CLIENT, authorId: ANA }),
+      message({ id: 42, kind: "system", event: "joined", payload: { actor: ANA, user: ANA }, body: null, authorId: null }),
+    ],
+    names: { [ANA]: "Ana", [LEO]: null },
+    asOf: "2025-11-15T18:05:00.123+00:00",
+  });
+  await gw.messages(SERIES, 40, 100);
+  assert.deepEqual(calls, [
+    { fn: "chat_messages", args: { p_series: SERIES, p_before: null, p_limit: 50 } },
+    { fn: "chat_messages", args: { p_series: SERIES, p_before: 40, p_limit: 100 } },
+  ]);
+});
+
+test("since sends chat_messages_since with its three arguments, the cursor as given and null the first time (K-B1)", async () => {
+  const { calls, gw } = gateway({ rows: [row({ id: 43, state: "removed", body: null })], names: {}, as_of: "2025-11-15T18:06:00+00:00" });
+  assert.deepEqual(await gw.since(SERIES, 42, null), {
+    rows: [message({ id: 43, state: "removed", body: null })],
+    names: {},
+    asOf: "2025-11-15T18:06:00+00:00",
+  });
+  await gw.since(SERIES, 43, "2025-11-15T18:04:00.000Z");
+  await gw.since(SERIES, null, null);
+  assert.deepEqual(calls, [
+    { fn: "chat_messages_since", args: { p_series: SERIES, p_after: 42, p_changed_after: null } },
+    { fn: "chat_messages_since", args: { p_series: SERIES, p_after: 43, p_changed_after: "2025-11-15T18:04:00.000Z" } },
+    { fn: "chat_messages_since", args: { p_series: SERIES, p_after: null, p_changed_after: null } },
+  ]);
+});
+
+test("a page reads missing rows and names as empty", async () => {
+  assert.deepEqual(await gateway({ as_of: "2025-11-15T18:06:00+00:00" }).gw.since(SERIES, 1, null), {
+    rows: [],
+    names: {},
+    asOf: "2025-11-15T18:06:00+00:00",
+  });
+});
+
+test("send and announce send their functions with the client id and return the stored row", async () => {
+  const sent = gateway(row({ author_id: ANA, client_id: CLIENT }));
+  assert.deepEqual(await sent.gw.send(SERIES, "I can bring the snacks", CLIENT), message({ authorId: ANA, clientId: CLIENT }));
+  assert.deepEqual(sent.calls, [
+    { fn: "send_message", args: { p_series: SERIES, p_body: "I can bring the snacks", p_client_id: CLIENT } },
+  ]);
+  const announced = gateway(row({ kind: "announcement", audience: "everyone", author_id: ANA, client_id: CLIENT }));
+  assert.deepEqual(
+    await announced.gw.announce(SERIES, "Doors open at 19:30", "everyone", CLIENT),
+    message({ kind: "announcement", audience: "everyone", authorId: ANA, clientId: CLIENT }),
+  );
+  assert.deepEqual(announced.calls, [
+    {
+      fn: "send_announcement",
+      args: { p_series: SERIES, p_body: "Doors open at 19:30", p_audience: "everyone", p_client_id: CLIENT },
+    },
+  ]);
+});
+
+test("remove, deleteOwn, markRead and setMute each send their own function", async () => {
+  const { calls, gw } = gateway();
+  await gw.remove(41);
+  await gw.deleteOwn(42);
+  await gw.markRead(SERIES, 43);
+  await gw.setMute(SERIES, true);
+  await gw.setMute(SERIES, false);
+  assert.deepEqual(calls, [
+    { fn: "remove_message", args: { p_id: 41 } },
+    { fn: "delete_message", args: { p_id: 42 } },
+    { fn: "mark_chat_read", args: { p_series: SERIES, p_last_id: 43 } },
+    { fn: "set_chat_mute", args: { p_series: SERIES, p_muted: true } },
+    { fn: "set_chat_mute", args: { p_series: SERIES, p_muted: false } },
+  ]);
+});
+
+test("overview sends my_chat_overview and keeps each announcement's id (SHOULD 7)", async () => {
+  const { calls, gw } = gateway({
+    chats: {
+      [SERIES]: { unread: true, last: row(), open: true, count: 4 },
+      other: { unread: false, last: null, open: false, count: 0 },
+    },
+    announcements: { [PLAN]: { id: 40, author_id: ANA, body: "Doors open at 19:30" } },
+    names: { [ANA]: "Ana", [LEO]: "Leo" },
+  });
+  assert.deepEqual(await gw.overview(), {
+    chats: {
+      [SERIES]: { unread: true, last: message(), open: true, count: 4 },
+      other: { unread: false, last: null, open: false, count: 0 },
+    },
+    announcements: { [PLAN]: { id: 40, authorId: ANA, body: "Doors open at 19:30" } },
+    names: { [ANA]: "Ana", [LEO]: "Leo" },
+  });
+  assert.deepEqual(calls, [{ fn: "my_chat_overview", args: {} }]);
+  assert.deepEqual(await gateway({}).gw.overview(), { chats: {}, announcements: {}, names: {} });
+  assert.deepEqual(await gateway(null).gw.overview(), { chats: {}, announcements: {}, names: {} });
+});
+
+test("a refusal is thrown as the server sent it", async () => {
+  const refusal = { code: "42501", message: "Not in this chat" };
+  const { gw } = gateway(null, refusal);
+  const calls: Promise<unknown>[] = [
+    gw.summary(SERIES),
+    gw.messages(SERIES),
+    gw.since(SERIES, 1, null),
+    gw.send(SERIES, "hi", CLIENT),
+    gw.announce(SERIES, "hi", "going", CLIENT),
+    gw.remove(1),
+    gw.deleteOwn(1),
+    gw.markRead(SERIES, 1),
+    gw.setMute(SERIES, true),
+    gw.overview(),
+  ];
+  for (const call of calls) await assert.rejects(call, (e) => e === refusal);
+});
+
+test("the deadline wraps every call", async () => {
+  let wrapped = 0;
+  const gw = createChatGateway(
+    async () => ({ data: null, error: null }),
+    async (request) => {
+      wrapped++;
+      return request(new AbortController().signal);
+    },
+  );
+  await gw.markRead(SERIES, 1);
+  await gw.setMute(SERIES, true);
+  assert.equal(wrapped, 2);
+});
+
+test("the server's refusals read as plain words; anything else is the connection line", () => {
+  assert.equal(chatErrorMessage({ code: "42501", message: "Not in this chat" }), "You’re not in this chat.");
+  assert.equal(chatErrorMessage({ code: "42501", message: "Hosts only" }), "Only hosts can do that.");
+  assert.equal(chatErrorMessage({ code: "42501", message: "Not your message" }), "You can only delete your own messages.");
+  assert.equal(chatErrorMessage({ code: "22023", message: "Chat closed" }), "This chat is closed.");
+  assert.equal(chatErrorMessage({ code: "22023", message: "Slow down" }), "You’re sending messages too fast. Wait a moment.");
+  assert.equal(chatErrorMessage({ code: "22023", message: "Too fast" }), "You’re sending messages too fast. Wait a moment.");
+  assert.equal(chatErrorMessage({ code: "22023", message: "Invalid message" }), "Write something first, up to 1,000 characters.");
+  for (const other of [
+    new Error("Failed to fetch"),
+    { code: "42501", message: "Something new" },
+    { code: "22023", message: "Something new" },
+    { code: "22023", message: "Not in this chat" },
+    { code: "57014" },
+    null,
+  ])
+    assert.equal(chatErrorMessage(other), "Check your connection and try again.");
+});
+
+test("isNotInChat and isChatClosed tell the two refusals the hook acts on by code and message (H11)", () => {
+  assert.equal(isNotInChat({ code: "42501", message: "Not in this chat" }), true);
+  assert.equal(isChatClosed({ code: "22023", message: "Chat closed" }), true);
+  for (const other of [
+    { code: "42501", message: "Hosts only" },
+    { code: "22023", message: "Not in this chat" },
+    { code: "42501", message: "Chat closed" },
+    { code: "22023", message: "Slow down" },
+    { message: "Not in this chat" },
+    new Error("Not in this chat"),
+    null,
+    undefined,
+    "Chat closed",
+  ]) {
+    assert.equal(isNotInChat(other), false);
+    assert.equal(isChatClosed(other), false);
+  }
+});

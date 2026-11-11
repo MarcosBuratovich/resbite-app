@@ -99,6 +99,7 @@ function lifecycleHarness() {
     events: string[] = [],
     places: string[] = [],
     invites: string[] = [],
+    chats: string[] = [],
     device: string[] = [];
   let auth = async () => {
       events.push("auth");
@@ -125,6 +126,9 @@ function lifecycleHarness() {
     clearPhoto: () => photo(),
     clearInviteCodes: async (scope) => {
       invites.push(scope);
+    },
+    clearChatQueue: async (scope) => {
+      chats.push(scope);
     },
     clearKnownNames: (scope) => {
       events.push(`names:${scope}`);
@@ -155,6 +159,7 @@ function lifecycleHarness() {
     events,
     places,
     invites,
+    chats,
     device,
     setAuth: (fn: () => Promise<void>) => {
       auth = fn;
@@ -243,6 +248,7 @@ test("the names are forgotten first in the account's cleanup, so a step that fai
       clearCalendarRecords: quiet,
       clearPhoto: quiet,
       clearInviteCodes: quiet,
+      clearChatQueue: quiet,
       clearKnownNames: (scope) => {
         calls.push(`names:${scope}`);
       },
@@ -278,6 +284,7 @@ test("a failed cover clear fails sign-out before auth sign-out", async () => {
     clearCalendarRecords: async () => {},
     clearPhoto: async () => {},
     clearInviteCodes: async () => {},
+    clearChatQueue: async () => {},
     clearKnownNames: () => {},
     clearCovers: async () => {
       throw Error("disk");
@@ -403,6 +410,7 @@ test("a failed recent-places clear fails sign-out before auth sign-out", async (
       events.push("photo");
     },
     clearInviteCodes: async () => {},
+    clearChatQueue: async () => {},
     clearKnownNames: () => {},
     clearCovers: async () => {},
     blockPending: () => () => {},
@@ -446,6 +454,7 @@ test("a failed reminder or calendar clear fails sign-out before auth sign-out", 
         events.push("photo");
       },
       clearInviteCodes: async () => {},
+      clearChatQueue: async () => {},
       clearKnownNames: () => {},
       clearCovers: async () => {},
       blockPending: () => () => {},
@@ -478,6 +487,7 @@ test("a push cleanup failure refuses sign-out first, with its own notice; other 
     clearCalendarRecords: async () => {},
     clearPhoto: async () => {},
     clearInviteCodes: async () => {},
+    clearChatQueue: async () => {},
     clearKnownNames: () => {},
     clearCovers: async () => {},
     blockPending: () => () => {},
@@ -534,6 +544,7 @@ test("sign-out dismisses the pushes still shown, after removing the endpoint and
       clearCalendarRecords: async () => {},
       clearPhoto: async () => {},
       clearInviteCodes: async () => {},
+      clearChatQueue: async () => {},
       clearKnownNames: () => {},
       clearCovers: async () => {},
       blockPending: () => () => {},
@@ -586,4 +597,78 @@ test("sign-out dismisses the pushes still shown, after removing the endpoint and
   assert.deepEqual(await signOutWith(throwing), ["push", "reminders", "auth", "finish"]);
   // Leaving preview signs nobody out and touches no notification.
   assert.deepEqual(await signOutWith(fake(), true), ["reminders", "finish"]);
+});
+
+function orderedLifecycle(preview: boolean, failChat = false) {
+  const calls: string[] = [];
+  const step = (name: string) => async (scope: string) => {
+    calls.push(`${name}:${scope}`);
+    if (failChat && name === "chat") throw Error("disk");
+  };
+  const life = createSessionLifecycle({
+    suspend: () => {},
+    resume: () => {},
+    clearPeople: step("people"),
+    clearRecentPlaces: step("places"),
+    clearInviteCodes: step("invites"),
+    clearChatQueue: step("chat"),
+    clearKnownNames: (scope) => {
+      calls.push(`names:${scope}`);
+    },
+    clearReminders: step("reminders"),
+    clearCalendarRecords: step("calendar"),
+    clearPhoto: step("photo"),
+    clearCovers: step("covers"),
+    clearJournal: step("journal"),
+    blockPending: () => () => {},
+    clearPending: async () => {
+      calls.push("pending");
+    },
+    authSignOut: async () => {
+      calls.push("auth");
+    },
+    finish: () => {
+      calls.push("finish");
+    },
+    busy: () => {},
+  });
+  life.update({ account: "owner", preview });
+  return { life, calls };
+}
+test("sign-out and account deletion clear the unsent chat messages right after the invitation codes (K-S7)", async () => {
+  const signOut = orderedLifecycle(false);
+  await signOut.life.signOut();
+  assert.deepEqual(signOut.calls, [
+    "names:owner",
+    "people:owner",
+    "places:owner",
+    "invites:owner",
+    "chat:owner",
+    "reminders:owner",
+    "calendar:owner",
+    "photo:owner",
+    "covers:owner",
+    "pending",
+    "auth",
+    "finish",
+  ]);
+  const deletion = orderedLifecycle(false);
+  await deletion.life.finishAccountDeletion("owner");
+  assert.deepEqual(deletion.calls.slice(0, 6), [
+    "names:owner",
+    "journal:owner",
+    "people:owner",
+    "places:owner",
+    "invites:owner",
+    "chat:owner",
+  ]);
+  assert(deletion.calls.includes("auth"));
+  const preview = orderedLifecycle(true);
+  await preview.life.signOut();
+  assert.equal(preview.calls.indexOf("chat:preview"), preview.calls.indexOf("invites:preview") + 1);
+});
+test("a failed chat queue clear fails sign-out before auth sign-out", async () => {
+  const h = orderedLifecycle(false, true);
+  await assert.rejects(h.life.signOut(), /disk/);
+  assert.deepEqual(h.calls, ["names:owner", "people:owner", "places:owner", "invites:owner", "chat:owner"]);
 });
