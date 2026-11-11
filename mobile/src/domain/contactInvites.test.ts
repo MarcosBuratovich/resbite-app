@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { contactNumbers, hostRegion, inviteMessage, newInviteCode, personalLink, sendOrder, smsUrl, whatsappUrl, whatsappAppUrl, groupContacts, storedFor, storedEntry } from "./contactInvites";
+import { contactNumbers, hostRegion, inviteMessage, newInviteCode, personalLink, sendOrder, smsUrl, whatsappUrl, whatsappAppUrl, groupContacts, storedFor, storedEntry, inviteItems, usersToInvite } from "./contactInvites";
 import { INVITE_COPY } from "./inviteCopy";
 
 test("contactNumbers gives one entry per distinct number and counts the unparseable", () => {
@@ -132,4 +132,31 @@ test("storedEntry also names the key a code is saved under, so it can be forgott
   assert.deepEqual(storedEntry(stored, "+5491112341234"), { key: "+5491112341234", value: "exact" });
   assert.deepEqual(storedEntry(stored, "+5491198765432"), { key: "+541198765432", value: "old" });
   assert.equal(storedEntry(stored, "+447700900111"), undefined);
+});
+
+test("inviteItems: one phone item per number (the first pick wins), each with its code, and the connections apart", () => {
+  const { numbers } = contactNumbers(
+    [
+      { fullName: "Ben Ito", phones: [{ number: "+44 7700 900456" }] },
+      { fullName: "Cy Okafor", phones: [{ number: "+44 7700 900789" }] },
+    ],
+    "GB",
+  );
+  const [ben, cy] = numbers;
+  // A typed number equal to a contact's has a pick of its own: the same key twice.
+  const typed = { ...ben, contact: "typed", name: "Ben" };
+  const items = inviteItems([ben, cy, typed], new Set(["u-marta", "u-sofia"]), new Set(), (n) => `code-${n.name}`);
+  assert.deepEqual(items.numbers, [ben, cy]);
+  assert.deepEqual(items.phones, [
+    { phone: "447700900456", country: "44", code: "code-Ben Ito" },
+    { phone: "447700900789", country: "44", code: "code-Cy Okafor" },
+  ]);
+  assert.deepEqual(items.users, [{ user: "u-marta" }, { user: "u-sofia" }]);
+});
+
+test("inviteItems leaves out a chosen connection already on the resbite", () => {
+  const items = inviteItems([], new Set(["u-marta", "u-lucas"]), new Set(["u-lucas", "u-owner"]), () => "x");
+  assert.deepEqual(items, { numbers: [], phones: [], users: [{ user: "u-marta" }] });
+  assert.deepEqual(usersToInvite(new Set(["u-lucas"]), new Set(["u-lucas"])), []);
+  assert.deepEqual(usersToInvite(new Set(["u-sofia", "u-marta"]), new Set()), [{ user: "u-sofia" }, { user: "u-marta" }]);
 });

@@ -239,6 +239,10 @@ async function fixture({ user = host, width = 390, foldStatus = 200 } = {}) {
       return reply(plan === coffee.id ? state.guests : []);
     }
     if (path === "/rest/v1/plan_mutes") return reply([]);
+    // Connections (verify-connections covers them): the host has none, so Invite people shows no "Your connections",
+    // and the event page's people know no connection states.
+    if (path === "/rest/v1/rpc/my_connections") return reply({ requests: [], connected: [] });
+    if (path === "/rest/v1/rpc/plan_connection_states") return reply({});
     if (path === "/rest/v1/rpc/plan_link") return reply("AbCdEfGhIjKlMnOpQrStUv");
     // Open-link approval: nobody has answered the event link (the host's Waiting for you and My resbites' requests
     // are empty; verify-event and verify-open-link-app cover them).
@@ -419,6 +423,10 @@ try {
     await expect(heading(page, "Or share the event link")).toBeVisible();
     await expect(button(page, "Share link")).toBeVisible();
     await expect(button(page, "Invite 0")).toBeDisabled();
+    // No connections: no "Your connections" section and no "Phone contacts" title, as before connections.
+    await expect.poll(() => f.calls("/rest/v1/rpc/my_connections").length).toBe(1);
+    await expect(page.getByRole("heading", { name: /^Your connections/ })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Phone contacts", exact: true })).toHaveCount(0);
     await noTestCode(page, "the Pick step");
     // Nothing is looked up before anything is picked.
     await page.waitForTimeout(600);

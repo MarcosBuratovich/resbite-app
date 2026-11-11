@@ -1,5 +1,14 @@
+import { CONNECTIONS_COPY } from "../domain/connectionsCopy";
 import { INVITE_COPY } from "../domain/inviteCopy";
 export type InviteKind = "app" | "link" | "self" | "already";
+/** A phone number to invite: its digits, calling code and the personal code its link carries. */
+export type PhoneItem = { phone: string; country: string; code: string };
+/** A Resbite connection to invite in the app, by user id (CO-P4). */
+export type UserItem = { user: string };
+export type InviteItem = PhoneItem | UserItem;
+export type PhoneResult = { phone: string; kind: InviteKind };
+export type UserResult = { user: string; kind: InviteKind };
+export type InviteResult = PhoneResult | UserResult;
 export type PhoneInvitation = {
   phone: string;
   country: string;
@@ -9,10 +18,8 @@ export type PhoneInvitation = {
 export type ContactInviteGateway = {
   /** Which of these numbers (digits) belong to people already on Resbite. */
   onResbite(phones: string[]): Promise<Set<string>>;
-  invite(
-    plan: string,
-    items: { phone: string; country: string; code: string }[],
-  ): Promise<{ phone: string; kind: InviteKind }[]>;
+  /** Each result in its item's order and shape: `{phone, kind}` for a number, `{user, kind}` for a connection. */
+  invite(plan: string, items: InviteItem[]): Promise<InviteResult[]>;
   list(plan: string): Promise<PhoneInvitation[]>;
   revoke(plan: string, phone: string): Promise<void>;
 };
@@ -30,8 +37,30 @@ export function inviteErrorMessage(e: unknown): string {
   return offline;
 }
 
+/**
+ * A `{user}` item the server refused (42501 'Not a connection'): someone not, or no longer, connected, or who may no
+ * longer use the app. The server refuses the whole call for it, so `inviteConnections` sends such a call again one
+ * by one. Told by its name, as a class's `instanceof` may not survive the transform to older JavaScript.
+ */
+const NOT_A_CONNECTION = "NotAConnection";
+export const isNotAConnection = (e: unknown): boolean => e instanceof Error && e.name === NOT_A_CONNECTION;
+function failure(e: unknown): Error {
+  if (errorField(e, "code") === "42501" && errorField(e, "message") === "Not a connection") {
+    const refused = Error(CONNECTIONS_COPY.failed);
+    refused.name = NOT_A_CONNECTION;
+    return refused;
+  }
+  return Error(inviteErrorMessage(e));
+}
+
 const kinds: readonly string[] = ["app", "link", "self", "already"];
 const BATCH = 50;
+/** A reply that answers its item: the same shape (a phone for a number, a user for a connection) and a known kind. */
+const answers = (item: InviteItem, d: unknown): boolean => {
+  if (!d || typeof d !== "object") return false;
+  const r = d as Record<string, unknown>;
+  return typeof ("user" in item ? r.user : r.phone) === "string" && kinds.includes(r.kind as string);
+};
 
 export type Rpc = (
   fn: string,
@@ -60,9 +89,9 @@ export function createContactInviteGateway(
     try {
       reply = await deadline((signal) => rpc(fn, args, signal));
     } catch (error) {
-      throw Error(inviteErrorMessage(error));
+      throw failure(error);
     }
-    if (reply.error) throw Error(inviteErrorMessage(reply.error));
+    if (reply.error) throw failure(reply.error);
     return reply.data;
   }
   return {
@@ -77,9 +106,10 @@ export function createContactInviteGateway(
       }
       return found;
     },
-    // The server takes at most 50 a call, as the lookup does; the results come back in the items' order.
+    // The server takes at most 50 a call (numbers and connections together), as the lookup does; the results come
+    // back in the items' order, each in its item's shape.
     async invite(plan, items) {
-      const out: { phone: string; kind: InviteKind }[] = [];
+      const out: InviteResult[] = [];
       for (let i = 0; i < items.length; i += BATCH) {
         const batch = items.slice(i, i + BATCH);
         const data = await call("invite_contacts", {
@@ -89,13 +119,15 @@ export function createContactInviteGateway(
         if (
           !Array.isArray(data) ||
           data.length !== batch.length ||
-          !data.every(
-            (d) => d && typeof d.phone === "string" && kinds.includes(d.kind),
-          )
+          !data.every((d, j) => answers(batch[j], d))
         )
           throw Error(offline);
-        for (const d of data)
-          out.push({ phone: d.phone as string, kind: d.kind as InviteKind });
+        for (const [j, d] of data.entries())
+          out.push(
+            "user" in batch[j]
+              ? { user: d.user as string, kind: d.kind as InviteKind }
+              : { phone: d.phone as string, kind: d.kind as InviteKind },
+          );
       }
       return out;
     },
@@ -113,6 +145,42 @@ export function createContactInviteGateway(
       await call("revoke_phone_invitation", { p_plan: plan, p_phone: phone });
     },
   };
+}
+
+/**
+ * Invites connections by user id (CO-P4), in calls of their own: Invite people sends them after the numbers, so a
+ * refusal here never loses the numbers' invitations. A call refused for one of its connections (42501 'Not a
+ * connection': `my_connections` may still list someone who can no longer be invited) is sent again one by one, so
+ * the others are still invited; those refused alone are left out of the results and listed in `refused`. Any other
+ * failure throws, as `invite` does.
+ */
+export async function inviteConnections(
+  gateway: Pick<ContactInviteGateway, "invite">,
+  plan: string,
+  users: string[],
+): Promise<{ results: UserResult[]; refused: string[] }> {
+  const results: UserResult[] = [];
+  const refused: string[] = [];
+  const keep = (found: InviteResult[]) => {
+    for (const r of found) if ("user" in r) results.push(r);
+  };
+  for (let i = 0; i < users.length; i += BATCH) {
+    const batch = users.slice(i, i + BATCH);
+    try {
+      keep(await gateway.invite(plan, batch.map((user) => ({ user }))));
+    } catch (e) {
+      if (!isNotAConnection(e)) throw e;
+      for (const user of batch) {
+        try {
+          keep(await gateway.invite(plan, [{ user }]));
+        } catch (one) {
+          if (!isNotAConnection(one)) throw one;
+          refused.push(user);
+        }
+      }
+    }
+  }
+  return { results, refused };
 }
 
 // The client loads on first use, so the gateway's logic runs under node without React Native.

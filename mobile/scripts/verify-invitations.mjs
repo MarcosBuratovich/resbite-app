@@ -97,6 +97,8 @@ async function fixture({ width = 390, largeText = false } = {}) {
     if (path === "/rest/v1/plans")
       return reply(req.headers().accept?.includes("object") ? state.current : [state.current]);
     if (path === "/rest/v1/attendees") return reply([]);
+    // No connections: Invite people shows no "Your connections" (verify-connections covers them).
+    if (path === "/rest/v1/rpc/my_connections") return reply({ requests: [], connected: [] });
     // The organizer's event link: read once when the card opens.
     if (path === "/rest/v1/rpc/plan_link") {
       state.links.push(req.postDataJSON());
@@ -118,7 +120,7 @@ try {
     await expect(page.getByRole("heading")).toHaveText(["Invite people", "Or share the event link"]);
     await expect(heading(page, "Event link")).toHaveCount(0);
     for (const name of LINK_CONTROLS) await expect(button(page, name)).toBeEnabled();
-    await expect(page.getByText("Anyone can answer with it, and you approve them first.", { exact: true })).toBeVisible();
+    await expect(page.getByText("Anyone who answers through the link waits for your approval.", { exact: true })).toBeVisible();
     assert.deepEqual(state.links, [{ p_plan: plan.id }], "the link is read once, for this resbite");
     // GI1's cover card is gone, and the screen never shows the exact place.
     await expect(page.getByText("This is what people see before they reply.", { exact: true })).toHaveCount(0);

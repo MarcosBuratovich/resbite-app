@@ -12,5 +12,10 @@ test("approval copy names the person and uses curly apostrophes", () => {
   assert.equal(INVITE_COPY.approveLabel("Bea"), "Approve Bea");
   assert.equal(INVITE_COPY.declineLabel("Bea"), "Decline Bea");
   assert.equal(INVITE_COPY.waitingForYou, "Waiting for you");
-  assert.equal(INVITE_COPY.linkInfoLine, "Anyone can answer with it, and you approve them first.");
+});
+
+test("Invite people names its phone contacts apart from the connections, and the event link says who waits", () => {
+  assert.equal(INVITE_COPY.phoneContacts, "Phone contacts");
+  assert.equal(INVITE_COPY.eventLinkHint, "Anyone who answers through the link waits for your approval.");
+  assert.equal("linkInfoLine" in INVITE_COPY, false, "the old hint is gone");
 });

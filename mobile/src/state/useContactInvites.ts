@@ -2,19 +2,24 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Platform } from "react-native";
 import { getRandomBytes } from "expo-crypto";
 import { readPhoneRows, hasContactAccess, expandContactAccess } from "../services/contacts";
-import { contactInviteGateway, type InviteKind } from "../services/contactInvites";
+import { contactInviteGateway, inviteConnections, type InviteKind, type UserResult } from "../services/contactInvites";
+import { connectionGateway, type ConnectionPerson } from "../services/connections";
 import { inviteCodeStore, type StoredInvite } from "../services/inviteCodeStore";
 import { putInviteQuietly, sendPersonalLink } from "../services/inviteSend";
 import {
   contactNumbers,
   hostRegion,
+  inviteItems,
   newInviteCode,
   storedFor,
+  usersToInvite,
   type ContactNumber,
 } from "../domain/contactInvites";
+import { CONNECTIONS_COPY } from "../domain/connectionsCopy";
 import { INVITE_COPY } from "../domain/inviteCopy";
 import { deviceRegion, INVALID_PHONE, parsePhone, phoneKey } from "../domain/phone";
 
+export { inviteItems } from "../domain/contactInvites";
 export const DEFAULT_ORIGIN = "https://link.resbite.com";
 const digitsOf = (e164: string) => e164.replace(/\D/g, "");
 
@@ -25,7 +30,8 @@ type Message = { host: string; title: string; when: string };
 
 /**
  * Contact invitations for one event: the contact pages, the picked numbers, the "On Resbite" lookup (picked
- * numbers only, debounced), the invite call and the sending of each personal link from this phone.
+ * numbers only, debounced), the host's Resbite connections and the ones picked (CO-P4), the invite calls and the
+ * sending of each personal link from this phone.
  */
 export function useContactInvites(a: {
   planId: string | undefined;
@@ -33,8 +39,10 @@ export function useContactInvites(a: {
   userPhone: string | null | undefined;
   message: Message;
   enabled: boolean;
+  /** The user ids already on the resbite (its owner and guests): their connections read "Invited". */
+  onPlan?: string[];
 }) {
-  const { planId, scope, userPhone, message, enabled } = a;
+  const { planId, scope, userPhone, message, enabled, onPlan } = a;
   const hostDefault = useMemo(() => hostRegion(userPhone, deviceRegion()), [userPhone]);
   // The region a number without a country code is read in: the host's own, until the host picks another.
   const [assumedRegion, setAssumedRegionState] = useState(hostDefault);
@@ -65,6 +73,9 @@ export function useContactInvites(a: {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [connections, setConnections] = useState<ConnectionPerson[]>([]);
+  const [chosenUsers, setChosenUsers] = useState<Set<string>>(new Set());
+  const invitedUsers = useMemo(() => new Set(onPlan ?? []), [onPlan]);
   const touched = useRef(false);
   const working = useRef(false);
   const checked = useRef(new Set<string>());
@@ -88,6 +99,8 @@ export function useContactInvites(a: {
     setPicked({});
     setOnResbite(new Set());
     setOutcome(null);
+    setConnections([]);
+    setChosenUsers(new Set());
     setError(null);
     setNotice("");
     setBusy(false);
@@ -98,6 +111,19 @@ export function useContactInvites(a: {
     loadedRegion.current = null;
     setAssumedRegionState(hostDefault);
   }, [context]);
+
+  // The host's connections, read once a host may invite here. Without them (a failed read included) the section is
+  // simply absent: the numbers and the event link still work.
+  useEffect(() => {
+    if (!enabled || !scope) return;
+    const ctx = current.current;
+    connectionGateway.mine().then(
+      ({ connected }) => {
+        if (alive(ctx)) setConnections(connected);
+      },
+      () => {},
+    );
+  }, [enabled, scope, context]);
 
   const clearContacts = useCallback(() => {
     setLoaded([]);
@@ -177,6 +203,18 @@ export function useContactInvites(a: {
     return q ? all.filter((n) => `${n.name} ${n.label}`.toLowerCase().includes(q)) : all;
   }, [all, query]);
   const selected = useMemo(() => Object.values(picked), [picked]);
+  /** What Invite N counts: the picked numbers and the picked connections not already on the resbite. */
+  const inviteCount = selected.length + usersToInvite(chosenUsers, invitedUsers).length;
+
+  /** Picks a connection, or clears the pick; someone already on the resbite can't be picked. */
+  function toggleUser(userId: string) {
+    if (invitedUsers.has(userId)) return;
+    setChosenUsers((old) => {
+      const next = new Set(old);
+      if (!next.delete(userId)) next.add(userId);
+      return next;
+    });
+  }
 
   /** Picks this number for its contact (replacing another of theirs); picking the same one again clears it. */
   function toggle(n: ContactNumber) {
@@ -241,41 +279,68 @@ export function useContactInvites(a: {
   }, [selected, enabled, planId]);
 
   async function invite() {
-    if (!planId || !scope || !selected.length || working.current) return;
+    if (!planId || !scope || !inviteCount || working.current) return;
     const ctx = current.current;
     working.current = true;
     setBusy(true);
     setError(null);
     try {
-      const stored = await inviteCodeStore.get(scope, planId);
-      // One item per key (the first pick wins): a typed number equal to a contact's other number has a pick of its
-      // own, and two items with one key would land on one invitation, leaving the first link shown dead.
-      const seen = new Set<string>();
-      const unique = selected.filter((n) => !seen.has(n.key) && !!seen.add(n.key));
-      const items = unique.map((n) => ({
-        phone: digitsOf(n.e164),
-        country: n.country,
-        code: storedFor(stored, n.e164)?.code ?? newInviteCode(getRandomBytes(16)),
-      }));
-      const results = await contactInviteGateway.invite(planId, items);
-      if (!alive(ctx)) return;
+      // Only the numbers have codes kept on this phone.
+      const stored = selected.length ? await inviteCodeStore.get(scope, planId) : {};
+      const { numbers, phones, users } = inviteItems(
+        selected,
+        chosenUsers,
+        invitedUsers,
+        (n) => storedFor(stored, n.e164)?.code ?? newInviteCode(getRandomBytes(16)),
+      );
       const out: Outcome = { inApp: [], already: [], links: [] };
-      for (const [i, n] of unique.entries()) {
-        const kind: InviteKind | undefined = results.find((r) => phoneKey(r.phone) === n.key)?.kind;
-        if (kind === "link") {
-          const prior = storedFor(stored, n.e164);
-          const value: StoredInvite = { code: items[i].code, name: n.name, sentVia: prior?.code === items[i].code ? prior.sentVia : undefined };
-          await putInviteQuietly(scope, planId, n.e164, value);
-          out.links.push({ number: n, code: items[i].code, sentVia: value.sentVia });
-        } else if (kind === "app" || kind === "already") {
-          await inviteCodeStore.remove(scope, planId, n.e164).catch(() => {});
-          (kind === "app" ? out.inApp : out.already).push(n.name);
-        } else if (kind === "self") {
-          await inviteCodeStore.remove(scope, planId, n.e164).catch(() => {});
+      // The numbers first: a failure here shows on the Pick step, and nothing else is sent.
+      if (phones.length) {
+        const results = await contactInviteGateway.invite(planId, phones);
+        if (!alive(ctx)) return;
+        for (const [i, n] of numbers.entries()) {
+          const kind: InviteKind | undefined = results.find((r) => "phone" in r && phoneKey(r.phone) === n.key)?.kind;
+          if (kind === "link") {
+            const prior = storedFor(stored, n.e164);
+            const value: StoredInvite = { code: phones[i].code, name: n.name, sentVia: prior?.code === phones[i].code ? prior.sentVia : undefined };
+            await putInviteQuietly(scope, planId, n.e164, value);
+            out.links.push({ number: n, code: phones[i].code, sentVia: value.sentVia });
+          } else if (kind === "app" || kind === "already") {
+            await inviteCodeStore.remove(scope, planId, n.e164).catch(() => {});
+            (kind === "app" ? out.inApp : out.already).push(n.name);
+          } else if (kind === "self") {
+            await inviteCodeStore.remove(scope, planId, n.e164).catch(() => {});
+          }
+        }
+      }
+      // Then the connections, in calls of their own, so a refusal there never loses the numbers' invitations.
+      let note: string | null = null;
+      if (users.length) {
+        let sent: { results: UserResult[]; refused: string[] } | null = null;
+        try {
+          sent = await inviteConnections(contactInviteGateway, planId, users.map((u) => u.user));
+        } catch (e) {
+          // Nothing was sent: the Pick step says why, as it does for the numbers.
+          if (!phones.length) throw e;
+          // The numbers went: Almost there shows them, with why the connections didn't go.
+          note = e instanceof Error ? e.message : INVITE_COPY.offline;
+        }
+        if (sent) {
+          for (const r of sent.results) {
+            const name = connections.find((p) => p.userId === r.user)?.name;
+            if (name && r.kind === "app") out.inApp.push(name);
+            else if (name && r.kind === "already") out.already.push(name);
+          }
+          if (sent.refused.length) {
+            // Everyone picked was refused: stay on the Pick step.
+            if (!phones.length && !sent.results.length) throw Error(CONNECTIONS_COPY.failed);
+            note = CONNECTIONS_COPY.inviteRefused;
+          }
         }
       }
       if (!alive(ctx)) return;
       setOutcome(out);
+      setError(note);
     } catch (e) {
       if (alive(ctx)) setError(e instanceof Error ? e.message : INVITE_COPY.offline);
     } finally {
@@ -315,5 +380,6 @@ export function useContactInvites(a: {
   return {
     assumedRegion, setAssumedRegion, access, visible, selected, picked, onResbite, query, setQuery, more, limited, skipped, offset,
     busy, error, setError, notice, setNotice, outcome, loadContacts, toggle, choose, addNumber, invite, send,
+    connections, chosenUsers, toggleUser, invitedUsers, inviteCount,
   };
 }

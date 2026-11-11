@@ -116,7 +116,7 @@ export function EventLinkCard({
   return (
     <View style={{ gap: 10 }}>
       {titled ? <Title style={{ fontSize: 23 }}>{INVITE_COPY.eventLink}</Title> : null}
-      <Copy style={s.muted}>{INVITE_COPY.linkInfoLine}</Copy>
+      <Copy style={s.muted}>{INVITE_COPY.eventLinkHint}</Copy>
       <ErrorNote message={error} />
       {!!notice && (
         <Copy accessibilityLiveRegion="polite" style={{ color: c.aquaDark }}>

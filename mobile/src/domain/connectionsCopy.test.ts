@@ -25,6 +25,9 @@ test("connections copy reads exactly", () => {
   assert.equal(C.acceptFrom("Bea"), "Accept Bea's request");
   assert.equal(C.yourConnections, "Your connections");
   assert.equal(C.invitedAlready, "Invited");
+  assert.equal(C.selectPerson("Marta"), "Select Marta");
+  assert.equal(C.searchConnections, "Search connections");
+  assert.equal(C.inviteRefused, "One of your connections can't be invited right now. The others were.");
   assert.equal(C.profileRow, "Connections");
   assert.equal(C.peopleListsRow, "People lists");
   assert.equal(C.namesFirst, "Answer first to connect with people here.");

@@ -284,6 +284,12 @@ async function open(world = {}) {
       // The Invite screen's event link.
       case "plan_link":
         return reply("AAAAAAAAAAAAAAAAAAAAA1");
+      // Connections (verify-connections covers them): none here, so the people know no states and Invite people
+      // shows no "Your connections".
+      case "plan_connection_states":
+        return reply({});
+      case "my_connections":
+        return reply({ requests: [], connected: [] });
       case "set_plan_cover_if_current": {
         // As the server does: a cover only from the plan owner's folder, and only one that was uploaded.
         if (body.p_path !== null && (!body.p_path.startsWith(`${state.plan.owner_id}/${body.p_plan}/`) || !state.uploads.includes(body.p_path)))

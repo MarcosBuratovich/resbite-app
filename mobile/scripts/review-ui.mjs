@@ -488,6 +488,8 @@ try {
           }),
         );
       if (path === "/rest/v1/rpc/plan_phone_invitations") return reply([...links.values()]);
+      // No connections: Invite people shows no "Your connections" (verify-connections covers them).
+      if (path === "/rest/v1/rpc/my_connections") return reply({ requests: [], connected: [] });
       return reply({ message: `Unexpected ${path}` }, 400);
     });
     const open = async (path) => {

@@ -21,6 +21,11 @@ export const CONNECTIONS_COPY = {
   acceptFrom: (name: string) => `Accept ${name}'s request`,
   yourConnections: "Your connections",
   invitedAlready: "Invited",
+  /** A connection's row on Invite people, for VoiceOver. */
+  selectPerson: (name: string) => `Select ${name}`,
+  searchConnections: "Search connections",
+  /** Invite people, when a connection's invitation is refused (they may no longer use the app) but others went. */
+  inviteRefused: "One of your connections can't be invited right now. The others were.",
   profileRow: "Connections",
   peopleListsRow: "People lists",
   namesFirst: "Answer first to connect with people here.",

@@ -38,7 +38,7 @@ function Row({ g, chosen, badge, onPress }: { g: Group; chosen?: ContactNumber; 
   );
 }
 
-/** Step 1: search, picked chips, contact list, manual number, and the Invite button. */
+/** Step 1: search, picked chips, contact list, manual number, and the Invite button (contacts and connections). */
 export function PickStep({ k, previewing }: { k: Contacts; previewing: boolean }) {
   const [name, setName] = useState("");
   const [number, setNumber] = useState("");
@@ -140,10 +140,11 @@ export function PickStep({ k, previewing }: { k: Contacts; previewing: boolean }
         <Button title={T.addButton} secondary disabled={!number.trim()} onPress={add} />
       </View>
       <View style={{ gap: 6 }}>
+        {/* The count takes in the connections picked above the contacts (CO-03). */}
         <Button
-          title={T.invite(k.selected.length)}
+          title={T.invite(k.inviteCount)}
           hint={T.inviteHint}
-          disabled={k.selected.length === 0 || k.busy || previewing}
+          disabled={k.inviteCount === 0 || k.busy || previewing}
           loading={k.busy}
           onPress={() => void k.invite()}
         />

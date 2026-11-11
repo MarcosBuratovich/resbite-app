@@ -9,6 +9,7 @@ import { EventLinkCard } from "../src/design/EventLinkCard";
 import { EVENT_COPY } from "../src/domain/eventPage";
 import { IconButton, InfoSheet } from "../src/design/kit";
 import { PickStep, SendStep } from "../src/design/ContactPicker";
+import { ConnectionsPicker, SectionTitle } from "../src/design/ConnectionsPicker";
 import { PreviewNotice } from "../src/design/Chrome";
 import { useApp } from "../src/state/AppState";
 import { useContactInvites } from "../src/state/useContactInvites";
@@ -17,14 +18,16 @@ import { INVITE_COPY } from "../src/domain/inviteCopy";
 import { useFocusedRefresh, type Run } from "../src/state/useFocusedRefresh";
 import { planGateway } from "../src/services/plans";
 import { readProfile } from "../src/services/profile";
+import { readGuests } from "../src/services/rsvp";
 import { canEditPlan, type Plan } from "../src/domain/plans";
 import { LINK_INFO, linkDate } from "../src/domain/eventLinks";
 
 const unavailable = INVITE_COPY.hostsOnly;
 
 /**
- * "Invite people" (/invitations?plan=<id>): a host (the owner or an admin) picks phone contacts or adds numbers to
- * invite, then sends each person's own link. The event link (Share, Copy and Turn off) follows the contacts.
+ * "Invite people" (/invitations?plan=<id>): a host (the owner or an admin) picks Resbite connections (CO-03), phone
+ * contacts or adds numbers to invite, then sends each person's own link. The event link (Share, Copy and Turn off)
+ * follows the contacts.
  */
 export default function Invitations() {
   const { plan: planId } = useLocalSearchParams<{ plan: string }>();
@@ -33,6 +36,7 @@ export default function Invitations() {
   const identity = `${preview ? "preview" : (userId ?? "")}:${planId}`;
   const [plan, setPlan] = useState<Plan | null>(null);
   const [host, setHost] = useState<string | null>(null);
+  const [onPlan, setOnPlan] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [about, setAbout] = useState(false);
@@ -47,6 +51,7 @@ export default function Invitations() {
       when: plan ? linkDate(plan.starts_at, plan.ends_at) : "",
     },
     enabled: !preview && !!plan,
+    onPlan,
   });
 
   const load = useCallback(
@@ -66,16 +71,26 @@ export default function Invitations() {
         // The plan read embeds the admins, who invite as the owner does.
         if (!found || !canEditPlan(found, userId, preview, Date.now(), found.admins)) throw Error(unavailable);
         let name: string | null = null;
+        let guests: string[] = [];
         if (!preview) {
-          // The name is only for the invitation message; without it the message says "Your host".
-          name = await readProfile(userId!).then(
-            (profile) => profile?.display_name?.trim() || null,
-            () => null,
-          );
+          [name, guests] = await Promise.all([
+            // The name is only for the invitation message; without it the message says "Your host".
+            readProfile(userId!).then(
+              (profile) => profile?.display_name?.trim() || null,
+              () => null,
+            ),
+            // Who is on the resbite already, so their connections read "Invited". Without it every connection can
+            // be picked, and the server answers "already" for those on it.
+            readGuests(found.id).then(
+              (list) => list.map((g) => g.userId),
+              (): string[] => [],
+            ),
+          ]);
           if (!valid()) return;
         }
         setPlan(found);
         setHost(name);
+        setOnPlan(found.owner_id ? [found.owner_id, ...guests] : guests);
       } catch (e) {
         if (valid()) {
           setError(e instanceof Error ? e.message : "Couldn’t load this resbite. Check your connection and try again.");
@@ -101,7 +116,13 @@ export default function Invitations() {
           <IconButton icon={Info} label="About invitation links" onPress={() => setAbout(true)} />
         </View>
         <Title>{contacts.outcome ? INVITE_COPY.almostHeading : INVITE_COPY.heading}</Title>
-        {plan && !contacts.outcome && <PickStep k={contacts} previewing={preview} />}
+        {plan && !contacts.outcome && (
+          <>
+            <ConnectionsPicker k={contacts} />
+            {contacts.connections.length > 0 && <SectionTitle>{INVITE_COPY.phoneContacts}</SectionTitle>}
+            <PickStep k={contacts} previewing={preview} />
+          </>
+        )}
         {plan && contacts.outcome && (
           <SendStep
             outcome={contacts.outcome}

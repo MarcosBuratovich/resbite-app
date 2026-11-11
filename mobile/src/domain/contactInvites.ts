@@ -59,6 +59,32 @@ export function groupContacts(numbers: ContactNumber[]): { contact: string; name
   return [...groups.values()];
 }
 
+/** The connections to invite: those picked, less anyone already on the resbite (who would only come back "already"). */
+export function usersToInvite(chosenUsers: ReadonlySet<string>, invitedUsers: ReadonlySet<string>): { user: string }[] {
+  return [...chosenUsers].filter((user) => !invitedUsers.has(user)).map((user) => ({ user }));
+}
+
+/**
+ * What Invite people sends: one phone item per number key (the first pick wins: a typed number equal to a contact's
+ * other number has a pick of its own, and two items with one key would land on one invitation, leaving the first
+ * link shown dead), each with the code `codeFor` gives it; and the connections, apart, as they go in calls of their
+ * own after the numbers. `numbers` are the picks the phone items were made from, in the same order.
+ */
+export function inviteItems(
+  selected: ContactNumber[],
+  chosenUsers: ReadonlySet<string>,
+  invitedUsers: ReadonlySet<string>,
+  codeFor: (n: ContactNumber) => string,
+): { numbers: ContactNumber[]; phones: { phone: string; country: string; code: string }[]; users: { user: string }[] } {
+  const seen = new Set<string>();
+  const numbers = selected.filter((n) => !seen.has(n.key) && !!seen.add(n.key));
+  return {
+    numbers,
+    phones: numbers.map((n) => ({ phone: n.e164.replace(/\D/g, ""), country: n.country, code: codeFor(n) })),
+    users: usersToInvite(chosenUsers, invitedUsers),
+  };
+}
+
 /** The region of the host's own verified phone (digits only), else the fallback. */
 export function hostRegion(userPhone: string | null | undefined, fallback: string): string {
   return (userPhone ? regionOf(userPhone) : null) ?? fallback;

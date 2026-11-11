@@ -86,7 +86,10 @@ export const INVITE_COPY = {
   decideClosed: "This resbite has ended or was cancelled, so no one can be added now.",
   decideCannotAdd: "This person can’t be added to this resbite.",
   decideAnswered: "Someone already answered this request.",
-  linkInfoLine: "Anyone can answer with it, and you approve them first.",
+  /** The event link's hint on Invite people (CO-03). */
+  eventLinkHint: "Anyone who answers through the link waits for your approval.",
+  /** Invite people's phone contacts, under the connections when there are any (CO-03). */
+  phoneContacts: "Phone contacts",
 };
 
 /**
