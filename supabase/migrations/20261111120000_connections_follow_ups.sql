@@ -99,10 +99,16 @@ alter table private.notification_outbox add constraint notification_outbox_detai
  or (kind='invited' and detail='again')
  or (kind='connection_request' and detail in ('going','invited','met','were_invited')));
 
--- How two people stand on a resbite, by the rule above; null when there is no such resbite. The database's own: no API
--- role may call it (its two callers, request_connection and my_connections, are definers).
+-- How two people stand on a resbite: by the rule above when each has a place on it (its owner, or an attendee row
+-- whatever the reply), and 'met' when either has none. The card reads a series' latest occurrence, which the requester
+-- may not be on (not carried to it, or removed): there it says neither going nor invited, as before. On a request's own
+-- resbite both normally have one: the person asked is on it, and the asker sees its names. Null when there is no such
+-- resbite. The database's own: no API role may call it (its two callers, request_connection and my_connections, are
+-- definers).
 create function private.pair_standing(p_plan uuid, p_a uuid, p_b uuid) returns text language sql stable security definer set search_path = '' as $$
- select case when p.status='active' and (select count(*) from (values (p_a),(p_b)) u(id)
+ select case when (select count(*) from (values (p_a),(p_b)) u(id)
+    where u.id=p.owner_id or exists(select 1 from public.attendees a where a.plan_id=p.id and a.user_id=u.id))<2 then 'met'
+  when p.status='active' and (select count(*) from (values (p_a),(p_b)) u(id)
     where u.id=p.owner_id or exists(select 1 from public.attendees a where a.plan_id=p.id and a.user_id=u.id
      and a.response in ('accepted','maybe')))=2
    then case when private.plan_end(p.starts_at,p.ends_at)>now() then 'going' else 'met' end
@@ -167,16 +173,16 @@ end $$;
 -- 3. The Connections card says the same (Ruling 6, CO-P6)
 -- A request's context on the card was 'going' or 'met', a host counting as going whatever their reply: "You're both
 -- going" for an admin who had not answered, "Met at" for a resbite one of them skipped. It is now how the two stand on
--- the occurrence the card already reads, by the push's rule.
+-- the occurrence the card already reads, by the push's rule ('met' when either of the two is not on it).
 
 -- The caller's Connections (CO-P6): the requests to them, newest first, and their connections, by name, with the other
 -- person's name and photo and the resbite they met at. Requests the caller sent are not listed: a refused one would
 -- vanish from such a list (CO-P3). title is that series' latest occurrence the caller may read (can_read_plan: its owner
 -- or on its guest list; CO-R9), null when the series is gone or the caller may read none of it, so a guest removed or
 -- not carried to a later occurrence never reads its title (the app shows "Met on Resbite"). context, on a request, is
--- how the two stand on that occurrence (private.pair_standing: 'going', 'invited', 'met' or 'were_invited'), and 'met'
--- when there is none. Otherwise the 20261110120000_connections body, verbatim; its grants and its public wrapper are
--- kept.
+-- how the two stand on that occurrence (private.pair_standing: 'going', 'invited', 'met' or 'were_invited'; 'met' when
+-- either is not on it), and 'met' when there is none. Otherwise the 20261110120000_connections body, verbatim; its
+-- grants and its public wrapper are kept.
 create or replace function private.my_connections() returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester();
 begin

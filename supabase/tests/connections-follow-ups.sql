@@ -265,6 +265,55 @@ do $$ declare r text; begin
  end loop;
 end $$;
 
+-- Not on the latest occurrence (Ruling 7): the card reads the series' latest occurrence the person asked may read, and
+-- the requester may have no place on it (not carried, or removed): then it is 'met', never 'invited'. 01's 'Supper'
+-- f51…06 has 03 and 08 Going; its next occurrence f51…07 has 08 only. 03 asks 08 from the first: the push says
+-- 'going', and 08's card, on the next one, says 'met'.
+insert into public.plans(id,owner_id,title,starts_at,ends_at,time_zone,place_label,categories) values
+ ('f5100000-0000-4000-8000-000000000006','f5000000-0000-4000-8000-000000000001','Supper',
+  '2099-06-08 19:00+00','2099-06-08 22:00+00','UTC','Kitchen',array['community']);
+insert into public.plans(id,owner_id,title,starts_at,ends_at,time_zone,place_label,categories,series_id) values
+ ('f5100000-0000-4000-8000-000000000007','f5000000-0000-4000-8000-000000000001','Supper',
+  '2099-06-15 19:00+00','2099-06-15 22:00+00','UTC','Kitchen',array['community'],'f5100000-0000-4000-8000-000000000006');
+insert into public.attendees(plan_id,user_id,response) values
+ ('f5100000-0000-4000-8000-000000000006','f5000000-0000-4000-8000-000000000003','accepted'),
+ ('f5100000-0000-4000-8000-000000000006','f5000000-0000-4000-8000-000000000008','accepted'),
+ ('f5100000-0000-4000-8000-000000000007','f5000000-0000-4000-8000-000000000008','accepted');
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"f5000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
+do $$ begin
+ if public.request_connection('f5000000-0000-4000-8000-000000000008','f5100000-0000-4000-8000-000000000006') is distinct from 'requested' then
+  raise exception '03''s request from Supper did not say requested';
+ end if;
+end $$;
+select set_config('request.jwt.claims','{"sub":"f5000000-0000-4000-8000-000000000008","role":"authenticated"}',true);
+do $$ begin
+ if (select string_agg(right(r->>'user_id',2)||':'||(r->>'title')||':'||(r->>'context'),',' order by r->>'user_id')
+   from jsonb_array_elements(public.my_connections()->'requests') r) is distinct from '03:Supper:met' then
+  raise exception 'The card of 08, asked by 03 who is not on the latest occurrence, is wrong: %', public.my_connections()->'requests';
+ end if;
+end $$;
+reset role;
+do $$ begin
+ if (select detail from private.notification_outbox where kind='connection_request'
+   and actor_id='f5000000-0000-4000-8000-000000000003' and recipient_id='f5000000-0000-4000-8000-000000000008') is distinct from 'going' then
+  raise exception 'Two Going guests of the first Supper is not going';
+ end if;
+ -- Either way round, and on an ended or cancelled occurrence too: no place is 'met'.
+ if private.pair_standing('f5100000-0000-4000-8000-000000000007','f5000000-0000-4000-8000-000000000003','f5000000-0000-4000-8000-000000000008') is distinct from 'met'
+ or private.pair_standing('f5100000-0000-4000-8000-000000000007','f5000000-0000-4000-8000-000000000008','f5000000-0000-4000-8000-000000000003') is distinct from 'met' then
+  raise exception 'Someone with no place on the occurrence did not give met';
+ end if;
+ update public.plans set status='cancelled' where id='f5100000-0000-4000-8000-000000000007';
+ if private.pair_standing('f5100000-0000-4000-8000-000000000007','f5000000-0000-4000-8000-000000000003','f5000000-0000-4000-8000-000000000008') is distinct from 'met' then
+  raise exception 'Someone with no place on a cancelled occurrence did not give met';
+ end if;
+ update public.plans set starts_at=now()-interval '4 hours', ends_at=now()-interval '1 hour' where id='f5100000-0000-4000-8000-000000000007';
+ if private.pair_standing('f5100000-0000-4000-8000-000000000007','f5000000-0000-4000-8000-000000000003','f5000000-0000-4000-8000-000000000008') is distinct from 'met' then
+  raise exception 'Someone with no place on an ended, cancelled occurrence did not give met';
+ end if;
+end $$;
+
 -- The detail check takes the four for a request only: 'soon' on a request, or any detail on an acceptance, is refused.
 do $$ begin
  begin
