@@ -271,18 +271,26 @@ test("a refusal is thrown as the server sent it", async () => {
   for (const call of calls) await assert.rejects(call, (e) => e === refusal);
 });
 
-test("the deadline wraps every call", async () => {
-  let wrapped = 0;
+test("the deadline wraps each of the gateway's ten calls", async () => {
+  const wrapped: string[] = [];
   const gw = createChatGateway(
-    async () => ({ data: null, error: null }),
+    async (fn) => ({ data: fn === "send_message" || fn === "send_announcement" ? row() : { rows: [], as_of: "x" }, error: null }),
     async (request) => {
-      wrapped++;
+      wrapped.push("wrapped");
       return request(new AbortController().signal);
     },
   );
+  await gw.summary(SERIES).catch(() => {});
+  await gw.messages(SERIES);
+  await gw.since(SERIES, 1, null);
+  await gw.send(SERIES, "hi", CLIENT);
+  await gw.announce(SERIES, "hi", "going", CLIENT);
+  await gw.remove(1);
+  await gw.deleteOwn(1);
   await gw.markRead(SERIES, 1);
   await gw.setMute(SERIES, true);
-  assert.equal(wrapped, 2);
+  await gw.overview();
+  assert.equal(wrapped.length, 10);
 });
 
 test("the server's refusals read as plain words; anything else is the connection line", () => {
@@ -321,4 +329,73 @@ test("isNotInChat and isChatClosed tell the two refusals the hook acts on by cod
     assert.equal(isNotInChat(other), false);
     assert.equal(isChatClosed(other), false);
   }
+});
+
+test("a page drops rows without a numeric id and reads odd fields as empty (D4)", async () => {
+  const { gw } = gateway({
+    rows: [
+      row({ id: "abc" }),
+      null,
+      "row",
+      row({ id: 0 }),
+      row({ id: 1.5 }),
+      row({ id: "7", payload: "str", audience: "nobody", event: 5, body: 9, author_id: 3, client_id: {} }),
+      row({ id: 8, payload: [1], created_at: undefined, updated_at: null }),
+    ],
+    names: { [LEO]: "Leo" },
+    as_of: "x",
+  });
+  const page = await gw.messages(SERIES);
+  assert.deepEqual(
+    page.rows.map((r) => r.id),
+    [7, 8],
+  );
+  assert.deepEqual(page.rows[0], message({ id: 7, payload: null, audience: null, event: null, body: null, authorId: null }));
+  assert.equal(page.rows[1].payload, null);
+  assert.equal(page.rows[1].createdAt, "");
+  assert.equal(page.rows[1].updatedAt, "");
+});
+
+test("a summary's numbers fall back to 0, its odd last and pinned to null, its missing text to empty (D4)", async () => {
+  const s = await gateway({ accepted: "x", members: null, going: "4", everyone: {}, message_count: NaN, last_read_id: "x", pinned: {}, last: "str" }).gw.summary(SERIES);
+  assert.equal(s.accepted, 0);
+  assert.equal(s.members, 0);
+  assert.equal(s.going, 4);
+  assert.equal(s.everyone, 0);
+  assert.equal(s.messageCount, 0);
+  assert.equal(s.lastReadId, null);
+  assert.equal(s.pinned, null);
+  assert.equal(s.last, null);
+  assert.equal(s.startsAt, "");
+  assert.equal(s.timeZone, "");
+  assert.equal(s.title, "");
+  assert.equal(s.seriesId, "");
+  assert.equal(s.planId, "");
+  assert.equal(s.status, "");
+  assert.equal(s.endsAt, null);
+  assert.equal(s.closesAt, null);
+  assert.deepEqual(s.names, {});
+  assert.equal((await gateway({ pinned: row({ id: "abc" }) }).gw.summary(SERIES)).pinned, null);
+});
+
+test("an overview keeps every chat when one's last line is odd, and drops an announcement without a numeric id (D4)", async () => {
+  const o = await gateway({
+    chats: {
+      a: { unread: true, last: "str", open: true, count: "x" },
+      b: { unread: false, last: row(), open: false, count: 3 },
+      c: "junk",
+    },
+    announcements: { p1: { id: "abc", author_id: ANA, body: "x" }, p2: { id: 40, author_id: ANA, body: "Doors open" }, p3: 5 },
+  }).gw.overview();
+  assert.deepEqual(o.chats, {
+    a: { unread: true, last: null, open: true, count: 0 },
+    b: { unread: false, last: message(), open: false, count: 3 },
+    c: { unread: false, last: null, open: false, count: 0 },
+  });
+  assert.deepEqual(o.announcements, { p2: { id: 40, authorId: ANA, body: "Doors open" } });
+});
+
+test("a send answered with a row the app can't read is refused", async () => {
+  await assert.rejects(gateway(row({ id: "abc" })).gw.send(SERIES, "hi", CLIENT));
+  await assert.rejects(gateway(null).gw.announce(SERIES, "hi", "going", CLIENT));
 });

@@ -66,4 +66,6 @@ export const CHAT_COPY = {
   /** An announcement's audience for the screen reader (K-S14). */
   announcementLabel: (a: ChatAudience | null) =>
     a === "everyone" ? "Announcement to everyone invited" : "Announcement to people going",
+  /** A cancelled one-off's header, in place of its date line (H20). */
+  cancelled: "Cancelled",
 } as const;

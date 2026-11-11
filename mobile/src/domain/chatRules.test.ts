@@ -16,6 +16,7 @@ import {
   systemText,
   timeLabel,
 } from "./chatRules";
+import { CHAT_COPY } from "./chatCopy";
 
 const ANA = "0a000000-0000-4000-8000-000000000001";
 const LEO = "0a000000-0000-4000-8000-000000000002";
@@ -344,9 +345,8 @@ test("linkParts trims the punctuation around a link and finds more than one", ()
   ]);
 });
 
-test("linkHost lowercases, drops the port and the user part, so the confirm names the real host", () => {
+test("linkHost lowercases and drops the port, so the confirm names the host the link opens", () => {
   assert.equal(linkHost("HTTPS://Example.COM:8080/Path"), "example.com");
-  assert.equal(linkHost("https://google.com@evil.example/login"), "evil.example");
   assert.equal(linkHost("https://example.com./x"), "example.com");
   assert.equal(linkHost("ftp://example.com"), "");
   assert.equal(linkHost("not a link"), "");
@@ -397,4 +397,180 @@ test("isSeriesId accepts a series uuid as the server writes it and nothing else 
     assert.equal(isSeriesId(bad), false, bad);
   for (const bad of [undefined, null, 7, ["123e4567-e89b-42d3-a456-426614174000"], {}])
     assert.equal(isSeriesId(bad), false);
+});
+
+const PHONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+test("linkParts leaves a user part, a backslash, or a control, bidi or zero-width character as plain text (H20)", () => {
+  for (const plain of [
+    "https://google.com@evil.example/login",
+    "https://evil.example\\@google.com",
+    "https://evil.com\\@bank.com/",
+    "https://x.com\\evil.com",
+    "https://bank.com:pass@evil.com/x",
+    "https://@example.com/",
+    "https://x.com/\u0000",
+    "https://x.com/a\u0007b",
+    "https://x.com/‮txt",
+    "https://x.com/a⁦b",
+    "https://x.com/a‏b",
+    "https://x.com/a؜b",
+    "https://x.com/a​b",
+    "https://x.com/a­b",
+  ])
+    assert.deepEqual(linkParts(plain), [{ text: plain }], JSON.stringify(plain));
+  assert.deepEqual(linkParts("see https://google.com@evil.example now"), [{ text: "see https://google.com@evil.example now" }]);
+  assert.equal(linkHost("https://google.com@evil.example/login"), "");
+  assert.equal(linkHost("https://evil.example\\@google.com"), "");
+  // After the path starts, an @ is only text: the host is still the one before it.
+  assert.deepEqual(linkParts("https://example.com/@ana"), [{ text: "https://example.com/@ana", href: "https://example.com/@ana" }]);
+});
+
+test("linkParts links domain hosts only: no IP in any form, no localhost, no single label, no port above 65535 (H20)", () => {
+  for (const plain of [
+    "https://127.0.0.1/",
+    "https://2130706433/",
+    "https://0x7f.0.0.1/",
+    "https://0177.0.0.1/",
+    "https://1.0x7f/",
+    "https://192.168.1.1:8080/admin",
+    "https://[::1]/",
+    "https://[2001:db8::1]:8080/",
+    "https://localhost/",
+    "https://localhost./x",
+    "https://app.localhost/",
+    "https://a/",
+    "https://intranet/x",
+    "https://example.c0m/",
+    "https://x.com:99999/",
+    "https://x.com:65536/",
+    "https://x.com:/",
+  ])
+    assert.deepEqual(linkParts(plain), [{ text: plain }], plain);
+  for (const linked of ["https://x.com:65535/", "https://x.com:8080/a", "https://a.b.example.co.uk/x", "http://1password.com/"])
+    assert.deepEqual(linkParts(linked), [{ text: linked, href: linked }], linked);
+  assert.equal(linkHost("https://x.com:65535/"), "x.com");
+});
+
+test("a link stops at a quote or an angle bracket (H20)", () => {
+  assert.deepEqual(linkParts('<a href="https://x.com/a">x</a>'), [
+    { text: '<a href="' },
+    { text: "https://x.com/a", href: "https://x.com/a" },
+    { text: '">x</a>' },
+  ]);
+  assert.deepEqual(linkParts("<https://x.com/a>"), [
+    { text: "<" },
+    { text: "https://x.com/a", href: "https://x.com/a" },
+    { text: ">" },
+  ]);
+  assert.deepEqual(linkParts('"https://x.com/a"'), [
+    { text: '"' },
+    { text: "https://x.com/a", href: "https://x.com/a" },
+    { text: '"' },
+  ]);
+});
+
+test("a bad zone falls back to the phone's zone and a bad time drops out; nothing throws (D2)", () => {
+  const iso = "2025-11-15T18:02:00Z";
+  assert.equal(dayLabel(iso, "Mars/Base"), dayLabel(iso, PHONE));
+  assert.equal(timeLabel(iso, ""), timeLabel(iso, PHONE));
+  assert.equal(dayLabel("x", LONDON), "");
+  assert.equal(timeLabel("nope", LONDON), "");
+  const closes = "2025-11-17T18:00:00Z";
+  const at = Date.parse(closes) - 31 * HOUR;
+  assert.equal(closingLine(closes, at, "Nope/Zone"), closingLine(closes, at, PHONE));
+  assert.equal(closingLine(closes, NaN, LONDON), null);
+  assert.equal(closingLine("garbage", at, LONDON), null);
+  const before = Date.parse("2026-10-30T12:00:00Z");
+  assert.equal(headerLine(summary({ timeZone: "Mars/Base" }), before), headerLine(summary({ timeZone: PHONE }), before));
+  assert.equal(typeof headerLine(summary(), NaN), "string");
+  assert.deepEqual(closedCard(summary({ closesAt: "2025-11-17T18:00:00Z", timeZone: "Mars/Base", open: false })), {
+    line: CHAT_COPY.closedOn(dayLabel("2025-11-17T18:00:00Z", PHONE)),
+    why: CHAT_COPY.closedWhy,
+  });
+  assert.deepEqual(closedCard(summary({ closesAt: "garbage", open: false })), { line: "This chat is closed.", why: null });
+  // A payload's bad zone reads in the phone's zone; a bad time is left out of the line.
+  assert.equal(
+    line("changed", change({ to_start: "2025-11-14T19:30:00Z", from_zone: "Mars/Base", to_zone: "Mars/Base" })),
+    line("changed", change({ to_start: "2025-11-14T19:30:00Z", from_zone: PHONE, to_zone: PHONE })),
+  );
+  assert.equal(line("changed", change({ from_start: "garbage", to_start: "2025-11-14T19:30:00Z" })), "Ana changed the time");
+  assert.equal(line("changed", change({ to_end: "later" })), "Ana changed the time");
+  assert.equal(
+    line("changed", change({ what: "time_place", to_start: "zzz" })),
+    "Ana changed the time and place · Nico's, Villa Crespo",
+  );
+  const saturday = Date.parse("2025-11-15T20:00:00Z");
+  assert.equal(messageLabel(msg({ createdAt: "nope" }), names, ANA, saturday, LONDON), "Leo, I can bring the snacks");
+  assert.equal(messageLabel(msg(), names, ANA, NaN, LONDON), "Leo, I can bring the snacks, Sat 15 Nov, 18:02");
+  assert.equal(messageLabel(msg(), names, ANA, saturday, "Bad/Zone"), messageLabel(msg(), names, ANA, saturday, PHONE));
+});
+
+test("a summary missing its start or its zone hides the header and closing lines (D4)", () => {
+  const before = Date.parse("2026-10-30T12:00:00Z");
+  assert.equal(headerLine(summary({ startsAt: "" }), before), null);
+  assert.equal(headerLine(summary({ startsAt: "garbage" }), before), null);
+  assert.equal(headerLine(summary({ timeZone: "" }), before), null);
+  const closes = "2025-11-17T18:00:00Z";
+  assert.equal(closingLine(closes, Date.parse(closes) - HOUR, ""), null);
+});
+
+test("a cancelled one-off's header reads Cancelled in place of the date line (Q8)", () => {
+  assert.equal(headerLine(summary({ status: "cancelled" }), Date.parse("2026-10-30T12:00:00Z")), "Cancelled");
+  assert.equal(headerLine(summary({ status: "cancelled" }), Date.parse("2026-11-30T12:00:00Z")), "Cancelled");
+  assert.equal(headerLine(summary({ status: "cancelled", startsAt: "" }), 0), "Cancelled");
+});
+
+test("the same start and end in a new zone reads as a change of time zone (Q1)", () => {
+  const BA = "America/Argentina/Buenos_Aires";
+  assert.equal(line("changed", change({ to_zone: BA })), "Ana changed the time zone");
+  assert.equal(line("changed", change({ to_zone: BA }), ANA), "You changed the time zone");
+  assert.equal(line("changed", change({ to_zone: BA, actor: null })), "The time zone changed");
+  assert.equal(line("changed", change({ to_zone: BA, from_end: null, to_end: null })), "Ana changed the time zone");
+  // The same instant and the same zone: nothing to show but the change itself.
+  assert.equal(line("changed", change({})), "Ana changed the time");
+  // The end moved while the zone changed: the end is what moved.
+  assert.equal(line("changed", change({ to_zone: BA, to_end: "2025-11-15T02:00:00Z" })), "Ana changed the end · 22:00 → 23:00");
+});
+
+test("rowText and messageLabel give null for a line they can't word, and never show the body of an unknown kind or state (Q2, Q6)", () => {
+  const saturday = Date.parse("2025-11-15T20:00:00Z");
+  for (const m of [
+    sys("something_new", { actor: ANA }),
+    sys("ended", {}),
+    sys("changed", change({ what: "title" })),
+    msg({ kind: "weird" as ChatMessage["kind"] }),
+    msg({ state: "hidden" as ChatMessage["state"], body: "secret" }),
+    msg({ kind: "announcement", audience: "going", state: "hidden" as ChatMessage["state"], body: "secret" }),
+  ]) {
+    assert.equal(rowText(m, names, ANA, false), null, JSON.stringify(m));
+    assert.equal(messageLabel(m, names, ANA, saturday, LONDON), null, JSON.stringify(m));
+  }
+  assert.equal(rowText(null, names, ANA, false), "No messages yet");
+});
+
+test("names: own keys only, cleaned of controls, bidi and zero-width characters, blank reads Someone, a null map reads empty (Q3)", () => {
+  for (const key of ["constructor", "__proto__", "toString", "hasOwnProperty"])
+    assert.equal(line("joined", { actor: key, user: key }), "Someone joined", key);
+  const say = (name: string | null) => systemText(sys("joined", { user: MIA }), { [MIA]: name }, ANA, false, "x");
+  assert.equal(say("  "), "Someone joined");
+  assert.equal(say("​‮"), "Someone joined");
+  assert.equal(say("Mia\n‮evil"), "Mia evil joined");
+  assert.equal(say("M​i⁦a\u0007"), "Mia joined");
+  assert.equal(say("Mia\ud800"), "Mia joined");
+  assert.equal(say("  Mia  "), "Mia joined");
+  assert.equal(say("Leo:"), "Leo joined");
+  assert.equal(rowText(msg(), { [LEO]: "Leo:" }, ANA, false), "Leo: I can bring the snacks");
+  assert.equal(systemText(sys("joined", { user: MIA }), null as unknown as ChatNames, ANA, false, "x"), "Someone joined");
+  assert.equal(rowText(msg(), null as unknown as ChatNames, ANA, false), "Someone: I can bring the snacks");
+  assert.equal(
+    messageLabel(msg(), undefined as unknown as ChatNames, ANA, Date.parse("2025-11-15T20:00:00Z"), LONDON),
+    "Someone, I can bring the snacks, 18:02",
+  );
+});
+
+test("a place label or a title in a line is cleaned the same way", () => {
+  assert.equal(line("changed", change({ what: "place", place_label: "Nico's\n‮Villa" })), "Ana changed the place · Nico's Villa");
+  assert.equal(line("changed", change({ what: "place", place_label: "​ " })), "Ana changed the place");
+  assert.equal(line("ended", { title: "Board‮ game\nnight" }), "Board game night ended");
 });

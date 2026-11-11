@@ -63,4 +63,6 @@ test("the copy the rulings added reads exactly", () => {
   assert.equal(C.open, "Open");
   assert.equal(C.announcementLabel("everyone"), "Announcement to everyone invited");
   assert.equal(C.announcementLabel("going"), "Announcement to people going");
+  // H20 (Q8): a cancelled one-off's header.
+  assert.equal(C.cancelled, "Cancelled");
 });

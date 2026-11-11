@@ -90,80 +90,84 @@ export type ChatGateway = {
   overview(): Promise<ChatOverview>;
 };
 
-type Row = {
-  id: number | string;
-  kind: ChatMessage["kind"];
-  audience?: ChatAudience | null;
-  event?: string | null;
-  payload?: Record<string, unknown> | null;
-  body?: string | null;
-  state: ChatMessage["state"];
-  author_id?: string | null;
-  created_at: string;
-  updated_at: string;
-  client_id?: string | null;
-};
 type Data = Record<string, unknown>;
 
+// The server's answer is read defensively (H20): a row without a usable id is dropped, a number that isn't one reads
+// as 0, and text that isn't text reads as empty, so one odd value never blanks a chat or poisons a cursor.
 const isObject = (value: unknown): value is Data => typeof value === "object" && value !== null && !Array.isArray(value);
 const names = (value: unknown): ChatNames => (isObject(value) ? (value as ChatNames) : {});
-const count = (value: unknown): number => (typeof value === "number" ? value : Number(value ?? 0));
+const finite = (value: unknown): number | null => {
+  const n = typeof value === "number" ? value : typeof value === "string" && value.trim() !== "" ? Number(value) : NaN;
+  return Number.isFinite(n) ? n : null;
+};
+const count = (value: unknown): number => finite(value) ?? 0;
+const idOf = (value: unknown): number | null => {
+  const n = finite(value);
+  return n !== null && Number.isSafeInteger(n) && n > 0 ? n : null;
+};
+const textOf = (value: unknown): string => (typeof value === "string" ? value : "");
+const textOrNull = (value: unknown): string | null => (typeof value === "string" ? value : null);
 
-function chatMessage(value: unknown): ChatMessage {
-  if (!isObject(value)) throw Error("Unexpected chat row");
-  const row = value as Row;
+/** A row as the app holds it; null when it has no usable id. An unknown kind or state is kept, and shows no body. */
+function chatMessage(value: unknown): ChatMessage | null {
+  if (!isObject(value)) return null;
+  const id = idOf(value.id);
+  if (id === null) return null;
   return {
-    id: Number(row.id),
-    kind: row.kind,
-    audience: row.audience ?? null,
-    event: row.event ?? null,
-    payload: row.payload ?? null,
-    body: row.body ?? null,
-    state: row.state,
-    authorId: row.author_id ?? null,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    clientId: row.client_id ?? null,
+    id,
+    kind: textOf(value.kind) as ChatMessage["kind"],
+    audience: value.audience === "going" || value.audience === "everyone" ? value.audience : null,
+    event: textOrNull(value.event),
+    payload: isObject(value.payload) ? value.payload : null,
+    body: textOrNull(value.body),
+    state: textOf(value.state) as ChatMessage["state"],
+    authorId: textOrNull(value.author_id),
+    createdAt: textOf(value.created_at),
+    updatedAt: textOf(value.updated_at),
+    clientId: textOrNull(value.client_id),
   };
 }
-const optionalMessage = (value: unknown): ChatMessage | null => (value ? chatMessage(value) : null);
+const rows = (value: unknown): ChatMessage[] =>
+  (Array.isArray(value) ? value : []).map(chatMessage).filter((m): m is ChatMessage => m !== null);
+function sentRow(value: unknown): ChatMessage {
+  const m = chatMessage(value);
+  if (!m) throw Error("Unexpected chat row");
+  return m;
+}
 
 function page(data: unknown): ChatPage {
   if (!isObject(data) || typeof data.as_of !== "string") throw Error("Unexpected chat page");
-  return {
-    rows: (Array.isArray(data.rows) ? data.rows : []).map(chatMessage),
-    names: names(data.names),
-    asOf: data.as_of,
-  };
+  return { rows: rows(data.rows), names: names(data.names), asOf: data.as_of };
 }
 
+/** A summary missing its start or zone reads them as empty, and the header and closing lines hide (H20). */
 function summary(data: unknown): ChatSummary {
   if (!isObject(data)) throw Error("Unexpected chat summary");
   const repeat = data.repeat_weeks;
   return {
-    seriesId: data.series_id as string,
-    planId: data.plan_id as string,
-    title: data.title as string,
-    startsAt: data.starts_at as string,
-    endsAt: (data.ends_at as string | null) ?? null,
-    timeZone: data.time_zone as string,
-    status: data.status as string,
+    seriesId: textOf(data.series_id),
+    planId: textOf(data.plan_id),
+    title: textOf(data.title),
+    startsAt: textOf(data.starts_at),
+    endsAt: textOrNull(data.ends_at),
+    timeZone: textOf(data.time_zone),
+    status: textOf(data.status),
     repeatWeeks: repeat === 1 || repeat === 2 ? repeat : null,
     isGroup: data.is_group === true,
     stopped: data.stopped === true,
-    closesAt: (data.closes_at as string | null) ?? null,
+    closesAt: textOrNull(data.closes_at),
     open: data.open === true,
     host: data.host === true,
     accepted: count(data.accepted),
     members: count(data.members),
     going: count(data.going),
     everyone: count(data.everyone),
-    pinned: optionalMessage(data.pinned),
-    last: optionalMessage(data.last),
+    pinned: chatMessage(data.pinned),
+    last: chatMessage(data.last),
     names: names(data.names),
     mutedChat: data.muted_chat === true,
     mutedResbite: data.muted_resbite === true,
-    lastReadId: data.last_read_id == null ? null : Number(data.last_read_id),
+    lastReadId: finite(data.last_read_id),
     unread: data.unread === true,
     messageCount: count(data.message_count),
   };
@@ -176,19 +180,16 @@ function overview(data: unknown): ChatOverview {
     const chat = isObject(c) ? c : {};
     chats[series] = {
       unread: chat.unread === true,
-      last: optionalMessage(chat.last),
+      last: chatMessage(chat.last),
       open: chat.open === true,
       count: count(chat.count),
     };
   }
   const announcements: ChatOverview["announcements"] = {};
   for (const [plan, a] of Object.entries(isObject(d.announcements) ? d.announcements : {})) {
-    if (!isObject(a)) continue;
-    announcements[plan] = {
-      id: Number(a.id),
-      authorId: (a.author_id as string | null) ?? null,
-      body: (a.body as string | null) ?? "",
-    };
+    const id = isObject(a) ? idOf(a.id) : null;
+    if (!isObject(a) || id === null) continue;
+    announcements[plan] = { id, authorId: textOrNull(a.author_id), body: textOf(a.body) };
   }
   return { chats, announcements, names: names(d.names) };
 }
@@ -207,9 +208,9 @@ export function createChatGateway(rpc: Rpc, deadline: Deadline = passThrough): C
     since: async (series, after, changedAfter) =>
       page(await call("chat_messages_since", { p_series: series, p_after: after, p_changed_after: changedAfter })),
     send: async (series, body, clientId) =>
-      chatMessage(await call("send_message", { p_series: series, p_body: body, p_client_id: clientId })),
+      sentRow(await call("send_message", { p_series: series, p_body: body, p_client_id: clientId })),
     announce: async (series, body, audience, clientId) =>
-      chatMessage(
+      sentRow(
         await call("send_announcement", { p_series: series, p_body: body, p_audience: audience, p_client_id: clientId }),
       ),
     remove: async (id) => void (await call("remove_message", { p_id: id })),

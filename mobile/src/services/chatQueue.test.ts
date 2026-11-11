@@ -145,11 +145,17 @@ test("a write whose read straddles a suspend does not land", async () => {
   assert.equal(d.data.size, 0);
 });
 
-test("a damaged record is refused; an item of the wrong shape is dropped", async () => {
+test("a damaged record reads as empty and the next write replaces it; a bad item inside is dropped (D3)", async () => {
+  for (const raw of ["{{", "{}", "null", '"x"', JSON.stringify({ c1: item("c1") }), "[[1]]"]) {
+    const d = disk();
+    d.data.set("resbite.chat-queue.v1.u1", raw);
+    const queue = createChatQueue(d);
+    assert.deepEqual(await queue.list("u1", S1), [], raw);
+    await queue.put("u1", item("c9"));
+    assert.deepEqual(JSON.parse(d.data.get("resbite.chat-queue.v1.u1")!), [item("c9")], raw);
+  }
   const d = disk();
   const queue = createChatQueue(d);
-  d.data.set("resbite.chat-queue.v1.u1", JSON.stringify({ c1: item("c1") }));
-  await assert.rejects(queue.list("u1", S1), /Invalid saved messages/);
   d.data.set(
     "resbite.chat-queue.v1.u1",
     JSON.stringify([item("c1"), { clientId: "c2", series: S1 }, null, item("c3", S1, { failed: true })]),
@@ -161,4 +167,31 @@ test("a damaged record is refused; an item of the wrong shape is dropped", async
     item("c3", S1, { failed: true }),
     item("c4"),
   ]);
+});
+
+test("put and update refuse a partial item or patch, and keep what is there (Q7)", async () => {
+  const d = disk();
+  const queue = createChatQueue(d);
+  await queue.put("u1", item("c1"));
+  const before = d.data.get("resbite.chat-queue.v1.u1");
+  for (const bad of [null, {}, { clientId: "x" }, { ...item("c2"), failed: "no" }, { ...item("c2"), body: 5 }])
+    await assert.rejects(queue.put("u1", bad as unknown as QueuedMessage), /Invalid queued message/, JSON.stringify(bad));
+  for (const patch of [{}, { failed: "yes" }, null])
+    await assert.rejects(queue.update("u1", "c1", patch as unknown as { failed: boolean }), /Invalid queued message/);
+  assert.equal(d.data.get("resbite.chat-queue.v1.u1"), before);
+  assert.deepEqual(await queue.list("u1", S1), [item("c1")]);
+});
+
+test("an account holds at most 100 unsent messages (H20)", async () => {
+  const queue = createChatQueue(disk());
+  for (let i = 0; i < 100; i++) await queue.put("u1", item(`c${i}`, i % 2 ? S1 : S2));
+  await assert.rejects(queue.put("u1", item("c100")), /Too many unsent messages/);
+  await queue.put("u1", item("c5", S1, { failed: true }));
+  await queue.put("u2", item("c100"));
+  await queue.remove("u1", "c0");
+  await queue.put("u1", item("c100"));
+  const all = [...(await queue.list("u1", S1)), ...(await queue.list("u1", S2))];
+  assert.equal(all.length, 100);
+  assert.equal(all.find((i) => i.clientId === "c5")?.failed, true);
+  assert.deepEqual(await queue.list("u2", S1), [item("c100")]);
 });
