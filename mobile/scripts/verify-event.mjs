@@ -63,7 +63,7 @@ const ATTENDEE_SELECTS = ["user_id,response,profiles(display_name)", "version,re
 const MUTE_SELECT = "series_id";
 // ...and the named-columns read the plan gateway sends (src/services/plans.ts `planColumns`, used by the reminder sync).
 const PLAN_COLUMNS =
-  "id,activity_id,title,description,categories,starts_at,ends_at,time_zone,place_label,status,version,owner_id,has_meeting_details,guest_note,guest_note_at,area,place_tbd,repeat_weeks,series_id,repeats_from,plan_meeting_details(note),plan_admins(user_id)";
+  "id,activity_id,title,description,categories,starts_at,ends_at,time_zone,place_label,status,version,owner_id,has_meeting_details,guest_note,guest_note_at,area,place_tbd,repeat_weeks,series_id,repeats_from,bring_invites,bring_levels,plan_meeting_details(note),plan_admins(user_id)";
 const HOST = { id: "33333333-3333-4333-8333-333333333333", name: "Ana" };
 const PLAN_ID = "22222222-2222-4222-8222-222222222222";
 const SERIES_ID = "55555555-5555-4555-8555-555555555555";

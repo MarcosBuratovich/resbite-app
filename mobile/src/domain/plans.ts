@@ -41,6 +41,10 @@ export type Plan = {
   repeats_from: string | null;
   /** Plan 3: the ids of the people the host made admins (the embed `plan_admins(user_id)`); [] when none. */
   admins: string[];
+  /** Circles of trust: how many people each guest may bring (0 is Nobody); absent on cached and preview plans. */
+  bring_invites?: 0 | 1 | 2 | 3;
+  /** Circles of trust: how many levels deep bringing goes; absent on cached and preview plans. */
+  bring_levels?: 1 | 2 | 3;
 };
 
 /** A plans row read with its Meeting details embedded as `plan_meeting_details(note)` and its admins as `plan_admins(user_id)`. */
