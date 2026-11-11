@@ -99,10 +99,12 @@ export function notificationCopy(input: CopyInput): Copy {
     if (input.kind === "connection_accepted")
       return { title: `You and ${name} are now connected`, body: "You can invite each other from Invite people." };
     if (!title) return GENERIC_COPY;
+    // The database says how the two stand; with no detail, fall back to the start time.
     const start = input.starts_at ? new Date(input.starts_at).getTime() : NaN;
+    const going = input.detail === "going" || (input.detail !== "invited" && input.detail !== "met" && Number.isFinite(start) && start > Date.now());
     return {
       title: `${name} wants to connect`,
-      body: Number.isFinite(start) && start > Date.now() ? `You're both going to ${title}.` : `You were both at ${title}.`,
+      body: input.detail === "invited" ? `You're both invited to ${title}.` : going ? `You're both going to ${title}.` : `You were both at ${title}.`,
     };
   }
   // The next occurrence of a repeating resbite (CR-P24): the title says it is on again, the body says when.
