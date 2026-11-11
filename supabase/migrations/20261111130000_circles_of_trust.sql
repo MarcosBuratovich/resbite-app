@@ -35,9 +35,9 @@ alter table private.phone_invitations
  add column level smallint not null default 1 check (level between 1 and 4);
 create index phone_invitations_brought_by_idx on private.phone_invitations(brought_by) where brought_by is not null;
 
--- 3. Removals (C-R2): per series, whom a host removed (remove_guest), declined (decide_join_request) or whose link a host
--- revoked (revoke_phone_invitation, revoke_brought_invitation; not a link the host brought themself, C31). A guest
--- cannot bring them back to the series, by connection or by number, and no link lets them back
+-- 3. Removals (CO-R12): per series, whom a host removed (remove_guest), declined (decide_join_request) or whose link a
+-- host revoked (revoke_phone_invitation, revoke_brought_invitation; not a link the host brought themself, CO-R16). A
+-- guest cannot bring them back to the series, by connection or by number, and no link lets them back
 -- (answer_phone_invitation), until a host invites them again or approves their request, which clears the record
 -- (invite_contacts, decide_join_request). A web account's records follow the person into the app, and so does the
 -- removal (fold_web_account). One row per key: a writer with a user and a number writes a user row and a number row,
@@ -57,7 +57,7 @@ revoke all on private.plan_removals from public, anon, authenticated, service_ro
 
 -- 4. The new functions
 
--- A first name (C30): the first word of a display name, whatever space separates the words (as the app's
+-- A first name (CO-R17): the first word of a display name, whatever space separates the words (as the app's
 -- name.trim().split(/\s+/)[0] reads it, so the Unicode spaces JavaScript counts are spaces here too, whatever the
 -- database's locale), with control characters taken out; null when nothing is left. The database's own: no role may
 -- call it.
@@ -66,12 +66,12 @@ create function private.first_name(p_name text) returns text language sql immuta
   '[[:space:]\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+',' ','g')),' '))[1],'[[:cntrl:]]','','g'),'')
 $$;
 
--- Joining the guest list ends a wait at the host's door (C26, C27). Whenever a guest row is made on a resbite or moved
+-- Joining the guest list ends a wait at the host's door (CO-R15). Whenever a guest row is made on a resbite or moved
 -- onto it (the fold moves rows to another account), the person's request to join that resbite that waits for the host
 -- goes: on the list and waiting never both hold on any path (answering a link, a host's invitation, a claimed
 -- per-person link, approval, the roll, joining by the open link, the fold), so a host's Decline never records a removal
 -- for someone who stays (decide_join_request refuses one on the list). It also ends any guest's unanswered link to the
--- person's confirmed number there (level above 1), which frees that bringer's invite (C30); a host's own link stays,
+-- person's confirmed number there (level above 1), which frees that bringer's invite; a host's own link stays,
 -- and so does the link being answered (answer_phone_invitation marks it answered first). The database's own: no role
 -- may call it.
 create function private.attendees_close_waiting() returns trigger language plpgsql security definer set search_path = '' as $$
@@ -148,12 +148,13 @@ create function public.my_bring_allowance(p_plan uuid) returns jsonb language sq
  select private.my_bring_allowance(p_plan)
 $$;
 
--- A host's view of the links guests sent (finding 8): one per live, unanswered link of a level above 1, oldest first,
--- as {id, ending, country, brought_by_name}. ending is the number's last two digits; the number itself is never
--- returned. brought_by_name is the bringer's first name, left out when there is no bringer or their account is being
--- deleted. A host removes one by its id (revoke_brought_invitation). The caller's own (a link they brought before a
--- host made them an admin) is not here: plan_phone_invitations gives it to them with its number (C32), so no link shows
--- twice. Hosts only (42501 'Plan owner required'), also after the end, as plan_phone_invitations.
+-- A host's view of the links guests sent (CO-R13, the plan's Revision 14): one per live, unanswered link of a level
+-- above 1, oldest first, as {id, ending, country, brought_by_name}. ending is the number's last two digits; the number
+-- itself is never returned. brought_by_name is the bringer's first name, left out when there is no bringer or their
+-- account is being deleted. A host removes one by its id (revoke_brought_invitation). The caller's own (a link they
+-- brought before a host made them an admin) is not here: plan_phone_invitations gives it to them with its number
+-- (CO-R16), so no link shows twice. Hosts only (42501 'Plan owner required'), also after the end, as
+-- plan_phone_invitations.
 create function private.plan_brought_invitations(p_plan uuid) returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester();
 begin
@@ -170,10 +171,10 @@ create function public.plan_brought_invitations(p_plan uuid) returns jsonb langu
 $$;
 
 -- A host removes a guest's link by its id: a link of p_plan above level 1 that nobody has answered is revoked, and the
--- removal of its number is recorded. A link someone has answered is refused, 22023 'Invitation answered' (C29): a list
--- read before the answer must never remove someone who has just joined; the host removes the person through their row
--- (remove_guest). A link the host brought themself (as a guest, before a host made them an admin) is their own
--- take-back (C31): revoked, and nothing is recorded. Any other id is a quiet no-op. A host of an open resbite only
+-- removal of its number is recorded. A link someone has answered is refused, 22023 'Invitation answered' (CO-R16): a
+-- list read before the answer must never remove someone who has just joined; the host removes the person through their
+-- row (remove_guest). A link the host brought themself (as a guest, before a host made them an admin) is their own
+-- take-back (CO-R16): revoked, and nothing is recorded. Any other id is a quiet no-op. A host of an open resbite only
 -- (require_link_owner, which holds the plan's row, as answering a link does).
 create function private.revoke_brought_invitation(p_plan uuid, p_invitation uuid) returns void language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid; v_inv private.phone_invitations;
@@ -193,12 +194,13 @@ create function public.revoke_brought_invitation(p_plan uuid, p_invitation uuid)
 $$;
 
 -- A bringer takes back an in-app invitation nobody has answered (CO-P10): their own pending guest row (brought by the
--- caller, still pending) on an open resbite is deleted, under the plan's lock. Its unsent invitation notice then fails
--- eligibility (no guest row). Nothing is recorded: the bringer is not a host. Only a bringer who is on the resbite
--- (has a guest row) may, and only someone they brought for this occurrence (C18-I1): never a host (an admin the roll
--- carried, not yet answered), and never someone the roll carried from the occurrence before (only a host takes a
--- regular of the series off). Someone with no such row is refused before the plan's row is locked (a stranger never
--- waits for it). Anything else is 42501 'Not your invitation'.
+-- caller, still pending) on an open resbite is deleted, under the plan's lock, and so is its invitation notice, sent or
+-- not, with its deliveries: the notice's key is the person's on the resbite, so bringing or inviting them again is told
+-- again. Nothing is recorded: the bringer is not a host. Only a bringer who is on the resbite (has a guest row) may,
+-- and only someone they brought for this occurrence (CO-R16): never a host (an admin the roll carried, not yet
+-- answered), and never someone the roll carried from the occurrence before (only a host takes a regular of the series
+-- off). Someone with no such row is refused before the plan's row is locked (a stranger never waits for it). Anything
+-- else is 42501 'Not your invitation'.
 create function private.withdraw_brought_invitation(p_plan uuid, p_user uuid) returns void language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester(); v_plan public.plans;
 begin
@@ -211,7 +213,11 @@ begin
    and not private.is_host(p_plan,p_user)
    and not exists(select 1 from public.attendees a where a.plan_id=v_plan.repeats_from and a.user_id=p_user) then
    delete from public.attendees where plan_id=p_plan and user_id=p_user and brought_by=v_uid and response='pending';
-   if found then return; end if;
+   if found then
+    -- The invitation's notice goes with it, sent or not (its deliveries too), so a later invitation is told again.
+    delete from private.notification_outbox where dedupe_key='invited:'||p_plan||':'||p_user;
+    return;
+   end if;
   end if;
  end if;
  raise exception 'Not your invitation' using errcode='42501';
@@ -220,10 +226,10 @@ create function public.withdraw_brought_invitation(p_plan uuid, p_user uuid) ret
  select private.withdraw_brought_invitation(p_plan,p_user)
 $$;
 
--- The bringers' first names, for the chain on the people list (CO-P11, C-R7): {"<bringer id>": "<first name>"} for each
--- account that brought someone whose guest row is on p_plan, whether or not the bringer is still on it, leaving out
--- an account being deleted (rule 10: the display then says nothing). Only for someone who may see the names
--- (can_see_guests: a host, or a guest who has answered), else 42501 'Names required'.
+-- The bringers' first names, for the chain on the people list (CO-P11, the plan's Revision 13): {"<bringer id>":
+-- "<first name>"} for each account that brought someone whose guest row is on p_plan, whether or not the bringer is
+-- still on it, leaving out an account being deleted (the spec's rule 10: the display then says nothing). Only for
+-- someone who may see the names (can_see_guests: a host, or a guest who has answered), else 42501 'Names required'.
 create function private.plan_bringers(p_plan uuid) returns jsonb language plpgsql stable security definer set search_path = '' as $$
 begin
  if not private.can_see_guests(p_plan) then raise exception 'Names required' using errcode='42501'; end if;
@@ -237,31 +243,36 @@ $$;
 
 -- 5. The redefined functions. Each keeps its signature, its grants and its public wrapper (create or replace).
 
--- Inviting and bringing (CO-P9, CO-P10, rule 6, C-R2, C-R3). The 20261110120000_connections body, with a branch for a
--- caller who is not a host: a guest whose allowance says may_bring brings people, who join without approval.
+-- Inviting and bringing (CO-P9, CO-P10, the spec's rule 6, CO-R12, CO-R14, the plan's Revisions 7 to 9). The
+-- 20261110120000_connections body, with a branch for a caller who is not a host: a guest whose allowance says may_bring
+-- brings people, who join without approval.
 --
 -- Opening. A host (private.is_host) goes through require_link_owner as today, so a host of an ended resbite still gets
 -- 'Active plan owner required'. Anyone else must have a guest row on the resbite, checked before its row is locked
--- (someone not on it never waits for the row), else 42501 'Not allowed to bring people here'. They then take the
--- plan's row (for update) and only then read the allowance, so a circle lowered at the same moment (set_plan_circle
--- holds the same row) is seen. The resbite must be open (not cancelled, not ended) and the guest still on it, else the
--- same 42501. A guest who may not bring (not may_bring) may still send their own live links again (C19, CO-P15: a sent
--- invitation stands, and the app's Send again makes a new code), and nothing else: any other item, and any item by
--- user (an in-app invitation, never a link sent again), refuses the whole call with that 42501. Then both branches take the caller's advisory lock and charge the lookup budget (numbers only),
--- as today.
+-- (someone not on it never waits for the row), else 42501 'Not allowed to bring people here'. They then take the plan's
+-- row (for update) and only then read the allowance, so a circle lowered at the same moment (set_plan_circle holds the
+-- same row) is seen. The resbite must be open (not cancelled, not ended) and the guest still on it, else the same
+-- 42501. A guest who may not bring (not may_bring) may still send their own live links again (CO-P15: a sent invitation
+-- stands, and the app's Send again makes a new code), and nothing else: any other item, and any item by user (an in-app
+-- invitation, never a link sent again), refuses the whole call with that 42501. A guest's own live link sent again
+-- becomes an in-app invitation when the number's holder has joined the app since it was sent (step 3 below): CO-P15
+-- covers this too, as the same invitation reaching them another way, and the count does not change (the pending row
+-- takes the link's place). Then both branches take the caller's advisory lock and charge the lookup budget (numbers
+-- only), as today.
 -- Lock order: in both branches the plan's row, then the caller's advisory lock (locally require_tester takes that lock
 -- first, before either). Two functions take them the other way round, so on the hosted project, where require_tester
 -- takes no lock, each can deadlock (40P01) with a bringing at the same instant. answer_phone_invitation takes the
 -- answerer's advisory lock, then the plan's row: the same account bringing and answering on one resbite at once.
--- decide_join_request takes the advisory locks of the host and of the requester, then the plan's row (require_link_owner):
--- a host deciding a request of a guest who is bringing someone on that resbite at that moment (the guest has a guest row
--- and a request still waiting, which only rows from before this migration can be: attendees_close_waiting ends a wait
--- whenever someone joins the list, C27). Outside invite_contacts, fold_web_account's step 2d (taking the app account off
--- a resbite where it is on record) can deadlock with a host's remove_guest of that account at the same instant; either
--- side's retry is harmless. And, an order rather than a lock: inside the fold, the trigger closes the app account's
--- waiting request on a resbite before step 2d takes the account off it, so that request is gone though the account is
--- not on the list (very rare: the web account must have answered a guest's link on that occurrence while the app
--- account, on record there, waited). Accepted: all improbable, a retry works, and hosts could already do the first.
+-- decide_join_request takes the advisory locks of the host and of the requester, then the plan's row
+-- (require_link_owner): a host deciding a request of a guest who is bringing someone on that resbite at that moment
+-- (the guest has a guest row and a request still waiting, which only rows from before this migration can be:
+-- attendees_close_waiting ends a wait whenever someone joins the list, CO-R15). Outside invite_contacts,
+-- fold_web_account's step 2d (taking the app account off a resbite where it is on record) can deadlock with a host's
+-- remove_guest of that account at the same instant; either side's retry is harmless. And, an order rather than a lock:
+-- inside the fold, the trigger closes the app account's waiting request on a resbite before step 2d takes the account
+-- off it, so that request is gone though the account is not on the list (very rare: the web account must have answered
+-- a guest's link on that occurrence while the app account, on record there, waited). Accepted: all improbable, a retry
+-- works, and hosts could already do the first.
 --
 -- What is written. A guest's new guest rows and links are brought_by the caller at the caller's level + 1; a host's
 -- have no bringer and level 1. Every link created or reopened has invited_by the caller.
@@ -282,8 +293,8 @@ $$;
 --
 -- A host's items, as today, plus: a link makes the row the host's (no bringer, level 1, whoever sent it before, since
 -- the host's code is now the live one; invited_by the host when the old link was revoked); the row is created now
--- whenever a host sends it, reopened or sent again while live, so it counts as the host's invitation from then (C21,
--- C22: answer_phone_invitation lets a host's link made after a removal through); an in-app outcome, {user}
+-- whenever a host sends it, reopened or sent again while live, so it counts as the host's invitation from then (CO-R12:
+-- answer_phone_invitation lets a host's link made after a removal through); an in-app outcome, {user}
 -- included, revokes every live link on the person's number, a bringer's included, which frees that bringer's invite
 -- (a number's holder is found by the number's key, so the item's key is the holder's); and an 'app' or 'link' item
 -- clears the series' removal records of that person and number.
@@ -415,7 +426,7 @@ begin
        user_id=case when private.phone_invitations.revoked_at is null then private.phone_invitations.user_id end,
        answered_at=case when private.phone_invitations.revoked_at is null then private.phone_invitations.answered_at end,
        invited_by=case when private.phone_invitations.revoked_at is null then private.phone_invitations.invited_by else excluded.invited_by end,
-       -- A host's link counts from when the host last sent it (C21, C22); a guest's sent again keeps its time.
+       -- A host's link counts from when the host last sent it (CO-R12); a guest's sent again keeps its time.
        created_at=case when private.phone_invitations.revoked_at is null and not v_host then private.phone_invitations.created_at else excluded.created_at end,
        brought_by=excluded.brought_by, level=excluded.level;
     end if;
@@ -433,19 +444,19 @@ end $$;
 
 -- Answering a personal link: a new guest row takes the link's bringer and level (CO-P15: the circle is not checked
 -- again; a bringer who has since left, or lowered numbers, change nothing). Someone already on the resbite keeps their
--- own row, bringer and level. A removal sticks (C-R2, C19): a link is refused as a revoked link is (42501 'Invitation
--- unavailable') when its answerer or its number is on record for the series, with one exception (C21): a host's own
+-- own row, bringer and level. A removal sticks (CO-R12): a link is refused as a revoked link is (42501 'Invitation
+-- unavailable') when its answerer or its number is on record for the series, with one exception: a host's own
 -- link (level 1) created after the latest of those records is the host's later decision, so it answers normally, and
 -- answering it clears them (the answerer's and the number's). A host's link is created again whenever the host sends
--- it, reopened or sent again while live (C22, invite_contacts). This covers a person removed while they had no
+-- it, reopened or sent again while live (invite_contacts). This covers a person removed while they had no
 -- confirmed number, whom the host then linked by a number nobody held yet (the host's invitation cleared only the
 -- number's record). A host's link last sent before the removal, and any guest's link (level > 1), stay refused while a
 -- record stands. A refusal undoes everything the call wrote, so it cannot revoke the link itself: the links to
 -- a person's confirmed number are revoked when the host removes or declines them (remove_guest, decide_join_request),
 -- and this check stops the rest (a number the person confirmed afterwards). An answer closes the answerer's request to
--- join this resbite that is waiting for the host, if any (C24): they are on it now, so a host's later Decline finds
+-- join this resbite that is waiting for the host, if any (CO-R15): they are on it now, so a host's later Decline finds
 -- nothing waiting (22023 'Request already decided') and removes them the usual way. A new guest row's trigger does
--- that too (C27); this covers an answer by someone already on the list. Otherwise the
+-- that too; this covers an answer by someone already on the list. Otherwise the
 -- 20261031120000_creating_a_resbite body.
 create or replace function private.answer_phone_invitation(p_code text, p_name text, p_response text, p_terms_version text) returns jsonb
 language plpgsql security definer set search_path = '' as $$
@@ -471,8 +482,8 @@ begin
  select * into v_inv from private.phone_invitations where id=v_inv.id and revoked_at is null;
  if not found then raise exception 'Invitation unavailable' using errcode='42501'; end if;
  if v_inv.user_id is not null and v_inv.user_id<>v_uid then raise exception 'Invitation unavailable' using errcode='42501'; end if;
- -- The person or the number a host removed, declined or revoked on this series (C19), unless this is the host's own
- -- link made after the latest of those records (C21), whose answer clears them.
+ -- The person or the number a host removed, declined or revoked on this series (CO-R12), unless this is the host's own
+ -- link made after the latest of those records, whose answer clears them.
  v_removed := (select max(r.removed_at) from private.plan_removals r
   where r.series_id=v_plan.series_id and (r.user_id=v_uid or r.phone=v_inv.phone));
  if v_removed is not null then
@@ -502,7 +513,7 @@ begin
   insert into public.profiles(id,display_name) values(v_uid,btrim(p_name));
  end if;
  insert into private.beta_access(user_id,source) values(v_uid,'invitation') on conflict (user_id) do nothing;
- -- On the resbite now, so no longer waiting at the host's door (C24).
+ -- On the resbite now, so no longer waiting at the host's door (CO-R15).
  delete from private.join_requests where plan_id=v_plan.id and user_id=v_uid and status='waiting';
  select * into v_att from public.attendees where plan_id=v_plan.id and user_id=v_uid for update;
  if v_att.user_id is null then
@@ -531,7 +542,7 @@ end $$;
 -- The personal page names the person who brought you (CO-P9): the open payload carries "inviter", the bringer's first
 -- name, when the link has a bringer whose account is not being deleted (which renames its profile 'Deleted member');
 -- otherwise there is no inviter key. host and every other key are unchanged. A link of an open resbite whose answer
--- would be refused for a removal (C24, the rule of answer_phone_invitation) gets the page of a revoked link,
+-- would be refused for a removal (CO-R12, the rule of answer_phone_invitation) gets the page of a revoked link,
 -- {"state":"inactive"}: the series has a record of the link's number, or of an account whose confirmed number it is
 -- (who alone could answer it), and the link is not a host's own (level 1) made after the latest of those records.
 -- Otherwise the 20261031120000_creating_a_resbite body.
@@ -547,7 +558,7 @@ begin
  select display_name into v_host from public.profiles where id=v_plan.owner_id;
  v_state := case when v_plan.status<>'active' then 'cancelled' when private.plan_end(v_plan.starts_at,v_plan.ends_at)<=now() then 'happened' else 'open' end;
  if v_state<>'open' then return jsonb_build_object('state',v_state,'host',v_host,'title',v_plan.title); end if;
- -- A removal on record, as answering checks it (C24).
+ -- A removal on record, as answering checks it (CO-R12).
  v_removed := (select max(r.removed_at) from private.plan_removals r where r.series_id=v_plan.series_id
   and (r.phone=v_inv.phone or r.user_id in (select u.id from auth.users u
    where u.phone=any(private.phone_variants(v_inv.phone)) and u.phone_confirmed_at is not null)));
@@ -630,11 +641,13 @@ begin
  return v_count;
 end $$;
 
--- Removing a guest is recorded for the series (C-R2), so the guest's friends cannot bring them back and no link lets
+-- Removing a guest is recorded for the series (CO-R12), so the guest's friends cannot bring them back and no link lets
 -- them back (answer_phone_invitation); the live links to their confirmed number, a host's or a guest's, are revoked
--- with it (C19: removing the person is the host's remedy, CO-P15), which frees a bringer's invite. An admin who removes
--- themself is leaving, which no host did: nothing is recorded or revoked for them. Nothing else changes: the people the
--- guest brought keep their rows, bringer and level (CO-P11). Otherwise the 20261031120000_creating_a_resbite body.
+-- with it (removing the person is the host's remedy, CO-P15), which frees a bringer's invite. Their invitation notice
+-- goes with the guest row, sent or not, with its deliveries: its key is the person's on the resbite, so inviting them
+-- again is told again. An admin who removes themself is leaving, which no host did: nothing is recorded or revoked for
+-- them. Nothing else changes: the people the guest brought keep their rows, bringer and level (CO-P11). Otherwise the
+-- 20261031120000_creating_a_resbite body.
 create or replace function private.remove_guest(p_plan uuid,p_user uuid) returns void language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid; v_owner uuid;
 begin
@@ -651,6 +664,9 @@ begin
  update private.phone_invitations set revoked_at=now(), code_hash=null where plan_id=p_plan and user_id=p_user;
  delete from public.plan_admins where plan_id=p_plan and user_id=p_user;
  delete from public.attendees where plan_id=p_plan and user_id=p_user;
+ -- Their invitation's notice goes with the guest row, sent or not (its deliveries too), so a later invitation is told
+ -- again.
+ delete from private.notification_outbox where dedupe_key='invited:'||p_plan||':'||p_user;
  -- The removal, for the series (an account that does not exist has nothing to record), and the links to the person's
  -- confirmed number.
  if p_user<>v_uid then
@@ -662,16 +678,16 @@ begin
  end if;
 end $$;
 
--- Declining a request to join is recorded for the series too (C-R2): a guest cannot then bring the person the host
+-- Declining a request to join is recorded for the series too (CO-R12): a guest cannot then bring the person the host
 -- turned down, and no link lets them in (answer_phone_invitation); the live links to their confirmed number are revoked
--- with it, as when a host removes someone (C19). Approving is the host letting the person in (CO-P13): their guest row
--- is level 1 with no bringer, a row they already had included (it keeps its reply, as before), and the person's records
--- for the series go, as a host's own invitation clears them (C18-Q4). Any guest's live link (level above 1) to their
--- confirmed number is revoked, which frees that bringer's invite (C24); a host's own link stays. The request is
--- approved before the row is made, so the row's trigger (attendees_close_waiting), which ends waits, leaves it
--- approved. Someone already on the guest list is never waiting (C27): approving such a pair (only rows from before this
--- migration) keeps today's behaviour, and declining one records nothing and answers 22023 'Request already decided'.
--- Otherwise the 20261029120000_open_link_approval body.
+-- with it, as when a host removes someone. Approving is the host letting the person in (CO-P13): their guest row is
+-- level 1 with no bringer, a row they already had included (it keeps its reply, as before), and the person's records
+-- for the series go, as a host's own invitation clears them (CO-R12). Any guest's live link (level above 1) to their
+-- confirmed number is revoked, which frees that bringer's invite, as a host's invitation does (CO-R14); a host's own
+-- link stays. The request is approved before the row is made, so the row's trigger (attendees_close_waiting), which
+-- ends waits, leaves it approved. Someone already on the guest list is never waiting (CO-R15): approving such a pair
+-- (only rows from before this migration) keeps today's behaviour, and declining one records nothing and answers 22023
+-- 'Request already decided'. Otherwise the 20261029120000_open_link_approval body.
 create or replace function private.decide_join_request(p_plan uuid, p_user uuid, p_approve boolean) returns jsonb
 language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid; v_req private.join_requests;
@@ -683,7 +699,7 @@ begin
  select * into v_req from private.join_requests where plan_id=p_plan and user_id=p_user and status='waiting' for update;
  if not found then raise exception 'Request already decided' using errcode='22023'; end if;
  if not p_approve then
-  -- Someone on the guest list is not waiting at the door (C27).
+  -- Someone on the guest list is not waiting at the door (CO-R15).
   if exists(select 1 from public.attendees where plan_id=p_plan and user_id=p_user) then
    raise exception 'Request already decided' using errcode='22023';
   end if;
@@ -716,7 +732,7 @@ begin
  -- The host lets them in: their records for the series go (the person, and their confirmed number).
  delete from private.plan_removals r using public.plans p where p.id=p_plan and r.series_id=p.series_id
   and (r.user_id=p_user or r.phone=(select nullif(private.phone_key(u.phone),'') from auth.users u where u.id=p_user and u.phone_confirmed_at is not null));
- -- A guest's link to them is no longer needed: its bringer's invite frees (C24).
+ -- A guest's link to them is no longer needed: its bringer's invite frees, as with a host's invitation (CO-R14).
  update private.phone_invitations set revoked_at=now(), code_hash=null where plan_id=p_plan and revoked_at is null and level>1
   and phone=(select nullif(private.phone_key(u.phone),'') from auth.users u where u.id=p_user and u.phone_confirmed_at is not null);
  insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id)
@@ -725,9 +741,9 @@ begin
 end $$;
 
 -- Revoking a link by number. A host, as today (require_link_owner; the answerer leaves the resbite and any admin role),
--- and the revocation is recorded for the series (C-R2): the number, and the person when it was answered. A link the
+-- and the revocation is recorded for the series (CO-R12): the number, and the person when it was answered. A link the
 -- host brought themself (as a guest, before a host made them an admin) is their own take-back, as a bringer's is
--- (C31): revoked, nothing recorded, and an answered one refused, 22023 'Invitation answered' (C29). A guest may
+-- (CO-R16): revoked, nothing recorded, and an answered one refused, 22023 'Invitation answered'. A guest may
 -- revoke a link they brought that nobody has answered and that is still live, while the resbite is open, whatever
 -- their own reply (CO-P10): the invite frees, and nothing is recorded. Someone with no such link is refused before
 -- the plan's row is locked. Anything else is 42501 'Active plan owner required', as a guest gets today. Otherwise the
@@ -737,7 +753,7 @@ declare v_uid uuid := private.require_tester(); v_user uuid; v_phone text; v_ser
 begin
  if private.is_host(p_plan,v_uid) then
   perform private.require_link_owner(p_plan);
-  -- The host's own take-back (C31).
+  -- The host's own take-back (CO-R16).
   if exists(select 1 from private.phone_invitations where plan_id=p_plan and phone=private.phone_key(p_phone) and brought_by=v_uid) then
    if exists(select 1 from private.phone_invitations where plan_id=p_plan and phone=private.phone_key(p_phone) and answered_at is not null) then
     raise exception 'Invitation answered' using errcode='22023';
@@ -778,11 +794,11 @@ end $$;
 
 -- The list of links by number. A host gets today's list, in today's shape (installed builds read phone on every row),
 -- of the hosts' own links (level 1); the links guests sent are in plan_brought_invitations, without their numbers. The
--- links a host brought themself, as a guest before a host made them an admin, are theirs too (C32): they sent them and
--- know the numbers, so they come here in the same shape plus "brought": true (the app takes them back as the bringer,
--- C31), and plan_brought_invitations leaves them out. No host gets a number another person sent. A guest gets only the
--- links they brought, in today's shape (they remove theirs by number), so a guest who brought nobody gets []. Anyone
--- else is refused (42501 'Plan owner required'). Otherwise the 20261031120000_creating_a_resbite body.
+-- links a host brought themself, as a guest before a host made them an admin, are theirs too (CO-R16): they sent them
+-- and know the numbers, so they come here in the same shape plus "brought": true (the app takes them back as the
+-- bringer), and plan_brought_invitations leaves them out. No host gets a number another person sent. A guest gets only
+-- the links they brought, in today's shape (they remove theirs by number), so a guest who brought nobody gets [].
+-- Anyone else is refused (42501 'Plan owner required'). Otherwise the 20261031120000_creating_a_resbite body.
 create or replace function private.plan_phone_invitations(p_plan uuid) returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester(); v_host boolean;
 begin
@@ -797,14 +813,14 @@ begin
    and case when v_host then i.level=1 or i.brought_by=v_uid else i.brought_by is not distinct from v_uid end),'[]'::jsonb);
 end $$;
 
--- Folding a web-only account into the app account keeps the person's removal records (C19, #38): a record of the web
+-- Folding a web-only account into the app account keeps the person's removal records (CO-R12): a record of the web
 -- account moves to the app account, which a guest then cannot bring back either; where the app account already has
--- one for that series, the later removal stands (C24: a host's link lets them back only when made after it). And the
--- removal itself holds (C30, probe F): a person a host removed as one account must not stay on through the other
+-- one for that series, the later removal stands (a host's link lets them back only when made after it). And the
+-- removal itself holds: a person a host removed as one account must not stay on through the other
 -- (a guest's link answered on the web, then folded in). So, after the rows move, on every resbite not yet ended of a
 -- series where the app account is on record, the app account leaves the guest list, any admin role and its links
 -- there, as remove_guest takes them, unless a host let the person back later: a host's own link (level 1) it answered
--- there that was made after the latest record, which then clears that record, as answering it does (C21). Otherwise
+-- there that was made after the latest record, which then clears that record, as answering it does. Otherwise
 -- the 20261030120000_push_delivery body; its grants and its public wrapper are kept.
 create or replace function private.fold_web_account(p_from uuid, p_into uuid) returns jsonb language plpgsql security definer set search_path = '' as $$
 declare v_moved integer; v_disabled boolean; v_row record;
@@ -845,7 +861,8 @@ begin
   where user_id=p_from
  on conflict (series_id,user_id) where user_id is not null do update set removed_at=greatest(private.plan_removals.removed_at,excluded.removed_at);
  delete from private.plan_removals where user_id=p_from;
- -- 2d. The removal holds (C30): the app account's places on resbites not yet ended of a series where it is on record.
+ -- 2d. The removal holds (CO-R12): the app account's places on resbites not yet ended of a series where it is on
+ -- record.
  for v_row in select a.plan_id, p.series_id,
    (select max(r.removed_at) from private.plan_removals r where r.series_id=p.series_id and r.user_id=p_into) as removed_at
   from public.attendees a join public.plans p on p.id=a.plan_id
@@ -855,7 +872,7 @@ begin
  loop
   if exists(select 1 from private.phone_invitations i where i.plan_id=v_row.plan_id and i.user_id=p_into and i.level=1
     and i.answered_at is not null and i.revoked_at is null and i.created_at>v_row.removed_at) then
-   -- The host's later link (C21).
+   -- The host's later link, made after the record.
    delete from private.plan_removals where series_id=v_row.series_id and user_id=p_into;
   else
    update private.invitations set revoked_at=now() where plan_id=v_row.plan_id and claimed_by=p_into and revoked_at is null;
@@ -890,12 +907,12 @@ begin
 end $$;
 
 -- The worker's claim tells a host who brought the person who answered (CO-P11, UX2-D4): each job also carries
--- brought_by_name. For an rsvp it is the first name (private.first_name, C30) of the bringer on the actor's guest row
--- on the plan, when that account is not being deleted (which renames its profile 'Deleted member') and is not the
--- recipient (a bringer a host made an admin is not told about themself, C27); for every other kind, and for someone
--- nobody brought, it is null. The sender's copy reads "Clara is going · brought by Pedro.". Two more changes (C30): an
--- answer from someone no longer on the guest list is not news, so its unsent delivery is suppressed (D4); and the jobs
--- come in the order the notices were made (D1), so a later answer is never sent before an earlier one. Otherwise the
+-- brought_by_name. For an rsvp it is the first name (private.first_name, CO-R17) of the bringer on the actor's guest
+-- row on the plan, when that account is not being deleted (which renames its profile 'Deleted member') and is not the
+-- recipient (a bringer a host made an admin is not told about themself); for every other kind, and for someone nobody
+-- brought, it is null. The sender's copy reads "Clara is going · brought by Pedro.". Two more changes: an answer from
+-- someone no longer on the guest list is not news, so its unsent delivery is suppressed; and the jobs come in the order
+-- the notices were made, so a later answer is never sent before an earlier one. Otherwise the
 -- 20261030120000_push_delivery body; its grants are kept (service_role only).
 create or replace function public.claim_notification_deliveries(p_limit integer default 25) returns jsonb
 language plpgsql security definer set search_path='' as $$
@@ -920,7 +937,7 @@ begin
  where d.state in ('pending','ticket') and (not private.notification_recipient_eligible(d.outbox_id)
  or not exists(select 1 from private.device_endpoints e join private.notification_outbox o on o.id=d.outbox_id
  where e.token=d.token and e.user_id=o.recipient_id and e.updated_at=d.endpoint_updated_at));
- -- An answer from someone no longer on the guest list (removed since) is not news (circles of trust, C30).
+ -- An answer from someone no longer on the guest list (removed since) is not news (circles of trust).
  update private.notification_deliveries d set state='suppressed',lease_id=null,lease_until=null
  from private.notification_outbox o where o.id=d.outbox_id and d.state='pending' and o.kind='rsvp' and o.actor_id is not null
  and not exists(select 1 from public.attendees a where a.plan_id=o.plan_id and a.user_id=o.actor_id);
@@ -943,7 +960,7 @@ begin
  'brought_by_name',case when o.kind='rsvp' then (select private.first_name(b.display_name)
   from public.attendees a join public.profiles b on b.id=a.brought_by
   where a.plan_id=o.plan_id and a.user_id=o.actor_id and a.brought_by<>o.recipient_id and not private.deletion_pending(b.id)) end)
- -- In the order the notices were made (C30).
+ -- In the order the notices were made (circles of trust).
  order by o.id, d.id),'[]'::jsonb) into v_result
  from claimed d join private.notification_outbox o on o.id=d.outbox_id
  join public.plans plan on plan.id=o.plan_id
@@ -953,12 +970,13 @@ begin
  return v_result;
 end $$;
 
--- 6. Deletion (rule 10, CO-P15): asking to delete an account also empties "brought by" wherever it names the account,
--- on guest rows and on links (the links stay live: a sent invitation stands, now with no bringer), and deletes the
--- account's removal records. The deletion lifecycle is local-only (20261022120001_gi2_local_delivery_and_deletion; the
--- hosted project has none of it): its request function is redefined only where it exists, so this file still applies
--- on the hosted baseline, and the release that brings deletion to hosted must carry these three statements beside the
--- two deletes of 20261110120000_connections. Otherwise the 20261110120000_connections body; its grants are kept.
+-- 6. Deletion (the spec's rule 10, CO-P15): asking to delete an account also empties "brought by" wherever it names the
+-- account, on guest rows and on links (the links stay live: a sent invitation stands, now with no bringer), and deletes
+-- the account's removal records. The deletion lifecycle is local-only (20261022120001_gi2_local_delivery_and_deletion;
+-- the hosted project has none of it): its request function is redefined only where it exists, so this file still
+-- applies on the hosted baseline, and the release that brings deletion to hosted must carry these three statements
+-- beside the two deletes of 20261110120000_connections. Otherwise the 20261110120000_connections body; its grants are
+-- kept.
 do $migration$ begin
  if pg_catalog.to_regprocedure('private.request_account_deletion(uuid,uuid,uuid,text)') is not null then
   execute $fn$

@@ -6,8 +6,12 @@
 --   - People already brought stay on their resbites as ordinary guests; who brought them and their levels go.
 --   - The circle numbers (each resbite's invites and levels) and the removal records (private.plan_removals) are lost:
 --     a person a host removed, declined or revoked can be brought, or answer a link, again.
---   - A bringer's live links stay live, as ordinary invitations; hosts then see them, numbers included, in
---     plan_phone_invitations, and a guest can no longer list or revoke them.
+--   - The links guests sent that nobody has answered are revoked first (owner decision CO-Q2, by default): the
+--     plan_phone_invitations restored here lists every live link to a host, number included, so a number a guest typed
+--     would reach the hosts. Those invitations stop working: their page reads as no longer active, and an answer is
+--     refused. A guest's link someone has answered stays live, so its answerer can still change their answer from it;
+--     the restored list returns it to a host who calls it, though no app build lists an answered link. The hosts' own
+--     links stay as they are.
 -- It restores, each keeping its grants (create or replace) and its public wrapper:
 --   private.invite_contacts                       from 20261110120000_connections.sql
 --   private.answer_phone_invitation, personal_invitation_page, revoke_phone_invitation, plan_phone_invitations,
@@ -21,9 +25,10 @@
 -- private.attendees_close_waiting, the helper private.first_name, the seven new functions (one internal, six behind a
 -- public wrapper) and the six public wrappers, private.plan_removals and the six new columns. Waits the trigger
 -- ended stay ended (a person on the guest list has no request waiting).
--- Builds: an app build with the circle (the card, "Bring someone", the chain) gets errors from the functions dropped
--- here and reads no brought_by, level or circle columns: roll the app back first. Installed builds from before the
--- migration read nothing it made.
+-- Builds: an app build with the circle (the card, "Bring someone", the chain) can't load a resbite or Invite people
+-- once this has run: its plans read selects bring_invites,bring_levels and its readGuests selects brought_by,level,
+-- columns dropped here, and the functions dropped here answer with errors. Roll the app back first. Installed builds
+-- from before the migration read nothing it made.
 -- Order: run it after the chat rollbacks (chat plan 1 copies this migration's claim and deletion bodies, and chat
 -- plan 2's group lines read brought_by) and before the connections follow-ups rollback
 -- (supabase/rollback/20261111120000_connections_follow_ups.rollback.sql), which restores a roll without brought_by and
@@ -46,6 +51,10 @@ end $$;
 
 -- Nothing reads or writes the three tables until this commits (the columns go at the end).
 lock table public.plans, public.attendees, private.phone_invitations in access exclusive mode;
+
+-- The links guests sent that nobody has answered (level above 1) end before the hosts' list of every live link comes
+-- back below, so no number a guest typed reaches a host (owner decision CO-Q2, by default).
+update private.phone_invitations set revoked_at=now(), code_hash=null where level>1 and revoked_at is null and answered_at is null;
 
 -- Inviting as it was (20261110120000_connections.sql): hosts only (require_link_owner); no bringing, no removals.
 create or replace function private.invite_contacts(p_plan uuid, p_invites jsonb) returns jsonb language plpgsql security definer set search_path = '' as $$

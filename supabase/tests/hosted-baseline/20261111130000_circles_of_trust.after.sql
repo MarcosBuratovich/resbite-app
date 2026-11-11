@@ -68,26 +68,36 @@ do $$ declare r text; f text; begin
  end loop;
 end $$;
 
--- 2. The rollback, rehearsed and undone. Seed what it changes: a circle on the resbite, a guest's in-app bringing and
--- their link, a removal record. Try its two guards: it refuses once the follow-ups rollback has run (pair_standing,
--- renamed, stands in) and while chat is applied (a public.messages table stands in); a refusal changes nothing. Then
--- run it: the ten functions, with their grants, are the ones .before.sql recorded; the nine new functions, the six
--- wrappers, the trigger, plan_removals and the six columns are gone; the people brought stay as ordinary guests and the link stays
--- live.
+-- 2. The rollback, rehearsed and undone. Seed what it changes: a circle on the resbite, a guest's in-app bringing, an
+-- unanswered link the guest sent and an answered one, a removal record. Try its two guards: it refuses once the
+-- follow-ups rollback has run (pair_standing, renamed, stands in) and while chat is applied (a public.messages table
+-- stands in); a refusal changes nothing. Then run it: the ten functions, with their grants, are the ones .before.sql
+-- recorded; the nine new functions, the six wrappers, the trigger, plan_removals and the six columns are gone; the
+-- people brought stay as ordinary guests. No unanswered link a guest sent stays live (owner decision CO-Q2, by
+-- default): the restored plan_phone_invitations lists every live link to a host with its number, so those links end
+-- first. The host's own link stays live, and so does the answered one, whose answerer stays on the resbite.
 begin;
 insert into auth.users(id,phone,phone_confirmed_at) values
  ('c2000000-0000-4000-8000-000000000003','447700900884',now()),
- ('c2000000-0000-4000-8000-000000000004','447700900885',now());
+ ('c2000000-0000-4000-8000-000000000004','447700900885',now()),
+ ('c2000000-0000-4000-8000-000000000005','447700900887',now());
 insert into public.profiles(id,display_name) values
- ('c2000000-0000-4000-8000-000000000003','Rehearsal friend'),('c2000000-0000-4000-8000-000000000004','Rehearsal other');
+ ('c2000000-0000-4000-8000-000000000003','Rehearsal friend'),('c2000000-0000-4000-8000-000000000004','Rehearsal other'),
+ ('c2000000-0000-4000-8000-000000000005','Rehearsal answerer');
 update public.plans set bring_invites=2, bring_levels=2 where id='c2100000-0000-4000-8000-000000000001';
 insert into public.attendees(plan_id,user_id,response,brought_by,level) values
- ('c2100000-0000-4000-8000-000000000001','c2000000-0000-4000-8000-000000000003','pending','c2000000-0000-4000-8000-000000000002',2);
-insert into private.phone_invitations(plan_id,phone,country,code_hash,invited_by,brought_by,level) values
+ ('c2100000-0000-4000-8000-000000000001','c2000000-0000-4000-8000-000000000003','pending','c2000000-0000-4000-8000-000000000002',2),
+ ('c2100000-0000-4000-8000-000000000001','c2000000-0000-4000-8000-000000000005','accepted','c2000000-0000-4000-8000-000000000002',2);
+insert into private.phone_invitations(plan_id,phone,country,code_hash,invited_by,brought_by,level,user_id,answered_at) values
  ('c2100000-0000-4000-8000-000000000001','447700900886','44',extensions.digest(repeat('S',22),'sha256'),
-  'c2000000-0000-4000-8000-000000000002','c2000000-0000-4000-8000-000000000002',2);
+  'c2000000-0000-4000-8000-000000000002','c2000000-0000-4000-8000-000000000002',2,null,null),
+ ('c2100000-0000-4000-8000-000000000001','447700900887','44',extensions.digest(repeat('T',22),'sha256'),
+  'c2000000-0000-4000-8000-000000000002','c2000000-0000-4000-8000-000000000002',2,'c2000000-0000-4000-8000-000000000005',now());
 insert into private.plan_removals(series_id,user_id) select series_id,'c2000000-0000-4000-8000-000000000004' from public.plans
  where id='c2100000-0000-4000-8000-000000000001';
+-- The guests' unanswered links, live now (the rollback drops the level column, so they are noted by id first).
+create temporary table co2_rehearsal_brought on commit drop as
+ select id from private.phone_invitations where level>1 and revoked_at is null and answered_at is null;
 \set co2_rehearsal_rollback `cat :'resbite_repo'/supabase/rollback/20261111130000_circles_of_trust.rollback.sql`
 create temporary table co2_rehearsal_scripts on commit drop as select :'co2_rehearsal_rollback'::text as rollback;
 do $$ begin
@@ -137,9 +147,19 @@ do $$ begin
  end if;
  if not exists(select 1 from public.attendees where plan_id='c2100000-0000-4000-8000-000000000001' and user_id='c2000000-0000-4000-8000-000000000003'
    and response='pending')
- or not exists(select 1 from private.phone_invitations where plan_id='c2100000-0000-4000-8000-000000000001' and phone='447700900886'
-   and revoked_at is null and code_hash=extensions.digest(repeat('S',22),'sha256')) then
-  raise exception 'Rollback lost a brought guest or a bringer''s live link';
+ or not exists(select 1 from public.attendees where plan_id='c2100000-0000-4000-8000-000000000001' and user_id='c2000000-0000-4000-8000-000000000005'
+   and response='accepted') then
+  raise exception 'Rollback lost a brought guest';
+ end if;
+ if (select count(*) from co2_rehearsal_brought)<>1 then raise exception 'The rehearsal noted no guest''s unanswered link'; end if;
+ if exists(select 1 from private.phone_invitations i join co2_rehearsal_brought b on b.id=i.id where i.revoked_at is null or i.code_hash is not null) then
+  raise exception 'Rollback left a guest''s unanswered link live';
+ end if;
+ if not exists(select 1 from private.phone_invitations where plan_id='c2100000-0000-4000-8000-000000000001' and phone='447700900883'
+   and revoked_at is null and code_hash=extensions.digest(repeat('R',22),'sha256'))
+ or not exists(select 1 from private.phone_invitations where plan_id='c2100000-0000-4000-8000-000000000001' and phone='447700900887'
+   and revoked_at is null and answered_at is not null and user_id='c2000000-0000-4000-8000-000000000005') then
+  raise exception 'Rollback ended the host''s link or an answered one';
  end if;
 end $$;
 rollback;

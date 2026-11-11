@@ -1914,6 +1914,101 @@ do $$ declare v text; begin
 end $$;
 rollback;
 
+-- Slice 19: an invitation taken back, or a guest removed, and then invited again, is told again. Base (1,1). 06 has a
+-- device. The notice's key is the person's on the resbite (invited:<plan>:<user>), so the old notice must go with the
+-- guest row, its delivery too, or the new invitation's notice is the old one and nothing is sent.
+-- 02 brings 06 in the app, and the worker claims 06's notice; 02 takes it back: the notice and its delivery go. 02
+-- brings 06 again: a fresh notice, which the worker claims for 06.
+begin;
+select pg_temp.co2_cast();
+insert into private.device_endpoints(token,user_id,platform) values ('ExpoPushToken[co2clara]',pg_temp.co2('06'),'ios');
+create temporary table co2_jobs(step text, n bigint, job jsonb) on commit drop;
+grant select, insert on co2_jobs to service_role;
+create temporary table co2_notice(step text, id bigint) on commit drop;
+set local role authenticated;
+select pg_temp.co2_as('02');
+select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_user('06'))))='app','02 bringing 06');
+set local role service_role;
+insert into co2_jobs select 'brought', x.n, x.j from jsonb_array_elements(public.claim_notification_deliveries(25)) with ordinality x(j,n);
+reset role;
+insert into co2_notice select 'brought', id from private.notification_outbox where dedupe_key='invited:'||pg_temp.co2p()||':'||pg_temp.co2('06');
+do $$ begin
+ if (select count(*) from co2_jobs where step='brought' and job->>'plan_id'=pg_temp.co2p()::text and job->>'kind'='invited'
+   and job->>'recipient_id'=pg_temp.co2('06')::text)<>1
+ or not exists(select 1 from private.notification_deliveries where outbox_id=(select id from co2_notice where step='brought')) then
+  raise exception 'Bringing 06 was not claimed for 06';
+ end if;
+end $$;
+set local role authenticated;
+select pg_temp.co2_as('02');
+select public.withdraw_brought_invitation(pg_temp.co2p(),pg_temp.co2('06'));
+reset role;
+do $$ begin
+ if exists(select 1 from private.notification_outbox where dedupe_key='invited:'||pg_temp.co2p()||':'||pg_temp.co2('06')) then
+  raise exception 'The take-back left 06''s notice';
+ end if;
+ if exists(select 1 from private.notification_deliveries where outbox_id=(select id from co2_notice where step='brought')) then
+  raise exception 'The take-back left the notice''s delivery';
+ end if;
+end $$;
+set local role authenticated;
+select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_user('06'))))='app','02 bringing 06 again');
+set local role service_role;
+insert into co2_jobs select 'again', x.n, x.j from jsonb_array_elements(public.claim_notification_deliveries(25)) with ordinality x(j,n);
+reset role;
+do $$ begin
+ if (select count(*) from co2_jobs where step='again' and job->>'plan_id'=pg_temp.co2p()::text and job->>'kind'='invited'
+   and job->>'recipient_id'=pg_temp.co2('06')::text and job->>'actor_name'='Pedro P')<>1 then
+  raise exception 'Bringing 06 again was not told: %', (select string_agg(job::text,',') from co2_jobs where step='again');
+ end if;
+end $$;
+rollback;
+-- 01 invites 06 in the app, the worker claims the notice, and 06 says Going; 01 removes 06: the notice and its delivery
+-- go. 01 invites 06 again: a fresh notice, which the worker claims for 06.
+begin;
+select pg_temp.co2_cast();
+insert into private.device_endpoints(token,user_id,platform) values ('ExpoPushToken[co2clara]',pg_temp.co2('06'),'ios');
+create temporary table co2_jobs(step text, n bigint, job jsonb) on commit drop;
+grant select, insert on co2_jobs to service_role;
+create temporary table co2_notice(step text, id bigint) on commit drop;
+set local role authenticated;
+select pg_temp.co2_as('01');
+select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_user('06'))))='app','01 inviting 06');
+set local role service_role;
+insert into co2_jobs select 'invited', x.n, x.j from jsonb_array_elements(public.claim_notification_deliveries(25)) with ordinality x(j,n);
+reset role;
+insert into co2_notice select 'invited', id from private.notification_outbox where dedupe_key='invited:'||pg_temp.co2p()||':'||pg_temp.co2('06');
+set local role authenticated;
+select pg_temp.co2_as('06');
+select public.respond(pg_temp.co2p(),'accepted',1);
+select pg_temp.co2_as('01');
+select public.remove_guest(pg_temp.co2p(),pg_temp.co2('06'));
+reset role;
+do $$ begin
+ if (select count(*) from co2_jobs where step='invited' and job->>'plan_id'=pg_temp.co2p()::text and job->>'kind'='invited'
+   and job->>'recipient_id'=pg_temp.co2('06')::text)<>1 then
+  raise exception 'Inviting 06 was not claimed for 06';
+ end if;
+ if exists(select 1 from private.notification_outbox where dedupe_key='invited:'||pg_temp.co2p()||':'||pg_temp.co2('06')) then
+  raise exception 'The removal left 06''s notice';
+ end if;
+ if exists(select 1 from private.notification_deliveries where outbox_id=(select id from co2_notice where step='invited')) then
+  raise exception 'The removal left the notice''s delivery';
+ end if;
+end $$;
+set local role authenticated;
+select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_user('06'))))='app','01 inviting 06 again');
+set local role service_role;
+insert into co2_jobs select 'again', x.n, x.j from jsonb_array_elements(public.claim_notification_deliveries(25)) with ordinality x(j,n);
+reset role;
+do $$ begin
+ if (select count(*) from co2_jobs where step='again' and job->>'plan_id'=pg_temp.co2p()::text and job->>'kind'='invited'
+   and job->>'recipient_id'=pg_temp.co2('06')::text and job->>'actor_name'='Ana Host')<>1 then
+  raise exception 'Inviting 06 again was not told: %', (select string_agg(job::text,',') from co2_jobs where step='again');
+ end if;
+end $$;
+rollback;
+
 drop function pg_temp.co2_cast(), pg_temp.co2_allowance(uuid,text), pg_temp.co2_used(text), pg_temp.co2_refused(text,text,text),
  pg_temp.co2_check(boolean,text), pg_temp.co2_kinds(jsonb), pg_temp.co2_as(text), pg_temp.co2_number(text,text), pg_temp.co2_user(text),
  pg_temp.co2_phone(text), pg_temp.co2p(), pg_temp.co2(text);
