@@ -18,3 +18,4 @@ phone-key.sql
 creating-a-resbite.sql
 connections.sql
 connections-follow-ups.sql
+circles-of-trust.sql

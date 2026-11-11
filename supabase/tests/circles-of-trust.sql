@@ -893,7 +893,7 @@ do $$ declare v_next uuid; begin
   raise exception 'plans.bring_invites is still there';
  end if;
  if to_regprocedure('private.request_account_deletion(uuid,uuid,uuid,text)') is not null
- and pg_catalog.pg_get_functiondef('private.request_account_deletion(uuid,uuid,uuid,text)'::regprocedure) like '%brought_by%' then
+ and pg_catalog.pg_get_functiondef(pg_catalog.to_regprocedure('private.request_account_deletion(uuid,uuid,uuid,text)')) like '%brought_by%' then
   raise exception 'request_account_deletion still clears brought_by';
  end if;
  -- The roll it restored carries 02, who said Can't go after Going.
