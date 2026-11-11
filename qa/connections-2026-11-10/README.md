@@ -86,9 +86,9 @@ Not applied. Fill in here, with the date and the owner's approval, as each step 
 
 Only with the owner's approval, in one transaction, after the sender has drained the outbox if no pending notice is to be lost:
 
-1. `begin; \i supabase/rollback/20261110120000_connections.rollback.sql; commit;` (sha256 above). It deletes the connection functions and their wrappers, `public.connections` and `private.connection_refusals` with every row (every connection, request and refusal is gone, nobody is told), and every `connection_request` and `connection_accepted` outbox row, delivered or not, so the earlier kind check can come back; it restores the redefined functions to their previous bodies.
+1. `begin; \i supabase/rollback/20261110120000_connections.rollback.sql; commit;` (sha256 above). It deletes the connection functions and their wrappers, `public.connections` and `private.connection_refusals` with every row (every connection, request and refusal is gone, nobody is told), and every `connection_request` and `connection_accepted` outbox row, delivered or not, so the earlier kind check can come back; it restores `private.can_read_profile`, `private.invite_contacts`, `private.notification_recipient_eligible` and (guarded, only where it exists) `private.request_account_deletion` to their previous bodies, and the outbox kind check to its earlier list.
 2. Builds made with this plan call functions that no longer exist: the Connections screen, Connect and "Your connections" fail until the old build is back. Redeploy the previous `deliver-notifications` from the previous commit.
-3. Remove the line for this migration from `supabase/tests/hosted-baseline/migrations.txt` if it was appended, and repair the history: `supabase migration repair --status reverted 20261110120000 --linked --yes`.
+3. Remove the line for this migration from `supabase/tests/hosted-baseline/migrations.txt` if it was appended. The hosted migration history row stays (the earlier rollbacks left theirs too); never run `supabase migration repair --status reverted`.
 
 ## Not done here
 
