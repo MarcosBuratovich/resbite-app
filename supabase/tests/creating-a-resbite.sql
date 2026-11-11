@@ -1114,18 +1114,20 @@ do $$ declare o public.plans; n public.plans; begin
  if (select count(*) from public.plan_admins where plan_id=n.id and user_id='e1000000-0000-4000-8000-000000000002'
    and appointed_by='e1000000-0000-4000-8000-000000000001' and appointed_at=now())<>1
   or (select count(*) from public.plan_admins where plan_id=n.id)<>1 then raise exception 'The admin did not carry'; end if;
- -- Everyone who uses the app and didn't withdraw, the admin among them, asked again; not the guest who only answered on
- -- the web, nor the one who is leaving.
+ -- Everyone who uses the app, whatever their reply (the one who withdrew too, CH-P20), the admin among them, asked again;
+ -- not the guest who only answered on the web, nor the one who is leaving.
  if (select array_agg(user_id order by user_id) from public.attendees where plan_id=n.id)<>array['e1000000-0000-4000-8000-000000000002',
-   'e1000000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000004','e1000000-0000-4000-8000-000000000005']::uuid[]
+   'e1000000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000004','e1000000-0000-4000-8000-000000000005',
+   'e1000000-0000-4000-8000-000000000006']::uuid[]
   then raise exception 'Wrong people carried'; end if;
  if exists(select 1 from public.attendees where plan_id=n.id and user_id in ('e1000000-0000-4000-8000-000000000010','e1000000-0000-4000-8000-000000000011'))
   or exists(select 1 from private.notification_outbox where plan_id=n.id and recipient_id in ('e1000000-0000-4000-8000-000000000010','e1000000-0000-4000-8000-000000000011'))
   then raise exception 'A web-only or leaving guest was carried or told'; end if;
  if exists(select 1 from public.attendees where plan_id=n.id and (response<>'pending' or version<>1)) then raise exception 'Replies did not start empty'; end if;
- -- The invitation push: one each for the three guests; none for the admin or the owner.
+ -- The invitation push: one each for the four guests; none for the admin or the owner.
  if (select array_agg(recipient_id order by recipient_id) from private.notification_outbox where plan_id=n.id)<>array[
-   'e1000000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000004','e1000000-0000-4000-8000-000000000005']::uuid[]
+   'e1000000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000004','e1000000-0000-4000-8000-000000000005',
+   'e1000000-0000-4000-8000-000000000006']::uuid[]
   then raise exception 'Wrong recipients'; end if;
  if exists(select 1 from private.notification_outbox where plan_id=n.id and (kind<>'invited' or detail is distinct from 'again'
    or actor_id<>'e1000000-0000-4000-8000-000000000001' or dedupe_key<>'invited:'||n.id||':'||recipient_id))
@@ -1156,7 +1158,7 @@ do $$ declare n uuid := (select id from public.plans where repeats_from='e110000
  if (select response from public.attendees where plan_id=n and user_id='e1000000-0000-4000-8000-000000000002') is distinct from 'pending'
   then raise exception 'The carried admin should still be pending'; end if;
  if (select note from public.plan_meeting_details where plan_id=n) is distinct from 'Ring the bell' then raise exception 'The carried admin cannot read the meeting details'; end if;
- if (select count(*) from public.attendees where plan_id=n)<>4 then raise exception 'The carried admin does not see the guests'; end if;
+ if (select count(*) from public.attendees where plan_id=n)<>5 then raise exception 'The carried admin does not see the guests'; end if;
 end $$;
 select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000005","role":"authenticated"}',true);
 do $$ declare n uuid := (select id from public.plans where repeats_from='e1100000-0000-4000-8000-000000000030'); begin

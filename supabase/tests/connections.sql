@@ -36,7 +36,8 @@ insert into public.attendees(plan_id,user_id,response) values
  ('f1100000-0000-4000-8000-000000000002','f1000000-0000-4000-8000-000000000002','accepted'),
  ('f1100000-0000-4000-8000-000000000002','f1000000-0000-4000-8000-000000000003','accepted');
 
--- 02 asks 03, twice: one row, one notice.
+-- 02 asks 03, twice: one row, one notice, whose detail says both are going (02 Going, 03 Maybe; the follow-ups
+-- migration, 20261111120000).
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 do $$ begin
@@ -59,7 +60,7 @@ do $$ declare c public.connections; o private.notification_outbox; v_series uuid
  if (select count(*) from private.notification_outbox where kind='connection_request')<>1 then raise exception 'One request notice expected'; end if;
  select * into o from private.notification_outbox where kind='connection_request';
  if o.recipient_id is distinct from 'f1000000-0000-4000-8000-000000000003' or o.actor_id is distinct from 'f1000000-0000-4000-8000-000000000002'
- or o.plan_id is distinct from 'f1100000-0000-4000-8000-000000000001' or o.detail is not null
+ or o.plan_id is distinct from 'f1100000-0000-4000-8000-000000000001' or o.detail is distinct from 'going'
  or o.dedupe_key is distinct from 'connect:f1000000-0000-4000-8000-000000000002:f1000000-0000-4000-8000-000000000003:'||v_series||':f1000000-0000-4000-8000-000000000002' then
   raise exception 'Request notice wrong: %', o;
  end if;
