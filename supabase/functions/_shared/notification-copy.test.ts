@@ -26,6 +26,35 @@ test("each kind and detail has its wording under the event title", () => {
     assert.deepEqual(notificationCopy({ ...base, kind, detail }), { title: "Picnic in the park", body }, `${kind}/${detail}`);
 });
 
+test("a host hears who brought the person who answered (circles of trust)", () => {
+  const rsvp = { kind: "rsvp", title: "Board game night", actor_name: "Clara", brought_by_name: "Pedro" };
+  const cases: [string, string][] = [
+    ["accepted", "Clara is going · brought by Pedro."],
+    ["maybe", "Clara might come · brought by Pedro."],
+    ["declined", "Clara can’t go · brought by Pedro."],
+    ["withdrawn", "Clara can’t go now · brought by Pedro."],
+  ];
+  for (const [detail, body] of cases)
+    assert.deepEqual(notificationCopy({ ...rsvp, detail }), { title: "Board game night", body }, detail);
+  // Without the field the text is unchanged.
+  assert.deepEqual(notificationCopy({ kind: "rsvp", detail: "accepted", title: "Board game night", actor_name: "Clara" }), {
+    title: "Board game night",
+    body: "Clara is going.",
+  });
+  for (const brought_by_name of [null, undefined, "", "   "])
+    assert.equal(notificationCopy({ ...rsvp, detail: "maybe", brought_by_name }).body, "Clara might come.", String(brought_by_name));
+  // The person who answered keeps their full display name; the bringer is the first name the claim gives.
+  assert.equal(notificationCopy({ ...rsvp, detail: "accepted", actor_name: "Clara Pérez" }).body, "Clara Pérez is going · brought by Pedro.");
+  // Only an answer says who brought them: an invitation ignores the field.
+  assert.deepEqual(notificationCopy({ kind: "invited", detail: null, title: "Board game night", actor_name: "Clara", brought_by_name: "Pedro" }), {
+    title: "Board game night",
+    body: "Clara invited you.",
+  });
+  // Without the answerer's name or a known answer it still falls back.
+  assert.deepEqual(notificationCopy({ ...rsvp, detail: "accepted", actor_name: null }), GENERIC_COPY);
+  assert.deepEqual(notificationCopy({ ...rsvp, detail: "pending" }), GENERIC_COPY);
+});
+
 test("times are in the event's time zone with a 24-hour clock", () => {
   assert.equal(
     notificationCopy({ ...base, kind: "plan_changed", detail: "time", starts_at: "2026-10-17T23:30:00Z", time_zone: "Asia/Tokyo" }).body,

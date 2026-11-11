@@ -13,6 +13,8 @@ export type CopyInput = {
   starts_at?: string | null;
   time_zone?: string | null;
   actor_name?: string | null;
+  /** An rsvp's bringer, by first name: "Clara is going · brought by Pedro." Other kinds ignore it. */
+  brought_by_name?: string | null;
 };
 export type Copy = { title: string; body: string };
 export const GENERIC_COPY: Copy = Object.freeze({
@@ -60,7 +62,10 @@ function body(input: CopyInput): string | null {
   switch (input.kind) {
     case "rsvp": {
       const said = answer(input.detail);
-      return name && said ? `${name} ${said}` : null;
+      if (!name || !said) return null;
+      // Circles of trust: the host hears who brought them, before the full stop.
+      const bringer = input.brought_by_name?.trim();
+      return bringer ? `${name} ${said.slice(0, -1)} · brought by ${bringer}.` : `${name} ${said}`;
     }
     case "invitation":
       return name ? `${name} joined from your invite.` : null;

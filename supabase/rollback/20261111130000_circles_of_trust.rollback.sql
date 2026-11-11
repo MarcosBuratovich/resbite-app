@@ -14,6 +14,7 @@
 --   remove_guest                                  from 20261031120000_creating_a_resbite.sql
 --   private.decide_join_request                   from 20261029120000_open_link_approval.sql
 --   private.fold_web_account                      from 20261030120000_push_delivery.sql
+--   public.claim_notification_deliveries          from 20261030120000_push_delivery.sql (the worker's; no wrapper)
 --   private.roll_repeating_plans                  from 20261111120000_connections_follow_ups.sql (every guest carried)
 --   private.request_account_deletion              from 20261110120000_connections.sql, where it exists (local only)
 -- then drops the seven new functions (one internal, six behind a public wrapper) and the six public wrappers,
@@ -328,6 +329,51 @@ begin
  -- 4. The web profile.
  delete from public.profiles where id=p_from;
  return jsonb_build_object('moved_attendees',v_moved);
+end $$;
+-- The worker's claim as it was (20261030120000_push_delivery.sql): no brought_by_name.
+create or replace function public.claim_notification_deliveries(p_limit integer default 25) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare v_outbox record; v_result jsonb;
+begin
+ -- Endpoint expansion is once per logical event; never notify a newly bound device about old events.
+ for v_outbox in select o.id from private.notification_outbox o
+ where o.expanded_at is null and o.delivered_at is null order by o.id limit 100 for update skip locked
+ loop
+  if private.notification_recipient_eligible(v_outbox.id) then
+   insert into private.notification_deliveries(outbox_id,token,endpoint_updated_at)
+   select o.id,e.token,e.updated_at from private.notification_outbox o
+   join private.device_endpoints e on e.user_id=o.recipient_id where o.id=v_outbox.id
+   on conflict do nothing;
+  end if;
+  update private.notification_outbox set expanded_at=now() where id=v_outbox.id;
+ end loop;
+ -- A crashed send without a persisted ticket is uncertain: never blindly send it again.
+ update private.notification_deliveries set state='unknown',lease_id=null,lease_until=null
+ where state='sending' and lease_until<now();
+ update private.notification_deliveries d set state='suppressed',lease_id=null,lease_until=null
+ where d.state in ('pending','ticket') and (not private.notification_recipient_eligible(d.outbox_id)
+ or not exists(select 1 from private.device_endpoints e join private.notification_outbox o on o.id=d.outbox_id
+ where e.token=d.token and e.user_id=o.recipient_id and e.updated_at=d.endpoint_updated_at));
+ with picked as (
+ select d.id from private.notification_deliveries d where d.state in ('pending','ticket')
+ and d.next_attempt_at<=now() and (d.lease_until is null or d.lease_until<now())
+ order by d.next_attempt_at,d.id limit greatest(1,least(coalesce(p_limit,25),25)) for update skip locked
+ ), claimed as (
+ update private.notification_deliveries d set lease_id=gen_random_uuid(),lease_until=now()+interval '2 minutes',
+ attempts=d.attempts+1,state=case when d.ticket_id is null then 'sending' else 'ticket' end
+ from picked where d.id=picked.id returning d.*
+ )
+ select coalesce(jsonb_agg(jsonb_build_object('id',d.id,'lease_id',d.lease_id,'outbox_id',d.outbox_id::text,
+ 'plan_id',o.plan_id,'recipient_id',o.recipient_id,'token',d.token,'attempts',d.attempts,
+ 'ticket_id',d.ticket_id,'ticket_created_at',d.ticket_created_at,
+ 'kind',o.kind,'detail',o.detail,'title',plan.title,'starts_at',plan.starts_at,'time_zone',plan.time_zone,
+ 'actor_name',actor.display_name)),'[]'::jsonb) into v_result
+ from claimed d join private.notification_outbox o on o.id=d.outbox_id
+ join public.plans plan on plan.id=o.plan_id
+ left join public.profiles actor on actor.id=o.actor_id and actor.deletion_requested_at is null;
+ update private.notification_outbox o set delivered_at=now() where o.expanded_at is not null and o.delivered_at is null
+ and not exists(select 1 from private.notification_deliveries d where d.outbox_id=o.id and d.state in ('pending','sending','ticket'));
+ return v_result;
 end $$;
 -- The roll as it was (20261111120000_connections_follow_ups.sql): every guest carried, with no circle, bringer or level.
 create or replace function private.roll_repeating_plans() returns integer language plpgsql security definer set search_path = '' as $$

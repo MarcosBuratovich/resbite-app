@@ -197,6 +197,11 @@ test("payload uses the event title and what happened when the claim carries them
     },
   ]);
 });
+test("a host's push says who brought the person who answered when the claim names them", () => {
+  const answer = { ...job, kind: "rsvp", detail: "accepted", title: "Board game night", actor_name: "Clara" };
+  assert.equal(payloadFor({ ...answer, brought_by_name: "Pedro" }).body, "Clara is going · brought by Pedro.");
+  assert.equal(payloadFor({ ...answer, brought_by_name: null }).body, "Clara is going.");
+});
 test("a connection notice carries the connection type, a plan notice the plan_update type", () => {
   for (const kind of ["connection_request", "connection_accepted"])
     assert.equal(payloadFor({ ...job, kind }).data.type, "connection");

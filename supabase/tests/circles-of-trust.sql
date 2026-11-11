@@ -1,4 +1,4 @@
--- Circles of trust (docs/superpowers/plans/2026-11-10-connections-2-circles-of-trust.md, Task 1;
+-- Circles of trust (docs/superpowers/plans/2026-11-10-connections-2-circles-of-trust.md, Tasks 1 and 2;
 -- docs/superpowers/specs/2026-11-10-connections-and-circles-design.md, CO-D4, CO-D5, CO-P8–P13, CO-P15): a host lets
 -- each guest bring people (invites) and says how far that trust travels (levels); a guest brings a connection or a
 -- phone contact, who joins without approval; a person the host removed is not brought straight back. Synthetic
@@ -1435,7 +1435,8 @@ rollback;
 
 -- Slice 17: the rollback, rehearsed (C-R16). While the chat migrations are applied it refuses and changes nothing.
 -- Without them it runs: the circle columns go, the roll it restores is the follow-ups' (it carries a guest who said
--- Can't go after Going), and the guarded request_account_deletion, where it exists, is the connections body again.
+-- Can't go after Going), the guarded request_account_deletion, where it exists, is the connections body again, and the
+-- worker's claim names no bringer (the push_delivery body).
 -- The full rehearsal of every object is 20261111130000_circles_of_trust.after.sql's, in hosted-baseline mode.
 \set circles_rollback `cat :'resbite_repo'/supabase/rollback/20261111130000_circles_of_trust.rollback.sql`
 select to_regclass('public.messages') is not null as co2_chat \gset
@@ -1466,6 +1467,9 @@ do $$ declare v_next uuid; begin
  and pg_catalog.pg_get_functiondef(pg_catalog.to_regprocedure('private.request_account_deletion(uuid,uuid,uuid,text)')) like '%brought_by%' then
   raise exception 'request_account_deletion still clears brought_by';
  end if;
+ if pg_catalog.pg_get_functiondef('public.claim_notification_deliveries(integer)'::regprocedure) like '%brought_by%' then
+  raise exception 'The restored claim still names a bringer';
+ end if;
  -- The roll it restored carries 02, who said Can't go after Going.
  insert into auth.users(id,email,email_confirmed_at) values
   ('f6000000-0000-4000-8000-000000000001','co2-owner@resbite-test.invalid',now()),
@@ -1486,6 +1490,51 @@ do $$ declare v_next uuid; begin
 end $$;
 rollback;
 \endif
+
+-- Slice 18: the host hears who brought whom (Task 2, UX2-D4). set_plan_circle(2,1). 01 has a device, and so has 06.
+-- 02 brings 06 in the app and sends 09 a link; 09 answers Going, and 03 (whom nobody brought) says Going. The worker's
+-- claim (service_role) gives every job a brought_by_name: 'Pedro', 02's first name, on 01's job for 09's answer; null on
+-- 01's job for 03's, and on 06's invitation (only an answer names the bringer). Once 02's account is being deleted,
+-- 09's next answer reaches 01 with brought_by_name null.
+begin;
+select pg_temp.co2_cast();
+insert into private.device_endpoints(token,user_id,platform) values
+ ('ExpoPushToken[co2host]',pg_temp.co2('01'),'ios'),('ExpoPushToken[co2clara]',pg_temp.co2('06'),'ios');
+create temporary table co2_jobs(step text, job jsonb) on commit drop;
+grant select, insert on co2_jobs to service_role;
+set local role authenticated;
+select pg_temp.co2_as('01');
+select public.set_plan_circle(pg_temp.co2p(),2::smallint,1::smallint);
+select pg_temp.co2_as('02');
+select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_user('06'),pg_temp.co2_number('09','A'))))='app,link',
+ '02 bringing 06 and 09');
+select pg_temp.co2_as('09');
+select public.answer_phone_invitation(repeat('A',22),'Nico N','accepted','2026-10');
+select pg_temp.co2_as('03');
+select public.respond(pg_temp.co2p(),'accepted',1);
+set local role service_role;
+insert into co2_jobs select 'first', j from jsonb_array_elements(public.claim_notification_deliveries(25)) j;
+reset role;
+do $$ declare v text; begin
+ v := (select string_agg(right(job->>'recipient_id',2)||':'||(job->>'kind')||':'||coalesce(job->>'actor_name','-')||':'||coalesce(job->'brought_by_name','"absent"'::jsonb)::text,
+   ',' order by job->>'recipient_id', job->>'actor_name') from co2_jobs where step='first' and job->>'plan_id'=pg_temp.co2p()::text);
+ if v is distinct from '01:rsvp:Marta M:null,01:rsvp:Nico N:"Pedro",06:invited:Pedro P:null' then
+  raise exception 'The first claim: %', v;
+ end if;
+end $$;
+update public.profiles set deletion_requested_at=now(), display_name='Deleted member' where id=pg_temp.co2('02');
+set local role authenticated;
+select pg_temp.co2_as('09');
+select public.answer_phone_invitation(repeat('A',22),'Nico N','maybe','2026-10');
+set local role service_role;
+insert into co2_jobs select 'leaving', j from jsonb_array_elements(public.claim_notification_deliveries(25)) j;
+reset role;
+do $$ declare v text; begin
+ v := (select string_agg(right(job->>'recipient_id',2)||':'||(job->>'kind')||':'||(job->>'detail')||':'||coalesce(job->'brought_by_name','"absent"'::jsonb)::text,',')
+  from co2_jobs where step='leaving' and job->>'plan_id'=pg_temp.co2p()::text);
+ if v is distinct from '01:rsvp:maybe:null' then raise exception 'The claim after 02 asked to leave: %', v; end if;
+end $$;
+rollback;
 
 drop function pg_temp.co2_cast(), pg_temp.co2_allowance(uuid,text), pg_temp.co2_used(text), pg_temp.co2_refused(text,text,text),
  pg_temp.co2_check(boolean,text), pg_temp.co2_kinds(jsonb), pg_temp.co2_as(text), pg_temp.co2_number(text,text), pg_temp.co2_user(text),

@@ -18,6 +18,8 @@ export type Delivery = {
   starts_at?: string | null;
   time_zone?: string | null;
   actor_name?: string | null;
+  /** For an rsvp only: the first name of whoever brought the person who answered (circles of trust); else null. */
+  brought_by_name?: string | null;
 };
 export type Outcome =
   | "ticket"
