@@ -803,7 +803,8 @@ end $$;
 
 -- The title and the context come from the series' latest occurrence the caller may read (CO-R9): with 03 on neither
 -- Film night nor the later 'Film night again', no title ("Met on Resbite") and 'met'; back on Film night, its title
--- (both going); on the later one too, its title, 'met' while 02 is not on it. With both answered it is 'going', and a
+-- (both going); on the later one too, its title, 'invited' while 02 is not on it (not both going: how the two stand
+-- comes from private.pair_standing, the follow-ups migration 20261111120000). With both answered it is 'going', and a
 -- host counts as going (01 asks 03); once it has ended it is 'met'.
 reset role;
 insert into public.plans(id,owner_id,title,starts_at,ends_at,time_zone,place_label,categories,series_id) values
@@ -836,7 +837,7 @@ insert into public.attendees(plan_id,user_id,response) values
 set local role authenticated;
 do $$ begin
  if public.my_connections()->'requests'->0->>'title' is distinct from 'Film night again'
- or public.my_connections()->'requests'->0->>'context' is distinct from 'met' then
+ or public.my_connections()->'requests'->0->>'context' is distinct from 'invited' then
   raise exception 'The latest occurrence did not give the title, or the context: %', public.my_connections();
  end if;
 end $$;
@@ -864,13 +865,13 @@ do $$ begin
   raise exception 'Requests not newest first: %', public.my_connections();
  end if;
 end $$;
--- A cancelled latest occurrence is 'met'.
+-- A cancelled latest occurrence that has not ended is 'invited'.
 reset role;
 update public.plans set status='cancelled' where id='f1100000-0000-4000-8000-000000000003';
 set local role authenticated;
 do $$ begin
  if (select jsonb_agg(jsonb_build_array(r->>'name',r->>'title',r->>'context') order by n) from jsonb_array_elements(public.my_connections()->'requests') with ordinality e(r,n))
-   is distinct from '[["Guest A","Film night again","met"],["Owner","Film night again","met"]]'::jsonb then
+   is distinct from '[["Guest A","Film night again","invited"],["Owner","Film night again","invited"]]'::jsonb then
   raise exception 'A cancelled latest occurrence wrong: %', public.my_connections();
  end if;
 end $$;

@@ -1,16 +1,38 @@
 -- Rehearsal checks for 20261111120000_connections_follow_ups (hosted-baseline mode only).
--- 1. The apply: the roll is the one .before.sql recorded but for the withdrawn filter; request_connection gives its
--- notice a detail; the detail check keeps every earlier value and takes the four for a request only; both functions
--- keep their grants (no API role may run the roll; signed-in accounts may ask); the apply wrote no rows.
+-- 1. The apply: each redefined function is the one .before.sql recorded but for its change (the roll's withdrawn filter
+-- goes; request_connection's notice and my_connections' context come from pair_standing); pair_standing is a stable
+-- definer no API role may call; the detail check keeps every earlier value and takes the four for a request only; the
+-- three keep their grants (no API role may run the roll; signed-in accounts may ask and read); the apply wrote no
+-- rows.
 do $$ declare r text; begin
  if pg_catalog.pg_get_functiondef('private.roll_repeating_plans()'::regprocedure) is distinct from
    replace((select definition from private.cf_rehearsal_functions where signature='private.roll_repeating_plans()'),
     'where plan_id=p.id and response<>''withdrawn'' and private.used_app(user_id)','where plan_id=p.id and private.used_app(user_id)') then
   raise exception 'The roll changed more, or less, than the withdrawn filter';
  end if;
- if pg_catalog.pg_get_functiondef('private.request_connection(uuid,uuid)'::regprocedure)
-   not like '%into v_detail from public.plans p where p.id=p_plan;%insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,created_at,detail)%,v_at,v_detail)%' then
-  raise exception 'request_connection does not give its notice a detail';
+ if pg_catalog.pg_get_functiondef('private.request_connection(uuid,uuid)'::regprocedure) is distinct from
+   replace((select definition from private.cf_rehearsal_functions where signature='private.request_connection(uuid,uuid)'),
+$q$ insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,created_at)
+  values(p_plan,p_user,'connection_request','connect:'||v_a||':'||v_b||':'||v_series||':'||v_uid,v_uid,v_at)$q$,
+$q$ -- The notice carries how the two stand on the resbite asked from, for its line (CO-P5).
+ insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,created_at,detail)
+  values(p_plan,p_user,'connection_request','connect:'||v_a||':'||v_b||':'||v_series||':'||v_uid,v_uid,v_at,private.pair_standing(p_plan,v_uid,p_user))$q$) then
+  raise exception 'request_connection changed more, or less, than its notice''s detail';
+ end if;
+ if pg_catalog.pg_get_functiondef('private.my_connections()'::regprocedure) is distinct from
+   replace((select definition from private.cf_rehearsal_functions where signature='private.my_connections()'),
+$q$    case when lp.status='active' and private.plan_end(lp.starts_at,lp.ends_at)>now()
+     and (select bool_and(private.is_host(lp.id,u.id) or exists(select 1 from public.attendees a
+       where a.plan_id=lp.id and a.user_id=u.id and a.response in ('accepted','maybe'))) from (values (v_uid),(o.other)) u(id))
+    then 'going' else 'met' end as context$q$,
+$q$    case when lp.id is null then 'met' else private.pair_standing(lp.id,v_uid,o.other) end as context$q$) then
+  raise exception 'my_connections changed more, or less, than its context';
+ end if;
+ if pg_catalog.to_regprocedure('private.pair_standing(uuid,uuid,uuid)') is null
+ or (select prosecdef from pg_catalog.pg_proc where oid='private.pair_standing(uuid,uuid,uuid)'::regprocedure) is not true
+ or (select provolatile from pg_catalog.pg_proc where oid='private.pair_standing(uuid,uuid,uuid)'::regprocedure) is distinct from 's'
+ or (select proconfig from pg_catalog.pg_proc where oid='private.pair_standing(uuid,uuid,uuid)'::regprocedure) is distinct from array['search_path=""'] then
+  raise exception 'pair_standing is missing, or not a stable definer with an empty search path';
  end if;
  if (select pg_catalog.pg_get_constraintdef(oid) from pg_catalog.pg_constraint
    where conrelid='private.notification_outbox'::regclass and conname='notification_outbox_detail_check')
@@ -24,6 +46,7 @@ do $$ declare r text; begin
  end if;
  foreach r in array array['anon','authenticated','service_role'] loop
   if has_function_privilege(r,'private.roll_repeating_plans()','execute') then raise exception '% may run the roll', r; end if;
+  if has_function_privilege(r,'private.pair_standing(uuid,uuid,uuid)','execute') then raise exception '% may call pair_standing', r; end if;
  end loop;
  if not has_function_privilege('authenticated','private.request_connection(uuid,uuid)','execute')
  or has_function_privilege('anon','private.request_connection(uuid,uuid)','execute')
@@ -38,8 +61,8 @@ end $$;
 -- 2. The rollback, rehearsed and undone. Seed what it changes (two request notices with a detail) and what it leaves
 -- (one with none, from before the migration, and a repeat's invitation), try its guard (it refuses once the connections
 -- rollback or the creating-a-resbite rollback has run; each function, renamed, stands in), then run it: every row
--- stays, the two notices with a detail now without one, and the detail check and both functions, with their grants,
--- are the ones .before.sql recorded.
+-- stays, the two notices with a detail now without one; the detail check and the three functions, my_connections with
+-- plan 1's body among them, with their grants, are the ones .before.sql recorded; pair_standing is gone.
 begin;
 insert into auth.users(id,email,email_confirmed_at) values
  ('cf000000-0000-4000-8000-000000000001','follow-ups-rehearsal-a@resbite-test.invalid',now()),
@@ -89,8 +112,9 @@ do $$ begin
  if exists(select 1 from private.cf_rehearsal_functions f
    where pg_catalog.pg_get_functiondef(f.signature::regprocedure) is distinct from f.definition
    or (select p.proacl::text from pg_catalog.pg_proc p where p.oid=f.signature::regprocedure) is distinct from f.grants) then
-  raise exception 'Rollback did not restore the roll and request_connection with their grants';
+  raise exception 'Rollback did not restore the roll, request_connection and my_connections with their grants';
  end if;
+ if pg_catalog.to_regprocedure('private.pair_standing(uuid,uuid,uuid)') is not null then raise exception 'Rollback left pair_standing'; end if;
  if not exists(select 1 from public.plans where id='cf100000-0000-4000-8000-000000000001') then raise exception 'Rollback lost the plan'; end if;
 end $$;
 rollback;

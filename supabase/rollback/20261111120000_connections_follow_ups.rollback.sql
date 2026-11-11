@@ -1,21 +1,23 @@
 -- Rollback for 20261111120000_connections_follow_ups.sql (connections follow-ups). Run as one transaction, only with
 -- the owner's approval:
 --   begin; \i supabase/rollback/20261111120000_connections_follow_ups.rollback.sql; commit;
--- It is for the hosted project, where that migration redefined the two functions below and replaced the outbox detail
--- check. It deletes no row: every 'connection_request' outbox row with a detail ('going', 'invited', 'met' or
--- 'were_invited': every request notice queued since the migration) keeps its row, delivered or not, with its detail set
--- to null, so the earlier detail check can come back. A notice not yet sent then goes with the wording for a request
--- with no detail; the rows' keys still stop the restored request_connection from queuing a second notice for a request
--- already told. It first locks the outbox against writes (share row exclusive), so no notice with a detail is queued
--- while it runs: a request made meanwhile waits, and one that had already worked out its notice's detail fails once
--- this commits (asking again works).
+-- It is for the hosted project, where that migration redefined the three functions below, created
+-- private.pair_standing and replaced the outbox detail check. It deletes no row: every 'connection_request' outbox row
+-- with a detail ('going', 'invited', 'met' or 'were_invited': every request notice queued since the migration) keeps
+-- its row, delivered or not, with its detail set to null, so the earlier detail check can come back. A notice not yet
+-- sent then goes with the wording for a request with no detail; the rows' keys still stop the restored
+-- request_connection from queuing a second notice for a request already told. It first locks the outbox against
+-- writes (share row exclusive), so no notice with a detail is queued while it runs: a request made meanwhile waits, and
+-- one that had already worked out its notice's detail fails once this commits (asking again works).
 -- private.roll_repeating_plans comes back from 20261031120000_creating_a_resbite.sql: a guest who said Can't go after
--- Going is no longer carried to the next occurrence. private.request_connection comes back from
--- 20261110120000_connections.sql: a request's notice has no detail. Both keep their grants (create or replace), and
--- request_connection its public wrapper. The detail check comes back from 20261031120000_creating_a_resbite.sql.
+-- Going is no longer carried to the next occurrence. private.request_connection and private.my_connections come back
+-- from 20261110120000_connections.sql: a request's notice has no detail, and a request's context on the Connections
+-- card is 'going' or 'met' again (a host counting as going whatever their reply). The three keep their grants (create
+-- or replace), and the two connection functions their public wrappers. private.pair_standing, which nothing calls once
+-- they are back, is dropped. The detail check comes back from 20261031120000_creating_a_resbite.sql.
 -- Kept: everything else, the occurrences the roll already created among it, with every guest it carried.
--- Builds: no app build calls anything this migration made; the sender words a request notice with no detail as it did
--- before the migration.
+-- Builds: no app build calls anything this migration made. The sender words a request notice with no detail as it did
+-- before the migration; an app build that knows the four contexts gets only 'going' and 'met'.
 -- Order: run it first of the rollbacks, before the connections one
 -- (supabase/rollback/20261110120000_connections.rollback.sql), which drops request_connection, and the creating-a-resbite
 -- one (supabase/rollback/20261031120000_creating_a_resbite.rollback.sql), which drops the roll: this file would bring
@@ -135,6 +137,33 @@ begin
   on conflict do nothing;
  return 'requested';
 end $$;
+-- The Connections card as it was (20261110120000_connections.sql): a request's context is 'going' or 'met'.
+create or replace function private.my_connections() returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_uid uuid := private.require_tester();
+begin
+ return (with people as (
+   select o.other, c.state, c.requested_by, c.series_id, c.created_at, pr.display_name as name, pr.avatar_path, pr.avatar_revision,
+    lp.title,
+    case when lp.status='active' and private.plan_end(lp.starts_at,lp.ends_at)>now()
+     and (select bool_and(private.is_host(lp.id,u.id) or exists(select 1 from public.attendees a
+       where a.plan_id=lp.id and a.user_id=u.id and a.response in ('accepted','maybe'))) from (values (v_uid),(o.other)) u(id))
+    then 'going' else 'met' end as context
+   from public.connections c
+   cross join lateral (select case when c.user_a=v_uid then c.user_b else c.user_a end as other) o
+   join public.profiles pr on pr.id=o.other
+   left join lateral (select p.id, p.title, p.status, p.starts_at, p.ends_at from public.plans p where p.series_id=c.series_id
+    and private.can_read_plan(p.id) order by p.starts_at desc, p.id limit 1) lp on true
+   where c.user_a=v_uid or c.user_b=v_uid)
+  select jsonb_build_object(
+   'requests',coalesce((select jsonb_agg(jsonb_build_object('user_id',p.other,'name',p.name,'avatar_path',p.avatar_path,
+     'avatar_revision',p.avatar_revision,'series_id',p.series_id,'title',p.title,'context',p.context) order by p.created_at desc,p.other)
+    from people p where p.state='requested' and p.requested_by=p.other),'[]'::jsonb),
+   'connected',coalesce((select jsonb_agg(jsonb_build_object('user_id',p.other,'name',p.name,'avatar_path',p.avatar_path,
+     'avatar_revision',p.avatar_revision,'series_id',p.series_id,'title',p.title) order by p.name,p.other)
+    from people p where p.state='connected'),'[]'::jsonb)));
+end $$;
+-- Nothing calls the helper now.
+drop function private.pair_standing(uuid,uuid,uuid);
 
 -- The request notices keep their rows, without a detail, and the check comes back as it was
 -- (20261031120000_creating_a_resbite.sql).

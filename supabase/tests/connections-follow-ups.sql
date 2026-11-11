@@ -223,6 +223,48 @@ do $$ begin
  if (select count(*) from private.notification_outbox where kind='connection_request')<>8 then raise exception 'Eight request notices expected'; end if;
 end $$;
 
+-- The Connections card says the same (Ruling 6): a request's context, read by the person asked, is how the two stand on
+-- the series' latest occurrence they may read, here the resbite each request came from, as the push's detail. 04 has
+-- 01's request (going), 02's from the cancelled Quiz (invited) and 08's, the admin who has not answered (invited); 06
+-- has 04's (invited) and 07's from the ended Picnic 06 said Can't go to (were_invited); 03 has 02's (going); 07 has 02's
+-- from Picnic (met) and 03's from the cancelled Brunch (were_invited).
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"f5000000-0000-4000-8000-000000000004","role":"authenticated"}',true);
+do $$ begin
+ if (select string_agg(right(r->>'user_id',2)||':'||(r->>'context'),',' order by r->>'user_id')
+   from jsonb_array_elements(public.my_connections()->'requests') r) is distinct from '01:going,02:invited,08:invited' then
+  raise exception 'The card of 04, asked by the owner, from a cancelled plan and by a pending admin, is wrong: %', public.my_connections()->'requests';
+ end if;
+end $$;
+select set_config('request.jwt.claims','{"sub":"f5000000-0000-4000-8000-000000000006","role":"authenticated"}',true);
+do $$ begin
+ if (select string_agg(right(r->>'user_id',2)||':'||(r->>'context'),',' order by r->>'user_id')
+   from jsonb_array_elements(public.my_connections()->'requests') r) is distinct from '04:invited,07:were_invited' then
+  raise exception 'The card of 06, who said Can''t go, is wrong: %', public.my_connections()->'requests';
+ end if;
+end $$;
+select set_config('request.jwt.claims','{"sub":"f5000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
+do $$ begin
+ if (select string_agg(right(r->>'user_id',2)||':'||(r->>'context'),',' order by r->>'user_id')
+   from jsonb_array_elements(public.my_connections()->'requests') r) is distinct from '02:going' then
+  raise exception 'The card of 03, both going, is wrong: %', public.my_connections()->'requests';
+ end if;
+end $$;
+select set_config('request.jwt.claims','{"sub":"f5000000-0000-4000-8000-000000000007","role":"authenticated"}',true);
+do $$ begin
+ if (select string_agg(right(r->>'user_id',2)||':'||(r->>'context'),',' order by r->>'user_id')
+   from jsonb_array_elements(public.my_connections()->'requests') r) is distinct from '02:met,03:were_invited' then
+  raise exception 'The card of 07, on two ended plans, is wrong: %', public.my_connections()->'requests';
+ end if;
+end $$;
+reset role;
+-- The helper is the database's own: no API role may call it.
+do $$ declare r text; begin
+ foreach r in array array['anon','authenticated','service_role'] loop
+  if has_function_privilege(r,'private.pair_standing(uuid,uuid,uuid)','execute') then raise exception '% may call pair_standing', r; end if;
+ end loop;
+end $$;
+
 -- The detail check takes the four for a request only: 'soon' on a request, or any detail on an acceptance, is refused.
 do $$ begin
  begin

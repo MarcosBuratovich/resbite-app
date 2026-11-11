@@ -1,6 +1,6 @@
--- Connections follow-ups: the roll carries every guest; a request's notice says how the two stand.
+-- Connections follow-ups: the roll carries every guest; a request's notice, and its card, say how the two stand.
 -- Specs: docs/superpowers/specs/2026-11-10-groups-and-chat-design.md (CH-P20) and
--- docs/superpowers/specs/2026-11-10-connections-and-circles-design.md (CO-P5).
+-- docs/superpowers/specs/2026-11-10-connections-and-circles-design.md (CO-P5, CO-P6).
 -- Plan: docs/superpowers/plans/2026-11-11-connections-3-follow-ups.md
 -- Hosted-compatible: depends only on the migrations in supabase/tests/hosted-baseline/migrations.txt
 -- Rollback: supabase/rollback/20261111120000_connections_follow_ups.rollback.sql
@@ -88,8 +88,9 @@ end $$;
 --   'met'          it has ended, was not cancelled, and both were going;
 --   'were_invited' it has ended, and not 'met' (one of them said Can't go or never answered, or it was cancelled);
 --   'invited'      it has not ended, and not 'going' (the same, or it was cancelled before its end).
--- The sender words the push from it; a notice queued before this migration has none. The detail check is replaced by
--- exact name, keeping every existing value.
+-- private.pair_standing says it, for the push here and for the Connections card (section 3). The sender words the push
+-- from it; a notice queued before this migration has none. The detail check is replaced by exact name, keeping every
+-- existing value.
 alter table private.notification_outbox drop constraint notification_outbox_detail_check;
 alter table private.notification_outbox add constraint notification_outbox_detail_check check (
  detail is null
@@ -98,12 +99,24 @@ alter table private.notification_outbox add constraint notification_outbox_detai
  or (kind='invited' and detail='again')
  or (kind='connection_request' and detail in ('going','invited','met','were_invited')));
 
--- Asking, from a resbite: a new request's notice carries the detail above. Otherwise the 20261110120000_connections
--- body, verbatim (its comments name that file's sections): the pair's lock, the refusals, and the notice's key (the
--- pair, the series and who asked: a request sent again queues nothing, and its first notice, with its first detail,
--- stands for it) and stamp. Its grants and its public wrapper are kept.
+-- How two people stand on a resbite, by the rule above; null when there is no such resbite. The database's own: no API
+-- role may call it (its two callers, request_connection and my_connections, are definers).
+create function private.pair_standing(p_plan uuid, p_a uuid, p_b uuid) returns text language sql stable security definer set search_path = '' as $$
+ select case when p.status='active' and (select count(*) from (values (p_a),(p_b)) u(id)
+    where u.id=p.owner_id or exists(select 1 from public.attendees a where a.plan_id=p.id and a.user_id=u.id
+     and a.response in ('accepted','maybe')))=2
+   then case when private.plan_end(p.starts_at,p.ends_at)>now() then 'going' else 'met' end
+  when private.plan_end(p.starts_at,p.ends_at)>now() then 'invited' else 'were_invited' end
+ from public.plans p where p.id=p_plan
+$$;
+revoke all on function private.pair_standing(uuid,uuid,uuid) from public, anon, authenticated, service_role;
+
+-- Asking, from a resbite: a new request's notice carries how the two stand on it (private.pair_standing). Otherwise the
+-- 20261110120000_connections body, verbatim (its comments name that file's sections): the pair's lock, the refusals,
+-- and the notice's key (the pair, the series and who asked: a request sent again queues nothing, and its first notice,
+-- with its first detail, stands for it) and stamp. Its grants and its public wrapper are kept.
 create or replace function private.request_connection(p_user uuid, p_plan uuid) returns text language plpgsql security definer set search_path = '' as $$
-declare v_uid uuid := private.require_tester(); v_a uuid; v_b uuid; v_series uuid; v_row public.connections; v_at timestamptz; v_detail text;
+declare v_uid uuid := private.require_tester(); v_a uuid; v_b uuid; v_series uuid; v_row public.connections; v_at timestamptz;
 begin
  select p.user_a,p.user_b into v_a,v_b from private.pair(v_uid,p_user) p;
  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_a::text||':'||v_b::text,53));
@@ -144,16 +157,44 @@ begin
  -- the request queues nothing, and the first notice, stamped with the first request's time, stands for it.
  insert into public.connections(user_a,user_b,state,requested_by,series_id,created_at)
   values(v_a,v_b,'requested',v_uid,v_series,pg_catalog.clock_timestamp()) returning created_at into v_at;
- -- How the two stand on the resbite asked from, for the notice's line (CO-P5): 'going', 'met', 'were_invited' or
- -- 'invited'. Both are going when each is its owner or a guest whose own reply is Going or Maybe.
- select case when p.status='active' and (select count(*) from (values (v_uid),(p_user)) u(id)
-    where u.id=p.owner_id or exists(select 1 from public.attendees a where a.plan_id=p.id and a.user_id=u.id
-     and a.response in ('accepted','maybe')))=2
-   then case when private.plan_end(p.starts_at,p.ends_at)>now() then 'going' else 'met' end
-  when private.plan_end(p.starts_at,p.ends_at)>now() then 'invited' else 'were_invited' end
- into v_detail from public.plans p where p.id=p_plan;
+ -- The notice carries how the two stand on the resbite asked from, for its line (CO-P5).
  insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,created_at,detail)
-  values(p_plan,p_user,'connection_request','connect:'||v_a||':'||v_b||':'||v_series||':'||v_uid,v_uid,v_at,v_detail)
+  values(p_plan,p_user,'connection_request','connect:'||v_a||':'||v_b||':'||v_series||':'||v_uid,v_uid,v_at,private.pair_standing(p_plan,v_uid,p_user))
   on conflict do nothing;
  return 'requested';
+end $$;
+
+-- 3. The Connections card says the same (Ruling 6, CO-P6)
+-- A request's context on the card was 'going' or 'met', a host counting as going whatever their reply: "You're both
+-- going" for an admin who had not answered, "Met at" for a resbite one of them skipped. It is now how the two stand on
+-- the occurrence the card already reads, by the push's rule.
+
+-- The caller's Connections (CO-P6): the requests to them, newest first, and their connections, by name, with the other
+-- person's name and photo and the resbite they met at. Requests the caller sent are not listed: a refused one would
+-- vanish from such a list (CO-P3). title is that series' latest occurrence the caller may read (can_read_plan: its owner
+-- or on its guest list; CO-R9), null when the series is gone or the caller may read none of it, so a guest removed or
+-- not carried to a later occurrence never reads its title (the app shows "Met on Resbite"). context, on a request, is
+-- how the two stand on that occurrence (private.pair_standing: 'going', 'invited', 'met' or 'were_invited'), and 'met'
+-- when there is none. Otherwise the 20261110120000_connections body, verbatim; its grants and its public wrapper are
+-- kept.
+create or replace function private.my_connections() returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_uid uuid := private.require_tester();
+begin
+ return (with people as (
+   select o.other, c.state, c.requested_by, c.series_id, c.created_at, pr.display_name as name, pr.avatar_path, pr.avatar_revision,
+    lp.title,
+    case when lp.id is null then 'met' else private.pair_standing(lp.id,v_uid,o.other) end as context
+   from public.connections c
+   cross join lateral (select case when c.user_a=v_uid then c.user_b else c.user_a end as other) o
+   join public.profiles pr on pr.id=o.other
+   left join lateral (select p.id, p.title, p.status, p.starts_at, p.ends_at from public.plans p where p.series_id=c.series_id
+    and private.can_read_plan(p.id) order by p.starts_at desc, p.id limit 1) lp on true
+   where c.user_a=v_uid or c.user_b=v_uid)
+  select jsonb_build_object(
+   'requests',coalesce((select jsonb_agg(jsonb_build_object('user_id',p.other,'name',p.name,'avatar_path',p.avatar_path,
+     'avatar_revision',p.avatar_revision,'series_id',p.series_id,'title',p.title,'context',p.context) order by p.created_at desc,p.other)
+    from people p where p.state='requested' and p.requested_by=p.other),'[]'::jsonb),
+   'connected',coalesce((select jsonb_agg(jsonb_build_object('user_id',p.other,'name',p.name,'avatar_path',p.avatar_path,
+     'avatar_revision',p.avatar_revision,'series_id',p.series_id,'title',p.title) order by p.name,p.other)
+    from people p where p.state='connected'),'[]'::jsonb)));
 end $$;
