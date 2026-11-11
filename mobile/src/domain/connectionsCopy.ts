@@ -15,6 +15,8 @@ export const CONNECTIONS_COPY = {
   metOnResbite: "Met on Resbite",
   bothGoing: (title: string) => `You're both going to ${title}`,
   bothAt: (title: string) => `You were both at ${title}`,
+  bothInvited: (title: string) => `You're both invited to ${title}`,
+  wereBothInvited: (title: string) => `You were both invited to ${title}`,
   connect: "Connect on Resbite",
   connectHint: (name: string) => `${name} decides. Then you can invite each other in the app.`,
   requestSent: "Request sent",
@@ -26,8 +28,13 @@ export const CONNECTIONS_COPY = {
   /** A connection's row on Invite people, for VoiceOver. */
   selectPerson: (name: string) => `Select ${name}`,
   searchConnections: "Search connections",
-  /** Invite people, when a connection's invitation is refused (they may no longer use the app) but others went. */
-  inviteRefused: "One of your connections can't be invited right now. The others were.",
+  /**
+   * Invite people, when connections' invitations are refused (they may no longer use the app): how many, and that the
+   * others were invited only when another connection or a number was.
+   */
+  inviteRefused: (n: number, othersWent: boolean) =>
+    `${n === 1 ? "One connection" : `${n} connections`} you picked can't be invited right now.` +
+    (othersWent ? " The others were invited." : ""),
   profileRow: "Connections",
   /** Profile's Connections row with requests waiting, for VoiceOver: the whole count, whatever the badge shows. */
   waitingLabel: (n: number) => (n === 1 ? "Connections, 1 request" : `Connections, ${n} requests`),
@@ -40,3 +47,16 @@ export const CONNECTIONS_COPY = {
   notHere: "That person isn't on this resbite.",
   failed: "Couldn't do that. Try again.",
 };
+
+/**
+ * A request card's line: how the two stand on the resbite its request names, as the request's push says ('going',
+ * 'invited', 'were_invited'; 'met' or anything else reads as met there). With no resbite left to name, Resbite.
+ */
+export function requestLine(context: string | undefined, title: string | null): string {
+  const C = CONNECTIONS_COPY;
+  if (title === null) return C.metOnResbite;
+  if (context === "going") return C.bothGoing(title);
+  if (context === "invited") return C.bothInvited(title);
+  if (context === "were_invited") return C.wereBothInvited(title);
+  return C.bothAt(title);
+}

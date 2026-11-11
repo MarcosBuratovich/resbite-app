@@ -3,21 +3,18 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-nat
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { ArrowLeft, Ellipsis, Unlink2 } from "lucide-react-native";
-import { Button, Copy, ErrorNote, s, useLargeText } from "../src/design/ui";
+import { Button, Copy, ErrorNote, TextAction, s, useLargeText } from "../src/design/ui";
 import { IconButton, focusHeading } from "../src/design/kit";
 import { GrabberSheet } from "../src/design/GrabberSheet";
 import { MenuRow } from "../src/design/MenuRow";
 import { colors as c, depth, fonts, r, space } from "../src/design/tokens";
-import { CONNECTIONS_COPY as C } from "../src/domain/connectionsCopy";
+import { CONNECTIONS_COPY as C, requestLine } from "../src/domain/connectionsCopy";
 import { EVENT_COPY } from "../src/domain/eventPage";
 import type { ConnectionPerson } from "../src/services/connections";
-import { useConnections } from "../src/state/useConnections";
+import { actionErrorFor, useConnections } from "../src/state/useConnections";
 
 const SEPARATOR = " · ";
 
-/** How a request's two met: both on its resbite now, or both were; with no resbite left to name, Resbite. */
-const requestLine = (p: ConnectionPerson) =>
-  p.title === null ? C.metOnResbite : p.context === "going" ? C.bothGoing(p.title) : C.bothAt(p.title);
 /** Where a connection began. */
 const metLine = (p: ConnectionPerson) => (p.title === null ? C.metOnResbite : C.metAt(p.title));
 
@@ -26,8 +23,9 @@ type Sheet = { person: ConnectionPerson; view: "menu" | "remove" };
 /**
  * Connections (CO-02, CO-P6): /connections, from Profile or a connection push. Requests first, newest first, each a
  * card with Accept and Not now (stacked under Larger Text); then the connections by name, each with the three dots
- * for Remove connection and its in-place confirm. A decision the server takes changes the list at once. A refresh
- * that fails keeps the list, with why above it; only a first read that fails offers Try again.
+ * for Remove connection and its in-place confirm. A decision the server takes changes the list at once. A read that
+ * fails says why above the list it kept, with Try again; that line stays while a retry runs and goes only when a read
+ * succeeds, whatever sheet opens or closes. A decision that fails says why in its own card or sheet (Ruling 8).
  */
 export default function Connections() {
   const k = useConnections();
@@ -35,15 +33,16 @@ export default function Connections() {
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const data = k.data;
   const off = k.acting !== null;
-  const loading = !data && k.busy && !k.error;
+  const loading = !data && k.busy && !k.readError;
+  const retry = () => void k.load();
   const open = (person: ConnectionPerson) => {
-    k.clearError();
+    k.sheetMoved();
     setSheet({ person, view: "menu" });
   };
   const close = () => {
     if (off) return;
     setSheet(null);
-    k.clearError();
+    k.sheetMoved();
   };
   /** On success the sheet closes over the shorter list; on failure it stays and says why. */
   const confirmRemove = async (person: ConnectionPerson) => {
@@ -56,15 +55,27 @@ export default function Connections() {
       <Bar />
       {!data ? (
         <View style={styles.state}>
-          <ErrorNote message={k.error} />
+          <ErrorNote message={k.readError} />
           {loading ? <ActivityIndicator accessibilityLabel={C.loading} color={c.aquaDark} /> : null}
-          {k.error ? (
-            <Button icon={false} secondary title={EVENT_COPY.tryAgain} disabled={k.busy} onPress={() => void k.load()} />
+          {k.readError ? (
+            <Button
+              icon={false}
+              secondary
+              title={EVENT_COPY.tryAgain}
+              loading={k.busy}
+              disabled={off}
+              onPress={retry}
+            />
           ) : null}
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.list}>
-          {!sheet && <ErrorNote message={k.error} />}
+          {k.readError ? (
+            <View>
+              <ErrorNote message={k.readError} />
+              <TextAction title={EVENT_COPY.tryAgain} busy={k.busy} disabled={off} onPress={retry} />
+            </View>
+          ) : null}
           {data.requests.length > 0 ? (
             <View style={styles.group}>
               <Text accessibilityRole="header" style={[styles.groupTitle, free]}>
@@ -76,9 +87,13 @@ export default function Connections() {
                   <View key={person.userId} style={styles.card}>
                     <View style={styles.cardHead}>
                       <Avatar name={person.name} />
-                      <View style={styles.name} accessible accessibilityLabel={`${person.name}, ${requestLine(person)}`}>
+                      <View
+                        style={styles.name}
+                        accessible
+                        accessibilityLabel={`${person.name}, ${requestLine(person.context, person.title)}`}
+                      >
                         <Text style={[styles.nameText, free]}>{person.name}</Text>
-                        <Text style={[styles.sub, free]}>{requestLine(person)}</Text>
+                        <Text style={[styles.sub, free]}>{requestLine(person.context, person.title)}</Text>
                       </View>
                     </View>
                     <View style={[styles.pills, largeText && styles.pillsStacked]}>
@@ -104,6 +119,7 @@ export default function Connections() {
                         />
                       </View>
                     </View>
+                    <ErrorNote message={actionErrorFor(k.actionError, person.userId, "card")} />
                   </View>
                 );
               })}
@@ -174,7 +190,7 @@ export default function Connections() {
                 <Button title={C.keep} secondary disabled={off} onPress={() => setSheet({ person: current, view: "menu" })} />
               </View>
             )}
-            <ErrorNote message={k.error} />
+            <ErrorNote message={actionErrorFor(k.actionError, current.userId, "sheet")} />
           </>
         ) : null}
       </GrabberSheet>

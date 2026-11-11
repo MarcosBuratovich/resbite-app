@@ -819,7 +819,7 @@ export function RowGroup({ children }: { children: React.ReactNode }) {
 /**
  * One settings row: a tinted icon circle, a short title and a chevron; at least 60 pt tall. `badge` is a short count
  * before the chevron (Connections' pending requests, "99+" at most), kept to one line; say what it counts, in full,
- * in `label`.
+ * in `label`. The badge and the chevron keep their size: under Larger Text the title wraps instead (Ruling 10).
  */
 export function Row({
   title,
@@ -867,7 +867,11 @@ export function Row({
           </Text>
         </View>
       ) : null}
-      {chevron && <ChevronRight size={18} strokeWidth={2.2} color={c.muted} />}
+      {chevron && (
+        <View style={styles.rowChevron}>
+          <ChevronRight size={18} strokeWidth={2.2} color={c.muted} />
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -1169,8 +1173,18 @@ const styles = StyleSheet.create({
   rowDivider: { height: 1, backgroundColor: c.line, marginLeft: 68 },
   row: { flexDirection: "row", alignItems: "center", gap: space.m, minHeight: 60, paddingHorizontal: 18, paddingVertical: 8 },
   rowIcon: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
-  rowTitle: { flex: 1, fontFamily: fonts.medium, fontSize: 16, color: c.ink },
-  rowBadge: { minWidth: 24, borderRadius: 12, paddingHorizontal: 7, paddingVertical: 2, backgroundColor: c.pink, alignItems: "center" },
+  // minWidth 0: on the web a one-word title would otherwise keep its full width and squeeze the badge and chevron.
+  rowTitle: { flex: 1, minWidth: 0, fontFamily: fonts.medium, fontSize: 16, color: c.ink },
+  rowBadge: {
+    flexShrink: 0,
+    minWidth: 24,
+    borderRadius: 12,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    backgroundColor: c.pink,
+    alignItems: "center",
+  },
+  rowChevron: { flexShrink: 0 },
   rowBadgeText: { fontFamily: fonts.bold, fontSize: 13, lineHeight: 18, color: c.ink, textAlign: "center" },
   // The focus ring is the card's (a 2 pt aqua ring, web and native alike), not the browser outline.
   inputCard: {

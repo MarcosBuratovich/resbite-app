@@ -326,15 +326,19 @@ export function useContactInvites(a: {
           note = e instanceof Error ? e.message : INVITE_COPY.offline;
         }
         if (sent) {
+          // Before the connections' names join them: what the numbers invited.
+          const numbersWent = out.inApp.length + out.links.length > 0;
           for (const r of sent.results) {
             const name = connections.find((p) => p.userId === r.user)?.name;
             if (name && r.kind === "app") out.inApp.push(name);
             else if (name && r.kind === "already") out.already.push(name);
           }
           if (sent.refused.length) {
-            // Everyone picked was refused: stay on the Pick step.
-            if (!phones.length && !sent.results.length) throw Error(CONNECTIONS_COPY.failed);
-            note = CONNECTIONS_COPY.inviteRefused;
+            // Everyone picked was a refused connection: the Pick step says so, as trying again won't help.
+            if (!phones.length && !sent.results.length)
+              throw Error(CONNECTIONS_COPY.inviteRefused(sent.refused.length, false));
+            const othersWent = numbersWent || sent.results.some((r) => r.kind === "app");
+            note = CONNECTIONS_COPY.inviteRefused(sent.refused.length, othersWent);
           }
         }
       }

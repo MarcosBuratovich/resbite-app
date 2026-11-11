@@ -11,9 +11,13 @@ export type ConnectionPerson = {
   avatarRevision: number;
   seriesId: string | null;
   title: string | null;
-  /** On a request only: how the two met. */
-  context?: "going" | "met";
+  /** On a request only: how the two stand on its resbite (as its push says). */
+  context?: RequestContext;
 };
+
+/** Going or invited on a resbite still to end; at it, or invited to it, once it has ended. */
+export type RequestContext = "going" | "invited" | "met" | "were_invited";
+const CONTEXTS: readonly string[] = ["going", "invited", "met", "were_invited"];
 
 export type MyConnections = { requests: ConnectionPerson[]; connected: ConnectionPerson[] };
 
@@ -34,7 +38,7 @@ type Row = {
   avatar_revision: number;
   series_id: string | null;
   title: string | null;
-  context?: "going" | "met";
+  context?: string;
 };
 
 function person(row: Row): ConnectionPerson {
@@ -46,7 +50,8 @@ function person(row: Row): ConnectionPerson {
     seriesId: row.series_id,
     title: row.title,
   };
-  if (row.context) p.context = row.context;
+  // A context this app doesn't know yet reads as met there.
+  if (row.context) p.context = CONTEXTS.includes(row.context) ? (row.context as RequestContext) : "met";
   return p;
 }
 

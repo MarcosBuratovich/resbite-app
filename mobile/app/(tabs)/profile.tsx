@@ -23,7 +23,7 @@ export default function Profile() {
   // CO-P6: the requests waiting, read on each focus; none shows before a read succeeds, or after one fails until one
   // succeeds again (the hook keeps its list through a failure, for the Connections screen).
   const connections = useConnections();
-  const waiting = connections.failed ? 0 : (connections.data?.requests.length ?? 0);
+  const waiting = connections.readError ? 0 : (connections.data?.requests.length ?? 0);
   const [editing, setEditing] = useState(false);
   const firstRun = !p.profile && !p.loading;
   const shownName = p.profile?.display_name || p.name;
