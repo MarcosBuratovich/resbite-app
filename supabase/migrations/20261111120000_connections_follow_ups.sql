@@ -173,7 +173,10 @@ end $$;
 -- 3. The Connections card says the same (Ruling 6, CO-P6)
 -- A request's context on the card was 'going' or 'met', a host counting as going whatever their reply: "You're both
 -- going" for an admin who had not answered, "Met at" for a resbite one of them skipped. It is now how the two stand on
--- the occurrence the card already reads, by the push's rule ('met' when either of the two is not on it).
+-- the occurrence the card already reads, by the push's rule ('met' when either of the two is not on it). Someone who
+-- may not see that occurrence's guests (private.can_see_guests: they have not answered it, and are not a host) reads
+-- 'met': the line would otherwise tell them whether the person asking is on its list, which is withheld until they
+-- answer (UX-P5).
 
 -- The caller's Connections (CO-P6): the requests to them, newest first, and their connections, by name, with the other
 -- person's name and photo and the resbite they met at. Requests the caller sent are not listed: a refused one would
@@ -181,15 +184,17 @@ end $$;
 -- or on its guest list; CO-R9), null when the series is gone or the caller may read none of it, so a guest removed or
 -- not carried to a later occurrence never reads its title (the app shows "Met on Resbite"). context, on a request, is
 -- how the two stand on that occurrence (private.pair_standing: 'going', 'invited', 'met' or 'were_invited'; 'met' when
--- either is not on it), and 'met' when there is none. Otherwise the 20261110120000_connections body, verbatim; its
--- grants and its public wrapper are kept.
+-- either is not on it). It is 'met' too when there is no such occurrence, and when the caller may not see its guests
+-- (private.can_see_guests, which reads the caller from the request as this function does: a guest who has not answered
+-- it), so the card never says whether the person asking is on a list the caller may not read. Otherwise the
+-- 20261110120000_connections body, verbatim; its grants and its public wrapper are kept.
 create or replace function private.my_connections() returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester();
 begin
  return (with people as (
    select o.other, c.state, c.requested_by, c.series_id, c.created_at, pr.display_name as name, pr.avatar_path, pr.avatar_revision,
     lp.title,
-    case when lp.id is null then 'met' else private.pair_standing(lp.id,v_uid,o.other) end as context
+    case when lp.id is null or not private.can_see_guests(lp.id) then 'met' else private.pair_standing(lp.id,v_uid,o.other) end as context
    from public.connections c
    cross join lateral (select case when c.user_a=v_uid then c.user_b else c.user_a end as other) o
    join public.profiles pr on pr.id=o.other

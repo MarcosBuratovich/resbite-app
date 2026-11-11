@@ -25,7 +25,7 @@ $q$    case when lp.status='active' and private.plan_end(lp.starts_at,lp.ends_at
      and (select bool_and(private.is_host(lp.id,u.id) or exists(select 1 from public.attendees a
        where a.plan_id=lp.id and a.user_id=u.id and a.response in ('accepted','maybe'))) from (values (v_uid),(o.other)) u(id))
     then 'going' else 'met' end as context$q$,
-$q$    case when lp.id is null then 'met' else private.pair_standing(lp.id,v_uid,o.other) end as context$q$) then
+$q$    case when lp.id is null or not private.can_see_guests(lp.id) then 'met' else private.pair_standing(lp.id,v_uid,o.other) end as context$q$) then
   raise exception 'my_connections changed more, or less, than its context';
  end if;
  if pg_catalog.to_regprocedure('private.pair_standing(uuid,uuid,uuid)') is null

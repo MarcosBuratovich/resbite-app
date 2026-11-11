@@ -7,8 +7,8 @@
 -- its row, delivered or not, with its detail set to null, so the earlier detail check can come back. A notice not yet
 -- sent then goes with the wording for a request with no detail; the rows' keys still stop the restored
 -- request_connection from queuing a second notice for a request already told. It first locks the outbox against
--- writes (share row exclusive), so no notice with a detail is queued while it runs: a request made meanwhile waits, and
--- one that had already worked out its notice's detail fails once this commits (asking again works).
+-- writes (share row exclusive), so no notice with a detail is queued while it runs: a request that reaches its notice
+-- meanwhile waits, and fails once this commits, as the body it runs calls the helper dropped here (asking again works).
 -- private.roll_repeating_plans comes back from 20261031120000_creating_a_resbite.sql: a guest who said Can't go after
 -- Going is no longer carried to the next occurrence. private.request_connection and private.my_connections come back
 -- from 20261110120000_connections.sql: a request's notice has no detail, and a request's context on the Connections

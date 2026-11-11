@@ -314,6 +314,53 @@ do $$ begin
  end if;
 end $$;
 
+-- Not answered on the latest occurrence (Ruling 11): someone who has not answered does not see who else is on a
+-- resbite (UX-P5, private.can_see_guests), so their card does not say either: it is 'met', whatever the requester's
+-- place there. 01's 'Walk' f51…08 has 06 and 08 Going; its next occurrence f51…09 has 08 Going and 06 not answered, as
+-- the roll carries a guest. 08 asks 06 from the first: 06's card, on the next one, says 'met'; once 06 answers Going
+-- there, it says how the two stand, 'going'.
+insert into public.plans(id,owner_id,title,starts_at,ends_at,time_zone,place_label,categories) values
+ ('f5100000-0000-4000-8000-000000000008','f5000000-0000-4000-8000-000000000001','Walk',
+  '2099-06-09 10:00+00','2099-06-09 12:00+00','UTC','Park',array['community']);
+insert into public.plans(id,owner_id,title,starts_at,ends_at,time_zone,place_label,categories,series_id) values
+ ('f5100000-0000-4000-8000-000000000009','f5000000-0000-4000-8000-000000000001','Walk',
+  '2099-06-16 10:00+00','2099-06-16 12:00+00','UTC','Park',array['community'],'f5100000-0000-4000-8000-000000000008');
+insert into public.attendees(plan_id,user_id,response) values
+ ('f5100000-0000-4000-8000-000000000008','f5000000-0000-4000-8000-000000000006','accepted'),
+ ('f5100000-0000-4000-8000-000000000008','f5000000-0000-4000-8000-000000000008','accepted'),
+ ('f5100000-0000-4000-8000-000000000009','f5000000-0000-4000-8000-000000000006','pending'),
+ ('f5100000-0000-4000-8000-000000000009','f5000000-0000-4000-8000-000000000008','accepted');
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"f5000000-0000-4000-8000-000000000008","role":"authenticated"}',true);
+do $$ begin
+ if public.request_connection('f5000000-0000-4000-8000-000000000006','f5100000-0000-4000-8000-000000000008') is distinct from 'requested' then
+  raise exception '08''s request from Walk did not say requested';
+ end if;
+end $$;
+select set_config('request.jwt.claims','{"sub":"f5000000-0000-4000-8000-000000000006","role":"authenticated"}',true);
+do $$ begin
+ if (select string_agg(right(r->>'user_id',2)||':'||(r->>'title')||':'||(r->>'context'),',' order by r->>'user_id')
+   from jsonb_array_elements(public.my_connections()->'requests') r where r->>'user_id'='f5000000-0000-4000-8000-000000000008')
+   is distinct from '08:Walk:met' then
+  raise exception 'The card of 06, who has not answered on the latest occurrence, is wrong: %', public.my_connections()->'requests';
+ end if;
+end $$;
+select public.respond('f5100000-0000-4000-8000-000000000009','accepted',1);
+do $$ begin
+ if (select string_agg(right(r->>'user_id',2)||':'||(r->>'title')||':'||(r->>'context'),',' order by r->>'user_id')
+   from jsonb_array_elements(public.my_connections()->'requests') r where r->>'user_id'='f5000000-0000-4000-8000-000000000008')
+   is distinct from '08:Walk:going' then
+  raise exception 'The card of 06, once Going on the latest occurrence, is wrong: %', public.my_connections()->'requests';
+ end if;
+end $$;
+reset role;
+do $$ begin
+ if (select detail from private.notification_outbox where kind='connection_request'
+   and actor_id='f5000000-0000-4000-8000-000000000008' and recipient_id='f5000000-0000-4000-8000-000000000006') is distinct from 'going' then
+  raise exception 'Two Going guests of the first Walk is not going';
+ end if;
+end $$;
+
 -- The detail check takes the four for a request only: 'soon' on a request, or any detail on an acceptance, is refused.
 do $$ begin
  begin
