@@ -44,6 +44,8 @@ create table public.messages (
 create index messages_series_idx on public.messages(series_id, id);
 -- Serves chat_messages_since's "changed after the cursor".
 create index messages_series_updated_idx on public.messages(series_id, updated_at);
+-- Serves the latest announcements of a series: the invitation card's (my_chat_overview) and the pinned one (Task 2).
+create index messages_series_announcements_idx on public.messages(series_id, id) where kind = 'announcement';
 alter table public.messages enable row level security;
 revoke all on public.messages from public, anon, authenticated, service_role;
 -- The identity's sequence is granted by the same defaults; no role but the database's needs it.
@@ -147,9 +149,9 @@ create function private.chat_closes_at(p_series uuid) returns timestamptz langua
 $$;
 revoke all on function private.chat_closes_at(uuid) from public, anon, authenticated, service_role;
 
--- Open for writing: before the close time; with no close time, unless the current occurrence is cancelled (on a
--- one-off, never). A series that does not exist is not open. Plan 2 redefines it for groups: a null close time on a
--- group means open (CH-R-A2, NOTE 1).
+-- Open for writing: before the close time; with no close time, open unless cancelled; on a one-off a null close time
+-- means cancelled, so closed. A series that does not exist is not open. Plan 2 redefines it for groups: a null close
+-- time on a group means open (CH-R-A2, NOTE 1).
 create function private.chat_open(p_series uuid) returns boolean language sql stable security definer set search_path = '' as $$
  select coalesce(now() < private.chat_closes_at(p_series), c.status <> 'cancelled', false)
  from private.current_occurrence(p_series) c
@@ -200,9 +202,10 @@ create function private.chat_row(p_message public.messages, p_viewer uuid) retur
 $$;
 revoke all on function private.chat_row(public.messages,uuid) from public, anon, authenticated, service_role;
 
--- The names a set of rows needs (K-B2, Shared interfaces): {"<uuid>": first name or null} for each row's author_id and
--- every top-level payload value that is a uuid, keyed as written. A uuid that is not a person (plan 2's plan_id in its
--- "next" and "stopped" lines) maps to null, and the app never shows it (NOTE 9). Anything that is not a row is skipped.
+-- The names a set of rows needs (K-B2, Shared interfaces, H22): {"<uuid>": first name or null} for each row's
+-- author_id and for the payload's person keys, actor, user and brought_by, when they hold a uuid; keyed as written. No
+-- other payload value is looked up: a place label or a title is free text, and a uuid typed there must never turn into
+-- someone's first name. Plans 2 and 3 add their own person keys here by name. Anything that is not a row is skipped.
 create function private.chat_names(p_rows jsonb) returns jsonb language sql stable security definer set search_path = '' as $$
  select coalesce(jsonb_object_agg(u.id, private.chat_first_name(u.id::uuid)), '{}'::jsonb)
  from (
@@ -210,11 +213,11 @@ create function private.chat_names(p_rows jsonb) returns jsonb language sql stab
   from jsonb_array_elements(case when jsonb_typeof(p_rows) = 'array' then p_rows else '[]'::jsonb end) r
   where jsonb_typeof(r.value) = 'object' and r.value->>'author_id' is not null
   union
-  select v.value #>> '{}'
+  select r.value->'payload'->>k.key
   from jsonb_array_elements(case when jsonb_typeof(p_rows) = 'array' then p_rows else '[]'::jsonb end) r
-   cross join lateral jsonb_each(case when jsonb_typeof(r.value->'payload') = 'object' then r.value->'payload' else '{}'::jsonb end) v
-  where jsonb_typeof(v.value) = 'string'
-   and v.value #>> '{}' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+   cross join unnest(array['actor','user','brought_by']) as k(key)
+  where jsonb_typeof(r.value->'payload') = 'object' and jsonb_typeof(r.value->'payload'->k.key) = 'string'
+   and r.value->'payload'->>k.key ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
  ) u
 $$;
 revoke all on function private.chat_names(jsonb) from public, anon, authenticated, service_role;
@@ -309,8 +312,10 @@ grant execute on function private.chat_messages_since(uuid,bigint,timestamptz), 
 
 -- My resbites' view (CH-P14, the invitation card): {"chats": {"<series_id>": {unread, last, open, count}},
 -- "announcements": {"<plan_id>": {id, author_id, body}}, "names": {…}}. chats: every series where the caller is in the
--- chat of its current occurrence; count is message_count. announcements: for each plan where the caller has not
--- answered, the latest announcement to everyone still sent that was written while that plan was current; id lets
+-- chat of its current occurrence; count is message_count. announcements (H22, H23): for the caller's unanswered row on
+-- a series' current occurrence, while it is active and has not ended, the series' latest sent announcement whose
+-- audience includes the caller (the pinned one, when that reaches them), keyed by that occurrence. A past, cancelled or
+-- ended occurrence gives none, so an invitation that is over, or a guest taken off, keeps no announcement. id lets
 -- plan 3 report it from the card (SHOULD 7). names covers every last row and every announcement's author. Anyone
 -- signed in may ask: it holds only their own.
 create function private.my_chat_overview() returns jsonb language plpgsql stable security definer set search_path = '' as $$
@@ -336,9 +341,12 @@ begin
  from (select p.id as plan_id, m.id, m.author_id, m.body
        from public.attendees a join public.plans p on p.id = a.plan_id
        cross join lateral (select m.id, m.author_id, m.body from public.messages m
-         where m.series_id = p.series_id and m.plan_id = p.id and m.kind = 'announcement' and m.audience = 'everyone' and m.state = 'sent'
+         where m.series_id = p.series_id and m.kind = 'announcement' and m.state = 'sent'
+          and exists (select 1 from private.announcement_audience(p.series_id, m.audience) as r(id) where r.id = v_uid)
          order by m.id desc limit 1) m
-       where a.user_id = v_uid and a.response = 'pending') x;
+       where a.user_id = v_uid and a.response = 'pending' and p.status = 'active'
+        and private.plan_end(p.starts_at, p.ends_at) > now()
+        and p.id = (private.current_occurrence(p.series_id)).id) x;
  return jsonb_build_object('chats', v_chats, 'announcements', v_announcements, 'names', private.chat_names(v_lasts || v_authors));
 end $$;
 revoke all on function private.my_chat_overview() from public, anon, authenticated, service_role;

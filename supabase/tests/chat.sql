@@ -164,7 +164,8 @@ end $$;
 
 -- chat_summary (K-N2, K-N7), as a signed-in 03: the one-off's header (accepted: 02 and 03 are Going), the people in it
 -- (4), the sheet's counts (Going 4, Everyone 5), not a host, open, closing at the end + 48 hours, nothing written yet.
--- As 02, the admin, and 01, the owner: a host. As 05 (not answered) and 08: 42501 'Not in this chat'.
+-- As 02, the admin, and 01, the owner: a host. As 05 (not answered), 08 and 07 (Can't go after Going): 42501 'Not in
+-- this chat'.
 set local role authenticated;
 select pg_temp.ch_as(pg_temp.c1('03'));
 do $$ declare s jsonb := public.chat_summary(pg_temp.c1p('01')); begin
@@ -186,6 +187,8 @@ select pg_temp.ch_check(public.chat_summary(pg_temp.c1p('01'))@>'{"host":true}',
 select pg_temp.ch_as(pg_temp.c1('05'));
 select pg_temp.ch_refused($$select public.chat_summary(pg_temp.c1p('01'))$$,'42501','Not in this chat');
 select pg_temp.ch_as(pg_temp.c1('08'));
+select pg_temp.ch_refused($$select public.chat_summary(pg_temp.c1p('01'))$$,'42501','Not in this chat');
+select pg_temp.ch_as(pg_temp.c1('07'));
 select pg_temp.ch_refused($$select public.chat_summary(pg_temp.c1p('01'))$$,'42501','Not in this chat');
 reset role;
 
@@ -284,8 +287,9 @@ do $$ begin
   'The weekly chat''s summary is not about the rolled occurrence');
 end $$;
 
--- The reads (K-B1, K-B2, K-N10). 120 messages by 03 and 04 in turn, each with a client id; then two system lines (author
--- null, K-B2): one names 09, whose account is being deleted, and one names c1…99, which has no profile.
+-- The reads (K-B1, K-B2, K-N10). 120 messages by 03 and 04 in turn, each with a client id; then three system lines
+-- (author null, K-B2): one names 09, whose account is being deleted; one names c1…99, which has no profile; and a
+-- `changed` line whose place label, free text, is 08's uuid (H22: only the person keys are looked up).
 insert into public.messages(series_id,plan_id,author_id,kind,body,client_id,created_at,updated_at)
  select pg_temp.c1p('01'),pg_temp.c1p('01'),pg_temp.c1(case when g%2=0 then '03' else '04' end),'message','Message '||g,
   gen_random_uuid(),now()-interval '1 hour'+g*interval '1 second',now()-interval '1 hour'+g*interval '1 second'
@@ -294,27 +298,34 @@ insert into public.messages(series_id,plan_id,kind,event,payload,created_at,upda
  (pg_temp.c1p('01'),pg_temp.c1p('01'),'system','joined',jsonb_build_object('actor',null,'user',pg_temp.c1('09')),
   now()-interval '58 minutes',now()-interval '58 minutes'),
  (pg_temp.c1p('01'),pg_temp.c1p('01'),'system','admin',jsonb_build_object('actor',pg_temp.c1('01'),'user',pg_temp.c1('99')),
+  now()-interval '58 minutes',now()-interval '58 minutes'),
+ (pg_temp.c1p('01'),pg_temp.c1p('01'),'system','changed',jsonb_build_object('actor',null,'what','place','place_label',pg_temp.c1('08')),
   now()-interval '58 minutes',now()-interval '58 minutes');
 
 -- As a signed-in 03: chat_messages gives {rows, names, as_of}, the newest 50 in id order; chat_messages_since gives every
--- row after an id. As 08 (a stranger) and 05 (not answered): 42501 'Not in this chat', for both reads.
+-- row after an id. As 08 (a stranger), 05 (not answered) and 07 (Can't go after Going): 42501 'Not in this chat', for
+-- both reads.
 set local role authenticated;
 select pg_temp.ch_as(pg_temp.c1('03'));
 select pg_temp.ch_check(pg_temp.ch_keys(public.chat_messages(pg_temp.c1p('01')))='as_of,names,rows'
  and jsonb_array_length(public.chat_messages(pg_temp.c1p('01'))->'rows')=50,'chat_messages as 03 is not a page of 50');
 select pg_temp.ch_check(pg_temp.ch_keys(public.chat_messages_since(pg_temp.c1p('01'),0,null))='as_of,names,rows'
- and jsonb_array_length(public.chat_messages_since(pg_temp.c1p('01'),0,null)->'rows')=122,'chat_messages_since as 03 is not every row');
+ and jsonb_array_length(public.chat_messages_since(pg_temp.c1p('01'),0,null)->'rows')=123,'chat_messages_since as 03 is not every row');
 select pg_temp.ch_as(pg_temp.c1('08'));
 select pg_temp.ch_refused($$select public.chat_messages(pg_temp.c1p('01'))$$,'42501','Not in this chat');
 select pg_temp.ch_refused($$select public.chat_messages_since(pg_temp.c1p('01'),0,null)$$,'42501','Not in this chat');
 select pg_temp.ch_as(pg_temp.c1('05'));
 select pg_temp.ch_refused($$select public.chat_messages(pg_temp.c1p('01'),null,10)$$,'42501','Not in this chat');
 select pg_temp.ch_refused($$select public.chat_messages_since(pg_temp.c1p('01'),0,now())$$,'42501','Not in this chat');
+select pg_temp.ch_as(pg_temp.c1('07'));
+select pg_temp.ch_refused($$select public.chat_messages(pg_temp.c1p('01'))$$,'42501','Not in this chat');
+select pg_temp.ch_refused($$select public.chat_messages_since(pg_temp.c1p('01'),0,null)$$,'42501','Not in this chat');
 reset role;
 
--- The page's rows and names. names maps each author and each payload uuid to a first name: 03 'Mia', 04 'Leo', 01 'Ana'
--- (an actor); 09, being deleted, and c1…99, with no profile, to null (the app shows "Someone"). Every row has the plan's
--- shape; client_id is there only on the viewer's own rows, and is the one stored.
+-- The page's rows and names. names maps each author and each person in a payload (actor, user, brought_by: H22) to a
+-- first name: 03 'Mia', 04 'Leo', 01 'Ana' (an actor); 09, being deleted, and c1…99, with no profile, to null (the app
+-- shows "Someone"). The `changed` line maps nothing: its place label is free text, though it holds 08's uuid. Every row
+-- has the plan's shape; client_id is there only on the viewer's own rows, and is the one stored.
 do $$ declare r jsonb; v_row jsonb; m public.messages; begin
  perform pg_temp.ch_as(pg_temp.c1('03'));
  r := public.chat_messages(pg_temp.c1p('01'));
@@ -336,6 +347,31 @@ do $$ declare r jsonb; v_row jsonb; m public.messages; begin
  perform pg_temp.ch_check(r->'rows' @> jsonb_build_array(jsonb_build_object('id',m.id,'kind','message','audience',null,'event',null,
   'payload',null,'body','Message 119','state','sent','author_id',pg_temp.c1('04'),'created_at',m.created_at,'updated_at',m.updated_at)),
   'Message 119 does not read as stored');
+ perform pg_temp.ch_check(private.chat_names((select jsonb_build_array(private.chat_row(x,pg_temp.c1('03'))) from public.messages x
+   where x.series_id=pg_temp.c1p('01') and x.event='changed'))='{}'::jsonb,'The changed line''s place label was looked up as a person');
+ -- Only the person keys, at the payload's top level: a uuid under plan_id, title or place_label, or nested, is never looked up.
+ perform pg_temp.ch_check(private.chat_names(jsonb_build_array(
+   jsonb_build_object('author_id',null,'payload',jsonb_build_object('actor',pg_temp.c1('01'),'user',pg_temp.c1('03'),'brought_by',pg_temp.c1('04'))),
+   jsonb_build_object('author_id',pg_temp.c1('02'),'payload',jsonb_build_object('plan_id',pg_temp.c1('05'),'title',pg_temp.c1('06'),
+    'place_label',pg_temp.c1('07'),'nested',jsonb_build_object('user',pg_temp.c1('08'))))))
+   =jsonb_build_object(pg_temp.c1('01')::text,'Ana',pg_temp.c1('02')::text,'Ada',pg_temp.c1('03')::text,'Mia',pg_temp.c1('04')::text,'Leo'),
+  'chat_names looks up more than the authors and the person keys');
+end $$;
+
+-- After the close (the end + 48 h 01 min), the history still reads (rule 4: reading only): the same newest page, and
+-- every row since 0. The times go back afterwards.
+do $$ declare v_page text := pg_temp.ch_newest(pg_temp.c1p('01'),null,50); begin
+ perform set_config('resbite.system','roll',true);
+ update public.plans set starts_at=now()-interval '51 hours 1 minute',ends_at=now()-interval '48 hours 1 minute' where id=pg_temp.c1p('01');
+ perform set_config('resbite.system','',true);
+ perform pg_temp.ch_as(pg_temp.c1('03'));
+ perform pg_temp.ch_check(private.chat_open(pg_temp.c1p('01')) is false,'The chat did not close');
+ perform pg_temp.ch_check(pg_temp.ch_ids(public.chat_messages(pg_temp.c1p('01')))=v_page,'chat_messages does not read after the close');
+ perform pg_temp.ch_check(jsonb_array_length(public.chat_messages_since(pg_temp.c1p('01'),0,null)->'rows')
+   =(select count(*) from public.messages where series_id=pg_temp.c1p('01')),'chat_messages_since does not read after the close');
+ perform set_config('resbite.system','roll',true);
+ update public.plans set starts_at=pg_temp.c1_start(),ends_at=pg_temp.c1_start()+interval '3 hours' where id=pg_temp.c1p('01');
+ perform set_config('resbite.system','',true);
 end $$;
 
 -- p_limit is clamped to 1..100 (K-N10): 0 and -5 give 1 row, 500 gives 100, null gives 50. A page ends just before p_before.
@@ -431,10 +467,17 @@ delete from public.chat_reads where user_id=pg_temp.c1('03');
 -- one-off and the weekly series, 03 Going on its current occurrence), keyed by series, with unread, last, open and the
 -- count, names covering each last row, and no announcement (03 has no unanswered invitation). As 05: no chat (05 is in
 -- none) and, for the one-off, where 05 has not answered, that announcement with its id, author and words (SHOULD 7),
--- names covering its author. An announcement to Going, or one no longer sent, is not on 05's card. The announcement
--- leaves 'sent' and both ids go back afterwards, so slice 2 starts with no pinned announcement.
-do $$ declare v_ann bigint; v_msg bigint; v_last bigint; v_pinned bigint; s jsonb; o jsonb; begin
+-- names covering its author. As 07 (Can't go after Going): no chat and no announcement.
+-- The card's announcement (H22, H23) is the series' latest sent announcement whose audience includes the caller: a
+-- newer one to Going, or a newer one to everyone that was removed, leaves 05's card on the first. It is listed only for
+-- the caller's unanswered row on the series' current occurrence while that is active and has not ended: a cancelled
+-- or ended one-off gives none, though its chat may still be open; on the weekly series, an announcement written on the
+-- past occurrence is listed under the current one's id, and a row left only on the past occurrence gives none.
+-- Every announcement here leaves 'sent' and both ids go back afterwards, so slice 2 starts with no pinned announcement.
+do $$ declare v_ann bigint; v_going bigint; v_gone bigint; v_week bigint; v_msg bigint; v_last bigint; v_pinned bigint; v_next uuid;
+ s jsonb; o jsonb; begin
  select c.last_message_id,c.pinned_message_id into v_last,v_pinned from public.chats c where c.series_id=pg_temp.c1p('01');
+ select id into v_next from public.plans where repeats_from=pg_temp.c1p('02');
  insert into public.messages(series_id,plan_id,author_id,kind,audience,body,created_at,updated_at) values
   (pg_temp.c1p('01'),pg_temp.c1p('01'),pg_temp.c1('01'),'announcement','everyone','Doors open at 7',now()-interval '1 hour',now()-interval '1 hour')
   returning id into v_ann;
@@ -450,7 +493,8 @@ do $$ declare v_ann bigint; v_msg bigint; v_last bigint; v_pinned bigint; s json
   'my_chat_overview as 03: '||o::text);
  perform pg_temp.ch_check(o->'chats'->(pg_temp.c1p('01')::text)=jsonb_build_object('unread',true,'last',s->'last','open',true,
    'count',(select message_count from public.chats where series_id=pg_temp.c1p('01'))),'The overview''s one-off entry: '||(o->'chats'->(pg_temp.c1p('01')::text))::text);
- perform pg_temp.ch_check(o->'chats'->(pg_temp.c1p('02')::text)@>'{"unread":false,"last":null,"open":true}','The overview''s weekly entry: '||o::text);
+ perform pg_temp.ch_check(o->'chats'->(pg_temp.c1p('02')::text)=jsonb_build_object('unread',false,'last',null,'open',true,
+   'count',(select message_count from public.chats where series_id=pg_temp.c1p('02'))),'The overview''s weekly entry: '||o::text);
  perform pg_temp.ch_check(o->'announcements'='{}'::jsonb and o->'names'=jsonb_build_object(pg_temp.c1('04')::text,'Leo'),
   'The overview''s announcements or names as 03: '||o::text);
  perform pg_temp.ch_as(pg_temp.c1('05'));
@@ -458,9 +502,53 @@ do $$ declare v_ann bigint; v_msg bigint; v_last bigint; v_pinned bigint; s json
  perform pg_temp.ch_check(o=jsonb_build_object('chats','{}'::jsonb,'announcements',jsonb_build_object(pg_temp.c1p('01')::text,
   jsonb_build_object('id',v_ann,'author_id',pg_temp.c1('01'),'body','Doors open at 7')),'names',jsonb_build_object(pg_temp.c1('01')::text,'Ana')),
   'my_chat_overview as 05: '||o::text);
+ perform pg_temp.ch_as(pg_temp.c1('07'));
+ o := public.my_chat_overview();
+ perform pg_temp.ch_check(o=jsonb_build_object('chats','{}'::jsonb,'announcements','{}'::jsonb,'names','{}'::jsonb),'my_chat_overview as 07: '||o::text);
+ -- The latest announcement whose audience includes 05.
+ insert into public.messages(series_id,plan_id,author_id,kind,audience,body,created_at,updated_at) values
+  (pg_temp.c1p('01'),pg_temp.c1p('01'),pg_temp.c1('01'),'announcement','going','For the people going',now()-interval '1 hour',now()-interval '1 hour')
+  returning id into v_going;
+ insert into public.messages(series_id,plan_id,author_id,kind,audience,body,state,created_at,updated_at) values
+  (pg_temp.c1p('01'),pg_temp.c1p('01'),pg_temp.c1('01'),'announcement','everyone','Taken back','removed',now()-interval '1 hour',now()-interval '1 hour')
+  returning id into v_gone;
+ perform pg_temp.ch_as(pg_temp.c1('05'));
+ perform pg_temp.ch_check((public.my_chat_overview()->'announcements'->(pg_temp.c1p('01')::text)->>'id')::bigint=v_ann,
+  '05''s card is not the latest announcement that reaches 05: '||(public.my_chat_overview()->'announcements')::text);
+ -- Only while the current occurrence is active and has not ended.
+ perform set_config('resbite.system','roll',true);
+ update public.plans set status='cancelled' where id=pg_temp.c1p('01');
+ perform set_config('resbite.system','',true);
+ perform pg_temp.ch_check(public.my_chat_overview()->'announcements'='{}'::jsonb,'A cancelled one-off''s announcement is on 05''s card');
+ perform set_config('resbite.system','roll',true);
+ update public.plans set status='active',starts_at=now()-interval '4 hours',ends_at=now()-interval '1 hour' where id=pg_temp.c1p('01');
+ perform set_config('resbite.system','',true);
+ perform pg_temp.ch_check(private.chat_open(pg_temp.c1p('01')) and public.my_chat_overview()->'announcements'='{}'::jsonb,
+  'An ended one-off''s announcement is on 05''s card');
+ perform set_config('resbite.system','roll',true);
+ update public.plans set starts_at=pg_temp.c1_start(),ends_at=pg_temp.c1_start()+interval '3 hours' where id=pg_temp.c1p('01');
+ perform set_config('resbite.system','',true);
+ -- The weekly series: written on the past occurrence, listed under the current one's id.
+ insert into public.messages(series_id,plan_id,author_id,kind,audience,body,created_at,updated_at) values
+  (pg_temp.c1p('02'),pg_temp.c1p('02'),pg_temp.c1('01'),'announcement','everyone','Bring water',now()-interval '1 hour',now()-interval '1 hour')
+  returning id into v_week;
+ o := public.my_chat_overview();
+ perform pg_temp.ch_check(o->'announcements'=jsonb_build_object(pg_temp.c1p('01')::text,
+   jsonb_build_object('id',v_ann,'author_id',pg_temp.c1('01'),'body','Doors open at 7'),v_next::text,
+   jsonb_build_object('id',v_week,'author_id',pg_temp.c1('01'),'body','Bring water')),'05''s cards with the weekly series: '||o::text);
+ perform set_config('resbite.system','roll',true);
+ update public.attendees set response='declined' where plan_id=v_next and user_id=pg_temp.c1('05');
+ perform set_config('resbite.system','',true);
+ perform pg_temp.ch_check(pg_temp.ch_keys(public.my_chat_overview()->'announcements')=pg_temp.c1p('01')::text,
+  'A row left only on a past occurrence brings its announcement to 05''s card');
+ perform set_config('resbite.system','roll',true);
+ update public.attendees set response='pending' where plan_id=v_next and user_id=pg_temp.c1('05');
+ perform set_config('resbite.system','',true);
+ -- An announcement to Going, or one no longer sent, is on no card.
  update public.messages set audience='going' where id=v_ann;
- perform pg_temp.ch_check(public.my_chat_overview()->'announcements'='{}'::jsonb,'An announcement to Going is on 05''s card');
- update public.messages set audience='everyone',state='deleted' where id=v_ann;
+ perform pg_temp.ch_check(not (public.my_chat_overview()->'announcements' ? pg_temp.c1p('01')::text),'An announcement to Going is on 05''s card');
+ update public.messages set state='deleted' where id in (v_ann,v_going,v_week);
+ update public.messages set audience='everyone' where id=v_ann;
  perform pg_temp.ch_check(public.my_chat_overview()=jsonb_build_object('chats','{}'::jsonb,'announcements','{}'::jsonb,'names','{}'::jsonb),
   'A deleted announcement is on 05''s card');
  update public.chats set pinned_message_id=v_pinned,last_message_id=v_last where series_id=pg_temp.c1p('01');
@@ -496,7 +584,7 @@ select pg_temp.ch_refused($$insert into public.messages(series_id,plan_id,author
 -- messages' id sequence: no API role reads or writes them directly, and a direct select is refused. The four reads and
 -- their private bodies are for signed-in accounts only; the helpers and the trigger functions are for no role. Every
 -- new private function is a definer with an empty search path; the public wrappers are not definers. The triggers,
--- indexes, defaults, keys and foreign keys are as the plan names them.
+-- indexes (the announcements' partial one too, H22), defaults, keys and foreign keys are as the plan names them.
 do $$ declare t text; r text; p text; begin
  foreach t in array array['public.messages','public.chats','public.chat_reads','public.chat_mutes'] loop
   perform pg_temp.ch_check((select relrowsecurity from pg_catalog.pg_class where oid=t::regclass)
@@ -556,7 +644,9 @@ do $$ declare f text; r text; begin
  perform pg_temp.ch_check((select indexdef from pg_catalog.pg_indexes where schemaname='public' and indexname='messages_series_idx')
    like '%ON public.messages USING btree (series_id, id)'
   and (select indexdef from pg_catalog.pg_indexes where schemaname='public' and indexname='messages_series_updated_idx')
-   like '%ON public.messages USING btree (series_id, updated_at)','The messages indexes are wrong');
+   like '%ON public.messages USING btree (series_id, updated_at)'
+  and (select indexdef from pg_catalog.pg_indexes where schemaname='public' and indexname='messages_series_announcements_idx')
+   like '%ON public.messages USING btree (series_id, id) WHERE (kind = ''announcement''::text)','The messages indexes are wrong');
  perform pg_temp.ch_check(exists(select 1 from pg_catalog.pg_constraint where conrelid='public.messages'::regclass and contype='u'
    and pg_catalog.pg_get_constraintdef(oid)='UNIQUE (author_id, client_id)'),'messages has no unique (author_id, client_id)');
  perform pg_temp.ch_check((select string_agg(a.attname||'='||pg_catalog.pg_get_expr(d.adbin,d.adrelid),',' order by a.attname)
