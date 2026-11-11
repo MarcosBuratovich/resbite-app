@@ -368,6 +368,31 @@ test("the first name loses a trailing colon, comma or semicolon and is capped at
   assert.equal(notificationCopy({ kind: "invited", title: "Board game night", actor_name: "Leo: Martínez" }).body, "Leo: Martínez invited you.");
 });
 
+test("a first name keeps the joiners inside it, so an emoji name stays whole; a joiner at either end goes (H21)", () => {
+  const chat = { kind: "chat_message", title: "Board game night", message_body: "Hi" };
+  const name = (actor_name: string) => notificationCopy({ ...chat, actor_name }).body;
+  const family = "👨\u200d👩\u200d👧\u200d👦";
+  const technologist = "👩\u200d💻";
+  assert.equal(name(`${family} Smith`), `${family}: Hi`);
+  assert.equal(name(technologist), `${technologist}: Hi`);
+  assert.equal(name(`Leo${technologist}`), `Leo${technologist}: Hi`);
+  // One grapheme each, so 30 families stay whole and 31 are cut to 30.
+  assert.equal(name(family.repeat(30)), `${family.repeat(30)}: Hi`);
+  assert.equal(name(family.repeat(31)), `${family.repeat(30)}…: Hi`);
+  // A joiner at the start or the end of the first word joins nothing.
+  assert.equal(name("\u200dLeo\u200d Martínez"), "Leo: Hi");
+  assert.equal(name("\u200d\u200dLeo\u200d\u200d"), "Leo: Hi");
+  assert.equal(name("Leo\u200d: Martínez"), "Leo: Hi");
+  assert.equal(name("Leo:\u200d Martínez"), "Leo: Hi");
+  assert.equal(name(`\u200b${technologist}\u200b`), `${technologist}: Hi`);
+  // Other zero-width and format characters still go from the inside.
+  assert.equal(name("Le\u200bo\u2060n"), "Leon: Hi");
+  // A joiner alone is no name.
+  for (const kind of ["chat_message", "announcement"])
+    for (const actor_name of ["\u200d", "\u200d\u200d", "\u200d:", ":\u200d", "\u200b\u200d\u200c"])
+      assert.deepEqual(notificationCopy({ ...chat, kind, actor_name }), GENERIC_COPY, `${kind} ${JSON.stringify(actor_name)}`);
+});
+
 test("a first name that is blank once cleaned gives the generic text (H18)", () => {
   const chat = { title: "Board game night", message_body: "Hi" };
   for (const kind of ["chat_message", "announcement"])

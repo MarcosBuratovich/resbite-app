@@ -104,8 +104,11 @@ const NAME_CUT = 30;
 const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
 /** Controls (white space aside, which is collapsed first), and the bidi embeddings, overrides and isolates. */
 const CONTROLS = /[\p{Cc}\u202A-\u202E\u2066-\u2069]/gu;
-/** Zero-width and format characters, and the blank fillers that pass for a letter (Hangul, Braille). */
-const ZERO_WIDTH = /[\p{Cf}\u115F\u1160\u3164\uFFA0\u2800]/gu;
+/**
+ * Zero-width and format characters, and the blank fillers that pass for a letter (Hangul, Braille). The joiner
+ * (U+200D) is left out: inside a name it holds an emoji together, and senderName removes it only at the ends (H21).
+ */
+const ZERO_WIDTH = /(?!\u200D)[\p{Cf}\u115F\u1160\u3164\uFFA0\u2800]/gu;
 /** All a reader cannot see: white space, controls, zero-width and format characters and Unicode's other ignorables. */
 const INVISIBLE = /[\s\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}\u2800]/gu;
 let segmenter: Intl.Segmenter | undefined;
@@ -135,10 +138,16 @@ const visible = (text: string) => text.replace(INVISIBLE, "") !== "";
 /**
  * The sender as a chat notice names them: the first word of the name the claim gives (K-N3, rule 8), split on every
  * Unicode space as private.first_name splits, with zero-width and format characters removed before the split (so
- * none can hide the name), a trailing ":", "," or ";" dropped, and at most 30 graphemes.
+ * none can hide the name), joiners kept inside it but not at its ends, a trailing ":", "," or ";" dropped, and at
+ * most 30 graphemes.
  */
 function senderName(name: string | null | undefined): string | null {
-  const first = oneLine(name ?? "").replace(ZERO_WIDTH, "").trim().split(" ")[0].replace(/[:,;]+$/, "");
+  const first = oneLine(name ?? "")
+    .replace(ZERO_WIDTH, "")
+    .trim()
+    .split(" ")[0]
+    .replace(/^\u200D+/, "")
+    .replace(/[:,;\u200D]+$/, "");
   return visible(first) ? cut(first, NAME_CUT) : null;
 }
 

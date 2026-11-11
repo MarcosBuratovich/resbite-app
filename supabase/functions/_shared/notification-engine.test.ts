@@ -7,7 +7,7 @@ import {
   type Delivery,
   type Result,
 } from "./notification-engine.ts";
-import { expoGateway } from "./notification-adapters.ts";
+import { deliveryStore, expoGateway } from "./notification-adapters.ts";
 import { notificationHandler } from "../deliver-notifications/handler.ts";
 const job: Delivery = {
   id: "delivery",
@@ -297,7 +297,8 @@ function batches(sizes: number[] | "endless", sendMs = 0) {
   return { store, gateway, limits, outcomes, validated, sent, clock: () => time };
 }
 const TICKET = { outcome: "ticket", ticket: "ticket", delaySeconds: 900 };
-const HANDED_BACK = { outcome: "retry", delaySeconds: 0 };
+/** The outcome a job not started at the budget is finished with (H21): pending again, its attempt given back. */
+const HANDED_BACK = { outcome: "deferred" };
 test("the sender claims 25 first, then 10 at a time, until a claim comes back empty (K-B3.3, H3)", async () => {
   const f = batches([25, 10, 10, 3]);
   assert.deepEqual(await runNotifications(f.store, f.gateway, true, f.clock), { disabled: false, processed: 48, deferred: 0 });
@@ -323,7 +324,7 @@ test("no new claim starts once 5 seconds have passed (K-B3.4, H3)", async () => 
   const h = batches("endless", 1000);
   assert.deepEqual(await runNotifications(h.store, h.gateway, true, h.clock, 2000), { disabled: false, processed: 2, deferred: 23 });
 });
-test("no new send starts after 5 seconds: the rest of the batch goes back for the next run, none lost (H18)", async () => {
+test("no new send starts after 5 seconds: the rest of the batch is finished as deferred for the next run (H18, H21)", async () => {
   // 25 claimed, each send takes 2 s: sends start at 0, 2 and 4 s; at 6 s the other 22 are handed back unsent.
   const f = batches("endless", 2000);
   assert.deepEqual(await runNotifications(f.store, f.gateway, true, f.clock), { disabled: false, processed: 3, deferred: 22 });
@@ -362,17 +363,20 @@ test("no new send starts after 5 seconds: the rest of the batch goes back for th
   assert.deepEqual(receipts, []);
   assert.deepEqual(outcomes, [TICKET, HANDED_BACK]);
 });
-test("a claim that fails after the first batch ends the run with what it did; only a failed first claim is an error (H18)", async () => {
+test("a claim that fails after the first batch ends the run with what it did and says so; only a failed first claim is a 503 (H18, H21)", async () => {
   const f = batches([3]);
   const claim = f.store.claim;
   f.store.claim = async (limit: number) => {
     if (f.limits.length === 1) {
       f.limits.push(limit);
-      throw Error("db down");
+      throw Error("db down at ExponentPushToken[secret]");
     }
     return claim(limit);
   };
-  assert.deepEqual(await runNotifications(f.store, f.gateway, true, f.clock), { disabled: false, processed: 3, deferred: 0 });
+  const ended = await runNotifications(f.store, f.gateway, true, f.clock);
+  assert.deepEqual(ended, { disabled: false, processed: 3, deferred: 0, error: "Notification claim failed" });
+  // A short fixed reason: nothing the failure carried reaches the reply.
+  assert.ok(!JSON.stringify(ended).includes("secret"));
   assert.deepEqual(f.limits, [25, 10]);
   assert.equal(f.outcomes.length, 3);
   const g = batches([3]);
@@ -393,7 +397,14 @@ test("a claim that fails after the first batch ends the run with what it did; on
   };
   const partial = await notificationHandler({ ...h, secret: "s".repeat(32), enabled: true })(post());
   assert.equal(partial.status, 200);
-  assert.deepEqual(await partial.json(), { disabled: false, processed: 3, deferred: 0 });
+  assert.deepEqual(await partial.json(), { disabled: false, processed: 3, deferred: 0, error: "Notification claim failed" });
+  // A malformed later claim ends the run the same way; a run that ends cleanly has no error.
+  const m = batches([2]);
+  const good = m.store.claim;
+  m.store.claim = async (limit: number) => (m.limits.length === 0 ? good(limit) : ({ rows: [] } as unknown as Delivery[]));
+  assert.deepEqual(await runNotifications(m.store, m.gateway, true, m.clock), { disabled: false, processed: 2, deferred: 0, error: "Notification claim failed" });
+  const clean = batches([2]);
+  assert.ok(!("error" in (await runNotifications(clean.store, clean.gateway, true, clean.clock))));
 });
 test("a claim that returns null reads as empty (H18)", async () => {
   const f = batches([]);
@@ -439,4 +450,13 @@ test("a disabled sender never reads the clock or claims", async () => {
   });
   assert.deepEqual(result, { disabled: true, processed: 0 });
   assert.deepEqual(f.limits, []);
+});
+test("the journal hears a deferred job as the outcome deferred, with no ticket and no delay (H21)", async () => {
+  const bodies: unknown[] = [];
+  const store = deliveryStore("https://journal.test", "service-key", async (_url, init) => {
+    bodies.push(JSON.parse(String(init?.body)));
+    return new Response(null, { status: 204 });
+  });
+  await store.finish({ ...job, id: "d1", lease_id: "l1" }, { outcome: "deferred" });
+  assert.deepEqual(bodies, [{ p_id: "d1", p_lease: "l1", p_outcome: "deferred", p_ticket: null, p_delay_seconds: 0 }]);
 });

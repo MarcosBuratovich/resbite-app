@@ -36,7 +36,9 @@ export type Outcome =
   | "failed"
   | "invalid"
   | "unknown"
-  | "suppressed";
+  | "suppressed"
+  /** Not started before the run's budget ran out: pending again at once, with the claim's attempt given back (H21). */
+  | "deferred";
 export type Result = {
   outcome: Outcome;
   ticket?: string;
@@ -119,11 +121,12 @@ function claimed(value: Delivery[] | null | undefined): Delivery[] {
   return value;
 }
 /**
- * One run of the sender, sized to fit under its caller's 10 s timeout (K-B3.3, H3, H18). The first claim takes 25;
- * later claims take 10, and none starts once `budgetMs` (5 s) has passed since the start. No send or receipt check
- * starts after that either: each claimed job not yet started is handed back as a retry with no delay, so the next
- * run claims it again and none is lost. A claim that fails after the first batch ends the run with what it did; only
- * a failed first claim is an error. `deferred` counts the jobs handed back.
+ * One run of the sender, sized to fit under its caller's 10 s timeout (K-B3.3, H3, H18, H21). The first claim takes
+ * 25; later claims take 10, and none starts once `budgetMs` (5 s) has passed since the start. No send or receipt check
+ * starts after that either: each claimed job not yet started is finished as `deferred`, which the journal returns to
+ * pending at once with its attempt given back, so the next run claims it again and none is lost. `deferred` counts
+ * them. A claim that fails after the first batch ends the run with what it did and a short `error`; only a failed
+ * first claim is thrown (the worker's 503).
  */
 export async function runNotifications(
   store: DeliveryStore,
@@ -142,19 +145,22 @@ export async function runNotifications(
   };
   let processed = 0;
   let deferred = 0;
+  let error: string | undefined;
   for (let first = true; first || !spent(); first = false) {
     let jobs: Delivery[];
     try {
       jobs = claimed(await store.claim(first ? 25 : 10));
-    } catch (error) {
-      if (first) throw error;
+    } catch (failure) {
+      if (first) throw failure;
+      // A fixed reason: what the failure carried (a provider or journal reply) is never echoed.
+      error = "Notification claim failed";
       break;
     }
     if (jobs.length === 0) break;
     for (const job of jobs) {
       if (spent()) {
         // Never started: back to the queue as it was (a ticket job keeps its ticket), for the next run.
-        await store.finish(job, { outcome: "retry", delaySeconds: 0 });
+        await store.finish(job, { outcome: "deferred" });
         deferred++;
         continue;
       }
@@ -162,7 +168,9 @@ export async function runNotifications(
       processed++;
     }
   }
-  return { disabled: false, processed, deferred };
+  return error === undefined
+    ? { disabled: false, processed, deferred }
+    : { disabled: false, processed, deferred, error };
 }
 async function deliver(
   store: DeliveryStore,
