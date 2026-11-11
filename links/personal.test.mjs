@@ -195,3 +195,15 @@ test("the personal page shows the repeat line and Place to be decided under the 
   assert.ok(html.includes('<p class="detail">Every other Monday</p>'));
   assert.ok(html.includes('<p class="detail">Place to be decided</p>'));
 });
+
+test("a guest's link names the inviter, and the host by first name; a host's link is as before", () => {
+  const html = renderPersonalPage({ ...open, host: "Ana Host", inviter: "Pedro" }, options);
+  for (const text of ["Pedro invited you to Ana’s resbite", "Not your number? Ask Pedro to check it.", 'data-inviter="Pedro"',
+    "Ask Pedro for help if it is off."])
+    assert.ok(html.includes(text), text);
+  assert.ok(html.includes('data-host="Ana Host"'));
+  const plain = renderPersonalPage({ ...open, host: "Ana Host" }, options);
+  for (const text of ["Ana Host invited you", "Ask Ana Host to check it.", "Ask Ana Host for help if it is off."]) assert.ok(plain.includes(text), text);
+  assert.ok(!plain.includes("data-inviter"));
+  assert.ok(!plain.includes("’s resbite"));
+});

@@ -28,8 +28,12 @@ export function personalHeaders(supabaseUrl) {
 }
 
 /** The page's own words, in one place. Task 11's script carries its step strings in personal-flow.mjs. */
+const firstWord = (name) => String(name ?? "").trim().split(/\s+/)[0];
+
 export const PERSONAL_WORDS = {
   invited: (host) => `${host} invited you`,
+  // A guest brought you: they are named, and the host by first name (as the pushes do).
+  invitedBy: (inviter, host) => `${inviter} invited you to ${firstWord(host)}’s resbite`,
   forNumber: (code, ending) => `This invitation is for a +${code} number ending ••${ending}.`,
   answer: "Answer",
   notYours: (host) => `Not your number? Ask ${host} to check it.`,
@@ -130,6 +134,7 @@ function stepsBody(data, image, options, mode) {
     code: options.code,
     ...(open ? { mode: "open", country: OPEN_LINK_COUNTRY } : { country: data.country, ending: data.ending }),
     host: data.host,
+    ...(data.inviter ? { inviter: data.inviter } : {}),
     "terms-version": options.termsVersion,
     "terms-url": options.termsUrl,
     "privacy-url": options.privacyUrl,
@@ -140,13 +145,14 @@ function stepsBody(data, image, options, mode) {
   const dataAttrs = Object.entries(attrs)
     .map(([name, value]) => `data-${name}="${escape(value)}"`)
     .join(" ");
+  const who = data.inviter || data.host;
   const note = open ? "" : `\n        <p class="note">${escape(w.forNumber(data.country, data.ending))}</p>`;
   const after = open
     ? `\n        <p><a class="button secondary" id="open-app" href="resbite://r/${escape(options.code)}">${w.haveApp}</a></p>`
-    : `\n        <p class="muted">${escape(w.notYours(data.host))}</p>`;
+    : `\n        <p class="muted">${escape(w.notYours(who))}</p>`;
   return `    <main id="main" ${dataAttrs}>
       <section id="step-invitation">
-        <p class="invited"><span class="dot" aria-hidden="true"></span>${escape(w.invited(data.host))}</p>
+        <p class="invited"><span class="dot" aria-hidden="true"></span>${escape(data.inviter ? w.invitedBy(data.inviter, data.host) : w.invited(data.host))}</p>
         <img class="hero" src="${escape(image)}" alt="" />
         <h1>${escape(data.title)}</h1>
         <p class="detail">${escape(when)}</p>${repeatHtml}${tbd}${area}
@@ -157,7 +163,7 @@ function stepsBody(data, image, options, mode) {
       <section id="step-code" aria-live="polite" hidden></section>
       <section id="step-answer" aria-live="polite" hidden></section>
       <section id="step-app" aria-live="polite" hidden></section>
-      <noscript><p class="muted">Answering needs JavaScript. Ask ${escape(data.host)} for help if it is off.</p></noscript>
+      <noscript><p class="muted">Answering needs JavaScript. Ask ${escape(who)} for help if it is off.</p></noscript>
     </main>`;
 }
 

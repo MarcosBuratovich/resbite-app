@@ -608,3 +608,8 @@ test("sign out clears this code's entry first, then posts a local logout with th
   await signOutKept({ storage, code: CODE_A, session: null, post: async (...a) => none.push(a) });
   assert.deepEqual(none, []);
 });
+
+test("wrongNumber names the inviter when there is one, else the host", () => {
+  assert.equal(errorText("wrongNumber", "Ana", "Pedro"), "That isn’t the number Pedro invited.");
+  assert.equal(errorText("wrongNumber", "Ana"), "That isn’t the number Ana invited.");
+});
