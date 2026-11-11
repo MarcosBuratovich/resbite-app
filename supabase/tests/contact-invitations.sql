@@ -722,13 +722,14 @@ reset role;
 
 -- M3: the tables follow auth.users. Deleting an account forgets who sent or answered an invitation (the invitation
 -- stays) and removes its daily lookup count. 31 invited someone to the Walk and looked numbers up; 04 answered the Quiz.
+-- brought_by (20261111130000_circles_of_trust, the guest who sent a link) is forgotten the same way.
 do $$ begin
  if (select is_nullable from information_schema.columns where table_schema='private' and table_name='phone_invitations' and column_name='invited_by')<>'YES' then
   raise exception 'invited_by must be nullable';
  end if;
  if (select array_agg(a.attname::text||':'||c.confdeltype::text order by a.attname) from pg_catalog.pg_constraint c
      join pg_catalog.pg_attribute a on a.attrelid=c.conrelid and a.attnum=c.conkey[1]
-     where c.contype='f' and c.confrelid='auth.users'::regclass and c.conrelid='private.phone_invitations'::regclass) is distinct from array['invited_by:n','user_id:n']
+     where c.contype='f' and c.confrelid='auth.users'::regclass and c.conrelid='private.phone_invitations'::regclass) is distinct from array['brought_by:n','invited_by:n','user_id:n']
  or (select array_agg(a.attname::text||':'||c.confdeltype::text) from pg_catalog.pg_constraint c
      join pg_catalog.pg_attribute a on a.attrelid=c.conrelid and a.attnum=c.conkey[1]
      where c.contype='f' and c.confrelid='auth.users'::regclass and c.conrelid='private.lookup_usage'::regclass) is distinct from array['user_id:c'] then

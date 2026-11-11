@@ -397,8 +397,8 @@ do $$ begin
   raise exception 'A plain guest changed the plan'; exception when insufficient_privilege then null; end;
  begin perform public.decide_join_request('e1100000-0000-4000-8000-000000000003','e1000000-0000-4000-8000-000000000006',true); raise exception 'A plain guest decided a request';
  exception when insufficient_privilege then null; end;
- begin perform public.plan_phone_invitations('e1100000-0000-4000-8000-000000000003'); raise exception 'A plain guest listed invitations';
- exception when insufficient_privilege then null; end;
+ -- A guest lists only the links they brought (20261111130000_circles_of_trust): a plain guest who brought nobody gets none.
+ if public.plan_phone_invitations('e1100000-0000-4000-8000-000000000003') is distinct from '[]'::jsonb then raise exception 'A plain guest listed invitations'; end if;
  begin perform public.plan_join_requests('e1100000-0000-4000-8000-000000000003'); raise exception 'A plain guest listed requests';
  exception when insufficient_privilege then null; end;
  begin perform public.set_guest_note('e1100000-0000-4000-8000-000000000003','Hello'); raise exception 'A plain guest wrote the note';
