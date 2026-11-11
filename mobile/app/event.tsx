@@ -141,8 +141,9 @@ export default function EventPage() {
   const guestNote = current.guest_note?.trim() ?? "";
   const tag = hostLabel(role);
   const organizer = event.organizer?.trim();
-  // A guest who hasn't answered reads only their own row: the numbers come from the server (CR-P4).
-  const counts = peopleCounts({ guests, invited, requests, counts: serverCounts });
+  // A guest who hasn't answered reads only their own row: the numbers come from the server (CR-P4). A host's "N
+  // invited" counts the links their guests sent too (CO-07).
+  const counts = peopleCounts({ guests, invited, requests, counts: serverCounts, broughtLinks: event.broughtLinks });
   const answeredGuest = showsNames(role, response);
   const going = guests.filter((g) => g.response === "accepted").map((g) => g.name);
   const row = bottomRow({ role, state, response });

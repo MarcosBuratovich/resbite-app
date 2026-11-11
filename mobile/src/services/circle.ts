@@ -10,11 +10,29 @@ import type { Circle, CircleSaveEvent } from "../domain/circle";
  */
 export type Allowance = { allowed: number; used: number; remaining: number; level: number; mayBring: boolean };
 
+/**
+ * A link a guest sent bringing someone, as a host sees it (`plan_brought_invitations`): its id (Remove takes it back
+ * by it), the number's last two digits and country, never the number; and the bringer's first name, null when there is
+ * none to show.
+ */
+export type BroughtLink = { id: string; ending: string; country: string; broughtByName: string | null };
+
 export type CircleGateway = {
   /** The host sets the resbite's circle (`set_plan_circle`); the plan's new version. */
   set(planId: string, invites: number, levels: number): Promise<number>;
   /** The caller's allowance on this resbite. A host gets nothing to bring; someone not on it, 42501 'Not invited'. */
   allowance(planId: string): Promise<Allowance>;
+  /**
+   * The bringers' first names by account id (`plan_bringers`), for the chain on the people list (CO-07); an account
+   * being deleted is left out, and so is a blank name. Someone who may not see names: 42501 'Names required'.
+   */
+  bringers(planId: string): Promise<Record<string, string>>;
+  /** The links the guests sent bringing someone, for a host (`plan_brought_invitations`); anyone else: 42501. */
+  broughtLinks(planId: string): Promise<BroughtLink[]>;
+  /** A host takes back a guest's link by its id (`revoke_brought_invitation`). Refusals are worded (C14). */
+  revokeBrought(planId: string, invitationId: string): Promise<void>;
+  /** A bringer takes back an in-app invitation they sent (`withdraw_brought_invitation`). Refusals are worded (C14). */
+  withdraw(planId: string, userId: string): Promise<void>;
 };
 
 const count = (value: unknown) => (typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null);
@@ -30,12 +48,55 @@ function allowanceFrom(reply: unknown): Allowance {
   return { allowed, used, remaining, level, mayBring: row.may_bring };
 }
 
+/** `plan_bringers`' reply: the names by id, blank ones left out; anything but an object is the connection line. */
+function bringersFrom(reply: unknown): Record<string, string> {
+  if (typeof reply !== "object" || reply === null || Array.isArray(reply)) throw Error(offline);
+  const names: Record<string, string> = {};
+  for (const [id, name] of Object.entries(reply)) if (typeof name === "string" && name.trim()) names[id] = name.trim();
+  return names;
+}
+
+/** `plan_brought_invitations`' reply, field by field (no number can come through); one row it can't read fails it. */
+function broughtLinksFrom(reply: unknown): BroughtLink[] {
+  if (!Array.isArray(reply)) throw Error(offline);
+  return reply.map((item: unknown) => {
+    const row = typeof item === "object" && item !== null ? (item as Record<string, unknown>) : {};
+    if (typeof row.id !== "string" || typeof row.ending !== "string" || typeof row.country !== "string") throw Error(offline);
+    // The server leaves the name out when there is none to show (C14).
+    const name = typeof row.brought_by_name === "string" ? row.brought_by_name.trim() : "";
+    return { id: row.id, ending: row.ending, country: row.country, broughtByName: name || null };
+  });
+}
+
+/**
+ * Taking back an invitation, refused (C14): 42501 (answered meanwhile, ended, or someone only a host may take off)
+ * says so; anything else is the connection line.
+ */
+const takeBackMessage = (e: unknown): string => (errorField(e, "code") === "42501" ? CIRCLE_COPY.cantTakeBack : INVITE_COPY.offline);
+
+/**
+ * A bringer's Remove on their own link goes through `contactInviteGateway.revoke`, which words a 42501 for hosts
+ * ("Only a host can invite people…"). For a bringer it means the link was answered, or the resbite ended: this says so.
+ */
+export function bringerRevokeError(e: unknown): Error {
+  if (!(e instanceof Error)) return Error(INVITE_COPY.offline);
+  return e.message === INVITE_COPY.hostsOnly ? Error(CIRCLE_COPY.cantTakeBack) : e;
+}
+
 /** The circle of trust: a refusal is thrown as the server sent it, as `connectionGateway` does. */
 export function createCircleGateway(rpc: Rpc, deadline: Deadline = passThrough): CircleGateway {
   async function call(fn: string, args: Record<string, unknown>): Promise<unknown> {
     const { data, error } = await deadline((signal) => rpc(fn, args, signal));
     if (error) throw error;
     return data;
+  }
+  /** A call whose refusal is told in words (C14), a lost connection included. */
+  async function takeBack(fn: string, args: Record<string, unknown>): Promise<void> {
+    try {
+      await call(fn, args);
+    } catch (e) {
+      throw Error(takeBackMessage(e));
+    }
   }
   return {
     async set(planId, invites, levels) {
@@ -46,6 +107,18 @@ export function createCircleGateway(rpc: Rpc, deadline: Deadline = passThrough):
     },
     async allowance(planId) {
       return allowanceFrom(await call("my_bring_allowance", { p_plan: planId }));
+    },
+    async bringers(planId) {
+      return bringersFrom(await call("plan_bringers", { p_plan: planId }));
+    },
+    async broughtLinks(planId) {
+      return broughtLinksFrom(await call("plan_brought_invitations", { p_plan: planId }));
+    },
+    async revokeBrought(planId, invitationId) {
+      await takeBack("revoke_brought_invitation", { p_plan: planId, p_invitation: invitationId });
+    },
+    async withdraw(planId, userId) {
+      await takeBack("withdraw_brought_invitation", { p_plan: planId, p_user: userId });
     },
   };
 }

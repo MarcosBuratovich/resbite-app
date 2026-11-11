@@ -205,6 +205,15 @@ async function fixture({
       assert.equal(body.p_plan, plan.id);
       return reply([]);
     }
+    // The chain on the people list (circles of trust): nobody here was brought, and no guest sent a link.
+    if (plan && path === "/rest/v1/rpc/plan_bringers") {
+      assert.equal(body.p_plan, plan.id);
+      return reply({});
+    }
+    if (plan && path === "/rest/v1/rpc/plan_brought_invitations") {
+      assert.equal(body.p_plan, plan.id);
+      return reply([]);
+    }
     if (plan && path === "/rest/v1/rpc/request_connection") {
       assert.equal(body.p_plan, plan.id);
       state.pairs[body.p_user] = "requested_by_me";

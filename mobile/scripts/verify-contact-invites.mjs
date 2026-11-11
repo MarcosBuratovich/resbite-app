@@ -268,6 +268,15 @@ async function fixture({ user = host, width = 390, foldStatus = 200 } = {}) {
       assert.equal(body.p_plan, coffee.id);
       return reply([...state.invitations.values()].map(({ phone, country, answered, response }) => ({ phone, country, answered, response })));
     }
+    // The chain (circles of trust): nobody here was brought, and no guest sent a link.
+    if (path === "/rest/v1/rpc/plan_bringers") {
+      assert.equal(body.p_plan, coffee.id);
+      return reply({});
+    }
+    if (path === "/rest/v1/rpc/plan_brought_invitations") {
+      assert.equal(body.p_plan, coffee.id);
+      return reply([]);
+    }
     if (path === "/rest/v1/rpc/revoke_phone_invitation") {
       state.invitations.delete(body.p_phone);
       return empty();

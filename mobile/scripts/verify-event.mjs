@@ -279,6 +279,14 @@ async function open(world = {}) {
         return reply(state.plan.owner_id === user.id || state.admins.includes(user.id) ? state.phoneInvites : []);
       case "plan_join_requests":
         return reply(state.requests);
+      // The chain (circles of trust): nobody here was brought, and no guest sent a link. As the server does, a guest
+      // gets no guests' links.
+      case "plan_bringers":
+        return reply({});
+      case "plan_brought_invitations":
+        return state.plan.owner_id === user.id || state.admins.includes(user.id)
+          ? reply([])
+          : reply({ code: "42501", message: "Plan owner required" }, 403);
       // The server's counts for an invitee who hasn't answered (plan_people_counts): every guest row, the viewer's too.
       case "plan_people_counts": {
         const all = [...state.guests, ...(state.attendee ? [g(user.id, "Fixture", state.attendee.response)] : [])];
@@ -382,6 +390,8 @@ try {
     await expect(btn(page, `${row}. Alex and Bea`)).toBeVisible();
     await expect(page.getByText("Hosted by")).toHaveCount(0);
     assert.deepEqual(f.rpcs("plan_phone_invitations"), [{ p_plan: PLAN_ID }]);
+    // With the links their guests sent bringing someone, counted in "N invited" (none here).
+    assert.deepEqual(f.rpcs("plan_brought_invitations"), [{ p_plan: PLAN_ID }]);
     assert.deepEqual(f.rpcs("plan_join_requests"), [{ p_plan: PLAN_ID }]);
     // The host reads every guest row, so the counts come from them, not from plan_people_counts.
     assert.deepEqual(f.rpcs("plan_people_counts"), []);

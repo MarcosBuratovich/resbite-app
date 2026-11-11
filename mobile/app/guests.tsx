@@ -4,17 +4,29 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { router, useLocalSearchParams } from "expo-router";
 import { ArrowLeft, Check, Clock, Ellipsis, Link2, Send, UserMinus, UserPlus, X } from "lucide-react-native";
 import type { LucideIcon } from "lucide-react-native";
-import { Button, Copy, ErrorNote, s } from "../src/design/ui";
+import { Button, Copy, ErrorNote, s, useLargeText } from "../src/design/ui";
 import { IconButton, focusHeading } from "../src/design/kit";
 import { GrabberSheet } from "../src/design/GrabberSheet";
 import { MenuLabel, MenuRow, MenuSeparator } from "../src/design/MenuRow";
 import { colors as c, fonts, space } from "../src/design/tokens";
-import { EVENT_COPY, pageState, peopleGroups, type PersonAction, type PersonRow } from "../src/domain/eventPage";
+import {
+  EVENT_COPY,
+  pageState,
+  peopleGroups,
+  personLabel,
+  removalOf,
+  sheetHead,
+  type PersonAction,
+  type PersonRow,
+} from "../src/domain/eventPage";
+import { circleOf, firstName } from "../src/domain/circle";
+import { CIRCLE_COPY } from "../src/domain/circleCopy";
 import { CONNECTIONS_COPY } from "../src/domain/connectionsCopy";
 import { removeGuestQuestion } from "../src/domain/eventLinks";
 import { INVITE_COPY } from "../src/domain/inviteCopy";
 import { invitationGateway } from "../src/services/invitations";
 import { contactInviteGateway } from "../src/services/contactInvites";
+import { bringerRevokeError, circleGateway } from "../src/services/circle";
 import { joinRequestGateway } from "../src/services/joinRequests";
 import { useApp } from "../src/state/AppState";
 import { useEvent, type EventPage } from "../src/state/useEvent";
@@ -35,8 +47,10 @@ const ACTION_ICON: Partial<Record<PersonAction, LucideIcon>> = {
 };
 
 /**
- * The people list (spec CR-P4, CR-P16, CO-01): /guests?plan=<id>. Everyone who answered, and for hosts the rest, with a
- * sheet of actions per person: the connection ones for everyone, then the hosts' own.
+ * The people list (spec CR-P4, CR-P16, CO-01, CO-07): /guests?plan=<id>. Everyone who answered, and for hosts the rest,
+ * with a sheet of actions per person: the connection ones for everyone, then the hosts' own. Who brought whom shows as
+ * a chain: a brought person sits under whoever brought them, indented one step per hop. A guest who brought people sees
+ * their own unanswered invitations, with Send again and Remove.
  */
 export default function Guests() {
   const { plan: planId } = useLocalSearchParams<{ plan?: string }>();
@@ -88,7 +102,13 @@ type Sheet = { row: PersonRow; view: "menu" | "remove" | "decline" };
 function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage["plan"]> }) {
   const { role, guests, invited, requests, admins, owner, connections } = event;
   const me = useApp().session?.user.id ?? null;
-  const resend = useResend(plan, event.load);
+  const host = (role ?? "guest") !== "guest";
+  // A bringer's Send again names them and the organizer (CO-P9); null when the organizer's name isn't known.
+  const resend = useResend(plan, event.load, role === "guest" ? { organizer: firstName(event.organizer) || null } : undefined);
+  const largeText = useLargeText();
+  // The chain's step: a smaller one under Larger Text, so a deep row keeps room for its name.
+  const step = largeText ? 8 : 16;
+  const circle = circleOf(plan);
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -103,6 +123,8 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
     owner,
     userId: me,
     connections,
+    bringerNames: event.bringerNames,
+    broughtLinks: event.broughtLinks,
   });
   const off = working || event.acting !== null || resend.busy !== null;
   const open = (row: PersonRow) => {
@@ -152,22 +174,40 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
         return run(async () => void (await joinRequestGateway.decide(plan.id, row.userId!, true)));
     }
   };
+  /**
+   * Remove, three ways: a guest's link a host sees by its id; an in-app invitee a guest brought, withdrawn by them; a
+   * link by its number (the server admits a bringer for their own). A refusal says it in words (C14).
+   */
   const confirmRemove = (row: PersonRow) =>
     run(async () => {
-      if (row.kind === "linkInvite") {
-        const person = invitee(row);
-        await contactInviteGateway.revoke(plan.id, row.phone!);
-        if (person) await resend.forget(person);
-      } else await invitationGateway.removeGuest(plan.id, row.userId!);
+      switch (removalOf(row, host)) {
+        case "brought":
+          return void (await circleGateway.revokeBrought(plan.id, row.invitationId!));
+        case "withdraw":
+          return void (await circleGateway.withdraw(plan.id, row.userId!));
+        case "link": {
+          const person = invitee(row);
+          await contactInviteGateway.revoke(plan.id, row.phone!).catch((e: unknown) => {
+            throw host ? e : bringerRevokeError(e);
+          });
+          if (person) await resend.forget(person);
+          return;
+        }
+        default:
+          await invitationGateway.removeGuest(plan.id, row.userId!);
+      }
     });
   const confirmDecline = (row: PersonRow) => run(async () => void (await joinRequestGateway.decide(plan.id, row.userId!, false)));
 
   const current = sheet?.row ?? null;
+  const head = current ? sheetHead(current) : null;
   const shownError = error ?? resend.error ?? event.error;
   return (
     <View style={s.page}>
       <Bar planId={plan.id} />
       <ScrollView contentContainerStyle={styles.list}>
+        {/* The host's circle, in words (CO-07). */}
+        {host && circle.invites > 0 ? <Text style={styles.circleLine}>{CIRCLE_COPY.listLine(circle.invites, circle.levels)}</Text> : null}
         {!sheet && <ErrorNote message={event.error} />}
         {groups.map((group) => (
           <View key={group.title} style={{ gap: 2 }}>
@@ -175,9 +215,19 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
               {group.title}
             </Text>
             {group.rows.map((row) => (
-              <View key={row.key} style={styles.person}>
+              <View key={row.key} style={[styles.person, row.depth > 0 && { paddingLeft: step * row.depth }]}>
+                {/* One thin rule per step in, so a chain reads as nested (CO-07); the words say it too (rule 11). */}
+                {Array.from({ length: row.depth }, (_, k) => (
+                  <View
+                    key={k}
+                    aria-hidden
+                    importantForAccessibility="no"
+                    pointerEvents="none"
+                    style={[styles.rule, { left: step * k + step / 2 - 1 }]}
+                  />
+                ))}
                 <Avatar name={row.name} />
-                <View style={styles.name} accessible accessibilityLabel={nameLabel(row)}>
+                <View style={styles.name} accessible accessibilityLabel={personLabel(row)}>
                   <View style={styles.nameLine}>
                     <Text style={styles.nameText}>{row.name}</Text>
                     {row.kind === "owner" ? <Badge text={EVENT_COPY.hostingBadge} /> : null}
@@ -206,8 +256,9 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
               <Avatar name={current.name} big />
               <View style={{ flex: 1 }}>
                 <Text style={styles.headName}>{current.name}</Text>
-                {/* The group title is out of sight inside the sheet: the head says the answer, or how they were invited. */}
-                {(current.status ?? current.reply) ? <Text style={styles.headSub}>{current.status ?? current.reply}</Text> : null}
+                {/* The group title is out of sight inside the sheet: the head says the answer and who brought them, or how
+                    they were invited. */}
+                {head ? <Text style={styles.headSub}>{head}</Text> : null}
               </View>
             </View>
             {sheet?.view === "menu" ? (
@@ -282,17 +333,6 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
 /** Send again goes by the app the invitation went by; with none recorded, either. */
 const sendVias = (sent?: "whatsapp" | "messages"): ("whatsapp" | "messages")[] => (sent ? [sent] : ["whatsapp", "messages"]);
 
-const nameLabel = (row: PersonRow) =>
-  [
-    row.name,
-    row.kind === "owner" ? EVENT_COPY.hostingBadge : null,
-    row.admin ? EVENT_COPY.adminBadge : null,
-    row.connection === "connected" ? CONNECTIONS_COPY.connectedBadge : null,
-    row.status,
-  ]
-    .filter(Boolean)
-    .join(", ");
-
 /** A small chip on the name line: Hosting, Admin, Connected. */
 function Badge({ text }: { text: string }) {
   return (
@@ -358,8 +398,12 @@ const styles = StyleSheet.create({
   back: { position: "absolute", left: 16 },
   barTitle: { fontFamily: fonts.medium, fontSize: 17, lineHeight: 22, color: c.ink, textAlign: "center" },
   list: { paddingHorizontal: 20, paddingBottom: 40, gap: 14 },
+  // Ink, not muted: muted on the page is 4.48:1, under 4.5:1 for text this size.
+  circleLine: { fontFamily: fonts.body, fontSize: 13, lineHeight: 18, color: c.ink },
   groupTitle: { fontFamily: fonts.bold, fontSize: 13, lineHeight: 18, color: c.muted, letterSpacing: 0.4, textTransform: "uppercase", marginTop: 6 },
   person: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 56, paddingVertical: 6 },
+  // Reaches into the 2 pt gap above, so the rules of a chain join up.
+  rule: { position: "absolute", top: -2, bottom: 0, width: 2, backgroundColor: c.line },
   name: { flex: 1, gap: 1 },
   nameLine: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 },
   nameText: { fontFamily: fonts.medium, fontSize: 15, lineHeight: 20, color: c.ink },

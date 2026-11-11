@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { circleErrorMessage, createCircleGateway, saveCircle } from "./circle";
+import { bringerRevokeError, circleErrorMessage, createCircleGateway, saveCircle } from "./circle";
 import { circleSave, type CircleSaveState } from "../domain/circle";
 
 type Call = { fn: string; args: Record<string, unknown> };
@@ -164,4 +164,74 @@ test("allowance runs inside the deadline it is given", async () => {
   );
   assert.equal((await gw.allowance("p")).remaining, 1);
   assert.equal(wrapped, 1);
+});
+
+test("the people list's four calls: their function names and arguments", async () => {
+  const { calls, gw } = gateway({});
+  await gw.bringers("plan-1");
+  const links = gateway([]);
+  await links.gw.broughtLinks("plan-1");
+  const revoke = gateway(null);
+  await revoke.gw.revokeBrought("plan-1", "inv-1");
+  await revoke.gw.withdraw("plan-1", "clara");
+  assert.deepEqual([...calls, ...links.calls, ...revoke.calls], [
+    { fn: "plan_bringers", args: { p_plan: "plan-1" } },
+    { fn: "plan_brought_invitations", args: { p_plan: "plan-1" } },
+    { fn: "revoke_brought_invitation", args: { p_plan: "plan-1", p_invitation: "inv-1" } },
+    { fn: "withdraw_brought_invitation", args: { p_plan: "plan-1", p_user: "clara" } },
+  ]);
+});
+
+test("bringers: each bringer's first name by id; a blank one is no name; a reply it can't read is the connection line", async () => {
+  assert.deepEqual(await gateway({ pedro: "Pedro", clara: "Clara" }).gw.bringers("p"), { pedro: "Pedro", clara: "Clara" });
+  // The server's first word of a blank display name is "".
+  assert.deepEqual(await gateway({ pedro: "Pedro", sol: "", leo: "  ", odd: 7 }).gw.bringers("p"), { pedro: "Pedro" });
+  for (const odd of [null, [], "Pedro", 3]) await assert.rejects(gateway(odd).gw.bringers("p"), /Check your connection and try again\./, JSON.stringify(odd));
+  const refusal = { code: "42501", message: "Names required" };
+  await assert.rejects(gateway(null, refusal).gw.bringers("p"), (e) => e === refusal);
+});
+
+test("broughtLinks: id, ending, country and the bringer's first name, null when left out (C14); never the number", async () => {
+  const reply = [
+    { id: "inv-1", ending: "23", country: "GB", brought_by_name: "Sol" },
+    { id: "inv-2", ending: "07", country: "AR" },
+    { id: "inv-3", ending: "45", country: "ES", brought_by_name: null, phone: "447700900145" },
+    { id: "inv-4", ending: "61", country: "GB", brought_by_name: "" },
+  ];
+  assert.deepEqual(await gateway(reply).gw.broughtLinks("p"), [
+    { id: "inv-1", ending: "23", country: "GB", broughtByName: "Sol" },
+    { id: "inv-2", ending: "07", country: "AR", broughtByName: null },
+    { id: "inv-3", ending: "45", country: "ES", broughtByName: null },
+    { id: "inv-4", ending: "61", country: "GB", broughtByName: null },
+  ]);
+  for (const odd of [null, {}, "x", [{ ending: "23", country: "GB" }], [{ id: "inv-1", country: "GB" }], [{ id: "inv-1", ending: 23, country: "GB" }], [null]])
+    await assert.rejects(gateway(odd).gw.broughtLinks("p"), /Check your connection and try again\./, JSON.stringify(odd));
+  const refusal = { code: "42501", message: "Plan owner required" };
+  await assert.rejects(gateway(null, refusal).gw.broughtLinks("p"), (e) => e === refusal);
+});
+
+test("revokeBrought and withdraw: 42501 is 'You can’t take this invitation back any more.', anything else the connection line (C14)", async () => {
+  for (const call of ["revokeBrought", "withdraw"] as const) {
+    for (const refusal of [
+      { code: "42501", message: "Not your invitation" },
+      { code: "42501", message: "Active plan owner required" },
+    ])
+      await assert.rejects(gateway(null, refusal).gw[call]("p", "x"), (e) => e instanceof Error && e.message === "You can’t take this invitation back any more.", `${call} ${refusal.message}`);
+    for (const other of [{ code: "57014" }, { code: "P0001", message: "boom" }, { message: "Failed to fetch" }])
+      await assert.rejects(gateway(null, other).gw[call]("p", "x"), (e) => e instanceof Error && e.message === "Check your connection and try again.", `${call} ${JSON.stringify(other)}`);
+    // A lost connection or the deadline throws before any reply.
+    const thrown = createCircleGateway(async () => {
+      throw new Error("Failed to fetch");
+    });
+    await assert.rejects(thrown[call]("p", "x"), (e) => e instanceof Error && e.message === "Check your connection and try again.", call);
+  }
+  assert.equal(await gateway(null).gw.revokeBrought("p", "inv-1"), undefined);
+  assert.equal(await gateway(null).gw.withdraw("p", "clara"), undefined);
+});
+
+test("a bringer removing their own link too late hears it in a bringer's words, not the hosts' (C14)", () => {
+  // contactInviteGateway.revoke words a 42501 for hosts ("Only a host can invite people…"); a bringer's is too late.
+  assert.equal(bringerRevokeError(new Error("Only a host can invite people to a resbite that hasn’t ended.")).message, "You can’t take this invitation back any more.");
+  assert.equal(bringerRevokeError(new Error("Check your connection and try again.")).message, "Check your connection and try again.");
+  assert.equal(bringerRevokeError("odd").message, "Check your connection and try again.");
 });

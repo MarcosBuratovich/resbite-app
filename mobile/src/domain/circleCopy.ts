@@ -50,4 +50,9 @@ export const CIRCLE_COPY = {
   cappedHint: "No invites left",
   /** Under the used-all line: where a bringer sends their own invitation again. */
   sendAgainHint: "To send an invitation again, open it on the people list.",
+  /**
+   * A bringer's Remove on their own invitation, refused (C14): answered meanwhile, the resbite ended, or a host's or a
+   * regular the series carried, whom only a host takes off (C18-I1).
+   */
+  cantTakeBack: "You can’t take this invitation back any more.",
 };

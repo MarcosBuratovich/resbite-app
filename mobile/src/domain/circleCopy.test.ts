@@ -64,3 +64,7 @@ test("bring mode's cap, count and used-all lines (C20, C23)", () => {
   assert.equal(CIRCLE_COPY.left(0), "None left");
   assert.equal(CIRCLE_COPY.left(-1), "None left");
 });
+
+test("a bringer taking back an invitation the server no longer lets them (C14)", () => {
+  assert.equal(CIRCLE_COPY.cantTakeBack, "You can’t take this invitation back any more.");
+});

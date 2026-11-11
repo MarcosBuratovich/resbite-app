@@ -1,8 +1,9 @@
 import type { Guest } from "../services/rsvp";
 import type { HostRequest } from "../services/joinRequests";
 import type { ConnectionState } from "../services/connections";
-import type { Allowance } from "../services/circle";
+import type { Allowance, BroughtLink } from "../services/circle";
 import { CIRCLE_COPY } from "./circleCopy";
+import { CONNECTIONS_COPY } from "./connectionsCopy";
 import { firstName } from "./circle";
 import type { InvitedPerson } from "../state/useEvent";
 import { ANSWER_OPTIONS } from "./rsvp";
@@ -41,6 +42,15 @@ export const EVENT_COPY = {
   invitedByLink: "Invited by link",
   invitedInApp: "Invited in the app",
   askedThroughLink: "Asked through the link",
+  /** The chain (CO-07): an answered guest's status line, and an unanswered one's, after its own words. */
+  broughtBy: (name: string) => `Brought by ${name}`,
+  broughtByJoined: (name: string) => `brought by ${name}`,
+  /** An unanswered invitation the viewer sent bringing someone. */
+  broughtByYou: "brought by you",
+  /** A brought person's spoken name: the indent in words (rule 11). */
+  broughtLabel: (name: string, bringer: string) => `${name}, brought by ${bringer}`,
+  /** A guest's link as a host sees it, by the number's last two digits (never the number). */
+  numberEnding: (ending: string) => `Number ending ••${ending}`,
   people: "People",
   actionsFor: "Actions for ",
   makeAdmin: "Make admin",
@@ -274,18 +284,23 @@ const GROUP_RESPONSES = {
 const inGroup = (guests: readonly Guest[], group: keyof typeof GROUP_RESPONSES) =>
   guests.filter((g) => (GROUP_RESPONSES[group] as readonly string[]).includes(g.response));
 
-/** The people row's numbers: from the guest rows, or from the server's `counts` when the viewer reads only their own. */
+/**
+ * The people row's numbers: from the guest rows, or from the server's `counts` when the viewer reads only their own. A
+ * host's "N invited" counts the links their guests sent bringing someone too (`broughtLinks`, CO-07), which their own
+ * list (`invited`) leaves out.
+ */
 export function peopleCounts(i: {
   guests: Guest[];
   invited: InvitedPerson[];
   requests: HostRequest[];
   counts?: AnswerCounts | null;
+  broughtLinks?: readonly BroughtLink[];
 }): PeopleCounts {
   return {
     going: i.counts?.going ?? inGroup(i.guests, "going").length,
     maybe: i.counts?.maybe ?? inGroup(i.guests, "maybe").length,
     cantGo: i.counts?.cantGo ?? inGroup(i.guests, "cantGo").length,
-    invited: i.invited.length + inGroup(i.guests, "pending").length,
+    invited: i.invited.length + (i.broughtLinks?.length ?? 0) + inGroup(i.guests, "pending").length,
     waiting: i.requests.length,
   };
 }
@@ -368,6 +383,18 @@ export type PersonRow = {
   /** The viewer's own row: no dots, whoever they are. */
   me: boolean;
   actions: PersonAction[];
+  /**
+   * How far in this row sits under the person who brought them (CO-07): 0 for someone nobody brought, or whose bringer
+   * isn't in the same group; one more per hop, at most 3. Display only: the level stays the server's.
+   */
+  depth: 0 | 1 | 2 | 3;
+  /**
+   * The first name of whoever brought them (`plan_bringers`, or a guest's link's own); null for someone nobody brought,
+   * and for a bringer with no name to show (an account being deleted, or a name not known yet: rule 10).
+   */
+  broughtByName: string | null;
+  /** A link a guest sent, as a host sees it (`plan_brought_invitations`): Remove takes it back by this id. */
+  invitationId?: string;
 };
 
 const inviteStatus = (via: "whatsapp" | "messages" | undefined) =>
@@ -387,6 +414,36 @@ function connectionActions(state: ConnectionState | null, askable: boolean): Per
   }
 }
 
+/** A row before its place in the chain is known, with who brought them (an account id, or null). */
+type Placed = { row: Omit<PersonRow, "depth">; by: string | null };
+
+/**
+ * A group's rows in chain order (CO-07): each person right after whoever brought them, when that person is in the same
+ * group, recursively, siblings in their own order; everyone else where they were. `depth` counts the hops from the first
+ * person in the chain who is not brought, or whose bringer is not in the group, capped at 3. Rows naming each other (not
+ * something the server writes) still show, once each, from the first of them.
+ */
+function chained(items: readonly Placed[]): PersonRow[] {
+  const ids = new Set(items.map((x) => x.row.userId).filter((id): id is string => !!id));
+  const under = new Map<string, Placed[]>();
+  const roots: Placed[] = [];
+  for (const x of items) {
+    if (x.by && x.by !== x.row.userId && ids.has(x.by)) under.set(x.by, [...(under.get(x.by) ?? []), x]);
+    else roots.push(x);
+  }
+  const rows: PersonRow[] = [];
+  const placed = new Set<Placed>();
+  const place = (x: Placed, depth: number) => {
+    if (placed.has(x)) return;
+    placed.add(x);
+    rows.push({ ...x.row, depth: Math.min(depth, 3) as PersonRow["depth"] });
+    for (const next of (x.row.userId && under.get(x.row.userId)) || []) place(next, depth + 1);
+  };
+  for (const x of roots) place(x, 0);
+  for (const x of items) place(x, 0);
+  return rows;
+}
+
 /**
  * The people list's groups and each person's actions. Hosts act only while the resbite is open: after the end, or once
  * it is cancelled, the list is read-only. Only the owner makes or removes admins (Make admin on a Going guest; Remove as
@@ -403,6 +460,16 @@ function connectionActions(state: ConnectionState | null, askable: boolean): Per
  * The owner (`owner`, null when not known or where names are hidden) heads Going, marked Hosting, so a guest connects
  * with the host here too; nobody has a host action on that row. Each group's title counts the rows shown in it, the
  * owner's included ("Going · 6" for the owner and five guests); the event page's people row counts the guests alone.
+ *
+ * The chain (CO-07, CO-P11): in each group a brought person sits under whoever brought them (`chained`). An answered one
+ * reads "Brought by Pedro"; an unanswered one adds "· brought by Pedro" to how they were invited, or "· brought by you"
+ * for the viewer's own. A bringer with no name in `bringerNames` (`plan_bringers`; an account being deleted, or not read
+ * yet) gets no words (rule 10). A host's Invited group also lists the links their guests sent (`broughtLinks`) by their
+ * last digits, with Remove but no Send again (the host has no code). A guest who isn't a host gets an Invited group of
+ * their own invitations only (CO-P10): the links they sent (`invited`, which the server gives them alone) and the in-app
+ * invitees they brought, with Remove (and Send again where this phone holds the code) while the resbite is open; Remove
+ * stays off a host's row, which the server never lets them withdraw (C18-I1). Everyone else's unanswered rows stay
+ * hidden from guests (UX2-D6).
  */
 export function peopleGroups(i: {
   role: Viewer;
@@ -414,9 +481,15 @@ export function peopleGroups(i: {
   owner: { userId: string; name: string } | null;
   userId: string | null;
   connections: Record<string, ConnectionState> | null;
+  /** The bringers' first names by account id (`plan_bringers`); none when not read. */
+  bringerNames?: Readonly<Record<string, string>>;
+  /** The links the hosts' guests sent bringing someone (`plan_brought_invitations`); a host's only. */
+  broughtLinks?: readonly BroughtLink[];
 }): { title: string; rows: PersonRow[] }[] {
   const host = i.role !== "guest";
   const acts = host && i.state === "open";
+  // A guest takes back only their own unanswered invitations, while the resbite is open.
+  const bringerActs = !host && i.state === "open";
   const owner = i.role === "owner";
   const connectionOf = (userId: string): ConnectionState | null =>
     i.connections === null || userId === i.userId ? null : (i.connections[userId] ?? "none");
@@ -425,6 +498,17 @@ export function peopleGroups(i: {
     const me = userId === i.userId;
     const connection = connectionOf(userId);
     return { userId, connection, me, actions: me ? [] : [...connectionActions(connection, askable), ...hostActions] };
+  };
+  /** A bringer's first name, or null when there is no bringer or no name to show. */
+  const nameOf = (bringer: string | null | undefined): string | null => {
+    const name = bringer ? i.bringerNames?.[bringer] : undefined;
+    return typeof name === "string" && name.trim() ? name.trim() : null;
+  };
+  /** An unanswered row's status: how they were invited, then who brought them. */
+  const unanswered = (status: string, bringer: string | null): string => {
+    if (bringer && bringer === i.userId) return `${status}${SEPARATOR}${EVENT_COPY.broughtByYou}`;
+    const name = nameOf(bringer);
+    return name ? `${status}${SEPARATOR}${EVENT_COPY.broughtByJoined(name)}` : status;
   };
   /** What a host may do to someone on the guest list (an answered guest or an app invitee). */
   const guestActions = (userId: string, canMakeAdmin: boolean): PersonAction[] => {
@@ -436,77 +520,172 @@ export function peopleGroups(i: {
     if (owner || !admin) actions.push("remove");
     return actions;
   };
-  const guestRow = (g: Guest, reply: string, canMakeAdmin: boolean): PersonRow => ({
-    key: `guest:${g.userId}`,
-    name: g.name,
-    status: null,
-    reply,
-    admin: i.admins.includes(g.userId),
-    kind: "guest",
-    ...person(g.userId, true, guestActions(g.userId, canMakeAdmin)),
-  });
+  const guestItem = (g: Guest, reply: string, canMakeAdmin: boolean): Placed => {
+    const by = nameOf(g.broughtById);
+    return {
+      by: g.broughtById,
+      row: {
+        key: `guest:${g.userId}`,
+        name: g.name,
+        status: by ? EVENT_COPY.broughtBy(by) : null,
+        reply,
+        admin: i.admins.includes(g.userId),
+        kind: "guest",
+        ...person(g.userId, true, guestActions(g.userId, canMakeAdmin)),
+        broughtByName: by,
+      },
+    };
+  };
   const answeredGroup = (group: "going" | "maybe" | "cantGo", option: "going" | "maybe" | "cant") => {
     const title = optionText(option);
-    return { title, rows: inGroup(i.guests, group).map((g) => guestRow(g, title, group === "going")) };
+    return { title, items: inGroup(i.guests, group).map((g) => guestItem(g, title, group === "going")) };
   };
-  const ownerRows: PersonRow[] = i.owner
+  const ownerItems: Placed[] = i.owner
     ? [
         {
-          key: `owner:${i.owner.userId}`,
-          name: i.owner.name,
-          status: null,
-          reply: EVENT_COPY.hostingBadge,
-          admin: false,
-          kind: "owner",
-          ...person(i.owner.userId, true, []),
+          by: null,
+          row: {
+            key: `owner:${i.owner.userId}`,
+            name: i.owner.name,
+            status: null,
+            reply: EVENT_COPY.hostingBadge,
+            admin: false,
+            kind: "owner",
+            ...person(i.owner.userId, true, []),
+            broughtByName: null,
+          },
         },
       ]
     : [];
   const going = answeredGroup("going", "going");
-  const linkRows: PersonRow[] = i.invited.map((p) => ({
-    key: `link:${p.phone}`,
-    name: p.name,
-    status: inviteStatus(p.stored?.sentVia),
-    reply: null,
-    admin: false,
-    kind: "linkInvite",
-    phone: p.phone,
-    connection: null,
-    me: false,
-    actions: !acts ? [] : p.stored !== null ? ["sendAgain", "removeInvite"] : ["removeInvite"],
-  }));
-  // Not answered yet: only an admin may be asked (a host, whatever their reply).
-  const appRows: PersonRow[] = inGroup(i.guests, "pending").map((g) => ({
-    key: `app:${g.userId}`,
-    name: g.name,
-    status: EVENT_COPY.invitedInApp,
-    reply: null,
-    admin: i.admins.includes(g.userId),
-    kind: "appInvite",
-    ...person(g.userId, i.admins.includes(g.userId), guestActions(g.userId, false)),
-  }));
-  const requestRows: PersonRow[] = i.requests.map((r) => ({
-    key: `request:${r.user_id}`,
-    name: r.name,
-    status: EVENT_COPY.askedThroughLink,
-    reply: null,
-    admin: false,
-    kind: "request",
-    userId: r.user_id,
-    connection: null,
-    me: false,
-    actions: acts ? ["approve", "decline"] : [],
+  // A host's own links, nobody's; a guest's are all their own (the server lists no one else's to a guest).
+  const linkItems: Placed[] = i.invited.map((p) => {
+    const by = host ? null : i.userId;
+    return {
+      by,
+      row: {
+        key: `link:${p.phone}`,
+        name: p.name,
+        status: unanswered(inviteStatus(p.stored?.sentVia), by),
+        reply: null,
+        admin: false,
+        kind: "linkInvite",
+        phone: p.phone,
+        connection: null,
+        me: false,
+        actions: !(host ? acts : bringerActs) ? [] : p.stored !== null ? ["sendAgain", "removeInvite"] : ["removeInvite"],
+        broughtByName: nameOf(by),
+      },
+    };
+  });
+  // The links a host's guests sent: by the last two digits, as the host can't know the name (Revision 14).
+  const broughtItems: Placed[] = host
+    ? (i.broughtLinks ?? []).map((l) => {
+        const by = l.broughtByName?.trim() || null;
+        return {
+          by: null,
+          row: {
+            key: `brought:${l.id}`,
+            name: EVENT_COPY.numberEnding(l.ending),
+            status: by ? `${EVENT_COPY.invitedByLink}${SEPARATOR}${EVENT_COPY.broughtByJoined(by)}` : EVENT_COPY.invitedByLink,
+            reply: null,
+            admin: false,
+            kind: "linkInvite",
+            invitationId: l.id,
+            connection: null,
+            me: false,
+            actions: acts ? ["removeInvite"] : [],
+            broughtByName: by,
+          },
+        };
+      })
+    : [];
+  // Not answered yet: only an admin may be asked (a host, whatever their reply). A guest sees only those they brought.
+  const appItems: Placed[] = inGroup(i.guests, "pending")
+    .filter((g) => host || (!!i.userId && g.broughtById === i.userId))
+    .map((g) => {
+      const admin = i.admins.includes(g.userId);
+      return {
+        by: g.broughtById,
+        row: {
+          key: `app:${g.userId}`,
+          name: g.name,
+          status: unanswered(EVENT_COPY.invitedInApp, g.broughtById),
+          reply: null,
+          admin,
+          kind: "appInvite",
+          ...person(g.userId, admin, host ? guestActions(g.userId, false) : bringerActs && !admin ? ["removeInvite"] : []),
+          broughtByName: nameOf(g.broughtById),
+        },
+      };
+    });
+  const requestItems: Placed[] = i.requests.map((r) => ({
+    by: null,
+    row: {
+      key: `request:${r.user_id}`,
+      name: r.name,
+      status: EVENT_COPY.askedThroughLink,
+      reply: null,
+      admin: false,
+      kind: "request",
+      userId: r.user_id,
+      connection: null,
+      me: false,
+      actions: acts ? ["approve", "decline"] : [],
+      broughtByName: null,
+    },
   }));
   const groups = [
-    { title: going.title, rows: [...ownerRows, ...going.rows] },
+    { title: going.title, items: [...ownerItems, ...going.items] },
     answeredGroup("maybe", "maybe"),
     answeredGroup("cantGo", "cant"),
-    ...(host
-      ? [
-          { title: EVENT_COPY.groupInvited, rows: [...linkRows, ...appRows] },
-          { title: EVENT_COPY.groupWaiting, rows: requestRows },
-        ]
-      : []),
+    { title: EVENT_COPY.groupInvited, items: [...linkItems, ...broughtItems, ...appItems] },
+    ...(host ? [{ title: EVENT_COPY.groupWaiting, items: requestItems }] : []),
   ];
-  return groups.filter((g) => g.rows.length > 0).map((g) => ({ title: `${g.title}${SEPARATOR}${g.rows.length}`, rows: g.rows }));
+  return groups
+    .map((g) => ({ title: g.title, rows: chained(g.items) }))
+    .filter((g) => g.rows.length > 0)
+    .map((g) => ({ title: `${g.title}${SEPARATOR}${g.rows.length}`, rows: g.rows }));
+}
+
+/**
+ * The sheet's line under the name, where the group title is out of sight: the answer, then who brought them ("Going ·
+ * brought by Pedro"); otherwise how they were invited (which already says who brought them), or the answer.
+ */
+export function sheetHead(row: PersonRow): string | null {
+  if (row.broughtByName && row.reply) return `${row.reply}${SEPARATOR}${EVENT_COPY.broughtByJoined(row.broughtByName)}`;
+  return row.status ?? row.reply;
+}
+
+/**
+ * A row's spoken name (rule 11): "Clara, brought by Pedro" for a brought person whose bringer is named, then the badges,
+ * then the rest of the status line, each part on its own ("Pat, brought by Pedro, Invited in the app"). A row the
+ * viewer brought keeps its own words ("Juli, Invited by WhatsApp, brought by you").
+ */
+export function personLabel(row: PersonRow): string {
+  const parts = row.status ? row.status.split(SEPARATOR) : [];
+  const bringer = row.broughtByName;
+  const words = bringer ? [EVENT_COPY.broughtBy(bringer), EVENT_COPY.broughtByJoined(bringer)] : [];
+  const brought = !!bringer && parts.length > 0 && words.includes(parts[parts.length - 1]);
+  return [
+    brought ? EVENT_COPY.broughtLabel(row.name, bringer) : row.name,
+    row.kind === "owner" ? EVENT_COPY.hostingBadge : null,
+    row.admin ? EVENT_COPY.adminBadge : null,
+    row.connection === "connected" ? CONNECTIONS_COPY.connectedBadge : null,
+    ...(brought ? parts.slice(0, -1) : parts),
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
+/**
+ * How Remove takes someone off the list: a guest's link a host sees by its id (`revoke_brought_invitation`); an in-app
+ * invitee a guest brought, withdrawn by that guest (`withdraw_brought_invitation`); any other link by its number
+ * (`revoke_phone_invitation`, which admits a bringer for their own); anyone else as a host removes a guest today.
+ */
+export function removalOf(row: PersonRow, host: boolean): "brought" | "withdraw" | "link" | "guest" {
+  if (row.invitationId) return "brought";
+  if (row.kind === "linkInvite") return "link";
+  if (row.kind === "appInvite" && !host) return "withdraw";
+  return "guest";
 }

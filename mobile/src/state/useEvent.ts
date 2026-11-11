@@ -12,7 +12,7 @@ import { muteErrorMessage, readMutedSeries, setPlanMute } from "../services/mute
 import { broughtNames, EVENT_COPY, pageState, showsNames, viewerRole, type AnswerCounts, type Viewer } from "../domain/eventPage";
 import { circleOf } from "../domain/circle";
 import type { Plan } from "../domain/plans";
-import { circleGateway, type Allowance } from "../services/circle";
+import { circleGateway, type Allowance, type BroughtLink } from "../services/circle";
 import { storedEntry } from "../domain/contactInvites";
 import { contactInviteGateway } from "../services/contactInvites";
 import { inviteCodeStore, type StoredInvite } from "../services/inviteCodeStore";
@@ -22,6 +22,10 @@ import { connectionErrorMessage, connectionGateway, type ConnectionState } from 
 import { readProfile } from "../services/profile";
 import { requestGone } from "./connectionsModel";
 import { rememberName } from "./knownNames";
+
+/** Nothing read: shared empties, so a screen with none gets the same value on every render. */
+const NO_LINKS: BroughtLink[] = [];
+const NO_NAMES: Record<string, string> = {};
 
 /** Someone a host invited by personal link who hasn't answered: the stored name, else the number. */
 export type InvitedPerson = {
@@ -62,6 +66,17 @@ export type EventPage = {
   broughtNames: string[];
   /** Open-link answers waiting for a host; empty for everyone else. */
   requests: HostRequest[];
+  /**
+   * The bringers' first names by account id (`plan_bringers`), for "Brought by Pedro" on the people list (CO-07): read
+   * where names show, landing when it arrives. A failed read keeps the names known; empty at first, where names are
+   * hidden and in the preview.
+   */
+  bringerNames: Record<string, string>;
+  /**
+   * The links the guests sent bringing someone, for a host (`plan_brought_invitations`): listed by their last digits
+   * and counted in "N invited". Empty for everyone else, and when the read fails.
+   */
+  broughtLinks: BroughtLink[];
   /**
    * The signed-in person's connection with each person on the resbite (CO-01), read where names show, landing after the
    * event when it is slower. Null before the first successful read, where names are hidden and in the preview: the
@@ -126,6 +141,10 @@ export function useEvent(planId: string | undefined): EventPage {
   const [invited, setInvited] = useState<InvitedPerson[]>([]);
   const [allowance, setAllowance] = useState<Allowance | null>(null);
   const [requests, setRequests] = useState<HostRequest[]>([]);
+  const [bringerNames, setBringerNames] = useState<Record<string, string>>(NO_NAMES);
+  const [broughtLinks, setBroughtLinks] = useState<BroughtLink[]>(NO_LINKS);
+  // The latest read of the bringers' names wins, as the states' does.
+  const bringersRead = useRef(0);
   const [connections, setConnections] = useState<Record<string, ConnectionState> | null>(null);
   /** The owner's own name, read for their row on the people list; everyone else has it as `organizer`. */
   const [ownName, setOwnName] = useState<string | null>(null);
@@ -139,6 +158,8 @@ export function useEvent(planId: string | undefined): EventPage {
     setInvited([]);
     setAllowance(null);
     setRequests([]);
+    setBringerNames(NO_NAMES);
+    setBroughtLinks(NO_LINKS);
     setConnections(null);
     setOwnName(null);
     setMutedSeries(new Set());
@@ -174,6 +195,15 @@ export function useEvent(planId: string | undefined): EventPage {
             },
             () => {},
           );
+        // Likewise the bringers' names for the chain (CO-07): only where names show, and a failure keeps those known.
+        const bringersTicket = ++bringersRead.current;
+        if (named)
+          void circleGateway.bringers(planId).then(
+            (names) => {
+              if (valid() && bringersTicket === bringersRead.current) setBringerNames(names);
+            },
+            () => {},
+          );
         // Likewise the owner's own name for their row: it lands when it arrives; a failure keeps the one known.
         if (next.plan.owner_id === userId)
           void readProfile(userId).then(
@@ -197,8 +227,14 @@ export function useEvent(planId: string | undefined): EventPage {
               () => valid() && setInvited([]),
             );
         }
-        // The hosts' invitations list is a convenience, so a failure leaves it empty.
-        const people = host ? await readInvited(planId, userId).catch((): InvitedPerson[] => []) : null;
+        // The hosts' invitations list is a convenience, so a failure leaves it empty; likewise the links their guests
+        // sent bringing someone (CO-07), read with it.
+        const [people, links] = host
+          ? await Promise.all([
+              readInvited(planId, userId).catch((): InvitedPerson[] => []),
+              circleGateway.broughtLinks(planId).catch((): BroughtLink[] => []),
+            ])
+          : [null, NO_LINKS];
         // Likewise the waiting list: the event still opens if it can't be read.
         const waiting = host ? await joinRequestGateway.forPlan(planId).catch(() => []) : [];
         // Likewise the mute: a failed read leaves the resbite unmuted on screen, and the next load tries again.
@@ -210,8 +246,10 @@ export function useEvent(planId: string | undefined): EventPage {
             setAllowance(null);
           } else if (!answered) setInvited([]);
           setRequests(waiting);
-          // Names hidden: no states at all, whatever was known before.
+          setBroughtLinks(links);
+          // Names hidden: no states and no bringers at all, whatever was known before.
           if (!named && ticket === statesRead.current) setConnections(null);
+          if (!named && bringersTicket === bringersRead.current) setBringerNames(NO_NAMES);
           setSnapshot(next);
           setFresh(true);
           syncDevice();
@@ -222,6 +260,7 @@ export function useEvent(planId: string | undefined): EventPage {
           setInvited([]);
           setAllowance(null);
           setRequests([]);
+          setBroughtLinks(NO_LINKS);
           setError(e instanceof Error ? e.message : EVENT_COPY.readFailed);
         }
       } finally {
@@ -452,6 +491,8 @@ export function useEvent(planId: string | undefined): EventPage {
     allowance: preview ? null : allowance,
     broughtNames: role === "guest" && !preview ? broughtNames({ guests: snapshot?.guests ?? [], invited, userId: userId ?? null }) : [],
     requests,
+    bringerNames: preview ? NO_NAMES : bringerNames,
+    broughtLinks: preview ? NO_LINKS : broughtLinks,
     connections: preview ? null : connections,
     owner,
     // Without a plan to read nothing loads: the screens say it isn't available instead of waiting.
