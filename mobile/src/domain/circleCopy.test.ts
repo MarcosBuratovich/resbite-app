@@ -52,3 +52,15 @@ test("bringing someone: the row, its hints and bring mode's lines are the design
 test("a batch refused for one person, while bringing is still allowed, asks the bringer to ask the host (C5)", () => {
   assert.equal(CIRCLE_COPY.oneRefused, "One of these people can’t be brought here. Ask the host.");
 });
+
+test("bring mode's cap, count and used-all lines (C20, C23)", () => {
+  assert.equal(CIRCLE_COPY.overCap, "That’s more than you can bring now. Untick someone to continue.");
+  assert.equal(CIRCLE_COPY.cantAddMore, "You can’t bring more people now.");
+  assert.equal(CIRCLE_COPY.cappedHint, "No invites left");
+  assert.equal(CIRCLE_COPY.sendAgainHint, "To send an invitation again, open it on the people list.");
+  assert.equal(CIRCLE_COPY.left(1), "1 left");
+  assert.equal(CIRCLE_COPY.left(2), "2 left");
+  assert.equal(CIRCLE_COPY.left(3), "3 left");
+  assert.equal(CIRCLE_COPY.left(0), "None left");
+  assert.equal(CIRCLE_COPY.left(-1), "None left");
+});

@@ -60,6 +60,37 @@ export function firstGuestName(
 }
 
 /**
+ * Bring mode's refusal line once the allowance is read again (C5, C20). After a refusal, 'Not allowed to bring people
+ * here' while bringing is still allowed held someone the host removed, so it asks the bringer to ask the host; only that
+ * line is rewritten, so a newer line read in between stays. On the Pick step, the used-all line goes once a read shows
+ * invites left (the cap and the count say the rest). On Almost there it stays: it says why the connections didn't go
+ * after the numbers did.
+ */
+export function lineAfterAllowance(
+  line: string | null,
+  allowance: { mayBring: boolean; remaining: number },
+  at: { afterRefusal: boolean; picking: boolean },
+): string | null {
+  if (at.afterRefusal && line === CIRCLE_COPY.notAllowed && allowance.mayBring) return CIRCLE_COPY.oneRefused;
+  if (at.picking && line === CIRCLE_COPY.noneLeft && allowance.mayBring && allowance.remaining > 0) return null;
+  return line;
+}
+
+/**
+ * Bring mode's live line under "Ana trusts you to bring …": what is left as picks fill ("1 left", "None left"), or, with
+ * more picked than is left (the allowance dropped after they were picked), the line to untick someone, while Invite waits.
+ */
+export function bringProgress(remaining: number, count: number): { line: string; overCap: boolean } {
+  if (count > remaining) return { line: CIRCLE_COPY.overCap, overCap: true };
+  return { line: CIRCLE_COPY.left(remaining - count), overCap: false };
+}
+
+/** What to say aloud when a line changes: the new line when it appears or changes; nothing when it stays or goes. */
+export function announcement(previous: string | null, next: string | null): string | null {
+  return next && next !== previous ? next : null;
+}
+
+/**
  * The card's state: the circle the server has, the one shown, whether a save is in flight, and the plan version the
  * saved circle is known at (the screen's read, or the version the last confirmed save returned).
  */

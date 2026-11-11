@@ -12,6 +12,7 @@ import {
   hostRegion,
   inviteItems,
   newInviteCode,
+  overCap,
   pickChosen,
   pickToggled,
   storedFor,
@@ -19,6 +20,7 @@ import {
   usersToInvite,
   type ContactNumber,
 } from "../domain/contactInvites";
+import { CIRCLE_COPY } from "../domain/circleCopy";
 import { CONNECTIONS_COPY } from "../domain/connectionsCopy";
 import { INVITE_COPY } from "../domain/inviteCopy";
 import { deviceRegion, INVALID_PHONE, parsePhone, phoneKey } from "../domain/phone";
@@ -30,8 +32,8 @@ const digitsOf = (e164: string) => e164.replace(/\D/g, "");
 export type Access = "idle" | "loading" | "ready" | "denied" | "web";
 export type Sendable = { number: ContactNumber; code: string; sentVia?: StoredInvite["sentVia"] };
 export type Outcome = { inApp: string[]; already: string[]; links: Sendable[] };
-/** The personal link's message: `inviter` only when a guest brings someone (CO-P9). */
-type Message = { inviter?: string; host: string; title: string; when: string };
+/** The personal link's message: `inviter` only when a guest brings someone (CO-P9), "" when their name isn't known. */
+export type Message = { inviter?: string; host: string; title: string; when: string };
 
 /**
  * Contact invitations for one event: the contact pages, the picked numbers, the "On Resbite" lookup (picked
@@ -214,8 +216,10 @@ export function useContactInvites(a: {
   const usersCount = usersToInvite(chosenUsers, invitedUsers).length;
   /** What Invite N counts: the picked numbers and the picked connections not already on the resbite. */
   const inviteCount = numbersCount + usersCount;
-  /** Bring mode's cap is reached: unpicked rows can't be picked (`canPick`). */
+  /** Bring mode's cap is reached: unpicked rows can't be picked (`canPick`), and Add is off. */
   const atCap = !canPick(inviteCount, limit, false);
+  /** More picked than the cap (it dropped after they were picked): Invite waits until some are unticked. */
+  const overCapped = overCap(inviteCount, limit);
 
   // Each pick goes through the cap (`canPick`): each list counts its own latest picks, and the other's as last shown.
   /** Picks a connection, or clears the pick; someone already on the resbite can't be picked. */
@@ -238,7 +242,8 @@ export function useContactInvites(a: {
     if (!parsed.ok) return parsed.message;
     const n = contactNumbers([{ fullName: name, phones: [{ number: parsed.e164 }] }], region ?? assumedRegion).numbers[0];
     if (!n) return INVALID_PHONE;
-    // Past the cap the number is still listed, unpicked, like any contact that can't be picked now.
+    // At bring mode's cap a new number can't be picked: it stays in the fields, with why.
+    if (pickChosen(picked, n, usersCount, limit) === picked) return CIRCLE_COPY.cantAddMore;
     setManual((old) => (old.some((x) => x.key === n.key) ? old : [n, ...old]));
     setPicked((old) => pickChosen(old, n, usersCount, limit));
     return null;
@@ -358,7 +363,8 @@ export function useContactInvites(a: {
     }
   }
   const sending = useRef(false);
-  async function send(item: Sendable, via: "whatsapp" | "messages"): Promise<string | null> {
+  /** Opens WhatsApp or Messages with this person's link; `words` replaces `message` (bring mode's names, read at send time). */
+  async function send(item: Sendable, via: "whatsapp" | "messages", words?: Message): Promise<string | null> {
     if (!planId || !scope || sending.current) return null;
     sending.current = true;
     const ctx = current.current;
@@ -371,7 +377,7 @@ export function useContactInvites(a: {
         code: item.code,
         via,
         origin,
-        message,
+        message: words ?? message,
       });
       if (failure) return failure;
       if (alive(ctx))
@@ -387,6 +393,6 @@ export function useContactInvites(a: {
   return {
     assumedRegion, setAssumedRegion, access, visible, selected, picked, onResbite, query, setQuery, more, limited, skipped, offset,
     busy, error, setError, notice, setNotice, outcome, loadContacts, toggle, choose, addNumber, invite, send,
-    connections, chosenUsers, toggleUser, invitedUsers, inviteCount, atCap,
+    connections, chosenUsers, toggleUser, invitedUsers, inviteCount, atCap, overCap: overCapped,
   };
 }

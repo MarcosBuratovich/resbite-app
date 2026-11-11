@@ -125,7 +125,7 @@ test("hostLabel and byline", () => {
   assert.equal(byline("Ana"), "Hosted by Ana");
 });
 
-const guest = (userId: string, name: string, response: string, broughtById: string | null = null, level = 0) => ({ userId, name, response, broughtById, level });
+const guest = (userId: string, name: string, response: string, broughtById: string | null = null, level = 1) => ({ userId, name, response, broughtById, level });
 /** Someone invited by personal link: `held` is whether this phone holds their code (with the app it went by, if any). */
 const linkPerson = (phone: string, name: string, sentVia?: "whatsapp" | "messages", held = sentVia !== undefined) => ({
   phone,
@@ -568,6 +568,10 @@ test("readGuests: who brought a guest and their level, read as nobody's and 1 wh
   assert.deepEqual(broughtFrom({}), { broughtById: null, level: 1 });
   assert.deepEqual(broughtFrom({ brought_by: null, level: null }), { broughtById: null, level: 1 });
   for (const odd of ["2", 0, -1, 1.5, Number.NaN]) assert.equal(broughtFrom({ level: odd }).level, 1);
+  // Clamped to the levels a circle has (1–4: a host's guest, then up to three hops).
+  assert.equal(broughtFrom({ level: 4 }).level, 4);
+  assert.equal(broughtFrom({ level: 5 }).level, 4);
+  assert.equal(broughtFrom({ level: 70 }).level, 4);
   for (const odd of ["", 7, {}]) assert.equal(broughtFrom({ brought_by: odd }).broughtById, null);
   const source = readFileSync(new URL("../services/rsvp.ts", import.meta.url), "utf8");
   const read = source.slice(source.indexOf("export async function readGuests("));

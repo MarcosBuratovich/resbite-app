@@ -274,8 +274,9 @@ async function open(world = {}) {
       case "remove_admin":
         state.admins = state.admins.filter((id) => id !== body.p_user);
         return none();
+      // As the server does: a host reads every link; a guest only the links they sent bringing someone (none here).
       case "plan_phone_invitations":
-        return reply(state.phoneInvites);
+        return reply(state.plan.owner_id === user.id || state.admins.includes(user.id) ? state.phoneInvites : []);
       case "plan_join_requests":
         return reply(state.requests);
       // The server's counts for an invitee who hasn't answered (plan_people_counts): every guest row, the viewer's too.
@@ -730,6 +731,9 @@ try {
       await page.getByRole("button", { name: "Close sheet" }).first().click();
       // An answered guest reads every row: no plan_people_counts.
       assert.deepEqual(f.rpcs("plan_people_counts"), []);
+      // ...and the links they sent bringing someone (circles of trust), for the Bring someone row.
+      assert.ok(f.rpcs("plan_phone_invitations").length > 0, "an answered guest reads their own links");
+      assert.ok(f.rpcs("plan_phone_invitations").every((args) => args.p_plan === PLAN_ID));
     },
   );
   await scenario("guest, not answered", { viewer: "guest", guests: going2 }, async (f) => {
@@ -748,6 +752,8 @@ try {
     await expect(btn(page, "More")).toHaveCount(0);
     await expect(btn(page, "Change your answer")).toHaveCount(0);
     assert.deepEqual(f.rpcs("respond"), []);
+    // A guest who hasn't answered has brought no one: no links read.
+    assert.deepEqual(f.rpcs("plan_phone_invitations"), []);
     // Answering Going brings the whole list, and the row counts it (the guest among the Going).
     await page.getByRole("radio", { name: "Going", exact: true }).click();
     await expect(text(page, "You’re going")).toBeVisible();

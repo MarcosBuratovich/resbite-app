@@ -40,4 +40,14 @@ export const CIRCLE_COPY = {
    * people picked is someone the host removed (C5).
    */
   oneRefused: "One of these people can’t be brought here. Ask the host.",
+  /** Bring mode's count under its line as picks fill: "1 left", "2 left", "None left". */
+  left: (n: number) => (n > 0 ? `${n} left` : "None left"),
+  /** Bring mode with more picked than the invites left (the allowance dropped): Invite waits until some are unticked. */
+  overCap: "That’s more than you can bring now. Untick someone to continue.",
+  /** The Add a number card at bring mode's cap, where Add is off. */
+  cantAddMore: "You can’t bring more people now.",
+  /** The spoken hint of a row that can't be picked at bring mode's cap. */
+  cappedHint: "No invites left",
+  /** Under the used-all line: where a bringer sends their own invitation again. */
+  sendAgainHint: "To send an invitation again, open it on the people list.",
 };

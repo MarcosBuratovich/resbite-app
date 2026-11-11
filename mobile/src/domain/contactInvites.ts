@@ -75,6 +75,14 @@ export function canPick(count: number, limit: number | undefined, replacing: boo
   return limit === undefined || replacing || count < limit;
 }
 
+/**
+ * More picked than bring mode's cap (the allowance dropped after they were picked): Invite waits until some are
+ * unticked, as the server would refuse the batch. A host has no cap.
+ */
+export function overCap(count: number, limit: number | undefined): boolean {
+  return limit !== undefined && count > limit;
+}
+
 type Picks = Record<string, ContactNumber>;
 
 /**
@@ -175,29 +183,31 @@ export function personalLink(origin: string, code: string): string {
 }
 
 /**
- * A personal link's message. A host's says "Ana invited you to …"; a guest bringing someone names both (CO-P9):
- * "Pedro invited you to Ana’s …".
+ * A personal link's message. A host's (no `inviter`) says "Ana invited you to …". A guest bringing someone (`inviter`
+ * given) names both (CO-P9): "Pedro invited you to Ana’s …". In a bringer's, an unknown name is "" (C20): without
+ * theirs it reads "You’re invited to Ana’s …", and without the organizer's it has no possessive.
  */
 export function inviteMessage(a: { inviter?: string; host: string; title: string; when: string; link: string }): string {
-  if (a.inviter) return `${a.inviter} invited you to ${a.host}’s ${a.title}, ${a.when}. Reply here: ${a.link}`;
-  return `${a.host} invited you to ${a.title}, ${a.when}. Reply here: ${a.link}`;
+  if (a.inviter === undefined) return `${a.host} invited you to ${a.title}, ${a.when}. Reply here: ${a.link}`;
+  const who = a.inviter ? `${a.inviter} invited you to` : "You’re invited to";
+  const what = a.host ? `${a.host}’s ${a.title}` : a.title;
+  return `${who} ${what}, ${a.when}. Reply here: ${a.link}`;
 }
 
 /**
- * The message's names, from the sender's own name (`own`, null when it couldn't be read). A host's message carries
- * their name, else "Your host". A bringer's (`organizer` given: the organizer's first name) carries their own first
- * name as the inviter; without it the message names only the organizer, who does host it.
+ * The message's names, from the sender's own name (`own`, null when it isn't known). A host's message (no `organizer`)
+ * carries their name, else "Your host". A bringer's (`organizer` given: the organizer's name, null when it isn't known)
+ * carries both first names, each "" when unknown, which `inviteMessage` words without it (C20).
  */
 export function messageFor(a: {
   own: string | null;
-  organizer?: string;
+  organizer?: string | null;
   title: string;
   when: string;
 }): { inviter?: string; host: string; title: string; when: string } {
   const { title, when } = a;
   if (a.organizer === undefined) return { host: a.own ?? INVITE_COPY.hostFallback, title, when };
-  const inviter = firstName(a.own);
-  return inviter ? { inviter, host: a.organizer, title, when } : { host: a.organizer, title, when };
+  return { inviter: firstName(a.own), host: firstName(a.organizer), title, when };
 }
 
 export function whatsappUrl(e164: string, text: string): string {

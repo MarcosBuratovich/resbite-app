@@ -7,6 +7,8 @@ import { CountrySheet } from "./CountrySheet";
 import { Chip, IconButton, InfoSheet, Tile } from "./kit";
 import { colors as c } from "./tokens";
 import { INVITE_COPY as T } from "../domain/inviteCopy";
+import { CIRCLE_COPY } from "../domain/circleCopy";
+import { useAnnounce } from "./useAnnounce";
 import { countryByRegion } from "../domain/countries";
 import { regionOf } from "../domain/phone";
 import { groupContacts, type ContactNumber } from "../domain/contactInvites";
@@ -37,7 +39,7 @@ function Row({
     <Pressable
       accessibilityRole="checkbox"
       accessibilityLabel={`${g.name}, ${detail}${badge ? `, ${T.onResbite}` : ""}`}
-      accessibilityHint={T.rowHint}
+      accessibilityHint={disabled ? CIRCLE_COPY.cappedHint : T.rowHint}
       aria-checked={!!chosen}
       disabled={disabled}
       onPress={onPress}
@@ -81,6 +83,8 @@ export function PickStep({ k, previewing }: { k: Contacts; previewing: boolean }
     }
   }
   const settings = () => void Linking.openSettings().catch(() => k.setError(T.settingsFailed));
+  // Bring mode's cap (C20, C23): Add is off and says why; said aloud as the cap is reached (past it, the screen's line).
+  useAnnounce(k.atCap && !k.overCap ? CIRCLE_COPY.cantAddMore : null);
   return (
     <View style={{ gap: 14 }}>
       {previewing && <Copy>{T.previewNotice}</Copy>}
@@ -152,14 +156,19 @@ export function PickStep({ k, previewing }: { k: Contacts; previewing: boolean }
           </View>
         </View>
         <ErrorNote message={problem} />
-        <Button title={T.addButton} secondary disabled={!number.trim()} onPress={add} />
+        {k.atCap && (
+          <Copy accessibilityLiveRegion="polite" style={s.muted}>
+            {CIRCLE_COPY.cantAddMore}
+          </Copy>
+        )}
+        <Button title={T.addButton} secondary disabled={!number.trim() || k.atCap} onPress={add} />
       </View>
       <View style={{ gap: 6 }}>
         {/* The count takes in the connections picked above the contacts (CO-03). */}
         <Button
           title={T.invite(k.inviteCount)}
           hint={T.inviteHint}
-          disabled={k.inviteCount === 0 || k.busy || previewing}
+          disabled={k.inviteCount === 0 || k.overCap || k.busy || previewing}
           loading={k.busy}
           onPress={() => void k.invite()}
         />

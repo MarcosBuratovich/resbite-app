@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { circleOf, circleSave, circleSentence, firstGuestName, firstName, type Circle, type CircleSaveState } from "./circle";
+import { announcement, bringProgress, circleOf, circleSave, circleSentence, firstGuestName, firstName, lineAfterAllowance, type Circle, type CircleSaveState } from "./circle";
+import { CIRCLE_COPY } from "./circleCopy";
 
 // The placeholder name readGuests gives a guest without one, read from its source: rsvp.ts loads the Supabase client.
 const RSVP = readFileSync(new URL("../services/rsvp.ts", import.meta.url), "utf8");
@@ -200,4 +201,47 @@ test("a plan read while a save is in flight waits for that save's answer", () =>
 test("a confirmed version never goes back", () => {
   const saving = circleSave(settled(at(1, 2), 8), { type: "tap", value: at(2, 2) });
   assert.equal(circleSave(saving, { type: "saved", value: at(2, 2), version: 6 }).version, 8);
+});
+
+const may = (remaining: number, mayBring = true) => ({ mayBring, remaining });
+
+test("lineAfterAllowance: after a refusal, 'Not allowed' while bringing is still allowed asks the bringer to ask the host (C5, C20)", () => {
+  const refusal = { afterRefusal: true, picking: true };
+  assert.equal(lineAfterAllowance(CIRCLE_COPY.notAllowed, may(1), refusal), CIRCLE_COPY.oneRefused);
+  // Still allowed but none left: the line is rewritten all the same; the screen shows the used-all line.
+  assert.equal(lineAfterAllowance(CIRCLE_COPY.notAllowed, may(0), refusal), CIRCLE_COPY.oneRefused);
+  assert.equal(lineAfterAllowance(CIRCLE_COPY.notAllowed, may(1, false), refusal), CIRCLE_COPY.notAllowed);
+  // Only that line is rewritten: a newer line, or none, stays as it is (the guarded updater).
+  assert.equal(lineAfterAllowance("Check your connection and try again.", may(1), refusal), "Check your connection and try again.");
+  assert.equal(lineAfterAllowance(null, may(1), refusal), null);
+  assert.equal(lineAfterAllowance(CIRCLE_COPY.oneRefused, may(1), refusal), CIRCLE_COPY.oneRefused);
+  // A screen load is no answer to a refusal: it leaves 'Not allowed' alone.
+  assert.equal(lineAfterAllowance(CIRCLE_COPY.notAllowed, may(1), { afterRefusal: false, picking: true }), CIRCLE_COPY.notAllowed);
+});
+
+test("lineAfterAllowance: a used-all line goes once a read shows invites left, on the Pick step only (C20, C23 #6)", () => {
+  for (const afterRefusal of [true, false]) {
+    assert.equal(lineAfterAllowance(CIRCLE_COPY.noneLeft, may(1), { afterRefusal, picking: true }), null);
+    assert.equal(lineAfterAllowance(CIRCLE_COPY.noneLeft, may(0), { afterRefusal, picking: true }), CIRCLE_COPY.noneLeft);
+    assert.equal(lineAfterAllowance(CIRCLE_COPY.noneLeft, may(2, false), { afterRefusal, picking: true }), CIRCLE_COPY.noneLeft);
+    // Almost there: the numbers went and the connections were refused; the line says why, whatever is left now.
+    assert.equal(lineAfterAllowance(CIRCLE_COPY.noneLeft, may(1), { afterRefusal, picking: false }), CIRCLE_COPY.noneLeft);
+  }
+});
+
+test("bringProgress: what is left as picks fill, and past it the line to untick someone (C20, C23 #60)", () => {
+  assert.deepEqual(bringProgress(2, 0), { line: "2 left", overCap: false });
+  assert.deepEqual(bringProgress(2, 1), { line: "1 left", overCap: false });
+  assert.deepEqual(bringProgress(1, 1), { line: "None left", overCap: false });
+  assert.deepEqual(bringProgress(1, 3), { line: "That’s more than you can bring now. Untick someone to continue.", overCap: true });
+  assert.deepEqual(bringProgress(0, 1), { line: CIRCLE_COPY.overCap, overCap: true });
+});
+
+test("announcement: a line is spoken once when it appears or changes, never when it goes", () => {
+  assert.equal(announcement(null, CIRCLE_COPY.noneLeft), CIRCLE_COPY.noneLeft);
+  assert.equal(announcement(CIRCLE_COPY.noneLeft, CIRCLE_COPY.noneLeft), null);
+  assert.equal(announcement(CIRCLE_COPY.noneLeft, CIRCLE_COPY.notAllowed), CIRCLE_COPY.notAllowed);
+  assert.equal(announcement(CIRCLE_COPY.noneLeft, null), null);
+  assert.equal(announcement(null, ""), null);
+  assert.equal(announcement(null, null), null);
 });

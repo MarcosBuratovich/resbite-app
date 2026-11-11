@@ -21,6 +21,7 @@ import { joinRequestGateway, type HostRequest } from "../services/joinRequests";
 import { connectionErrorMessage, connectionGateway, type ConnectionState } from "../services/connections";
 import { readProfile } from "../services/profile";
 import { requestGone } from "./connectionsModel";
+import { rememberName } from "./knownNames";
 
 /** Someone a host invited by personal link who hasn't answered: the stored name, else the number. */
 export type InvitedPerson = {
@@ -158,6 +159,8 @@ export function useEvent(planId: string | undefined): EventPage {
       setError(null);
       try {
         const next = await readEvent(planId, userId);
+        // Bring mode, opened from here, names the organizer without reading it again (C23).
+        rememberName(userId, next.plan.owner_id, next.organizer);
         // Unanswered personal links and open-link requests are every host's: the owner's and the admins'.
         const host = next.plan.owner_id === userId || next.admins.includes(userId);
         // The connection states, only where names show (the server refuses them elsewhere). The event never waits
@@ -180,22 +183,32 @@ export function useEvent(planId: string | undefined): EventPage {
             },
             () => {},
           );
-        // The invitations list is a convenience, so a failure leaves it empty. A guest who has answered gets the links
-        // they sent bringing someone (the server lists only their own). Likewise what this guest may bring: without it
-        // there is no Bring someone row.
+        // A guest's Bring someone row: what they may bring, and the links they sent bringing someone (once they have
+        // answered; the server lists only their own). The event never waits for them: they land when they arrive, and
+        // until then the row shows what was known. A failure gives no allowance and no links.
         const answered = !!next.attendee && next.attendee.response !== "pending";
-        const [people, bring] = await Promise.all([
-          host || answered ? readInvited(planId, userId).catch((): InvitedPerson[] => []) : [],
-          readAllowance(next.plan, host, next.attendee?.response ?? null),
-        ]);
+        if (!host) {
+          void readAllowance(next.plan, false, next.attendee?.response ?? null).then((bring) => {
+            if (valid()) setAllowance(bring);
+          });
+          if (answered)
+            void readInvited(planId, userId).then(
+              (links) => valid() && setInvited(links),
+              () => valid() && setInvited([]),
+            );
+        }
+        // The hosts' invitations list is a convenience, so a failure leaves it empty.
+        const people = host ? await readInvited(planId, userId).catch((): InvitedPerson[] => []) : null;
         // Likewise the waiting list: the event still opens if it can't be read.
         const waiting = host ? await joinRequestGateway.forPlan(planId).catch(() => []) : [];
         // Likewise the mute: a failed read leaves the resbite unmuted on screen, and the next load tries again.
         const muted = await readMutedSeries().catch(() => new Set<string>());
         if (valid()) {
           setMutedSeries(muted);
-          setInvited(people);
-          setAllowance(bring);
+          if (people) {
+            setInvited(people);
+            setAllowance(null);
+          } else if (!answered) setInvited([]);
           setRequests(waiting);
           // Names hidden: no states at all, whatever was known before.
           if (!named && ticket === statesRead.current) setConnections(null);
@@ -283,16 +296,17 @@ export function useEvent(planId: string | undefined): EventPage {
         setNotice(EVENT_COPY.responseSaved);
         syncDevice();
         // UX-P5: answering reveals who's coming; the server now returns the whole list, so the counts come from it.
-        try {
-          const list = await readGuests(attempt.planId);
-          if (valid()) setSnapshot((old) => (old ? { ...old, guests: list, counts: null } : old));
-        } catch {
-          if (valid()) setError(EVENT_COPY.guestsFailed);
-        }
-        // Going or Maybe may now bring someone; Can't go no longer may.
+        // Read with it, what the guest may now bring: Going or Maybe may bring someone, Can't go no longer may.
         const host = confirmed.plan.owner_id === userId || confirmed.plan.admins.includes(userId);
-        const bring = await readAllowance(confirmed.plan, host, confirmed.attendee.response);
-        if (valid()) setAllowance(bring);
+        const [list, bring] = await Promise.all([
+          readGuests(attempt.planId).catch(() => null),
+          readAllowance(confirmed.plan, host, confirmed.attendee.response),
+        ]);
+        if (valid()) {
+          if (list) setSnapshot((old) => (old ? { ...old, guests: list, counts: null } : old));
+          else setError(EVENT_COPY.guestsFailed);
+          setAllowance(bring);
+        }
       } else if (result === "review" || result === "unavailable") {
         setPending(null);
         setError(result === "review" ? EVENT_COPY.responseReview : EVENT_COPY.responsesClosed);

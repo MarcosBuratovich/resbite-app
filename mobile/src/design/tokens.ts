@@ -4,6 +4,8 @@ export const colors = {
   aqua: "#89CAC7",
   aquaSoft: "#E8F6F3",
   aquaDark: "#245F60",
+  /** The lightest aqua: the Bring someone card's wash (ink on it is 12.12:1; muted is 4.48:1, too faint for text). */
+  aquaWash: "#F3FBFA",
   cream: "#FAF5F0",
   paper: "#FFFFFF",
   pink: "#F2ADB2",

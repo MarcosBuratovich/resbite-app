@@ -558,7 +558,7 @@ const styles = StyleSheet.create({
   },
   counts: { fontFamily: fonts.bold, fontSize: 15, color: c.ink },
   // The mockup's Bring someone card: an aqua edge and wash, the icon in an aqua circle.
-  bring: { borderWidth: 1.5, borderColor: c.aqua, backgroundColor: "#F3FBFA" },
+  bring: { borderWidth: 1.5, borderColor: c.aqua, backgroundColor: c.aquaWash },
   bringIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: c.aquaSoft, alignItems: "center", justifyContent: "center" },
   rowTitle: { fontFamily: fonts.medium, fontSize: 15, color: c.ink },
   // Ink, not muted: muted is 4.48:1 on the aqua wash, under 4.5:1 for 12 pt text.

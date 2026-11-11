@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { canPick, contactNumbers, hostRegion, inviteMessage, messageFor, newInviteCode, personalLink, pickChosen, pickToggled, sendOrder, smsUrl, userToggled, whatsappUrl, whatsappAppUrl, groupContacts, storedFor, storedEntry, inviteItems, usersToInvite, type ContactNumber } from "./contactInvites";
+import { canPick, contactNumbers, hostRegion, inviteMessage, messageFor, newInviteCode, overCap, personalLink, pickChosen, pickToggled, sendOrder, smsUrl, userToggled, whatsappUrl, whatsappAppUrl, groupContacts, storedFor, storedEntry, inviteItems, usersToInvite, type ContactNumber } from "./contactInvites";
 import { INVITE_COPY } from "./inviteCopy";
 
 test("contactNumbers gives one entry per distinct number and counts the unparseable", () => {
@@ -249,8 +249,12 @@ test("the personal link's message: a host's own name, or a bringer's first name 
   assert.deepEqual(messageFor({ own: "Marcos Buratovich", ...at }), { host: "Marcos Buratovich", ...at });
   assert.deepEqual(messageFor({ own: null, ...at }), { host: INVITE_COPY.hostFallback, ...at });
   assert.deepEqual(messageFor({ own: "  Pedro Gómez ", organizer: "Ana", ...at }), { inviter: "Pedro", host: "Ana", ...at });
-  // Without their own name, a bringer's message still names the organizer, never "Your host".
-  assert.deepEqual(messageFor({ own: null, organizer: "Ana", ...at }), { host: "Ana", ...at });
+  // Without their own name, a bringer's message says "You’re invited" (C20), never "Ana invited you" or "Your host".
+  assert.deepEqual(messageFor({ own: null, organizer: "Ana", ...at }), { inviter: "", host: "Ana", ...at });
+  assert.deepEqual(messageFor({ own: "   ", organizer: "Ana", ...at }), { inviter: "", host: "Ana", ...at });
+  // Without the organizer's, no possessive (C20); the organizer is named by first name.
+  assert.deepEqual(messageFor({ own: "Pedro Pérez", organizer: null, ...at }), { inviter: "Pedro", host: "", ...at });
+  assert.deepEqual(messageFor({ own: "Pedro Pérez", organizer: "Ana María López", ...at }), { inviter: "Pedro", host: "Ana", ...at });
   assert.equal(
     inviteMessage({ ...messageFor({ own: "Pedro Gómez", organizer: "Ana", ...at }), link: LINK }),
     `Pedro invited you to Ana’s Board game night, Thu 20 Nov 19:00. Reply here: ${LINK}`,
@@ -259,7 +263,48 @@ test("the personal link's message: a host's own name, or a bringer's first name 
 
 test("Send again (useResend) words a bringer's message with the organizer it is given, and a host's as before", () => {
   const source = readFileSync(new URL("../state/useResend.ts", import.meta.url), "utf8");
-  assert.match(source, /bringing\?: \{ organizer: string \}/);
+  // The organizer may be unknown (null): the message then has no possessive.
+  assert.match(source, /bringing\?: \{ organizer: string \| null \}/);
+  // The sender's name comes from the session's profile first (C23), read only when that has none.
+  assert.match(source, /account\.displayName \?\?/);
   assert.match(source, /message: messageFor\(\{ own, organizer: bringing\?\.organizer,/);
   assert.doesNotMatch(source, /host: host \?\? INVITE_COPY\.hostFallback/);
+});
+
+test("a bringer's message without a name: 'You’re invited to Ana’s …'; without the organizer's, no possessive (C20)", () => {
+  const at = { title: "Board game night", when: "Thu 20 Nov 19:00", link: LINK };
+  assert.equal(inviteMessage({ inviter: "", host: "Ana", ...at }), `You’re invited to Ana’s Board game night, Thu 20 Nov 19:00. Reply here: ${LINK}`);
+  assert.equal(inviteMessage({ inviter: "Pedro", host: "", ...at }), `Pedro invited you to Board game night, Thu 20 Nov 19:00. Reply here: ${LINK}`);
+  assert.equal(inviteMessage({ inviter: "", host: "", ...at }), `You’re invited to Board game night, Thu 20 Nov 19:00. Reply here: ${LINK}`);
+  assert.equal(
+    inviteMessage({ ...messageFor({ own: null, organizer: null, title: "Board game night", when: "Thu 20 Nov 19:00" }), link: LINK }),
+    `You’re invited to Board game night, Thu 20 Nov 19:00. Reply here: ${LINK}`,
+  );
+  // A host's message is as before, "Your host" included.
+  assert.equal(
+    inviteMessage({ ...messageFor({ own: null, title: "Board game night", when: "Thu 20 Nov 19:00" }), link: LINK }),
+    `Your host invited you to Board game night, Thu 20 Nov 19:00. Reply here: ${LINK}`,
+  );
+});
+
+test("overCap: more picked than the invites left (the allowance dropped after they were picked)", () => {
+  assert.equal(overCap(3, 1), true);
+  assert.equal(overCap(1, 0), true);
+  assert.equal(overCap(1, 1), false);
+  assert.equal(overCap(0, 1), false);
+  assert.equal(overCap(9, undefined), false);
+});
+
+test("the pickers at the cap: Invite waits past it, Add is off at it, a number added there says why, capped rows say why (C20, C23)", () => {
+  const hook = readFileSync(new URL("../state/useContactInvites.ts", import.meta.url), "utf8");
+  assert.match(hook, /const overCapped = overCap\(inviteCount, limit\);/);
+  const add = hook.slice(hook.indexOf("function addNumber("), hook.indexOf("\n  }\n", hook.indexOf("function addNumber(")));
+  // Checked before the number is listed, so a refused number stays in the fields with the line.
+  assert.ok(add.indexOf("return CIRCLE_COPY.cantAddMore;") >= 0 && add.indexOf("return CIRCLE_COPY.cantAddMore;") < add.indexOf("setManual("));
+  const picker = readFileSync(new URL("../design/ContactPicker.tsx", import.meta.url), "utf8");
+  assert.match(picker, /disabled=\{k\.inviteCount === 0 \|\| k\.overCap \|\| k\.busy \|\| previewing\}/);
+  assert.match(picker, /disabled=\{!number\.trim\(\) \|\| k\.atCap\}/);
+  assert.match(picker, /accessibilityHint=\{disabled \? CIRCLE_COPY\.cappedHint : T\.rowHint\}/);
+  const connections = readFileSync(new URL("../design/ConnectionsPicker.tsx", import.meta.url), "utf8");
+  assert.match(connections, /accessibilityHint=\{capped \? CIRCLE_COPY\.cappedHint : undefined\}/);
 });

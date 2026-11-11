@@ -157,13 +157,14 @@ export function bottomRow(i: { role: Viewer; state: PageState; response: string 
 
 /**
  * Who brought a guest and their level (CO-P8), from their attendee row. A row without them (a browser stub, an old
- * cache, a database before the circles migration) reads as nobody's, level 1.
+ * cache, a database before the circles migration) reads as nobody's, level 1; a level is kept within 1–4 (a host's
+ * guest, then up to three hops), as the database's check holds it.
  */
 export function broughtFrom(row: { brought_by?: unknown; level?: unknown }): { broughtById: string | null; level: number } {
   const level = row.level;
   return {
     broughtById: typeof row.brought_by === "string" && row.brought_by ? row.brought_by : null,
-    level: typeof level === "number" && Number.isSafeInteger(level) && level >= 1 ? level : 1,
+    level: typeof level === "number" && Number.isSafeInteger(level) && level >= 1 ? Math.min(level, 4) : 1,
   };
 }
 

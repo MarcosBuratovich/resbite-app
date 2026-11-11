@@ -4,6 +4,7 @@ import { Check } from "lucide-react-native";
 import { Field, useLargeText } from "./ui";
 import { colors as c, fonts } from "./tokens";
 import { CONNECTIONS_COPY as C } from "../domain/connectionsCopy";
+import { CIRCLE_COPY } from "../domain/circleCopy";
 import type { ConnectionPerson } from "../services/connections";
 
 type Contacts = ReturnType<typeof import("../state/useContactInvites").useContactInvites>;
@@ -98,6 +99,7 @@ function PickRow({
     <Pressable
       accessibilityRole="checkbox"
       accessibilityLabel={C.selectPerson(person.name)}
+      accessibilityHint={capped ? CIRCLE_COPY.cappedHint : undefined}
       aria-checked={on}
       disabled={disabled || capped}
       onPress={onPress}

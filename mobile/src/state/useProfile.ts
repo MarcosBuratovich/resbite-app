@@ -164,7 +164,7 @@ export function useProfile() {
       dirty.current = false;
       setName(value);
       setSaved(true);
-      if (!preview) account.profileSaved();
+      if (!preview) account.profileSaved(value);
       setProfile((old) => ({
         display_name: value,
         avatar_path: old?.avatar_path ?? null,

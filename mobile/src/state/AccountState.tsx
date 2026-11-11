@@ -23,6 +23,8 @@ type Snapshot = {
   status: AccountAccessStatus | "checking" | "error";
   user: User | null;
   profileReady: boolean;
+  /** This account's own display name, trimmed, as its profile was read or last saved; null when unknown. */
+  displayName: string | null;
   error: string | null;
 };
 const blank = (accountId = ""): Snapshot => ({
@@ -30,6 +32,7 @@ const blank = (accountId = ""): Snapshot => ({
   status: "checking",
   user: null,
   profileReady: false,
+  displayName: null,
   error: null,
 });
 const Context = createContext<
@@ -41,7 +44,8 @@ const Context = createContext<
     /** The access status of the newest finished read (not React state, so it is current right after `refresh`). */
     latestStatus: () => Snapshot["status"];
     acceptDetails: (user: User) => void;
-    profileSaved: () => void;
+    /** The profile was saved with this name. */
+    profileSaved: (name: string) => void;
   }
 >({
   ...blank(),
@@ -97,6 +101,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         status,
         user,
         profileReady: Boolean(profile?.display_name),
+        displayName: profile?.display_name?.trim() || null,
         error: null,
       });
       if (status === "approved" || status === "access_pending") {
@@ -146,10 +151,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
             old.accountId === user.id ? { ...old, user } : old,
           );
         },
-        profileSaved: () =>
+        profileSaved: (name) =>
           setSnapshot((old) =>
             old.accountId === identity.current
-              ? { ...old, profileReady: true }
+              ? { ...old, profileReady: true, displayName: name.trim() || old.displayName }
               : old,
           ),
       }}
