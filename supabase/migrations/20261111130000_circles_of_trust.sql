@@ -151,8 +151,9 @@ $$;
 -- A host's view of the links guests sent (finding 8): one per live, unanswered link of a level above 1, oldest first,
 -- as {id, ending, country, brought_by_name}. ending is the number's last two digits; the number itself is never
 -- returned. brought_by_name is the bringer's first name, left out when there is no bringer or their account is being
--- deleted. A host removes one by its id (revoke_brought_invitation). Hosts only (42501 'Plan owner required'), also
--- after the end, as plan_phone_invitations.
+-- deleted. A host removes one by its id (revoke_brought_invitation). The caller's own (a link they brought before a
+-- host made them an admin) is not here: plan_phone_invitations gives it to them with its number (C32), so no link shows
+-- twice. Hosts only (42501 'Plan owner required'), also after the end, as plan_phone_invitations.
 create function private.plan_brought_invitations(p_plan uuid) returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester();
 begin
@@ -161,7 +162,8 @@ begin
    || coalesce((select jsonb_build_object('brought_by_name',private.first_name(pr.display_name)) from public.profiles pr
      where pr.id=i.brought_by and not private.deletion_pending(pr.id) and private.first_name(pr.display_name) is not null),'{}'::jsonb)
    order by i.created_at,i.id)
-  from private.phone_invitations i where i.plan_id=p_plan and i.revoked_at is null and i.answered_at is null and i.level>1),'[]'::jsonb);
+  from private.phone_invitations i where i.plan_id=p_plan and i.revoked_at is null and i.answered_at is null and i.level>1
+   and i.brought_by is distinct from v_uid),'[]'::jsonb);
 end $$;
 create function public.plan_brought_invitations(p_plan uuid) returns jsonb language sql stable security invoker set search_path = '' as $$
  select private.plan_brought_invitations(p_plan)
@@ -254,8 +256,12 @@ $$;
 -- decide_join_request takes the advisory locks of the host and of the requester, then the plan's row (require_link_owner):
 -- a host deciding a request of a guest who is bringing someone on that resbite at that moment (the guest has a guest row
 -- and a request still waiting, which only rows from before this migration can be: attendees_close_waiting ends a wait
--- whenever someone joins the list, C27). Accepted: both improbable, a retry works, and hosts could already do the
--- first.
+-- whenever someone joins the list, C27). Outside invite_contacts, fold_web_account's step 2d (taking the app account off
+-- a resbite where it is on record) can deadlock with a host's remove_guest of that account at the same instant; either
+-- side's retry is harmless. And, an order rather than a lock: inside the fold, the trigger closes the app account's
+-- waiting request on a resbite before step 2d takes the account off it, so that request is gone though the account is
+-- not on the list (very rare: the web account must have answered a guest's link on that occurrence while the app
+-- account, on record there, waited). Accepted: all improbable, a retry works, and hosts could already do the first.
 --
 -- What is written. A guest's new guest rows and links are brought_by the caller at the caller's level + 1; a host's
 -- have no bringer and level 1. Every link created or reopened has invited_by the caller.
@@ -771,10 +777,12 @@ begin
 end $$;
 
 -- The list of links by number. A host gets today's list, in today's shape (installed builds read phone on every row),
--- of the hosts' own links (level 1); the links guests sent are in plan_brought_invitations, without their numbers. A
--- guest gets only the links they brought, in the same shape (they remove theirs by number), so a guest who brought
--- nobody gets []. Anyone else is refused (42501 'Plan owner required'). Otherwise the
--- 20261031120000_creating_a_resbite body.
+-- of the hosts' own links (level 1); the links guests sent are in plan_brought_invitations, without their numbers. The
+-- links a host brought themself, as a guest before a host made them an admin, are theirs too (C32): they sent them and
+-- know the numbers, so they come here in the same shape plus "brought": true (the app takes them back as the bringer,
+-- C31), and plan_brought_invitations leaves them out. No host gets a number another person sent. A guest gets only the
+-- links they brought, in today's shape (they remove theirs by number), so a guest who brought nobody gets []. Anyone
+-- else is refused (42501 'Plan owner required'). Otherwise the 20261031120000_creating_a_resbite body.
 create or replace function private.plan_phone_invitations(p_plan uuid) returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester(); v_host boolean;
 begin
@@ -783,9 +791,10 @@ begin
   raise exception 'Plan owner required' using errcode='42501';
  end if;
  return coalesce((select jsonb_agg(jsonb_build_object('phone',i.phone,'country',i.country,'answered',i.answered_at is not null,
-   'response',(select a.response from public.attendees a where a.plan_id=i.plan_id and a.user_id=i.user_id)) order by i.created_at,i.phone)
+   'response',(select a.response from public.attendees a where a.plan_id=i.plan_id and a.user_id=i.user_id))
+   || case when v_host and i.brought_by=v_uid then '{"brought":true}'::jsonb else '{}'::jsonb end order by i.created_at,i.phone)
   from private.phone_invitations i where i.plan_id=p_plan and i.revoked_at is null
-   and case when v_host then i.level=1 else i.brought_by is not distinct from v_uid end),'[]'::jsonb);
+   and case when v_host then i.level=1 or i.brought_by=v_uid else i.brought_by is not distinct from v_uid end),'[]'::jsonb);
 end $$;
 
 -- Folding a web-only account into the app account keeps the person's removal records (C19, #38): a record of the web

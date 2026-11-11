@@ -1539,6 +1539,45 @@ select pg_temp.co2_check((select count(*) from jsonb_array_elements(public.plan_
  where e.value->>'ending'='10' and not e.value?'brought_by_name')=1,'A bringer being deleted is named: '||public.plan_brought_invitations(pg_temp.co2p())::text);
 rollback;
 
+-- Slice 13c: a host's own brought links are theirs on the list (C32). set_plan_circle(2,1). 02 sends 11 a link and 03
+-- sends 09 one; 01 sends 10 one; then 01 makes 02 an admin. 02's plan_phone_invitations lists 01's link in today's
+-- shape and 02's own link to 11 in today's shape plus "brought": true, number included (02 sent it), and
+-- plan_brought_invitations no longer gives 02 that row (it would show twice), only 03's. 01's plan_brought_invitations
+-- still lists 02's link by its ending and 02's first name, never the number, and 01's plan_phone_invitations shows no
+-- number another person sent. 03, a guest, sees today's shape, with no "brought" key.
+begin;
+select pg_temp.co2_cast();
+set local role authenticated;
+select pg_temp.co2_as('01');
+select public.set_plan_circle(pg_temp.co2p(),2::smallint,1::smallint);
+select pg_temp.co2_as('02');
+select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('11','A'))))='link','02 sending 11 a link');
+select pg_temp.co2_as('03');
+select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('09','B'))))='link','03 sending 09 a link');
+select pg_temp.co2_as('01');
+select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('10','C'))))='link','01 sending 10 a link');
+reset role;
+-- 01 sends 10's link first, as an older invitation: the list is oldest first.
+update private.phone_invitations set created_at=now()-interval '1 hour' where plan_id=pg_temp.co2p() and phone=pg_temp.co2_phone('10');
+insert into public.plan_admins(plan_id,user_id,appointed_by) values (pg_temp.co2p(),pg_temp.co2('02'),pg_temp.co2('01'));
+set local role authenticated;
+select pg_temp.co2_as('02');
+select pg_temp.co2_check(public.plan_phone_invitations(pg_temp.co2p())=
+ '[{"phone":"447700900610","country":"44","answered":false,"response":null},{"phone":"447700900611","country":"44","answered":false,"response":null,"brought":true}]'::jsonb,
+ '02''s list as an admin: '||public.plan_phone_invitations(pg_temp.co2p())::text);
+select pg_temp.co2_check((select string_agg(e->>'ending'||':'||coalesce(e->>'brought_by_name','-'),',') from jsonb_array_elements(public.plan_brought_invitations(pg_temp.co2p())) e)='09:Marta',
+ '02''s list of others'' links: '||public.plan_brought_invitations(pg_temp.co2p())::text);
+select pg_temp.co2_as('01');
+select pg_temp.co2_check(public.plan_phone_invitations(pg_temp.co2p())='[{"phone":"447700900610","country":"44","answered":false,"response":null}]'::jsonb,
+ '01''s list: '||public.plan_phone_invitations(pg_temp.co2p())::text);
+select pg_temp.co2_check((select string_agg(e->>'ending'||':'||coalesce(e->>'brought_by_name','-')||':'||(e?'phone')::text,',' order by e->>'ending')
+ from jsonb_array_elements(public.plan_brought_invitations(pg_temp.co2p())) e)='09:Marta:false,11:Pedro:false',
+ '01''s list of the guests'' links: '||public.plan_brought_invitations(pg_temp.co2p())::text);
+select pg_temp.co2_as('03');
+select pg_temp.co2_check(public.plan_phone_invitations(pg_temp.co2p())='[{"phone":"447700900609","country":"44","answered":false,"response":null}]'::jsonb,
+ '03''s list: '||public.plan_phone_invitations(pg_temp.co2p())::text);
+rollback;
+
 -- Slice 13b: what a bringer may take back (C18-I1). set_plan_circle(2,1). 02 brings 06 and 07 in the app. 06 is then
 -- an admin, not yet answered (as the roll carries one): a host, whom 02 may not withdraw. Once 01 removes 02, 02 may
 -- withdraw nobody. Refusals take nobody off.
