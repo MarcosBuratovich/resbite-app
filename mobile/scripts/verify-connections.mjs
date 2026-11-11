@@ -200,6 +200,11 @@ async function fixture({
       assert.equal(body.p_plan, plan.id);
       return reply(state.pairs);
     }
+    // A guest who has answered reads the links they sent bringing someone (circles of trust); Ana brought nobody.
+    if (plan && path === "/rest/v1/rpc/plan_phone_invitations") {
+      assert.equal(body.p_plan, plan.id);
+      return reply([]);
+    }
     if (plan && path === "/rest/v1/rpc/request_connection") {
       assert.equal(body.p_plan, plan.id);
       state.pairs[body.p_user] = "requested_by_me";

@@ -33,3 +33,22 @@ test("the people list's line spells the levels out (CO-07)", () => {
   assert.equal(CIRCLE_COPY.listLine(3, 1), "Circle of trust: each person brings 3, one level.");
   assert.equal(CIRCLE_COPY.listLine(2, 3), "Circle of trust: each person brings 2, three levels.");
 });
+
+test("bringing someone: the row, its hints and bring mode's lines are the design's, with curly apostrophes (CO-05, CO-06)", () => {
+  assert.equal(CIRCLE_COPY.bringSomeone, "Bring someone");
+  assert.equal(CIRCLE_COPY.bringHint("Ana", 1), "Ana trusts you to bring 1 person. They’re in, no approval needed.");
+  assert.equal(CIRCLE_COPY.bringHint("Ana", 2), "Ana trusts you to bring 2 people. They’re in, no approval needed.");
+  assert.equal(CIRCLE_COPY.bringHintMore("Ana", 1), "Ana trusts you to bring 1 more person. They’re in, no approval needed.");
+  assert.equal(CIRCLE_COPY.bringHintMore("Ana", 2), "Ana trusts you to bring 2 more people. They’re in, no approval needed.");
+  assert.equal(CIRCLE_COPY.youBrought(["Clara"]), "You brought Clara");
+  assert.equal(CIRCLE_COPY.youBrought(["Clara", "Martín"]), "You brought Clara and Martín");
+  assert.equal(CIRCLE_COPY.youBrought(["Clara", "Martín", "Sol"]), "You brought Clara, Martín and Sol");
+  assert.equal(CIRCLE_COPY.bringLine("Ana", 1, "Board game night"), "Ana trusts you to bring 1 person to Board game night.");
+  assert.equal(CIRCLE_COPY.bringLine("Ana", 3, "Board game night"), "Ana trusts you to bring 3 people to Board game night.");
+  assert.equal(CIRCLE_COPY.notAllowed, "You can’t bring anyone to this resbite now.");
+  assert.equal(CIRCLE_COPY.noneLeft, "You’ve used all your invites for this resbite.");
+});
+
+test("a batch refused for one person, while bringing is still allowed, asks the bringer to ask the host (C5)", () => {
+  assert.equal(CIRCLE_COPY.oneRefused, "One of these people can’t be brought here. Ask the host.");
+});

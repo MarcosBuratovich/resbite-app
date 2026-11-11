@@ -59,7 +59,7 @@ const PLAN_SELECT = "*,plan_meeting_details(note),plan_admins(user_id)";
 const COVER_SELECT = "cover_path,cover_description,cover_revision";
 const COVER_REVISION_SELECT = "cover_path,cover_revision";
 // The guest-list and own-row reads (src/services/rsvp.ts) and the reminder sync's (deviceReminders), and the mutes'.
-const ATTENDEE_SELECTS = ["user_id,response,profiles(display_name)", "version,response", "plan_id,response"];
+const ATTENDEE_SELECTS = ["user_id,response,brought_by,level,profiles(display_name)", "version,response", "plan_id,response"];
 const MUTE_SELECT = "series_id";
 // ...and the named-columns read the plan gateway sends (src/services/plans.ts `planColumns`, used by the reminder sync).
 const PLAN_COLUMNS =
@@ -384,7 +384,7 @@ try {
     assert.deepEqual(f.rpcs("plan_join_requests"), [{ p_plan: PLAN_ID }]);
     // The host reads every guest row, so the counts come from them, not from plan_people_counts.
     assert.deepEqual(f.rpcs("plan_people_counts"), []);
-    assert.ok(f.attendeeSelects.has("user_id,response,profiles(display_name)"), "the guest list was read");
+    assert.ok(f.attendeeSelects.has("user_id,response,brought_by,level,profiles(display_name)"), "the guest list was read");
     assert.ok(f.muteSelects.has(MUTE_SELECT), "the mutes were read");
     // Invite opens the Invite screen for this resbite.
     await btn(page, "Invite").click();

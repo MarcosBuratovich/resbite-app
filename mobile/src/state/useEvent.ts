@@ -9,7 +9,10 @@ import { readEvent, readGuests, readRsvp, writeRsvp, type EventSnapshot, type Gu
 import { syncReminders } from "../services/deviceReminders";
 import { adminErrorMessage, appointAdmin, removeAdmin } from "../services/admins";
 import { muteErrorMessage, readMutedSeries, setPlanMute } from "../services/mutes";
-import { EVENT_COPY, showsNames, viewerRole, type AnswerCounts, type Viewer } from "../domain/eventPage";
+import { broughtNames, EVENT_COPY, pageState, showsNames, viewerRole, type AnswerCounts, type Viewer } from "../domain/eventPage";
+import { circleOf } from "../domain/circle";
+import type { Plan } from "../domain/plans";
+import { circleGateway, type Allowance } from "../services/circle";
 import { storedEntry } from "../domain/contactInvites";
 import { contactInviteGateway } from "../services/contactInvites";
 import { inviteCodeStore, type StoredInvite } from "../services/inviteCodeStore";
@@ -44,8 +47,18 @@ export type EventPage = {
   guests: Guest[];
   /** The server's Going, Maybe and Can't go numbers for a guest who hasn't answered (they read only their own row). */
   counts: AnswerCounts | null;
-  /** Personal-link invitations not answered yet: the hosts' (the owner and the admins); empty for everyone else. */
+  /**
+   * Personal-link invitations not answered yet: a host's (the owner and the admins) are every one; a guest who has
+   * answered gets only the links they sent bringing someone; empty for everyone else.
+   */
   invited: InvitedPerson[];
+  /**
+   * What the signed-in guest may bring (`my_bring_allowance`), read only for a guest who is Going or Maybe on an open
+   * resbite whose circle isn't Nobody; null otherwise, and when the read fails.
+   */
+  allowance: Allowance | null;
+  /** Whom the signed-in guest brought and who is still in, for "You brought …" (`broughtNames`); empty for hosts. */
+  broughtNames: string[];
   /** Open-link answers waiting for a host; empty for everyone else. */
   requests: HostRequest[];
   /**
@@ -110,6 +123,7 @@ export function useEvent(planId: string | undefined): EventPage {
   const [acting, setActing] = useState<EventPage["acting"]>(null);
   const actingRef = useRef(false);
   const [invited, setInvited] = useState<InvitedPerson[]>([]);
+  const [allowance, setAllowance] = useState<Allowance | null>(null);
   const [requests, setRequests] = useState<HostRequest[]>([]);
   const [connections, setConnections] = useState<Record<string, ConnectionState> | null>(null);
   /** The owner's own name, read for their row on the people list; everyone else has it as `organizer`. */
@@ -122,6 +136,7 @@ export function useEvent(planId: string | undefined): EventPage {
   useEffect(() => {
     setSnapshot(null);
     setInvited([]);
+    setAllowance(null);
     setRequests([]);
     setConnections(null);
     setOwnName(null);
@@ -165,8 +180,14 @@ export function useEvent(planId: string | undefined): EventPage {
             },
             () => {},
           );
-        // The invitations list is a convenience, so a failure leaves it empty.
-        const people = host ? await readInvited(planId, userId).catch(() => []) : [];
+        // The invitations list is a convenience, so a failure leaves it empty. A guest who has answered gets the links
+        // they sent bringing someone (the server lists only their own). Likewise what this guest may bring: without it
+        // there is no Bring someone row.
+        const answered = !!next.attendee && next.attendee.response !== "pending";
+        const [people, bring] = await Promise.all([
+          host || answered ? readInvited(planId, userId).catch((): InvitedPerson[] => []) : [],
+          readAllowance(next.plan, host, next.attendee?.response ?? null),
+        ]);
         // Likewise the waiting list: the event still opens if it can't be read.
         const waiting = host ? await joinRequestGateway.forPlan(planId).catch(() => []) : [];
         // Likewise the mute: a failed read leaves the resbite unmuted on screen, and the next load tries again.
@@ -174,6 +195,7 @@ export function useEvent(planId: string | undefined): EventPage {
         if (valid()) {
           setMutedSeries(muted);
           setInvited(people);
+          setAllowance(bring);
           setRequests(waiting);
           // Names hidden: no states at all, whatever was known before.
           if (!named && ticket === statesRead.current) setConnections(null);
@@ -185,6 +207,7 @@ export function useEvent(planId: string | undefined): EventPage {
         if (valid()) {
           setSnapshot(null);
           setInvited([]);
+          setAllowance(null);
           setRequests([]);
           setError(e instanceof Error ? e.message : EVENT_COPY.readFailed);
         }
@@ -266,6 +289,10 @@ export function useEvent(planId: string | undefined): EventPage {
         } catch {
           if (valid()) setError(EVENT_COPY.guestsFailed);
         }
+        // Going or Maybe may now bring someone; Can't go no longer may.
+        const host = confirmed.plan.owner_id === userId || confirmed.plan.admins.includes(userId);
+        const bring = await readAllowance(confirmed.plan, host, confirmed.attendee.response);
+        if (valid()) setAllowance(bring);
       } else if (result === "review" || result === "unavailable") {
         setPending(null);
         setError(result === "review" ? EVENT_COPY.responseReview : EVENT_COPY.responsesClosed);
@@ -408,6 +435,8 @@ export function useEvent(planId: string | undefined): EventPage {
     guests: snapshot?.guests ?? [],
     counts: snapshot?.counts ?? null,
     invited,
+    allowance: preview ? null : allowance,
+    broughtNames: role === "guest" && !preview ? broughtNames({ guests: snapshot?.guests ?? [], invited, userId: userId ?? null }) : [],
     requests,
     connections: preview ? null : connections,
     owner,
@@ -431,6 +460,16 @@ export function useEvent(planId: string | undefined): EventPage {
     setNotice,
     clearError: () => setError(null),
   };
+}
+
+/**
+ * What the signed-in guest may bring, read only where the Bring someone row could show: a guest (not a host) who is
+ * Going or Maybe on an open resbite whose circle isn't Nobody. Null otherwise, and when the read fails.
+ */
+async function readAllowance(plan: Plan, host: boolean, response: string | null): Promise<Allowance | null> {
+  if (host || (response !== "accepted" && response !== "maybe")) return null;
+  if (pageState(plan) !== "open" || circleOf(plan).invites === 0) return null;
+  return circleGateway.allowance(plan.id).catch(() => null);
 }
 
 async function readInvited(planId: string, userId: string): Promise<InvitedPerson[]> {

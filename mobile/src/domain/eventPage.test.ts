@@ -1,9 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   EVENT_COPY,
   answerCountsFrom,
   bottomRow,
+  bringRow,
+  broughtFrom,
+  broughtNames,
   byline,
   cancelQuestion,
   hostLabel,
@@ -121,7 +125,7 @@ test("hostLabel and byline", () => {
   assert.equal(byline("Ana"), "Hosted by Ana");
 });
 
-const guest = (userId: string, name: string, response: string) => ({ userId, name, response });
+const guest = (userId: string, name: string, response: string, broughtById: string | null = null, level = 0) => ({ userId, name, response, broughtById, level });
 /** Someone invited by personal link: `held` is whether this phone holds their code (with the app it went by, if any). */
 const linkPerson = (phone: string, name: string, sentVia?: "whatsapp" | "messages", held = sentVia !== undefined) => ({
   phone,
@@ -493,4 +497,81 @@ test("stateChip: Cancelled, Ended or none", () => {
   assert.equal(stateChip({ ...plan, starts_at: "2026-10-01T18:00:00Z" }, now), "Ended");
   assert.equal(stateChip({ ...plan, status: "cancelled" }, now), "Cancelled");
   assert.equal(stateChip({ ...plan, status: "cancelled", starts_at: "2026-10-01T18:00:00Z" }, now), "Cancelled");
+});
+
+const allowance = (allowed: number, used: number, mayBring = true) => ({
+  allowed,
+  used,
+  remaining: Math.max(allowed - used, 0),
+  level: 1,
+  mayBring,
+});
+const bring = (over: Partial<Parameters<typeof bringRow>[0]> = {}) =>
+  bringRow({ role: "guest", state: "open", response: "accepted", allowance: allowance(1, 0), broughtNames: [], host: "Ana", ...over });
+
+test("bringRow: only a Going or Maybe guest on an open resbite whose allowance lets them bring (CO-05)", () => {
+  assert.equal(bring({ role: "owner" }), null);
+  assert.equal(bring({ role: "admin" }), null);
+  assert.equal(bring({ response: "pending" }), null);
+  assert.equal(bring({ response: null }), null);
+  assert.equal(bring({ response: "declined" }), null);
+  assert.equal(bring({ response: "withdrawn" }), null);
+  assert.equal(bring({ state: "ended" }), null);
+  assert.equal(bring({ state: "cancelled" }), null);
+  // Nobody, or past the last level: the server says may_bring false.
+  assert.equal(bring({ allowance: allowance(1, 0, false) }), null);
+  assert.equal(bring({ allowance: allowance(0, 0, false) }), null);
+  // Not read (a failed read, or not asked for).
+  assert.equal(bring({ allowance: null }), null);
+});
+
+test("bringRow: the hint while invites are left, first and then 'more'", () => {
+  assert.deepEqual(bring(), { kind: "bring", hint: "Ana trusts you to bring 1 person. They’re in, no approval needed." });
+  assert.deepEqual(bring({ response: "maybe" }), { kind: "bring", hint: "Ana trusts you to bring 1 person. They’re in, no approval needed." });
+  assert.deepEqual(bring({ allowance: allowance(2, 0) }), { kind: "bring", hint: "Ana trusts you to bring 2 people. They’re in, no approval needed." });
+  assert.deepEqual(bring({ allowance: allowance(2, 1), broughtNames: ["Clara"] }), {
+    kind: "bring",
+    hint: "Ana trusts you to bring 1 more person. They’re in, no approval needed.",
+  });
+  assert.deepEqual(bring({ allowance: allowance(3, 1) }), { kind: "bring", hint: "Ana trusts you to bring 2 more people. They’re in, no approval needed." });
+});
+
+test("bringRow: every invite used reads who was brought, with no chevron; with no names, nothing", () => {
+  // One link, no guest row yet.
+  assert.deepEqual(bring({ allowance: allowance(1, 1), broughtNames: ["Clara"] }), { kind: "brought", text: "You brought Clara" });
+  assert.deepEqual(bring({ allowance: allowance(2, 2), broughtNames: ["Clara", "Martín"] }), { kind: "brought", text: "You brought Clara and Martín" });
+  assert.equal(bring({ allowance: allowance(1, 1), broughtNames: [] }), null);
+  // The host lowered the circle below what was used: remaining 0.
+  assert.deepEqual(bring({ allowance: allowance(1, 2), broughtNames: ["Clara", "Martín"] }), { kind: "brought", text: "You brought Clara and Martín" });
+  assert.equal(bring({ allowance: allowance(1, 1, false), broughtNames: ["Clara"] }), null);
+});
+
+test("broughtNames: the bringer's own brought guests still in, by first name, then their own unanswered links", () => {
+  const guests = [
+    guest("pedro", "Pedro Pérez", "accepted"),
+    guest("clara", "Clara Gómez", "accepted", "pedro", 2),
+    guest("martin", "Martín Ruiz", "pending", "pedro", 2),
+    guest("sol", "Sol Díaz", "maybe", "pedro", 2),
+    guest("leo", "Leo Paz", "declined", "pedro", 2),
+    guest("ines", "Inés Vega", "withdrawn", "pedro", 2),
+    guest("marta", "Marta M", "accepted", "ana", 2),
+  ];
+  const links = [linkPerson("7700900111", "Juli Fernández"), linkPerson("7700900222", "+44 7700 900222")];
+  assert.deepEqual(broughtNames({ guests, invited: links, userId: "pedro" }), ["Clara", "Martín", "Sol", "Juli Fernández", "+44 7700 900222"]);
+  assert.deepEqual(broughtNames({ guests, invited: [], userId: "marta" }), []);
+  assert.deepEqual(broughtNames({ guests: [], invited: [], userId: null }), []);
+});
+
+test("readGuests: who brought a guest and their level, read as nobody's and 1 when the row lacks them", () => {
+  assert.deepEqual(broughtFrom({ brought_by: "pedro", level: 2 }), { broughtById: "pedro", level: 2 });
+  // A browser stub or an old cache: no columns.
+  assert.deepEqual(broughtFrom({}), { broughtById: null, level: 1 });
+  assert.deepEqual(broughtFrom({ brought_by: null, level: null }), { broughtById: null, level: 1 });
+  for (const odd of ["2", 0, -1, 1.5, Number.NaN]) assert.equal(broughtFrom({ level: odd }).level, 1);
+  for (const odd of ["", 7, {}]) assert.equal(broughtFrom({ brought_by: odd }).broughtById, null);
+  const source = readFileSync(new URL("../services/rsvp.ts", import.meta.url), "utf8");
+  const read = source.slice(source.indexOf("export async function readGuests("));
+  assert.match(read, /\.select\("user_id,response,brought_by,level,profiles\(display_name\)"\)/);
+  assert.match(read, /\.\.\.broughtFrom\(row\)/);
+  assert.match(source, /export type Guest = \{[^}]*broughtById: string \| null;[^}]*level: number;[^}]*\}/);
 });

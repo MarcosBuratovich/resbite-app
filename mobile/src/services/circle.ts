@@ -3,10 +3,32 @@ import { CIRCLE_COPY } from "../domain/circleCopy";
 import { INVITE_COPY } from "../domain/inviteCopy";
 import type { Circle, CircleSaveEvent } from "../domain/circle";
 
+/**
+ * What the signed-in guest may bring to a resbite (`my_bring_allowance`): the invites the circle gives each guest, those
+ * used (their brought guests still in and their unanswered links), those left, their own level, and whether they may
+ * bring at all (Going or Maybe, on an open resbite, within the circle's levels; the count is not part of it).
+ */
+export type Allowance = { allowed: number; used: number; remaining: number; level: number; mayBring: boolean };
+
 export type CircleGateway = {
   /** The host sets the resbite's circle (`set_plan_circle`); the plan's new version. */
   set(planId: string, invites: number, levels: number): Promise<number>;
+  /** The caller's allowance on this resbite. A host gets nothing to bring; someone not on it, 42501 'Not invited'. */
+  allowance(planId: string): Promise<Allowance>;
 };
+
+const count = (value: unknown) => (typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null);
+
+/** `my_bring_allowance`'s reply; anything else can't be read and is the connection line. */
+function allowanceFrom(reply: unknown): Allowance {
+  const row = typeof reply === "object" && reply !== null && !Array.isArray(reply) ? (reply as Record<string, unknown>) : {};
+  const [allowed, used, remaining] = [count(row.allowed), count(row.used), count(row.remaining)];
+  // bring_allowance gives someone without a guest row a null level; nothing here depends on it.
+  const level = row.level === null ? 0 : count(row.level);
+  if (allowed === null || used === null || remaining === null || level === null || typeof row.may_bring !== "boolean")
+    throw Error(offline);
+  return { allowed, used, remaining, level, mayBring: row.may_bring };
+}
 
 /** The circle of trust: a refusal is thrown as the server sent it, as `connectionGateway` does. */
 export function createCircleGateway(rpc: Rpc, deadline: Deadline = passThrough): CircleGateway {
@@ -21,6 +43,9 @@ export function createCircleGateway(rpc: Rpc, deadline: Deadline = passThrough):
       // A reply without the new version can't confirm the save.
       if (typeof version !== "number") throw Error(offline);
       return version;
+    },
+    async allowance(planId) {
+      return allowanceFrom(await call("my_bring_allowance", { p_plan: planId }));
     },
   };
 }

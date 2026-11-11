@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createContactInviteGateway, inviteConnections, inviteErrorMessage, isNotAConnection } from "./contactInvites";
+import { CIRCLE_COPY } from "../domain/circleCopy";
+import { INVITE_COPY } from "../domain/inviteCopy";
 
 type Call = { fn: string; args: Record<string, unknown> };
 function gateway(reply: (c: Call) => { data: unknown; error: unknown }) {
@@ -226,4 +228,27 @@ test("error mapping", () => {
   assert.equal(inviteErrorMessage({ code: "22023" }), "Check your connection and try again.");
   assert.equal(inviteErrorMessage(new Error("network")), "Check your connection and try again.");
   assert.equal(inviteErrorMessage(null), "Check your connection and try again.");
+});
+
+test("the two circle refusals are worded by their message, before their code; everything else as before", () => {
+  assert.equal(inviteErrorMessage({ code: "42501", message: "Not allowed to bring people here" }), CIRCLE_COPY.notAllowed);
+  assert.equal(inviteErrorMessage({ code: "22023", message: "No invites left" }), CIRCLE_COPY.noneLeft);
+  assert.equal(inviteErrorMessage({ code: "42501", message: "Active plan owner required" }), INVITE_COPY.hostsOnly);
+  assert.equal(inviteErrorMessage({ code: "22023", message: "Invalid circle" }), "Invalid circle");
+});
+
+test("a bring the server refuses is thrown in the circle's words, by invite and by a connection's own call", async () => {
+  const { gw } = gateway(() => ({ data: null, error: { code: "42501", message: "Not allowed to bring people here" } }));
+  await assert.rejects(gw.invite("p", [{ phone: "447700900201", country: "44", code: "A".repeat(22) }]), (e) => {
+    assert.ok(e instanceof Error);
+    assert.equal(e.message, CIRCLE_COPY.notAllowed);
+    assert.equal(isNotAConnection(e), false);
+    return true;
+  });
+  // A refused bring is no 'Not a connection': the connections aren't sent again one by one.
+  const many = gateway(() => ({ data: null, error: { code: "42501", message: "Not allowed to bring people here" } }));
+  await assert.rejects(inviteConnections(many.gw, "p", ["u1", "u2"]), { message: CIRCLE_COPY.notAllowed });
+  assert.equal(many.calls.length, 1);
+  const none = gateway(() => ({ data: null, error: { code: "22023", message: "No invites left" } }));
+  await assert.rejects(none.gw.invite("p", [{ user: "u1" }]), { message: CIRCLE_COPY.noneLeft });
 });

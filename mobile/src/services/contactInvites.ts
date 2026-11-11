@@ -1,3 +1,4 @@
+import { CIRCLE_COPY } from "../domain/circleCopy";
 import { CONNECTIONS_COPY } from "../domain/connectionsCopy";
 import { INVITE_COPY } from "../domain/inviteCopy";
 export type InviteKind = "app" | "link" | "self" | "already";
@@ -30,7 +31,14 @@ export const errorField = (e: unknown, field: "code" | "message") =>
     ? String((e as Record<string, unknown>)[field])
     : "";
 
+/**
+ * An invite's refusal in words. The circle's two refusals are told by their message, before the code: 42501 'Not
+ * allowed to bring people here' (no allowance, or someone a host removed) and 22023 'No invites left'.
+ */
 export function inviteErrorMessage(e: unknown): string {
+  const message = errorField(e, "message");
+  if (message === "Not allowed to bring people here") return CIRCLE_COPY.notAllowed;
+  if (message === "No invites left") return CIRCLE_COPY.noneLeft;
   const code = errorField(e, "code");
   if (code === "42501") return INVITE_COPY.hostsOnly;
   if (code === "22023") return errorField(e, "message") || offline;

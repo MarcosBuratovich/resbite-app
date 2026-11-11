@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { getRandomBytes } from "expo-crypto";
-import { newInviteCode } from "../domain/contactInvites";
+import { messageFor, newInviteCode } from "../domain/contactInvites";
 import { linkDate } from "../domain/eventLinks";
 import { INVITE_COPY } from "../domain/inviteCopy";
 import { contactInviteGateway } from "../services/contactInvites";
@@ -17,11 +17,14 @@ import type { InvitedPerson } from "./useEvent";
  * people list offers Send again only where this phone holds the code (`InvitedPerson.stored`, found under the number
  * or another spelling of it). `busy` is the phone being worked on, `error` what went wrong; `reload` runs when a
  * fresh invitation turned out to be something else (an app invitation), so the list is read again. `resend`
- * answers whether the link went out (false: `error` says why).
+ * answers whether the link went out (false: `error` says why). `bringing` is given for a guest who brought the person
+ * (`organizer`: the organizer's first name): the message then reads "Pedro invited you to Ana’s …" (CO-P9), where a
+ * host's names the host alone.
  */
 export function useResend(
   plan: { id: string; title: string; starts_at: string; ends_at?: string | null },
   reload?: () => Promise<void>,
+  bringing?: { organizer: string },
 ): {
   resend: (person: InvitedPerson, via: "whatsapp" | "messages") => Promise<boolean>;
   /**
@@ -56,7 +59,7 @@ export function useResend(
       setBusy(person.phone);
       setError(null);
       try {
-        const host = await readProfile(scope).then(
+        const own = await readProfile(scope).then(
           (profile) => profile?.display_name?.trim() || null,
           () => null,
         );
@@ -83,11 +86,7 @@ export function useResend(
           code: saved.code,
           via,
           origin: process.env.EXPO_PUBLIC_INVITATION_ORIGIN || DEFAULT_ORIGIN,
-          message: {
-            host: host ?? INVITE_COPY.hostFallback,
-            title: plan.title.trim(),
-            when: linkDate(plan.starts_at, plan.ends_at ?? null),
-          },
+          message: messageFor({ own, organizer: bringing?.organizer, title: plan.title.trim(), when: linkDate(plan.starts_at, plan.ends_at ?? null) }),
         });
         if (failure) {
           setError(failure);
@@ -101,7 +100,7 @@ export function useResend(
         setBusy(null);
       }
     },
-    [busy, scope, plan.id, plan.title, plan.starts_at, plan.ends_at, reload],
+    [busy, scope, plan.id, plan.title, plan.starts_at, plan.ends_at, reload, bringing?.organizer],
   );
   const clearError = useCallback(() => setError(null), []);
   return { resend, forget, busy, error, clearError };

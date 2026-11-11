@@ -49,7 +49,15 @@ export function ConnectionsPicker({ k }: { k: Contacts }) {
               <Text style={[styles.invited, free]}>{C.invitedAlready}</Text>
             </View>
           ) : (
-            <PickRow key={p.userId} person={p} on={k.chosenUsers.has(p.userId)} disabled={k.busy} free={free} onPress={() => k.toggleUser(p.userId)} />
+            <PickRow
+              key={p.userId}
+              person={p}
+              on={k.chosenUsers.has(p.userId)}
+              disabled={k.busy}
+              capped={k.atCap && !k.chosenUsers.has(p.userId)}
+              free={free}
+              onPress={() => k.toggleUser(p.userId)}
+            />
           ),
         )}
       </View>
@@ -67,17 +75,22 @@ export function SectionTitle({ children }: { children: string }) {
   );
 }
 
-/** The whole row is the 44 pt (or taller) target; the box drawn in it is 24 pt. */
+/**
+ * The whole row is the 44 pt (or taller) target; the box drawn in it is 24 pt. `capped`: bring mode's cap is reached
+ * and this person isn't picked, so the row is disabled and dimmed (`Pressable` sets `accessibilityState.disabled`).
+ */
 function PickRow({
   person,
   on,
   disabled,
+  capped,
   free,
   onPress,
 }: {
   person: ConnectionPerson;
   on: boolean;
   disabled: boolean;
+  capped: boolean;
   free: false | { lineHeight: undefined };
   onPress: () => void;
 }) {
@@ -86,9 +99,9 @@ function PickRow({
       accessibilityRole="checkbox"
       accessibilityLabel={C.selectPerson(person.name)}
       aria-checked={on}
-      disabled={disabled}
+      disabled={disabled || capped}
       onPress={onPress}
-      style={styles.person}
+      style={[styles.person, capped && styles.off]}
     >
       <Avatar name={person.name} />
       <Text style={[styles.name, free]}>{firstName(person.name)}</Text>
@@ -114,6 +127,7 @@ const styles = StyleSheet.create({
   name: { flex: 1, fontFamily: fonts.medium, fontSize: 15, lineHeight: 20, color: c.ink },
   invited: { fontFamily: fonts.medium, fontSize: 12, lineHeight: 16, color: c.muted },
   free: { lineHeight: undefined },
+  off: { opacity: 0.55 },
   box: { width: 24, height: 24, borderRadius: 7, borderWidth: 2, borderColor: c.ink, alignItems: "center", justifyContent: "center" },
   boxOn: { backgroundColor: c.ink },
   avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: c.aquaSoft, alignItems: "center", justifyContent: "center" },

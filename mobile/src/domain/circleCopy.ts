@@ -1,4 +1,8 @@
-/** The circle of trust's words (CO-04, CO-07). */
+import { joinNames } from "./inviteCopy";
+
+const people = (n: number) => (n === 1 ? "1 person" : `${n} people`);
+
+/** The circle of trust's words (CO-04, CO-05, CO-06, CO-07). */
 export const CIRCLE_COPY = {
   heading: "Circle of trust",
   hint: "Let the people you invite bring someone you don’t know. Whoever they bring is in, without your OK.",
@@ -16,4 +20,24 @@ export const CIRCLE_COPY = {
   saveFailed: "Couldn’t save the circle. Try again.",
   /** The sentence's name when no guest is going yet. */
   eachGuest: "Each guest",
+  /** The resbite page's row for a guest who may bring someone (CO-05), and bring mode's title (CO-06). */
+  bringSomeone: "Bring someone",
+  /** The row's line before any invite is used: `host` is the organizer's first name, `n` the invites allowed. */
+  bringHint: (host: string, n: number) => `${host} trusts you to bring ${people(n)}. They’re in, no approval needed.`,
+  /** The row's line once some are used: `n` the invites left. */
+  bringHintMore: (host: string, n: number) =>
+    `${host} trusts you to bring ${n} more ${n === 1 ? "person" : "people"}. They’re in, no approval needed.`,
+  /** The row once every invite is used, with no chevron. */
+  youBrought: (names: string[]) => `You brought ${joinNames(names)}`,
+  /** Bring mode's line under the title: `n` the invites left. */
+  bringLine: (host: string, n: number, title: string) => `${host} trusts you to bring ${people(n)} to ${title}.`,
+  /** Bring mode when the allowance doesn't allow bringing, and 42501 'Not allowed to bring people here'. */
+  notAllowed: "You can’t bring anyone to this resbite now.",
+  /** Bring mode with no invites left, and 22023 'No invites left'. */
+  noneLeft: "You’ve used all your invites for this resbite.",
+  /**
+   * A batch refused with 'Not allowed to bring people here' while the allowance still allows bringing: one of the
+   * people picked is someone the host removed (C5).
+   */
+  oneRefused: "One of these people can’t be brought here. Ask the host.",
 };

@@ -1,6 +1,9 @@
 import type { Guest } from "../services/rsvp";
 import type { HostRequest } from "../services/joinRequests";
 import type { ConnectionState } from "../services/connections";
+import type { Allowance } from "../services/circle";
+import { CIRCLE_COPY } from "./circleCopy";
+import { firstName } from "./circle";
 import type { InvitedPerson } from "../state/useEvent";
 import { ANSWER_OPTIONS } from "./rsvp";
 import { EXACT_ADDRESS_LATER, eventPlace } from "./eventView";
@@ -150,6 +153,56 @@ export function bottomRow(i: { role: Viewer; state: PageState; response: string 
   if (i.state === "open" && !answered(i.response)) return { kind: "answer" };
   if (answered(i.response)) return { kind: "reply", text: replyText(i.response!), change: i.state === "open" };
   return { kind: "none" };
+}
+
+/**
+ * Who brought a guest and their level (CO-P8), from their attendee row. A row without them (a browser stub, an old
+ * cache, a database before the circles migration) reads as nobody's, level 1.
+ */
+export function broughtFrom(row: { brought_by?: unknown; level?: unknown }): { broughtById: string | null; level: number } {
+  const level = row.level;
+  return {
+    broughtById: typeof row.brought_by === "string" && row.brought_by ? row.brought_by : null,
+    level: typeof level === "number" && Number.isSafeInteger(level) && level >= 1 ? level : 1,
+  };
+}
+
+/**
+ * Whom the signed-in guest brought, for "You brought …": the first names of their brought guests who are still in
+ * (not answered, Going or Maybe), then their own unanswered links (the stored name, else the number).
+ */
+export function broughtNames(i: { guests: readonly Guest[]; invited: readonly InvitedPerson[]; userId: string | null }): string[] {
+  if (!i.userId) return [];
+  const still: readonly string[] = ["pending", "accepted", "maybe"];
+  const guests = i.guests
+    .filter((g) => g.broughtById === i.userId && still.includes(g.response))
+    .map((g) => firstName(g.name) || g.name);
+  return [...guests, ...i.invited.map((p) => p.name)];
+}
+
+export type BringRow = { kind: "bring"; hint: string } | { kind: "brought"; text: string };
+
+/**
+ * The resbite page's "Bring someone" row (CO-05), right after the people row: only for a guest who is Going or Maybe
+ * on an open resbite and whose allowance lets them bring (`mayBring`: the host's circle isn't Nobody and they are within
+ * its levels). While invites are left it opens bring mode; once all are used it reads whom they brought, with no
+ * chevron. `host` is the organizer's first name.
+ */
+export function bringRow(i: {
+  role: Viewer;
+  state: PageState;
+  response: string | null;
+  allowance: Allowance | null;
+  broughtNames: string[];
+  host: string;
+}): BringRow | null {
+  const a = i.allowance;
+  if (i.role !== "guest" || i.state !== "open" || (i.response !== "accepted" && i.response !== "maybe") || !a?.mayBring)
+    return null;
+  if (a.remaining > 0)
+    return { kind: "bring", hint: a.used === 0 ? CIRCLE_COPY.bringHint(i.host, a.allowed) : CIRCLE_COPY.bringHintMore(i.host, a.remaining) };
+  if (a.remaining === 0 && i.broughtNames.length > 0) return { kind: "brought", text: CIRCLE_COPY.youBrought(i.broughtNames) };
+  return null;
 }
 
 export type MoreRow = "calendar" | "mute" | "unmute" | "again" | "changeReply" | "cancel";

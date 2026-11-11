@@ -18,7 +18,20 @@ type Contacts = ReturnType<typeof import("../state/useContactInvites").useContac
 
 type Group = ReturnType<typeof groupContacts>[number];
 
-function Row({ g, chosen, badge, onPress }: { g: Group; chosen?: ContactNumber; badge: boolean; onPress: () => void }) {
+/** `disabled`: bring mode's cap is reached and this contact isn't picked (`Pressable` sets `accessibilityState.disabled`). */
+function Row({
+  g,
+  chosen,
+  badge,
+  disabled,
+  onPress,
+}: {
+  g: Group;
+  chosen?: ContactNumber;
+  badge: boolean;
+  disabled: boolean;
+  onPress: () => void;
+}) {
   const detail = chosen?.label ?? (g.numbers.length > 1 ? T.numbersCount(g.numbers.length) : g.numbers[0].label);
   return (
     <Pressable
@@ -26,8 +39,9 @@ function Row({ g, chosen, badge, onPress }: { g: Group; chosen?: ContactNumber; 
       accessibilityLabel={`${g.name}, ${detail}${badge ? `, ${T.onResbite}` : ""}`}
       accessibilityHint={T.rowHint}
       aria-checked={!!chosen}
+      disabled={disabled}
       onPress={onPress}
-      style={styles.row}
+      style={[styles.row, disabled && styles.off]}
     >
       <View style={styles.who}>
         <Copy style={styles.name}>{g.name}</Copy>
@@ -111,6 +125,7 @@ export function PickStep({ k, previewing }: { k: Contacts; previewing: boolean }
                 g={g}
                 chosen={chosen}
                 badge={!!chosen && k.onResbite.has(chosen.key)}
+                disabled={!chosen && k.atCap}
                 onPress={() => (g.numbers.length === 1 ? k.toggle(g.numbers[0]) : setChoosing(g))}
               />
             );
@@ -250,5 +265,6 @@ const styles = StyleSheet.create({
   heading: { fontWeight: "700", color: c.muted, textTransform: "uppercase", fontSize: 12 },
   box: { width: 22, height: 22, borderRadius: 7, borderWidth: 1.5, borderColor: "#cfc9d6", alignItems: "center", justifyContent: "center" },
   boxOn: { backgroundColor: c.aquaDark, borderColor: c.aquaDark },
+  off: { opacity: 0.55 },
   ok: { backgroundColor: c.aquaSoft, borderRadius: 14, padding: 12 },
 });

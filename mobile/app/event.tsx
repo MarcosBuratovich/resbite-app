@@ -19,6 +19,7 @@ import {
   RefreshCw,
   Repeat,
   Send,
+  UserPlus,
 } from "lucide-react-native";
 import { Button, Copy, ErrorNote, Reveal, s } from "../src/design/ui";
 import { MenuRow, MenuSeparator } from "../src/design/MenuRow";
@@ -37,6 +38,7 @@ import { meetingDetailsView } from "../src/domain/eventDetails";
 import { coverNotice, mapsUrl } from "../src/domain/eventView";
 import {
   bottomRow,
+  bringRow,
   byline,
   cancelQuestion,
   EVENT_COPY,
@@ -52,6 +54,9 @@ import {
   whenLines,
 } from "../src/domain/eventPage";
 import { ANSWER_OPTIONS, answerKey, canRespond, responseFor, type Response } from "../src/domain/rsvp";
+import { firstName } from "../src/domain/circle";
+import { CIRCLE_COPY } from "../src/domain/circleCopy";
+import { INVITE_COPY } from "../src/domain/inviteCopy";
 import { useApp } from "../src/state/AppState";
 import { useEvent } from "../src/state/useEvent";
 import { useEventDevice } from "../src/state/useEventDevice";
@@ -141,6 +146,15 @@ export default function EventPage() {
   const answeredGuest = showsNames(role, response);
   const going = guests.filter((g) => g.response === "accepted").map((g) => g.name);
   const row = bottomRow({ role, state, response });
+  // CO-05: a guest whom the host's circle trusts may bring someone, up to their allowance.
+  const bring = bringRow({
+    role,
+    state,
+    response,
+    allowance: event.allowance,
+    broughtNames: event.broughtNames,
+    host: firstName(organizer) || INVITE_COPY.hostFallback,
+  });
   const rows = moreRows({ role, state, muted: event.muted, response, calendar: device.shown });
   const hasMore = rows.length > 0;
   const closeMore = () => setMoreOpen(false);
@@ -166,6 +180,9 @@ export default function EventPage() {
   }
   function openPeople() {
     router.push({ pathname: "/guests", params: { plan: current.id } });
+  }
+  function bringSomeone() {
+    router.push({ pathname: "/invitations", params: { plan: current.id, bring: "1" } });
   }
   const acting = event.acting !== null;
   const answerControl = (after?: (saved: Response) => void | Promise<void>) =>
@@ -355,6 +372,7 @@ export default function EventPage() {
           names={answeredGuest ? going : []}
           onOpen={answeredGuest ? openPeople : undefined}
         />
+        {bring && <BringRow row={bring} onOpen={bringSomeone} />}
         {!!current.description && <Copy>{current.description}</Copy>}
         {current.categories.length > 0 && (
           <View style={styles.chips}>
@@ -484,6 +502,42 @@ function PeopleRow({ text, names, onOpen }: { text: string; names: string[]; onO
   );
 }
 
+/**
+ * "Bring someone" (CO-05), right after the people row: a row card that opens bring mode, with the host's trust in a
+ * line under the title; or, once every invite is used, whom the guest brought, as text with no chevron.
+ */
+function BringRow({ row, onOpen }: { row: NonNullable<ReturnType<typeof bringRow>>; onOpen: () => void }) {
+  const icon = (
+    <View aria-hidden importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={styles.bringIcon}>
+      <UserPlus size={20} strokeWidth={1.8} color={c.aquaDark} />
+    </View>
+  );
+  if (row.kind === "brought")
+    return (
+      <View style={styles.card}>
+        {icon}
+        <Text style={[styles.rowTitle, { flex: 1 }]}>{row.text}</Text>
+      </View>
+    );
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${CIRCLE_COPY.bringSomeone}. ${row.hint}`}
+      onPress={onOpen}
+      style={[styles.card, styles.bring]}
+    >
+      {icon}
+      <View style={styles.rowText}>
+        <Text style={styles.rowTitle}>{CIRCLE_COPY.bringSomeone}</Text>
+        <Text style={styles.hint}>{row.hint}</Text>
+      </View>
+      <View aria-hidden importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+        <ChevronRight size={20} strokeWidth={1.8} color={c.muted} />
+      </View>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   chips: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 },
   row: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 44, paddingVertical: 6 },
@@ -503,6 +557,12 @@ const styles = StyleSheet.create({
     backgroundColor: c.paper,
   },
   counts: { fontFamily: fonts.bold, fontSize: 15, color: c.ink },
+  // The mockup's Bring someone card: an aqua edge and wash, the icon in an aqua circle.
+  bring: { borderWidth: 1.5, borderColor: c.aqua, backgroundColor: "#F3FBFA" },
+  bringIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: c.aquaSoft, alignItems: "center", justifyContent: "center" },
+  rowTitle: { fontFamily: fonts.medium, fontSize: 15, color: c.ink },
+  // Ink, not muted: muted is 4.48:1 on the aqua wash, under 4.5:1 for 12 pt text.
+  hint: { fontFamily: fonts.body, fontSize: 12, lineHeight: 17, color: c.ink },
   answer: {
     paddingHorizontal: space.l,
     paddingTop: space.m,

@@ -7,11 +7,15 @@ import { connectionGateway, type ConnectionPerson } from "../services/connection
 import { inviteCodeStore, type StoredInvite } from "../services/inviteCodeStore";
 import { putInviteQuietly, sendPersonalLink } from "../services/inviteSend";
 import {
+  canPick,
   contactNumbers,
   hostRegion,
   inviteItems,
   newInviteCode,
+  pickChosen,
+  pickToggled,
   storedFor,
+  userToggled,
   usersToInvite,
   type ContactNumber,
 } from "../domain/contactInvites";
@@ -26,7 +30,8 @@ const digitsOf = (e164: string) => e164.replace(/\D/g, "");
 export type Access = "idle" | "loading" | "ready" | "denied" | "web";
 export type Sendable = { number: ContactNumber; code: string; sentVia?: StoredInvite["sentVia"] };
 export type Outcome = { inApp: string[]; already: string[]; links: Sendable[] };
-type Message = { host: string; title: string; when: string };
+/** The personal link's message: `inviter` only when a guest brings someone (CO-P9). */
+type Message = { inviter?: string; host: string; title: string; when: string };
 
 /**
  * Contact invitations for one event: the contact pages, the picked numbers, the "On Resbite" lookup (picked
@@ -41,8 +46,10 @@ export function useContactInvites(a: {
   enabled: boolean;
   /** The user ids already on the resbite (its owner and guests): their connections read "Invited". */
   onPlan?: string[];
+  /** Bring mode's cap: the invites left. A host has none. */
+  limit?: number;
 }) {
-  const { planId, scope, userPhone, message, enabled, onPlan } = a;
+  const { planId, scope, userPhone, message, enabled, onPlan, limit } = a;
   const hostDefault = useMemo(() => hostRegion(userPhone, deviceRegion()), [userPhone]);
   // The region a number without a country code is read in: the host's own, until the host picks another.
   const [assumedRegion, setAssumedRegionState] = useState(hostDefault);
@@ -203,32 +210,27 @@ export function useContactInvites(a: {
     return q ? all.filter((n) => `${n.name} ${n.label}`.toLowerCase().includes(q)) : all;
   }, [all, query]);
   const selected = useMemo(() => Object.values(picked), [picked]);
+  const numbersCount = selected.length;
+  const usersCount = usersToInvite(chosenUsers, invitedUsers).length;
   /** What Invite N counts: the picked numbers and the picked connections not already on the resbite. */
-  const inviteCount = selected.length + usersToInvite(chosenUsers, invitedUsers).length;
+  const inviteCount = numbersCount + usersCount;
+  /** Bring mode's cap is reached: unpicked rows can't be picked (`canPick`). */
+  const atCap = !canPick(inviteCount, limit, false);
 
+  // Each pick goes through the cap (`canPick`): each list counts its own latest picks, and the other's as last shown.
   /** Picks a connection, or clears the pick; someone already on the resbite can't be picked. */
   function toggleUser(userId: string) {
     if (invitedUsers.has(userId)) return;
-    setChosenUsers((old) => {
-      const next = new Set(old);
-      if (!next.delete(userId)) next.add(userId);
-      return next;
-    });
+    setChosenUsers((old) => userToggled(old, userId, invitedUsers, numbersCount, limit));
   }
 
   /** Picks this number for its contact (replacing another of theirs); picking the same one again clears it. */
   function toggle(n: ContactNumber) {
-    setPicked((old) => {
-      if (old[n.contact]?.key === n.key) {
-        const { [n.contact]: _gone, ...rest } = old;
-        return rest;
-      }
-      return { ...old, [n.contact]: n };
-    });
+    setPicked((old) => pickToggled(old, n, usersCount, limit));
   }
   /** Picks this number for its contact; choosing again replaces it. */
   function choose(n: ContactNumber) {
-    setPicked((old) => ({ ...old, [n.contact]: n }));
+    setPicked((old) => pickChosen(old, n, usersCount, limit));
   }
   /** Parses a typed number with the host's region; picks it on success. Returns an error message otherwise. */
   function addNumber(name: string, input: string, region?: string): string | null {
@@ -236,8 +238,9 @@ export function useContactInvites(a: {
     if (!parsed.ok) return parsed.message;
     const n = contactNumbers([{ fullName: name, phones: [{ number: parsed.e164 }] }], region ?? assumedRegion).numbers[0];
     if (!n) return INVALID_PHONE;
+    // Past the cap the number is still listed, unpicked, like any contact that can't be picked now.
     setManual((old) => (old.some((x) => x.key === n.key) ? old : [n, ...old]));
-    setPicked((old) => ({ ...old, [n.contact]: n }));
+    setPicked((old) => pickChosen(old, n, usersCount, limit));
     return null;
   }
 
@@ -384,6 +387,6 @@ export function useContactInvites(a: {
   return {
     assumedRegion, setAssumedRegion, access, visible, selected, picked, onResbite, query, setQuery, more, limited, skipped, offset,
     busy, error, setError, notice, setNotice, outcome, loadContacts, toggle, choose, addNumber, invite, send,
-    connections, chosenUsers, toggleUser, invitedUsers, inviteCount,
+    connections, chosenUsers, toggleUser, invitedUsers, inviteCount, atCap,
   };
 }

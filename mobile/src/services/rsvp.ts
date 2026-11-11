@@ -4,7 +4,7 @@ import { planFromRow, type Plan } from "../domain/plans";
 import type { RsvpAttempt, RsvpSnapshot } from "../domain/rsvp";
 import { isInviteToken } from "../domain/appLinks";
 import { claimLinkErrorMessage, incompleteInvitation } from "../domain/eventLinks";
-import { answerCountsFrom, type AnswerCounts } from "../domain/eventPage";
+import { answerCountsFrom, broughtFrom, type AnswerCounts } from "../domain/eventPage";
 const eventUnavailable =
   "This invitation is unavailable, or its details could not be refreshed. Check your connection and try again.";
 export async function readRsvp(
@@ -64,7 +64,15 @@ export async function writeRsvp(attempt: RsvpAttempt) {
   if (error) throw error;
 }
 
-export type Guest = { userId: string; name: string; response: string };
+export type Guest = {
+  userId: string;
+  name: string;
+  response: string;
+  /** The guest who brought them (CO-P9); null for someone a host invited, or who asked through the link. */
+  broughtById: string | null;
+  /** Their level in the circle: 1 for a host's guest, one more per hop. */
+  level: number;
+};
 /** The name `readGuests` gives a guest whose profile name is missing or blank (a hidden or missing profile row). */
 export const UNNAMED_GUEST = "Tester";
 export type EventSnapshot = {
@@ -91,18 +99,22 @@ export async function readGuests(planId: string): Promise<Guest[]> {
   const { data, error } = await withDeadline((signal) =>
     supabase
       .from("attendees")
-      .select("user_id,response,profiles(display_name)")
+      .select("user_id,response,brought_by,level,profiles(display_name)")
       .eq("plan_id", planId)
       .abortSignal(signal),
   );
   if (error) throw new Error(eventUnavailable);
   const rows: unknown = data;
   return Array.isArray(rows)
-    ? rows.map((row: { user_id: string; response: string; profiles: { display_name: string } | null }) => ({
-        userId: row.user_id,
-        name: row.profiles?.display_name || UNNAMED_GUEST,
-        response: row.response,
-      }))
+    ? rows.map(
+        (row: { user_id: string; response: string; brought_by?: unknown; level?: unknown; profiles: { display_name: string } | null }) => ({
+          userId: row.user_id,
+          name: row.profiles?.display_name || UNNAMED_GUEST,
+          response: row.response,
+          // A browser stub or an old cache lacks the two columns: nobody's, level 1.
+          ...broughtFrom(row),
+        }),
+      )
     : [];
 }
 

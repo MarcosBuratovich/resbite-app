@@ -130,3 +130,38 @@ test("the card's save, step by step: a save whose answer is lost reloads, and th
   card = circleSave(card, { type: "read", value: { invites: 3, levels: 2 }, version: 5 });
   assert.deepEqual(card, { saved: { invites: 3, levels: 2 }, shown: { invites: 3, levels: 2 }, saving: false, version: 5 });
 });
+
+test("allowance asks my_bring_allowance for the resbite and maps may_bring", async () => {
+  const { calls, gw } = gateway({ allowed: 2, used: 1, remaining: 1, level: 1, may_bring: true });
+  assert.deepEqual(await gw.allowance("plan-1"), { allowed: 2, used: 1, remaining: 1, level: 1, mayBring: true });
+  assert.deepEqual(calls, [{ fn: "my_bring_allowance", args: { p_plan: "plan-1" } }]);
+  assert.deepEqual(await gateway({ allowed: 0, used: 0, remaining: 0, level: 0, may_bring: false }).gw.allowance("p"), {
+    allowed: 0,
+    used: 0,
+    remaining: 0,
+    level: 0,
+    mayBring: false,
+  });
+  // bring_allowance gives a null level to someone without a guest row; the app reads it as 0.
+  assert.equal((await gateway({ allowed: 1, used: 0, remaining: 1, level: null, may_bring: false }).gw.allowance("p")).level, 0);
+});
+
+test("allowance: a refusal is thrown as the server sent it; a reply it can't read is the connection line", async () => {
+  const refusal = { code: "42501", message: "Not invited" };
+  await assert.rejects(gateway(null, refusal).gw.allowance("p"), (e) => e === refusal);
+  for (const odd of [null, [], "x", { allowed: 1, used: 0, remaining: 1, level: 1 }, { allowed: "1", used: 0, remaining: 1, level: 1, may_bring: true }, { allowed: 1, used: -1, remaining: 1, level: 1, may_bring: true }])
+    await assert.rejects(gateway(odd).gw.allowance("p"), /Check your connection and try again\./);
+});
+
+test("allowance runs inside the deadline it is given", async () => {
+  let wrapped = 0;
+  const gw = createCircleGateway(
+    async () => ({ data: { allowed: 1, used: 0, remaining: 1, level: 1, may_bring: true }, error: null }),
+    async (request) => {
+      wrapped += 1;
+      return request(new AbortController().signal);
+    },
+  );
+  assert.equal((await gw.allowance("p")).remaining, 1);
+  assert.equal(wrapped, 1);
+});
