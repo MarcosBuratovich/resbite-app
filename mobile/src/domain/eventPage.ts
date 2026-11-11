@@ -8,6 +8,8 @@ import { firstName } from "./circle";
 import type { InvitedPerson } from "../state/useEvent";
 import { ANSWER_OPTIONS } from "./rsvp";
 import { EXACT_ADDRESS_LATER, eventPlace } from "./eventView";
+import { removeGuestQuestion } from "./eventLinks";
+import { INVITE_COPY } from "./inviteCopy";
 import { planEnd } from "./planEnd";
 import { repeatLine, whenLine } from "./whenText";
 
@@ -47,10 +49,16 @@ export const EVENT_COPY = {
   broughtByJoined: (name: string) => `brought by ${name}`,
   /** An unanswered invitation the viewer sent bringing someone. */
   broughtByYou: "brought by you",
+  /** An answered guest the viewer brought (C28). */
+  broughtByYouAnswered: "Brought by you",
   /** A brought person's spoken name: the indent in words (rule 11). */
   broughtLabel: (name: string, bringer: string) => `${name}, brought by ${bringer}`,
   /** A guest's link as a host sees it, by the number's last two digits (never the number). */
   numberEnding: (ending: string) => `Number ending ••${ending}`,
+  /** The same, spoken: a screen reader would read the bullets out. */
+  numberEndingSpoken: (ending: string) => `Number ending ${ending}`,
+  /** After a host's question for removing someone who brought people: they stay (CO-P15). */
+  broughtStay: "People they brought stay invited.",
   people: "People",
   actionsFor: "Actions for ",
   makeAdmin: "Make admin",
@@ -393,6 +401,11 @@ export type PersonRow = {
    * and for a bringer with no name to show (an account being deleted, or a name not known yet: rule 10).
    */
   broughtByName: string | null;
+  /**
+   * The viewer brought them, host or not (C28, C31): "Brought by you" or "· brought by you", and Remove is the viewer's
+   * own take-back, not a host's removal.
+   */
+  broughtByMe: boolean;
   /** A link a guest sent, as a host sees it (`plan_brought_invitations`): Remove takes it back by this id. */
   invitationId?: string;
 };
@@ -462,10 +475,12 @@ function chained(items: readonly Placed[]): PersonRow[] {
  * owner's included ("Going · 6" for the owner and five guests); the event page's people row counts the guests alone.
  *
  * The chain (CO-07, CO-P11): in each group a brought person sits under whoever brought them (`chained`). An answered one
- * reads "Brought by Pedro"; an unanswered one adds "· brought by Pedro" to how they were invited, or "· brought by you"
- * for the viewer's own. A bringer with no name in `bringerNames` (`plan_bringers`; an account being deleted, or not read
- * yet) gets no words (rule 10). A host's Invited group also lists the links their guests sent (`broughtLinks`) by their
- * last digits, with Remove but no Send again (the host has no code). A guest who isn't a host gets an Invited group of
+ * reads "Brought by Pedro"; an unanswered one adds "· brought by Pedro" to how they were invited; the viewer's own read
+ * "Brought by you" and "· brought by you", host or not (C28, C31). The names are `bringerNames` (`plan_bringers`) once
+ * read: a bringer it leaves out (an account being deleted) gets no words (rule 10). Until it is read (null), a bringer's
+ * first name comes from their own row when the list shows it, never from the placeholder name (`unnamed`) (C28). A host's Invited group also lists the links their guests sent (`broughtLinks`) by their
+ * last digits, with Remove but no Send again (the host has no code); their own links are in `invited`, marked
+ * `brought`, with Send again and their own take-back (C31). A guest who isn't a host gets an Invited group of
  * their own invitations only (CO-P10): the links they sent (`invited`, which the server gives them alone) and the in-app
  * invitees they brought, with Remove (and Send again where this phone holds the code) while the resbite is open; Remove
  * stays off a host's row, which the server never lets them withdraw (C18-I1). Everyone else's unanswered rows stay
@@ -481,8 +496,10 @@ export function peopleGroups(i: {
   owner: { userId: string; name: string } | null;
   userId: string | null;
   connections: Record<string, ConnectionState> | null;
-  /** The bringers' first names by account id (`plan_bringers`); none when not read. */
-  bringerNames?: Readonly<Record<string, string>>;
+  /** The bringers' first names by account id (`plan_bringers`); null (or left out) until a read lands. */
+  bringerNames?: Readonly<Record<string, string>> | null;
+  /** The name a guest row carries when its profile has none (`UNNAMED_GUEST`): never a bringer's name. */
+  unnamed?: string;
   /** The links the hosts' guests sent bringing someone (`plan_brought_invitations`); a host's only. */
   broughtLinks?: readonly BroughtLink[];
 }): { title: string; rows: PersonRow[] }[] {
@@ -499,14 +516,25 @@ export function peopleGroups(i: {
     const connection = connectionOf(userId);
     return { userId, connection, me, actions: me ? [] : [...connectionActions(connection, askable), ...hostActions] };
   };
+  // Until the bringers' names are read, a bringer's own row on the list names them (C28): the rows this viewer sees.
+  const ownRows = new Map<string, string>();
+  if (!i.bringerNames)
+    for (const g of i.guests) {
+      const shown = host || g.response !== "pending" || (!!i.userId && g.broughtById === i.userId);
+      const first = g.name === i.unnamed ? "" : firstName(g.name);
+      if (shown && first) ownRows.set(g.userId, first);
+    }
   /** A bringer's first name, or null when there is no bringer or no name to show. */
   const nameOf = (bringer: string | null | undefined): string | null => {
-    const name = bringer ? i.bringerNames?.[bringer] : undefined;
+    if (!bringer) return null;
+    if (!i.bringerNames) return ownRows.get(bringer) ?? null;
+    const name = i.bringerNames[bringer];
     return typeof name === "string" && name.trim() ? name.trim() : null;
   };
+  const mine = (bringer: string | null | undefined): boolean => !!bringer && bringer === i.userId;
   /** An unanswered row's status: how they were invited, then who brought them. */
   const unanswered = (status: string, bringer: string | null): string => {
-    if (bringer && bringer === i.userId) return `${status}${SEPARATOR}${EVENT_COPY.broughtByYou}`;
+    if (mine(bringer)) return `${status}${SEPARATOR}${EVENT_COPY.broughtByYou}`;
     const name = nameOf(bringer);
     return name ? `${status}${SEPARATOR}${EVENT_COPY.broughtByJoined(name)}` : status;
   };
@@ -527,12 +555,13 @@ export function peopleGroups(i: {
       row: {
         key: `guest:${g.userId}`,
         name: g.name,
-        status: by ? EVENT_COPY.broughtBy(by) : null,
+        status: mine(g.broughtById) ? EVENT_COPY.broughtByYouAnswered : by ? EVENT_COPY.broughtBy(by) : null,
         reply,
         admin: i.admins.includes(g.userId),
         kind: "guest",
         ...person(g.userId, true, guestActions(g.userId, canMakeAdmin)),
         broughtByName: by,
+        broughtByMe: mine(g.broughtById),
       },
     };
   };
@@ -553,14 +582,16 @@ export function peopleGroups(i: {
             kind: "owner",
             ...person(i.owner.userId, true, []),
             broughtByName: null,
+            broughtByMe: false,
           },
         },
       ]
     : [];
   const going = answeredGroup("going", "going");
-  // A host's own links, nobody's; a guest's are all their own (the server lists no one else's to a guest).
+  // A guest's links are all their own (the server lists no one else's to a guest); a host's are nobody's, but for the
+  // ones they brought before they were one (`brought`, C31).
   const linkItems: Placed[] = i.invited.map((p) => {
-    const by = host ? null : i.userId;
+    const by = !host || p.brought ? i.userId : null;
     return {
       by,
       row: {
@@ -575,6 +606,7 @@ export function peopleGroups(i: {
         me: false,
         actions: !(host ? acts : bringerActs) ? [] : p.stored !== null ? ["sendAgain", "removeInvite"] : ["removeInvite"],
         broughtByName: nameOf(by),
+        broughtByMe: mine(by),
       },
     };
   });
@@ -596,6 +628,7 @@ export function peopleGroups(i: {
             me: false,
             actions: acts ? ["removeInvite"] : [],
             broughtByName: by,
+            broughtByMe: false,
           },
         };
       })
@@ -616,6 +649,7 @@ export function peopleGroups(i: {
           kind: "appInvite",
           ...person(g.userId, admin, host ? guestActions(g.userId, false) : bringerActs && !admin ? ["removeInvite"] : []),
           broughtByName: nameOf(g.broughtById),
+          broughtByMe: mine(g.broughtById),
         },
       };
     });
@@ -633,6 +667,7 @@ export function peopleGroups(i: {
       me: false,
       actions: acts ? ["approve", "decline"] : [],
       broughtByName: null,
+      broughtByMe: false,
     },
   }));
   const groups = [
@@ -648,27 +683,49 @@ export function peopleGroups(i: {
     .map((g) => ({ title: `${g.title}${SEPARATOR}${g.rows.length}`, rows: g.rows }));
 }
 
-/**
- * The sheet's line under the name, where the group title is out of sight: the answer, then who brought them ("Going ·
- * brought by Pedro"); otherwise how they were invited (which already says who brought them), or the answer.
- */
-export function sheetHead(row: PersonRow): string | null {
-  if (row.broughtByName && row.reply) return `${row.reply}${SEPARATOR}${EVENT_COPY.broughtByJoined(row.broughtByName)}`;
-  return row.status ?? row.reply;
+/** The row with this key in the list as it is now, or null once it is gone: an open sheet follows it (C31 Q6). */
+export function rowByKey(groups: readonly { rows: readonly PersonRow[] }[], key: string): PersonRow | null {
+  for (const g of groups) for (const row of g.rows) if (row.key === key) return row;
+  return null;
 }
 
 /**
- * A row's spoken name (rule 11): "Clara, brought by Pedro" for a brought person whose bringer is named, then the badges,
- * then the rest of the status line, each part on its own ("Pat, brought by Pedro, Invited in the app"). A row the
- * viewer brought keeps its own words ("Juli, Invited by WhatsApp, brought by you").
+ * The sheet's line under the name, where the group title is out of sight: the answer, then who brought them ("Going ·
+ * brought by Pedro", "Going · brought by you"); otherwise how they were invited (which already says who brought them),
+ * or the answer.
+ */
+export function sheetHead(row: PersonRow): string | null {
+  if (row.reply && row.broughtByMe) return `${row.reply}${SEPARATOR}${EVENT_COPY.broughtByYou}`;
+  if (row.reply && row.broughtByName) return `${row.reply}${SEPARATOR}${EVENT_COPY.broughtByJoined(row.broughtByName)}`;
+  return row.status ?? row.reply;
+}
+
+const ENDING_PREFIX = EVENT_COPY.numberEnding("");
+/** A row's name as a screen reader should say it: a guest's link by its digits without the bullets ("Number ending 23"). */
+export function spokenName(row: Pick<PersonRow, "name" | "invitationId">): string {
+  return row.invitationId && row.name.startsWith(ENDING_PREFIX)
+    ? EVENT_COPY.numberEndingSpoken(row.name.slice(ENDING_PREFIX.length))
+    : row.name;
+}
+
+/**
+ * A row's spoken name (rule 11): "Clara, brought by Pedro" (or "Clara, brought by you") for a brought person whose
+ * bringer is named, then the badges, then the rest of the status line, each part on its own ("Pat, brought by Pedro,
+ * Invited in the app"). A guest's link by its digits is spoken without the bullets.
  */
 export function personLabel(row: PersonRow): string {
+  const name = spokenName(row);
   const parts = row.status ? row.status.split(SEPARATOR) : [];
   const bringer = row.broughtByName;
-  const words = bringer ? [EVENT_COPY.broughtBy(bringer), EVENT_COPY.broughtByJoined(bringer)] : [];
-  const brought = !!bringer && parts.length > 0 && words.includes(parts[parts.length - 1]);
+  const words = row.broughtByMe
+    ? [EVENT_COPY.broughtByYouAnswered, EVENT_COPY.broughtByYou]
+    : bringer
+      ? [EVENT_COPY.broughtBy(bringer), EVENT_COPY.broughtByJoined(bringer)]
+      : [];
+  const brought = parts.length > 0 && words.includes(parts[parts.length - 1]);
+  const lead = !brought ? name : row.broughtByMe ? `${name}, ${EVENT_COPY.broughtByYou}` : EVENT_COPY.broughtLabel(name, bringer!);
   return [
-    brought ? EVENT_COPY.broughtLabel(row.name, bringer) : row.name,
+    lead,
     row.kind === "owner" ? EVENT_COPY.hostingBadge : null,
     row.admin ? EVENT_COPY.adminBadge : null,
     row.connection === "connected" ? CONNECTIONS_COPY.connectedBadge : null,
@@ -679,13 +736,48 @@ export function personLabel(row: PersonRow): string {
 }
 
 /**
+ * The avatar's letter: the first letter of the name (so an emoji first is skipped, never cut in half), upper case; null
+ * when there is none (a number, a name of emoji) and for a guest's link a host sees by its digits: a phone stands in.
+ */
+export function avatarLetter(row: Pick<PersonRow, "name" | "invitationId">): string | null {
+  if (row.invitationId) return null;
+  const letter = row.name.match(/\p{L}/u)?.[0];
+  return letter ? letter.toLocaleUpperCase() : null;
+}
+
+/**
  * How Remove takes someone off the list: a guest's link a host sees by its id (`revoke_brought_invitation`); an in-app
- * invitee a guest brought, withdrawn by that guest (`withdraw_brought_invitation`); any other link by its number
+ * invitee the viewer brought, host or not, taken back (`withdraw_brought_invitation`, C31); any other link by its number
  * (`revoke_phone_invitation`, which admits a bringer for their own); anyone else as a host removes a guest today.
  */
 export function removalOf(row: PersonRow, host: boolean): "brought" | "withdraw" | "link" | "guest" {
   if (row.invitationId) return "brought";
   if (row.kind === "linkInvite") return "link";
-  if (row.kind === "appInvite" && !host) return "withdraw";
+  if (row.kind === "appInvite" && (!host || row.broughtByMe)) return "withdraw";
   return "guest";
+}
+
+/**
+ * The sheet's question before a remove or a decline, written and spoken (a link by its digits without the bullets). A
+ * host removing someone who brought people adds that they stay (CO-P15, C31 Q1): the people on the list they brought.
+ */
+export function removeQuestion(
+  row: PersonRow,
+  i: { guests: readonly Guest[]; host: boolean; view: "remove" | "decline" },
+): { text: string; spoken: string } {
+  const ask = (name: string) => {
+    if (i.view === "decline") return INVITE_COPY.declineQuestion(name);
+    const base = row.kind === "guest" ? removeGuestQuestion(name) : INVITE_COPY.removeInvite(name);
+    const brought = i.host && !!row.userId && i.guests.some((g) => g.broughtById === row.userId && g.userId !== row.userId);
+    return brought ? `${base} ${EVENT_COPY.broughtStay}` : base;
+  };
+  return { text: ask(row.name), spoken: ask(spokenName(row)) };
+}
+
+/** Where focus goes once a row is removed: the next row on the list, else the one before; null when none is left. */
+export function focusAfterRemove(groups: readonly { rows: readonly PersonRow[] }[], key: string): string | null {
+  const rows = groups.flatMap((g) => g.rows);
+  const at = rows.findIndex((r) => r.key === key);
+  if (at < 0) return null;
+  return rows[at + 1]?.key ?? rows[at - 1]?.key ?? null;
 }

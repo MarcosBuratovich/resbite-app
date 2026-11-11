@@ -18,6 +18,7 @@ export function GrabberSheet({
   title,
   icon: Icon,
   onClose,
+  onDismissed,
   label,
   footer,
   children,
@@ -29,6 +30,11 @@ export function GrabberSheet({
   onClose: () => void;
   /** The sheet's spoken name when it differs from the title, or when there is no title. */
   label?: string;
+  /**
+   * Once the sheet has gone, after its closing animation (web and iOS; Android's Modal never says): focus can move
+   * then, as the sheet holds it until it has gone.
+   */
+  onDismissed?: () => void;
   /** Fixed under the scrolling content, above the home indicator (a sheet's Done); it never scrolls away. */
   footer?: React.ReactNode;
   children?: React.ReactNode;
@@ -48,7 +54,7 @@ export function GrabberSheet({
     [],
   );
   return (
-    <Modal visible={visible} transparent animationType={reduce ? "fade" : "slide"} onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType={reduce ? "fade" : "slide"} onRequestClose={onClose} onDismiss={onDismissed}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.backdrop}>
         <Pressable accessible={false} focusable={false} style={StyleSheet.absoluteFill} onPress={onClose} />
         <SafeAreaView

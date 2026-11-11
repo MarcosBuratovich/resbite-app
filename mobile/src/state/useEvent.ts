@@ -23,9 +23,8 @@ import { readProfile } from "../services/profile";
 import { requestGone } from "./connectionsModel";
 import { rememberName } from "./knownNames";
 
-/** Nothing read: shared empties, so a screen with none gets the same value on every render. */
+/** Nothing read: a shared empty, so a screen with none gets the same value on every render. */
 const NO_LINKS: BroughtLink[] = [];
-const NO_NAMES: Record<string, string> = {};
 
 /** Someone a host invited by personal link who hasn't answered: the stored name, else the number. */
 export type InvitedPerson = {
@@ -37,6 +36,8 @@ export type InvitedPerson = {
   stored: StoredInvite | null;
   /** The key `stored` is saved under (the E.164, or the other spelling), so removing the invitation forgets it. */
   storedKey: string | null;
+  /** The signed-in person brought them (`plan_phone_invitations`' `brought`): a host's own brought link is theirs (C31). */
+  brought: boolean;
 };
 
 export type EventPage = {
@@ -68,10 +69,10 @@ export type EventPage = {
   requests: HostRequest[];
   /**
    * The bringers' first names by account id (`plan_bringers`), for "Brought by Pedro" on the people list (CO-07): read
-   * where names show, landing when it arrives. A failed read keeps the names known; empty at first, where names are
-   * hidden and in the preview.
+   * only for the list (`chain`), where names show, landing when it arrives. A failed read keeps the names known. Null
+   * until a read lands, where names are hidden and in the preview: the list then names a bringer from their own row.
    */
-  bringerNames: Record<string, string>;
+  bringerNames: Record<string, string> | null;
   /**
    * The links the guests sent bringing someone, for a host (`plan_brought_invitations`): listed by their last digits
    * and counted in "N invited". Empty for everyone else, and when the read fails.
@@ -121,7 +122,9 @@ export type EventPage = {
  * One event for both roles (UX1). load and respond are invite.tsx's logic, unchanged
  * apart from reading the whole event; cancel is My resbites' (cancelPlan), unchanged.
  */
-export function useEvent(planId: string | undefined): EventPage {
+export function useEvent(planId: string | undefined, options: { chain?: boolean } = {}): EventPage {
+  // Only the people list shows who brought whom, so only it reads the bringers' names (C28).
+  const chain = options.chain === true;
   const { session, preview, localPlans, setLocalPlans, signingOut } = useApp();
   const account = useAccount();
   const accountReady = account.status === "approved" && account.reviewed && account.profileReady;
@@ -141,7 +144,7 @@ export function useEvent(planId: string | undefined): EventPage {
   const [invited, setInvited] = useState<InvitedPerson[]>([]);
   const [allowance, setAllowance] = useState<Allowance | null>(null);
   const [requests, setRequests] = useState<HostRequest[]>([]);
-  const [bringerNames, setBringerNames] = useState<Record<string, string>>(NO_NAMES);
+  const [bringerNames, setBringerNames] = useState<Record<string, string> | null>(null);
   const [broughtLinks, setBroughtLinks] = useState<BroughtLink[]>(NO_LINKS);
   // The latest read of the bringers' names wins, as the states' does.
   const bringersRead = useRef(0);
@@ -158,7 +161,7 @@ export function useEvent(planId: string | undefined): EventPage {
     setInvited([]);
     setAllowance(null);
     setRequests([]);
-    setBringerNames(NO_NAMES);
+    setBringerNames(null);
     setBroughtLinks(NO_LINKS);
     setConnections(null);
     setOwnName(null);
@@ -180,8 +183,6 @@ export function useEvent(planId: string | undefined): EventPage {
       setError(null);
       try {
         const next = await readEvent(planId, userId);
-        // Bring mode, opened from here, names the organizer without reading it again (C23).
-        rememberName(userId, next.plan.owner_id, next.organizer);
         // Unanswered personal links and open-link requests are every host's: the owner's and the admins'.
         const host = next.plan.owner_id === userId || next.admins.includes(userId);
         // The connection states, only where names show (the server refuses them elsewhere). The event never waits
@@ -195,9 +196,10 @@ export function useEvent(planId: string | undefined): EventPage {
             },
             () => {},
           );
-        // Likewise the bringers' names for the chain (CO-07): only where names show, and a failure keeps those known.
+        // Likewise the bringers' names for the chain (CO-07): only on the people list, where names show; a failure keeps
+        // those known.
         const bringersTicket = ++bringersRead.current;
-        if (named)
+        if (named && chain)
           void circleGateway.bringers(planId).then(
             (names) => {
               if (valid() && bringersTicket === bringersRead.current) setBringerNames(names);
@@ -240,6 +242,8 @@ export function useEvent(planId: string | undefined): EventPage {
         // Likewise the mute: a failed read leaves the resbite unmuted on screen, and the next load tries again.
         const muted = await readMutedSeries().catch(() => new Set<string>());
         if (valid()) {
+          // Bring mode, opened from here, names the organizer without reading it again (C23); only from a current read.
+          rememberName(userId, next.plan.owner_id, next.organizer);
           setMutedSeries(muted);
           if (people) {
             setInvited(people);
@@ -249,7 +253,7 @@ export function useEvent(planId: string | undefined): EventPage {
           setBroughtLinks(links);
           // Names hidden: no states and no bringers at all, whatever was known before.
           if (!named && ticket === statesRead.current) setConnections(null);
-          if (!named && bringersTicket === bringersRead.current) setBringerNames(NO_NAMES);
+          if (!named && bringersTicket === bringersRead.current) setBringerNames(null);
           setSnapshot(next);
           setFresh(true);
           syncDevice();
@@ -267,7 +271,7 @@ export function useEvent(planId: string | undefined): EventPage {
         if (valid()) setBusy(false);
       }
     },
-    [planId, userId, preview, signingOut, accountReady],
+    [planId, userId, preview, signingOut, accountReady, chain],
   );
   const {
     refresh: load,
@@ -491,7 +495,7 @@ export function useEvent(planId: string | undefined): EventPage {
     allowance: preview ? null : allowance,
     broughtNames: role === "guest" && !preview ? broughtNames({ guests: snapshot?.guests ?? [], invited, userId: userId ?? null }) : [],
     requests,
-    bringerNames: preview ? NO_NAMES : bringerNames,
+    bringerNames: preview ? null : bringerNames,
     broughtLinks: preview ? NO_LINKS : broughtLinks,
     connections: preview ? null : connections,
     owner,
@@ -545,6 +549,7 @@ async function readInvited(planId: string, userId: string): Promise<InvitedPerso
         name: saved?.name?.trim() || formatPhone(e164),
         stored: saved,
         storedKey: entry?.key ?? null,
+        brought: r.brought,
       };
     });
 }

@@ -68,11 +68,21 @@ function broughtLinksFrom(reply: unknown): BroughtLink[] {
   });
 }
 
+const TAKE_BACK_REFUSED = "TakeBackRefused";
+/** A take-back the server refused, in words, told apart by its name (as `isNotAConnection` does). */
+const refusal = (): Error => Object.assign(Error(CIRCLE_COPY.cantTakeBack), { name: TAKE_BACK_REFUSED });
+/** The server refused a take-back (it answered); a lost connection is not one. */
+export const isTakeBackRefusal = (e: unknown): boolean => e instanceof Error && e.name === TAKE_BACK_REFUSED;
+
 /**
- * Taking back an invitation, refused (C14): 42501 (answered meanwhile, ended, or someone only a host may take off)
- * says so; anything else is the connection line.
+ * Taking back an invitation, refused (C14): 42501 (ended, or someone only a host may take off) or 22023 'Invitation
+ * answered' (C29) says so; anything else is the connection line.
  */
-const takeBackMessage = (e: unknown): string => (errorField(e, "code") === "42501" ? CIRCLE_COPY.cantTakeBack : INVITE_COPY.offline);
+function takeBackError(e: unknown): Error {
+  const code = errorField(e, "code");
+  if (code === "42501" || (code === "22023" && errorField(e, "message") === "Invitation answered")) return refusal();
+  return Error(INVITE_COPY.offline);
+}
 
 /**
  * A bringer's Remove on their own link goes through `contactInviteGateway.revoke`, which words a 42501 for hosts
@@ -80,7 +90,21 @@ const takeBackMessage = (e: unknown): string => (errorField(e, "code") === "4250
  */
 export function bringerRevokeError(e: unknown): Error {
   if (!(e instanceof Error)) return Error(INVITE_COPY.offline);
-  return e.message === INVITE_COPY.hostsOnly ? Error(CIRCLE_COPY.cantTakeBack) : e;
+  return e.message === INVITE_COPY.hostsOnly || e.message === "Invitation answered" ? refusal() : e;
+}
+
+/**
+ * Runs a take-back. When the server refuses it, the list is read again before the refusal is told, so the row shows
+ * what holds now: taken back after all, or answered (C28). A lost connection reads nothing again: the read would
+ * likely fail too, and the event page would go.
+ */
+export async function takingBack(task: () => Promise<void>, reload: () => Promise<void>): Promise<void> {
+  try {
+    await task();
+  } catch (e) {
+    if (isTakeBackRefusal(e)) await reload().catch(() => {});
+    throw e;
+  }
 }
 
 /** The circle of trust: a refusal is thrown as the server sent it, as `connectionGateway` does. */
@@ -95,7 +119,7 @@ export function createCircleGateway(rpc: Rpc, deadline: Deadline = passThrough):
     try {
       await call(fn, args);
     } catch (e) {
-      throw Error(takeBackMessage(e));
+      throw takeBackError(e);
     }
   }
   return {

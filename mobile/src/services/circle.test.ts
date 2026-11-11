@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { bringerRevokeError, circleErrorMessage, createCircleGateway, saveCircle } from "./circle";
+import { bringerRevokeError, circleErrorMessage, createCircleGateway, isTakeBackRefusal, saveCircle, takingBack } from "./circle";
 import { circleSave, type CircleSaveState } from "../domain/circle";
 
 type Call = { fn: string; args: Record<string, unknown> };
@@ -193,18 +193,18 @@ test("bringers: each bringer's first name by id; a blank one is no name; a reply
 
 test("broughtLinks: id, ending, country and the bringer's first name, null when left out (C14); never the number", async () => {
   const reply = [
-    { id: "inv-1", ending: "23", country: "GB", brought_by_name: "Sol" },
-    { id: "inv-2", ending: "07", country: "AR" },
-    { id: "inv-3", ending: "45", country: "ES", brought_by_name: null, phone: "447700900145" },
-    { id: "inv-4", ending: "61", country: "GB", brought_by_name: "" },
+    { id: "inv-1", ending: "23", country: "44", brought_by_name: "Sol" },
+    { id: "inv-2", ending: "07", country: "54" },
+    { id: "inv-3", ending: "45", country: "34", brought_by_name: null, phone: "447700900145" },
+    { id: "inv-4", ending: "61", country: "44", brought_by_name: "" },
   ];
   assert.deepEqual(await gateway(reply).gw.broughtLinks("p"), [
-    { id: "inv-1", ending: "23", country: "GB", broughtByName: "Sol" },
-    { id: "inv-2", ending: "07", country: "AR", broughtByName: null },
-    { id: "inv-3", ending: "45", country: "ES", broughtByName: null },
-    { id: "inv-4", ending: "61", country: "GB", broughtByName: null },
+    { id: "inv-1", ending: "23", country: "44", broughtByName: "Sol" },
+    { id: "inv-2", ending: "07", country: "54", broughtByName: null },
+    { id: "inv-3", ending: "45", country: "34", broughtByName: null },
+    { id: "inv-4", ending: "61", country: "44", broughtByName: null },
   ]);
-  for (const odd of [null, {}, "x", [{ ending: "23", country: "GB" }], [{ id: "inv-1", country: "GB" }], [{ id: "inv-1", ending: 23, country: "GB" }], [null]])
+  for (const odd of [null, {}, "x", [{ ending: "23", country: "44" }], [{ id: "inv-1", country: "44" }], [{ id: "inv-1", ending: 23, country: "44" }], [null]])
     await assert.rejects(gateway(odd).gw.broughtLinks("p"), /Check your connection and try again\./, JSON.stringify(odd));
   const refusal = { code: "42501", message: "Plan owner required" };
   await assert.rejects(gateway(null, refusal).gw.broughtLinks("p"), (e) => e === refusal);
@@ -234,4 +234,60 @@ test("a bringer removing their own link too late hears it in a bringer's words, 
   assert.equal(bringerRevokeError(new Error("Only a host can invite people to a resbite that hasn’t ended.")).message, "You can’t take this invitation back any more.");
   assert.equal(bringerRevokeError(new Error("Check your connection and try again.")).message, "Check your connection and try again.");
   assert.equal(bringerRevokeError("odd").message, "Check your connection and try again.");
+});
+
+test("a take-back refused because they answered meanwhile is worded as any refusal (C29); the refusals are told apart", async () => {
+  for (const call of ["revokeBrought", "withdraw"] as const) {
+    const answered = gateway(null, { code: "22023", message: "Invitation answered" }).gw[call]("p", "x");
+    await assert.rejects(answered, (e) => e instanceof Error && e.message === "You can’t take this invitation back any more." && isTakeBackRefusal(e), call);
+    await assert.rejects(gateway(null, { code: "42501", message: "Not your invitation" }).gw[call]("p", "x"), (e) => isTakeBackRefusal(e), call);
+    // Another 22023, or a lost connection, is not a refusal.
+    await assert.rejects(gateway(null, { code: "22023", message: "Invalid circle" }).gw[call]("p", "x"), (e) => e instanceof Error && e.message === "Check your connection and try again." && !isTakeBackRefusal(e), call);
+    await assert.rejects(gateway(null, { message: "Failed to fetch" }).gw[call]("p", "x"), (e) => !isTakeBackRefusal(e), call);
+  }
+  // A bringer's link: the hosts' words, or 'Invitation answered', become a refusal in a bringer's words.
+  for (const message of ["Only a host can invite people to a resbite that hasn’t ended.", "Invitation answered"]) {
+    const e = bringerRevokeError(new Error(message));
+    assert.deepEqual([e.message, isTakeBackRefusal(e)], ["You can’t take this invitation back any more.", true], message);
+  }
+  assert.equal(isTakeBackRefusal(bringerRevokeError(new Error("Check your connection and try again."))), false);
+  assert.equal(isTakeBackRefusal("You can’t take this invitation back any more."), false);
+});
+
+test("takingBack: a refused take-back reads the list again before it says why; anything else doesn't (C28)", async () => {
+  const steps: string[] = [];
+  const reload = async () => void steps.push("reload");
+  await takingBack(async () => void steps.push("sent"), reload);
+  assert.deepEqual(steps, ["sent"]);
+  steps.length = 0;
+  const refused = Object.assign(new Error("You can’t take this invitation back any more."), { name: "TakeBackRefused" });
+  await assert.rejects(
+    takingBack(async () => {
+      steps.push("sent");
+      throw refused;
+    }, reload),
+    (e) => e === refused,
+  );
+  assert.deepEqual(steps, ["sent", "reload"]);
+  steps.length = 0;
+  const offline = new Error("Check your connection and try again.");
+  await assert.rejects(
+    takingBack(async () => {
+      throw offline;
+    }, reload),
+    (e) => e === offline,
+  );
+  assert.deepEqual(steps, [], "a lost connection reads nothing again: the list might not load either");
+  // A reload that fails still lets the refusal through.
+  await assert.rejects(
+    takingBack(
+      async () => {
+        throw refused;
+      },
+      async () => {
+        throw new Error("offline");
+      },
+    ),
+    (e) => e === refused,
+  );
 });

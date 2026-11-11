@@ -15,6 +15,8 @@ export type PhoneInvitation = {
   country: string;
   answered: boolean;
   response: string | null;
+  /** The caller brought them (a guest's links, and a host's own from before they were one): theirs to take back (C31). */
+  brought: boolean;
 };
 export type ContactInviteGateway = {
   /** Which of these numbers (digits) belong to people already on Resbite. */
@@ -148,6 +150,7 @@ export function createContactInviteGateway(
         country: String(d.country),
         answered: d.answered === true,
         response: typeof d.response === "string" ? d.response : null,
+        brought: d.brought === true,
       }));
     },
     async revoke(plan, phone) {

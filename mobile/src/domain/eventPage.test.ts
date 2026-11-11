@@ -22,9 +22,14 @@ import {
   personLabel,
   placeLine,
   planEnd,
+  avatarLetter,
+  focusAfterRemove,
   removalOf,
+  removeQuestion,
   replyText,
+  rowByKey,
   sheetHead,
+  spokenName,
   viewerRole,
   whenLines,
   type PersonRow,
@@ -131,10 +136,11 @@ test("hostLabel and byline", () => {
 
 const guest = (userId: string, name: string, response: string, broughtById: string | null = null, level = 1) => ({ userId, name, response, broughtById, level });
 /** Someone invited by personal link: `held` is whether this phone holds their code (with the app it went by, if any). */
-const linkPerson = (phone: string, name: string, sentVia?: "whatsapp" | "messages", held = sentVia !== undefined) => ({
+const linkPerson = (phone: string, name: string, sentVia?: "whatsapp" | "messages", held = sentVia !== undefined, brought = false) => ({
   phone,
   e164: `+44${phone}`,
-  country: "GB",
+  country: "44",
+  brought,
   name,
   stored: held ? { code: "c", name, ...(sentVia ? { sentVia } : {}) } : null,
   storedKey: held ? `+44${phone}` : null,
@@ -221,20 +227,20 @@ test("peopleGroups for an owner", () => {
     "Going · 2", "Maybe · 1", "Can’t go · 1", "Invited, not answered yet · 4", "Waiting for you · 1",
   ]);
   const [going, maybe, cant, invited, waiting] = groups.map((g) => g.rows);
-  assert.deepEqual(going[0], { key: "guest:adm", name: "Leo", status: null, reply: "Going", admin: true, kind: "guest", userId: "adm", connection: null, me: false, actions: ["removeAdmin", "remove"], depth: 0, broughtByName: null });
+  assert.deepEqual(going[0], { key: "guest:adm", name: "Leo", status: null, reply: "Going", admin: true, kind: "guest", userId: "adm", connection: null, me: false, actions: ["removeAdmin", "remove"], depth: 0, broughtByName: null, broughtByMe: false });
   assert.deepEqual(going[1].actions, ["makeAdmin", "remove"]);
   assert.equal(going[1].admin, false);
-  assert.deepEqual(maybe[0], { key: "guest:m1", name: "Sol", status: null, reply: "Maybe", admin: false, kind: "guest", userId: "m1", connection: null, me: false, actions: ["remove"], depth: 0, broughtByName: null });
+  assert.deepEqual(maybe[0], { key: "guest:m1", name: "Sol", status: null, reply: "Maybe", admin: false, kind: "guest", userId: "m1", connection: null, me: false, actions: ["remove"], depth: 0, broughtByName: null, broughtByMe: false });
   assert.deepEqual(cant[0].actions, ["remove"]);
   assert.equal(cant[0].reply, "Can’t go");
-  assert.deepEqual(invited[0], { key: "link:111", name: "Dan", status: "Invited by WhatsApp", reply: null, admin: false, kind: "linkInvite", phone: "111", connection: null, me: false, actions: ["sendAgain", "removeInvite"], depth: 0, broughtByName: null });
+  assert.deepEqual(invited[0], { key: "link:111", name: "Dan", status: "Invited by WhatsApp", reply: null, admin: false, kind: "linkInvite", phone: "111", connection: null, me: false, actions: ["sendAgain", "removeInvite"], depth: 0, broughtByName: null, broughtByMe: false });
   // Send again needs this phone's code for the person, found under any spelling of their number (`stored`).
   assert.equal(invited[1].status, "Invited by link");
   assert.deepEqual(invited[1].actions, ["removeInvite"]);
   assert.equal(invited[2].status, "Invited by link");
   assert.deepEqual(invited[2].actions, ["sendAgain", "removeInvite"]);
-  assert.deepEqual(invited[3], { key: "app:p1", name: "Pat", status: "Invited in the app", reply: null, admin: false, kind: "appInvite", userId: "p1", connection: null, me: false, actions: ["remove"], depth: 0, broughtByName: null });
-  assert.deepEqual(waiting[0], { key: "request:r1", name: "Rae", status: "Asked through the link", reply: null, admin: false, kind: "request", userId: "r1", connection: null, me: false, actions: ["approve", "decline"], depth: 0, broughtByName: null });
+  assert.deepEqual(invited[3], { key: "app:p1", name: "Pat", status: "Invited in the app", reply: null, admin: false, kind: "appInvite", userId: "p1", connection: null, me: false, actions: ["remove"], depth: 0, broughtByName: null, broughtByMe: false });
+  assert.deepEqual(waiting[0], { key: "request:r1", name: "Rae", status: "Asked through the link", reply: null, admin: false, kind: "request", userId: "r1", connection: null, me: false, actions: ["approve", "decline"], depth: 0, broughtByName: null, broughtByMe: false });
 });
 
 test("peopleGroups: the owner removes an admin's role whatever their answer; Make admin only on Going", () => {
@@ -424,7 +430,7 @@ test("the owner's row comes first under Going: Hosting, the connection actions, 
   assert.deepEqual(asGuest.map((g) => g.title), ["Going · 2", "Maybe · 1"]);
   assert.deepEqual(asGuest[0].rows[0], {
     key: "owner:own", name: "Ana", status: null, reply: "Hosting", admin: false, kind: "owner", userId: "own",
-    connection: "none", me: false, actions: ["connect"], depth: 0, broughtByName: null,
+    connection: "none", me: false, actions: ["connect"], depth: 0, broughtByName: null, broughtByMe: false,
   });
   assert.deepEqual(asGuest[0].rows.map((r) => r.name), ["Ana", "Marta"]);
   // The owner's own list: their row, with no dots.
@@ -589,7 +595,7 @@ test("readGuests: who brought a guest and their level, read as nobody's and 1 wh
 /** Fixture people by id, named once (C6): `g("martin")` is Martín, Going, brought by nobody, level 1. */
 const NAMES: Record<string, string> = {
   owner: "Owner", ana: "Ana", pedro: "Pedro", clara: "Clara", martin: "Martín", marta: "Marta", sol: "Sol", leo: "Leo",
-  nico: "Nico", pat: "Pat", ines: "Inés", bo: "Bo", cy: "Cy", di: "Di", eve: "Eve",
+  nico: "Nico", pat: "Pat", ines: "Inés", bo: "Bo", cy: "Cy", di: "Di", eve: "Eve", sofia: "Sofía",
 };
 const g = (id: string, over: Partial<ReturnType<typeof guest>> = {}) => ({ ...guest(id, NAMES[id] ?? id, "accepted"), ...over });
 const base: Parameters<typeof peopleGroups>[0] = {
@@ -705,6 +711,7 @@ test("a bringer sees their own unanswered links and in-app invitees", () => {
     ["Leo", "Invited in the app · brought by you", [], 0],
   ]);
   assert.deepEqual([invited[2].kind, invited[2].userId, invited[2].broughtByName], ["appInvite", "clara", "Pedro"]);
+  assert.deepEqual(invited.map((r) => r.broughtByMe), [true, true, true, true]);
   assert.equal(invited[3].admin, true);
   // Every other pending row stays hidden from guests.
   assert.equal(groups.flatMap((x) => x.rows).some((r) => r.name === "Sol" || r.name === "Nico"), false);
@@ -728,8 +735,8 @@ test("a host sees a bringer's link by its last digits", () => {
     guests: [g("pedro"), g("sol"), g("pat", { response: "pending", broughtById: "pedro", level: 2 })],
     invited: [linkPerson("111", "Dan", "whatsapp")],
     broughtLinks: [
-      { id: "inv-1", ending: "23", country: "GB", broughtByName: "Sol" },
-      { id: "inv-2", ending: "07", country: "AR", broughtByName: null },
+      { id: "inv-1", ending: "23", country: "44", broughtByName: "Sol" },
+      { id: "inv-2", ending: "07", country: "54", broughtByName: null },
     ],
     bringerNames: { pedro: "Pedro" },
   };
@@ -740,6 +747,7 @@ test("a host sees a bringer's link by its last digits", () => {
   assert.deepEqual(invited[1], {
     key: "brought:inv-1", name: "Number ending ••23", status: "Invited by link · brought by Sol", reply: null, admin: false,
     kind: "linkInvite", invitationId: "inv-1", connection: null, me: false, actions: ["removeInvite"], depth: 0, broughtByName: "Sol",
+    broughtByMe: false,
   });
   // No Send again: the host has no code for it. No name to show for a bringer who has none.
   assert.deepEqual([invited[2].status, invited[2].invitationId, invited[2].actions, invited[2].broughtByName], ["Invited by link", "inv-2", ["removeInvite"], null]);
@@ -808,7 +816,7 @@ test("a brought row is labelled 'Clara, brought by Pedro', its other words after
     ],
     admins: ["marta"],
     invited: [linkPerson("111", "Dan", "whatsapp")],
-    broughtLinks: [{ id: "inv-1", ending: "23", country: "GB", broughtByName: "Sol" }],
+    broughtLinks: [{ id: "inv-1", ending: "23", country: "44", broughtByName: "Sol" }],
     bringerNames: { pedro: "Pedro" },
     connections: { marta: "connected" },
   });
@@ -817,7 +825,7 @@ test("a brought row is labelled 'Clara, brought by Pedro', its other words after
   assert.equal(personLabel(by("Clara")), "Clara, brought by Pedro");
   assert.equal(personLabel(by("Marta")), "Marta, brought by Pedro, Admin, Connected");
   assert.equal(personLabel(by("Pat")), "Pat, brought by Pedro, Invited in the app");
-  assert.equal(personLabel(by("Number ending ••23")), "Number ending ••23, brought by Sol, Invited by link");
+  assert.equal(personLabel(by("Number ending ••23")), "Number ending 23, brought by Sol, Invited by link");
   // No bringer, or none named: today's label.
   assert.equal(personLabel(by("Owner")), "Owner, Hosting");
   assert.equal(personLabel(by("Pedro")), "Pedro");
@@ -825,7 +833,7 @@ test("a brought row is labelled 'Clara, brought by Pedro', its other words after
   assert.equal(personLabel(by("Dan")), "Dan, Invited by WhatsApp");
   // The bringer's own rows say it in words already.
   const own = peopleGroups({ ...base, role: "guest", userId: "pedro", guests: [g("pedro"), g("clara", { response: "pending", broughtById: "pedro", level: 2 })], invited: [linkPerson("111", "Juli", "whatsapp")], bringerNames: { pedro: "Pedro" } });
-  assert.deepEqual(group(own, "Invited").map(personLabel), ["Juli, Invited by WhatsApp, brought by you", "Clara, Invited in the app, brought by you"]);
+  assert.deepEqual(group(own, "Invited").map(personLabel), ["Juli, brought by you, Invited by WhatsApp", "Clara, brought by you, Invited in the app"]);
 });
 
 test("Remove goes three ways: a guest's link by its id, a bringer's in-app invitee withdrawn, a link by its number", () => {
@@ -836,7 +844,7 @@ test("Remove goes three ways: a guest's link by its id, a bringer's in-app invit
       userId,
       guests: [g("pedro"), g("ana"), g("clara", { response: "pending", broughtById: "pedro", level: 2 })],
       invited: [linkPerson("111", "Dan", "whatsapp")],
-      broughtLinks: role === "owner" ? [{ id: "inv-1", ending: "23", country: "GB", broughtByName: "Sol" }] : [],
+      broughtLinks: role === "owner" ? [{ id: "inv-1", ending: "23", country: "44", broughtByName: "Sol" }] : [],
       bringerNames: { pedro: "Pedro" },
     }).flatMap((x) => x.rows);
   const host = groups("owner", "owner");
@@ -852,8 +860,8 @@ test("Remove goes three ways: a guest's link by its id, a bringer's in-app invit
 
 test("peopleCounts: a host's 'N invited' counts the links their guests sent too", () => {
   const links = [
-    { id: "inv-1", ending: "23", country: "GB", broughtByName: "Sol" },
-    { id: "inv-2", ending: "07", country: "AR", broughtByName: null },
+    { id: "inv-1", ending: "23", country: "44", broughtByName: "Sol" },
+    { id: "inv-2", ending: "07", country: "54", broughtByName: null },
   ];
   const counts = peopleCounts({ guests: [guest("p", "P", "pending"), guest("a", "A", "accepted")], invited: [linkPerson("1", "X")], requests: [], broughtLinks: links });
   assert.deepEqual(counts, { going: 1, maybe: 0, cantGo: 0, invited: 4, waiting: 0 });
@@ -876,18 +884,218 @@ test("the resbite page and the people list pass the chain's reads through", () =
   assert.match(list, /circleOf\(plan\)/);
   assert.match(list, /CIRCLE_COPY\.listLine\(/);
   const remove = list.slice(list.indexOf("const confirmRemove"), list.indexOf("const confirmDecline"));
-  assert.match(remove, /case "brought":\s*return void \(await circleGateway\.revokeBrought\(plan\.id, row\.invitationId!\)\);/);
-  assert.match(remove, /case "withdraw":\s*return void \(await circleGateway\.withdraw\(plan\.id, row\.userId!\)\);/);
+  assert.match(remove, /case "brought":\s*await takingBack\(\(\) => circleGateway\.revokeBrought\(plan\.id, row\.invitationId!\), reload\);/);
+  assert.match(remove, /case "withdraw":\s*await takingBack\(\(\) => circleGateway\.withdraw\(plan\.id, row\.userId!\), reload\);/);
   assert.match(remove, /contactInviteGateway\.revoke\(plan\.id, row\.phone!\)/);
   assert.match(remove, /removalOf\(row, host\)/);
 });
 
-test("useEvent reads the bringers' names where names show, keeping them on a failure, and the guests' links for hosts only", () => {
+test("useEvent reads the bringers' names for the people list only, where names show, and the guests' links for hosts only", () => {
   const src = readFileSync(new URL("../state/useEvent.ts", import.meta.url), "utf8");
-  assert.match(src, /bringerNames: Record<string, string>;/);
+  // Null until a read lands (C28): the list then takes a bringer's name from their own row.
+  assert.match(src, /bringerNames: Record<string, string> \| null;/);
   assert.match(src, /broughtLinks: BroughtLink\[\];/);
-  // Where names show, landing when it arrives; only the latest read sets them, and a failure changes nothing.
-  assert.match(src, /if \(named\)\s*void circleGateway\.bringers\(planId\)\.then\(\s*\(names\) => \{\s*if \(valid\(\) && bringersTicket === bringersRead\.current\) setBringerNames\(names\);\s*\},\s*\(\) => \{\},\s*\);/);
+  assert.match(src, /export function useEvent\(planId: string \| undefined, options: \{ chain\?: boolean \} = \{\}\): EventPage/);
+  // Only the people list asks (C28 Q4), where names show; only the latest read sets them; a failure changes nothing.
+  assert.match(src, /if \(named && chain\)\s*void circleGateway\.bringers\(planId\)\.then\(\s*\(names\) => \{\s*if \(valid\(\) && bringersTicket === bringersRead\.current\) setBringerNames\(names\);\s*\},\s*\(\) => \{\},\s*\);/);
   // Hosts only, read with their own links; a failure gives none.
   assert.match(src, /const \[people, links\] = host\s*\? await Promise\.all\(\[\s*readInvited\(planId, userId\)\.catch\(\(\): InvitedPerson\[\] => \[\]\),\s*circleGateway\.broughtLinks\(planId\)\.catch\(\(\): BroughtLink\[\] => \[\]\),\s*\]\)\s*: \[null, NO_LINKS\];/);
+  // The organizer's name is kept only from a read still current (C28).
+  const read = src.slice(src.indexOf("const next = await readEvent(planId, userId);"), src.indexOf("} catch (e) {"));
+  const kept = read.indexOf("rememberName(userId, next.plan.owner_id, next.organizer);");
+  assert.ok(kept > read.indexOf("if (valid()) {"), "rememberName under valid()");
+  // A host's own brought links are theirs (C31): the list's `brought` reaches InvitedPerson.
+  assert.match(src, /brought: r\.brought,/);
+  const people = readFileSync(new URL("../../app/guests.tsx", import.meta.url), "utf8");
+  assert.match(people, /useEvent\(planId, \{ chain: true \}\)/);
+  const page = readFileSync(new URL("../../app/event.tsx", import.meta.url), "utf8");
+  assert.match(page, /const event = useEvent\(planId\);/);
+});
+
+// Fix round 1 (C28, C31).
+test("EVENT_COPY's fix-round words", () => {
+  assert.equal(EVENT_COPY.broughtByYouAnswered, "Brought by you");
+  assert.equal(EVENT_COPY.numberEndingSpoken("23"), "Number ending 23");
+  assert.equal(EVENT_COPY.broughtStay, "People they brought stay invited.");
+});
+
+test("a bringer reads 'Brought by you' on the people they brought who answered, host or not (C28)", () => {
+  const input = {
+    ...base,
+    role: "guest" as const,
+    userId: "pedro",
+    guests: [g("pedro"), g("clara", { broughtById: "pedro", level: 2 }), g("sol", { response: "maybe", broughtById: "pedro", level: 2 }), g("marta", { broughtById: "ana", level: 2 })],
+    bringerNames: { pedro: "Pedro", ana: "Ana" },
+  };
+  const rows = peopleGroups(input).flatMap((x) => x.rows);
+  const by = (name: string) => rows.find((r) => r.name === name)!;
+  assert.deepEqual([by("Clara").status, by("Clara").broughtByMe, by("Clara").depth], ["Brought by you", true, 1]);
+  assert.equal(sheetHead(by("Clara")), "Going · brought by you");
+  assert.equal(sheetHead(by("Sol")), "Maybe · brought by you");
+  assert.equal(personLabel(by("Clara")), "Clara, brought by you");
+  // Someone else's reads as before.
+  assert.deepEqual([by("Marta").status, by("Marta").broughtByMe, personLabel(by("Marta"))], ["Brought by Ana", false, "Marta, brought by Ana"]);
+  assert.deepEqual([by("Pedro").status, by("Pedro").broughtByMe], [null, false]);
+  // An admin who brought Clara before being made one reads the same.
+  const admin = peopleGroups({ ...input, role: "admin", admins: ["pedro"] }).flatMap((x) => x.rows);
+  assert.equal(admin.find((r) => r.name === "Clara")!.status, "Brought by you");
+});
+
+test("until the bringers' names land, a brought row takes its bringer's first name from the bringer's own row (C28)", () => {
+  const guests = [
+    g("pedro", { name: "Pedro Pérez" }), g("clara", { name: "Clara Gómez", broughtById: "pedro", level: 2 }),
+    g("martin", { broughtById: "clara", level: 3 }), g("sol", { broughtById: "gone", level: 2 }),
+    g("nico", { name: "Tester" }), g("bo", { broughtById: "nico", level: 2 }),
+    g("pat", { response: "pending", broughtById: "pedro", level: 2 }),
+  ];
+  for (const bringerNames of [null, undefined]) {
+    const rows = peopleGroups({ ...base, guests, bringerNames, unnamed: "Tester" }).flatMap((x) => x.rows);
+    const by = (name: string) => rows.find((r) => r.name === name)!;
+    assert.deepEqual([by("Clara Gómez").status, by("Clara Gómez").broughtByName], ["Brought by Pedro", "Pedro"]);
+    assert.equal(by("Martín").status, "Brought by Clara");
+    assert.equal(personLabel(by("Martín")), "Martín, brought by Clara");
+    // A bringer not on the list, or with only the placeholder for a name: the indent without words.
+    assert.equal(by("Sol").status, null);
+    assert.deepEqual([by("Bo").status, by("Bo").depth], [null, 1]);
+    assert.equal(by("Pat").status, "Invited in the app · brought by Pedro");
+  }
+  // Once read, the server's names decide: one it leaves out (an account being deleted) has no words (rule 10).
+  const landed = peopleGroups({ ...base, guests, bringerNames: { clara: "Clara" }, unnamed: "Tester" }).flatMap((x) => x.rows);
+  assert.equal(landed.find((r) => r.name === "Clara Gómez")!.status, null);
+  assert.equal(landed.find((r) => r.name === "Martín")!.status, "Brought by Clara");
+  // A guest's list takes names only from the rows it shows: a pending bringer is hidden from them (UX2-D6).
+  const asGuest = peopleGroups({
+    ...base,
+    role: "guest",
+    userId: "marta",
+    guests: [g("marta"), g("pedro", { response: "pending" }), g("clara", { broughtById: "pedro", level: 2 })],
+    bringerNames: null,
+  }).flatMap((x) => x.rows);
+  assert.equal(asGuest.find((r) => r.name === "Clara")!.status, null);
+});
+
+test("a host's own brought links and invitees are theirs: 'brought by you', Send again, and their own take-back (C31)", () => {
+  const groups = peopleGroups({
+    ...base,
+    role: "admin",
+    userId: "pedro",
+    admins: ["pedro"],
+    guests: [g("pedro"), g("sofia", { response: "pending", broughtById: "pedro", level: 2 }), g("pat", { response: "pending" })],
+    // The host's list holds their own level-1 links and the links they brought (`brought`).
+    invited: [linkPerson("101", "Dan", "whatsapp"), linkPerson("123", "Juli", "whatsapp", true, true), linkPerson("124", "+44 124", undefined, false, true)],
+    broughtLinks: [{ id: "inv-9", ending: "45", country: "44", broughtByName: "Clara" }],
+    bringerNames: { pedro: "Pedro" },
+  });
+  const rows = group(groups, "Invited");
+  const by = (name: string) => rows.find((r) => r.name === name)!;
+  assert.deepEqual([by("Dan").status, by("Dan").broughtByMe, by("Dan").actions], ["Invited by WhatsApp", false, ["sendAgain", "removeInvite"]]);
+  assert.deepEqual([by("Juli").status, by("Juli").broughtByMe, by("Juli").actions], ["Invited by WhatsApp · brought by you", true, ["sendAgain", "removeInvite"]]);
+  assert.deepEqual([by("+44 124").status, by("+44 124").actions], ["Invited by link · brought by you", ["removeInvite"]]);
+  assert.equal(personLabel(by("Juli")), "Juli, brought by you, Invited by WhatsApp");
+  assert.deepEqual([by("Sofía").status, by("Sofía").broughtByMe, by("Sofía").actions], ["Invited in the app · brought by you", true, ["remove"]]);
+  assert.deepEqual([by("Pat").status, by("Pat").broughtByMe], ["Invited in the app", false]);
+  // Remove: their own invitee is taken back (withdraw), their own link by its number; anyone else's as a host.
+  assert.equal(removalOf(by("Sofía"), true), "withdraw");
+  assert.equal(removalOf(by("Pat"), true), "guest");
+  assert.equal(removalOf(by("Juli"), true), "link");
+  assert.equal(removalOf(by("Number ending ••45"), true), "brought");
+});
+
+test("avatars take the first letter of a name, else a phone stands in", () => {
+  const row = (name: string, invitationId?: string) => ({ name, invitationId });
+  assert.equal(avatarLetter(row("Clara Gómez")), "C");
+  assert.equal(avatarLetter(row("élise")), "É");
+  // An emoji first: the first letter after it; none at all, no letter (never half a character).
+  assert.equal(avatarLetter(row("🎲 Pedro")), "P");
+  assert.equal(avatarLetter(row("👩🏽‍💻")), null);
+  assert.equal(avatarLetter(row("+44 7700 900222")), null);
+  assert.equal(avatarLetter(row("   ")), null);
+  // A guest's link a host sees by its digits has no name to take a letter from.
+  assert.equal(avatarLetter(row("Number ending ••23", "inv-1")), null);
+});
+
+test("a link a host sees by its digits is spoken without the bullets", () => {
+  const groups = peopleGroups({ ...base, broughtLinks: [{ id: "inv-1", ending: "23", country: "44", broughtByName: "Sol" }, { id: "inv-2", ending: "07", country: "44", broughtByName: null }] });
+  const [sol, none] = group(groups, "Invited");
+  assert.equal(spokenName(sol), "Number ending 23");
+  assert.equal(personLabel(sol), "Number ending 23, brought by Sol, Invited by link");
+  assert.equal(personLabel(none), "Number ending 07, Invited by link");
+  // Everyone else is spoken as written.
+  assert.equal(spokenName(group(peopleGroups({ ...base, guests: [g("ana")] }), "Going")[0]), "Ana");
+});
+
+test("the remove question: a host removing someone who brought people says those people stay (C31 Q1)", () => {
+  const input = {
+    ...base,
+    guests: [
+      g("pedro"), g("clara", { broughtById: "pedro", level: 2 }), g("sol"),
+      g("nico", { response: "pending" }), g("bo", { response: "pending", broughtById: "nico", level: 2 }), g("cy", { response: "pending" }),
+    ],
+    bringerNames: { pedro: "Pedro", nico: "Nico" },
+  };
+  const rows = peopleGroups(input).flatMap((x) => x.rows);
+  const by = (name: string) => rows.find((r) => r.name === name)!;
+  const ask = (name: string, host = true) => removeQuestion(by(name), { guests: input.guests, host, view: "remove" });
+  assert.deepEqual(ask("Pedro"), {
+    text: "Remove Pedro from this resbite? They can ask to join again with the event link, and you’ll decide. People they brought stay invited.",
+    spoken: "Remove Pedro from this resbite? They can ask to join again with the event link, and you’ll decide. People they brought stay invited.",
+  });
+  assert.equal(ask("Sol").text, "Remove Sol from this resbite? They can ask to join again with the event link, and you’ll decide.");
+  assert.equal(ask("Nico").text, "Remove the invitation for Nico? People they brought stay invited.");
+  assert.equal(ask("Cy").text, "Remove the invitation for Cy?");
+  // A guest taking back their own invitee: today's question.
+  assert.equal(ask("Nico", false).text, "Remove the invitation for Nico?");
+  // A link by its digits is spoken without the bullets; a decline is asked as before.
+  const link = group(peopleGroups({ ...base, broughtLinks: [{ id: "inv-1", ending: "23", country: "44", broughtByName: "Sol" }] }), "Invited")[0];
+  assert.deepEqual(removeQuestion(link, { guests: [], host: true, view: "remove" }), {
+    text: "Remove the invitation for Number ending ••23?",
+    spoken: "Remove the invitation for Number ending 23?",
+  });
+  const rae = group(peopleGroups({ ...base, requests: [request("rae", "Rae")] }), "Waiting")[0];
+  assert.equal(removeQuestion(rae, { guests: [], host: true, view: "decline" }).text, "Decline Rae? They’ll see they weren’t added.");
+});
+
+test("after a remove, focus goes to the list's next row, else the one before", () => {
+  const groups = peopleGroups({ ...base, owner: { userId: "owner", name: "Owner" }, guests: [g("ana"), g("sol", { response: "maybe" }), g("pat", { response: "pending" })] });
+  assert.equal(focusAfterRemove(groups, "guest:ana"), "guest:sol");
+  // Across groups, in the order shown.
+  assert.equal(focusAfterRemove(groups, "guest:sol"), "app:pat");
+  assert.equal(focusAfterRemove(groups, "app:pat"), "guest:sol");
+  assert.equal(focusAfterRemove(peopleGroups({ ...base, guests: [g("ana")] }), "guest:ana"), null);
+  assert.equal(focusAfterRemove(groups, "guest:nobody"), null);
+});
+
+test("an open sheet follows the list: the same person's row as it is now, or nothing once they are gone (C31 Q6)", () => {
+  const guests = [g("pedro"), g("clara", { broughtById: "pedro", level: 2 })];
+  const before = peopleGroups({ ...base, guests, bringerNames: {} });
+  const held = rowByKey(before, "guest:clara")!;
+  assert.equal(sheetHead(held), "Going");
+  const after = peopleGroups({ ...base, guests, bringerNames: { pedro: "Pedro" } });
+  assert.equal(sheetHead(rowByKey(after, held.key)!), "Going · brought by Pedro");
+  assert.equal(rowByKey(peopleGroups({ ...base, guests: [g("pedro")] }), held.key), null);
+});
+
+test("the people list wires the fix round: take-backs reload when refused, focus moves, long names wrap (C28, C31)", () => {
+  const list = readFileSync(new URL("../../app/guests.tsx", import.meta.url), "utf8");
+  // Rows the viewer brought are taken back in a bringer's words; a refused take-back reads the list again (C28, C29).
+  assert.match(list, /takingBack\(/);
+  assert.match(list, /throw host && !row\.broughtByMe \? e : bringerRevokeError\(e\);/);
+  // The sheet follows the list (Q6) and its question and the next row take focus (D4).
+  assert.match(list, /rowByKey\(groups, sheet\.row\.key\)/);
+  assert.match(list, /focusHeading\(question\.current\)/);
+  assert.match(list, /focusAfterRemove\(groups, row\.key\)/);
+  // The next row takes focus once the sheet has gone: its focus trap holds focus until then (web), and VoiceOver's
+  // modal too (iOS). Android's Modal says nothing on closing, so there it moves when the sheet state clears.
+  assert.match(list, /onDismissed=\{focusNextRow\}/);
+  assert.match(list, /if \(Platform\.OS === "android" && !sheet\) focusNextRow\(\);/);
+  const sheet = readFileSync(new URL("../design/GrabberSheet.tsx", import.meta.url), "utf8");
+  assert.match(sheet, /onDismiss=\{onDismissed\}/);
+  assert.match(list, /removeQuestion\(current, \{ guests, host, view: sheet\.view \}\)/);
+  // Spoken names without bullets; the avatar's letter, else a phone.
+  assert.match(list, /label=\{`\$\{EVENT_COPY\.actionsFor\}\$\{spokenName\(row\)\}`\}/);
+  assert.match(list, /avatarLetter\(/);
+  // A long name deep in the chain wraps beside the dots (D3).
+  assert.match(list, /name: \{ flex: 1, minWidth: 0, gap: 1 \}/);
+  assert.match(list, /nameText: \{[^}]*flexShrink: 1, minWidth: 0/);
+  assert.match(list, /unnamed: UNNAMED_GUEST/);
 });

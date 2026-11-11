@@ -746,7 +746,7 @@ export function InfoSheet({
 }
 
 /** Moves VoiceOver (or browser focus) to a step's title after the step changes. */
-export function focusHeading(target: Text | null) {
+export function focusHeading(target: Text | View | null) {
   if (!target) return;
   if (Platform.OS === "web") {
     const node = target as unknown as HTMLElement;

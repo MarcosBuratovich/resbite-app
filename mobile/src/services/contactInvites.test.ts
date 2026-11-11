@@ -212,7 +212,7 @@ test("list and revoke call their RPCs", async () => {
     data: c.fn === "plan_phone_invitations" ? [{ phone: "447700900202", country: "44", answered: true, response: "accepted" }] : null,
     error: null,
   }));
-  assert.deepEqual(await gw.list("p"), [{ phone: "447700900202", country: "44", answered: true, response: "accepted" }]);
+  assert.deepEqual(await gw.list("p"), [{ phone: "447700900202", country: "44", answered: true, response: "accepted", brought: false }]);
   await gw.revoke("p", "447700900202");
   assert.deepEqual(calls[1], { fn: "revoke_phone_invitation", args: { p_plan: "p", p_phone: "447700900202" } });
 });
@@ -251,4 +251,16 @@ test("a bring the server refuses is thrown in the circle's words, by invite and 
   assert.equal(many.calls.length, 1);
   const none = gateway(() => ({ data: null, error: { code: "22023", message: "No invites left" } }));
   await assert.rejects(none.gw.invite("p", [{ user: "u1" }]), { message: CIRCLE_COPY.noneLeft });
+});
+
+test("list marks a link the caller brought, so a host's own brought links read as theirs (C31)", async () => {
+  const gw = createContactInviteGateway(async () => ({
+    data: [
+      { phone: "447700900101", country: "44", answered: false, response: null },
+      { phone: "447700900123", country: "44", answered: false, response: null, brought: true },
+      { phone: "447700900124", country: "44", answered: false, response: null, brought: "yes" },
+    ],
+    error: null,
+  }));
+  assert.deepEqual((await gw.list("p")).map((r) => r.brought), [false, true, false]);
 });
