@@ -304,7 +304,8 @@ test("the plan read selects the flag, the repeat rule, the series columns, the c
   const { readFileSync } = await import("node:fs");
   const source = readFileSync(new URL("../services/plans.ts", import.meta.url), "utf8");
   const columns = /const planColumns =\s*"([^"]+)"/.exec(source)?.[1].split(",") ?? [];
-  for (const name of ["place_tbd", "repeat_weeks", "series_id", "repeats_from", "bring_invites", "bring_levels", "plan_admins(user_id)"])
+  // The version too: the circle card takes a read only when it is at least as new as its last confirmed save.
+  for (const name of ["version", "place_tbd", "repeat_weeks", "series_id", "repeats_from", "bring_invites", "bring_levels", "plan_admins(user_id)"])
     assert.ok(columns.includes(name), `planColumns lacks ${name}`);
   assert.equal(/const planListColumns =\s*"([^"]+)"/.exec(source)?.[1], "*,plan_admins(user_id)");
 });

@@ -32,20 +32,21 @@ export const circleGateway = createCircleGateway(
 );
 
 /**
- * Why the circle wasn't saved, in words. 42501: the resbite ended or this person is no longer a host, so the screen
- * reloads and shows its gate. 22023: numbers the server refused. Anything else, a lost connection included, is the
- * connection line.
+ * Why the circle wasn't saved, in words, and whether the screen reads the plan again. 42501: the resbite ended or
+ * this person is no longer a host, so the reload shows the screen's gate. 22023: numbers the server refused; nothing
+ * changed. Anything else, a lost connection or a lost answer included, is the connection line, and the reload shows
+ * what the server holds, since the save may have landed (C17).
  */
 export function circleErrorMessage(e: unknown): { message: string; reload: boolean } {
   const code = errorField(e, "code");
   if (code === "42501") return { message: CIRCLE_COPY.saveFailed, reload: true };
   if (code === "22023") return { message: CIRCLE_COPY.saveFailed, reload: false };
-  return { message: INVITE_COPY.offline, reload: false };
+  return { message: INVITE_COPY.offline, reload: true };
 }
 
 /**
- * Saves the circle a host tapped and says what the card does next: the `circleSave` event, and on a failure the line
- * under the card and whether the screen reloads.
+ * Saves the circle a host tapped and says what the card does next: the `circleSave` event (a saved one carries the
+ * version `set_plan_circle` returned), and on a failure the line under the card and whether the screen reloads.
  */
 export async function saveCircle(
   gateway: Pick<CircleGateway, "set">,
@@ -53,8 +54,8 @@ export async function saveCircle(
   value: Circle,
 ): Promise<{ event: CircleSaveEvent; error: { message: string; reload: boolean } | null }> {
   try {
-    await gateway.set(planId, value.invites, value.levels);
-    return { event: { type: "saved", value }, error: null };
+    const version = await gateway.set(planId, value.invites, value.levels);
+    return { event: { type: "saved", value, version }, error: null };
   } catch (e) {
     return { event: { type: "failed" }, error: circleErrorMessage(e) };
   }

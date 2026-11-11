@@ -65,6 +65,8 @@ export async function writeRsvp(attempt: RsvpAttempt) {
 }
 
 export type Guest = { userId: string; name: string; response: string };
+/** The name `readGuests` gives a guest whose profile name is missing or blank (a hidden or missing profile row). */
+export const UNNAMED_GUEST = "Tester";
 export type EventSnapshot = {
   plan: Plan;
   /** The signed-in invitee's own row; null for the organizer. */
@@ -98,7 +100,7 @@ export async function readGuests(planId: string): Promise<Guest[]> {
   return Array.isArray(rows)
     ? rows.map((row: { user_id: string; response: string; profiles: { display_name: string } | null }) => ({
         userId: row.user_id,
-        name: row.profiles?.display_name || "Tester",
+        name: row.profiles?.display_name || UNNAMED_GUEST,
         response: row.response,
       }))
     : [];

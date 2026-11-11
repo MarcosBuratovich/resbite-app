@@ -19,7 +19,7 @@ import { INVITE_COPY } from "../src/domain/inviteCopy";
 import { useFocusedRefresh, type Run } from "../src/state/useFocusedRefresh";
 import { planGateway } from "../src/services/plans";
 import { readProfile } from "../src/services/profile";
-import { readGuests } from "../src/services/rsvp";
+import { readGuests, UNNAMED_GUEST } from "../src/services/rsvp";
 import { canEditPlan, type Plan } from "../src/domain/plans";
 import { firstGuestName } from "../src/domain/circle";
 import { CIRCLE_COPY } from "../src/domain/circleCopy";
@@ -92,7 +92,10 @@ export default function Invitations() {
             // be picked, and the server answers "already" for those on it. The same list names the circle card's
             // first guest (CO-04), else "Each guest".
             readGuests(found.id).then(
-              (list): [string[], string] => [list.map((g) => g.userId), firstGuestName(list, [found.owner_id, ...found.admins])],
+              (list): [string[], string] => [
+                list.map((g) => g.userId),
+                firstGuestName(list, [found.owner_id, ...found.admins], UNNAMED_GUEST),
+              ],
               (): [string[], string] => [[], CIRCLE_COPY.eachGuest],
             ),
           ]);

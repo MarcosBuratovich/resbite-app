@@ -53,7 +53,7 @@ test("a reply without a version is not taken as saved", async () => {
   await assert.rejects(gateway("8").gw.set("p", 1, 1), /Check your connection and try again\./);
 });
 
-test("42501 is a failed save that reloads the screen; 22023 a failed save; anything else the connection line", () => {
+test("42501 is a failed save that reloads the screen; 22023 a failed save; anything else the connection line and a reload", () => {
   assert.deepEqual(circleErrorMessage({ code: "42501", message: "Active plan owner required" }), {
     message: "Couldn’t save the circle. Try again.",
     reload: true,
@@ -63,7 +63,7 @@ test("42501 is a failed save that reloads the screen; 22023 a failed save; anyth
     reload: false,
   });
   for (const other of [new Error("Failed to fetch"), { code: "57014" }, { code: "40001", message: "Plan changed; refresh" }, null, undefined])
-    assert.deepEqual(circleErrorMessage(other), { message: "Check your connection and try again.", reload: false });
+    assert.deepEqual(circleErrorMessage(other), { message: "Check your connection and try again.", reload: true });
 });
 
 const refusing = (error: unknown) => ({
@@ -75,7 +75,7 @@ const refusing = (error: unknown) => ({
 test("saveCircle sends the tapped circle and answers saved with it", async () => {
   const { calls, gw } = gateway(9);
   assert.deepEqual(await saveCircle(gw, "plan-1", { invites: 2, levels: 2 }), {
-    event: { type: "saved", value: { invites: 2, levels: 2 } },
+    event: { type: "saved", value: { invites: 2, levels: 2 }, version: 9 },
     error: null,
   });
   assert.deepEqual(calls, [{ fn: "set_plan_circle", args: { p_plan: "plan-1", p_invites: 2, p_levels: 2 } }]);
@@ -92,27 +92,41 @@ test("saveCircle answers failed with the words and whether the screen reloads", 
   });
   assert.deepEqual(await saveCircle(refusing(new Error("Failed to fetch")), "p", { invites: 1, levels: 1 }), {
     event: { type: "failed" },
-    error: { message: "Check your connection and try again.", reload: false },
+    error: { message: "Check your connection and try again.", reload: true },
   });
 });
 
 test("the card's save, step by step: a tap disables both choices, a 42501 shows the saved value, the line and a reload", async () => {
-  let card: CircleSaveState = { saved: { invites: 1, levels: 2 }, shown: { invites: 1, levels: 2 }, saving: false };
+  let card: CircleSaveState = { saved: { invites: 1, levels: 2 }, shown: { invites: 1, levels: 2 }, saving: false, version: 4 };
   const tapped = { invites: 2, levels: 2 } as const;
   card = circleSave(card, { type: "tap", value: tapped });
-  assert.deepEqual(card, { saved: { invites: 1, levels: 2 }, shown: tapped, saving: true });
+  assert.deepEqual(card, { saved: { invites: 1, levels: 2 }, shown: tapped, saving: true, version: 4 });
   const { event, error } = await saveCircle(refusing({ code: "42501", message: "Active plan owner required" }), "p", tapped);
   card = circleSave(card, event);
-  assert.deepEqual(card, { saved: { invites: 1, levels: 2 }, shown: { invites: 1, levels: 2 }, saving: false });
+  assert.deepEqual(card, { saved: { invites: 1, levels: 2 }, shown: { invites: 1, levels: 2 }, saving: false, version: 4 });
   assert.deepEqual(error, { message: "Couldn’t save the circle. Try again.", reload: true });
 });
 
 test("the card's save, step by step: a saved tap becomes what the card has", async () => {
-  let card: CircleSaveState = { saved: { invites: 0, levels: 1 }, shown: { invites: 0, levels: 1 }, saving: false };
+  let card: CircleSaveState = { saved: { invites: 0, levels: 1 }, shown: { invites: 0, levels: 1 }, saving: false, version: 5 };
   card = circleSave(card, { type: "tap", value: { invites: 1, levels: 1 } });
   assert.equal(card.saving, true);
   const { event, error } = await saveCircle(gateway(6).gw, "p", { invites: 1, levels: 1 });
   card = circleSave(card, event);
-  assert.deepEqual(card, { saved: { invites: 1, levels: 1 }, shown: { invites: 1, levels: 1 }, saving: false });
+  assert.deepEqual(card, { saved: { invites: 1, levels: 1 }, shown: { invites: 1, levels: 1 }, saving: false, version: 6 });
   assert.equal(error, null);
+  // The screen's refresh read, taken before the save landed, is older and changes nothing.
+  assert.equal(circleSave(card, { type: "read", value: { invites: 0, levels: 1 }, version: 5 }), card);
+});
+
+test("the card's save, step by step: a save whose answer is lost reloads, and the read shows what the server holds (Q6)", async () => {
+  let card: CircleSaveState = { saved: { invites: 1, levels: 2 }, shown: { invites: 1, levels: 2 }, saving: false, version: 4 };
+  card = circleSave(card, { type: "tap", value: { invites: 3, levels: 2 } });
+  const { event, error } = await saveCircle(refusing(new DOMException("The operation was aborted.", "AbortError")), "p", { invites: 3, levels: 2 });
+  card = circleSave(card, event);
+  assert.deepEqual(error, { message: "Check your connection and try again.", reload: true });
+  assert.deepEqual(card.shown, { invites: 1, levels: 2 });
+  // The save had reached the database: the reload reads it back at v5.
+  card = circleSave(card, { type: "read", value: { invites: 3, levels: 2 }, version: 5 });
+  assert.deepEqual(card, { saved: { invites: 3, levels: 2 }, shown: { invites: 3, levels: 2 }, saving: false, version: 5 });
 });

@@ -37,40 +37,61 @@ export function circleSentence({ name, invites, levels }: { name: string } & Cir
 }
 
 /**
- * The name the sentence uses: the first name of the first guest who is going and isn't a host (the owner and admins
- * invite; they never bring), else `CIRCLE_COPY.eachGuest`.
+ * The name the sentence uses (CO-04): among the guests who are going and aren't hosts (the owner and admins invite;
+ * they never bring), the first name that comes first alphabetically, ignoring case, with the user id breaking a tie,
+ * so it stays the same whatever order the server sends the rows in. A blank name and `unnamed`, the placeholder
+ * `readGuests` gives a guest without a name (`UNNAMED_GUEST`), are never used. With none, `CIRCLE_COPY.eachGuest`.
  */
 export function firstGuestName(
   guests: readonly { userId: string; name: string; response: string }[],
   hosts: readonly (string | undefined)[],
+  unnamed: string,
 ): string {
+  let best: { name: string; key: string; userId: string } | null = null;
   for (const g of guests) {
-    if (g.response !== "accepted" || hosts.includes(g.userId)) continue;
+    if (g.response !== "accepted" || hosts.includes(g.userId) || g.name === unnamed) continue;
     const name = firstName(g.name);
-    if (name) return name;
+    if (!name) continue;
+    const key = name.toLocaleLowerCase();
+    const order = best ? key.localeCompare(best.key) || (g.userId < best.userId ? -1 : g.userId > best.userId ? 1 : 0) : -1;
+    if (order < 0) best = { name, key, userId: g.userId };
   }
-  return CIRCLE_COPY.eachGuest;
+  return best?.name ?? CIRCLE_COPY.eachGuest;
 }
 
-/** The card's state: the circle the server has, the one shown, and whether a save is in flight. */
-export type CircleSaveState = { saved: Circle; shown: Circle; saving: boolean };
-export type CircleSaveEvent = { type: "tap"; value: Circle } | { type: "saved"; value: Circle } | { type: "failed" };
+/**
+ * The card's state: the circle the server has, the one shown, whether a save is in flight, and the plan version the
+ * saved circle is known at (the screen's read, or the version the last confirmed save returned).
+ */
+export type CircleSaveState = { saved: Circle; shown: Circle; saving: boolean; version: number };
+export type CircleSaveEvent =
+  | { type: "tap"; value: Circle }
+  | { type: "saved"; value: Circle; version: number }
+  | { type: "failed" }
+  /** The screen read the plan: its circle at its version. */
+  | { type: "read"; value: Circle; version: number };
 
 const same = (a: Circle, b: Circle) => a.invites === b.invites && a.levels === b.levels;
 
 /**
  * Each change saves at once. A tap shows its value and starts a save; a tap while one is in flight, or on what is
  * shown, returns the state unchanged (the same object), so the caller sends nothing. A failure shows the saved
- * value again, never one tapped before.
+ * value again, never one tapped before. A plan read replaces the card only when it is at least as new as what the
+ * card knows and no save is in flight (that save's answer decides): a read taken before a confirmed save, landing
+ * after it, changes nothing (D8). The known version never goes back.
  */
 export function circleSave(state: CircleSaveState, event: CircleSaveEvent): CircleSaveState {
   switch (event.type) {
     case "tap":
       if (state.saving || same(state.shown, event.value)) return state;
-      return { saved: state.saved, shown: event.value, saving: true };
+      return { ...state, shown: event.value, saving: true };
     case "saved":
-      return { saved: event.value, shown: event.value, saving: false };
+      return { saved: event.value, shown: event.value, saving: false, version: Math.max(state.version, event.version) };
     case "failed":
-      return { saved: state.saved, shown: state.saved, saving: false };
+      return { ...state, shown: state.saved, saving: false };
+    case "read":
+      if (state.saving || event.version < state.version) return state;
+      if (event.version === state.version && same(state.saved, event.value) && same(state.shown, event.value)) return state;
+      return { saved: event.value, shown: event.value, saving: false, version: event.version };
   }
 }

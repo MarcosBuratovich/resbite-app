@@ -491,7 +491,10 @@ export function AvatarStack({ names, label, onPress }: { names: readonly string[
   );
 }
 
-/** Two or three options as a radio group (Upcoming/Past, Going/Maybe/Can’t go). */
+/**
+ * Options as a radio group (Upcoming/Past, Going/Maybe/Can’t go, the circle's four). Every option's text is ink, which
+ * meets 4.5:1 on the surface behind it (muted gives 4.32:1); the chosen one is told by its paper pill and semibold.
+ */
 export function Segmented<K extends string>({
   label,
   options,
@@ -1138,7 +1141,7 @@ const styles = StyleSheet.create({
   segmented: { flexDirection: "row", gap: 4, padding: 4, borderRadius: r.tile, backgroundColor: c.surface },
   segment: { flex: 1, minHeight: 44, paddingHorizontal: 12, borderRadius: r.tile, alignItems: "center", justifyContent: "center" },
   segmentOn: { backgroundColor: c.paper, boxShadow: depth.small },
-  segmentText: { fontSize: 14, color: c.muted, textAlign: "center" },
+  segmentText: { fontSize: 14, color: c.ink, textAlign: "center" },
   segmentTextOn: { fontFamily: fonts.medium, color: c.ink },
   // Steps v2 (owner-approved mockup): full-width bars, 48 pt round buttons, a 36 pt title.
   progress: { flexDirection: "row", gap: 6, marginHorizontal: 20, paddingTop: space.m },

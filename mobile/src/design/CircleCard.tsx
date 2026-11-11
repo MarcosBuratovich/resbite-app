@@ -30,14 +30,16 @@ const LEVEL_OPTIONS: readonly { key: LevelsKey; text: string }[] = ([1, 2, 3] as
   text: C.levels(n),
 }));
 
-const settled = (circle: Circle): CircleSaveState => ({ saved: circle, shown: circle, saving: false });
+const settled = (circle: Circle, version: number): CircleSaveState => ({ saved: circle, shown: circle, saving: false, version });
+const same = (a: Circle, b: Circle) => a.invites === b.invites && a.levels === b.levels;
 
 /**
  * The Circle of trust card on Invite people (CO-04): how many people each guest may bring and how far it goes, and a
  * sentence that says what that means with `firstGuest`'s name. Each change saves at once; both choices wait while a
- * save is in flight, and a failure shows the saved value again with its words under the card. A refusal that means
- * the resbite ended or this person is no longer a host calls `onReload`, so the screen shows its gate. The screen
- * renders it only for a host, outside the preview.
+ * save is in flight, and a failure shows the saved value again with its words under the card. Any failure but a
+ * refused number calls `onReload`: the screen reads the plan again and shows its gate, or what the server holds. A
+ * plan read older than the card's last confirmed save is ignored, and a read that changes what is shown clears the
+ * line. The screen renders it only for a host, outside the preview.
  */
 export function CircleCard({
   plan,
@@ -50,17 +52,18 @@ export function CircleCard({
 }) {
   const largeText = useLargeText();
   const fromPlan = circleOf(plan);
-  const [state, setState] = useState<CircleSaveState>(() => settled(fromPlan));
+  const [state, setState] = useState<CircleSaveState>(() => settled(fromPlan, plan.version));
   const [error, setError] = useState<string | null>(null);
   // The state each event reduces, current even between two taps in the same frame.
   const current = useRef(state);
   const live = useRef(true);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    // Set here too, so the card stays live after StrictMode's unmount and remount.
+    live.current = true;
+    return () => {
       live.current = false;
-    },
-    [],
-  );
+    };
+  }, []);
   const dispatch = useCallback((event: CircleSaveEvent) => {
     const before = current.current;
     const next = circleSave(before, event);
@@ -69,15 +72,16 @@ export function CircleCard({
     return next !== before;
   }, []);
 
-  // A newer read of the plan (after a reload, or another host's change) is what the server has, unless a save is in
-  // flight: that save's answer decides.
+  // Each plan read the screen passes in (and the current one again once a save ends) goes through the reducer, which
+  // takes it only when it is at least as new as the last confirmed save (D8). A read that changes what is shown is
+  // newer than any line under the card, so the line goes.
+  const { saving } = state;
   useEffect(() => {
-    const now = current.current;
-    if (now.saving || (now.saved.invites === fromPlan.invites && now.saved.levels === fromPlan.levels)) return;
-    current.current = settled(fromPlan);
-    setState(current.current);
+    const before = current.current;
+    if (!dispatch({ type: "read", value: fromPlan, version: plan.version })) return;
+    if (!same(before.shown, current.current.shown)) setError(null);
     // fromPlan is rebuilt each render; its two numbers and the plan's version say when it changed.
-  }, [plan.id, plan.version, fromPlan.invites, fromPlan.levels]);
+  }, [dispatch, plan.id, plan.version, fromPlan.invites, fromPlan.levels, saving]);
 
   function choose(value: Circle) {
     if (!dispatch({ type: "tap", value })) return;
@@ -91,7 +95,7 @@ export function CircleCard({
     });
   }
 
-  const { shown, saving } = state;
+  const { shown } = state;
   const sentence = circleSentence({ name: firstGuest, ...shown });
   return (
     <View style={styles.section}>
@@ -121,7 +125,7 @@ export function CircleCard({
         {/* After both choices in the tree, so it is read after them (rule 11). */}
         {!!sentence && (
           <View style={styles.sentence}>
-            <Copy style={styles.sentenceText}>
+            <Copy accessibilityLiveRegion="polite" style={styles.sentenceText}>
               {/* The sentence starts with the name, in the semibold the design gives it. */}
               <Text style={styles.name}>{firstGuest}</Text>
               {sentence.slice(firstGuest.length)}
