@@ -84,11 +84,14 @@ do $$ declare n public.plans; begin
 end $$;
 rollback;
 
--- Slice 2: a request's notice says how the two stand on the resbite it was asked from (CO-P5): 'going' while it is on
--- (not cancelled, not ended) and both are on it (each a host, or a guest who is Going or Maybe), 'met' once it has
--- ended, else 'invited'. Users f5…: 01 owner, 02 and 04 Going, 03 Maybe, 06 Can't go, 07 a guest of the ended plan only.
--- 01's plans: f51…02 'Film night' is open (02, 03, 04, 06); f51…03 'Picnic' has ended (02 and 07 Going); f51…04 'Quiz'
--- is cancelled and has not ended (02 and 04 Going).
+-- Slice 2: a request's notice says how the two stand on the resbite it was asked from (CO-P5). Both are going when each
+-- is its owner or a guest whose own reply is Going or Maybe (an admin counts by their reply alone). 'going': it is on
+-- (not cancelled, not ended) and both are going; 'met': it has ended, was not cancelled, and both were going;
+-- 'were_invited': ended, and not 'met'; 'invited': not ended, and not 'going'. Users f5…: 01 owner, 02 and 04 Going, 03
+-- Maybe, 06 Can't go, 07 a guest of the ended plans only, 08 an admin of Film night whose own reply is pending (as the
+-- roll carries one). 01's plans: f51…02 'Film night' is open (02, 03, 04, 06, admin 08); f51…03 'Picnic' has ended (02
+-- and 07 Going, 06 Can't go); f51…04 'Quiz' is cancelled and has not ended (02 and 04 Going); f51…05 'Brunch' was
+-- cancelled and has ended (03 and 07 Going).
 begin;
 insert into auth.users(id,email,email_confirmed_at) values
  ('f5000000-0000-4000-8000-000000000001','h1-owner@resbite-test.invalid',now()),
@@ -96,14 +99,16 @@ insert into auth.users(id,email,email_confirmed_at) values
  ('f5000000-0000-4000-8000-000000000003','h1-maybe@resbite-test.invalid',now()),
  ('f5000000-0000-4000-8000-000000000004','h1-going-too@resbite-test.invalid',now()),
  ('f5000000-0000-4000-8000-000000000006','h1-cant-go@resbite-test.invalid',now()),
- ('f5000000-0000-4000-8000-000000000007','h1-picnic@resbite-test.invalid',now());
+ ('f5000000-0000-4000-8000-000000000007','h1-picnic@resbite-test.invalid',now()),
+ ('f5000000-0000-4000-8000-000000000008','h1-admin-pending@resbite-test.invalid',now());
 insert into private.tester_roster(email) values ('h1-owner@resbite-test.invalid'),('h1-going@resbite-test.invalid'),
  ('h1-maybe@resbite-test.invalid'),('h1-going-too@resbite-test.invalid'),('h1-cant-go@resbite-test.invalid'),
- ('h1-picnic@resbite-test.invalid');
+ ('h1-picnic@resbite-test.invalid'),('h1-admin-pending@resbite-test.invalid');
 insert into public.profiles(id,display_name) values
  ('f5000000-0000-4000-8000-000000000001','Owner'),('f5000000-0000-4000-8000-000000000002','Guest A'),
  ('f5000000-0000-4000-8000-000000000003','Guest B'),('f5000000-0000-4000-8000-000000000004','Guest C'),
- ('f5000000-0000-4000-8000-000000000006','Guest D'),('f5000000-0000-4000-8000-000000000007','Guest E');
+ ('f5000000-0000-4000-8000-000000000006','Guest D'),('f5000000-0000-4000-8000-000000000007','Guest E'),
+ ('f5000000-0000-4000-8000-000000000008','Admin F');
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"f5000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 select public.create_plan_v4('f5100000-0000-4000-8000-000000000002','Film night','',array['community'],null,
@@ -112,6 +117,8 @@ select public.create_plan_v4('f5100000-0000-4000-8000-000000000003','Picnic','',
  '2099-06-05 12:00+00','2099-06-05 15:00+00','UTC','Park',false,null,'');
 select public.create_plan_v4('f5100000-0000-4000-8000-000000000004','Quiz','',array['community'],null,
  '2099-06-06 19:00+00','2099-06-06 22:00+00','UTC','Pub',false,null,'');
+select public.create_plan_v4('f5100000-0000-4000-8000-000000000005','Brunch','',array['community'],null,
+ '2099-06-07 10:00+00','2099-06-07 12:00+00','UTC','Cafe',false,null,'');
 reset role;
 insert into public.attendees(plan_id,user_id,response) values
  ('f5100000-0000-4000-8000-000000000002','f5000000-0000-4000-8000-000000000002','accepted'),
@@ -120,13 +127,22 @@ insert into public.attendees(plan_id,user_id,response) values
  ('f5100000-0000-4000-8000-000000000002','f5000000-0000-4000-8000-000000000006','declined'),
  ('f5100000-0000-4000-8000-000000000003','f5000000-0000-4000-8000-000000000002','accepted'),
  ('f5100000-0000-4000-8000-000000000003','f5000000-0000-4000-8000-000000000007','accepted'),
+ ('f5100000-0000-4000-8000-000000000003','f5000000-0000-4000-8000-000000000006','declined'),
  ('f5100000-0000-4000-8000-000000000004','f5000000-0000-4000-8000-000000000002','accepted'),
- ('f5100000-0000-4000-8000-000000000004','f5000000-0000-4000-8000-000000000004','accepted');
-update public.plans set starts_at=now()-interval '4 hours', ends_at=now()-interval '1 hour' where id='f5100000-0000-4000-8000-000000000003';
-update public.plans set status='cancelled' where id='f5100000-0000-4000-8000-000000000004';
+ ('f5100000-0000-4000-8000-000000000004','f5000000-0000-4000-8000-000000000004','accepted'),
+ ('f5100000-0000-4000-8000-000000000005','f5000000-0000-4000-8000-000000000003','accepted'),
+ ('f5100000-0000-4000-8000-000000000005','f5000000-0000-4000-8000-000000000007','accepted'),
+ ('f5100000-0000-4000-8000-000000000002','f5000000-0000-4000-8000-000000000008','pending');
+insert into public.plan_admins(plan_id,user_id,appointed_by,appointed_at) values
+ ('f5100000-0000-4000-8000-000000000002','f5000000-0000-4000-8000-000000000008','f5000000-0000-4000-8000-000000000001',now());
+update public.plans set starts_at=now()-interval '4 hours', ends_at=now()-interval '1 hour'
+ where id in ('f5100000-0000-4000-8000-000000000003','f5100000-0000-4000-8000-000000000005');
+update public.plans set status='cancelled' where id in ('f5100000-0000-4000-8000-000000000004','f5100000-0000-4000-8000-000000000005');
 
 -- 02 (Going) asks 03 (Maybe) on the open plan, 07 on the ended one and 04 on the cancelled one; 04 (Going) asks 06
--- (Can't go) on the open plan; 01, its owner (a host, with no guest row), asks 04 (Going) on it. Each is a new request.
+-- (Can't go) on the open plan; 01, its owner (a host, with no guest row), asks 04 (Going) on it; 03 asks 07 on the
+-- cancelled plan that has ended; 07 asks 06, who said Can't go, on the ended plan; 08, the admin who has not answered,
+-- asks 04 (Going) on the open plan. Each is a new request.
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"f5000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 do $$ begin
@@ -146,6 +162,24 @@ select set_config('request.jwt.claims','{"sub":"f5000000-0000-4000-8000-00000000
 do $$ begin
  if public.request_connection('f5000000-0000-4000-8000-000000000004','f5100000-0000-4000-8000-000000000002') is distinct from 'requested' then
   raise exception 'The owner''s request did not say requested';
+ end if;
+end $$;
+select set_config('request.jwt.claims','{"sub":"f5000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
+do $$ begin
+ if public.request_connection('f5000000-0000-4000-8000-000000000007','f5100000-0000-4000-8000-000000000005') is distinct from 'requested' then
+  raise exception '03''s request did not say requested';
+ end if;
+end $$;
+select set_config('request.jwt.claims','{"sub":"f5000000-0000-4000-8000-000000000007","role":"authenticated"}',true);
+do $$ begin
+ if public.request_connection('f5000000-0000-4000-8000-000000000006','f5100000-0000-4000-8000-000000000003') is distinct from 'requested' then
+  raise exception '07''s request did not say requested';
+ end if;
+end $$;
+select set_config('request.jwt.claims','{"sub":"f5000000-0000-4000-8000-000000000008","role":"authenticated"}',true);
+do $$ begin
+ if public.request_connection('f5000000-0000-4000-8000-000000000004','f5100000-0000-4000-8000-000000000002') is distinct from 'requested' then
+  raise exception 'The pending admin''s request did not say requested';
  end if;
 end $$;
 reset role;
@@ -171,10 +205,25 @@ do $$ begin
    and actor_id='f5000000-0000-4000-8000-000000000002' and recipient_id='f5000000-0000-4000-8000-000000000004') is distinct from 'invited' then
   raise exception 'Two Going guests of a cancelled plan that has not ended is not invited';
  end if;
- if (select count(*) from private.notification_outbox where kind='connection_request')<>5 then raise exception 'Five request notices expected'; end if;
+ if (select detail from private.notification_outbox where kind='connection_request'
+   and actor_id='f5000000-0000-4000-8000-000000000003' and recipient_id='f5000000-0000-4000-8000-000000000007') is distinct from 'were_invited' then
+  raise exception 'Two Going guests of a cancelled plan that has ended is not were_invited: %', (select detail from private.notification_outbox
+   where kind='connection_request' and actor_id='f5000000-0000-4000-8000-000000000003' and recipient_id='f5000000-0000-4000-8000-000000000007');
+ end if;
+ if (select detail from private.notification_outbox where kind='connection_request'
+   and actor_id='f5000000-0000-4000-8000-000000000007' and recipient_id='f5000000-0000-4000-8000-000000000006') is distinct from 'were_invited' then
+  raise exception 'Going and Can''t go on an ended plan is not were_invited: %', (select detail from private.notification_outbox
+   where kind='connection_request' and actor_id='f5000000-0000-4000-8000-000000000007' and recipient_id='f5000000-0000-4000-8000-000000000006');
+ end if;
+ if (select detail from private.notification_outbox where kind='connection_request'
+   and actor_id='f5000000-0000-4000-8000-000000000008' and recipient_id='f5000000-0000-4000-8000-000000000004') is distinct from 'invited' then
+  raise exception 'A pending admin and a Going guest on an open plan is not invited: %', (select detail from private.notification_outbox
+   where kind='connection_request' and actor_id='f5000000-0000-4000-8000-000000000008' and recipient_id='f5000000-0000-4000-8000-000000000004');
+ end if;
+ if (select count(*) from private.notification_outbox where kind='connection_request')<>8 then raise exception 'Eight request notices expected'; end if;
 end $$;
 
--- The detail check takes the three for a request only: 'soon' on a request, or any detail on an acceptance, is refused.
+-- The detail check takes the four for a request only: 'soon' on a request, or any detail on an acceptance, is refused.
 do $$ begin
  begin
   insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,detail) values

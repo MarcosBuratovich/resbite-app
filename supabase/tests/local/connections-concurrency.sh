@@ -2,9 +2,9 @@
 # Invoke only with the disposable cluster created by scripts/test-database.sh. Two people who share a resbite ask each
 # other at the same moment. request_connection takes the pair's lock first, so the two requests queue: the first stores
 # the request, the second finds it and accepts. A third session holds the pair's lock first, so both requests are
-# waiting when it lets go; each request then waits 0.2 s before its commit, so the second runs while the first's row is
-# not yet committed. Expected: one pair row, connected; no unique violation in either session; at most one acceptance
-# notice.
+# waiting when it lets go. Whichever takes the lock next keeps it for 0.2 s more before its commit, and the other waits
+# for that commit before it reads the pair's row: it never runs alongside the first. Expected: one pair row, connected;
+# no unique violation in either session; at most one acceptance notice.
 set -euo pipefail
 pg_bin="$1"
 socket="$2"

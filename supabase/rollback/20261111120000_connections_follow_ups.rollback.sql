@@ -2,12 +2,13 @@
 -- the owner's approval:
 --   begin; \i supabase/rollback/20261111120000_connections_follow_ups.rollback.sql; commit;
 -- It is for the hosted project, where that migration redefined the two functions below and replaced the outbox detail
--- check. It deletes every 'connection_request' outbox row with a detail ('going', 'invited' or 'met': every request
--- notice queued since the migration), delivered or not, so the earlier detail check can come back. The choice: a row
--- not yet sent goes, and that request is never told by push (the request itself stays, in the Connections of the person
--- asked). Delivered rows go too; sent pushes are not recalled. Rows younger than a day are the ones the sender could
--- still send: run this just after the sender has drained the outbox to lose none. Request notices queued before the
--- migration have no detail and stay.
+-- check. It deletes no row: every 'connection_request' outbox row with a detail ('going', 'invited', 'met' or
+-- 'were_invited': every request notice queued since the migration) keeps its row, delivered or not, with its detail set
+-- to null, so the earlier detail check can come back. A notice not yet sent then goes with the wording for a request
+-- with no detail; the rows' keys still stop the restored request_connection from queuing a second notice for a request
+-- already told. It first locks the outbox against writes (share row exclusive), so no notice with a detail is queued
+-- while it runs: a request made meanwhile waits, and one that had already worked out its notice's detail fails once
+-- this commits (asking again works).
 -- private.roll_repeating_plans comes back from 20261031120000_creating_a_resbite.sql: a guest who said Can't go after
 -- Going is no longer carried to the next occurrence. private.request_connection comes back from
 -- 20261110120000_connections.sql: a request's notice has no detail. Both keep their grants (create or replace), and
@@ -25,6 +26,9 @@ do $$ begin
   raise exception 'Run the connections follow-ups rollback before the connections and creating-a-resbite rollbacks';
  end if;
 end $$;
+
+-- Nothing writes the outbox until this commits.
+lock table private.notification_outbox in share row exclusive mode;
 
 -- The roll as it was (20261031120000_creating_a_resbite.sql): a guest who said Can't go after Going is not carried.
 create or replace function private.roll_repeating_plans() returns integer language plpgsql security definer set search_path = '' as $$
@@ -132,8 +136,9 @@ begin
  return 'requested';
 end $$;
 
--- The outbox rows the earlier check does not allow, and the check as it was (20261031120000_creating_a_resbite.sql).
-delete from private.notification_outbox where kind='connection_request' and detail is not null;
+-- The request notices keep their rows, without a detail, and the check comes back as it was
+-- (20261031120000_creating_a_resbite.sql).
+update private.notification_outbox set detail=null where kind='connection_request' and detail is not null;
 alter table private.notification_outbox drop constraint notification_outbox_detail_check;
 alter table private.notification_outbox add constraint notification_outbox_detail_check check (
  detail is null

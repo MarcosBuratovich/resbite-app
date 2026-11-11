@@ -82,17 +82,21 @@ end $$;
 -- 2. A request's notice says how the two stand (CO-P5)
 -- The request's push said "You're both going to ..." for any resbite that had not started, to someone who said Can't go
 -- too. The 'connection_request' row now carries as its detail how the two stand on the resbite it was asked from when
--- it is queued: 'going' while that resbite is on (not cancelled, not ended) and both are on it (each a host, or a guest
--- who is Going or Maybe: the rule of my_connections' context), 'met' once it has ended, else 'invited' (one of them
--- said Can't go, or it was cancelled before its end). The sender words the push from it; a notice queued before this
--- migration has none. The detail check is replaced by exact name, keeping every existing value.
+-- it is queued. Both are going when each is its owner or a guest whose own reply is Going or Maybe: an admin counts by
+-- their reply alone, so an admin carried to a next occurrence who has not answered yet does not. Then:
+--   'going'        the resbite is on (not cancelled, not ended) and both are going;
+--   'met'          it has ended, was not cancelled, and both were going;
+--   'were_invited' it has ended, and not 'met' (one of them said Can't go or never answered, or it was cancelled);
+--   'invited'      it has not ended, and not 'going' (the same, or it was cancelled before its end).
+-- The sender words the push from it; a notice queued before this migration has none. The detail check is replaced by
+-- exact name, keeping every existing value.
 alter table private.notification_outbox drop constraint notification_outbox_detail_check;
 alter table private.notification_outbox add constraint notification_outbox_detail_check check (
  detail is null
  or (kind='plan_changed' and detail in ('time','place','time_place'))
  or (kind='rsvp' and detail in ('accepted','maybe','declined','withdrawn'))
  or (kind='invited' and detail='again')
- or (kind='connection_request' and detail in ('going','invited','met')));
+ or (kind='connection_request' and detail in ('going','invited','met','were_invited')));
 
 -- Asking, from a resbite: a new request's notice carries the detail above. Otherwise the 20261110120000_connections
 -- body, verbatim (its comments name that file's sections): the pair's lock, the refusals, and the notice's key (the
@@ -140,11 +144,13 @@ begin
  -- the request queues nothing, and the first notice, stamped with the first request's time, stands for it.
  insert into public.connections(user_a,user_b,state,requested_by,series_id,created_at)
   values(v_a,v_b,'requested',v_uid,v_series,pg_catalog.clock_timestamp()) returning created_at into v_at;
- -- How the two stand on the resbite asked from, for the notice's line (CO-P5): 'going', 'met' or 'invited'.
- select case when p.status='active' and private.plan_end(p.starts_at,p.ends_at)>now()
-   and (select bool_and(private.is_host(p.id,u.id) or exists(select 1 from public.attendees a
-     where a.plan_id=p.id and a.user_id=u.id and a.response in ('accepted','maybe'))) from (values (v_uid),(p_user)) u(id))
-  then 'going' when private.plan_end(p.starts_at,p.ends_at)<=now() then 'met' else 'invited' end
+ -- How the two stand on the resbite asked from, for the notice's line (CO-P5): 'going', 'met', 'were_invited' or
+ -- 'invited'. Both are going when each is its owner or a guest whose own reply is Going or Maybe.
+ select case when p.status='active' and (select count(*) from (values (v_uid),(p_user)) u(id)
+    where u.id=p.owner_id or exists(select 1 from public.attendees a where a.plan_id=p.id and a.user_id=u.id
+     and a.response in ('accepted','maybe')))=2
+   then case when private.plan_end(p.starts_at,p.ends_at)>now() then 'going' else 'met' end
+  when private.plan_end(p.starts_at,p.ends_at)>now() then 'invited' else 'were_invited' end
  into v_detail from public.plans p where p.id=p_plan;
  insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,created_at,detail)
   values(p_plan,p_user,'connection_request','connect:'||v_a||':'||v_b||':'||v_series||':'||v_uid,v_uid,v_at,v_detail)

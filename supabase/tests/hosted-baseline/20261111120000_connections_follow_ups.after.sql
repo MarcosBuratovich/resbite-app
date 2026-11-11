@@ -1,6 +1,6 @@
 -- Rehearsal checks for 20261111120000_connections_follow_ups (hosted-baseline mode only).
 -- 1. The apply: the roll is the one .before.sql recorded but for the withdrawn filter; request_connection gives its
--- notice a detail; the detail check keeps every earlier value and takes the three for a request only; both functions
+-- notice a detail; the detail check keeps every earlier value and takes the four for a request only; both functions
 -- keep their grants (no API role may run the roll; signed-in accounts may ask); the apply wrote no rows.
 do $$ declare r text; begin
  if pg_catalog.pg_get_functiondef('private.roll_repeating_plans()'::regprocedure) is distinct from
@@ -14,7 +14,7 @@ do $$ declare r text; begin
  end if;
  if (select pg_catalog.pg_get_constraintdef(oid) from pg_catalog.pg_constraint
    where conrelid='private.notification_outbox'::regclass and conname='notification_outbox_detail_check')
-   not like '%detail IS NULL%''plan_changed''%''time''%''place''%''time_place''%''rsvp''%''accepted''%''maybe''%''declined''%''withdrawn''%''invited''%''again''%''connection_request''%''going''%''invited''%''met''%' then
+   not like '%detail IS NULL%''plan_changed''%''time''%''place''%''time_place''%''rsvp''%''accepted''%''maybe''%''declined''%''withdrawn''%''invited''%''again''%''connection_request''%''going''%''invited''%''met''%''were_invited''%' then
   raise exception 'The detail check is wrong: %', (select pg_catalog.pg_get_constraintdef(oid) from pg_catalog.pg_constraint
    where conrelid='private.notification_outbox'::regclass and conname='notification_outbox_detail_check');
  end if;
@@ -35,11 +35,11 @@ do $$ declare r text; begin
   raise exception 'The apply wrote rows';
  end if;
 end $$;
--- 2. The rollback, rehearsed and undone. Seed what it deletes (a request notice with a detail) and what it keeps (one
--- with none, from before the migration, and a repeat's invitation), try its guard (it refuses once the connections
--- rollback or the creating-a-resbite rollback has run; each function, renamed, stands in), then run it: the notice
--- with a detail is gone, the other two stay, and the detail check and both functions, with their grants, are the ones
--- .before.sql recorded.
+-- 2. The rollback, rehearsed and undone. Seed what it changes (two request notices with a detail) and what it leaves
+-- (one with none, from before the migration, and a repeat's invitation), try its guard (it refuses once the connections
+-- rollback or the creating-a-resbite rollback has run; each function, renamed, stands in), then run it: every row
+-- stays, the two notices with a detail now without one, and the detail check and both functions, with their grants,
+-- are the ones .before.sql recorded.
 begin;
 insert into auth.users(id,email,email_confirmed_at) values
  ('cf000000-0000-4000-8000-000000000001','follow-ups-rehearsal-a@resbite-test.invalid',now()),
@@ -52,6 +52,8 @@ insert into public.plans(id,owner_id,title,starts_at,ends_at,time_zone,place_lab
 insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,detail) values
  ('cf100000-0000-4000-8000-000000000001','cf000000-0000-4000-8000-000000000002','connection_request','cf-rehearsal:going',
   'cf000000-0000-4000-8000-000000000001','going'),
+ ('cf100000-0000-4000-8000-000000000001','cf000000-0000-4000-8000-000000000001','connection_request','cf-rehearsal:were-invited',
+  'cf000000-0000-4000-8000-000000000002','were_invited'),
  ('cf100000-0000-4000-8000-000000000001','cf000000-0000-4000-8000-000000000001','connection_request','cf-rehearsal:none',
   'cf000000-0000-4000-8000-000000000002',null),
  ('cf100000-0000-4000-8000-000000000001','cf000000-0000-4000-8000-000000000002','invited','cf-rehearsal:again',
@@ -70,16 +72,14 @@ do $$ declare f text; begin
   end;
   execute 'alter function private.cf_rehearsal_renamed'||substring(f from '\(.*\)$')||' rename to '||substring(f from '^[a-z_]+');
  end loop;
- if (select count(*) from private.notification_outbox where dedupe_key like 'cf-rehearsal:%')<>3 then
-  raise exception 'The refused rollback changed something';
- end if;
 end $$;
 \ir ../../rollback/20261111120000_connections_follow_ups.rollback.sql
 do $$ begin
- if (select string_agg(dedupe_key,',' order by dedupe_key) from private.notification_outbox where dedupe_key like 'cf-rehearsal:%')
-   is distinct from 'cf-rehearsal:again,cf-rehearsal:none' then
-  raise exception 'The rollback deleted the wrong notices: %', (select string_agg(dedupe_key,',' order by dedupe_key)
-   from private.notification_outbox where dedupe_key like 'cf-rehearsal:%');
+ if (select string_agg(dedupe_key||'='||coalesce(detail,'null'),',' order by dedupe_key) from private.notification_outbox
+   where dedupe_key like 'cf-rehearsal:%')
+   is distinct from 'cf-rehearsal:again=again,cf-rehearsal:going=null,cf-rehearsal:none=null,cf-rehearsal:were-invited=null' then
+  raise exception 'The rollback did not keep every notice, the request notices without a detail: %', (select
+   string_agg(dedupe_key||'='||coalesce(detail,'null'),',' order by dedupe_key) from private.notification_outbox where dedupe_key like 'cf-rehearsal:%');
  end if;
  if (select pg_catalog.pg_get_constraintdef(oid) from pg_catalog.pg_constraint
    where conrelid='private.notification_outbox'::regclass and conname='notification_outbox_detail_check')
