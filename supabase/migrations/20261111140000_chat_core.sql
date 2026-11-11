@@ -4,8 +4,9 @@
 -- Spec: docs/superpowers/specs/2026-11-10-groups-and-chat-design.md (CH-D1–D6; CH-P1–P3, P5–P12, P14–P19)
 -- Plan: docs/superpowers/plans/2026-11-11-chat-1-core.md (Tasks 1 to 3), with the rulings in its Revised lists
 -- Hosted-compatible: depends only on the migrations in supabase/tests/hosted-baseline/migrations.txt,
--- 20261111120000_connections_follow_ups.sql and 20261111130000_circles_of_trust.sql (private.first_name), and on the
--- hosted project's Realtime (locally a stub in supabase/tests/local/bootstrap.sql; this file never creates it).
+-- 20261111120000_connections_follow_ups.sql and 20261111130000_circles_of_trust.sql (private.first_name, and the claim
+-- and the deletion request this file copies), and on the hosted project's Realtime (locally a stub in
+-- supabase/tests/local/bootstrap.sql; this file never creates it).
 -- Rollback: supabase/rollback/20261111140000_chat_core.rollback.sql (Task 3)
 --
 -- The chat's identity is the series (CH-P1): a one-off is its own series, and every occurrence of a repeating resbite
@@ -355,3 +356,466 @@ create function public.my_chat_overview() returns jsonb language sql stable secu
 $$;
 revoke all on function public.my_chat_overview() from public, anon, authenticated, service_role;
 grant execute on function private.my_chat_overview(), public.my_chat_overview() to authenticated;
+
+-- Section 2 (Task 2): writing, announcements, delete and remove, mutes and reads; the two notices with one push a
+-- minute; the claim's chat fields; the deletion step.
+
+-- 2a. The outbox's two chat kinds. A chat notice names the message it is about: message_id, which goes with the
+-- message. The kind check is replaced by exact name, keeping the eleven of 20261110120000_connections. The index serves
+-- the one-push-a-minute test of send_message (K-B3.1, K-N11): a recipient's chat notices by time.
+alter table private.notification_outbox add column message_id bigint null references public.messages(id) on delete cascade;
+alter table private.notification_outbox drop constraint notification_outbox_kind_check;
+alter table private.notification_outbox add constraint notification_outbox_kind_check
+ check (kind in ('invitation','rsvp','plan_changed','plan_cancelled','guest_note','invited','join_request','join_approved','admin_added',
+  'connection_request','connection_accepted','chat_message','announcement'));
+create index notification_outbox_recipient_kind_idx on private.notification_outbox(recipient_id, kind, created_at);
+-- Serves the writers' limits (K-S8): an author's messages and announcements of the last minute.
+create index messages_author_created_idx on public.messages(author_id, created_at);
+
+-- 2b. The chat row's figures (K-S12, K-N12, Decision 9), kept by a trigger on every message written or changed:
+-- last_message_id and last_message_at follow the newest row inserted (any kind; a lower id committing late never moves
+-- them back); message_count counts the messages and announcements that are sent, so it moves when one is written sent
+-- or leaves sent; pinned_message_id is the latest announcement still sent, recomputed when an announcement is written
+-- or changes state, so removing or deleting the pinned one pins the one before, or nothing. The chat row is locked
+-- before it is read, so a writer that waited on another reads what that one committed. It runs under the roll and
+-- deletion flags too: a deleted account's announcement unpins. The database's own: no role may call it.
+create function private.messages_chat_stats() returns trigger language plpgsql security definer set search_path = '' as $$
+declare v_delta int := 0; v_pin boolean;
+begin
+ if new.kind in ('message','announcement') and new.state = 'sent' then v_delta := 1; end if;
+ if tg_op = 'UPDATE' then
+  if old.kind in ('message','announcement') and old.state = 'sent' then v_delta := v_delta - 1; end if;
+  v_pin := 'announcement' in (old.kind, new.kind) and old.state is distinct from new.state;
+  if v_delta = 0 and not v_pin then return null; end if;
+ else
+  v_pin := new.kind = 'announcement';
+ end if;
+ perform 1 from public.chats c where c.series_id = new.series_id for update;
+ update public.chats c set
+  last_message_id = case when tg_op = 'INSERT' and new.id > coalesce(c.last_message_id, 0) then new.id else c.last_message_id end,
+  last_message_at = case when tg_op = 'INSERT' and new.id > coalesce(c.last_message_id, 0) then new.created_at else c.last_message_at end,
+  message_count = c.message_count + v_delta,
+  pinned_message_id = case when v_pin then (select max(m.id) from public.messages m
+   where m.series_id = new.series_id and m.kind = 'announcement' and m.state = 'sent') else c.pinned_message_id end
+ where c.series_id = new.series_id;
+ return null;
+end $$;
+revoke all on function private.messages_chat_stats() from public, anon, authenticated, service_role;
+create trigger messages_chat_stats after insert or update on public.messages for each row execute function private.messages_chat_stats();
+
+-- 2c. The words of a message or an announcement (K-S8, step 4): trimmed of white space at both ends, then 1 to 1000
+-- characters with one that is not white space; null when they are not. This database's \s does not take U+00A0 (the
+-- harness's ctype; hosted may differ), so the class adds it and the other spaces \s may miss: U+2000–U+200B, U+2028,
+-- U+2029, U+202F, U+205F, U+3000 and U+FEFF. The database's own: no role may call it.
+create function private.chat_body(p_body text) returns text language sql immutable security definer set search_path = '' as $$
+ select t.body from (select pg_catalog.regexp_replace(p_body,
+   '^[\s\u00a0\u2000-\u200b\u2028\u2029\u202f\u205f\u3000\ufeff]+|[\s\u00a0\u2000-\u200b\u2028\u2029\u202f\u205f\u3000\ufeff]+$', '', 'g') as body) t
+ where pg_catalog.char_length(t.body) between 1 and 1000
+  and t.body ~ '[^\s\u00a0\u2000-\u200b\u2028\u2029\u202f\u205f\u3000\ufeff]'
+$$;
+revoke all on function private.chat_body(text) from public, anon, authenticated, service_role;
+
+-- 2d. Writing (K-S8, K-B3.1, Decision 6). Each returns the row as chat_row gives it (the app names its own rows "You",
+-- so no names map). Checks, in this order:
+--  1. the caller's row with this client id is returned as it is and nothing is queued, so a resend after a lost
+--     answer, after the close or after leaving gets its stored row; on another series or of the other kind it is not
+--     the same message, 22023 'Invalid message';
+--  2. send_message: in the chat, else 42501 'Not in this chat'; send_announcement: a host of the current occurrence,
+--     else 42501 'Hosts only';
+--  3. open, else 22023 'Chat closed'; the words (chat_body) and, for an announcement, its audience (going or everyone),
+--     else 22023 'Invalid message';
+--  4. send_announcement: no announcement by the caller in this chat in the last minute, else 22023 'Too fast';
+--  5. no more than 30 messages and announcements by the caller, in any chat, in the last minute: the 31st is
+--     22023 'Slow down';
+--  6. the chat's lock (K-B3.1), held to the commit, so writers in one chat queue their notices one after another;
+--  7. the insert, on conflict (author_id, client_id) doing nothing: when nothing comes back, a concurrent repeat won,
+--     and that row is returned (with step 1's checks) and nothing queued;
+--  8. the notices. A message: one chat_message to each other member, unless they already have one for this chat from
+--     the last 60 seconds (one push a minute, decided here; the first message of the minute is pushed). An
+--     announcement: one to each person its audience reaches but the author, never held back (CH-P7). Both on the
+--     current occurrence, with the author as actor and the row as message_id (H6).
+create function private.send_message(p_series uuid, p_body text, p_client_id uuid) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := private.require_tester(); v_row public.messages; v_body text; v_plan uuid; v_id bigint;
+begin
+ select * into v_row from public.messages m where m.author_id = v_uid and m.client_id = p_client_id;
+ if found then
+  if v_row.series_id is distinct from p_series or v_row.kind <> 'message' then raise exception 'Invalid message' using errcode='22023'; end if;
+  return private.chat_row(v_row, v_uid);
+ end if;
+ if not private.chat_member(p_series, v_uid) then raise exception 'Not in this chat' using errcode='42501'; end if;
+ if not private.chat_open(p_series) then raise exception 'Chat closed' using errcode='22023'; end if;
+ v_body := private.chat_body(p_body);
+ if v_body is null then raise exception 'Invalid message' using errcode='22023'; end if;
+ if (select count(*) from public.messages m where m.author_id = v_uid and m.kind in ('message','announcement')
+     and m.created_at > now() - interval '1 minute') >= 30 then
+  raise exception 'Slow down' using errcode='22023';
+ end if;
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('chat:'||p_series, 0));
+ v_plan := (private.current_occurrence(p_series)).id;
+ insert into public.messages(series_id, plan_id, author_id, kind, body, client_id)
+ values (p_series, v_plan, v_uid, 'message', v_body, p_client_id)
+ on conflict (author_id, client_id) do nothing returning id into v_id;
+ if v_id is null then
+  select * into v_row from public.messages m where m.author_id = v_uid and m.client_id = p_client_id;
+  if v_row.series_id is distinct from p_series or v_row.kind <> 'message' then raise exception 'Invalid message' using errcode='22023'; end if;
+  return private.chat_row(v_row, v_uid);
+ end if;
+ insert into private.notification_outbox(plan_id, recipient_id, kind, dedupe_key, actor_id, message_id)
+ select v_plan, r.id, 'chat_message', 'chat:'||v_id||':'||r.id, v_uid, v_id
+ from private.chat_members(p_series) as r(id)
+ where r.id <> v_uid
+   and not exists (select 1 from private.notification_outbox o join public.messages m on m.id = o.message_id
+                   where o.recipient_id = r.id and o.kind = 'chat_message' and m.series_id = p_series
+                     and o.created_at > now() - interval '60 seconds')
+ on conflict do nothing;
+ select * into v_row from public.messages m where m.id = v_id;
+ return private.chat_row(v_row, v_uid);
+end $$;
+revoke all on function private.send_message(uuid,text,uuid) from public, anon, authenticated, service_role;
+create function public.send_message(p_series uuid, p_body text, p_client_id uuid) returns jsonb
+language sql security invoker set search_path = '' as $$
+ select private.send_message(p_series, p_body, p_client_id)
+$$;
+revoke all on function public.send_message(uuid,text,uuid) from public, anon, authenticated, service_role;
+grant execute on function private.send_message(uuid,text,uuid), public.send_message(uuid,text,uuid) to authenticated;
+
+create function private.send_announcement(p_series uuid, p_body text, p_audience text, p_client_id uuid) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := private.require_tester(); v_row public.messages; v_body text; v_plan uuid; v_id bigint;
+begin
+ select * into v_row from public.messages m where m.author_id = v_uid and m.client_id = p_client_id;
+ if found then
+  if v_row.series_id is distinct from p_series or v_row.kind <> 'announcement' then raise exception 'Invalid message' using errcode='22023'; end if;
+  return private.chat_row(v_row, v_uid);
+ end if;
+ v_plan := (private.current_occurrence(p_series)).id;
+ if v_plan is null or not private.is_host(v_plan, v_uid) then raise exception 'Hosts only' using errcode='42501'; end if;
+ if not private.chat_open(p_series) then raise exception 'Chat closed' using errcode='22023'; end if;
+ v_body := private.chat_body(p_body);
+ if v_body is null or p_audience is null or p_audience not in ('going','everyone') then
+  raise exception 'Invalid message' using errcode='22023';
+ end if;
+ if exists (select 1 from public.messages m where m.author_id = v_uid and m.series_id = p_series and m.kind = 'announcement'
+     and m.created_at > now() - interval '1 minute') then
+  raise exception 'Too fast' using errcode='22023';
+ end if;
+ if (select count(*) from public.messages m where m.author_id = v_uid and m.kind in ('message','announcement')
+     and m.created_at > now() - interval '1 minute') >= 30 then
+  raise exception 'Slow down' using errcode='22023';
+ end if;
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('chat:'||p_series, 0));
+ insert into public.messages(series_id, plan_id, author_id, kind, audience, body, client_id)
+ values (p_series, v_plan, v_uid, 'announcement', p_audience, v_body, p_client_id)
+ on conflict (author_id, client_id) do nothing returning id into v_id;
+ if v_id is null then
+  select * into v_row from public.messages m where m.author_id = v_uid and m.client_id = p_client_id;
+  if v_row.series_id is distinct from p_series or v_row.kind <> 'announcement' then raise exception 'Invalid message' using errcode='22023'; end if;
+  return private.chat_row(v_row, v_uid);
+ end if;
+ insert into private.notification_outbox(plan_id, recipient_id, kind, dedupe_key, actor_id, message_id)
+ select v_plan, r.id, 'announcement', 'announce:'||v_id||':'||r.id, v_uid, v_id
+ from private.announcement_audience(p_series, p_audience) as r(id)
+ where r.id <> v_uid
+ on conflict do nothing;
+ select * into v_row from public.messages m where m.id = v_id;
+ return private.chat_row(v_row, v_uid);
+end $$;
+revoke all on function private.send_announcement(uuid,text,text,uuid) from public, anon, authenticated, service_role;
+create function public.send_announcement(p_series uuid, p_body text, p_audience text, p_client_id uuid) returns jsonb
+language sql security invoker set search_path = '' as $$
+ select private.send_announcement(p_series, p_body, p_audience, p_client_id)
+$$;
+revoke all on function public.send_announcement(uuid,text,text,uuid) from public, anon, authenticated, service_role;
+grant execute on function private.send_announcement(uuid,text,text,uuid), public.send_announcement(uuid,text,text,uuid) to authenticated;
+
+-- 2e. Delete and remove (K-B2, K-N12, K-S17, Decision 7). Only messages and announcements: a system line is neither
+-- the caller's nor removable. delete_message: the caller's own row, else 42501 'Not your message'; it becomes deleted
+-- with no body. remove_message: a row in a chat where the caller is a host of the current occurrence, else 42501
+-- 'Hosts only'; it becomes removed with no body, or deleted when it is the caller's own, so a host's words never read
+-- "removed". Both work after the close. A row already deleted or removed keeps its state: a removal is never turned
+-- into a deletion by its author, and a retry changes nothing.
+create function private.delete_message(p_id bigint) returns void language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := private.require_tester(); v_row public.messages;
+begin
+ select * into v_row from public.messages m where m.id = p_id and m.kind in ('message','announcement') for update;
+ if not found or v_row.author_id is distinct from v_uid then raise exception 'Not your message' using errcode='42501'; end if;
+ update public.messages set state = 'deleted', body = null where id = p_id and state = 'sent';
+end $$;
+revoke all on function private.delete_message(bigint) from public, anon, authenticated, service_role;
+create function public.delete_message(p_id bigint) returns void language sql security invoker set search_path = '' as $$
+ select private.delete_message(p_id)
+$$;
+revoke all on function public.delete_message(bigint) from public, anon, authenticated, service_role;
+grant execute on function private.delete_message(bigint), public.delete_message(bigint) to authenticated;
+
+create function private.remove_message(p_id bigint) returns void language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := private.require_tester(); v_row public.messages;
+begin
+ select * into v_row from public.messages m where m.id = p_id and m.kind in ('message','announcement') for update;
+ if not found or not coalesce(private.is_host((private.current_occurrence(v_row.series_id)).id, v_uid), false) then
+  raise exception 'Hosts only' using errcode='42501';
+ end if;
+ update public.messages set state = case when author_id = v_uid then 'deleted' else 'removed' end, body = null
+ where id = p_id and state = 'sent';
+end $$;
+revoke all on function private.remove_message(bigint) from public, anon, authenticated, service_role;
+create function public.remove_message(p_id bigint) returns void language sql security invoker set search_path = '' as $$
+ select private.remove_message(p_id)
+$$;
+revoke all on function public.remove_message(bigint) from public, anon, authenticated, service_role;
+grant execute on function private.remove_message(bigint), public.remove_message(bigint) to authenticated;
+
+-- 2f. Reads and mutes (K-S11, CH-P8, H23). For someone in the chat, else 42501 'Not in this chat'. mark_chat_read
+-- moves the caller's read forward only, and never past the chat's last message: a larger id (or a null) reads as far as
+-- that. set_chat_mute mutes the chat's pushes of messages (announcements still come) or, with false, unmutes.
+create function private.mark_chat_read(p_series uuid, p_last_id bigint) returns void language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := private.require_tester(); v_id bigint;
+begin
+ if not private.chat_member(p_series, v_uid) then raise exception 'Not in this chat' using errcode='42501'; end if;
+ select least(greatest(coalesce(p_last_id, 0), 0), coalesce(c.last_message_id, 0)) into v_id from public.chats c where c.series_id = p_series;
+ insert into public.chat_reads(series_id, user_id, last_read_id) values (p_series, v_uid, coalesce(v_id, 0))
+ on conflict (series_id, user_id) do update set last_read_id = greatest(public.chat_reads.last_read_id, excluded.last_read_id);
+end $$;
+revoke all on function private.mark_chat_read(uuid,bigint) from public, anon, authenticated, service_role;
+create function public.mark_chat_read(p_series uuid, p_last_id bigint) returns void language sql security invoker set search_path = '' as $$
+ select private.mark_chat_read(p_series, p_last_id)
+$$;
+revoke all on function public.mark_chat_read(uuid,bigint) from public, anon, authenticated, service_role;
+grant execute on function private.mark_chat_read(uuid,bigint), public.mark_chat_read(uuid,bigint) to authenticated;
+
+create function private.set_chat_mute(p_series uuid, p_muted boolean) returns void language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := private.require_tester();
+begin
+ if not private.chat_member(p_series, v_uid) then raise exception 'Not in this chat' using errcode='42501'; end if;
+ if p_muted then
+  insert into public.chat_mutes(series_id, user_id) values (p_series, v_uid) on conflict do nothing;
+ else
+  delete from public.chat_mutes where series_id = p_series and user_id = v_uid;
+ end if;
+end $$;
+revoke all on function private.set_chat_mute(uuid,boolean) from public, anon, authenticated, service_role;
+create function public.set_chat_mute(p_series uuid, p_muted boolean) returns void language sql security invoker set search_path = '' as $$
+ select private.set_chat_mute(p_series, p_muted)
+$$;
+revoke all on function public.set_chat_mute(uuid,boolean) from public, anon, authenticated, service_role;
+grant execute on function private.set_chat_mute(uuid,boolean), public.set_chat_mute(uuid,boolean) to authenticated;
+
+-- 2g. Who may be told (K-N3, CH-P7, CH-P8). The two chat kinds get a branch of their own: the recipient may use the app
+-- and is not being deleted, has not muted the resbite (plan_mutes, by series), and the message is still sent; a
+-- chat_message under an hour old (K-N3), to someone in the chat now who has not muted it; an announcement under a day
+-- old, to someone its audience reaches now (announcement_audience: a host, Going or Maybe, or not answered for
+-- everyone), muted chat or not. Every other kind keeps the 20261110120000_connections body, verbatim but for the kind
+-- test that leaves the chat kinds out of the first branch; its grants are kept (nobody).
+create or replace function private.notification_recipient_eligible(p_outbox bigint) returns boolean
+language sql stable security definer set search_path='' as $$
+ select exists (
+ select 1 from private.notification_outbox o
+ join public.plans plan on plan.id=o.plan_id
+ where o.id=p_outbox and o.kind not in ('connection_request','connection_accepted','chat_message','announcement')
+ and private.user_eligible(o.recipient_id) and not private.deletion_pending(o.recipient_id)
+ and (private.is_host(plan.id,o.recipient_id) or exists(select 1 from public.attendees a where a.plan_id=plan.id and a.user_id=o.recipient_id
+  and (o.kind not in ('plan_changed','guest_note') or a.response in ('accepted','maybe','pending'))))
+ and (o.kind not in ('rsvp','invitation','join_request') or private.is_host(plan.id,o.recipient_id))
+ and o.created_at>now()-interval '24 hours'
+ and not exists(select 1 from public.plan_mutes m where m.series_id=plan.series_id and m.user_id=o.recipient_id)
+ and (o.kind<>'join_request' or (plan.status='active' and private.plan_end(plan.starts_at,plan.ends_at)>now()
+  and exists(select 1 from private.join_requests j where j.plan_id=o.plan_id and j.user_id=o.actor_id
+   and j.status='waiting' and j.created_at<=o.created_at)
+  and not exists(select 1 from public.attendees a where a.plan_id=o.plan_id and a.user_id=o.actor_id)
+  and not private.deletion_pending(o.actor_id)))
+ ) or exists (
+ select 1 from private.notification_outbox o
+ where o.id=p_outbox and o.kind in ('connection_request','connection_accepted')
+ and private.user_eligible(o.recipient_id) and not private.deletion_pending(o.recipient_id)
+ and o.created_at>now()-interval '24 hours'
+ and exists(select 1 from public.connections c
+  where (c.user_a,c.user_b)=(least(o.recipient_id,o.actor_id),greatest(o.recipient_id,o.actor_id))
+  and (o.kind='connection_accepted' and c.state='connected' and o.created_at>=c.accepted_at
+   or o.kind='connection_request' and c.state='requested' and c.requested_by=o.actor_id))
+ ) or exists (
+ select 1 from private.notification_outbox o
+ join public.messages msg on msg.id=o.message_id
+ where o.id=p_outbox and o.kind in ('chat_message','announcement')
+ and private.user_eligible(o.recipient_id) and not private.deletion_pending(o.recipient_id)
+ and not exists(select 1 from public.plan_mutes m where m.series_id=msg.series_id and m.user_id=o.recipient_id)
+ and msg.state='sent'
+ and (o.kind='chat_message' and o.created_at>now()-interval '1 hour'
+   and private.chat_member(msg.series_id,o.recipient_id)
+   and not exists(select 1 from public.chat_mutes cm where cm.series_id=msg.series_id and cm.user_id=o.recipient_id)
+  or o.kind='announcement' and o.created_at>now()-interval '24 hours'
+   and exists(select 1 from private.announcement_audience(msg.series_id,msg.audience) as r(id) where r.id=o.recipient_id))
+ )
+$$;
+
+-- 2h. The worker's claim, with the chat (K-B3.2): the expansion takes every other kind before the chat kinds, so a
+-- change, a cancellation or an answer is never queued behind a lively chat's notices; and each job also carries
+-- series_id (the chat it opens), message_id (as text, like outbox_id: H6), message_body (the words, for the two chat
+-- kinds only, while the message is sent) and audience (an announcement's). All four are null for every other kind. A
+-- chat notice over an hour old is dropped by the eligibility check (K-N3, H17), as an announcement over a day old is.
+-- actor_name is null for an actor who is being deleted or was (H19), as brought_by_name is. The one push a minute is
+-- send_message's (Decision 6): the claim has no such rule. Otherwise the 20261111130000_circles_of_trust body
+-- (brought_by_name, the rsvp of someone no longer on the guest list suppressed, the jobs in the order the notices were
+-- made); its grants are kept (service_role only).
+create or replace function public.claim_notification_deliveries(p_limit integer default 25) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare v_outbox record; v_result jsonb;
+begin
+ -- Endpoint expansion is once per logical event; never notify a newly bound device about old events. The chat kinds
+ -- come last (K-B3.2).
+ for v_outbox in select o.id from private.notification_outbox o
+ where o.expanded_at is null and o.delivered_at is null order by (o.kind in ('chat_message','announcement')), o.id limit 100 for update skip locked
+ loop
+  if private.notification_recipient_eligible(v_outbox.id) then
+   insert into private.notification_deliveries(outbox_id,token,endpoint_updated_at)
+   select o.id,e.token,e.updated_at from private.notification_outbox o
+   join private.device_endpoints e on e.user_id=o.recipient_id where o.id=v_outbox.id
+   on conflict do nothing;
+  end if;
+  update private.notification_outbox set expanded_at=now() where id=v_outbox.id;
+ end loop;
+ -- A crashed send without a persisted ticket is uncertain: never blindly send it again.
+ update private.notification_deliveries set state='unknown',lease_id=null,lease_until=null
+ where state='sending' and lease_until<now();
+ update private.notification_deliveries d set state='suppressed',lease_id=null,lease_until=null
+ where d.state in ('pending','ticket') and (not private.notification_recipient_eligible(d.outbox_id)
+ or not exists(select 1 from private.device_endpoints e join private.notification_outbox o on o.id=d.outbox_id
+ where e.token=d.token and e.user_id=o.recipient_id and e.updated_at=d.endpoint_updated_at));
+ -- An answer from someone no longer on the guest list (removed since) is not news (circles of trust).
+ update private.notification_deliveries d set state='suppressed',lease_id=null,lease_until=null
+ from private.notification_outbox o where o.id=d.outbox_id and d.state='pending' and o.kind='rsvp' and o.actor_id is not null
+ and not exists(select 1 from public.attendees a where a.plan_id=o.plan_id and a.user_id=o.actor_id);
+ with picked as (
+ select d.id from private.notification_deliveries d where d.state in ('pending','ticket')
+ and d.next_attempt_at<=now() and (d.lease_until is null or d.lease_until<now())
+ order by d.next_attempt_at,d.id limit greatest(1,least(coalesce(p_limit,25),25)) for update skip locked
+ ), claimed as (
+ update private.notification_deliveries d set lease_id=gen_random_uuid(),lease_until=now()+interval '2 minutes',
+ attempts=d.attempts+1,state=case when d.ticket_id is null then 'sending' else 'ticket' end
+ from picked where d.id=picked.id returning d.*
+ )
+ select coalesce(jsonb_agg(jsonb_build_object('id',d.id,'lease_id',d.lease_id,'outbox_id',d.outbox_id::text,
+ 'plan_id',o.plan_id,'recipient_id',o.recipient_id,'token',d.token,'attempts',d.attempts,
+ 'ticket_id',d.ticket_id,'ticket_created_at',d.ticket_created_at,
+ 'kind',o.kind,'detail',o.detail,'title',plan.title,'starts_at',plan.starts_at,'time_zone',plan.time_zone,
+ 'actor_name',actor.display_name,
+ -- Who brought the person who answered (circles of trust): an rsvp only, by first name, unless that account is being
+ -- deleted or is the recipient; null otherwise, so other jobs carry nothing more (UX2-D4).
+ 'brought_by_name',case when o.kind='rsvp' then (select private.first_name(b.display_name)
+  from public.attendees a join public.profiles b on b.id=a.brought_by
+  where a.plan_id=o.plan_id and a.user_id=o.actor_id and a.brought_by<>o.recipient_id and not private.deletion_pending(b.id)) end,
+ -- The chat (chat core): the chat a notice opens, its message and, for the two chat kinds only, the words.
+ 'series_id',msg.series_id,'message_id',o.message_id::text,
+ 'message_body',case when o.kind in ('chat_message','announcement') and msg.state='sent' then msg.body end,
+ 'audience',msg.audience)
+ -- In the order the notices were made (circles of trust).
+ order by o.id, d.id),'[]'::jsonb) into v_result
+ from claimed d join private.notification_outbox o on o.id=d.outbox_id
+ join public.plans plan on plan.id=o.plan_id
+ left join public.profiles actor on actor.id=o.actor_id and not private.deletion_pending(o.actor_id)
+ left join public.messages msg on msg.id=o.message_id;
+ update private.notification_outbox o set delivered_at=now() where o.expanded_at is not null and o.delivered_at is null
+ and not exists(select 1 from private.notification_deliveries d where d.outbox_id=o.id and d.state in ('pending','sending','ticket'));
+ return v_result;
+end $$;
+
+-- 2i. The worker's outcome (H21): 'deferred' is a job the sender claimed but could not start before its budget ran out.
+-- It goes back at once (no 30 s floor; the delay is clamped to 0..3600 and the sender sends 0) to pending, or to ticket
+-- when it holds one (its ticket_id is kept: the sender sends no ticket), and the attempt the claim counted is given
+-- back, so a job handed back is never lost to the attempt limit. Otherwise the 20261030120000_push_delivery body; its
+-- grants are kept (service_role only).
+create or replace function public.finish_notification_delivery(p_id uuid,p_lease uuid,p_outcome text,p_ticket text default null,p_delay_seconds integer default 0)
+returns void language plpgsql security definer set search_path='' as $$
+declare d private.notification_deliveries; v_recipient uuid;
+begin
+ if p_outcome not in ('ticket','received','retry','failed','invalid','unknown','suppressed','deferred') then raise exception 'Invalid delivery outcome'; end if;
+ select * into d from private.notification_deliveries where id=p_id and lease_id=p_lease and lease_until>now() for update;
+ if not found then return; end if; -- deletion or obsolete worker lease
+ if p_outcome='ticket' and (p_ticket is null or length(p_ticket) not between 1 and 512) then raise exception 'Ticket required'; end if;
+ if p_outcome='invalid' then
+  select recipient_id into v_recipient from private.notification_outbox where id=d.outbox_id;
+  delete from private.device_endpoints where token=d.token and user_id=v_recipient and updated_at=d.endpoint_updated_at;
+ end if;
+ update private.notification_deliveries set
+ state=case when p_outcome='retry' then case when attempts>=8 then 'unknown' when ticket_id is null then 'pending' else 'ticket' end
+  when p_outcome='deferred' then case when ticket_id is null then 'pending' else 'ticket' end else p_outcome end,
+ attempts=case when p_outcome='deferred' then greatest(attempts-1,0) else attempts end,
+ ticket_id=case when p_outcome='ticket' then p_ticket else ticket_id end,
+ ticket_created_at=case when p_outcome='ticket' then now() else ticket_created_at end,
+ next_attempt_at=case when p_outcome='deferred' then now()+make_interval(secs=>greatest(0,least(coalesce(p_delay_seconds,0),3600)))
+  else now()+make_interval(secs=>greatest(30,least(coalesce(p_delay_seconds,30),3600))) end,
+ lease_id=null,lease_until=null where id=d.id;
+ update private.notification_outbox o set delivered_at=now() where o.id=d.outbox_id
+ and not exists(select 1 from private.notification_deliveries x where x.outbox_id=o.id and x.state in ('pending','sending','ticket'));
+end $$;
+
+-- 2j. Deletion (K-S2, K-B2, K-N5, Decision 14). Asking to delete an account first sets the deletion's flag, so no chat
+-- line is written for what the deletion does (its cancellations, the place scrub); then, besides what it did, the
+-- account's messages and announcements read deleted, with no words and no author, and its chat reads and mutes go.
+-- It never edits a system line's payload (K-S3). The deletion lifecycle is local-only (20261022120001_gi2_local_delivery_and_deletion;
+-- the hosted project has none of it): the function is redefined only where it exists, so this file still applies on
+-- the hosted baseline, and the release that brings deletion to hosted must carry these statements. Otherwise the
+-- 20261111130000_circles_of_trust body (BLOCKING 1: it empties brought_by and deletes the removal records); its
+-- grants are kept.
+do $migration$ begin
+ if pg_catalog.to_regprocedure('private.request_account_deletion(uuid,uuid,uuid,text)') is not null then
+  execute $fn$
+create or replace function private.request_account_deletion(p_user uuid,p_session uuid,p_request uuid,p_recovery text)
+returns jsonb language plpgsql security definer set search_path='' as $$
+declare v_job private.account_deletion_jobs; v_plan public.plans;
+begin
+ if p_user is null or p_request is null or p_recovery is null or p_recovery !~ '^[a-f0-9]{64}$' then
+ raise exception 'Invalid deletion request' using errcode='22023'; end if;
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(p_user::text,47));
+ select * into v_job from private.account_deletion_jobs where user_id=p_user;
+ if found then
+  if v_job.request_id<>p_request or v_job.recovery_hash<>extensions.digest(p_recovery,'sha256') then
+   raise exception 'Deletion already requested' using errcode='22023'; end if;
+  return jsonb_build_object('requestId',v_job.request_id,'status',v_job.status);
+ end if;
+ -- Edge validates Auth tokens and recent AMR; SQL also requires that the proof's
+ -- session is real, belongs to this user and was freshly created, not refreshed.
+ if not exists(select 1 from auth.sessions where id=p_session and user_id=p_user and created_at>=now()-interval '5 minutes' and created_at<=now()+interval '30 seconds')
+ or not exists(select 1 from auth.users u where u.id=p_user and u.email_confirmed_at is not null and not coalesce(u.is_anonymous,false) and (exists(select 1 from private.tester_roster r where r.email=lower(u.email) and r.enabled) or private.has_live_grant(u.id)) and (u.banned_until is null or u.banned_until<=now()))
+ then raise exception 'Fresh eligible authentication required' using errcode='42501'; end if;
+ -- Chat (K-S2): from here to the commit, the chat-line triggers write nothing, so the cancellations and the scrub below
+ -- write no line.
+ perform set_config('resbite.system','deletion',true);
+ insert into private.account_deletion_jobs(request_id,user_id,recovery_hash) values(p_request,p_user,extensions.digest(p_recovery,'sha256'));
+ delete from private.tester_roster where email=(select lower(email) from auth.users where id=p_user);
+ update public.profiles set deletion_requested_at=now(),display_name='Deleted member',avatar_path=null where id=p_user;
+ -- Lock plans in a deterministic order, preserving others' access to cancellation.
+ for v_plan in select * from public.plans where owner_id=p_user order by id for update loop
+  if v_plan.status='active' and v_plan.starts_at>now() then
+   update public.plans set status='cancelled',version=version+1 where id=v_plan.id;
+   insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key)
+    select v_plan.id,a.user_id,'plan_cancelled','deletion:'||p_request||':'||v_plan.id||':'||a.user_id from public.attendees a
+    where a.plan_id=v_plan.id and a.user_id<>p_user on conflict do nothing;
+  end if;
+  update public.plans set place_label='Meeting place removed',note='',latitude=null,longitude=null where id=v_plan.id;
+  update private.invitations set revoked_at=coalesce(revoked_at,now()),intended_email=null where plan_id=v_plan.id;
+ end loop;
+ update private.invitations set revoked_at=coalesce(revoked_at,now()),claimed_by=null,intended_email=null where claimed_by=p_user;
+ delete from public.connections where p_user in (user_a,user_b);
+ delete from private.connection_refusals where from_user=p_user or to_user=p_user;
+ -- Circles of trust: nobody was brought by a deleted account, and its removal records go.
+ update public.attendees set brought_by=null where brought_by=p_user;
+ update private.phone_invitations set brought_by=null where brought_by=p_user;
+ delete from private.plan_removals where user_id=p_user;
+ -- Chat (K-B2, K-N5, Decision 14): the account's messages and announcements lose their words and their author, each
+ -- chat's row locked first, in one order, so two deletions never wait on each other's; a deleted announcement
+ -- unpins (K-S12). A system line is left as it is, payload and all (K-S3): the names map shows the person as nobody.
+ -- Its reads and mutes go.
+ perform 1 from public.chats c where c.series_id in (select m.series_id from public.messages m
+  where m.author_id=p_user and m.kind in ('message','announcement')) order by c.series_id for update;
+ update public.messages set state='deleted',body=null,author_id=null where author_id=p_user and kind in ('message','announcement');
+ delete from public.chat_reads where user_id=p_user;
+ delete from public.chat_mutes where user_id=p_user;
+ delete from public.attendees where user_id=p_user;
+ delete from private.device_endpoints where user_id=p_user;
+ delete from private.notification_outbox where recipient_id=p_user;
+ return jsonb_build_object('requestId',p_request,'status','queued');
+end $$;
+$fn$;
+ end if;
+end $migration$;
