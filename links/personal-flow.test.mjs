@@ -613,3 +613,8 @@ test("wrongNumber names the inviter when there is one, else the host", () => {
   assert.equal(errorText("wrongNumber", "Ana", "Pedro"), "That isn’t the number Pedro invited.");
   assert.equal(errorText("wrongNumber", "Ana"), "That isn’t the number Ana invited.");
 });
+
+test("errorText: a blank inviter falls back to the host", () => {
+  for (const blank of ["", "  ", " ", "​‍", "﻿"])
+    assert.equal(errorText("wrongNumber", "Ana", blank), "That isn’t the number Ana invited.");
+});

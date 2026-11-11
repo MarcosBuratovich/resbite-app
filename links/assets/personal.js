@@ -77,7 +77,7 @@ function start(main, answerButton) {
   const ending = data.ending || "";
   const host = data.host || "";
   // A guest's link names who brought you; a host's link has none, and the host stands in.
-  const inviter = data.inviter || host;
+  const inviter = (data.inviter || "").replace(/[\s\u00a0\u200b-\u200d\ufeff]+/g, "") ? data.inviter : host;
   const termsVersion = data.termsVersion || "";
   // When the event ends (the start, with no end) the answer closes, and the kept session goes with it.
   const endsAt = Date.parse(data.endsAt || "");

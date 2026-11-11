@@ -88,7 +88,8 @@ const ERROR_KEYS = new Set([
 ]);
 
 /** The words for an error the reducer holds; "" for none. */
-export function errorText(error, host, inviter = host) {
+export function errorText(error, host, inviter) {
+  if (!inviter || !inviter.replace(/[\s\u00a0\u200b-\u200d\ufeff]+/g, "")) inviter = host;
   if (!error) return "";
   if (!ERROR_KEYS.has(error)) return String(error);
   const copy = PAGE_COPY[error];

@@ -27,6 +27,8 @@ const HAPPENED = "HappenedHappenedHappen";
 const UNKNOWN = "UnknownUnknownUnknownU";
 const ANOTHER = "AnotherAnotherAnotherA"; // Another open invitation, whose kept session is never this page's.
 const GUEST_LINK = "GuestGuestGuestGuestGu"; // An open invitation a guest brought: its page names Pedro.
+const LONG_NAME = "Wolfeschlegelsteinhausenbergerdorff".repeat(9).slice(0, 300); // One unbroken word.
+const LONG_LINK = "LongLongLongLongLongLo";
 const STALE = "StaleStaleStaleStaleSt"; // An invitation whose event has started.
 const INVITED = "447700900834";
 const OTHER = "447700900534"; // Another person's number with the same last two digits.
@@ -82,6 +84,7 @@ const PAGES = {
 // ANOTHER is open too, for the per-code storage checks; STALE's event has started, so its page is closed.
 PAGES[ANOTHER] = { ...OPEN_PAGE, title: "Board games" };
 PAGES[GUEST_LINK] = { ...OPEN_PAGE, inviter: "Pedro" };
+PAGES[LONG_LINK] = { ...OPEN_PAGE, host: LONG_NAME, inviter: LONG_NAME };
 PAGES[STALE] = { state: "happened", host: "Marcos", title: "Old picnic" };
 const readPersonalInvitation = async (code) => PAGES[code] ?? { state: "inactive" };
 
@@ -218,7 +221,7 @@ async function fixture({ seeds = [], width = 390 } = {}) {
     if (url.origin !== SUPABASE) unexpected.push(`another Supabase host: ${url.origin}`);
     if (method === "POST" && path === "/rest/v1/rpc/check_invited_number") {
       if (state.tooMany) return pgError(400, "22023", "Too many tries. Try again later.");
-      return reply([CODE, GUEST_LINK].includes(body.p_code) && String(body.p_phone).replace(/\D/g, "") === INVITED);
+      return reply([CODE, GUEST_LINK, LONG_LINK].includes(body.p_code) && String(body.p_phone).replace(/\D/g, "") === INVITED);
     }
     if (method === "POST" && path === "/auth/v1/otp") {
       if (state.offline) return route.abort("internetdisconnected");
@@ -654,6 +657,19 @@ try {
     await page.getByLabel("Mobile number", { exact: true }).fill("07700 900111");
     await button(page, "Send code").click();
     await expect(text(page, "That isn’t the number Pedro invited.")).toBeVisible();
+    await f.done();
+  }
+
+  // 4e. A 300-character unbroken name wraps: the invitation and the confirm step never scroll sideways.
+  {
+    const f = await fixture({ width: 320 }),
+      { page } = f;
+    await page.goto(`${ORIGIN}/i/${LONG_LINK}`);
+    await expect(heading(page, "Picnic in the park")).toBeVisible();
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "no sideways scroll with a long name");
+    await button(page, "Answer").click();
+    await expect(heading(page, COPY.confirm)).toBeVisible();
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "no sideways scroll on the confirm step");
     await f.done();
   }
 

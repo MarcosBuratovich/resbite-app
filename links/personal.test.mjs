@@ -207,3 +207,20 @@ test("a guest's link names the inviter, and the host by first name; a host's lin
   assert.ok(!plain.includes("data-inviter"));
   assert.ok(!plain.includes("’s resbite"));
 });
+
+test("a blank inviter is absent; a blank host drops 'to ’s resbite'; the preview names the inviter", () => {
+  for (const inviter of ["", "   ", " ", "​‌‍", "﻿  "]) {
+    const html = renderPersonalPage({ ...open, host: "Ana Host", inviter }, options);
+    assert.ok(html.includes("Ana Host invited you"), JSON.stringify(inviter));
+    assert.ok(html.includes("Ask Ana Host to check it.") && !html.includes("data-inviter"));
+    assert.ok(html.includes("Invited by Ana Host"));
+  }
+  for (const host of ["", "​", "   "]) {
+    const html = renderPersonalPage({ ...open, host, inviter: "Pedro" }, options);
+    assert.ok(html.includes(">Pedro invited you<") || html.includes("</span>Pedro invited you</p>"), JSON.stringify(host));
+    assert.ok(!html.includes("’s resbite"));
+  }
+  const html = renderPersonalPage({ ...open, host: "Ana Host", inviter: "Pedro" }, options);
+  assert.ok(html.includes('content="Mon 2 Nov, 13:00 · Invited by Pedro"'));
+  assert.ok(!html.includes("Invited by Ana Host"));
+});
