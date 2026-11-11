@@ -106,6 +106,7 @@ export function notificationCopy(input: CopyInput): Copy {
     switch (input.detail) {
       case "going": sentence = `You're both going to ${title}`; break;
       case "invited": sentence = `You're both invited to ${title}`; break;
+      case "were_invited": sentence = `You were both invited to ${title}`; break;
       case "met": sentence = `You were both at ${title}`; break;
       default: sentence = Number.isFinite(start) && start > Date.now() ? `You're both going to ${title}` : `You were both at ${title}`;
     }

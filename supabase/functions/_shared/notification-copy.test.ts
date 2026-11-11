@@ -145,6 +145,8 @@ test("a connection request names how the two stand by its detail", () => {
   assert.equal(notificationCopy({ ...req, title: "Pizza night!", detail: "invited" }).body, "You're both invited to Pizza night!");
   assert.equal(notificationCopy({ ...req, title: "Wrap up.", detail: "met" }).body, "You were both at Wrap up.");
   assert.equal(notificationCopy({ ...req, title: "Why?", starts_at: "2099-01-01T19:00:00Z" }).body, "You're both going to Why?");
+  assert.deepEqual(notificationCopy({ ...req, detail: "were_invited" }), { title: "Pedro wants to connect", body: "You were both invited to Picnic." });
+  assert.equal(notificationCopy({ ...req, title: "Pizza night!", detail: "were_invited" }).body, "You were both invited to Pizza night!");
 });
 
 test("a connection request leads with who, and says where you met", () => {
