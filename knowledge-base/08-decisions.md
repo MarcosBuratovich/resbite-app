@@ -559,16 +559,16 @@ Creating a resbite ([spec](../docs/superpowers/specs/2026-10-28-creating-a-resbi
 
 ## Connections (CO), 10 November 2026
 
-Connections ([spec](../docs/superpowers/specs/2026-11-10-connections-and-circles-design.md)) are built in plan 1 (connections; branch `co1-connections`), live on the hosted project since 11 November 2026 (migration applied, `deliver-notifications` redeployed at version 4); the TestFlight build and the device checks are pending. The circle of trust is plan 2. One line each; the spec holds the reasons.
+Connections ([spec](../docs/superpowers/specs/2026-11-10-connections-and-circles-design.md)) are built in plan 1 (connections; branch `co1-connections`), live on the hosted project since 11 November 2026 (migration applied, `deliver-notifications` redeployed at version 4); the TestFlight build and the device checks are pending. The circle of trust is plan 2, built on branch `co2-circles-of-trust` and awaiting rollout (below). One line each; the spec holds the reasons.
 
 **Decisions.**
 - **CO-D1.** Two kinds of people to invite: phone contacts with a Resbite account, as today, and Resbite connections.
 - **CO-D2.** A connection is earned, not searched: no place to browse or look people up; you connect only with someone invited to, or at, the same resbite.
 - **CO-D3.** The other person has to accept; until then nothing changes for either.
-- **CO-D4.** Circles of trust: the host sets how many each person may bring (invites) and how far trust travels (levels). Plan 2.
-- **CO-D5.** People brought inside the circle are in without approval; the host can still remove them. Plan 2.
+- **CO-D4.** Circles of trust: the host sets how many each person may bring (invites) and how far trust travels (levels). Built in plan 2.
+- **CO-D5.** People brought inside the circle are in without approval; the host can still remove them. Built in plan 2.
 - **CO-D6.** The open link is the host's door: everyone who answers through it waits for approval, connections included (overrides the IN brief).
-- **CO-D7.** Real accounts only: no unnamed plus-ones; they stay on the for-later list.
+- **CO-D7.** Real accounts only: no unnamed plus-ones; they stay on the for-later list. Plan 2 holds to it: a guest brings a connection, or a phone contact who signs up.
 - **CO-D8.** The three mockups of 10 November are the design of the screens (CO-01 to CO-07).
 
 **Calls made while writing the spec.**
@@ -595,3 +595,25 @@ Connections ([spec](../docs/superpowers/specs/2026-11-10-connections-and-circles
 **Follow-ups (plan 3, 11 November 2026; branch `co3-follow-ups`, built, not rolled out).** The runbook is [`qa/connections-follow-ups-2026-11-11/README.md`](../qa/connections-follow-ups-2026-11-11/README.md).
 - **CO-R10.** The request push and the Connections card name how the two stand on the resbite, with one rule, `private.pair_standing`. Each counts as going when they own it or their own reply is Going or Maybe; an admin counts by their reply alone. `going`: on, and both going ("You're both going to <title>."). `invited`: not ended, and not `going`, a resbite cancelled before its end included ("You're both invited to <title>."). `met`: ended, not cancelled, and both went ("You were both at <title>."). `were_invited`: ended, and not `met` ("You were both invited to <title>."). The rule has nothing to say (null) when either has no place on that resbite, which a request's own resbite never is. The card then reads a fifth context, `from` ("From <title>", true whatever happened since), as it does when there is no occurrence the caller may read, or the caller may not see its guests (they have not answered it). A notice queued before the change has no detail and keeps the start-time wording. The detail is the request's first notice's, as its key is static (CO-R8).
 - CH-P20 (groups and chat) shipped ahead of the groups plan, in the same follow-ups: the roll carries every guest, whatever their reply, so Can't go this week is invited again next week. Guests the earlier roll dropped are not brought back.
+
+**Circles of trust (plan 2, 11 November 2026; branch `co2-circles-of-trust`, built, not rolled out).** The runbook is [`qa/circles-of-trust-2026-11-10/README.md`](../qa/circles-of-trust-2026-11-10/README.md). The migration is `20261111130000_circles_of_trust.sql`; it goes live after, or with, the follow-ups migration.
+
+*The spec's calls, as built.*
+- **CO-P7.** The circle is set on Invite people, in a Circle of trust card above the connections, by the owner and admins while the resbite is open. Each person can bring Nobody, 1, 2 or 3 (default Nobody); How far it goes is 1 to 3 levels (default 1). It saves on each tap, and a sentence names a guest who is going.
+- **CO-P8.** A guest may bring while the resbite is open, they are Going or Maybe, their level is within the circle's, and an invite is left. Hosts are level 0 and invite instead; a host's guests are level 1; whoever a level-n guest brings is level n+1.
+- **CO-P9.** A "Bring someone" row on the resbite page opens Invite people in bring mode: the same pickers, capped at the invites left, with no event link and no circle card. A phone contact's message names both: "Pedro invited you to Ana’s Board game night, <when>. Reply here: <link>". The web page names the inviter, and the hosts hear "Clara is going · brought by Pedro."
+- **CO-P10.** An invite is used while the person brought is not answered, Going or Maybe, or holds an unanswered link. It frees when they say Can't go, are removed, or the bringer takes back the invitation.
+- **CO-P11.** The people list shows "Brought by Pedro" and indents the brought person under the bringer. Removing someone never removes the people they brought; lowering the numbers removes nobody; Nobody hides Bring someone.
+- **CO-P12.** The roll copies the circle, and each carried guest keeps who brought them and their level.
+- **CO-P13.** Approval through the open link is unchanged, and an approved person is level 1 with no bringer.
+- **CO-P15.** The circle is checked once, inside `invite_contacts`, when the invitation is sent. A sent invitation stands, whatever happens to the circle or the bringer afterwards.
+
+*Calls made while planning and building* (they change what the spec describes).
+- **CO-R11.** Carried levels: CO-P12 wins over CO-P8's "carried along a series is level 1". A brought guest the roll carries keeps their bringer and level, so they keep counting for that bringer.
+- **CO-R12.** Removals are remembered per series (`private.plan_removals`): whom a host removed, declined or revoked, by account and by number. A guest cannot bring them back, and they cannot answer a guest's link, or a host's link sent before the removal. A host's own later invitation, or an approval, clears the record.
+- **CO-R13.** A host sees a guest's unanswered link by its last two digits, as "Number ending ••23 · Invited by link · brought by Pedro": never the number, the name or the channel. The host removes it by its id.
+- **CO-R14.** A host's link takes over a bringer's: when a host sends a link to a number a guest's link already reaches, the link becomes the host's (no bringer, level 1), and the bringer's invite is freed. A host's in-app invitation of that person ends the guest's link too.
+- **CO-R15.** On the guest list and waiting at the host's door never both hold: whoever joins the list by any path has their waiting request closed. A guest cannot bring someone who is waiting.
+- **CO-R16.** A bringer's take-back is theirs, host or not: their own unanswered link or in-app invitation goes with no removal record. An answered link is not taken back by id; the host removes the person through their row.
+- **CO-R17.** A first name is `private.first_name`: the first word of `display_name`, with every kind of space treated as one and control characters removed, or none when nothing is left. It replaces the plan's `split_part` definition and agrees with the app's `firstName`.
+- **Owner question (C-R11).** The roll carries every guest (CH-P20), so a brought person who said Can't go comes back not answered, still counted for their bringer. The bringer's used invites can then exceed the circle's, and they read none left. Built that way by default; the alternative is one condition in the roll. The owner answers before the migration (the runbook's step 0).
