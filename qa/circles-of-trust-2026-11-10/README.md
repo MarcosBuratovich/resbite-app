@@ -37,10 +37,10 @@ The decisions and the calls made while building are in the [decision log](../../
 
 | File | sha256 |
 | --- | --- |
-| `supabase/migrations/20261111130000_circles_of_trust.sql` | `09e0cf75bbc7555b2b352f726cbbf73b1042a2c4a6ee9dd3c4478f9a95709b8f` |
-| `supabase/rollback/20261111130000_circles_of_trust.rollback.sql` | `22da35a1e5d667351c4f1d06e09d795e30440c2dadd5ef9b0990ace045eb8f43` |
+| `supabase/migrations/20261111130000_circles_of_trust.sql` | `04062e2b091fa582f59a3d1ff9a322e8019ce671c64d532d5c113d0916d77256` |
+| `supabase/rollback/20261111130000_circles_of_trust.rollback.sql` | `0c4f4bc033c632698783b8855e277c33cea52415a88521c74c88479433463146` |
 | `supabase/tests/hosted-baseline/20261111130000_circles_of_trust.before.sql` | `0b2be16e10b84994deeb6baf2d7efe2bfa8630859095681d1ca51d7954759fd5` |
-| `supabase/tests/hosted-baseline/20261111130000_circles_of_trust.after.sql` | `13d76347fba7905e5aaa7e4c5a3e23e24154059d4e8b44369b7e52cf3a0b0be0` |
+| `supabase/tests/hosted-baseline/20261111130000_circles_of_trust.after.sql` | `c500202fb5ae42daa9b3f93cc7aca34331e86fe13e6083ea644a76e78a0b33f4` |
 | `supabase/migrations/20261111120000_connections_follow_ups.sql` (only while it is pending) | `72d1536db56c956ade36844c9d4c715fffa9222090c0cb64226166fff39ae3d6` |
 | `supabase/rollback/20261111120000_connections_follow_ups.rollback.sql` | `e7d507923674073a6c8547b7d51c32722ee7abfae929e22d42b5ddfff1f1fe16` |
 | `supabase/ops/hosted-fingerprint.sql` (unchanged) | `0778c53f98bc1cbdcee82487651dabc3fa246674a5d0efa1d6502e7746819a00` |
@@ -66,13 +66,14 @@ All of these ran on `co2-circles-of-trust`, with Tasks 1 to 7 combined.
 
   - Name both candidates. Bare, this mode fails by design until both are live: `tests.txt` lists their tests.
   - The circles after file rehearses the rollback in a transaction it rolls back. Both guards are tried and refuse with their messages.
-  - With the guards satisfied the rollback runs. All ten restored functions equal their snapshots, definitions and grants. Every new object is gone. A brought guest and a bringer's live link stay.
+  - With the guards satisfied the rollback runs. All ten restored functions equal their snapshots, definitions and grants. Every new object is gone. The brought guests stay.
+  - The guest's unanswered link is revoked, so no link a guest sent that nobody answered stays live (CO-Q2, the default). The host's own link and a guest's answered link stay live.
   - On a scratch copy with both lines appended to `migrations.txt`, the bare mode passes, 21 PASS lines.
-- **The race (Task 1, Step 5).** `supabase/tests/local/circles-concurrency.sh` runs in full mode.
+- **The race (the plan's Task 1, Step 5).** `supabase/tests/local/circles-concurrency.sh` runs in full mode.
   - Scenario (b): the host lowers the circle to Nobody while a guest brings someone. The guest waits on the resbite's row, then gets 42501. Nobody is added.
   - Scenario (c): a stranger with a 300 ms lock timeout is refused before the row lock, three ways.
   - **Mutation run, once, not committed.** With the allowance read moved above the row lock, (b) failed: the guest's call returned `app` and the friend's row appeared. Restored, (b) passed in every run since.
-- The app check passes: the typecheck, 806 tests, and the content validation.
+- The app check passes: the typecheck, 810 tests, and the content validation.
 
   ```
   (cd mobile && npm run check)
@@ -91,7 +92,7 @@ All of these ran on `co2-circles-of-trust`, with Tasks 1 to 7 combined.
   (cd mobile && node --import tsx ../links/verify-personal.mjs)
   ```
 
-- **The browser script**, `mobile/scripts/verify-circle.mjs`, passes on Expo web with every Supabase request stubbed. It walks the five scenarios in the plan: the host's card, bringing a connection, bringing a number, the host's chain and the bringer's list. It also takes back an in-app invitation as the bringer (C14).
+- **The browser script**, `mobile/scripts/verify-circle.mjs`, passes on Expo web with every Supabase request stubbed. It walks the five scenarios in the plan: the host's card, bringing a connection, bringing a number, the host's chain and the bringer's list. It also takes back an in-app invitation as the bringer.
 - **The fingerprint, on a local replay.**
   - `supabase/ops/hosted-fingerprint.sql` on a Docker replay of `migrations.txt` (19 files) gives 355 objects.
   - That matches the connections `hosted-after.json` of 11 November, 355 of 355 by definition, with the 15 known `acl` differences.
@@ -112,7 +113,7 @@ All of these ran on `co2-circles-of-trust`, with Tasks 1 to 7 combined.
 
 **Order.** The steps below, by their numbers:
 
-0. The owner's answer to the owner question, CO-Q1.
+0. The owner's answers to the owner questions, CO-Q1 and CO-Q2.
 1. Before snapshot.
 2. The migration.
 3. After snapshot and advisors.
@@ -133,11 +134,15 @@ The migration must be live before the TestFlight build. The new build reads `pla
 
 **The assistant's steps.** The advisors read (through the Supabase MCP server) and the `deliver-notifications` deploy are the assistant's. It does each once the owner approves it, as the connections record did.
 
-0. **The owner question, CO-Q1, before step 2.**
-   - The roll carries every guest (CH-P20). So a brought person who said Can't go comes back pending on the next occurrence, still counted for their bringer.
-   - The bringer's `used` can then exceed `allowed`. They read no invites left (`remaining` 0) until the brought person says Can't go there, or a host removes them. A bringer cannot take back someone the roll carried (CO-R16).
-   - **Built that way by default.** The alternative, not carrying a brought person who said Can't go, is one condition in the roll, and a new migration hash.
-   - Record the answer under "Applied". With no answer, the default ships.
+0. **The owner questions, CO-Q1 and CO-Q2, before step 2.**
+   - **CO-Q1, the roll.** The roll carries every guest (CH-P20). So a brought person who said Can't go comes back pending on the next occurrence, still counted for their bringer.
+     - The bringer's `used` can then exceed `allowed`. They read no invites left (`remaining` 0) until the brought person says Can't go there, or a host removes them. A bringer cannot take back someone the roll carried (CO-R16).
+     - **Built that way by default.** The alternative, not carrying a brought person who said Can't go, is one condition in the roll, and a new migration hash.
+   - **CO-Q2, the bringers' links after a rollback.** Should a rollback keep the bringers' unanswered links live, showing their numbers to hosts?
+     - The `plan_phone_invitations` the rollback restores lists every live link to a host, with its number. So, before restoring it, the rollback revokes every link a guest sent that nobody has answered, and no number a guest typed reaches a host.
+     - The cost: those invitations stop working. Their page reads as no longer active, and an answer is refused.
+     - **Built that way by default.** The alternative, keeping those links live and showing their numbers to hosts, is one statement out of the rollback, and a new rollback hash.
+   - Record both answers under "Applied". With no answer, the defaults ship.
 1. **Before snapshot, the history and two counts.** Read-only, into this directory, with `! bash ~/co2-before.sh`:
 
    ```bash
@@ -186,13 +191,13 @@ The migration must be live before the TestFlight build. The new build reads `pla
    case "$MODE" in
      both)
        echo "72d1536db56c956ade36844c9d4c715fffa9222090c0cb64226166fff39ae3d6  $FU" | sha256sum -c -
-       echo "09e0cf75bbc7555b2b352f726cbbf73b1042a2c4a6ee9dd3c4478f9a95709b8f  $CO" | sha256sum -c -
+       echo "04062e2b091fa582f59a3d1ff9a322e8019ce671c64d532d5c113d0916d77256  $CO" | sha256sum -c -
        FILES=("$FU" "$CO")
        VERSIONS=(20261111120000 20261111130000)
        GUARD="if $PAIR is not null then raise exception 'The connections follow-ups migration is already applied: if circles is not, run co2-apply.sh circles'; end if;"
        ;;
      circles)
-       echo "09e0cf75bbc7555b2b352f726cbbf73b1042a2c4a6ee9dd3c4478f9a95709b8f  $CO" | sha256sum -c -
+       echo "04062e2b091fa582f59a3d1ff9a322e8019ce671c64d532d5c113d0916d77256  $CO" | sha256sum -c -
        FILES=("$CO")
        VERSIONS=(20261111130000)
        GUARD="if $PAIR is null then raise exception 'The connections follow-ups migration is not applied: run co2-apply.sh both'; end if;
@@ -224,7 +229,7 @@ The migration must be live before the TestFlight build. The new build reads `pla
 
    - The history query should then read `21 | 20261111130000`.
    - **Locks.** The follow-ups file locks `private.notification_outbox` briefly. This file locks `public.plans`, `public.attendees` and `private.phone_invitations` briefly, to add the columns and their checks. Each check reads every row once, and the tables are small.
-   - **Installed builds keep working** (Review Focus 1). No new foreign key links `attendees` to `profiles`, so their embeds resolve.
+   - **Installed builds keep working** (the plan's Review Focus 1). No new foreign key links `attendees` to `profiles`, so their embeds resolve.
      - A host's `plan_phone_invitations` keeps today's shape. It leaves out the guests' links, which only the new build can make.
      - `invite_contacts` keeps its answer kinds, and the web page keeps its keys.
 3. **After snapshot and advisors.**
@@ -324,7 +329,9 @@ The migration must be live before the TestFlight build. The new build reads `pla
      - Set Nobody: Pedro's resbite page loses Bring someone. Then set "2" and "2 levels" again.
    - **Bring a connection and a phone contact, on two phones.**
      - As Pedro, Going, the resbite page shows "Bring someone" and "Ana trusts you to bring 2 people. They’re in, no approval needed."
-     - Bring Clara in the app. Clara's phone gets the invitation. Clara's Going reaches Ana as "Clara is going · brought by Pedro." (after step 4).
+     - Bring Clara in the app. Clara's phone gets the invitation.
+     - Before Clara answers, Pedro takes the invitation back on the people list, then brings Clara again. Clara's phone gets the invitation again.
+     - Clara's Going reaches Ana as "Clara is going · brought by Pedro." (after step 4).
      - The row now reads "Ana trusts you to bring 1 more person. They’re in, no approval needed."
      - In bring mode, "1 left": once one connection is ticked, the others are dimmed, and VoiceOver says "No invites left" on them. The cap and refusal lines are announced as they appear (iOS only).
      - Bring Juli by number, by WhatsApp. The message reads "Pedro invited you to Ana’s <title>, <when>. Reply here: <link>".
@@ -341,14 +348,14 @@ The migration must be live before the TestFlight build. The new build reads `pla
    - **The host removes a brought person; the bringer cannot bring them back.** Ana removes Clara.
      - Pedro tries to bring Clara again, by connection and by number. Both are refused with "One of these people can’t be brought here. Ask the host."
      - A removal also takes back any live link to Clara's number, Ana's own included (a known gap below).
-     - Ana invites Clara in the app: that works, and clears the record.
+     - Ana invites Clara in the app: that works, clears the record, and Clara's phone gets the invitation again.
    - **Remove the bringer.** Ana removes Pedro. The question adds "People they brought stay invited." Juli stays, one step up, still "Brought by Pedro".
      - VoiceOver moves to the question when Remove asks it, and to the next row after the remove.
    - **Android, when its build exists.** After a remove, focus moves to the next row (no Modal dismiss event there).
 
 ## Applied
 
-Nothing yet. Each step's record goes here when it is done, as in the earlier runbooks. Step 0's answer to CO-Q1 goes here first.
+Nothing yet. Each step's record goes here when it is done, as in the earlier runbooks. Step 0's answers to CO-Q1 and CO-Q2 go here first.
 
 ## Rollback
 
@@ -369,7 +376,8 @@ Every rollback below refuses to run too late, after a rollback that should follo
 
 **This file's steps.**
 
-1. **The app first.** A build with the circle gets errors from the functions this file drops. Make a build without it the testers' build first, or accept those errors until one is.
+1. **The app first.** Once this file has run, an installed build with the circle can't load a resbite or Invite people. Its plans read selects `bring_invites,bring_levels` and its `readGuests` selects `brought_by,level`, and this file drops those columns. The functions it drops answer that build with errors too.
+   - Make a build without the circle the testers' build first, or accept that those screens fail on the circle build until one is.
 2. The owner runs the rollback with `! bash ~/co2-rollback.sh`. It checks the hash, then runs the file in one transaction, with no psql `\i`, and takes a fingerprint:
 
    ```bash
@@ -379,7 +387,7 @@ Every rollback below refuses to run too late, after a rollback that should follo
    cd "${REPO:-$HOME/dev/resbite-app}"
    D=qa/circles-of-trust-2026-11-10
    F=supabase/rollback/20261111130000_circles_of_trust.rollback.sql
-   echo "22da35a1e5d667351c4f1d06e09d795e30440c2dadd5ef9b0990ace045eb8f43  $F" | sha256sum -c -
+   echo "0c4f4bc033c632698783b8855e277c33cea52415a88521c74c88479433463146  $F" | sha256sum -c -
    mkdir -p /tmp/co2 && { echo 'begin;'; cat "$F"; echo; echo 'commit;'; } > /tmp/co2/rollback.sql
    supabase db query --linked -f /tmp/co2/rollback.sql
    supabase db query --linked -f supabase/ops/hosted-fingerprint.sql -o json > "$D/hosted-after-rollback.json"
@@ -387,11 +395,14 @@ Every rollback below refuses to run too late, after a rollback that should follo
 
    - The script stops before running anything if the hash differs.
    - `hosted-after-rollback.json` should equal the follow-ups `hosted-after.json` by definition: 356 of 356, with the same 15 `acl` differences. Wrapped this way, the rollback did exactly that locally.
-   - Run again, it fails at the trigger it already dropped, and changes nothing.
+   - Run again, it fails at its first change, the revoke that reads the `level` column it already dropped, and changes nothing.
 3. **What it does.**
    - It deletes no guest and no link. People already brought stay on their resbites as ordinary guests; who brought them and their levels go.
    - The circle numbers and the removal records are lost. A link still live to someone a host removed can then be answered again.
-   - A bringer's live links stay live, as ordinary invitations. Hosts then see them, numbers included, in `plan_phone_invitations`.
+   - **First, it revokes the links guests sent that nobody has answered** (CO-Q2, the default). The `plan_phone_invitations` it restores lists every live link to a host, number included, so a number a guest typed would otherwise reach the hosts.
+     - The cost: those invitations stop working. Their page reads as no longer active, and an answer is refused.
+     - A guest's link that someone has answered stays live, so its answerer can still change their answer from it. The restored list returns it, number included, to a host who calls that function directly. No app build lists an answered link.
+     - The hosts' own links are untouched.
    - It restores ten functions with their grants: `invite_contacts` (connections), five from creating-a-resbite, `decide_join_request` (open-link approval), `fold_web_account` and `claim_notification_deliveries` (push delivery), and the roll (follow-ups). `request_account_deletion` is restored only where it exists, which is local only.
    - It drops the trigger and its function, `private.first_name`, the seven new functions with their six public wrappers, `private.plan_removals` and the six new columns.
    - It locks the three tables first. Reads of them wait until it commits.
@@ -404,26 +415,31 @@ Every rollback below refuses to run too late, after a rollback that should follo
 
 Accepted during the build; none blocks the rollout.
 
-- **A missed "is going" (D2, pre-existing).** A host removes a guest and later invites them again. The fresh guest row starts at version 1, so its first answer's push key repeats the earlier one, and the host misses that one "is going".
-- **The fold (Task 2, concern 1).** Guest rows have no creation time. If a host removed someone's web-only account, then invited their app account in the app before the person folded the two, the fold takes that invitation off. The person needs another invitation. Rare.
-- **The fold's order (Task 2, a re-review note).** Inside the fold, the trigger closes the app account's waiting request on an occurrence before step 2d takes the account off that occurrence. Very rare: the web account must have answered a guest's link there.
-- **Old waiting pairs (Task 2, concern 4).** A guest row beside a waiting request, from before this migration, stays on hosted. The people list hides the request, and a Decline of it is refused. Step 1 counts them.
-- **A removal takes back the host's own link too (Task 1, concern 3).** Removing or declining someone revokes every live link to their confirmed number on that resbite, the host's own included. The host's list loses that link.
+- **A missed "is going" (pre-existing).** A host removes a guest and later invites them again. The fresh guest row starts at version 1, so its first answer's push key repeats the earlier one, and the host misses that one "is going".
+- **The fold can undo a host's invitation.** Guest rows have no creation time. If a host removed someone's web-only account, then invited their app account in the app before the person folded the two, the fold takes that invitation off. The person needs another invitation. Rare.
+- **The fold's order.** Inside the fold, the trigger closes the app account's waiting request on an occurrence before step 2d takes the account off that occurrence. Very rare: the web account must have answered a guest's link there.
+- **Old waiting pairs.** A guest row beside a waiting request, from before this migration, stays on hosted. The people list hides the request, and a Decline of it is refused. Step 1 counts them.
+- **A removal takes back the host's own link too.** Removing or declining someone revokes every live link to their confirmed number on that resbite, the host's own included. The host's list loses that link.
+- **A link answered by an account that is later deleted (for the release that brings deletion to hosted).** The link stays live and answered: the deletion takes the answerer's guest row off, and the link's answerer becomes empty when the account goes.
+  - The bringer's invite frees, since `used` counts only unanswered links and the guest rows still in. So the bringer can send that link again, uncounted.
+  - Deletion is local only today (the migration's section 6). That release should also revoke the links the account answered.
 - **Deferred minors.** A link's message and Send again write the time in the phone's zone, not the resbite's (pre-existing). `fold_web_account` does not move `brought_by`; a web-only account cannot bring.
 
-## Accepted risks and the owner question
+## Accepted risks and the owner questions
 
-Copied from the plan.
+Copied from the plan; CO-Q2 came after it.
 
-- **Owner question, CO-Q1 (finding 12).** The roll carries every guest (CH-P20), so a brought person who said Can't go comes back pending with their bringer. The bringer's `used` on the next occurrence can exceed `allowed` (shown as no invites left, `remaining` 0).
+- **Owner question, CO-Q1.** The roll carries every guest (CH-P20), so a brought person who said Can't go comes back pending with their bringer. The bringer's `used` on the next occurrence can exceed `allowed` (shown as no invites left, `remaining` 0).
   - Built that way by default (CO-Q1). The roadmap's owner table asks the owner before the circles migration (step 0).
   - The alternative, not carrying a brought person who said Can't go, is one condition in the roll.
+- **Owner question, CO-Q2.** Keep the bringers' unanswered links live after a rollback, showing their numbers to hosts? By default the rollback revokes them before it restores the hosts' list of links, so no number a guest typed reaches a host, and those invitations stop working (step 0).
+  - The alternative is one statement out of the rollback, and a new rollback hash.
 - A bringer learns `already` for a number whose holder is on the resbite, spending nothing. Bringers already read every name (`attendee_read`), and `contacts_on_resbite` was already open to every tester.
 - Anyone holding a forwarded personal link sees the bringer's first name. The phone-key check is unchanged, so neither lets anyone in.
 - **Lock order, one account.** On hosted, where `require_tester` takes no lock, both `invite_contacts` branches take the plan row and then the caller's advisory lock. `answer_phone_invitation` takes them the other way round. The same account inviting and answering on one plan at the same instant could deadlock (40P01). Improbable, and hosts can already do it today.
-- **Lock order, two accounts (C18-Q6).** `decide_join_request` takes the host's and the requester's advisory locks, then the plan row. A host deciding the request of a guest who is bringing someone at the same instant can deadlock with them on hosted. Rare, and a retry works.
+- **Lock order, two accounts.** `decide_join_request` takes the host's and the requester's advisory locks, then the plan row. A host deciding the request of a guest who is bringing someone at the same instant can deadlock with them on hosted. Rare, and a retry works.
 - **Lock order, the fold.** Its step that takes a removed account off can deadlock with a host's `remove_guest` of that account at the same instant. Either retry is harmless.
-- A bringer learns `already` when someone else's live link already reaches the number, spending nothing: someone invited that number, not who (C18-Q3).
+- A bringer learns `already` when someone else's live link already reaches the number, spending nothing: someone invited that number, not who.
 - A bringer can infer that a host removed or declined someone, or that the person is waiting at the host's door. Bringing that one person is refused with 42501 while their allowance says they may bring. The message is the same as every other refusal and names nobody.
 - A host sees a bringer's unanswered link only as "Number ending ••23 · Invited by link · brought by Sol": no name, no channel.
 
