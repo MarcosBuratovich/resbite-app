@@ -226,8 +226,10 @@ $$;
 -- answerer's advisory lock, then the plan's row: the same account bringing and answering on one resbite at once.
 -- decide_join_request takes the advisory locks of the host and of the requester, then the plan's row (require_link_owner):
 -- a host deciding a request of a guest who is bringing someone on that resbite at that moment (the guest has a guest row
--- and a waiting request, from before the host's door was kept from guests). Accepted: both improbable, a retry works,
--- and hosts could already do the first.
+-- and a request still waiting: a host invited them in the app or by a per-person link while they waited, or the rows
+-- are from before the host's door was kept from guests; a waiting person who answers a link no longer waits, C24, as
+-- answer_phone_invitation closes the request). Accepted: both improbable, a retry works, and hosts could already do the
+-- first.
 --
 -- What is written. A guest's new guest rows and links are brought_by the caller at the caller's level + 1; a host's
 -- have no bringer and level 1. Every link created or reopened has invited_by the caller.
@@ -408,7 +410,9 @@ end $$;
 -- number's record). A host's link last sent before the removal, and any guest's link (level > 1), stay refused while a
 -- record stands. A refusal undoes everything the call wrote, so it cannot revoke the link itself: the links to
 -- a person's confirmed number are revoked when the host removes or declines them (remove_guest, decide_join_request),
--- and this check stops the rest (a number the person confirmed afterwards). Otherwise the
+-- and this check stops the rest (a number the person confirmed afterwards). An answer closes the answerer's request to
+-- join this resbite that is waiting for the host, if any (C24): they are on it now, so a host's later Decline finds
+-- nothing waiting (22023 'Request already decided') and removes them the usual way. Otherwise the
 -- 20261031120000_creating_a_resbite body.
 create or replace function private.answer_phone_invitation(p_code text, p_name text, p_response text, p_terms_version text) returns jsonb
 language plpgsql security definer set search_path = '' as $$
@@ -465,6 +469,8 @@ begin
   insert into public.profiles(id,display_name) values(v_uid,btrim(p_name));
  end if;
  insert into private.beta_access(user_id,source) values(v_uid,'invitation') on conflict (user_id) do nothing;
+ -- On the resbite now, so no longer waiting at the host's door (C24).
+ delete from private.join_requests where plan_id=v_plan.id and user_id=v_uid and status='waiting';
  select * into v_att from public.attendees where plan_id=v_plan.id and user_id=v_uid for update;
  if v_att.user_id is null then
   -- The link's bringer and level (CO-P15).
@@ -488,10 +494,14 @@ end $$;
 
 -- The personal page names the person who brought you (CO-P9): the open payload carries "inviter", the bringer's first
 -- name, when the link has a bringer whose account is not being deleted (which renames its profile 'Deleted member');
--- otherwise there is no inviter key. host and every other key are unchanged. Otherwise the
--- 20261031120000_creating_a_resbite body.
+-- otherwise there is no inviter key. host and every other key are unchanged. A link of an open resbite whose answer
+-- would be refused for a removal (C24, the rule of answer_phone_invitation) gets the page of a revoked link,
+-- {"state":"inactive"}: the series has a record of the link's number, or of an account whose confirmed number it is
+-- (who alone could answer it), and the link is not a host's own (level 1) made after the latest of those records.
+-- Otherwise the 20261031120000_creating_a_resbite body.
 create or replace function private.personal_invitation_page(p_code text) returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare v_inv private.phone_invitations; v_plan public.plans; v_host text; v_going integer; v_state text; v_inviter text;
+ v_removed timestamptz;
 begin
  if p_code is null or p_code !~ '^[A-Za-z0-9_-]{22}$' then return jsonb_build_object('state','inactive'); end if;
  select * into v_inv from private.phone_invitations where code_hash=extensions.digest(p_code,'sha256') and revoked_at is null;
@@ -501,6 +511,13 @@ begin
  select display_name into v_host from public.profiles where id=v_plan.owner_id;
  v_state := case when v_plan.status<>'active' then 'cancelled' when private.plan_end(v_plan.starts_at,v_plan.ends_at)<=now() then 'happened' else 'open' end;
  if v_state<>'open' then return jsonb_build_object('state',v_state,'host',v_host,'title',v_plan.title); end if;
+ -- A removal on record, as answering checks it (C24).
+ v_removed := (select max(r.removed_at) from private.plan_removals r where r.series_id=v_plan.series_id
+  and (r.phone=v_inv.phone or r.user_id in (select u.id from auth.users u
+   where u.phone=any(private.phone_variants(v_inv.phone)) and u.phone_confirmed_at is not null)));
+ if v_removed is not null and not (v_inv.level=1 and v_inv.created_at>v_removed) then
+  return jsonb_build_object('state','inactive');
+ end if;
  select count(*) into v_going from public.attendees where plan_id=v_plan.id and response='accepted';
  v_inviter := (select nullif(split_part(btrim(pr.display_name),' ',1),'') from public.profiles pr
   where pr.id=v_inv.brought_by and not private.deletion_pending(pr.id));
@@ -613,8 +630,9 @@ end $$;
 -- turned down, and no link lets them in (answer_phone_invitation); the live links to their confirmed number are revoked
 -- with it, as when a host removes someone (C19). Approving is the host letting the person in (CO-P13): their guest row
 -- is level 1 with no bringer, a row they already had included (it keeps its reply, as before), and the person's records
--- for the series go, as a host's own invitation clears them (C18-Q4). Otherwise the 20261029120000_open_link_approval
--- body.
+-- for the series go, as a host's own invitation clears them (C18-Q4). Any guest's live link (level above 1) to their
+-- confirmed number is revoked, which frees that bringer's invite (C24); a host's own link stays. Otherwise the
+-- 20261029120000_open_link_approval body.
 create or replace function private.decide_join_request(p_plan uuid, p_user uuid, p_approve boolean) returns jsonb
 language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid; v_req private.join_requests;
@@ -653,6 +671,9 @@ begin
  -- The host lets them in: their records for the series go (the person, and their confirmed number).
  delete from private.plan_removals r using public.plans p where p.id=p_plan and r.series_id=p.series_id
   and (r.user_id=p_user or r.phone=(select nullif(private.phone_key(u.phone),'') from auth.users u where u.id=p_user and u.phone_confirmed_at is not null));
+ -- A guest's link to them is no longer needed: its bringer's invite frees (C24).
+ update private.phone_invitations set revoked_at=now(), code_hash=null where plan_id=p_plan and revoked_at is null and level>1
+  and phone=(select nullif(private.phone_key(u.phone),'') from auth.users u where u.id=p_user and u.phone_confirmed_at is not null);
  update private.join_requests set status='approved', decided_at=now() where plan_id=p_plan and user_id=p_user;
  insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id)
   values(p_plan,p_user,'join_approved','join-approved:'||p_plan||':'||p_user||':'||extract(epoch from v_req.created_at),v_uid) on conflict do nothing;
@@ -720,8 +741,9 @@ begin
 end $$;
 
 -- Folding a web-only account into the app account keeps the person's removal records (C19, #38): a record of the web
--- account moves to the app account, which a guest then cannot bring back either. Otherwise the
--- 20261030120000_push_delivery body; its grants and its public wrapper are kept.
+-- account moves to the app account, which a guest then cannot bring back either; where the app account already has
+-- one for that series, the later removal stands (C24: a host's link lets them back only when made after it). Otherwise
+-- the 20261030120000_push_delivery body; its grants and its public wrapper are kept.
 create or replace function private.fold_web_account(p_from uuid, p_into uuid) returns jsonb language plpgsql security definer set search_path = '' as $$
 declare v_moved integer; v_disabled boolean;
 begin
@@ -755,10 +777,11 @@ begin
  -- 2b. Notices the account caused that haven't gone out yet name the app account.
  update private.notification_outbox set actor_id=p_into where actor_id=p_from and delivered_at is null;
  -- 2c. Removal records (circles of trust): a record of the web account is a record of the person, so it moves to the
- -- app account before the web account goes (deleting it would cascade the record away). One the app account already
- -- has for that series stands.
+ -- app account before the web account goes (deleting it would cascade the record away). Where the app account already
+ -- has one for that series, it keeps the later time.
  insert into private.plan_removals(series_id,user_id,removed_at) select series_id,p_into,removed_at from private.plan_removals
-  where user_id=p_from on conflict do nothing;
+  where user_id=p_from
+ on conflict (series_id,user_id) where user_id is not null do update set removed_at=greatest(private.plan_removals.removed_at,excluded.removed_at);
  delete from private.plan_removals where user_id=p_from;
  -- 3. The tick and the grant, unless the account has its own. A revoked grant is a ban: one on either side stays. An
  -- account whose tester-roster entry is disabled gets no live grant, as join_by_link and answer_phone_invitation.

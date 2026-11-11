@@ -543,7 +543,8 @@ rollback;
 
 -- Slice 7b: a removed account with no number yet (C19, #36). Base (1,1). 07, Going, has no confirmed number; 01
 -- removes 07. 02 sends a link to a number nobody holds; 07 then confirms that number and answers: refused as a revoked
--- link is, and 07 stays off the resbite.
+-- link is, and 07 stays off the resbite. The link's page says so too (C24): open while nobody holds the number, the
+-- unavailable page once 07 does.
 begin;
 select pg_temp.co2_cast();
 update auth.users set phone=null, phone_confirmed_at=null where id=pg_temp.co2('07');
@@ -555,8 +556,13 @@ select pg_temp.co2_as('02');
 select pg_temp.co2_refused($$select public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_user('07')))$$,'42501','Not allowed to bring people here');
 select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('99','A'))))='link',
  '02 sending a number nobody holds');
+set local role anon;
+select pg_temp.co2_check(public.personal_invitation_page(repeat('A',22))->>'state'='open','The page of a link to a number nobody holds is not open');
 reset role;
 update auth.users set phone=pg_temp.co2_phone('99'), phone_confirmed_at=now() where id=pg_temp.co2('07');
+set local role anon;
+select pg_temp.co2_check(public.personal_invitation_page(repeat('A',22))='{"state":"inactive"}'::jsonb,
+ 'The page of a link its number''s holder may not answer is open');
 set local role authenticated;
 select pg_temp.co2_as('07');
 select pg_temp.co2_refused($$select public.answer_phone_invitation(repeat('A',22),'Tomas T','accepted','2026-10')$$,'42501','Invitation unavailable');
@@ -565,10 +571,31 @@ do $$ begin
  if exists(select 1 from public.attendees where plan_id=pg_temp.co2p() and user_id=pg_temp.co2('07')) then raise exception '07 came back through a link'; end if;
 end $$;
 rollback;
+-- A number on record (C24). No path leaves a live link beside its number's record (a host's link clears it, a guest
+-- may not send one, and a revocation revokes that link), so the record is written directly here, an hour ago: the
+-- page of a guest's link to that number, and of a host's link made before the record, is the unavailable page; a
+-- host's link made after it is open, as its answer would go through.
+begin;
+select pg_temp.co2_cast();
+set local role authenticated;
+select pg_temp.co2_as('02');
+select public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('98','A')));
+select pg_temp.co2_as('01');
+select public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('97','B'),pg_temp.co2_number('96','C')));
+reset role;
+update private.phone_invitations set created_at=now()-interval '2 hours' where plan_id=pg_temp.co2p() and phone=pg_temp.co2_phone('96');
+insert into private.plan_removals(series_id,phone,removed_at) select series_id,pg_temp.co2_phone(n),now()-interval '1 hour'
+ from public.plans, unnest(array['98','97','96']) n where id=pg_temp.co2p();
+set local role anon;
+select pg_temp.co2_check(public.personal_invitation_page(repeat('A',22))='{"state":"inactive"}'::jsonb,'The page of a guest''s link to a number on record is open');
+select pg_temp.co2_check(public.personal_invitation_page(repeat('B',22))->>'state'='open','The page of a host''s link made after the record is not open');
+select pg_temp.co2_check(public.personal_invitation_page(repeat('C',22))='{"state":"inactive"}'::jsonb,'The page of a host''s link made before the record is open');
+rollback;
 
 -- Slice 7c: removing the person ends the links to their number (C19, #37). Base (1,1). 02 sends 07 a link; 07 asks
--- through the open link and 01 approves; 01 then removes 07. 02's link is revoked (02's invite frees), and answering it
--- is refused as a revoked link is. Then the same when 01 removes 07 while 07 is not on the resbite.
+-- through the open link and 01 approves (which already ends 02's link: C24, slice 10c); 01 then removes 07. 02's link
+-- is revoked (02's invite frees), and answering it is refused as a revoked link is. Then the same when 01 removes 07
+-- while 07 is not on the resbite, which only the removal ends.
 begin;
 select pg_temp.co2_cast();
 set local role authenticated;
@@ -641,6 +668,35 @@ delete from auth.users where id=pg_temp.co2('14');
 update auth.users set phone='447700900614', phone_confirmed_at=now() where id=pg_temp.co2('15');
 set local role authenticated;
 select pg_temp.co2_refused($$select public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('14','A')))$$,'42501','Not allowed to bring people here');
+rollback;
+-- Where the app account already has a record for the series, the fold keeps the later of the two (C24): 01 removed
+-- 15 two hours ago and 14 now, so 15's record takes 14's time (a host's link lets the person back only when made after
+-- the latest removal, C21).
+begin;
+select pg_temp.co2_cast();
+insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) values
+ ('f6000000-0000-4000-8000-000000000014',null,null,'447700900614',now()),
+ ('f6000000-0000-4000-8000-000000000015','co2-folded@resbite-test.invalid',now(),null,null);
+insert into private.tester_roster(email) values ('co2-folded@resbite-test.invalid');
+insert into private.beta_access(user_id,source) values ('f6000000-0000-4000-8000-000000000014','invitation');
+insert into public.profiles(id,display_name) values ('f6000000-0000-4000-8000-000000000014','Web W'),('f6000000-0000-4000-8000-000000000015','App A');
+insert into private.app_sessions(user_id) values ('f6000000-0000-4000-8000-000000000015');
+insert into public.attendees(plan_id,user_id,response) values (pg_temp.co2p(),'f6000000-0000-4000-8000-000000000014','accepted');
+set local role authenticated;
+select pg_temp.co2_as('01');
+select public.remove_guest(pg_temp.co2p(),pg_temp.co2('15'));
+reset role;
+update private.plan_removals set removed_at=now()-interval '2 hours' where user_id=pg_temp.co2('15');
+set local role authenticated;
+select public.remove_guest(pg_temp.co2p(),pg_temp.co2('14'));
+reset role;
+select private.fold_web_account(pg_temp.co2('14'),pg_temp.co2('15'));
+do $$ begin
+ if (select string_agg(right(user_id::text,2)||':'||(removed_at=now())::text,',') from private.plan_removals) is distinct from '15:true' then
+  raise exception 'The fold kept the earlier removal: %',
+   (select string_agg(right(user_id::text,2)||':'||removed_at::text,',') from private.plan_removals);
+ end if;
+end $$;
 rollback;
 
 -- Slice 7e: the open link is the host's door (C19, CO-D6). Base (1,1). 13 is waiting for 01's answer: 02 may not
@@ -718,6 +774,8 @@ rollback;
 -- nobody holds, which clears no record of 07's; 07 confirms that number and answers: 07 is back, Going, level 1 with
 -- no bringer, and the record is gone. A guest's link made after the removal stays refused (slice 7b). A host's link
 -- counts from when the host last sent it (C22): reopened, or sent again while live; a guest's sent again does not.
+-- Once 07 holds the number, each link's page is open where the answer goes through and the unavailable page where it
+-- is refused (C24).
 begin;
 select pg_temp.co2_cast();
 update auth.users set phone=null, phone_confirmed_at=null where id=pg_temp.co2('07');
@@ -733,6 +791,8 @@ select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p()
 reset role;
 select pg_temp.co2_check(exists(select 1 from private.plan_removals where user_id=pg_temp.co2('07')),'The host''s link to an unheld number cleared 07''s record');
 update auth.users set phone=pg_temp.co2_phone('99'), phone_confirmed_at=now() where id=pg_temp.co2('07');
+set local role anon;
+select pg_temp.co2_check(public.personal_invitation_page(repeat('A',22))->>'state'='open','The page of the host''s later link is not open');
 set local role authenticated;
 select pg_temp.co2_as('07');
 select public.answer_phone_invitation(repeat('A',22),'Tomas T','accepted','2026-10');
@@ -758,6 +818,8 @@ reset role;
 update private.phone_invitations set created_at=now()-interval '2 hours' where plan_id=pg_temp.co2p() and phone=pg_temp.co2_phone('99');
 update private.plan_removals set removed_at=now()-interval '1 hour';
 update auth.users set phone=pg_temp.co2_phone('99'), phone_confirmed_at=now() where id=pg_temp.co2('07');
+set local role anon;
+select pg_temp.co2_check(public.personal_invitation_page(repeat('A',22))='{"state":"inactive"}'::jsonb,'The page of the host''s link from before the removal is open');
 set local role authenticated;
 select pg_temp.co2_as('07');
 select pg_temp.co2_refused($$select public.answer_phone_invitation(repeat('A',22),'Tomas T','accepted','2026-10')$$,'42501','Invitation unavailable');
@@ -852,9 +914,66 @@ do $$ begin
  perform pg_temp.co2_check(pg_temp.co2_used('02')=1,'Sending again was counted');
 end $$;
 update auth.users set phone=pg_temp.co2_phone('99'), phone_confirmed_at=now() where id=pg_temp.co2('07');
+set local role anon;
+select pg_temp.co2_check(public.personal_invitation_page(repeat('B',22))='{"state":"inactive"}'::jsonb,'The page of a guest''s link sent again is open');
 set local role authenticated;
 select pg_temp.co2_as('07');
 select pg_temp.co2_refused($$select public.answer_phone_invitation(repeat('B',22),'Tomas T','accepted','2026-10')$$,'42501','Invitation unavailable');
+rollback;
+
+-- Slice 7i: answering a link closes a waiting request (C24, re-review Q1). Base (1,1). 02 sends 07 a link; 07 then
+-- asks through the open link, and answers 02's link while the request waits: 07 is in, Going, brought by 02 at level
+-- 2, and no longer waiting, so 01's Decline finds nothing to decide (22023 'Request already decided') and records
+-- nothing, and 07 stays. Then 08, Going with a request still waiting (rows from before guests were kept from the
+-- host's door), answers a host's link with the answer 08 already gave, which changes nothing else: the request closes
+-- too.
+begin;
+select pg_temp.co2_cast();
+set local role authenticated;
+select pg_temp.co2_as('02');
+select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('07','A'))))='link','02 sending 07 a link');
+reset role;
+insert into private.join_requests(plan_id,user_id,response) values (pg_temp.co2p(),pg_temp.co2('07'),'maybe');
+set local role authenticated;
+select pg_temp.co2_as('07');
+select public.answer_phone_invitation(repeat('A',22),'Tomas T','accepted','2026-10');
+select pg_temp.co2_as('01');
+select pg_temp.co2_check(not public.plan_join_requests(pg_temp.co2p()) @> jsonb_build_array(jsonb_build_object('user_id',pg_temp.co2('07'))),
+ '07 is on 01''s waiting list after answering');
+select pg_temp.co2_refused($$select public.decide_join_request(pg_temp.co2p(),pg_temp.co2('07'),false)$$,'22023','Request already decided');
+reset role;
+do $$ begin
+ if exists(select 1 from private.join_requests where plan_id=pg_temp.co2p() and user_id=pg_temp.co2('07') and status='waiting') then
+  raise exception '07''s request is still waiting';
+ end if;
+ if (select (response,brought_by,level) from public.attendees where plan_id=pg_temp.co2p() and user_id=pg_temp.co2('07'))
+   is distinct from ('accepted'::text,pg_temp.co2('02'),2::smallint) then
+  raise exception '07 is not in through 02''s link';
+ end if;
+ if exists(select 1 from private.plan_removals) then raise exception 'A decline of nothing waiting recorded 07'; end if;
+end $$;
+rollback;
+begin;
+select pg_temp.co2_cast();
+insert into public.attendees(plan_id,user_id,response,brought_by,level) values (pg_temp.co2p(),pg_temp.co2('08'),'accepted',pg_temp.co2('03'),2);
+insert into private.join_requests(plan_id,user_id,response) values (pg_temp.co2p(),pg_temp.co2('08'),'accepted');
+insert into private.phone_invitations(plan_id,phone,country,code_hash,invited_by) values
+ (pg_temp.co2p(),pg_temp.co2_phone('08'),'44',extensions.digest(repeat('B',22),'sha256'),pg_temp.co2('01'));
+set local role authenticated;
+select pg_temp.co2_as('08');
+select public.answer_phone_invitation(repeat('B',22),'Sol S','accepted','2026-10');
+select pg_temp.co2_as('01');
+select pg_temp.co2_refused($$select public.decide_join_request(pg_temp.co2p(),pg_temp.co2('08'),false)$$,'22023','Request already decided');
+reset role;
+do $$ begin
+ if exists(select 1 from private.join_requests where plan_id=pg_temp.co2p() and user_id=pg_temp.co2('08') and status='waiting') then
+  raise exception '08''s request is still waiting';
+ end if;
+ if (select (response,brought_by,level) from public.attendees where plan_id=pg_temp.co2p() and user_id=pg_temp.co2('08'))
+   is distinct from ('accepted'::text,pg_temp.co2('03'),2::smallint) then
+  raise exception '08''s row changed';
+ end if;
+end $$;
 rollback;
 
 -- Slice 8: a sent invitation stands (CO-P15). set_plan_circle(2,2): 02 brings 06 (who says Going) and sends 10 a link.
@@ -969,6 +1088,40 @@ do $$ begin
    from public.attendees where plan_id=pg_temp.co2p() and user_id in (pg_temp.co2('08'),pg_temp.co2('13')));
  end if;
 end $$;
+rollback;
+
+-- Slice 10c: approving frees a guest's invite (C24). Base (1,1). 02 sends 07 a link and 01 sends 09 one; then 07 and
+-- 09 ask through the open link, and 01 approves both. 02's link to 07's number is revoked, so 02's invite is free
+-- again and 02 may bring someone else; 01's own link to 09 stays live, as the host's.
+begin;
+select pg_temp.co2_cast();
+set local role authenticated;
+select pg_temp.co2_as('02');
+select public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('07','A')));
+select pg_temp.co2_as('01');
+select public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('09','B')));
+reset role;
+-- Asking through the open link gives 09 a profile.
+insert into public.profiles(id,display_name) values (pg_temp.co2('09'),'Nico N');
+insert into private.join_requests(plan_id,user_id,response) values (pg_temp.co2p(),pg_temp.co2('07'),'accepted'),(pg_temp.co2p(),pg_temp.co2('09'),'maybe');
+set local role authenticated;
+select pg_temp.co2_as('01');
+select public.decide_join_request(pg_temp.co2p(),pg_temp.co2('07'),true);
+select public.decide_join_request(pg_temp.co2p(),pg_temp.co2('09'),true);
+reset role;
+do $$ begin
+ if (select revoked_at is null or code_hash is not null from private.phone_invitations where plan_id=pg_temp.co2p() and phone=pg_temp.co2_phone('07')) then
+  raise exception 'Approving 07 left 02''s link to 07 live';
+ end if;
+ perform pg_temp.co2_check(pg_temp.co2_used('02')=0,'02''s link to an approved person still counts');
+ if (select revoked_at is not null or code_hash is null from private.phone_invitations where plan_id=pg_temp.co2p() and phone=pg_temp.co2_phone('09')) then
+  raise exception 'Approving 09 revoked 01''s own link';
+ end if;
+end $$;
+set local role authenticated;
+select pg_temp.co2_as('02');
+select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('10','C'))))='link',
+ '02 bringing 10 with the invite freed');
 rollback;
 
 -- Slice 11: someone already on the resbite keeps their place. Base (1,1). 01 invites 06 (level 1, no bringer); 06 then

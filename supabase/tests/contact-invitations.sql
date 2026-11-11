@@ -225,6 +225,10 @@ insert into public.plans(id,owner_id,title,starts_at,time_zone,place_label,area,
 update public.plans set starts_at='2020-01-01 12:00+00' where id='d1100000-0000-4000-8000-000000000003';
 update public.plans set area='Riverside' where id='d1100000-0000-4000-8000-000000000001';
 update private.phone_invitations set revoked_at=null, user_id=null, answered_at=null, code_hash=extensions.digest(repeat('A',22),'sha256'), check_count=0, check_window=null where phone='447700900202';
+-- As the host's invitation this stands in for, the reopened link clears the removal records the revocation and
+-- remove_guest above wrote for 202 and its holder 04 (circles of trust: with them, answering it would be refused and
+-- its page would be the unavailable one).
+delete from private.plan_removals where phone='447700900202' or user_id='d1000000-0000-4000-8000-000000000004';
 insert into private.phone_invitations(plan_id,phone,country,code_hash,invited_by) values
  ('d1100000-0000-4000-8000-000000000001','447700900207','44',extensions.digest(repeat('F',22),'sha256'),'d1000000-0000-4000-8000-000000000001'),
  ('d1100000-0000-4000-8000-000000000002','447700900202','44',extensions.digest(repeat('G',22),'sha256'),'d1000000-0000-4000-8000-000000000001'),
