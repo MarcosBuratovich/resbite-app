@@ -19,6 +19,7 @@ import { useAccount } from "../src/state/AccountState";
 import { knownName, rememberName } from "../src/state/knownNames";
 import { INVITE_COPY } from "../src/domain/inviteCopy";
 import { useFocusedRefresh, type Run } from "../src/state/useFocusedRefresh";
+import { useScreenTurn } from "../src/state/screenTurn";
 import { planGateway } from "../src/services/plans";
 import { readProfile } from "../src/services/profile";
 import { readGuests, UNNAMED_GUEST } from "../src/services/rsvp";
@@ -57,6 +58,8 @@ export default function Invitations() {
   const userId = session?.user.id;
   const bringAsked = bring === "1";
   const identity = `${preview ? "preview" : (userId ?? "")}:${planId}`;
+  // Work that awaits sets state only while the screen still shows this account's resbite (C25).
+  const beginTurn = useScreenTurn(identity);
   const [plan, setPlan] = useState<Plan | null>(null);
   // With `bring`, the screen doesn't know whether it is bring mode or a host's until the plan is read, so it has no title.
   const [mode, setMode] = useState<"host" | "bring" | null>(bringAsked ? null : "host");
@@ -218,20 +221,22 @@ export default function Invitations() {
     if (!bringing || !plan || !contacts.error || before !== null) return;
     const ticket = ++allowanceRead.current;
     const id = plan.id;
+    const here = beginTurn();
     void circleGateway.allowance(id).then(
       (next) => {
-        if (shownPlan.current === id) takeAllowance(ticket, next, true);
+        if (here() && shownPlan.current === id) takeAllowance(ticket, next, true);
       },
       // The line already shown stays; the next load reads the allowance again.
       () => {},
     );
-  }, [contacts.error, bringing, plan?.id, takeAllowance]);
+  }, [contacts.error, bringing, plan?.id, takeAllowance, beginTurn]);
 
   // A bringer's link names them and the organizer. A name still unknown is read again as the link goes (C20); without
   // it the message is worded without it.
   const resolving = useRef(false);
   async function sendLink(item: Sendable, via: "whatsapp" | "messages") {
     if (resolving.current) return;
+    const here = beginTurn();
     let words: Message | undefined;
     if (bringing && plan) {
       resolving.current = true;
@@ -239,6 +244,8 @@ export default function Invitations() {
         const ownName = own ?? accountName.current ?? (userId ? await nameOf(userId) : null);
         const organizerName =
           organizer ?? knownName(userId, plan.owner_id) ?? (plan.owner_id ? await nameOf(plan.owner_id) : null);
+        // The screen moved on (another account or resbite, or it closed) while the names were read: nothing goes.
+        if (!here()) return;
         if (ownName) setOwn(ownName);
         if (organizerName) setOrganizer(firstName(organizerName) || null);
         words = messageFor({
@@ -251,7 +258,8 @@ export default function Invitations() {
         resolving.current = false;
       }
     }
-    contacts.setError(await contacts.send(item, via, words));
+    const line = await contacts.send(item, via, words);
+    if (here()) contacts.setError(line);
   }
 
   const progress = canBring && allowance ? bringProgress(allowance.remaining, contacts.inviteCount) : null;

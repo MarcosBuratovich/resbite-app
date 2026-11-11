@@ -18,6 +18,7 @@ import { planCoverStore } from "../services/planCovers";
 import { peopleStore } from "../services/people";
 import { recentPlaces } from "../services/recentPlaces";
 import { inviteCodeStore } from "../services/inviteCodeStore";
+import { forgetNames } from "./knownNames";
 import { clearReminders } from "../services/deviceReminders";
 import { clearCalendarRecords } from "../services/deviceCalendar";
 import { clearAttestation } from "../services/phoneAccount";
@@ -123,6 +124,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       clearPeople: peopleStore.clear,
       clearRecentPlaces: (scope) => recentPlaces.clear(scope),
       clearInviteCodes: (scope) => inviteCodeStore.clear(scope),
+      clearKnownNames: forgetNames,
       clearReminders,
       clearCalendarRecords,
       clearPhoto: (scope) => profilePhotoStore.clear(scope),

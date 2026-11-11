@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { knownName, rememberName } from "./knownNames";
+import { forgetNames, knownName, rememberName } from "./knownNames";
 
 test("a name read on one screen is known on the next, for the same account only", () => {
   rememberName("pedro", "ana", "Ana Host");
@@ -30,4 +30,26 @@ test("the event page remembers the organizer's name it read, and bring mode look
   const screen = readFileSync(new URL("../../app/invitations.tsx", import.meta.url), "utf8");
   assert.match(screen, /knownName\(userId, found\.owner_id\)/);
   assert.match(screen, /account\.displayName/);
+});
+
+test("signing out or deleting the account forgets the names it read, and only its own (C25)", () => {
+  rememberName("leaving", "ana", "Ana Host");
+  rememberName("leaving", "sol", "Sol Vega");
+  rememberName("staying", "ana", "Ana H");
+  forgetNames("leaving");
+  assert.equal(knownName("leaving", "ana"), null);
+  assert.equal(knownName("leaving", "sol"), null);
+  assert.equal(knownName("staying", "ana"), "Ana H", "another account's names stay");
+  // An account whose id begins like another's is a different account.
+  rememberName("leaving-2", "leo", "Leo Paz");
+  forgetNames("leaving");
+  assert.equal(knownName("leaving-2", "leo"), "Leo Paz");
+  forgetNames("");
+  assert.equal(knownName("staying", "ana"), "Ana H", "a blank scope forgets nothing");
+});
+
+test("the app's session lifecycle forgets the names on sign-out and deletion (C25)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const app = readFileSync(new URL("./AppState.tsx", import.meta.url), "utf8");
+  assert.match(app, /clearKnownNames: forgetNames/);
 });

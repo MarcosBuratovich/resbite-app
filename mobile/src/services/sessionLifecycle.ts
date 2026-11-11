@@ -24,6 +24,8 @@ type Dependencies = {
   clearRecentPlaces: (scope: string) => Promise<void>;
   /** CI: the host's personal invitation codes and names for this scope. */
   clearInviteCodes: (scope: string) => Promise<void>;
+  /** C25: the display names this account read, held in memory for the next screen (`knownNames`). */
+  clearKnownNames: (scope: string) => void;
   /** UX3: the scope's reminders (scheduled and shown) and reminder switches. */
   clearReminders: (scope: string) => Promise<void>;
   /** UX3: which events this scope added to the calendar on this device. */
@@ -132,6 +134,7 @@ export function createSessionLifecycle(deps: Dependencies) {
             current();
             await deps.clearInviteCodes(scope);
             current();
+            if (!original.preview) deps.clearKnownNames(scope);
             await deps.clearReminders(scope);
             current();
             await deps.clearCalendarRecords(scope);

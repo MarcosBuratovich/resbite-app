@@ -126,6 +126,9 @@ function lifecycleHarness() {
     clearInviteCodes: async (scope) => {
       invites.push(scope);
     },
+    clearKnownNames: (scope) => {
+      events.push(`names:${scope}`);
+    },
     clearCovers: async (scope) => {
       events.push(`covers:${scope}`);
     },
@@ -208,6 +211,18 @@ test("sign-out clears cover journals for the account after the photo; preview do
   await p.life.signOut();
   assert(!p.events.some((e) => e.startsWith("covers")));
 });
+test("sign-out forgets the names this account read, before auth sign-out; preview has none to forget (C25)", async () => {
+  const h = lifecycleHarness();
+  h.life.update({ account: "owner", preview: false });
+  await h.life.signOut();
+  const names = h.events.indexOf("names:owner");
+  assert(names >= 0, "names forgotten");
+  assert(names < h.events.indexOf("auth"));
+  const p = lifecycleHarness();
+  p.life.update({ account: "owner", preview: true });
+  await p.life.signOut();
+  assert(!p.events.some((e) => e.startsWith("names")));
+});
 test("a failed cover clear fails sign-out before auth sign-out", async () => {
   const events: string[] = [];
   const life = createSessionLifecycle({
@@ -219,6 +234,7 @@ test("a failed cover clear fails sign-out before auth sign-out", async () => {
     clearCalendarRecords: async () => {},
     clearPhoto: async () => {},
     clearInviteCodes: async () => {},
+    clearKnownNames: () => {},
     clearCovers: async () => {
       throw Error("disk");
     },
@@ -343,6 +359,7 @@ test("a failed recent-places clear fails sign-out before auth sign-out", async (
       events.push("photo");
     },
     clearInviteCodes: async () => {},
+    clearKnownNames: () => {},
     clearCovers: async () => {},
     blockPending: () => () => {},
     clearPending: async () => {},
@@ -385,6 +402,7 @@ test("a failed reminder or calendar clear fails sign-out before auth sign-out", 
         events.push("photo");
       },
       clearInviteCodes: async () => {},
+      clearKnownNames: () => {},
       clearCovers: async () => {},
       blockPending: () => () => {},
       clearPending: async () => {},
@@ -416,6 +434,7 @@ test("a push cleanup failure refuses sign-out first, with its own notice; other 
     clearCalendarRecords: async () => {},
     clearPhoto: async () => {},
     clearInviteCodes: async () => {},
+    clearKnownNames: () => {},
     clearCovers: async () => {},
     blockPending: () => () => {},
     clearPending: async () => {},
@@ -471,6 +490,7 @@ test("sign-out dismisses the pushes still shown, after removing the endpoint and
       clearCalendarRecords: async () => {},
       clearPhoto: async () => {},
       clearInviteCodes: async () => {},
+      clearKnownNames: () => {},
       clearCovers: async () => {},
       blockPending: () => () => {},
       clearPending: async () => {},
