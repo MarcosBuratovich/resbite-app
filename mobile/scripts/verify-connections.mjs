@@ -8,7 +8,8 @@
 //              remove_connection { p_user } and the row goes; Back returns to Profile, whose badge has gone
 //   decline    under Larger Text the two pills stack; a failed Accept keeps the card and says why; Not now sends
 //              decline_connection { p_user } and removes the card; Accept on a request withdrawn meanwhile (42501 'No
-//              request') says nothing and reads the list again, so the card goes
+//              request') says nothing and reads the list again, so the card goes; when that read fails the list
+//              stays, with why above it and no Try again
 //   edges      the empty state (no footer line); a failed read offers Try again
 //   invite     Invite people as the host: Your connections · 3 above Phone contacts, alphabetical, Lucas (on the
 //              resbite) "Invited" without a tick, the event link's hint; ticking Marta makes Invite 1, which sends
@@ -16,8 +17,8 @@
 //   mixed      a number and two connections: the number's call first, then the connections' own; one of them refused
 //              (42501 'Not a connection') is sent again one by one, so Marta is invited, Ben's link is offered and a
 //              line says one connection couldn't be
-//   more       nine connections bring the search field (accent-blind); the only connection picked being refused says
-//              so and stays on the Pick step; a failed read leaves the section out, with no error
+//   more       nine connections bring the search field (accent-blind); the only connection picked being refused (asked
+//              once) says so and stays on the Pick step; a failed read leaves the section out, with no error
 //   people     as a guest who answered Going, on Pedro's resbite's people list: the dots on the host → Connect on
 //              Resbite sends request_connection { p_user, p_plan }; the sheet then says Request sent with Cancel
 //              request, which sends cancel_connection_request { p_user } and brings Connect back; Inés's request is
@@ -412,6 +413,32 @@ try {
   }
   console.log("PASS: under Larger Text the pills stack; a failed Accept keeps the card; Not now declines; a withdrawn request goes quietly.");
 
+  // A refresh that fails keeps the list, with why above it and no Try again: Pedro withdrew his request, so Accept
+  // reads the list again, and that read fails.
+  {
+    const f = await fixture({ requests: [pedro], connected: [marta] }),
+      { page } = f;
+    await page.goto(`${base}/connections`);
+    await expect(heading(page, "Requests · 1")).toBeVisible();
+    f.state.requests = [];
+    f.state.failReads = 1;
+    await button(page, "Accept Pedro's request").click();
+    const why = text(page, "Check your connection and try again.");
+    await expect(why).toBeVisible();
+    assert.equal(f.calls("my_connections").length, 2, "the list was read again");
+    await expect(heading(page, "Requests · 1")).toBeVisible();
+    await expect(button(page, "Accept Pedro's request")).toBeVisible();
+    await expect(heading(page, "Connected · 1")).toBeVisible();
+    await expect(button(page, "Actions for Marta")).toBeVisible();
+    assert.ok(
+      await inOrder(page, [why, heading(page, "Requests · 1"), heading(page, "Connected · 1")]),
+      "why sits above the kept list",
+    );
+    await expect(button(page, "Try again")).toHaveCount(0);
+    await f.done();
+  }
+  console.log("PASS: a refresh that fails keeps the list, with why above it and no Try again.");
+
   // 4. Nobody yet: the empty state and no footer line, and no badge on Profile. A failed read offers Try again, and
   // on Profile a failed read shows no badge.
   {
@@ -570,21 +597,30 @@ try {
     await expect(heading(page, "Invite people")).toBeVisible();
     await expect(heading(page, "Almost there")).toHaveCount(0);
     await expect(tick(page, "Sofía Gil")).toHaveAttribute("aria-checked", "true");
-    assert.deepEqual(f.calls("invite_contacts").map((x) => x.body.p_invites), [[{ user: SOFIA }], [{ user: SOFIA }]]);
+    // A refused call of one is not sent again.
+    assert.deepEqual(f.calls("invite_contacts").map((x) => x.body.p_invites), [[{ user: SOFIA }]]);
     await f.done();
   }
   {
     const f = await fixture({ requests: [], connected: [marta], plan: PICNIC }),
       { page } = f;
     f.state.failReads = 1;
+    const failedRead = page.waitForResponse((r) => new URL(r.url()).pathname === "/rest/v1/rpc/my_connections");
     await page.goto(`${base}/invitations?plan=${PICNIC.id}`);
     await expect(heading(page, "Invite people")).toBeVisible();
     await expect(button(page, "Invite 0")).toBeVisible();
-    await expect.poll(() => f.calls("my_connections").length).toBe(1);
-    await page.waitForTimeout(300);
-    await expect(page.getByRole("heading", { name: /^Your connections/ })).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: "Phone contacts", exact: true })).toHaveCount(0);
-    await expect(visible(page.getByRole("alert"))).toHaveCount(0);
+    assert.equal((await failedRead).status(), 503);
+    assert.equal(f.calls("my_connections").length, 1);
+    // From the failed read's return, the section, the phone contacts' title and any error stay out: looked for until
+    // five looks running find none; a look that finds one fails the run (a count once spoiled stays spoiled).
+    const shown = async () =>
+      (await page.getByRole("heading", { name: /^Your connections/ }).count()) +
+      (await page.getByRole("heading", { name: "Phone contacts", exact: true }).count()) +
+      (await visible(page.getByRole("alert")).count());
+    let looks = 0;
+    await expect
+      .poll(async () => (looks = (await shown()) > 0 ? -Infinity : looks + 1), { intervals: [50], timeout: 3000 })
+      .toBe(5);
     await f.done();
   }
   console.log(

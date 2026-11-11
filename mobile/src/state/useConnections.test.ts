@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applyDecision, requestGone } from "./connectionsModel";
+import { applyDecision, keepOnFailure, requestGone } from "./connectionsModel";
 import type { ConnectionPerson, MyConnections } from "../services/connections";
 
 const person = (userId: string, name: string, title: string | null, context?: "going" | "met"): ConnectionPerson => ({
@@ -76,4 +76,12 @@ test("a request the server no longer holds (withdrawn or already answered) is to
   assert.equal(requestGone({ code: "22023", message: "No request" }), false);
   assert.equal(requestGone(new TypeError("Failed to fetch")), false);
   assert.equal(requestGone(null), false);
+});
+
+test("a failed read keeps the list already held; with none held yet there is still none", () => {
+  const list = mine();
+  assert.equal(keepOnFailure(list, true), list);
+  assert.equal(keepOnFailure(null, true), null);
+  // Only a failure keeps it: a read that brought a list puts its own in place.
+  assert.equal(keepOnFailure(list, false), null);
 });

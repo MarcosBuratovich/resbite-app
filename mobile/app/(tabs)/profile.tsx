@@ -20,8 +20,10 @@ import { useProfile } from "../../src/state/useProfile";
  */
 export default function Profile() {
   const p = useProfile();
-  // CO-P6: the requests waiting, read on each focus; none shows before a read succeeds, or after one fails.
-  const waiting = useConnections().data?.requests.length ?? 0;
+  // CO-P6: the requests waiting, read on each focus; none shows before a read succeeds, or after one fails until one
+  // succeeds again (the hook keeps its list through a failure, for the Connections screen).
+  const connections = useConnections();
+  const waiting = connections.failed ? 0 : (connections.data?.requests.length ?? 0);
   const [editing, setEditing] = useState(false);
   const firstRun = !p.profile && !p.loading;
   const shownName = p.profile?.display_name || p.name;
@@ -168,8 +170,8 @@ export default function Profile() {
             icon={Link2}
             tint={categoryPalette.uplifting.tint}
             ink={categoryPalette.uplifting.ink}
-            badge={waiting > 0 ? String(waiting) : undefined}
-            label={waiting > 0 ? `${CONNECTIONS_COPY.profileRow}, ${waiting} ${waiting === 1 ? "request" : "requests"}` : undefined}
+            badge={waiting > 0 ? CONNECTIONS_COPY.badge(waiting) : undefined}
+            label={waiting > 0 ? CONNECTIONS_COPY.waitingLabel(waiting) : undefined}
             onPress={() => router.push("/connections")}
           />
           <Row

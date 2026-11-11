@@ -173,6 +173,25 @@ test("inviteConnections sends a refused call again one by one, so the others are
   );
 });
 
+test("inviteConnections does not send a refused call holding one connection again: that connection is refused", async () => {
+  const refuse = (users: string[]) =>
+    gateway((c) => {
+      const asked = (c.args.p_invites as { user: string }[]).map((x) => x.user);
+      if (asked.some((user) => users.includes(user))) return { data: null, error: { code: "42501", message: "Not a connection" } };
+      return { data: asked.map((user) => ({ user, kind: "app" })), error: null };
+    });
+  const one = refuse(["u-gone"]);
+  assert.deepEqual(await inviteConnections(one.gw, "plan", ["u-gone"]), { results: [], refused: ["u-gone"] });
+  assert.equal(one.calls.length, 1, "the one connection is asked once");
+  // The 51st of 51 goes in a call of its own: refused there, it is not asked again either.
+  const users = Array.from({ length: 51 }, (_, i) => `u-${i}`);
+  const last = refuse(["u-50"]);
+  const { results, refused } = await inviteConnections(last.gw, "plan", users);
+  assert.deepEqual(last.calls.map((c) => (c.args.p_invites as unknown[]).length), [50, 1]);
+  assert.deepEqual(results.map((r) => r.user), users.slice(0, 50));
+  assert.deepEqual(refused, ["u-50"]);
+});
+
 test("inviteConnections sends 60 connections in calls of at most 50; a lost connection still fails the whole invite", async () => {
   const users = Array.from({ length: 60 }, (_, i) => `u-${i}`);
   const ok = gateway((c) => ({

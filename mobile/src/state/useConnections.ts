@@ -1,19 +1,27 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useApp } from "./AppState";
 import { useFocusedRefresh, type Run } from "./useFocusedRefresh";
-import { applyDecision, requestGone, type ConnectionDecision } from "./connectionsModel";
+import { applyDecision, keepOnFailure, requestGone, type ConnectionDecision } from "./connectionsModel";
 import { connectionErrorMessage, connectionGateway, type MyConnections } from "../services/connections";
 
-export { applyDecision, requestGone, type ConnectionDecision } from "./connectionsModel";
+export { applyDecision, keepOnFailure, requestGone, type ConnectionDecision } from "./connectionsModel";
 
 /** The preview has no account: nobody to connect with, and nothing is read or sent. */
 const NOBODY: MyConnections = { requests: [], connected: [] };
 
 export type Connections = {
-  /** The last list read, with the decisions taken since; null before the first read and after a failed one. */
+  /**
+   * The last list read, with the decisions taken since; null before the first read and after a first read that
+   * failed. A failed refresh keeps the list (keepOnFailure): the Connections screen shows `error` above it.
+   */
   data: MyConnections | null;
   /** A read is running. */
   busy: boolean;
+  /**
+   * The last read failed: from the failure until a read succeeds, a retry included. Profile shows no badge
+   * meanwhile (CO-P6), whatever list is kept.
+   */
+  failed: boolean;
   /** The decision running, and whose request or connection it is about: one runs at a time. */
   acting: { userId: string; decision: ConnectionDecision } | null;
   error: string | null;
@@ -42,10 +50,12 @@ export function useConnections(): Connections {
   const working = useRef(false);
   const [data, setData] = useState<MyConnections | null>(null);
   const [busy, setBusy] = useState(!preview);
+  const [failed, setFailed] = useState(false);
   const [acting, setActing] = useState<Connections["acting"]>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     setData(null);
+    setFailed(false);
     setError(null);
     setActing(null);
     working.current = false;
@@ -58,10 +68,14 @@ export function useConnections(): Connections {
       setError(null);
       try {
         const next = await connectionGateway.mine();
-        if (valid()) setData(next);
+        if (valid()) {
+          setData(next);
+          setFailed(false);
+        }
       } catch (e) {
         if (valid()) {
-          setData(null);
+          setData((old) => keepOnFailure(old, true));
+          setFailed(true);
           setError(connectionErrorMessage(e));
         }
       } finally {
@@ -115,6 +129,7 @@ export function useConnections(): Connections {
   return {
     data: preview ? NOBODY : data,
     busy: busy && !preview,
+    failed: failed && !preview,
     acting,
     error,
     load,

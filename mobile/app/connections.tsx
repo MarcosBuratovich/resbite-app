@@ -26,7 +26,8 @@ type Sheet = { person: ConnectionPerson; view: "menu" | "remove" };
 /**
  * Connections (CO-02, CO-P6): /connections, from Profile or a connection push. Requests first, newest first, each a
  * card with Accept and Not now (stacked under Larger Text); then the connections by name, each with the three dots
- * for Remove connection and its in-place confirm. A decision the server takes changes the list at once.
+ * for Remove connection and its in-place confirm. A decision the server takes changes the list at once. A refresh
+ * that fails keeps the list, with why above it; only a first read that fails offers Try again.
  */
 export default function Connections() {
   const k = useConnections();
@@ -56,7 +57,7 @@ export default function Connections() {
       {!data ? (
         <View style={styles.state}>
           <ErrorNote message={k.error} />
-          {loading ? <ActivityIndicator accessibilityLabel="Loading your connections" color={c.aquaDark} /> : null}
+          {loading ? <ActivityIndicator accessibilityLabel={C.loading} color={c.aquaDark} /> : null}
           {k.error ? (
             <Button icon={false} secondary title={EVENT_COPY.tryAgain} disabled={k.busy} onPress={() => void k.load()} />
           ) : null}
@@ -94,7 +95,7 @@ export default function Connections() {
                       <View style={!largeText && styles.pill}>
                         <Button
                           title={C.notNow}
-                          label={`${C.notNow}, ${person.name}'s request`}
+                          label={C.notNowFrom(person.name)}
                           icon={false}
                           secondary
                           loading={deciding === "decline"}

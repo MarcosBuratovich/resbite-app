@@ -17,7 +17,7 @@ const firstName = (name: string) => name.trim().split(/\s+/)[0] || name;
 const fold = (text: string) =>
   text
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
 
 /**

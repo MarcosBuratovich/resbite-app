@@ -40,7 +40,8 @@ export function inviteErrorMessage(e: unknown): string {
 /**
  * A `{user}` item the server refused (42501 'Not a connection'): someone not, or no longer, connected, or who may no
  * longer use the app. The server refuses the whole call for it, so `inviteConnections` sends such a call again one
- * by one. Told by its name, as a class's `instanceof` may not survive the transform to older JavaScript.
+ * by one, unless it held only that one. Told by its name, as a class's `instanceof` may not survive the transform to
+ * older JavaScript.
  */
 const NOT_A_CONNECTION = "NotAConnection";
 export const isNotAConnection = (e: unknown): boolean => e instanceof Error && e.name === NOT_A_CONNECTION;
@@ -151,8 +152,8 @@ export function createContactInviteGateway(
  * Invites connections by user id (CO-P4), in calls of their own: Invite people sends them after the numbers, so a
  * refusal here never loses the numbers' invitations. A call refused for one of its connections (42501 'Not a
  * connection': `my_connections` may still list someone who can no longer be invited) is sent again one by one, so
- * the others are still invited; those refused alone are left out of the results and listed in `refused`. Any other
- * failure throws, as `invite` does.
+ * the others are still invited; those refused alone are left out of the results and listed in `refused`. A refused
+ * call that held one connection is not sent again: that one is refused. Any other failure throws, as `invite` does.
  */
 export async function inviteConnections(
   gateway: Pick<ContactInviteGateway, "invite">,
@@ -170,6 +171,10 @@ export async function inviteConnections(
       keep(await gateway.invite(plan, batch.map((user) => ({ user }))));
     } catch (e) {
       if (!isNotAConnection(e)) throw e;
+      if (batch.length === 1) {
+        refused.push(batch[0]);
+        continue;
+      }
       for (const user of batch) {
         try {
           keep(await gateway.invite(plan, [{ user }]));

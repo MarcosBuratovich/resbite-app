@@ -30,6 +30,14 @@ function inNameOrder(connected: ConnectionPerson[], person: ConnectionPerson): C
 }
 
 /**
+ * What a read leaves held, given whether it failed: a failure keeps the list already held, so a failed refresh leaves
+ * it on screen with the error above it; with none held yet (a first read) there is still none, and the screen offers
+ * Try again. Only a failure keeps it: a read that brought a list puts its own in place.
+ */
+export const keepOnFailure = (previous: MyConnections | null, failed: boolean): MyConnections | null =>
+  failed ? previous : null;
+
+/**
  * The server holds no such request any more: the requester withdrew it, or it was answered elsewhere (42501 'No
  * request', from accept and decline). Nothing went wrong for the person: the list is read again and the card goes.
  */

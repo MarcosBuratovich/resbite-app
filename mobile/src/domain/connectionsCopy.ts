@@ -4,6 +4,8 @@ export const CONNECTIONS_COPY = {
   connected: "Connected",
   accept: "Accept",
   notNow: "Not now",
+  /** A request's Not now, for VoiceOver. */
+  notNowFrom: (name: string) => `Not now, ${name}'s request`,
   remove: "Remove connection",
   removeQuestion: (name: string) => `Remove ${name} from your connections? Neither of you will be told.`,
   keep: "Keep",
@@ -27,6 +29,12 @@ export const CONNECTIONS_COPY = {
   /** Invite people, when a connection's invitation is refused (they may no longer use the app) but others went. */
   inviteRefused: "One of your connections can't be invited right now. The others were.",
   profileRow: "Connections",
+  /** Profile's Connections row with requests waiting, for VoiceOver: the whole count, whatever the badge shows. */
+  waitingLabel: (n: number) => (n === 1 ? "Connections, 1 request" : `Connections, ${n} requests`),
+  /** The requests waiting, on Profile's Connections row: the count, capped so it stays a short badge. */
+  badge: (n: number) => (n > 99 ? "99+" : String(n)),
+  /** The Connections screen's first read, for VoiceOver. */
+  loading: "Loading your connections",
   peopleListsRow: "People lists",
   namesFirst: "Answer first to connect with people here.",
   notHere: "That person isn't on this resbite.",

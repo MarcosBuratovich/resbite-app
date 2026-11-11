@@ -33,4 +33,16 @@ test("connections copy reads exactly", () => {
   assert.equal(C.namesFirst, "Answer first to connect with people here.");
   assert.equal(C.notHere, "That person isn't on this resbite.");
   assert.equal(C.failed, "Couldn't do that. Try again.");
+  assert.equal(C.loading, "Loading your connections");
+  assert.equal(C.notNowFrom("Bea"), "Not now, Bea's request");
+  assert.equal(C.waitingLabel(1), "Connections, 1 request");
+  assert.equal(C.waitingLabel(2), "Connections, 2 requests");
+  assert.equal(C.waitingLabel(120), "Connections, 120 requests");
+});
+
+test("the requests badge is the count, capped at 99+", () => {
+  assert.equal(C.badge(1), "1");
+  assert.equal(C.badge(99), "99");
+  assert.equal(C.badge(100), "99+");
+  assert.equal(C.badge(1234), "99+");
 });

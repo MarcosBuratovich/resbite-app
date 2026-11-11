@@ -818,7 +818,8 @@ export function RowGroup({ children }: { children: React.ReactNode }) {
 
 /**
  * One settings row: a tinted icon circle, a short title and a chevron; at least 60 pt tall. `badge` is a short count
- * before the chevron (Connections' pending requests); say what it counts in `label`.
+ * before the chevron (Connections' pending requests, "99+" at most), kept to one line; say what it counts, in full,
+ * in `label`.
  */
 export function Row({
   title,
@@ -861,7 +862,9 @@ export function Row({
       <Copy style={destructive ? [styles.rowTitle, { color: c.error }] : styles.rowTitle}>{title}</Copy>
       {badge ? (
         <View style={styles.rowBadge}>
-          <Text style={styles.rowBadgeText}>{badge}</Text>
+          <Text numberOfLines={1} style={styles.rowBadgeText}>
+            {badge}
+          </Text>
         </View>
       ) : null}
       {chevron && <ChevronRight size={18} strokeWidth={2.2} color={c.muted} />}
