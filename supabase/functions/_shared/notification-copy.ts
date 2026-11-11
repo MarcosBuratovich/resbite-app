@@ -100,12 +100,16 @@ export function notificationCopy(input: CopyInput): Copy {
       return { title: `You and ${name} are now connected`, body: "You can invite each other from Invite people." };
     if (!title) return GENERIC_COPY;
     // The database says how the two stand; with no detail, fall back to the start time.
+    const end = /[.!?…]$/.test(title) ? "" : ".";
     const start = input.starts_at ? new Date(input.starts_at).getTime() : NaN;
-    const going = input.detail === "going" || (input.detail !== "invited" && input.detail !== "met" && Number.isFinite(start) && start > Date.now());
-    return {
-      title: `${name} wants to connect`,
-      body: input.detail === "invited" ? `You're both invited to ${title}.` : going ? `You're both going to ${title}.` : `You were both at ${title}.`,
-    };
+    let sentence: string;
+    switch (input.detail) {
+      case "going": sentence = `You're both going to ${title}`; break;
+      case "invited": sentence = `You're both invited to ${title}`; break;
+      case "met": sentence = `You were both at ${title}`; break;
+      default: sentence = Number.isFinite(start) && start > Date.now() ? `You're both going to ${title}` : `You were both at ${title}`;
+    }
+    return { title: `${name} wants to connect`, body: sentence + end };
   }
   // The next occurrence of a repeating resbite (CR-P24): the title says it is on again, the body says when.
   if (input.kind === "invited" && input.detail === "again") {

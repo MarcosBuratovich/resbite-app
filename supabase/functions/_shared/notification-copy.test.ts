@@ -135,11 +135,16 @@ test("invited again: the title says it is on again and the body is the start in 
 });
 
 test("a connection request names how the two stand by its detail", () => {
-  const base = { kind: "connection_request", title: "Picnic", actor_name: "Pedro" } as const;
-  assert.deepEqual(notificationCopy({ ...base, detail: "going" }), { title: "Pedro wants to connect", body: "You're both going to Picnic." });
-  assert.deepEqual(notificationCopy({ ...base, detail: "invited" }), { title: "Pedro wants to connect", body: "You're both invited to Picnic." });
-  assert.deepEqual(notificationCopy({ ...base, detail: "met" }), { title: "Pedro wants to connect", body: "You were both at Picnic." });
-  assert.deepEqual(notificationCopy({ ...base, starts_at: "2099-01-01T19:00:00Z" }), { title: "Pedro wants to connect", body: "You're both going to Picnic." });
+  const req = { kind: "connection_request", title: "Picnic", actor_name: "Pedro" } as const;
+  assert.deepEqual(notificationCopy({ ...req, detail: "going" }), { title: "Pedro wants to connect", body: "You're both going to Picnic." });
+  assert.deepEqual(notificationCopy({ ...req, detail: "invited" }), { title: "Pedro wants to connect", body: "You're both invited to Picnic." });
+  assert.deepEqual(notificationCopy({ ...req, detail: "met" }), { title: "Pedro wants to connect", body: "You were both at Picnic." });
+  assert.deepEqual(notificationCopy({ ...req, starts_at: "2099-01-01T19:00:00Z" }), { title: "Pedro wants to connect", body: "You're both going to Picnic." });
+  assert.deepEqual(notificationCopy({ ...req, detail: "met", starts_at: "2099-01-01T19:00:00Z" }), { title: "Pedro wants to connect", body: "You were both at Picnic." });
+  assert.equal(notificationCopy({ ...req, title: "Wrap up.", detail: "going" }).body, "You're both going to Wrap up.");
+  assert.equal(notificationCopy({ ...req, title: "Pizza night!", detail: "invited" }).body, "You're both invited to Pizza night!");
+  assert.equal(notificationCopy({ ...req, title: "Wrap up.", detail: "met" }).body, "You were both at Wrap up.");
+  assert.equal(notificationCopy({ ...req, title: "Why?", starts_at: "2099-01-01T19:00:00Z" }).body, "You're both going to Why?");
 });
 
 test("a connection request leads with who, and says where you met", () => {
