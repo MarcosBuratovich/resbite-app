@@ -1,10 +1,10 @@
 -- Rehearsal checks for 20261111130000_circles_of_trust (hosted-baseline mode only).
 -- 1. The apply. The rows from before the migration say no circle, no bringer, level 1. Exactly one foreign key links
 -- attendees to profiles and one plans to profiles (the installed builds' embeds still resolve); both brought_by
--- columns point at auth.users and become null when the account goes. plan_removals has RLS on and no policy. The nine
--- redefined functions kept their grants; the six public wrappers are for signed-in accounts only (and their private
--- bodies too, as the house does it); bring_allowance is for no API role; the seven private functions are definers
--- with an empty search path.
+-- columns point at auth.users and become null when the account goes. plan_removals has RLS on and no policy. The ten
+-- redefined functions kept their grants; the six public wrappers are for signed-in accounts only, and so are their
+-- private bodies (as the house does it: never anon, never service_role); bring_allowance is for no API role; the seven
+-- private functions are definers with an empty search path.
 do $$ declare r text; f text; begin
  if (select (bring_invites,bring_levels) from public.plans where id='c2100000-0000-4000-8000-000000000001') is distinct from (0::smallint,1::smallint)
  or (select (brought_by,level) from public.attendees where plan_id='c2100000-0000-4000-8000-000000000001') is distinct from (null::uuid,1::smallint)
@@ -37,7 +37,7 @@ do $$ declare r text; f text; begin
   'plan_brought_invitations(uuid)','revoke_brought_invitation(uuid,uuid)','withdraw_brought_invitation(uuid,uuid)'] loop
   if not has_function_privilege('authenticated','public.'||f,'execute') or not has_function_privilege('authenticated','private.'||f,'execute')
   or has_function_privilege('anon','public.'||f,'execute') or has_function_privilege('anon','private.'||f,'execute')
-  or has_function_privilege('service_role','public.'||f,'execute') then
+  or has_function_privilege('service_role','public.'||f,'execute') or has_function_privilege('service_role','private.'||f,'execute') then
    raise exception 'public.% or its body has the wrong grants', f;
   end if;
   if (select prosecdef from pg_catalog.pg_proc where oid=('public.'||f)::regprocedure) then raise exception 'public.% is a definer', f; end if;
@@ -56,7 +56,7 @@ end $$;
 -- 2. The rollback, rehearsed and undone. Seed what it changes: a circle on the resbite, a guest's in-app bringing and
 -- their link, a removal record. Try its two guards: it refuses once the follow-ups rollback has run (pair_standing,
 -- renamed, stands in) and while chat is applied (a public.messages table stands in); a refusal changes nothing. Then
--- run it: the nine functions, with their grants, are the ones .before.sql recorded; the seven new functions, the six
+-- run it: the ten functions, with their grants, are the ones .before.sql recorded; the seven new functions, the six
 -- wrappers, plan_removals and the six columns are gone; the people brought stay as ordinary guests and the link stays
 -- live.
 begin;

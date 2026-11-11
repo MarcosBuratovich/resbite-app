@@ -92,6 +92,9 @@ Same as plan 1, verbatim: no hosted touch in this plan; the house function and t
 - A bringer learns `already` for a number whose holder is on the resbite, spending nothing. Bringers already read every name (`attendee_read`, `20261014120000_ux2_rules.sql:114`), and `contacts_on_resbite` was already open to every tester.
 - Anyone holding a forwarded personal link sees the bringer's first name. The phone-key check is unchanged, so neither lets anyone in.
 - Lock order: on hosted, where `require_tester` takes no lock, both `invite_contacts` branches take the plan row and then the caller's advisory lock, and `answer_phone_invitation` takes them the other way round (`20261031120000_creating_a_resbite.sql:309, 318`). The same account inviting and answering on one plan at the same instant could deadlock (40P01). This is improbable, and hosts can already do it today.
+- Lock order across two accounts (tester #62, C18-Q6): `decide_join_request` takes the host's and the requester's advisory locks, then the plan row (`require_link_owner`). A host deciding the request of a guest who is bringing someone on that resbite at the same instant (the guest has a guest row and a request still waiting) can deadlock with them on hosted (40P01). Rare, and a retry works. The migration's lock-order note names it too.
+- A bringer learns `already` when someone else's live link (a host's or another bringer's) already reaches the number, spending nothing: someone invited that number, not who (C18-Q3).
+- A bringer can infer that a host removed or declined someone, or that the person is waiting at the host's door (tester #46): bringing that one person is refused with 42501 'Not allowed to bring people here' while their allowance says they may bring. The message is the same as every other refusal (C-R2) and names nobody.
 - A host sees a bringer's unanswered link only as "Number ending ••23 · Invited by link · brought by Sol": no name, no channel.
 
 ---

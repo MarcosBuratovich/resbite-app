@@ -6,6 +6,9 @@
 # the guest's invite_contacts asks for the same row before it reads the allowance, so it waits, and then sees the
 # lowered circle. Expected: the guest gets 42501 'Not allowed to bring people here' and nobody is added. With the
 # allowance read above the plan-row lock the guest would read the old circle and bring the person: this fails.
+# (c) Someone who is not on the resbite never reaches its row (C18, the review's minor 7): while the host holds it
+# again, a stranger whose lock wait is capped at 300 ms asks to bring, to revoke and to withdraw. Each is refused with
+# its 42501 at once; none waits for the row (that would end in 55P03, lock_not_available).
 set -euo pipefail
 pg_bin="$1"
 socket="$2"
@@ -15,13 +18,14 @@ args=(-X -v ON_ERROR_STOP=1 -h "$socket" -p "$port" -U postgres -d postgres)
 insert into auth.users(id,phone,phone_confirmed_at,raw_user_meta_data) values
  ('f7000000-0000-4000-8000-000000000001','447700900771',now(),'{}'),
  ('f7000000-0000-4000-8000-000000000002','447700900772',now(),'{}'),
+ ('f7000000-0000-4000-8000-000000000003','447700900773',now(),'{}'),
  ('f7000000-0000-4000-8000-000000000006','447700900776',now(),'{}');
 insert into public.profiles(id,display_name) values
  ('f7000000-0000-4000-8000-000000000001','Race host'),('f7000000-0000-4000-8000-000000000002','Race guest'),
- ('f7000000-0000-4000-8000-000000000006','Race friend');
+ ('f7000000-0000-4000-8000-000000000003','Race stranger'),('f7000000-0000-4000-8000-000000000006','Race friend');
 insert into private.beta_access(user_id,source) values
  ('f7000000-0000-4000-8000-000000000001','maintainer'),('f7000000-0000-4000-8000-000000000002','maintainer'),
- ('f7000000-0000-4000-8000-000000000006','maintainer');
+ ('f7000000-0000-4000-8000-000000000003','maintainer'),('f7000000-0000-4000-8000-000000000006','maintainer');
 -- The host's resbite, each guest may bring one; the guest is Going and connected to their friend.
 insert into public.plans(id,owner_id,title,starts_at,time_zone,place_label,categories,bring_invites,bring_levels) values
  ('f7100000-0000-4000-8000-000000000001','f7000000-0000-4000-8000-000000000001','Race games','2099-08-04 19:00+00','UTC','Kitchen',array['community'],1,1);
@@ -74,8 +78,47 @@ do $$ begin
   raise exception 'The host''s change did not stick';
  end if;
 end $$;
-delete from public.connections where user_a='f7000000-0000-4000-8000-000000000002' and user_b='f7000000-0000-4000-8000-000000000006';
-delete from public.plans where id='f7100000-0000-4000-8000-000000000001';
-delete from auth.users where id in ('f7000000-0000-4000-8000-000000000001','f7000000-0000-4000-8000-000000000002','f7000000-0000-4000-8000-000000000006');
 SQL
 echo "PASS: a guest bringing while the host lowers the circle waits on the plan's row, then is refused: nobody added"
+# (c) The host holds the plan's row again.
+PGAPPNAME=resbite_circle_hold2 "$pg_bin/psql" "${args[@]}" >"$socket/circles-concurrency-hold2.log" 2>&1 <<'SQL' &
+begin;
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"f7000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+select public.set_plan_circle('f7100000-0000-4000-8000-000000000001',1::smallint,1::smallint);
+select pg_sleep(2);
+commit;
+SQL
+hold_pid=$!
+wait_for resbite_circle_hold2 wait_event PgSleep 'The host did not hold the plan again'
+"$pg_bin/psql" "${args[@]}" >"$socket/circles-concurrency-stranger.log" 2>&1 <<'SQL'
+set role authenticated;
+set lock_timeout = '300ms';
+select set_config('request.jwt.claims','{"sub":"f7000000-0000-4000-8000-000000000003","role":"authenticated"}',false);
+do $$ declare v_state text; v_message text; v_out text := ''; begin
+ begin
+  perform public.invite_contacts('f7100000-0000-4000-8000-000000000001',jsonb_build_array(jsonb_build_object('user','f7000000-0000-4000-8000-000000000006')));
+ exception when others then get stacked diagnostics v_state = returned_sqlstate, v_message = message_text; v_out := v_out||v_state||' '||v_message||'; ';
+ end;
+ begin
+  perform public.revoke_phone_invitation('f7100000-0000-4000-8000-000000000001','447700900779');
+ exception when others then get stacked diagnostics v_state = returned_sqlstate, v_message = message_text; v_out := v_out||v_state||' '||v_message||'; ';
+ end;
+ begin
+  perform public.withdraw_brought_invitation('f7100000-0000-4000-8000-000000000001','f7000000-0000-4000-8000-000000000006');
+ exception when others then get stacked diagnostics v_state = returned_sqlstate, v_message = message_text; v_out := v_out||v_state||' '||v_message||'; ';
+ end;
+ raise notice 'STRANGER %', v_out;
+end $$;
+SQL
+wait "$hold_pid" || { cat "$socket/circles-concurrency-hold2.log"; echo "The host's second change failed"; exit 1; }
+if ! grep -qF 'STRANGER 42501 Not allowed to bring people here; 42501 Active plan owner required; 42501 Not your invitation; ' "$socket/circles-concurrency-stranger.log"; then
+ cat "$socket/circles-concurrency-stranger.log"; echo 'FAIL: someone not on the resbite waited for its row, or was answered otherwise'; exit 1
+fi
+"$pg_bin/psql" "${args[@]}" >"$socket/circles-concurrency-cleanup.log" <<'SQL'
+delete from public.connections where user_a='f7000000-0000-4000-8000-000000000002' and user_b='f7000000-0000-4000-8000-000000000006';
+delete from public.plans where id='f7100000-0000-4000-8000-000000000001';
+delete from auth.users where id in ('f7000000-0000-4000-8000-000000000001','f7000000-0000-4000-8000-000000000002',
+ 'f7000000-0000-4000-8000-000000000003','f7000000-0000-4000-8000-000000000006');
+SQL
+echo "PASS: someone not on the resbite is refused without waiting for its row (bring, revoke, withdraw)"

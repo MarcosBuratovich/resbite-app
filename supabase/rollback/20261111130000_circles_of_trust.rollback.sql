@@ -4,7 +4,8 @@
 -- It is for the hosted project, where 20261111120000_connections_follow_ups.sql must already be applied (this file
 -- restores its roll). It deletes no guest and no link:
 --   - People already brought stay on their resbites as ordinary guests; who brought them and their levels go.
---   - The circle numbers (each resbite's invites and levels) and the removal records (private.plan_removals) are lost.
+--   - The circle numbers (each resbite's invites and levels) and the removal records (private.plan_removals) are lost:
+--     a person a host removed, declined or revoked can be brought, or answer a link, again.
 --   - A bringer's live links stay live, as ordinary invitations; hosts then see them, numbers included, in
 --     plan_phone_invitations, and a guest can no longer list or revoke them.
 -- It restores, each keeping its grants (create or replace) and its public wrapper:
@@ -12,9 +13,11 @@
 --   private.answer_phone_invitation, personal_invitation_page, revoke_phone_invitation, plan_phone_invitations,
 --   remove_guest                                  from 20261031120000_creating_a_resbite.sql
 --   private.decide_join_request                   from 20261029120000_open_link_approval.sql
+--   private.fold_web_account                      from 20261030120000_push_delivery.sql
 --   private.roll_repeating_plans                  from 20261111120000_connections_follow_ups.sql (every guest carried)
 --   private.request_account_deletion              from 20261110120000_connections.sql, where it exists (local only)
--- then drops the seven new functions with their public wrappers, private.plan_removals and the six new columns.
+-- then drops the seven new functions (one internal, six behind a public wrapper) and the six public wrappers,
+-- private.plan_removals and the six new columns.
 -- Builds: an app build with the circle (the card, "Bring someone", the chain) gets errors from the functions dropped
 -- here and reads no brought_by, level or circle columns: roll the app back first. Installed builds from before the
 -- migration read nothing it made.
@@ -270,6 +273,62 @@ begin
   values(p_plan,p_user,'join_approved','join-approved:'||p_plan||':'||p_user||':'||extract(epoch from v_req.created_at),v_uid) on conflict do nothing;
  return jsonb_build_object('status','approved');
 end $$;
+-- Folding a web account as it was (20261030120000_push_delivery.sql): removal records are not moved.
+create or replace function private.fold_web_account(p_from uuid, p_into uuid) returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_moved integer; v_disabled boolean;
+begin
+ if p_from is null or p_into is null or p_from=p_into then raise exception 'Invalid accounts' using errcode='22023'; end if;
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(least(p_from,p_into)::text,47));
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(greatest(p_from,p_into)::text,47));
+ if not exists(select 1 from auth.users where id=p_into) then raise exception 'Unknown account' using errcode='22023'; end if;
+ if private.used_app(p_from) then raise exception 'The account has used the app' using errcode='22023'; end if;
+ if exists(select 1 from public.plans where owner_id=p_from) then raise exception 'The account organizes events' using errcode='22023'; end if;
+ -- Add your number comes before About you, so the account may have no profile yet: it takes the name given on the web.
+ insert into public.profiles(id,display_name) select p_into, display_name from public.profiles where id=p_from
+  on conflict (id) do nothing;
+ -- 1. Places: where the account is already on the event, or organizes it, its own place stays and the web one goes.
+ delete from public.attendees f where f.user_id=p_from
+  and (exists(select 1 from public.attendees t where t.plan_id=f.plan_id and t.user_id=p_into)
+   or exists(select 1 from public.plans p where p.id=f.plan_id and p.owner_id=p_into));
+ update public.attendees set user_id=p_into where user_id=p_from;
+ get diagnostics v_moved = row_count;
+ -- 2. Invitations.
+ update private.phone_invitations set user_id=p_into where user_id=p_from;
+ -- 2a. Open-link requests: where the account already has its own request, is on the event or organizes it, its own
+ -- stands and the web one goes; the rest move with their answer, link and status.
+ -- Where its own request stands, the web one's unsent notice goes with it, so the host is told once.
+ delete from private.notification_outbox o where o.kind='join_request' and o.actor_id=p_from and o.delivered_at is null
+  and exists(select 1 from private.join_requests t where t.plan_id=o.plan_id and t.user_id=p_into);
+ delete from private.join_requests f where f.user_id=p_from
+  and (exists(select 1 from private.join_requests t where t.plan_id=f.plan_id and t.user_id=p_into)
+   or exists(select 1 from public.attendees t where t.plan_id=f.plan_id and t.user_id=p_into)
+   or exists(select 1 from public.plans p where p.id=f.plan_id and p.owner_id=p_into));
+ update private.join_requests set user_id=p_into where user_id=p_from;
+ -- 2b. Notices the account caused that haven't gone out yet name the app account.
+ update private.notification_outbox set actor_id=p_into where actor_id=p_from and delivered_at is null;
+ -- 3. The tick and the grant, unless the account has its own. A revoked grant is a ban: one on either side stays. An
+ -- account whose tester-roster entry is disabled gets no live grant, as join_by_link and answer_phone_invitation.
+ v_disabled := exists(select 1 from auth.users u where u.id=p_into
+  and exists(select 1 from private.tester_roster r where r.email = lower(u.email) and not r.enabled));
+ if not exists(select 1 from private.age_attestations where user_id=p_into) then
+  update private.age_attestations set user_id=p_into where user_id=p_from;
+ end if;
+ if not exists(select 1 from private.beta_access where user_id=p_into) then
+  insert into private.beta_access(user_id,source,plan_link_id,granted_at,revoked_at)
+   select p_into,source,plan_link_id,granted_at,revoked_at from private.beta_access
+   where user_id=p_from and (revoked_at is not null or not v_disabled);
+ else
+  update private.beta_access t set revoked_at=f.revoked_at from private.beta_access f
+   where t.user_id=p_into and t.revoked_at is null and f.user_id=p_from and f.revoked_at is not null;
+ end if;
+ -- The web account's live grant and tick go, so a fold whose user deletion then fails leaves no second account that
+ -- gets in; its ban stays, so that account still can't join by a link or answer an invitation.
+ delete from private.beta_access where user_id=p_from and revoked_at is null;
+ delete from private.age_attestations where user_id=p_from;
+ -- 4. The web profile.
+ delete from public.profiles where id=p_from;
+ return jsonb_build_object('moved_attendees',v_moved);
+end $$;
 -- The roll as it was (20261111120000_connections_follow_ups.sql): every guest carried, with no circle, bringer or level.
 create or replace function private.roll_repeating_plans() returns integer language plpgsql security definer set search_path = '' as $$
 declare p public.plans; v_id uuid; v_start timestamptz; v_end timestamptz; v_steps integer; v_count integer := 0; v_constraint text;
@@ -376,7 +435,7 @@ $fn$;
  end if;
 end $migration$;
 
--- The seven new functions and their wrappers, the removal records, and the six columns.
+-- The seven new functions and the six public wrappers, the removal records, and the six columns.
 drop function public.set_plan_circle(uuid,smallint,smallint), private.set_plan_circle(uuid,smallint,smallint),
  public.my_bring_allowance(uuid), private.my_bring_allowance(uuid), private.bring_allowance(uuid,uuid),
  public.plan_brought_invitations(uuid), private.plan_brought_invitations(uuid),

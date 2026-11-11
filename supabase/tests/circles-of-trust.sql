@@ -415,6 +415,48 @@ do $$ begin
 end $$;
 rollback;
 
+-- Slice 6b: sending your own link again needs only your place on the resbite (C19, CO-P15). Base (1,1). 02 sends 09
+-- a link. set_plan_circle(0,1): nobody may bring, yet 02 sends that link again with a new code, at no cost; anything
+-- else 02 asks in the same call ('self' too) refuses the call, and so does any in-app invitation (a connection, not a
+-- link sent again). 02 says Can't go and sends it again. Once the resbite has ended, or 01 has removed 02, 02 may not.
+begin;
+select pg_temp.co2_cast();
+set local role authenticated;
+select pg_temp.co2_as('02');
+select public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('09','A')));
+select pg_temp.co2_as('01');
+select public.set_plan_circle(pg_temp.co2p(),0::smallint,1::smallint);
+select pg_temp.co2_as('02');
+select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('09','B'))))='link',
+ '02 sending their own link again at (0,1)');
+select pg_temp.co2_refused($$select public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('10','C')))$$,'42501','Not allowed to bring people here');
+select pg_temp.co2_refused($$select public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('09','D'),pg_temp.co2_number('02','E')))$$,
+ '42501','Not allowed to bring people here');
+select pg_temp.co2_refused($$select public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_user('06')))$$,'42501','Not allowed to bring people here');
+select pg_temp.co2_refused($$select public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_user('05')))$$,'42501','Not allowed to bring people here');
+select public.respond(pg_temp.co2p(),'declined',1);
+select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('09','F'))))='link',
+ '02, Can''t go, sending their own link again');
+reset role;
+do $$ begin
+ if (select (code_hash,brought_by,level) from private.phone_invitations where plan_id=pg_temp.co2p() and phone=pg_temp.co2_phone('09'))
+   is distinct from (extensions.digest(repeat('F',22),'sha256'),pg_temp.co2('02'),2::smallint) then
+  raise exception 'Sending again did not keep 02''s link with the new code';
+ end if;
+ perform pg_temp.co2_check(pg_temp.co2_used('02')=1,'Sending again was counted');
+end $$;
+update public.plans set starts_at=now()-interval '3 hours', ends_at=now()-interval '1 hour' where id=pg_temp.co2p();
+set local role authenticated;
+select pg_temp.co2_refused($$select public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('09','G')))$$,'42501','Not allowed to bring people here');
+reset role;
+update public.plans set starts_at='2099-06-04 19:00+00', ends_at='2099-06-04 22:00+00' where id=pg_temp.co2p();
+set local role authenticated;
+select pg_temp.co2_as('01');
+select public.remove_guest(pg_temp.co2p(),pg_temp.co2('02'));
+select pg_temp.co2_as('02');
+select pg_temp.co2_refused($$select public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('09','H')))$$,'42501','Not allowed to bring people here');
+rollback;
+
 -- Slice 7: removals (C-R2). Base (1,1). Whom a host removed, declined or revoked, a guest cannot bring back to the
 -- series, by connection or by number, until a host invites them; a guest's own revocation records nothing; an admin who
 -- leaves is not removed. Each row is one key: a user or a number.
@@ -496,6 +538,178 @@ do $$ begin
    (select string_agg(coalesce(right(user_id::text,2),'-')||'/'||coalesce(phone,'-'),',' order by user_id,phone) from private.plan_removals);
  end if;
  if exists(select 1 from public.attendees where plan_id=pg_temp.co2p() and user_id=pg_temp.co2('09')) then raise exception '09 is still on the resbite'; end if;
+end $$;
+rollback;
+
+-- Slice 7b: a removed account with no number yet (C19, #36). Base (1,1). 07, Going, has no confirmed number; 01
+-- removes 07. 02 sends a link to a number nobody holds; 07 then confirms that number and answers: refused as a revoked
+-- link is, and 07 stays off the resbite.
+begin;
+select pg_temp.co2_cast();
+update auth.users set phone=null, phone_confirmed_at=null where id=pg_temp.co2('07');
+insert into public.attendees(plan_id,user_id,response) values (pg_temp.co2p(),pg_temp.co2('07'),'accepted');
+set local role authenticated;
+select pg_temp.co2_as('01');
+select public.remove_guest(pg_temp.co2p(),pg_temp.co2('07'));
+select pg_temp.co2_as('02');
+select pg_temp.co2_refused($$select public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_user('07')))$$,'42501','Not allowed to bring people here');
+select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('99','A'))))='link',
+ '02 sending a number nobody holds');
+reset role;
+update auth.users set phone=pg_temp.co2_phone('99'), phone_confirmed_at=now() where id=pg_temp.co2('07');
+set local role authenticated;
+select pg_temp.co2_as('07');
+select pg_temp.co2_refused($$select public.answer_phone_invitation(repeat('A',22),'Tomas T','accepted','2026-10')$$,'42501','Invitation unavailable');
+reset role;
+do $$ begin
+ if exists(select 1 from public.attendees where plan_id=pg_temp.co2p() and user_id=pg_temp.co2('07')) then raise exception '07 came back through a link'; end if;
+end $$;
+rollback;
+
+-- Slice 7c: removing the person ends the links to their number (C19, #37). Base (1,1). 02 sends 07 a link; 07 asks
+-- through the open link and 01 approves; 01 then removes 07. 02's link is revoked (02's invite frees), and answering it
+-- is refused as a revoked link is. Then the same when 01 removes 07 while 07 is not on the resbite.
+begin;
+select pg_temp.co2_cast();
+set local role authenticated;
+select pg_temp.co2_as('02');
+select public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('07','A')));
+reset role;
+insert into private.join_requests(plan_id,user_id,response) values (pg_temp.co2p(),pg_temp.co2('07'),'accepted');
+set local role authenticated;
+select pg_temp.co2_as('01');
+select public.decide_join_request(pg_temp.co2p(),pg_temp.co2('07'),true);
+select public.remove_guest(pg_temp.co2p(),pg_temp.co2('07'));
+reset role;
+do $$ begin
+ if (select revoked_at is null or code_hash is not null from private.phone_invitations where plan_id=pg_temp.co2p() and phone=pg_temp.co2_phone('07')) then
+  raise exception 'Removing 07 left 02''s link to 07 live';
+ end if;
+ perform pg_temp.co2_check(pg_temp.co2_used('02')=0,'02''s link to a removed person still counts');
+end $$;
+set local role authenticated;
+select pg_temp.co2_as('07');
+select pg_temp.co2_refused($$select public.answer_phone_invitation(repeat('A',22),'Tomas T','accepted','2026-10')$$,'42501','Invitation unavailable');
+rollback;
+begin;
+select pg_temp.co2_cast();
+set local role authenticated;
+select pg_temp.co2_as('02');
+select public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('07','A')));
+select pg_temp.co2_as('01');
+select public.remove_guest(pg_temp.co2p(),pg_temp.co2('07'));
+select pg_temp.co2_as('07');
+select pg_temp.co2_refused($$select public.answer_phone_invitation(repeat('A',22),'Tomas T','accepted','2026-10')$$,'42501','Invitation unavailable');
+reset role;
+do $$ begin
+ if exists(select 1 from public.attendees where plan_id=pg_temp.co2p() and user_id=pg_temp.co2('07')) then raise exception '07 came back through a link'; end if;
+end $$;
+rollback;
+
+-- Slice 7d: a removal follows the person into the app (C19, #38). Base (1,1). 14, a web-only account (a number and a
+-- grant, never in the app), Going, is removed by 01 and then folded into 15, an app account with no number yet and a
+-- connection of 02. The record moves to 15, so 02 may not bring 15; once 14 is deleted and 15 holds the number, not
+-- by number either.
+begin;
+select pg_temp.co2_cast();
+insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) values
+ ('f6000000-0000-4000-8000-000000000014',null,null,'447700900614',now()),
+ ('f6000000-0000-4000-8000-000000000015','co2-folded@resbite-test.invalid',now(),null,null);
+insert into private.tester_roster(email) values ('co2-folded@resbite-test.invalid');
+insert into private.beta_access(user_id,source) values ('f6000000-0000-4000-8000-000000000014','invitation');
+insert into public.profiles(id,display_name) values ('f6000000-0000-4000-8000-000000000014','Web W'),('f6000000-0000-4000-8000-000000000015','App A');
+insert into private.app_sessions(user_id) values ('f6000000-0000-4000-8000-000000000015');
+insert into public.connections(user_a,user_b,state,requested_by,accepted_at) values
+ ('f6000000-0000-4000-8000-000000000002','f6000000-0000-4000-8000-000000000015','connected','f6000000-0000-4000-8000-000000000002',now());
+insert into public.attendees(plan_id,user_id,response) values (pg_temp.co2p(),'f6000000-0000-4000-8000-000000000014','accepted');
+set local role authenticated;
+select pg_temp.co2_as('01');
+select public.remove_guest(pg_temp.co2p(),pg_temp.co2('14'));
+reset role;
+select private.fold_web_account(pg_temp.co2('14'),pg_temp.co2('15'));
+do $$ begin
+ if (select string_agg(coalesce(right(user_id::text,2),'-')||'/'||coalesce(phone,'-'),',') from private.plan_removals) is distinct from '15/-' then
+  raise exception 'The fold did not move the record: %',
+   (select string_agg(coalesce(right(user_id::text,2),'-')||'/'||coalesce(phone,'-'),',') from private.plan_removals);
+ end if;
+end $$;
+set local role authenticated;
+select pg_temp.co2_as('02');
+select pg_temp.co2_refused($$select public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_user('15')))$$,'42501','Not allowed to bring people here');
+reset role;
+delete from auth.users where id=pg_temp.co2('14');
+update auth.users set phone='447700900614', phone_confirmed_at=now() where id=pg_temp.co2('15');
+set local role authenticated;
+select pg_temp.co2_refused($$select public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('14','A')))$$,'42501','Not allowed to bring people here');
+rollback;
+
+-- Slice 7e: the open link is the host's door (C19, CO-D6). Base (1,1). 13 is waiting for 01's answer: 02 may not
+-- bring 13, in the app or by number, and nothing is written. Once 01 approves, 13 is on the resbite ('already').
+begin;
+select pg_temp.co2_cast();
+set local role authenticated;
+select pg_temp.co2_as('02');
+select pg_temp.co2_refused($$select public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_user('13')))$$,'42501','Not allowed to bring people here');
+select pg_temp.co2_refused($$select public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('13','A')))$$,'42501','Not allowed to bring people here');
+reset role;
+do $$ begin
+ if exists(select 1 from public.attendees where plan_id=pg_temp.co2p() and user_id=pg_temp.co2('13'))
+ or exists(select 1 from private.phone_invitations where plan_id=pg_temp.co2p()) then
+  raise exception 'Bringing someone at the host''s door wrote something';
+ end if;
+end $$;
+set local role authenticated;
+select pg_temp.co2_as('01');
+select public.decide_join_request(pg_temp.co2p(),pg_temp.co2('13'),true);
+select pg_temp.co2_as('02');
+select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_user('13'))))='already',
+ '02 bringing 13 once approved');
+rollback;
+
+-- Slice 7f: a host revokes a guest's link that was answered. Base (1,1). 02 sends 10 a link, which 10 answers Going;
+-- 01 revokes it by its id: 10 leaves the resbite, the link is revoked, and both the number and the person are on record.
+begin;
+select pg_temp.co2_cast();
+set local role authenticated;
+select pg_temp.co2_as('02');
+select public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('10','A')));
+select pg_temp.co2_as('10');
+select public.answer_phone_invitation(repeat('A',22),'Lia L','accepted','2026-10');
+reset role;
+select id as co2_link from private.phone_invitations where plan_id=pg_temp.co2p() and phone=pg_temp.co2_phone('10') \gset
+set local role authenticated;
+select pg_temp.co2_as('01');
+select public.revoke_brought_invitation(pg_temp.co2p(),:'co2_link');
+reset role;
+do $$ begin
+ if exists(select 1 from public.attendees where plan_id=pg_temp.co2p() and user_id=pg_temp.co2('10')) then raise exception '10 is still on the resbite'; end if;
+ if (select revoked_at is null or code_hash is not null from private.phone_invitations where plan_id=pg_temp.co2p() and phone=pg_temp.co2_phone('10')) then
+  raise exception 'The answered link is still live';
+ end if;
+ if (select string_agg(coalesce(right(user_id::text,2),'-')||'/'||coalesce(phone,'-'),',' order by user_id,phone) from private.plan_removals)
+   is distinct from '10/-,-/447700900610' then
+  raise exception 'Revoking an answered link recorded: %',
+   (select string_agg(coalesce(right(user_id::text,2),'-')||'/'||coalesce(phone,'-'),',' order by user_id,phone) from private.plan_removals);
+ end if;
+end $$;
+rollback;
+
+-- Slice 7g: a host's in-app invitation clears the record. Base (1,1). 02 brings 06; 01 removes 06, then invites 06 in
+-- the app: the record is gone, and 06 is on the resbite with no bringer.
+begin;
+select pg_temp.co2_cast();
+set local role authenticated;
+select pg_temp.co2_as('02');
+select public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_user('06')));
+select pg_temp.co2_as('01');
+select public.remove_guest(pg_temp.co2p(),pg_temp.co2('06'));
+select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_user('06'))))='app','01 inviting 06 in the app');
+reset role;
+do $$ begin
+ if exists(select 1 from private.plan_removals) then raise exception 'The host''s invitation by user left the record'; end if;
+ if (select (brought_by,level) from public.attendees where plan_id=pg_temp.co2p() and user_id=pg_temp.co2('06')) is distinct from (null::uuid,1::smallint) then
+  raise exception '06, invited by the host, has a bringer';
+ end if;
 end $$;
 rollback;
 
@@ -584,7 +798,32 @@ do $$ begin
  if (select (brought_by,level) from private.phone_invitations where plan_id=pg_temp.co2p() and phone=pg_temp.co2_phone('09')) is distinct from (null::uuid,1::smallint) then
   raise exception 'The admin''s link changed';
  end if;
- perform pg_temp.co2_check(pg_temp.co2_used('12')=0,'The admin''s link counts against them');
+ -- After Can't go, 12 is no longer a host: a guest (level 1) whose link, sent as a host, uses none of their invites.
+ perform pg_temp.co2_check(pg_temp.co2_allowance(pg_temp.co2p(),'12')='1,0,1,1,false','12 after Can''t go: '||pg_temp.co2_allowance(pg_temp.co2p(),'12'));
+end $$;
+rollback;
+
+-- Slice 10b: an approved person is level 1 with no bringer (C19, CO-P13), and the approval clears their record
+-- (C18-Q4). Base (1,1). 01 removes 13 (not on the resbite: the record alone), then approves 13's request: the record
+-- goes. 08, brought by 03 and not yet answered (a row from before guests were kept from the host's door), asks too:
+-- approving makes that row level 1 with no bringer and keeps 08's reply.
+begin;
+select pg_temp.co2_cast();
+insert into public.attendees(plan_id,user_id,response,brought_by,level) values (pg_temp.co2p(),pg_temp.co2('08'),'pending',pg_temp.co2('03'),2);
+insert into private.join_requests(plan_id,user_id,response) values (pg_temp.co2p(),pg_temp.co2('08'),'maybe');
+set local role authenticated;
+select pg_temp.co2_as('01');
+select public.remove_guest(pg_temp.co2p(),pg_temp.co2('13'));
+select public.decide_join_request(pg_temp.co2p(),pg_temp.co2('13'),true);
+select public.decide_join_request(pg_temp.co2p(),pg_temp.co2('08'),true);
+reset role;
+do $$ begin
+ if exists(select 1 from private.plan_removals) then raise exception 'The approval left 13''s record'; end if;
+ if (select string_agg(right(user_id::text,2)||':'||response||':'||coalesce(right(brought_by::text,2),'-')||':'||level,',' order by user_id)
+   from public.attendees where plan_id=pg_temp.co2p() and user_id in (pg_temp.co2('08'),pg_temp.co2('13'))) is distinct from '08:pending:-:1,13:accepted:-:1' then
+  raise exception 'Approved rows: %', (select string_agg(right(user_id::text,2)||':'||response||':'||coalesce(right(brought_by::text,2),'-')||':'||level,',' order by user_id)
+   from public.attendees where plan_id=pg_temp.co2p() and user_id in (pg_temp.co2('08'),pg_temp.co2('13')));
+ end if;
 end $$;
 rollback;
 
@@ -743,6 +982,33 @@ select pg_temp.co2_check((select count(*) from jsonb_array_elements(public.plan_
  where e.value->>'ending'='10' and not e.value?'brought_by_name')=1,'A bringer being deleted is named: '||public.plan_brought_invitations(pg_temp.co2p())::text);
 rollback;
 
+-- Slice 13b: what a bringer may take back (C18-I1). set_plan_circle(2,1). 02 brings 06 and 07 in the app. 06 is then
+-- an admin, not yet answered (as the roll carries one): a host, whom 02 may not withdraw. Once 01 removes 02, 02 may
+-- withdraw nobody. Refusals take nobody off.
+begin;
+select pg_temp.co2_cast();
+set local role authenticated;
+select pg_temp.co2_as('01');
+select public.set_plan_circle(pg_temp.co2p(),2::smallint,1::smallint);
+select pg_temp.co2_as('02');
+select public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_user('06'),pg_temp.co2_user('07')));
+reset role;
+insert into public.plan_admins(plan_id,user_id,appointed_by) values (pg_temp.co2p(),pg_temp.co2('06'),pg_temp.co2('01'));
+set local role authenticated;
+select pg_temp.co2_refused($$select public.withdraw_brought_invitation(pg_temp.co2p(),pg_temp.co2('06'))$$,'42501','Not your invitation');
+select pg_temp.co2_as('01');
+select public.remove_guest(pg_temp.co2p(),pg_temp.co2('02'));
+select pg_temp.co2_as('02');
+select pg_temp.co2_refused($$select public.withdraw_brought_invitation(pg_temp.co2p(),pg_temp.co2('07'))$$,'42501','Not your invitation');
+reset role;
+do $$ begin
+ if (select count(*) from public.attendees where plan_id=pg_temp.co2p() and user_id in (pg_temp.co2('06'),pg_temp.co2('07')))<>2
+ or not exists(select 1 from public.plan_admins where plan_id=pg_temp.co2p() and user_id=pg_temp.co2('06')) then
+  raise exception 'A refused withdrawal took someone off';
+ end if;
+end $$;
+rollback;
+
 -- Slice 14: plan_bringers. set_plan_circle(1,2). 02 brings 06, who says Going and brings 09, who answers Going. Whoever
 -- may see the names gets each bringer's first name, by id, whether or not the bringer is still on the resbite;
 -- someone who may not see the names is refused; a bringer being deleted is left out.
@@ -781,7 +1047,8 @@ rollback;
 -- brings 11, who says Can't go, then 10, who says Going; 01 invites 06 and removes them. 10 and 11 use the app
 -- afterwards (the roll carries only people who use the app). It ends; the roll copies the circle and carries 10 and 11
 -- as not answered, brought by 02 at level 2, so 02 has used two of one invite. 06's removal is the series': 02, Going on
--- the next occurrence, may not bring them (not 'No invites left': the removal is checked first).
+-- the next occurrence, may not bring them (not 'No invites left': the removal is checked first), nor withdraw 10,
+-- whom the roll carried.
 begin;
 select pg_temp.co2_cast();
 insert into public.plans(id,owner_id,title,starts_at,ends_at,time_zone,place_label,categories,repeat_weeks,bring_invites,bring_levels) values
@@ -822,6 +1089,12 @@ select pg_temp.co2_as('02');
 select public.respond(current_setting('co2.next')::uuid,'accepted',1);
 select pg_temp.co2_refused($$select public.invite_contacts(current_setting('co2.next')::uuid,jsonb_build_array(pg_temp.co2_user('06')))$$,
  '42501','Not allowed to bring people here');
+-- 10 was on the occurrence before: the roll carried them, so only a host takes them off (C18-I1).
+select pg_temp.co2_refused($$select public.withdraw_brought_invitation(current_setting('co2.next')::uuid,pg_temp.co2('10'))$$,
+ '42501','Not your invitation');
+reset role;
+select pg_temp.co2_check(exists(select 1 from public.attendees where plan_id=current_setting('co2.next')::uuid and user_id=pg_temp.co2('10')),
+ '02 withdrew someone the roll carried');
 rollback;
 
 -- Slice 16: deletion (local only: the deletion lifecycle is not on the hosted project). set_plan_circle(2,2). 02
