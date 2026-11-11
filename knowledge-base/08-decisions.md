@@ -556,3 +556,36 @@ Creating a resbite ([spec](../docs/superpowers/specs/2026-10-28-creating-a-resbi
 - **CR-P24.** The next occurrence carries everyone invited in the app (except people removed) and the admins, with replies empty; link-only invitees are not carried.
 - **CR-P25.** Edit changes this occurrence and the next is copied from it; Cancel on a repeating resbite offers “Cancel just this one” and “Cancel this and stop repeating”.
 - **CR-P26.** Repeats are stored as repeat_weeks, series_id and repeats_from, rolled by a private function run by pg_cron every five minutes from an owner-run script; mutes are keyed by series.
+
+## Connections (CO), 10 November 2026
+
+Connections ([spec](../docs/superpowers/specs/2026-11-10-connections-and-circles-design.md)) are built in plan 1 (connections; branch `co1-connections`, not rolled out); the circle of trust is plan 2. One line each; the spec holds the reasons.
+
+**Decisions.**
+- **CO-D1.** Two kinds of people to invite: phone contacts with a Resbite account, as today, and Resbite connections.
+- **CO-D2.** A connection is earned, not searched: no place to browse or look people up; you connect only with someone invited to, or at, the same resbite.
+- **CO-D3.** The other person has to accept; until then nothing changes for either.
+- **CO-D4.** Circles of trust: the host sets how many each person may bring (invites) and how far trust travels (levels). Plan 2.
+- **CO-D5.** People brought inside the circle are in without approval; the host can still remove them. Plan 2.
+- **CO-D6.** The open link is the host's door: everyone who answers through it waits for approval, connections included (overrides the IN brief).
+- **CO-D7.** Real accounts only: no unnamed plus-ones; they stay on the for-later list.
+- **CO-D8.** The three mockups of 10 November are the design of the screens (CO-01 to CO-07).
+
+**Calls made while writing the spec.**
+- **CO-P1.** Connect lives on the people list: every row gets the three dots for everyone; a guest's sheet holds the connection action only.
+- **CO-P2.** Pedro may ask Ana from a resbite when he can see names there and she is its owner, an admin, or has answered.
+- **CO-P3.** A pair is none, requested or connected; the unit is the series; "Not now" is remembered and invisible to the requester, who keeps seeing "Request sent".
+- **CO-P4.** A connection lets each appear under "Your connections" on the other's Invite people, and read each other's name and avatar; nothing else.
+- **CO-P5.** Pushes: "Pedro wants to connect" and "You and Ana are now connected"; not now, cancelling and removing are silent; a tap opens Connections.
+- **CO-P6.** The Connections screen is a new Profile row above "People & groups" (renamed "People lists"): Requests (newest first), then Connected (alphabetical) with "Met at <title>".
+- **CO-P14.** Until blocking exists, Remove connection is the way out, and a removed person cannot ask again from the same series.
+
+**Rulings made while building** (they change what the spec describes).
+- **CO-R1.** Refusals are read pair-wide, not per series, and stay invisible to the refused side (the sheet keeps "Request sent · Cancel request"); acceptance clears all refusals between the pair, and a refusal on another series is kept when a real request is sent there (one chance per series).
+- **CO-R2.** A refuser who asks back connects at once; a hidden refusal (cancelled by the refused side, or made by a removal) is not a standing request.
+- **CO-R3.** Removing a connection records a hidden refusal for the removed side (the build of CO-P14).
+- **CO-R4.** `public.connections` has no direct reads (RLS on, no policy); the app reads through `my_connections` (requests and connected only, no `sent`) and `plan_connection_states`.
+- **CO-R5.** The people list shows the owner first under Going, badged "Hosting", with the connection actions, and its group titles count that row; the event page's people row still counts guests only.
+- **CO-R6.** The Profile row and the People screen are both called "People lists".
+- **CO-R7.** A connection invite item (`{user}`) needs an eligible account not pending deletion, else 42501 "Not a connection".
+- **CO-R8.** The connection notices' dedupe keys carry the row's exact timestamp, so a cancelled request sent again still pushes.

@@ -4,6 +4,8 @@
 
 **Creating a resbite, 28 October 2026:** the database for creating a resbite (hosts and admins, the end as the boundary, To be decided, repeating resbites, mutes) is built locally as `supabase/migrations/20261031120000_creating_a_resbite.sql`; nothing is applied to the hosted project, Vercel or TestFlight. The owner's approvals, the file's sha256 and the rollback are in [`qa/creating-a-resbite-2026-10-31/README.md`](../qa/creating-a-resbite-2026-10-31/README.md).
 
+**Connections, 10 November 2026:** plan 1 of the connections design (request and accept from a shared resbite, the Connections screen, Connect/Cancel/Accept on the people list, "Your connections" on Invite people, the two pushes) is built on branch `co1-connections` as `supabase/migrations/20261110120000_connections.sql` and is **not rolled out**: nothing is applied to the hosted project, no function is deployed, no TestFlight build is made. The rollout needs the owner's approval for the snapshots, the migration (by file name and sha256), the `deliver-notifications` redeploy and a TestFlight build, then the device checks; the steps, hashes and rollback are in [`qa/connections-2026-11-10/README.md`](../qa/connections-2026-11-10/README.md). The circle of trust (plan 2) is not started.
+
 This document records the mobile foundation and successive implementation milestones. It is **not yet an accepted standalone two-person test release**. The current development target is the [expanded private beta](milestones/2026-09-23-expanded-private-beta.md), selected on 23 September; older scope/access statements below are historical and superseded by dated updates.
 
 ## Created and verified
