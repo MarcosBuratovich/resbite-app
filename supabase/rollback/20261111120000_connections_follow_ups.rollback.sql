@@ -17,16 +17,35 @@
 -- they are back, is dropped. The detail check comes back from 20261031120000_creating_a_resbite.sql.
 -- Kept: everything else, the occurrences the roll already created among it, with every guest it carried.
 -- Builds: no app build calls anything this migration made. The sender words a request notice with no detail as it did
--- before the migration; an app build that knows the four contexts gets only 'going' and 'met'.
--- Order: run it first of the rollbacks, before the connections one
--- (supabase/rollback/20261110120000_connections.rollback.sql), which drops request_connection, and the creating-a-resbite
--- one (supabase/rollback/20261031120000_creating_a_resbite.rollback.sql), which drops the roll: this file would bring
--- either back. The guard below stops this file when either has already run; it changes nothing.
+-- before the migration; an app build that knows the five contexts gets only 'going' and 'met'.
+-- Order: run it after the rollbacks of every later migration, and before those of earlier ones. A later migration that
+-- redefines the roll, request_connection or my_connections has its own rollback, which puts this migration's body
+-- back: run before it, this file would replace the later body with one two migrations old. Of the earlier ones, the
+-- connections rollback (supabase/rollback/20261110120000_connections.rollback.sql) drops request_connection and
+-- my_connections, and the creating-a-resbite one (supabase/rollback/20261031120000_creating_a_resbite.rollback.sql)
+-- drops the roll: run after either, this file would bring them back. The two guards below stop this file in both
+-- cases; a refusal changes nothing.
 
+-- An earlier rollback has already run: a function this file restores is gone.
 do $$ begin
  if to_regprocedure('private.request_connection(uuid,uuid)') is null or to_regprocedure('private.roll_repeating_plans()') is null then
   raise exception 'Run the connections follow-ups rollback before the connections and creating-a-resbite rollbacks';
  end if;
+end $$;
+
+-- A later migration has redefined a function this file restores: its body (pg_proc.prosrc) is no longer the one
+-- 20261111120000_connections_follow_ups.sql gave it, whose md5 is recorded here. They change with that file's bodies.
+do $$ declare f record; begin
+ for f in select * from (values
+   ('private.roll_repeating_plans()','854685e04658fcaca5e7820afee4f082'),
+   ('private.request_connection(uuid,uuid)','042679df9553e48a5a3c4206ea8ca5a9'),
+   ('private.my_connections()','13d79d8fe9738d8268a4643a72be00d7')) v(signature,body)
+ loop
+  if (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p where p.oid=pg_catalog.to_regprocedure(f.signature)) is distinct from f.body then
+   raise exception '% is not the connections follow-ups body: run the rollbacks of every later migration first', f.signature
+    using errcode='42501';
+  end if;
+ end loop;
 end $$;
 
 -- Nothing writes the outbox until this commits.

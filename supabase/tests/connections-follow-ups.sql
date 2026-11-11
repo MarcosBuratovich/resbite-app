@@ -5,23 +5,26 @@
 -- ids with the prefix f5, as h1 is not hexadecimal); one rolled-back block per slice.
 
 -- Slice 1: the roll (CH-P20). Users f5…: 01 owner, 02 a guest who was Going and said Can't go (stored 'withdrawn'), 03 a
--- guest who said Can't go (declined), 04 a Going guest, 05 a Going guest the owner made an admin, who then said Can't go.
--- All five have used the app. Plan f51…01 'Board game night' is 01's and weekly; it ended an hour ago.
+-- guest who said Can't go (declined), 04 a Going guest, 05 a Going guest the owner made an admin, who then said Can't go,
+-- 06 a Going guest the owner then removed. All six have used the app. Plan f51…01 'Board game night' is 01's and
+-- weekly; it ended an hour ago.
 begin;
 insert into auth.users(id,email,email_confirmed_at) values
  ('f5000000-0000-4000-8000-000000000001','h1-owner@resbite-test.invalid',now()),
  ('f5000000-0000-4000-8000-000000000002','h1-going-then-cant@resbite-test.invalid',now()),
  ('f5000000-0000-4000-8000-000000000003','h1-cant-go@resbite-test.invalid',now()),
  ('f5000000-0000-4000-8000-000000000004','h1-going@resbite-test.invalid',now()),
- ('f5000000-0000-4000-8000-000000000005','h1-admin@resbite-test.invalid',now());
+ ('f5000000-0000-4000-8000-000000000005','h1-admin@resbite-test.invalid',now()),
+ ('f5000000-0000-4000-8000-000000000006','h1-removed@resbite-test.invalid',now());
 insert into private.tester_roster(email) values ('h1-owner@resbite-test.invalid'),('h1-going-then-cant@resbite-test.invalid'),
- ('h1-cant-go@resbite-test.invalid'),('h1-going@resbite-test.invalid'),('h1-admin@resbite-test.invalid');
+ ('h1-cant-go@resbite-test.invalid'),('h1-going@resbite-test.invalid'),('h1-admin@resbite-test.invalid'),
+ ('h1-removed@resbite-test.invalid');
 insert into public.profiles(id,display_name) values
  ('f5000000-0000-4000-8000-000000000001','Owner'),('f5000000-0000-4000-8000-000000000002','Guest A'),
  ('f5000000-0000-4000-8000-000000000003','Guest B'),('f5000000-0000-4000-8000-000000000004','Guest C'),
- ('f5000000-0000-4000-8000-000000000005','Admin D');
+ ('f5000000-0000-4000-8000-000000000005','Admin D'),('f5000000-0000-4000-8000-000000000006','Guest E');
 insert into private.app_sessions(user_id) select ('f5000000-0000-4000-8000-0000000000'||n)::uuid
- from unnest(array['01','02','03','04','05']) n;
+ from unnest(array['01','02','03','04','05','06']) n;
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"f5000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 select public.create_plan_v4('f5100000-0000-4000-8000-000000000001','Board game night','',array['community'],null,
@@ -31,11 +34,13 @@ insert into public.attendees(plan_id,user_id,response) values
  ('f5100000-0000-4000-8000-000000000001','f5000000-0000-4000-8000-000000000002','accepted'),
  ('f5100000-0000-4000-8000-000000000001','f5000000-0000-4000-8000-000000000003','declined'),
  ('f5100000-0000-4000-8000-000000000001','f5000000-0000-4000-8000-000000000004','accepted'),
- ('f5100000-0000-4000-8000-000000000001','f5000000-0000-4000-8000-000000000005','accepted');
--- 01 makes 05 an admin. Then 02 and 05, both Going, say Can't go: the app stores it as 'withdrawn', and it ends 05's
--- admin role (CR-P15).
+ ('f5100000-0000-4000-8000-000000000001','f5000000-0000-4000-8000-000000000005','accepted'),
+ ('f5100000-0000-4000-8000-000000000001','f5000000-0000-4000-8000-000000000006','accepted');
+-- 01 makes 05 an admin and removes 06, whose row goes. Then 02 and 05, both Going, say Can't go: the app stores it as
+-- 'withdrawn', and it ends 05's admin role (CR-P15).
 set local role authenticated;
 select public.appoint_admin('f5100000-0000-4000-8000-000000000001','f5000000-0000-4000-8000-000000000005');
+select public.remove_guest('f5100000-0000-4000-8000-000000000001','f5000000-0000-4000-8000-000000000006');
 select set_config('request.jwt.claims','{"sub":"f5000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 select public.respond('f5100000-0000-4000-8000-000000000001','withdrawn',1);
 select set_config('request.jwt.claims','{"sub":"f5000000-0000-4000-8000-000000000005","role":"authenticated"}',true);
@@ -53,13 +58,18 @@ end $$;
 update public.plans set starts_at=now()-interval '4 hours', ends_at=now()-interval '1 hour' where id='f5100000-0000-4000-8000-000000000001';
 
 -- The roll, as the database runs it: every guest is carried, as not answered, and invited again with the "is on again"
--- notice ('invited', detail 'again'); 05 as a guest, not as an admin.
+-- notice ('invited', detail 'again'); 05 as a guest, not as an admin. 06, removed, has no row to carry: they are not
+-- on the next occurrence and are not invited to it.
 do $$ declare n public.plans; begin
  if private.roll_repeating_plans()<>1 then raise exception 'Expected exactly one plan rolled'; end if;
  select * into n from public.plans where repeats_from='f5100000-0000-4000-8000-000000000001';
  if not found then raise exception 'No next occurrence'; end if;
  if not exists(select 1 from public.attendees where plan_id=n.id and user_id='f5000000-0000-4000-8000-000000000002') then
   raise exception 'The guest who said Can''t go after Going was not carried';
+ end if;
+ if exists(select 1 from public.attendees where plan_id=n.id and user_id='f5000000-0000-4000-8000-000000000006')
+ or exists(select 1 from private.notification_outbox where plan_id=n.id and recipient_id='f5000000-0000-4000-8000-000000000006') then
+  raise exception 'The removed guest was carried, or invited again';
  end if;
  if (select array_agg(user_id order by user_id) from public.attendees where plan_id=n.id) is distinct from array[
    'f5000000-0000-4000-8000-000000000002','f5000000-0000-4000-8000-000000000003','f5000000-0000-4000-8000-000000000004',
@@ -265,10 +275,11 @@ do $$ declare r text; begin
  end loop;
 end $$;
 
--- Not on the latest occurrence (Ruling 7): the card reads the series' latest occurrence the person asked may read, and
--- the requester may have no place on it (not carried, or removed): then it is 'met', never 'invited'. 01's 'Supper'
--- f51…06 has 03 and 08 Going; its next occurrence f51…07 has 08 only. 03 asks 08 from the first: the push says
--- 'going', and 08's card, on the next one, says 'met'.
+-- Not on the latest occurrence (Rulings 7 and 14): the card reads the series' latest occurrence the person asked may
+-- read, and the requester may have no place on it (not carried, or removed): then pair_standing has nothing to say
+-- (null) and the card is 'from', never 'invited' or 'met'. 01's 'Supper' f51…06 has 03 and 08 Going; its next
+-- occurrence f51…07 has 08 only. 03 asks 08 from the first: the push says 'going', and 08's card, on the next one,
+-- says 'from'.
 insert into public.plans(id,owner_id,title,starts_at,ends_at,time_zone,place_label,categories) values
  ('f5100000-0000-4000-8000-000000000006','f5000000-0000-4000-8000-000000000001','Supper',
   '2099-06-08 19:00+00','2099-06-08 22:00+00','UTC','Kitchen',array['community']);
@@ -289,7 +300,7 @@ end $$;
 select set_config('request.jwt.claims','{"sub":"f5000000-0000-4000-8000-000000000008","role":"authenticated"}',true);
 do $$ begin
  if (select string_agg(right(r->>'user_id',2)||':'||(r->>'title')||':'||(r->>'context'),',' order by r->>'user_id')
-   from jsonb_array_elements(public.my_connections()->'requests') r) is distinct from '03:Supper:met' then
+   from jsonb_array_elements(public.my_connections()->'requests') r) is distinct from '03:Supper:from' then
   raise exception 'The card of 08, asked by 03 who is not on the latest occurrence, is wrong: %', public.my_connections()->'requests';
  end if;
 end $$;
@@ -299,25 +310,30 @@ do $$ begin
    and actor_id='f5000000-0000-4000-8000-000000000003' and recipient_id='f5000000-0000-4000-8000-000000000008') is distinct from 'going' then
   raise exception 'Two Going guests of the first Supper is not going';
  end if;
- -- Either way round, and on an ended or cancelled occurrence too: no place is 'met'.
- if private.pair_standing('f5100000-0000-4000-8000-000000000007','f5000000-0000-4000-8000-000000000003','f5000000-0000-4000-8000-000000000008') is distinct from 'met'
- or private.pair_standing('f5100000-0000-4000-8000-000000000007','f5000000-0000-4000-8000-000000000008','f5000000-0000-4000-8000-000000000003') is distinct from 'met' then
-  raise exception 'Someone with no place on the occurrence did not give met';
+ -- Either way round, and on an ended or cancelled occurrence too: no place is null.
+ if private.pair_standing('f5100000-0000-4000-8000-000000000007','f5000000-0000-4000-8000-000000000003','f5000000-0000-4000-8000-000000000008') is not null
+ or private.pair_standing('f5100000-0000-4000-8000-000000000007','f5000000-0000-4000-8000-000000000008','f5000000-0000-4000-8000-000000000003') is not null then
+  raise exception 'Someone with no place on the occurrence gave a standing';
  end if;
  update public.plans set status='cancelled' where id='f5100000-0000-4000-8000-000000000007';
- if private.pair_standing('f5100000-0000-4000-8000-000000000007','f5000000-0000-4000-8000-000000000003','f5000000-0000-4000-8000-000000000008') is distinct from 'met' then
-  raise exception 'Someone with no place on a cancelled occurrence did not give met';
+ if private.pair_standing('f5100000-0000-4000-8000-000000000007','f5000000-0000-4000-8000-000000000003','f5000000-0000-4000-8000-000000000008') is not null then
+  raise exception 'Someone with no place on a cancelled occurrence gave a standing';
  end if;
  update public.plans set starts_at=now()-interval '4 hours', ends_at=now()-interval '1 hour' where id='f5100000-0000-4000-8000-000000000007';
- if private.pair_standing('f5100000-0000-4000-8000-000000000007','f5000000-0000-4000-8000-000000000003','f5000000-0000-4000-8000-000000000008') is distinct from 'met' then
-  raise exception 'Someone with no place on an ended, cancelled occurrence did not give met';
+ if private.pair_standing('f5100000-0000-4000-8000-000000000007','f5000000-0000-4000-8000-000000000003','f5000000-0000-4000-8000-000000000008') is not null then
+  raise exception 'Someone with no place on an ended, cancelled occurrence gave a standing';
+ end if;
+ -- A resbite that does not exist has no standing either, whoever is asked about.
+ if private.pair_standing('f5100000-0000-4000-8000-0000000000ff','f5000000-0000-4000-8000-000000000003','f5000000-0000-4000-8000-000000000008') is not null
+ or private.pair_standing(null,'f5000000-0000-4000-8000-000000000003','f5000000-0000-4000-8000-000000000008') is not null then
+  raise exception 'An unknown resbite gave a standing';
  end if;
 end $$;
 
--- Not answered on the latest occurrence (Ruling 11): someone who has not answered does not see who else is on a
--- resbite (UX-P5, private.can_see_guests), so their card does not say either: it is 'met', whatever the requester's
+-- Not answered on the latest occurrence (Rulings 11 and 14): someone who has not answered does not see who else is on
+-- a resbite (UX-P5, private.can_see_guests), so their card does not say either: it is 'from', whatever the requester's
 -- place there. 01's 'Walk' f51…08 has 06 and 08 Going; its next occurrence f51…09 has 08 Going and 06 not answered, as
--- the roll carries a guest. 08 asks 06 from the first: 06's card, on the next one, says 'met'; once 06 answers Going
+-- the roll carries a guest. 08 asks 06 from the first: 06's card, on the next one, says 'from'; once 06 answers Going
 -- there, it says how the two stand, 'going'.
 insert into public.plans(id,owner_id,title,starts_at,ends_at,time_zone,place_label,categories) values
  ('f5100000-0000-4000-8000-000000000008','f5000000-0000-4000-8000-000000000001','Walk',
@@ -341,7 +357,7 @@ select set_config('request.jwt.claims','{"sub":"f5000000-0000-4000-8000-00000000
 do $$ begin
  if (select string_agg(right(r->>'user_id',2)||':'||(r->>'title')||':'||(r->>'context'),',' order by r->>'user_id')
    from jsonb_array_elements(public.my_connections()->'requests') r where r->>'user_id'='f5000000-0000-4000-8000-000000000008')
-   is distinct from '08:Walk:met' then
+   is distinct from '08:Walk:from' then
   raise exception 'The card of 06, who has not answered on the latest occurrence, is wrong: %', public.my_connections()->'requests';
  end if;
 end $$;

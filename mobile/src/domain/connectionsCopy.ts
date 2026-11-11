@@ -17,6 +17,8 @@ export const CONNECTIONS_COPY = {
   bothAt: (title: string) => `You were both at ${title}`,
   bothInvited: (title: string) => `You're both invited to ${title}`,
   wereBothInvited: (title: string) => `You were both invited to ${title}`,
+  /** A request's resbite and no more, when the server can't say how the two stand on it. */
+  from: (title: string) => `From ${title}`,
   connect: "Connect on Resbite",
   connectHint: (name: string) => `${name} decides. Then you can invite each other in the app.`,
   requestSent: "Request sent",
@@ -50,7 +52,8 @@ export const CONNECTIONS_COPY = {
 
 /**
  * A request card's line: how the two stand on the resbite its request names, as the request's push says ('going',
- * 'invited', 'were_invited'; 'met' or anything else reads as met there). With no resbite left to name, Resbite.
+ * 'invited', 'were_invited'; 'met' or anything else reads as met there). 'from' names the resbite only: the server
+ * can't say how the two stand on it. With no resbite left to name, Resbite.
  */
 export function requestLine(context: string | undefined, title: string | null): string {
   const C = CONNECTIONS_COPY;
@@ -58,5 +61,6 @@ export function requestLine(context: string | undefined, title: string | null): 
   if (context === "going") return C.bothGoing(title);
   if (context === "invited") return C.bothInvited(title);
   if (context === "were_invited") return C.wereBothInvited(title);
+  if (context === "from") return C.from(title);
   return C.bothAt(title);
 }

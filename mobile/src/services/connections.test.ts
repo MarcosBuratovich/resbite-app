@@ -65,7 +65,7 @@ test("mine sends my_connections and maps the server's rows", async () => {
   assert.equal("context" in mine.connected[0], false);
 });
 
-test("mine keeps a request's four contexts and reads any other as met", async () => {
+test("mine keeps a request's five contexts and reads any other as met", async () => {
   const row = (user_id: string, context: string) => ({
     user_id,
     name: user_id,
@@ -76,12 +76,19 @@ test("mine keeps a request's four contexts and reads any other as met", async ()
     context,
   });
   const { gw } = gateway({
-    requests: [row("a", "going"), row("b", "invited"), row("c", "met"), row("d", "were_invited"), row("e", "soon")],
+    requests: [
+      row("a", "going"),
+      row("b", "invited"),
+      row("c", "met"),
+      row("d", "were_invited"),
+      row("e", "from"),
+      row("f", "soon"),
+    ],
     connected: [],
   });
   assert.deepEqual(
     (await gw.mine()).requests.map((p) => p.context),
-    ["going", "invited", "met", "were_invited", "met"],
+    ["going", "invited", "met", "were_invited", "from", "met"],
   );
 });
 

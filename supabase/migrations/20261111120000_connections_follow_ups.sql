@@ -100,14 +100,14 @@ alter table private.notification_outbox add constraint notification_outbox_detai
  or (kind='connection_request' and detail in ('going','invited','met','were_invited')));
 
 -- How two people stand on a resbite: by the rule above when each has a place on it (its owner, or an attendee row
--- whatever the reply), and 'met' when either has none. The card reads a series' latest occurrence, which the requester
--- may not be on (not carried to it, or removed): there it says neither going nor invited, as before. On a request's own
--- resbite both normally have one: the person asked is on it, and the asker sees its names. Null when there is no such
--- resbite. The database's own: no API role may call it (its two callers, request_connection and my_connections, are
+-- whatever the reply). Null when either has none, and when there is no such resbite: it then has nothing true to say.
+-- The card reads a series' latest occurrence, which the requester may not be on (not carried to it, or removed): there
+-- the card names the resbite only (section 3). On a request's own resbite both have a place (request_connection says
+-- why). The database's own: no API role may call it (its two callers, request_connection and my_connections, are
 -- definers).
 create function private.pair_standing(p_plan uuid, p_a uuid, p_b uuid) returns text language sql stable security definer set search_path = '' as $$
  select case when (select count(*) from (values (p_a),(p_b)) u(id)
-    where u.id=p.owner_id or exists(select 1 from public.attendees a where a.plan_id=p.id and a.user_id=u.id))<2 then 'met'
+    where u.id=p.owner_id or exists(select 1 from public.attendees a where a.plan_id=p.id and a.user_id=u.id))<2 then null
   when p.status='active' and (select count(*) from (values (p_a),(p_b)) u(id)
     where u.id=p.owner_id or exists(select 1 from public.attendees a where a.plan_id=p.id and a.user_id=u.id
      and a.response in ('accepted','maybe')))=2
@@ -121,6 +121,12 @@ revoke all on function private.pair_standing(uuid,uuid,uuid) from public, anon, 
 -- 20261110120000_connections body, verbatim (its comments name that file's sections): the pair's lock, the refusals,
 -- and the notice's key (the pair, the series and who asked: a request sent again queues nothing, and its first notice,
 -- with its first detail, stands for it) and stamp. Its grants and its public wrapper are kept.
+-- Both have a place on p_plan when the notice is queued, so pair_standing gives one of its four values there. The
+-- person asked is its owner or has a guest row (the 'Not on this resbite' refusal). The caller passed can_see_guests:
+-- its owner, a guest who has answered, or an admin, and an admin has a guest row (only a Going guest is appointed, the
+-- roll copies an admin only with their row, and removing a guest ends the role). Were it ever null, the notice would
+-- be queued with no detail, which the check above admits, and the sender would word it by the start time, as it does
+-- a notice from before this migration; nothing would fail.
 create or replace function private.request_connection(p_user uuid, p_plan uuid) returns text language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester(); v_a uuid; v_b uuid; v_series uuid; v_row public.connections; v_at timestamptz;
 begin
@@ -173,28 +179,31 @@ end $$;
 -- 3. The Connections card says the same (Ruling 6, CO-P6)
 -- A request's context on the card was 'going' or 'met', a host counting as going whatever their reply: "You're both
 -- going" for an admin who had not answered, "Met at" for a resbite one of them skipped. It is now how the two stand on
--- the occurrence the card already reads, by the push's rule ('met' when either of the two is not on it). Someone who
--- may not see that occurrence's guests (private.can_see_guests: they have not answered it, and are not a host) reads
--- 'met': the line would otherwise tell them whether the person asking is on its list, which is withheld until they
--- answer (UX-P5).
+-- the occurrence the card already reads, by the push's rule. Where that rule has nothing to say, the context is
+-- 'from', and the card names the resbite only ("From <title>"), which stays true whatever happened since: when either
+-- of the two is not on that occurrence, and for someone who may not see its guests (private.can_see_guests: they have
+-- not answered it, and are not a host), whom any other line would tell whether the person asking is on its list,
+-- withheld until they answer (UX-P5).
 
 -- The caller's Connections (CO-P6): the requests to them, newest first, and their connections, by name, with the other
 -- person's name and photo and the resbite they met at. Requests the caller sent are not listed: a refused one would
 -- vanish from such a list (CO-P3). title is that series' latest occurrence the caller may read (can_read_plan: its owner
 -- or on its guest list; CO-R9), null when the series is gone or the caller may read none of it, so a guest removed or
--- not carried to a later occurrence never reads its title (the app shows "Met on Resbite"). context, on a request, is
--- how the two stand on that occurrence (private.pair_standing: 'going', 'invited', 'met' or 'were_invited'; 'met' when
--- either is not on it). It is 'met' too when there is no such occurrence, and when the caller may not see its guests
--- (private.can_see_guests, which reads the caller from the request as this function does: a guest who has not answered
--- it), so the card never says whether the person asking is on a list the caller may not read. Otherwise the
--- 20261110120000_connections body, verbatim; its grants and its public wrapper are kept.
+-- not carried to a later occurrence never reads its title (the app shows "Met on Resbite"). context is worked out for
+-- a request only (a connection's row carries none): how the two stand on that occurrence (private.pair_standing:
+-- 'going', 'invited', 'met' or 'were_invited'). It is 'from' when pair_standing has nothing to say (either is not on
+-- it), when there is no such occurrence, and when the caller may not see its guests (private.can_see_guests, which
+-- reads the caller from the request as this function does: a guest who has not answered it), so the card never says
+-- whether the person asking is on a list the caller may not read. Otherwise the 20261110120000_connections body,
+-- verbatim; its grants and its public wrapper are kept.
 create or replace function private.my_connections() returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester();
 begin
  return (with people as (
    select o.other, c.state, c.requested_by, c.series_id, c.created_at, pr.display_name as name, pr.avatar_path, pr.avatar_revision,
     lp.title,
-    case when lp.id is null or not private.can_see_guests(lp.id) then 'met' else private.pair_standing(lp.id,v_uid,o.other) end as context
+    case when c.state='requested' then coalesce(case when lp.id is not null and private.can_see_guests(lp.id)
+     then private.pair_standing(lp.id,v_uid,o.other) end,'from') end as context
    from public.connections c
    cross join lateral (select case when c.user_a=v_uid then c.user_b else c.user_a end as other) o
    join public.profiles pr on pr.id=o.other

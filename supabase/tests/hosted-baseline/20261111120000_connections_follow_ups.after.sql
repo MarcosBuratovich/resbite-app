@@ -1,6 +1,7 @@
 -- Rehearsal checks for 20261111120000_connections_follow_ups (hosted-baseline mode only).
 -- 1. The apply: each redefined function is the one .before.sql recorded but for its change (the roll's withdrawn filter
--- goes; request_connection's notice and my_connections' context come from pair_standing); pair_standing is a stable
+-- goes; request_connection's notice and my_connections' context, worked out for a request only, come from
+-- pair_standing); pair_standing is a stable
 -- definer no API role may call; the detail check keeps every earlier value and takes the four for a request only; the
 -- three keep their grants (no API role may run the roll; signed-in accounts may ask and read); the apply wrote no
 -- rows.
@@ -25,7 +26,8 @@ $q$    case when lp.status='active' and private.plan_end(lp.starts_at,lp.ends_at
      and (select bool_and(private.is_host(lp.id,u.id) or exists(select 1 from public.attendees a
        where a.plan_id=lp.id and a.user_id=u.id and a.response in ('accepted','maybe'))) from (values (v_uid),(o.other)) u(id))
     then 'going' else 'met' end as context$q$,
-$q$    case when lp.id is null or not private.can_see_guests(lp.id) then 'met' else private.pair_standing(lp.id,v_uid,o.other) end as context$q$) then
+$q$    case when c.state='requested' then coalesce(case when lp.id is not null and private.can_see_guests(lp.id)
+     then private.pair_standing(lp.id,v_uid,o.other) end,'from') end as context$q$) then
   raise exception 'my_connections changed more, or less, than its context';
  end if;
  if pg_catalog.to_regprocedure('private.pair_standing(uuid,uuid,uuid)') is null
@@ -59,10 +61,13 @@ $q$    case when lp.id is null or not private.can_see_guests(lp.id) then 'met' e
  end if;
 end $$;
 -- 2. The rollback, rehearsed and undone. Seed what it changes (two request notices with a detail) and what it leaves
--- (one with none, from before the migration, and a repeat's invitation), try its guard (it refuses once the connections
--- rollback or the creating-a-resbite rollback has run; each function, renamed, stands in), then run it: every row
--- stays, the two notices with a detail now without one; the detail check and the three functions, my_connections with
--- plan 1's body among them, with their grants, are the ones .before.sql recorded; pair_standing is gone.
+-- (one with none, from before the migration, and a repeat's invitation), try its two guards, then run it. The first
+-- guard refuses once the connections rollback or the creating-a-resbite rollback has run (each function, renamed,
+-- stands in). The second refuses, with 42501, when a later migration has redefined the roll, request_connection or
+-- my_connections (each in turn, given one more comment line, stands in; the refusal undoes the stand-in). With the
+-- three as the migration left them it runs: every row stays, the two notices with a detail now without one; the detail
+-- check and the three functions, my_connections with plan 1's body among them, with their grants, are the ones
+-- .before.sql recorded; pair_standing is gone.
 begin;
 insert into auth.users(id,email,email_confirmed_at) values
  ('cf000000-0000-4000-8000-000000000001','follow-ups-rehearsal-a@resbite-test.invalid',now()),
@@ -94,6 +99,18 @@ do $$ declare f text; begin
    if sqlerrm is distinct from 'Run the connections follow-ups rollback before the connections and creating-a-resbite rollbacks' then raise; end if;
   end;
   execute 'alter function private.cf_rehearsal_renamed'||substring(f from '\(.*\)$')||' rename to '||substring(f from '^[a-z_]+');
+ end loop;
+ foreach f in array array['roll_repeating_plans()','request_connection(uuid,uuid)','my_connections()'] loop
+  begin
+   execute replace(pg_catalog.pg_get_functiondef(('private.'||f)::regprocedure),E'\nbegin\n',E'\nbegin\n -- A later migration''s body.\n');
+   execute (select rollback from cf_rehearsal_scripts);
+   raise exception 'The follow-ups rollback ran with private.% redefined since the migration', f;
+  exception when insufficient_privilege then
+   if sqlerrm is distinct from 'private.'||f||' is not the connections follow-ups body: run the rollbacks of every later migration first' then raise; end if;
+  end;
+  if pg_catalog.pg_get_functiondef(('private.'||f)::regprocedure) like '%A later migration''s body.%' then
+   raise exception 'The refusal left the stand-in for private.%', f;
+  end if;
  end loop;
 end $$;
 \ir ../../rollback/20261111120000_connections_follow_ups.rollback.sql

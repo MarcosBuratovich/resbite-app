@@ -15,14 +15,17 @@
 - **A request's notice says how the two stand (CO-P5).**
   - A new helper, `private.pair_standing(plan, a, b)`, returns one of four values. No API role may call it.
   - A person counts as going when they are the resbite's owner, or their own reply is Going or Maybe. An admin counts by their own reply alone.
-  - It returns `met` when either person has no place on the resbite: neither its owner nor on its guest list, whatever the reply.
+  - It returns null when either person has no place on the resbite: neither its owner nor on its guest list, whatever the reply.
+  - A request's own resbite never gives null: both people have a place on it. If it ever did, the notice would have no detail and the old wording, and nothing would fail.
   - `private.request_connection` stores the value as the notice's `detail`. The rest of its body is the connections body, verbatim.
   - The notice's key is still static (CO-R8). A request sent again keeps its first notice, with that notice's detail.
   - The outbox detail check is replaced by name. It keeps every earlier value and adds the four for `connection_request`.
 - **The Connections card says the same (CO-P6).**
   - `private.my_connections()` reads a request's context from `private.pair_standing`, on the series' latest occurrence the caller may read.
-  - The context is `met` when there is no such occurrence.
-  - It is `met` too when the caller may not see that occurrence's guests (they have not answered it and are not a host). The card then never says who is on a list the caller may not read (UX-P5).
+  - The context is a fifth value, `from`, when the helper returns null (one of the two is not on that occurrence) and when there is no such occurrence.
+  - It is `from` too when the caller may not see that occurrence's guests (they have not answered it and are not a host). The card then never says who is on a list the caller may not read (UX-P5).
+  - The app words `from` as "From <title>", which stays true whatever happened since. The push never carries `from`.
+  - The context is worked out for requests only. A connected row carries none.
 - **The sender's copy** (`supabase/functions/_shared/notification-copy.ts`) words the request push from the detail. The title stays "<name> wants to connect". The body's full stop is left out when the title already ends in `.`, `!`, `?` or `…`.
 
 | Detail | When | Push body |
@@ -36,10 +39,12 @@
 - **Rulings made during the build** (they change what the plan describes):
   - There are four values, not three. With `were_invited`, "You were both at" goes only to two people who both went (Ruling 3).
   - The owner always counts as going. An admin counts only by their own reply, since a carried admin is pending until they answer (Ruling 5).
-  - The push and the card share one helper (Ruling 6), with the `met` fallbacks of Rulings 7 and 11.
+  - The push and the card share one helper (Ruling 6). The card's two fallbacks of Rulings 7 and 11 read `from`, not `met` (Ruling 14).
   - The rollback keeps every request notice and sets its detail to null. It deletes none of them (Ruling 4).
+  - The rollback refuses, with 42501, once a later migration has redefined a function it restores (Ruling 14).
 - **The app polish (Task 3), on this branch.** It needs a TestFlight build but no ordering with the server (step 5).
   - A request card words `invited` as "You're both invited to <title>" and `were_invited` as "You were both invited to <title>" (Ruling 6).
+  - It words `from` as "From <title>" (Ruling 14). With no title it still reads "Met on Resbite", and a value it does not know still reads like `met`.
   - A failed refresh on Connections shows its line above the kept list, with Try again, never inside a sheet. An action's error shows in its own sheet or card (Ruling 8).
   - Invite people counts the connections it could not invite: "One connection you picked can't be invited right now." or "<n> connections you picked …". It adds "The others were invited." only when others were (Ruling 9).
   - Profile's Connections row keeps its chevron and lets its title wrap, so the badge never squeezes it at 320 px under Larger Text (Ruling 10). The badge stops at "99+".
@@ -49,17 +54,17 @@
 
 | File | sha256 |
 | --- | --- |
-| `supabase/migrations/20261111120000_connections_follow_ups.sql` | `5bc959ac736969b4f800ba2f010af4001a181793f2ed8a05651807b16cbedb32` |
-| `supabase/rollback/20261111120000_connections_follow_ups.rollback.sql` | `007f3593691caaeb2d8647c8e7cc315c4bbe5fda6d8462a8f8ff527bc06523bb` |
+| `supabase/migrations/20261111120000_connections_follow_ups.sql` | `72d1536db56c956ade36844c9d4c715fffa9222090c0cb64226166fff39ae3d6` |
+| `supabase/rollback/20261111120000_connections_follow_ups.rollback.sql` | `e7d507923674073a6c8547b7d51c32722ee7abfae929e22d42b5ddfff1f1fe16` |
 | `supabase/tests/hosted-baseline/20261111120000_connections_follow_ups.before.sql` | `b2b5676aed807d56309c9c91308ed73ab69b284ba0c39b3381abc32436f701c6` |
-| `supabase/tests/hosted-baseline/20261111120000_connections_follow_ups.after.sql` | `e8fb073d2b78e51144a4836d095b699d743067a3eebdada46dddeed83b062c7b` |
+| `supabase/tests/hosted-baseline/20261111120000_connections_follow_ups.after.sql` | `723f50f4f4b771de36951ee33dfb308a93e4e4b95678bba947ef217f68a90688` |
 | `supabase/ops/schedule-roll-repeating-plans.sql` (unchanged since creating a resbite; step 6) | `3a8202877260008723648dc4723b36aedb6d772f809b2552997765773040d74e` |
 
 The before/after pair is the rehearsal, run locally only. Recompute before asking for approval (`sha256sum <file>`). Approve by file name and hash, and stop if a hash differs.
 
 ## Checks made locally (11 November 2026)
 
-All of these ran on the merged branch, with the polish, at `3041cef`.
+All of these ran on the merged branch, with the polish and the final fix wave (Ruling 14).
 
 - Full mode passes, 35 PASS lines. They include `connections-follow-ups.sql` and the new concurrency script (two people asking each other at once make one connected pair).
 
@@ -75,8 +80,10 @@ All of these ran on the merged branch, with the polish, at `3041cef`.
 
   - Name the candidate. Bare, this mode fails by design until this migration is live.
   - The reason: `tests.txt` lists `connections-follow-ups.sql`, and `creating-a-resbite.sql` expects the new roll, but `migrations.txt` lacks this file.
-  - The after file rehearses the rollback in a transaction it rolls back. The guard refuses when either function is gone, every row is kept with a null detail, the three bodies and grants equal the previous ones, and `pair_standing` is gone.
-- The app check passes: the typecheck, 695 tests in 79 runs, and the content validation.
+  - The after file rehearses the rollback in a transaction it rolls back. The first guard refuses when either function is gone.
+  - The second guard refuses, with 42501, when the roll, `request_connection` or `my_connections` was redefined after this migration. Each is tried in turn.
+  - With the three as the migration left them the rollback runs: every row is kept with a null detail, the three bodies and grants equal the previous ones, and `pair_standing` is gone.
+- The app check passes: the typecheck, 696 tests in 79 runs, and the content validation.
 
   ```
   (cd mobile && npm run check)
@@ -147,7 +154,7 @@ All of these ran on the merged branch, with the polish, at `3041cef`.
    cd "${REPO:-$HOME/dev/resbite-app}"
    D=qa/connections-follow-ups-2026-11-11
    F=supabase/migrations/20261111120000_connections_follow_ups.sql
-   echo "5bc959ac736969b4f800ba2f010af4001a181793f2ed8a05651807b16cbedb32  $F" | sha256sum -c -
+   echo "72d1536db56c956ade36844c9d4c715fffa9222090c0cb64226166fff39ae3d6  $F" | sha256sum -c -
    mkdir -p /tmp/co3 && { echo 'begin;'; cat "$F"; echo; echo 'commit;'; } > /tmp/co3/apply.sql
    supabase db query --linked -f /tmp/co3/apply.sql
    supabase migration repair --status applied 20261111120000 --linked --yes
@@ -218,8 +225,9 @@ All of these ran on the merged branch, with the polish, at `3041cef`.
    - The app polish (Task 3, on this branch) rides the next TestFlight build. It words `invited` as "You're both invited to <title>" and `were_invited` as "You were both invited to <title>".
    - A build made before the polish reads a request's context by one rule, `requestLine` in `mobile/app/connections.tsx:19-20` on `main` (3b5be48).
    - With no title it shows "Met on Resbite". With `going` it shows "You're both going to <title>".
-   - Any other value shows "You were both at <title>", the `met` wording. So such a build shows `invited` and `were_invited` as "You were both at <title>".
+   - Any other value shows "You were both at <title>", the `met` wording. So such a build shows `invited`, `were_invited` and `from` as "You were both at <title>".
    - That build does not check the value, so nothing breaks.
+   - One line changes on such a build once the migration is live. A request involving an admin who has not answered an upcoming resbite used to read "You're both going to <title>". It now reads "You were both at <title>" (`invited`), though the resbite has not happened. The fallback `from` reads "You were both at <title>" there too. The polished build words both truly.
    - A polished build on a server without this migration gets only `going` and `met`, and words them as before.
 6. **Roll job** (creating-a-resbite runbook, step 7). It may be created once this migration is live and the creating-a-resbite TestFlight build is out.
    - Not before: the old roll drops a guest who said Can't go, for good.
@@ -241,7 +249,7 @@ All of these ran on the merged branch, with the polish, at `3041cef`.
    - Ask from an ended resbite one of you skipped. The push reads "You were both invited to <title>."
    - **The two new card lines.** On a resbite that does not repeat, the card names the same resbite as the push.
    - So the request card on Connections reads "You're both invited to <title>" and "You were both invited to <title>" in the two checks above.
-   - On a repeating resbite the card reads the series' latest occurrence. A person who has not answered it reads "You were both at <title>".
+   - On a repeating resbite the card reads the series' latest occurrence. A person who has not answered it reads "From <title>". So does anyone when the person asking is not on that occurrence.
    - **A failed refresh (Ruling 8).** With Connections loaded, turn on Airplane Mode, then leave the app and come back.
    - The error line shows above the kept list, with Try again, never inside a sheet. Opening or closing a sheet does not clear it.
    - Try again shows busy while it runs, with no jump in the layout. The line goes once a read succeeds.
@@ -260,7 +268,16 @@ Nothing yet. Each step's record goes here when it is done, as in the earlier run
 
 Only with the owner's approval, in one transaction.
 
-1. The owner runs the rollback with `! bash ~/co3-rollback.sh`. It checks the hash, then runs the file in one transaction, with no psql `\i`:
+1. **The roll job first.** If `cron.job` has `roll-repeating-plans` (step 6 created it; step 1's cron query lists it), the owner unschedules it before anything else:
+
+   ```
+   supabase db query --linked "select cron.unschedule('roll-repeating-plans')"
+   ```
+
+   - Why: the rollback puts the old roll back. With the job still running, each roll from then on drops every guest who went from Going to Can't go, for good.
+   - The statement fails when there is no such job. Then nothing needs unscheduling.
+   - Afterwards step 1's cron query should list no job. Create it again (step 6) only once this migration is live again.
+2. The owner runs the rollback with `! bash ~/co3-rollback.sh`. It checks the hash, then runs the file in one transaction, with no psql `\i`:
 
    ```bash
    #!/bin/bash
@@ -268,7 +285,7 @@ Only with the owner's approval, in one transaction.
    set -euo pipefail
    cd "${REPO:-$HOME/dev/resbite-app}"
    F=supabase/rollback/20261111120000_connections_follow_ups.rollback.sql
-   echo "007f3593691caaeb2d8647c8e7cc315c4bbe5fda6d8462a8f8ff527bc06523bb  $F" | sha256sum -c -
+   echo "e7d507923674073a6c8547b7d51c32722ee7abfae929e22d42b5ddfff1f1fe16  $F" | sha256sum -c -
    mkdir -p /tmp/co3 && { echo 'begin;'; cat "$F"; echo; echo 'commit;'; } > /tmp/co3/rollback.sql
    supabase db query --linked -f /tmp/co3/rollback.sql
    ```
@@ -283,9 +300,12 @@ Only with the owner's approval, in one transaction.
    - It restores `private.request_connection` and `private.my_connections` (the connections bodies) with their grants. Their public wrappers stay.
    - It drops `private.pair_standing` and puts back the creating-a-resbite detail check.
    - Everything else is kept, including the occurrences the roll already made and every guest it carried.
-2. **Order.** Run this rollback first. Then the connections rollback, `supabase/rollback/20261110120000_connections.rollback.sql`.
-   - Then the creating-a-resbite rollback, `supabase/rollback/20261031120000_creating_a_resbite.rollback.sql`, after unscheduling the roll job. Then the earlier ones, as the creating-a-resbite runbook lists.
-   - This file's guard stops it, changing nothing, once the connections or the creating-a-resbite rollback has run.
+3. **Order.** Run this rollback after the rollbacks of every later migration, and before those of earlier ones.
+   - Later migrations (circles, the chat plans) redefine the roll, `request_connection` or `my_connections`. Their rollbacks put this migration's bodies back, so they run first.
+   - This file refuses with 42501, changing nothing, while any of the three is not this migration's body. It compares `md5(prosrc)` with the values recorded in the file.
+   - Then the connections rollback, `supabase/rollback/20261110120000_connections.rollback.sql`.
+   - Then the creating-a-resbite rollback, `supabase/rollback/20261031120000_creating_a_resbite.rollback.sql`. The roll job is already unscheduled (step 1). Then the earlier ones, as the creating-a-resbite runbook lists.
+   - This file's first guard stops it, changing nothing, once the connections or the creating-a-resbite rollback has run.
    - The connections rollback's header still says to run it first of the rollbacks. That header predates this file and is left unchanged, as its hash is part of a live runbook.
    - Nothing stops the connections rollback if it runs first by mistake. Then this file refuses, and `private.pair_standing` stays behind, unused.
    - In that case the roll also keeps carrying every guest until the creating-a-resbite rollback. A local run on the hosted baseline showed exactly this.
@@ -295,9 +315,9 @@ Only with the owner's approval, in one transaction.
      supabase db query --linked "drop function private.pair_standing(uuid,uuid,uuid)"
      ```
 
-3. After it, the redeployed sender words request pushes by the start time again. No sender redeploy is needed.
+4. After it, the redeployed sender words request pushes by the start time again. No sender redeploy is needed.
    - No app build calls anything this migration made. A polished build gets only `going` and `met`.
-4. Remove the line for this migration from `supabase/tests/hosted-baseline/migrations.txt` if it was appended.
+5. Remove the line for this migration from `supabase/tests/hosted-baseline/migrations.txt` if it was appended.
    - The hosted migration history row stays, as the earlier rollbacks left theirs. Never run `supabase migration repair --status reverted`.
 
 ## Not done here

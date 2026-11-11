@@ -66,3 +66,10 @@ test("a request card says how the two stand on its resbite; anything else reads 
   assert.equal(requestLine("going", null), "Met on Resbite");
   assert.equal(requestLine("invited", null), "Met on Resbite");
 });
+
+test("a request card names only the resbite when the server can't say how the two stand on it", () => {
+  assert.equal(C.from("Picnic"), "From Picnic");
+  assert.equal(requestLine("from", "Picnic"), "From Picnic");
+  // No resbite left to name.
+  assert.equal(requestLine("from", null), "Met on Resbite");
+});

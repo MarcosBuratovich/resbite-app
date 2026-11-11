@@ -15,9 +15,12 @@ export type ConnectionPerson = {
   context?: RequestContext;
 };
 
-/** Going or invited on a resbite still to end; at it, or invited to it, once it has ended. */
-export type RequestContext = "going" | "invited" | "met" | "were_invited";
-const CONTEXTS: readonly string[] = ["going", "invited", "met", "were_invited"];
+/**
+ * Going or invited on a resbite still to end; at it, or invited to it, once it has ended. 'from' when the server can't
+ * say: one of the two isn't on the resbite the card names, or the person reading hasn't answered it.
+ */
+export type RequestContext = "going" | "invited" | "met" | "were_invited" | "from";
+const CONTEXTS: readonly string[] = ["going", "invited", "met", "were_invited", "from"];
 
 export type MyConnections = { requests: ConnectionPerson[]; connected: ConnectionPerson[] };
 
