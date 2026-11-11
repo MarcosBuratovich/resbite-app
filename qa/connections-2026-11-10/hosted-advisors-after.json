@@ -1,0 +1,464 @@
+[
+ {
+  "name": "rls_enabled_no_policy",
+  "title": "RLS Enabled No Policy",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "SECURITY"
+  ],
+  "description": "Detects cases where row level security (RLS) has been enabled on a table but no RLS policies have been created.",
+  "detail": "Table \\`private.age_attestations\\` has RLS enabled, but no policies exist"
+ },
+ {
+  "name": "rls_enabled_no_policy",
+  "title": "RLS Enabled No Policy",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "SECURITY"
+  ],
+  "description": "Detects cases where row level security (RLS) has been enabled on a table but no RLS policies have been created.",
+  "detail": "Table \\`private.app_sessions\\` has RLS enabled, but no policies exist"
+ },
+ {
+  "name": "rls_enabled_no_policy",
+  "title": "RLS Enabled No Policy",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "SECURITY"
+  ],
+  "description": "Detects cases where row level security (RLS) has been enabled on a table but no RLS policies have been created.",
+  "detail": "Table \\`private.beta_access\\` has RLS enabled, but no policies exist"
+ },
+ {
+  "name": "rls_enabled_no_policy",
+  "title": "RLS Enabled No Policy",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "SECURITY"
+  ],
+  "description": "Detects cases where row level security (RLS) has been enabled on a table but no RLS policies have been created.",
+  "detail": "Table \\`private.connection_refusals\\` has RLS enabled, but no policies exist"
+ },
+ {
+  "name": "rls_enabled_no_policy",
+  "title": "RLS Enabled No Policy",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "SECURITY"
+  ],
+  "description": "Detects cases where row level security (RLS) has been enabled on a table but no RLS policies have been created.",
+  "detail": "Table \\`private.device_endpoints\\` has RLS enabled, but no policies exist"
+ },
+ {
+  "name": "rls_enabled_no_policy",
+  "title": "RLS Enabled No Policy",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "SECURITY"
+  ],
+  "description": "Detects cases where row level security (RLS) has been enabled on a table but no RLS policies have been created.",
+  "detail": "Table \\`private.invitations\\` has RLS enabled, but no policies exist"
+ },
+ {
+  "name": "rls_enabled_no_policy",
+  "title": "RLS Enabled No Policy",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "SECURITY"
+  ],
+  "description": "Detects cases where row level security (RLS) has been enabled on a table but no RLS policies have been created.",
+  "detail": "Table \\`private.join_requests\\` has RLS enabled, but no policies exist"
+ },
+ {
+  "name": "rls_enabled_no_policy",
+  "title": "RLS Enabled No Policy",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "SECURITY"
+  ],
+  "description": "Detects cases where row level security (RLS) has been enabled on a table but no RLS policies have been created.",
+  "detail": "Table \\`private.link_opens\\` has RLS enabled, but no policies exist"
+ },
+ {
+  "name": "rls_enabled_no_policy",
+  "title": "RLS Enabled No Policy",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "SECURITY"
+  ],
+  "description": "Detects cases where row level security (RLS) has been enabled on a table but no RLS policies have been created.",
+  "detail": "Table \\`private.lookup_usage\\` has RLS enabled, but no policies exist"
+ },
+ {
+  "name": "rls_enabled_no_policy",
+  "title": "RLS Enabled No Policy",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "SECURITY"
+  ],
+  "description": "Detects cases where row level security (RLS) has been enabled on a table but no RLS policies have been created.",
+  "detail": "Table \\`private.notification_deliveries\\` has RLS enabled, but no policies exist"
+ },
+ {
+  "name": "rls_enabled_no_policy",
+  "title": "RLS Enabled No Policy",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "SECURITY"
+  ],
+  "description": "Detects cases where row level security (RLS) has been enabled on a table but no RLS policies have been created.",
+  "detail": "Table \\`private.notification_outbox\\` has RLS enabled, but no policies exist"
+ },
+ {
+  "name": "rls_enabled_no_policy",
+  "title": "RLS Enabled No Policy",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "SECURITY"
+  ],
+  "description": "Detects cases where row level security (RLS) has been enabled on a table but no RLS policies have been created.",
+  "detail": "Table \\`private.phone_invitations\\` has RLS enabled, but no policies exist"
+ },
+ {
+  "name": "rls_enabled_no_policy",
+  "title": "RLS Enabled No Policy",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "SECURITY"
+  ],
+  "description": "Detects cases where row level security (RLS) has been enabled on a table but no RLS policies have been created.",
+  "detail": "Table \\`private.phone_mode\\` has RLS enabled, but no policies exist"
+ },
+ {
+  "name": "rls_enabled_no_policy",
+  "title": "RLS Enabled No Policy",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "SECURITY"
+  ],
+  "description": "Detects cases where row level security (RLS) has been enabled on a table but no RLS policies have been created.",
+  "detail": "Table \\`private.phone_rewrites\\` has RLS enabled, but no policies exist"
+ },
+ {
+  "name": "rls_enabled_no_policy",
+  "title": "RLS Enabled No Policy",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "SECURITY"
+  ],
+  "description": "Detects cases where row level security (RLS) has been enabled on a table but no RLS policies have been created.",
+  "detail": "Table \\`private.plan_links\\` has RLS enabled, but no policies exist"
+ },
+ {
+  "name": "rls_enabled_no_policy",
+  "title": "RLS Enabled No Policy",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "SECURITY"
+  ],
+  "description": "Detects cases where row level security (RLS) has been enabled on a table but no RLS policies have been created.",
+  "detail": "Table \\`private.test_codes\\` has RLS enabled, but no policies exist"
+ },
+ {
+  "name": "rls_enabled_no_policy",
+  "title": "RLS Enabled No Policy",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "SECURITY"
+  ],
+  "description": "Detects cases where row level security (RLS) has been enabled on a table but no RLS policies have been created.",
+  "detail": "Table \\`private.test_mode_log\\` has RLS enabled, but no policies exist"
+ },
+ {
+  "name": "rls_enabled_no_policy",
+  "title": "RLS Enabled No Policy",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "SECURITY"
+  ],
+  "description": "Detects cases where row level security (RLS) has been enabled on a table but no RLS policies have been created.",
+  "detail": "Table \\`private.tester_roster\\` has RLS enabled, but no policies exist"
+ },
+ {
+  "name": "rls_enabled_no_policy",
+  "title": "RLS Enabled No Policy",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "SECURITY"
+  ],
+  "description": "Detects cases where row level security (RLS) has been enabled on a table but no RLS policies have been created.",
+  "detail": "Table \\`public.connections\\` has RLS enabled, but no policies exist"
+ },
+ {
+  "name": "unindexed_foreign_keys",
+  "title": "Unindexed foreign keys",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "PERFORMANCE"
+  ],
+  "description": "Identifies foreign key constraints without a covering index, which can impact database performance.",
+  "detail": "Table \\`private.connection_refusals\\` has a foreign key \\`connection_refusals_to_user_fkey\\` without a covering index. This can lead to suboptimal query performance."
+ },
+ {
+  "name": "unindexed_foreign_keys",
+  "title": "Unindexed foreign keys",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "PERFORMANCE"
+  ],
+  "description": "Identifies foreign key constraints without a covering index, which can impact database performance.",
+  "detail": "Table \\`private.phone_invitations\\` has a foreign key \\`phone_invitations_invited_by_fkey\\` without a covering index. This can lead to suboptimal query performance."
+ },
+ {
+  "name": "unindexed_foreign_keys",
+  "title": "Unindexed foreign keys",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "PERFORMANCE"
+  ],
+  "description": "Identifies foreign key constraints without a covering index, which can impact database performance.",
+  "detail": "Table \\`private.phone_invitations\\` has a foreign key \\`phone_invitations_user_id_fkey\\` without a covering index. This can lead to suboptimal query performance."
+ },
+ {
+  "name": "unindexed_foreign_keys",
+  "title": "Unindexed foreign keys",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "PERFORMANCE"
+  ],
+  "description": "Identifies foreign key constraints without a covering index, which can impact database performance.",
+  "detail": "Table \\`public.plan_admins\\` has a foreign key \\`plan_admins_appointed_by_fkey\\` without a covering index. This can lead to suboptimal query performance."
+ },
+ {
+  "name": "unindexed_foreign_keys",
+  "title": "Unindexed foreign keys",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "PERFORMANCE"
+  ],
+  "description": "Identifies foreign key constraints without a covering index, which can impact database performance.",
+  "detail": "Table \\`public.plan_mutes\\` has a foreign key \\`plan_mutes_user_id_fkey\\` without a covering index. This can lead to suboptimal query performance."
+ },
+ {
+  "name": "unused_index",
+  "title": "Unused Index",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "PERFORMANCE"
+  ],
+  "description": "Detects if an index has never been used and may be a candidate for removal.",
+  "detail": "Index \\`notification_outbox_actor_idx\\` on table \\`private.notification_outbox\\` has not been used"
+ },
+ {
+  "name": "unused_index",
+  "title": "Unused Index",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "PERFORMANCE"
+  ],
+  "description": "Detects if an index has never been used and may be a candidate for removal.",
+  "detail": "Index \\`beta_access_plan_link_idx\\` on table \\`private.beta_access\\` has not been used"
+ },
+ {
+  "name": "unused_index",
+  "title": "Unused Index",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "PERFORMANCE"
+  ],
+  "description": "Detects if an index has never been used and may be a candidate for removal.",
+  "detail": "Index \\`join_requests_plan_link_idx\\` on table \\`private.join_requests\\` has not been used"
+ },
+ {
+  "name": "unused_index",
+  "title": "Unused Index",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "PERFORMANCE"
+  ],
+  "description": "Detects if an index has never been used and may be a candidate for removal.",
+  "detail": "Index \\`plan_admins_user_idx\\` on table \\`public.plan_admins\\` has not been used"
+ },
+ {
+  "name": "unused_index",
+  "title": "Unused Index",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "PERFORMANCE"
+  ],
+  "description": "Detects if an index has never been used and may be a candidate for removal.",
+  "detail": "Index \\`plans_series_idx\\` on table \\`public.plans\\` has not been used"
+ },
+ {
+  "name": "unused_index",
+  "title": "Unused Index",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "PERFORMANCE"
+  ],
+  "description": "Detects if an index has never been used and may be a candidate for removal.",
+  "detail": "Index \\`connections_user_b_idx\\` on table \\`public.connections\\` has not been used"
+ },
+ {
+  "name": "unused_index",
+  "title": "Unused Index",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "PERFORMANCE"
+  ],
+  "description": "Detects if an index has never been used and may be a candidate for removal.",
+  "detail": "Index \\`connection_refusals_users_idx\\` on table \\`private.connection_refusals\\` has not been used"
+ },
+ {
+  "name": "anon_security_definer_function_executable",
+  "title": "Public Can Execute SECURITY DEFINER Function",
+  "level": "WARN",
+  "facing": "EXTERNAL",
+  "categories": [
+   "SECURITY"
+  ],
+  "description": "Detects `SECURITY DEFINER` functions that are callable without signing in. Revoke `EXECUTE`, switch the function to `SECURITY INVOKER`, or move it out of your exposed API schema if it is not meant to be public.",
+  "detail": "Function `public.check_invited_number(p_code text, p_phone text)` can be executed by the `anon` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/check_invited_number`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional."
+ },
+ {
+  "name": "anon_security_definer_function_executable",
+  "title": "Public Can Execute SECURITY DEFINER Function",
+  "level": "WARN",
+  "facing": "EXTERNAL",
+  "categories": [
+   "SECURITY"
+  ],
+  "description": "Detects `SECURITY DEFINER` functions that are callable without signing in. Revoke `EXECUTE`, switch the function to `SECURITY INVOKER`, or move it out of your exposed API schema if it is not meant to be public.",
+  "detail": "Function `public.exchange_test_code(p_phone text, p_code text)` can be executed by the `anon` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/exchange_test_code`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional."
+ },
+ {
+  "name": "anon_security_definer_function_executable",
+  "title": "Public Can Execute SECURITY DEFINER Function",
+  "level": "WARN",
+  "facing": "EXTERNAL",
+  "categories": [
+   "SECURITY"
+  ],
+  "description": "Detects `SECURITY DEFINER` functions that are callable without signing in. Revoke `EXECUTE`, switch the function to `SECURITY INVOKER`, or move it out of your exposed API schema if it is not meant to be public.",
+  "detail": "Function `public.invitation_page(p_code text)` can be executed by the `anon` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/invitation_page`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional."
+ },
+ {
+  "name": "anon_security_definer_function_executable",
+  "title": "Public Can Execute SECURITY DEFINER Function",
+  "level": "WARN",
+  "facing": "EXTERNAL",
+  "categories": [
+   "SECURITY"
+  ],
+  "description": "Detects `SECURITY DEFINER` functions that are callable without signing in. Revoke `EXECUTE`, switch the function to `SECURITY INVOKER`, or move it out of your exposed API schema if it is not meant to be public.",
+  "detail": "Function `public.note_link_open(p_code text)` can be executed by the `anon` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/note_link_open`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional."
+ },
+ {
+  "name": "anon_security_definer_function_executable",
+  "title": "Public Can Execute SECURITY DEFINER Function",
+  "level": "WARN",
+  "facing": "EXTERNAL",
+  "categories": [
+   "SECURITY"
+  ],
+  "description": "Detects `SECURITY DEFINER` functions that are callable without signing in. Revoke `EXECUTE`, switch the function to `SECURITY INVOKER`, or move it out of your exposed API schema if it is not meant to be public.",
+  "detail": "Function `public.personal_invitation_page(p_code text)` can be executed by the `anon` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/personal_invitation_page`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional."
+ },
+ {
+  "name": "authenticated_security_definer_function_executable",
+  "title": "Signed-In Users Can Execute SECURITY DEFINER Function",
+  "level": "WARN",
+  "facing": "EXTERNAL",
+  "categories": [
+   "SECURITY"
+  ],
+  "description": "Detects `SECURITY DEFINER` functions that are callable by signed-in users. Revoke `EXECUTE`, switch the function to `SECURITY INVOKER`, or move it out of your exposed API schema if signed-in users should not call it.",
+  "detail": "Function `public.check_invited_number(p_code text, p_phone text)` can be executed by the `authenticated` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/check_invited_number`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional."
+ },
+ {
+  "name": "authenticated_security_definer_function_executable",
+  "title": "Signed-In Users Can Execute SECURITY DEFINER Function",
+  "level": "WARN",
+  "facing": "EXTERNAL",
+  "categories": [
+   "SECURITY"
+  ],
+  "description": "Detects `SECURITY DEFINER` functions that are callable by signed-in users. Revoke `EXECUTE`, switch the function to `SECURITY INVOKER`, or move it out of your exposed API schema if signed-in users should not call it.",
+  "detail": "Function `public.exchange_test_code(p_phone text, p_code text)` can be executed by the `authenticated` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/exchange_test_code`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional."
+ },
+ {
+  "name": "authenticated_security_definer_function_executable",
+  "title": "Signed-In Users Can Execute SECURITY DEFINER Function",
+  "level": "WARN",
+  "facing": "EXTERNAL",
+  "categories": [
+   "SECURITY"
+  ],
+  "description": "Detects `SECURITY DEFINER` functions that are callable by signed-in users. Revoke `EXECUTE`, switch the function to `SECURITY INVOKER`, or move it out of your exposed API schema if signed-in users should not call it.",
+  "detail": "Function `public.invitation_page(p_code text)` can be executed by the `authenticated` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/invitation_page`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional."
+ },
+ {
+  "name": "authenticated_security_definer_function_executable",
+  "title": "Signed-In Users Can Execute SECURITY DEFINER Function",
+  "level": "WARN",
+  "facing": "EXTERNAL",
+  "categories": [
+   "SECURITY"
+  ],
+  "description": "Detects `SECURITY DEFINER` functions that are callable by signed-in users. Revoke `EXECUTE`, switch the function to `SECURITY INVOKER`, or move it out of your exposed API schema if signed-in users should not call it.",
+  "detail": "Function `public.note_link_open(p_code text)` can be executed by the `authenticated` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/note_link_open`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional."
+ },
+ {
+  "name": "authenticated_security_definer_function_executable",
+  "title": "Signed-In Users Can Execute SECURITY DEFINER Function",
+  "level": "WARN",
+  "facing": "EXTERNAL",
+  "categories": [
+   "SECURITY"
+  ],
+  "description": "Detects `SECURITY DEFINER` functions that are callable by signed-in users. Revoke `EXECUTE`, switch the function to `SECURITY INVOKER`, or move it out of your exposed API schema if signed-in users should not call it.",
+  "detail": "Function `public.personal_invitation_page(p_code text)` can be executed by the `authenticated` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/personal_invitation_page`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional."
+ },
+ {
+  "name": "auth_db_connections_absolute",
+  "title": "Auth DB Connection Strategy is not Percentage",
+  "level": "INFO",
+  "facing": "EXTERNAL",
+  "categories": [
+   "PERFORMANCE"
+  ],
+  "description": "Using a percentage based allocation connection strategy for Auth can help to improve the server's performance when increasing instance size.",
+  "detail": "Your project's Auth server is configured to use at most 10 connections. Increasing the instance size without manually adjusting this number will not improve the performance of the Auth server. Switch to a percentage based connection allocation strategy instead."
+ }
+]
