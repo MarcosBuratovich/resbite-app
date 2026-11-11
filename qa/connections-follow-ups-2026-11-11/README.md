@@ -11,7 +11,7 @@
   - `private.roll_repeating_plans()` is the creating-a-resbite body with one change: the carried-guest insert no longer skips a `withdrawn` reply.
   - A guest who was Going and then said Can't go is invited again to the next occurrence, not answered.
   - An admin who says Can't go has already lost the admin role (CR-P15), so the roll carries them as a guest.
-  - Guests the old roll already dropped are not brought back. There is no backfill. Step 1 counts them if the roll job exists.
+  - Guests the old roll already dropped are not brought back. There is no backfill. Step 1 counts them.
 - **A request's notice says how the two stand (CO-P5).**
   - A new helper, `private.pair_standing(plan, a, b)`, returns one of four values. No API role may call it.
   - A person counts as going when they are the resbite's owner, or their own reply is Going or Maybe. An admin counts by their own reply alone.
@@ -38,7 +38,12 @@
   - The owner always counts as going. An admin counts only by their own reply, since a carried admin is pending until they answer (Ruling 5).
   - The push and the card share one helper (Ruling 6), with the `met` fallbacks of Rulings 7 and 11.
   - The rollback keeps every request notice and sets its detail to null. It deletes none of them (Ruling 4).
-- **App, separately.** The app polish (Task 3 of the plan) words the two new card contexts. It is built on branch `co3-follow-ups-t3` and joins this branch after its review. It needs a TestFlight build but no ordering with the server (step 5).
+- **The app polish (Task 3), on this branch.** It needs a TestFlight build but no ordering with the server (step 5).
+  - A request card words `invited` as "You're both invited to <title>" and `were_invited` as "You were both invited to <title>" (Ruling 6).
+  - A failed refresh on Connections shows its line above the kept list, with Try again, never inside a sheet. An action's error shows in its own sheet or card (Ruling 8).
+  - Invite people counts the connections it could not invite: "One connection you picked can't be invited right now." or "<n> connections you picked …". It adds "The others were invited." only when others were (Ruling 9).
+  - Profile's Connections row keeps its chevron and lets its title wrap, so the badge never squeezes it at 320 px under Larger Text (Ruling 10). The badge stops at "99+".
+  - The spoken labels come from the copy. A refused invitation of one connection is not sent again.
 
 ## Files and hashes
 
@@ -53,6 +58,8 @@
 The before/after pair is the rehearsal, run locally only. Recompute before asking for approval (`sha256sum <file>`). Approve by file name and hash, and stop if a hash differs.
 
 ## Checks made locally (11 November 2026)
+
+All of these ran on the merged branch, with the polish, at `3041cef`.
 
 - Full mode passes, 35 PASS lines. They include `connections-follow-ups.sql` and the new concurrency script (two people asking each other at once make one connected pair).
 
@@ -69,7 +76,7 @@ The before/after pair is the rehearsal, run locally only. Recompute before askin
   - Name the candidate. Bare, this mode fails by design until this migration is live.
   - The reason: `tests.txt` lists `connections-follow-ups.sql`, and `creating-a-resbite.sql` expects the new roll, but `migrations.txt` lacks this file.
   - The after file rehearses the rollback in a transaction it rolls back. The guard refuses when either function is gone, every row is kept with a null detail, the three bodies and grants equal the previous ones, and `pair_standing` is gone.
-- The app check passes: the typecheck, 686 tests in 79 runs, and the content validation. This branch carries no app change; the polish is on its own branch.
+- The app check passes: the typecheck, 695 tests in 79 runs, and the content validation.
 
   ```
   (cd mobile && npm run check)
@@ -87,19 +94,24 @@ The before/after pair is the rehearsal, run locally only. Recompute before askin
   - With this file applied there are 356. One is added: `private.pair_standing(uuid,uuid,uuid)`, granted to its owner only.
   - Four change by definition: `private.roll_repeating_plans()`, `private.request_connection(uuid,uuid)`, `private.my_connections()` and the constraint `notification_outbox_detail_check`.
   - Nothing is removed, no grant changes, and every table keeps its row count.
-- The dropped-guests count of step 1 runs on that replay and returns 0, as it has no data. The build's probe (P14) showed the same query finds a guest the old roll dropped.
+- **The dropped-guests count of step 1, seeded.** On the empty replay it returns `0 | 0 | 0 | 0`.
+  - A seeded local run on the hosted baseline used the old roll to roll two weekly series.
+  - One guest said Can't go after Going on both. A second was invited again by hand. A third never used the app. A fourth stayed Going.
+  - The count returned `2 | 1 | 2 | 2`: two guest rows, one person, two series, two rolled occurrences. Only the first guest is counted.
 
 ## Rollout runbook
 
-**Order.** Before snapshot with the roll-job check, migration, after snapshot and advisors, `deliver-notifications` redeploy, device checks. The TestFlight build with the app polish has no order with these. The roll job comes only after the migration and the creating-a-resbite TestFlight build.
+**Order.** Before snapshot with the roll-job check and the dropped-guests count, migration, after snapshot and advisors, `deliver-notifications` redeploy, device checks. The TestFlight build with the app polish has no order with these. The roll job comes only after the migration and the creating-a-resbite TestFlight build.
 
 **Owner-run scripts.** The assistant's safety check refuses live reads and the apply, so the owner runs short scripts with `! bash ~/<name>.sh`. At rollout time the assistant writes each script into the home directory from the block in its step. The owner reads it, then runs it. Each runs from the checkout the rollout uses: `REPO`, by default `~/dev/resbite-app`, at the merged commit. None prints a secret, a phone number or an account id.
 
-1. **Before snapshot and the roll-job check.** Read-only, into this directory, with `! bash ~/co3-before.sh`:
+**The assistant's steps.** The advisors read (through the Supabase MCP server) and the `deliver-notifications` deploy are the assistant's. It does each once the owner approves it, as the connections record did.
+
+1. **Before snapshot, the roll-job check and the dropped-guests count.** Read-only, into this directory, with `! bash ~/co3-before.sh`:
 
    ```bash
    #!/bin/bash
-   # Read-only: the before snapshot and the roll-job check (connections follow-ups, step 1).
+   # Read-only: the before snapshot, the roll-job check and the dropped-guests count (connections follow-ups, step 1).
    set -euo pipefail
    cd "${REPO:-$HOME/dev/resbite-app}"
    D=qa/connections-follow-ups-2026-11-11
@@ -108,39 +120,24 @@ The before/after pair is the rehearsal, run locally only. Recompute before askin
    supabase db query --linked -o json "select policyname, cmd, qual, with_check from pg_policies where schemaname = 'storage' order by policyname" > "$D/hosted-storage-policies-before.json"
    supabase db query --linked "select count(*) as applied, max(version) as latest from supabase_migrations.schema_migrations"
    supabase db query --linked "select jobname from cron.job where jobname = 'roll-repeating-plans'"
+   supabase db query --linked "select count(*) as guest_rows, count(distinct a.user_id) as people, count(distinct o.series_id) as series, (select count(*) from public.plans where repeats_from is not null) as rolled from public.plans o join public.plans nx on nx.repeats_from = o.id join public.attendees a on a.plan_id = o.id and a.response = 'withdrawn' where not exists (select 1 from public.attendees b where b.plan_id = nx.id and b.user_id = a.user_id) and private.used_app(a.user_id) and private.user_eligible(a.user_id) and not private.deletion_pending(a.user_id)"
    ```
 
    - Compare `hosted-before.json` with a local replay of `migrations.txt` (19 files). Expect 355 of 355 by definition.
    - The only differences should be the 15 known `acl` ones: hosted's default `service_role` grant on 14 older `public` objects and `public.unregister_device(text)`.
    - It should be identical by definition to the connections `hosted-after.json` of 11 November. **Confirm from the real snapshot before approving.** Stop if anything else differs.
    - The storage policies should match the replay, 7 of 7.
-   - The history should show 19 rows, the last `20261110120000`.
-   - **The roll job.** The last query lists the job if it exists. On hosted it is expected not to exist, as creating-a-resbite step 7 was held.
-   - **If the job exists**, the old roll may already have dropped guests who said Can't go. This migration changes only the rolls to come and brings no one back. Count them, read-only, with `! bash ~/co3-dropped.sh`:
-
-     ```bash
-     #!/bin/bash
-     # Read-only, only when step 1 found the roll job: how many guests the old roll already dropped. Counts only.
-     set -euo pipefail
-     cd "${REPO:-$HOME/dev/resbite-app}"
-     mkdir -p /tmp/co3
-     cat > /tmp/co3/dropped.sql <<'SQL'
-     select count(*) as guest_rows, count(distinct a.user_id) as people, count(distinct o.series_id) as series
-     from public.plans o
-     join public.plans nx on nx.repeats_from = o.id
-     join public.attendees a on a.plan_id = o.id and a.response = 'withdrawn'
-     where not exists (select 1 from public.attendees b where b.plan_id = nx.id and b.user_id = a.user_id)
-       and private.used_app(a.user_id) and private.user_eligible(a.user_id) and not private.deletion_pending(a.user_id);
-     SQL
-     supabase db query --linked -f /tmp/co3/dropped.sql
-     ```
-
-     - It returns three counts and nothing else: guest rows, people and series. It shows no names, ids or phone numbers.
-     - It counts a guest who said Can't go on an occurrence that was rolled, and who has no row on the next one.
-     - It counts only guests the roll would carry now: they use the app, may still use it, and are not leaving.
+   - The history query should read `19 | 20261110120000`.
+   - **The roll job.** The cron query lists the job if it exists. On hosted it is expected not to exist, as creating-a-resbite step 7 was held. Step 6 needs this answer.
+   - **The dropped-guests count** always runs. The old roll did not carry a guest who said Can't go after Going. This migration changes only the rolls to come and brings no one back.
+     - It returns four counts and nothing else. It shows no names, ids or phone numbers.
+     - `guest_rows`, `people` and `series` count guests who said Can't go on an occurrence that was rolled, and have no row on the next one.
+     - They count only guests the roll would carry now: they use the app, may still use it, and are not leaving.
      - A guest a host invited again by hand has a row, so is not counted.
+     - `rolled` counts the occurrences the roll has made, by the job or by a run by hand.
+     - Expected on hosted: `0 | 0 | 0 | 0`, if the roll has never run there.
+     - If `guest_rows` is above 0, the owner decides on a repair before the apply. Rolled occurrences with no guest dropped need nothing.
      - If the CLI's role is refused the private functions, paste the same query into the SQL editor. It is read-only there too.
-     - The owner decides on a repair before the apply. A count of 0 needs nothing.
 2. **Migration** (the owner approves by file name and sha256, above). Never `supabase db push`: it would also push the local-only migrations. `! bash ~/co3-apply.sh` checks the hash, applies, records, and takes step 3's snapshots:
 
    ```bash
@@ -162,7 +159,14 @@ The before/after pair is the rehearsal, run locally only. Recompute before askin
 
    - The script stops before applying if the hash differs.
    - The file runs in one transaction. Any error rolls all of it back, and the script stops before the history repair.
-   - The history should gain one row: 20 rows, the last `20261111120000 | 20261111120000`.
+   - If the apply succeeded and only the repair failed, run the repair alone, from the repository root. Then run the script's last four lines, for the history and step 3's snapshots.
+
+     ```
+     supabase migration repair --status applied 20261111120000 --linked --yes
+     ```
+
+   - Running the whole script again would only fail. The second apply stops at `create function private.pair_standing`, which already exists, and changes nothing (checked locally).
+   - The history query should then read `20 | 20261111120000`, one row more.
    - There is no backfill, and the migration writes no row.
    - It takes a brief lock on `private.notification_outbox` to replace the detail check, as the earlier migrations did.
    - The re-added check validates every existing row. They all pass, as it keeps every earlier value.
@@ -171,7 +175,7 @@ The before/after pair is the rehearsal, run locally only. Recompute before askin
    - Before to after: one function added, `private.pair_standing(uuid,uuid,uuid)`, which no API role may run.
    - Four objects change: the three functions above and the outbox constraint `notification_outbox_detail_check`. Nothing is removed and no grant changes. `.after.sql` asserts the same shape locally.
    - Every table keeps its row count. The storage policies are unchanged, 7 of 7.
-   - **Advisors.** Read them (security and performance) through the Supabase MCP server, as last time, into `hosted-advisors-after.json`.
+   - **Advisors.** Once the owner approves, the assistant reads them (security and performance) through the Supabase MCP server, into `hosted-advisors-after.json`.
    - Compare with the connections `hosted-advisors-after.json`: 42 findings, 10 WARN, the rest INFO, no ERROR.
    - **Expected: no new finding.** The new helper is a definer in `private` with an empty `search_path`, and no API role may run it. The migration adds no table, index, policy or foreign key.
    - Unused-index notices can come and go with use alone, not from this file. Stop the rollout for anything else new.
@@ -187,7 +191,7 @@ The before/after pair is the rehearsal, run locally only. Recompute before askin
      bash scripts/test-database-docker.sh --hosted-baseline
      ```
 
-4. **Redeploy `deliver-notifications`** (Task 2 changed the request push's words). With the owner's approval, after step 2, from the repository root:
+4. **Redeploy `deliver-notifications`** (Task 2 changed the request push's words). Once the owner approves it, the assistant runs the deploy after step 2, from the repository root:
 
    ```
    supabase functions deploy deliver-notifications --no-verify-jwt --project-ref ewcsgvhuojxdpaspwsrx
@@ -196,7 +200,7 @@ The before/after pair is the rehearsal, run locally only. Recompute before askin
    - `--no-verify-jwt` is required: without it the schedule's calls are refused. The secrets and the Vault entries stay as they are.
    - Either order with step 2 is safe. The sender in place now ignores the detail and words a request by its start time.
    - The new sender words a request with no detail the same way. Until the redeploy, request pushes keep the old wording, and nothing fails.
-   - Afterwards the function list should show `deliver-notifications` ACTIVE, `verify_jwt` false, at version 5 (the connections redeploy made 4).
+   - Afterwards the function list should show `deliver-notifications` ACTIVE and `verify_jwt` false. Its version is one more than the version before this redeploy (5 if nothing else was deployed).
    - An unauthenticated POST to the function URL should answer 401 from the handler.
    - The owner then reads the schedule's runs after the redeploy with `! bash ~/co3-sender-check.sh` (read-only):
 
@@ -211,8 +215,8 @@ The before/after pair is the rehearsal, run locally only. Recompute before askin
 
    - Each run should succeed, and each call answer HTTP 200 with `"disabled":false`.
 5. **TestFlight build** (the owner's step). It has no ordering with steps 1 to 4.
-   - The app polish (Task 3) rides the next TestFlight build. It words `invited` as "You're both invited to <title>" and `were_invited` as "You were both invited to <title>".
-   - A build made before the polish reads a request's context by one rule, `requestLine` in `mobile/app/connections.tsx:19-20`.
+   - The app polish (Task 3, on this branch) rides the next TestFlight build. It words `invited` as "You're both invited to <title>" and `were_invited` as "You were both invited to <title>".
+   - A build made before the polish reads a request's context by one rule, `requestLine` in `mobile/app/connections.tsx:19-20` on `main` (3b5be48).
    - With no title it shows "Met on Resbite". With `going` it shows "You're both going to <title>".
    - Any other value shows "You were both at <title>", the `met` wording. So such a build shows `invited` and `were_invited` as "You were both at <title>".
    - That build does not check the value, so nothing breaks.
@@ -229,15 +233,24 @@ The before/after pair is the rehearsal, run locally only. Recompute before askin
      ```
 
    - Then check the job's role and its first runs, as that step says. `username` must be `postgres`.
-7. **Device checks** (two phones, after steps 2 and 4; the card lines need the polished build).
+7. **Device checks** (two phones, after steps 2 and 4; the card and screen checks need the polished build).
    - A request pushes once per pair, series and person asking (CO-R8). Use a fresh pair or a fresh series for each check.
    - Ask from a resbite you are both Going to. The push reads "You're both going to <title>."
    - Ask from an upcoming resbite the other said Can't go to. The push reads "You're both invited to <title>."
    - Ask from an ended resbite you both went to. The push reads "You were both at <title>."
    - Ask from an ended resbite one of you skipped. The push reads "You were both invited to <title>."
-   - On the polished build, the request card on Connections uses the same words, for the series' latest occurrence.
-   - A person who has not answered that occurrence reads "You were both at <title>" on the card.
-   - After step 6, on a weekly resbite: a guest who said Can't go is on the next occurrence, not answered. They get the "<title> is on again" push.
+   - **The two new card lines.** On a resbite that does not repeat, the card names the same resbite as the push.
+   - So the request card on Connections reads "You're both invited to <title>" and "You were both invited to <title>" in the two checks above.
+   - On a repeating resbite the card reads the series' latest occurrence. A person who has not answered it reads "You were both at <title>".
+   - **A failed refresh (Ruling 8).** With Connections loaded, turn on Airplane Mode, then leave the app and come back.
+   - The error line shows above the kept list, with Try again, never inside a sheet. Opening or closing a sheet does not clear it.
+   - Try again shows busy while it runs, with no jump in the layout. The line goes once a read succeeds.
+   - **Counted refusals (Ruling 9).** On Invite people, pick a connection who can no longer be invited (an account being deleted, say). Pick another connection or a number not yet on the resbite with it.
+   - The line reads "One connection you picked can't be invited right now. The others were invited."
+   - With that connection as the only pick, the Pick step shows "One connection you picked can't be invited right now."
+   - **The row keeps its chevron (Ruling 10).** At 320 points wide with the largest Larger Text, Profile's Connections row keeps its chevron and its badge.
+   - **The roll (after step 6).** On a weekly resbite, a guest says Going, then Can't go (stored as `withdrawn`).
+   - After the occurrence ends, they are on the next one, not answered, and get the "<title> is on again" push.
 
 ## Applied
 
@@ -247,12 +260,21 @@ Nothing yet. Each step's record goes here when it is done, as in the earlier run
 
 Only with the owner's approval, in one transaction.
 
-1. Run the rollback (sha256 above):
+1. The owner runs the rollback with `! bash ~/co3-rollback.sh`. It checks the hash, then runs the file in one transaction, with no psql `\i`:
 
-   ```
-   begin; \i supabase/rollback/20261111120000_connections_follow_ups.rollback.sql; commit;
+   ```bash
+   #!/bin/bash
+   # The connections follow-ups rollback. Only with the owner's approval.
+   set -euo pipefail
+   cd "${REPO:-$HOME/dev/resbite-app}"
+   F=supabase/rollback/20261111120000_connections_follow_ups.rollback.sql
+   echo "007f3593691caaeb2d8647c8e7cc315c4bbe5fda6d8462a8f8ff527bc06523bb  $F" | sha256sum -c -
+   mkdir -p /tmp/co3 && { echo 'begin;'; cat "$F"; echo; echo 'commit;'; } > /tmp/co3/rollback.sql
+   supabase db query --linked -f /tmp/co3/rollback.sql
    ```
 
+   - The script stops before running anything if the hash differs.
+   - Wrapped this way, the rollback ran locally after the migration and gave back the baseline's fingerprint, 355 of 355.
    - It deletes no row, so it need not wait for the sender to drain the outbox.
    - Every `connection_request` notice with a detail keeps its row, delivered or not, with the detail set to null.
    - A notice not yet sent then goes with the no-detail wording. The rows' keys still stop a second notice for a request already told.
@@ -267,6 +289,12 @@ Only with the owner's approval, in one transaction.
    - The connections rollback's header still says to run it first of the rollbacks. That header predates this file and is left unchanged, as its hash is part of a live runbook.
    - Nothing stops the connections rollback if it runs first by mistake. Then this file refuses, and `private.pair_standing` stays behind, unused.
    - In that case the roll also keeps carrying every guest until the creating-a-resbite rollback. A local run on the hosted baseline showed exactly this.
+   - A leftover `private.pair_standing` can be dropped by hand, with the owner's approval. The owner runs:
+
+     ```
+     supabase db query --linked "drop function private.pair_standing(uuid,uuid,uuid)"
+     ```
+
 3. After it, the redeployed sender words request pushes by the start time again. No sender redeploy is needed.
    - No app build calls anything this migration made. A polished build gets only `going` and `met`.
 4. Remove the line for this migration from `supabase/tests/hosted-baseline/migrations.txt` if it was appended.
@@ -276,8 +304,10 @@ Only with the owner's approval, in one transaction.
 
 No hosted change, no function deployment, no schedule and no TestFlight upload. Nothing was pushed.
 
-- **The app polish** (Task 3) is reviewed on its own branch and joins this one separately.
-- **Guests the old roll already dropped** stay dropped. Step 1 counts them if the roll job exists.
+- **Guests the old roll already dropped** stay dropped. Step 1 counts them.
+- **Task 3's deferred minors:**
+  - At 320 px under Larger Text, the one-word Row title breaks mid-word ("Connecti/ons"). The chevron and badge stay.
+  - The Connections bar title overlaps Back beyond the project's own Larger Text emulation. This plan does not change it.
 - **Deferred minors from the build's ledger:**
   - A request's detail is fixed by its first notice (the static key, CO-R8). A request sent again from the same series after things change keeps the first wording.
   - A request's first detail can be out of date when a reply changes while its notice waits. The window is the sender's minute.

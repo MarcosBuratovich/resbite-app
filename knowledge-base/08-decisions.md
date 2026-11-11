@@ -559,7 +559,7 @@ Creating a resbite ([spec](../docs/superpowers/specs/2026-10-28-creating-a-resbi
 
 ## Connections (CO), 10 November 2026
 
-Connections ([spec](../docs/superpowers/specs/2026-11-10-connections-and-circles-design.md)) are built in plan 1 (connections; branch `co1-connections`, not rolled out); the circle of trust is plan 2. One line each; the spec holds the reasons.
+Connections ([spec](../docs/superpowers/specs/2026-11-10-connections-and-circles-design.md)) are built in plan 1 (connections; branch `co1-connections`), live on the hosted project since 11 November 2026 (migration applied, `deliver-notifications` redeployed at version 4); the TestFlight build and the device checks are pending. The circle of trust is plan 2. One line each; the spec holds the reasons.
 
 **Decisions.**
 - **CO-D1.** Two kinds of people to invite: phone contacts with a Resbite account, as today, and Resbite connections.
