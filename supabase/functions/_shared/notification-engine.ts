@@ -112,74 +112,97 @@ function providerOutcome(value: ProviderResult, receipt: boolean): Result {
   if (error === "MessageRateExceeded") return { outcome: "retry" };
   return { outcome: "failed" };
 }
+/** A claim's answer: null reads as empty; anything else that is not a list is an error. */
+function claimed(value: Delivery[] | null | undefined): Delivery[] {
+  if (value == null) return [];
+  if (!Array.isArray(value)) throw new Error("Notification claim malformed");
+  return value;
+}
 /**
- * One run of the sender. It claims 25 deliveries at a time and works through each batch, again and again, while a
- * claim returns rows and less than `budgetMs` has passed since the start (K-B3.3). The clock is read once at the
- * start and once after each batch, so the first batch always runs and a run ends at most one batch past its budget.
+ * One run of the sender, sized to fit under its caller's 10 s timeout (K-B3.3, H3, H18). The first claim takes 25;
+ * later claims take 10, and none starts once `budgetMs` (5 s) has passed since the start. No send or receipt check
+ * starts after that either: each claimed job not yet started is handed back as a retry with no delay, so the next
+ * run claims it again and none is lost. A claim that fails after the first batch ends the run with what it did; only
+ * a failed first claim is an error. `deferred` counts the jobs handed back.
  */
 export async function runNotifications(
   store: DeliveryStore,
   gateway: PushGateway,
   enabled = false,
-  now = Date.now(),
   clock: () => number = Date.now,
-  budgetMs = 40_000,
+  budgetMs = 5_000,
 ) {
   if (!enabled) return { disabled: true, processed: 0 };
   const start = clock();
+  // Spent unless the time since the start is known and under budget: a clock that reads NaN, or steps back behind
+  // the start (a wall-clock correction), ends the run instead of stretching it.
+  const spent = () => {
+    const elapsed = clock() - start;
+    return !(elapsed >= 0 && elapsed < budgetMs);
+  };
   let processed = 0;
-  do {
-    const jobs = await store.claim(25);
+  let deferred = 0;
+  for (let first = true; first || !spent(); first = false) {
+    let jobs: Delivery[];
+    try {
+      jobs = claimed(await store.claim(first ? 25 : 10));
+    } catch (error) {
+      if (first) throw error;
+      break;
+    }
     if (jobs.length === 0) break;
-    processed += await processBatch(store, gateway, jobs, now);
-  } while (clock() - start < budgetMs);
-  return { disabled: false, processed };
+    for (const job of jobs) {
+      if (spent()) {
+        // Never started: back to the queue as it was (a ticket job keeps its ticket), for the next run.
+        await store.finish(job, { outcome: "retry", delaySeconds: 0 });
+        deferred++;
+        continue;
+      }
+      await deliver(store, gateway, job, clock);
+      processed++;
+    }
+  }
+  return { disabled: false, processed, deferred };
 }
-async function processBatch(
+async function deliver(
   store: DeliveryStore,
   gateway: PushGateway,
-  jobs: Delivery[],
-  now: number,
+  job: Delivery,
+  clock: () => number,
 ) {
-  let processed = 0;
-  for (const job of jobs) {
-    if (!(await store.validate(job))) {
-      await store.finish(job, { outcome: "suppressed" });
-      processed++;
-      continue;
-    }
-    let result: Result;
-    // Checking an existing ticket never sends a second notification.
-    try {
-      if (job.ticket_id) {
-        const receipt = await gateway.receipt(job.ticket_id);
-        const age = now - Date.parse(job.ticket_created_at ?? "");
-        result = receipt
-          ? providerOutcome(receipt, true)
-          : !Number.isFinite(age) || age >= 23 * 3600_000
-            ? { outcome: "unknown" }
-            : { outcome: "retry", delaySeconds: 900 };
-      } else {
-        result = providerOutcome(await gateway.send(payloadFor(job)), false);
-      }
-    } catch (error) {
-      // A lost HTTP reply may already have sent the push. Do not blindly duplicate it.
-      result = {
-        outcome: job.ticket_id
-          ? "retry"
-          : error instanceof GatewayFailure
-            ? error.disposition
-            : "unknown",
-      };
-    }
-    if (result.outcome === "retry") {
-      if (job.attempts >= 8)
-        result = { outcome: job.ticket_id ? "unknown" : "failed" };
-      else result.delaySeconds ??= backoff(job.attempts);
-    }
-    // Never catch a failed journal write and treat it as provider failure.
-    await store.finish(job, result);
-    processed++;
+  if (!(await store.validate(job))) {
+    await store.finish(job, { outcome: "suppressed" });
+    return;
   }
-  return processed;
+  let result: Result;
+  // Checking an existing ticket never sends a second notification.
+  try {
+    if (job.ticket_id) {
+      const receipt = await gateway.receipt(job.ticket_id);
+      const age = clock() - Date.parse(job.ticket_created_at ?? "");
+      result = receipt
+        ? providerOutcome(receipt, true)
+        : !Number.isFinite(age) || age >= 23 * 3600_000
+          ? { outcome: "unknown" }
+          : { outcome: "retry", delaySeconds: 900 };
+    } else {
+      result = providerOutcome(await gateway.send(payloadFor(job)), false);
+    }
+  } catch (error) {
+    // A lost HTTP reply may already have sent the push. Do not blindly duplicate it.
+    result = {
+      outcome: job.ticket_id
+        ? "retry"
+        : error instanceof GatewayFailure
+          ? error.disposition
+          : "unknown",
+    };
+  }
+  if (result.outcome === "retry") {
+    if (job.attempts >= 8)
+      result = { outcome: job.ticket_id ? "unknown" : "failed" };
+    else result.delaySeconds ??= backoff(job.attempts);
+  }
+  // Never catch a failed journal write and treat it as provider failure.
+  await store.finish(job, result);
 }

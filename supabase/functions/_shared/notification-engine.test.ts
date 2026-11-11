@@ -261,56 +261,180 @@ test("other kinds keep their payload, with no series, even when the claim carrie
   }
 });
 
-/** A store whose claims return these batch sizes in turn (then none), or a full batch for ever. */
-function batches(sizes: number[] | "endless") {
+/**
+ * A store whose claims return these batch sizes in turn (then none), or a full batch for ever. `sendMs` is how far
+ * each send moves the fake clock that `clock` reads.
+ */
+function batches(sizes: number[] | "endless", sendMs = 0) {
   const limits: number[] = [];
   const outcomes: Result[] = [];
+  const validated: string[] = [];
+  const sent: string[] = [];
   let next = 0;
+  let time = 0;
   const store = {
     async claim(limit: number) {
       limits.push(limit);
-      const size = sizes === "endless" ? 25 : (sizes[limits.length - 1] ?? 0);
+      const size = sizes === "endless" ? limit : (sizes[limits.length - 1] ?? 0);
       return Array.from({ length: size }, () => ({ ...job, id: `delivery-${next}`, outbox_id: String(++next) }));
     },
+    validate: async (delivery: Delivery) => {
+      validated.push(delivery.id);
+      return true;
+    },
+    finish: async (_: Delivery, value: Result) => {
+      outcomes.push(value);
+    },
+  };
+  const gateway = {
+    send: async (payload: { data: { notificationId: string } }) => {
+      sent.push(payload.data.notificationId);
+      time += sendMs;
+      return { status: "ok" as const, id: "ticket" };
+    },
+    receipt: async (): Promise<any> => ({ status: "ok" }),
+  };
+  return { store, gateway, limits, outcomes, validated, sent, clock: () => time };
+}
+const TICKET = { outcome: "ticket", ticket: "ticket", delaySeconds: 900 };
+const HANDED_BACK = { outcome: "retry", delaySeconds: 0 };
+test("the sender claims 25 first, then 10 at a time, until a claim comes back empty (K-B3.3, H3)", async () => {
+  const f = batches([25, 10, 10, 3]);
+  assert.deepEqual(await runNotifications(f.store, f.gateway, true, f.clock), { disabled: false, processed: 48, deferred: 0 });
+  assert.deepEqual(f.limits, [25, 10, 10, 10, 10]);
+  assert.equal(f.outcomes.length, 48);
+  // An empty first claim ends the run at once.
+  const empty = batches([]);
+  assert.deepEqual(await runNotifications(empty.store, empty.gateway, true, empty.clock), { disabled: false, processed: 0, deferred: 0 });
+  assert.deepEqual(empty.limits, [25]);
+});
+test("no new claim starts once 5 seconds have passed (K-B3.4, H3)", async () => {
+  // 25 sends of 0.2 s: the last starts at 4.8 s and ends at 5 s, so the batch is sent whole and nothing more is claimed.
+  const f = batches("endless", 200);
+  assert.deepEqual(await runNotifications(f.store, f.gateway, true, f.clock), { disabled: false, processed: 25, deferred: 0 });
+  assert.deepEqual(f.limits, [25]);
+  assert.equal(f.sent.length, 25);
+  // At 4.9 s a second claim still starts. Its sends stop at 5 s as below.
+  const g = batches("endless", 196);
+  const result = await runNotifications(g.store, g.gateway, true, g.clock);
+  assert.deepEqual(g.limits, [25, 10]);
+  assert.deepEqual(result, { disabled: false, processed: 26, deferred: 9 });
+  // A run with a smaller budget stops sooner.
+  const h = batches("endless", 1000);
+  assert.deepEqual(await runNotifications(h.store, h.gateway, true, h.clock, 2000), { disabled: false, processed: 2, deferred: 23 });
+});
+test("no new send starts after 5 seconds: the rest of the batch goes back for the next run, none lost (H18)", async () => {
+  // 25 claimed, each send takes 2 s: sends start at 0, 2 and 4 s; at 6 s the other 22 are handed back unsent.
+  const f = batches("endless", 2000);
+  assert.deepEqual(await runNotifications(f.store, f.gateway, true, f.clock), { disabled: false, processed: 3, deferred: 22 });
+  assert.deepEqual(f.limits, [25]);
+  assert.equal(f.sent.length, 3);
+  assert.equal(f.validated.length, 3);
+  assert.deepEqual(f.outcomes, [TICKET, TICKET, TICKET, ...Array(22).fill(HANDED_BACK)]);
+  // A job waiting for its receipt is handed back too, keeping its ticket: the provider is not asked again.
+  let time = 0;
+  const receipts: string[] = [];
+  const outcomes: Result[] = [];
+  const store = {
+    claim: async (limit: number) =>
+      limit === 25
+        ? [
+            { ...job, id: "slow" },
+            { ...job, id: "waiting", ticket_id: "ticket-2", ticket_created_at: new Date(0).toISOString() },
+          ]
+        : [],
     validate: async () => true,
     finish: async (_: Delivery, value: Result) => {
       outcomes.push(value);
     },
   };
   const gateway = {
-    send: async () => ({ status: "ok" as const, id: "ticket" }),
-    receipt: async (): Promise<any> => ({ status: "ok" }),
+    send: async () => {
+      time += 6000;
+      return { status: "ok" as const, id: "ticket" };
+    },
+    receipt: async (id: string): Promise<any> => {
+      receipts.push(id);
+      return { status: "ok" };
+    },
   };
-  return { store, gateway, limits, outcomes };
-}
-test("the sender claims 25 at a time until a claim comes back empty (K-B3.3)", async () => {
-  const f = batches([25, 25, 3]);
-  assert.deepEqual(await runNotifications(f.store, f.gateway, true), { disabled: false, processed: 53 });
-  assert.deepEqual(f.limits, [25, 25, 25, 25]);
-  assert.equal(f.outcomes.length, 53);
-  // An empty first claim ends the run at once.
-  const empty = batches([]);
-  assert.deepEqual(await runNotifications(empty.store, empty.gateway, true), { disabled: false, processed: 0 });
-  assert.deepEqual(empty.limits, [25]);
+  assert.deepEqual(await runNotifications(store, gateway, true, () => time), { disabled: false, processed: 1, deferred: 1 });
+  assert.deepEqual(receipts, []);
+  assert.deepEqual(outcomes, [TICKET, HANDED_BACK]);
 });
-test("the sender stops claiming once its 40-second budget is spent (K-B3.4)", async () => {
-  const f = batches("endless");
-  let calls = 0;
-  const start = 1_000_000;
-  // The first call reads the start; each later call is 15 seconds on.
-  const clock = () => start + 15_000 * calls++;
-  const result = await runNotifications(f.store, f.gateway, true, Date.now(), clock);
-  assert.deepEqual(f.limits, [25, 25, 25]);
-  assert.deepEqual(result, { disabled: false, processed: 75 });
-  // A smaller budget is honoured too: the first batch always runs, the clock is checked after each.
-  const g = batches("endless");
-  let ticks = 0;
-  await runNotifications(g.store, g.gateway, true, Date.now(), () => 15_000 * ticks++, 10_000);
-  assert.deepEqual(g.limits, [25]);
+test("a claim that fails after the first batch ends the run with what it did; only a failed first claim is an error (H18)", async () => {
+  const f = batches([3]);
+  const claim = f.store.claim;
+  f.store.claim = async (limit: number) => {
+    if (f.limits.length === 1) {
+      f.limits.push(limit);
+      throw Error("db down");
+    }
+    return claim(limit);
+  };
+  assert.deepEqual(await runNotifications(f.store, f.gateway, true, f.clock), { disabled: false, processed: 3, deferred: 0 });
+  assert.deepEqual(f.limits, [25, 10]);
+  assert.equal(f.outcomes.length, 3);
+  const g = batches([3]);
+  g.store.claim = async () => {
+    throw Error("db down");
+  };
+  await assert.rejects(runNotifications(g.store, g.gateway, true, g.clock), /db down/);
+  // Through the worker: a failed first claim is a 503; a failed later claim is the run's result.
+  const post = () => new Request("https://example.test", { method: "POST", headers: { authorization: "Bearer " + "s".repeat(32) } });
+  const failing = notificationHandler({ ...g, secret: "s".repeat(32), enabled: true });
+  assert.equal((await failing(post())).status, 503);
+  const h = batches([3]);
+  const first = h.store.claim;
+  let claims = 0;
+  h.store.claim = async (limit: number) => {
+    if (claims++ === 1) throw Error("db down");
+    return first(limit);
+  };
+  const partial = await notificationHandler({ ...h, secret: "s".repeat(32), enabled: true })(post());
+  assert.equal(partial.status, 200);
+  assert.deepEqual(await partial.json(), { disabled: false, processed: 3, deferred: 0 });
+});
+test("a claim that returns null reads as empty (H18)", async () => {
+  const f = batches([]);
+  f.store.claim = async (limit: number) => {
+    f.limits.push(limit);
+    return null as unknown as Delivery[];
+  };
+  assert.deepEqual(await runNotifications(f.store, f.gateway, true, f.clock), { disabled: false, processed: 0, deferred: 0 });
+  assert.deepEqual(f.limits, [25]);
+  const g = batches([2]);
+  const claim = g.store.claim;
+  g.store.claim = async (limit: number) => (g.limits.length === 0 ? claim(limit) : (g.limits.push(limit), null as unknown as Delivery[]));
+  assert.deepEqual(await runNotifications(g.store, g.gateway, true, g.clock), { disabled: false, processed: 2, deferred: 0 });
+  assert.deepEqual(g.limits, [25, 10]);
+});
+test("a receipt's age is read from the clock (H18)", async () => {
+  const created = Date.parse("2026-11-11T09:00:00Z");
+  for (const [hours, outcome] of [
+    [1, { outcome: "retry", delaySeconds: 900 }],
+    [22.9, { outcome: "retry", delaySeconds: 900 }],
+    [23, { outcome: "unknown" }],
+  ] as const) {
+    const f = fixture({ ticket_id: "ticket", ticket_created_at: new Date(created).toISOString() });
+    f.gateway.receipt = async () => null;
+    await runNotifications(f.store, f.gateway, true, () => created + hours * 3600_000);
+    assert.deepEqual(f.outcomes, [outcome], `${hours} h`);
+  }
+});
+test("a clock that reads NaN or goes back behind the start ends the run, so it can never run on (H18)", async () => {
+  for (const reads of [[1000, NaN, 0], [1000, 999], [1000, 1000, 0]]) {
+    const f = batches("endless");
+    let i = 0;
+    const clock = () => reads[Math.min(i++, reads.length - 1)];
+    const result = await runNotifications(f.store, f.gateway, true, clock);
+    assert.ok(f.limits.length <= 2, JSON.stringify(reads));
+    assert.equal(result.processed + (result.deferred ?? 0), f.outcomes.length, JSON.stringify(reads));
+  }
 });
 test("a disabled sender never reads the clock or claims", async () => {
   const f = batches("endless");
-  const result = await runNotifications(f.store, f.gateway, false, Date.now(), () => {
+  const result = await runNotifications(f.store, f.gateway, false, () => {
     throw Error("Must not read the clock");
   });
   assert.deepEqual(result, { disabled: true, processed: 0 });

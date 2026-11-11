@@ -4,8 +4,8 @@
  * puts the event title underneath, and the invitation to a repeating resbite's next occurrence reads
  * "<title> is on again" over its time. It never contains the place, the Meeting details, the Note to guests
  * itself, the description or the cover description (UX3). The two chat notices are the one place a person's
- * own words appear (CH-P7): the sender's first name and their message, cut at 120 characters. Anything missing
- * or unexpected falls back to the generic text.
+ * own words appear (CH-P7): the sender's first name and their message, each made one clean line and cut (the
+ * name at 30 graphemes, the message at 120). Anything missing or unexpected falls back to the generic text.
  */
 export type CopyInput = {
   kind?: string | null;
@@ -97,22 +97,62 @@ function body(input: CopyInput): string | null {
   }
 }
 
-/** The most of a person's message a chat notice shows, in code points. */
-const CHAT_CUT = 120;
+/** The most of a person's message a chat notice shows, and of their first name, in graphemes (K-N3, H3, H18). */
+const WORDS_CUT = 120;
+const NAME_CUT = 30;
+/** Half of a surrogate pair: no font draws it, and it makes the provider's JSON ill-formed. */
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+/** Controls (white space aside, which is collapsed first), and the bidi embeddings, overrides and isolates. */
+const CONTROLS = /[\p{Cc}\u202A-\u202E\u2066-\u2069]/gu;
+/** Zero-width and format characters, and the blank fillers that pass for a letter (Hangul, Braille). */
+const ZERO_WIDTH = /[\p{Cf}\u115F\u1160\u3164\uFFA0\u2800]/gu;
+/** All a reader cannot see: white space, controls, zero-width and format characters and Unicode's other ignorables. */
+const INVISIBLE = /[\s\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}\u2800]/gu;
+let segmenter: Intl.Segmenter | undefined;
+/**
+ * The text's graphemes. Looked up when a cut is made, not when the module loads, so a runtime without Intl.Segmenter
+ * still sends every notice; there the cut falls back to code points, which never split a surrogate pair.
+ */
+function graphemes(text: string): string[] {
+  if (typeof Intl.Segmenter !== "function") return Array.from(text);
+  segmenter ??= new Intl.Segmenter("en", { granularity: "grapheme" });
+  return Array.from(segmenter.segment(text), (part) => part.segment);
+}
+
+/** One well-formed line: lone surrogates, controls and bidi controls gone, each run of white space one space. */
+function oneLine(text: string): string {
+  return text.replace(LONE_SURROGATE, "").replace(/\s+/g, " ").replace(CONTROLS, "").replace(/ {2,}/g, " ").trim();
+}
+
+/** The first `max` graphemes and "…", with no space before it; whole when it is no longer. */
+function cut(text: string, max: number): string {
+  const parts = graphemes(text);
+  return parts.length > max ? `${parts.slice(0, max).join("").trimEnd()}…` : text;
+}
+
+const visible = (text: string) => text.replace(INVISIBLE, "") !== "";
+
+/**
+ * The sender as a chat notice names them: the first word of the name the claim gives (K-N3, rule 8), split on every
+ * Unicode space as private.first_name splits, with zero-width and format characters removed before the split (so
+ * none can hide the name), a trailing ":", "," or ";" dropped, and at most 30 graphemes.
+ */
+function senderName(name: string | null | undefined): string | null {
+  const first = oneLine(name ?? "").replace(ZERO_WIDTH, "").trim().split(" ")[0].replace(/[:,;]+$/, "");
+  return visible(first) ? cut(first, NAME_CUT) : null;
+}
 
 /**
  * "<first name>: <words>" for a chat message, "Announcement from <first name>: <words>" for an announcement (CH-P7).
- * The first name is the first word of the name the claim gives (K-N3, rule 8), read as private.first_name reads it
- * for the chat's own lines: every Unicode space splits (JavaScript's \s is the same set), then control characters
- * go. The cut counts code points, not UTF-16 units, so an emoji is never split in half (K-N3).
+ * The words are one clean line cut at 120 graphemes, so no emoji, flag or accent is split (K-N3, H3). Words with
+ * nothing visible in them count as none (H18).
  */
 function chatBody(input: CopyInput): string | null {
-  const first = input.actor_name?.trim().split(/\s+/)[0].replace(/\p{Cc}/gu, "");
-  const words = input.message_body?.trim();
-  if (!first || !words) return null;
-  const points = Array.from(words);
-  const cut = points.length > CHAT_CUT ? `${points.slice(0, CHAT_CUT).join("")}…` : words;
-  return input.kind === "announcement" ? `Announcement from ${first}: ${cut}` : `${first}: ${cut}`;
+  const first = senderName(input.actor_name);
+  const words = oneLine(input.message_body ?? "");
+  if (!first || !visible(words)) return null;
+  const text = cut(words, WORDS_CUT);
+  return input.kind === "announcement" ? `Announcement from ${first}: ${text}` : `${first}: ${text}`;
 }
 
 export function notificationCopy(input: CopyInput): Copy {
