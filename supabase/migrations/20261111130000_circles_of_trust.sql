@@ -242,11 +242,12 @@ $$;
 --  3. the caller's own live link: sent again, at no cost: a link takes the item's new code (the app sends the code it
 --     has just made), an in-app outcome revokes the link and adds the pending row;
 --  4. otherwise (a revoked link, or none): new, and counted; a reopened link takes invited_by, brought_by and level
---     from this invitation.
+--     from this invitation, and comes back fresh, created now (C21 counts a host's link from its creation).
 -- New items are counted as they come; one more than remaining is 22023 'No invites left', which undoes the whole batch.
 --
 -- A host's items, as today, plus: a link makes the row the host's (no bringer, level 1, whoever sent it before, since
--- the host's code is now the live one; invited_by the host when the old link was revoked); an in-app outcome, {user}
+-- the host's code is now the live one; invited_by the host, and created now, when the old link was revoked: a link
+-- sent again while live keeps its creation time, so it is still the link from before a removal); an in-app outcome, {user}
 -- included, revokes every live link on the person's number, a bringer's included, which frees that bringer's invite
 -- (a number's holder is found by the number's key, so the item's key is the holder's); and an 'app' or 'link' item
 -- clears the series' removal records of that person and number.
@@ -378,6 +379,7 @@ begin
        user_id=case when private.phone_invitations.revoked_at is null then private.phone_invitations.user_id end,
        answered_at=case when private.phone_invitations.revoked_at is null then private.phone_invitations.answered_at end,
        invited_by=case when private.phone_invitations.revoked_at is null then private.phone_invitations.invited_by else excluded.invited_by end,
+       created_at=case when private.phone_invitations.revoked_at is null then private.phone_invitations.created_at else excluded.created_at end,
        brought_by=excluded.brought_by, level=excluded.level;
     end if;
     if v_host then
@@ -394,15 +396,20 @@ end $$;
 
 -- Answering a personal link: a new guest row takes the link's bringer and level (CO-P15: the circle is not checked
 -- again; a bringer who has since left, or lowered numbers, change nothing). Someone already on the resbite keeps their
--- own row, bringer and level. A removal sticks (C-R2, C19): a link of any level, a host's or a guest's, is refused as a
--- revoked link is (42501 'Invitation unavailable') when its answerer or its number is on record for the series (a
--- host's own invitation sent after the removal has cleared the record). The refusal undoes everything the call wrote,
--- so it cannot revoke the link itself: the links to a person's confirmed number are revoked when the host removes or
--- declines them (remove_guest, decide_join_request), and this check stops the rest (a number the person confirmed
--- afterwards). Otherwise the 20261031120000_creating_a_resbite body.
+-- own row, bringer and level. A removal sticks (C-R2, C19): a link is refused as a revoked link is (42501 'Invitation
+-- unavailable') when its answerer or its number is on record for the series, with one exception (C21): a host's own
+-- link (level 1) created after the latest of those records is the host's later decision, so it answers normally, and
+-- answering it clears them (the answerer's and the number's). This covers a person removed while they had no confirmed
+-- number, whom the host then linked by a number nobody held yet (the host's invitation cleared only the number's
+-- record). A link made before the removal, the host's or a guest's, and any guest's link (level > 1) stay refused
+-- while a record stands. A refusal undoes everything the call wrote, so it cannot revoke the link itself: the links to
+-- a person's confirmed number are revoked when the host removes or declines them (remove_guest, decide_join_request),
+-- and this check stops the rest (a number the person confirmed afterwards). Otherwise the
+-- 20261031120000_creating_a_resbite body.
 create or replace function private.answer_phone_invitation(p_code text, p_name text, p_response text, p_terms_version text) returns jsonb
 language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := auth.uid(); v_inv private.phone_invitations; v_plan public.plans; v_has_profile boolean; v_att public.attendees; v_next integer;
+ v_removed timestamptz;
 begin
  if v_uid is null then raise exception 'Sign-in required' using errcode='42501'; end if;
  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_uid::text,47));
@@ -423,9 +430,16 @@ begin
  select * into v_inv from private.phone_invitations where id=v_inv.id and revoked_at is null;
  if not found then raise exception 'Invitation unavailable' using errcode='42501'; end if;
  if v_inv.user_id is not null and v_inv.user_id<>v_uid then raise exception 'Invitation unavailable' using errcode='42501'; end if;
- -- The person or the number a host removed, declined or revoked on this series (C19).
- if exists(select 1 from private.plan_removals r where r.series_id=v_plan.series_id and (r.user_id=v_uid or r.phone=v_inv.phone)) then
-  raise exception 'Invitation unavailable' using errcode='42501';
+ -- The person or the number a host removed, declined or revoked on this series (C19), unless this is the host's own
+ -- link made after the latest of those records (C21), whose answer clears them.
+ v_removed := (select max(r.removed_at) from private.plan_removals r
+  where r.series_id=v_plan.series_id and (r.user_id=v_uid or r.phone=v_inv.phone));
+ if v_removed is not null then
+  if v_inv.level=1 and v_inv.created_at>v_removed then
+   delete from private.plan_removals where series_id=v_plan.series_id and (user_id=v_uid or phone=v_inv.phone);
+  else
+   raise exception 'Invitation unavailable' using errcode='42501';
+  end if;
  end if;
  if exists(select 1 from private.beta_access where user_id=v_uid and revoked_at is not null) then
   raise exception 'Invitation unavailable' using errcode='42501';

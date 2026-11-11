@@ -713,6 +713,88 @@ do $$ begin
 end $$;
 rollback;
 
+-- Slice 7h: a host's later link overrides the removal (C21). Base (1,1). 07, Going, has no confirmed number; 01
+-- removes 07 (an hour ago: the record's time is set back, as one transaction has one clock). 01 then links a number
+-- nobody holds, which clears no record of 07's; 07 confirms that number and answers: 07 is back, Going, level 1 with
+-- no bringer, and the record is gone. A guest's link made after the removal stays refused (slice 7b).
+begin;
+select pg_temp.co2_cast();
+update auth.users set phone=null, phone_confirmed_at=null where id=pg_temp.co2('07');
+insert into public.attendees(plan_id,user_id,response) values (pg_temp.co2p(),pg_temp.co2('07'),'accepted');
+set local role authenticated;
+select pg_temp.co2_as('01');
+select public.remove_guest(pg_temp.co2p(),pg_temp.co2('07'));
+reset role;
+update private.plan_removals set removed_at=now()-interval '1 hour';
+set local role authenticated;
+select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('99','A'))))='link',
+ '01 linking a number nobody holds');
+reset role;
+select pg_temp.co2_check(exists(select 1 from private.plan_removals where user_id=pg_temp.co2('07')),'The host''s link to an unheld number cleared 07''s record');
+update auth.users set phone=pg_temp.co2_phone('99'), phone_confirmed_at=now() where id=pg_temp.co2('07');
+set local role authenticated;
+select pg_temp.co2_as('07');
+select public.answer_phone_invitation(repeat('A',22),'Tomas T','accepted','2026-10');
+reset role;
+do $$ begin
+ if (select (response,brought_by,level) from public.attendees where plan_id=pg_temp.co2p() and user_id=pg_temp.co2('07'))
+   is distinct from ('accepted'::text,null::uuid,1::smallint) then
+  raise exception '07 did not come back Going at level 1';
+ end if;
+ if exists(select 1 from private.plan_removals) then raise exception 'Answering the host''s later link left a record'; end if;
+end $$;
+rollback;
+-- A host's link made before the removal stays refused: it survived the removal, as 07 had no number then.
+begin;
+select pg_temp.co2_cast();
+update auth.users set phone=null, phone_confirmed_at=null where id=pg_temp.co2('07');
+insert into public.attendees(plan_id,user_id,response) values (pg_temp.co2p(),pg_temp.co2('07'),'accepted');
+set local role authenticated;
+select pg_temp.co2_as('01');
+select public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('99','A')));
+select public.remove_guest(pg_temp.co2p(),pg_temp.co2('07'));
+reset role;
+update private.phone_invitations set created_at=now()-interval '2 hours' where plan_id=pg_temp.co2p() and phone=pg_temp.co2_phone('99');
+update private.plan_removals set removed_at=now()-interval '1 hour';
+update auth.users set phone=pg_temp.co2_phone('99'), phone_confirmed_at=now() where id=pg_temp.co2('07');
+set local role authenticated;
+select pg_temp.co2_as('07');
+select pg_temp.co2_refused($$select public.answer_phone_invitation(repeat('A',22),'Tomas T','accepted','2026-10')$$,'42501','Invitation unavailable');
+reset role;
+select pg_temp.co2_check(exists(select 1 from private.plan_removals where user_id=pg_temp.co2('07')),'A refused answer cleared the record');
+rollback;
+-- The same link revoked by the host and sent again after the removal (still to a number nobody holds) comes back fresh
+-- and counts from then: 07 answers it.
+begin;
+select pg_temp.co2_cast();
+update auth.users set phone=null, phone_confirmed_at=null where id=pg_temp.co2('07');
+insert into public.attendees(plan_id,user_id,response) values (pg_temp.co2p(),pg_temp.co2('07'),'accepted');
+set local role authenticated;
+select pg_temp.co2_as('01');
+select public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('99','A')));
+select public.remove_guest(pg_temp.co2p(),pg_temp.co2('07'));
+reset role;
+update private.phone_invitations set created_at=now()-interval '2 hours' where plan_id=pg_temp.co2p() and phone=pg_temp.co2_phone('99');
+update private.plan_removals set removed_at=now()-interval '1 hour';
+set local role authenticated;
+select public.revoke_phone_invitation(pg_temp.co2p(),pg_temp.co2_phone('99'));
+select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('99','B'))))='link',
+ '01 sending the number again');
+reset role;
+update auth.users set phone=pg_temp.co2_phone('99'), phone_confirmed_at=now() where id=pg_temp.co2('07');
+set local role authenticated;
+select pg_temp.co2_as('07');
+select public.answer_phone_invitation(repeat('B',22),'Tomas T','accepted','2026-10');
+reset role;
+do $$ begin
+ if (select (response,brought_by,level) from public.attendees where plan_id=pg_temp.co2p() and user_id=pg_temp.co2('07'))
+   is distinct from ('accepted'::text,null::uuid,1::smallint) then
+  raise exception '07 did not come back through the host''s link sent again';
+ end if;
+ if exists(select 1 from private.plan_removals) then raise exception 'Answering left a record'; end if;
+end $$;
+rollback;
+
 -- Slice 8: a sent invitation stands (CO-P15). set_plan_circle(2,2): 02 brings 06 (who says Going) and sends 10 a link.
 -- set_plan_circle(0,1): 06 may not bring, yet 10's answer puts them on the resbite brought by 02. 02 saying Can't go,
 -- then being removed, leaves both rows as they were.
