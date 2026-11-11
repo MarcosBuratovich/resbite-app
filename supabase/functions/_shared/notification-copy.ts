@@ -3,8 +3,9 @@
  * says what happened and who did it, with two exceptions: admin_added leads with who made you an admin and
  * puts the event title underneath, and the invitation to a repeating resbite's next occurrence reads
  * "<title> is on again" over its time. It never contains the place, the Meeting details, the Note to guests
- * itself, the description or the cover description (UX3). Anything missing or unexpected falls back to the
- * generic text.
+ * itself, the description or the cover description (UX3). The two chat notices are the one place a person's
+ * own words appear (CH-P7): the sender's first name and their message, cut at 120 characters. Anything missing
+ * or unexpected falls back to the generic text.
  */
 export type CopyInput = {
   kind?: string | null;
@@ -15,6 +16,8 @@ export type CopyInput = {
   actor_name?: string | null;
   /** An rsvp's bringer, by first name: "Clara is going · brought by Pedro." Other kinds ignore it. */
   brought_by_name?: string | null;
+  /** The message a chat_message or announcement notice is about. Every other kind ignores it. */
+  message_body?: string | null;
 };
 export type Copy = { title: string; body: string };
 export const GENERIC_COPY: Copy = Object.freeze({
@@ -94,8 +97,30 @@ function body(input: CopyInput): string | null {
   }
 }
 
+/** The most of a person's message a chat notice shows, in code points. */
+const CHAT_CUT = 120;
+
+/**
+ * "<first name>: <words>" for a chat message, "Announcement from <first name>: <words>" for an announcement (CH-P7).
+ * The first name is the first word of the name the claim gives (K-N3, rule 8), read as private.first_name reads it
+ * for the chat's own lines: every Unicode space splits (JavaScript's \s is the same set), then control characters
+ * go. The cut counts code points, not UTF-16 units, so an emoji is never split in half (K-N3).
+ */
+function chatBody(input: CopyInput): string | null {
+  const first = input.actor_name?.trim().split(/\s+/)[0].replace(/\p{Cc}/gu, "");
+  const words = input.message_body?.trim();
+  if (!first || !words) return null;
+  const points = Array.from(words);
+  const cut = points.length > CHAT_CUT ? `${points.slice(0, CHAT_CUT).join("")}…` : words;
+  return input.kind === "announcement" ? `Announcement from ${first}: ${cut}` : `${first}: ${cut}`;
+}
+
 export function notificationCopy(input: CopyInput): Copy {
   const title = input.title?.trim();
+  if (input.kind === "chat_message" || input.kind === "announcement") {
+    const text = title ? chatBody(input) : null;
+    return title && text ? { title, body: text } : GENERIC_COPY;
+  }
   // The one notice that leads with who did it: the plan's title is the line underneath.
   if (input.kind === "admin_added")
     return title ? { title: `${input.actor_name?.trim() || "Someone"} made you an admin`, body: title } : GENERIC_COPY;

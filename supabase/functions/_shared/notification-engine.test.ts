@@ -23,8 +23,14 @@ const job: Delivery = {
 function fixture(overrides: Partial<Delivery> = {}) {
   const outcomes: Result[] = [];
   const payloads: unknown[] = [];
+  // A store with one job, then none: the sender claims until a claim comes back empty.
+  let claimed = false;
   const store = {
-    claim: async () => [{ ...job, ...overrides }],
+    claim: async (_limit: number) => {
+      if (claimed) return [];
+      claimed = true;
+      return [{ ...job, ...overrides }];
+    },
     validate: async () => true,
     finish: async (_: Delivery, value: Result) => {
       outcomes.push(value);
@@ -206,4 +212,107 @@ test("a connection notice carries the connection type, a plan notice the plan_up
   for (const kind of ["connection_request", "connection_accepted"])
     assert.equal(payloadFor({ ...job, kind }).data.type, "connection");
   assert.equal(payloadFor({ ...job, kind: "rsvp" }).data.type, "plan_update");
+});
+
+const SERIES = "30000000-0000-4000-8000-000000000003";
+test("a chat push names the chat it opens: type chat with the series, the plan and the notice", () => {
+  for (const kind of ["chat_message", "announcement"]) {
+    const payload = payloadFor({
+      ...job,
+      kind,
+      series_id: SERIES,
+      message_id: "77",
+      message_body: "See you at 8",
+      audience: kind === "announcement" ? "everyone" : null,
+      title: "Board game night",
+      actor_name: "Leo Martínez",
+    });
+    assert.deepEqual(payload.data, { type: "chat", seriesId: SERIES, planId: job.plan_id, notificationId: "1" }, kind);
+    assert.equal(payload.data.type, "chat");
+    assert.equal(payload.data.seriesId, SERIES);
+    assert.equal(payload.title, "Board game night");
+    assert.equal(payload.body, kind === "announcement" ? "Announcement from Leo: See you at 8" : "Leo: See you at 8");
+    // The message id and the audience stay on the server.
+    assert.ok(!JSON.stringify(payload).includes('"77"') && !JSON.stringify(payload).includes("everyone"), kind);
+  }
+});
+test("a chat push with a missing or malformed series is never sent", async () => {
+  for (const kind of ["chat_message", "announcement"])
+    for (const series_id of [null, undefined, "", "not-a-uuid", `${SERIES}x`, " " + SERIES, "30000000-0000-4000-8000-00000000000g"])
+      assert.throws(
+        () => payloadFor({ ...job, kind, series_id }),
+        (e: unknown) => e instanceof GatewayFailure && e.disposition === "failed",
+        `${kind}/${JSON.stringify(series_id)}`,
+      );
+  // Through the runner it is a failed delivery and nothing reaches the gateway.
+  const f = fixture({ kind: "chat_message", series_id: "bad", title: "Board game night", actor_name: "Leo", message_body: "Hi" });
+  await runNotifications(f.store, f.gateway, true);
+  assert.equal(f.payloads.length, 0);
+  assert.deepEqual(f.outcomes, [{ outcome: "failed" }]);
+});
+test("other kinds keep their payload, with no series, even when the claim carries one", () => {
+  for (const series_id of [SERIES, "not-a-uuid", null]) {
+    assert.deepEqual(payloadFor({ ...job, kind: "rsvp", series_id }).data, { type: "plan_update", planId: job.plan_id, notificationId: "1" });
+    assert.deepEqual(payloadFor({ ...job, kind: "connection_request", series_id }).data, {
+      type: "connection",
+      planId: job.plan_id,
+      notificationId: "1",
+    });
+  }
+});
+
+/** A store whose claims return these batch sizes in turn (then none), or a full batch for ever. */
+function batches(sizes: number[] | "endless") {
+  const limits: number[] = [];
+  const outcomes: Result[] = [];
+  let next = 0;
+  const store = {
+    async claim(limit: number) {
+      limits.push(limit);
+      const size = sizes === "endless" ? 25 : (sizes[limits.length - 1] ?? 0);
+      return Array.from({ length: size }, () => ({ ...job, id: `delivery-${next}`, outbox_id: String(++next) }));
+    },
+    validate: async () => true,
+    finish: async (_: Delivery, value: Result) => {
+      outcomes.push(value);
+    },
+  };
+  const gateway = {
+    send: async () => ({ status: "ok" as const, id: "ticket" }),
+    receipt: async (): Promise<any> => ({ status: "ok" }),
+  };
+  return { store, gateway, limits, outcomes };
+}
+test("the sender claims 25 at a time until a claim comes back empty (K-B3.3)", async () => {
+  const f = batches([25, 25, 3]);
+  assert.deepEqual(await runNotifications(f.store, f.gateway, true), { disabled: false, processed: 53 });
+  assert.deepEqual(f.limits, [25, 25, 25, 25]);
+  assert.equal(f.outcomes.length, 53);
+  // An empty first claim ends the run at once.
+  const empty = batches([]);
+  assert.deepEqual(await runNotifications(empty.store, empty.gateway, true), { disabled: false, processed: 0 });
+  assert.deepEqual(empty.limits, [25]);
+});
+test("the sender stops claiming once its 40-second budget is spent (K-B3.4)", async () => {
+  const f = batches("endless");
+  let calls = 0;
+  const start = 1_000_000;
+  // The first call reads the start; each later call is 15 seconds on.
+  const clock = () => start + 15_000 * calls++;
+  const result = await runNotifications(f.store, f.gateway, true, Date.now(), clock);
+  assert.deepEqual(f.limits, [25, 25, 25]);
+  assert.deepEqual(result, { disabled: false, processed: 75 });
+  // A smaller budget is honoured too: the first batch always runs, the clock is checked after each.
+  const g = batches("endless");
+  let ticks = 0;
+  await runNotifications(g.store, g.gateway, true, Date.now(), () => 15_000 * ticks++, 10_000);
+  assert.deepEqual(g.limits, [25]);
+});
+test("a disabled sender never reads the clock or claims", async () => {
+  const f = batches("endless");
+  const result = await runNotifications(f.store, f.gateway, false, Date.now(), () => {
+    throw Error("Must not read the clock");
+  });
+  assert.deepEqual(result, { disabled: true, processed: 0 });
+  assert.deepEqual(f.limits, []);
 });

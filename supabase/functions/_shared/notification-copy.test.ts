@@ -196,3 +196,79 @@ test("a connection request leads with who, and says where you met", () => {
     { title: "You and Ana are now connected", body: "You can invite each other from Invite people." });
   assert.deepEqual(notificationCopy({ kind: "connection_request", title: "Picnic", actor_name: "" }), GENERIC_COPY);
 });
+
+test("a chat message and an announcement carry the sender's first name and their words under the event title", () => {
+  const chat = { title: "Board game night", actor_name: "Leo Martínez", message_body: "See you at 8, I'll bring snacks" };
+  assert.deepEqual(notificationCopy({ ...chat, kind: "chat_message" }), {
+    title: "Board game night",
+    body: "Leo: See you at 8, I'll bring snacks",
+  });
+  assert.deepEqual(notificationCopy({ ...chat, kind: "announcement" }), {
+    title: "Board game night",
+    body: "Announcement from Leo: See you at 8, I'll bring snacks",
+  });
+  // The first word of the name the claim gives, whatever the spacing around it (K-N3, rule 8).
+  for (const actor_name of ["Leo", "  Leo   Martínez ", "Leo\tMartínez"])
+    assert.equal(notificationCopy({ ...chat, kind: "chat_message", actor_name }).body, "Leo: See you at 8, I'll bring snacks", actor_name);
+  // Other kinds keep the name as the claim gives it.
+  assert.equal(notificationCopy({ ...chat, kind: "rsvp", detail: "accepted" }).body, "Leo Martínez is going.");
+  assert.equal(notificationCopy({ ...chat, kind: "invited" }).body, "Leo Martínez invited you.");
+});
+
+test("a chat push cuts the words at 120 characters with an ellipsis", () => {
+  const chat = { kind: "chat_message", title: "Board game night", actor_name: "Leo Martínez" };
+  const long = "a".repeat(130);
+  assert.equal(notificationCopy({ ...chat, message_body: long }).body, `Leo: ${"a".repeat(120)}…`);
+  assert.equal(notificationCopy({ ...chat, kind: "announcement", message_body: long }).body, `Announcement from Leo: ${"a".repeat(120)}…`);
+  // Exactly 120 stays whole; 121 is cut.
+  assert.equal(notificationCopy({ ...chat, message_body: "b".repeat(120) }).body, `Leo: ${"b".repeat(120)}`);
+  assert.equal(notificationCopy({ ...chat, message_body: "b".repeat(121) }).body, `Leo: ${"b".repeat(120)}…`);
+});
+
+test("the cut counts code points, so an emoji is never split (K-N3)", () => {
+  const chat = { kind: "chat_message", title: "Board game night", actor_name: "Leo Martínez" };
+  const letters = "c".repeat(119);
+  const body = notificationCopy({ ...chat, message_body: `${letters}🎉x` }).body;
+  assert.equal(body, `Leo: ${letters}🎉…`);
+  // No lone surrogate anywhere: a UTF-16 cut at 120 would leave half of the emoji.
+  assert.ok(!/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(body));
+  // 120 code points that are 121 UTF-16 units stay whole.
+  assert.equal(notificationCopy({ ...chat, message_body: `${letters}🎉` }).body, `Leo: ${letters}🎉`);
+});
+
+test("a chat push without a name, words or title falls back to the generic text", () => {
+  const chat = { title: "Board game night", actor_name: "Leo Martínez", message_body: "Hello" };
+  for (const kind of ["chat_message", "announcement"]) {
+    for (const actor_name of [null, undefined, "", "   "])
+      assert.deepEqual(notificationCopy({ ...chat, kind, actor_name }), GENERIC_COPY, `${kind}/name ${JSON.stringify(actor_name)}`);
+    for (const message_body of [null, undefined, "", "   "])
+      assert.deepEqual(notificationCopy({ ...chat, kind, message_body }), GENERIC_COPY, `${kind}/body ${JSON.stringify(message_body)}`);
+    for (const title of [null, "  "])
+      assert.deepEqual(notificationCopy({ ...chat, kind, title }), GENERIC_COPY, `${kind}/title ${JSON.stringify(title)}`);
+  }
+});
+
+test("only the two chat kinds carry the message's words", () => {
+  const leaky = { ...base, message_body: "Secret words" };
+  for (const [kind, detail] of [
+    ["rsvp", "accepted"],
+    ["invitation", null],
+    ["invited", null],
+    ["invited", "again"],
+    ["guest_note", null],
+    ["plan_changed", "time_place"],
+    ["plan_cancelled", null],
+    ["admin_added", null],
+    ["connection_request", "going"],
+    ["connection_accepted", null],
+  ] as const)
+    assert.ok(!JSON.stringify(notificationCopy({ ...leaky, kind, detail })).includes("Secret"), `${kind}/${detail}`);
+});
+
+test("the first name reads as the chat's own helper gives it: every Unicode space splits, control characters go", () => {
+  const chat = { kind: "chat_message", title: "Board game night", message_body: "Hi" };
+  for (const actor_name of ["Leo Martínez", "Leo Martínez", "Leo　Martínez", "﻿Leo Martínez", "Le\u0007o Martínez", "\u0000Leo\u001b Martínez"])
+    assert.equal(notificationCopy({ ...chat, actor_name }).body, "Leo: Hi", JSON.stringify(actor_name));
+  // A name that is only control characters is no name.
+  assert.deepEqual(notificationCopy({ ...chat, actor_name: "\u0007\u0008 Martínez" }), GENERIC_COPY);
+});

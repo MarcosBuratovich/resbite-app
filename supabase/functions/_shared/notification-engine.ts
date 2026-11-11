@@ -20,6 +20,14 @@ export type Delivery = {
   actor_name?: string | null;
   /** For an rsvp only: the first name of whoever brought the person who answered (circles of trust); else null. */
   brought_by_name?: string | null;
+  /** Chat (chat core): the series whose chat the notice opens, as a uuid. A chat push without a valid one is never sent. */
+  series_id?: string | null;
+  /** Chat: the message the notice is about. It stays on the server: the push never carries it. */
+  message_id?: string | null;
+  /** Chat: the message's words, for chat_message and announcement only. The copy cuts them at 120 characters. */
+  message_body?: string | null;
+  /** Chat: an announcement's audience ('going' or 'everyone'); else null. It stays on the server. */
+  audience?: string | null;
 };
 export type Outcome =
   | "ticket"
@@ -53,25 +61,40 @@ export class GatewayFailure extends Error {
 }
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const isChat = (kind: string | null | undefined) =>
+  kind === "chat_message" || kind === "announcement";
+function dataFor(job: Delivery) {
+  // A chat notice opens the chat of its series; the app reads the chat through the server before showing it.
+  if (isChat(job.kind))
+    return {
+      type: "chat" as const,
+      seriesId: job.series_id as string,
+      planId: job.plan_id,
+      notificationId: job.outbox_id,
+    };
+  return {
+    type:
+      job.kind === "connection_request" || job.kind === "connection_accepted"
+        ? ("connection" as const)
+        : ("plan_update" as const),
+    planId: job.plan_id,
+    notificationId: job.outbox_id,
+  };
+}
 export function payloadFor(job: Delivery) {
   if (
     !UUID.test(job.plan_id) ||
     !/^\d+$/.test(job.outbox_id) ||
-    !/^(ExponentPushToken|ExpoPushToken)\[[A-Za-z0-9_-]+\]$/.test(job.token)
+    !/^(ExponentPushToken|ExpoPushToken)\[[A-Za-z0-9_-]+\]$/.test(job.token) ||
+    (isChat(job.kind) &&
+      (typeof job.series_id !== "string" || !UUID.test(job.series_id)))
   ) {
     throw new GatewayFailure("failed");
   }
   return {
     to: job.token,
     ...notificationCopy(job),
-    data: {
-      type:
-        job.kind === "connection_request" || job.kind === "connection_accepted"
-          ? "connection"
-          : "plan_update",
-      planId: job.plan_id,
-      notificationId: job.outbox_id,
-    },
+    data: dataFor(job),
     ttl: 3600,
   };
 }
@@ -89,14 +112,35 @@ function providerOutcome(value: ProviderResult, receipt: boolean): Result {
   if (error === "MessageRateExceeded") return { outcome: "retry" };
   return { outcome: "failed" };
 }
+/**
+ * One run of the sender. It claims 25 deliveries at a time and works through each batch, again and again, while a
+ * claim returns rows and less than `budgetMs` has passed since the start (K-B3.3). The clock is read once at the
+ * start and once after each batch, so the first batch always runs and a run ends at most one batch past its budget.
+ */
 export async function runNotifications(
   store: DeliveryStore,
   gateway: PushGateway,
   enabled = false,
   now = Date.now(),
+  clock: () => number = Date.now,
+  budgetMs = 40_000,
 ) {
   if (!enabled) return { disabled: true, processed: 0 };
-  const jobs = await store.claim(25);
+  const start = clock();
+  let processed = 0;
+  do {
+    const jobs = await store.claim(25);
+    if (jobs.length === 0) break;
+    processed += await processBatch(store, gateway, jobs, now);
+  } while (clock() - start < budgetMs);
+  return { disabled: false, processed };
+}
+async function processBatch(
+  store: DeliveryStore,
+  gateway: PushGateway,
+  jobs: Delivery[],
+  now: number,
+) {
   let processed = 0;
   for (const job of jobs) {
     if (!(await store.validate(job))) {
@@ -137,5 +181,5 @@ export async function runNotifications(
     await store.finish(job, result);
     processed++;
   }
-  return { disabled: false, processed };
+  return processed;
 }
