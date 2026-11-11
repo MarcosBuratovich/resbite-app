@@ -716,7 +716,8 @@ rollback;
 -- Slice 7h: a host's later link overrides the removal (C21). Base (1,1). 07, Going, has no confirmed number; 01
 -- removes 07 (an hour ago: the record's time is set back, as one transaction has one clock). 01 then links a number
 -- nobody holds, which clears no record of 07's; 07 confirms that number and answers: 07 is back, Going, level 1 with
--- no bringer, and the record is gone. A guest's link made after the removal stays refused (slice 7b).
+-- no bringer, and the record is gone. A guest's link made after the removal stays refused (slice 7b). A host's link
+-- counts from when the host last sent it (C22): reopened, or sent again while live; a guest's sent again does not.
 begin;
 select pg_temp.co2_cast();
 update auth.users set phone=null, phone_confirmed_at=null where id=pg_temp.co2('07');
@@ -793,6 +794,67 @@ do $$ begin
  end if;
  if exists(select 1 from private.plan_removals) then raise exception 'Answering left a record'; end if;
 end $$;
+rollback;
+
+-- The host's link from before the removal, still live, sent again by the host after it (Send again: a new code on the
+-- same live link) counts from then (C22): 07 answers it, level 1, and the record is gone.
+begin;
+select pg_temp.co2_cast();
+update auth.users set phone=null, phone_confirmed_at=null where id=pg_temp.co2('07');
+insert into public.attendees(plan_id,user_id,response) values (pg_temp.co2p(),pg_temp.co2('07'),'accepted');
+set local role authenticated;
+select pg_temp.co2_as('01');
+select public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('99','A')));
+select public.remove_guest(pg_temp.co2p(),pg_temp.co2('07'));
+reset role;
+update private.phone_invitations set created_at=now()-interval '2 hours' where plan_id=pg_temp.co2p() and phone=pg_temp.co2_phone('99');
+update private.plan_removals set removed_at=now()-interval '1 hour';
+set local role authenticated;
+select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('99','B'))))='link',
+ '01 sending their live link again');
+reset role;
+update auth.users set phone=pg_temp.co2_phone('99'), phone_confirmed_at=now() where id=pg_temp.co2('07');
+set local role authenticated;
+select pg_temp.co2_as('07');
+select public.answer_phone_invitation(repeat('B',22),'Tomas T','accepted','2026-10');
+reset role;
+do $$ begin
+ if (select (response,brought_by,level) from public.attendees where plan_id=pg_temp.co2p() and user_id=pg_temp.co2('07'))
+   is distinct from ('accepted'::text,null::uuid,1::smallint) then
+  raise exception '07 did not come back through the host''s live link sent again';
+ end if;
+ if exists(select 1 from private.plan_removals) then raise exception 'Answering left a record'; end if;
+end $$;
+rollback;
+-- A guest's link from before the removal, sent again by the guest after it, keeps its creation time, still costs
+-- nothing, and stays refused (a guest's link, while a record stands).
+begin;
+select pg_temp.co2_cast();
+update auth.users set phone=null, phone_confirmed_at=null where id=pg_temp.co2('07');
+insert into public.attendees(plan_id,user_id,response) values (pg_temp.co2p(),pg_temp.co2('07'),'accepted');
+set local role authenticated;
+select pg_temp.co2_as('02');
+select public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('99','A')));
+select pg_temp.co2_as('01');
+select public.remove_guest(pg_temp.co2p(),pg_temp.co2('07'));
+reset role;
+update private.phone_invitations set created_at=now()-interval '2 hours' where plan_id=pg_temp.co2p() and phone=pg_temp.co2_phone('99');
+update private.plan_removals set removed_at=now()-interval '1 hour';
+set local role authenticated;
+select pg_temp.co2_as('02');
+select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('99','B'))))='link',
+ '02 sending their live link again');
+reset role;
+do $$ begin
+ if (select created_at>now()-interval '1 hour' from private.phone_invitations where plan_id=pg_temp.co2p() and phone=pg_temp.co2_phone('99')) then
+  raise exception 'A guest''s link sent again took a new creation time';
+ end if;
+ perform pg_temp.co2_check(pg_temp.co2_used('02')=1,'Sending again was counted');
+end $$;
+update auth.users set phone=pg_temp.co2_phone('99'), phone_confirmed_at=now() where id=pg_temp.co2('07');
+set local role authenticated;
+select pg_temp.co2_as('07');
+select pg_temp.co2_refused($$select public.answer_phone_invitation(repeat('B',22),'Tomas T','accepted','2026-10')$$,'42501','Invitation unavailable');
 rollback;
 
 -- Slice 8: a sent invitation stands (CO-P15). set_plan_circle(2,2): 02 brings 06 (who says Going) and sends 10 a link.

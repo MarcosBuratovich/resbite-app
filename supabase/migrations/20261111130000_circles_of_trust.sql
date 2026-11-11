@@ -242,12 +242,14 @@ $$;
 --  3. the caller's own live link: sent again, at no cost: a link takes the item's new code (the app sends the code it
 --     has just made), an in-app outcome revokes the link and adds the pending row;
 --  4. otherwise (a revoked link, or none): new, and counted; a reopened link takes invited_by, brought_by and level
---     from this invitation, and comes back fresh, created now (C21 counts a host's link from its creation).
+--     from this invitation, and comes back fresh, created now. A guest's own live link sent again (3) keeps its
+--     creation time.
 -- New items are counted as they come; one more than remaining is 22023 'No invites left', which undoes the whole batch.
 --
 -- A host's items, as today, plus: a link makes the row the host's (no bringer, level 1, whoever sent it before, since
--- the host's code is now the live one; invited_by the host, and created now, when the old link was revoked: a link
--- sent again while live keeps its creation time, so it is still the link from before a removal); an in-app outcome, {user}
+-- the host's code is now the live one; invited_by the host when the old link was revoked); the row is created now
+-- whenever a host sends it, reopened or sent again while live, so it counts as the host's invitation from then (C21,
+-- C22: answer_phone_invitation lets a host's link made after a removal through); an in-app outcome, {user}
 -- included, revokes every live link on the person's number, a bringer's included, which frees that bringer's invite
 -- (a number's holder is found by the number's key, so the item's key is the holder's); and an 'app' or 'link' item
 -- clears the series' removal records of that person and number.
@@ -379,7 +381,8 @@ begin
        user_id=case when private.phone_invitations.revoked_at is null then private.phone_invitations.user_id end,
        answered_at=case when private.phone_invitations.revoked_at is null then private.phone_invitations.answered_at end,
        invited_by=case when private.phone_invitations.revoked_at is null then private.phone_invitations.invited_by else excluded.invited_by end,
-       created_at=case when private.phone_invitations.revoked_at is null then private.phone_invitations.created_at else excluded.created_at end,
+       -- A host's link counts from when the host last sent it (C21, C22); a guest's sent again keeps its time.
+       created_at=case when private.phone_invitations.revoked_at is null and not v_host then private.phone_invitations.created_at else excluded.created_at end,
        brought_by=excluded.brought_by, level=excluded.level;
     end if;
     if v_host then
@@ -399,10 +402,11 @@ end $$;
 -- own row, bringer and level. A removal sticks (C-R2, C19): a link is refused as a revoked link is (42501 'Invitation
 -- unavailable') when its answerer or its number is on record for the series, with one exception (C21): a host's own
 -- link (level 1) created after the latest of those records is the host's later decision, so it answers normally, and
--- answering it clears them (the answerer's and the number's). This covers a person removed while they had no confirmed
--- number, whom the host then linked by a number nobody held yet (the host's invitation cleared only the number's
--- record). A link made before the removal, the host's or a guest's, and any guest's link (level > 1) stay refused
--- while a record stands. A refusal undoes everything the call wrote, so it cannot revoke the link itself: the links to
+-- answering it clears them (the answerer's and the number's). A host's link is created again whenever the host sends
+-- it, reopened or sent again while live (C22, invite_contacts). This covers a person removed while they had no
+-- confirmed number, whom the host then linked by a number nobody held yet (the host's invitation cleared only the
+-- number's record). A host's link last sent before the removal, and any guest's link (level > 1), stay refused while a
+-- record stands. A refusal undoes everything the call wrote, so it cannot revoke the link itself: the links to
 -- a person's confirmed number are revoked when the host removes or declines them (remove_guest, decide_join_request),
 -- and this check stops the rest (a number the person confirmed afterwards). Otherwise the
 -- 20261031120000_creating_a_resbite body.
