@@ -10,11 +10,40 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-10-connections-and-circles-design.md` (CO-D4, CO-D5, CO-D7, CO-P7–P13, CO-P15, screens CO-04–CO-07; mockups `docs/superpowers/specs/2026-11-10-connections-groups-chat-mockups/circle-of-trust.html`).
 
-**Branch:** `co2-circles-of-trust` from `main` after plan 1 (`co1-connections`) is merged; it uses plan 1's `{user}` invite items, `ConnectionsPicker` and `connectionGateway`.
+**Branch:** `co2-circles-of-trust` from `main` after the follow-ups plan (`docs/superpowers/plans/2026-11-11-connections-3-follow-ups.md`) is merged. Plan 1 is merged and live (main `3e5d37f`, hosted migration `20261110120000`).
+
+## Revised 11 November 2026, after plan 1 shipped
+
+Plan 1's execution changed interfaces this plan names. Where the tasks below and this section differ, this section wins.
+
+- **Migration name:** `supabase/migrations/20261111130000_circles_of_trust.sql` (after the follow-ups' `20261111120000`), not `20261110130000`.
+- **Where each redefined function's latest body lives** (copy from there, change only what the task says):
+  - `invite_contacts`: `20261110120000_connections.sql:321`. It already takes `{user}` items, which need a `connected` pair plus `user_eligible` and not `deletion_pending`, and fail the whole call with `42501 'Not a connection'`. It opens with `v_uid uuid := private.require_link_owner(p_plan)`. Replace that line with `v_uid := private.require_tester()`, followed by a branch. A host still goes through `private.require_link_owner(p_plan)`. A non-host takes the plan row `for update`, then the allowance check. The advisory lock and the `charge_lookup` call (phone items only) stay for both.
+  - `answer_phone_invitation`: `20261031120000_creating_a_resbite.sql:304`.
+  - `personal_invitation_page`: `20261031120000_creating_a_resbite.sql:266`.
+  - `plan_phone_invitations`: `20261031120000_creating_a_resbite.sql:653`.
+  - `claim_invite`: `20261031120000_creating_a_resbite.sql:121`.
+  - `decide_join_request`: `20261029120000_open_link_approval.sql:225`.
+  - `roll_repeating_plans`: the follow-ups migration's version, which carries every guest row (CH-P20). Copy it from `20261111120000_connections_follow_ups.sql`, not from creating-a-resbite.
+  - `claim_notification_deliveries`: `20261030120000_push_delivery.sql:101`.
+- **The app as it stands.**
+  - `Guest` is `{ userId, name, response }` (`mobile/src/services/rsvp.ts:67`); `readGuests` selects at `:92`.
+  - `peopleGroups` (`mobile/src/domain/eventPage.ts:353`) takes `owner`, `userId` and `connections`. It puts the owner's "Hosting" row first under Going, and its group titles count every row shown (Ruling 21).
+  - The chain nesting of Task 5 keeps the owner's row first. The owner is never "brought", so the owner row has `depth 0`.
+- **Invite people as it stands.**
+  - `ConnectionsPicker` (`mobile/src/design/ConnectionsPicker.tsx`) sits above `PickStep`.
+  - `useContactInvites` returns `connections`, `chosenUsers`, `toggleUser`, `invitedUsers` and `inviteCount`.
+  - `inviteItems(selected, chosenUsers, invitedUsers, codeFor)` returns `{ numbers, phones, users }`.
+  - The numbers go first, in their own calls. The connections go in calls of their own through `inviteConnections`, which retries a refused batch one by one.
+  - Bring mode's `limit` caps `inviteCount` (numbers plus connections together). The server checks the allowance under the plan lock in each call, so the phone call and the connections call cannot together exceed it.
+- **Page order.** The "Bring someone" row goes right after the people row. The chat plan's Chat row goes after it (CH-P14).
+- **The CO-P2 group exception** (anyone on a group may be asked) is the chat plan's, not this one's.
+- **Commands on this machine:** edge tests run with `node --import ./mobile/node_modules/tsx/dist/loader.mjs supabase/functions/_shared/<file>.test.ts` from the repo root (Node here lacks `--experimental-transform-types`). After new screens land in a checkout, start Expo once (`npx expo start --web --port 8081`, stop it by its process group) before `npm run typecheck`: the typed-route file is generated and git-ignored.
+- **Runbook steps that changed:** apply this migration together with the follow-ups' one if both are pending (one before/after snapshot pair, two files approved by name and sha256, applied in order); the sender redeploy (Task 2's `rsvp` wording) can share the follow-ups' redeploy.
 
 ## Global Constraints
 
-Same as plan 1, verbatim: no hosted touch in this plan; the house function and table shapes and error codes; rollback and hosted-baseline files with both harness modes green; pushes through the outbox with UX2-D4 wording; copy in `*Copy.ts` with exact-string tests and every new test appended to `mobile/package.json`; `npm run check` green; Expo v57 docs first; UX2-D6 names rule; 44 pt and labels; commit messages end with `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`; commit per task, never push. Plus: the link site is generated with `node --import ./mobile/node_modules/tsx/dist/loader.mjs links/generate.mjs …` and checked with `links/*.test.mjs` and `links/verify-personal.mjs`; deploying it is an owner-approved rollout step, not part of this plan.
+Same as plan 1, verbatim: no hosted touch in this plan; the house function and table shapes and error codes; rollback and hosted-baseline files with both harness modes green; pushes through the outbox with UX2-D4 wording; copy in `*Copy.ts` with exact-string tests and every new test appended to `mobile/package.json`; `npm run check` green; Expo v57 docs first; UX2-D6 names rule; 44 pt and labels; commit messages end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`; commit per task, never push. Plus: the link site is generated with `node --import ./mobile/node_modules/tsx/dist/loader.mjs links/generate.mjs …` and checked with `links/*.test.mjs` and `links/verify-personal.mjs`; deploying it is an owner-approved rollout step, not part of this plan.
 
 ## Review Focus
 
@@ -29,9 +58,9 @@ Same as plan 1, verbatim: no hosted touch in this plan; the house function and t
 ### Task 1: Migration: columns, allowance, bringing on the server
 
 **Files:**
-- Create: `supabase/migrations/20261110130000_circles_of_trust.sql`
+- Create: `supabase/migrations/20261111130000_circles_of_trust.sql`
 - Create: `supabase/tests/circles-of-trust.sql`, `supabase/tests/local/circles-concurrency.sh`
-- Create: `supabase/rollback/20261110130000_circles_of_trust.rollback.sql`, `supabase/tests/hosted-baseline/20261110130000_circles_of_trust.before.sql`, `.after.sql`
+- Create: `supabase/rollback/20261111130000_circles_of_trust.rollback.sql`, `supabase/tests/hosted-baseline/20261111130000_circles_of_trust.before.sql`, `.after.sql`
 
 **Interfaces:**
 - Consumes: plan 1's `invite_contacts` (with `{user}` items), `private.require_link_owner`, `private.is_host`, `private.plan_end`, `private.answer_phone_invitation` (`20261031120000_creating_a_resbite.sql:304`), `private.claim_invite` (`:120`), `private.decide_join_request` (`20261029120000_open_link_approval.sql:225`), `private.roll_repeating_plans` (`:1006`), `private.personal_invitation_page` (`20261028120000_contact_invitations.sql:197`), the concurrency script shape of `supabase/tests/local/*-concurrency.sh`.
@@ -82,19 +111,19 @@ Run: `bash scripts/test-database-docker.sh`. Expected: PASS.
 
 - [ ] **Step 6: Rollback, hosted-baseline files, both modes**
 
-Rollback drops the functions back to their plan-1 or earlier bodies and the columns (header comment: people already brought stay as ordinary guests; the circle numbers are lost). `before.sql`: `bring_invites` absent; `after.sql`: present with default 0, `set_plan_circle` granted to `authenticated`. Run: `bash scripts/test-database-docker.sh --hosted-baseline supabase/migrations/20261110130000_circles_of_trust.sql`. Expected: PASS. Note the migration's `sha256sum` for Task 7.
+Rollback drops the functions back to their plan-1 or earlier bodies and the columns (header comment: people already brought stay as ordinary guests; the circle numbers are lost). `before.sql`: `bring_invites` absent; `after.sql`: present with default 0, `set_plan_circle` granted to `authenticated`. Run: `bash scripts/test-database-docker.sh --hosted-baseline supabase/migrations/20261111130000_circles_of_trust.sql`. Expected: PASS. Note the migration's `sha256sum` for Task 7.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add supabase/migrations/20261110130000_circles_of_trust.sql supabase/tests/circles-of-trust.sql supabase/tests/local/circles-concurrency.sh supabase/rollback/20261110130000_circles_of_trust.rollback.sql supabase/tests/hosted-baseline/20261110130000_circles_of_trust.*.sql
+git add supabase/migrations/20261111130000_circles_of_trust.sql supabase/tests/circles-of-trust.sql supabase/tests/local/circles-concurrency.sh supabase/rollback/20261111130000_circles_of_trust.rollback.sql supabase/tests/hosted-baseline/20261111130000_circles_of_trust.*.sql
 git commit -m "Circles of trust: the numbers, the allowance, and bringing someone on the server"
 ```
 
 ### Task 2: "· brought by Pedro" in the host's push
 
 **Files:**
-- Modify: `supabase/migrations/20261110130000_circles_of_trust.sql` (append: `claim_notification_deliveries` returns `brought_by_name`), `supabase/tests/circles-of-trust.sql` (one assertion), `supabase/rollback/…` (restore the claim)
+- Modify: `supabase/migrations/20261111130000_circles_of_trust.sql` (append: `claim_notification_deliveries` returns `brought_by_name`), `supabase/tests/circles-of-trust.sql` (one assertion), `supabase/rollback/…` (restore the claim)
 - Modify: `supabase/functions/_shared/notification-engine.ts:4-20` (`Delivery.brought_by_name?: string | null`), `supabase/functions/_shared/notification-copy.ts:44-64` (`CopyInput.brought_by_name`, the `rsvp` case), `notification-copy.test.ts`
 
 **Interfaces:**
@@ -112,7 +141,7 @@ Copy test: `notificationCopy({ kind: "rsvp", detail: "accepted", title: "Board g
 - [ ] **Step 4: Commit**
 
 ```bash
-git add supabase/migrations/20261110130000_circles_of_trust.sql supabase/tests/circles-of-trust.sql supabase/rollback/20261110130000_circles_of_trust.rollback.sql supabase/functions/_shared
+git add supabase/migrations/20261111130000_circles_of_trust.sql supabase/tests/circles-of-trust.sql supabase/rollback/20261111130000_circles_of_trust.rollback.sql supabase/functions/_shared
 git commit -m "Circles of trust: the host hears who brought whom"
 ```
 
@@ -221,7 +250,7 @@ test("a bringer's own unanswered links appear for them with 'brought by you'", �
 - [ ] **Step 5: Commit**
 
 ```bash
-git add mobile/src/domain/eventPage.ts mobile/src/domain/eventPage.test.ts mobile/app/guests.tsx mobile/src/state/useEvent.ts supabase/migrations/20261110130000_circles_of_trust.sql supabase/tests/circles-of-trust.sql supabase/rollback/20261110130000_circles_of_trust.rollback.sql
+git add mobile/src/domain/eventPage.ts mobile/src/domain/eventPage.test.ts mobile/app/guests.tsx mobile/src/state/useEvent.ts supabase/migrations/20261111130000_circles_of_trust.sql supabase/tests/circles-of-trust.sql supabase/rollback/20261111130000_circles_of_trust.rollback.sql
 git commit -m "Circles of trust: the people list shows who brought whom"
 ```
 
