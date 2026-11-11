@@ -17,8 +17,10 @@
 --   public.claim_notification_deliveries          from 20261030120000_push_delivery.sql (the worker's; no wrapper)
 --   private.roll_repeating_plans                  from 20261111120000_connections_follow_ups.sql (every guest carried)
 --   private.request_account_deletion              from 20261110120000_connections.sql, where it exists (local only)
--- then drops the seven new functions (one internal, six behind a public wrapper) and the six public wrappers,
--- private.plan_removals and the six new columns.
+-- then drops the trigger attendees_close_waiting on public.attendees and then its function
+-- private.attendees_close_waiting, the helper private.first_name, the seven new functions (one internal, six behind a
+-- public wrapper) and the six public wrappers, private.plan_removals and the six new columns. Waits the trigger
+-- ended stay ended (a person on the guest list has no request waiting).
 -- Builds: an app build with the circle (the card, "Bring someone", the chain) gets errors from the functions dropped
 -- here and reads no brought_by, level or circle columns: roll the app back first. Installed builds from before the
 -- migration read nothing it made.
@@ -481,7 +483,11 @@ $fn$;
  end if;
 end $migration$;
 
--- The seven new functions and the six public wrappers, the removal records, and the six columns.
+-- The trigger, then its function; the first-name helper; the seven new functions and the six public wrappers, the
+-- removal records, and the six columns.
+drop trigger attendees_close_waiting on public.attendees;
+drop function private.attendees_close_waiting();
+drop function private.first_name(text);
 drop function public.set_plan_circle(uuid,smallint,smallint), private.set_plan_circle(uuid,smallint,smallint),
  public.my_bring_allowance(uuid), private.my_bring_allowance(uuid), private.bring_allowance(uuid,uuid),
  public.plan_brought_invitations(uuid), private.plan_brought_invitations(uuid),

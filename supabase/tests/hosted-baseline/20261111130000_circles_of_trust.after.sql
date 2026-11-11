@@ -4,7 +4,9 @@
 -- columns point at auth.users and become null when the account goes. plan_removals has RLS on and no policy. The ten
 -- redefined functions kept their grants; the six public wrappers are for signed-in accounts only, and so are their
 -- private bodies (as the house does it: never anon, never service_role); bring_allowance is for no API role; the seven
--- private functions are definers with an empty search path.
+-- private functions are definers with an empty search path. The trigger that ends a wait at the host's door fires
+-- after a guest row is inserted or moved; it and the first-name helper are definers with an empty search path that no
+-- role may call.
 do $$ declare r text; f text; begin
  if (select (bring_invites,bring_levels) from public.plans where id='c2100000-0000-4000-8000-000000000001') is distinct from (0::smallint,1::smallint)
  or (select (brought_by,level) from public.attendees where plan_id='c2100000-0000-4000-8000-000000000001') is distinct from (null::uuid,1::smallint)
@@ -51,13 +53,26 @@ do $$ declare r text; f text; begin
    and p.prosecdef and p.proconfig=array['search_path=""'])<>7 then
   raise exception 'A new private function is not a definer with an empty search path';
  end if;
+ if not exists(select 1 from pg_catalog.pg_trigger t where t.tgrelid='public.attendees'::regclass and t.tgname='attendees_close_waiting'
+   and t.tgfoid='private.attendees_close_waiting()'::regprocedure
+   and pg_catalog.pg_get_triggerdef(t.oid) like '%AFTER INSERT OR UPDATE OF plan_id, user_id ON public.attendees FOR EACH ROW%') then
+  raise exception 'The trigger that ends a wait is missing';
+ end if;
+ foreach f in array array['private.attendees_close_waiting()','private.first_name(text)'] loop
+  if not (select prosecdef and proconfig=array['search_path=""'] from pg_catalog.pg_proc where oid=f::regprocedure) then
+   raise exception '% is not a definer with an empty search path', f;
+  end if;
+  foreach r in array array['public','anon','authenticated','service_role'] loop
+   if has_function_privilege(r,f,'execute') then raise exception '% may call %', r, f; end if;
+  end loop;
+ end loop;
 end $$;
 
 -- 2. The rollback, rehearsed and undone. Seed what it changes: a circle on the resbite, a guest's in-app bringing and
 -- their link, a removal record. Try its two guards: it refuses once the follow-ups rollback has run (pair_standing,
 -- renamed, stands in) and while chat is applied (a public.messages table stands in); a refusal changes nothing. Then
--- run it: the ten functions, with their grants, are the ones .before.sql recorded; the seven new functions, the six
--- wrappers, plan_removals and the six columns are gone; the people brought stay as ordinary guests and the link stays
+-- run it: the ten functions, with their grants, are the ones .before.sql recorded; the nine new functions, the six
+-- wrappers, the trigger, plan_removals and the six columns are gone; the people brought stay as ordinary guests and the link stays
 -- live.
 begin;
 insert into auth.users(id,phone,phone_confirmed_at) values
@@ -107,8 +122,11 @@ do $$ begin
  end if;
  if exists(select 1 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','private')
    and p.proname in ('set_plan_circle','bring_allowance','my_bring_allowance','plan_bringers','plan_brought_invitations',
-    'revoke_brought_invitation','withdraw_brought_invitation')) then
+    'revoke_brought_invitation','withdraw_brought_invitation','attendees_close_waiting','first_name')) then
   raise exception 'Rollback left a new function';
+ end if;
+ if exists(select 1 from pg_catalog.pg_trigger where tgrelid='public.attendees'::regclass and tgname='attendees_close_waiting') then
+  raise exception 'Rollback left the trigger';
  end if;
  if pg_catalog.to_regclass('private.plan_removals') is not null then raise exception 'Rollback left plan_removals'; end if;
  if exists(select 1 from pg_catalog.pg_attribute where not attisdropped and (

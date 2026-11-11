@@ -494,12 +494,24 @@ end $$;
 update auth.users set banned_until=null where id='d2000000-0000-4000-8000-000000000007';
 
 -- decide: someone who joined another way meanwhile (a personal invitation) keeps their answer; the request is still
--- approved. While they are on the event, their stale waiting request is hidden from both lists.
+-- approved. While they are on the event, their stale waiting request is hidden from both lists. Since circles of trust,
+-- joining the list ends a wait (the attendees_close_waiting trigger), so a guest row beside a waiting request is one
+-- from before that migration: olr_legacy_guest sets the trigger aside for its insert, to stand in for such a row.
+create function pg_temp.olr_legacy_guest(p_plan uuid, p_user uuid, p_response text) returns void language plpgsql as $$
+begin
+ if pg_catalog.to_regprocedure('private.attendees_close_waiting()') is not null then
+  alter table public.attendees disable trigger attendees_close_waiting;
+ end if;
+ insert into public.attendees(plan_id,user_id,response) values (p_plan,p_user,p_response);
+ if pg_catalog.to_regprocedure('private.attendees_close_waiting()') is not null then
+  alter table public.attendees enable trigger attendees_close_waiting;
+ end if;
+end $$;
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000015","role":"authenticated"}',true);
 do $$ begin perform public.request_to_join((select code from olr_codes where name='A4'),null,'accepted',null); end $$;
 reset role;
-insert into public.attendees(plan_id,user_id,response) values ('d2100000-0000-4000-8000-000000000001','d2000000-0000-4000-8000-000000000015','declined');
+select pg_temp.olr_legacy_guest('d2100000-0000-4000-8000-000000000001','d2000000-0000-4000-8000-000000000015','declined');
 set local role authenticated;
 do $$ declare r jsonb; begin
  if public.my_join_requests() is distinct from '[]'::jsonb then raise exception 'A stale request is listed for a guest'; end if;
@@ -861,10 +873,11 @@ do $$ begin
  exception when others then if sqlstate is distinct from '22023' or sqlerrm is distinct from 'Invalid decision' then raise; end if; end;
 end $$;
 
--- change_join_answer on a request that no longer applies changes nothing: Cal is now on the event another way (22023),
--- and Eve's Quiz has started, then is cancelled (42501).
+-- change_join_answer on a request that no longer applies changes nothing: Cal is now on the event another way (22023;
+-- a row from before circles of trust, olr_legacy_guest, as joining now ends the wait), and Eve's Quiz has started, then
+-- is cancelled (42501).
 reset role;
-insert into public.attendees(plan_id,user_id,response) values ('d2100000-0000-4000-8000-000000000001','d2000000-0000-4000-8000-000000000007','declined');
+select pg_temp.olr_legacy_guest('d2100000-0000-4000-8000-000000000001','d2000000-0000-4000-8000-000000000007','declined');
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000007","role":"authenticated"}',true);
 do $$ begin

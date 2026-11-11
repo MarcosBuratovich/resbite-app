@@ -63,9 +63,11 @@ function body(input: CopyInput): string | null {
     case "rsvp": {
       const said = answer(input.detail);
       if (!name || !said) return null;
-      // Circles of trust: the host hears who brought them, before the full stop.
+      // Circles of trust: the host hears who brought them, before the full stop. A name that ends a sentence itself
+      // ("Dr.", "Pedro!") takes no second one, as a title in the connection copy below.
       const bringer = input.brought_by_name?.trim();
-      return bringer ? `${name} ${said.slice(0, -1)} · brought by ${bringer}.` : `${name} ${said}`;
+      if (!bringer) return `${name} ${said}`;
+      return `${name} ${said.slice(0, -1)} · brought by ${bringer}${/[.!?…]$/.test(bringer) ? "" : "."}`;
     }
     case "invitation":
       return name ? `${name} joined from your invite.` : null;

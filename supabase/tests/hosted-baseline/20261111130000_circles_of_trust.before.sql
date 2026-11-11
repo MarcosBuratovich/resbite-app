@@ -26,7 +26,8 @@ insert into public.attendees(plan_id,user_id,response) values
 insert into private.phone_invitations(plan_id,phone,country,code_hash,invited_by) values
  ('c2100000-0000-4000-8000-000000000001','447700900883','44',extensions.digest(repeat('R',22),'sha256'),'c2000000-0000-4000-8000-000000000001');
 
--- 3. The pre-state: no circle, no bringer, no removals, none of the seven new functions; the roll is the follow-ups'
+-- 3. The pre-state: no circle, no bringer, no removals, none of the nine new functions and no trigger on attendees'
+-- waits; the roll is the follow-ups'
 -- (it carries every guest).
 do $$ begin
  if (select count(*) from private.co2_rehearsal_functions where definition is not null)<>10 then
@@ -41,8 +42,11 @@ do $$ begin
  if pg_catalog.to_regclass('private.plan_removals') is not null then raise exception 'plan_removals exists before the migration'; end if;
  if exists(select 1 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','private')
    and p.proname in ('set_plan_circle','bring_allowance','my_bring_allowance','plan_bringers','plan_brought_invitations',
-    'revoke_brought_invitation','withdraw_brought_invitation')) then
+    'revoke_brought_invitation','withdraw_brought_invitation','attendees_close_waiting','first_name')) then
   raise exception 'A new function exists before the migration';
+ end if;
+ if exists(select 1 from pg_catalog.pg_trigger where tgrelid='public.attendees'::regclass and tgname='attendees_close_waiting') then
+  raise exception 'The trigger exists before the migration';
  end if;
  if (select definition from private.co2_rehearsal_functions where signature='private.roll_repeating_plans()') like '%response<>''withdrawn''%' then
   raise exception 'The roll is not the follow-ups one: apply 20261111120000_connections_follow_ups first';

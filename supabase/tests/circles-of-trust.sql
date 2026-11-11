@@ -107,7 +107,9 @@ $$;
 
 -- Slice 1: the schema (C-R1). Exactly one foreign key links attendees to profiles, and one plans to profiles, so the
 -- installed builds' profiles(display_name) embeds still resolve; both brought_by columns point at auth.users and are
--- set to null when the account goes. plan_removals is the database's own: RLS on, no policy, no grant.
+-- set to null when the account goes. plan_removals is the database's own: RLS on, no policy, no grant. The trigger
+-- that ends a wait at the host's door fires after a guest row is inserted or moved (C27); it and the first-name
+-- helper (C30) are definers with an empty search path that no role may call.
 begin;
 do $$ begin
  if (select count(*) from pg_catalog.pg_constraint where conrelid='public.attendees'::regclass and confrelid='public.profiles'::regclass)<>1
@@ -133,6 +135,21 @@ do $$ begin
  or has_table_privilege('service_role','private.plan_removals','select') then
   raise exception 'plan_removals is open';
  end if;
+end $$;
+do $$ declare f text; r text; begin
+ if not exists(select 1 from pg_catalog.pg_trigger t where t.tgrelid='public.attendees'::regclass and t.tgname='attendees_close_waiting'
+   and not t.tgisinternal and t.tgenabled='O' and t.tgfoid='private.attendees_close_waiting()'::regprocedure
+   and pg_catalog.pg_get_triggerdef(t.oid) like '%AFTER INSERT OR UPDATE OF plan_id, user_id ON public.attendees FOR EACH ROW%') then
+  raise exception 'The trigger that ends a wait is missing or fires on something else';
+ end if;
+ foreach f in array array['private.attendees_close_waiting()','private.first_name(text)'] loop
+  if not (select prosecdef and proconfig=array['search_path=""'] from pg_catalog.pg_proc where oid=f::regprocedure) then
+   raise exception '% is not a definer with an empty search path', f;
+  end if;
+  foreach r in array array['public','anon','authenticated','service_role'] loop
+   if has_function_privilege(r,f,'execute') then raise exception '% may call %', r, f; end if;
+  end loop;
+ end loop;
 end $$;
 rollback;
 
@@ -722,8 +739,9 @@ select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p()
  '02 bringing 13 once approved');
 rollback;
 
--- Slice 7f: a host revokes a guest's link that was answered. Base (1,1). 02 sends 10 a link, which 10 answers Going;
--- 01 revokes it by its id: 10 leaves the resbite, the link is revoked, and both the number and the person are on record.
+-- Slice 7f: a host may not remove an answered guest's link by its id (C29). Base (1,1). 02 sends 10 a link, which 10
+-- answers Going; 01's revoke by its id (a list read before the answer) is refused, 22023 'Invitation answered', and
+-- changes nothing: 10 stays, the link stays live, nothing is recorded. A host removes the person through their row.
 begin;
 select pg_temp.co2_cast();
 set local role authenticated;
@@ -735,18 +753,17 @@ reset role;
 select id as co2_link from private.phone_invitations where plan_id=pg_temp.co2p() and phone=pg_temp.co2_phone('10') \gset
 set local role authenticated;
 select pg_temp.co2_as('01');
-select public.revoke_brought_invitation(pg_temp.co2p(),:'co2_link');
+select pg_temp.co2_refused(format('select public.revoke_brought_invitation(pg_temp.co2p(),%L)',:'co2_link'),'22023','Invitation answered');
 reset role;
 do $$ begin
- if exists(select 1 from public.attendees where plan_id=pg_temp.co2p() and user_id=pg_temp.co2('10')) then raise exception '10 is still on the resbite'; end if;
- if (select revoked_at is null or code_hash is not null from private.phone_invitations where plan_id=pg_temp.co2p() and phone=pg_temp.co2_phone('10')) then
-  raise exception 'The answered link is still live';
+ if (select (response,brought_by,level) from public.attendees where plan_id=pg_temp.co2p() and user_id=pg_temp.co2('10'))
+   is distinct from ('accepted'::text,pg_temp.co2('02'),2::smallint) then
+  raise exception '10 left the resbite';
  end if;
- if (select string_agg(coalesce(right(user_id::text,2),'-')||'/'||coalesce(phone,'-'),',' order by user_id,phone) from private.plan_removals)
-   is distinct from '10/-,-/447700900610' then
-  raise exception 'Revoking an answered link recorded: %',
-   (select string_agg(coalesce(right(user_id::text,2),'-')||'/'||coalesce(phone,'-'),',' order by user_id,phone) from private.plan_removals);
+ if (select revoked_at is not null or code_hash is null from private.phone_invitations where plan_id=pg_temp.co2p() and phone=pg_temp.co2_phone('10')) then
+  raise exception 'The answered link was revoked';
  end if;
+ if exists(select 1 from private.plan_removals) then raise exception 'A refused revoke recorded a removal'; end if;
 end $$;
 rollback;
 
@@ -974,6 +991,249 @@ do $$ begin
   raise exception '08''s row changed';
  end if;
 end $$;
+rollback;
+
+-- Slice 7j: every way onto the guest list ends a wait at the host's door (C27, probes c, c3, d, g, f2, M1). Base (1,1).
+-- Whoever gets a guest row on the resbite, by a host's in-app invitation (by user, or by a number whose holder uses the
+-- app), a claimed per-person link, approval, the roll or the fold, has no waiting request there any more, so a host's
+-- Decline finds nothing to decide (22023 'Request already decided') and records nothing. Getting on the list also
+-- ends any guest's unanswered link to the person's number on that resbite, which frees that bringer's invite (C30,
+-- M1). A guest row beside a request still waiting is only a row from before this migration: declining it records
+-- nothing (22023), and approving it keeps today's behaviour (slice 10b).
+begin;
+select pg_temp.co2_cast();
+insert into private.join_requests(plan_id,user_id,response) values (pg_temp.co2p(),pg_temp.co2('06'),'accepted'),(pg_temp.co2p(),pg_temp.co2('08'),'maybe');
+set local role authenticated;
+select pg_temp.co2_as('01');
+select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_user('06'),pg_temp.co2_number('08','A'))))='app,app',
+ '01 inviting 06 by user and 08 by number');
+select pg_temp.co2_refused($$select public.decide_join_request(pg_temp.co2p(),pg_temp.co2('06'),false)$$,'22023','Request already decided');
+select pg_temp.co2_refused($$select public.decide_join_request(pg_temp.co2p(),pg_temp.co2('08'),false)$$,'22023','Request already decided');
+reset role;
+do $$ begin
+ if exists(select 1 from private.join_requests where plan_id=pg_temp.co2p() and user_id in (pg_temp.co2('06'),pg_temp.co2('08'))) then
+  raise exception 'A host''s invitation left a request waiting';
+ end if;
+ if exists(select 1 from private.plan_removals) then raise exception 'A decline of someone on the list recorded a removal'; end if;
+end $$;
+rollback;
+-- A claimed per-person link: 02 has sent 07 a link; 07 claims a host's per-person link instead. 07's wait ends, and
+-- 02's link to 07 does too, so 02 may bring someone else. Then 13, waiting in the cast, claims one.
+begin;
+select pg_temp.co2_cast();
+set local role authenticated;
+select pg_temp.co2_as('02');
+select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('07','A'))))='link','02 sending 07 a link');
+reset role;
+insert into private.join_requests(plan_id,user_id,response) values (pg_temp.co2p(),pg_temp.co2('07'),'accepted');
+set local role authenticated;
+select pg_temp.co2_as('01');
+select public.create_invite('f6200000-0000-4000-8000-000000000011',pg_temp.co2p(),repeat('d',64));
+select public.create_invite('f6200000-0000-4000-8000-000000000013',pg_temp.co2p(),repeat('e',64));
+select pg_temp.co2_as('07');
+select public.claim_invite(repeat('d',64));
+select pg_temp.co2_as('13');
+select public.claim_invite(repeat('e',64));
+select pg_temp.co2_as('01');
+select pg_temp.co2_refused($$select public.decide_join_request(pg_temp.co2p(),pg_temp.co2('07'),false)$$,'22023','Request already decided');
+select pg_temp.co2_refused($$select public.decide_join_request(pg_temp.co2p(),pg_temp.co2('13'),false)$$,'22023','Request already decided');
+reset role;
+do $$ begin
+ if exists(select 1 from private.join_requests where plan_id=pg_temp.co2p() and user_id in (pg_temp.co2('07'),pg_temp.co2('13'))) then
+  raise exception 'A claimed per-person link left a request waiting';
+ end if;
+ if (select revoked_at is null or code_hash is not null from private.phone_invitations where plan_id=pg_temp.co2p() and phone=pg_temp.co2_phone('07')) then
+  raise exception 'A claimed per-person link left 02''s link to 07 live';
+ end if;
+ perform pg_temp.co2_check(pg_temp.co2_used('02')=0,'02''s link to someone already on the list still counts');
+ if exists(select 1 from private.plan_removals) then raise exception 'A decline of someone on the list recorded a removal'; end if;
+end $$;
+set local role authenticated;
+select pg_temp.co2_as('02');
+select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('10','B'))))='link',
+ '02 bringing 10 with the invite freed');
+rollback;
+-- The fold: 14, a web-only account, answered 02's link; 15, the app account, is waiting. Folding 14 into 15 moves the
+-- guest row (an update, not an insert): 15's wait ends.
+begin;
+select pg_temp.co2_cast();
+insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) values
+ ('f6000000-0000-4000-8000-000000000014',null,null,'447700900614',now()),
+ ('f6000000-0000-4000-8000-000000000015','co2-folded@resbite-test.invalid',now(),null,null);
+insert into private.tester_roster(email) values ('co2-folded@resbite-test.invalid');
+insert into private.beta_access(user_id,source) values ('f6000000-0000-4000-8000-000000000014','invitation');
+insert into public.profiles(id,display_name) values ('f6000000-0000-4000-8000-000000000014','Web W'),('f6000000-0000-4000-8000-000000000015','App A');
+insert into private.app_sessions(user_id) values ('f6000000-0000-4000-8000-000000000015');
+set local role authenticated;
+select pg_temp.co2_as('02');
+select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('14','A'))))='link','02 sending 14 a link');
+select pg_temp.co2_as('14');
+select public.answer_phone_invitation(repeat('A',22),'Web W','accepted','2026-10');
+reset role;
+insert into private.join_requests(plan_id,user_id,response) values (pg_temp.co2p(),pg_temp.co2('15'),'accepted');
+select private.fold_web_account(pg_temp.co2('14'),pg_temp.co2('15'));
+set local role authenticated;
+select pg_temp.co2_as('01');
+select pg_temp.co2_refused($$select public.decide_join_request(pg_temp.co2p(),pg_temp.co2('15'),false)$$,'22023','Request already decided');
+reset role;
+do $$ begin
+ if exists(select 1 from private.join_requests where plan_id=pg_temp.co2p() and user_id=pg_temp.co2('15')) then raise exception 'The fold left 15 waiting'; end if;
+ if (select (response,brought_by,level) from public.attendees where plan_id=pg_temp.co2p() and user_id=pg_temp.co2('15'))
+   is distinct from ('accepted'::text,pg_temp.co2('02'),2::smallint) then
+  raise exception 'The fold did not move 14''s row to 15';
+ end if;
+ if exists(select 1 from private.plan_removals) then raise exception 'A decline of someone on the list recorded a removal'; end if;
+end $$;
+rollback;
+-- A guest row beside a request still waiting, as only rows from before this migration can be (the row first, then
+-- the request): declining records nothing (22023) and the request stays as it was. Then the roll (f2): plan 1 repeats
+-- weekly; 06 asks, 01 invites 06 in the app, 01's Decline is refused, and the occurrence ends: the roll carries 06
+-- to the next occurrence, and the series holds no record of 06.
+begin;
+select pg_temp.co2_cast();
+insert into public.attendees(plan_id,user_id,response) values (pg_temp.co2p(),pg_temp.co2('08'),'accepted');
+insert into private.join_requests(plan_id,user_id,response) values (pg_temp.co2p(),pg_temp.co2('08'),'maybe'),(pg_temp.co2p(),pg_temp.co2('06'),'accepted');
+update public.plans set repeat_weeks=1 where id=pg_temp.co2p();
+set local role authenticated;
+select pg_temp.co2_as('01');
+select pg_temp.co2_refused($$select public.decide_join_request(pg_temp.co2p(),pg_temp.co2('08'),false)$$,'22023','Request already decided');
+select public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_user('06')));
+select pg_temp.co2_refused($$select public.decide_join_request(pg_temp.co2p(),pg_temp.co2('06'),false)$$,'22023','Request already decided');
+reset role;
+do $$ begin
+ if (select status from private.join_requests where plan_id=pg_temp.co2p() and user_id=pg_temp.co2('08')) is distinct from 'waiting' then
+  raise exception 'A refused decline changed the request';
+ end if;
+end $$;
+update public.plans set starts_at=now()-interval '3 hours', ends_at=now()-interval '1 hour' where id=pg_temp.co2p();
+select pg_temp.co2_check(private.roll_repeating_plans()>=1,'The roll made no occurrence');
+do $$ declare v_next uuid := (select id from public.plans where repeats_from=pg_temp.co2p()); begin
+ if not exists(select 1 from public.attendees where plan_id=v_next and user_id=pg_temp.co2('06') and response='pending') then
+  raise exception 'The roll did not carry 06';
+ end if;
+ if exists(select 1 from private.plan_removals) then raise exception 'The series holds a record of someone on its list'; end if;
+end $$;
+rollback;
+
+-- Slice 7k: a removal sticks through the fold (C30, probe F). Base (1,1). 15, an app account with no number, is Going;
+-- 01 removes 15, so 02 may not bring 15 in the app. 02 links a number nobody holds; the person signs in on the web by
+-- that number (a new account, 16) and answers Going. When 15 then adds the number and 16 is folded into 15, the row
+-- 16 brought along does not stay: 15 is off the resbite again, 02's link to the number is revoked, and the record
+-- stands. A host's own later link is the host's decision (C21): when 01 links the number after the removal and 16
+-- answers it, the fold keeps 15 on, and the record goes, as answering it would clear it.
+begin;
+select pg_temp.co2_cast();
+insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) values
+ ('f6000000-0000-4000-8000-000000000015','co2-folded@resbite-test.invalid',now(),null,null);
+insert into private.tester_roster(email) values ('co2-folded@resbite-test.invalid');
+insert into public.profiles(id,display_name) values ('f6000000-0000-4000-8000-000000000015','App A');
+insert into private.app_sessions(user_id) values ('f6000000-0000-4000-8000-000000000015');
+insert into public.connections(user_a,user_b,state,requested_by,accepted_at) values
+ ('f6000000-0000-4000-8000-000000000002','f6000000-0000-4000-8000-000000000015','connected','f6000000-0000-4000-8000-000000000002',now());
+insert into public.attendees(plan_id,user_id,response) values (pg_temp.co2p(),pg_temp.co2('15'),'accepted');
+set local role authenticated;
+select pg_temp.co2_as('01');
+select public.remove_guest(pg_temp.co2p(),pg_temp.co2('15'));
+select pg_temp.co2_as('02');
+select pg_temp.co2_refused($$select public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_user('15')))$$,'42501','Not allowed to bring people here');
+select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('16','A'))))='link','02 linking a number nobody holds');
+reset role;
+insert into auth.users(id,phone,phone_confirmed_at) values ('f6000000-0000-4000-8000-000000000016','447700900616',now());
+set local role authenticated;
+select pg_temp.co2_as('16');
+select public.answer_phone_invitation(repeat('A',22),'App A','accepted','2026-10');
+reset role;
+select private.fold_web_account(pg_temp.co2('16'),pg_temp.co2('15'));
+do $$ begin
+ if exists(select 1 from public.attendees where plan_id=pg_temp.co2p() and user_id=pg_temp.co2('15')) then raise exception 'The fold brought 15 back'; end if;
+ if (select revoked_at is null or code_hash is not null from private.phone_invitations where plan_id=pg_temp.co2p() and phone=pg_temp.co2_phone('16')) then
+  raise exception 'The fold left 02''s link live';
+ end if;
+ if (select string_agg(coalesce(right(user_id::text,2),'-')||'/'||coalesce(phone,'-'),',') from private.plan_removals) is distinct from '15/-' then
+  raise exception 'The record did not stand: %', (select string_agg(coalesce(right(user_id::text,2),'-')||'/'||coalesce(phone,'-'),',') from private.plan_removals);
+ end if;
+end $$;
+rollback;
+begin;
+select pg_temp.co2_cast();
+insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) values
+ ('f6000000-0000-4000-8000-000000000015','co2-folded@resbite-test.invalid',now(),null,null);
+insert into private.tester_roster(email) values ('co2-folded@resbite-test.invalid');
+insert into public.profiles(id,display_name) values ('f6000000-0000-4000-8000-000000000015','App A');
+insert into private.app_sessions(user_id) values ('f6000000-0000-4000-8000-000000000015');
+insert into public.attendees(plan_id,user_id,response) values (pg_temp.co2p(),pg_temp.co2('15'),'accepted');
+set local role authenticated;
+select pg_temp.co2_as('01');
+select public.remove_guest(pg_temp.co2p(),pg_temp.co2('15'));
+reset role;
+update private.plan_removals set removed_at=now()-interval '1 hour';
+set local role authenticated;
+select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('16','A'))))='link','01 linking a number nobody holds');
+reset role;
+insert into auth.users(id,phone,phone_confirmed_at) values ('f6000000-0000-4000-8000-000000000016','447700900616',now());
+set local role authenticated;
+select pg_temp.co2_as('16');
+select public.answer_phone_invitation(repeat('A',22),'App A','accepted','2026-10');
+reset role;
+select private.fold_web_account(pg_temp.co2('16'),pg_temp.co2('15'));
+do $$ begin
+ if (select (response,brought_by,level) from public.attendees where plan_id=pg_temp.co2p() and user_id=pg_temp.co2('15'))
+   is distinct from ('accepted'::text,null::uuid,1::smallint) then
+  raise exception 'The fold took 15 off though the host linked them after the removal';
+ end if;
+ if exists(select 1 from private.plan_removals) then raise exception 'The host''s later link answered left the record'; end if;
+end $$;
+rollback;
+
+-- Slice 7l: a host's own brought link is theirs to take back (C31). set_plan_circle(3,1). 02 sends 11, 10 and 07
+-- links, 03 sends 09 and 98 links; 07 answers Going; then 01 makes 02 an admin. 02 takes back the link to 11 by number
+-- and the link to 10 by its id: both are revoked, and nothing is recorded. 02's answered link to 07 is refused either
+-- way (22023 'Invitation answered', C29) and 07 stays. 01 revoking 03's links, by id (09) and by number (98), records
+-- each number, as a host's revoke of someone else's link does.
+begin;
+select pg_temp.co2_cast();
+set local role authenticated;
+select pg_temp.co2_as('01');
+select public.set_plan_circle(pg_temp.co2p(),3::smallint,1::smallint);
+select pg_temp.co2_as('02');
+select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('11','A'),pg_temp.co2_number('10','B'),
+ pg_temp.co2_number('07','C'))))='link,link,link','02 sending three links');
+select pg_temp.co2_as('03');
+select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('09','D'),pg_temp.co2_number('98','E'))))='link,link',
+ '03 sending two links');
+select pg_temp.co2_as('07');
+select public.answer_phone_invitation(repeat('C',22),'Tomas T','accepted','2026-10');
+reset role;
+insert into public.plan_admins(plan_id,user_id,appointed_by) values (pg_temp.co2p(),pg_temp.co2('02'),pg_temp.co2('01'));
+select id as co2_link10 from private.phone_invitations where plan_id=pg_temp.co2p() and phone=pg_temp.co2_phone('10') \gset
+select id as co2_link07 from private.phone_invitations where plan_id=pg_temp.co2p() and phone=pg_temp.co2_phone('07') \gset
+select id as co2_link09 from private.phone_invitations where plan_id=pg_temp.co2p() and phone=pg_temp.co2_phone('09') \gset
+set local role authenticated;
+select pg_temp.co2_as('02');
+select public.revoke_phone_invitation(pg_temp.co2p(),pg_temp.co2_phone('11'));
+select public.revoke_brought_invitation(pg_temp.co2p(),:'co2_link10');
+select pg_temp.co2_refused($$select public.revoke_phone_invitation(pg_temp.co2p(),pg_temp.co2_phone('07'))$$,'22023','Invitation answered');
+select pg_temp.co2_refused(format('select public.revoke_brought_invitation(pg_temp.co2p(),%L)',:'co2_link07'),'22023','Invitation answered');
+reset role;
+do $$ begin
+ if exists(select 1 from private.plan_removals) then
+  raise exception 'A host''s own take-back recorded: %', (select string_agg(coalesce(right(user_id::text,2),'-')||'/'||coalesce(phone,'-'),',') from private.plan_removals);
+ end if;
+ if (select string_agg(right(phone,2)||':'||(revoked_at is not null and code_hash is null)::text,',' order by phone) from private.phone_invitations
+   where plan_id=pg_temp.co2p() and phone in (pg_temp.co2_phone('11'),pg_temp.co2_phone('10'),pg_temp.co2_phone('07'))) is distinct from '07:false,10:true,11:true' then
+  raise exception 'The take-backs: %', (select string_agg(right(phone,2)||':'||(revoked_at is not null)::text,',' order by phone) from private.phone_invitations where plan_id=pg_temp.co2p());
+ end if;
+ if (select (response,brought_by) from public.attendees where plan_id=pg_temp.co2p() and user_id=pg_temp.co2('07')) is distinct from ('accepted'::text,pg_temp.co2('02')) then
+  raise exception '07 left the resbite';
+ end if;
+end $$;
+set local role authenticated;
+select pg_temp.co2_as('01');
+select public.revoke_brought_invitation(pg_temp.co2p(),:'co2_link09');
+select public.revoke_phone_invitation(pg_temp.co2p(),pg_temp.co2_phone('98'));
+reset role;
+select pg_temp.co2_check((select string_agg(coalesce(right(user_id::text,2),'-')||'/'||coalesce(phone,'-'),',' order by phone) from private.plan_removals)
+ ='-/447700900609,-/447700900698','A host''s revoke of someone else''s link did not record the number');
 rollback;
 
 -- Slice 8: a sent invitation stands (CO-P15). set_plan_circle(2,2): 02 brings 06 (who says Going) and sends 10 a link.
@@ -1470,6 +1730,10 @@ do $$ declare v_next uuid; begin
  if pg_catalog.pg_get_functiondef('public.claim_notification_deliveries(integer)'::regprocedure) like '%brought_by%' then
   raise exception 'The restored claim still names a bringer';
  end if;
+ if exists(select 1 from pg_catalog.pg_trigger where tgrelid='public.attendees'::regclass and tgname='attendees_close_waiting')
+ or pg_catalog.to_regprocedure('private.attendees_close_waiting()') is not null or pg_catalog.to_regprocedure('private.first_name(text)') is not null then
+  raise exception 'The rollback left the trigger or a helper';
+ end if;
  -- The roll it restored carries 02, who said Can't go after Going.
  insert into auth.users(id,email,email_confirmed_at) values
   ('f6000000-0000-4000-8000-000000000001','co2-owner@resbite-test.invalid',now()),
@@ -1491,48 +1755,123 @@ end $$;
 rollback;
 \endif
 
--- Slice 18: the host hears who brought whom (Task 2, UX2-D4). set_plan_circle(2,1). 01 has a device, and so has 06.
--- 02 brings 06 in the app and sends 09 a link; 09 answers Going, and 03 (whom nobody brought) says Going. The worker's
--- claim (service_role) gives every job a brought_by_name: 'Pedro', 02's first name, on 01's job for 09's answer; null on
--- 01's job for 03's, and on 06's invitation (only an answer names the bringer). Once 02's account is being deleted,
--- 09's next answer reaches 01 with brought_by_name null.
+-- Slice 18: the host hears who brought whom (Task 2, UX2-D4; C27, C30). set_plan_circle(2,2). 01, 02 and 07 have
+-- devices. 02 brings 06 in the app and sends 09 a link; 06 says Going and brings 07 in the app; 01 then makes 02 an
+-- admin; 09 answers Going, and 03 (whom nobody brought) says Going. The worker's claim (service_role) gives every job
+-- a brought_by_name: 'Pedro', 02's first name, on 01's jobs for 06's and 09's answers; null on 01's job for 03's; null
+-- on 02's jobs, as 02 is the bringer and is not told about themself (A1, A2); and null on 07's invitation, whose
+-- actor 06 was brought by 02 (only an answer names a bringer). The jobs come in the order the answers came (D1).
 begin;
 select pg_temp.co2_cast();
 insert into private.device_endpoints(token,user_id,platform) values
- ('ExpoPushToken[co2host]',pg_temp.co2('01'),'ios'),('ExpoPushToken[co2clara]',pg_temp.co2('06'),'ios');
-create temporary table co2_jobs(step text, job jsonb) on commit drop;
+ ('ExpoPushToken[co2host]',pg_temp.co2('01'),'ios'),('ExpoPushToken[co2pedro]',pg_temp.co2('02'),'ios'),
+ ('ExpoPushToken[co2tomas]',pg_temp.co2('07'),'ios');
+insert into public.connections(user_a,user_b,state,requested_by,accepted_at) values
+ ('f6000000-0000-4000-8000-000000000006','f6000000-0000-4000-8000-000000000007','connected','f6000000-0000-4000-8000-000000000006',now());
+create temporary table co2_jobs(step text, n bigint, job jsonb) on commit drop;
 grant select, insert on co2_jobs to service_role;
 set local role authenticated;
 select pg_temp.co2_as('01');
-select public.set_plan_circle(pg_temp.co2p(),2::smallint,1::smallint);
+select public.set_plan_circle(pg_temp.co2p(),2::smallint,2::smallint);
 select pg_temp.co2_as('02');
 select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_user('06'),pg_temp.co2_number('09','A'))))='app,link',
  '02 bringing 06 and 09');
+select pg_temp.co2_as('06');
+select public.respond(pg_temp.co2p(),'accepted',1);
+select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_user('07'))))='app','06 bringing 07');
+reset role;
+insert into public.plan_admins(plan_id,user_id,appointed_by) values (pg_temp.co2p(),pg_temp.co2('02'),pg_temp.co2('01'));
+set local role authenticated;
 select pg_temp.co2_as('09');
 select public.answer_phone_invitation(repeat('A',22),'Nico N','accepted','2026-10');
 select pg_temp.co2_as('03');
 select public.respond(pg_temp.co2p(),'accepted',1);
 set local role service_role;
-insert into co2_jobs select 'first', j from jsonb_array_elements(public.claim_notification_deliveries(25)) j;
+insert into co2_jobs select 'first', x.n, x.j from jsonb_array_elements(public.claim_notification_deliveries(25)) with ordinality x(j,n);
 reset role;
 do $$ declare v text; begin
  v := (select string_agg(right(job->>'recipient_id',2)||':'||(job->>'kind')||':'||coalesce(job->>'actor_name','-')||':'||coalesce(job->'brought_by_name','"absent"'::jsonb)::text,
    ',' order by job->>'recipient_id', job->>'actor_name') from co2_jobs where step='first' and job->>'plan_id'=pg_temp.co2p()::text);
- if v is distinct from '01:rsvp:Marta M:null,01:rsvp:Nico N:"Pedro",06:invited:Pedro P:null' then
+ if v is distinct from '01:rsvp:Clara C:"Pedro",01:rsvp:Marta M:null,01:rsvp:Nico N:"Pedro",02:rsvp:Marta M:null,02:rsvp:Nico N:null,07:invited:Clara C:null' then
   raise exception 'The first claim: %', v;
  end if;
+ if (select array_agg((job->>'outbox_id')::bigint order by n) from co2_jobs where step='first')
+   is distinct from (select array_agg((job->>'outbox_id')::bigint order by (job->>'outbox_id')::bigint, n) from co2_jobs where step='first') then
+  raise exception 'The claim is not in the order the notices came: %', (select string_agg(job->>'outbox_id',',' order by n) from co2_jobs where step='first');
+ end if;
+end $$;
+rollback;
+-- An answer from someone a host has removed since is not news (D4): 02 links 09 and 10, both answer Going, and 01
+-- removes 10 before the worker runs: the claim has 09's answer only. Once 02's account is being deleted, 09's next
+-- answer reaches 01 with brought_by_name null.
+begin;
+select pg_temp.co2_cast();
+insert into private.device_endpoints(token,user_id,platform) values ('ExpoPushToken[co2host]',pg_temp.co2('01'),'ios');
+create temporary table co2_jobs(step text, n bigint, job jsonb) on commit drop;
+grant select, insert on co2_jobs to service_role;
+set local role authenticated;
+select pg_temp.co2_as('01');
+select public.set_plan_circle(pg_temp.co2p(),2::smallint,1::smallint);
+select pg_temp.co2_as('02');
+select pg_temp.co2_check(pg_temp.co2_kinds(public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('09','A'),pg_temp.co2_number('10','B'))))='link,link',
+ '02 bringing 09 and 10');
+select pg_temp.co2_as('09');
+select public.answer_phone_invitation(repeat('A',22),'Nico N','accepted','2026-10');
+select pg_temp.co2_as('10');
+select public.answer_phone_invitation(repeat('B',22),'Lia L','accepted','2026-10');
+select pg_temp.co2_as('01');
+select public.remove_guest(pg_temp.co2p(),pg_temp.co2('10'));
+set local role service_role;
+insert into co2_jobs select 'first', x.n, x.j from jsonb_array_elements(public.claim_notification_deliveries(25)) with ordinality x(j,n);
+reset role;
+do $$ declare v text; begin
+ v := (select string_agg(right(job->>'recipient_id',2)||':'||(job->>'kind')||':'||coalesce(job->>'actor_name','-')||':'||coalesce(job->'brought_by_name','"absent"'::jsonb)::text,
+   ',' order by job->>'actor_name') from co2_jobs where step='first' and job->>'plan_id'=pg_temp.co2p()::text);
+ if v is distinct from '01:rsvp:Nico N:"Pedro"' then raise exception 'The claim after 01 removed 10: %', v; end if;
 end $$;
 update public.profiles set deletion_requested_at=now(), display_name='Deleted member' where id=pg_temp.co2('02');
 set local role authenticated;
 select pg_temp.co2_as('09');
 select public.answer_phone_invitation(repeat('A',22),'Nico N','maybe','2026-10');
 set local role service_role;
-insert into co2_jobs select 'leaving', j from jsonb_array_elements(public.claim_notification_deliveries(25)) j;
+insert into co2_jobs select 'leaving', x.n, x.j from jsonb_array_elements(public.claim_notification_deliveries(25)) with ordinality x(j,n);
 reset role;
 do $$ declare v text; begin
  v := (select string_agg(right(job->>'recipient_id',2)||':'||(job->>'kind')||':'||(job->>'detail')||':'||coalesce(job->'brought_by_name','"absent"'::jsonb)::text,',')
   from co2_jobs where step='leaving' and job->>'plan_id'=pg_temp.co2p()::text);
  if v is distinct from '01:rsvp:maybe:null' then raise exception 'The claim after 02 asked to leave: %', v; end if;
+end $$;
+rollback;
+-- A first name is the first word of the display name, whatever space separates the words (C30, N6–N8): with 02's
+-- name 'Pedro' NBSP 'Pérez', the link's page, the host's list of links, the bringers' names and the claim all say
+-- 'Pedro'. Tabs, line breaks, the other Unicode spaces and control characters never reach a first name.
+begin;
+select pg_temp.co2_cast();
+insert into private.device_endpoints(token,user_id,platform) values ('ExpoPushToken[co2host]',pg_temp.co2('01'),'ios');
+create temporary table co2_jobs(step text, n bigint, job jsonb) on commit drop;
+grant select, insert on co2_jobs to service_role;
+update public.profiles set display_name='Pedro'||chr(160)||'Pérez' where id=pg_temp.co2('02');
+set local role authenticated;
+select pg_temp.co2_as('02');
+select public.invite_contacts(pg_temp.co2p(),jsonb_build_array(pg_temp.co2_number('09','A')));
+set local role anon;
+select pg_temp.co2_check(public.personal_invitation_page(repeat('A',22))->>'inviter'='Pedro','The page''s inviter: '||(public.personal_invitation_page(repeat('A',22))->>'inviter'));
+set local role authenticated;
+select pg_temp.co2_as('01');
+select pg_temp.co2_check(public.plan_brought_invitations(pg_temp.co2p())->0->>'brought_by_name'='Pedro','The host''s list of links: '||public.plan_brought_invitations(pg_temp.co2p())::text);
+select pg_temp.co2_as('09');
+select public.answer_phone_invitation(repeat('A',22),'Nico N','accepted','2026-10');
+select pg_temp.co2_as('01');
+select pg_temp.co2_check(public.plan_bringers(pg_temp.co2p())->>pg_temp.co2('02')::text='Pedro','The bringers'' names: '||public.plan_bringers(pg_temp.co2p())::text);
+set local role service_role;
+insert into co2_jobs select 'first', x.n, x.j from jsonb_array_elements(public.claim_notification_deliveries(25)) with ordinality x(j,n);
+reset role;
+select pg_temp.co2_check((select job->>'brought_by_name' from co2_jobs where step='first' and job->>'kind'='rsvp')='Pedro','The claim''s bringer: '||
+ coalesce((select job->>'brought_by_name' from co2_jobs where step='first' and job->>'kind'='rsvp'),'<none>'));
+do $$ declare v text; begin
+ v := (select string_agg(coalesce(private.first_name(n),'<null>'),'|' order by o) from unnest(array[E'Pedro\tP',E'Pedro\nP',E'\nPedro P',chr(160)||'Pedro',
+   chr(12288)||'Pedro P','Pedro'||chr(8239)||'P',chr(65279)||'Pedro',E'Pe\u0007dro P','Dr. Pedro Pérez','  ',chr(160),'']) with ordinality u(n,o));
+ if v is distinct from 'Pedro|Pedro|Pedro|Pedro|Pedro|Pedro|Pedro|Pedro|Dr.|<null>|<null>|<null>' then raise exception 'First names: %', v; end if;
 end $$;
 rollback;
 

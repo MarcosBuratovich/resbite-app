@@ -50,6 +50,15 @@ test("a host hears who brought the person who answered (circles of trust)", () =
     title: "Board game night",
     body: "Clara invited you.",
   });
+  // A first name that ends a sentence itself takes no second full stop, as a title in the connection copy (C27).
+  for (const [bringer, body] of [
+    ["Dr.", "Nico N might come · brought by Dr."],
+    ["J.R.", "Nico N might come · brought by J.R."],
+    ["Pedro!", "Nico N might come · brought by Pedro!"],
+    ["Pedro?", "Nico N might come · brought by Pedro?"],
+    ["Pedro…", "Nico N might come · brought by Pedro…"],
+  ])
+    assert.equal(notificationCopy({ ...rsvp, detail: "maybe", actor_name: "Nico N", brought_by_name: bringer }).body, body, bringer);
   // Without the answerer's name or a known answer it still falls back.
   assert.deepEqual(notificationCopy({ ...rsvp, detail: "accepted", actor_name: null }), GENERIC_COPY);
   assert.deepEqual(notificationCopy({ ...rsvp, detail: "pending" }), GENERIC_COPY);
