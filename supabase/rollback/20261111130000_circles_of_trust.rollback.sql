@@ -53,7 +53,9 @@ end $$;
 lock table public.plans, public.attendees, private.phone_invitations in access exclusive mode;
 
 -- The links guests sent that nobody has answered (level above 1) end before the hosts' list of every live link comes
--- back below, so no number a guest typed reaches a host (owner decision CO-Q2, by default).
+-- back below, so the hosts' list shows no number a guest typed for an unanswered link (owner decision CO-Q2, by default).
+-- Answered links stay live, so their guests can still change their answer; a host who calls the restored list directly
+-- reads their numbers.
 update private.phone_invitations set revoked_at=now(), code_hash=null where level>1 and revoked_at is null and answered_at is null;
 
 -- Inviting as it was (20261110120000_connections.sql): hosts only (require_link_owner); no bringing, no removals.

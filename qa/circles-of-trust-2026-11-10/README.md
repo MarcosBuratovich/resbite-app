@@ -38,7 +38,7 @@ The decisions and the calls made while building are in the [decision log](../../
 | File | sha256 |
 | --- | --- |
 | `supabase/migrations/20261111130000_circles_of_trust.sql` | `04062e2b091fa582f59a3d1ff9a322e8019ce671c64d532d5c113d0916d77256` |
-| `supabase/rollback/20261111130000_circles_of_trust.rollback.sql` | `0c4f4bc033c632698783b8855e277c33cea52415a88521c74c88479433463146` |
+| `supabase/rollback/20261111130000_circles_of_trust.rollback.sql` | `ff4ff8a60211345fc09f28a012327f8d6f3a7e6259b8f15cf096d4beac41d6a1` |
 | `supabase/tests/hosted-baseline/20261111130000_circles_of_trust.before.sql` | `0b2be16e10b84994deeb6baf2d7efe2bfa8630859095681d1ca51d7954759fd5` |
 | `supabase/tests/hosted-baseline/20261111130000_circles_of_trust.after.sql` | `c500202fb5ae42daa9b3f93cc7aca34331e86fe13e6083ea644a76e78a0b33f4` |
 | `supabase/migrations/20261111120000_connections_follow_ups.sql` (only while it is pending) | `72d1536db56c956ade36844c9d4c715fffa9222090c0cb64226166fff39ae3d6` |
@@ -139,7 +139,7 @@ The migration must be live before the TestFlight build. The new build reads `pla
      - The bringer's `used` can then exceed `allowed`. They read no invites left (`remaining` 0) until the brought person says Can't go there, or a host removes them. A bringer cannot take back someone the roll carried (CO-R16).
      - **Built that way by default.** The alternative, not carrying a brought person who said Can't go, is one condition in the roll, and a new migration hash.
    - **CO-Q2, the bringers' links after a rollback.** Should a rollback keep the bringers' unanswered links live, showing their numbers to hosts?
-     - The `plan_phone_invitations` the rollback restores lists every live link to a host, with its number. So, before restoring it, the rollback revokes every link a guest sent that nobody has answered, and no number a guest typed reaches a host.
+     - The `plan_phone_invitations` the rollback restores lists every live link to a host, with its number. So, before restoring it, the rollback revokes every link a guest sent that nobody has answered. Answered links stay live, so those guests can still change their answer, and a host who calls the restored list directly reads their numbers. No app build lists answered links.
      - The cost: those invitations stop working. Their page reads as no longer active, and an answer is refused.
      - **Built that way by default.** The alternative, keeping those links live and showing their numbers to hosts, is one statement out of the rollback, and a new rollback hash.
    - Record both answers under "Applied". With no answer, the defaults ship.
@@ -387,7 +387,7 @@ Every rollback below refuses to run too late, after a rollback that should follo
    cd "${REPO:-$HOME/dev/resbite-app}"
    D=qa/circles-of-trust-2026-11-10
    F=supabase/rollback/20261111130000_circles_of_trust.rollback.sql
-   echo "0c4f4bc033c632698783b8855e277c33cea52415a88521c74c88479433463146  $F" | sha256sum -c -
+   echo "ff4ff8a60211345fc09f28a012327f8d6f3a7e6259b8f15cf096d4beac41d6a1  $F" | sha256sum -c -
    mkdir -p /tmp/co2 && { echo 'begin;'; cat "$F"; echo; echo 'commit;'; } > /tmp/co2/rollback.sql
    supabase db query --linked -f /tmp/co2/rollback.sql
    supabase db query --linked -f supabase/ops/hosted-fingerprint.sql -o json > "$D/hosted-after-rollback.json"
@@ -432,8 +432,9 @@ Copied from the plan; CO-Q2 came after it.
 - **Owner question, CO-Q1.** The roll carries every guest (CH-P20), so a brought person who said Can't go comes back pending with their bringer. The bringer's `used` on the next occurrence can exceed `allowed` (shown as no invites left, `remaining` 0).
   - Built that way by default (CO-Q1). The roadmap's owner table asks the owner before the circles migration (step 0).
   - The alternative, not carrying a brought person who said Can't go, is one condition in the roll.
-- **Owner question, CO-Q2.** Keep the bringers' unanswered links live after a rollback, showing their numbers to hosts? By default the rollback revokes them before it restores the hosts' list of links, so no number a guest typed reaches a host, and those invitations stop working (step 0).
+- **Owner question, CO-Q2.** Keep the bringers' unanswered links live after a rollback, showing their numbers to hosts? By default the rollback revokes them before it restores the hosts' list of links, and those invitations stop working (step 0). Answered links stay live, so their numbers reach a host only by a direct call to the restored list; no app build lists them.
   - The alternative is one statement out of the rollback, and a new rollback hash.
+- A take-back followed by a new invitation pushes the person again, and so does a host's remove and re-invite. A bringer can repeat it with a connection, since a take-back frees the invite; the person can mute the series or remove the connection.
 - A bringer learns `already` for a number whose holder is on the resbite, spending nothing. Bringers already read every name (`attendee_read`), and `contacts_on_resbite` was already open to every tester.
 - Anyone holding a forwarded personal link sees the bringer's first name. The phone-key check is unchanged, so neither lets anyone in.
 - **Lock order, one account.** On hosted, where `require_tester` takes no lock, both `invite_contacts` branches take the plan row and then the caller's advisory lock. `answer_phone_invitation` takes them the other way round. The same account inviting and answering on one plan at the same instant could deadlock (40P01). Improbable, and hosts can already do it today.
