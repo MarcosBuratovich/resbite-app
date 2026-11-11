@@ -2,7 +2,8 @@
 // below, which follows the circles migration's rules; a request it does not expect, and any request off this machine,
 // fail the run. The RPCs the app sends are asserted by name and arguments.
 //   host       Invite people as Ana, the plan saved at (1, 2): the Circle of trust card shows "1" and "2 levels", the
-//              plan read's select names bring_invites and bring_levels (the stub drops them from a read that doesn't);
+//              read of the plan names bring_invites and bring_levels (the stub records every plans read's select, and
+//              drops the two columns from a read of the plan that names neither them nor *);
 //              "2" sends set_plan_circle { p_plan, p_invites: 2, p_levels: 2 }, "1" sends { …, 1, 2 }; the sentence
 //              names Pedro; a refused save (22023) says so and shows the saved choice again
 //   bring      Pedro, Going, with my_bring_allowance { 1, 0, 1, 1, true }: the resbite's Bring someone row and line;
@@ -75,6 +76,9 @@ const PLAN = {
 const WHEN = "Thu 5 Mar, 18:00 – 21:00";
 const MESSAGE = (code) => `Pedro invited you to Ana’s Board game night, ${WHEN}. Reply here: https://link.resbite.com/i/${code}`;
 const OPEN = ["pending", "accepted", "maybe"];
+/** Every fixture's problems, so a scenario that fails before its done() still names them. */
+const problemsSeen = [];
+const PROBLEMS = "every RPC named Ana's resbite, and only a guest brought";
 
 const jwt = (sub) => {
   const exp = Math.floor(Date.now() / 1000) + 3600;
@@ -115,7 +119,8 @@ const CORS = {
  * A page signed in as `me` on a stubbed Supabase that holds Ana's resbite: its guest rows (`guests`: who brought them
  * and their level), its personal links (`links`), and the people `me` is connected to. invite_contacts, the allowance,
  * the two people-list reads and the three take-backs follow the circles migration for this cast. `refuse` queues
- * refusals for the next calls of a function, by name ({ code, message } each).
+ * refusals for the next calls of a function, by name ({ code, message } each). A request the model finds wrong (an RPC
+ * naming another resbite, a host bringing) is refused and recorded in `problems`, which `done()` fails by name.
  */
 async function fixture({ me, guests, links = [], connections = [], bringers = null, width = 390 }) {
   const context = await browser.newContext({
@@ -158,14 +163,15 @@ async function fixture({ me, guests, links = [], connections = [], bringers = nu
     links: links.map((l) => ({ brought_by: null, level: 1, revoked: false, answered: false, code: null, ...l })),
     connections: [...connections],
     refuse: {},
-    /** The select of every plan read, in order. */
-    planSelects: [],
+    /** Every /rest/v1/plans read, in order: the plan it names (null for a list) and its select. */
+    planReads: [],
     /** What my_bring_allowance answered, in order. */
     allowances: [],
   };
   const log = [],
     errors = [],
-    unexpected = [];
+    unexpected = [],
+    problems = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => {
     // The refusals under test answer 400 or 403.
@@ -242,7 +248,12 @@ async function fixture({ me, guests, links = [], connections = [], bringers = nu
     const id = (name) => q.get(name)?.replace(/^eq\./, "");
     const rpc = path.startsWith("/rest/v1/rpc/") ? path.slice("/rest/v1/rpc/".length) : null;
     if (rpc && state.refuse[rpc]?.length) return refuse(state.refuse[rpc].shift());
-    if (rpc && "p_plan" in (body ?? {})) assert.equal(body.p_plan, PLAN.id, `${rpc} names Ana's resbite`);
+    if (rpc && "p_plan" in (body ?? {}) && body.p_plan !== PLAN.id) {
+      problems.push(`${rpc} names ${body.p_plan}, not Ana's resbite`);
+      problemsSeen.push(problems.at(-1));
+      return refuse({ code: "42501", message: "Fixture: not Ana's resbite" });
+    }
+    if (path === "/rest/v1/plans") state.planReads.push({ id: id("id") ?? null, select: q.get("select") });
 
     if (path === "/auth/v1/user") return reply(user);
     if (rpc === "account_access_status") return reply({ account_id: me, status: "approved" });
@@ -252,10 +263,8 @@ async function fixture({ me, guests, links = [], connections = [], bringers = nu
       return reply({ id: who, display_name: NAMES[who] ?? null, avatar_path: null, avatar_revision: 0 });
     }
     if (path === "/rest/v1/plans" && id("id") === PLAN.id) {
-      // C-R5: a read whose select doesn't name the circle's columns gets none back.
-      const select = q.get("select");
-      state.planSelects.push(select);
-      const cols = columnsOf(select);
+      // The plan's Revision 11: a read whose select doesn't name the circle's columns gets none back.
+      const cols = columnsOf(q.get("select"));
       const row = { ...state.plan, plan_meeting_details: null, plan_admins: [] };
       if (!cols.includes("*")) for (const c of ["bring_invites", "bring_levels"]) if (!cols.includes(c)) delete row[c];
       return reply(row);
@@ -306,7 +315,11 @@ async function fixture({ me, guests, links = [], connections = [], bringers = nu
       return a ? reply(a) : refuse({ code: "42501", message: "Not invited" });
     }
     if (rpc === "invite_contacts") {
-      assert.ok(!isHost(me), "only a guest brings here");
+      if (isHost(me)) {
+        problems.push("invite_contacts from the host: only a guest brings in these scenarios");
+        problemsSeen.push(problems.at(-1));
+        return refuse({ code: "42501", message: "Fixture: a host's invitation is not modelled" });
+      }
       const r = bring(body.p_invites);
       return r.ok ? reply(r.ok) : refuse(r);
     }
@@ -357,6 +370,7 @@ async function fixture({ me, guests, links = [], connections = [], bringers = nu
     opened: () => page.evaluate(() => window.__opened.slice()),
     stored: () => page.evaluate((key) => JSON.parse(sessionStorage.getItem(key) ?? "{}"), `resbite.invite-codes.v1.${me}`),
     async done() {
+      assert.deepEqual(problems, [], PROBLEMS);
       assert.deepEqual(unexpected, [], "every request was one the fixture expects");
       assert.deepEqual(errors, [], "no page or console errors");
       await context.close();
@@ -401,9 +415,11 @@ try {
     await page.goto(`${base}/invitations?plan=${PLAN.id}`);
     await expect(heading(page, "Invite people")).toBeVisible();
     await expect(heading(page, "Circle of trust")).toBeVisible();
+    const planReads = f.state.planReads.filter((r) => r.id === PLAN.id).map((r) => r.select);
+    assert.ok(planReads.length > 0, "Invite people read the plan");
     assert.ok(
-      f.state.planSelects.some((s) => s.includes("bring_invites,bring_levels")),
-      `the plan read names the circle's columns: ${f.state.planSelects.join(" | ")}`,
+      planReads.every((s) => s.includes("bring_invites,bring_levels")),
+      `each read of the plan names the circle's columns: ${planReads.join(" | ")}`,
     );
     await expect(radio(page, "Each person can bring", "1 person each")).toHaveAttribute("aria-checked", "true");
     await expect(radio(page, "Each person can bring", "1 person each")).toHaveText("1");
@@ -664,6 +680,10 @@ try {
   );
 
   console.log("PASS: the circle of trust, end to end. All Supabase requests intercepted.");
+} catch (e) {
+  // A refused request can make a later step wait and time out: the problem behind it is the failure to show.
+  assert.deepEqual(problemsSeen, [], PROBLEMS);
+  throw e;
 } finally {
   await browser.close();
 }

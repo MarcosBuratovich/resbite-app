@@ -17,7 +17,7 @@
   - The allowance is checked once, under the resbite's row lock, when the invitation is sent. A sent invitation stands.
   - Too many new people refuse the whole call (22023 'No invites left'). No allowance refuses it too (42501 'Not allowed to bring people here').
   - Sending one's own live link again costs nothing.
-- **A removal sticks (C-R2).** `private.plan_removals` remembers, per series, whom a host removed, declined or revoked.
+- **A removal sticks (CO-R12).** `private.plan_removals` remembers, per series, whom a host removed, declined or revoked.
   - A guest cannot bring that person back, by connection or by number. That person cannot answer a guest's link, or a host's link sent before the removal.
   - A host's own later invitation, or an approval, clears the record.
 - **The people list (CO-07).** `plan_bringers` names the bringers. `plan_brought_invitations` gives a host the guests' unanswered links by their last two digits, never the number.
@@ -110,9 +110,11 @@ All of these ran on `co2-circles-of-trust`, with Tasks 1 to 7 combined.
 
 ## Rollout runbook
 
-**Order.**
-1. The owner's answer to the owner question.
-2. Before snapshot, then the migration.
+**Order.** The steps below, by their numbers:
+
+0. The owner's answer to the owner question, CO-Q1.
+1. Before snapshot.
+2. The migration.
 3. After snapshot and advisors.
 4. The `deliver-notifications` redeploy.
 5. The link-site deploy.
@@ -122,6 +124,7 @@ All of these ran on `co2-circles-of-trust`, with Tasks 1 to 7 combined.
 The migration must be live before the TestFlight build. The new build reads `plans.bring_invites` and `bring_levels`, and its `readGuests` selects `brought_by,level`. On the old schema those reads fail, so the resbite page and Invite people do not load.
 
 **If the follow-ups migration is still pending,** this runbook applies it too. One before/after snapshot pair covers both. The owner approves both files by name and sha256, and they go in order, in one transaction. The follow-ups runbook's other steps still hold: its step 1 count (in this step 1 too), its device checks and its roll-job step.
+- When step 2 runs `both`, the follow-ups runbook takes no snapshots of its own. Its Applied section then records that its migration went with this one, and points to step 2 here and to this directory's snapshot files.
 
 **Owner-run scripts.** The assistant's safety check refuses live reads and the apply, so the owner runs short scripts with `! bash ~/<name>.sh`.
 - At rollout time the assistant writes each script into the home directory from the block in its step. The owner reads it, then runs it.
@@ -130,9 +133,9 @@ The migration must be live before the TestFlight build. The new build reads `pla
 
 **The assistant's steps.** The advisors read (through the Supabase MCP server) and the `deliver-notifications` deploy are the assistant's. It does each once the owner approves it, as the connections record did.
 
-0. **The owner question (C-R11), before step 2.**
+0. **The owner question, CO-Q1, before step 2.**
    - The roll carries every guest (CH-P20). So a brought person who said Can't go comes back pending on the next occurrence, still counted for their bringer.
-   - The bringer's `used` can then exceed `allowed`. They read no invites left (`remaining` 0) until the brought person says Can't go there, or a host removes them. A bringer cannot take back someone the roll carried (C18-I1).
+   - The bringer's `used` can then exceed `allowed`. They read no invites left (`remaining` 0) until the brought person says Can't go there, or a host removes them. A bringer cannot take back someone the roll carried (CO-R16).
    - **Built that way by default.** The alternative, not carrying a brought person who said Can't go, is one condition in the roll, and a new migration hash.
    - Record the answer under "Applied". With no answer, the default ships.
 1. **Before snapshot, the history and two counts.** Read-only, into this directory, with `! bash ~/co2-before.sh`:
@@ -186,7 +189,7 @@ The migration must be live before the TestFlight build. The new build reads `pla
        echo "09e0cf75bbc7555b2b352f726cbbf73b1042a2c4a6ee9dd3c4478f9a95709b8f  $CO" | sha256sum -c -
        FILES=("$FU" "$CO")
        VERSIONS=(20261111120000 20261111130000)
-       GUARD="if $PAIR is not null then raise exception 'The connections follow-ups migration is already applied: run co2-apply.sh circles'; end if;"
+       GUARD="if $PAIR is not null then raise exception 'The connections follow-ups migration is already applied: if circles is not, run co2-apply.sh circles'; end if;"
        ;;
      circles)
        echo "09e0cf75bbc7555b2b352f726cbbf73b1042a2c4a6ee9dd3c4478f9a95709b8f  $CO" | sha256sum -c -
@@ -313,7 +316,7 @@ The migration must be live before the TestFlight build. The new build reads `pla
 6. **TestFlight build** (the owner's step), only after step 2, and with step 5 done before testers get it.
    - Build from the merged head and upload through EAS, as the earlier runbooks do.
    - An installed build keeps working after step 2 (step 2's notes). Hosts on it see the circle nowhere, and their guests see no Bring someone row: every resbite reads as Nobody until a host on the new build sets a circle.
-7. **Device checks** (Ana as host, Pedro as guest, and Clara and Juli as the people Pedro brings). Use two phones, signing in as each account in turn where needed. Use tester accounts, and never write a real number in this file. Each check needs steps 2, 4, 5 and 6, and runs in this order.
+7. **Device checks** (Ana as host, Pedro as guest, and Clara and Juli as the people Pedro brings). Use two phones, signing in as each account in turn where needed. Use tester accounts, and never write a real number in this file. The first check needs only step 2, on the build already installed. The others need steps 2, 4, 5 and 6 and the new build, and run in this order.
    - **Right after step 2, on the installed build.** As a host, the resbite page, the people list and Invite people load as before, with names and the invitation list.
    - **Set the circle.** As Ana, on Invite people, set "2" and "2 levels". The sentence names a guest who is Going: "Pedro can bring 2 people, and each of them can bring 2 more. Only people with a Resbite account."
      - Leave and come back: the card shows the saved choice.
@@ -345,19 +348,24 @@ The migration must be live before the TestFlight build. The new build reads `pla
 
 ## Applied
 
-Nothing yet. Each step's record goes here when it is done, as in the earlier runbooks. Step 0's answer goes here first.
+Nothing yet. Each step's record goes here when it is done, as in the earlier runbooks. Step 0's answer to CO-Q1 goes here first.
 
 ## Rollback
 
 Only with the owner's approval, in one transaction.
 
-**The full order, newest first.** Chat plan 3, chat plan 2, chat plan 1, circles (this file), follow-ups, connections, creating-a-resbite, then the earlier ones as the creating-a-resbite runbook lists. Each step's guard refuses when run out of order, except the connections rollback's (below). This list supersedes the "run this first" lines of the follow-ups runbook and of the connections rollback's header, which predate this file.
+**The full order, newest first.** Chat plan 3, chat plan 2, chat plan 1, circles (this file), follow-ups, connections, creating-a-resbite, then the earlier ones as the creating-a-resbite runbook lists. This list supersedes the "run this first" lines of the follow-ups runbook and of the connections and creating-a-resbite rollbacks' headers, which predate this file.
 
-- **The chat rollbacks** come first, when the chat plans ship. This file refuses while `public.messages` exists (C-R15): chat plan 1 copies this migration's claim and deletion bodies, and chat plan 2's group lines read `brought_by`.
-- **This file** refuses once the follow-ups rollback has run (`private.pair_standing` gone). Run after it, this file would bring back the roll that one removed.
-- **The follow-ups rollback** refuses, with 42501, while the roll, `request_connection` or `my_connections` is not its own body. So it refuses while circles is applied (rehearsed above). It also refuses once the connections or creating-a-resbite rollback has run.
-- **The connections rollback** refuses once the creating-a-resbite rollback has run. **Nothing stops it running before this file and the follow-ups one.** Then this file still runs, but it restores the connections body of `invite_contacts`, which reads the connections table that rollback dropped. Never run it out of order.
-- **The creating-a-resbite rollback** refuses once the phone-key, push or open-link rollback has run, as its runbook says.
+Every rollback below refuses to run too late, after a rollback that should follow it. Only this file and the follow-ups one also refuse to run too early. **The connections and creating-a-resbite rollbacks have no guard against running before the later rollbacks.** Run each of them only in this order. A refusal changes nothing.
+
+- **The chat rollbacks** come first, when the chat plans ship. This file refuses while `public.messages` exists, with "Roll back the chat migrations before the circles-of-trust rollback" (the plan's Revision 3). Chat plan 1 copies this migration's claim and deletion bodies, and chat plan 2's group lines read `brought_by`.
+- **This file** refuses once the follow-ups rollback has run (`private.pair_standing` gone), with "Run the circles-of-trust rollback before the connections follow-ups rollback". Run after it, this file would bring back the roll that one removed.
+- **The follow-ups rollback** refuses, with 42501, while the roll, `request_connection` or `my_connections` is not its own body. So it refuses while circles is applied (rehearsed above), with "private.roll_repeating_plans() is not the connections follow-ups body: run the rollbacks of every later migration first".
+  - It also refuses once the connections or creating-a-resbite rollback has run, with "Run the connections follow-ups rollback before the connections and creating-a-resbite rollbacks".
+- **The connections rollback** refuses once the creating-a-resbite rollback has run, with "Run the connections rollback before the creating-a-resbite rollback". **Nothing stops it running before this file and the follow-ups one.** Then this file still runs, but it restores the connections body of `invite_contacts`, which reads the connections table that rollback dropped. Never run it out of order.
+- **The creating-a-resbite rollback** refuses once the phone-key, push or open-link rollback has run, with "Run the creating-a-resbite rollback before the phone-key rollback" and its two like messages. **Nothing stops it running before the later rollbacks either.**
+  - On a local replay with both files applied, run first, it committed. It removed 37 objects and changed 30: `public.plan_admins` and the roll were gone, and `private.plan_removals` was left behind.
+  - Never run it out of order.
 
 **This file's steps.**
 
@@ -398,6 +406,7 @@ Accepted during the build; none blocks the rollout.
 
 - **A missed "is going" (D2, pre-existing).** A host removes a guest and later invites them again. The fresh guest row starts at version 1, so its first answer's push key repeats the earlier one, and the host misses that one "is going".
 - **The fold (Task 2, concern 1).** Guest rows have no creation time. If a host removed someone's web-only account, then invited their app account in the app before the person folded the two, the fold takes that invitation off. The person needs another invitation. Rare.
+- **The fold's order (Task 2, a re-review note).** Inside the fold, the trigger closes the app account's waiting request on an occurrence before step 2d takes the account off that occurrence. Very rare: the web account must have answered a guest's link there.
 - **Old waiting pairs (Task 2, concern 4).** A guest row beside a waiting request, from before this migration, stays on hosted. The people list hides the request, and a Decline of it is refused. Step 1 counts them.
 - **A removal takes back the host's own link too (Task 1, concern 3).** Removing or declining someone revokes every live link to their confirmed number on that resbite, the host's own included. The host's list loses that link.
 - **Deferred minors.** A link's message and Send again write the time in the phone's zone, not the resbite's (pre-existing). `fold_web_account` does not move `brought_by`; a web-only account cannot bring.
@@ -406,8 +415,8 @@ Accepted during the build; none blocks the rollout.
 
 Copied from the plan.
 
-- **Owner question (finding 12).** The roll carries every guest (CH-P20), so a brought person who said Can't go comes back pending with their bringer. The bringer's `used` on the next occurrence can exceed `allowed` (shown as no invites left, `remaining` 0).
-  - Built that way by default (C-R11). The roadmap's owner table asks the owner before the circles migration (step 0).
+- **Owner question, CO-Q1 (finding 12).** The roll carries every guest (CH-P20), so a brought person who said Can't go comes back pending with their bringer. The bringer's `used` on the next occurrence can exceed `allowed` (shown as no invites left, `remaining` 0).
+  - Built that way by default (CO-Q1). The roadmap's owner table asks the owner before the circles migration (step 0).
   - The alternative, not carrying a brought person who said Can't go, is one condition in the roll.
 - A bringer learns `already` for a number whose holder is on the resbite, spending nothing. Bringers already read every name (`attendee_read`), and `contacts_on_resbite` was already open to every tester.
 - Anyone holding a forwarded personal link sees the bringer's first name. The phone-key check is unchanged, so neither lets anyone in.
