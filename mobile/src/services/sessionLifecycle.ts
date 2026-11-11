@@ -122,6 +122,9 @@ export function createSessionLifecycle(deps: Dependencies) {
             current();
           }
           if (scope) {
+            // First, before any step that can fail: the names this account read are held in memory only, and a
+            // sign-out that fails later must not leave them behind.
+            if (!original.preview) deps.clearKnownNames(scope);
             if (deleteAccount) {
               if (!deps.clearJournal)
                 throw Error("Journal cleanup is unavailable.");
@@ -134,7 +137,6 @@ export function createSessionLifecycle(deps: Dependencies) {
             current();
             await deps.clearInviteCodes(scope);
             current();
-            if (!original.preview) deps.clearKnownNames(scope);
             await deps.clearReminders(scope);
             current();
             await deps.clearCalendarRecords(scope);

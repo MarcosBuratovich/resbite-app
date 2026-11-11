@@ -199,6 +199,18 @@ export function broughtNames(i: { guests: readonly Guest[]; invited: readonly In
   return [...guests, ...i.invited.map((p) => p.name)];
 }
 
+/**
+ * Whether to read a guest's own links (`plan_phone_invitations`, for "You brought …" and their rows on the people list):
+ * only when the circle lets guests bring (`invites`, the plan's), or the guest is known to have brought someone: a
+ * guest row they brought, whatever its answer, or `known` (the last read found a link of theirs, or this phone keeps a
+ * code for the resbite). A sent invitation stands after the host lowers the circle (CO-P15), so those links are still
+ * read; on a resbite whose circle is Nobody, with nothing brought, there are none, and the read is skipped.
+ */
+export function readsOwnLinks(i: { invites: number; userId: string | null; guests: readonly Guest[]; known: boolean }): boolean {
+  if (!i.userId) return false;
+  return i.invites > 0 || i.known || i.guests.some((g) => g.broughtById === i.userId);
+}
+
 export type BringRow = { kind: "bring"; hint: string } | { kind: "brought"; text: string };
 
 /**

@@ -223,6 +223,50 @@ test("sign-out forgets the names this account read, before auth sign-out; previe
   await p.life.signOut();
   assert(!p.events.some((e) => e.startsWith("names")));
 });
+test("the names are forgotten first in the account's cleanup, so a step that fails after it still leaves them forgotten", async () => {
+  const h = lifecycleHarness();
+  h.life.update({ account: "owner", preview: false });
+  await h.life.signOut();
+  assert.deepEqual(h.events.slice(0, 4), ["block", "busy:true", "names:owner", "clear:owner"], "first, before the people clear");
+  const quiet = async () => {};
+  const failing = (step: "people" | "journal") => {
+    const calls: string[] = [];
+    const life = createSessionLifecycle({
+      suspend: () => {},
+      resume: () => {},
+      clearPeople: async () => {
+        calls.push("people");
+        if (step === "people") throw Error("disk");
+      },
+      clearRecentPlaces: quiet,
+      clearReminders: quiet,
+      clearCalendarRecords: quiet,
+      clearPhoto: quiet,
+      clearInviteCodes: quiet,
+      clearKnownNames: (scope) => {
+        calls.push(`names:${scope}`);
+      },
+      clearCovers: quiet,
+      blockPending: () => () => {},
+      clearPending: quiet,
+      authSignOut: async () => {
+        calls.push("auth");
+      },
+      finish: () => {},
+      busy: () => {},
+    });
+    life.update({ account: "owner", preview: false });
+    return { life, calls };
+  };
+  // The first clear fails: sign-out fails before auth sign-out, and the names are already gone.
+  const people = failing("people");
+  await assert.rejects(people.life.signOut(), /disk/);
+  assert.deepEqual(people.calls, ["names:owner", "people"]);
+  // Deleting the account with no journal cleanup throws at its first step: the names are gone all the same.
+  const journal = failing("journal");
+  await assert.rejects(journal.life.finishAccountDeletion("owner"), /Journal cleanup is unavailable/);
+  assert.deepEqual(journal.calls, ["names:owner"]);
+});
 test("a failed cover clear fails sign-out before auth sign-out", async () => {
   const events: string[] = [];
   const life = createSessionLifecycle({

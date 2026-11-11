@@ -9,7 +9,7 @@ import { readEvent, readGuests, readRsvp, writeRsvp, type EventSnapshot, type Gu
 import { syncReminders } from "../services/deviceReminders";
 import { adminErrorMessage, appointAdmin, removeAdmin } from "../services/admins";
 import { muteErrorMessage, readMutedSeries, setPlanMute } from "../services/mutes";
-import { broughtNames, EVENT_COPY, pageState, showsNames, viewerRole, type AnswerCounts, type Viewer } from "../domain/eventPage";
+import { broughtNames, EVENT_COPY, pageState, readsOwnLinks, showsNames, viewerRole, type AnswerCounts, type Viewer } from "../domain/eventPage";
 import { circleOf } from "../domain/circle";
 import type { Plan } from "../domain/plans";
 import { circleGateway, type Allowance, type BroughtLink } from "../services/circle";
@@ -55,7 +55,8 @@ export type EventPage = {
   counts: AnswerCounts | null;
   /**
    * Personal-link invitations not answered yet: a host's (the owner and the admins) are every one; a guest who has
-   * answered gets only the links they sent bringing someone; empty for everyone else.
+   * answered gets only the links they sent bringing someone, read only where there can be some (`readsOwnLinks`: the
+   * circle lets guests bring, or they are known to have brought someone); empty for everyone else.
    */
   invited: InvitedPerson[];
   /**
@@ -142,6 +143,8 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
   const [acting, setActing] = useState<EventPage["acting"]>(null);
   const actingRef = useRef(false);
   const [invited, setInvited] = useState<InvitedPerson[]>([]);
+  /** The last read of a guest's own links found one, so the next load reads them again whatever the circle says. */
+  const linksFound = useRef(false);
   const [allowance, setAllowance] = useState<Allowance | null>(null);
   const [requests, setRequests] = useState<HostRequest[]>([]);
   const [bringerNames, setBringerNames] = useState<Record<string, string> | null>(null);
@@ -159,6 +162,7 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
   useEffect(() => {
     setSnapshot(null);
     setInvited([]);
+    linksFound.current = false;
     setAllowance(null);
     setRequests([]);
     setBringerNames(null);
@@ -216,16 +220,21 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
             () => {},
           );
         // A guest's Bring someone row: what they may bring, and the links they sent bringing someone (once they have
-        // answered; the server lists only their own). The event never waits for them: they land when they arrive, and
-        // until then the row shows what was known. A failure gives no allowance and no links.
+        // answered; the server lists only their own), read only where there can be some (readsOwnLinks). The event never
+        // waits for them: they land when they arrive, and until then the row shows what was known. A failure gives no
+        // allowance and no links.
         const answered = !!next.attendee && next.attendee.response !== "pending";
         if (!host) {
           void readAllowance(next.plan, false, next.attendee?.response ?? null).then((bring) => {
             if (valid()) setAllowance(bring);
           });
           if (answered)
-            void readInvited(planId, userId).then(
-              (links) => valid() && setInvited(links),
+            void readOwnLinks(next, planId, userId, linksFound.current).then(
+              (links) => {
+                if (!valid()) return;
+                linksFound.current = links.length > 0;
+                setInvited(links);
+              },
               () => valid() && setInvited([]),
             );
         }
@@ -531,10 +540,22 @@ async function readAllowance(plan: Plan, host: boolean, response: string | null)
   return circleGateway.allowance(plan.id).catch(() => null);
 }
 
-async function readInvited(planId: string, userId: string): Promise<InvitedPerson[]> {
+/**
+ * A guest's own links, read only when readsOwnLinks says there can be some: the circle lets guests bring, or the guest
+ * is known to have brought someone (a guest row they brought, a link the last read found, or a code this phone keeps
+ * for the resbite). Otherwise none, with no request.
+ */
+async function readOwnLinks(next: EventSnapshot, planId: string, userId: string, found: boolean): Promise<InvitedPerson[]> {
+  const stored = await inviteCodeStore.get(userId, planId).catch((): Record<string, StoredInvite> => ({}));
+  const known = found || Object.keys(stored).length > 0;
+  if (!readsOwnLinks({ invites: circleOf(next.plan).invites, userId, guests: next.guests, known })) return [];
+  return readInvited(planId, userId, stored);
+}
+
+async function readInvited(planId: string, userId: string, codes?: Record<string, StoredInvite>): Promise<InvitedPerson[]> {
   const [rows, stored] = await Promise.all([
     contactInviteGateway.list(planId),
-    inviteCodeStore.get(userId, planId).catch((): Record<string, StoredInvite> => ({})),
+    codes ?? inviteCodeStore.get(userId, planId).catch((): Record<string, StoredInvite> => ({})),
   ]);
   return rows
     .filter((r) => !r.answered)

@@ -103,13 +103,19 @@ export type CircleSaveEvent =
   | { type: "read"; value: Circle; version: number };
 
 const same = (a: Circle, b: Circle) => a.invites === b.invites && a.levels === b.levels;
+/** A plan version the card can compare: one that isn't a finite number (a plan read without it) is unknown. */
+const known = (version: number) => Number.isFinite(version);
+/** The newer of the version known and the one given; an unknown one changes nothing, and the version never goes back. */
+const newer = (current: number, next: number) => (!known(next) ? current : known(current) ? Math.max(current, next) : next);
 
 /**
  * Each change saves at once. A tap shows its value and starts a save; a tap while one is in flight, or on what is
  * shown, returns the state unchanged (the same object), so the caller sends nothing. A failure shows the saved
  * value again, never one tapped before. A plan read replaces the card only when it is at least as new as what the
  * card knows and no save is in flight (that save's answer decides): a read taken before a confirmed save, landing
- * after it, changes nothing (D8). The known version never goes back.
+ * after it, changes nothing (D8). The known version never goes back. A version that isn't a finite number (a plan read
+ * without it, from a database too old to have it) is unknown: that read is taken, as before the guard, and the version
+ * known stays, so the guard holds for the reads after it.
  */
 export function circleSave(state: CircleSaveState, event: CircleSaveEvent): CircleSaveState {
   switch (event.type) {
@@ -117,12 +123,14 @@ export function circleSave(state: CircleSaveState, event: CircleSaveEvent): Circ
       if (state.saving || same(state.shown, event.value)) return state;
       return { ...state, shown: event.value, saving: true };
     case "saved":
-      return { saved: event.value, shown: event.value, saving: false, version: Math.max(state.version, event.version) };
+      return { saved: event.value, shown: event.value, saving: false, version: newer(state.version, event.version) };
     case "failed":
       return { ...state, shown: state.saved, saving: false };
     case "read":
-      if (state.saving || event.version < state.version) return state;
+      if (state.saving) return state;
+      // Only a read whose version is known, and older than the one the card knows, is too old; an unknown one is taken.
+      if (known(event.version) && known(state.version) && event.version < state.version) return state;
       if (event.version === state.version && same(state.saved, event.value) && same(state.shown, event.value)) return state;
-      return { saved: event.value, shown: event.value, saving: false, version: event.version };
+      return { saved: event.value, shown: event.value, saving: false, version: newer(state.version, event.version) };
   }
 }

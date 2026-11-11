@@ -493,7 +493,8 @@ export function AvatarStack({ names, label, onPress }: { names: readonly string[
 
 /**
  * Options as a radio group (Upcoming/Past, Going/Maybe/Can’t go, the circle's four). Every option's text is ink, which
- * meets 4.5:1 on the surface behind it (muted gives 4.32:1); the chosen one is told by its paper pill and semibold.
+ * meets 4.5:1 on the surface behind it (muted gives 4.32:1); the chosen one is told by its paper pill and the medium
+ * font (`fonts.medium`).
  */
 export function Segmented<K extends string>({
   label,

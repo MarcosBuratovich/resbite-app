@@ -741,9 +741,9 @@ try {
       await page.getByRole("button", { name: "Close sheet" }).first().click();
       // An answered guest reads every row: no plan_people_counts.
       assert.deepEqual(f.rpcs("plan_people_counts"), []);
-      // ...and the links they sent bringing someone (circles of trust), for the Bring someone row.
-      assert.ok(f.rpcs("plan_phone_invitations").length > 0, "an answered guest reads their own links");
-      assert.ok(f.rpcs("plan_phone_invitations").every((args) => args.p_plan === PLAN_ID));
+      // ...and not the links they sent bringing someone (circles of trust): this resbite's circle is Nobody and they
+      // brought nobody, so there are none to read (verify-circle reads them where the circle lets guests bring).
+      assert.deepEqual(f.rpcs("plan_phone_invitations"), [], "no links read for a guest who can't have any");
     },
   );
   await scenario("guest, not answered", { viewer: "guest", guests: going2 }, async (f) => {

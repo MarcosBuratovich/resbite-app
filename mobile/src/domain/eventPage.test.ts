@@ -8,6 +8,7 @@ import {
   bringRow,
   broughtFrom,
   broughtNames,
+  readsOwnLinks,
   byline,
   cancelQuestion,
   hostLabel,
@@ -571,6 +572,35 @@ test("broughtNames: the bringer's own brought guests still in, by first name, th
   assert.deepEqual(broughtNames({ guests, invited: links, userId: "pedro" }), ["Clara", "Martín", "Sol", "Juli Fernández", "+44 7700 900222"]);
   assert.deepEqual(broughtNames({ guests, invited: [], userId: "marta" }), []);
   assert.deepEqual(broughtNames({ guests: [], invited: [], userId: null }), []);
+});
+
+test("readsOwnLinks: a guest's own links are read only when the circle lets guests bring, or they are known to have brought someone", () => {
+  const guests = [
+    guest("pedro", "Pedro Pérez", "accepted"),
+    guest("clara", "Clara Gómez", "declined", "pedro", 2),
+    guest("marta", "Marta M", "accepted", "ana", 2),
+  ];
+  // The circle lets guests bring: read, whoever they brought.
+  assert.equal(readsOwnLinks({ invites: 1, userId: "marta", guests: [], known: false }), true);
+  // Nobody, and nothing says they brought anyone: no read (most resbites).
+  assert.equal(readsOwnLinks({ invites: 0, userId: "marta", guests, known: false }), false);
+  // Nobody now, but someone they brought is on the list, whatever their answer...
+  assert.equal(readsOwnLinks({ invites: 0, userId: "pedro", guests, known: false }), true);
+  // ...or a link of theirs is known: the last read found one, or this phone keeps its code.
+  assert.equal(readsOwnLinks({ invites: 0, userId: "marta", guests: [], known: true }), true);
+  // No account: nothing to read.
+  assert.equal(readsOwnLinks({ invites: 2, userId: null, guests, known: true }), false);
+});
+
+test("useEvent reads a guest's own links only when readsOwnLinks says so, counting this phone's codes as known", () => {
+  const src = readFileSync(new URL("../state/useEvent.ts", import.meta.url), "utf8");
+  assert.match(src, /if \(answered\)\s*void readOwnLinks\(next, planId, userId, linksFound\.current\)\.then\(/);
+  assert.match(src, /readsOwnLinks\(\{ invites: circleOf\(next\.plan\)\.invites, userId, guests: next\.guests, known \}\)/);
+  assert.match(src, /const known = found \|\| Object\.keys\(stored\)\.length > 0;/);
+  // A read that found links keeps them known for the next load, until one finds none.
+  assert.match(src, /linksFound\.current = links\.length > 0;/);
+  // The guest's path is the only one gated: the hosts' list is read as before.
+  assert.equal(src.match(/void readInvited\(/g), null);
 });
 
 test("readGuests: who brought a guest and their level, read as nobody's and 1 when the row lacks them", () => {

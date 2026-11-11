@@ -70,11 +70,11 @@ test("deletion clears the create journal as well as scoped data before local-onl
   await result;
   assert.deepEqual(h.calls, [
     "suspend:a",
+    "names:a",
     "journal:a",
     "people:a",
     "places:a",
     "invites:a",
-    "names:a",
     "reminders:a",
     "calendar:a",
     "photo:a",

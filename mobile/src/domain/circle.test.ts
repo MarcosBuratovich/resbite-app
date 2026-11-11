@@ -193,6 +193,25 @@ test("a plan read at or past the confirmed version is what the server holds", ()
   assert.deepEqual(circleSave(saved12, { type: "read", value: at(3, 2), version: 5 }), settled(at(3, 2), 5));
 });
 
+test("a plan version that isn't a finite number is unknown: the read is taken, and the version known stays", () => {
+  // A plan read without its version (a very old database) is what the server holds, as before the guard...
+  for (const version of [Number.NaN, Number.POSITIVE_INFINITY, undefined as unknown as number]) {
+    const unknown = circleSave(saved12, { type: "read", value: at(3, 3), version });
+    assert.deepEqual(unknown, settled(at(3, 3), 5), `a read at ${version}`);
+    // ...and the guard still holds after it: a read older than the version known changes nothing.
+    assert.equal(circleSave(unknown, { type: "read", value: at(0, 1), version: 4 }), unknown);
+    // A save answered without a version keeps the version known too.
+    const saving = circleSave(saved12, { type: "tap", value: at(2, 2) });
+    assert.deepEqual(circleSave(saving, { type: "saved", value: at(2, 2), version }), settled(at(2, 2), 5));
+    // A card that started from a plan read without one takes the first version it is given.
+    assert.deepEqual(circleSave(settled(at(1, 2), version), { type: "read", value: at(2, 1), version: 3 }), settled(at(2, 1), 3));
+    assert.deepEqual(
+      circleSave({ ...settled(at(1, 2), version), shown: at(2, 2), saving: true }, { type: "saved", value: at(2, 2), version: 6 }),
+      settled(at(2, 2), 6),
+    );
+  }
+});
+
 test("a plan read while a save is in flight waits for that save's answer", () => {
   const saving = circleSave(saved12, { type: "tap", value: at(2, 2) });
   assert.equal(circleSave(saving, { type: "read", value: at(3, 3), version: 9 }), saving);
