@@ -13,7 +13,7 @@
   - An admin who says Can't go has already lost the admin role (CR-P15), so the roll carries them as a guest.
   - Guests the old roll already dropped are not brought back. There is no backfill. Step 1 counts them.
 - **A request's notice says how the two stand (CO-P5).**
-  - A new helper, `private.pair_standing(plan, a, b)`, returns one of four values. No API role may call it.
+  - A new helper, `private.pair_standing(plan, a, b)`, returns one of four values, or null (below). No API role may call it.
   - A person counts as going when they are the resbite's owner, or their own reply is Going or Maybe. An admin counts by their own reply alone.
   - It returns null when either person has no place on the resbite: neither its owner nor on its guest list, whatever the reply.
   - A request's own resbite never gives null: both people have a place on it. If it ever did, the notice would have no detail and the old wording, and nothing would fail.
@@ -178,7 +178,7 @@ All of these ran on the merged branch, with the polish and the final fix wave (R
    - It takes a brief lock on `private.notification_outbox` to replace the detail check, as the earlier migrations did.
    - The re-added check validates every existing row. They all pass, as it keeps every earlier value.
 3. **After snapshot and advisors.**
-   - `hosted-after.json` should match a local replay of `migrations.txt` plus this file: 356 of 356 by definition, with the same 15 `acl` differences.
+   - `hosted-after.json` should match a local replay of `migrations.txt` plus this file: 356 of 356 by definition, with the same 15 `acl` differences. A full match also means this migration's rollback guard will pass on hosted: the definitions carry the function bodies verbatim, and the local rehearsal ran the rollback on those same bodies.
    - Before to after: one function added, `private.pair_standing(uuid,uuid,uuid)`, which no API role may run.
    - Four objects change: the three functions above and the outbox constraint `notification_outbox_detail_check`. Nothing is removed and no grant changes. `.after.sql` asserts the same shape locally.
    - Every table keeps its row count. The storage policies are unchanged, 7 of 7.
@@ -268,7 +268,7 @@ Nothing yet. Each step's record goes here when it is done, as in the earlier run
 
 Only with the owner's approval, in one transaction.
 
-1. **The roll job first.** If `cron.job` has `roll-repeating-plans` (step 6 created it; step 1's cron query lists it), the owner unschedules it before anything else:
+1. **The roll job first.** If `cron.job` has `roll-repeating-plans` (step 6 created it; step 1's cron query lists it), the owner unschedules it before anything else, from the repository root:
 
    ```
    supabase db query --linked "select cron.unschedule('roll-repeating-plans')"
@@ -304,12 +304,12 @@ Only with the owner's approval, in one transaction.
    - Later migrations (circles, the chat plans) redefine the roll, `request_connection` or `my_connections`. Their rollbacks put this migration's bodies back, so they run first.
    - This file refuses with 42501, changing nothing, while any of the three is not this migration's body. It compares `md5(prosrc)` with the values recorded in the file.
    - Then the connections rollback, `supabase/rollback/20261110120000_connections.rollback.sql`.
-   - Then the creating-a-resbite rollback, `supabase/rollback/20261031120000_creating_a_resbite.rollback.sql`. The roll job is already unscheduled (step 1). Then the earlier ones, as the creating-a-resbite runbook lists.
+   - Then the creating-a-resbite rollback, `supabase/rollback/20261031120000_creating_a_resbite.rollback.sql`. The roll job is already unscheduled (rollback step 1). Then the earlier ones, as the creating-a-resbite runbook lists.
    - This file's first guard stops it, changing nothing, once the connections or the creating-a-resbite rollback has run.
    - The connections rollback's header still says to run it first of the rollbacks. That header predates this file and is left unchanged, as its hash is part of a live runbook.
    - Nothing stops the connections rollback if it runs first by mistake. Then this file refuses, and `private.pair_standing` stays behind, unused.
    - In that case the roll also keeps carrying every guest until the creating-a-resbite rollback. A local run on the hosted baseline showed exactly this.
-   - A leftover `private.pair_standing` can be dropped by hand, with the owner's approval. The owner runs:
+   - A leftover `private.pair_standing` can be dropped by hand, with the owner's approval. The owner runs, from the repository root:
 
      ```
      supabase db query --linked "drop function private.pair_standing(uuid,uuid,uuid)"
