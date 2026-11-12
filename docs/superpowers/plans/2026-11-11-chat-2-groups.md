@@ -72,7 +72,7 @@ What changed, one line each:
 From `.superpowers/sdd/challenges/chat-2-groups-after-core-challenge.md` (1 BLOCKING, 11 IMPORTANT, 12 NOTE, 3 owner questions), with the controller's rulings in `chat-2-groups-after-core-rulings.md` and `chat-2-3-after-core-rulings.md`. The rulings win where they differ from the challenge. One line per ruling:
 - **B1:** P2-Q1 to Q4 are decisions (above; Decisions 7 to 10). `private.notification_recipient_eligible` is redefined for P2-Q1, with its rollback line, its rehearsal comparison and the slice 2f tests: a cancelled week's group message pushes members, a cancelled one-off pushes nobody, and a stopped group's 48-hour goodbye pushes. Plan 3 copies plan 2's body (its own ruling B2). Task 2; Task 4, Step 5.
 - **I1:** the roll's own flag is proved. The test resets the flag before the roll and asserts it is `roll` right after. The concurrency script, whose roll runs in a clean session, checks for no `joined` and no `admin` line. Task 2, Steps 1 and 2.
-- **I2:** two tests. A `cant_go` on the old occurrence survives Going on the new one, which pins the merge to the current occurrence. A `cant_go` 11 minutes old survives Going, which pins the 10 minutes. The line changes state, never vanishes unseen (m6), and H33's guard doesn't apply to the delete. Task 2.
+- **I2:** two tests. A `cant_go` on the old occurrence is neither merged into nor deleted by a Can't go and then a Going on the new one, which write and delete a line of their own. That pins the merge and the delete to the current occurrence. A `cant_go` 11 minutes old survives Going, which pins the 10 minutes. The line changes state, never vanishes unseen (m6), and H33's guard doesn't apply to the delete. Task 2.
 - **I3:** My resbites draws the unread dot on a group member's invitation card (`plans.tsx`), checked in `review-ui.mjs` beside the tile's dot. Task 4.
 - **I4:** `readEvent` reads a failed `series_is_group` as "not a group" and keeps the page. Tested, with a line in the rollback header and the runbook. Tasks 2, 3 and 4.
 - **I5:** every "Next one" line opens the newest occurrence the reader may read, which is the summary's current `planId`. With no `planId` it re-reads the chat instead of opening an error page. Decision 14; Tasks 3 and 4, (gr2).
@@ -85,6 +85,15 @@ From `.superpowers/sdd/challenges/chat-2-groups-after-core-challenge.md` (1 BLOC
 - **NOTEs taken (they correct the plan's text):** 1 (`chat.sql:211-216` kept), 2 (`dayLabel` without `now` in `systemText`), 3 (`series_is_group` follows membership), 4 (the old replies spelled out), 6 (the Chat row survives an answer on a group), 7 (the cancelled-stop header and card recorded as a known gap), 8 (a roll signed in as someone), 10 (two rollback header lines), 11 (slice 2's cast, blocks and file order), 12 (the small tests; a leave on a closed group is allowed; `stopped_at` only on a group). Tasks 1 to 4.
 - **NOTEs listed, not taken (they add scope):** 5 ("Mute this resbite" for a not-answered group member: "Mute chat" in the chat's menu is theirs already) and 9 (dropping a leaver's unsent messages). Both are known gaps in the runbook (Task 4, Step 5).
 - **Owner questions:** G-QA (I11), G-QB (I8) and G-QC (= CO-Q1, I9) go in the runbook's Step 0, each with the default the build ships. Task 4, Step 5.
+
+### After the confirmation (12 November 2026)
+
+From `.superpowers/sdd/challenges/chat-2-groups-confirmation.md` (0 BLOCKING, 4 IMPORTANT, 6 NOTE), every fix taken as written. No decision reopened:
+- **IMPORTANT 1:** I2's "this occurrence only" test now has 03 answer Can't go and then Going on the new occurrence, so the narrowed merge and delete each run. A series-wide search fails both. Task 2, block 2b.
+- **IMPORTANT 2:** the `chat.sql` way-back block's `to_regclass` switch moves to Task 1, Step 3. Task 1 creates `series_leaves`, and `chat.sql:2281` would fail on it, so Task 1 now passes on its own.
+- **IMPORTANT 3:** on an ended occurrence `invite_contacts` refuses (42501 'Active plan owner required' for a host, 'Not allowed to bring people here' for a guest), so it never answers 'already'. Fixed in Decision 2 and block 2d.
+- **IMPORTANT 4:** `creating-a-resbite.sql:1163-1167` now expects a pending guest of a rolled group occurrence to read all 5 rows (CH-P21). It is in Task 2's Files and Step 4, and every test file runs in both modes.
+- **NOTEs 1 to 6:** the `chat.sql` and `test-database.sh` citations are corrected (Task 1). Slice 1 names a plan per line, with four weeklies and three one-offs in the cast. The cast connects 01 with 03, 04 and 07. Block 2d sets `created_at` to `now() - interval '61 seconds'`. `chat_hide_line` locks the `chats` row first (H28's order). The `rsvp.test.ts` seam follows `reminders.test.ts:458-466`.
 
 ## Revised 11 November 2026
 
@@ -165,7 +174,7 @@ Chat plan 1's Global Constraints, verbatim, with the migration `supabase/migrati
 ## Decisions this plan makes
 
 1. **Any way back in clears a leave** (G-N1). The trigger clears it on any attendee insert, as Review Focus 6 expects, and on a guest row moved to the person by a fold (`update of user_id`, I7). An old personal link would otherwise let a leaver back in by answering Can't go, so `leave_series` revokes the leaver's personal links on the current occurrence, as `remove_guest` does. Their `invited` notice goes with the row, as `remove_guest`'s does, so an invitation back is told again (I6).
-2. **The leave record is only the roll's skip list** (G-S5). Membership of a group is the hosts and the attendee rows of the current occurrence. One exception: someone who leaves after the current occurrence ended keeps their row, a real attendance, and is out of the chat at once (G-N13). Such a leaver can't be re-invited until the roll. `invite_contacts` answers `already` for the row and inserts nothing, so the leave stays, and the roll then skips them (confirmation NOTE 15). A leave from a closed group is allowed and writes its `left` line, as other lines are written to a closed chat (`cancelled` is) (challenge NOTE 12).
+2. **The leave record is only the roll's skip list** (G-S5). Membership of a group is the hosts and the attendee rows of the current occurrence. One exception: someone who leaves after the current occurrence ended keeps their row, a real attendance, and is out of the chat at once (G-N13). Such a leaver can't be re-invited until the roll. `invite_contacts` refuses on an ended occurrence, before it looks at anyone: 42501 'Active plan owner required' for a host (`require_link_owner`, `circles_of_trust.sql:306-308`, `creating_a_resbite.sql:237-243`) and 42501 'Not allowed to bring people here' for a guest (`circles_of_trust.sql:315-320`). So the leave stays, and the roll then skips them (confirmation NOTE 15). A leave from a closed group is allowed and writes its `left` line, as other lines are written to a closed chat (`cancelled` is) (challenge NOTE 12).
 3. **Two new system lines.** Edit → "Doesn't repeat" writes "Ana stopped repeating this · the last one is Thu 27 Nov" (G-N13). A one-off with messages that becomes a group writes "Ana made this a group · everyone invited can read this chat" (G-N8). The spec has neither.
 4. **A group stops when its owner can no longer use the app** (G-S4). The roll skips such a plan, so `stopped` counts an owner who is not `user_eligible`, and the chat closes 48 hours after the last end.
 5. **The roll drops a "brought by" that points outside the group** (G-N3). A carried row whose bringer is not carried gets `brought_by = null`.
@@ -198,8 +207,8 @@ Chat plan 1's Global Constraints, verbatim, with the migration `supabase/migrati
 ### Task 1: Migration section 1: the group flag, membership, closing and the summary
 
 **Files:**
-- Create: `supabase/migrations/20261111150000_chat_groups.sql` (section 1), `supabase/tests/chat-groups.sql` (slice 1; add it to `supabase/tests/hosted-baseline/tests.txt`, after `chat.sql`), `supabase/tests/hosted-baseline/20261111150000_chat_groups.before.sql`, `.after.sql`. In full mode `chat-groups.sql` runs before `chat.sql`, since the glob sorts `-` before `.` (`scripts/test-database.sh:28`), and after it in `tests.txt`. That is harmless: each file's transactions roll back.
-- Modify: `supabase/tests/chat.sql` (plan 1's weekly-series assertions, Step 3)
+- Create: `supabase/migrations/20261111150000_chat_groups.sql` (section 1), `supabase/tests/chat-groups.sql` (slice 1; add it to `supabase/tests/hosted-baseline/tests.txt`, after `chat.sql`), `supabase/tests/hosted-baseline/20261111150000_chat_groups.before.sql`, `.after.sql`. In full mode `chat-groups.sql` runs before `chat.sql`, since the glob sorts `-` before `.` (`scripts/test-database.sh:29`), and after it in `tests.txt`. That is harmless: each file's transactions roll back.
+- Modify: `supabase/tests/chat.sql` (plan 1's weekly-series assertions and the way-back block's switch, Step 3)
 
 **Interfaces:**
 - Consumes, as built at sha256 `1047fb37…ce`:
@@ -221,8 +230,9 @@ Chat plan 1's Global Constraints, verbatim, with the migration `supabase/migrati
   - `private.series_leaves (series_id uuid not null, user_id uuid not null references public.profiles(id) on delete cascade, left_at timestamptz not null default now(), primary key (series_id, user_id))`. RLS on, no policies, all revoked from the four roles.
   - Trigger `attendees_clear_leave` after insert or update of `user_id` on `public.attendees`, function `private.attendees_clear_leave()`: deletes the leave of `new.user_id` for the plan's series (Decision 1). The update case is a fold (`update public.attendees set user_id=p_into …`, `chat_core.sql:1016`), which moves a row by update and never inserts. `attendees_close_waiting` fires on the same update for the same reason (`circles_of_trust.sql:85`) (I7). No grants.
   - `private.chat_hide_line(p_id bigint) returns void`, plpgsql, no grants. It is the one way a system line leaves the feed (Decision 6, I8):
-    - it sets the system row's `state = 'deleted'`, so `messages_touch` moves `updated_at` and `messages_signal` fires;
-    - `messages_chat_stats` ignores that change (:400-403), so the function then locks the `chats` row as that trigger does (:407; never the `chat:` advisory lock, :886-889), checks that `last_message_id` still points at the row, and if so moves it to the series' newest row that is not a deleted system line. `last_message_at` moves with it to that row's `created_at`, both null when no row is left (confirmation 2, NOTE 4).
+    - it first locks the series' `chats` row (`for update`), as chat core locks it before a message row everywhere (H28: `delete_message` :578-579, `remove_message` :595, the deletion :864-867), and never the `chat:` advisory lock (:886-889);
+    - then it sets the system row's `state = 'deleted'`, so `messages_touch` moves `updated_at` and `messages_signal` fires;
+    - `messages_chat_stats` ignores that change (:400-403), so the function then checks whether `last_message_id` points at the row, and if so moves it to the series' newest row that is not a deleted system line. `last_message_at` moves with it to that row's `created_at`, both null when no row is left (confirmation 2, NOTE 4).
     - A row that is not a `sent` system line is left as it is.
   - `private.group_stopped(p_series uuid) returns boolean`: `is_group`, and either `stopped_at` is set or the current occurrence's owner is not `private.user_eligible` (G-S4). No grants.
   - Trigger `plans_group_flag` after insert or update of `repeat_weeks, status` on `public.plans`, function `private.plans_group_flag()`. It acts only when the row is its series' current occurrence. On update it compares OLD with NEW (G-N4).
@@ -250,34 +260,40 @@ Chat plan 1's Global Constraints, verbatim, with the migration `supabase/migrati
 - [ ] **Step 1: Failing SQL test, slice 1** (`supabase/tests/chat-groups.sql`). Ids use the hex prefix `e6` and emails `g2-…@resbite-test.invalid`. Each block is rolled back, as `supabase/tests/connections.sql` does: slice 1 is one block, and slice 2 has six (Task 2). Each block starts from the same cast, made by `pg_temp.e6_cast()` as `chat.sql`'s `pg_temp.c1_cast()` makes its own (`chat.sql:7-9`).
   - The cast: owner 01, admin 02, guests 03 Going, 04 Maybe, 05 pending, 06 Can't go, and 08, a stranger.
   - 07, 09, 10, 11 and 12 have accounts that used the app and may use it (the cast's grants, so the roll carries them), and no guest row. Each test says how they come in.
-  - Three plans with the same people, all made with `create_plan_v4` as 01: the weekly "Board game night", a second weekly "Film club" (used by slice 2), and the one-off "Picnic".
+  - 01 is connected with 03, 04 and 07: `public.connections` rows with `(user_a, user_b)` as least and greatest, state `connected`. `invite_contacts` refuses an in-app invitation of anyone else with 42501 'Not a connection', a host's too (`circles_of_trust.sql:342-345`), and slice 2 invites 07, 04 and 03 in the app.
+  - Seven plans with the same people, all made with `create_plan_v4` as 01. Each line below names the plan it runs on, so no terminal change (a cancel, a stop) reaches a later line's plan (`change_plan_v4` refuses a cancelled plan):
+    - weekly: "Board game night" (the running group of the summary, members and audience lines, and of slice 2), "Film club" (also slice 2's), "Quiz night" and "Book club";
+    - one-off: "Picnic" (every one-off line, and slice 2's one-off), "Brunch" and "Walk" (made weekly).
 ```sql
--- is_group true after create_plan_v4 with repeat_weeks 1. The one-off: false.
--- 01 sends one message on the weekly series. Then change_plan_v4 with repeat_weeks null on the weekly plan: is_group still
---   true, stopped_at set, chat_closes_at = end + 48 h, and one line stopped {actor: 01, plan_id, starts_at, time_zone}
---   with author_id null. chats.last_message_id is that line's id.
--- I8: change_plan_v4 with repeat_weeks 1 again (a resume): stopped_at null, chat_closes_at null, chat_open true, the
+-- is_group true after create_plan_v4 with repeat_weeks 1 (all four weeklies). Picnic, Brunch and Walk: false.
+-- Board game night, I8: 01 sends one message. Then change_plan_v4 with repeat_weeks null: is_group still true,
+--   stopped_at set, chat_closes_at = end + 48 h, and one line stopped {actor: 01, plan_id, starts_at, time_zone} with
+--   author_id null. chats.last_message_id is that line's id.
+--   Then change_plan_v4 with repeat_weeks 1 again (a resume): stopped_at null, chat_closes_at null, chat_open true, the
 --   stopped line reads state 'deleted', no new line is written, chats.last_message_id is 01's message id and
---   last_message_at its created_at.
--- A one-off with one message, then change_plan_v4 with repeat_weeks 1: is_group true, one line made_group {actor: 01}.
---   A one-off with no messages made weekly: no made_group line.
--- chat_member true for 01..06 on the group. On the one-off: 05 and 06 false.
--- A row on the running current occurrence plus a leave inserted by hand: chat_member true (no leave test while it runs).
--- I7, on Film club (so Board game night's counts below hold): a leave for 07 inserted by hand, and a guest row for 12 on
---   Film club's current occurrence (by hand, under the flag). Then update public.attendees set user_id = 07 where
---   user_id = 12 (a fold's move): 07's leave for Film club is gone.
--- Cancel with p_stop_repeating on a first occurrence: chat_open true at 47 h after the cancel, false at 48 h (move stopped_at).
--- G-S1: Edit to Doesn't repeat, move stopped_at back 3 days, then cancel: stopped_at within a second of now(),
---   chat_open true at 47 h after the cancel.
--- Cancel just this one: chat_closes_at null, chat_open true.
--- G-S4: make 01 ineligible (remove 01's roster row or revoke 01's live grant, whichever the fixture uses):
---   chat_summary.stopped true, chat_closes_at = plan_end(current) + 48 h.
---   With the current occurrence cancelled and the rule kept (as account deletion leaves it): the same closes_at.
--- chat_summary as 05: is_group true, stopped false, repeat_weeks 1, members 6 (01 and every attendee row).
--- series_is_group as 08 (stranger): false. As 05 (pending member): true.
--- Announcement audiences on the group: going = 01 02 03 04, everyone = 01..06 (announcement_audience unchanged).
+--   last_message_at its created_at. Board game night runs on from here.
+-- Brunch: one message, then change_plan_v4 with repeat_weeks 1: is_group true, one line made_group {actor: 01}.
+--   Walk (no messages) made weekly: no made_group line.
+-- Board game night: chat_member true for 01..06. Picnic: 05 and 06 false.
+-- Board game night: 03's row on the running current occurrence plus a leave for 03 inserted by hand: chat_member true
+--   (no leave test while it runs).
+-- Film club, I7: a leave for 07 inserted by hand, and a guest row for 12 on Film club's current occurrence (by hand,
+--   under the flag). Then update public.attendees set user_id = 07 where user_id = 12 (a fold's move): 07's leave for
+--   Film club is gone.
+-- Quiz night: Cancel with p_stop_repeating on its first occurrence: chat_open true at 47 h after the cancel, false at
+--   48 h (move stopped_at).
+-- Book club, G-S1: Edit to Doesn't repeat, move stopped_at back 3 days, then cancel: stopped_at within a second of
+--   now(), chat_open true at 47 h after the cancel.
+-- Film club: Cancel just this one: chat_closes_at null, chat_open true.
+-- Board game night: chat_summary as 05: is_group true, stopped false, repeat_weeks 1, members 6 (01 and every attendee row).
+-- Board game night: series_is_group as 08 (stranger): false. As 05 (pending member): true.
+-- Board game night: announcement audiences going = 01 02 03 04, everyone = 01..06 (announcement_audience unchanged).
 -- Direct select on private.series_leaves as authenticated: insufficient_privilege.
--- Last in the slice (challenge NOTE 12): 01 cancels the one-off. Its chats row keeps stopped_at null.
+-- G-S4, after the lines above, since it stops every series 01 owns: make 01 ineligible (remove 01's roster row or
+--   revoke 01's live grant, whichever the fixture uses). Board game night: chat_summary.stopped true, chat_closes_at =
+--   plan_end(current) + 48 h. Film club (its current occurrence cancelled and the rule kept, as account deletion
+--   leaves it): the same closes_at rule. Then 01's eligibility is restored.
+-- Last in the slice (challenge NOTE 12), Picnic: 01 cancels it. Its chats row keeps stopped_at null.
 ```
 - [ ] **Step 2: Run** `bash scripts/test-database-docker.sh` → FAIL (`chats.stopped_at` missing).
 - [ ] **Step 3: Implement** section 1. Plan 1's `supabase/tests/chat.sql` asserts one-off rules on its weekly fixture, "Thursday run" (`pg_temp.c1p('02')`: owner 01, admin 02 Going, 03 Going, 05 not answered; plan 1's Decision 4). That series is now a group from `create_plan_v4` on (`plans_group_flag` on insert): change those assertions to expect every attendee row a member, and keep the one-off matrix on the one-off fixture (`c1p('01')`). The ones this section breaks, as built:
@@ -287,10 +303,11 @@ Chat plan 1's Global Constraints, verbatim, with the migration `supabase/migrati
     - members before the roll are `01,02,03,05`, and after it `01,02,03,05` (everyone carried), also once 03 answers Going;
     - `chat_closes_at` is null and `chat_open` true while it runs;
     - "The roll made a group" goes, and the summary's `is_group` is true.
-  - `chat.sql:571` and `:621-622`: 05's `my_chat_overview` now lists the weekly chat (05 is a member).
-  - `chat.sql:727-730` (the slice's comment) and `:916-935`: 03's weekly message is told to `01,02,05`. `:912`, 02's weekly announcement to `01,03,05`, still holds.
+  - `chat.sql:564-566`, `:614-615` and `:623-624`: 05's `my_chat_overview` now lists the weekly chat (05 is a member). 03's check at `:621-622` still holds.
+  - `chat.sql:727-730` (the slice's comment) and `:916-935`: 03's weekly message is told to `01,02,05`. `:907-908`, 02's weekly announcement to `01,03,05`, still holds.
+  - the way-back block (`chat.sql:2243-2290`) creates a stand-in `private.series_leaves` (`create table private.series_leaves(id integer)` at :2281) to prove chat core's rollback refuses. That fails with 42P07 once this section's real table exists, in both modes, so it is fixed here, not in Task 2. Switch it on `to_regclass('private.series_leaves')` with psql's `\if`, as `circles-of-trust.sql:1735-1757` does for chat. With this plan applied: run chat core's rollback, expect "Run the chat groups rollback before the chat core rollback", and check nothing changed. Without it: the full run as built. Chat core's full rehearsal also runs in `20261111140000_chat_core.after.sql`, before this migration, in hosted-baseline mode.
 
-  Task 2's roll lines and way-back block break three more (Task 2, Step 4). Run the file to find any other.
+  Task 2's roll lines and `cancelled` payload break two more, and Task 2's `can_see_guests` one in `creating-a-resbite.sql` (Task 2, Step 4). Run every test file in both modes, not only `chat.sql`, to find any other.
 - [ ] **Step 4: Rehearsal files** (G-B7). `before.sql` runs after plan 1's migration on the hosted baseline and creates three rolled series (two occurrences each, the second with `repeats_from`):
   - (a) the current occurrence cancelled with `repeat_weeks` null, its end 10 days ago;
   - (b) the current occurrence stopped by Edit (`active`, `repeat_weeks` null), its end 1 hour ago;
@@ -319,7 +336,7 @@ Chat plan 1's Global Constraints, verbatim, with the migration `supabase/migrati
 ### Task 2: Migration section 2: the group lines, the roll, leaving and visibility
 
 **Files:**
-- Modify: `supabase/migrations/20261111150000_chat_groups.sql` (section 2), `supabase/tests/chat-groups.sql` (slice 2), `supabase/tests/chat.sql` (the roll's lines, the whole `cancelled` payload and the way-back block, Step 4), `scripts/test-database.sh` (run the new script with the other concurrency scripts in full mode), `supabase/tests/hosted-baseline/20261111150000_chat_groups.after.sql` (the rehearsal)
+- Modify: `supabase/migrations/20261111150000_chat_groups.sql` (section 2), `supabase/tests/chat-groups.sql` (slice 2), `supabase/tests/chat.sql` (the roll's lines and the whole `cancelled` payload, Step 4), `supabase/tests/creating-a-resbite.sql` (a pending guest of a rolled group occurrence, Step 4), `scripts/test-database.sh` (run the new script with the other concurrency scripts in full mode), `supabase/tests/hosted-baseline/20261111150000_chat_groups.after.sql` (the rehearsal)
 - Create: `supabase/tests/local/leave-series-concurrency.sh`, `supabase/rollback/20261111150000_chat_groups.rollback.sql`
 
 **Interfaces:**
@@ -413,8 +430,11 @@ Chat plan 1's Global Constraints, verbatim, with the migration `supabase/migrati
 -- Film club: no 'ended' line on its cancelled occurrence, and a 'next' line on its new one with that occurrence's starts_at.
 -- G-N3: 09 is carried with brought_by null. 10 keeps brought_by 03.
 -- I9 (CO-Q1 "carried"): 11, brought by 03, who said Can't go, is carried, pending, with brought_by 03 and level 2.
--- I2 (this occurrence only): 03 answers accepted on the new occurrence, within 10 minutes of the old cant_go line: that
---   line stays 'sent', and no line is written.
+-- I2 (this occurrence only), on the new occurrence and within 10 minutes of the old cant_go line:
+--   03 answers declined: one new cant_go line whose plan_id is the new occurrence, and the old line unchanged (its
+--   updated_at and plan_id as before). A series-wide search would rewrite the old line instead and write none.
+--   Then 03 answers accepted: the new line reads state 'deleted', and the old line stays 'sent'. A series-wide search
+--   would delete the old one. 'ended' and 'next' name nobody, so H33's guard hides neither failure. 03 ends Going.
 -- I11, as 05 (pending on the new occurrence, not a host): chat_messages and chat_messages_since return the 'next' line
 --   with no 'place_label' key and with place_tbd. chat_summary.last (that line) and my_chat_overview's last for the
 --   series have no 'place_label' either. As 02 (an admin, pending there: a host) and as 03 (Going there): place_label is
@@ -440,10 +460,11 @@ Chat plan 1's Global Constraints, verbatim, with the migration `supabase/migrati
 -- G-N13: after Board game night's current occurrence ends (ends_at moved under the flag) and before the roll,
 --   leave_series as 03: the leave is stored, 03's attendee row stays, chat_member(series, 03) false.
 -- Challenge NOTE 3: series_is_group as 03 on that series: false. 03 can still read the occurrence but is no member.
--- S1 (plan 1 builds the audiences on chat_members): before the roll, 02 announces to going. Move that announcement's
---   created_at back 61 seconds, so plan 1's 'Too fast' doesn't answer the next one. 02 then announces to everyone.
+-- S1 (plan 1 builds the audiences on chat_members): before the roll, 02 announces to going. Set that announcement's
+--   created_at to now() - interval '61 seconds' ('Too fast' compares with now(), the transaction's start, :531-532), so
+--   it doesn't answer the next one. 02 then announces to everyone.
 --   No announcement outbox row for 03. chat_summary as 02: going and everyone both leave 03 out.
---   01 invites 03 again before the roll: 'already', no row inserted, the leave stays (Decision 2).
+--   01 invites 03 again before the roll: 42501 'Active plan owner required', no row inserted, the leave stays (Decision 2).
 -- The roll (the flag reset first; the times were moved for G-N13) does not carry 03.
 -- Challenge NOTE 12, a closed group, last in the block: Film club stopped by Edit (Doesn't repeat), then its end moved
 --   49 hours back under the flag, so chat_open is false. leave_series as 04 there: allowed, one line
@@ -479,10 +500,10 @@ Chat plan 1's Global Constraints, verbatim, with the migration `supabase/migrati
   - Leave first, on a second seeded plan: session B holds the lock (`leave_series` in an open transaction with `pg_sleep`). The roll skips that plan (it returns 0). A second roll after B commits creates the occurrence without 04.
   - Add the script to `scripts/test-database.sh`'s full-mode list, after `decide-join-concurrency.sh`.
 - [ ] **Step 3: Run** → FAIL.
-- [ ] **Step 4: Implement** section 2 and the rollback. Then the three `chat.sql` assertions this section breaks:
+- [ ] **Step 4: Implement** section 2 and the rollback. Then the assertions this section breaks: two in `chat.sql` (Task 1 already switched its way-back block) and one in `creating-a-resbite.sql`. Run every test file in both modes to find any other:
   - `chat.sql:2134-2142` compares the whole `cancelled` payload with `{actor}`: add `stop` (true: the c3 one-off has no rule), `starts_at` and `time_zone`;
   - this plan's roll writes `ended` and `next` on the weekly series in slice 1 (`chat.sql:322-325`). Slice 1's overview entry for it (`:558-559`, `last` null and `unread` false as 03) now reads the `next` line, unread for 03 since its actor is null. Slice 2's "Slices 1 and 2 wrote other lines" (`:1436-1440`, every system line since the transaction began) now lists them too;
-  - the way-back block (`chat.sql:2243-2290`) creates a stand-in `private.series_leaves` to prove chat core's rollback refuses, which fails now that the table exists. Switch it on `to_regclass('private.series_leaves')` with psql's `\if`, as `circles-of-trust.sql:1735-1757` does for chat. With this plan applied: run chat core's rollback, expect "Run the chat groups rollback before the chat core rollback", and check nothing changed. Without it: the full run as built. Chat core's full rehearsal also runs in `20261111140000_chat_core.after.sql`, before this migration, in hosted-baseline mode.
+  - `creating-a-resbite.sql:1163-1167`: as 05, pending on the rolled occurrence of the weekly "Board game night" (`create_plan_v4 … 1::smallint`, :1044-1045, so a group from Task 1 on), `count(*) from public.attendees` was 1 ('A pending guest sees the other guests'). `attendee_read` admits rows through `can_see_guests` (`20261014120000_ux2_rules.sql:114-115`), so with the group branch 05 now reads all 5 rows (CH-P21, the intended change): expect 5. The meeting-details check at :1166 stays;
 
   Checked and unchanged: `chat.sql`'s cancelled-plan eligibility block (`:1041-1054`) is on the c1 one-off, whose rule P2-Q1 keeps. Its weekly overview entry (`:558-559`) is read as 03 after 03 answered Going on the rolled occurrence (`:340-341`), so the `next` line keeps its `place_label` for 03 (Decision 11).
 - [ ] **Step 5: Run** both modes (the four candidates, as in Task 1) → PASS. The rehearsal in `after.sql` runs inside a transaction that ends in `rollback`, as `20261110120000_connections.after.sql` does. It applies the rollback and proves:
@@ -497,7 +518,7 @@ Chat plan 1's Global Constraints, verbatim, with the migration `supabase/migrati
 
 **Files:**
 - Modify: `mobile/src/domain/chatCopy.ts` and test, `mobile/src/domain/chatRules.ts` and test, `mobile/src/state/chatModel.ts` and test (`shownMessages`, `withEndedLine` for a stopped group), `mobile/src/state/chatFeed.ts` and test (the group wording, headings and labels of every row), `mobile/src/services/chat.ts` (`leave(series)`, error mapping) and test, `mobile/src/domain/eventPage.ts` and test (`EVENT_COPY.groupNotAnswered`, `showsNames`, `moreRows`, `peopleGroups`, `chatRow`), `mobile/src/services/rsvp.ts` (`readEvent` reads the group flag, and keeps the page when it can't), `mobile/src/state/useEvent.ts` (exposes `isGroup`, and keeps a group's Chat row after an answer)
-- Create: `mobile/src/services/rsvp.test.ts` (none exists at `43f4416`; append it to `package.json`'s `test` chain). `readEvent` calls the app's client directly, so the test needs a seam. One option is the injected `rpc` shape `createChatGateway(rpc, deadline)` uses (`chat.ts:218`).
+- Create: `mobile/src/services/rsvp.test.ts` (none exists at `43f4416`; append it to `package.json`'s `test` chain). `readEvent` calls the app's client directly, through `supabase.from(…)` chains as well as `rpc`, so the test loads `rsvp.ts` with a stubbed `require("./supabase")` (and `./plans` for `planWithDetails` and `withDeadline`), as `reminders.test.ts:458-466` and `profilePhotoStore.test.ts:288` do.
 
 **Interfaces:**
 - Consumes, as chat core built them:
