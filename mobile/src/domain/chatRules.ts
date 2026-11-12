@@ -107,6 +107,9 @@ function person(id: unknown, names: ChatNames, viewerId: string, subject = true)
   return nameOf(uuid, names) || CHAT_COPY.someone;
 }
 
+/** The name over someone's bubble: their first name from the read's `names`, "You" for the reader, else "Someone". */
+export const authorName = (m: ChatMessage, names: ChatNames, viewerId: string): string => person(m.authorId, names, viewerId);
+
 /**
  * How a start or an end moved, each read in its own zone: "19:00 → 19:30" on the same day, "Fri 19:00 → Sat 19:00"
  * within the week, and with the dates ("Fri 14 Nov 19:00 → Fri 21 Nov 19:00") a week or more apart, where the weekday

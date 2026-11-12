@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { ChatMessage, ChatNames, ChatSummary } from "../services/chat";
 import {
+  authorName,
   canAnnounce,
   closedCard,
   closingLine,
@@ -573,4 +574,14 @@ test("a place label or a title in a line is cleaned the same way", () => {
   assert.equal(line("changed", change({ what: "place", place_label: "Nico's\n‮Villa" })), "Ana changed the place · Nico's Villa");
   assert.equal(line("changed", change({ what: "place", place_label: "​ " })), "Ana changed the place");
   assert.equal(line("ended", { title: "Board‮ game\nnight" }), "Board game night ended");
+});
+
+test("authorName: the name over someone's bubble, from the read's names, cleaned; You for the reader; Someone otherwise", () => {
+  assert.equal(authorName(msg({ authorId: LEO }), names, ANA), "Leo");
+  assert.equal(authorName(msg({ authorId: ANA }), names, ANA), "You");
+  assert.equal(authorName(msg({ authorId: GONE }), names, ANA), "Someone");
+  assert.equal(authorName(msg({ authorId: UNKNOWN }), names, ANA), "Someone");
+  assert.equal(authorName(msg({ authorId: null }), names, ANA), "Someone");
+  assert.equal(authorName(msg({ authorId: LEO }), { [LEO]: "‮Leo:" }, ANA), "Leo");
+  assert.equal(authorName(msg({ authorId: "constructor" }), names, ANA), "Someone");
 });
