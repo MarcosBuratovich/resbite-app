@@ -261,6 +261,10 @@ function setup(
   const channels: FakeChannel[] = [];
   let uuid = 0;
   let current = true;
+  // Plan 3: the safety gateway's accept_chat_rules, and the app-wide "blocks changed" event (B3).
+  let accepts = 0;
+  const acceptFails: unknown[] = [];
+  const blockListeners = new Set<() => void>();
   const session = createChatSession({
     series: SERIES,
     scope: ME,
@@ -284,6 +288,15 @@ function setup(
     timers: clock,
     current: () => current,
     onChange: (next) => void states.push(next),
+    acceptRules: async () => {
+      accepts += 1;
+      const e = acceptFails.shift();
+      if (e) throw e;
+    },
+    blocksChanged: (listener) => {
+      blockListeners.add(listener);
+      return () => void blockListeners.delete(listener);
+    },
   });
   const state = (): ChatState => session.state();
   const ids = () => state().messages.map((m) => m.id);
@@ -310,6 +323,14 @@ function setup(
     openChannels,
     snapshot,
     endSession: () => (current = false),
+    /** How many times accept_chat_rules was called; `failAccept` makes the next one fail. */
+    accepts: () => accepts,
+    failAccept: (e: unknown) => void acceptFails.push(e),
+    /** A block or unblock went through somewhere in the app. */
+    blocksChanged: () => {
+      for (const listener of [...blockListeners]) listener();
+    },
+    blockListeners: () => blockListeners.size,
     async open() {
       session.focus();
       await settle();
@@ -2224,4 +2245,139 @@ test("blur and dispose leave no timer behind: the poll, the tick, the close, the
   assert.equal(t.clock.pending(), 0);
   await t.clock.advance(3_600_000);
   assert.equal(t.clock.pending(), 0);
+});
+
+// Plan 3: the chat rules (G-B4(d), challenge I6) and the "blocks changed" event (B3).
+const RULES = { code: "22023", message: "Rules not accepted" };
+
+test("two messages refused 'Rules not accepted' wait for the rules with their own ids and no error; I agree sends each once (I6)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  await t.open();
+  assert.equal(t.state().rulesNeeded, null);
+  t.server.fail.send = RULES;
+  const first = t.session.send("first");
+  const second = t.session.send("second");
+  assert.equal(await first, false);
+  assert.equal(await second, false);
+  await settle();
+  assert.deepEqual(t.state().rulesNeeded, { clientIds: ["client-1", "client-2"], announce: null });
+  // A refusal for the rules is no connection failure: no error line.
+  assert.equal(t.state().error, null);
+  assert.deepEqual(t.state().pending.map((p) => [p.clientId, p.failed]), [
+    ["client-1", true],
+    ["client-2", true],
+  ]);
+  // Refused again on a tap, the id joins once.
+  assert.equal(await t.session.retry("client-1"), false);
+  await settle();
+  assert.deepEqual(t.state().rulesNeeded?.clientIds, ["client-1", "client-2"]);
+  delete t.server.fail.send;
+  const sends = t.server.calls("send").length;
+  assert.equal(await t.session.agreeRules(), true);
+  await settle();
+  assert.equal(t.accepts(), 1);
+  assert.deepEqual(t.server.calls("send").slice(sends), [
+    [SERIES, "first", "client-1"],
+    [SERIES, "second", "client-2"],
+  ]);
+  assert.equal(t.state().rulesNeeded, null);
+  assert.equal(t.state().summary?.rulesAccepted, true);
+  assert.equal(t.state().error, null);
+  // Nothing more goes out after the read shows them.
+  await t.clock.advance(60_000);
+  assert.equal(t.server.calls("send").length, sends + 2);
+});
+
+test("a failed I agree sends nothing and keeps what waits; Cancel drops the rules and leaves the messages not sent (I6)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  t.server.setSummary({ rulesAccepted: false });
+  await t.open();
+  t.server.fail.send = RULES;
+  await t.session.send("first");
+  await t.session.send("second");
+  await settle();
+  delete t.server.fail.send;
+  const held = t.state().rulesNeeded;
+  const sends = t.server.calls("send").length;
+  t.failAccept(OFFLINE);
+  assert.equal(await t.session.agreeRules(), false);
+  await settle();
+  assert.equal(t.accepts(), 1);
+  assert.equal(t.server.calls("send").length, sends);
+  assert.deepEqual(t.state().rulesNeeded, held);
+  assert.equal(t.state().summary?.rulesAccepted, false);
+  assert.equal(t.state().error, null);
+  t.session.dismissRules();
+  assert.equal(t.state().rulesNeeded, null);
+  assert.deepEqual(t.state().pending.map((p) => [p.clientId, p.failed]), [
+    ["client-1", true],
+    ["client-2", true],
+  ]);
+  // A failed message is never resent by itself (H41 I2b): nothing goes before I agree.
+  await t.clock.advance(5 * 60_000);
+  t.session.blur();
+  await t.open();
+  await t.clock.advance(15_000);
+  assert.equal(t.server.calls("send").length, sends);
+});
+
+test("an announcement refused 'Rules not accepted' waits with its words and audience; I agree sends it with the same client id (I6)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  t.server.setSummary({ host: true });
+  await t.open();
+  t.server.failOnce("announce", RULES);
+  assert.equal(await t.session.announce("Doors at 7", "everyone"), false);
+  assert.deepEqual(t.state().rulesNeeded, { clientIds: [], announce: { body: "Doors at 7", audience: "everyone" } });
+  assert.equal(t.state().error, null);
+  const announced = t.state().announced;
+  assert.equal(await t.session.agreeRules(), true);
+  await settle();
+  const calls = t.server.calls("announce");
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[1], calls[0]);
+  assert.deepEqual(calls[1], [SERIES, "Doors at 7", "everyone", "client-1"]);
+  assert.equal(t.state().rulesNeeded, null);
+  // The screen learns the announcement went, so it can clear the words it kept (I6).
+  assert.equal(t.state().announced, announced + 1);
+});
+
+test("a held message taken off the phone leaves what waits for the rules; the last one ends the wait (I6)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  await t.open();
+  t.server.fail.send = RULES;
+  await t.session.send("first");
+  await t.session.send("second");
+  await settle();
+  await t.session.discard("client-1");
+  assert.deepEqual(t.state().rulesNeeded?.clientIds, ["client-2"]);
+  await t.session.discard("client-2");
+  assert.equal(t.state().rulesNeeded, null);
+});
+
+test("a 'blocks changed' event while the chat is blurred reads the summary and the newest page and replaces the list; after dispose it reads nothing (B3)", async () => {
+  const t = setup();
+  t.server.seed(120);
+  await t.open();
+  await t.session.loadEarlier();
+  assert.deepEqual(t.ids(), range(101, 220));
+  // Another screen over the chat (the people list): the chat is blurred, never refocused.
+  t.session.blur();
+  const summaries = t.server.calls("summary").length;
+  const newest = t.server.calls("messages").filter((c) => c[1] === null).length;
+  t.blocksChanged();
+  await settle();
+  assert.equal(t.server.calls("summary").length, summaries + 1);
+  assert.equal(t.server.calls("messages").filter((c) => c[1] === null).length, newest + 1);
+  assert.deepEqual(t.ids(), range(171, 220));
+  assert.equal(t.blockListeners(), 1);
+  t.session.dispose();
+  assert.equal(t.blockListeners(), 0);
+  const calls = t.server.callCount();
+  t.blocksChanged();
+  await settle();
+  assert.equal(t.server.callCount(), calls);
 });

@@ -13,6 +13,8 @@ import {
   readsOwnLinks,
   byline,
   cancelQuestion,
+  chatPeople,
+  chatPersonFor,
   hostLabel,
   moreRows,
   namesLine,
@@ -951,7 +953,8 @@ test("useEvent reads the bringers' names for the people list only, where names s
   assert.match(src, /const readBringers = \(\) =>\s*void circleGateway\.bringers\(planId\)\.then\(\s*\(names\) => \{\s*if \(valid\(\) && bringersTicket === bringersRead\.current\) setBringerNames\(names\);\s*\},\s*\(\) => \{\},\s*\);/);
   assert.match(src, /if \(named && chain\) readBringers\(\);/);
   // A group flag that lands later (ruling GR6 M7) reads them then, on the people list only.
-  assert.match(src, /if \(isGroup && !named\) \{\s*named = true;\s*readStates\(\);\s*if \(chain\) readBringers\(\);\s*\}/);
+  // Chat plan 3 reads the blocks beside the states then too (Task 5).
+  assert.match(src, /if \(isGroup && !named\) \{\s*named = true;\s*readStates\(\);\s*readBlocks\(valid\);\s*if \(chain\) readBringers\(\);/);
   // Hosts only, read with their own links; a failure gives none.
   assert.match(src, /const \[people, links\] = host\s*\? await Promise\.all\(\[\s*readInvited\(planId, userId\)\.catch\(\(\): InvitedPerson\[\] => \[\]\),\s*circleGateway\.broughtLinks\(planId\)\.catch\(\(\): BroughtLink\[\] => \[\]\),\s*\]\)\s*: \[null, NO_LINKS\];/);
   // The organizer's name is kept only from a read still current (C28).
@@ -1144,7 +1147,8 @@ test("the people list wires the fix round: take-backs reload when refused, focus
   assert.match(list, /if \(Platform\.OS === "android" && !sheet\) focusNextRow\(\);/);
   const sheet = readFileSync(new URL("../design/GrabberSheet.tsx", import.meta.url), "utf8");
   assert.match(sheet, /onDismiss=\{onDismissed\}/);
-  assert.match(list, /removeQuestion\(current, \{ guests, host, view: sheet\.view \}\)/);
+  // Only Remove's and Decline's views ask it (plan 3's report and block confirm ask their own).
+  assert.match(list, /removeQuestion\(current, \{ guests, host, view: asking \}\)/);
   // Spoken names without bullets; the avatar's letter, else a phone.
   assert.match(list, /label=\{`\$\{EVENT_COPY\.actionsFor\}\$\{spokenName\(row\)\}`\}/);
   assert.match(list, /avatarLetter\(/);
@@ -1564,4 +1568,63 @@ test("the people list's Report, Block and Unblock labels use the cleaned name", 
   assert.match(list, /block: SAFETY_COPY\.block\(shownName\(row\.name\)\),/);
   assert.match(list, /unblock: SAFETY_COPY\.unblock\(shownName\(row\.name\)\),/);
   assert.doesNotMatch(list, /SAFETY_COPY\.\w+\(row\.name\)/);
+});
+
+// Task 5: the Blocked badge in words, and the chat's people for its Report or block (G-N6, G-N7).
+test("personLabel says Blocked, to the blocker, and not Connected for someone blocked", () => {
+  const rows = rowsOf({ ...SAFE, blocks: new Set(["leo"]) });
+  const leo = named(rows, "Leo");
+  assert.equal(leo.blocked, true);
+  assert.match(personLabel(leo), /^Leo, Blocked\b/);
+  assert.equal(personLabel(leo).includes("Connected"), false);
+  // Not blocked: as before.
+  assert.equal(personLabel(named(rowsOf(SAFE), "Leo")).includes("Blocked"), false);
+});
+
+const person = (userId: string, name: string, response: string) => ({ userId, name, response, broughtById: null, level: 1 });
+const CHAT = {
+  guests: [person("leo", "Leo", "accepted"), person("mia", "Mia", "maybe"), person("sol", "Sol", "declined"), person("pat", "Pat", "pending"), person("me", "Me", "accepted"), person("ada", "Ada", "pending")],
+  owner: { userId: "ana", name: "Ana" },
+  admins: ["ada"],
+  userId: "me",
+  blocks: new Set<string>(["mia"]) as ReadonlySet<string> | null,
+  isGroup: false,
+  unnamed: "Tester",
+};
+
+test("chatPeople: on a one-off, the owner, the admins and Going or Maybe, never the viewer; blocked people with Unblock (G-N6)", () => {
+  const people = chatPeople(CHAT);
+  assert.deepEqual(people.map((p) => p.userId), ["ana", "leo", "mia", "ada"]);
+  assert.deepEqual(people.find((p) => p.userId === "ana"), { userId: "ana", name: "Ana", blocked: false, theyHost: true, actions: ["report", "block"] });
+  assert.deepEqual(people.find((p) => p.userId === "mia"), { userId: "mia", name: "Mia", blocked: true, theyHost: false, actions: ["report", "unblock"] });
+  // An admin who hasn't answered is in a one-off's chat as a host (ruling GR6 M6).
+  assert.equal(people.find((p) => p.userId === "ada")?.theyHost, true);
+  // Blocks not known yet: Report only (N13).
+  assert.deepEqual(chatPeople({ ...CHAT, blocks: null }).map((p) => p.actions), [["report"], ["report"], ["report"], ["report"]]);
+  // A group: everyone in it, answered or not (plan 2).
+  assert.deepEqual(chatPeople({ ...CHAT, isGroup: true }).map((p) => p.userId), ["ana", "leo", "mia", "sol", "pat", "ada"]);
+  // The viewer is the owner: not listed; alone, nobody (the menu hides Report or block).
+  assert.deepEqual(chatPeople({ ...CHAT, guests: [], owner: { userId: "me", name: "Me" } }), []);
+  // A guest with no profile name reads as nobody's name, never "Tester".
+  assert.equal(chatPeople({ ...CHAT, guests: [person("leo", "Tester", "accepted")] })[1].name, "");
+  // No owner known yet (names hidden): the guests only.
+  assert.deepEqual(chatPeople({ ...CHAT, owner: null }).map((p) => p.userId), ["leo", "mia", "ada"]);
+});
+
+test("chatPersonFor: an author on the occurrence is their row; one who left gets Report and Block, named from the chat (G-N6)", () => {
+  const people = chatPeople(CHAT);
+  assert.equal(chatPersonFor(people, "leo", {}, CHAT.blocks, "me"), people[1]);
+  assert.deepEqual(chatPersonFor(people, "gone", { gone: "Rob\u200b" }, CHAT.blocks, "me"), {
+    userId: "gone",
+    name: "Rob",
+    blocked: false,
+    theyHost: false,
+    actions: ["report", "block"],
+  });
+  assert.deepEqual(chatPersonFor(people, "gone", {}, new Set(["gone"]), "me")?.actions, ["report", "unblock"]);
+  assert.deepEqual(chatPersonFor(people, "gone", {}, null, "me")?.actions, ["report"]);
+  assert.equal(chatPersonFor(people, "gone", {}, null, "me")?.name, "Someone");
+  // The viewer and a row without an author are nobody's sheet.
+  assert.equal(chatPersonFor(people, "me", {}, CHAT.blocks, "me"), null);
+  assert.equal(chatPersonFor(people, null, {}, CHAT.blocks, "me"), null);
 });

@@ -6,6 +6,7 @@ import { useFocusedRefresh } from "./useFocusedRefresh";
 import { createChatSession, IDLE, listenWith, type ChatSession, type ChatState } from "./chatSession";
 import { chatGateway } from "../services/chat";
 import { chatQueue } from "../services/chatQueue";
+import { onBlocksChanged, safetyGateway } from "../services/safety";
 import { supabase } from "../services/supabase";
 import { isSeriesId } from "../domain/chatRules";
 import type { ChatAudience } from "../domain/chatCopy";
@@ -34,6 +35,13 @@ export type Chat = ChatState & {
   refresh: () => Promise<void>;
   /** Reads the newest page and the summary again and replaces the list (plan 3's block and unblock). */
   replace: () => Promise<void>;
+  /**
+   * I agree on the chat rules (plan 3, I6): accepts them once, then sends what waited for them. True once accepted;
+   * false (nothing sent) when the acceptance failed.
+   */
+  agreeRules: () => Promise<boolean>;
+  /** Cancel on the rules sheet: what waited stays not sent. */
+  dismissRules: () => void;
   /** The server's time by this phone, never going back: the closing countdown counts against it (H29). */
   serverNow: () => number;
   /** Cancel: what the last action said went wrong goes (H32 36). */
@@ -85,6 +93,9 @@ export function useChat(series: string | undefined): Chat {
         }
       },
       onChange: setState,
+      acceptRules: safetyGateway.acceptRules,
+      // A block or unblock made anywhere replaces this chat's list, whatever screen is over it (B3).
+      blocksChanged: onBlocksChanged,
     });
     setChat(made);
     setState(made.state());
@@ -116,6 +127,8 @@ export function useChat(series: string | undefined): Chat {
             setMute: chat.setMute,
             refresh: chat.refresh,
             replace: chat.replace,
+            agreeRules: chat.agreeRules,
+            dismissRules: chat.dismissRules,
             serverNow: chat.serverNow,
             clearError: chat.clearError,
           }
@@ -131,6 +144,8 @@ export function useChat(series: string | undefined): Chat {
             setMute: refused,
             refresh: nothing,
             replace: nothing,
+            agreeRules: refused,
+            dismissRules: () => {},
             serverNow: () => Date.now(),
             clearError: () => {},
           },

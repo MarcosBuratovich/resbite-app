@@ -27,6 +27,10 @@
 //              Resbite sends request_connection { p_user, p_plan }; the sheet then says Request sent with Cancel
 //              request, which sends cancel_connection_request { p_user } and brings Connect back; Inés's request is
 //              accepted from her dots (accept_connection { p_user }) and her row shows Connected
+//   safety     chat plan 3 (challenge I3): a request card's dots → Report Pedro → Spam → report_user with the request's
+//              series_id as p_series (none for a request with no resbite); → Block Pedro → the confirm → block_user
+//              { p_user, p_block: true }, then my_connections again, and the card goes; a connection's dots → Block
+//              Marta after Remove connection, the same, and the row goes; a connection has no Report
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { AUTH_STORAGE_KEY, button, heading, heightOf, inOrder, noChat, quietReminders, visible } from "./qa-helpers.mjs";
@@ -157,6 +161,9 @@ async function fixture({
     parked: [],
     guests: guests.map(({ user_id, name, response = "pending" }) => ({ user_id, response, profiles: { display_name: name } })),
     pairs: { ...pairs },
+    // Chat plan 3: the people Ana blocked. As the server does, my_connections leaves them out (a block ends any
+    // connection and any request between the two, G-B1).
+    blocked: [],
   };
   const log = [],
     errors = [],
@@ -241,6 +248,19 @@ async function fixture({
       );
     }
     if (path === "/rest/v1/rpc/my_join_requests") return reply([]);
+    // Chat plan 3: Ana's blocks, block and unblock, and reporting a person.
+    if (path === "/rest/v1/rpc/my_blocks") return reply(state.blocked.map((id) => ({ user_id: id, name: null })));
+    if (path === "/rest/v1/rpc/block_user") {
+      state.blocked = state.blocked.filter((id) => id !== body.p_user);
+      if (body.p_block) {
+        state.blocked.unshift(body.p_user);
+        state.requests = state.requests.filter((r) => r.user_id !== body.p_user);
+        state.connected = state.connected.filter((r) => r.user_id !== body.p_user);
+        delete state.pairs[body.p_user];
+      }
+      return empty();
+    }
+    if (path === "/rest/v1/rpc/report_user") return empty();
     if (path === "/rest/v1/rpc/my_connections") {
       const fail = state.failReads > 0;
       if (fail) state.failReads--;
@@ -347,8 +367,10 @@ try {
       await inOrder(page, [heading(page, "Requests · 1"), visible(page.getByText("Pedro", { exact: true })), heading(page, "Connected · 2")]),
       "the requests come first",
     );
-    // A request has no dots; the pills are labelled with the person and sit side by side, each 44 pt or taller.
-    await expect(button(page, "Actions for Pedro")).toHaveCount(0);
+    // A request card's dots hold Report and Block (plan 3, I3); the pills are labelled with the person and sit side by
+    // side, each 44 pt or taller.
+    await expect(button(page, "Actions for Pedro")).toBeVisible();
+    assert.ok((await heightOf(button(page, "Actions for Pedro"))) >= 44, "the card's dots are a 44 pt target");
     const accept = button(page, "Accept Pedro's request"),
       notNow = button(page, "Not now, Pedro's request");
     await expect(accept).toBeVisible();
@@ -849,7 +871,12 @@ try {
     assert.deepEqual(f.calls("accept_connection").map((x) => x.body), [{ p_user: INES }]);
     await expect(page.getByLabel("Inés, Connected", { exact: true })).toBeVisible();
     await expect(visible(page.getByText("Connected", { exact: true }))).toHaveCount(1);
-    await expect(button(page, "Actions for Inés")).toHaveCount(0);
+    // Nothing left to do about the connection there; Report and Block stay theirs (plan 3).
+    await button(page, "Actions for Inés").click();
+    await expect(button(page, "Report Inés")).toBeVisible();
+    await expect(button(page, "Block Inés")).toBeVisible();
+    for (const row of ["Accept Inés's request", "Not now", "Connect on Resbite", "Cancel request"]) await expect(button(page, row)).toHaveCount(0);
+    await closeSheet();
     // Tomás was never asked: Connect stays on his row; nothing was declined.
     await expect(button(page, "Actions for Tomás")).toBeVisible();
     assert.equal(f.calls("decline_connection").length, 0);
@@ -859,6 +886,62 @@ try {
   console.log(
     "PASS: the people list as a guest: Connect on the host's row sends request_connection { p_user, p_plan }, then Request sent with Cancel request, which sends cancel_connection_request { p_user } and brings Connect back; Accept Inés's request sends accept_connection { p_user } and her row shows Connected.",
   );
+
+
+  // 9. Report and block from Connections (chat plan 3, challenge I3).
+  {
+    const nowhere = row(SOFIA, "Sofía Gil", null, "from");
+    const f = await fixture({ requests: [pedro, nowhere] }),
+      { page } = f;
+    const sheet = visible(page.locator("[aria-modal]"));
+    await page.goto(`${base}/connections`);
+    await expect(heading(page, "Requests · 2")).toBeVisible();
+    // A request card: Report Pedro (the request's resbite as the series), then Block Pedro.
+    await button(page, "Actions for Pedro").click();
+    await expect(button(page, "Report Pedro")).toBeVisible();
+    assert.ok(await inOrder(page, [button(page, "Report Pedro"), button(page, "Block Pedro")]), "Report, then Block");
+    await button(page, "Report Pedro").click();
+    await page.getByRole("radio", { name: "Spam", exact: true }).click();
+    await button(page, "Send report").click();
+    await expect(sheet.getByText("Thanks. The Resbite team will look at it.", { exact: true })).toBeVisible();
+    assert.deepEqual(
+      f.calls("report_user").map((x) => x.body),
+      [{ p_user: PEDRO, p_series: "series-Pedro", p_reason: "spam", p_details: null }],
+    );
+    await button(page, "Done").click();
+    // A request with no resbite to name has nothing to report it on: Block only.
+    await button(page, "Actions for Sofía Gil").click();
+    await expect(button(page, "Block Sofía Gil")).toBeVisible();
+    await expect(button(page, "Report Sofía Gil")).toHaveCount(0);
+    await button(page, "Close sheet").click();
+    // Block Pedro: the confirm, then block_user and the list read again, without the card.
+    await button(page, "Actions for Pedro").click();
+    await button(page, "Block Pedro").click();
+    await expect(
+      sheet.getByText("Block Pedro? You won’t see Pedro’s messages, and Pedro won’t know. Any connection between you ends, and unblocking won’t bring it back.", { exact: true }),
+    ).toBeVisible();
+    const reads = f.calls("my_connections").length;
+    await button(page, "Block Pedro").click();
+    await expect(button(page, "Actions for Pedro")).toHaveCount(0);
+    assert.deepEqual(f.calls("block_user").map((x) => x.body), [{ p_user: PEDRO, p_block: true }]);
+    assert.ok(f.calls("my_connections").length > reads, "the list is read again");
+    await expect(heading(page, "Requests · 1")).toBeVisible();
+    await expect(sheet).toHaveCount(0);
+    // A connection's dots: Remove connection, then Block Marta; no Report.
+    await button(page, "Actions for Marta").click();
+    await expect(button(page, "Report Marta")).toHaveCount(0);
+    assert.ok(await inOrder(page, [button(page, "Remove connection"), button(page, "Block Marta")]), "Block after Remove connection");
+    await button(page, "Block Marta").click();
+    await expect(
+      sheet.getByText("Block Marta? You won’t see Marta’s messages, and Marta won’t know. Any connection between you ends, and unblocking won’t bring it back.", { exact: true }),
+    ).toBeVisible();
+    await button(page, "Block Marta").click();
+    await expect(button(page, "Actions for Marta")).toHaveCount(0);
+    assert.deepEqual(f.calls("block_user").map((x) => x.body).at(-1), { p_user: MARTA, p_block: true });
+    await expect(heading(page, "Connected · 1")).toBeVisible();
+    await f.done();
+  }
+  console.log("PASS (safety): a request card's dots → Report Pedro → Spam → report_user { p_series: the request's series_id }; a request with no resbite has Block only; Block Pedro → the confirm → block_user, my_connections again, and the card goes; a connection's dots → Block Marta after Remove connection (no Report) → block_user, and the row goes.");
 
   console.log("PASS: Connections, the people list's Connect, Cancel request and Accept, and Your connections on Invite people. All Supabase requests intercepted.");
 } finally {

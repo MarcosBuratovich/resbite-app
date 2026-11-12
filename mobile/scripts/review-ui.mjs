@@ -4,7 +4,9 @@
 // one On Resbite, the event link below them, and Almost there), the resbite page's people row, the people list with Waiting for you and
 // the Invited group and a three-dots sheet per person, and My resbites with an Invitations card and the open-link requests
 // (waiting and declined), and the /waiting screen in both states; Task 8: the resbite page's Chat row, the invitation
-// card's announcement line, a tile's unread dot, My resbites with a failing my_chat_overview, and Data & privacy's chat line; a signed-out invitation and a dead link; an account waiting for access with its
+// card's announcement line, a tile's unread dot, My resbites with a failing my_chat_overview, and Data & privacy's chat line; chat plan 3:
+// an invitation card's long-press (Report message, Report and Block its announcer, inviter and owner, also as the card's accessibility
+// actions), the report sent and the block confirmed, after which the line goes; a signed-out invitation and a dead link; an account waiting for access with its
 // Invitations and the inline 18+ tick on the invite screen; and phone sign-up,
 // its code, phone sign-in, About you, and Add your number with its "taken" refusal, the offer to bring in a web-only account and
 // that offer's code step.
@@ -457,6 +459,7 @@ try {
       names: { g1: "Alex", [jo]: "Jo" },
     };
     let overviewFails = false;
+    const rpcCalls = [];
     // Chat plan 2 (I3): for one pass Jo's invitation is a group's, whose chat lists its members who haven't answered,
     // with this entry in my_chat_overview's chats; null, it is a one-off invitation, with no entry and no dot.
     let invitationChat = null;
@@ -465,6 +468,12 @@ try {
     let invitationRepeats = false;
     // Fix round 1: how long my_chat_overview takes to answer (H36 Q4: the list never waits for it).
     let overviewDelay = 0;
+    // Chat plan 3: the invitation's owner as named (Ana for the safety checks), the overview's announcements and inviters
+    // for them, and the people Stephen blocked, whom my_chat_overview leaves out, as the server does.
+    let joName = "Jo";
+    let safetyOverview = null;
+    let blocked = [];
+    const PEDRO = "88888888-8888-4888-8888-888888888888";
     // Fix round 1 (H37 Q4): last week's occurrence of the organizer's series, ended, which carries no dot; and (H37 Q5)
     // Jo's picnic, started an hour ago and still running, where Stephen hasn't answered: its tile carries Jo's announcement.
     const lastWeek = { ...plan, id: "22222222-2222-4222-8222-222222222200", starts_at: "2026-10-16T18:30:00Z", ends_at: "2026-10-16T21:00:00Z" };
@@ -513,11 +522,12 @@ try {
       const id = url.searchParams.get("id")?.replace(/^eq\./, "");
       const one = req.headers().accept?.includes("object");
       const reply = (body, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+      if (path.startsWith("/rest/v1/rpc/")) rpcCalls.push({ name: path.slice("/rest/v1/rpc/".length), body: req.postData() ? req.postDataJSON() : null });
       if (path === "/auth/v1/user") return reply(user);
       if (path === "/rest/v1/rpc/account_access_status") return reply({ account_id: user.id, status: "approved" });
       if (path === "/rest/v1/rpc/note_app_session") return route.fulfill({ status: 204, body: "" });
       if (path === "/rest/v1/profiles") {
-        if (url.searchParams.get("id")?.startsWith("in.")) return reply([{ id: jo, display_name: "Jo" }]);
+        if (url.searchParams.get("id")?.startsWith("in.")) return reply([{ id: jo, display_name: joName }]);
         return reply({ id: user.id, display_name: "Stephen", avatar_path: null, avatar_revision: 0 });
       }
       if (path === "/rest/v1/activities") return reply([]);
@@ -570,11 +580,26 @@ try {
           : reply({ code: "42501", message: "Not in this chat", details: null, hint: null }, 403);
       if (path === "/rest/v1/rpc/my_chat_overview") {
         if (overviewFails) return reply({ message: "Fixture: the overview failed" }, 500);
-        const answer = invitationChat ? { ...overview, chats: { ...overview.chats, [invitation.series_id]: invitationChat } } : overview;
+        const read = safetyOverview ? { ...overview, ...safetyOverview, names: { ...overview.names, [jo]: joName, ...safetyOverview.names } } : overview;
+        const shown = {
+          ...read,
+          announcements: Object.fromEntries(Object.entries(read.announcements).filter(([, a]) => !blocked.includes(a.author_id))),
+          inviters: Object.fromEntries(Object.entries(read.inviters ?? {}).filter(([, id]) => !blocked.includes(id))),
+        };
+        const answer = invitationChat ? { ...shown, chats: { ...shown.chats, [invitation.series_id]: invitationChat } } : shown;
         return overviewDelay ? new Promise((r) => setTimeout(r, overviewDelay)).then(() => reply(answer)) : reply(answer);
       }
       // Chat plan 2's group flag on the resbite page: these resbites are one-offs.
       if (path === "/rest/v1/rpc/series_is_group") return reply(false);
+      // Chat plan 3: Stephen's blocks (the people list reads them beside the states), block and unblock, and reports.
+      if (path === "/rest/v1/rpc/my_blocks") return reply(blocked.map((id) => ({ user_id: id, name: null })));
+      if (path === "/rest/v1/rpc/block_user") {
+        const { p_user, p_block } = req.postDataJSON();
+        blocked = blocked.filter((id) => id !== p_user);
+        if (p_block) blocked.unshift(p_user);
+        return route.fulfill({ status: 204, body: "" });
+      }
+      if (path === "/rest/v1/rpc/report_message" || path === "/rest/v1/rpc/report_user") return route.fulfill({ status: 204, body: "" });
       // Named, so a failure says which request nobody planned for.
       errors.push(`Unexpected ${req.method()} ${path}${url.search}`);
       return reply({ message: `Unexpected ${path}` }, 400);
@@ -750,6 +775,67 @@ try {
       invitationAdmin = false;
       invitationRepeats = false;
       invitationChat = null;
+      // Chat plan 3 (confirmation S7, B4, R-Q1, I-2): Report and Block from an invitation card, by long-press and as its
+      // accessibility actions. The owner is Ana here, so the byline reads "Ana invited you".
+      const calls = (name) => rpcCalls.filter((c) => c.name === name).map((c) => c.body);
+      const sheet = visible(page.locator("[aria-modal]"));
+      const sheetButtons = () =>
+        sheet.getByRole("button").evaluateAll((els) => els.map((el) => el.getAttribute("aria-label") ?? el.textContent.trim()).filter((n) => n !== "Close sheet"));
+      /** The card's accessibility actions, as React holds them (react-native-web renders none). */
+      const cardActions = (card) =>
+        card.first().evaluate((el) => {
+          const label = el.getAttribute("aria-label");
+          const key = Object.keys(el).find((k) => k.startsWith("__reactFiber$"));
+          for (let f = el[key]; f; f = f.return)
+            for (const copy of [f, f.alternate])
+              if (copy?.memoizedProps?.accessibilityActions && copy.memoizedProps.accessibilityLabel === label) return copy.memoizedProps.accessibilityActions;
+          return null;
+        });
+      joName = "Ana";
+      safetyOverview = { announcements: { [invitation.id]: { id: 41, author_id: jo, body: "Doors open at 19:30" } }, names: {} };
+      await open("/plans");
+      const anaCard = button(page, /^Ana invited you, Board games at the café, /);
+      const anaLine = "Announcement from Ana · Doors open at 19:30";
+      await expect(page.getByText(anaLine, { exact: true })).toBeVisible();
+      assert.deepEqual(await cardActions(anaCard), [
+        { name: "reportMessage:41", label: "Report message" },
+        { name: `reportPerson:${jo}`, label: "Report Ana" },
+        { name: `block:${jo}`, label: "Block Ana" },
+      ]);
+      await anaCard.first().click({ delay: 700 });
+      await expect.poll(sheetButtons).toEqual(["Report message", "Report Ana", "Block Ana"]);
+      await shot("plans-invitation-actions", false);
+      await button(page, "Report message").click();
+      await page.getByRole("radio", { name: "Spam", exact: true }).click();
+      await button(page, "Send report").click();
+      await expect(sheet.getByText("Thanks. The Resbite team will look at it.", { exact: true })).toBeVisible();
+      assert.deepEqual(calls("report_message"), [{ p_id: 41, p_reason: "spam", p_details: null }]);
+      await button(page, "Done").click();
+      await expect(sheet).toHaveCount(0);
+      await anaCard.first().click({ delay: 700 });
+      await button(page, "Block Ana").click();
+      await expect(
+        sheet.getByText("Block Ana? You won’t see Ana’s messages or announcements, and Ana won’t know. Any connection between you ends, and unblocking won’t bring it back.", { exact: true }),
+      ).toBeVisible();
+      await shot("plans-invitation-block", false);
+      const overviews = calls("my_chat_overview").length;
+      await button(page, "Block Ana").click();
+      await expect(sheet.getByText("Blocked", { exact: true })).toBeVisible();
+      assert.deepEqual(calls("block_user"), [{ p_user: jo, p_block: true }]);
+      await expect.poll(() => calls("my_chat_overview").length).toBeGreaterThan(overviews);
+      await button(page, "Close sheet").click();
+      await expect(page.getByText(anaLine, { exact: true })).toHaveCount(0);
+      // No announcement, and Pedro invited Stephen: Pedro first, then Ana, whom the byline names.
+      blocked = [];
+      safetyOverview = { announcements: {}, inviters: { [invitation.id]: PEDRO }, names: { [PEDRO]: "Pedro" } };
+      await open("/plans");
+      await expect.poll(async () => (await cardActions(anaCard))?.map((a) => a.label)).toEqual(["Report Pedro", "Block Pedro", "Report Ana", "Block Ana"]);
+      await anaCard.first().click({ delay: 700 });
+      await expect.poll(sheetButtons).toEqual(["Report Pedro", "Block Pedro", "Report Ana", "Block Ana"]);
+      await button(page, "Close sheet").click();
+      joName = "Jo";
+      safetyOverview = null;
+      blocked = [];
     }
     // The waiting screen in both states: the card, "Waiting for <host>", the answer; and "You weren’t added".
     await open(`/waiting?plan=${mine[0].plan_id}`);

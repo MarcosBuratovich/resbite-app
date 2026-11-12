@@ -4,7 +4,8 @@ import type { ConnectionState } from "../services/connections";
 import type { Allowance, BroughtLink } from "../services/circle";
 import type { ChatSummary } from "../services/chat";
 import { CHAT_COPY } from "./chatCopy";
-import { cutLine, rowText } from "./chatRules";
+import { cleanName, cutLine, rowText } from "./chatRules";
+import { SAFETY_COPY } from "./safetyCopy";
 import { CIRCLE_COPY } from "./circleCopy";
 import { CONNECTIONS_COPY } from "./connectionsCopy";
 import { firstName } from "./circle";
@@ -860,7 +861,8 @@ export function personLabel(row: PersonRow): string {
     lead,
     row.kind === "owner" ? EVENT_COPY.hostingBadge : null,
     row.admin ? EVENT_COPY.adminBadge : null,
-    row.connection === "connected" ? CONNECTIONS_COPY.connectedBadge : null,
+    // Blocked (plan 3), to the blocker only; a block ends any connection, so Connected never shows beside it.
+    row.blocked ? SAFETY_COPY.blocked : row.connection === "connected" ? CONNECTIONS_COPY.connectedBadge : null,
     ...(brought ? parts.slice(0, -1) : parts),
   ]
     .filter(Boolean)
@@ -912,4 +914,73 @@ export function focusAfterRemove(groups: readonly { rows: readonly PersonRow[] }
   const at = rows.findIndex((r) => r.key === key);
   if (at < 0) return null;
   return rows[at + 1]?.key ?? rows[at - 1]?.key ?? null;
+}
+
+/** Someone in the chat, for its Report or block (plan 3, G-N6): the person's sheet offers `actions`, in this order. */
+export type ChatPerson = {
+  userId: string;
+  /** Their name as the people list has it ("" when none); the screen shows `shownName`. */
+  name: string;
+  /** The viewer blocked them: "Blocked", and Unblock for Block. */
+  blocked: boolean;
+  /** The owner or an admin of the occurrence: the block question says their announcements go too (NOTE 7). */
+  theyHost: boolean;
+  actions: Array<"report" | "block" | "unblock">;
+};
+
+/** Report, then Block or Unblock once the blocks are known (N13): nothing but Report while they aren't. */
+const safetyOf = (blocked: boolean, blocks: ReadonlySet<string> | null): ChatPerson["actions"] =>
+  blocks === null ? ["report"] : ["report", blocked ? "unblock" : "block"];
+
+/**
+ * The chat's people, for the menu's Report or block and an author's sheet (G-N6, G-N7): the current occurrence's owner,
+ * then its guests in the list's order, never the viewer, each once. On a group every member, answered or not (plan 2);
+ * on a one-off the people in its chat: the admins (a host who hasn't answered is in it, ruling GR6 M6) and Going or
+ * Maybe. Empty when the viewer is alone, so the entry hides (`showsReportOrBlock`).
+ */
+export function chatPeople(i: {
+  guests: readonly Pick<Guest, "userId" | "name" | "response">[];
+  owner: { userId: string; name: string } | null;
+  admins: readonly string[];
+  userId: string | null;
+  blocks: ReadonlySet<string> | null;
+  isGroup: boolean;
+  /** The name a guest row carries when its profile has none (`UNNAMED_GUEST`): never shown as theirs. */
+  unnamed?: string;
+}): ChatPerson[] {
+  const seen = new Set<string>();
+  const out: ChatPerson[] = [];
+  const add = (userId: string, name: string, theyHost: boolean) => {
+    if (!userId || userId === i.userId || seen.has(userId)) return;
+    seen.add(userId);
+    const blocked = i.blocks !== null && i.blocks.has(userId);
+    out.push({ userId, name, blocked, theyHost, actions: safetyOf(blocked, i.blocks) });
+  };
+  if (i.owner) add(i.owner.userId, i.owner.name, true);
+  for (const g of i.guests) {
+    const admin = i.admins.includes(g.userId);
+    if (i.isGroup || admin || g.response === "accepted" || g.response === "maybe")
+      add(g.userId, g.name === i.unnamed ? "" : g.name, admin || g.userId === i.owner?.userId);
+  }
+  return out;
+}
+
+/**
+ * The person an author's name opens (G-N6): their row among the chat's people; an author no longer on the current
+ * occurrence (left, or removed) gets Report and Block only, named as the chat names them. Null for the viewer and for a
+ * row without an author.
+ */
+export function chatPersonFor(
+  people: readonly ChatPerson[],
+  userId: string | null,
+  names: Readonly<Record<string, string | null>>,
+  blocks: ReadonlySet<string> | null,
+  viewerId: string | null,
+): ChatPerson | null {
+  if (!userId || userId === viewerId) return null;
+  const listed = people.find((p) => p.userId === userId);
+  if (listed) return listed;
+  const blocked = blocks !== null && blocks.has(userId);
+  const name = cleanName(Object.prototype.hasOwnProperty.call(names, userId) ? names[userId] : null) || CHAT_COPY.someone;
+  return { userId, name, blocked, theyHost: false, actions: safetyOf(blocked, blocks) };
 }

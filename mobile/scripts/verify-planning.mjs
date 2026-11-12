@@ -263,6 +263,8 @@ async function signedInPage({ plans = [], guests = [], failJournal = false, ...o
     // The resbite page's connection states and the links its guests sent (verify-connections and verify-circle cover
     // them): none here.
     if (url.pathname === "/rest/v1/rpc/plan_connection_states") return reply({});
+    // Chat plan 3's blocks, read beside the states: nobody blocked (verify-event and verify-chat cover them).
+    if (url.pathname === "/rest/v1/rpc/my_blocks") return reply([]);
     if (url.pathname === "/rest/v1/rpc/plan_brought_invitations") return reply([]);
     // Task 8's chat reads: no Chat row, nothing unread (verify-event and review-ui cover them).
     if (noChat(url.pathname) !== undefined) return reply(noChat(url.pathname));

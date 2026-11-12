@@ -2,14 +2,16 @@ import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import { ArrowLeft, Ellipsis, Unlink2 } from "lucide-react-native";
+import { ArrowLeft, Ban, Ellipsis, Flag, Unlink2 } from "lucide-react-native";
 import { Button, Copy, ErrorNote, TextAction, s, useLargeText } from "../src/design/ui";
 import { IconButton, focusHeading } from "../src/design/kit";
 import { GrabberSheet } from "../src/design/GrabberSheet";
 import { MenuRow } from "../src/design/MenuRow";
+import { BlockQuestion, ReportSheet } from "../src/design/ReportSheet";
 import { colors as c, depth, fonts, r, space } from "../src/design/tokens";
 import { CONNECTIONS_COPY as C, requestLine } from "../src/domain/connectionsCopy";
 import { EVENT_COPY } from "../src/domain/eventPage";
+import { SAFETY_COPY, shownName } from "../src/domain/safetyCopy";
 import type { ConnectionPerson } from "../src/services/connections";
 import { actionErrorFor, useConnections } from "../src/state/useConnections";
 
@@ -18,7 +20,11 @@ const SEPARATOR = " · ";
 /** Where a connection began. */
 const metLine = (p: ConnectionPerson) => (p.title === null ? C.metOnResbite : C.metAt(p.title));
 
-type Sheet = { person: ConnectionPerson; view: "menu" | "remove" };
+/**
+ * A person's sheet: a connection's (Remove connection, then Block) or, plan 3, a request card's (Report, then Block),
+ * with Remove's question, the report or the block confirm in place (challenge I3).
+ */
+type Sheet = { person: ConnectionPerson; from: "request" | "connection"; view: "menu" | "remove" | "report" | "block" };
 
 /**
  * Connections (CO-02, CO-P6): /connections, from Profile or a connection push. Requests first, newest first, each a
@@ -35,9 +41,9 @@ export default function Connections() {
   const off = k.acting !== null;
   const loading = !data && k.busy && !k.readError;
   const retry = () => void k.load();
-  const open = (person: ConnectionPerson) => {
+  const open = (person: ConnectionPerson, from: Sheet["from"] = "connection") => {
     k.sheetMoved();
-    setSheet({ person, view: "menu" });
+    setSheet({ person, from, view: "menu" });
   };
   const close = () => {
     if (off) return;
@@ -50,6 +56,12 @@ export default function Connections() {
   };
   const current = sheet?.person ?? null;
   const free = largeText && styles.free;
+  /** After a block the sheet closes and the list is read again: the server no longer lists them (I3). */
+  const afterBlock = () => {
+    setSheet(null);
+    k.sheetMoved();
+    void k.load();
+  };
   return (
     <View style={s.page}>
       <Bar />
@@ -95,6 +107,14 @@ export default function Connections() {
                         <Text style={[styles.nameText, free]}>{person.name}</Text>
                         <Text style={[styles.sub, free]}>{requestLine(person.context, person.title)}</Text>
                       </View>
+                      {/* Plan 3 (I3): Report and Block for the person asking. */}
+                      <IconButton
+                        icon={Ellipsis}
+                        tone="plain"
+                        label={`${EVENT_COPY.actionsFor}${person.name}`}
+                        disabled={off}
+                        onPress={() => open(person, "request")}
+                      />
                     </View>
                     <View style={[styles.pills, largeText && styles.pillsStacked]}>
                       <View style={!largeText && styles.pill}>
@@ -164,17 +184,51 @@ export default function Connections() {
               <Avatar name={current.name} big />
               <View style={{ flex: 1 }}>
                 <Text style={[styles.headName, free]}>{current.name}</Text>
-                <Text style={[styles.headSub, free]}>{metLine(current)}</Text>
+                <Text style={[styles.headSub, free]}>
+                  {sheet?.from === "request" ? requestLine(current.context, current.title) : metLine(current)}
+                </Text>
               </View>
             </View>
-            {sheet?.view === "menu" ? (
+            {sheet?.view === "report" && current.seriesId ? (
+              // Report the person, on the resbite the request came from (G-S9's waiting-request clause).
+              <ReportSheet
+                target={{ kind: "user", userId: current.userId, series: current.seriesId, name: current.name }}
+                onDone={close}
+              />
+            ) : sheet?.view === "block" ? (
+              <BlockQuestion
+                userId={current.userId}
+                name={current.name}
+                youHost={false}
+                theyHost={false}
+                onBlocked={afterBlock}
+                onKeep={() => setSheet({ ...sheet, view: "menu" })}
+              />
+            ) : sheet?.view === "menu" ? (
               <View>
+                {sheet.from === "connection" ? (
+                  <MenuRow
+                    title={C.remove}
+                    icon={Unlink2}
+                    destructive
+                    disabled={off}
+                    onPress={() => setSheet({ ...sheet, view: "remove" })}
+                  />
+                ) : current.seriesId ? (
+                  // A connection has no Report: the ruling gives Report to request cards only (I3).
+                  <MenuRow
+                    title={SAFETY_COPY.reportPerson(shownName(current.name))}
+                    icon={Flag}
+                    disabled={off}
+                    onPress={() => setSheet({ ...sheet, view: "report" })}
+                  />
+                ) : null}
                 <MenuRow
-                  title={C.remove}
-                  icon={Unlink2}
+                  title={SAFETY_COPY.block(shownName(current.name))}
+                  icon={Ban}
                   destructive
                   disabled={off}
-                  onPress={() => setSheet({ person: current, view: "remove" })}
+                  onPress={() => setSheet({ ...sheet, view: "block" })}
                 />
               </View>
             ) : (
@@ -187,7 +241,7 @@ export default function Connections() {
                   disabled={off}
                   onPress={() => void confirmRemove(current)}
                 />
-                <Button title={C.keep} secondary disabled={off} onPress={() => setSheet({ person: current, view: "menu" })} />
+                <Button title={C.keep} secondary disabled={off} onPress={() => sheet && setSheet({ ...sheet, view: "menu" })} />
               </View>
             )}
             <ErrorNote message={actionErrorFor(k.actionError, current.userId, "sheet")} />

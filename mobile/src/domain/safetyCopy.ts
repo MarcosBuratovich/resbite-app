@@ -1,6 +1,6 @@
-import type { ChatNames } from "../services/chat";
+import type { ChatNames, ChatOverview } from "../services/chat";
 import { CHAT_COPY } from "./chatCopy";
-import { cleanName, hasHiddenCharacter } from "./chatRules";
+import { cleanName, hasHiddenCharacter, pendingCardNote } from "./chatRules";
 
 /** Report and block (chat plan 3), as the rulings word them. The apostrophe is the curly one, as in chat core's copy. */
 export const SAFETY_COPY = {
@@ -33,6 +33,11 @@ export const SAFETY_COPY = {
       : theyHost
         ? `Block ${name}? You won’t see ${name}’s messages or announcements, and ${name} won’t know. Any connection between you ends, and unblocking won’t bring it back.`
         : `Block ${name}? You won’t see ${name}’s messages, and ${name} won’t know. Any connection between you ends, and unblocking won’t bring it back.`,
+  /**
+   * Owner question R-Q6's default, under a host's block confirm only: a block hides the person's messages from the blocker
+   * alone, hosts included (CH-P13); removing them from the resbite stops them for everyone.
+   */
+  hostBlockNote: "This hides their messages from you only. To stop them for everyone, remove them from the resbite.",
 
   // The refusals, in words.
   unavailable: "You can’t report that any more.",
@@ -147,4 +152,58 @@ export function invitationActions(i: {
     );
   }
   return actions;
+}
+
+/**
+ * The block confirm's lines (G-N9, NOTE 7, R-Q6): the question for the cleaned name (`shownName`, ruling SR2), and for a
+ * host of that resbite the line on what a block doesn't do.
+ */
+export function blockLines(name: unknown, youHost: boolean, theyHost: boolean): string[] {
+  const question = SAFETY_COPY.blockQuestion(shownName(name), youHost, theyHost);
+  return youHost ? [question, SAFETY_COPY.hostBlockNote] : [question];
+}
+
+/** What an unanswered invitee's overview says of one invitation (B1, B4): its announcement and who invited them. */
+export type InvitationEntry = {
+  /** The latest "Everyone invited" announcement, `text` worded as the card words it (`pendingCardNote`); null when none shows. */
+  announcement: { id: number; authorId: string | null; name: string; text: string } | null;
+  /** Who invited them (`inviters`), with the overview's name for them, "" when it has none. */
+  inviter: { userId: string; name: string } | null;
+};
+
+/**
+ * One invitation's entry in `my_chat_overview` for someone who hasn't answered (P3-Q1, B4): the announcement only while
+ * the card or the page shows its line (until the resbite ends), and the inviter whatever the line. Null parts when the
+ * overview isn't read yet or names neither.
+ */
+export function invitationEntry(
+  plan: { id: string; starts_at: string; ends_at?: string | null },
+  overview: ChatOverview | null,
+  viewerId: string,
+  now: number,
+): InvitationEntry {
+  if (!overview) return { announcement: null, inviter: null };
+  const nameOf = (id: string | null) =>
+    id && Object.prototype.hasOwnProperty.call(overview.names, id) && typeof overview.names[id] === "string" ? (overview.names[id] as string) : "";
+  const text = pendingCardNote(plan, "pending", overview, viewerId, now);
+  const a = overview.announcements[plan.id];
+  const inviterId = overview.inviters?.[plan.id];
+  return {
+    announcement: text && a ? { id: a.id, authorId: a.authorId, name: nameOf(a.authorId), text } : null,
+    inviter: typeof inviterId === "string" && inviterId !== "" ? { userId: inviterId, name: nameOf(inviterId) } : null,
+  };
+}
+
+/** An invitation's action as its menu row says it: Report message, Report Pedro, Block Pedro. */
+export function invitationActionLabel(action: InvitationAction): string {
+  if (action.kind === "reportMessage") return SAFETY_COPY.reportMessage;
+  return action.kind === "reportPerson" ? SAFETY_COPY.reportPerson(action.name) : SAFETY_COPY.block(action.name);
+}
+
+/** The same entries as the card's accessibility actions (S7), each named once by what it is about. */
+export function invitationAccessibilityActions(actions: readonly InvitationAction[]): { name: string; label: string }[] {
+  return actions.map((action) => ({
+    name: action.kind === "reportMessage" ? `reportMessage:${action.id}` : `${action.kind}:${action.userId}`,
+    label: invitationActionLabel(action),
+  }));
 }

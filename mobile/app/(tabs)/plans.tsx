@@ -2,7 +2,7 @@ import React, { useState, useCallback, useRef, useEffect } from "react";
 import { AppState, Image, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useFocusEffect, useLocalSearchParams, usePathname } from "expo-router";
-import { Check, Lightbulb, Plus, RotateCcw, UserRound } from "lucide-react-native";
+import { Ban, Check, Flag, Lightbulb, Plus, RotateCcw, UserRound } from "lucide-react-native";
 import { artwork } from "../../src/services/catalogue";
 import { eventPicture } from "../../src/domain/events";
 import { supabase } from "../../src/services/supabase";
@@ -11,6 +11,9 @@ import { Copy, Title, ErrorNote, Reveal, TextAction, s, useLargeText } from "../
 import { Chip, chipToneFor, CoverCard, Fab, IconButton, Segmented, Tile } from "../../src/design/kit";
 import { fonts } from "../../src/design/tokens";
 import { PreviewNotice } from "../../src/design/Chrome";
+import { GrabberSheet } from "../../src/design/GrabberSheet";
+import { MenuRow } from "../../src/design/MenuRow";
+import { BlockQuestion, BlockedLine, ReportSheet } from "../../src/design/ReportSheet";
 import { createdNotice } from "../../src/domain/planCopy";
 import { planCoverStore } from "../../src/services/planCovers";
 import {
@@ -36,6 +39,23 @@ import { readRsvp, writeRsvp } from "../../src/services/rsvp";
 import { chatGateway, type ChatOverview } from "../../src/services/chat";
 import { currentOccurrences, invitationDot, pendingCardNote, unreadDot } from "../../src/domain/chatRules";
 import { leftGroups } from "../../src/state/useGroupLeave";
+import { firstName } from "../../src/domain/circle";
+import {
+  SAFETY_COPY,
+  invitationAccessibilityActions,
+  invitationActionLabel,
+  invitationActions,
+  type InvitationAction,
+  type ReportTarget,
+} from "../../src/domain/safetyCopy";
+import { onBlocksChanged } from "../../src/services/safety";
+
+/** An invitation's Report and Block in its sheet (plan 3, S7): the list, a report, the block confirm, its result. */
+type InvitationStep =
+  | { kind: "list" }
+  | { kind: "report"; target: ReportTarget }
+  | { kind: "block"; userId: string; name: string; theyHost: boolean }
+  | { kind: "blocked" };
 
 // The last save notice already shown, so a remount or web history restoring the same URL never
 // repeats a saved toast. Each save passes a fresh `notice` id.
@@ -68,7 +88,9 @@ export default function Plans() {
     [answering, setAnswering] = useState<string | null>(null),
     [answerError, setAnswerError] = useState<{ plan: string; message: string } | null>(null),
     // The last answer confirmed from an Invitations row: Going or Maybe brings the notification ask.
-    [answered, setAnswered] = useState<{ scope: string; response: string } | null>(null);
+    [answered, setAnswered] = useState<{ scope: string; response: string } | null>(null),
+    // Plan 3: the invitation whose Report and Block are open, and where they stand.
+    [reporting, setReporting] = useState<{ planId: string; step: InvitationStep } | null>(null);
   const scope = preview ? "preview" : session?.user.id;
   // Found by the reconcile that runs when the tabs open (see useReconcileCreate), not by this screen.
   const createdTitle = createdPlan && createdPlan.scope === scope ? createdPlan.title : null;
@@ -186,6 +208,20 @@ export default function Plans() {
   }, [createdTitle]);
   // A group left from its chat or resbite page, whichever screen the person is on by then: read the list again (UI Q4).
   useEffect(() => leftGroups.listen(() => void refreshRef.current()), []);
+  // After a block or unblock anywhere (plan 3): the overview again, which leaves out what someone blocked wrote and who
+  // they are, so an invitation's line and its announcer and inviter go (NOTE 2). Nothing else changes here.
+  const readOverview = useRef(() => {});
+  readOverview.current = () => {
+    if (preview || !session) return;
+    const uid = session.user.id;
+    void chatGateway.overview().then(
+      (chats) => {
+        if (identity.current === uid) setOverview(chats);
+      },
+      () => {},
+    );
+  };
+  useEffect(() => onBlocksChanged(() => readOverview.current()), []);
   // Every occurrence of a group left on this phone is gone from the list at once, even if the next read fails (UI Q3).
   const list = leftGroups.without(preview ? localPlans : loadedFor === session?.user.id && session ? plans : [], session?.user.id ?? null);
   const now = Date.now();
@@ -247,6 +283,26 @@ export default function Plans() {
       if (valid()) setAnswering(null);
     }
   }
+  /**
+   * What an unanswered invitation's card offers to report or block (S7, B4, R-Q1, I-2): its announcement while the card
+   * shows it, the person who invited them, and the owner the byline names. My resbites reads no blocks, so after "Block
+   * Ana" the owner is still offered; blocking again stores nothing new (Known gaps).
+   */
+  const actionsFor = (p: LocalPlan, note: string | null): InvitationAction[] =>
+    invitationActions({
+      announcement: note && overview ? (overview.announcements[p.id] ?? null) : null,
+      inviterId: overview?.inviters[p.id] ?? null,
+      owner: p.owner_id ? { userId: p.owner_id, name: firstName(hosts[p.owner_id]) } : null,
+      viewerId: session?.user.id ?? "",
+      names: overview?.names ?? {},
+    });
+  /** One of an invitation's actions, from its sheet or from the screen reader's actions on the card. */
+  const stepFor = (p: LocalPlan, action: InvitationAction): InvitationStep =>
+    action.kind === "reportMessage"
+      ? { kind: "report", target: { kind: "message", id: action.id } }
+      : action.kind === "reportPerson"
+        ? { kind: "report", target: { kind: "user", userId: action.userId, series: p.series_id, name: action.name } }
+        : { kind: "block", userId: action.userId, name: action.name, theyHost: action.theyHost };
   const start = () => router.push("/arrange");
   const open = (p: LocalPlan) => {
     router.setParams({ created: "0", cover: "none" });
@@ -311,6 +367,9 @@ export default function Plans() {
               const host = hosts[p.owner_id ?? ""]?.trim() || INVITE_COPY.hostFallback;
               // The latest announcement sent to Everyone invited, under the title (spec "The announcement on the invitation card").
               const note = pendingCardNote(p, "pending", overview, session?.user.id ?? "", now);
+              // Plan 3: Report and Block, by a long-press on the card and as its accessibility actions (S7).
+              const safety = actionsFor(p, note);
+              const safetyActions = invitationAccessibilityActions(safety);
               const place = eventPlace({ owner: false, response: "pending", place: p.place_label, area: p.area }).line;
               const chips = cardChips({ owner: false, status: p.status, response: "pending", starts_at: p.starts_at, ends_at: p.ends_at }, now);
               return (
@@ -333,6 +392,12 @@ export default function Plans() {
                       new Date(now),
                     )}`}
                     onPress={() => open(p)}
+                    onLongPress={safety.length ? () => setReporting({ planId: p.id, step: { kind: "list" } }) : undefined}
+                    accessibilityActions={safetyActions}
+                    onAccessibilityAction={(name) => {
+                      const action = safety[safetyActions.findIndex((a) => a.name === name)];
+                      if (action) setReporting({ planId: p.id, step: stepFor(p, action) });
+                    }}
                   />
                   <Segmented
                     label={INVITE_COPY.yourAnswer(p.title)}
@@ -446,7 +511,68 @@ export default function Plans() {
         <Fab placement="float" onPress={start} />
       </SafeAreaView>
       <NotificationAsk ask={ask} />
+      <InvitationSheet
+        reporting={reporting}
+        plan={reporting ? (invitations.find((p) => p.id === reporting.planId) ?? null) : null}
+        actionsFor={(p) => actionsFor(p, pendingCardNote(p, "pending", overview, session?.user.id ?? "", now))}
+        stepFor={stepFor}
+        onStep={(step) => setReporting((r) => (r ? { ...r, step } : r))}
+        onClose={() => setReporting(null)}
+      />
     </SafeAreaView>
+  );
+}
+
+/**
+ * An invitation's Report and Block (plan 3, S7, B4): its actions as rows, then the report or the block confirm in
+ * place (`blockQuestion(name, false, theyHost)`), and "Blocked" after it. The list follows the overview read again after
+ * a block, so the announcer and the inviter go.
+ */
+function InvitationSheet({
+  reporting,
+  plan,
+  actionsFor,
+  stepFor,
+  onStep,
+  onClose,
+}: {
+  reporting: { planId: string; step: InvitationStep } | null;
+  plan: LocalPlan | null;
+  actionsFor: (p: LocalPlan) => InvitationAction[];
+  stepFor: (p: LocalPlan, action: InvitationAction) => InvitationStep;
+  onStep: (step: InvitationStep) => void;
+  onClose: () => void;
+}) {
+  const step = reporting?.step ?? null;
+  return (
+    <GrabberSheet visible={reporting !== null && plan !== null} label={SAFETY_COPY.reportOrBlock} onClose={onClose}>
+      {!plan || !step ? null : step.kind === "report" ? (
+        <ReportSheet target={step.target} onDone={onClose} />
+      ) : step.kind === "block" ? (
+        <BlockQuestion
+          userId={step.userId}
+          name={step.name}
+          youHost={false}
+          theyHost={step.theyHost}
+          onBlocked={() => onStep({ kind: "blocked" })}
+          onKeep={() => onStep({ kind: "list" })}
+        />
+      ) : step.kind === "blocked" ? (
+        <BlockedLine />
+      ) : (
+        <View>
+          {actionsFor(plan).map((action) => (
+            <MenuRow
+              key={action.kind === "reportMessage" ? `message:${action.id}` : `${action.kind}:${action.userId}`}
+              title={invitationActionLabel(action)}
+              icon={action.kind === "block" ? Ban : Flag}
+              destructive={action.kind === "block"}
+              onPress={() => onStep(stepFor(plan, action))}
+            />
+          ))}
+        </View>
+      )}
+    </GrabberSheet>
   );
 }
 

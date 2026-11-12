@@ -2,12 +2,13 @@ import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
-import { ArrowLeft, Check, Clock, Ellipsis, Link2, Phone, Send, UserMinus, UserPlus, X } from "lucide-react-native";
+import { ArrowLeft, Ban, Check, Clock, Ellipsis, Flag, Link2, Phone, Send, UserMinus, UserPlus, X } from "lucide-react-native";
 import type { LucideIcon } from "lucide-react-native";
 import { Button, Copy, ErrorNote, s, useLargeText } from "../src/design/ui";
 import { IconButton, focusHeading } from "../src/design/kit";
 import { GrabberSheet } from "../src/design/GrabberSheet";
 import { MenuLabel, MenuRow, MenuSeparator } from "../src/design/MenuRow";
+import { BlockQuestion, BlockedLine, ReportSheet } from "../src/design/ReportSheet";
 import { colors as c, fonts, space } from "../src/design/tokens";
 import {
   EVENT_COPY,
@@ -34,6 +35,7 @@ import { contactInviteGateway } from "../src/services/contactInvites";
 import { bringerRevokeError, circleGateway, takingBack } from "../src/services/circle";
 import { UNNAMED_GUEST } from "../src/services/rsvp";
 import { joinRequestGateway } from "../src/services/joinRequests";
+import { safetyGateway } from "../src/services/safety";
 import { useApp } from "../src/state/AppState";
 import { useEvent, type EventPage } from "../src/state/useEvent";
 import { useGroupScreen } from "../src/state/useGroupLeave";
@@ -51,19 +53,11 @@ const ACTION_ICON: Partial<Record<PersonAction, LucideIcon>> = {
   decline: X,
   remove: X,
   removeInvite: X,
+  // Plan 3: Report, and Block or Unblock.
+  report: Flag,
+  block: Ban,
+  unblock: Ban,
 };
-
-const NOBODY_BLOCKED: ReadonlySet<string> = new Set();
-const SAFETY_ACTIONS: readonly PersonAction[] = ["report", "block", "unblock"];
-/**
- * Report, Block and Unblock (plan 3) open sheets this screen doesn't have yet: until it does, no row offers them, and the
- * list and each person's sheet are as before.
- */
-const withoutSafety = (groups: ReturnType<typeof peopleGroups>): ReturnType<typeof peopleGroups> =>
-  groups.map((g) => ({
-    ...g,
-    rows: g.rows.map((row) => ({ ...row, actions: row.actions.filter((a) => !SAFETY_ACTIONS.includes(a)) })),
-  }));
 
 /**
  * The people list (spec CR-P4, CR-P16, CO-01, CO-07): /guests?plan=<id>. Everyone who answered, and for hosts the rest,
@@ -120,7 +114,11 @@ function Bar({ planId }: { planId?: string }) {
   );
 }
 
-type Sheet = { row: PersonRow; view: "menu" | "remove" | "decline" };
+/**
+ * A person's sheet and what it shows: its rows, Remove's or Decline's question, and plan 3's report, block confirm and
+ * the block's result line, each in place.
+ */
+type Sheet = { row: PersonRow; view: "menu" | "remove" | "decline" | "report" | "block" | "blocked" };
 
 function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage["plan"]> }) {
   const { role, guests, invited, requests, admins, owner, connections } = event;
@@ -136,26 +134,24 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // After the end, or once cancelled, the hosts' actions go; connecting stays (CO rule 7).
-  const groups = withoutSafety(
-    peopleGroups({
-      role: role ?? "guest",
-      state: pageState(plan),
-      guests,
-      invited,
-      requests,
-      admins,
-      owner,
-      userId: me,
-      connections,
-      // This screen reads no blocks yet (plan 3's `my_blocks`), so nobody is blocked here, as before.
-      blocks: NOBODY_BLOCKED,
-      bringerNames: event.bringerNames,
-      broughtLinks: event.broughtLinks,
-      unnamed: UNNAMED_GUEST,
-      // A group's guest sees everyone in it, answered or not (G-B5).
-      isGroup: event.isGroup,
-    }),
-  );
+  const groups = peopleGroups({
+    role: role ?? "guest",
+    state: pageState(plan),
+    guests,
+    invited,
+    requests,
+    admins,
+    owner,
+    userId: me,
+    connections,
+    // Plan 3: the people this person blocked; while unknown, no Block, Unblock or Connect (N13).
+    blocks: event.blocks,
+    bringerNames: event.bringerNames,
+    broughtLinks: event.broughtLinks,
+    unnamed: UNNAMED_GUEST,
+    // A group's guest sees everyone in it, answered or not (G-B5).
+    isGroup: event.isGroup,
+  });
   const off = working || event.acting !== null || resend.busy !== null;
   const open = (row: PersonRow) => {
     setError(null);
@@ -202,6 +198,14 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
         return run(() => event.demote(row.userId!), false);
       case "approve":
         return run(async () => void (await joinRequestGateway.decide(plan.id, row.userId!, true)));
+      // Plan 3: Report and Block ask in place; Unblock acts at once, through the gateway, so every open chat and this
+      // list hear it (B3, NOTE 2).
+      case "report":
+        return setSheet({ row, view: "report" });
+      case "block":
+        return setSheet({ row, view: "block" });
+      case "unblock":
+        return run(() => safetyGateway.unblock(row.userId!), false);
     }
   };
   // Each person's row on the list, so focus can move to the next one after a remove (D4). It moves once the sheet has
@@ -260,7 +264,8 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
   const current = live ?? sheet?.row ?? null;
   const gone = sheet !== null && live === null;
   const head = current ? sheetHead(current) : null;
-  const ask = current && sheet && sheet.view !== "menu" ? removeQuestion(current, { guests, host, view: sheet.view }) : null;
+  const asking = sheet?.view === "remove" || sheet?.view === "decline" ? sheet.view : null;
+  const ask = current && asking ? removeQuestion(current, { guests, host, view: asking }) : null;
   // The question takes focus when Remove (or Decline) asks it (D4).
   const question = useRef<Text | null>(null);
   useEffect(() => {
@@ -307,7 +312,12 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
                     <Text style={styles.nameText}>{row.name}</Text>
                     {row.kind === "owner" ? <Badge text={EVENT_COPY.hostingBadge} /> : null}
                     {row.admin ? <Badge text={EVENT_COPY.adminBadge} /> : null}
-                    {row.connection === "connected" ? <Badge text={CONNECTIONS_COPY.connectedBadge} /> : null}
+                    {/* Blocked shows to the blocker only (plan 3); a block ends any connection, so never both. */}
+                    {row.blocked ? (
+                      <Badge text={SAFETY_COPY.blocked} />
+                    ) : row.connection === "connected" ? (
+                      <Badge text={CONNECTIONS_COPY.connectedBadge} />
+                    ) : null}
                   </View>
                   {row.status ? <Text style={styles.sub}>{row.status}</Text> : null}
                 </View>
@@ -341,9 +351,27 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
                 {head ? <Text style={styles.headSub}>{head}</Text> : null}
               </View>
             </View>
-            {gone ? null : sheet?.view === "menu" ? (
+            {sheet?.view === "blocked" ? (
+              <BlockedLine />
+            ) : gone ? null : sheet?.view === "report" && current.userId ? (
+              <ReportSheet
+                target={{ kind: "user", userId: current.userId, series: plan.series_id, name: current.name }}
+                onDone={() => setSheet(null)}
+              />
+            ) : sheet?.view === "block" && current.userId ? (
+              <BlockQuestion
+                userId={current.userId}
+                name={current.name}
+                youHost={host}
+                theyHost={current.kind === "owner" || current.admin}
+                onBlocked={() => setSheet({ row: current, view: "blocked" })}
+                onKeep={() => setSheet({ row: current, view: "menu" })}
+              />
+            ) : sheet?.view === "menu" ? (
               <View>
-                {current.connection === "connected" ? <MenuLabel title={CONNECTIONS_COPY.connectedBadge} icon={Link2} /> : null}
+                {current.connection === "connected" && !current.blocked ? (
+                  <MenuLabel title={CONNECTIONS_COPY.connectedBadge} icon={Link2} />
+                ) : null}
                 {current.actions.flatMap((action) =>
                   action === "sendAgain"
                     ? sendVias(invitee(current)?.stored?.sentVia).map((via) => (
@@ -398,7 +426,7 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
                 />
               </View>
             )}
-            {sheet ? <ErrorNote message={shownError} /> : null}
+            {sheet && (sheet.view === "menu" || asking) ? <ErrorNote message={shownError} /> : null}
           </>
         ) : null}
       </GrabberSheet>
@@ -432,6 +460,7 @@ function Row({
   via?: "whatsapp" | "messages";
 }) {
   const destructive = action === "remove" || action === "removeInvite";
+  // Block is red too, and asks in place (plan 3, G-N9); it needs no band of its own after Report.
   const text: Record<PersonAction, string> = {
     connect: CONNECTIONS_COPY.connect,
     cancelRequest: CONNECTIONS_COPY.cancelRequest,
@@ -456,7 +485,7 @@ function Row({
         title={text[action]}
         hint={action === "connect" ? CONNECTIONS_COPY.connectHint(row.name) : undefined}
         icon={ACTION_ICON[action] ?? X}
-        destructive={destructive}
+        destructive={destructive || action === "block"}
         disabled={disabled}
         onPress={onPress}
       />

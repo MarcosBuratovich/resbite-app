@@ -4,6 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams, usePathname } from "expo-router";
 import {
   ArrowLeft,
+  Ban,
   Bell,
   BellOff,
   Calendar,
@@ -13,6 +14,7 @@ import {
   ChevronRight,
   Copy as CopyIcon,
   Ellipsis,
+  Flag,
   LogOut,
   MapPin,
   MessageCircle,
@@ -21,9 +23,11 @@ import {
   RefreshCw,
   Repeat,
   Send,
+  ShieldAlert,
   UserPlus,
 } from "lucide-react-native";
-import { Button, Copy, ErrorNote, Reveal, s } from "../src/design/ui";
+import { Button, Copy, ErrorNote, Reveal, TextAction, s } from "../src/design/ui";
+import { BlockQuestion, BlockedLine, ReportSheet } from "../src/design/ReportSheet";
 import { MenuRow, MenuSeparator } from "../src/design/MenuRow";
 import { ActionBar, ReplyPill, type BarAction } from "../src/design/ActionBar";
 import { AvatarStack, Chip, chipToneFor, focusHeading, IconButton, Segmented } from "../src/design/kit";
@@ -64,6 +68,7 @@ import { CIRCLE_COPY } from "../src/domain/circleCopy";
 import { CHAT_COPY } from "../src/domain/chatCopy";
 import { groupDay } from "../src/domain/chatRules";
 import { INVITE_COPY } from "../src/domain/inviteCopy";
+import { SAFETY_COPY, invitationActionLabel, invitationActions, type ReportTarget } from "../src/domain/safetyCopy";
 import { useApp } from "../src/state/AppState";
 import { useEvent } from "../src/state/useEvent";
 import { useEventDevice } from "../src/state/useEventDevice";
@@ -91,8 +96,16 @@ export default function EventPage() {
     }
   }, [notice, pathname]);
   const [moreOpen, setMoreOpen] = useState(false);
-  // The More sheet changes its own content (GL 5): the rows, the answer control, the cancel question, or Leave group's.
-  const [moreView, setMoreView] = useState<"rows" | "reply" | "cancel" | "leave">("rows");
+  // The More sheet changes its own content (GL 5): the rows, the answer control, the cancel question, Leave group's, or
+  // an unanswered invitation's Report or block (plan 3).
+  const [moreView, setMoreView] = useState<"rows" | "reply" | "cancel" | "leave" | "safety">("rows");
+  // Report or block's own steps in the More sheet: who to report or block, a report, the block confirm, its result.
+  const [safety, setSafety] = useState<
+    | { kind: "list" }
+    | { kind: "report"; target: ReportTarget }
+    | { kind: "block"; userId: string; name: string; theyHost: boolean }
+    | { kind: "blocked" }
+  >({ kind: "list" });
   // Leave's question takes focus, and Keep gives it back to the Leave row, as the chat's does (H32 Q53, review M2).
   const leaveQuestion = useRef<Text | null>(null);
   const leaveRow = useRef<View | null>(null);
@@ -184,8 +197,23 @@ export default function EventPage() {
   });
   // CH-P14: the series' chat, for the people in it; none when the read was refused or failed (K-S13).
   const chat = chatRow(event.chat, session?.user.id ?? "");
-  // A group's guest may leave it while its chat is open (G-N13): the Chat row's summary says so. Report or block (plan
-  // 3) opens a sheet this page doesn't have yet: until it does, More is as before.
+  // Plan 3 (B1, B4, R-Q1, I-2): what an unanswered invitee may report or block, the announcement's author, the person
+  // who invited them and the owner the byline names, from the page's own read when the overview's failed.
+  const invitationNames: Record<string, string> = {};
+  if (event.announcement?.authorId) invitationNames[event.announcement.authorId] = event.announcement.name;
+  if (event.inviter) invitationNames[event.inviter.userId] = event.inviter.name;
+  const reportable =
+    role === "guest" && response === "pending"
+      ? invitationActions({
+          announcement: event.announcement,
+          inviterId: event.inviter?.userId ?? null,
+          owner: current.owner_id ? { userId: current.owner_id, name: firstName(organizer) } : null,
+          viewerId: session?.user.id ?? "",
+          names: invitationNames,
+        })
+      : [];
+  // A group's guest may leave it while its chat is open (G-N13): the Chat row's summary says so. Report or block shows
+  // only with someone to name, so it never opens empty.
   const rows = moreRows({
     role,
     state,
@@ -194,9 +222,16 @@ export default function EventPage() {
     calendar: device.shown,
     isGroup: event.isGroup,
     chatOpen: event.chat?.open === true,
-  }).filter((row) => row !== "reportOrBlock");
+  }).filter((row) => row !== "reportOrBlock" || reportable.length > 0);
   const hasMore = rows.length > 0;
   const closeMore = () => setMoreOpen(false);
+  /** Report or block, in the More sheet: from its row, or from the button beside the announcement (B1). */
+  function openSafety() {
+    event.clearError();
+    setSafety({ kind: "list" });
+    setMoreView("safety");
+    setMoreOpen(true);
+  }
 
   // Do this again: the plan screen opens on a copy of this resbite, with no date yet.
   function again() {
@@ -300,6 +335,8 @@ export default function EventPage() {
             <MenuRow title={EVENT_COPY.cancelResbite} icon={CalendarX} destructive disabled={acting} onPress={() => setMoreView("cancel")} />
           </React.Fragment>
         );
+      case "reportOrBlock":
+        return <MenuRow key={name} title={SAFETY_COPY.reportOrBlock} icon={ShieldAlert} disabled={acting} onPress={openSafety} />;
       case "leaveGroup":
         // Last, in red; alone for someone who hasn't answered, and on an ended or cancelled page (G-N13).
         return (
@@ -437,7 +474,17 @@ export default function EventPage() {
           </View>
         )}
         {/* An invitee who hasn't answered: the latest announcement to everyone invited, in full, as their card words it (H37). */}
-        {!!event.announcement && <Copy>{event.announcement}</Copy>}
+        {!!event.announcement && (
+          <View style={styles.announcement}>
+            <Copy>{event.announcement.text}</Copy>
+            {/* Its author and the people who invited them, reachable beside the words (B1): a button, never a long-press. */}
+            {reportable.length > 0 ? (
+              <View style={{ alignSelf: "flex-start" }}>
+                <TextAction title={SAFETY_COPY.reportOrBlock} onPress={openSafety} />
+              </View>
+            ) : null}
+          </View>
+        )}
         <MeetingDetails view={details} owner={host} place={current.place_label} />
         <PeopleRow
           text={peopleRowText(counts, host)}
@@ -481,6 +528,36 @@ export default function EventPage() {
         onClose={closeMore}
       >
         {moreView === "rows" && rows.map(moreRow)}
+        {moreView === "safety" &&
+          (safety.kind === "report" ? (
+            <ReportSheet target={safety.target} onDone={closeMore} />
+          ) : safety.kind === "block" ? (
+            <BlockQuestion
+              userId={safety.userId}
+              name={safety.name}
+              youHost={false}
+              theyHost={safety.theyHost}
+              onBlocked={() => setSafety({ kind: "blocked" })}
+              onKeep={() => setSafety({ kind: "list" })}
+            />
+          ) : safety.kind === "blocked" ? (
+            <BlockedLine />
+          ) : (
+            reportable.map((action) => (
+              <MenuRow
+                key={action.kind === "reportMessage" ? `message:${action.id}` : `${action.kind}:${action.userId}`}
+                title={invitationActionLabel(action)}
+                icon={action.kind === "block" ? Ban : Flag}
+                destructive={action.kind === "block"}
+                onPress={() => {
+                  if (action.kind === "reportMessage") setSafety({ kind: "report", target: { kind: "message", id: action.id } });
+                  else if (action.kind === "reportPerson")
+                    setSafety({ kind: "report", target: { kind: "user", userId: action.userId, series: current.series_id, name: action.name } });
+                  else setSafety({ kind: "block", userId: action.userId, name: action.name, theyHost: action.theyHost });
+                }}
+              />
+            ))
+          ))}
         {moreView === "reply" && answerControl(afterMoreReply)}
         {moreView === "leave" && (
           <>
@@ -671,6 +748,7 @@ function ChatRow({ row, onOpen }: { row: ChatRowView; onOpen: () => void }) {
 
 const styles = StyleSheet.create({
   chips: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 },
+  announcement: { gap: 2 },
   row: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 44, paddingVertical: 6 },
   rowText: { flex: 1, gap: 2 },
   small: { fontFamily: fonts.body, fontSize: 12, color: c.muted },

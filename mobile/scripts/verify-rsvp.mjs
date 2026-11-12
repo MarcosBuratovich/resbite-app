@@ -136,6 +136,9 @@ try {
       });
     }
     if (path === "/rest/v1/rpc/my_chat_overview") return reply({ chats: {}, announcements: {}, names: {} });
+    // The people list's reads once answered (Going names everyone): no connections and, chat plan 3, nobody blocked.
+    if (path === "/rest/v1/rpc/plan_connection_states") return reply({});
+    if (path === "/rest/v1/rpc/my_blocks") return reply([]);
     if (path === "/rest/v1/rpc/claim_invite") {
       claims++;
       assert.equal(
@@ -167,10 +170,16 @@ try {
     return reply({ message: "Unexpected intercepted endpoint" }, 400);
   });
   await page.goto(`${base}/event?plan=${plan.id}`);
-  // An unanswered guest sees the answer control in the bottom bar, and no More.
+  // An unanswered guest sees the answer control in the bottom bar, and More beside it holding Report or block alone
+  // (chat plan 3: the host the byline names, B4 and I-2).
   await expect(page.getByRole("radiogroup", { name: "Your answer", exact: true })).toBeVisible();
   await expect(page.getByRole("radio", { name: "Maybe", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "More", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "More", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Report or block", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add to calendar", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Mute this resbite", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Close sheet", exact: true }).first().click();
+  await expect(page.getByRole("button", { name: "Report or block", exact: true })).toHaveCount(0);
   // Not answered yet: not in the chat, so no Chat row (CH-P14).
   await expect.poll(() => chatReads).toBeGreaterThan(0);
   await expect(page.getByRole("button", { name: /^Chat\b/ })).toHaveCount(0);

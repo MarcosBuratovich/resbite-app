@@ -21,13 +21,16 @@ import { formatPhone, phoneSendForm } from "../domain/phone";
 import { joinRequestGateway, type HostRequest } from "../services/joinRequests";
 import { connectionErrorMessage, connectionGateway, type ConnectionState } from "../services/connections";
 import { chatGateway, isNotInChat, type ChatSummary } from "../services/chat";
-import { pendingCardNote } from "../domain/chatRules";
+import { onBlocksChanged, safetyGateway } from "../services/safety";
+import { invitationEntry, type InvitationEntry } from "../domain/safetyCopy";
 import { readProfile } from "../services/profile";
 import { requestGone } from "./connectionsModel";
 import { rememberName } from "./knownNames";
 
 /** Nothing read: a shared empty, so a screen with none gets the same value on every render. */
 const NO_LINKS: BroughtLink[] = [];
+/** No invitation entry: nothing read, someone who has answered, or a host. */
+const NO_ENTRY: InvitationEntry = { announcement: null, inviter: null };
 
 /** Someone a host invited by personal link who hasn't answered: the stored name, else the number. */
 export type InvitedPerson = {
@@ -95,6 +98,13 @@ export type EventPage = {
    */
   connections: Record<string, ConnectionState> | null;
   /**
+   * The people the signed-in person blocked (`my_blocks`, plan 3), read beside the connection states, where names show.
+   * Null until a read lands, where names are hidden and in the preview: the people list then offers no Block, Unblock or
+   * Connect (N13). A failed read keeps what was known and says nothing; the next focus reads again. After any block or
+   * unblock in the app it is read again (confirmation NOTE 2).
+   */
+  blocks: ReadonlySet<string> | null;
+  /**
    * The owner, for the first row of the people list (a guest connects with the host there too): the organizer's name
    * for everyone else, this account's own (from its profile) for the owner. Null where names are hidden, in the
    * preview, and until the name is known.
@@ -108,11 +118,14 @@ export type EventPage = {
    */
   chat: ChatSummary | null;
   /**
-   * For an invitee who hasn't answered, the latest "Everyone invited" announcement in full, worded as My resbites'
-   * card words it ("Announcement from Ana · …", H37 D3), from `my_chat_overview`; null for everyone else, until it is
-   * read, and after the resbite has ended. A failed read keeps the one known.
+   * For an invitee who hasn't answered, the latest "Everyone invited" announcement (`my_chat_overview`): its id and
+   * author, for Report and Block (B1), and `text` in full as My resbites' card words it ("Announcement from Ana · …", H37
+   * D3). Null for everyone else, until it is read, and after the resbite has ended. A failed read keeps the one known;
+   * after a block the overview is read again, and an announcement by someone blocked is gone (NOTE 2).
    */
-  announcement: string | null;
+  announcement: InvitationEntry["announcement"];
+  /** For an invitee who hasn't answered, who invited them (the overview's `inviters`, B4), from the same read. */
+  inviter: InvitationEntry["inviter"];
   busy: boolean;
   fresh: boolean;
   error: string | null;
@@ -180,6 +193,14 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
   // The latest read of the bringers' names wins, as the states' does.
   const bringersRead = useRef(0);
   const [connections, setConnections] = useState<Record<string, ConnectionState> | null>(null);
+  const [blocks, setBlocks] = useState<ReadonlySet<string> | null>(null);
+  // The latest read of the blocks wins, as the states' does.
+  const blocksRead = useRef(0);
+  /**
+   * What the last read of this page reads again after a block or unblock anywhere (NOTE 2): the states and the blocks
+   * where names show, and an unanswered invitee's overview. Keyed by the identity it was read for.
+   */
+  const afterBlocks = useRef<{ key: string; named: boolean; invitee: Plan | null } | null>(null);
   /** The owner's own name, read for their row on the people list; everyone else has it as `organizer`. */
   const [ownName, setOwnName] = useState<string | null>(null);
   // The latest read of the states wins: a whole-event read and a re-read after a connection action can overlap.
@@ -212,21 +233,35 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
       },
     );
   };
-  const [announcement, setAnnouncement] = useState<string | null>(null);
+  const [entry, setEntry] = useState<InvitationEntry>(NO_ENTRY);
   const announcementRead = useRef(0);
-  /** An invitee who hasn't answered: the latest "Everyone invited" announcement, in full (H37 D3). A failure keeps it. */
+  /**
+   * An invitee who hasn't answered: the latest "Everyone invited" announcement, in full (H37 D3), and who invited them
+   * (B4), from one overview read. A failure keeps what was known.
+   */
   const readAnnouncement = (plan: Plan, viewer: string, valid: () => boolean) => {
     const ticket = ++announcementRead.current;
     void chatGateway.overview().then(
       (overview) => {
-        if (valid() && ticket === announcementRead.current) setAnnouncement(pendingCardNote(plan, "pending", overview, viewer, Date.now()));
+        if (valid() && ticket === announcementRead.current) setEntry(invitationEntry(plan, overview, viewer, Date.now()));
       },
       () => {},
     );
   };
   const dropAnnouncement = () => {
     announcementRead.current++;
-    setAnnouncement(null);
+    setEntry(NO_ENTRY);
+    if (afterBlocks.current) afterBlocks.current = { ...afterBlocks.current, invitee: null };
+  };
+  /** The people blocked, as `my_blocks` lists them; a failure keeps what was known and says nothing (N13). */
+  const readBlocks = (valid: () => boolean) => {
+    const ticket = ++blocksRead.current;
+    void safetyGateway.myBlocks().then(
+      (list) => {
+        if (valid() && ticket === blocksRead.current) setBlocks(new Set(list.map((b) => b.userId)));
+      },
+      () => {},
+    );
   };
   // UX3: this phone's reminders follow every event load, answer and cancellation; failures wait for the next sync.
   const syncDevice = () => void syncReminders({ userId: userId ?? null, preview }).catch(() => {});
@@ -239,6 +274,9 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
     setBringerNames(null);
     setBroughtLinks(NO_LINKS);
     setConnections(null);
+    setBlocks(null);
+    blocksRead.current++;
+    afterBlocks.current = null;
     setOwnName(null);
     setMutedSeries(new Set());
     setChat(null);
@@ -289,7 +327,10 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
             () => {},
           );
         let named = showsNames(viewer, next.attendee?.response ?? null, next.isGroup);
+        // The blocks (plan 3) beside the states, where names show: a block changes what the people list offers.
+        const blocksTicket = blocksRead.current + 1;
         if (named) readStates();
+        if (named) readBlocks(valid);
         if (named && chain) readBringers();
         // The group flag lands when it arrives (GR6 M7): a member then sees names, so what names need is read then. It
         // lands for the account and plan it was read for even when an answer started a run of its own meanwhile, so the
@@ -303,7 +344,9 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
           if (isGroup && !named) {
             named = true;
             readStates();
+            readBlocks(valid);
             if (chain) readBringers();
+            if (afterBlocks.current?.key === flagKey) afterBlocks.current = { ...afterBlocks.current, named: true };
           }
         });
         // Likewise the Chat row (K-S13), on the resbite page only (not the people list): the page never waits for the
@@ -312,6 +355,7 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
         // An invitee who hasn't answered isn't in the chat: the page shows them the announcement sent to everyone invited.
         const waitingAnswer = !chain && !host && next.attendee?.response === "pending";
         if (waitingAnswer) readAnnouncement(next.plan, userId, valid);
+        afterBlocks.current = { key: flagKey, named, invitee: waitingAnswer ? next.plan : null };
         // Likewise the owner's own name for their row: it lands when it arrives; a failure keeps the one known.
         if (next.plan.owner_id === userId)
           void readProfile(userId).then(
@@ -364,6 +408,7 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
           setBroughtLinks(links);
           // Names hidden: no states and no bringers at all, whatever was known before.
           if (!named && ticket === statesRead.current) setConnections(null);
+          if (!named && blocksTicket > blocksRead.current) setBlocks(null);
           if (!named && bringersTicket === bringersRead.current) setBringerNames(null);
           if (!waitingAnswer) dropAnnouncement();
           // With the flag as known now: it may have landed while the rest was read.
@@ -394,6 +439,31 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
     begin,
     focused,
   } = useFocusedRefresh(read, { identity, onBackground: () => setFresh(false) });
+  // After a block or unblock anywhere in the app, while this page is mounted, focused or not (NOTE 2, B3): the blocks
+  // again, the states again where they are read at all (a block ended any connection; after Unblock the server answers
+  // `none`, not `connected`), and for an unanswered invitee the overview again, so the announcement and the inviter go.
+  useEffect(
+    () =>
+      onBlocksChanged(() => {
+        const again = afterBlocks.current;
+        if (!again || !userId || !planId || again.key !== `${userId}:${planId}`) return;
+        const mine = currentIdentity.current;
+        const valid = () => currentIdentity.current === mine;
+        if (again.named) {
+          readBlocks(valid);
+          const ticket = ++statesRead.current;
+          void connectionGateway.statesFor(planId).then(
+            (states) => {
+              if (valid() && ticket === statesRead.current) setConnections(states);
+            },
+            () => {},
+          );
+        }
+        if (again.invitee) readAnnouncement(again.invitee, userId, valid);
+      }),
+    // The handler reads the latest refs; the setters and the gateways don't change.
+    [userId, planId],
+  );
   const plan = preview ? (localPlans.find((p) => p.id === planId) ?? null) : (snapshot?.plan ?? null);
   const admins = snapshot?.admins ?? [];
   const role: Viewer | null = !plan ? null : preview ? "owner" : viewerRole(plan, userId ?? null, admins);
@@ -649,9 +719,11 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
     bringerNames: preview ? null : bringerNames,
     broughtLinks: preview ? NO_LINKS : broughtLinks,
     connections: preview ? null : connections,
+    blocks: preview ? null : blocks,
     owner,
     chat: preview ? null : chat,
-    announcement: preview ? null : announcement,
+    announcement: preview ? null : entry.announcement,
+    inviter: preview ? null : entry.inviter,
     // Without a plan to read nothing loads: the screens say it isn't available instead of waiting.
     busy: busy && Boolean(planId),
     fresh: preview || fresh,

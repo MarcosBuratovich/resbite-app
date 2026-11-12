@@ -1,7 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { ChatNames } from "../services/chat";
-import { SAFETY_COPY as S, invitationActions, showsReportOrBlock, shownName, supportAddress, thanksLines, type ReportTarget } from "./safetyCopy";
+import {
+  SAFETY_COPY as S,
+  blockLines,
+  invitationAccessibilityActions,
+  invitationActionLabel,
+  invitationActions,
+  invitationEntry,
+  showsReportOrBlock,
+  shownName,
+  supportAddress,
+  thanksLines,
+  type ReportTarget,
+} from "./safetyCopy";
 
 const ANA = "0a000000-0000-4000-8000-000000000001";
 const PEDRO = "0a000000-0000-4000-8000-000000000005";
@@ -245,4 +257,71 @@ test("shownName cleans a name for Report and Block, and says Someone when nothin
   assert.equal(shownName(""), "Someone");
   assert.equal(shownName(null), "Someone");
   assert.equal(S.block(shownName("\u202eevE")), "Block evE");
+});
+
+// Task 5: owner question R-Q6's line, the invitation's entry from the overview, and its actions' words.
+test("a host's block confirm adds the line on what a block does not do (R-Q6); every question names the cleaned name", () => {
+  assert.equal(S.hostBlockNote, "This hides their messages from you only. To stop them for everyone, remove them from the resbite.");
+  assert.deepEqual(blockLines("Leo", true, false), [
+    "Block Leo? You won’t see Leo’s messages or announcements, and you won’t be able to remove Leo’s messages. Any connection between you ends, and unblocking won’t bring it back.",
+    "This hides their messages from you only. To stop them for everyone, remove them from the resbite.",
+  ]);
+  assert.deepEqual(blockLines("Leo", false, false), [
+    "Block Leo? You won’t see Leo’s messages, and Leo won’t know. Any connection between you ends, and unblocking won’t bring it back.",
+  ]);
+  assert.deepEqual(blockLines("Ana", false, true), [
+    "Block Ana? You won’t see Ana’s messages or announcements, and Ana won’t know. Any connection between you ends, and unblocking won’t bring it back.",
+  ]);
+  // Ruling SR2: the cleaned name, and Someone when nothing is left.
+  assert.equal(blockLines("\u200bLeo\u200f", false, false)[0].startsWith("Block Leo? You won’t see Leo’s messages,"), true);
+  assert.equal(blockLines("  ", false, false)[0].startsWith("Block Someone? You won’t see Someone’s messages,"), true);
+  assert.equal(S.hostBlockNote.includes("'"), false);
+});
+
+const overview = (over: Partial<{ announcements: Record<string, { id: number; authorId: string | null; body: string }>; inviters: Record<string, string>; names: ChatNames }> = {}) => ({
+  chats: {},
+  announcements: {},
+  inviters: {},
+  names: {},
+  ...over,
+});
+const PLAN = "0c000000-0000-4000-8000-000000000001";
+const NOW = Date.parse("2099-03-01T12:00:00Z");
+const open = { id: PLAN, starts_at: "2099-03-05T15:00:00Z", ends_at: "2099-03-05T17:00:00Z" };
+
+test("invitationEntry: the overview's announcement, worded as the card words it, and the inviter, both named (B1, B4)", () => {
+  const read = overview({
+    announcements: { [PLAN]: { id: 41, authorId: ANA, body: "Doors open at 19:30" } },
+    inviters: { [PLAN]: PEDRO },
+    names,
+  });
+  assert.deepEqual(invitationEntry(open, read, ME, NOW), {
+    announcement: { id: 41, authorId: ANA, name: "Ana", text: "Announcement from Ana · Doors open at 19:30" },
+    inviter: { userId: PEDRO, name: "Pedro" },
+  });
+  // Nothing read yet: nothing to offer from the overview (the owner still comes from the page).
+  assert.deepEqual(invitationEntry(open, null, ME, NOW), { announcement: null, inviter: null });
+  // No announcement and no inviter for this plan.
+  assert.deepEqual(invitationEntry(open, overview({ names }), ME, NOW), { announcement: null, inviter: null });
+  // An inviter the overview can't name keeps their id with no name; invitationActions then leaves them out.
+  assert.deepEqual(invitationEntry(open, overview({ inviters: { [PLAN]: ADA } }), ME, NOW).inviter, { userId: ADA, name: "" });
+  // After the end, the line is gone (pendingCardNote), and so is Report message; the inviter stays.
+  const ended = { ...open, starts_at: "2099-02-01T15:00:00Z", ends_at: "2099-02-01T17:00:00Z" };
+  assert.deepEqual(invitationEntry(ended, read, ME, NOW), { announcement: null, inviter: { userId: PEDRO, name: "Pedro" } });
+  // An announcement with nothing to show is no line.
+  const blank = overview({ announcements: { [PLAN]: { id: 7, authorId: ANA, body: " \u200b " } }, names });
+  assert.equal(invitationEntry(open, blank, ME, NOW).announcement, null);
+});
+
+test("an invitation's actions read as their menu rows, and their accessibility actions name each once", () => {
+  const actions = invitationActions({ announcement: { id: 41, authorId: ANA }, inviterId: PEDRO, owner: { userId: ANA, name: "Ana" }, viewerId: ME, names });
+  assert.deepEqual(actions.map(invitationActionLabel), ["Report message", "Report Ana", "Block Ana", "Report Pedro", "Block Pedro"]);
+  assert.deepEqual(invitationAccessibilityActions(actions), [
+    { name: "reportMessage:41", label: "Report message" },
+    { name: `reportPerson:${ANA}`, label: "Report Ana" },
+    { name: `block:${ANA}`, label: "Block Ana" },
+    { name: `reportPerson:${PEDRO}`, label: "Report Pedro" },
+    { name: `block:${PEDRO}`, label: "Block Pedro" },
+  ]);
+  assert.deepEqual(invitationAccessibilityActions([]), []);
 });

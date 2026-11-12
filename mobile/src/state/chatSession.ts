@@ -5,6 +5,7 @@ import {
   isHostsOnly,
   isNotInChat,
   isTooFast,
+  needsChatRules,
   type ChatGateway,
   type ChatMessage,
   type ChatNames,
@@ -69,6 +70,13 @@ export type ChatState = {
   clockOffset: number;
   /** The last earlier page failed to load: the list offers Try again, and a page that loads clears it (H32 24). */
   earlierFailed: boolean;
+  /**
+   * What waits for the chat rules (plan 3, G-B4(d), I6): the client ids of messages refused 'Rules not accepted', in the
+   * order refused, each once, and an announcement refused so, with its words and audience. Null when nothing waits.
+   */
+  rulesNeeded: { clientIds: string[]; announce: { body: string; audience: ChatAudience } | null } | null;
+  /** Counts the announcements the server took, whichever way they went: the screen clears the words it kept (I6). */
+  announced: number;
 };
 
 /** Nothing open: no account, the preview, a series that isn't one, or before the chat is made. */
@@ -82,6 +90,8 @@ export const IDLE: ChatState = {
   hasEarlier: false,
   clockOffset: 0,
   earlierFailed: false,
+  rulesNeeded: null,
+  announced: 0,
 };
 
 export type ChatTimers = {
@@ -118,6 +128,13 @@ export type ChatSessionDeps = {
   /** False once the session the chat was opened in has changed: nothing more is applied. */
   current?(): boolean;
   onChange(state: ChatState): void;
+  /** Agrees to the chat rules (plan 3: the safety gateway's `accept_chat_rules`). */
+  acceptRules?(): Promise<void>;
+  /**
+   * Hears every block and unblock that went through, from any screen (plan 3, B3); the function it returns stops
+   * listening. Each one replaces the list, focused or not.
+   */
+  blocksChanged?(listener: () => void): () => void;
 };
 
 export type ChatSession = ReturnType<typeof createChatSession>;
@@ -208,6 +225,8 @@ export function createChatSession(deps: ChatSessionDeps) {
   const delivered = new Map<string, number>();
   let lastAnnounce: { body: string; audience: ChatAudience; clientId: string } | null = null;
   let earlier: Promise<void> | null = null;
+  /** An I agree in flight: a second tap waits for the same answer, so the rules are accepted once. */
+  let agreeing: Promise<boolean> | null = null;
 
   const live = () => !disposed && current();
   function serverNow(): number {
@@ -226,6 +245,19 @@ export function createChatSession(deps: ChatSessionDeps) {
   const withoutPending = (clientId: string) => state.pending.filter((p) => p.clientId !== clientId);
   const markPending = (clientId: string, failed: boolean) =>
     state.pending.map((p) => (p.clientId === clientId ? { ...p, failed } : p));
+  /** A message refused for the chat rules waits for I agree, once, in the order refused (I6). */
+  function holdForRules(clientId: string) {
+    const held = state.rulesNeeded ?? { clientIds: [], announce: null };
+    if (held.clientIds.includes(clientId)) return;
+    set({ rulesNeeded: { ...held, clientIds: [...held.clientIds, clientId] } });
+  }
+  /** A message taken off the phone no longer waits; with nothing left, the wait ends. */
+  function unholdForRules(clientId: string) {
+    const held = state.rulesNeeded;
+    if (!held || !held.clientIds.includes(clientId)) return;
+    const clientIds = held.clientIds.filter((id) => id !== clientId);
+    set({ rulesNeeded: clientIds.length === 0 && held.announce === null ? null : { ...held, clientIds } });
+  }
   const askSummary = () => void (summaryAsked += 1);
   const summaryOwed = () => summaryAsked > summaryHad;
 
@@ -422,7 +454,7 @@ export function createChatSession(deps: ChatSessionDeps) {
     floor = null;
     readError = CHAT_COPY.notInChat;
     actionError = null;
-    set({ summary: null, names: {}, messages: [], pending: [], hasEarlier: false, busy: false, earlierFailed: false });
+    set({ summary: null, names: {}, messages: [], pending: [], hasEarlier: false, busy: false, earlierFailed: false, rulesNeeded: null });
   }
 
   /** Pending messages a read has shown, or that landed below the loaded rows, leave `pending`. */
@@ -709,6 +741,11 @@ export function createChatSession(deps: ChatSessionDeps) {
       void queue.update(scope, clientId, { failed: true }).catch(noop);
       if (!live() || shut) return false;
       set({ pending: markPending(clientId, true) });
+      // The chat rules not agreed yet: the rules sheet, not an error line; it waits for I agree (I6).
+      if (needsChatRules(e)) {
+        holdForRules(clientId);
+        return false;
+      }
       if (isChatClosed(e)) readClose();
       failed(e, "action");
       return false;
@@ -769,6 +806,92 @@ export function createChatSession(deps: ChatSessionDeps) {
     return earlier;
   }
 
+  /** The newest page and the summary again, replacing the list, earlier pages and all (H25). */
+  function replaceList(): Promise<void> {
+    if (disposed) return Promise.resolve();
+    wantReplace = true;
+    return reader.trigger();
+  }
+
+  // A block or unblock anywhere changes what this person may see under every loaded row: the list is replaced, focused
+  // or not, while the session lives (B3, Decision 17).
+  const stopBlocks = deps.blocksChanged?.(() => {
+    if (live()) void replaceList();
+  }) ?? noop;
+
+  /** A host's announcement, sent with the client id kept for the same words and audience (H32). */
+  async function announceOnce(text: string, audience: ChatAudience): Promise<boolean> {
+    const body = wellFormedText(text);
+    if (!live() || shut || !hasVisibleText(body)) return false;
+    actionError = null;
+    set({});
+    const again = lastAnnounce && lastAnnounce.body === body && lastAnnounce.audience === audience;
+    const clientId = again && lastAnnounce ? lastAnnounce.clientId : newId();
+    lastAnnounce = { body, audience, clientId };
+    try {
+      await gateway.announce(series, body, audience, clientId);
+      if (lastAnnounce?.clientId === clientId) lastAnnounce = null;
+      if (!live() || shut) return true;
+      set({ announced: state.announced + 1 });
+      rereadSummary();
+      return true;
+    } catch (e) {
+      if (!live()) return false;
+      // The chat rules not agreed yet: its words and audience wait for I agree, and its client id stays (I6).
+      if (needsChatRules(e)) {
+        set({ rulesNeeded: { clientIds: state.rulesNeeded?.clientIds ?? [], announce: { body, audience } } });
+        return false;
+      }
+      if (isChatClosed(e)) readClose();
+      // The announcement limit has its own words (H32 Q35).
+      failed(e, "action", isTooFast(e) ? CHAT_COPY.announceTooFast : undefined);
+      return false;
+    }
+  }
+
+  /**
+   * I agree (G-B4(d), I6): the rules are accepted once; then each message that waited is sent once with its own client
+   * id, in the order of the list, and an announcement that waited with its words and audience (its client id kept).
+   * False when the acceptance failed: nothing is sent, and what waits still waits.
+   */
+  async function agree(): Promise<boolean> {
+    if (!live() || !deps.acceptRules) return false;
+    try {
+      await deps.acceptRules();
+    } catch {
+      return false;
+    }
+    if (!live()) return false;
+    const held = state.rulesNeeded;
+    set({ summary: state.summary ? { ...state.summary, rulesAccepted: true } : state.summary, rulesNeeded: null });
+    if (held) {
+      const waiting = state.pending.filter((p) => held.clientIds.includes(p.clientId)).map((p) => p.clientId);
+      for (const clientId of waiting) void retryOne(clientId);
+      if (held.announce) void announceOnce(held.announce.body, held.announce.audience);
+    }
+    return true;
+  }
+
+  /** Sends again, with its own client id, a failed message or one left behind (H26 D4). */
+  async function retryOne(clientId: string): Promise<boolean> {
+    const item = state.pending.find((p) => p.clientId === clientId);
+    if (!live() || shut || !item || sending.has(clientId) || delivered.has(clientId) || discarded.has(clientId))
+      return false;
+    if (!item.failed && staleUnsent([item], timers.now()).length === 0) return false;
+    actionError = null;
+    const again = { ...item, failed: false };
+    if (unsaved.has(clientId)) {
+      // Sign-out began: nothing more is sent. A queue still full or failing doesn't stop a tap: it goes from the
+      // screen's copy (H41 m3).
+      if ((await save(again)) === "session") {
+        set({});
+        return false;
+      }
+    } else if (item.failed) void queue.update(scope, clientId, { failed: false }).catch(noop);
+    set({ pending: state.pending.map((p) => (p.clientId === clientId ? again : p)) });
+    return deliver(again);
+  }
+
   return {
     state: () => state,
     /** The server's time by this phone, never going back: what the closing countdown counts against (H29). */
@@ -824,6 +947,7 @@ export function createChatSession(deps: ChatSessionDeps) {
       looking = false;
       dropChannel();
       stopTimers();
+      stopBlocks();
     },
     /** "Try again": the summary, the newest page and a since, then what was left behind. */
     refresh(): Promise<void> {
@@ -836,11 +960,7 @@ export function createChatSession(deps: ChatSessionDeps) {
      * Reads the newest page and the summary again and replaces the list, earlier pages and all (H25). Plan 3's block
      * and unblock call it, since what a person may see has changed under every loaded row.
      */
-    replace(): Promise<void> {
-      if (disposed) return Promise.resolve();
-      wantReplace = true;
-      return reader.trigger();
-    },
+    replace: replaceList,
     loadEarlier,
     /** Earlier pages of 100 until the oldest loaded id is at or below `id`, for the pinned card (K-S12). */
     async loadUntil(id: number): Promise<void> {
@@ -881,25 +1001,7 @@ export function createChatSession(deps: ChatSessionDeps) {
       }
       return deliver(item);
     },
-    /** Sends again, with its own client id, a failed message or one left behind (H26 D4). */
-    async retry(clientId: string): Promise<boolean> {
-      const item = state.pending.find((p) => p.clientId === clientId);
-      if (!live() || shut || !item || sending.has(clientId) || delivered.has(clientId) || discarded.has(clientId))
-        return false;
-      if (!item.failed && staleUnsent([item], timers.now()).length === 0) return false;
-      actionError = null;
-      const again = { ...item, failed: false };
-      if (unsaved.has(clientId)) {
-        // Sign-out began: nothing more is sent. A queue still full or failing doesn't stop a tap: it goes from the
-        // screen's copy (H41 m3).
-        if ((await save(again)) === "session") {
-          set({});
-          return false;
-        }
-      } else if (item.failed) void queue.update(scope, clientId, { failed: false }).catch(noop);
-      set({ pending: state.pending.map((p) => (p.clientId === clientId ? again : p)) });
-      return deliver(again);
-    },
+    retry: retryOne,
     /**
      * Takes an unsent message off this phone, for good: a send or a resend still in flight checks first (H26 D5). One
      * already on its way to the server is settled by its answer: refused, it goes; taken, its row shows.
@@ -908,33 +1010,28 @@ export function createChatSession(deps: ChatSessionDeps) {
       discarded.add(clientId);
       unsaved.delete(clientId);
       set({ pending: withoutPending(clientId) });
+      unholdForRules(clientId);
       await queue.remove(scope, clientId).catch(noop);
     },
     /**
      * A host's announcement. A failure keeps its client id for the same text and audience, so sending it again can't
      * make two. Its row and the pinned card come by the read it asks for.
      */
-    async announce(text: string, audience: ChatAudience): Promise<boolean> {
-      const body = wellFormedText(text);
-      if (!live() || shut || !hasVisibleText(body)) return false;
-      actionError = null;
-      set({});
-      const again = lastAnnounce && lastAnnounce.body === body && lastAnnounce.audience === audience;
-      const clientId = again && lastAnnounce ? lastAnnounce.clientId : newId();
-      lastAnnounce = { body, audience, clientId };
-      try {
-        await gateway.announce(series, body, audience, clientId);
-        if (lastAnnounce?.clientId === clientId) lastAnnounce = null;
-        if (!live() || shut) return true;
-        rereadSummary();
-        return true;
-      } catch (e) {
-        if (!live()) return false;
-        if (isChatClosed(e)) readClose();
-        // The announcement limit has its own words (H32 Q35).
-        failed(e, "action", isTooFast(e) ? CHAT_COPY.announceTooFast : undefined);
-        return false;
-      }
+    announce: announceOnce,
+    /**
+     * I agree: the rules once, then what waited for them, each once (I6). True once the rules are accepted; false (nothing
+     * sent, what waits still waits) when the acceptance failed. A second tap while one runs gets the same answer.
+     */
+    agreeRules(): Promise<boolean> {
+      if (!agreeing)
+        agreeing = agree().finally(() => {
+          agreeing = null;
+        });
+      return agreeing;
+    },
+    /** Cancel on the rules sheet: what waited stays not sent ("Not sent. Tap to retry."), and nothing goes by itself. */
+    dismissRules() {
+      if (state.rulesNeeded !== null) set({ rulesNeeded: null });
     },
     deleteOwn: (id: number) => takeDown(id, "deleted"),
     remove: (id: number) => takeDown(id, "removed"),

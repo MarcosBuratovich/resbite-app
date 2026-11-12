@@ -243,6 +243,8 @@ async function fixture({ user = host, width = 390, foldStatus = 200 } = {}) {
     // and the event page's people know no connection states.
     if (path === "/rest/v1/rpc/my_connections") return reply({ requests: [], connected: [] });
     if (path === "/rest/v1/rpc/plan_connection_states") return reply({});
+    // Chat plan 3's blocks, read beside the states: nobody blocked (verify-event and verify-chat cover them).
+    if (path === "/rest/v1/rpc/my_blocks") return reply([]);
     if (path === "/rest/v1/rpc/plan_link") return reply("AbCdEfGhIjKlMnOpQrStUv");
     // Open-link approval: nobody has answered the event link (the host's Waiting for you and My resbites' requests
     // are empty; verify-event and verify-open-link-app cover them).

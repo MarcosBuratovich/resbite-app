@@ -18,15 +18,17 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
-import { ArrowLeft, ArrowUp, Bell, BellOff, ChevronRight, Ellipsis, LogOut, Trash2, UserPlus, Users } from "lucide-react-native";
+import { ArrowLeft, ArrowUp, Ban, Bell, BellOff, ChevronRight, Ellipsis, Flag, LogOut, ShieldAlert, Trash2, UserPlus, UserRound, Users } from "lucide-react-native";
 import { Button, Copy, ErrorNote, TextAction, s, useLargeText, useReduceMotion } from "../src/design/ui";
 import { Chip, IconButton, focusHeading } from "../src/design/kit";
 import { GrabberSheet } from "../src/design/GrabberSheet";
 import { MenuRow } from "../src/design/MenuRow";
+import { BlockQuestion, BlockedLine, ReportSheet } from "../src/design/ReportSheet";
+import { ChatRulesSheet } from "../src/design/ChatRulesSheet";
 import { NotificationAsk } from "../src/design/NotificationAsk";
 import { colors as c, depth, fonts, space } from "../src/design/tokens";
 import { CHAT_COPY, type ChatAudience } from "../src/domain/chatCopy";
-import { SAFETY_COPY } from "../src/domain/safetyCopy";
+import { SAFETY_COPY, showsReportOrBlock, shownName } from "../src/domain/safetyCopy";
 import {
   audienceOptions,
   canAnnounce,
@@ -48,9 +50,12 @@ import {
   peopleLine,
   phoneZone,
 } from "../src/domain/chatRules";
-import { EVENT_COPY } from "../src/domain/eventPage";
+import { EVENT_COPY, chatPeople, chatPersonFor, type ChatPerson } from "../src/domain/eventPage";
 import { NOTIFICATION_ASK } from "../src/domain/notifications";
 import type { ChatSummary } from "../src/services/chat";
+import { safetyErrorMessage, safetyGateway } from "../src/services/safety";
+import { UNNAMED_GUEST } from "../src/services/rsvp";
+import { useEvent } from "../src/state/useEvent";
 import { useApp } from "../src/state/AppState";
 import { useChat, type Chat } from "../src/state/useChat";
 import { shownMessages, withEndedLine, withPending } from "../src/state/chatModel";
@@ -144,7 +149,13 @@ function useMounted() {
   return mounted;
 }
 
-type ActionSheet = { key: string; view: "menu" | "delete" | "remove"; direct: boolean };
+type ActionSheet = { key: string; view: "menu" | "delete" | "remove" | "report"; direct: boolean };
+
+/**
+ * Plan 3's Report or block, in the menu's sheet (Decision 3, G-N6): the chat's people, or one person's sheet (Report,
+ * then Block or Unblock), their report, the block confirm, or its result line. An author's name opens their sheet there.
+ */
+type Safety = { kind: "people" } | { kind: "person"; userId: string; step: "actions" | "report" | "block" | "blocked" };
 
 /**
  * The chat (CH-02 to CH-08): /chat?series=<series id>. The header with the date and the going count, the pinned
@@ -182,6 +193,24 @@ export default function ChatScreen() {
   useGroupScreen(focusedSeries);
   // Refused after a leave whose answer was lost: the leave went through, so it finishes on the phone (ruling GR6 M5).
   const { session: viewer, preview: previewing, captureSession } = useApp();
+  // The chat's people come from the current occurrence's own reads (G-N6): its guests, the connection states and the
+  // blocks, read again after any block or unblock (NOTE 2). The people list's read: no Chat row of its own to read.
+  const event = useEvent(summary && !out ? summary.planId || undefined : undefined, { chain: true });
+  const viewerId = viewer?.user.id ?? null;
+  const people = useMemo(
+    () =>
+      chatPeople({
+        guests: event.guests,
+        owner: event.owner,
+        admins: event.admins,
+        userId: viewerId,
+        blocks: event.blocks,
+        // On a group every member is in its chat, answered or not (plan 2).
+        isGroup: summary?.isGroup === true,
+        unnamed: UNNAMED_GUEST,
+      }),
+    [event.guests, event.owner, event.admins, event.blocks, viewerId, summary?.isGroup],
+  );
   const refused = valid && !summary && chat.error === CHAT_COPY.notInChat;
   useEffect(() => {
     if (refused && focusedSeries)
@@ -212,6 +241,8 @@ export default function ChatScreen() {
           keyboard={keyboard}
           menuOpen={menuOpen}
           onMenu={setMenuOpen}
+          people={people}
+          blocks={event.blocks}
         />
       )}
       <NotificationAsk ask={ask} body={NOTIFICATION_ASK.chatBody} />
@@ -287,6 +318,8 @@ function Conversation({
   keyboard,
   menuOpen,
   onMenu,
+  people,
+  blocks,
 }: {
   /** The route's series, a valid one (the screen checked it): Leave group names it. */
   series: string;
@@ -296,6 +329,10 @@ function Conversation({
   keyboard: boolean;
   menuOpen: boolean;
   onMenu: (open: boolean) => void;
+  /** The chat's people but the reader (plan 3, G-N6), for Report or block and an author's sheet. */
+  people: ChatPerson[];
+  /** The people the reader blocked; null while unknown (N13). */
+  blocks: ReadonlySet<string> | null;
 }) {
   const { session, preview, captureSession } = useApp();
   const viewerId = session?.user.id ?? "";
@@ -333,25 +370,30 @@ function Conversation({
   const leaveQuestion = useRef<Text | null>(null);
   const leaveRow = useRef<View | null>(null);
   const leftQuestion = useRef(false);
+  // Plan 3: Report or block in the menu's sheet, and an Unblock running from it.
+  const [safety, setSafety] = useState<Safety | null>(null);
+  const [unblocking, setUnblocking] = useState(false);
+  const [safetyError, setSafetyError] = useState<string | null>(null);
+  // The chat rules (G-B4(d), I6): asked before a first message, or after a refusal (`chat.rulesNeeded`).
+  const [rulesAsk, setRulesAsk] = useState(false);
+  const [rulesError, setRulesError] = useState<string | null>(null);
 
   // The list: rows (a deleted system line never shows, Decision 6), the ended line and the unsent messages, worded,
   // oldest first; reversed for the inverted list.
   const rows = useMemo(
     () =>
-      withoutReport(
-        chatFeed(withEndedLine(withPending(shownMessages(chat.messages), chat.pending), summary, chat.hasEarlier, now), {
-          names: chat.names,
-          viewerId,
-          now,
-          zone,
-          title: summary.title,
-          host: summary.host,
-          closed: !open,
-          group: summary.isGroup,
-          day,
-          planId: summary.planId,
-        }),
-      ),
+      chatFeed(withEndedLine(withPending(shownMessages(chat.messages), chat.pending), summary, chat.hasEarlier, now), {
+        names: chat.names,
+        viewerId,
+        now,
+        zone,
+        title: summary.title,
+        host: summary.host,
+        closed: !open,
+        group: summary.isGroup,
+        day,
+        planId: summary.planId,
+      }),
     [chat.messages, chat.pending, chat.names, chat.hasEarlier, summary, now, viewerId, zone, open, day],
   );
   const data = useMemo(() => [...rows].reverse(), [rows]);
@@ -483,7 +525,7 @@ function Conversation({
   }, []);
   const onAction = useCallback(
     (row: FeedRow, name: string) => {
-      if (name === "delete" || name === "remove") return openActions(row.key, name);
+      if (name === "delete" || name === "remove" || name === "report") return openActions(row.key, name);
       if (name === "deleteUnsent" && row.type === "pending") return void chat.discard(row.clientId);
       if (row.type === "bubble" || row.type === "announcement") {
         const href = row.links.find((l) => l.name === name)?.href;
@@ -491,6 +533,16 @@ function Conversation({
       }
     },
     [askLink, chat.discard, openActions],
+  );
+
+  // A tap on an author's name opens their sheet in the menu's sheet (G-N6), over the chat, which stays on screen.
+  const openPerson = useCallback(
+    (userId: string) => {
+      setSafetyError(null);
+      setSafety({ kind: "person", userId, step: "actions" });
+      onMenu(true);
+    },
+    [onMenu],
   );
 
   const renderItem: ListRenderItem<FeedRow> = useCallback(
@@ -505,9 +557,10 @@ function Conversation({
         onAction={onAction}
         onRetry={chat.retry}
         onReread={chat.replace}
+        onPerson={openPerson}
       />
     ),
-    [summary.planId, largeText, askLink, openActions, onAction, chat.retry, chat.replace, onRowLayout],
+    [summary.planId, largeText, askLink, openActions, onAction, chat.retry, chat.replace, onRowLayout, openPerson],
   );
 
   // Earlier pages: a spinner only while one loads; a failed one offers Try again (H31, H32 24).
@@ -539,6 +592,18 @@ function Conversation({
     setTimeout(() => (againOpen.current = false), 1000);
   };
   const send = () => {
+    const body = draftRef.current;
+    if (!hasVisibleText(body)) return;
+    // Not agreed to the chat rules yet: the rules first, and nothing is called (G-B4(d)).
+    if (!summary.rulesAccepted) {
+      setRulesError(null);
+      setRulesAsk(true);
+      return;
+    }
+    sendNow();
+  };
+  /** Sends what the field holds: the bubble shows at once, in `pending`, at the newest end. */
+  const sendNow = () => {
     const body = draftRef.current;
     if (!hasVisibleText(body)) return;
     // A send goes to the newest: a pinned jump still under way stops here (H35 I1).
@@ -584,11 +649,13 @@ function Conversation({
     setWorking(false);
     if (done) onMenu(false);
   };
-  // The menu opens on its rows, never on a question or a refusal left from before.
+  // The menu opens on its rows, never on a question or a refusal left from before (Report or block's included).
   useEffect(() => {
     if (menuOpen) return;
     setMenuView("menu");
     setLeaveError(null);
+    setSafety(null);
+    setSafetyError(null);
   }, [menuOpen]);
   // The question takes focus; after Keep, the Leave group row does (H32 Q53).
   useEffect(() => {
@@ -619,6 +686,51 @@ function Conversation({
     else if (result && menuShown.current) setLeaveError(result.error);
   };
 
+  // Plan 3: the person a sheet is about, as the chat's people now have them (an Unblock or a block read again shows at
+  // once); an author no longer on the occurrence gets Report and Block only (G-N6).
+  const person = safety?.kind === "person" ? chatPersonFor(people, safety.userId, chat.names, blocks, viewerId) : null;
+  const unblock = async (who: ChatPerson) => {
+    if (unblocking) return;
+    setUnblocking(true);
+    setSafetyError(null);
+    try {
+      // Through the gateway, so this chat and every other replace their lists (B3).
+      await safetyGateway.unblock(who.userId);
+      if (mounted.current) onMenu(false);
+    } catch (e) {
+      if (mounted.current) setSafetyError(safetyErrorMessage(e));
+    } finally {
+      if (mounted.current) setUnblocking(false);
+    }
+  };
+  // The rules sheet over the chat: before a first message, or for messages the server held for them. An announcement
+  // held for them is asked in the Announce sheet, which it came from (I6).
+  const waiting = chat.rulesNeeded;
+  const heldMessages = waiting !== null && waiting.announce === null && waiting.clientIds.length > 0 ? waiting.clientIds.length : 0;
+  const rulesShown = rulesAsk || heldMessages > 0;
+  const agree = async () => {
+    const asked = rulesAsk;
+    if (!(await chat.agreeRules())) {
+      if (mounted.current) setRulesError(SAFETY_COPY.rulesNotSaved);
+      return;
+    }
+    if (!mounted.current) return;
+    setRulesError(null);
+    setRulesAsk(false);
+    // Before a first message: the words in the field go now, with a client id the session makes.
+    if (asked) sendNow();
+  };
+  const cancelRules = () => {
+    setRulesAsk(false);
+    setRulesError(null);
+    if (heldMessages > 0) chat.dismissRules();
+  };
+  // An announcement held for the rules brings its sheet back, if it was closed meanwhile (I6).
+  const heldAnnouncement = waiting?.announce ?? null;
+  useEffect(() => {
+    if (heldAnnouncement) setAnnouncing(true);
+  }, [heldAnnouncement]);
+
   const said = !nothingSaid(rows);
   const emptyBlock = said ? null : <EmptyState words={emptyState(summary)} open={open} planId={summary.planId} />;
   return (
@@ -640,7 +752,7 @@ function Conversation({
         ) : null}
         {closing ? <Text style={styles.closing}>{closing}</Text> : null}
         {/* A sheet that is open says it there: one alert, not two. */}
-        {shownError && showing && !menuOpen && !sheet && !announcing ? (
+        {shownError && showing && !menuOpen && !sheet && !announcing && !rulesShown ? (
           <View style={styles.errorBand}>
             <ErrorNote message={shownError} />
           </View>
@@ -700,7 +812,83 @@ function Conversation({
           dismissError();
         }}
       >
-        {menuView === "leave" ? (
+        {safety?.kind === "people" ? (
+          <View>
+            <Text accessibilityRole="header" style={styles.sheetHeading}>
+              {SAFETY_COPY.reportOrBlock}
+            </Text>
+            {people.map((p) => (
+              <MenuRow
+                key={p.userId}
+                title={shownName(p.name)}
+                hint={p.blocked ? SAFETY_COPY.blocked : undefined}
+                label={p.blocked ? `${shownName(p.name)}, ${SAFETY_COPY.blocked}` : shownName(p.name)}
+                icon={UserRound}
+                onPress={() => {
+                  setSafetyError(null);
+                  setSafety({ kind: "person", userId: p.userId, step: "actions" });
+                }}
+              />
+            ))}
+          </View>
+        ) : safety?.kind === "person" && person ? (
+          <View style={styles.question}>
+            {safety.step !== "report" ? (
+              <Text accessibilityRole={safety.step === "actions" ? "header" : undefined} style={styles.sheetHeading}>
+                {shownName(person.name)}
+              </Text>
+            ) : null}
+            {safety.step === "report" ? (
+              <ReportSheet
+                target={{ kind: "user", userId: person.userId, series: summary.seriesId, name: person.name }}
+                onDone={() => onMenu(false)}
+              />
+            ) : safety.step === "block" ? (
+              <BlockQuestion
+                userId={person.userId}
+                name={person.name}
+                youHost={summary.host}
+                theyHost={person.theyHost}
+                onBlocked={() => setSafety({ ...safety, step: "blocked" })}
+                onKeep={() => setSafety({ ...safety, step: "actions" })}
+              />
+            ) : safety.step === "blocked" ? (
+              <BlockedLine />
+            ) : (
+              <View>
+                {person.actions.map((action) =>
+                  action === "report" ? (
+                    <MenuRow
+                      key={action}
+                      title={SAFETY_COPY.reportPerson(shownName(person.name))}
+                      icon={Flag}
+                      disabled={unblocking}
+                      onPress={() => setSafety({ ...safety, step: "report" })}
+                    />
+                  ) : action === "block" ? (
+                    <MenuRow
+                      key={action}
+                      title={SAFETY_COPY.block(shownName(person.name))}
+                      icon={Ban}
+                      destructive
+                      disabled={unblocking}
+                      onPress={() => setSafety({ ...safety, step: "block" })}
+                    />
+                  ) : (
+                    <MenuRow
+                      key={action}
+                      title={SAFETY_COPY.unblock(shownName(person.name))}
+                      icon={Ban}
+                      busy={unblocking}
+                      onPress={() => void unblock(person)}
+                    />
+                  ),
+                )}
+                <ErrorNote message={safetyError} />
+              </View>
+            )}
+          </View>
+        ) : menuView === "leave" ? (
           <View style={styles.question}>
             <Copy ref={leaveQuestion} accessibilityRole="header" style={styles.questionText}>
               {CHAT_COPY.leaveQuestion(summary.title, groupDay(summary))}
@@ -737,6 +925,18 @@ function Conversation({
                 busy={working}
                 onPress={() => void mute()}
               />
+              {/* Plan 3 (Decision 3, NOTE 3-a): after Mute, before Leave group; hidden with nobody else here (G-N7). */}
+              {showsReportOrBlock(people.length) ? (
+                <MenuRow
+                  title={SAFETY_COPY.reportOrBlock}
+                  icon={ShieldAlert}
+                  disabled={working}
+                  onPress={() => {
+                    dismissError();
+                    setSafety({ kind: "people" });
+                  }}
+                />
+              ) : null}
               {/* A group's member who isn't a host, while its chat is open (G-N13), in red after Mute. */}
               {canLeave(summary) ? (
                 <MenuRow
@@ -760,21 +960,25 @@ function Conversation({
 
       <GrabberSheet visible={sheet !== null && target !== undefined} label={target && "label" in target ? target.label : undefined} onClose={closeSheet}>
         {sheet && target ? (
-          sheet.view === "menu" ? (
+          sheet.view === "report" && (target.type === "bubble" || target.type === "announcement") ? (
+            // Someone else's message or announcement, sent (G-N12): its report, in place.
+            <ReportSheet target={{ kind: "message", id: target.message.id }} onDone={() => setSheet(null)} />
+          ) : sheet.view === "menu" ? (
             <View>
               {targetActions.map((action, i) => (
                 <MenuRow
                   key={action}
                   ref={i === 0 ? firstMenuRow : undefined}
                   title={ACTION_LABEL[action]}
-                  icon={Trash2}
-                  destructive
+                  // Report isn't a take-down: no bin, not red (G-N12).
+                  icon={action === "report" ? Flag : Trash2}
+                  destructive={action !== "report"}
                   disabled={working}
                   onPress={() => {
                     if (action === "deleteUnsent" && target.type === "pending") {
                       setSheet(null);
                       void chat.discard(target.clientId);
-                    } else if (action === "delete" || action === "remove") setSheet({ ...sheet, view: action });
+                    } else if (action === "delete" || action === "remove" || action === "report") setSheet({ ...sheet, view: action });
                   }}
                 />
               ))}
@@ -822,6 +1026,18 @@ function Conversation({
         }}
         onSent={() => setAnnouncing(false)}
       />
+
+      {/* The chat rules over the chat (G-B4(d), I6): before a first message, or for messages held for them. */}
+      <GrabberSheet visible={rulesShown} label={SAFETY_COPY.rulesTitle} onClose={cancelRules}>
+        {rulesShown ? (
+          <ChatRulesSheet
+            held={heldMessages > 0 ? SAFETY_COPY.rulesHeldMessage(heldMessages) : null}
+            error={rulesError}
+            onAgree={agree}
+            onCancel={cancelRules}
+          />
+        ) : null}
+      </GrabberSheet>
 
       <GrabberSheet
         visible={link !== null}
@@ -890,16 +1106,9 @@ type RowProps = {
   onRetry: (clientId: string) => void;
   /** Reads the chat again: a "Next one" line with no current occurrence to open (Decision 14). */
   onReread: () => void;
+  /** A tap on an author's name: their sheet (plan 3, G-N6). */
+  onPerson: (userId: string) => void;
 };
-
-/**
- * Report message (plan 3) opens the report sheet, which this screen doesn't have yet: until it does, no row offers it,
- * and the long-press sheet and the screen reader's actions are as before.
- */
-const withoutReport = (rows: FeedRow[]): FeedRow[] =>
-  rows.map((row) =>
-    "actions" in row && row.actions.includes("report") ? { ...row, actions: row.actions.filter((a) => a !== "report") } : row,
-  );
 
 const actionsOf = (actions: MessageAction[], links: FeedLink[] = []) => [
   ...actions.map((name) => ({ name, label: ACTION_LABEL[name] })),
@@ -911,7 +1120,7 @@ const actionsOf = (actions: MessageAction[], links: FeedLink[] = []) => [
  * One row of the feed: a day, Resbite's line, a change chip, a group's "Next one", the ended line, a bubble, an
  * announcement, or an unsent one.
  */
-function RowBody({ row, planId, largeText, onLink, onActions, onAction, onRetry, onReread }: RowProps) {
+function RowBody({ row, planId, largeText, onLink, onActions, onAction, onRetry, onReread, onPerson }: RowProps) {
   switch (row.type) {
     case "day":
       // Each message's label carries its day, so the separator is for the eye only (K-S14).
@@ -1019,9 +1228,23 @@ function RowBody({ row, planId, largeText, onLink, onActions, onAction, onRetry,
       return (
         <View style={[styles.message, row.own && styles.mine, largeText && styles.messageWide]}>
           {row.showAuthor && row.author ? (
-            <Text aria-hidden style={styles.who}>
-              {row.author}
-            </Text>
+            row.message.authorId ? (
+              // The name opens the person's sheet: Report, and Block or Unblock (plan 3, G-N6). The bubble's label says
+              // the name too, so the screen reader meets it once as text and once as this button.
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={row.author}
+                onPress={() => onPerson(row.message.authorId!)}
+                hitSlop={{ top: 10, bottom: 4, left: 10, right: 10 }}
+                style={({ pressed }) => [styles.whoButton, pressed && styles.pressed]}
+              >
+                <Text style={styles.who}>{row.author}</Text>
+              </Pressable>
+            ) : (
+              <Text aria-hidden style={styles.who}>
+                {row.author}
+              </Text>
+            )
           ) : null}
           <Pressable {...press} style={({ pressed }) => [styles.bubble, row.own && styles.bubbleMine, pressed && styles.pressed]}>
             {body}
@@ -1212,7 +1435,23 @@ function AnnounceSheet({
   const [sending, setSending] = useState(false);
   const mounted = useMounted();
   const largeText = useLargeText();
-  const send = async () => {
+  // The chat rules, in this sheet's place (G-B4(d), I6): before a first announcement, or after the server held one for
+  // them, keeping its words and audience; Cancel brings the announcement back.
+  const [rulesFirst, setRulesFirst] = useState(false);
+  const [rulesError, setRulesError] = useState<string | null>(null);
+  const heldAnnounce = chat.rulesNeeded?.announce ?? null;
+  const showRules = rulesFirst || heldAnnounce !== null;
+  // An announcement the session sent after I agree took its words with it: the next opening starts empty (I6).
+  const announced = useRef(chat.announced);
+  useEffect(() => {
+    if (chat.announced === announced.current) return;
+    announced.current = chat.announced;
+    onBody("");
+    setCut(false);
+    setAudience(defaultAudience(summary));
+    // Only when one went through.
+  }, [chat.announced]);
+  const sendNow = async () => {
     setSending(true);
     const done = await chat.announce(body, audience);
     if (!mounted.current) return;
@@ -1224,9 +1463,54 @@ function AnnounceSheet({
       onSent();
     }
   };
+  const send = async () => {
+    // Not agreed to the chat rules yet: the rules first, and nothing is called.
+    if (!summary.rulesAccepted) {
+      setRulesError(null);
+      setRulesFirst(true);
+      return;
+    }
+    await sendNow();
+  };
+  const agree = async () => {
+    const first = rulesFirst;
+    if (!(await chat.agreeRules())) {
+      if (mounted.current) setRulesError(SAFETY_COPY.rulesNotSaved);
+      return;
+    }
+    if (!mounted.current) return;
+    setRulesError(null);
+    setRulesFirst(false);
+    // Before a first announcement it goes now; one the server held, the session sends with its own client id.
+    if (first) await sendNow();
+    else onSent();
+  };
+  const cancelRules = () => {
+    setRulesFirst(false);
+    setRulesError(null);
+    if (heldAnnounce) chat.dismissRules();
+  };
   // A group's: everyone in the group first, then going this week; a one-off's: Going, then Everyone invited (G-S7).
   const options = audienceOptions(summary);
   const placeholder = summary.isGroup ? CHAT_COPY.announcePlaceholderGroup : CHAT_COPY.announcePlaceholder;
+  if (showRules)
+    return (
+      <GrabberSheet
+        visible={visible}
+        label={SAFETY_COPY.rulesTitle}
+        onClose={() => {
+          cancelRules();
+          onCancel();
+        }}
+      >
+        <ChatRulesSheet
+          held={heldAnnounce ? SAFETY_COPY.rulesHeldAnnouncement : null}
+          error={rulesError}
+          onAgree={agree}
+          onCancel={cancelRules}
+        />
+      </GrabberSheet>
+    );
   return (
     <GrabberSheet visible={visible} title={CHAT_COPY.newAnnouncement} onClose={onCancel}>
       <Text style={styles.sheetLabel}>{CHAT_COPY.whoGetsIt}</Text>
@@ -1367,6 +1651,8 @@ const styles = StyleSheet.create({
   messageWide: { maxWidth: "92%" },
   mine: { alignSelf: "flex-end", alignItems: "flex-end" },
   who: { fontFamily: fonts.medium, fontSize: 11, color: c.muted, marginLeft: 10 },
+  whoButton: { alignSelf: "flex-start" },
+  sheetHeading: { fontFamily: fonts.display, fontSize: 22, color: c.ink, marginBottom: space.s },
   bubble: {
     minHeight: 44,
     justifyContent: "center",

@@ -1,6 +1,7 @@
 import React from "react";
 import {
   AccessibilityInfo,
+  type AccessibilityActionEvent,
   ActivityIndicator,
   Image,
   KeyboardAvoidingView,
@@ -311,6 +312,8 @@ export function CoverArt({ picture, uri }: { picture: EventPicture; uri?: string
  * - `note` (Task 8): a line under the title, such as an invitation's latest announcement; a pressable card says it at the
  *   end of its label.
  * - `dot` (CH-P9): a neutral dot beside the title for unread chat messages; the label ends ", unread messages".
+ * - `onLongPress` with `accessibilityActions` and `onAccessibilityAction` (chat plan 3, S7): a pressable card's other
+ *   actions, held or chosen from the screen reader's actions, such as an invitation's Report and Block.
  */
 export function CoverCard({
   picture,
@@ -332,6 +335,9 @@ export function CoverCard({
   pictureLabel,
   note,
   dot = false,
+  onLongPress,
+  accessibilityActions,
+  onAccessibilityAction,
 }: {
   picture: EventPicture;
   uri?: string | null;
@@ -353,6 +359,9 @@ export function CoverCard({
   pictureLabel?: string;
   note?: string | null;
   dot?: boolean;
+  onLongPress?: () => void;
+  accessibilityActions?: ReadonlyArray<{ name: string; label: string }>;
+  onAccessibilityAction?: (name: string) => void;
 }) {
   const largeText = useLargeText();
   const spokenLabel = label === undefined ? undefined : [label, note?.trim()].filter(Boolean).join(", ") + (dot ? `, ${CHAT_COPY.unreadMessages}` : "");
@@ -470,6 +479,11 @@ export function CoverCard({
         accessibilityRole="button"
         accessibilityLabel={spokenLabel}
         onPress={onPress}
+        onLongPress={onLongPress}
+        accessibilityActions={accessibilityActions && accessibilityActions.length ? accessibilityActions : undefined}
+        onAccessibilityAction={
+          onAccessibilityAction ? (e: AccessibilityActionEvent) => onAccessibilityAction(e.nativeEvent.actionName) : undefined
+        }
         onFocus={(e) => {
           // Keyboard focus only (focus-visible); the ring sits inside the card so overflow cannot clip it.
           const node = e.target as unknown as { matches?: (selector: string) => boolean };

@@ -289,6 +289,8 @@ async function fixture({ me, guests, links = [], connections = [], bringers = nu
     if (["/rest/v1/activities", "/rest/v1/plans", "/rest/v1/attendees", "/rest/v1/plan_mutes"].includes(path)) return reply([]);
     if (rpc === "my_join_requests" || rpc === "plan_join_requests") return reply([]);
     if (rpc === "plan_connection_states") return reply({});
+    // Chat plan 3's blocks, read beside the states: nobody blocked (verify-event and verify-chat cover them).
+    if (rpc === "my_blocks") return reply([]);
     if (rpc === "plan_link") return reply("AbCdEfGhIjKlMnOpQrStUv");
     if (rpc === "contacts_on_resbite") return reply([]);
     if (rpc === "my_connections")
