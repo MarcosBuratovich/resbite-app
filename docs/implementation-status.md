@@ -10,6 +10,8 @@
 
 **Circles of trust, 11 November 2026:** plan 2 of the connections work is built on branch `co2-circles-of-trust`, stacked on the follow-ups branch, and is **awaiting rollout**. A host sets, on Invite people, how many people each guest may bring and how far that trust goes. A trusted guest brings a connection or a phone contact from the resbite's "Bring someone" row, and they join without approval. The people list shows who brought whom, and a person a host removed is not brought straight back. The migration is `supabase/migrations/20261111130000_circles_of_trust.sql`. The sender's new words ("Clara is going · brought by Pedro.") are in `supabase/functions/_shared/notification-copy.ts`, and the web page in `links/` names the inviter. Nothing is applied to the hosted project, no function or link site is deployed and no TestFlight build is made. The rollout starts with the owner's answers to two questions: CO-Q1, whether a brought person who said Can't go is carried to the next occurrence; and CO-Q2, whether a rollback keeps the bringers' unanswered links live, showing their numbers to hosts (by default it revokes them). Then it needs the owner's approval for the snapshots, the migration by file name and sha256, the `deliver-notifications` redeploy and the link-site deploy. While the follow-ups migration is pending, the same step applies it first. The TestFlight build comes only after the migration, since the new build reads the new columns. The browser check is `mobile/scripts/verify-circle.mjs`. The steps, hashes, device checks and rollback are in [`qa/circles-of-trust-2026-11-10/README.md`](../qa/circles-of-trust-2026-11-10/README.md).
 
+**Chat core, 11 to 12 November 2026:** chat plan 1 of 3 is **built, not hosted**, on branch `ch1-core`, stacked on the circles branch. Every resbite gets a chat: the people going and the hosts read and write it with the whole history, hosts send announcements, and Resbite writes the system lines. Messages arrive live through Realtime, with a push and a 20-second fallback poll. A one-off's chat goes read-only 48 hours after its end. The migration is `supabase/migrations/20261111140000_chat_core.sql`. The sender's chat words and claim loop are in `supabase/functions/_shared/`, and the screen is `mobile/app/chat.tsx`. **The labelled sample conversation is gone:** `mobile/app/sample-chat.tsx` and its content were removed with the chat build. Nothing is applied to the hosted project, no function is deployed, Realtime's settings are unchanged and no TestFlight build is made. Chat core is not meant to go live on its own: plans 2 (groups) and 3 (report and block) ship with it in one release. The release runbook is [`qa/chat-release/README.md`](../qa/chat-release/README.md), and the record is under Chat core in the [decision log](../knowledge-base/08-decisions.md).
+
 This document records the mobile foundation and successive implementation milestones. It is **not yet an accepted standalone two-person test release**. The current development target is the [expanded private beta](milestones/2026-09-23-expanded-private-beta.md), selected on 23 September; older scope/access statements below are historical and superseded by dated updates.
 
 ## Created and verified
@@ -30,7 +32,7 @@ This document records the mobile foundation and successive implementation milest
 
 1. Real-account device verification of draft recovery, interrupted saves and foreground plan/attendee refresh. Client restart recovery is implemented; tester access remains closed.
 2. Device contact permission-path and real-account invitation verification. Local groups, independent plan selections and individual invitation preparation/recovery/revocation are implemented. Notification availability and permission-status UI are implemented; permission requests, dispatch and endpoint cleanup remain. Optional photo normalization/private upload is implemented and awaits native/API device verification.
-3. Device verification of the labelled, read-only sample conversation after accepted RSVP; account deletion controls, queued cleanup and local tests are implemented but disabled pending deployment, real Auth/Storage acceptance and approved retention.
+3. Device verification of the live chat (the [chat release runbook](../qa/chat-release/README.md)'s device checks); the labelled sample conversation this item first named was removed with chat core on 11 November 2026. Account deletion controls, queued cleanup and local tests are implemented but disabled pending deployment, real Auth/Storage acceptance and approved retention.
 4. Owned HTTPS invitation and confirmation links, install fallback and cold-start routing tests. Strict scheme/owned-origin parsing, native incoming-link routing and a private HTTPS fallback generator are prepared. Current `resbite://invite` remains the default until an owned domain is configured; it requires an installed app. Pending invitations are retained securely through profile setup.
 5. Finish visual/content review, canonical category taxonomy and catalogue publication. Eight drafted pairs are ready for review; the live database catalogue remains unpublished/empty.
 6. Device accessibility, keyboard, date/time/timezone, denied-permission, reduced-motion and offline-path checks. Performance tuning after device measurement.
@@ -98,6 +100,8 @@ This document records the mobile foundation and successive implementation milest
 - Repeatable invitation QA: `node scripts/verify-invitations.mjs` with Expo running locally and Chrome installed.
 
 ## RSVP recovery, sample conversation and notification settings — 17 September 2026
+
+*Since 11 November 2026 the sample conversation below is gone: chat core removed `mobile/app/sample-chat.tsx`, its content and its Profile entry, and the real chat replaces it (the Chat core build, at the end of this file). The rest of this section stands as history.*
 
 - Two subagents implemented bounded parts of tasks 4, 6 and 7. This completes the client RSVP recovery/sample milestone and notification-status surface, not live push delivery or the two-phone acceptance milestone.
 - RSVP now reads current plan/attendee state before a write and again after its result. Lost replies are acknowledged only when the saved response/version matches; unchanged state offers an identical retry, while competing response/plan changes require review. Cancelled or started plans close responses. Focus/account guards stop delayed reads from issuing stale writes after navigation, and foreground/focus refresh replaces outdated details.
@@ -765,3 +769,47 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
 5. The cron job from `supabase/ops/schedule-roll-repeating-plans.sql`, run from the owner’s shell, only after steps 1 to 4.
 
 **Checks only a phone can give.** The native cover copy on Do this again; the missing-information announcement against the focus delay under VoiceOver; the native date and time pickers; Android back and swipe on the sheets and the It’s on! moment; the video-call refusal announcement; the More sheet and the people list under VoiceOver.
+
+## Chat core build — 11 to 12 November 2026
+
+**Built on branch `ch1-core` (chat plan 1 of 3), stacked on the circles branch; nothing is applied to the hosted project, Supabase functions, Realtime's settings or TestFlight.** It ships only with plans 2 (groups) and 3 (report and block), in one release.
+
+**What is built.**
+- **The database.** `supabase/migrations/20261111140000_chat_core.sql`:
+  - a chat per series, with its messages, reads and mutes, read and written only through ten functions;
+  - one-off membership on the current occurrence, and the 48-hour close;
+  - announcements with their two audiences and the pinned one;
+  - system lines written by triggers;
+  - one push a minute, decided when the message is written;
+  - the Realtime signal on the private channel `chat:<series>`, with its policy;
+  - the deletion step, local only.
+  - Its rollback, `supabase/rollback/20261111140000_chat_core.rollback.sql`, and the hosted-baseline rehearsal pass.
+- **The sender.** In `supabase/functions/_shared/`, the chat push words ("Leo: …", "Announcement from Ana: …"), the chat tap data, and a claim loop that hands back what it could not start (`deferred`).
+- **The app.**
+  - The `/chat` screen: live through Realtime, polled every 20 seconds when the channel isn't subscribed, unsent messages kept on the phone;
+  - the Chat row, the unread dot and the announcement line on My resbites;
+  - chat push taps and banners;
+  - the When sheet's 48-hour line, the notification ask on a chat's first open, and Data & privacy's Chat messages topic.
+  - The labelled sample conversation is removed.
+
+**Checks (12 November 2026, at `99d4035`).**
+- `bash scripts/test-database-docker.sh`: 44 PASS lines, `chat.sql` and `chat-send-concurrency.sh` included.
+- The hosted baseline with the follow-ups, circles and chat core candidates: 25 PASS lines.
+- `(cd mobile && npm run check)`: 1,024 tests.
+- The edge tests: 11 files, 107 tests.
+- The browser scripts (`verify-chat.mjs`, `verify-event.mjs`, `review-ui.mjs` and the others) passed during the build with a fake project URL.
+
+**What the owner still runs** is in [`qa/chat-release/README.md`](../qa/chat-release/README.md):
+- the owner questions (K-S17, the sender's budget, the lock-screen words);
+- the migration between snapshots, with the Realtime checks before and after;
+- the `deliver-notifications` redeploy, after the migration;
+- Realtime's "Allow public access" off;
+- the TestFlight build, which every tester installs before anyone chats;
+- the device checks and the throughput check.
+
+**Known leftovers** (not changed by the chat build).
+- **Six browser scripts still hard-code the hosted project's auth storage key and aren't strict:** `mobile/scripts/verify-covers.mjs`, `verify-links.mjs`, `verify-open-link-app.mjs`, `verify-invitations.mjs`, `verify-notifications.mjs` and `verify-auth.mjs`.
+  - They can't sign in against a fake project URL, so the chat build didn't run them. None fails on an unexpected request.
+  - Other scripts derive the key from `EXPO_PUBLIC_SUPABASE_URL` (`mobile/scripts/qa-helpers.mjs`, `verify-chat.mjs`, `verify-circle.mjs`).
+- **Sign-out leaves chat pushes on the phone.** It dismisses only pushes typed `plan_update` (`mobile/src/services/pushDevice.ts:342-354`). A chat push carries a person's words, and it stays in Notification Center for whoever signs in next; connection pushes stay too. Found while writing the runbook; not ruled on.
+- **The local deletion path.** `private.activate_deletion_intent`, which the deletion gateway calls, predates connections, circles and chat. Locally it writes chat lines when it cancels and scrubs a leaving owner's resbites, and keeps their messages. The roadmap's account-deletion item carries this.

@@ -36,8 +36,8 @@ No password or Google credential was shared. These results do not certify signup
 | Area | Check | Status |
 | --- | --- | --- |
 | Contacts | Deny access; manual entry stays usable. Allow limited contacts; only allowed rows appear. Expand selection; revoke in Settings; stale rows disappear. | Pending owner/device verification |
-| New screens | Larger Text and VoiceOver on People, Invitations, RSVP, sample conversation and Notification settings. | Pending |
-| Sample conversation | Preview → Profile → Explore sample conversation; persistent fictional/sample labels, scrollable content, no send action. | Pending |
+| New screens | Larger Text and VoiceOver on People, Invitations, RSVP, the chat and Notification settings. | Pending |
+| Chat | The device checks of the [chat release runbook](chat-release/README.md), step 7: live delivery, pushes and banners, one push a minute, mute, a removal, the keyboard, VoiceOver and Larger Text, the 48-hour close. The sample conversation this row first named was removed on 11 November 2026. | Pending the chat release |
 | Notification settings | Shows delivery unavailable in this build; preview does not request permission. Authenticated native permission status refreshes on returning from Settings. | Pending |
 | Motion | Reduce Motion, rapid taps, interrupted requests and foreground return. | Pending |
 | Real invitation/RSVP loop | Two eligible accounts and phones; accept/decline/withdraw, lost reply, concurrent changes, cancellation and revocation. | Pending B0/B1 prerequisites and explicit approval of a second tester |

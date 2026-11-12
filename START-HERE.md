@@ -4,6 +4,8 @@
 
 **Current direction — 23 September 2026:** the owner selected a complete private beta with live event chat, real personal wellness/history, saved activities, better planning/calendar, time polls, shared photos, recurring plans and shared groups. iPhone first; Android immediately afterward. Start with the [expanded development plan](docs/milestones/2026-09-23-expanded-private-beta.md) and [58-item scope mapping](knowledge-base/13-expanded-beta-scope.md). The first-test scope below is preserved history, superseded where the new plan explicitly expands it. See [implementation status](docs/implementation-status.md) for what actually exists; the broader beta is not yet built. Tester access remains owner-only.
 
+**Chat — 12 November 2026:** live event chat is built as chat core (plan 1 of 3, branch `ch1-core`), not on the hosted project yet; it ships with the groups and report-and-block plans in one release ([chat release runbook](qa/chat-release/README.md)). The labelled sample conversation is gone: the real chat replaces it.
+
 Resbite is a private social app for finding real-world activities, arranging them with people you know, and reflecting on time spent together. This knowledge base consolidates the supplied archive into a bounded starting point for the new project.
 
 **Scope decisions:** newer substantive information wins when sources conflict; **MVP first**, with premium and marketplace capabilities kept separate. A feature appearing in an old screen does not automatically put it into the first release.
@@ -18,7 +20,7 @@ Selected: **iPhone app, Google sign-in plus email/password with email confirmati
 
 The owner selected manual sharing of real invitation links and notifications limited to invitations, RSVP and plan changes; search and categories; contact import plus reusable groups; optional profile photo; and owner cancellation without transfer. Attendance caps, waiting lists, extra filters, similar activities, suggestion forms and post-event extras are deferred.
 
-Wellness and chat are **clearly labelled samples**; live messaging and real wellness calculations are not required for this test. The test is an English iPhone app for a small invited group. Success means the boss and another tester can discover an activity, create a plan and complete a real invitation/RSVP loop.
+Wellness and chat are **clearly labelled samples**; live messaging and real wellness calculations are not required for this test. (History: the chat sample was removed on 11 November 2026, when chat core was built.) The test is an English iPhone app for a small invited group. Success means the boss and another tester can discover an activity, create a plan and complete a real invitation/RSVP loop.
 
 Before visual work, review brand inconsistencies (Q15 C). Before real-tester use, define minimum data, visibility, contact handling, deletion and retention (Q13 A). Those selections authorize preparatory work; they do not imply that it has already been completed. No deadline is set.
 
