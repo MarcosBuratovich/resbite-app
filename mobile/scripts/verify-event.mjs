@@ -195,6 +195,8 @@ async function open(world = {}) {
     // (`chatAfterBlock`: the line before the blocked person's), or fails (`chatFailsAfterBlock`).
     chatAfterBlock: world.chatAfterBlock ?? null,
     chatFailsAfterBlock: Boolean(world.chatFailsAfterBlock),
+    // Ruling SR12: once a block went through, my_chat_overview fails.
+    overviewFailsAfterBlock: Boolean(world.overviewFailsAfterBlock),
     blockedOnce: false,
     pairs: { ...(world.pairs ?? {}) },
     hostName: world.hostName ?? HOST.name,
@@ -419,7 +421,8 @@ async function open(world = {}) {
       case "mark_chat_read":
         return none();
       case "my_chat_overview": {
-        if (state.overview === "failed") return reply({ message: "Fixture: the overview failed" }, 500);
+        if (state.overview === "failed" || (state.overviewFailsAfterBlock && state.blockedOnce))
+          return reply({ message: "Fixture: the overview failed" }, 500);
         // As the server does: nothing by or about someone the viewer blocked (plan 3).
         const blocked = Array.isArray(state.blocked) ? state.blocked : [];
         const announcements = Object.fromEntries(Object.entries(state.overview.announcements ?? {}).filter(([, a]) => !blocked.includes(a.author_id)));
@@ -1859,6 +1862,30 @@ try {
       await expect.poll(() => f.rpcs("my_chat_overview").length).toBeGreaterThan(overviews);
       await page.getByRole("button", { name: "Close sheet" }).first().click();
       await expect(text(page, "Announcement from Ana · Doors open at 19:30")).toHaveCount(0);
+    },
+  );
+  // Ruling SR12: the same block with the overview's re-read failing: the line goes all the same.
+  await scenario(
+    "safety, invitation announcement, its read failing",
+    {
+      viewer: "guest",
+      guests: [ALEX, BEA],
+      overview: { chats: {}, announcements: { [PLAN_ID]: { id: 41, author_id: HOST.id, body: "Doors open at 19:30" } }, names: { [HOST.id]: "Ana" } },
+      overviewFailsAfterBlock: true,
+    },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      await expect(text(page, "Announcement from Ana · Doors open at 19:30")).toBeVisible();
+      await btn(page, "Report or block").click();
+      await btn(page, "Block Ana").click();
+      const overviews = f.rpcs("my_chat_overview").length;
+      await btn(page, "Block Ana").click();
+      await expect(sheetOf(page).getByText("Blocked", { exact: true })).toBeVisible();
+      await expect.poll(() => f.rpcs("my_chat_overview").length).toBeGreaterThan(overviews);
+      await page.getByRole("button", { name: "Close sheet" }).first().click();
+      await expect(text(page, "Announcement from Ana · Doors open at 19:30")).toHaveCount(0);
+      await expect(page.getByRole("alert")).toHaveCount(0);
     },
   );
   // B4, R-Q1, I-2: no announcement; Pedro invited them, on Ana's resbite.

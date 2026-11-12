@@ -21,7 +21,7 @@ import { formatPhone, phoneSendForm } from "../domain/phone";
 import { joinRequestGateway, type HostRequest } from "../services/joinRequests";
 import { connectionErrorMessage, connectionGateway, type ConnectionState } from "../services/connections";
 import { chatGateway, isNotInChat, type ChatSummary } from "../services/chat";
-import { blockConfirmed, knownBlocksAfter, onBlocksChanged, safetyGateway } from "../services/safety";
+import { blockConfirmed, entryAfterBlock, knownBlocksAfter, onBlocksChanged, safetyGateway } from "../services/safety";
 import { invitationEntry, type InvitationEntry } from "../domain/safetyCopy";
 import { readProfile } from "../services/profile";
 import { requestGone } from "./connectionsModel";
@@ -469,7 +469,11 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
             () => {},
           );
         }
-        if (again.invitee) readAnnouncement(again.invitee, userId, valid);
+        // The blocked announcer's words leave the line at once (ruling SR12), then the overview is read again.
+        if (again.invitee) {
+          setEntry((now) => entryAfterBlock(now, change));
+          readAnnouncement(again.invitee, userId, valid);
+        }
         // The Chat row (final review I1): a confirmed block takes the person's line off it at once, and the chat is read
         // again for the line before theirs; a failed read keeps the row as it now is (H36).
         if (!chain) {

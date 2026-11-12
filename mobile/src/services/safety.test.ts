@@ -3,7 +3,16 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { blockConfirmed, createSafetyGateway, knownBlocksAfter, onBlocksChanged, safetyErrorMessage, showsBlockedLine } from "./safety";
+import {
+  blockConfirmed,
+  createSafetyGateway,
+  entryAfterBlock,
+  knownBlocksAfter,
+  onBlocksChanged,
+  overviewAfterBlock,
+  safetyErrorMessage,
+  showsBlockedLine,
+} from "./safety";
 
 type Call = { fn: string; args: Record<string, unknown> };
 function gateway(data: unknown = null, error: unknown = null) {
@@ -344,4 +353,49 @@ test("knownBlocksAfter: a confirmed change is applied to what is known; an uncon
   assert.equal(knownBlocksAfter(null, { userId: LEO, blocked: true, stored: true }), null);
   // The set it was given is never changed in place.
   assert.deepEqual([...known], [ANA]);
+});
+
+// Ruling SR12: a confirmed block drops the blocked announcer's words from an invitation's line at once, as the Chat row
+// drops its line (I1), so a failed re-read of the overview can't keep them.
+const PLAN_A = "0c000000-0000-4000-8000-00000000000a";
+const PLAN_B = "0c000000-0000-4000-8000-00000000000b";
+const stored = { userId: ANA, blocked: true, stored: true };
+
+test("entryAfterBlock: the announcement goes when its author's block is confirmed; nothing else changes", () => {
+  const entry = {
+    announcement: { id: 41, authorId: ANA, name: "Ana", text: "Announcement from Ana · Doors open at 19:30" },
+    inviter: { userId: LEO, name: "Leo" },
+  };
+  assert.deepEqual(entryAfterBlock(entry, stored), { announcement: null, inviter: { userId: LEO, name: "Leo" } });
+  // Not confirmed (stored nothing, or said nothing), an unblock, or someone else: as it was, the same object.
+  for (const change of [
+    { ...stored, stored: false },
+    { ...stored, stored: null },
+    { userId: ANA, blocked: false, stored: false },
+    { ...stored, userId: LEO },
+  ])
+    assert.equal(entryAfterBlock(entry, change), entry, JSON.stringify(change));
+  const none = { announcement: null, inviter: null };
+  assert.equal(entryAfterBlock(none, stored), none);
+});
+
+test("overviewAfterBlock: every invitation's announcement by the person blocked goes, the rest stay", () => {
+  const overview = {
+    chats: {},
+    announcements: {
+      [PLAN_A]: { id: 41, authorId: ANA, body: "Doors open at 19:30" },
+      [PLAN_B]: { id: 42, authorId: LEO, body: "Bring snacks" },
+    },
+    names: { [ANA]: "Ana", [LEO]: "Leo" },
+    inviters: { [PLAN_A]: LEO },
+  };
+  const after = overviewAfterBlock(overview, stored);
+  assert.deepEqual(after?.announcements, { [PLAN_B]: { id: 42, authorId: LEO, body: "Bring snacks" } });
+  assert.deepEqual([after?.names, after?.inviters, after?.chats], [overview.names, overview.inviters, overview.chats]);
+  // The overview given is never changed in place.
+  assert.equal(Object.keys(overview.announcements).length, 2);
+  // Unconfirmed or an unblock: the same object; nothing read yet stays nothing.
+  assert.equal(overviewAfterBlock(overview, { ...stored, stored: false }), overview);
+  assert.equal(overviewAfterBlock(overview, { userId: ANA, blocked: false, stored: false }), overview);
+  assert.equal(overviewAfterBlock(null, stored), null);
 });

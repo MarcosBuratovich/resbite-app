@@ -48,7 +48,7 @@ import {
   type InvitationAction,
   type ReportTarget,
 } from "../../src/domain/safetyCopy";
-import { onBlocksChanged } from "../../src/services/safety";
+import { onBlocksChanged, overviewAfterBlock } from "../../src/services/safety";
 
 /** An invitation's Report and Block in its sheet (plan 3, S7): the list, a report, the block confirm, its result. */
 type InvitationStep =
@@ -225,7 +225,15 @@ export default function Plans() {
       () => {},
     );
   };
-  useEffect(() => onBlocksChanged(() => readOverview.current()), []);
+  // A confirmed block takes that person's announcements off the cards at once (ruling SR12), then the overview is read again.
+  useEffect(
+    () =>
+      onBlocksChanged((change) => {
+        setOverview((now) => overviewAfterBlock(now, change));
+        readOverview.current();
+      }),
+    [],
+  );
   // Every occurrence of a group left on this phone is gone from the list at once, even if the next read fails (UI Q3).
   const list = leftGroups.without(preview ? localPlans : loadedFor === session?.user.id && session ? plans : [], session?.user.id ?? null);
   const now = Date.now();

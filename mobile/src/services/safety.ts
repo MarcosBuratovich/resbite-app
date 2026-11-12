@@ -1,7 +1,8 @@
 import { errorField, passThrough, planDeadline, type Deadline, type Rpc } from "./contactInvites";
 import { hasVisibleText, wellFormedText } from "../domain/chatRules";
 import { INVITE_COPY } from "../domain/inviteCopy";
-import { SAFETY_COPY, type ReportReason } from "../domain/safetyCopy";
+import { SAFETY_COPY, type InvitationEntry, type ReportReason } from "../domain/safetyCopy";
+import type { ChatOverview } from "./chat";
 
 /**
  * Someone the reader blocked, as `my_blocks` lists them; `name` is null for an account that can't be named (G-S10).
@@ -103,6 +104,27 @@ export function knownBlocksAfter(known: ReadonlySet<string> | null, change: Bloc
   if (change.blocked) next.add(change.userId);
   else next.delete(change.userId);
   return next;
+}
+
+/**
+ * An unanswered invitation's entry once a block went through (ruling SR12): a confirmed block of the announcement's
+ * author takes its words off the resbite page's line at once, so a failed re-read of the overview can't keep them, as
+ * the Chat row drops its line (I1). Anything else leaves it as it was, the same object.
+ */
+export function entryAfterBlock(entry: InvitationEntry, change: BlockChange): InvitationEntry {
+  if (!change.blocked || !blockConfirmed(change) || entry.announcement?.authorId !== change.userId) return entry;
+  return { ...entry, announcement: null };
+}
+
+/**
+ * My resbites' overview once a block went through (ruling SR12): a confirmed block takes every invitation's announcement
+ * by that person off the cards at once, as the overview read again will. Anything else leaves it as it was.
+ */
+export function overviewAfterBlock(overview: ChatOverview | null, change: BlockChange): ChatOverview | null {
+  if (!overview || !change.blocked || !blockConfirmed(change)) return overview;
+  const kept = Object.entries(overview.announcements).filter(([, a]) => a.authorId !== change.userId);
+  if (kept.length === Object.keys(overview.announcements).length) return overview;
+  return { ...overview, announcements: Object.fromEntries(kept) };
 }
 
 /**

@@ -854,6 +854,8 @@ try {
       await expect.poll(() => page.evaluate(() => document.activeElement?.textContent ?? null)).toBe("Block Ana");
       await button(page, "Block Ana").click();
       const overviews = calls("my_chat_overview").length;
+      // Ruling SR12: the read after the block fails too, and the line goes all the same (the card drops it itself).
+      overviewFails = true;
       await button(page, "Block Ana").click();
       await expect(sheet.getByText("Blocked", { exact: true })).toBeVisible();
       assert.deepEqual(calls("block_user"), [{ p_user: jo, p_block: true }]);
@@ -862,6 +864,7 @@ try {
       await expect(page.getByText(anaLine, { exact: true })).toHaveCount(0);
       // The slow read, asked before the block, has landed by now: the line stays gone.
       await page.waitForTimeout(8500);
+      overviewFails = false;
       await expect(page.getByText(anaLine, { exact: true })).toHaveCount(0);
       // No announcement, and Pedro invited Stephen: Pedro first, then Ana, whom the byline names.
       blocked = [];
