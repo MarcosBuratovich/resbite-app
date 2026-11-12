@@ -12,12 +12,18 @@
 # (3) A host removes a message while its author's account is being deleted (H28). A session holds the chat's row; the
 # deletion waits on it, then the host's remove. Both take the chat row before any message row, so when it lets go they
 # run one after the other: no deadlock (40P01). The deletion goes first, so the message reads deleted, with no author.
+# (4) A host loses the role while their removal waits on the chat's row (Task 3). A session holds the chat's row and
+# takes the admin's role away; the admin's remove_message passed its first check and waits. When the hold lets go, the
+# removal checks again under the lock: 42501 'Hosts only', and the message stays as it was.
+# The seed's guest rows and admin are the cast, not answers, so they are made under the roll's flag and write no chat
+# line (K-S2); the broadcasts the races make go with the cleanup.
 set -euo pipefail
 pg_bin="$1"
 socket="$2"
 port="$3"
 args=(-X -v ON_ERROR_STOP=1 -h "$socket" -p "$port" -U postgres -d postgres)
 "$pg_bin/psql" "${args[@]}" >"$socket/chat-send-concurrency-seed.log" <<'SQL'
+select set_config('resbite.system','roll',false);
 insert into auth.users(id,phone,phone_confirmed_at,raw_user_meta_data) values
  ('e9000000-0000-4000-8000-000000000001','447700900991',now(),'{}'),
  ('e9000000-0000-4000-8000-000000000002','447700900992',now(),'{}'),
@@ -43,6 +49,9 @@ insert into public.attendees(plan_id,user_id,response)
  from unnest(array['e9100000-0000-4000-8000-000000000001','e9100000-0000-4000-8000-000000000002']) p, generate_series(2,4) n;
 insert into public.attendees(plan_id,user_id,response) values
  ('e9100000-0000-4000-8000-000000000001','e9000000-0000-4000-8000-000000000005','accepted');
+-- Writer two is an admin of resbite two, until race (4) takes the role away.
+insert into public.plan_admins(plan_id,user_id,appointed_by) values
+ ('e9100000-0000-4000-8000-000000000002','e9000000-0000-4000-8000-000000000003','e9000000-0000-4000-8000-000000000001');
 -- The leaver's message, which the host will remove.
 insert into public.messages(series_id,plan_id,author_id,kind,body,client_id) values
  ('e9100000-0000-4000-8000-000000000001','e9100000-0000-4000-8000-000000000001','e9000000-0000-4000-8000-000000000005','message',
@@ -192,17 +201,53 @@ do $$ begin
 end $$;
 SQL
 echo "PASS: a host's removal and the author's account deletion at once queue on the chat's row: no deadlock"
+# (4) The chat's row is held while writer two's admin role goes; writer two's removal of writer one's message waits.
+first_id="$("$pg_bin/psql" "${args[@]}" -Atc "select id from public.messages where client_id='e9300000-0000-4000-8000-000000000003'")"
+PGAPPNAME=resbite_chat_hold4 "$pg_bin/psql" "${args[@]}" >"$socket/chat-send-concurrency-hold4.log" 2>&1 <<'SQL' &
+begin;
+select 1 from public.chats where series_id='e9100000-0000-4000-8000-000000000002' for update;
+delete from public.plan_admins where plan_id='e9100000-0000-4000-8000-000000000002' and user_id='e9000000-0000-4000-8000-000000000003';
+select pg_sleep(2);
+commit;
+SQL
+hold_pid=$!
+wait_for resbite_chat_hold4 wait_event PgSleep 'The chat row holder of race (4) did not become ready'
+PGAPPNAME=resbite_chat_demoted "$pg_bin/psql" "${args[@]}" -v id="$first_id" >"$socket/resbite_chat_demoted.log" 2>&1 <<'SQL' &
+\set VERBOSITY verbose
+set role authenticated;
+select set_config('request.jwt.claims','{"sub":"e9000000-0000-4000-8000-000000000003","role":"authenticated"}',false);
+select public.remove_message(:id);
+SQL
+demoted_pid=$!
+wait_for resbite_chat_demoted wait_event_type Lock "The demoted host's removal did not wait on the chat's row"
+wait "$hold_pid" || { cat "$socket/chat-send-concurrency-hold4.log"; exit 1; }
+demoted_status=0
+wait "$demoted_pid" || demoted_status=$?
+if [[ "$demoted_status" == 0 ]] || ! grep -q '42501: Hosts only' "$socket/resbite_chat_demoted.log"; then
+ cat "$socket/resbite_chat_demoted.log"; echo "FAIL: a host whose role went while their removal waited was not refused 'Hosts only'"; exit 1
+fi
+"$pg_bin/psql" "${args[@]}" >"$socket/chat-send-concurrency-verify4.log" <<'SQL'
+do $$ begin
+ if (select (state,body) from public.messages where client_id='e9300000-0000-4000-8000-000000000003')
+   is distinct from ('sent'::text,'First!'::text) then
+  raise exception 'FAIL: the refused removal changed the message';
+ end if;
+end $$;
+SQL
+echo "PASS: a host whose role goes while their removal waits on the chat's row is refused, and the message stays"
 "$pg_bin/psql" "${args[@]}" >"$socket/chat-send-concurrency-cleanup.log" <<'SQL'
 delete from public.plans where id in ('e9100000-0000-4000-8000-000000000001','e9100000-0000-4000-8000-000000000002');
 delete from public.chats where series_id in ('e9100000-0000-4000-8000-000000000001','e9100000-0000-4000-8000-000000000002');
 delete from private.account_deletion_jobs where user_id='e9000000-0000-4000-8000-000000000005';
+delete from realtime.messages where topic in ('chat:e9100000-0000-4000-8000-000000000001','chat:e9100000-0000-4000-8000-000000000002');
 delete from auth.users where id in ('e9000000-0000-4000-8000-000000000001','e9000000-0000-4000-8000-000000000002',
  'e9000000-0000-4000-8000-000000000003','e9000000-0000-4000-8000-000000000004','e9000000-0000-4000-8000-000000000005');
 do $$ begin
  if exists(select 1 from public.messages where series_id in ('e9100000-0000-4000-8000-000000000001','e9100000-0000-4000-8000-000000000002'))
  or exists(select 1 from public.chats where series_id in ('e9100000-0000-4000-8000-000000000001','e9100000-0000-4000-8000-000000000002'))
  or exists(select 1 from public.profiles where id::text like 'e9000000-%')
- or exists(select 1 from private.account_deletion_jobs where user_id::text like 'e9000000-%') then
+ or exists(select 1 from private.account_deletion_jobs where user_id::text like 'e9000000-%')
+ or exists(select 1 from realtime.messages where topic like 'chat:e9100000-%') then
   raise exception 'The race''s rows were not cleaned up';
  end if;
 end $$;

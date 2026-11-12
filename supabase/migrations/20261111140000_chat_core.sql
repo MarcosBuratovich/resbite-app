@@ -556,7 +556,9 @@ grant execute on function private.send_announcement(uuid,text,text,uuid), public
 -- 'Hosts only'; it becomes removed with no body, or deleted when it is the caller's own, so a host's words never read
 -- "removed". Both work after the close. A row already deleted or removed keeps its state: a removal is never turned
 -- into a deletion by its author, and a retry changes nothing. Each locks the chat's row before the message's, as the
--- stats trigger and the deletion take them (H28), so a removal and an account deletion never deadlock.
+-- stats trigger and the deletion take them (H28), so a removal and an account deletion never deadlock. remove_message
+-- asks again under that lock whether the caller is a host (Task 3), so a host whose role went while the removal
+-- waited removes nothing.
 create function private.delete_message(p_id bigint) returns void language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester(); v_row public.messages;
 begin
@@ -580,6 +582,9 @@ begin
   raise exception 'Hosts only' using errcode='42501';
  end if;
  perform 1 from public.chats c where c.series_id = v_row.series_id for update;
+ if not coalesce(private.is_host((private.current_occurrence(v_row.series_id)).id, v_uid), false) then
+  raise exception 'Hosts only' using errcode='42501';
+ end if;
  update public.messages set state = case when author_id = v_uid then 'deleted' else 'removed' end, body = null
  where id = p_id and state = 'sent';
 end $$;
@@ -626,12 +631,12 @@ revoke all on function public.set_chat_mute(uuid,boolean) from public, anon, aut
 grant execute on function private.set_chat_mute(uuid,boolean), public.set_chat_mute(uuid,boolean) to authenticated;
 
 -- 2g. Who may be told (K-N3, CH-P7, CH-P8). The two chat kinds get a branch of their own: the recipient may use the app
--- and is not being deleted, has not muted the resbite (plan_mutes, by series), and the message is still sent; a
--- chat_message under an hour old (K-N3), to someone in the chat now who has not muted it; an announcement under a day
--- old, on a plan not cancelled since (H30), to someone its audience reaches now (announcement_audience: a host, Going or
--- Maybe, or not answered for everyone while the one-off is active and has not ended), muted chat or not. Every other
--- kind keeps the 20261110120000_connections body, verbatim but for the kind test that leaves the chat kinds out of the
--- first branch; its grants are kept (nobody).
+-- and is not being deleted, has not muted the resbite (plan_mutes, by series), the message is still sent, and its plan
+-- (the notice's) has not been cancelled since (H30, Task 3); a chat_message under an hour old (K-N3), to someone in the
+-- chat now who has not muted it; an announcement under a day old, to someone its audience reaches now
+-- (announcement_audience: a host, Going or Maybe, or not answered for everyone while the one-off is active and has not
+-- ended), muted chat or not. Every other kind keeps the 20261110120000_connections body, verbatim but for the kind test
+-- that leaves the chat kinds out of the first branch; its grants are kept (nobody).
 create or replace function private.notification_recipient_eligible(p_outbox bigint) returns boolean
 language sql stable security definer set search_path='' as $$
  select exists (
@@ -665,11 +670,11 @@ language sql stable security definer set search_path='' as $$
  where o.id=p_outbox and o.kind in ('chat_message','announcement')
  and private.user_eligible(o.recipient_id) and not private.deletion_pending(o.recipient_id)
  and not exists(select 1 from public.plan_mutes m where m.series_id=msg.series_id and m.user_id=o.recipient_id)
- and msg.state='sent'
+ and msg.state='sent' and plan.status<>'cancelled'
  and (o.kind='chat_message' and o.created_at>now()-interval '1 hour'
    and private.chat_member(msg.series_id,o.recipient_id)
    and not exists(select 1 from public.chat_mutes cm where cm.series_id=msg.series_id and cm.user_id=o.recipient_id)
-  or o.kind='announcement' and o.created_at>now()-interval '24 hours' and plan.status<>'cancelled'
+  or o.kind='announcement' and o.created_at>now()-interval '24 hours'
    and exists(select 1 from private.announcement_audience(msg.series_id,msg.audience) as r(id) where r.id=o.recipient_id))
  )
 $$;
@@ -848,3 +853,143 @@ end $$;
 $fn$;
  end if;
 end $migration$;
+
+-- Section 3 (Task 3): Resbite's own lines and the live signal.
+
+-- 3a. The system lines (Decision 1, K-B2, K-S2, K-S3). Triggers on public.attendees, public.plans and public.plan_admins
+-- write them in the same transaction as the change (CH rule 7), so respond, answer_phone_invitation,
+-- decide_join_request, change_plan_v4, appoint_admin and every later writer of those rows get them for free. A line has
+-- no author: who acted is payload.actor (auth.uid(), null when nobody did, as in the roll), and every other person in
+-- it is a uuid that the reads name (chat_names: actor, user, brought_by). The app words the line, so plan 2 changes
+-- wording for groups without touching the server. A line takes no chat lock: every event that writes one already holds
+-- its plan's row (for update), and a message's insert takes that row's key-share lock after the chat's lock, so a line
+-- waiting for the chat's lock under the plan's would deadlock against it. A line committing late may therefore sit
+-- below a reader's read mark and never read as unread (accepted in Task 1's review); chat_messages_since still brings it.
+
+-- A system line on a plan's chat: kind system, no author, the event, and the payload with actor = auth.uid() unless it
+-- names an actor itself (the payload's keys win, so plan 2's roll writes its group lines with actor null through this,
+-- on purpose). It checks no flag. The database's own: no role may call it (K-N13).
+create function private.chat_system_line(p_plan uuid, p_event text, p_payload jsonb) returns void
+language sql security definer set search_path = '' as $$
+ insert into public.messages(series_id, plan_id, kind, event, payload)
+ select p.series_id, p.id, 'system', p_event, jsonb_build_object('actor', auth.uid()) || coalesce(p_payload, '{}'::jsonb)
+ from public.plans p where p.id = p_plan
+$$;
+revoke all on function private.chat_system_line(uuid,text,jsonb) from public, anon, authenticated, service_role;
+
+-- Whether the chat-line triggers stand down (K-S2, Shared interfaces): under the roll's flag (plan 2's roll writes its
+-- own lines) and the deletion's (request_account_deletion: its cancellations and its place scrub are no news). The
+-- flag is transaction-local, set with set_config('resbite.system', …, true). The database's own: no role may call it.
+create function private.chat_lines_off() returns boolean language sql stable security definer set search_path = '' as $$
+ select coalesce(pg_catalog.current_setting('resbite.system', true), '') in ('roll', 'deletion')
+$$;
+revoke all on function private.chat_lines_off() from public, anon, authenticated, service_role;
+
+-- An answer (K-S2, Decision 10, H8). Into Going or Maybe from anything else: joined {actor, user, brought_by when the
+-- guest row has a bringer}. Out of Going or Maybe into Can't go: cant_go {actor, user}. A row put in not answered
+-- writes nothing, and so does a move between Going and Maybe. When that person's latest joined or cant_go line in the
+-- series was made in the last 10 minutes, it is that line that changes (its event and payload; created_at stays,
+-- updated_at moves, and messages_signal tells the open chats again) instead of a new one, so a reply flipped back and
+-- forth is one line. The trigger fires on the answer only (insert, or update of response): a guest row moved between
+-- accounts (fold_web_account) or ended by the circles trigger beside it (attendees_close_waiting) writes nothing of its
+-- own, and a row deleted later in the same transaction keeps the line it wrote. The database's own: no role may call it.
+create function private.attendees_chat_lines() returns trigger language plpgsql security definer set search_path = '' as $$
+declare v_event text; v_payload jsonb; v_line bigint; v_made timestamptz;
+begin
+ if private.chat_lines_off() then return null; end if;
+ if new.response in ('accepted','maybe') and (tg_op = 'INSERT' or old.response not in ('accepted','maybe')) then
+  v_event := 'joined';
+  v_payload := jsonb_build_object('actor', auth.uid(), 'user', new.user_id)
+   || case when new.brought_by is not null then jsonb_build_object('brought_by', new.brought_by) else '{}'::jsonb end;
+ elsif tg_op = 'UPDATE' and old.response in ('accepted','maybe') and new.response in ('declined','withdrawn') then
+  v_event := 'cant_go';
+  v_payload := jsonb_build_object('actor', auth.uid(), 'user', new.user_id);
+ else
+  return null;
+ end if;
+ -- That person's latest line, looked for among the rows changed in the last 10 minutes (messages_series_updated_idx):
+ -- a line made in them was changed in them too, and rows are made in id order.
+ select m.id, m.created_at into v_line, v_made from public.messages m
+ where m.series_id = (select p.series_id from public.plans p where p.id = new.plan_id) and m.updated_at > now() - interval '10 minutes'
+  and m.kind = 'system' and m.event in ('joined','cant_go') and m.payload->>'user' = new.user_id::text
+ order by m.id desc limit 1;
+ if v_line is not null and v_made > now() - interval '10 minutes' then
+  update public.messages set event = v_event, payload = v_payload where id = v_line;
+ else
+  perform private.chat_system_line(new.plan_id, v_event, v_payload);
+ end if;
+ return null;
+end $$;
+revoke all on function private.attendees_chat_lines() from public, anon, authenticated, service_role;
+create trigger attendees_chat_lines after insert or update of response on public.attendees
+ for each row execute function private.attendees_chat_lines();
+
+-- A change of the plan (K-S2, K-S3). Cancelled: cancelled {actor}. While it is active, what change_plan_v4 counts as a
+-- change: the time (starts_at, ends_at or time_zone distinct) or the place (place_label distinct; a place_tbd flip
+-- with the label as it is writes nothing): changed {actor, what (time, place or time_place), from_start, to_start,
+-- from_end, to_end, from_zone, to_zone, place_label (the new one)}. A title, a note, a circle (set_plan_circle) or a
+-- version writes nothing. The deletion's scrub writes nothing under its flag, and the payload is never edited after
+-- (K-S3). Plan 2 redefines this by name. The database's own: no role may call it.
+create function private.plans_chat_lines() returns trigger language plpgsql security definer set search_path = '' as $$
+declare v_time boolean; v_place boolean;
+begin
+ if private.chat_lines_off() then return null; end if;
+ if new.status = 'cancelled' and old.status is distinct from 'cancelled' then
+  perform private.chat_system_line(new.id, 'cancelled', '{}'::jsonb);
+ elsif new.status = 'active' and old.status = 'active' then
+  v_time := new.starts_at is distinct from old.starts_at or new.ends_at is distinct from old.ends_at or new.time_zone is distinct from old.time_zone;
+  v_place := new.place_label is distinct from old.place_label;
+  if v_time or v_place then
+   perform private.chat_system_line(new.id, 'changed', jsonb_build_object(
+    'what', case when v_time and v_place then 'time_place' when v_time then 'time' else 'place' end,
+    'from_start', old.starts_at, 'to_start', new.starts_at, 'from_end', old.ends_at, 'to_end', new.ends_at,
+    'from_zone', old.time_zone, 'to_zone', new.time_zone, 'place_label', new.place_label));
+  end if;
+ end if;
+ return null;
+end $$;
+revoke all on function private.plans_chat_lines() from public, anon, authenticated, service_role;
+create trigger plans_chat_lines after update on public.plans for each row execute function private.plans_chat_lines();
+
+-- An appointment (appoint_admin): admin {actor, user}. Until plan 2's roll sets its flag, the roll's carried admins
+-- write one each, with no actor (Decision 4). The database's own: no role may call it.
+create function private.plan_admins_chat_lines() returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+ if private.chat_lines_off() then return null; end if;
+ perform private.chat_system_line(new.plan_id, 'admin', jsonb_build_object('actor', auth.uid(), 'user', new.user_id));
+ return null;
+end $$;
+revoke all on function private.plan_admins_chat_lines() from public, anon, authenticated, service_role;
+create trigger plan_admins_chat_lines after insert on public.plan_admins for each row execute function private.plan_admins_chat_lines();
+
+-- 3b. The live signal (CH-D2, K-S6, NOTE 3). Every row written to a chat and every update of one (a removal, a
+-- deletion, a line updated in place) broadcasts {id, kind, state} on the private channel chat:<series_id>, event chat:
+-- a signal only, never the words, so the app fetches through the reads (K-B1), and a phone that misses one catches up
+-- on its next read. On the hosted project realtime.send turns its own errors into warnings, so a broadcast never
+-- stops a write (the runbook checks Realtime before and after, K-S5). The database's own: no role may call it.
+create function private.messages_signal() returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+ perform realtime.send(jsonb_build_object('id', new.id, 'kind', new.kind, 'state', new.state), 'chat', 'chat:' || new.series_id::text, true);
+ return null;
+end $$;
+revoke all on function private.messages_signal() from public, anon, authenticated, service_role;
+create trigger messages_signal after insert or update on public.messages for each row execute function private.messages_signal();
+
+-- Who may listen to a chat's channel (K-S6, H23): a topic that is exactly chat:<a lower-case uuid>, matched before any
+-- cast, and a caller who may use the app (user_eligible) and is in that chat now (chat_member). Anything else is false,
+-- never an error. plpgsql, so a constant topic is never cast before the match. Realtime's policy calls it as the
+-- signed-in caller, so it is the one helper granted to authenticated; chat_member itself stays ungranted.
+create function private.can_listen(p_topic text) returns boolean language plpgsql stable security definer set search_path = '' as $$
+declare v_uid uuid := auth.uid();
+begin
+ if p_topic is null or p_topic !~ '^chat:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then return false; end if;
+ if v_uid is null or not private.user_eligible(v_uid) then return false; end if;
+ return coalesce(private.chat_member(substring(p_topic from 6)::uuid, v_uid), false);
+end $$;
+revoke all on function private.can_listen(text) from public, anon, authenticated, service_role;
+grant execute on function private.can_listen(text) to authenticated;
+
+-- Realtime's own check when a phone joins chat:<series> (private channels): broadcasts only, through can_listen alone.
+-- No policy lets anyone send: clients never do.
+create policy chat_members_listen on realtime.messages for select to authenticated
+ using (realtime.messages.extension = 'broadcast' and private.can_listen((select realtime.topic())));

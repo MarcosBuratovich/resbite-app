@@ -1,12 +1,14 @@
 -- Chat (docs/superpowers/plans/2026-11-11-chat-1-core.md, Tasks 1 to 3; docs/superpowers/specs/2026-11-10-groups-and-chat-design.md,
 -- CH-P1, CH-P2, CH-P5, CH-P14, CH-P15 and the Data section): a chat per series, who is in it, when it closes and the reads
--- (slice 1); writing, announcements and the notices (slice 2); Resbite's own lines and the live signal (slice 3); an
--- account's deletion (the last block). Synthetic identities only: emails chat1-… and chat5-…@resbite-test.invalid,
--- ids with the prefixes c1, c3 and c5, no phone numbers.
+-- (slice 1); writing, announcements and the notices (slice 2); Resbite's own lines and the live signal (slice 3); the
+-- way back (the rollback, rehearsed); an account's deletion (the last block). Synthetic identities only: emails chat1-…,
+-- chat3-…, chat5-… and chat6-…@resbite-test.invalid, ids with the prefixes c1, c3, c5 and c6, no phone numbers.
 --
--- Three transactions, each begin … rollback (NOTE 12). Slices 1 and 2 share the c1 cast, slice 3 has c3, and the deletion
--- block has c5. The prefixes c1 and c3 are also used by phone-accounts.sql and plan-covers.sql, which is harmless only
--- because every transaction rolls back.
+-- Four transactions, each begin … rollback (NOTE 12). Slices 1 and 2 share the c1 cast; slice 3 has the c1 cast again,
+-- with its own plans and two more people (c3); the rollback's rehearsal has c6, and the deletion block c5. The prefixes
+-- c1 and c3 are also used by phone-accounts.sql and plan-covers.sql, which is harmless only because every transaction
+-- rolls back. Since slice 3, answers, changes and appointments write system lines by trigger (Decision 1); the one
+-- line slices 1 and 2 leave written is a real change's, and slice 2 counts it (H9).
 -- Times moved by hand sit between set_config('resbite.system','roll',true) and set_config('resbite.system','',true), so no
 -- change line skews a later count (K-N2). The setting is transaction-local: without the reset it would last until the
 -- rollback and silence every later line (NOTE 12). An assertion that closes the c1 one-off moves its times back afterwards,
@@ -98,6 +100,41 @@ $$;
 create function pg_temp.ch_msg(p_body text) returns bigint language plpgsql stable as $$
 begin
  return (select m.id from public.messages m where m.series_id=pg_temp.c1p('01') and m.body=p_body);
+end $$;
+-- Slice 3's ids: people beyond the c1 cast (c3…10, c3…11) and its plans (c31…).
+create function pg_temp.c3(p text) returns uuid language sql immutable as $$ select ('c3000000-0000-4000-8000-0000000000'||p)::uuid $$;
+create function pg_temp.c3p(p text) returns uuid language sql immutable as $$ select ('c3100000-0000-4000-8000-0000000000'||p)::uuid $$;
+-- A series' system lines in id order, as event:user (the user's two digits, '-' for none): 'joined:04,admin:04' ('' for
+-- none). The superuser's.
+create function pg_temp.ch_lines(p_series uuid) returns text language plpgsql stable as $$
+begin
+ return (select coalesce(string_agg(m.event||':'||coalesce(right(m.payload->>'user',2),'-'),',' order by m.id),'') from public.messages m
+  where m.series_id=p_series and m.kind='system');
+end $$;
+-- How many broadcasts name a message: rows of realtime.messages on its chat's topic whose payload has its id. The
+-- superuser's (it reads past the policy).
+create function pg_temp.ch_signals(p_id bigint) returns integer language plpgsql stable as $$
+begin
+ return (select count(*) from realtime.messages r join public.messages m on m.id=p_id
+  where r.topic='chat:'||m.series_id and r.payload->>'id'=p_id::text);
+end $$;
+-- A change of a plan through change_plan_v4 as the current claims, at its current version, keeping its description,
+-- categories, repeat, note and area: the new version.
+create function pg_temp.ch_change(p_plan uuid, p_title text, p_start timestamptz, p_ends timestamptz, p_zone text, p_place text)
+returns integer language plpgsql as $$
+begin
+ return public.change_plan_v4(p_plan,(select version from public.plans where id=p_plan),p_title,'',array['community'],p_start,p_ends,
+  p_zone,p_place,false,null::smallint,null,null);
+end $$;
+-- One statement of a source file, from its first line (p_from) to the first p_to after it, both included. The
+-- rollback rehearsal runs a migration's own text for a function, to compare what the rollback restored with it.
+create function pg_temp.ch_source(p_text text, p_from text, p_to text) returns text language plpgsql immutable as $$
+declare v_start integer := position(p_from in p_text); v_len integer;
+begin
+ if v_start=0 then raise exception 'Not in the source: %', p_from; end if;
+ v_len := position(p_to in substring(p_text from v_start));
+ if v_len=0 then raise exception 'No % after %', p_to, p_from; end if;
+ return substring(p_text from v_start for v_len+length(p_to)-1);
 end $$;
 -- The c1 cast's accounts (see the header); the plans and guest rows are made at the start of the first transaction.
 create function pg_temp.c1_cast() returns void language sql as $cast$
@@ -982,7 +1019,8 @@ select pg_temp.ch_check(private.notification_recipient_eligible(pg_temp.ch_notic
 -- Who an announcement to everyone reaches on a one-off (H30): the people who have not answered only while it is active
 -- and has not ended. Ended an hour ago, its chat still open, 05 is in no audience and 05's notice of 02's announcement
 -- is no longer eligible; 03's still is. Cancelled, the plan's announcement notices are eligible to nobody, 03 and the
--- Going announcement's 04 included. The times and the status go back afterwards, and the notices are eligible again.
+-- Going announcement's 04 included, and so is its chat notice to 03 (Task 3). The times and the status go back
+-- afterwards, and the notices are eligible again.
 select set_config('resbite.system','roll',true);
 update public.plans set starts_at=now()-interval '4 hours',ends_at=now()-interval '1 hour' where id=pg_temp.c1p('01');
 select set_config('resbite.system','',true);
@@ -1004,13 +1042,17 @@ do $$ begin
    and not private.notification_recipient_eligible(pg_temp.ch_notice('announcement',current_setting('c1.doors')::bigint,'05'))
    and not private.notification_recipient_eligible(pg_temp.ch_notice('announcement',current_setting('c1.game')::bigint,'04')),
   'A cancelled plan''s announcement may still be told');
+ -- A chat notice too (Task 3): nothing is pushed about a resbite that is off, though its chat still reads.
+ perform pg_temp.ch_check(not private.notification_recipient_eligible(pg_temp.ch_notice('chat_message',current_setting('c1.sixth')::bigint,'03')),
+  'A cancelled plan''s chat message may still be told');
 end $$;
 select set_config('resbite.system','roll',true);
 update public.plans set status='active' where id=pg_temp.c1p('01');
 select set_config('resbite.system','',true);
 select pg_temp.ch_check(private.notification_recipient_eligible(pg_temp.ch_notice('announcement',current_setting('c1.doors')::bigint,'05'))
- and private.notification_recipient_eligible(pg_temp.ch_notice('announcement',current_setting('c1.doors')::bigint,'03')),
- 'The announcement may not be told once the one-off is active again');
+ and private.notification_recipient_eligible(pg_temp.ch_notice('announcement',current_setting('c1.doors')::bigint,'03'))
+ and private.notification_recipient_eligible(pg_temp.ch_notice('chat_message',current_setting('c1.sixth')::bigint,'03')),
+ 'The announcement or the chat message may not be told once the one-off is active again');
 
 -- The claim (H6, H17, H19, H21). 01 and 05 have a device. Two plan_changed notices to 01 by hand, from 02 and from 09
 -- (whose account is being deleted); where the deletion lifecycle exists, a third from 08, who has a deletion request but
@@ -1332,6 +1374,12 @@ select pg_temp.ch_as(pg_temp.c1('38'));
 select public.change_plan_v4(pg_temp.c1p('06'),current_setting('c1.v6')::int,'Crowd 4','',array['community'],pg_temp.c1_start(),
  pg_temp.c1_start()+interval '2 hours','Europe/London','The pub',false,null::smallint,null,null);
 reset role;
+-- The change is a real event, so its chat has its line (Task 3, H9): the one line any trigger writes in slices 1 and 2,
+-- where every other row set by hand sits under the roll's flag.
+select pg_temp.ch_check(pg_temp.ch_lines(pg_temp.c1p('06'))='changed:-'
+ and (select string_agg(right(m.series_id::text,2)||':'||m.event,',') from public.messages m where m.kind='system' and m.created_at>=now())='06:changed',
+ 'Slices 1 and 2 wrote other lines: '||coalesce((select string_agg(right(m.series_id::text,2)||':'||m.event,',' order by m.id) from public.messages m
+  where m.kind='system' and m.created_at>=now()),'none'));
 insert into private.device_endpoints(token,user_id,platform) values
  ('ExpoPushToken[c1g21]',pg_temp.c1('21'),'ios'),('ExpoPushToken[c1g30]',pg_temp.c1('30'),'ios'),('ExpoPushToken[c1g39]',pg_temp.c1('39'),'android');
 do $$ declare v_chat bigint[]; begin
@@ -1420,7 +1468,581 @@ do $$ declare f text; r text; begin
 end $$;
 rollback;
 
--- Slice 3 (Task 3) goes here, in its own transaction (prefix c3), above the deletion block.
+-- Slice 3 (Task 3): Resbite's own lines and the live signal (Decision 1, K-B2, K-S2, K-S3, K-S6, H8, H13, NOTE 3,
+-- NOTE 11, NOTE 12). Its own transaction, on the c1 cast again, with fresh one-offs (prefix c3), so no time an earlier
+-- slice moved can refuse a call. 01 owns 'Garden party' (c31…01), tomorrow for three hours at "Ana's garden", and
+-- 'Spare evening' (c31…02), a day later. On the party: 03 Going; 04, 05 and 06 not answered, 05 brought by 03. c3…10
+-- 'Kai Joiner' asks to join through the party's open link; c3…11 'Zoe Invited' is 01's connection, invited in the app.
+-- The cast's guest rows sit between the two flag calls (they are the cast, not answers), and write no line. Lines are
+-- read as pg_temp.ch_lines gives them; broadcasts as the stub's realtime.messages rows.
+begin;
+-- A series' newest system line. The superuser's. Made in this transaction, so it goes with it: it depends on the
+-- messages' row type, which the rollback rehearsal below drops.
+create function pg_temp.ch_last_line(p_series uuid) returns public.messages language plpgsql stable as $$
+declare m public.messages;
+begin
+ select * into m from public.messages x where x.series_id=p_series and x.kind='system' order by x.id desc limit 1;
+ return m;
+end $$;
+select pg_temp.c1_cast();
+insert into auth.users(id,email,email_confirmed_at)
+ select pg_temp.c3(n),'chat3-'||n||'@resbite-test.invalid',now() from unnest(array['10','11']) n;
+insert into private.tester_roster(email) select 'chat3-'||n||'@resbite-test.invalid' from unnest(array['10','11']) n;
+insert into public.profiles(id,display_name) values (pg_temp.c3('10'),'Kai Joiner'),(pg_temp.c3('11'),'Zoe Invited');
+set local role authenticated;
+select pg_temp.ch_as(pg_temp.c1('01'));
+select public.create_plan_v4(pg_temp.c3p('01'),'Garden party','',array['community'],null,pg_temp.c1_start(),
+ pg_temp.c1_start()+interval '3 hours','Europe/London','Ana''s garden',false,null::smallint);
+select public.create_plan_v4(pg_temp.c3p('02'),'Spare evening','',array['community'],null,pg_temp.c1_start()+interval '1 day',
+ pg_temp.c1_start()+interval '1 day 2 hours','Europe/London','The pub',false,null::smallint);
+reset role;
+select set_config('resbite.system','roll',true);
+insert into public.attendees(plan_id,user_id,response,brought_by) values
+ (pg_temp.c3p('01'),pg_temp.c1('03'),'accepted',null),(pg_temp.c3p('01'),pg_temp.c1('04'),'pending',null),
+ (pg_temp.c3p('01'),pg_temp.c1('05'),'pending',pg_temp.c1('03')),(pg_temp.c3p('01'),pg_temp.c1('06'),'pending',null);
+select set_config('resbite.system','',true);
+insert into public.connections(user_a,user_b,state,requested_by,accepted_at) values
+ (least(pg_temp.c1('01'),pg_temp.c3('11')),greatest(pg_temp.c1('01'),pg_temp.c3('11')),'connected',pg_temp.c1('01'),now());
+insert into private.plan_links(plan_id,code) values (pg_temp.c3p('01'),repeat('J',22));
+select pg_temp.ch_check(pg_temp.ch_lines(pg_temp.c3p('01'))='' and pg_temp.ch_lines(pg_temp.c3p('02'))=''
+ and not exists(select 1 from realtime.messages where topic in ('chat:'||pg_temp.c3p('01'),'chat:'||pg_temp.c3p('02'))),
+ 'Making the resbites and the cast wrote a line or a broadcast');
+
+-- 04 says Going (respond): one line, joined, with no author (K-B2), 04 the actor and the user, and no bringer, so no
+-- brought_by; one broadcast. Then Maybe, then Going again (H8): a move between Going and Maybe writes nothing and
+-- changes nothing, the line and its broadcasts as they were. Going once more is respond's no-op: nothing.
+set local role authenticated;
+select pg_temp.ch_as(pg_temp.c1('04'));
+select set_config('c3.v04',public.respond(pg_temp.c3p('01'),'accepted',1)::text,true);
+reset role;
+do $$ declare m public.messages := pg_temp.ch_last_line(pg_temp.c3p('01')); begin
+ perform pg_temp.ch_check(pg_temp.ch_lines(pg_temp.c3p('01'))='joined:04','04''s Going gave the lines '||pg_temp.ch_lines(pg_temp.c3p('01')));
+ perform pg_temp.ch_check((m.series_id,m.plan_id,m.author_id,m.kind,m.event,m.payload,m.body,m.audience,m.client_id,m.state)
+   is not distinct from (pg_temp.c3p('01'),pg_temp.c3p('01'),null::uuid,'system'::text,'joined'::text,
+    jsonb_build_object('actor',pg_temp.c1('04'),'user',pg_temp.c1('04')),null::text,null::text,null::uuid,'sent'::text),
+  '04''s joined line: '||row_to_json(m)::text);
+ perform pg_temp.ch_check(pg_temp.ch_signals(m.id)=1,'04''s line was broadcast '||pg_temp.ch_signals(m.id)||' times');
+ perform set_config('c3.line04',row_to_json(m)::text,true);
+ perform set_config('c3.line04_id',m.id::text,true);
+end $$;
+set local role authenticated;
+select pg_temp.ch_as(pg_temp.c1('04'));
+select set_config('c3.v04',public.respond(pg_temp.c3p('01'),'maybe',current_setting('c3.v04')::integer)::text,true);
+select set_config('c3.v04',public.respond(pg_temp.c3p('01'),'accepted',current_setting('c3.v04')::integer)::text,true);
+select set_config('c3.v04',public.respond(pg_temp.c3p('01'),'accepted',current_setting('c3.v04')::integer)::text,true);
+reset role;
+select pg_temp.ch_check(pg_temp.ch_lines(pg_temp.c3p('01'))='joined:04'
+ and (select row_to_json(m)::text from public.messages m where m.id=current_setting('c3.line04_id')::bigint)=current_setting('c3.line04')
+ and pg_temp.ch_signals(current_setting('c3.line04_id')::bigint)=1
+ and (select response from public.attendees where plan_id=pg_temp.c3p('01') and user_id=pg_temp.c1('04'))='accepted',
+ 'Maybe, then Going again, wrote, changed or broadcast a line: '||pg_temp.ch_lines(pg_temp.c3p('01')));
+
+-- 01 makes 04 an admin (appoint_admin, after 04's Going and before the cancel: K-N2): admin {actor 01, user 04}. A read
+-- names both by first name (K-B2): 01 'Ana', 04 'Leo'.
+set local role authenticated;
+select pg_temp.ch_as(pg_temp.c1('01'));
+select public.appoint_admin(pg_temp.c3p('01'),pg_temp.c1('04'));
+do $$ declare r jsonb := public.chat_messages(pg_temp.c3p('01')); begin
+ perform pg_temp.ch_check(r->'rows'->-1 @> jsonb_build_object('kind','system','event','admin','author_id',null,'body',null)
+   and r->'rows'->-1->'payload'=jsonb_build_object('actor',pg_temp.c1('01'),'user',pg_temp.c1('04')),'The admin line: '||(r->'rows'->-1)::text);
+ perform pg_temp.ch_check(r->'names'=jsonb_build_object(pg_temp.c1('01')::text,'Ana',pg_temp.c1('04')::text,'Leo'),
+  'The names of the admin line: '||(r->'names')::text);
+end $$;
+reset role;
+select pg_temp.ch_check(pg_temp.ch_lines(pg_temp.c3p('01'))='joined:04,admin:04','The lines after the appointment: '||pg_temp.ch_lines(pg_temp.c3p('01')));
+
+-- A join request, made as open-link-approval.sql makes one: 10 asks through the party's open link, Going. Waiting writes
+-- nothing (10 has no guest row yet). 01 approves (decide_join_request): joined {actor 01, user 10}, and a read names 10
+-- 'Kai' (Review Focus 7: "Kai joined", not "Ana joined").
+set local role authenticated;
+select pg_temp.ch_as(pg_temp.c3('10'));
+select pg_temp.ch_check(public.request_to_join(repeat('J',22),'Kai Joiner','accepted','2026-10')->>'state'='waiting','10''s request is not waiting');
+reset role;
+select pg_temp.ch_check(pg_temp.ch_lines(pg_temp.c3p('01'))='joined:04,admin:04','A waiting request wrote a line');
+set local role authenticated;
+select pg_temp.ch_as(pg_temp.c1('01'));
+select public.decide_join_request(pg_temp.c3p('01'),pg_temp.c3('10'),true);
+do $$ declare r jsonb := public.chat_messages(pg_temp.c3p('01')); begin
+ perform pg_temp.ch_check(r->'rows'->-1->>'event'='joined' and r->'rows'->-1->'payload'=jsonb_build_object('actor',pg_temp.c1('01'),'user',pg_temp.c3('10')),
+  'The approval''s line: '||(r->'rows'->-1)::text);
+ perform pg_temp.ch_check(r->'names'->>(pg_temp.c3('10')::text)='Kai' and r->'names'->>(pg_temp.c1('01')::text)='Ana',
+  'The approval''s names: '||(r->'names')::text);
+end $$;
+reset role;
+select pg_temp.ch_check(pg_temp.ch_lines(pg_temp.c3p('01'))='joined:04,admin:04,joined:10','The lines after the approval: '||pg_temp.ch_lines(pg_temp.c3p('01')));
+
+-- The live signal (K-S6, NOTE 3). 03 writes 'Bringing lemonade' and deletes it: two broadcasts on the private topic
+-- chat:<series>, event chat, each with only {id, kind, state}: sent, then deleted.
+set local role authenticated;
+select pg_temp.ch_as(pg_temp.c1('03'));
+select set_config('c3.lemonade',pg_temp.ch_send(pg_temp.c3p('01'),'Bringing lemonade')::text,true);
+select public.delete_message(current_setting('c3.lemonade')::bigint);
+reset role;
+select pg_temp.ch_check((select string_agg(r.event||' '||r.extension||' '||r.private::text||' '||r.payload::text,' | ' order by r.id)
+  from realtime.messages r where r.topic='chat:'||pg_temp.c3p('01') and r.payload->>'id'=current_setting('c3.lemonade'))
+ =format('chat broadcast true {"id": %s, "kind": "message", "state": "sent"} | chat broadcast true {"id": %s, "kind": "message", "state": "deleted"}',
+  current_setting('c3.lemonade'),current_setting('c3.lemonade')),
+ 'The broadcasts of 03''s message: '||coalesce((select string_agg(r.topic||' '||r.payload::text,' | ' order by r.id) from realtime.messages r
+  where r.payload->>'id'=current_setting('c3.lemonade')),'none'));
+
+-- Who may listen (K-S6, H23). As a signed-in 03, in the chat, with Realtime's topic set to the party's, its broadcasts
+-- read under RLS; as 08, a stranger, none. As 03 with a topic that is not exactly chat:<lower-case uuid> (not a uuid,
+-- upper case, thirty-six hyphens, a trailing newline, a trailing digit, none at all), none, and no error. With 03's
+-- roster entry turned off (03 may no longer use the app), none, though 03 is still in the chat.
+set local role authenticated;
+select pg_temp.ch_as(pg_temp.c1('03'));
+select set_config('realtime.topic','chat:'||pg_temp.c3p('01'),true);
+select pg_temp.ch_check((select count(*) from realtime.messages)>0,'03, in the chat, may not read its broadcasts');
+select pg_temp.ch_as(pg_temp.c1('08'));
+select pg_temp.ch_check((select count(*) from realtime.messages)=0,'08, a stranger, may read the party''s broadcasts');
+select pg_temp.ch_as(pg_temp.c1('03'));
+do $$ declare t text; begin
+ foreach t in array array['chat:not-a-uuid','chat:'||upper(pg_temp.c3p('01')::text),'chat:'||repeat('-',36),'chat:'||pg_temp.c3p('01')||e'\n',
+   'chat:'||pg_temp.c3p('01')||'0','other:x',''] loop
+  perform set_config('realtime.topic',t,true);
+  perform pg_temp.ch_check((select count(*) from realtime.messages)=0,format('03 reads broadcasts with the topic %L',t));
+ end loop;
+end $$;
+reset role;
+update private.tester_roster set enabled=false where email='chat1-03@resbite-test.invalid';
+set local role authenticated;
+select pg_temp.ch_as(pg_temp.c1('03'));
+select set_config('realtime.topic','chat:'||pg_temp.c3p('01'),true);
+select pg_temp.ch_check((select count(*) from realtime.messages)=0,'03, who may no longer use the app, may still read the broadcasts');
+select set_config('realtime.topic','',true);
+reset role;
+select pg_temp.ch_check(private.chat_member(pg_temp.c3p('01'),pg_temp.c1('03')),'03 left the chat with the roster entry');
+update private.tester_roster set enabled=true where email='chat1-03@resbite-test.invalid';
+-- can_listen itself: true for 03 on the party; false for every malformed topic, another family, a uuid that is no chat
+-- of 03's, null, 08 and nobody signed in.
+do $$ declare t text; begin
+ perform pg_temp.ch_as(pg_temp.c1('03'));
+ perform pg_temp.ch_check(private.can_listen('chat:'||pg_temp.c3p('01')),'can_listen is not true for 03 on the party');
+ foreach t in array array['chat:not-a-uuid','other:x','chat:'||upper(pg_temp.c3p('01')::text),'chat:'||repeat('-',36),
+   'chat:'||pg_temp.c3p('01')||e'\n','chat:'||pg_temp.c3p('01')||'0',' chat:'||pg_temp.c3p('01'),'chat:'||gen_random_uuid(),''] loop
+  perform pg_temp.ch_check(private.can_listen(t) is false,format('can_listen(%L) is not false',t));
+ end loop;
+ perform pg_temp.ch_check(private.can_listen(null) is false,'can_listen(null) is not false');
+ perform pg_temp.ch_as(pg_temp.c1('08'));
+ perform pg_temp.ch_check(private.can_listen('chat:'||pg_temp.c3p('01')) is false,'can_listen is not false for 08');
+ perform set_config('request.jwt.claims','',true);
+ perform pg_temp.ch_check(private.can_listen('chat:'||pg_temp.c3p('01')) is false,'can_listen is not false for nobody');
+end $$;
+
+-- 03 says Can't go (respond): cant_go {actor 03, user 03}; and from then 03 may not listen (Review Focus 1).
+set local role authenticated;
+select pg_temp.ch_as(pg_temp.c1('03'));
+select public.respond(pg_temp.c3p('01'),'declined',1);
+select set_config('realtime.topic','chat:'||pg_temp.c3p('01'),true);
+select pg_temp.ch_check((select count(*) from realtime.messages)=0,'03, who said Can''t go, may still read the broadcasts');
+select set_config('realtime.topic','',true);
+reset role;
+select pg_temp.ch_check(pg_temp.ch_lines(pg_temp.c3p('01'))='joined:04,admin:04,joined:10,cant_go:03'
+ and (pg_temp.ch_last_line(pg_temp.c3p('01'))).payload=jsonb_build_object('actor',pg_temp.c1('03'),'user',pg_temp.c1('03')),
+ '03''s Can''t go: '||pg_temp.ch_lines(pg_temp.c3p('01'))||' '||(pg_temp.ch_last_line(pg_temp.c3p('01'))).payload::text);
+
+-- 05, brought by 03, says Going: joined {actor 05, user 05, brought_by 03} ("joined · brought by Mia", H13), and a read
+-- names both, brought_by being a person key.
+set local role authenticated;
+select pg_temp.ch_as(pg_temp.c1('05'));
+select public.respond(pg_temp.c3p('01'),'accepted',1);
+do $$ declare r jsonb := public.chat_messages(pg_temp.c3p('01')); begin
+ perform pg_temp.ch_check(r->'rows'->-1->>'event'='joined'
+   and r->'rows'->-1->'payload'=jsonb_build_object('actor',pg_temp.c1('05'),'user',pg_temp.c1('05'),'brought_by',pg_temp.c1('03')),
+  'The brought guest''s line: '||(r->'rows'->-1)::text);
+ perform pg_temp.ch_check(r->'names'->>(pg_temp.c1('03')::text)='Mia' and r->'names'->>(pg_temp.c1('05')::text)='Sol',
+  'The brought guest''s names: '||(r->'names')::text);
+end $$;
+reset role;
+
+-- 01 invites 11, a connection, in the app (invite_contacts): a guest row not answered, and no line. 11 then says Can't
+-- go: no line either.
+set local role authenticated;
+select pg_temp.ch_as(pg_temp.c1('01'));
+select pg_temp.ch_check(public.invite_contacts(pg_temp.c3p('01'),jsonb_build_array(jsonb_build_object('user',pg_temp.c3('11'))))
+ =jsonb_build_array(jsonb_build_object('user',pg_temp.c3('11'),'kind','app')),'01 could not invite 11 in the app');
+reset role;
+select pg_temp.ch_check(exists(select 1 from public.attendees where plan_id=pg_temp.c3p('01') and user_id=pg_temp.c3('11') and response='pending')
+ and pg_temp.ch_lines(pg_temp.c3p('01'))='joined:04,admin:04,joined:10,cant_go:03,joined:05',
+ 'The in-app invitation gave no guest row, or wrote a line: '||pg_temp.ch_lines(pg_temp.c3p('01')));
+-- 11, never in the chat, says Can't go (respond): only a move out of Going or Maybe is news; nothing.
+set local role authenticated;
+select pg_temp.ch_as(pg_temp.c3('11'));
+select public.respond(pg_temp.c3p('01'),'declined',1);
+reset role;
+select pg_temp.ch_check(pg_temp.ch_lines(pg_temp.c3p('01'))='joined:04,admin:04,joined:10,cant_go:03,joined:05',
+ 'Can''t go from not answered wrote a line: '||pg_temp.ch_lines(pg_temp.c3p('01')));
+
+-- 06 says Going, Can't go, Going, Can't go, Going within a minute (K-S2, Decision 10): one line about 06, made at the
+-- first answer and updated in place each time after (its created_at kept, updated_at moved), with a broadcast each time:
+-- five. After the second answer it read cant_go {actor 06, user 06}; at the end joined {actor 06, user 06}. Nobody
+-- else's line changed.
+set local role authenticated;
+select pg_temp.ch_as(pg_temp.c1('06'));
+select set_config('c3.v06',public.respond(pg_temp.c3p('01'),'accepted',1)::text,true);
+reset role;
+select set_config('c3.line06',(select row_to_json(m)::text from public.messages m where m.series_id=pg_temp.c3p('01') and m.kind='system'
+ and m.payload->>'user'=pg_temp.c1('06')::text),true);
+set local role authenticated;
+select pg_temp.ch_as(pg_temp.c1('06'));
+select set_config('c3.v06',public.respond(pg_temp.c3p('01'),'declined',current_setting('c3.v06')::integer)::text,true);
+reset role;
+do $$ declare v jsonb := current_setting('c3.line06')::jsonb; m public.messages := pg_temp.ch_last_line(pg_temp.c3p('01')); begin
+ perform pg_temp.ch_check(m.id=(v->>'id')::bigint and m.event='cant_go' and m.payload=jsonb_build_object('actor',pg_temp.c1('06'),'user',pg_temp.c1('06'))
+   and m.created_at=(v->>'created_at')::timestamptz and m.updated_at=now() and pg_temp.ch_signals(m.id)=2,
+  '06''s Can''t go did not turn the line into cant_go in place: '||row_to_json(m)::text);
+end $$;
+set local role authenticated;
+select pg_temp.ch_as(pg_temp.c1('06'));
+select set_config('c3.v06',public.respond(pg_temp.c3p('01'),'accepted',current_setting('c3.v06')::integer)::text,true);
+select set_config('c3.v06',public.respond(pg_temp.c3p('01'),'declined',current_setting('c3.v06')::integer)::text,true);
+select set_config('c3.v06',public.respond(pg_temp.c3p('01'),'accepted',current_setting('c3.v06')::integer)::text,true);
+reset role;
+do $$ declare v jsonb := current_setting('c3.line06')::jsonb; m public.messages; begin
+ select * into m from public.messages where id=(v->>'id')::bigint;
+ perform pg_temp.ch_check(pg_temp.ch_lines(pg_temp.c3p('01'))='joined:04,admin:04,joined:10,cant_go:03,joined:05,joined:06',
+  'Five answers by 06 gave the lines '||pg_temp.ch_lines(pg_temp.c3p('01')));
+ perform pg_temp.ch_check(m.event='joined' and m.payload=jsonb_build_object('actor',pg_temp.c1('06'),'user',pg_temp.c1('06'))
+   and m.created_at=(v->>'created_at')::timestamptz and m.created_at>=now() and m.updated_at=now(),'06''s line after five answers: '||row_to_json(m)::text);
+ perform pg_temp.ch_check(pg_temp.ch_signals(m.id)=5,'06''s line was broadcast '||pg_temp.ch_signals(m.id)||' times, not 5');
+ perform pg_temp.ch_check((select count(*) from realtime.messages r where r.topic='chat:'||pg_temp.c3p('01') and r.payload->>'id'=m.id::text
+   and r.payload=jsonb_build_object('id',m.id,'kind','system','state','sent'))=5,'06''s broadcasts are not {id, kind system, state sent}');
+ perform pg_temp.ch_check((select row_to_json(x)::text from public.messages x where x.id=current_setting('c3.line04_id')::bigint)=current_setting('c3.line04'),
+  '06''s answers changed 04''s line');
+end $$;
+-- Ten minutes (K-S2): with 06's line made 9 min 59 s ago (moved by hand: a broadcast), 06's Can't go still updates it
+-- (a broadcast); made 10 min 1 s ago (another), 06's Going is a new line, and the old one keeps saying cant_go.
+update public.messages set created_at=now()-interval '9 minutes 59 seconds' where id=(current_setting('c3.line06')::jsonb->>'id')::bigint;
+set local role authenticated;
+select pg_temp.ch_as(pg_temp.c1('06'));
+select set_config('c3.v06',public.respond(pg_temp.c3p('01'),'declined',current_setting('c3.v06')::integer)::text,true);
+reset role;
+select pg_temp.ch_check(pg_temp.ch_lines(pg_temp.c3p('01'))='joined:04,admin:04,joined:10,cant_go:03,joined:05,cant_go:06'
+ and pg_temp.ch_signals((current_setting('c3.line06')::jsonb->>'id')::bigint)=7,
+ 'A Can''t go 9 min 59 s after the line did not update it: '||pg_temp.ch_lines(pg_temp.c3p('01')));
+update public.messages set created_at=now()-interval '10 minutes 1 second' where id=(current_setting('c3.line06')::jsonb->>'id')::bigint;
+set local role authenticated;
+select pg_temp.ch_as(pg_temp.c1('06'));
+select set_config('c3.v06',public.respond(pg_temp.c3p('01'),'accepted',current_setting('c3.v06')::integer)::text,true);
+reset role;
+select pg_temp.ch_check(pg_temp.ch_lines(pg_temp.c3p('01'))='joined:04,admin:04,joined:10,cant_go:03,joined:05,cant_go:06,joined:06'
+ and pg_temp.ch_signals((current_setting('c3.line06')::jsonb->>'id')::bigint)=8
+ and pg_temp.ch_signals((pg_temp.ch_last_line(pg_temp.c3p('01'))).id)=1
+ and (pg_temp.ch_last_line(pg_temp.c3p('01'))).payload=jsonb_build_object('actor',pg_temp.c1('06'),'user',pg_temp.c1('06')),
+ 'A Going 10 min 1 s after the line was not a new line: '||pg_temp.ch_lines(pg_temp.c3p('01')));
+
+-- Changes (K-S2, K-S3), through change_plan_v4 as 01: each a changed line, actor 01, with exactly the eight keys of
+-- K-S3 beside it. The place ('The bandstand'): what 'place', the starts, ends and zones the same, place_label the new
+-- label. The start half an hour later: what 'time', from_start and to_start differing. The end an hour later: what
+-- 'time', from_end and to_end differing. The zone (Europe/Paris, the same instants): what 'time', from_zone and to_zone
+-- differing. The start and the place together: 'time_place'. The title alone: nothing.
+do $$ declare s timestamptz := pg_temp.c1_start(); e timestamptz := pg_temp.c1_start()+interval '3 hours'; m public.messages;
+ n bigint := (select count(*) from public.messages where series_id=pg_temp.c3p('01') and kind='system'); begin
+ perform pg_temp.ch_as(pg_temp.c1('01'));
+ perform pg_temp.ch_change(pg_temp.c3p('01'),'Garden party',s,e,'Europe/London','The bandstand');
+ m := pg_temp.ch_last_line(pg_temp.c3p('01'));
+ perform pg_temp.ch_check(m.event='changed' and m.author_id is null and m.payload=jsonb_build_object('actor',pg_temp.c1('01'),'what','place',
+   'from_start',s,'to_start',s,'from_end',e,'to_end',e,'from_zone','Europe/London','to_zone','Europe/London','place_label','The bandstand'),
+  'The place change: '||coalesce(m.event,'none')||' '||coalesce(m.payload::text,''));
+ perform pg_temp.ch_change(pg_temp.c3p('01'),'Garden party',s+interval '30 minutes',e,'Europe/London','The bandstand');
+ m := pg_temp.ch_last_line(pg_temp.c3p('01'));
+ perform pg_temp.ch_check(m.event='changed' and m.payload=jsonb_build_object('actor',pg_temp.c1('01'),'what','time',
+   'from_start',s,'to_start',s+interval '30 minutes','from_end',e,'to_end',e,'from_zone','Europe/London','to_zone','Europe/London',
+   'place_label','The bandstand'),'The start change: '||m.payload::text);
+ perform pg_temp.ch_change(pg_temp.c3p('01'),'Garden party',s+interval '30 minutes',e+interval '1 hour','Europe/London','The bandstand');
+ m := pg_temp.ch_last_line(pg_temp.c3p('01'));
+ perform pg_temp.ch_check(m.event='changed' and m.payload=jsonb_build_object('actor',pg_temp.c1('01'),'what','time',
+   'from_start',s+interval '30 minutes','to_start',s+interval '30 minutes','from_end',e,'to_end',e+interval '1 hour',
+   'from_zone','Europe/London','to_zone','Europe/London','place_label','The bandstand'),'The end change: '||m.payload::text);
+ perform pg_temp.ch_change(pg_temp.c3p('01'),'Garden party',s+interval '30 minutes',e+interval '1 hour','Europe/Paris','The bandstand');
+ m := pg_temp.ch_last_line(pg_temp.c3p('01'));
+ perform pg_temp.ch_check(m.event='changed' and m.payload=jsonb_build_object('actor',pg_temp.c1('01'),'what','time',
+   'from_start',s+interval '30 minutes','to_start',s+interval '30 minutes','from_end',e+interval '1 hour','to_end',e+interval '1 hour',
+   'from_zone','Europe/London','to_zone','Europe/Paris','place_label','The bandstand'),'The zone change: '||m.payload::text);
+ perform pg_temp.ch_change(pg_temp.c3p('01'),'Garden party',s,e+interval '1 hour','Europe/Paris','The rose garden');
+ m := pg_temp.ch_last_line(pg_temp.c3p('01'));
+ perform pg_temp.ch_check(m.event='changed' and m.payload=jsonb_build_object('actor',pg_temp.c1('01'),'what','time_place',
+   'from_start',s+interval '30 minutes','to_start',s,'from_end',e+interval '1 hour','to_end',e+interval '1 hour',
+   'from_zone','Europe/Paris','to_zone','Europe/Paris','place_label','The rose garden'),'The start and place change: '||m.payload::text);
+ perform pg_temp.ch_check((select count(*) from public.messages where series_id=pg_temp.c3p('01') and kind='system')=n+5,
+  'The five changes did not write five lines');
+ perform pg_temp.ch_change(pg_temp.c3p('01'),'Summer garden party',s,e+interval '1 hour','Europe/Paris','The rose garden');
+ perform pg_temp.ch_check((select count(*) from public.messages where series_id=pg_temp.c3p('01') and kind='system')=n+5,
+  'A new title wrote a line');
+end $$;
+-- A flip of place_tbd with the label as it is (by hand; plans_place_tbd_valid lets it only while the label reads 'To be
+-- decided', put there under the roll's flag): nothing, either way. The label goes back the same way. The circle
+-- (set_plan_circle as 01, NOTE 11): nothing; only bring_invites, bring_levels and the version change.
+do $$ declare n bigint := (select count(*) from public.messages where series_id=pg_temp.c3p('01'));
+ v_before jsonb; v_after jsonb; begin
+ perform set_config('resbite.system','roll',true);
+ update public.plans set place_label='To be decided' where id=pg_temp.c3p('01');
+ perform set_config('resbite.system','',true);
+ update public.plans set place_tbd=true where id=pg_temp.c3p('01');
+ update public.plans set place_tbd=false where id=pg_temp.c3p('01');
+ perform pg_temp.ch_check((select count(*) from public.messages where series_id=pg_temp.c3p('01'))=n,'A place_tbd flip wrote a line');
+ perform set_config('resbite.system','roll',true);
+ update public.plans set place_label='The rose garden' where id=pg_temp.c3p('01');
+ perform set_config('resbite.system','',true);
+ v_before := (select to_jsonb(p) from public.plans p where p.id=pg_temp.c3p('01'));
+ perform pg_temp.ch_as(pg_temp.c1('01'));
+ perform public.set_plan_circle(pg_temp.c3p('01'),1::smallint,2::smallint);
+ v_after := (select to_jsonb(p) from public.plans p where p.id=pg_temp.c3p('01'));
+ perform pg_temp.ch_check(v_after-'bring_invites'-'bring_levels'-'version'=v_before-'bring_invites'-'bring_levels'-'version'
+   and v_after->>'bring_invites'='1' and v_after->>'bring_levels'='2' and (v_after->>'version')::integer=(v_before->>'version')::integer+1,
+  'set_plan_circle changed more than the circle and the version: '||v_after::text);
+ perform pg_temp.ch_check((select count(*) from public.messages where series_id=pg_temp.c3p('01'))=n,'set_plan_circle wrote a line');
+end $$;
+
+-- The flags (K-S2, NOTE 12). chat_lines_off is true for 'roll' and 'deletion' only. Under 'roll' (the roll's; plan 2's
+-- G-B6 runs the real one): an accepted guest row and a plan_admins row (07) write no line. Under 'deletion' (the
+-- deletion request's): 01 cancelling the spare evening writes no line on it, and no broadcast. Each ends with the flag
+-- reset, so the lines after it are written.
+do $$ declare n bigint := (select count(*) from public.messages where series_id=pg_temp.c3p('01')); begin
+ perform pg_temp.ch_check(private.chat_lines_off() is false,'The lines are off with no flag');
+ perform set_config('resbite.system','roll',true);
+ perform pg_temp.ch_check(private.chat_lines_off(),'The lines are on under the roll''s flag');
+ insert into public.attendees(plan_id,user_id,response) values (pg_temp.c3p('01'),pg_temp.c1('07'),'accepted');
+ insert into public.plan_admins(plan_id,user_id,appointed_by) values (pg_temp.c3p('01'),pg_temp.c1('07'),pg_temp.c1('01'));
+ perform set_config('resbite.system','',true);
+ perform pg_temp.ch_check((select count(*) from public.messages where series_id=pg_temp.c3p('01'))=n,'Under the roll''s flag, 07''s rows wrote a line');
+ perform pg_temp.ch_check(private.chat_lines_off() is false,'The lines are off with the flag reset');
+ perform set_config('resbite.system','other',true);
+ perform pg_temp.ch_check(private.chat_lines_off() is false,'The lines are off under another flag');
+ perform set_config('resbite.system','deletion',true);
+ perform pg_temp.ch_check(private.chat_lines_off(),'The lines are on under the deletion''s flag');
+ perform pg_temp.ch_as(pg_temp.c1('01'));
+ perform public.change_plan_v4(pg_temp.c3p('02'),(select version from public.plans where id=pg_temp.c3p('02')),'Spare evening','',
+  array['community'],null,null,null,null,null,null::smallint,null,null,true);
+ perform set_config('resbite.system','',true);
+ perform pg_temp.ch_check((select status from public.plans where id=pg_temp.c3p('02'))='cancelled'
+   and not exists(select 1 from public.messages where series_id=pg_temp.c3p('02'))
+   and not exists(select 1 from realtime.messages where topic='chat:'||pg_temp.c3p('02')),'Under the deletion''s flag, the cancel wrote a line');
+end $$;
+
+-- 01 cancels the party through change_plan_v4: cancelled {actor 01}.
+do $$ declare m public.messages; begin
+ perform pg_temp.ch_as(pg_temp.c1('01'));
+ perform public.change_plan_v4(pg_temp.c3p('01'),(select version from public.plans where id=pg_temp.c3p('01')),'Summer garden party','',
+  array['community'],null,null,null,null,null,null::smallint,null,null,true);
+ m := pg_temp.ch_last_line(pg_temp.c3p('01'));
+ perform pg_temp.ch_check(m.event='cancelled' and m.payload=jsonb_build_object('actor',pg_temp.c1('01')) and pg_temp.ch_signals(m.id)=1,
+  'The cancel''s line: '||coalesce(row_to_json(m)::text,'none'));
+ perform set_config('c3.cancelled',m.id::text,true);
+end $$;
+
+-- A system line is nobody's message (K-B2): its actor may not delete it, 42501 'Not your message', nor a host remove
+-- it, 42501 'Hosts only'; it stays as it was.
+select set_config('c3.lines_before',(select string_agg(row_to_json(m)::text,'|' order by m.id) from public.messages m
+ where m.series_id=pg_temp.c3p('01') and m.kind='system'),true);
+set local role authenticated;
+select pg_temp.ch_as(pg_temp.c1('01'));
+select pg_temp.ch_refused(format('select public.delete_message(%s)',current_setting('c3.cancelled')),'42501','Not your message');
+select pg_temp.ch_refused(format('select public.remove_message(%s)',current_setting('c3.line04_id')),'42501','Hosts only');
+select pg_temp.ch_as(pg_temp.c1('04'));
+select pg_temp.ch_refused(format('select public.delete_message(%s)',current_setting('c3.line04_id')),'42501','Not your message');
+select pg_temp.ch_refused(format('select public.remove_message(%s)',current_setting('c3.cancelled')),'42501','Hosts only');
+reset role;
+select pg_temp.ch_check((select string_agg(row_to_json(m)::text,'|' order by m.id) from public.messages m
+ where m.series_id=pg_temp.c3p('01') and m.kind='system')=current_setting('c3.lines_before'),'A refused delete or remove changed a system line');
+
+-- chat_system_line itself (Shared interfaces): kind system, no author, on the plan's chat; it adds actor = auth.uid()
+-- unless the payload names an actor, null included (plan 2's roll writes its group lines with actor null through it),
+-- and it checks no flag. On the spare evening's chat, with 01 signed in.
+do $$ declare m public.messages; begin
+ perform pg_temp.ch_as(pg_temp.c1('01'));
+ perform set_config('resbite.system','roll',true);
+ perform private.chat_system_line(pg_temp.c3p('02'),'ended',jsonb_build_object('actor',null,'title','Spare evening'));
+ perform set_config('resbite.system','',true);
+ m := pg_temp.ch_last_line(pg_temp.c3p('02'));
+ perform pg_temp.ch_check((m.series_id,m.plan_id,m.author_id,m.kind,m.event,m.payload,m.body,m.state) is not distinct from
+   (pg_temp.c3p('02'),pg_temp.c3p('02'),null::uuid,'system'::text,'ended'::text,jsonb_build_object('actor',null,'title','Spare evening'),
+    null::text,'sent'::text),'A line naming its actor as nobody, under the roll''s flag: '||coalesce(row_to_json(m)::text,'none'));
+ perform private.chat_system_line(pg_temp.c3p('02'),'next',jsonb_build_object('title','Spare evening'));
+ perform pg_temp.ch_check((pg_temp.ch_last_line(pg_temp.c3p('02'))).payload=jsonb_build_object('actor',pg_temp.c1('01'),'title','Spare evening'),
+  'A line naming no actor did not get the caller''s');
+ perform private.chat_system_line(pg_temp.c3p('02'),'stopped',null);
+ perform pg_temp.ch_check((pg_temp.ch_last_line(pg_temp.c3p('02'))).payload=jsonb_build_object('actor',pg_temp.c1('01'))
+   and pg_temp.ch_lines(pg_temp.c3p('02'))='ended:-,next:-,stopped:-','A line with no payload: '||pg_temp.ch_lines(pg_temp.c3p('02')));
+end $$;
+
+-- Every row written here and every update in place was broadcast once (NOTE 3): on chat:<the party>, event chat,
+-- extension broadcast, private, with only {id, kind, state}; the latest broadcast of each row carries its state now;
+-- and there are as many broadcasts as rows, plus the updates in place (03's deletion, 06's four answers and its one
+-- more, and the two hand moves of 06's line's time).
+do $$ begin
+ perform pg_temp.ch_check(not exists(select 1 from realtime.messages r where r.topic='chat:'||pg_temp.c3p('01')
+   and (r.event,r.extension,r.private,pg_temp.ch_keys(r.payload)) is distinct from ('chat'::text,'broadcast'::text,true,'id,kind,state'::text)),
+  'A broadcast is not a private chat broadcast of {id, kind, state}');
+ perform pg_temp.ch_check(not exists(select 1 from public.messages m where m.series_id=pg_temp.c3p('01')
+   and (select r.payload from realtime.messages r where r.topic='chat:'||pg_temp.c3p('01') and r.payload->>'id'=m.id::text order by r.id desc limit 1)
+    is distinct from jsonb_build_object('id',m.id,'kind',m.kind,'state',m.state)),'A row''s latest broadcast does not carry it as it is');
+ perform pg_temp.ch_check((select count(*) from realtime.messages where topic='chat:'||pg_temp.c3p('01'))
+   =(select count(*) from public.messages where series_id=pg_temp.c3p('01'))+8,
+  'Broadcasts: '||(select count(*) from realtime.messages where topic='chat:'||pg_temp.c3p('01'))||' for '
+   ||(select count(*) from public.messages where series_id=pg_temp.c3p('01'))||' rows');
+end $$;
+
+-- The schema (K-N13, K-S6, NOTE 3). The seven functions of this section are definers with an empty search path, and
+-- no role may call them, but can_listen, which only signed-in accounts may (plpgsql: a topic is matched before any
+-- cast). chat_member stays ungranted. The four triggers are as named. realtime.messages has exactly one policy, for
+-- reading, to authenticated, through can_listen alone; none to write (clients never send).
+do $$ declare f text; r text; begin
+ foreach f in array array['chat_system_line(uuid,text,jsonb)','chat_lines_off()','attendees_chat_lines()','plans_chat_lines()',
+   'plan_admins_chat_lines()','messages_signal()','can_listen(text)'] loop
+  perform pg_temp.ch_check((select prosecdef and proconfig=array['search_path=""'] from pg_catalog.pg_proc where oid=('private.'||f)::regprocedure),
+   'private.'||f||' is not a definer with an empty search path');
+  foreach r in array array['public','anon','authenticated','service_role'] loop
+   perform pg_temp.ch_check(has_function_privilege(r,'private.'||f,'execute')=(f='can_listen(text)' and r='authenticated'),
+    r||(case when has_function_privilege(r,'private.'||f,'execute') then ' may' else ' may not' end)||' call private.'||f);
+  end loop;
+ end loop;
+ perform pg_temp.ch_check(has_function_privilege('authenticated','private.can_listen(text)','execute')
+   and not has_function_privilege('authenticated','private.chat_member(uuid,uuid)','execute')
+   and not has_function_privilege('anon','private.chat_system_line(uuid,text,jsonb)','execute'),'The listening grants are wrong');
+ perform pg_temp.ch_check((select l.lanname from pg_catalog.pg_proc p join pg_catalog.pg_language l on l.oid=p.prolang
+   where p.oid='private.can_listen(text)'::regprocedure)='plpgsql','can_listen is not plpgsql');
+ perform pg_temp.ch_check((select string_agg(c.relname||'.'||t.tgname||' '||t.tgfoid::regprocedure::text||' '
+    ||substring(pg_catalog.pg_get_triggerdef(t.oid) from '(AFTER .* FOR EACH ROW)'),' | ' order by t.tgname)
+   from pg_catalog.pg_trigger t join pg_catalog.pg_class c on c.oid=t.tgrelid
+   where t.tgname in ('attendees_chat_lines','plans_chat_lines','plan_admins_chat_lines','messages_signal'))
+   ='attendees.attendees_chat_lines private.attendees_chat_lines() AFTER INSERT OR UPDATE OF response ON public.attendees FOR EACH ROW | '
+    'messages.messages_signal private.messages_signal() AFTER INSERT OR UPDATE ON public.messages FOR EACH ROW | '
+    'plan_admins.plan_admins_chat_lines private.plan_admins_chat_lines() AFTER INSERT ON public.plan_admins FOR EACH ROW | '
+    'plans.plans_chat_lines private.plans_chat_lines() AFTER UPDATE ON public.plans FOR EACH ROW','The line and signal triggers are wrong');
+ perform pg_temp.ch_check((select string_agg(p.policyname||' '||p.cmd||' '||p.permissive||' '||p.roles::text||' '||coalesce(p.with_check,'-'),' | ')
+   from pg_catalog.pg_policies p where p.schemaname='realtime' and p.tablename='messages')
+   ='chat_members_listen SELECT PERMISSIVE {authenticated} -','realtime.messages'' policies are wrong');
+ perform pg_temp.ch_check((select regexp_replace(qual,'\s+',' ','g') from pg_catalog.pg_policies where schemaname='realtime' and policyname='chat_members_listen')
+   ='((extension = ''broadcast''::text) AND private.can_listen(( SELECT realtime.topic() AS topic)))',
+  'The policy does not read through can_listen alone: '||(select qual from pg_catalog.pg_policies where schemaname='realtime' and policyname='chat_members_listen'));
+end $$;
+rollback;
+
+-- The way back (Task 3; K-N9, BLOCKING 1, NOTE 4, NOTE 5), rehearsed in a transaction that ends in rollback. While chat
+-- plan 2 is applied (a private.series_leaves table stands in) the rollback refuses and changes nothing. Otherwise it runs
+-- on a chat with a guest's joined line, a message, an announcement, their notices (one with a delivery), a read and a
+-- mute, beside an ordinary notice: the policy, the seven triggers, the four tables (and chats.is_group with them), every
+-- new function, the outbox's message_id (its index with it), its recipient index and the two kinds' notices go; the
+-- ordinary notice, the plan and its guest stay, and so do the other triggers of the tables the chat's triggers were on;
+-- the outbox's kind check holds the eleven kinds again. Each restored function is its source migration's text exactly
+-- (running that text again changes nothing), with its grants as they were: the notice audience
+-- (20261110120000_connections), the worker's claim (20261111130000_circles_of_trust), its outcome
+-- (20261030120000_push_delivery) and, where the deletion lifecycle exists (full mode), request_account_deletion (the
+-- circles body, BLOCKING 1). The circles rollback, which refuses while chat is applied, then runs. The rehearsal against
+-- the hosted state is 20261111140000_chat_core.after.sql's.
+\set ch_rollback `cat :'resbite_repo'/supabase/rollback/20261111140000_chat_core.rollback.sql`
+\set ch_circles_rollback `cat :'resbite_repo'/supabase/rollback/20261111130000_circles_of_trust.rollback.sql`
+\set ch_connections `cat :'resbite_repo'/supabase/migrations/20261110120000_connections.sql`
+\set ch_circles `cat :'resbite_repo'/supabase/migrations/20261111130000_circles_of_trust.sql`
+\set ch_push `cat :'resbite_repo'/supabase/migrations/20261030120000_push_delivery.sql`
+begin;
+create temporary table ch_texts on commit drop as select :'ch_rollback'::text as rollback, :'ch_circles_rollback'::text as circles_rollback;
+-- Each function the rollback restores, the statement that made it in its source migration, and its grants now.
+create temporary table ch_restores on commit drop as
+ select x.signature, x.source, (select p.proacl::text from pg_catalog.pg_proc p where p.oid=x.signature::regprocedure) as grants
+ from (values
+  ('private.notification_recipient_eligible(bigint)',pg_temp.ch_source(:'ch_connections','create or replace function private.notification_recipient_eligible(','$$;')),
+  ('public.claim_notification_deliveries(integer)',pg_temp.ch_source(:'ch_circles','create or replace function public.claim_notification_deliveries(','$$;')),
+  ('public.finish_notification_delivery(uuid,uuid,text,text,integer)',pg_temp.ch_source(:'ch_push','create or replace function public.finish_notification_delivery(','$$;')),
+  ('private.request_account_deletion(uuid,uuid,uuid,text)',pg_temp.ch_source(:'ch_circles','create or replace function private.request_account_deletion(','$$;'))) x(signature,source)
+ where pg_catalog.to_regprocedure(x.signature) is not null;
+-- The other triggers of the tables the chat's triggers are on, which stay.
+create temporary table ch_other_triggers on commit drop as
+ select t.tgrelid::regclass::text as tbl, t.tgname, pg_catalog.pg_get_triggerdef(t.oid) as definition from pg_catalog.pg_trigger t
+ where t.tgrelid in ('public.plans'::regclass,'public.attendees'::regclass,'public.plan_admins'::regclass) and not t.tgisinternal
+  and t.tgname not in ('plans_chat_row','plans_chat_lines','attendees_chat_lines','plan_admins_chat_lines');
+do $$ begin
+ perform pg_temp.ch_check(coalesce(length(btrim((select rollback from ch_texts))),0)>0,'The rollback text is empty');
+ perform pg_temp.ch_check((select count(*) from ch_restores)=case when pg_catalog.to_regprocedure('private.request_account_deletion(uuid,uuid,uuid,text)') is null then 3 else 4 end
+   and not exists(select 1 from ch_restores where source is null or grants is null),'A function to restore, or its source, is missing');
+ create table private.series_leaves(id integer);
+ begin
+  execute (select rollback from ch_texts);
+  raise exception 'The chat core rollback ran while chat plan 2 is applied';
+ exception when raise_exception then
+  if sqlerrm is distinct from 'Run the chat groups rollback before the chat core rollback' then raise; end if;
+ end;
+ drop table private.series_leaves;
+ perform pg_temp.ch_check(pg_catalog.to_regclass('public.messages') is not null and pg_catalog.to_regprocedure('private.can_listen(text)') is not null
+   and exists(select 1 from pg_catalog.pg_policies where schemaname='realtime' and policyname='chat_members_listen')
+   and exists(select 1 from pg_catalog.pg_trigger where tgname='attendees_chat_lines'),'The refused rollback changed something');
+end $$;
+create function pg_temp.c6(p text) returns uuid language sql immutable as $$ select ('c6000000-0000-4000-8000-0000000000'||p)::uuid $$;
+insert into auth.users(id,email,email_confirmed_at) values
+ (pg_temp.c6('01'),'chat6-01@resbite-test.invalid',now()),(pg_temp.c6('02'),'chat6-02@resbite-test.invalid',now());
+insert into private.tester_roster(email) values ('chat6-01@resbite-test.invalid'),('chat6-02@resbite-test.invalid');
+insert into public.profiles(id,display_name) values (pg_temp.c6('01'),'Rehearsal host'),(pg_temp.c6('02'),'Rehearsal guest');
+insert into public.plans(id,owner_id,title,starts_at,ends_at,time_zone,place_label,categories) values
+ ('c6100000-0000-4000-8000-000000000001',pg_temp.c6('01'),'Rehearsal picnic',now()+interval '1 day',now()+interval '1 day 2 hours',
+  'UTC','Lawn',array['community']);
+insert into public.attendees(plan_id,user_id,response) values ('c6100000-0000-4000-8000-000000000001',pg_temp.c6('02'),'accepted');
+do $$ begin
+ perform pg_temp.ch_as(pg_temp.c6('02'));
+ perform public.send_message('c6100000-0000-4000-8000-000000000001','See you there',gen_random_uuid());
+ perform pg_temp.ch_as(pg_temp.c6('01'));
+ perform public.send_announcement('c6100000-0000-4000-8000-000000000001','Bring a blanket','everyone',gen_random_uuid());
+end $$;
+insert into private.notification_deliveries(outbox_id,token,endpoint_updated_at)
+ select o.id,'ExpoPushToken[c6]',now() from private.notification_outbox o where o.plan_id='c6100000-0000-4000-8000-000000000001' and o.kind='chat_message';
+insert into public.chat_reads(series_id,user_id,last_read_id)
+ select 'c6100000-0000-4000-8000-000000000001',pg_temp.c6('02'),max(id) from public.messages where series_id='c6100000-0000-4000-8000-000000000001';
+insert into public.chat_mutes(series_id,user_id) values ('c6100000-0000-4000-8000-000000000001',pg_temp.c6('02'));
+insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key) values
+ ('c6100000-0000-4000-8000-000000000001',pg_temp.c6('02'),'plan_changed','c6:changed');
+select pg_temp.ch_check(pg_temp.ch_lines('c6100000-0000-4000-8000-000000000001')='joined:02'
+ and (select string_agg(kind,',' order by kind) from private.notification_outbox where plan_id='c6100000-0000-4000-8000-000000000001')
+  ='announcement,chat_message,plan_changed'
+ and exists(select 1 from private.notification_deliveries where token='ExpoPushToken[c6]'),'The rehearsal''s chat is not as seeded');
+\ir ../rollback/20261111140000_chat_core.rollback.sql
+do $$ declare f record; v_def text; begin
+ perform pg_temp.ch_check(not exists(select 1 from pg_catalog.pg_policies where schemaname='realtime'),'The rollback left a Realtime policy');
+ perform pg_temp.ch_check(not exists(select 1 from pg_catalog.pg_trigger where tgname in ('messages_signal','attendees_chat_lines','plans_chat_lines',
+   'plan_admins_chat_lines','messages_chat_stats','messages_touch','plans_chat_row')),'The rollback left a chat trigger');
+ perform pg_temp.ch_check((select coalesce(string_agg(x.d,' | ' order by x.d),'') from (select t.tgrelid::regclass::text||' '||t.tgname||' '
+    ||pg_catalog.pg_get_triggerdef(t.oid) as d from pg_catalog.pg_trigger t
+    where t.tgrelid in ('public.plans'::regclass,'public.attendees'::regclass,'public.plan_admins'::regclass) and not t.tgisinternal) x)
+   =(select coalesce(string_agg(x.d,' | ' order by x.d),'') from (select tbl||' '||tgname||' '||definition as d from ch_other_triggers) x),
+  'The rollback changed another trigger');
+ perform pg_temp.ch_check(pg_catalog.to_regclass('public.messages') is null and pg_catalog.to_regclass('public.chats') is null
+   and pg_catalog.to_regclass('public.chat_reads') is null and pg_catalog.to_regclass('public.chat_mutes') is null
+   and pg_catalog.to_regclass('public.messages_id_seq') is null,'The rollback left a chat table');
+ perform pg_temp.ch_check(not exists(select 1 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
+   where n.nspname in ('public','private') and p.proname in ('messages_touch','plans_chat_row','current_occurrence','chat_member','chat_members',
+    'chat_closes_at','chat_open','chat_is_group','announcement_audience','chat_first_name','chat_row','chat_names','chat_summary','chat_messages',
+    'chat_messages_since','my_chat_overview','messages_chat_stats','chat_body','send_message','send_announcement','delete_message','remove_message',
+    'mark_chat_read','set_chat_mute','chat_system_line','chat_lines_off','attendees_chat_lines','plans_chat_lines','plan_admins_chat_lines',
+    'messages_signal','can_listen')),'The rollback left a chat function: '||coalesce((select string_agg(n.nspname||'.'||p.proname,', ')
+    from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','private')
+    and (p.proname like '%chat%' or p.proname in ('current_occurrence','announcement_audience','messages_touch','messages_signal','send_message',
+     'send_announcement','delete_message','remove_message','can_listen'))),''));
+ perform pg_temp.ch_check(not exists(select 1 from pg_catalog.pg_attribute where attrelid='private.notification_outbox'::regclass and attname='message_id'
+   and not attisdropped) and pg_catalog.to_regclass('private.notification_outbox_recipient_kind_idx') is null
+   and pg_catalog.to_regclass('private.notification_outbox_message_idx') is null,'The rollback left the outbox''s message_id or an index');
+ perform pg_temp.ch_check(not exists(select 1 from private.notification_outbox where kind in ('chat_message','announcement'))
+   and not exists(select 1 from private.notification_deliveries where token='ExpoPushToken[c6]')
+   and exists(select 1 from private.notification_outbox where dedupe_key='c6:changed'),'The rollback kept a chat notice, or lost another');
+ perform pg_temp.ch_check(exists(select 1 from public.attendees where plan_id='c6100000-0000-4000-8000-000000000001' and user_id=pg_temp.c6('02')
+   and response='accepted'),'The rollback lost the resbite or its guest');
+ perform pg_temp.ch_check((select string_agg(k[1],',' order by k[1]) from regexp_matches(pg_catalog.pg_get_constraintdef(
+   (select oid from pg_catalog.pg_constraint where conrelid='private.notification_outbox'::regclass and conname='notification_outbox_kind_check')),'''([a-z_]+)''','g') k)
+   ='admin_added,connection_accepted,connection_request,guest_note,invitation,invited,join_approved,join_request,plan_cancelled,plan_changed,rsvp',
+  'The outbox''s kinds are not the eleven again');
+ for f in select * from ch_restores loop
+  v_def := pg_catalog.pg_get_functiondef(f.signature::regprocedure);
+  perform pg_temp.ch_check((select p.proacl::text from pg_catalog.pg_proc p where p.oid=f.signature::regprocedure) is not distinct from f.grants,
+   'The rollback changed the grants of '||f.signature);
+  execute f.source;
+  perform pg_temp.ch_check(pg_catalog.pg_get_functiondef(f.signature::regprocedure)=v_def,'The rollback did not restore '||f.signature||' as its source has it');
+ end loop;
+ begin
+  execute (select circles_rollback from ch_texts);
+ exception when raise_exception then
+  raise exception 'The circles rollback refused after the chat core rollback: %', sqlerrm;
+ end;
+ perform pg_temp.ch_check(pg_catalog.to_regclass('private.plan_removals') is null,'The circles rollback did not run after the chat core rollback');
+end $$;
+rollback;
 
 -- The deletion block (Task 2; K-B2, K-N5, K-S2, K-S3, K-S12, BLOCKING 1). Last in the file, in its own transaction with
 -- the prefix c5, because the deletion's flag lasts until the rollback (NOTE 12); only where the deletion lifecycle
@@ -1478,8 +2100,9 @@ select pg_temp.ch_check((select pinned_message_id from public.chats where series
 -- was. The system line naming 03 is unchanged, payload and all (K-S3),
 -- and the names map gives 03 as null. 03's announcement is no longer pinned, and nothing is (K-S12), and the counts
 -- leave 03's words out. 09 keeps its row on the Picnic, with nobody as its bringer (BLOCKING 1). 03's read and mute
--- rows are gone; 04's read stays. The deletion's flag is set (K-S2).
--- (Task 3 adds: no system line is written on 03's own one-off, though it is cancelled and its place scrubbed.)
+-- rows are gone; 04's read stays. The deletion's flag is set (K-S2): 03's own one-off is cancelled and its place
+-- scrubbed, and no system line is written on it (the one there is the hand-made admin line) nor on the Quiz, where 03's
+-- guest row goes (K-S2, K-S3).
 insert into auth.sessions(id,user_id,created_at) values ('c5200000-0000-4000-8000-000000000003',pg_temp.c5('03'),now());
 select private.request_account_deletion(pg_temp.c5('03'),'c5200000-0000-4000-8000-000000000003','c5300000-0000-4000-8000-000000000003',repeat('d',64));
 do $$ declare v_ids bigint[] := array[current_setting('c5.blanket')::bigint,current_setting('c5.gates')::bigint,current_setting('c5.quiz')::bigint];
@@ -1506,7 +2129,12 @@ do $$ declare v_ids bigint[] := array[current_setting('c5.blanket')::bigint,curr
   and not exists(select 1 from public.chat_mutes where user_id=pg_temp.c5('03'))
   and exists(select 1 from public.chat_reads where user_id=pg_temp.c5('04')),'03''s reads or mutes stayed, or 04''s read went');
  perform pg_temp.ch_check(current_setting('resbite.system',true)='deletion','The deletion did not set its flag');
- perform pg_temp.ch_check((select status from public.plans where id=pg_temp.c5p('01'))='cancelled','03''s own one-off is not cancelled');
+ perform pg_temp.ch_check((select (status,place_label) from public.plans where id=pg_temp.c5p('01'))
+   is not distinct from ('cancelled'::text,'Meeting place removed'::text),'03''s own one-off is not cancelled and scrubbed');
+ perform pg_temp.ch_check((select string_agg(m.event,',' order by m.id) from public.messages m where m.series_id=pg_temp.c5p('01') and m.kind='system')='admin'
+   and not exists(select 1 from public.messages m where m.series_id=pg_temp.c5p('02') and m.kind='system'),
+  'The deletion wrote a line: '||coalesce((select string_agg(m.event,',' order by m.id) from public.messages m
+   where m.series_id in (pg_temp.c5p('01'),pg_temp.c5p('02')) and m.kind='system'),''));
 end $$;
 rollback;
 \endif
