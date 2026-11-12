@@ -217,3 +217,21 @@ test("prune takes off, in one write, every one of an account's messages that its
   queue.resume("u1");
   assert.equal((await queue.list("u1", S1)).length, 1);
 });
+
+test("prune writes nothing when it drops nothing (H29)", async () => {
+  const d = disk();
+  let writes = 0;
+  const setItem = d.setItem;
+  d.setItem = async (k: string, v: string) => {
+    writes += 1;
+    await setItem(k, v);
+  };
+  const queue = createChatQueue(d);
+  await queue.put("u1", item("c1", S1));
+  assert.equal(writes, 1);
+  await queue.prune("u1", () => false);
+  assert.equal(writes, 1);
+  await queue.prune("u1", (q) => q.clientId === "c1");
+  assert.equal(writes, 2);
+  assert.deepEqual(await queue.list("u1", S1), []);
+});

@@ -241,7 +241,14 @@ function memoryDisk() {
   };
 }
 
-function setup(opts: { queue?: ReturnType<typeof createChatQueue> } = {}) {
+function setup(
+  opts: {
+    queue?: ReturnType<typeof createChatQueue>;
+    listen?: (series: string, on: FakeChannel["on"]) => { remove(): void };
+    /** The first this many channels can't be made: `listen` throws. */
+    listenThrows?: number;
+  } = {},
+) {
   const clock = fakeClock(START);
   const server = fakeServer(clock);
   const queue = opts.queue ?? createChatQueue(memoryDisk());
@@ -255,6 +262,8 @@ function setup(opts: { queue?: ReturnType<typeof createChatQueue> } = {}) {
     gateway: server.gateway,
     queue,
     listen: (series, on) => {
+      if (opts.listen) return opts.listen(series, on);
+      if (opts.listenThrows && opts.listenThrows-- > 0) throw Error("WebSocket not available");
       const channel: FakeChannel = {
         series,
         on,
@@ -1582,7 +1591,8 @@ test("listenWith reports a channel that can't be made as an error, and the poll 
   };
   listenWith(client)(SERIES, { signal: () => {}, status: (s) => statuses.push(s) });
   await settle();
-  assert.deepEqual(statuses, ["CHANNEL_ERROR"]);
+  // An error, and closed, so the return to the app makes a new one (H29).
+  assert.deepEqual(statuses, ["CHANNEL_ERROR", "CLOSED"]);
 });
 
 test("a resent message the server already holds below the loaded rows leaves pending at once, and not after the session ended (H25)", async () => {
@@ -1630,4 +1640,240 @@ test("a summary need raised while an older summary read is in flight outlives th
   hold.resolve();
   await settle();
   assert.equal(t.state().summary?.open, false);
+});
+
+// ---- Fix round 2: H29 ----
+
+test("a round trip over 2 s doesn't move the clock estimate, and the page's call is timed on its own (H29)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  t.server.skewBy(60_000);
+  await t.open();
+  t.latest().on.status("SUBSCRIBED");
+  await settle();
+  assert.equal(t.state().clockOffset, 60_000);
+  // A page that takes 14 s, its as_of taken as the call arrives: its midpoint would be 7 s out. The since after it
+  // is as slow, so no quick read repairs the estimate.
+  const slowPage = t.server.hold("messages");
+  const slowSince = t.server.hold("since");
+  const first = t.session.refresh();
+  await settle();
+  await t.clock.advance(14_000);
+  slowPage.resolve();
+  await settle();
+  await t.clock.advance(14_000);
+  slowSince.resolve();
+  await first;
+  await settle();
+  assert.equal(t.server.calls("since").length, 2);
+  assert.equal(t.state().clockOffset, 60_000);
+  // A slow summary beside a quick page: the page's own trip counts.
+  t.server.skewBy(30_000);
+  const slowSummary = t.server.hold("summary");
+  const slowSince2 = t.server.hold("since");
+  const second = t.session.refresh();
+  await settle();
+  await t.clock.advance(14_000);
+  slowSummary.resolve();
+  await settle();
+  await t.clock.advance(14_000);
+  slowSince2.resolve();
+  await second;
+  await settle();
+  assert.equal(t.server.calls("since").length, 3);
+  assert.equal(t.state().clockOffset, 30_000);
+});
+
+test("a first read with a 14 s round trip says nothing of the server's clock; a quick one then sets it (H29)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  t.server.skewBy(60_000);
+  const hold = t.server.hold("messages");
+  t.session.focus();
+  await settle();
+  await t.clock.advance(14_000);
+  hold.resolve();
+  await settle();
+  assert.equal(t.state().clockOffset, 0);
+  t.latest().on.status("SUBSCRIBED");
+  await settle();
+  assert.equal(t.state().clockOffset, 60_000);
+});
+
+test("the estimate keeps the shortest recent round trip: a faster read improves it, a slower one doesn't replace it (H29)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  t.server.skewBy(60_000);
+  const hold = t.server.hold("messages");
+  t.session.focus();
+  await settle();
+  await t.clock.advance(1_500);
+  hold.resolve();
+  await settle();
+  // A 1.5 s trip with the as_of taken as the call arrived: 750 ms under the truth.
+  assert.equal(t.state().clockOffset, 59_250);
+  t.latest().on.status("SUBSCRIBED");
+  await settle();
+  assert.equal(t.state().clockOffset, 60_000);
+  const slow = t.server.hold("since");
+  t.latest().on.signal({ id: 101, kind: "message", state: "sent" });
+  await settle();
+  await t.clock.advance(1_800);
+  slow.resolve();
+  await settle();
+  assert.equal(t.server.calls("since").length, 2);
+  assert.equal(t.state().clockOffset, 60_000);
+});
+
+test("server time never goes backwards when the estimate falls; it waits for this phone's clock to catch up (H29)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  t.server.skewBy(60_000);
+  // A 1.5 s trip with the as_of taken as the answer left: 750 ms over the truth.
+  const gate = deferred();
+  t.server.gates.messages = gate.promise;
+  t.session.focus();
+  await settle();
+  await t.clock.advance(1_500);
+  delete t.server.gates.messages;
+  gate.resolve();
+  await settle();
+  assert.equal(t.state().clockOffset, 60_750);
+  const before = t.session.serverNow();
+  assert.equal(before, START + 1_500 + 60_750);
+  t.latest().on.status("SUBSCRIBED");
+  await settle();
+  assert.equal(t.state().clockOffset, 60_000);
+  assert.equal(t.session.serverNow(), before);
+  await t.clock.advance(500);
+  assert.equal(t.session.serverNow(), before);
+  await t.clock.advance(1_000);
+  assert.equal(t.session.serverNow(), START + 3_000 + 60_000);
+});
+
+test("the close timer counts by the server's clock: a close 30 s off the minute tick is read at its moment (H29)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  t.server.skewBy(3_600_000);
+  // By the server, 90 s away; by this phone's own clock, an hour and 90 s.
+  t.server.setSummary({ closesAt: iso(START + 3_600_000 + 90_000) });
+  await t.open();
+  t.latest().on.status("SUBSCRIBED");
+  await settle();
+  t.server.setSummary({ open: false });
+  await t.clock.advance(89_999);
+  assert.equal(t.server.calls("summary").length, 1);
+  await t.clock.advance(1);
+  assert.equal(t.server.calls("summary").length, 2);
+  assert.equal(t.state().summary?.open, false);
+});
+
+test("a send that fails after 'Not in this chat' only marks the queue: the screen stays as the refusal left it (H29, D9)", async () => {
+  const t = setup();
+  t.server.seed(3);
+  await t.open();
+  t.latest().on.status("SUBSCRIBED");
+  await settle();
+  const gate = deferred();
+  t.server.gates.send = gate.promise;
+  t.server.fail.send = OFFLINE;
+  const sent = t.session.send("hi");
+  await settle();
+  t.server.failOnce("since", NOT_IN_CHAT);
+  t.latest().on.signal({ id: 104, kind: "message", state: "sent" });
+  await settle();
+  const refused = t.state();
+  assert.equal(refused.error, CHAT_COPY.notInChat);
+  delete t.server.gates.send;
+  gate.resolve();
+  assert.equal(await sent, false);
+  await settle();
+  assert.equal(t.state(), refused);
+  assert.deepEqual((await t.queue.list(ME, SERIES)).map((q) => q.failed), [true]);
+});
+
+test("announce is refused here while the chat refuses this person (H29)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  t.server.setSummary({ host: true });
+  t.server.fail.summary = NOT_IN_CHAT;
+  await t.open();
+  assert.equal(await t.session.announce("Moved to 3pm", "everyone"), false);
+  assert.equal(t.server.calls("announce").length, 0);
+  assert.equal(t.state().error, CHAT_COPY.notInChat);
+});
+
+test("a channel that can't be made leaves the chat on the poll, and the return to the app tries again (H29)", async () => {
+  const t = setup({ listenThrows: 2 });
+  t.server.seed(1);
+  await t.open();
+  assert.equal(t.channels.length, 0);
+  await t.clock.advance(20_000);
+  assert.equal(t.server.calls("since").length, 1);
+  t.session.background();
+  t.session.focus();
+  await settle();
+  assert.equal(t.channels.length, 1);
+  assert.equal(t.latest().removed, false);
+});
+
+test("a channel listenWith couldn't make is closed, so the return to the app replaces it (H29)", async () => {
+  let made = 0;
+  const statuses: string[] = [];
+  const client = {
+    getChannels: () => [] as Array<{ topic: string }>,
+    channel(name: string) {
+      made += 1;
+      if (made === 1) throw Error("WebSocket not available");
+      const channel = {
+        topic: `realtime:${name}`,
+        on: () => channel,
+        subscribe: (status: (s: string) => void) => {
+          status("SUBSCRIBED");
+          return channel;
+        },
+      };
+      return channel;
+    },
+    removeChannel: async () => "ok",
+  };
+  const listen = listenWith(client);
+  const t = setup({
+    listen: (series, on) =>
+      listen(series, {
+        signal: on.signal,
+        status: (s) => {
+          statuses.push(s);
+          on.status(s);
+        },
+      }),
+  });
+  t.server.seed(1);
+  await t.open();
+  assert.equal(made, 1);
+  t.session.background();
+  t.session.focus();
+  await settle();
+  assert.equal(made, 2);
+  assert.deepEqual(statuses, ["CHANNEL_ERROR", "CLOSED", "SUBSCRIBED"]);
+  // Subscribed: no poll.
+  const reads = t.server.calls("since").length;
+  await t.clock.advance(60_000);
+  assert.equal(t.server.calls("since").length, reads);
+});
+
+test("the retry after a failed read waits while the app is in the background, as the poll does (H29)", async () => {
+  const t = setup();
+  t.server.seed(3);
+  await t.open();
+  t.latest().on.status("SUBSCRIBED");
+  await settle();
+  t.server.add();
+  t.server.failOnce("since", OFFLINE);
+  t.latest().on.signal({ id: 104, kind: "message", state: "sent" });
+  await settle();
+  const reads = t.server.calls("since").length;
+  t.session.background();
+  await t.clock.advance(30_000);
+  assert.equal(t.server.calls("since").length, reads);
 });

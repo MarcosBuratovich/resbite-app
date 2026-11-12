@@ -70,7 +70,10 @@ export function createChatQueue(store: KeyStore) {
       if (epoch !== epochOf(scope)) throw Error("Session changed");
       const current = await read(scope);
       if (blocked.has(scope) || epoch !== epochOf(scope)) throw Error("Session changed");
-      await store.setItem(key(scope), JSON.stringify(update(current)));
+      const next = update(current);
+      // Unchanged (a prune that dropped nothing): nothing to write (H29).
+      if (next === current) return;
+      await store.setItem(key(scope), JSON.stringify(next));
     });
   }
   return {
@@ -108,7 +111,7 @@ export function createChatQueue(store: KeyStore) {
       change(scope, (items) => items.filter((i) => i.clientId !== clientId)),
     /** Takes off, in one write, every message of the account that `drop` picks, in any series (H26 Q6). */
     prune: (scope: string, drop: (item: QueuedMessage) => boolean) =>
-      change(scope, (items) => items.filter((i) => !drop(i))),
+      change(scope, (items) => (items.some(drop) ? items.filter((i) => !drop(i)) : items)),
     clear: (scope: string) => {
       epochs.set(scope, epochOf(scope) + 1);
       return run(() => store.removeItem(key(scope)));

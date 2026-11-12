@@ -29,6 +29,8 @@ export type Chat = ChatState & {
   refresh: () => Promise<void>;
   /** Reads the newest page and the summary again and replaces the list (plan 3's block and unblock). */
   replace: () => Promise<void>;
+  /** The server's time by this phone, never going back: the closing countdown counts against it (H29). */
+  serverNow: () => number;
 };
 
 const listen = listenWith(supabase);
@@ -107,6 +109,7 @@ export function useChat(series: string | undefined): Chat {
             setMute: chat.setMute,
             refresh: chat.refresh,
             replace: chat.replace,
+            serverNow: chat.serverNow,
           }
         : {
             loadEarlier: nothing,
@@ -120,6 +123,7 @@ export function useChat(series: string | undefined): Chat {
             setMute: refused,
             refresh: nothing,
             replace: nothing,
+            serverNow: () => Date.now(),
           },
     [chat],
   );

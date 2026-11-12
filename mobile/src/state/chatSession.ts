@@ -40,6 +40,10 @@ export const RETRY_FIRST_MS = 5_000;
  */
 export const CLOSE_RECHECK_MS = 1_000;
 export const CLOSE_RECHECKS = 3;
+/** A round trip longer than this says too little about the server's clock to count (H29). */
+export const CLOCK_TRIP_MAX_MS = 2_000;
+/** The recent round trips the clock estimate chooses from. */
+const CLOCK_SAMPLES = 8;
 /** A failed message older than this leaves the queue, in any chat (H26 Q6). */
 export const FAILED_KEPT_MS = 7 * 86_400_000;
 /** The longest delay a timer takes; a later close re-arms when it fires. */
@@ -55,8 +59,8 @@ export type ChatState = {
   error: string | null;
   hasEarlier: boolean;
   /**
-   * The server's clock minus this phone's, estimated from each read's `as_of` (H26 Q7–Q9). The closing countdown
-   * uses `Date.now() + clockOffset`, as the close timer does.
+   * The server's clock minus this phone's, estimated from each read's `as_of` (H26 Q7–Q9, H29). The closing countdown
+   * counts against the session's `serverNow()`, which applies it and never goes back.
    */
   clockOffset: number;
 };
@@ -151,6 +155,10 @@ export function createChatSession(deps: ChatSessionDeps) {
    */
   let floor: string | null = null;
   let offset = 0;
+  /** The recent reads' round trips and what each says of the server's clock; the shortest trip is believed (H29). */
+  let samples: Array<{ trip: number; offset: number }> = [];
+  /** The latest server time given out: it never goes back, so neither can the countdown (H29). */
+  let highest = -Infinity;
   let focused = false,
     looking = false,
     disposed = false,
@@ -188,7 +196,11 @@ export function createChatSession(deps: ChatSessionDeps) {
   let earlier: Promise<void> | null = null;
 
   const live = () => !disposed && current();
-  const serverNow = () => timers.now() + offset;
+  function serverNow(): number {
+    const now = timers.now() + offset;
+    if (now > highest) highest = now;
+    return highest;
+  }
   function set(patch: Partial<ChatState>) {
     if (disposed) return;
     state = { ...state, ...patch, error: actionError ?? readError, clockOffset: offset };
@@ -200,10 +212,18 @@ export function createChatSession(deps: ChatSessionDeps) {
   const askSummary = () => void (summaryAsked += 1);
   const summaryOwed = () => summaryAsked > summaryHad;
 
-  /** The server's time at the middle of the call, against this phone's (H26 Q7–Q9). */
-  function noteClock(at: string, started: number) {
+  /**
+   * What a read says of the server's clock: its `as_of` against the middle of its own round trip (H26 Q7–Q9). A trip
+   * over 2 s is ignored, and of the recent ones the shortest is believed, the latest of equals (H29).
+   */
+  function noteClock(at: string, started: number, ended = timers.now()) {
     const server = instantOf(at);
-    if (Number.isFinite(server)) offset = server - (started + timers.now()) / 2;
+    const trip = ended - started;
+    if (!Number.isFinite(server) || !(trip >= 0) || trip > CLOCK_TRIP_MAX_MS) return;
+    samples = [...samples, { trip, offset: server - (started + ended) / 2 }].slice(-CLOCK_SAMPLES);
+    let best = samples[0];
+    for (const sample of samples) if (sample.trip <= best.trip) best = sample;
+    offset = best.offset;
   }
   /** `p_changed_after` from a read's `as_of`: two minutes back, but not before a gap reload's floor (H24 (2)). */
   function cursorFrom(base: string): string {
@@ -259,9 +279,17 @@ export function createChatSession(deps: ChatSessionDeps) {
     set({ busy: true });
     const asked = summaryAsked;
     const started = timers.now();
-    const [summary, page] = await Promise.all([gateway.summary(series), gateway.messages(series, null, NEWEST_PAGE)]);
+    // The page's `as_of` is timed by the page's own call, not by the summary beside it (H29).
+    let pageAt = started;
+    const [summary, page] = await Promise.all([
+      gateway.summary(series),
+      gateway.messages(series, null, NEWEST_PAGE).then((answer) => {
+        pageAt = timers.now();
+        return answer;
+      }),
+    ]);
     if (!live() || shut) return null;
-    noteClock(page.asOf, started);
+    noteClock(page.asOf, started, pageAt);
     const replaced = gap || pageReplaces(state.messages, page.rows);
     const messages = replaced ? merge([], page.rows) : merge(state.messages, page.rows, true);
     // Where the page is the bottom of the list, its size says whether there is more before it.
@@ -344,7 +372,8 @@ export function createChatSession(deps: ChatSessionDeps) {
     retries += 1;
     retry = timers.setTimeout(() => {
       retry = null;
-      if (focused && !shut) void reader.trigger();
+      // As the poll does: nothing while nobody is looking; the return to the app reads in full.
+      if (focused && looking && !shut) void reader.trigger();
     }, wait);
   }
 
@@ -675,6 +704,8 @@ export function createChatSession(deps: ChatSessionDeps) {
 
   return {
     state: () => state,
+    /** The server's time by this phone, never going back: what the closing countdown counts against (H29). */
+    serverNow,
 
     /**
      * The screen gained focus, or the app came back to it: read, resend, and listen. Either is a new start for the
@@ -873,7 +904,10 @@ export function listenWith(client: RealtimeClientLike) {
           .subscribe((status) => on.status(status));
       })
       .catch(() => {
-        if (!removed) on.status("CHANNEL_ERROR");
+        // Closed as well, so the return to the app makes a new one (H29).
+        if (removed) return;
+        on.status("CHANNEL_ERROR");
+        on.status("CLOSED");
       });
     return {
       remove() {
