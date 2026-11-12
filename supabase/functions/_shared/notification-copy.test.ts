@@ -419,3 +419,19 @@ test("without Intl.Segmenter the copy cuts by code point, never splitting a surr
     `Leo: ${"c".repeat(119)}🇬🇧…`,
   );
 });
+
+test("a report notice says only that a report is waiting, whatever else the row carries", () => {
+  const expected = { title: "Resbite", body: "A new report is waiting." };
+  assert.deepEqual(
+    notificationCopy({
+      kind: "report_filed",
+      title: "Board game night",
+      actor_name: "Clara",
+      detail: "message",
+      message_body: "something said in a chat",
+    }),
+    expected,
+  );
+  assert.deepEqual(notificationCopy({ kind: "report_filed" }), expected);
+  assert.deepEqual(notificationCopy({ kind: "report_filed", title: null, actor_name: null }), expected);
+});

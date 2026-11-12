@@ -460,3 +460,23 @@ test("the journal hears a deferred job as the outcome deferred, with no ticket a
   await store.finish({ ...job, id: "d1", lease_id: "l1" }, { outcome: "deferred" });
   assert.deepEqual(bodies, [{ p_id: "d1", p_lease: "l1", p_outcome: "deferred", p_ticket: null, p_delay_seconds: 0 }]);
 });
+
+test("a report notice carries only its type and notification id, and the same ttl", () => {
+  const payload = payloadFor({
+    ...job,
+    kind: "report_filed",
+    title: "Board game night",
+    actor_name: "Clara",
+    series_id: SERIES,
+    message_body: "something said in a chat",
+  });
+  assert.deepEqual(payload.data, { type: "report", notificationId: "1" });
+  assert.deepEqual(Object.keys(payload.data).sort(), ["notificationId", "type"]);
+  assert.equal(payload.ttl, 3600);
+  assert.deepEqual({ title: payload.title, body: payload.body }, { title: "Resbite", body: "A new report is waiting." });
+  assert.equal(JSON.stringify(payload).includes("Clara"), false);
+  assert.equal(JSON.stringify(payload).includes("something said"), false);
+  // payloadFor's checks still apply.
+  assert.throws(() => payloadFor({ ...job, kind: "report_filed", plan_id: "bad" }));
+  assert.throws(() => payloadFor({ ...job, kind: "report_filed", outbox_id: "x" }));
+});

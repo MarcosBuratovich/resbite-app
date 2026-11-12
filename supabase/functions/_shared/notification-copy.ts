@@ -164,7 +164,11 @@ function chatBody(input: CopyInput): string | null {
   return input.kind === "announcement" ? `Announcement from ${first}: ${text}` : `${first}: ${text}`;
 }
 
+export const REPORT_COPY: Copy = Object.freeze({ title: "Resbite", body: "A new report is waiting." });
+
 export function notificationCopy(input: CopyInput): Copy {
+  // A moderator's push says only that a report is waiting: no title, name or text of the report.
+  if (input.kind === "report_filed") return { ...REPORT_COPY };
   const title = input.title?.trim();
   if (input.kind === "chat_message" || input.kind === "announcement") {
     const text = title ? chatBody(input) : null;

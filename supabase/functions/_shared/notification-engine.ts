@@ -66,6 +66,8 @@ const UUID =
 const isChat = (kind: string | null | undefined) =>
   kind === "chat_message" || kind === "announcement";
 function dataFor(job: Delivery) {
+  // A moderator's push carries no plan: the app opens where it was and routes nowhere.
+  if (job.kind === "report_filed") return { type: "report" as const, notificationId: job.outbox_id };
   // A chat notice opens the chat of its series; the app reads the chat through the server before showing it.
   if (isChat(job.kind))
     return {
