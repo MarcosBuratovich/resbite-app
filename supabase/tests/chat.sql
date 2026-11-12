@@ -89,6 +89,11 @@ create function pg_temp.ch_send(p_series uuid, p_body text) returns bigint langu
 begin
  return (public.send_message(p_series,p_body,gen_random_uuid())->>'id')::bigint;
 end $$;
+-- Whether this transaction holds someone's lock, require_tester's key (hashtextextended of the uuid, 47). The superuser's.
+create function pg_temp.ch_locked(p_user uuid) returns boolean language sql stable as $$
+ select exists(select 1 from pg_catalog.pg_locks l where l.locktype='advisory' and l.pid=pg_catalog.pg_backend_pid() and l.granted
+  and l.objsubid=1 and ((l.classid::bigint<<32)|l.objid::bigint)=pg_catalog.hashtextextended(p_user::text,47))
+$$;
 -- A slice 1 message by its words: its id. The superuser's.
 create function pg_temp.ch_msg(p_body text) returns bigint language plpgsql stable as $$
 begin
@@ -715,6 +720,9 @@ do $$ declare v_id bigint := current_setting('c1.snack')::bigint; m public.messa
  perform pg_temp.ch_check((select (c.last_message_id,c.last_message_at) from public.chats c where c.series_id=pg_temp.c1p('01'))
    is not distinct from (v_id,m.created_at),'The chat''s last message is not 03''s');
 end $$;
+-- The author's lock (H28): send_message takes require_tester's key itself before its limits, so one person's writes
+-- queue one after another on hosted too, where require_tester takes no lock.
+select pg_temp.ch_check(pg_temp.ch_locked(pg_temp.c1('03')),'send_message does not take its author''s lock');
 
 -- The same client id again (K-S8, step 1, before every other check) is the stored row, whatever the words, and tells
 -- nobody again. On the weekly series, or as an announcement (03 being no host), it is not that message: 22023 'Invalid
@@ -731,27 +739,43 @@ reset role;
 select pg_temp.ch_check((select count(*) from public.messages where client_id=current_setting('c1.snack_client')::uuid)=1
  and pg_temp.ch_to('chat_message',current_setting('c1.snack')::bigint)='01,02,04','The repeat made a row or a notice');
 
--- The words (step 4): trimmed of white space at both ends, U+00A0 and the other spaces this database's \s misses
--- included, then 1 to 1000 characters with one that is not a space. '', '   ', two newlines, a lone U+00A0, a lone
--- zero-width space, U+3000 with a BOM, 1001 characters and none at all: 22023 'Invalid message', nothing stored. '  hi\n'
--- is stored as 'hi', and 1000 characters between spaces are stored whole. Neither is told to anyone: 01, 02 and 04
--- have 03's notice from this minute (one push a minute).
+-- The words (step 4; H28, H30): trimmed at both ends of white space (U+00A0, U+0085, U+115F, U+2060, U+2800, U+3164,
+-- U+FFA0 and the other blanks this database's \s misses included) and of ZWNJ; then 1 to 1000 characters, at least one
+-- of them visible: not white space, a control (Cc) or format (Cf) character, a default-ignorable one (U+034F, the
+-- Hangul fillers, the variation selectors, the tags) or U+2800. Refused, 22023 'Invalid message', nothing stored: '',
+-- '   ', two newlines, a lone U+00A0, a zero-width space, U+3000 with a BOM, ZWNJ, ZWJ, a word joiner, NEL, U+180E, a
+-- soft hyphen, the Hangul fillers, a braille blank, RLO, LRI with PDI, invisible times, VS16, a combining grapheme
+-- joiner, a tag space, BEL, ESC, DEL, a mix of them, 1001 characters, and none at all. Stored: '  hi\n' as 'hi', ZWNJ
+-- hi ZWNJ as 'hi', a word joiner, hi and a braille blank as 'hi', 1000 characters between spaces whole, an emoji held
+-- together by ZWJ whole, and a zero-width space inside a word kept. None is told to anyone: 01, 02 and 04 have 03's
+-- notice from this minute (one push a minute).
 set local role authenticated;
 select pg_temp.ch_as(pg_temp.c1('03'));
 select pg_temp.ch_refused(format('select public.send_message(%L,%L,gen_random_uuid())',pg_temp.c1p('01'),b),'22023','Invalid message')
-from unnest(array['','   ',e'\n\n',e'\u00a0',e'\u200b',e'\u3000\ufeff',repeat('a',1001)]) b;
+from unnest(array['','   ',e'\n\n',e'\u00a0',e'\u200b',e'\u3000\ufeff',e'\u200c',e'\u200d',e'\u2060',e'\u0085',e'\u180e',
+ e'\u00ad',e'\u3164',e'\uffa0',e'\u115f\u1160',e'\u2800',e'\u202e',e'\u2066\u2069',e'\u2062',e'\ufe0f',e'\u034f',e'\U000e0020',
+ e'\u0007',e'\u001b',e'\u007f',e' \u200d\u2060\u00ad\u034f \u2800\t',repeat('a',1001)]) b;
 select pg_temp.ch_refused(format('select public.send_message(%L,null,gen_random_uuid())',pg_temp.c1p('01')),'22023','Invalid message');
 select set_config('c1.hi',pg_temp.ch_send(pg_temp.c1p('01'),e'  hi\n')::text,true);
 select set_config('c1.long',pg_temp.ch_send(pg_temp.c1p('01'),e'\u00a0 '||repeat('é',1000)||e'\u3000\n')::text,true);
+select set_config('c1.zwnj',pg_temp.ch_send(pg_temp.c1p('01'),e'\u200chi\u200c')::text,true);
+select set_config('c1.joiner',pg_temp.ch_send(pg_temp.c1p('01'),e'\u2060hi\u2800')::text,true);
+select set_config('c1.emoji',pg_temp.ch_send(pg_temp.c1p('01'),e'\U0001f469\u200d\U0001f4bb')::text,true);
+select set_config('c1.inner',pg_temp.ch_send(pg_temp.c1p('01'),e'no\u200bspace')::text,true);
 reset role;
 do $$ begin
  perform pg_temp.ch_check((select body from public.messages where id=current_setting('c1.hi')::bigint)='hi','''  hi\n'' is not stored as ''hi''');
  perform pg_temp.ch_check((select body from public.messages where id=current_setting('c1.long')::bigint)=repeat('é',1000),
   '1000 characters between spaces are not stored whole');
- perform pg_temp.ch_check((select count(*) from public.messages where author_id=pg_temp.c1('03') and created_at>=now())=3,
+ perform pg_temp.ch_check((select body from public.messages where id=current_setting('c1.zwnj')::bigint)='hi'
+   and (select body from public.messages where id=current_setting('c1.joiner')::bigint)='hi','ZWNJ, a word joiner or a braille blank at the ends was kept');
+ perform pg_temp.ch_check((select body from public.messages where id=current_setting('c1.emoji')::bigint)=e'\U0001f469\u200d\U0001f4bb'
+   and (select body from public.messages where id=current_setting('c1.inner')::bigint)=e'no\u200bspace','A joined emoji or an inner zero-width space was changed');
+ perform pg_temp.ch_check((select count(*) from public.messages where author_id=pg_temp.c1('03') and created_at>=now())=7,
   'A refused message was stored');
- perform pg_temp.ch_check(pg_temp.ch_to('chat_message',current_setting('c1.hi')::bigint)='' and pg_temp.ch_to('chat_message',current_setting('c1.long')::bigint)='',
-  '03''s next messages in the minute were told');
+ perform pg_temp.ch_check(not exists(select 1 from private.notification_outbox where message_id in (current_setting('c1.hi')::bigint,
+   current_setting('c1.long')::bigint,current_setting('c1.zwnj')::bigint,current_setting('c1.joiner')::bigint,current_setting('c1.emoji')::bigint,
+   current_setting('c1.inner')::bigint)),'03''s next messages in the minute were told');
 end $$;
 
 -- Not in the chat (step 2, before the words): 05 (not answered), 08 (a stranger) and 07 (Can't go after Going), and
@@ -811,6 +835,7 @@ do $$ declare v_id bigint := current_setting('c1.doors')::bigint; m public.messa
    jsonb_build_object('id',v_id,'author_id',pg_temp.c1('02'),'body','Doors open at 19:30')),'names',jsonb_build_object(pg_temp.c1('02')::text,'Ada')),
   'my_chat_overview as 05: '||o::text);
 end $$;
+select pg_temp.ch_check(pg_temp.ch_locked(pg_temp.c1('02')),'send_announcement does not take its author''s lock');
 
 -- One announcement a minute per author and chat (K-S8): 02 again in the one-off, to either audience: 22023 'Too fast'.
 -- Before that check (step 3): an audience that is neither going nor everyone, none, or no words: 22023 'Invalid
@@ -824,6 +849,7 @@ select pg_temp.ch_refused($$select public.send_announcement(pg_temp.c1p('01'),'D
 select pg_temp.ch_refused($$select public.send_announcement(pg_temp.c1p('01'),'Doors open at 19:45','all',gen_random_uuid())$$,'22023','Invalid message');
 select pg_temp.ch_refused($$select public.send_announcement(pg_temp.c1p('01'),'Doors open at 19:45',null,gen_random_uuid())$$,'22023','Invalid message');
 select pg_temp.ch_refused($$select public.send_announcement(pg_temp.c1p('01'),e' \u00a0','everyone',gen_random_uuid())$$,'22023','Invalid message');
+select pg_temp.ch_refused($$select public.send_announcement(pg_temp.c1p('01'),e'\u200d\u2060','everyone',gen_random_uuid())$$,'22023','Invalid message');
 select pg_temp.ch_check(public.send_announcement(pg_temp.c1p('01'),'Doors open at 19:45','going',current_setting('c1.doors_client')::uuid)
  =current_setting('c1.doors_row')::jsonb,'The same announcement again is not the stored row');
 select pg_temp.ch_refused($$select public.send_message(pg_temp.c1p('01'),'Doors open at 19:30',current_setting('c1.doors_client')::uuid)$$,
@@ -953,6 +979,39 @@ select set_config('resbite.system','',true);
 select pg_temp.ch_check(private.notification_recipient_eligible(pg_temp.ch_notice('chat_message',current_setting('c1.snack')::bigint,'04'))
  and private.notification_recipient_eligible(pg_temp.ch_notice('announcement',current_setting('c1.game')::bigint,'04')),'04, Maybe again, may not be told');
 
+-- Who an announcement to everyone reaches on a one-off (H30): the people who have not answered only while it is active
+-- and has not ended. Ended an hour ago, its chat still open, 05 is in no audience and 05's notice of 02's announcement
+-- is no longer eligible; 03's still is. Cancelled, the plan's announcement notices are eligible to nobody, 03 and the
+-- Going announcement's 04 included. The times and the status go back afterwards, and the notices are eligible again.
+select set_config('resbite.system','roll',true);
+update public.plans set starts_at=now()-interval '4 hours',ends_at=now()-interval '1 hour' where id=pg_temp.c1p('01');
+select set_config('resbite.system','',true);
+do $$ begin
+ perform pg_temp.ch_check(private.chat_open(pg_temp.c1p('01'))
+   and pg_temp.ch_who(array(select private.announcement_audience(pg_temp.c1p('01'),'everyone')))='01,02,03,04',
+  'Everyone on an ended one-off: '||pg_temp.ch_who(array(select private.announcement_audience(pg_temp.c1p('01'),'everyone'))));
+ perform pg_temp.ch_check(not private.notification_recipient_eligible(pg_temp.ch_notice('announcement',current_setting('c1.doors')::bigint,'05'))
+   and private.notification_recipient_eligible(pg_temp.ch_notice('announcement',current_setting('c1.doors')::bigint,'03')),
+  'After the end, the announcement to everyone may still be told to 05, or may no longer be told to 03');
+end $$;
+select set_config('resbite.system','roll',true);
+update public.plans set starts_at=pg_temp.c1_start(),ends_at=pg_temp.c1_start()+interval '3 hours',status='cancelled' where id=pg_temp.c1p('01');
+select set_config('resbite.system','',true);
+do $$ begin
+ perform pg_temp.ch_check(pg_temp.ch_who(array(select private.announcement_audience(pg_temp.c1p('01'),'everyone')))='01,02,03,04',
+  'Everyone on a cancelled one-off: '||pg_temp.ch_who(array(select private.announcement_audience(pg_temp.c1p('01'),'everyone'))));
+ perform pg_temp.ch_check(not private.notification_recipient_eligible(pg_temp.ch_notice('announcement',current_setting('c1.doors')::bigint,'03'))
+   and not private.notification_recipient_eligible(pg_temp.ch_notice('announcement',current_setting('c1.doors')::bigint,'05'))
+   and not private.notification_recipient_eligible(pg_temp.ch_notice('announcement',current_setting('c1.game')::bigint,'04')),
+  'A cancelled plan''s announcement may still be told');
+end $$;
+select set_config('resbite.system','roll',true);
+update public.plans set status='active' where id=pg_temp.c1p('01');
+select set_config('resbite.system','',true);
+select pg_temp.ch_check(private.notification_recipient_eligible(pg_temp.ch_notice('announcement',current_setting('c1.doors')::bigint,'05'))
+ and private.notification_recipient_eligible(pg_temp.ch_notice('announcement',current_setting('c1.doors')::bigint,'03')),
+ 'The announcement may not be told once the one-off is active again');
+
 -- The claim (H6, H17, H19, H21). 01 and 05 have a device. Two plan_changed notices to 01 by hand, from 02 and from 09
 -- (whose account is being deleted); where the deletion lifecycle exists, a third from 08, who has a deletion request but
 -- no mark on the profile. One claim as the sender. 01's notice of 03's message is a job of kind chat_message with every
@@ -1014,11 +1073,13 @@ end $$;
 -- retry waits its 30 s; a ticket waits for its receipt. A second call on the old lease changes nothing. An unknown
 -- outcome is still refused.
 set local role service_role;
-do $$ declare j jsonb; begin
+do $$ declare j jsonb; n int := 0; begin
  for j in select job from ch_jobs where step='first' and job->>'outbox_id' in (current_setting('c1.snack01'),current_setting('c1.doors05')) loop
   perform public.finish_notification_delivery(p_id=>(j->>'id')::uuid,p_lease=>(j->>'lease_id')::uuid,p_outcome=>'deferred',p_ticket=>null,p_delay_seconds=>0);
   perform public.finish_notification_delivery(p_id=>(j->>'id')::uuid,p_lease=>(j->>'lease_id')::uuid,p_outcome=>'deferred',p_ticket=>null,p_delay_seconds=>0);
+  n := n+1;
  end loop;
+ perform pg_temp.ch_check(n=2,'The jobs to hand back are not two: '||n);
  select job into j from ch_jobs where step='first' and job->>'outbox_id'=current_setting('c1.pc02');
  perform public.finish_notification_delivery((j->>'id')::uuid,(j->>'lease_id')::uuid,'retry',null,0);
  select job into j from ch_jobs where step='first' and job->>'outbox_id'=current_setting('c1.pc09');
@@ -1026,11 +1087,13 @@ do $$ declare j jsonb; begin
 end $$;
 select pg_temp.ch_refused($$select public.finish_notification_delivery(gen_random_uuid(),gen_random_uuid(),'later',null,0)$$,'P0001','Invalid delivery outcome');
 reset role;
-do $$ declare d private.notification_deliveries; begin
+do $$ declare d private.notification_deliveries; n int := 0; begin
  for d in select * from private.notification_deliveries where outbox_id in (current_setting('c1.snack01')::bigint,current_setting('c1.doors05')::bigint) loop
   perform pg_temp.ch_check((d.state,d.attempts,d.next_attempt_at,d.lease_id,d.lease_until,d.ticket_id)
     is not distinct from ('pending'::text,0,now(),null::uuid,null::timestamptz,null::text),'A deferred job is not pending at once with its attempt back: '||row_to_json(d)::text);
+  n := n+1;
  end loop;
+ perform pg_temp.ch_check(n=2,'The deferred deliveries are not two: '||n);
  select * into d from private.notification_deliveries where outbox_id=current_setting('c1.pc02')::bigint;
  perform pg_temp.ch_check((d.state,d.attempts,d.next_attempt_at) is not distinct from ('pending'::text,1,now()+interval '30 seconds'),
   'A retried job: '||row_to_json(d)::text);
@@ -1305,8 +1368,8 @@ end $$;
 
 -- The schema (K-S5, K-N11, K-N13, H21). The six writers and their private bodies are for signed-in accounts only; the
 -- public ones are not definers; every private one is a definer with an empty search path, and the stats trigger and
--- the words' helper are for no role. The trigger, the outbox's message_id (a cascading key to messages), its index and
--- the rate limit's index are as named, and the kind check holds the eleven earlier kinds and the two chat kinds. The
+-- the words' helper are for no role. The trigger, the outbox's message_id (a cascading key to messages, with its own
+-- index), the recipient index and the rate limit's index are as named, and the kind check holds the eleven earlier kinds and the two chat kinds. The
 -- redefined claim, check and finish keep their grants: the worker's (service_role) only, and nobody for the check.
 do $$ declare f text; r text; begin
  foreach f in array array['send_message(uuid,text,uuid)','send_announcement(uuid,text,text,uuid)','delete_message(bigint)',
@@ -1338,6 +1401,8 @@ do $$ declare f text; r text; begin
     and c.confrelid='public.messages'::regclass and c.confdeltype='c'),'The outbox''s message_id is not a cascading key to messages');
  perform pg_temp.ch_check((select indexdef from pg_catalog.pg_indexes where schemaname='private' and indexname='notification_outbox_recipient_kind_idx')
    like '%ON private.notification_outbox USING btree (recipient_id, kind, created_at)'
+  and (select indexdef from pg_catalog.pg_indexes where schemaname='private' and indexname='notification_outbox_message_idx')
+   like '%ON private.notification_outbox USING btree (message_id)'
   and (select indexdef from pg_catalog.pg_indexes where schemaname='public' and indexname='messages_author_created_idx')
    like '%ON public.messages USING btree (author_id, created_at)','The outbox''s or the rate limit''s index is wrong');
  perform pg_temp.ch_check((select string_agg(k[1],',' order by k[1]) from regexp_matches(pg_catalog.pg_get_constraintdef(
@@ -1362,8 +1427,9 @@ rollback;
 -- exists (full mode). The c5 cast: 01 'Ana Host', 03 'Mia Leaving', 04 'Leo Going', 09 'Kai Brought', all testers
 -- (chat5-…@resbite-test.invalid). 03 owns 'Picnic' (c51…01), a one-off tomorrow, with 04 Going and 09 not answered,
 -- brought by 03; 01 owns 'Quiz' (c51…02), the day after, with 03 and 04 Going. On the Picnic 03 writes a message and an
--- announcement (pinned) and 04 a message; on the Quiz 03 writes a message. A system line on the Picnic names 03 (03
--- made 04 an admin), and 09's row is inserted by hand. 03 has read the Picnic and muted the Quiz; 04 has read the Picnic.
+-- announcement (pinned) and 04 a message; on the Quiz 03 writes two messages, and 01 removes the second. A system line
+-- on the Picnic names 03 (03 made 04 an admin), and 09's row is inserted by hand. 03 has read the Picnic and muted the
+-- Quiz; 04 has read the Picnic.
 select to_regprocedure('private.request_account_deletion(uuid,uuid,uuid,text)') is not null as c5_deletion \gset
 \if :c5_deletion
 begin;
@@ -1392,9 +1458,12 @@ select pg_temp.ch_as(pg_temp.c5('03'));
 select set_config('c5.blanket',pg_temp.ch_send(pg_temp.c5p('01'),'Bring a blanket')::text,true);
 select set_config('c5.gates',(public.send_announcement(pg_temp.c5p('01'),'Gates at noon','everyone',gen_random_uuid())->>'id'),true);
 select set_config('c5.quiz',pg_temp.ch_send(pg_temp.c5p('02'),'Team name ideas?')::text,true);
+select set_config('c5.rude',pg_temp.ch_send(pg_temp.c5p('02'),'Rude words')::text,true);
 select public.set_chat_mute(pg_temp.c5p('02'),true);
 select pg_temp.ch_as(pg_temp.c5('04'));
 select set_config('c5.lovely',pg_temp.ch_send(pg_temp.c5p('01'),'Lovely')::text,true);
+select pg_temp.ch_as(pg_temp.c5('01'));
+select public.remove_message(current_setting('c5.rude')::bigint);
 reset role;
 insert into public.messages(series_id,plan_id,kind,event,payload) values
  (pg_temp.c5p('01'),pg_temp.c5p('01'),'system','admin',jsonb_build_object('actor',pg_temp.c5('03'),'user',pg_temp.c5('04')));
@@ -1404,8 +1473,9 @@ select set_config('c5.line',(select row_to_json(m)::text from public.messages m 
 select pg_temp.ch_check((select pinned_message_id from public.chats where series_id=pg_temp.c5p('01'))=current_setting('c5.gates')::bigint,
  '03''s announcement is not pinned before the deletion');
 
--- 03 asks to delete their account. Every message and announcement of 03's, on either chat, reads deleted, with no body
--- and no author (K-N5, Decision 14); 04's is as it was. The system line naming 03 is unchanged, payload and all (K-S3),
+-- 03 asks to delete their account. Every message and announcement of 03's still sent, on either chat, reads deleted,
+-- with no body and no author (K-N5, Decision 14); the one 01 removed stays removed, with no author (H27); 04's is as it
+-- was. The system line naming 03 is unchanged, payload and all (K-S3),
 -- and the names map gives 03 as null. 03's announcement is no longer pinned, and nothing is (K-S12), and the counts
 -- leave 03's words out. 09 keeps its row on the Picnic, with nobody as its bringer (BLOCKING 1). 03's read and mute
 -- rows are gone; 04's read stays. The deletion's flag is set (K-S2).
@@ -1417,6 +1487,8 @@ do $$ declare v_ids bigint[] := array[current_setting('c5.blanket')::bigint,curr
  perform pg_temp.ch_check(not exists(select 1 from public.messages where id=any(v_ids)
    and (state,body,author_id) is distinct from ('deleted'::text,null::text,null::uuid))
   and (select count(*) from public.messages where id=any(v_ids))=3,'03''s messages are not deleted, without words or author');
+ perform pg_temp.ch_check((select (state,body,author_id) from public.messages where id=current_setting('c5.rude')::bigint)
+   is not distinct from ('removed'::text,null::text,null::uuid),'03''s removed message is not still removed, without author');
  perform pg_temp.ch_check(not exists(select 1 from public.messages where author_id=pg_temp.c5('03')),'A row still names 03 as its author');
  perform pg_temp.ch_check((select (state,body,author_id) from public.messages where id=current_setting('c5.lovely')::bigint)
    is not distinct from ('sent'::text,'Lovely'::text,pg_temp.c5('04')),'04''s message changed');

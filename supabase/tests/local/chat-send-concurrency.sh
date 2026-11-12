@@ -9,6 +9,9 @@
 # the key, then returns that row and tells nobody (send_message's step 7). (2) Two people write in one chat at once. A
 # session holds the chat's lock (send_message's, K-B3.1), so both are waiting when it lets go. Expected: everyone else
 # in the chat, and each writer, has exactly one chat_message notice (one push a minute, decided under the lock).
+# (3) A host removes a message while its author's account is being deleted (H28). A session holds the chat's row; the
+# deletion waits on it, then the host's remove. Both take the chat row before any message row, so when it lets go they
+# run one after the other: no deadlock (40P01). The deletion goes first, so the message reads deleted, with no author.
 set -euo pipefail
 pg_bin="$1"
 socket="$2"
@@ -20,11 +23,16 @@ insert into auth.users(id,phone,phone_confirmed_at,raw_user_meta_data) values
  ('e9000000-0000-4000-8000-000000000002','447700900992',now(),'{}'),
  ('e9000000-0000-4000-8000-000000000003','447700900993',now(),'{}'),
  ('e9000000-0000-4000-8000-000000000004','447700900994',now(),'{}');
+-- The leaver of race (3): a confirmed email (the deletion asks for one) and a fresh session.
+insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data) values
+ ('e9000000-0000-4000-8000-000000000005','chat-race-05@resbite-test.invalid',now(),'{}');
+insert into auth.sessions(id,user_id,created_at) values ('e9200000-0000-4000-8000-000000000005','e9000000-0000-4000-8000-000000000005',now());
 insert into public.profiles(id,display_name) values
  ('e9000000-0000-4000-8000-000000000001','Race host'),('e9000000-0000-4000-8000-000000000002','Race writer one'),
- ('e9000000-0000-4000-8000-000000000003','Race writer two'),('e9000000-0000-4000-8000-000000000004','Race reader');
+ ('e9000000-0000-4000-8000-000000000003','Race writer two'),('e9000000-0000-4000-8000-000000000004','Race reader'),
+ ('e9000000-0000-4000-8000-000000000005','Race leaver');
 insert into private.beta_access(user_id,source)
- select ('e9000000-0000-4000-8000-00000000000'||n)::uuid,'maintainer' from generate_series(1,4) n;
+ select ('e9000000-0000-4000-8000-00000000000'||n)::uuid,'maintainer' from generate_series(1,5) n;
 -- Two resbites (one for each race, so the first race's notices never hold the second's back), each with the host and
 -- the three others Going.
 insert into public.plans(id,owner_id,title,starts_at,time_zone,place_label,categories) values
@@ -33,6 +41,12 @@ insert into public.plans(id,owner_id,title,starts_at,time_zone,place_label,categ
 insert into public.attendees(plan_id,user_id,response)
  select p::uuid,('e9000000-0000-4000-8000-00000000000'||n)::uuid,'accepted'
  from unnest(array['e9100000-0000-4000-8000-000000000001','e9100000-0000-4000-8000-000000000002']) p, generate_series(2,4) n;
+insert into public.attendees(plan_id,user_id,response) values
+ ('e9100000-0000-4000-8000-000000000001','e9000000-0000-4000-8000-000000000005','accepted');
+-- The leaver's message, which the host will remove.
+insert into public.messages(series_id,plan_id,author_id,kind,body,client_id) values
+ ('e9100000-0000-4000-8000-000000000001','e9100000-0000-4000-8000-000000000001','e9000000-0000-4000-8000-000000000005','message',
+  'Abusive words','e9300000-0000-4000-8000-000000000005');
 SQL
 wait_for() {
  local app="$1" column="$2" value="$3" what="$4"
@@ -136,15 +150,59 @@ do $$ declare v text; begin
 end $$;
 SQL
 echo "PASS: two people writing in one chat at once give everyone in it exactly one chat notice"
+# (3) The chat's row is held; the leaver's deletion, then the host's remove, wait on it.
+PGAPPNAME=resbite_chat_hold3 "$pg_bin/psql" "${args[@]}" >"$socket/chat-send-concurrency-hold3.log" 2>&1 <<'SQL' &
+begin;
+select 1 from public.chats where series_id='e9100000-0000-4000-8000-000000000001' for update;
+select pg_sleep(2);
+commit;
+SQL
+hold_pid=$!
+wait_for resbite_chat_hold3 wait_event PgSleep 'The chat row holder did not become ready'
+PGAPPNAME=resbite_chat_leaver "$pg_bin/psql" "${args[@]}" >"$socket/resbite_chat_leaver.log" 2>&1 <<'SQL' &
+\set VERBOSITY verbose
+select private.request_account_deletion('e9000000-0000-4000-8000-000000000005','e9200000-0000-4000-8000-000000000005',
+ 'e9300000-0000-4000-8000-000000000006',repeat('e',64));
+SQL
+leaver_pid=$!
+wait_for resbite_chat_leaver wait_event_type Lock "The deletion did not wait on the chat's row"
+abusive_id="$("$pg_bin/psql" "${args[@]}" -Atc "select id from public.messages where client_id='e9300000-0000-4000-8000-000000000005'")"
+PGAPPNAME=resbite_chat_remover "$pg_bin/psql" "${args[@]}" -v id="$abusive_id" >"$socket/resbite_chat_remover.log" 2>&1 <<'SQL' &
+\set VERBOSITY verbose
+set role authenticated;
+select set_config('request.jwt.claims','{"sub":"e9000000-0000-4000-8000-000000000001","role":"authenticated"}',false);
+select public.remove_message(:id);
+SQL
+remover_pid=$!
+wait_for resbite_chat_remover wait_event_type Lock "The host's remove did not wait"
+wait "$hold_pid" || { cat "$socket/chat-send-concurrency-hold3.log"; exit 1; }
+leaver_status=0; remover_status=0
+wait "$leaver_pid" || leaver_status=$?
+wait "$remover_pid" || remover_status=$?
+if [[ "$leaver_status" != 0 || "$remover_status" != 0 ]] || grep -q 40P01 "$socket/resbite_chat_leaver.log" "$socket/resbite_chat_remover.log"; then
+ cat "$socket/resbite_chat_leaver.log" "$socket/resbite_chat_remover.log"; echo 'FAIL: a removal and an account deletion at once did not both go through'; exit 1
+fi
+"$pg_bin/psql" "${args[@]}" >"$socket/chat-send-concurrency-verify3.log" <<'SQL'
+do $$ begin
+ if (select (state,body,author_id) from public.messages where client_id='e9300000-0000-4000-8000-000000000005')
+   is distinct from ('deleted'::text,null::text,null::uuid)
+  or not exists(select 1 from private.account_deletion_jobs where user_id='e9000000-0000-4000-8000-000000000005') then
+  raise exception 'FAIL: the deletion did not go first and through';
+ end if;
+end $$;
+SQL
+echo "PASS: a host's removal and the author's account deletion at once queue on the chat's row: no deadlock"
 "$pg_bin/psql" "${args[@]}" >"$socket/chat-send-concurrency-cleanup.log" <<'SQL'
 delete from public.plans where id in ('e9100000-0000-4000-8000-000000000001','e9100000-0000-4000-8000-000000000002');
 delete from public.chats where series_id in ('e9100000-0000-4000-8000-000000000001','e9100000-0000-4000-8000-000000000002');
+delete from private.account_deletion_jobs where user_id='e9000000-0000-4000-8000-000000000005';
 delete from auth.users where id in ('e9000000-0000-4000-8000-000000000001','e9000000-0000-4000-8000-000000000002',
- 'e9000000-0000-4000-8000-000000000003','e9000000-0000-4000-8000-000000000004');
+ 'e9000000-0000-4000-8000-000000000003','e9000000-0000-4000-8000-000000000004','e9000000-0000-4000-8000-000000000005');
 do $$ begin
  if exists(select 1 from public.messages where series_id in ('e9100000-0000-4000-8000-000000000001','e9100000-0000-4000-8000-000000000002'))
  or exists(select 1 from public.chats where series_id in ('e9100000-0000-4000-8000-000000000001','e9100000-0000-4000-8000-000000000002'))
- or exists(select 1 from public.profiles where id::text like 'e9000000-%') then
+ or exists(select 1 from public.profiles where id::text like 'e9000000-%')
+ or exists(select 1 from private.account_deletion_jobs where user_id::text like 'e9000000-%') then
   raise exception 'The race''s rows were not cleaned up';
  end if;
 end $$;

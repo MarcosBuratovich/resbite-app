@@ -167,9 +167,11 @@ revoke all on function private.chat_is_group(uuid) from public, anon, authentica
 
 -- Who an announcement reaches (K-N2, SHOULD 1), defined once, from chat_members, so plan 2 needs no change. 'going': the
 -- members who are a host of the current occurrence or Going or Maybe on it. 'everyone': every member, plus the current
--- occurrence's people who have not answered when the chat is not a group. On a one-off these are "Going" and "Everyone
--- invited"; once plan 2 makes every group attendee a member, "Going this Thursday" and "Everyone in the group". A group
--- member who left after the end keeps their guest row but is no member, so is in neither. Any other audience: nobody.
+-- occurrence's people who have not answered when the chat is not a group, while that occurrence is active and has not
+-- ended (H30): an invitation that is over, or cancelled, reaches nobody new. On a one-off these are "Going" and
+-- "Everyone invited"; once plan 2 makes every group attendee a member, "Going this Thursday" and "Everyone in the group".
+-- A group member who left after the end keeps their guest row but is no member, so is in neither. Any other audience:
+-- nobody.
 create function private.announcement_audience(p_series uuid, p_audience text) returns setof uuid language sql stable security definer set search_path = '' as $$
  select m.id from private.chat_members(p_series) as m(id), private.current_occurrence(p_series) c
  where p_audience = 'everyone'
@@ -178,6 +180,7 @@ create function private.announcement_audience(p_series uuid, p_audience text) re
  union
  select a.user_id from private.current_occurrence(p_series) c join public.attendees a on a.plan_id = c.id
  where p_audience = 'everyone' and a.response = 'pending' and not private.chat_is_group(p_series)
+  and c.status = 'active' and private.plan_end(c.starts_at, c.ends_at) > now()
 $$;
 revoke all on function private.announcement_audience(uuid,text) from public, anon, authenticated, service_role;
 
@@ -369,6 +372,8 @@ alter table private.notification_outbox add constraint notification_outbox_kind_
  check (kind in ('invitation','rsvp','plan_changed','plan_cancelled','guest_note','invited','join_request','join_approved','admin_added',
   'connection_request','connection_accepted','chat_message','announcement'));
 create index notification_outbox_recipient_kind_idx on private.notification_outbox(recipient_id, kind, created_at);
+-- Serves the cascade when a message goes, and the claim's and the check's way from a notice to its message.
+create index notification_outbox_message_idx on private.notification_outbox(message_id);
 -- Serves the writers' limits (K-S8): an author's messages and announcements of the last minute.
 create index messages_author_created_idx on public.messages(author_id, created_at);
 
@@ -403,15 +408,25 @@ end $$;
 revoke all on function private.messages_chat_stats() from public, anon, authenticated, service_role;
 create trigger messages_chat_stats after insert or update on public.messages for each row execute function private.messages_chat_stats();
 
--- 2c. The words of a message or an announcement (K-S8, step 4): trimmed of white space at both ends, then 1 to 1000
--- characters with one that is not white space; null when they are not. This database's \s does not take U+00A0 (the
--- harness's ctype; hosted may differ), so the class adds it and the other spaces \s may miss: U+2000–U+200B, U+2028,
--- U+2029, U+202F, U+205F, U+3000 and U+FEFF. The database's own: no role may call it.
+-- 2c. The words of a message or an announcement (K-S8, step 4; H28, H30): trimmed at both ends of white space, of the
+-- blanks this database's \s misses (U+00A0, U+0085, U+115F, U+1680, U+2000–U+200B, U+2028, U+2029, U+202F, U+205F,
+-- U+2060, U+2800, U+3000, U+3164, U+FEFF, U+FFA0) and of ZWNJ (U+200C); then 1 to 1000 characters, at least one of
+-- them visible as the sender's visible() counts it: not white space, a control character (Cc), a format character
+-- (Cf: U+00AD, U+0600–U+0605, U+061C, U+06DD, U+070F, U+0890–U+0891, U+08E2, U+180E, U+200B–U+200F, U+202A–U+202E,
+-- U+2060–U+2064, U+2066–U+206F, U+FEFF, U+FFF9–U+FFFB, U+110BD, U+110CD, U+13430–U+1343F, U+1BCA0–U+1BCA3,
+-- U+1D173–U+1D17A, U+E0001, U+E0020–U+E007F), a default-ignorable one (U+034F, U+115F, U+1160, U+17B4, U+17B5,
+-- U+180B–U+180F, U+2065, U+3164, U+FE00–U+FE0F, U+FFA0, U+FFF0–U+FFF8, U+E0000–U+E0FFF) or a braille blank (U+2800).
+-- Null when they are not. A ZWJ or a zero-width space inside the words is kept: it holds an emoji or a word together.
+-- The classes name every character, since \s here does not take U+00A0 and hosted's may differ. The database's own: no
+-- role may call it.
 create function private.chat_body(p_body text) returns text language sql immutable security definer set search_path = '' as $$
  select t.body from (select pg_catalog.regexp_replace(p_body,
-   '^[\s\u00a0\u2000-\u200b\u2028\u2029\u202f\u205f\u3000\ufeff]+|[\s\u00a0\u2000-\u200b\u2028\u2029\u202f\u205f\u3000\ufeff]+$', '', 'g') as body) t
+   '^[\s\u0085\u00a0\u115f\u1680\u2000-\u200c\u2028\u2029\u202f\u205f\u2060\u2800\u3000\u3164\ufeff\uffa0]+'
+   '|[\s\u0085\u00a0\u115f\u1680\u2000-\u200c\u2028\u2029\u202f\u205f\u2060\u2800\u3000\u3164\ufeff\uffa0]+$', '', 'g') as body) t
  where pg_catalog.char_length(t.body) between 1 and 1000
-  and t.body ~ '[^\s\u00a0\u2000-\u200b\u2028\u2029\u202f\u205f\u3000\ufeff]'
+  and t.body ~ ('[^\s\u0001-\u001f\u007f-\u00a0\u00ad\u034f\u0600-\u0605\u061c\u06dd\u070f\u0890\u0891\u08e2\u115f\u1160\u1680'
+   '\u17b4\u17b5\u180b-\u180f\u2000-\u200f\u2028-\u202f\u205f-\u206f\u2800\u3000\u3164\ufe00-\ufe0f\ufeff\uffa0\ufff0-\ufffb'
+   '\U000110bd\U000110cd\U00013430-\U0001343f\U0001bca0-\U0001bca3\U0001d173-\U0001d17a\U000e0000-\U000e0fff]')
 $$;
 revoke all on function private.chat_body(text) from public, anon, authenticated, service_role;
 
@@ -424,7 +439,8 @@ revoke all on function private.chat_body(text) from public, anon, authenticated,
 --     else 42501 'Hosts only';
 --  3. open, else 22023 'Chat closed'; the words (chat_body) and, for an announcement, its audience (going or everyone),
 --     else 22023 'Invalid message';
---  4. send_announcement: no announcement by the caller in this chat in the last minute, else 22023 'Too fast';
+--  4. the author's lock (require_tester's key), so one person's parallel calls meet the limits one at a time (H28);
+--     send_announcement: no announcement by the caller in this chat in the last minute, else 22023 'Too fast';
 --  5. no more than 30 messages and announcements by the caller, in any chat, in the last minute: the 31st is
 --     22023 'Slow down';
 --  6. the chat's lock (K-B3.1), held to the commit, so writers in one chat queue their notices one after another;
@@ -447,6 +463,9 @@ begin
  if not private.chat_open(p_series) then raise exception 'Chat closed' using errcode='22023'; end if;
  v_body := private.chat_body(p_body);
  if v_body is null then raise exception 'Invalid message' using errcode='22023'; end if;
+ -- The author's lock (require_tester's key; already held where require_tester takes it), so one person's writes queue
+ -- one after another and the limits below hold under parallel calls (H28).
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_uid::text, 47));
  if (select count(*) from public.messages m where m.author_id = v_uid and m.kind in ('message','announcement')
      and m.created_at > now() - interval '1 minute') >= 30 then
   raise exception 'Slow down' using errcode='22023';
@@ -496,6 +515,8 @@ begin
  if v_body is null or p_audience is null or p_audience not in ('going','everyone') then
   raise exception 'Invalid message' using errcode='22023';
  end if;
+ -- The author's lock, as send_message takes it (H28).
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_uid::text, 47));
  if exists (select 1 from public.messages m where m.author_id = v_uid and m.series_id = p_series and m.kind = 'announcement'
      and m.created_at > now() - interval '1 minute') then
   raise exception 'Too fast' using errcode='22023';
@@ -534,13 +555,15 @@ grant execute on function private.send_announcement(uuid,text,text,uuid), public
 -- with no body. remove_message: a row in a chat where the caller is a host of the current occurrence, else 42501
 -- 'Hosts only'; it becomes removed with no body, or deleted when it is the caller's own, so a host's words never read
 -- "removed". Both work after the close. A row already deleted or removed keeps its state: a removal is never turned
--- into a deletion by its author, and a retry changes nothing.
+-- into a deletion by its author, and a retry changes nothing. Each locks the chat's row before the message's, as the
+-- stats trigger and the deletion take them (H28), so a removal and an account deletion never deadlock.
 create function private.delete_message(p_id bigint) returns void language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester(); v_row public.messages;
 begin
- select * into v_row from public.messages m where m.id = p_id and m.kind in ('message','announcement') for update;
+ select * into v_row from public.messages m where m.id = p_id and m.kind in ('message','announcement');
  if not found or v_row.author_id is distinct from v_uid then raise exception 'Not your message' using errcode='42501'; end if;
- update public.messages set state = 'deleted', body = null where id = p_id and state = 'sent';
+ perform 1 from public.chats c where c.series_id = v_row.series_id for update;
+ update public.messages set state = 'deleted', body = null where id = p_id and state = 'sent' and author_id = v_uid;
 end $$;
 revoke all on function private.delete_message(bigint) from public, anon, authenticated, service_role;
 create function public.delete_message(p_id bigint) returns void language sql security invoker set search_path = '' as $$
@@ -552,10 +575,11 @@ grant execute on function private.delete_message(bigint), public.delete_message(
 create function private.remove_message(p_id bigint) returns void language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester(); v_row public.messages;
 begin
- select * into v_row from public.messages m where m.id = p_id and m.kind in ('message','announcement') for update;
+ select * into v_row from public.messages m where m.id = p_id and m.kind in ('message','announcement');
  if not found or not coalesce(private.is_host((private.current_occurrence(v_row.series_id)).id, v_uid), false) then
   raise exception 'Hosts only' using errcode='42501';
  end if;
+ perform 1 from public.chats c where c.series_id = v_row.series_id for update;
  update public.messages set state = case when author_id = v_uid then 'deleted' else 'removed' end, body = null
  where id = p_id and state = 'sent';
 end $$;
@@ -604,9 +628,10 @@ grant execute on function private.set_chat_mute(uuid,boolean), public.set_chat_m
 -- 2g. Who may be told (K-N3, CH-P7, CH-P8). The two chat kinds get a branch of their own: the recipient may use the app
 -- and is not being deleted, has not muted the resbite (plan_mutes, by series), and the message is still sent; a
 -- chat_message under an hour old (K-N3), to someone in the chat now who has not muted it; an announcement under a day
--- old, to someone its audience reaches now (announcement_audience: a host, Going or Maybe, or not answered for
--- everyone), muted chat or not. Every other kind keeps the 20261110120000_connections body, verbatim but for the kind
--- test that leaves the chat kinds out of the first branch; its grants are kept (nobody).
+-- old, on a plan not cancelled since (H30), to someone its audience reaches now (announcement_audience: a host, Going or
+-- Maybe, or not answered for everyone while the one-off is active and has not ended), muted chat or not. Every other
+-- kind keeps the 20261110120000_connections body, verbatim but for the kind test that leaves the chat kinds out of the
+-- first branch; its grants are kept (nobody).
 create or replace function private.notification_recipient_eligible(p_outbox bigint) returns boolean
 language sql stable security definer set search_path='' as $$
  select exists (
@@ -636,6 +661,7 @@ language sql stable security definer set search_path='' as $$
  ) or exists (
  select 1 from private.notification_outbox o
  join public.messages msg on msg.id=o.message_id
+ join public.plans plan on plan.id=o.plan_id
  where o.id=p_outbox and o.kind in ('chat_message','announcement')
  and private.user_eligible(o.recipient_id) and not private.deletion_pending(o.recipient_id)
  and not exists(select 1 from public.plan_mutes m where m.series_id=msg.series_id and m.user_id=o.recipient_id)
@@ -643,7 +669,7 @@ language sql stable security definer set search_path='' as $$
  and (o.kind='chat_message' and o.created_at>now()-interval '1 hour'
    and private.chat_member(msg.series_id,o.recipient_id)
    and not exists(select 1 from public.chat_mutes cm where cm.series_id=msg.series_id and cm.user_id=o.recipient_id)
-  or o.kind='announcement' and o.created_at>now()-interval '24 hours'
+  or o.kind='announcement' and o.created_at>now()-interval '24 hours' and plan.status<>'cancelled'
    and exists(select 1 from private.announcement_audience(msg.series_id,msg.audience) as r(id) where r.id=o.recipient_id))
  )
 $$;
@@ -749,9 +775,10 @@ begin
  and not exists(select 1 from private.notification_deliveries x where x.outbox_id=o.id and x.state in ('pending','sending','ticket'));
 end $$;
 
--- 2j. Deletion (K-S2, K-B2, K-N5, Decision 14). Asking to delete an account first sets the deletion's flag, so no chat
--- line is written for what the deletion does (its cancellations, the place scrub); then, besides what it did, the
--- account's messages and announcements read deleted, with no words and no author, and its chat reads and mutes go.
+-- 2j. Deletion (K-S2, K-B2, K-N5, Decision 14, H27). Asking to delete an account first sets the deletion's flag, so no
+-- chat line is written for what the deletion does (its cancellations, the place scrub); then, besides what it did, the
+-- account's messages and announcements lose their words and their author (those still sent read deleted, a removed one
+-- stays removed), and its chat reads and mutes go.
 -- It never edits a system line's payload (K-S3). The deletion lifecycle is local-only (20261022120001_gi2_local_delivery_and_deletion;
 -- the hosted project has none of it): the function is redefined only where it exists, so this file still applies on
 -- the hosted baseline, and the release that brings deletion to hosted must carry these statements. Otherwise the
@@ -802,13 +829,15 @@ begin
  update public.attendees set brought_by=null where brought_by=p_user;
  update private.phone_invitations set brought_by=null where brought_by=p_user;
  delete from private.plan_removals where user_id=p_user;
- -- Chat (K-B2, K-N5, Decision 14): the account's messages and announcements lose their words and their author, each
- -- chat's row locked first, in one order, so two deletions never wait on each other's; a deleted announcement
- -- unpins (K-S12). A system line is left as it is, payload and all (K-S3): the names map shows the person as nobody.
- -- Its reads and mutes go.
+ -- Chat (K-B2, K-N5, Decision 14, H27): the account's messages and announcements lose their words and their author;
+ -- those still sent read deleted, and one a host removed stays removed. Each chat's row is locked first, in one order,
+ -- before the message rows, as delete_message, remove_message and the stats trigger take them, so they never deadlock
+ -- with each other (H28). A deleted announcement unpins (K-S12). A system line is left as it is, payload and all
+ -- (K-S3): the names map shows the person as nobody. Its reads and mutes go.
  perform 1 from public.chats c where c.series_id in (select m.series_id from public.messages m
   where m.author_id=p_user and m.kind in ('message','announcement')) order by c.series_id for update;
- update public.messages set state='deleted',body=null,author_id=null where author_id=p_user and kind in ('message','announcement');
+ update public.messages set state=case when state='sent' then 'deleted' else state end,body=null,author_id=null
+  where author_id=p_user and kind in ('message','announcement');
  delete from public.chat_reads where user_id=p_user;
  delete from public.chat_mutes where user_id=p_user;
  delete from public.attendees where user_id=p_user;

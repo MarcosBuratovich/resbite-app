@@ -580,11 +580,11 @@ do $$ declare v text; begin
   is distinct from 'Worker processing finished across all endpoints; not a guarantee of delivery or reading. Inspect delivery ledger outcomes.' then
   raise exception 'delivered_at''s comment differs';
  end if;
- -- No other index on the outbox than the ones both modes share (chat core adds the recipient's notices by kind and time,
- -- in both).
+ -- No other index on the outbox than the ones both modes share (chat core adds the message's notices, and the
+ -- recipient's notices by kind and time, in both).
  select string_agg(c.relname,', ' order by c.relname) into v
   from pg_catalog.pg_index i join pg_catalog.pg_class c on c.oid=i.indexrelid where i.indrelid='private.notification_outbox'::regclass;
- if v is distinct from 'notification_outbox_actor_idx, notification_outbox_dedupe_key_key, notification_outbox_pending_idx, notification_outbox_pkey, '
+ if v is distinct from 'notification_outbox_actor_idx, notification_outbox_dedupe_key_key, notification_outbox_message_idx, notification_outbox_pending_idx, notification_outbox_pkey, '
   ||'notification_outbox_plan_idx, notification_outbox_recipient_idx, notification_outbox_recipient_kind_idx' then
   raise exception 'Outbox indexes differ: %', v;
  end if;
