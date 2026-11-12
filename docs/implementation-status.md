@@ -14,6 +14,8 @@
 
 **Chat groups, 12 November 2026:** chat plan 2 of 3 is **built, not hosted**, on branch `ch2-groups`, stacked on chat core. A repeating resbite's chat is a group's: everyone invited to its current occurrence reads and writes it whatever they answered this week, it stays open while the series repeats, and it closes 48 hours after the series stops. The roll carries the chat to the next occurrence with "ended" and "Next one" lines, and a member can leave the group from the chat or the resbite page. The migration is `supabase/migrations/20261111150000_chat_groups.sql`; the screens are `mobile/app/chat.tsx` and `mobile/app/event.tsx`. Nothing is applied to the hosted project and no build is made. It goes live with chat core and plan 3 in one sitting, after the owner's four questions (G-QA, G-QB, G-QC, G-QD; the build ships their defaults). The steps are in the [chat release runbook](../qa/chat-release/README.md), and the record is under Chat groups in the [decision log](../knowledge-base/08-decisions.md).
 
+**Chat safety, 12 November 2026:** chat plan 3 of 3 is **built, not hosted**, on branch `ch3-safety`, stacked on chat groups; its head holds the three chat plans, integrated. Anyone can report a message or a person and block a person, from a message, a person's sheet, the chat menu, an unanswered invitation's card and resbite page, and Connections. A block hides the person's messages and pushes from the blocker at once and ends any connection, and the blocked person is never told. A first message waits for the chat rules, a blocked-terms list stops the worst words, each report pushes the Resbite team, and Data & privacy shows the contact address, Blocked people and what a report keeps. The migration is `supabase/migrations/20261111160000_chat_safety.sql`, the team's scripts are in `supabase/ops/`, and the App Store review notes are `qa/chat-release/app-store-review-notes.md`. Nothing is applied to the hosted project, no function is deployed, no SQL editor script is run, no EAS variable is set and no build is made. It goes live with chat core and plan 2 in one sitting. The release waits for the owner's support address, blocked-terms list and moderators, and for R-Q4's backup reader. The [chat release runbook](../qa/chat-release/README.md) is now whole, and the record is under Chat safety in the [decision log](../knowledge-base/08-decisions.md).
+
 This document records the mobile foundation and successive implementation milestones. It is **not yet an accepted standalone two-person test release**. The current development target is the [expanded private beta](milestones/2026-09-23-expanded-private-beta.md), selected on 23 September; older scope/access statements below are historical and superseded by dated updates.
 
 ## Created and verified
@@ -34,7 +36,7 @@ This document records the mobile foundation and successive implementation milest
 
 1. Real-account device verification of draft recovery, interrupted saves and foreground plan/attendee refresh. Client restart recovery is implemented; tester access remains closed.
 2. Device contact permission-path and real-account invitation verification. Local groups, independent plan selections and individual invitation preparation/recovery/revocation are implemented. Notification availability and permission-status UI are implemented; permission requests, dispatch and endpoint cleanup remain. Optional photo normalization/private upload is implemented and awaits native/API device verification.
-3. Device verification of the live chat (the [chat release runbook](../qa/chat-release/README.md)'s device checks); the labelled sample conversation this item first named was removed with chat core on 11 November 2026. Account deletion controls, queued cleanup and local tests are implemented but disabled pending deployment, real Auth/Storage acceptance and approved retention.
+3. Device verification of the live chat, report and block among it (the [chat release runbook](../qa/chat-release/README.md)'s device checks); the labelled sample conversation this item first named was removed with chat core on 11 November 2026. Account deletion controls, queued cleanup and local tests are implemented but disabled pending deployment, real Auth/Storage acceptance and approved retention.
 4. Owned HTTPS invitation and confirmation links, install fallback and cold-start routing tests. Strict scheme/owned-origin parsing, native incoming-link routing and a private HTTPS fallback generator are prepared. Current `resbite://invite` remains the default until an owned domain is configured; it requires an installed app. Pending invitations are retained securely through profile setup.
 5. Finish visual/content review, canonical category taxonomy and catalogue publication. Eight drafted pairs are ready for review; the live database catalogue remains unpublished/empty.
 6. Device accessibility, keyboard, date/time/timezone, denied-permission, reduced-motion and offline-path checks. Performance tuning after device measurement.
@@ -845,3 +847,33 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
 - The browser scripts with a fake project URL: `verify-chat.mjs` 58, `verify-event.mjs` 30, `review-ui.mjs` passed and `verify-planning.mjs` 16.
 
 **What the owner still runs** is the groups part of [`qa/chat-release/README.md`](../qa/chat-release/README.md): the four owner questions (G-QA, G-QB, G-QC, G-QD), `ch2-apply.sh` right after chat core's, its after checks and advisors, the device checks, and the rollback if it is ever needed.
+
+## Chat safety build — 12 November 2026
+
+**Built on branch `ch3-safety` (chat plan 3 of 3), stacked on chat groups; nothing is applied to the hosted project, Supabase functions, the SQL editor, EAS, TestFlight or App Store Connect.** It ships with chat core and plan 2, in one release, and completes the [release runbook](../qa/chat-release/README.md).
+
+**What is built.**
+- **The database.** `supabase/migrations/20261111160000_chat_safety.sql`:
+  - blocks, and the block rule in the chat's reads and counts, every push, the connection functions, invitations and the contact lookup, read by the blocked person as a refusal;
+  - reports of a message (its words frozen) or a person, at most 20 a day per account, deleted with the account that filed them and 180 days after they are closed;
+  - the moderators and their push, at most one in 10 minutes each, ahead of chat pushes;
+  - the chat rules, agreed once before a first message or announcement, and the blocked-terms check on both;
+  - the deletion step and the fold, which carry blocks and reports;
+  - seven scripts for the SQL editor in `supabase/ops/`: the daily read, close, remove a message, suspend (with its undo), set the moderators, set the blocked terms, and delete the closed reports that are due.
+  - Its rollback, `supabase/rollback/20261111160000_chat_safety.rollback.sql`, restores the fourteen bodies it replaced byte for byte; the hosted-baseline rehearsal passes.
+- **The sender.** "A new report is waiting." for the moderators, with no resbite and no word of the report.
+- **The app.**
+  - Report message on a message's long-press; a person's sheet with Report and Block or Unblock, from a name over a message or the chat menu's Report or block; People in this chat; an unanswered invitation's card and resbite page; Connections.
+  - The report sheet, the block confirm, the chat rules sheet, and a refresh of every open chat after a block or unblock.
+  - Data & privacy: the Contact topic when `EXPO_PUBLIC_SUPPORT_ADDRESS` holds an address, what a report keeps, how long blocks stay, and Blocked people with each block's date.
+- **The record.** The release runbook's safety part, its owner-run scripts rehearsed in bash and zsh on a local replay, and the App Store review notes, `qa/chat-release/app-store-review-notes.md`.
+
+**Checks (12 November 2026),** on `ch3-safety` at `290c3b3`, the three plans integrated:
+- `bash scripts/test-database-docker.sh`: 64 PASS lines.
+- The hosted baseline with the five candidates: 29 PASS lines.
+- `(cd mobile && npm run check)`: 1,210 tests.
+- The edge tests: 109 tests in 11 files.
+- The fingerprint replay (479, then 532: 53 added, 14 changed; the rollback back to 479).
+- The browser scripts ran during the build on the task branches (`verify-chat.mjs` 77, `verify-event.mjs` 32, `verify-deletion.mjs` 12 and the others); the app review runs them again on `ch3-safety`.
+
+**What the owner still runs** is in [`qa/chat-release/README.md`](../qa/chat-release/README.md): chat safety's owner questions (the support address, the moderators, the blocked terms, R-Q4's backup reader among them); `ch3-apply.sh` right after `ch2-apply.sh`, with its settings check before and its after checks; the moderators, the blocked terms and the release gate after the sender's redeploy; the support address in EAS before the build; App Review with the review notes; the device checks; and, from then on, the daily reports queue.

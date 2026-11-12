@@ -2,13 +2,14 @@
 
 - **Spec:** [Groups and chat design](../../docs/superpowers/specs/2026-11-10-groups-and-chat-design.md) (CH-D1 to CH-D6, CH-P1 to CH-P19; screens CH-01 to CH-08; mockup `group-chat.html`).
 - **Plans:** [chat 1, core](../../docs/superpowers/plans/2026-11-11-chat-1-core.md), [chat 2, groups](../../docs/superpowers/plans/2026-11-11-chat-2-groups.md) and [chat 3, safety](../../docs/superpowers/plans/2026-11-11-chat-3-safety.md). The [roadmap](../../docs/superpowers/plans/2026-11-11-roadmap-connections-groups-chat.md) (Phase 3) ships the three in **one release**.
-- **Code:** chat core is on branch `ch1-core`, stacked on the circles branch `co2-circles-of-trust`. Chat groups (plan 2) is on branch `ch2-groups`, stacked on chat core. **Nothing is applied to the hosted project, Supabase functions, the Realtime settings, Vercel, EAS or TestFlight.** Every step below needs the owner's explicit approval when it is done. Neither build task executed any of them.
+- **Code:** chat core is on branch `ch1-core`, stacked on the circles branch `co2-circles-of-trust`. Chat groups (plan 2) is on branch `ch2-groups`, stacked on chat core. Chat safety (plan 3) is on branch `ch3-safety`, stacked on chat groups; its head holds the three plans' work, integrated. **Nothing is applied to the hosted project, Supabase functions, the Realtime settings, Vercel, EAS, TestFlight or App Store Connect.** Every step below needs the owner's explicit approval when it is done. No build task executed any of them.
+- **App Review:** [`app-store-review-notes.md`](app-store-review-notes.md), beside this file, is pasted into App Store Connect at step 6a.
 
-**This runbook is written in parts.** This file holds chat core (plan 1) and chat groups (plan 2). Plan 3 adds its own sections, files and steps, and completes the release order. Until then, nothing here is run.
+**This runbook is whole.** It holds chat core (plan 1), chat groups (plan 2) and chat safety (plan 3), and it is run as one release, in the order under "Rollout runbook": the owner's answers, the three migrations in one sitting, the sender, Realtime, the team's lists and the support address, then one TestFlight build and App Review.
 
 **Chat core is not meant to go live on its own** (plan Decision 4).
 - History: chat core alone would let a repeating series follow the one-off rules on its current occurrence, and the real weekly roll would write an `admin` line, with no actor, into the chat for each admin it carries (`private.plan_admins_chat_lines`, `supabase/migrations/20261111140000_chat_core.sql:984-993`). Plan 2 ships in the same sitting and ends both: a repeating series is a group, and its roll sets the roll flag, so it writes no line for anyone it carries.
-- Report and block (plan 3) must ship with any chat (App Store guideline 1.2, CH-P13).
+- Report and block (plan 3) ship in the same sitting and the same build. Chat never reaches testers or App Review without report, block, the chat rules, the blocked terms and a contact address (App Store guideline 1.2, CH-P13, the spec's Anti-goals): steps 5a, 5b and 6a gate the build.
 - So the three migrations go in one sitting, in order, and the app reaches testers in one TestFlight build.
 
 ## What is built (chat core)
@@ -99,6 +100,45 @@ The decisions and the calls made while building are in the [decision log](../../
 
 The decisions and calls are in the [decision log](../../knowledge-base/08-decisions.md), under Chat groups.
 
+## What is built (chat safety)
+
+- **One hosted-compatible migration**, `20261111160000_chat_safety.sql`, in two sections: blocks (section 1, lines 20-745), then reports, the moderators, the chat rules, the blocked terms, the deletion and the fold (section 2, lines 747-1444). It depends on the files in `migrations.txt` and the follow-ups, circles, chat core and chat groups migrations.
+  - Every body it replaces is copied from its latest definition as built and changed only where its comment says (the plan's Bases; its header, lines 7-17): plan 2's `chat_summary`, `my_chat_overview`, `request_connection` and `notification_recipient_eligible` (sha256 `068d7f42…`); chat core's `chat_messages`, `chat_messages_since`, `send_message`, `send_announcement`, the worker's claim, the deletion request and the fold (sha256 `1047fb37…`); the connections' `plan_connection_states`, the circles' `invite_contacts` and the phone_key's `contacts_on_resbite`. Fourteen bodies; thirteen on hosted, where the deletion request doesn't exist.
+  - It writes no data. Its six tables start empty: no term and no moderator is seeded.
+- **Six tables in `private`**, each with RLS on, no policy and no grant to any API role: `blocks`, `reports` (and its id sequence), `suspensions`, `moderators`, `chat_rules_acceptances` and `blocked_terms`. No public table.
+- **Five calls for signed-in accounts**, each a public invoker over a private definer with an empty `search_path`, for `authenticated` only: `block_user` (block or unblock; it answers `stored`, true only when the caller's block exists afterwards), `my_blocks` (`{user_id, name, at}`, newest first), `report_message`, `report_user` and `accept_chat_rules`. Four helpers no API role may call: `invited_by`, `inviter_of`, `chat_rules_version` (`'2026-11'`) and `report_keep_days` (180).
+- **A block** (plan Decisions 1, 2, 11, 17 and 18):
+  - the blocker no longer sees the blocked person's messages and announcements: in the history (filtered before the page's limit, so a page still holds 50 rows the blocker may see), the pinned card (an earlier announcement takes the pin; on a group, only the current occurrence's), the Chat row's line, the counts and unread, and the invitation card's announcement line;
+  - no push from the blocked person reaches the blocker, join requests included, and none names them: a host who blocked a guest's bringer reads "Clara is going.". The resbite's own news (`plan_changed`, `plan_cancelled`, a group's "<title> is on again") still arrives. The blocked person's messages use up none of the blocker's one push a minute;
+  - a block ends a connection and refuses new ones, both ways, before every accept path (CO-P14);
+  - **the blocked person is never told** (CH-P13). The block reads to them as a refusal ("Request sent"), as a removed connection, or as a number not on Resbite, in the contact lookup and in an invitation (Decision 11);
+  - Unblock deletes the caller's own block, whatever the two share now. No connection comes back;
+  - a blocked person's join request still shows to every host, the blocker included, who can decline it.
+- **Reports** (Decisions 4 to 7, 13 and 16):
+  - `report_message` freezes the message's words and author; a later delete changes nothing in the report. It works on a closed chat. One's own message, a system line, or a message no longer sent: `22023 'Report unavailable'`;
+  - `report_user` reports a person on a series: someone the caller sees there, an author in the caller's chat, the owner or the person who invited an unanswered invitee (R-Q1), an announcer whose audience holds the caller, or the sender of a waiting connection request;
+  - one report per person per message, and one open report per person about a person on a series: a repeat answers the same thanks and stores nothing. At most 20 reports per account per 24 hours (`22023 'Report limit'`);
+  - a reason outside the four, or details over 500 characters: `23514 'Invalid report'` with no detail, so no row is ever echoed to the caller or the log (ruling SR3);
+  - the reports an account filed go with it, however it goes (CH-P18): the deletion step, and `on delete cascade` from a profile removed by hand. Reports about it keep its id and the frozen words until they are closed;
+  - a closed report is deleted 180 days after closing (R-Q3), by `purge-closed-reports.sql` when the queue says one is due.
+- **The moderators' push** (Decisions 10 and 16). Each new report queues `report_filed` to every moderator but the reporter and the reported person, at most one per moderator in 10 minutes. It is eligible for 24 hours while the moderator may use the app, carries the report's resbite as its `plan_id` and nothing else of the report, and is claimed and sent before any chat push. No mute applies to it.
+- **The chat rules** (Decision 8). A first message or announcement waits for the person to agree to version `2026-11`: `send_message` and `send_announcement` refuse with `22023 'Rules not accepted'` right after the open check, and `chat_summary` gains `rules_accepted`. A repeated client id still returns its stored row first.
+- **The blocked terms** (Decision 9). A message or announcement holding a listed term as a whole word, in any case, is refused before it is stored (`22023 'Not allowed'`). A space in a term matches any run of blanks or a line break. Titles, notes to guests and names are not checked (challenge N4). A term is 1 to 80 characters, a letter, digit or underscore first and last, its words one space apart, with no regex character.
+- **Deletion and the fold.** The deletion request (local only, as chat core's) also deletes the person's blocks both ways, the reports they filed, their acceptances and their moderator row. The fold moves the web account's blocks and reports to the app account, keeping each block's time, and drops a report between the two accounts (challenge I4). Both take guest rows before blocks and reports, in one order.
+- **The team's scripts**, plain SQL for the hosted project's SQL editor (`supabase/ops/`, G-S12). Each is one statement, so one transaction, with one literal or list at the top to edit in the editor's copy only (`open-reports.sql` and `purge-closed-reports.sql` have none): `open-reports.sql` (the daily read: the open reports, the last 7 days' blocks and a `due` row), `close-report.sql`, `remove-reported-message.sql`, `suspend-account.sql` (with its undo), `moderators.sql`, `blocked-terms.sql` and `purge-closed-reports.sql`. They print counts or rows, never a phone number or a reported person's email. `blocked-terms.sql` prints no term, even on a refused run. How the team uses them is under "The reports queue".
+- **The sender** (`supabase/functions/_shared/`, rides the redeploy of step 4): `report_filed` reads "A new report is waiting." under "Resbite" (`notification-copy.ts:167-171`), with the tap data `{type: "report", notificationId}` (`notification-engine.ts:70`): no resbite and no word of the report. Its tap opens nothing.
+- **The app** rides the TestFlight build (step 6):
+  - in a chat: Report message on a message's long-press and in VoiceOver's actions; a person's sheet, from the author's name over a bubble or from the menu's Report or block (hidden when nobody else is in the chat), with Report <name> and Block <name> or Unblock <name>;
+  - on an unanswered invitation: the card's long-press on My resbites, and the resbite page's Report or block, beside the announcement line and in More. They offer Report message, and Report and Block for the announcer, the person who invited them and the owner;
+  - People in this chat: Report, and Block or Unblock. Connections: Report and Block on a request card's •••, and Block on a connection's •••;
+  - the report sheet (four reasons and an optional line of up to 500 characters; the thanks shows the support address), and the block confirm, which tells a host what a block doesn't do (R-Q6);
+  - the chat rules sheet before a first message or announcement; after a refusal it says what wasn't sent;
+  - a block or unblock made anywhere refreshes every open chat at once (Decision 17);
+  - Data & privacy: the Contact topic (the address as selectable text, Copy address and a mail link, only when `EXPO_PUBLIC_SUPPORT_ADDRESS` holds an address), what a report keeps, how long blocks stay (R-Q7), and Blocked people, with each block's date and Unblock;
+  - "Message removed by Resbite" for a message the team removed; the moderator's push shown while the app is open, and cleared from Notification Center at sign-out.
+
+The decisions and calls are in the [decision log](../../knowledge-base/08-decisions.md), under Chat safety.
+
 ## Files and hashes
 
 | File | sha256 |
@@ -108,16 +148,32 @@ The decisions and calls are in the [decision log](../../knowledge-base/08-decisi
 | `supabase/tests/hosted-baseline/20261111140000_chat_core.before.sql` | `e498c9f396a5fb1371422f9cb7f00e39ac900edc51e08aadb2a73d33d3c64db6` |
 | `supabase/tests/hosted-baseline/20261111140000_chat_core.after.sql` | `cabc541b71e8300a683e9582a6de351687664f65ebdfea36ba138b35dcc5010d` |
 | `supabase/migrations/20261111120000_connections_follow_ups.sql` (applied by [its runbook](../connections-follow-ups-2026-11-11/README.md)) | `72d1536db56c956ade36844c9d4c715fffa9222090c0cb64226166fff39ae3d6` |
-| `supabase/migrations/20261111130000_circles_of_trust.sql` (applied by [its runbook](../circles-of-trust-2026-11-10/README.md); plan 2's roll copies its body, I9) | `04062e2b091fa582f59a3d1ff9a322e8019ce671c64d532d5c113d0916d77256` |
+| `supabase/migrations/20261111130000_circles_of_trust.sql` (applied by [its runbook](../circles-of-trust-2026-11-10/README.md); plan 2's roll and plan 3's `invite_contacts` copy its bodies, I9) | `04062e2b091fa582f59a3d1ff9a322e8019ce671c64d532d5c113d0916d77256` |
 | `supabase/migrations/20261111150000_chat_groups.sql` | `068d7f42432862749646b4f7972e6cc9bc226d2670ca82d96610fd3b66759f23` |
 | `supabase/rollback/20261111150000_chat_groups.rollback.sql` | `100f23695dd9e5d417b10f2ca5c2668864b391a81503d1bebde3a1fd884190aa` |
 | `supabase/tests/hosted-baseline/20261111150000_chat_groups.before.sql` | `5b7ea7535c13d14bd851ed4bb13f7adb4ec09cf00e332775ab9f0d32ee46abc4` |
 | `supabase/tests/hosted-baseline/20261111150000_chat_groups.after.sql` | `f17999bc73863f2e5ac1fa555c30fa2e3dbc5ea46e609c3a8b30a9d1b7c14656` |
+| `supabase/migrations/20261111160000_chat_safety.sql` | `f8cfb5a62783528636aae2b8c461f150f8ae8f0553219d42b4b991bf66f2a2b2` |
+| `supabase/rollback/20261111160000_chat_safety.rollback.sql` | `990cc9b0d0391173c888dc2155044795b4fbadd5d1b47131223dcc417e40a1d6` |
+| `supabase/tests/hosted-baseline/20261111160000_chat_safety.before.sql` | `ed294a31dd9d44561464e8e941c0435b281240bae88abd7c3f281bf3ef6cbfa7` |
+| `supabase/tests/hosted-baseline/20261111160000_chat_safety.after.sql` | `d2ab7ceaf27a563e26990b21622d3a79a64a56168dff21d73cc87a7e89a80160` |
+| `supabase/ops/open-reports.sql` (the reports queue) | `ed84a165a73f573563a4434b4d00a47a062fd1d52dfac5c2b06543a21719b72a` |
+| `supabase/ops/close-report.sql` (the reports queue) | `d07453d18c20803cfdf5c45c69ae554306564c881e257a6c1d3a02687e7661eb` |
+| `supabase/ops/remove-reported-message.sql` (the reports queue) | `a7f88ed741c4256b6dae876243e66feb4abcb712317b839aa0af542d514e7210` |
+| `supabase/ops/suspend-account.sql` (the reports queue) | `0715e65be38f596f7fb437b041cda9b8a2dc94338764e39f94bc1eae11a538d6` |
+| `supabase/ops/purge-closed-reports.sql` (the reports queue) | `83d4397decd8d84dcd2c922936666b0f67ef76ca58c9215b1e7abb173d8a469a` |
+| `supabase/ops/moderators.sql` (step 5a) | `4fb9ccfbe2e9298b77c84552895dca89b825753dbf21fad712a6a7ef2f8e312f` |
+| `supabase/ops/blocked-terms.sql` (step 5a) | `f0124e1b02050bbc45905fb10c74e9ea7db889df3c27e9c50635f56f15fe29e4` |
+| `supabase/migrations/20261110120000_connections.sql` (live; plan 3's `plan_connection_states` copies its body) | `1f403e42f97e9c2b619fe7a5d778bee0dfd2146d7fffc5a2114b24cb32d112d8` |
+| `supabase/migrations/20261030130000_phone_key.sql` (live; plan 3's `contacts_on_resbite` copies its body) | `d7cf188f6b63d14453a2b34d6c8c85838ed196d7a06e01e3bd94c66ae0a14667` |
 | `supabase/ops/hosted-fingerprint.sql` (unchanged) | `0778c53f98bc1cbdcee82487651dabc3fa246674a5d0efa1d6502e7746819a00` |
 | `supabase/ops/hosted-counts.sql` (unchanged) | `15fe76aecba6bb5104d8795338c1ecaee9bd07ec9a2a9b7aba728e2bdae8c4a0` |
 | `supabase/ops/schedule-deliver-notifications.sql` (unchanged; step 0's question) | `b87d60d02b78bc7e0603b563bbc71492385c03ee0540427b952759645524608a` |
 
 The before/after pair is the rehearsal, run locally only. Recompute before asking for approval (`sha256sum <file>`). Approve by file name and hash, and stop if a hash differs.
+
+- **Plan 3's bases.** The chat safety migration copies fourteen bodies from five files, each checked at its hash in this table before it was copied, and its rollback restores each byte for byte: plan 2's migration (`068d7f42…9f23`: `chat_summary`, `my_chat_overview`, `request_connection`, `notification_recipient_eligible`), chat core's (`1047fb37…a78ce`: the two history reads, the two writes, the claim, the deletion request and the fold), and the connections' (`1f403e42…12d8`), circles' (`04062e2b…7256`) and phone_key's (`d7cf188f…4667`), one body each.
+- **The seven scripts in `supabase/ops/`** are pasted into the SQL editor, so their hash is checked by eye: compare the file's `sha256sum` with this table before copying it, and edit only the editor's copy.
 
 ## Checks made locally (12 November 2026)
 
@@ -213,31 +269,72 @@ The database suites, the edge tests, the fingerprint replay and the scripts' reh
   - Nothing is removed and no grant changes. On the replay, which has no plans, `public.chats` has 0 rows.
   - The rollback, wrapped as below, gives back the 464 exactly, by `(kind, name)`, definition and grant. Run again, it fails at its `lock table` (`private.series_leaves` is gone) and changes nothing.
 
+**Chat safety (12 November 2026).** On `ch3-safety` at `290c3b3`: plan 2's final work, plan 3's database (Tasks 1 to 3, rulings SR1 to SR8; its server-side final review clean at `ad0a3e6`) and plan 3's app (Tasks 4 to 6, rulings SR2, SR4, SR6, SR7 and SR9), integrated, with this record on top. The migration and rollback are at the hashes above.
+
+- Full mode passes, 64 PASS lines, `chat-safety.sql` and `chat-safety-concurrency.sh` included. The races cover a report, a fold and the team's removal each meeting an account deletion, the rollback meeting a send, the 20-a-day limit under eight reports at once, one notice per moderator under six reporters at once, and one report sent five times at once. Six `messages_signal` WARNINGs are expected, as for chat core.
+
+  ```
+  bash scripts/test-database-docker.sh
+  ```
+
+- The hosted baseline passes with the five candidates named, in order, 29 PASS lines:
+
+  ```
+  bash scripts/test-database-docker.sh --hosted-baseline supabase/migrations/20261111120000_connections_follow_ups.sql supabase/migrations/20261111130000_circles_of_trust.sql supabase/migrations/20261111140000_chat_core.sql supabase/migrations/20261111150000_chat_groups.sql supabase/migrations/20261111160000_chat_safety.sql
+  ```
+
+  - Name all five. Bare, this mode fails by design until all five are live. In a scratch copy with the five lines appended to `migrations.txt`, as their runbooks' step 3 append them, the bare run passed, 24 PASS lines: what step 3 means by "from now on".
+  - `.before.sql` asserts that nothing of plan 3 exists, and records the bodies it replaces with their grants. `.after.sql` asserts the six tables (RLS on, no policy, no privilege, empty), the five calls for `authenticated` only, the four helpers for no API role, every private function a definer with an empty `search_path`, the claim for `service_role` only, the kind check, and every replaced body changed with its grants kept.
+  - It then rehearses the rollback in a transaction it rolls back, with a suspension, a block, a report, a moderator, an acceptance, a term and a `report_filed` notice with a delivery in place: each of the 13 restored bodies equals its source byte for byte with its grants, nothing of plan 3 is left, and plan 2's rollback, which refused before, then runs.
+- The app check passes: the typecheck, 1,210 tests in 98 runs, and the content validation (`(cd mobile && npm run check)`).
+- Every edge test file passes, 109 tests in 11 files (107 and the moderators' push's 2).
+- **The browser scripts** passed during the build, on the task branches before integration, with every Supabase request stubbed: `verify-chat.mjs` 77 (s1 to s10 among them), `verify-event.mjs` 32, `verify-connections.mjs` 10, `verify-planning.mjs` 16, `verify-contact-invites.mjs` 6, `verify-circle.mjs` 6, `review-ui.mjs` and `verify-rsvp.mjs` (Task 5's last round, `eef8fc9`); `verify-deletion.mjs` 12, once without and once with `EXPO_PUBLIC_SUPPORT_ADDRESS` (Task 6's, `813daeb`). The app review runs them again on `ch3-safety`.
+- **The fingerprint, on a local replay** (as for chat core). From plan 2's 479 there are 532: 53 added and 14 changed, as listed under step 3. Nothing is removed and no grant changes. The rollback, wrapped as below, gives back the 479 byte for byte, with a block, a report, a suspension, a moderator, acceptances, a term and a pending `report_filed` delivery in place; plan 2's rollback then gives back the 464. Run again, plan 3's fails at its `lock table` (`private.chat_rules_acceptances` is gone) and changes nothing.
+- **Plan 3's scripts, rehearsed** exactly as printed here, through a stand-in for the CLI that sends each query to a local replay (the history table stood in), once with `bash` and once with `zsh`: the same output, errors, exit codes and files from both. Every read-only script left the database byte-identical (a `pg_dump` hashed before and after). No script's text, output, CLI call or file holds an account id, a phone number or an email, though the replay's three people had all three.
+  - `ch3-before-checks.sh` read `en_US.utf8`, true, true and `0`. On a database made with the `C` locale it read `C`, false and false; with `log_parameter_max_length_on_error` set to -1, it read `-1`.
+  - `ch3-apply.sh`: with the migration changed by one line, it stopped at the hash, with no CLI call. Before chat groups (the replay at 464) it refused with "The chat groups migration is not applied: run ch2-apply.sh first" and changed nothing. On the 479 it applied: history `24 | 20261111160000`, the fingerprint 532 (53 added, 14 changed), `hosted-after-safety.json` equal to it, and the six tables at 0 in `hosted-counts-after-safety.json`. Run again, it refused with "The chat safety migration is already applied". With a clashing `private.invited_by` planted, the apply failed, rolled back whole, and the history repair never ran.
+  - `ch3-after-checks.sh` read every count 0; 6, 6, 0, 0; true, false, false, false, `2026-11`, 180 and true. Before the apply it failed (`private.blocks` does not exist). Each value moved when its fault was planted: a block, a term or a `report_filed` row (the counts), a policy, RLS off, `select` to `anon` or `insert` to `service_role` (the lock-down), `execute` on `block_user` to `anon`, `my_blocks` revoked from `authenticated`, a helper or the claim granted to `authenticated`, another rules version or keeping period, and the kind check without `report_filed`.
+  - `ch3-gate.sh` read 0, 0 and 0 after the apply. After `moderators.sql` with one account's email and one unknown (`moderators` 1, `no_account` the unknown one) and `blocked-terms.sql` with two terms (`terms` 2; a list holding one bad term first changed nothing and printed `refused` 1, no term), it read 2, 1 and 1. With that moderator's grant revoked, `moderators_pushed` read 0.
+  - `ch3-rollback.sh`: with the file changed, it stopped at the hash. With plan 3 applied, `ch2-rollback.sh` refused ("Run the chat safety rollback before the chat groups rollback") and `ch1-rollback.sh` refused ("Run the chat groups rollback before the chat core rollback"), each changing nothing. Then it ran: the 479 byte for byte, `hosted-after-rollback-safety.json` equal to it, the history row kept, the `report_filed` notice and its delivery gone, and the account `suspend-account.sql` had suspended still suspended, as chat safety's rollback step 3 warns. Run again, it failed at its `lock table`; `ch2-rollback.sh` then passed, to the 464.
+  - Chat core's `ch1-throughput.sh`, with one `report_filed` notice waiting and one delivered as pending, read `waiting` 1, `chat_waiting` 0, `chat_pending` 0 and `other_pending` 1 (step 8's note).
+  - The reports queue's read-only state query ran before and after the rollback on the suspended account: no live grant, and `may_use_the_app` false.
+
 ## Rollout runbook
 
 **Before this runbook.** The follow-ups and circles migrations are live by their own runbooks: the history reads `21 | 20261111130000`. Chat core refuses to apply otherwise (step 2's guard). If their sender redeploys are still pending when this sitting comes, step 4 here carries their words too.
 
 **Order.** The steps below, by their numbers:
 
-0. The owner's answers to the owner questions.
-1. Before snapshot, with the Realtime checks.
-2. The migrations: chat core, then chat groups (plan 3's follows once its section exists).
+0. The owner's answers to the owner questions (R-Q4's blocks the release).
+1. Before snapshot, with the Realtime checks and chat safety's two settings.
+2. The migrations, in one sitting: chat core, then chat groups, then chat safety.
 3. After snapshot, the Realtime checks, advisors.
 4. The `deliver-notifications` redeploy.
 5. Realtime "Allow public access" off.
-6. The TestFlight build. Testers update before anyone chats.
+
+   5a. The moderators and the blocked terms, in the SQL editor, after step 4, and the release gate.
+
+   5b. The support address in the EAS production environment, before the build.
+6. The TestFlight build. Testers update before anyone chats. It goes to App Review only after step 6a.
+
+   6a. App Review: the review account, the address in the installed build and on the listing, R-Q4's answer, then the submission with the review notes.
 7. The device checks.
 8. The throughput check during the first busy chat hour.
+
+From the release on, the team reads the reports queue daily. That is a standing duty, under its own heading after step 8, not a step, so "steps 2 to 6" still means the rollout.
 
 - **The migration goes before the sender** (step 4 after step 2).
   - The hosted `finish_notification_delivery` refuses the new outcome `deferred` until this migration is live (`supabase/migrations/20261030120000_push_delivery.sql`, restored by the rollback at `supabase/rollback/20261111140000_chat_core.rollback.sql:239-260`).
   - The new sender hands back every job it could not start before its budget ran out, as `deferred`. Against the old finish that hand-back fails. The job stays leased as `sending`, and the claim marks it `unknown` once the lease ends, so it is never sent.
 - **The migration and the sender go before the build.** The chat build calls the ten functions and joins `chat:<series>`. The build reaches testers only once Realtime's public access is off (step 5).
+- **The sender goes before the moderators** (step 5a after step 4). Until the redeploy, the old sender words a `report_filed` job as a generic `plan_update` push whose tap opens the reported resbite. With no moderator yet, no such job exists.
+- **The team's lists and the address go before the build** (steps 5a and 5b before step 6). A chat build must meet a filled blocked-terms list and a moderator who is pushed. And `EXPO_PUBLIC_*` values are fixed when the bundle is built, so a build made before step 5b shows no contact line, whatever is set later.
 
 **Owner-run scripts.** The assistant's safety check refuses live reads and the apply, so the owner runs short scripts with `! bash ~/<name>.sh`.
 - At rollout time the assistant writes each script into the home directory from the block in its step. The owner reads it, then runs it.
 - Each runs from the checkout the rollout uses: `REPO`, by default `~/dev/resbite-app`, at the merged commit.
 - None prints a secret, a phone number or an account id.
+- **The SQL editor's scripts** (plan 3's seven, in `supabase/ops/`) are not run through the CLI. The owner, or a moderator, pastes each into the hosted project's SQL editor, edits its one literal there (an email, a term or a report id), and runs it. That literal, and what the scripts show (a report's words, names, an account id kept for an undo), stay in the SQL editor: never in this file, the repository or a chat.
 
 **The assistant's steps.** The advisors read (through the Supabase MCP server) and the `deliver-notifications` deploy are the assistant's. It does each once the owner approves it, as the connections record did.
 
@@ -258,7 +355,21 @@ The database suites, the edge tests, the fingerprint replay and the scripts' reh
      - **G-QC, the circles runbook's CO-Q1 (I9, Decision 13), still open there.** Is a brought person who said Can't go carried to the next occurrence? **Default: carried, as built**, the only answer that fits "everyone in a group is in its chat whatever their reply". If the owner chooses the alternative, the circles roll changes before the circles migration, and plan 2's copy of it is re-based on the new circles body and hash before step 2.
      - **G-QD, "this Thursday" on a fortnightly group (ruling GR6 M9).** The audience row, an announcement card's heading and the cancelled line say "this Thursday" for the current occurrence, which on a group that repeats every 2 weeks can be up to 13 days ahead. That is the spec's wording, written with a weekly example. **Default: unchanged, "this Thursday" on every group.** The alternative, the date ("Going on Thu 27 Nov"), is new wording in the app only.
      - Not owner questions: P2-Q1 to P2-Q4 are ruled (plan 2's Decisions 7 to 10). Their limits are under Known gaps.
-   - Plan 3 adds its own questions here (for example the support address, the moderators and the blocked terms).
+   - **Chat safety's questions** (plan 3). Each says when it is needed and the default the build ships. The build doesn't wait for the answers, but the release does where a line says so: the support address, the blocked terms and R-Q4. A different answer to a question needed before step 2 is a change to plan 3's migration and its hash.
+     - **The support address** (`EXPO_PUBLIC_SUPPORT_ADDRESS`; CH-P13, G-N10). It shows on Data & privacy's Contact topic and under a report's thanks, and goes in the review notes and on the App Store listing. **Needed before step 5b. Default: none, and the release waits.** While it is unset, or not an address, the app shows no contact line and step 6a's submission is blocked.
+     - **Who moderates** (G-B4(c), Decision 10). The moderators get "A new report is waiting." for each report and read the queue. **Needed before step 5a. Default: the owner alone,** one email in `moderators.sql`. A moderator other than the owner can read and act on reports only in the hosted project's SQL editor, with the queue's scripts: there is no screen for it (challenge N8). So each moderator needs access to the hosted project's dashboard, which only the owner can give, and an account on Resbite for the push.
+     - **The blocked terms** (G-B4(a), Decision 9). **Needed before step 5a. Default: none seeded, and the release waits for a list.** Step 5a's gate fails while `private.blocked_terms` is empty. The list is the owner's, pasted only into the SQL editor's copy of `blocked-terms.sql`. Only messages and announcements are checked; titles, notes to guests and names are not (challenge N4).
+     - **The chat rules' wording and the Terms document** (G-B4(d), Decision 8). **Default: the rulings' wording,** "Be kind. No harassment, hate, threats or spam. Messages that break these rules are removed, and people who break them can lose their account." with I agree, version `2026-11`; **the Terms document and `TERMS_VERSION` unchanged.** Needed before step 6 for the wording, which is in the build, and before step 6a for the Terms. A new version for everyone to agree to again is `private.chat_rules_version()`, before step 2.
+     - **G-S13, invitations from a blocked person** (Decision 11). **Default, built: no.** A blocked person's `invited` notice to the blocker is not eligible, and the blocker's number reads to them as one not on Resbite. The inviter is never told. What the default still lets through is under Known gaps. Needed before step 2.
+     - **R-Q1, Report from an invitation** (Decision 14). Report the person is offered wherever Block is on an invitation: the card on My resbites and the resbite page, for the announcer, the person who invited them and the owner. It reports a person, not "this resbite", so the spec's non-goal (CH-P13) stands. **Default: yes.** Needed before step 2.
+     - **R-Q2, a block reaching the team** (Decision 15, challenge I10). **Default: yes, as I10:** listed in the queue's daily read (`open-reports.sql`, the last 7 days: who blocked whom and when, never a message), with no push. Needed before step 6, since Data & privacy says so (R-Q7).
+     - **R-Q3, how long a closed report is kept** (Decision 7). **Default: 180 days after it is closed,** then `purge-closed-reports.sql` deletes it, when the daily read shows a `due` row. Another period is `private.report_keep_days()` before step 2 (a new migration hash) and the number in Data & privacy's `reportsPrivacy` line (a new build).
+     - **R-Q4, who answers within 24 hours when the owner is away. Release-blocking.** The review notes promise that the team checks the queue daily and acts within 24 hours. The owner names a backup reader before the release: someone on `moderators.sql`'s list, with the SQL editor (above). "Applied" records that one is named, never who: no name, number or account id in this file. **Until then the owner alone reads the queue daily. Needed before step 6a's submission, which waits for it.**
+     - **R-Q5, a blocked person's join requests** (Decision 18). **Default: no push of any kind from a blocked person to the blocker, join requests included.** The request still shows in the requests list to every host, the blocker included, who can decline it. The resbite's own changes still arrive. Needed before step 2.
+     - **R-Q6, what a host's block does** (ruling SR1). A block hides the person's messages from the blocker only, hosts included (CH-P13); to stop them for everyone, a host removes the person from the resbite. **Default: so, and a host's Block confirm says** "This hides their messages from you only. To stop them for everyone, remove them from the resbite." Needed before step 6 (the line is in the build); a different rule is a migration change, before step 2.
+     - **R-Q7, what Data & privacy says of blocks** (ruling SR4). **Default:** "Blocks stay until you undo them. The Resbite team can see who blocked whom for 7 days." Needed before step 6.
+     - Plan 2's owner questions are in its part of this step, above.
+   - **Not this runbook's:** the circles runbook's CO-Q1 (here as G-QC) and CO-Q2 (whether its rollback keeps the bringers' unanswered links live) are answered in that runbook, before its migration.
 1. **Before snapshot, the history, the Realtime checks and the series count.** Read-only, into this directory, with `! bash ~/ch1-before.sh`:
 
    ```bash
@@ -295,6 +406,23 @@ The database suites, the edge tests, the fingerprint replay and the scripts' reh
    - **The jobs.** `deliver-notifications` should be listed. `roll-repeating-plans` is listed if the follow-ups runbook created it.
      - Plan 2's roll, applied in the same sitting, sets the roll flag, so it writes no `admin` or `joined` line for anyone it carries; it writes "ended" and "Next one" itself. (Chat core alone would write an `admin` line for each carried admin, Decision 4: one reason it waits for plan 2.)
    - If the CLI's role is refused the `realtime` or `private` reads, paste the queries into the SQL editor. They are read-only there too.
+   - **Nothing of chat safety exists yet.** Its `.before.sql` asserts the same locally: none of its six tables or nine functions, and chat core's thirteen kinds in the outbox's check. Step 2's `ch3-apply.sh` refuses otherwise.
+   - **Chat safety's two settings** (plan 3; the final review's M3 and its note on the log). Read-only, with `! bash ~/ch3-before-checks.sh`:
+
+     ```bash
+     #!/bin/bash
+     # Read-only: the hosted settings chat safety relies on (chat plan 3, step 1): the database's locale, which the blocked
+     # terms' check and their whole-word match use, and whether a failed statement's values reach the log. It prints a
+     # locale's name, two booleans and a number, nothing else.
+     set -euo pipefail
+     cd "${REPO:-$HOME/dev/resbite-app}"
+     supabase db query --linked "select (select d.datctype from pg_catalog.pg_database d where d.datname = current_database()) as ctype, ('CABR' || chr(211) || 'N aqu' || chr(237)) ~* ('\mcabr' || chr(243) || 'n\M') as accented_whole_word, (chr(241) || 'and' || chr(250)) ~ '^\w(.*\w)?\$' as accented_term_fits, current_setting('log_parameter_max_length_on_error') as error_values_logged"
+     ```
+
+     - `ctype` is the database's own locale for letters (`pg_database.datctype`: from Postgres 16 there is no `lc_ctype` setting to `show`). **Expected: a UTF-8 locale,** such as `C.UTF-8` or `en_US.UTF-8`, never `C` or `POSIX`.
+     - **`accented_whole_word` and `accented_term_fits` true.** They ask what the blocked terms rely on, with the characters written by number so the script is plain ASCII: "CABRÓN aquí" holds "cabrón" as a whole word in any case (the `\m…\M` match with `~*`, `supabase/migrations/20261111160000_chat_safety.sql:1000` and `:1058`), and "ñandú" passes the terms' check (a word character first and last, `:829`). Under `C` both are false.
+     - **Either false: stop before step 2.** Whole-word matching would then miss an accented word written in capitals, and a term that starts or ends with an accented letter would fail the table's check, which stops the whole `blocked-terms.sql` run. The fix is an explicit collation on those three patterns in plan 3's migration: a new hash, rehearsed again, before the sitting.
+     - **`error_values_logged` `0`** (Postgres's default). Postgres then logs a failed statement without its bound values, so a refused report's details or a refused message's words never reach the log. Anything else: stop before step 2 and decide. Setting it back to 0 is a change to the hosted project's database settings, outside this runbook.
 2. **Migration** (the owner approves the file by name and sha256, above, in the release sitting with plans 2 and 3). Never `supabase db push`: it would also push the local-only migrations. Run `! bash ~/ch1-apply.sh`. It checks the hash, applies in one transaction, records, and takes step 3's snapshots:
 
    ```bash
@@ -327,7 +455,7 @@ The database suites, the edge tests, the fingerprint replay and the scripts' reh
      supabase migration repair --status applied 20261111140000 --linked --yes
      ```
 
-   - The history query should then read `22 | 20261111140000`. Plan 2 follows at once, below; plan 3's file follows it in the same sitting once its section exists.
+   - The history query should then read `22 | 20261111140000`. Plan 2 follows at once, then plan 3, below, in the same sitting.
    - **Locks, all brief.**
      - `private.notification_outbox`: the new column and its foreign key, the kind check re-added (it reads every row once) and two indexes.
      - `public.plans`, `public.attendees` and `public.plan_admins`: the new triggers.
@@ -369,6 +497,40 @@ The database suites, the edge tests, the fingerprint replay and the scripts' reh
      - The history query should then read `23 | 20261111150000`.
      - **Locks, all brief.** `public.chats` gains `stopped_at`, and the backfill updates the repeating series' rows; `public.plans` and `public.attendees` gain a trigger each. The schedule's run in that minute may wait for the commit.
      - **Installed builds keep working.** No build in testers' hands has chat. The chat build's resbite page reads `series_is_group`, which exists from now on.
+   - **Then chat safety** (the owner approves `20261111160000_chat_safety.sql` by name and sha256, above). Run `! bash ~/ch3-apply.sh`, in the same shape. Never `supabase db push`.
+
+     ```bash
+     #!/bin/bash
+     # The chat safety migration (chat plan 3; steps 2 and 3). Only after the owner approves the file by name and sha256,
+     # right after ch2-apply.sh, in the release sitting with chat plans 1 and 2.
+     set -euo pipefail
+     cd "${REPO:-$HOME/dev/resbite-app}"
+     D=qa/chat-release
+     F=supabase/migrations/20261111160000_chat_safety.sql
+     echo "f8cfb5a62783528636aae2b8c461f150f8ae8f0553219d42b4b991bf66f2a2b2  $F" | sha256sum -c -
+     GUARD="if pg_catalog.to_regclass('private.series_leaves') is null then raise exception 'The chat groups migration is not applied: run ch2-apply.sh first'; end if;
+      if pg_catalog.to_regclass('private.blocks') is not null then raise exception 'The chat safety migration is already applied'; end if;"
+     mkdir -p /tmp/ch3
+     { echo 'begin;'; echo "do \$\$ begin $GUARD end \$\$;"; cat "$F"; echo; echo 'commit;'; } > /tmp/ch3/apply.sql
+     supabase db query --linked -f /tmp/ch3/apply.sql
+     supabase migration repair --status applied 20261111160000 --linked --yes
+     supabase db query --linked "select count(*) as applied, max(version) as latest from supabase_migrations.schema_migrations"
+     supabase db query --linked -f supabase/ops/hosted-fingerprint.sql -o json > "$D/hosted-after-safety.json"
+     supabase db query --linked -f supabase/ops/hosted-counts.sql -o json > "$D/hosted-counts-after-safety.json"
+     ```
+
+     - The script stops before applying if the hash differs.
+     - One transaction, the guard first. Before chat groups (no `private.series_leaves`), or a second run (`private.blocks` exists), the guard refuses and changes nothing. Any other error rolls all of it back, and the script stops before the history repair.
+     - If the apply succeeded and only the repair failed, run the repair alone, from the repository root, then the script's last three lines:
+
+       ```
+       supabase migration repair --status applied 20261111160000 --linked --yes
+       ```
+
+     - The history query should then read `24 | 20261111160000`.
+     - **Never `supabase db push`,** and any rollback goes in reverse order only: plan 3's, then plan 2's, then plan 1's (G-N11; Rollback, below).
+     - **Locks, all brief.** `private.notification_outbox`: its kind check, dropped and added again with `report_filed` (it reads every row once). `public.profiles`, `public.messages` and `auth.users`: the new tables' foreign keys. Replacing the thirteen bodies locks no table. The schedule's run in that minute may wait for the commit.
+     - **Installed builds keep working.** The bodies they call (`plan_connection_states`, `request_connection`, `invite_contacts`, `contacts_on_resbite`, the claim) answer as before while no block exists, and only the chat build can make one. No build in testers' hands sends a message, so none meets the chat rules or the blocked terms.
 3. **After snapshot, the Realtime checks and advisors.**
    - `hosted-after.json` should match a local replay of `migrations.txt` plus the three files: 464 of 464 by definition, with the same 15 `acl` differences.
    - **Before to after**, by `(kind, name)`, as listed under the checks above: 77 added and 6 changed. Nothing is removed and no grant changes. `.after.sql` asserts the same shape locally.
@@ -439,13 +601,42 @@ The database suites, the edge tests, the fingerprint replay and the scripts' reh
        20261111150000_chat_groups.sql                         20261111150000
        ```
 
-   - Then run the baseline with no candidate. It must pass from now on, once plans 2 and 3's lines are appended too (their tests are in `tests.txt` by then):
+   - **Chat safety, after `ch3-apply.sh`.**
+     - `hosted-after-safety.json` should match a local replay of `migrations.txt` plus the five files: 532 of 532 by definition, with the same 15 `acl` differences. From `hosted-after-groups.json` (479), 53 added and 14 changed. Nothing is removed and no grant changes.
+       - The 53 added: 14 functions (the five calls, each public and private, and the four helpers); the six tables; 21 constraints (six primary keys, eight foreign keys, the reports' five checks, `blocked_terms`' check and `blocks`' check that nobody blocks themselves); and 12 indexes (the six primary keys' and six more: `blocks_blocked_id_idx`, `reports_reporter_message_key`, `reports_open_user_key`, `reports_reporter_created_idx`, `reports_message_idx` and `suspensions_report_idx`).
+       - The 14 changed: the outbox's `notification_outbox_kind_check`, and thirteen bodies: `chat_messages`, `chat_messages_since`, `chat_summary`, `my_chat_overview`, `send_message`, `send_announcement`, `notification_recipient_eligible`, `request_connection`, `plan_connection_states`, `invite_contacts`, `contacts_on_resbite` and `fold_web_account` in `private`, and the worker's `claim_notification_deliveries`. The fourteenth body the migration replaces, the deletion request, doesn't exist on hosted.
+     - **Counts.** Six tables more, each with 0 rows: `blocks`, `reports`, `suspensions`, `moderators`, `chat_rules_acceptances` and `blocked_terms`. Every other table keeps its count; the migration writes no row.
+     - Read-only, with `! bash ~/ch3-after-checks.sh`:
+
+       ```bash
+       #!/bin/bash
+       # Read-only: the six chat safety tables, their lock-down, the calls' grants and the outbox's new kind after the chat
+       # safety migration (chat plan 3, step 3). Counts, booleans and two settings only: no id, number, email or term.
+       set -euo pipefail
+       cd "${REPO:-$HOME/dev/resbite-app}"
+       supabase db query --linked "select (select count(*) from private.blocks) as blocks, (select count(*) from private.reports) as reports, (select count(*) from private.suspensions) as suspensions, (select count(*) from private.moderators) as moderators, (select count(*) from private.blocked_terms) as blocked_terms, (select count(*) from private.chat_rules_acceptances) as acceptances, (select count(*) from private.notification_outbox where kind = 'report_filed') as report_notices"
+       supabase db query --linked "select count(*) as tables, count(*) filter (where c.relrowsecurity) as rls_on, count(*) filter (where exists (select 1 from pg_catalog.pg_policy p where p.polrelid = c.oid)) as with_policy, count(*) filter (where has_table_privilege('anon', c.oid, 'select, insert, update, delete, truncate, references, trigger') or has_table_privilege('authenticated', c.oid, 'select, insert, update, delete, truncate, references, trigger') or has_table_privilege('service_role', c.oid, 'select, insert, update, delete, truncate, references, trigger')) as api_granted from pg_catalog.pg_class c where c.oid in (pg_catalog.to_regclass('private.blocks'), pg_catalog.to_regclass('private.reports'), pg_catalog.to_regclass('private.suspensions'), pg_catalog.to_regclass('private.moderators'), pg_catalog.to_regclass('private.blocked_terms'), pg_catalog.to_regclass('private.chat_rules_acceptances'))"
+       supabase db query --linked "select (select bool_and(has_function_privilege('authenticated', f, 'execute')) from unnest(array['public.block_user(uuid,boolean)', 'public.my_blocks()', 'public.report_message(bigint,text,text)', 'public.report_user(uuid,uuid,text,text)', 'public.accept_chat_rules()']) f) as members_may_call, (select bool_or(has_function_privilege('anon', f, 'execute')) from unnest(array['public.block_user(uuid,boolean)', 'public.my_blocks()', 'public.report_message(bigint,text,text)', 'public.report_user(uuid,uuid,text,text)', 'public.accept_chat_rules()']) f) as anon_may_call, (select bool_or(has_function_privilege(r, f, 'execute')) from unnest(array['private.invited_by(uuid,uuid)', 'private.inviter_of(uuid)', 'private.chat_rules_version()', 'private.report_keep_days()']) f cross join unnest(array['anon', 'authenticated', 'service_role']) r) as helpers_granted, has_function_privilege('authenticated', 'public.claim_notification_deliveries(integer)', 'execute') as members_may_claim, private.chat_rules_version() as rules_version, private.report_keep_days() as keep_days, (select pg_catalog.pg_get_constraintdef(k.oid) like '%''report_filed''%' from pg_catalog.pg_constraint k where k.conrelid = 'private.notification_outbox'::regclass and k.conname = 'notification_outbox_kind_check') as kind_admits_reports"
+       ```
+
+       - Every count 0: the migration seeds no term and no moderator (step 5a does), and nobody has the chat build yet.
+       - `tables` 6, `rls_on` 6, `with_policy` 0 and `api_granted` 0: no API role may read or write them, as for every private table (K-S5).
+       - `members_may_call` true, `anon_may_call` false, `helpers_granted` false and `members_may_claim` false: the five calls are for `authenticated` only, the four helpers are the database's own, and the worker's claim, redefined, is still the sender's alone.
+       - `rules_version` `2026-11`, `keep_days` 180 (R-Q3's default) and `kind_admits_reports` true.
+     - **Advisors.** `rls_enabled_no_policy` gains six INFO lines, one for each new table in `private`: RLS on and no policy, as for `private.series_leaves` and the private tables the advisors already list (the connections' `hosted-advisors-after.json` holds 18 such lines for `private` tables). `unused_index` gains INFO lines for the four plain new indexes until they are used: `blocks_blocked_id_idx`, `reports_reporter_created_idx`, `reports_message_idx` and `suspensions_report_idx`. No `unindexed_foreign_keys` line: each new foreign key leads a primary key or an index. The five public calls are invokers and every new private function is a definer with an empty `search_path`, so neither `*_security_definer_function_executable` lint gains a line. **Expected: no new WARN and no ERROR.** Stop for anything else new.
+     - Append this line to `supabase/tests/hosted-baseline/migrations.txt`:
+
+       ```
+       20261111160000_chat_safety.sql                         20261111160000
+       ```
+
+   - Then run the baseline with no candidate. It must pass from now on, with the three lines appended (`tests.txt` lists their tests):
 
      ```
      bash scripts/test-database-docker.sh --hosted-baseline
      ```
 
-4. **Redeploy `deliver-notifications`, after step 2.** It carries Task 4's chat words, the chat tap data and the claim loop with its `deferred` hand-back. It also carries the follow-ups and circles wording if their redeploys are still pending. Once the owner approves it, the assistant runs the deploy from the repository root:
+4. **Redeploy `deliver-notifications`, after step 2.** It carries chat core's chat words (its Task 4), the chat tap data and the claim loop with its `deferred` hand-back, and chat safety's moderators' push, the `report_filed` words and data (plan 3's Task 3). It also carries the follow-ups and circles wording if their redeploys are still pending. Once the owner approves it, the assistant runs the deploy from the repository root:
 
    ```
    supabase functions deploy deliver-notifications --no-verify-jwt --project-ref ewcsgvhuojxdpaspwsrx
@@ -453,9 +644,10 @@ The database suites, the edge tests, the fingerprint replay and the scripts' reh
 
    - **Not before step 2:** the old finish refuses `deferred` (the Order notes above).
    - Plan 2 makes no sender change of its own: its pushes are chat core's kinds, and who may be told changed in the database.
+   - Plan 3's change is the moderators' push alone: "A new report is waiting." under "Resbite" (`supabase/functions/_shared/notification-copy.ts:167-171`), with the tap data `{type: "report", notificationId}` and no resbite (`notification-engine.ts:70`). The old sender would word a `report_filed` job as a generic `plan_update` push, so the moderators are set only after this step (5a).
    - `--no-verify-jwt` is required: without it the schedule's calls are refused. The secrets and the Vault entries stay as they are.
    - Afterwards the function list should show `deliver-notifications` ACTIVE and `verify_jwt` false. Its version is one more than the version before this redeploy.
-   - Record under "Applied" the version before and the commit it was deployed from: a rollback puts that sender back first (Rollback, step 2).
+   - Record under "Applied" the version before and the commit it was deployed from: a rollback puts that sender back first (Rollback, chat core's step 2).
    - An unauthenticated POST to the function URL should answer 401 from the handler (`supabase/functions/deliver-notifications/handler.ts:16-21`).
    - The owner then reads the schedule's runs after the redeploy with `! bash ~/ch1-sender-check.sh` (read-only):
 
@@ -477,12 +669,46 @@ The database suites, the edge tests, the fingerprint replay and the scripts' reh
    - With it off, only private channels may be joined, so every join passes the policy of step 3.
    - Chat is the only Realtime use in the app (`mobile/src/state/chatSession.ts:960`, a private channel), so nothing else changes.
    - Record the change and its time under "Applied".
-6. **TestFlight build** (the owner's step), only after steps 2, 4 and 5, and with plans 2 and 3 in it.
+
+5a. **The moderators and the blocked terms, in the SQL editor, after step 4** (G-S12, challenge N11). Not before step 4: a moderator set before the redeploy would get a report's push from the old sender as a `plan_update` push whose tap opens the reported resbite.
+   - **The moderators** (step 0's "who moderates" and R-Q4). Paste `supabase/ops/moderators.sql` into the SQL editor, put the moderators' emails in its list (the owner's, and the backup reader's once named), and run it. It makes `private.moderators` exactly those accounts and prints `moderators` (how many) and `no_account` (each listed email no account holds). `no_account` should be empty: an email there is a typo, or an account not yet made.
+   - **The blocked terms** (step 0's question). Paste `supabase/ops/blocked-terms.sql` into the SQL editor, put the owner's list in its array in the editor's copy only, and run it. It prints only `terms` (how many there are now) and `refused` (how many in the list break the rules; then nothing changes, and no term is printed). Never save the list in the repository or in this file. `refused` should be 0: otherwise fix the list (1 to 80 characters, a letter, digit or underscore first and last, words one space apart, none of `[ ] \ . ^ $ * + ? ( ) { } |`) and run it again.
+   - **Release gate.** Read-only, with `! bash ~/ch3-gate.sh`:
+
+     ```bash
+     #!/bin/bash
+     # Read-only: the release gate after step 5a (chat plan 3): how many blocked terms and moderators there are, and how
+     # many of the moderators may use the app, so a report's push can reach them. Counts only: no term, email or id.
+     set -euo pipefail
+     cd "${REPO:-$HOME/dev/resbite-app}"
+     supabase db query --linked "select (select count(*) from private.blocked_terms) as blocked_terms, (select count(*) from private.moderators) as moderators, (select count(*) from private.moderators m where private.user_eligible(m.user_id) and not private.deletion_pending(m.user_id)) as moderators_pushed"
+     ```
+
+     - **`blocked_terms` above 0, `moderators` at least 1, and `moderators_pushed` equal to `moderators`.** Otherwise the release waits: no build (step 6) and no submission (step 6a).
+     - `moderators_pushed` counts the moderators who may use the app and aren't being deleted, the push's own test (`notification_recipient_eligible`'s `report_filed` branch). A moderator who may not is never pushed.
+     - Record the three counts under "Applied", never a term or an email.
+
+5b. **The support address, before the build** (step 0's first question; G-N10, challenge N9). The owner sets `EXPO_PUBLIC_SUPPORT_ADDRESS` in the EAS production environment, visibility plain text (the app shows it to everyone anyway). `mobile/.env.example` names it, commented.
+   - Check it from `mobile/` with `npx eas env:list --environment production`: the variable is listed, and its value is an address (one `@`, a dot after it, no space). `supportAddress` treats anything else as unset, so a build would show no contact line.
+   - **Submission is blocked until it is set:** step 6a checks that the installed build shows it.
+   - The address itself goes in neither this file nor the repository: the build reads it from EAS.
+6. **TestFlight build** (the owner's step), only after steps 2, 4, 5, 5a and 5b, with plans 2 and 3 in it. It goes to App Review only after step 6a.
    - Build from the merged head and upload through EAS, as the earlier runbooks do.
+   - `EXPO_PUBLIC_*` values are fixed when the bundle is built. A build made before step 5b, or before a change to the address, shows the old value: make a new one.
    - **Testers update first (K-N8).** Every tester installs the chat build before people start chatting. Tell them before the build is released to their group.
      - Membership follows the reply, not the build. So a Going tester on an older build gets chat pushes.
      - On an older build, a chat push's tap does nothing: its `parseNotificationTarget` refuses the type `chat` and the extra `seriesId`.
      - With an older build open, no chat banner shows: its handler shows only `plan_update` pushes.
+
+6a. **App Review** (challenge I8), the owner's step, before the build is submitted. With test accounts only.
+   - **The review account.** A tester account Going on a group (its chat never closes while it repeats), or on a resbite a month or more away. In that chat a second tester account has written messages and posted one announcement, and the review account hasn't agreed to the chat rules yet, so the reviewer meets the rules sheet. The review account is also invited, and hasn't answered, to a second resbite with an announcement to Everyone invited. So a reviewer finds Report and Block in an open chat, on the invitation card and on the resbite page.
+     - Its sign-in goes into App Store Connect's Sign-In Information for App Review, never into this file or the notes.
+     - Put the two resbites' titles into the notes' placeholders.
+   - **On the installed build**, the one being submitted: Data & privacy shows the Contact topic with the support address, and a report's thanks shows it too. `EXPO_PUBLIC_*` is fixed when the bundle is built, so a value set after the build doesn't count.
+   - **The listing.** The owner puts the support address on the App Store listing (CH-P13), in the app's support details in App Store Connect.
+   - **R-Q4 is answered:** a backup reader is named and is on `moderators.sql`'s list (step 5a; `ch3-gate.sh` again then reads `moderators` 2 or more). "Applied" records that one is named, never who.
+   - **Then submit,** with the review notes pasted into App Store Connect's Notes for App Review: the text in `app-store-review-notes.md`'s block, with its three placeholders filled. It is under 4,000 characters, the field's limit.
+   - Record the submission's date under "Applied".
 7. **Device checks** (Ana as host, Pedro and Clara as guests, Sol invited and not answered). Use two phones, signing in as each account in turn where needed. Use tester accounts, and never write a real number or account id in this file. They need steps 2 to 6 and the new build, and run in this order.
    - **Live delivery, with the app open.** Ana and Pedro, both Going, open the chat on two phones. Pedro sends "I can bring the snacks".
      - It appears on Ana's open screen within a few seconds, well before the 20-second poll (`POLL_MS`, `mobile/src/state/chatSession.ts:33`). Send twice more: each arrives as fast. That shows the phone's join of `chat:<series>` passed the policy.
@@ -553,6 +779,24 @@ The database suites, the edge tests, the fingerprint replay and the scripts' reh
      - **Stopping.** Ana sets "Doesn't repeat": the chat shows "Ana stopped repeating this · the last one is <day>", and the closing line appears 48 hours before it closes. Ana sets "Every week" again: that line goes (I8, G-QB's default).
      - **The goodbye window** (P2-Q1). After "Cancel this and stop repeating", a message from one phone is pushed to the other during the 48 hours. Then the chat closes with "This group’s chat closed on <day>.".
      - **At the largest Larger Text,** the group header's second line wraps whole at 320 points.
+   - **Chat safety (plan 3).** The owner's account, a moderator since step 5a, is signed in on one phone, and the other accounts on the others in turn. Ana hosts a one-off with Pedro, Clara and Mia Going and Sol invited, not answered; Mia never writes in its chat. A blocked term comes from the owner's list; never write one here.
+     - **The rules come first.** Pedro, who never agreed, writes his first message: the rules sheet comes before anything is sent, and I agree sends it once. Then, for the refusal: in the SQL editor, delete a test account's acceptance by its email, typed in the editor's copy only (`delete from private.chat_rules_acceptances a using auth.users u where a.user_id = u.id and lower(u.email) = '<the test account's email>'`), while that account's chat is open on its phone, and send: the sheet says "Your message hasn’t been sent. Agree to the chat rules to send it.", and I agree sends it once.
+     - **A blocked term is refused.** A message holding a listed term, in capitals too, reads "That message can’t be sent." and is not stored. The same term inside a longer word is sent.
+     - **A block hides at once (B3).** Pedro blocks Clara from People in this chat, then goes Back to the chat: Clara's messages, and the unread dot for them, are already gone, with no refocus. (Blocking a host the same way also takes their pinned card off; an earlier announcement takes the pin.) Data & privacy → Blocked people lists her, with "Blocked <day>" under her name.
+     - **The blocked person sees nothing.** While blocked, Clara asks Pedro to connect: she sees "Request sent", and Pedro gets no request and no push. Clara's next messages reach Ana, and neither reach nor push Pedro.
+     - **Unblock (B3).** Pedro unblocks Clara in Blocked people, then goes Back to the chat: her messages are back. No connection a block ended comes back.
+     - **A host's block** (R-Q6). Ana's Block confirm for Pedro ends with "This hides their messages from you only. To stop them for everyone, remove them from the resbite."
+     - **A block the server didn't store** (ruling SR9). Mia, who hasn't written in the chat and shares no other resbite or connection with Pedro, is removed by Ana while Pedro has her Block confirm open: Block then closes the confirm with no message, Blocked people doesn't list her, and no earlier chat error comes back.
+     - **A report reaches the team (Task 3).** Pedro reports one of Clara's messages: the thanks shows the support address. The moderator's phone shows "A new report is waiting." under "Resbite", with no name or words; its tap opens nothing; with Resbite open it shows as a banner. Signing out clears it from Notification Center. A second report within 10 minutes pushes nothing more.
+     - **The team's removal.** `remove-reported-message.sql` on that report (the reports queue, below), while Pedro and Clara have the chat open: the bubble reads "Message removed by Resbite" within a few seconds.
+     - **Report from everywhere** (I8). Report from a message's long-press, from a person's sheet (the author's name over a bubble, about 33 points tall, and the menu's Report or block), from an invitation card's long-press and from the resbite page: each sends, and each thanks shows the address. Data & privacy's Contact topic shows the address, selectable, with Copy address and a mail link, in the installed build.
+     - **An unanswered invitee's resbite page with an announcement** (B1). Sol opens it, with Ana's Everyone invited announcement from the checks above: "Report or block" beside the announcement line offers Report message and Report and Block for Ana. Report message sends; Block Ana stores, and the line goes.
+     - **An invitee brought by a guest, with no announcement** (B4, I-2). Leo, a guest Ana trusts to bring people, brings Clara to another of Ana's resbites; Clara doesn't answer. The card's long-press on My resbites and the page's More offer Report and Block for Leo and for Ana. Block Leo stores: Leo is in Clara's Blocked people.
+     - **A host who blocked a bringer** (I-3). Ana blocks Leo, then Clara says Going: Ana's push reads "Clara is going.", with no "brought by".
+     - **Connections** (I3). Block from a request card and from a connection row, and Report from a request card: each closes its sheet, and after a block the card or row goes, "Blocked <name>." is announced and focus moves to the next card.
+     - **The report sheet at the largest Larger Text,** with the keyboard open: it scrolls to Send report, with nothing clipped at 320 points.
+     - **VoiceOver.** On someone else's bubble, the rotor's actions offer Report message. The author's name over a bubble, and the menu's Report or block (the full-size way in), each open the person's sheet. After an unblock in Blocked people, VoiceOver says "Unblocked <name>." and focus moves to the next row.
+     - **TalkBack, when the Android build exists.** It reads "Unblocked <name>." after an unblock in Blocked people, and Connections' "Blocked <name>." after a block there. Each is a live region inserted with its text, unverified on Android so far.
 8. **Throughput check during the first busy chat hour (K-B3.5).** Read-only, every 10 minutes or so, with `! bash ~/ch1-throughput.sh`:
 
    ```bash
@@ -566,31 +810,100 @@ The database suites, the edge tests, the fingerprint replay and the scripts' reh
    ```
 
    - `waiting` stays under 100, and `oldest_wait` under 2 minutes.
+   - **A report's push is not chat** (plan 3). `report_filed` counts under `other_pending`, never `chat_pending`, and the claim takes it before any chat job, so a busy chat never holds back a moderator's push.
    - **The second line shows where a chat backlog waits.** The claim expands up to 100 outbox rows at a time, so a chat backlog sits as `pending` deliveries behind other kinds, not as unexpanded rows in `waiting`. Trouble is `oldest_chat_notice` over 1 hour: the sender drops a chat message push that old (an announcement after a day), without a trace in the other counts. `chat_pending` growing for several runs, or `other_pending` waiting with `oldest_other_notice` over 2 minutes, is also trouble.
    - **The check keys on the status and the `error` field together.** `clean` equals `calls`, and `cut_short` and `failed_or_timed_out` are 0. A run cut short by a later claim answers 200 with `error` set, so it counts under `cut_short`, never `clean`.
    - `deferred` above 0 in a burst is the loop handing back jobs it had no time for; the next run takes them. Many runs with `deferred` above 0, or any `failed_or_timed_out`, bring back step 0's budget question.
    - **A `plan_changed` made then reaches the other phone within two minutes.** Ana changes the time of another resbite Pedro is Going to while the chat is busy (the claim expands and sends it before the chat kinds, `supabase/migrations/20261111140000_chat_core.sql:712` and `:743`).
 
+## The reports queue
+
+From the release on, a standing duty, not a rollout step (challenge N11). It is how the team meets the review notes' promise: the queue checked daily, and content removed and accounts suspended within 24 hours of a report. Everything here runs in the hosted project's SQL editor, by the owner or a moderator: there is no screen for it (challenge N8). What it shows (a report's words, names, an account id kept for an undo) stays there. This section is the spec's note on reviewing reports (its file list names a `supabase/ops/README`; the plan puts the note here, beside the steps that set the queue up).
+
+- **Who reads it.** The moderators in `private.moderators` (step 5a). **Until R-Q4's backup is named, the owner alone reads the queue daily.** Once one is named, the backup reads it whenever the owner is away.
+- **When.** A moderator's phone shows "A new report is waiting." for a new report, at most once in 10 minutes each; the push holds no name and no words, and its tap opens nothing. Every day, push or not, a moderator runs `supabase/ops/open-reports.sql` (nothing to edit, read-only). Its one result lists:
+  - `report`: every open report, oldest first, with its reason, the reporter's own words (`details`), the reported message's words as they were when reported (`frozen_body`; none for a report about a person), who reported, who was reported, and the resbite with its date;
+  - `block`: every block of the last 7 days, newest first: who blocked whom, and when (R-Q2, I10). No message and no push. A block is the blocker's own choice and needs no action on its own; several blocks of one person point the team to what that person wrote;
+  - `due`: one row while closed reports are due for deletion, saying how many and to run `purge-closed-reports.sql`.
+- **For each report, the target is to act within 24 hours of it** (its `created_at`):
+  1. Read it. A report's words, and the reported message's frozen words, are what the reporter and the reported person wrote; nothing else of the chat is in the report.
+  2. **To remove the message:** `supabase/ops/remove-reported-message.sql`, the report's `id` in its one literal. It locks the chat row first, then removes the message if it is still a sent message or announcement: no words, `payload {"by": "resbite"}`. Open chats get it within seconds as "Message removed by Resbite" (a build without plan 3 reads "Message removed by an admin"), the count drops, a pinned announcement unpins, and no push goes out for it. It prints the message id and its final state: `removed`, or `deleted` when its author deleted it first. Run again, it changes nothing.
+  3. **To suspend the account:** `supabase/ops/suspend-account.sql`, the report's `id` in its one literal. It disables the person's tester roster row, if any, and revokes their live grant, if any, so they may no longer use the app: no reads, no writes, no pushes. It prints `account` (the suspended account's id: keep it in the SQL editor for an undo, never here), `roster_rows_disabled` and `grants_revoked`. Then **the owner bans the account in the Auth dashboard** (Authentication → Users), so it can't sign in either.
+  4. **Close it:** `supabase/ops/close-report.sql`, its one row `(report_id, status, action, note)`: status `reviewed` when nothing was done, `actioned` when something was; action `none`, `message_removed`, `account_suspended` or `both`; a short note, with no name, number or email. It closes only an open report, and prints the closed row; run again, or with another status, it prints no row and changes nothing, so a closed report's 180 days never start again. When the reported person's profile has gone, or their account is being deleted, it also forgets who the report was about.
+- **With a `due` row:** `supabase/ops/purge-closed-reports.sql` (nothing to edit). It deletes the reports closed more than 180 days ago (R-Q3, `private.report_keep_days()`), and on other closed reports forgets an account that has gone. It prints `deleted` and `cleared`.
+- **Undoing a suspension made in error.** The undo is the commented statement at the end of `suspend-account.sql`, with the suspended account's id in its literal: the id `suspend-account.sql` printed, or `select user_id, report_id, at from private.suspensions` lists the suspensions on record.
+  - It puts back only what that suspension changed (the roster row it disabled, the grant it revoked, by the time it revoked it), so an earlier ban or revocation stays, and deletes the record. It prints `roster_rows_enabled` and `grants_restored`. Lift the Auth dashboard ban by hand.
+  - The record is kept by the suspended account in `private.suspensions` (ruling SR8's M1), not on the report. So the undo works after the report is closed, purged 180 days later, or gone with its reporter's account, until the undo runs. It is gone only after the chat safety rollback (Rollback, below, says to undo first) or once the account itself is deleted from Auth.
+  - **Without a record, restore by hand.** First read the account's state now, in the SQL editor (read-only; the id in the editor's copy only). It reads no table of plan 3's, so it works after the rollback too:
+
+    ```sql
+    with input(user_id) as (values ('00000000-0000-0000-0000-000000000000'::uuid))
+    select (select count(*) from private.tester_roster t join auth.users u on t.email = lower(u.email) where u.id = i.user_id and t.enabled) as roster_enabled,
+     (select count(*) from private.tester_roster t join auth.users u on t.email = lower(u.email) where u.id = i.user_id and not t.enabled) as roster_disabled,
+     (select count(*) from private.beta_access b where b.user_id = i.user_id and b.revoked_at is null) as live_grants,
+     (select max(b.revoked_at) from private.beta_access b where b.user_id = i.user_id) as last_revoked_at,
+     private.user_eligible(i.user_id) as may_use_the_app
+    from input i;
+    ```
+
+    Then put back only what the suspension changed, as the undo statement does: the roster row's `enabled`, or the grant whose `revoked_at` is the suspension's time. An earlier ban stays.
+- **What the queue can't do.** A guest a host removed can't report that host in the app (Known gaps): the support address on Data & privacy covers it, and the owner answers such an email by hand. A report whose reporter deleted their account before the read is gone with them (CH-P18).
+
 ## Applied
 
 Nothing yet. Each step's record goes here when it is done, as in the earlier runbooks. Step 0's answers go here first.
+- For R-Q4, record that a backup reader is named, and the date, never who: no name, number or account id in this file.
+- For step 5a, record the gate's three counts, never a term or an email. For step 5b, that the address is set, and the build that carries it.
 
 ## Rollback
 
 Only with the owner's approval, in one transaction.
 
-**The full order, newest first (NOTE 5).** Roll back in this order only: chat 3, chat 2 (plan 2, this file's groups part), chat 1 (chat core), circles, follow-ups, connections, creating-a-resbite. Then the earlier ones, as the creating-a-resbite runbook lists.
+**The full order, newest first (NOTE 5).** Roll back in this order only: chat 3 (plan 3, this file's safety part), chat 2 (plan 2, this file's groups part), chat 1 (chat core), circles, follow-ups, connections, creating-a-resbite. Then the earlier ones, as the creating-a-resbite runbook lists.
 
 - **The guarded chain** is chat 3 → chat 2 → chat 1 → circles → follow-ups. Each refuses to run too early, and a refusal changes nothing.
+  - Plan 3's rollback goes first. Run where plan 3 isn't applied, it fails at its `lock table` and changes nothing.
   - Plan 2's rollback refuses while plan 3 is applied.
   - Chat core's rollback refuses while plan 2's `private.series_leaves` exists (NOTE 4), with "Run the chat groups rollback before the chat core rollback" (`supabase/rollback/20261111140000_chat_core.rollback.sql:44-49`).
   - The circles rollback refuses while `public.messages` exists, with "Roll back the chat migrations before the circles-of-trust rollback" (`supabase/rollback/20261111130000_circles_of_trust.rollback.sql:47-48`). Without that guard, rolling circles back would put the pre-chat claim and deletion bodies under plan 1. With plan 2 applied, every group roll would also fail on `brought_by`.
   - The follow-ups rollback refuses while circles is applied.
 - **Below the chain nothing guards.** The connections and creating-a-resbite rollbacks have no guard against chat. Their files belong to live runbooks, so they stay unchanged. **Never run either while chat is applied.** The connections one would take the chat kinds out of the outbox's check, and the chat branch out of who may be told, under a live chat.
 
+**Chat safety's steps** (plan 3), first. In them, "this file" is chat safety's rollback, `supabase/rollback/20261111160000_chat_safety.rollback.sql`.
+
+1. **The app first** (challenge I9), as chat core's step 1 below. A build with plan 3's app can't write against a database without it. `chat_summary` has no `rules_accepted` there, so every Send opens the rules sheet, and I agree calls `accept_chat_rules`, which is gone. Its people lists get no `my_blocks`, so they show no Block and no Connect. And chat without report and block may not reach testers (the spec's Anti-goals). So a chat 3 rollback means making a build without chat the testers' build first, or rolling back all three plans.
+2. **The sender stays** for a chat 3 rollback alone (challenge I9). It sends nothing of this plan's once this file has deleted the `report_filed` notices, and it is the chat sender chat core needs. It goes back only with chat core's rollback (chat core's step 2, below).
+3. **Undo any suspension made in error first** (the reports queue). This file drops `private.suspensions`: an account suspended with `suspend-account.sql` stays suspended, and the record of what to put back goes with the table.
+4. The owner runs `! bash ~/ch3-rollback.sh`, in `ch1-rollback.sh`'s and `ch2-rollback.sh`'s shape. It checks the hash, runs the file in one transaction, with no psql `\i`, and takes a fingerprint:
+
+   ```bash
+   #!/bin/bash
+   # The chat safety rollback (chat plan 3). Only with the owner's approval, once a build without chat is the testers'
+   # build (or with the rollback of all three plans), and before chat groups' rollback.
+   set -euo pipefail
+   cd "${REPO:-$HOME/dev/resbite-app}"
+   D=qa/chat-release
+   F=supabase/rollback/20261111160000_chat_safety.rollback.sql
+   echo "990cc9b0d0391173c888dc2155044795b4fbadd5d1b47131223dcc417e40a1d6  $F" | sha256sum -c -
+   mkdir -p /tmp/ch3 && { echo 'begin;'; cat "$F"; echo; echo 'commit;'; } > /tmp/ch3/rollback.sql
+   supabase db query --linked -f /tmp/ch3/rollback.sql
+   supabase db query --linked -f supabase/ops/hosted-fingerprint.sql -o json > "$D/hosted-after-rollback-safety.json"
+   ```
+
+   - The script stops before running anything if the hash differs.
+   - `hosted-after-rollback-safety.json` should equal chat groups' `hosted-after-groups.json` by definition: 479 of 479, with the same 15 `acl` differences. Wrapped this way, the rollback did exactly that locally.
+   - If it stops with "deadlock detected", nothing has changed: run it again. The worker's claim, a chat being opened or a block being made can meet it mid-way (its header, lines 46-47).
+   - Run again after it succeeded, it fails at its `lock table` (`private.chat_rules_acceptances` is gone) and changes nothing.
+5. **What it does** (its header, lines 1-52).
+   - **What is lost, with nobody told** (G-N11): every block, every report, open or closed, with its frozen words, every moderator, every acceptance of the chat rules, every blocked term and every suspension's record, and every `report_filed` notice, sent or not, with its deliveries. A connection a block ended doesn't come back. Pushes already sent are not recalled.
+   - It drops the five calls in both schemas, the four helpers and the six tables, puts back chat core's thirteen kinds in the outbox's check, and restores fourteen bodies byte for byte, keeping their grants (thirteen on hosted): chat core's seven, plan 2's four, and the connections', circles' and phone_key's one each.
+   - **What people notice:** a blocked person's messages, announcements, pushes and invitations reach the blocker again; nobody is asked to agree to the chat rules, and no term is refused; a message the team removed stays removed, and a build without plan 3 words it "Message removed by an admin"; the daily read of reports and blocks is gone, and the scripts in `supabase/ops/` that read or write the six tables fail.
+   - It goes before plan 2's: plan 2's rollback refuses while `private.blocks` exists, and this file drops it.
+6. Remove this migration's line from `supabase/tests/hosted-baseline/migrations.txt`. The hosted migration history row stays.
+
 **Chat groups' steps** (plan 2), before chat core's.
 
-1. Plan 3's rollback first, when plan 3 is applied: plan 2's refuses while `private.blocks` exists.
+1. Plan 3's rollback first, when plan 3 is applied (chat safety's steps, above): plan 2's refuses while `private.blocks` exists.
 2. The owner runs `! bash ~/ch2-rollback.sh`, in `ch1-rollback.sh`'s shape. It checks the hash, runs the file in one transaction, with no psql `\i`, and takes a fingerprint:
 
    ```bash
@@ -689,8 +1002,24 @@ Accepted during the build, unless marked; none blocks the rollout.
   - **A group whose owner is gone can stay open past 48 hours** (ruling GR4 M-1). When an owner's account deletion cancels a future occurrence and keeps the rule, or an owner cancels "just this one" and then loses access, the chat stays open, and pushing, until that cancelled occurrence's end + 48 hours, which can be about two weeks for a fortnightly group. The deletion is local only today; the fix goes with the account-deletion lifecycle and the sorted pass above: the deletion writes the group's stop time when it cancels.
   - **A leave is not carried by a fold** (ruling GR4 M-4). A person who left a group with an app account that had no confirmed number, while their web account, invited by number, still has a row on the current occurrence, is back in the group when they add the number and the fold moves that row. Narrow, and consistent with "any way back in clears a leave"; recorded only.
   - **A closed group isn't resumed** (ruling GR3 Q1). The roll never reopens it, and the app's Edit can't reopen an ended occurrence, so the way back is the closed card's "Do this again", a new resbite.
-- **Sign-out and the pushes left on the phone: fixed (H39).** Sign-out now clears every Resbite push from Notification Center: `plan_update`, chat and connection (`dismissShownPushes`, `mobile/src/services/pushDevice.ts:349`). So a chat push's words no longer stay for whoever signs in next.
+- **Chat safety's gaps** (plan 3), accepted:
+  - **A team removal on an older build.** A message the team removed reads "Message removed by an admin" on a build without plan 3, as after a rollback.
+  - **A second phone keeps the blocked person's rows for a while** (B3, Decision 17). The "blocks changed" event is one phone's. Another phone signed in to the same account, with that chat open, keeps the rows until its next full read: a refocus, the return to the app, or a reopen.
+  - **Pushes already shown stay** (challenge N14 (e)). A block stops new pushes from the blocked person; those already in Notification Center stay until they are cleared or the person signs out.
+  - **What G-S13's default still lets through** (challenge N12). A co-host or a guest of the blocked person can invite the blocker to the blocked person's resbite, since that notice's actor is not blocked. And the `'link'` answer asks the blocked person to send the blocker a link outside Resbite.
+  - **A fold and an old connection** (I4). A fold moves a block to the app account, but a connection the app account already had with the blocker stays.
+  - **The inviter rests on kept notices** (B4). Who invited an unanswered invitee is read from the outbox's `invited` rows, which are kept today (K-N11). The roadmap's cleanup of delivered rows must keep an unanswered invitation's `invited` row.
+  - **A message report refused because the message is no longer sent** says "You can’t report that any more." with no way on from that sheet (challenge N7, listed, not taken). The person's name in the chat still opens Report <name>.
+  - **The owner stays offered after a block** (I-2). On the invitation card and the resbite page the owner comes from the plan, not the overview, so Report and Block for them stay after a block. Blocking again changes nothing.
+  - **Plan 2's parked deadlock stays** as plan 2's gaps record it (ruling GR2): two account deletions at once can deadlock when each owns a group stopped by Edit and each wrote in the other's chat. Plan 3's deletion copy adds no chat-row lock.
+  - **A removed guest can't report the host who removed them** (the final review's M6). A guest a host removed is out of the chat, and in no audience, so `report_message` and `report_user` answer `22023 'Report unavailable'` (a group's leaver is covered by the leave record; a removal is not). The support address covers it (App Store 1.2).
+  - **Deleting two profiles by hand at the same moment** that blocked each other can deadlock on the blocks' cascades, as refusals already can (pre-existing). Delete profiles by hand one at a time; the one that fails can be retried.
+  - **A block undone before the daily read** isn't seen by the team (`open-reports.sql` lists the blocks that stand). An undone block is the person's own retraction.
+  - **A report whose reporter goes before the read** is gone with them (CH-P18), and the moderator's push then finds nothing in the queue.
+  - **`block_user`'s answer for a repeat** (the final re-review's note). Blocking again someone the caller can no longer read answers `stored` false, though the earlier block row stays. Harmless: the app takes the blocks from `my_blocks`, and the answer reveals only the caller's own data.
+  - **`accept_chat_rules` without a profile** raises a raw `23503` naming the caller's own id. Nobody without a profile can be in a chat, so the app never meets it.
+- **Sign-out and the pushes left on the phone: fixed (H39).** Sign-out now clears every Resbite push from Notification Center: `plan_update`, chat, connection and, since plan 3, a moderator's report push (`dismissShownPushes`, `mobile/src/services/pushDevice.ts:349`; `PUSH_TYPES`, `mobile/src/services/pushRegistration.ts:167`). So a chat push's words no longer stay for whoever signs in next.
 
 ## Not done here
 
-No hosted change, no function deployment, no Realtime setting, no schedule change and no TestFlight upload, for chat core or chat groups. Nothing was pushed.
+No hosted change, no function deployment, no Realtime setting, no schedule change, no SQL editor run, no EAS variable, no TestFlight upload and no App Store Connect entry, for chat core, chat groups or chat safety. Nothing was pushed.
