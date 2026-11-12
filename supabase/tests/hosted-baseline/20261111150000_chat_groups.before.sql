@@ -38,12 +38,17 @@ insert into public.plans(id,owner_id,title,starts_at,ends_at,time_zone,place_lab
   now()+interval '1 day',now()+interval '1 day 1 hour','UTC','Park',array['physical'],'active',1,
   'e6200000-0000-4000-8000-000000000007','e6200000-0000-4000-8000-000000000007');
 
--- 2. What the migration redefines, as it stands (chat core's bodies), with their grants, so .after.sql can prove the
--- apply keeps each one's grants and the rollback (Task 2) restores each exactly.
+-- 2. What the migration redefines, as it stands, with its grants, so .after.sql can prove the apply keeps each one's
+-- grants and the rollback restores each exactly: chat core's eight (section 1's four, then section 2's line triggers,
+-- the eligibility and the row), the creating-a-resbite can_see_guests, the follow-ups request_connection and the
+-- circles roll.
 create table private.ch2_rehearsal_functions as
  select f as signature, pg_catalog.pg_get_functiondef(f::regprocedure) as definition,
   (select p.proacl::text from pg_catalog.pg_proc p where p.oid=f::regprocedure) as grants
- from unnest(array['private.chat_member(uuid,uuid)','private.chat_closes_at(uuid)','private.chat_open(uuid)','private.chat_summary(uuid)']) f;
+ from unnest(array['private.chat_member(uuid,uuid)','private.chat_closes_at(uuid)','private.chat_open(uuid)','private.chat_summary(uuid)',
+  'private.attendees_chat_lines()','private.plans_chat_lines()','private.notification_recipient_eligible(bigint)',
+  'private.chat_row(public.messages,uuid)','private.can_see_guests(uuid)','private.request_connection(uuid,uuid)',
+  'private.roll_repeating_plans()']) f;
 alter table private.ch2_rehearsal_functions enable row level security;
 
 -- 3. The pre-state: chat core is applied and this file's objects are not; each series has exactly one chats row, none a
@@ -52,7 +57,7 @@ do $$ begin
  if pg_catalog.to_regclass('public.chats') is null or pg_catalog.to_regprocedure('private.chat_is_group(uuid)') is null then
   raise exception 'Chat core is not applied: apply 20261111140000_chat_core first';
  end if;
- if (select count(*) from private.ch2_rehearsal_functions where definition is not null and grants is not null)<>4 then
+ if (select count(*) from private.ch2_rehearsal_functions where definition is not null and grants is not null)<>11 then
   raise exception 'A function to redefine is missing';
  end if;
  if (select definition from private.ch2_rehearsal_functions where signature='private.chat_summary(uuid)') not like '%''stopped'', false,%'
@@ -62,7 +67,7 @@ do $$ begin
  if pg_catalog.to_regclass('private.series_leaves') is not null
  or exists(select 1 from pg_catalog.pg_attribute where attrelid='public.chats'::regclass and attname='stopped_at' and not attisdropped)
  or exists(select 1 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','private')
-   and p.proname in ('series_is_group','group_stopped','chat_hide_line','plans_group_flag','attendees_clear_leave'))
+   and p.proname in ('series_is_group','group_stopped','chat_hide_line','plans_group_flag','attendees_clear_leave','leave_series','chat_place_hidden'))
  or exists(select 1 from pg_catalog.pg_trigger where tgname in ('plans_group_flag','attendees_clear_leave')) then
   raise exception 'A chat groups object exists before the migration';
  end if;

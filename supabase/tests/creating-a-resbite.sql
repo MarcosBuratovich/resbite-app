@@ -690,11 +690,14 @@ insert into public.plan_admins(plan_id,user_id,appointed_by)
  select p,'e1000000-0000-4000-8000-000000000002','e1000000-0000-4000-8000-000000000001'
  from unnest(array['e1100000-0000-4000-8000-000000000012','e1100000-0000-4000-8000-000000000013','e1100000-0000-4000-8000-000000000014']::uuid[]) p;
 
--- plan_admins: a pending guest lists none, a Going guest sees the admin.
+-- plan_admins: a pending guest lists none, a Going guest sees the admin. Since chat plan 2 a repeating resbite is a
+-- group, whose pending members see its people (CH-P21, can_see_guests' group branch): so the pending guest lists none
+-- on 14, a one-off, and sees the admin on 12, every two weeks.
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000004","role":"authenticated"}',true);
 do $$ begin
- if (select count(*) from public.plan_admins where plan_id='e1100000-0000-4000-8000-000000000012')<>0 then raise exception 'A pending guest lists the admins'; end if;
+ if (select count(*) from public.plan_admins where plan_id='e1100000-0000-4000-8000-000000000014')<>0 then raise exception 'A pending guest lists the admins'; end if;
+ if (select count(*) from public.plan_admins where plan_id='e1100000-0000-4000-8000-000000000012')<>1 then raise exception 'A pending group member should see the admin'; end if;
 end $$;
 select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
 do $$ begin
@@ -1150,7 +1153,8 @@ do $$ begin
 end $$;
 
 -- On the next occurrence the carried admin's own reply is pending, yet as a host they read the meeting details (which
--- the editor saves back) and see the guests; a pending guest still sees only themself and no details.
+-- the editor saves back) and see the guests; a pending guest reads no details, and, since chat plan 2 made the weekly
+-- series a group, sees every guest of it (CH-P21: can_see_guests' group branch, which attendee_read follows).
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 do $$ declare n uuid := (select id from public.plans where repeats_from='e1100000-0000-4000-8000-000000000030'); begin
@@ -1164,7 +1168,7 @@ select set_config('request.jwt.claims','{"sub":"e1000000-0000-4000-8000-00000000
 do $$ declare n uuid := (select id from public.plans where repeats_from='e1100000-0000-4000-8000-000000000030'); begin
  if n is null then raise exception 'The pending guest cannot read the next occurrence'; end if;
  if exists(select 1 from public.plan_meeting_details where plan_id=n) then raise exception 'A pending guest reads the meeting details'; end if;
- if (select count(*) from public.attendees where plan_id=n)<>1 then raise exception 'A pending guest sees the other guests'; end if;
+ if (select count(*) from public.attendees where plan_id=n)<>5 then raise exception 'A pending group member does not see the other guests'; end if;
 end $$;
 reset role;
 

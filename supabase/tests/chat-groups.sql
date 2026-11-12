@@ -1,10 +1,12 @@
 -- Chat groups (docs/superpowers/plans/2026-11-11-chat-2-groups.md, Tasks 1 and 2; docs/superpowers/specs/2026-11-10-groups-and-chat-design.md,
--- CH-P1, CH-P15, CH-P20, with the rulings G-S1, G-S4, G-S5, G-B7 and the plan's Decisions 1, 2, 6 and 12): a repeating
--- resbite's chat is a group. Slice 1 (Task 1): the group flag, who is in a group's chat, when it closes, the summary and
--- the leave record. Synthetic identities only: emails g2-…@resbite-test.invalid, ids with the prefix e6, no phone numbers.
+-- CH-P1, CH-P4, CH-P15, CH-P20, CH-P21, with the rulings G-S1 to G-S6, G-B6, G-B7, G-N1, G-N3, G-N13, I1, I2, I6, I11
+-- and the plan's Decisions 1, 2, 6, 7, 11 and 12): a repeating resbite's chat is a group. Slice 1 (Task 1): the group
+-- flag, who is in a group's chat, when it closes, the summary and the leave record. Slice 2 (Task 2): the group's lines,
+-- the roll, leaving, who sees the group, and its pushes in a cancelled week. Synthetic identities only: emails
+-- g2-…@resbite-test.invalid, ids with the prefix e6, no phone numbers.
 --
--- One transaction per block, each begin … rollback, as connections.sql does: slice 1 is one block. Each block starts
--- from the same cast, made by pg_temp.e6_cast(). Times, rows and flags set by hand sit between
+-- One transaction per block, each begin … rollback, as connections.sql does: slice 1 is one block, slice 2 six. Each
+-- block starts from the same cast, made by pg_temp.e6_cast(). Times, rows and flags set by hand sit between
 -- set_config('resbite.system','roll',true) and set_config('resbite.system','',true), so they write no chat line; the
 -- setting is transaction-local, so it is reset at once (it would otherwise silence every later line).
 --
@@ -228,7 +230,8 @@ do $$ declare v_line public.messages; begin
 end $$;
 
 -- Walk rolls (its times moved back an hour past the end, under the roll's flag, with a guest row for 13, a web
--- account that never used the app, so the roll leaves it on the first occurrence).
+-- account that never used the app, so the roll leaves it on the first occurrence). Since Task 2 the roll writes its own
+-- two lines, ended and next (slice 2 checks them).
 -- Only the current occurrence speaks for the series (G-N4, review M3): the repeat turned off on the occurrence the roll
 -- left behind, then that occurrence cancelled (under the flag, so chat core writes no line), stop nothing.
 -- A fold clears a leave only when the row it moves lands on the current occurrence (Q2, Decision 1, CH-P4): 09 gets a
@@ -247,7 +250,7 @@ update public.plans set repeat_weeks=null where id=pg_temp.e6p('07');
 update public.plans set status='cancelled' where id=pg_temp.e6p('07');
 select set_config('resbite.system','',true);
 select pg_temp.g2_check((select stopped_at from public.chats where series_id=pg_temp.e6p('07')) is null and not private.group_stopped(pg_temp.e6p('07'))
- and private.chat_open(pg_temp.e6p('07')) and pg_temp.g2_lines(pg_temp.e6p('07'))='joined:sent',
+ and private.chat_open(pg_temp.e6p('07')) and pg_temp.g2_lines(pg_temp.e6p('07'))='joined:sent,ended:sent,next:sent',
  'A change to the occurrence the roll left behind stopped Walk, or wrote a line');
 select set_config('resbite.system','roll',true);
 insert into public.attendees(plan_id,user_id,response) values (current_setting('g2.walk2')::uuid,pg_temp.e6('09'),'accepted');
@@ -524,4 +527,626 @@ do $$ begin
  perform pg_temp.g2_check(private.chat_closes_at(pg_temp.e6p('05')) is null and private.chat_open(pg_temp.e6p('05')) is false,
   'The cancelled Picnic''s chat has a close time, or is open');
 end $$;
+rollback;
+
+-- Slice 2 (Task 2): the group's lines, the roll, leaving, and who sees the group. Six blocks, 2a to 2f, each begin …
+-- rollback and each from the cast, so no block's roll or leave reaches another; within a block the lines run in the
+-- order written, and each block names its rolls (challenge NOTE 11). Beyond the cast: 07 is invited in the app (2a, 2b,
+-- 2e); 09, 10 and 11 are brought guests, rows made by hand under the flag, 09 by 06 and 10 and 11 by 03, at level 2
+-- (2b). Times inside one transaction are moved by hand: "5 minutes later" moves a line's created_at 5 minutes back (an
+-- update can't set updated_at, which messages_touch makes now(), and the built search takes any row updated in the last
+-- 10 minutes). An update by hand that would write a line sits under the flag; one whose test is that it writes nothing
+-- runs outside it. A roll runs only once the flag is reset, so it runs with the flag empty, as cron runs it; right after
+-- it returns, the flag reads 'roll' (the roll set it itself) and is reset (I1): pg_temp.g2_roll.
+
+-- Slice 2's helpers, for this file's session only.
+-- An answer through respond, as the current claims, at the caller's own row's version: the new version.
+create function pg_temp.g2_respond(p_plan uuid, p_response text) returns integer language plpgsql as $$
+begin
+ return public.respond(p_plan,p_response,(select a.version from public.attendees a where a.plan_id=p_plan and a.user_id=auth.uid()));
+end $$;
+-- An invitation in the app (invite_contacts with one {user} item) by the current claims: the item's kind.
+create function pg_temp.g2_invite(p_plan uuid, p_user uuid) returns text language plpgsql as $$
+begin
+ return public.invite_contacts(p_plan,jsonb_build_array(jsonb_build_object('user',p_user)))->0->>'kind';
+end $$;
+-- Edit through change_plan_v4 as the current claims, keeping everything but the place: the new version.
+create function pg_temp.g2_place(p_plan uuid, p_place text) returns integer language plpgsql as $$
+declare p public.plans;
+begin
+ select * into p from public.plans where id=p_plan;
+ return public.change_plan_v4(p_plan,p.version,p.title,p.description,p.categories,p.starts_at,p.ends_at,p.time_zone,p_place,false,
+  p.repeat_weeks,null,null);
+end $$;
+-- A plan's times moved into the past (its end an hour ago), under the flag, reset at once: no line, and the next roll
+-- sees an ended occurrence.
+create function pg_temp.g2_past(p_plan uuid) returns void language plpgsql as $$
+begin
+ perform set_config('resbite.system','roll',true);
+ update public.plans set starts_at=now()-interval '3 hours',ends_at=now()-interval '1 hour' where id=p_plan;
+ perform set_config('resbite.system','',true);
+end $$;
+-- The roll as cron runs it: the flag is empty before it; right after it returns, the flag reads 'roll', which only the
+-- roll's own set_config can have put there (I1); then it is reset. The number of plans rolled. The superuser's.
+create function pg_temp.g2_roll() returns integer language plpgsql as $$
+declare n integer;
+begin
+ perform pg_temp.g2_check(coalesce(current_setting('resbite.system',true),'')='','The flag is set before the roll');
+ n := private.roll_repeating_plans();
+ perform pg_temp.g2_check(current_setting('resbite.system',true) is not distinct from 'roll',
+  'The roll did not set its flag (I1): '||coalesce(current_setting('resbite.system',true),'null'));
+ perform set_config('resbite.system','',true);
+ return n;
+end $$;
+-- The occurrence the roll made from a plan. The superuser's.
+create function pg_temp.g2_next(p_plan uuid) returns uuid language plpgsql stable as $$
+begin
+ return (select id from public.plans where repeats_from=p_plan);
+end $$;
+-- A series' system lines in id order, as event:user:state, the user's two digits ('-' for none): 'joined:07:sent'.
+-- The superuser's.
+create function pg_temp.g2_ulines(p_series uuid) returns text language plpgsql stable as $$
+begin
+ return (select coalesce(string_agg(m.event||':'||coalesce(right(m.payload->>'user',2),'-')||':'||m.state,',' order by m.id),'')
+  from public.messages m where m.series_id=p_series and m.kind='system');
+end $$;
+-- A series' latest system line of an event (a row of nulls for none). The superuser's.
+create function pg_temp.g2_last(p_series uuid, p_event text) returns public.messages language plpgsql stable as $$
+declare m public.messages;
+begin
+ select * into m from public.messages where series_id=p_series and kind='system' and event=p_event order by id desc limit 1;
+ return m;
+end $$;
+-- A read's row with this id (null for none).
+create function pg_temp.g2_row(p_read jsonb, p_id bigint) returns jsonb language sql immutable as $$
+ select e.value from jsonb_array_elements(p_read->'rows') e where (e.value->>'id')::bigint=p_id
+$$;
+-- A notice of a kind about a message to one person: whether it is there and may be told now. The superuser's.
+create function pg_temp.g2_told(p_kind text, p_message bigint, p_to uuid) returns boolean language plpgsql stable as $$
+declare v_id bigint;
+begin
+ select o.id into v_id from private.notification_outbox o where o.kind=p_kind and o.message_id=p_message and o.recipient_id=p_to;
+ if v_id is null then raise exception 'No % notice about % to %', p_kind, p_message, p_to; end if;
+ return private.notification_recipient_eligible(v_id);
+end $$;
+
+-- 2a. Lines and replies (Decision 6, confirmation S3, I2, challenge NOTE 4, G-S2), on Board game night unless named. No
+-- roll.
+begin;
+select pg_temp.e6_cast();
+-- 03 says Can't go: one line, cant_go {actor 03, user 03}. 01 invites 07 in the app: one line, joined {actor 01, user
+-- 07}, whatever the reply (07 has not answered).
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('03'));
+select pg_temp.g2_respond(pg_temp.e6p('01'),'declined');
+select pg_temp.g2_as(pg_temp.e6('01'));
+select pg_temp.g2_check(pg_temp.g2_invite(pg_temp.e6p('01'),pg_temp.e6('07'))='app','01 could not invite 07');
+reset role;
+do $$ declare c public.messages := pg_temp.g2_last(pg_temp.e6p('01'),'cant_go'); j public.messages := pg_temp.g2_last(pg_temp.e6p('01'),'joined'); begin
+ perform pg_temp.g2_check(pg_temp.g2_ulines(pg_temp.e6p('01'))='cant_go:03:sent,joined:07:sent','Board game night''s lines: '||pg_temp.g2_ulines(pg_temp.e6p('01')));
+ perform pg_temp.g2_check(c.author_id is null and c.plan_id=pg_temp.e6p('01') and c.payload=jsonb_build_object('actor',pg_temp.e6('03'),'user',pg_temp.e6('03')),
+  '03''s cant_go line: '||row_to_json(c)::text);
+ perform pg_temp.g2_check(j.payload=jsonb_build_object('actor',pg_temp.e6('01'),'user',pg_temp.e6('07')),'07''s joined line: '||row_to_json(j)::text);
+ perform set_config('g2.c03',c.id::text,true);
+ perform set_config('g2.j07',concat_ws('|',j.id,j.event,j.payload,j.state,j.created_at),true);
+end $$;
+-- S3: 07 says Can't go within a minute of the invitation: two lines, joined and cant_go, and the joined line as it was.
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('07'));
+select pg_temp.g2_respond(pg_temp.e6p('01'),'declined');
+reset role;
+do $$ declare j public.messages := pg_temp.g2_last(pg_temp.e6p('01'),'joined'); c public.messages := pg_temp.g2_last(pg_temp.e6p('01'),'cant_go'); begin
+ perform pg_temp.g2_check(pg_temp.g2_ulines(pg_temp.e6p('01'))='cant_go:03:sent,joined:07:sent,cant_go:07:sent',
+  'Lines once 07 said Can''t go: '||pg_temp.g2_ulines(pg_temp.e6p('01')));
+ perform pg_temp.g2_check(concat_ws('|',j.id,j.event,j.payload,j.state,j.created_at)=current_setting('g2.j07'),'07''s joined line changed: '||row_to_json(j)::text);
+ perform pg_temp.g2_check(c.payload=jsonb_build_object('actor',pg_temp.e6('07'),'user',pg_temp.e6('07')),'07''s cant_go line: '||row_to_json(c)::text);
+ perform set_config('g2.c07',c.id::text,true);
+end $$;
+-- 5 minutes later 07 says Going: the cant_go line reads deleted (signalled), the joined line stays, and the chat's last
+-- message is the joined line, with its time (NOTE 4).
+update public.messages set created_at=created_at-interval '5 minutes' where id=current_setting('g2.c07')::bigint;
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('07'));
+select pg_temp.g2_respond(pg_temp.e6p('01'),'accepted');
+reset role;
+do $$ declare v_j bigint := (pg_temp.g2_last(pg_temp.e6p('01'),'joined')).id; begin
+ perform pg_temp.g2_check(pg_temp.g2_ulines(pg_temp.e6p('01'))='cant_go:03:sent,joined:07:sent,cant_go:07:deleted',
+  'Lines once 07 said Going again: '||pg_temp.g2_ulines(pg_temp.e6p('01')));
+ perform pg_temp.g2_check(exists(select 1 from realtime.messages r where r.topic='chat:'||pg_temp.e6p('01')
+   and r.payload->>'id'=current_setting('g2.c07') and r.payload->>'state'='deleted'),'The cant_go line''s deletion was not signalled');
+ perform pg_temp.g2_check((select (c.last_message_id,c.last_message_at) from public.chats c where c.series_id=pg_temp.e6p('01'))
+   is not distinct from (select (m.id,m.created_at) from public.messages m where m.id=v_j),
+  'The chat''s last message is not 07''s joined line: '||(select row_to_json(c)::text from public.chats c where c.series_id=pg_temp.e6p('01')));
+end $$;
+-- 07 says Can't go again: one new cant_go line, shown.
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('07'));
+select pg_temp.g2_respond(pg_temp.e6p('01'),'declined');
+reset role;
+select pg_temp.g2_check(pg_temp.g2_ulines(pg_temp.e6p('01'))='cant_go:03:sent,joined:07:sent,cant_go:07:deleted,cant_go:07:sent',
+ 'Lines once 07 said Can''t go again: '||pg_temp.g2_ulines(pg_temp.e6p('01')));
+select set_config('g2.c07b',(pg_temp.g2_last(pg_temp.e6p('01'),'cant_go')).id::text,true);
+-- NOTE 4 (old states): that line moved 11 minutes back, then 07's reply set to Can't go again by hand, outside the flag
+-- (the trigger fires on every update of response): no line, and the line as it was. Then from declined to withdrawn:
+-- no line either.
+update public.messages set created_at=created_at-interval '11 minutes' where id=current_setting('g2.c07b')::bigint;
+select set_config('g2.c07b_row',(select concat_ws('|',m.event,m.payload,m.state,m.created_at) from public.messages m where m.id=current_setting('g2.c07b')::bigint),true);
+update public.attendees set response='declined' where plan_id=pg_temp.e6p('01') and user_id=pg_temp.e6('07');
+update public.attendees set response='withdrawn' where plan_id=pg_temp.e6p('01') and user_id=pg_temp.e6('07');
+select pg_temp.g2_check(pg_temp.g2_ulines(pg_temp.e6p('01'))='cant_go:03:sent,joined:07:sent,cant_go:07:deleted,cant_go:07:sent'
+ and (select concat_ws('|',m.event,m.payload,m.state,m.created_at) from public.messages m where m.id=current_setting('g2.c07b')::bigint)=current_setting('g2.c07b_row'),
+ 'A reply sent again, or declined to withdrawn, wrote or changed a line: '||pg_temp.g2_ulines(pg_temp.e6p('01')));
+-- I2 (the 10 minutes): 03's cant_go line moved 11 minutes back, then 03 says Going: the line stays sent, and no line.
+update public.messages set created_at=created_at-interval '11 minutes' where id=current_setting('g2.c03')::bigint;
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('03'));
+select pg_temp.g2_respond(pg_temp.e6p('01'),'accepted');
+reset role;
+select pg_temp.g2_check(pg_temp.g2_ulines(pg_temp.e6p('01'))='cant_go:03:sent,joined:07:sent,cant_go:07:deleted,cant_go:07:sent',
+ 'Going again after 10 minutes changed or wrote a line: '||pg_temp.g2_ulines(pg_temp.e6p('01')));
+-- Beyond the brief's list, the two other branches of a group's cant_go (Decision 6), on 04. 04 says Can't go, is put
+-- back to Going by hand under the flag (no line), then, by hand outside it with 01's claims, to Can't go again: the
+-- line merges in place (one cant_go line for 04, now with actor 01), as H33's guard holds. A later line names 04 (an
+-- admin line, by hand); 04 says Going: the cant_go line reads deleted all the same, as the guard is for a merge, not
+-- for the delete (I2). 04 says Can't go: a new line, the deleted one never brought back. Another line names 04, then
+-- the same back and forth by hand: the guard stops the merge, so a new line.
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('04'));
+select pg_temp.g2_respond(pg_temp.e6p('01'),'declined');
+reset role;
+select set_config('resbite.system','roll',true);
+update public.attendees set response='accepted' where plan_id=pg_temp.e6p('01') and user_id=pg_temp.e6('04');
+select set_config('resbite.system','',true);
+select pg_temp.g2_as(pg_temp.e6('01'));
+update public.attendees set response='declined' where plan_id=pg_temp.e6p('01') and user_id=pg_temp.e6('04');
+select pg_temp.g2_check((select count(*) from public.messages where series_id=pg_temp.e6p('01') and event='cant_go' and payload->>'user'=pg_temp.e6('04')::text)=1
+ and (pg_temp.g2_last(pg_temp.e6p('01'),'cant_go')).payload=jsonb_build_object('actor',pg_temp.e6('01'),'user',pg_temp.e6('04')),
+ '04''s second Can''t go did not merge into the first: '||pg_temp.g2_ulines(pg_temp.e6p('01')));
+insert into public.messages(series_id,plan_id,kind,event,payload)
+ values (pg_temp.e6p('01'),pg_temp.e6p('01'),'system','admin',jsonb_build_object('actor',pg_temp.e6('01'),'user',pg_temp.e6('04')));
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('04'));
+select pg_temp.g2_respond(pg_temp.e6p('01'),'accepted');
+select pg_temp.g2_respond(pg_temp.e6p('01'),'declined');
+reset role;
+insert into public.messages(series_id,plan_id,kind,event,payload)
+ values (pg_temp.e6p('01'),pg_temp.e6p('01'),'system','admin',jsonb_build_object('actor',pg_temp.e6('01'),'user',pg_temp.e6('04')));
+select set_config('resbite.system','roll',true);
+update public.attendees set response='accepted' where plan_id=pg_temp.e6p('01') and user_id=pg_temp.e6('04');
+select set_config('resbite.system','',true);
+update public.attendees set response='declined' where plan_id=pg_temp.e6p('01') and user_id=pg_temp.e6('04');
+select pg_temp.g2_check(pg_temp.g2_ulines(pg_temp.e6p('01'))='cant_go:03:sent,joined:07:sent,cant_go:07:deleted,cant_go:07:sent,'
+ 'cant_go:04:deleted,admin:04:sent,cant_go:04:sent,admin:04:sent,cant_go:04:sent','04''s back and forth: '||pg_temp.g2_ulines(pg_temp.e6p('01')));
+-- G-S2: Film club, "Cancel just this one": cancelled {actor 01, stop false, starts_at, time_zone} of the cancelled
+-- occurrence. Board game night, "Cancel this and stop repeating": cancelled {…, stop true, …}.
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('01'));
+select pg_temp.g2_cancel(pg_temp.e6p('02'),false);
+select pg_temp.g2_cancel(pg_temp.e6p('01'),true);
+reset role;
+do $$ declare m public.messages; p public.plans; n text; begin
+ foreach n in array array['02','01'] loop
+  m := pg_temp.g2_last(pg_temp.e6p(n),'cancelled');
+  select * into p from public.plans where id=pg_temp.e6p(n);
+  perform pg_temp.g2_check(m.plan_id=p.id and m.author_id is null and pg_temp.g2_keys(m.payload)='actor,starts_at,stop,time_zone'
+    and m.payload->>'actor'=pg_temp.e6('01')::text and m.payload->'stop'=to_jsonb(n='01')
+    and (m.payload->>'starts_at')::timestamptz=p.starts_at and m.payload->>'time_zone'=p.time_zone,
+   'The cancelled line of plan '||n||': '||coalesce(row_to_json(m)::text,'none'));
+ end loop;
+ perform pg_temp.g2_check(pg_temp.g2_ulines(pg_temp.e6p('02'))='cancelled:-:sent','Film club''s lines: '||pg_temp.g2_ulines(pg_temp.e6p('02')));
+end $$;
+-- The objects (K-S5, K-N13): leave_series in both schemas, a security definer behind an invoker, only authenticated may
+-- call; chat_place_hidden the database's own; every body this section redefines a security definer with an empty search
+-- path that keeps its grants: nobody for the line triggers, the roll, the eligibility and the row, authenticated for
+-- can_see_guests and request_connection. A series that does not exist hides the place.
+do $$ declare f text; r text; begin
+ foreach f in array array['private.leave_series(uuid)','private.chat_place_hidden(uuid,uuid)','private.attendees_chat_lines()','private.plans_chat_lines()',
+   'private.roll_repeating_plans()','private.can_see_guests(uuid)','private.request_connection(uuid,uuid)','private.notification_recipient_eligible(bigint)',
+   'private.chat_row(public.messages,uuid)'] loop
+  perform pg_temp.g2_check((select p.prosecdef and p.proconfig=array['search_path=""'] from pg_catalog.pg_proc p where p.oid=f::regprocedure),
+   f||' is not a security definer with an empty search path');
+ end loop;
+ perform pg_temp.g2_check((select not p.prosecdef and p.proconfig=array['search_path=""'] from pg_catalog.pg_proc p where p.oid='public.leave_series(uuid)'::regprocedure),
+  'public.leave_series is not an invoker with an empty search path');
+ foreach f in array array['private.chat_place_hidden(uuid,uuid)','private.attendees_chat_lines()','private.plans_chat_lines()','private.roll_repeating_plans()',
+   'private.notification_recipient_eligible(bigint)','private.chat_row(public.messages,uuid)'] loop
+  foreach r in array array['public','anon','authenticated','service_role'] loop
+   perform pg_temp.g2_check(not has_function_privilege(r,f,'execute'),r||' may execute '||f);
+  end loop;
+ end loop;
+ foreach f in array array['private.leave_series(uuid)','public.leave_series(uuid)','private.can_see_guests(uuid)','private.request_connection(uuid,uuid)',
+   'public.request_connection(uuid,uuid)'] loop
+  foreach r in array array['public','anon','service_role'] loop
+   perform pg_temp.g2_check(not has_function_privilege(r,f,'execute'),r||' may execute '||f);
+  end loop;
+  perform pg_temp.g2_check(has_function_privilege('authenticated',f,'execute'),'authenticated may not execute '||f);
+ end loop;
+ perform pg_temp.g2_check(private.chat_place_hidden(gen_random_uuid(),pg_temp.e6('01')) and private.chat_place_hidden(pg_temp.e6p('05'),null),
+  'A series that does not exist, or nobody, sees the place');
+end $$;
+rollback;
+
+-- 2b. One roll, with 01 signed in (challenge NOTE 8). Before it, in this order: 01 invites 07 in the app; 09, 10 and 11
+-- are made (11 Can't go, I9); 06 leaves, so 09's bringer is not carried (G-N3); 03 says Can't go (a cant_go line on the
+-- old occurrence, for I2); 01 cancels Film club just this one; Board game night's and Film club's times go into the
+-- past; the roll.
+begin;
+select pg_temp.e6_cast();
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('01'));
+select pg_temp.g2_check(pg_temp.g2_invite(pg_temp.e6p('01'),pg_temp.e6('07'))='app','01 could not invite 07');
+reset role;
+select set_config('resbite.system','roll',true);
+insert into public.attendees(plan_id,user_id,response,brought_by,level) values
+ (pg_temp.e6p('01'),pg_temp.e6('09'),'pending',pg_temp.e6('06'),2),(pg_temp.e6p('01'),pg_temp.e6('10'),'pending',pg_temp.e6('03'),2),
+ (pg_temp.e6p('01'),pg_temp.e6('11'),'declined',pg_temp.e6('03'),2);
+select set_config('resbite.system','',true);
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('06'));
+select public.leave_series(pg_temp.e6p('01'));
+select pg_temp.g2_as(pg_temp.e6('03'));
+select pg_temp.g2_respond(pg_temp.e6p('01'),'declined');
+select pg_temp.g2_as(pg_temp.e6('01'));
+select pg_temp.g2_cancel(pg_temp.e6p('02'),false);
+reset role;
+select set_config('g2.c03old',(pg_temp.g2_last(pg_temp.e6p('01'),'cant_go')).id::text,true);
+select set_config('g2.c03old_row',(select concat_ws('|',m.plan_id,m.event,m.payload,m.state,m.created_at,m.updated_at) from public.messages m
+ where m.id=current_setting('g2.c03old')::bigint),true);
+select pg_temp.g2_past(pg_temp.e6p('01'));
+select pg_temp.g2_past(pg_temp.e6p('02'));
+select pg_temp.g2_as(pg_temp.e6('01'));
+select pg_temp.g2_check(pg_temp.g2_roll()=2,'The roll did not roll Board game night and Film club alone');
+select set_config('request.jwt.claims','',true);
+select set_config('g2.new',pg_temp.g2_next(pg_temp.e6p('01'))::text,true);
+-- G-B6: the roll carries admin 02 and guests 03, 04, 05, 07, 09, 10 and 11 onto the new occurrence, not answered, and
+-- writes no joined line and no admin line there. NOTE 8: ended {actor null, title} on the old occurrence and next {actor
+-- null, plan_id, starts_at, time_zone, place_label, place_tbd} on the new one, the chat's last message, though 01 is
+-- signed in. Film club: no ended line on its cancelled occurrence, and a next line on its new one. G-N3: 09 is carried
+-- with no bringer, 10 keeps 03. I9 (CO-Q1 "carried"): 11, brought by 03, who said Can't go, is carried, not answered,
+-- with bringer 03 and level 2.
+do $$ declare v_new uuid := current_setting('g2.new')::uuid; v_film uuid := pg_temp.g2_next(pg_temp.e6p('02')); p public.plans;
+ e public.messages := pg_temp.g2_last(pg_temp.e6p('01'),'ended'); n public.messages := pg_temp.g2_last(pg_temp.e6p('01'),'next'); begin
+ select * into p from public.plans where id=v_new;
+ perform pg_temp.g2_check(p.series_id=pg_temp.e6p('01'),'The roll did not make Board game night''s next occurrence');
+ perform pg_temp.g2_check(pg_temp.g2_who(array(select a.user_id from public.attendees a where a.plan_id=v_new))='02,03,04,05,07,09,10,11'
+   and not exists(select 1 from public.attendees a where a.plan_id=v_new and a.response<>'pending'),
+  'Carried: '||pg_temp.g2_who(array(select a.user_id from public.attendees a where a.plan_id=v_new)));
+ perform pg_temp.g2_check(exists(select 1 from public.plan_admins pa where pa.plan_id=v_new and pa.user_id=pg_temp.e6('02')),'02 was not carried as an admin');
+ perform pg_temp.g2_check((select coalesce(string_agg(m.event,',' order by m.id),'') from public.messages m where m.plan_id=v_new)='next',
+  'Lines on the new occurrence: '||(select coalesce(string_agg(m.event,',' order by m.id),'') from public.messages m where m.plan_id=v_new));
+ perform pg_temp.g2_check(e.plan_id=pg_temp.e6p('01') and e.author_id is null and e.payload=jsonb_build_object('actor',null,'title','Board game night'),
+  'The ended line: '||coalesce(row_to_json(e)::text,'none'));
+ perform pg_temp.g2_check(n.plan_id=v_new and n.author_id is null and pg_temp.g2_keys(n.payload)='actor,place_label,place_tbd,plan_id,starts_at,time_zone'
+   and n.payload->'actor'='null'::jsonb and n.payload->>'plan_id'=v_new::text and (n.payload->>'starts_at')::timestamptz=p.starts_at
+   and n.payload->>'time_zone'='Europe/London' and n.payload->>'place_label'='Ana''s flat' and n.payload->'place_tbd'='false'::jsonb,
+  'The next line: '||coalesce(row_to_json(n)::text,'none'));
+ perform pg_temp.g2_check((select last_message_id from public.chats where series_id=pg_temp.e6p('01'))=n.id,'The next line is not the chat''s last message');
+ perform pg_temp.g2_check(not exists(select 1 from public.messages m where m.series_id=pg_temp.e6p('02') and m.event='ended')
+   and (pg_temp.g2_last(pg_temp.e6p('02'),'next')).plan_id=v_film
+   and ((pg_temp.g2_last(pg_temp.e6p('02'),'next')).payload->>'starts_at')::timestamptz=(select starts_at from public.plans where id=v_film),
+  'Film club''s lines: '||pg_temp.g2_ulines(pg_temp.e6p('02')));
+ perform pg_temp.g2_check((select brought_by from public.attendees where plan_id=v_new and user_id=pg_temp.e6('09')) is null
+   and (select brought_by from public.attendees where plan_id=v_new and user_id=pg_temp.e6('10'))=pg_temp.e6('03'),
+  '09 keeps a bringer who was not carried, or 10 lost 03');
+ perform pg_temp.g2_check((select (response,brought_by,level) from public.attendees where plan_id=v_new and user_id=pg_temp.e6('11'))
+   is not distinct from ('pending'::text,pg_temp.e6('03'),2::smallint),'11, brought by 03, who said Can''t go, is not carried as brought');
+end $$;
+-- I2 (this occurrence only), on the new occurrence, within 10 minutes of 03's cant_go line on the old one: 03 says Can't
+-- go, one new cant_go line on the new occurrence, the old line as it was (a series-wide search would rewrite it and
+-- write none); then Going, the new line reads deleted and the old one stays sent (a series-wide search would delete the
+-- old one). ended and next name nobody, so H33's guard hides neither failure. 03 ends Going.
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('03'));
+select pg_temp.g2_respond(current_setting('g2.new')::uuid,'declined');
+reset role;
+do $$ declare v_new uuid := current_setting('g2.new')::uuid; begin
+ perform pg_temp.g2_check((select concat_ws('|',m.plan_id,m.event,m.payload,m.state,m.created_at,m.updated_at) from public.messages m
+   where m.id=current_setting('g2.c03old')::bigint)=current_setting('g2.c03old_row'),'03''s old cant_go line changed');
+ perform pg_temp.g2_check((select count(*) from public.messages m where m.series_id=pg_temp.e6p('01') and m.event='cant_go' and m.plan_id=v_new
+   and m.state='sent' and m.payload=jsonb_build_object('actor',pg_temp.e6('03'),'user',pg_temp.e6('03')))=1,
+  'No new cant_go line on the new occurrence: '||pg_temp.g2_ulines(pg_temp.e6p('01')));
+ perform set_config('g2.c03new',(pg_temp.g2_last(pg_temp.e6p('01'),'cant_go')).id::text,true);
+end $$;
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('03'));
+select pg_temp.g2_respond(current_setting('g2.new')::uuid,'accepted');
+reset role;
+select pg_temp.g2_check((select state from public.messages where id=current_setting('g2.c03new')::bigint)='deleted'
+ and (select state from public.messages where id=current_setting('g2.c03old')::bigint)='sent'
+ and (select response from public.attendees where plan_id=current_setting('g2.new')::uuid and user_id=pg_temp.e6('03'))='accepted',
+ 'Going again on the new occurrence: '||pg_temp.g2_ulines(pg_temp.e6p('01')));
+-- I11, as 05 (not answered on the new occurrence, not a host): chat_messages and chat_messages_since give the next line
+-- with no place_label and with place_tbd, and so do chat_summary's last (that line) and my_chat_overview's last. As 02
+-- (an admin, not answered there: a host) and 03 (Going there): the place. Every row carries its message's plan_id
+-- (carry 4).
+do $$ declare v_next bigint := (pg_temp.g2_last(pg_temp.e6p('01'),'next')).id; r jsonb; n text; begin
+ perform pg_temp.g2_as(pg_temp.e6('05'));
+ r := public.chat_messages(pg_temp.e6p('01'));
+ perform pg_temp.g2_check(not (pg_temp.g2_row(r,v_next)->'payload' ? 'place_label') and pg_temp.g2_row(r,v_next)->'payload'->'place_tbd'='false'::jsonb,
+  'chat_messages as 05 gives the place: '||coalesce(pg_temp.g2_row(r,v_next)::text,'no row'));
+ perform pg_temp.g2_check(jsonb_array_length(r->'rows')>0 and not exists(select 1 from jsonb_array_elements(r->'rows') e
+   where (e.value->>'plan_id')::uuid is distinct from (select m.plan_id from public.messages m where m.id=(e.value->>'id')::bigint)),
+  'A row''s plan_id is not its message''s: '||(r->'rows')::text);
+ r := public.chat_messages_since(pg_temp.e6p('01'),0,null);
+ perform pg_temp.g2_check(not (pg_temp.g2_row(r,v_next)->'payload' ? 'place_label') and pg_temp.g2_row(r,v_next)->'payload' ? 'place_tbd',
+  'chat_messages_since as 05 gives the place: '||coalesce(pg_temp.g2_row(r,v_next)::text,'no row'));
+ r := public.chat_summary(pg_temp.e6p('01'))->'last';
+ perform pg_temp.g2_check((r->>'id')::bigint=v_next and not (r->'payload' ? 'place_label') and r->'payload' ? 'place_tbd',
+  'chat_summary''s last as 05: '||coalesce(r::text,'none'));
+ r := public.my_chat_overview()->'chats'->(pg_temp.e6p('01')::text)->'last';
+ perform pg_temp.g2_check((r->>'id')::bigint=v_next and not (r->'payload' ? 'place_label') and r->'payload' ? 'place_tbd',
+  'my_chat_overview''s last as 05: '||coalesce(r::text,'none'));
+ foreach n in array array['02','03'] loop
+  perform pg_temp.g2_as(pg_temp.e6(n));
+  perform pg_temp.g2_check(pg_temp.g2_row(public.chat_messages(pg_temp.e6p('01')),v_next)->'payload'->>'place_label'='Ana''s flat'
+    and public.chat_summary(pg_temp.e6p('01'))->'last'->'payload'->>'place_label'='Ana''s flat',n||' does not read the place in the next line');
+ end loop;
+end $$;
+-- 01 changes the place on the new occurrence: as 05, the changed line keeps what (place) and has no place_label; as 03
+-- it has the new one.
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('01'));
+select pg_temp.g2_place(current_setting('g2.new')::uuid,'The games cafe');
+reset role;
+do $$ declare v_changed bigint := (pg_temp.g2_last(pg_temp.e6p('01'),'changed')).id; r jsonb; begin
+ perform pg_temp.g2_check(v_changed is not null,'No changed line');
+ perform pg_temp.g2_as(pg_temp.e6('05'));
+ r := pg_temp.g2_row(public.chat_messages(pg_temp.e6p('01')),v_changed);
+ perform pg_temp.g2_check(r->'payload'->>'what'='place' and not (r->'payload' ? 'place_label'),'The changed line as 05: '||coalesce(r::text,'no row'));
+ r := public.chat_summary(pg_temp.e6p('01'))->'last';
+ perform pg_temp.g2_check((r->>'id')::bigint=v_changed and not (r->'payload' ? 'place_label'),'chat_summary''s last as 05: '||coalesce(r::text,'none'));
+ perform pg_temp.g2_as(pg_temp.e6('03'));
+ r := pg_temp.g2_row(public.chat_messages(pg_temp.e6p('01')),v_changed);
+ perform pg_temp.g2_check(r->'payload'->>'place_label'='The games cafe','The changed line as 03: '||coalesce(r::text,'no row'));
+end $$;
+-- I6: the roll queued invited:<new occurrence>:<04>. 04 leaves: that notice is gone. 01 invites 04 again in the app: one
+-- notice with that key, newer than the roll's.
+select set_config('g2.inv04',(select id from private.notification_outbox
+ where dedupe_key='invited:'||current_setting('g2.new')||':'||pg_temp.e6('04'))::text,true);
+select pg_temp.g2_check(current_setting('g2.inv04')<>'','The roll queued no invited notice for 04');
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('04'));
+select public.leave_series(pg_temp.e6p('01'));
+reset role;
+select pg_temp.g2_check(not exists(select 1 from private.notification_outbox where dedupe_key='invited:'||current_setting('g2.new')||':'||pg_temp.e6('04')),
+ '04''s invited notice stayed after 04 left');
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('01'));
+select pg_temp.g2_check(pg_temp.g2_invite(current_setting('g2.new')::uuid,pg_temp.e6('04'))='app','01 could not invite 04 again');
+reset role;
+select pg_temp.g2_check((select count(*) from private.notification_outbox where dedupe_key='invited:'||current_setting('g2.new')||':'||pg_temp.e6('04')
+  and id>current_setting('g2.inv04')::bigint)=1
+ and not exists(select 1 from private.series_leaves where series_id=pg_temp.e6p('01') and user_id=pg_temp.e6('04')),
+ '04, invited again the same week, has no new notice, or kept the leave');
+rollback;
+
+-- 2c. Leaving while the occurrence runs, then one roll. 04 holds a personal link on Board game night, claimed (a
+-- private.invitations row, made here).
+begin;
+select pg_temp.e6_cast();
+insert into private.invitations(id,plan_id,token_hash,claimed_by)
+ values (gen_random_uuid(),pg_temp.e6p('01'),extensions.digest(repeat('g',64),'sha256'),pg_temp.e6('04'));
+select set_config('g2.outbox',(select count(*) from private.notification_outbox)::text,true);
+-- 04 leaves: the guest row is gone, the leave stored, one line, left {actor 04, user 04}, out of the chat, no notice.
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('04'));
+select public.leave_series(pg_temp.e6p('01'));
+reset role;
+do $$ declare l public.messages := pg_temp.g2_last(pg_temp.e6p('01'),'left'); begin
+ perform pg_temp.g2_check(not exists(select 1 from public.attendees where plan_id=pg_temp.e6p('01') and user_id=pg_temp.e6('04'))
+   and exists(select 1 from private.series_leaves where series_id=pg_temp.e6p('01') and user_id=pg_temp.e6('04')),'04''s row stayed, or no leave');
+ perform pg_temp.g2_check(pg_temp.g2_ulines(pg_temp.e6p('01'))='left:04:sent' and l.plan_id=pg_temp.e6p('01') and l.author_id is null
+   and l.payload=jsonb_build_object('actor',pg_temp.e6('04'),'user',pg_temp.e6('04')),'The left line: '||coalesce(row_to_json(l)::text,'none'));
+ perform pg_temp.g2_check(not private.chat_member(pg_temp.e6p('01'),pg_temp.e6('04')),'04 is still in the chat');
+ perform pg_temp.g2_check((select count(*) from private.notification_outbox)=current_setting('g2.outbox')::bigint,'Leaving queued a notice');
+end $$;
+-- G-N1: the personal link is revoked, so answering it is refused as after remove_guest. Leaving again: 42501 'Not in
+-- this group' (challenge NOTE 12). The admin and the owner can't leave; a guest of the one-off is in no group.
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('04'));
+select pg_temp.g2_refused($$select public.claim_invite(repeat('g',64))$$,'42501','Invitation unavailable');
+select pg_temp.g2_refused($$select public.leave_series(pg_temp.e6p('01'))$$,'42501','Not in this group');
+select pg_temp.g2_as(pg_temp.e6('02'));
+select pg_temp.g2_refused($$select public.leave_series(pg_temp.e6p('01'))$$,'42501','Hosts can''t leave');
+select pg_temp.g2_as(pg_temp.e6('01'));
+select pg_temp.g2_refused($$select public.leave_series(pg_temp.e6p('01'))$$,'42501','Owner can''t leave');
+select pg_temp.g2_as(pg_temp.e6('03'));
+select pg_temp.g2_refused($$select public.leave_series(pg_temp.e6p('05'))$$,'42501','Not in this group');
+-- CH-P4: 02 says Can't go, which ends the admin role; then 02 may leave: one line, left {actor 02, user 02}.
+select pg_temp.g2_as(pg_temp.e6('02'));
+select pg_temp.g2_respond(pg_temp.e6p('01'),'declined');
+select public.leave_series(pg_temp.e6p('01'));
+reset role;
+select pg_temp.g2_check(pg_temp.g2_ulines(pg_temp.e6p('01'))='left:04:sent,cant_go:02:sent,left:02:sent'
+ and (pg_temp.g2_last(pg_temp.e6p('01'),'left')).payload=jsonb_build_object('actor',pg_temp.e6('02'),'user',pg_temp.e6('02'))
+ and not exists(select 1 from public.plan_admins where plan_id=pg_temp.e6p('01') and user_id=pg_temp.e6('02')),
+ 'Lines once 02 stepped down and left: '||pg_temp.g2_ulines(pg_temp.e6p('01')));
+-- The roll carries neither 04 nor 02. 01 invites 04 again: the leave goes, and 04 is in the group.
+select pg_temp.g2_past(pg_temp.e6p('01'));
+select pg_temp.g2_check(pg_temp.g2_roll()=1,'The roll did not roll Board game night alone');
+select set_config('g2.new',pg_temp.g2_next(pg_temp.e6p('01'))::text,true);
+select pg_temp.g2_check(pg_temp.g2_who(array(select a.user_id from public.attendees a where a.plan_id=current_setting('g2.new')::uuid))='03,05,06',
+ 'Carried: '||pg_temp.g2_who(array(select a.user_id from public.attendees a where a.plan_id=current_setting('g2.new')::uuid)));
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('01'));
+select pg_temp.g2_check(pg_temp.g2_invite(current_setting('g2.new')::uuid,pg_temp.e6('04'))='app','01 could not invite 04 again');
+reset role;
+select pg_temp.g2_check(not exists(select 1 from private.series_leaves where series_id=pg_temp.e6p('01') and user_id=pg_temp.e6('04'))
+ and private.chat_member(pg_temp.e6p('01'),pg_temp.e6('04')),'04, invited again, kept the leave or is not in the group');
+rollback;
+
+-- 2d. A leave after the end, then one roll; last, a leave from a closed group.
+begin;
+select pg_temp.e6_cast();
+-- G-N13: Board game night's current occurrence has ended (before the roll); 03 leaves: the leave is stored, the row
+-- stays (a real attendance), and 03 is out of the chat. NOTE 3: series_is_group says no to 03, who can still read the
+-- occurrence.
+select pg_temp.g2_past(pg_temp.e6p('01'));
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('03'));
+select public.leave_series(pg_temp.e6p('01'));
+select pg_temp.g2_check(not public.series_is_group(pg_temp.e6p('01')),'series_is_group says yes to 03, who left after the end');
+select pg_temp.g2_check(exists(select 1 from public.plans where id=pg_temp.e6p('01')),'03 can no longer read the occurrence');
+reset role;
+select pg_temp.g2_check(exists(select 1 from private.series_leaves where series_id=pg_temp.e6p('01') and user_id=pg_temp.e6('03'))
+ and exists(select 1 from public.attendees where plan_id=pg_temp.e6p('01') and user_id=pg_temp.e6('03'))
+ and not private.chat_member(pg_temp.e6p('01'),pg_temp.e6('03')) and pg_temp.g2_ulines(pg_temp.e6p('01'))='left:03:sent',
+ 'A leave after the end: '||pg_temp.g2_ulines(pg_temp.e6p('01')));
+-- S1: 02 announces to Going, then (its time moved 61 seconds back, so 'Too fast' does not answer) to everyone. Neither
+-- reaches 03, and the summary's Going and Everyone leave 03 out: Going 01, 02, 04; Everyone 01, 02, 04, 05, 06.
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('02'));
+select set_config('g2.going',(public.send_announcement(pg_temp.e6p('01'),'Who is bringing snacks?','going',gen_random_uuid())->>'id'),true);
+reset role;
+update public.messages set created_at=now()-interval '61 seconds' where id=current_setting('g2.going')::bigint;
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('02'));
+select set_config('g2.everyone',(public.send_announcement(pg_temp.e6p('01'),'Doors at seven','everyone',gen_random_uuid())->>'id'),true);
+select pg_temp.g2_check(public.chat_summary(pg_temp.e6p('01'))@>'{"going":3,"everyone":5}','The summary''s audiences as 02: '||public.chat_summary(pg_temp.e6p('01'))::text);
+reset role;
+do $$ begin
+ perform pg_temp.g2_check(not exists(select 1 from private.notification_outbox where kind='announcement' and recipient_id=pg_temp.e6('03')
+   and message_id in (current_setting('g2.going')::bigint,current_setting('g2.everyone')::bigint)),'An announcement reached 03, who left');
+ perform pg_temp.g2_check(pg_temp.g2_who(array(select private.announcement_audience(pg_temp.e6p('01'),'going')))='01,02,04'
+   and pg_temp.g2_who(array(select private.announcement_audience(pg_temp.e6p('01'),'everyone')))='01,02,04,05,06',
+  'The audiences: '||pg_temp.g2_who(array(select private.announcement_audience(pg_temp.e6p('01'),'everyone'))));
+end $$;
+-- 01 invites 03 again before the roll: refused on the ended occurrence, nothing written, the leave stays (Decision 2).
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('01'));
+select pg_temp.g2_refused($$select public.invite_contacts(pg_temp.e6p('01'),jsonb_build_array(jsonb_build_object('user',pg_temp.e6('03'))))$$,
+ '42501','Active plan owner required');
+reset role;
+select pg_temp.g2_check((select count(*) from public.attendees where user_id=pg_temp.e6('03') and plan_id in (select id from public.plans where series_id=pg_temp.e6p('01')))=1
+ and exists(select 1 from private.series_leaves where series_id=pg_temp.e6p('01') and user_id=pg_temp.e6('03')),'A refused invitation changed 03''s row or leave');
+-- The roll does not carry 03, and the leave stays.
+select pg_temp.g2_check(pg_temp.g2_roll()=1,'The roll did not roll Board game night alone');
+select pg_temp.g2_check(pg_temp.g2_who(array(select a.user_id from public.attendees a where a.plan_id=pg_temp.g2_next(pg_temp.e6p('01'))))='02,04,05,06'
+ and exists(select 1 from private.series_leaves where series_id=pg_temp.e6p('01') and user_id=pg_temp.e6('03'))
+ and not private.chat_member(pg_temp.e6p('01'),pg_temp.e6('03')),
+ 'Carried after 03 left: '||pg_temp.g2_who(array(select a.user_id from public.attendees a where a.plan_id=pg_temp.g2_next(pg_temp.e6p('01')))));
+-- Challenge NOTE 12, a closed group: Film club stopped by Edit, its end moved 49 hours back, so its chat is closed. 04
+-- may leave: one line, left {actor 04, user 04}; the row stays (ended, not cancelled); 04 is out.
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('01'));
+select pg_temp.g2_repeat(pg_temp.e6p('02'),null);
+reset role;
+select set_config('resbite.system','roll',true);
+update public.plans set starts_at=now()-interval '51 hours',ends_at=now()-interval '49 hours' where id=pg_temp.e6p('02');
+select set_config('resbite.system','',true);
+select pg_temp.g2_check(private.chat_open(pg_temp.e6p('02')) is false,'Film club''s chat is open');
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('04'));
+select public.leave_series(pg_temp.e6p('02'));
+reset role;
+select pg_temp.g2_check(pg_temp.g2_ulines(pg_temp.e6p('02'))='stopped:-:sent,left:04:sent'
+ and (pg_temp.g2_last(pg_temp.e6p('02'),'left')).payload=jsonb_build_object('actor',pg_temp.e6('04'),'user',pg_temp.e6('04'))
+ and exists(select 1 from public.attendees where plan_id=pg_temp.e6p('02') and user_id=pg_temp.e6('04'))
+ and not private.chat_member(pg_temp.e6p('02'),pg_temp.e6('04')),'A leave from a closed group: '||pg_temp.g2_ulines(pg_temp.e6p('02')));
+rollback;
+
+-- 2e. Who sees the group (CH-P21, G-S3). 01 invites 07 in the app, then one roll, so 07 and 05 are not answered on the
+-- past occurrence and carried.
+begin;
+select pg_temp.e6_cast();
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('01'));
+select pg_temp.g2_check(pg_temp.g2_invite(pg_temp.e6p('01'),pg_temp.e6('07'))='app','01 could not invite 07');
+reset role;
+select pg_temp.g2_past(pg_temp.e6p('01'));
+select pg_temp.g2_check(pg_temp.g2_roll()=1,'The roll did not roll Board game night alone');
+select set_config('g2.new',pg_temp.g2_next(pg_temp.e6p('01'))::text,true);
+select pg_temp.g2_check((select count(*) from public.attendees where user_id in (pg_temp.e6('05'),pg_temp.e6('07')) and response='pending'
+ and plan_id in (pg_temp.e6p('01'),current_setting('g2.new')::uuid))=4,'05 and 07 are not pending on both occurrences');
+-- As 05 (not answered): the group's guests, on its current occurrence, not the one-off's; 02's name.
+do $$ begin
+ perform pg_temp.g2_as(pg_temp.e6('05'));
+ perform pg_temp.g2_check(private.can_see_guests(current_setting('g2.new')::uuid),'05 may not see the group''s guests');
+ perform pg_temp.g2_check(not private.can_see_guests(pg_temp.e6p('05')),'05 may see the one-off''s guests');
+end $$;
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('05'));
+select pg_temp.g2_check((select display_name from public.profiles where id=pg_temp.e6('02'))='Ada Admin','05 does not read 02''s name');
+select pg_temp.g2_check((select count(*) from public.attendees where plan_id=current_setting('g2.new')::uuid)=6,'05 does not read the group''s guest list');
+-- 03 (not answered on the new occurrence) asks 05 (not answered) on the group: requested. On the one-off, 05 is not
+-- answered: 42501 'Not on this resbite'. series_is_group from the past occurrence's series: yes.
+select pg_temp.g2_as(pg_temp.e6('03'));
+select pg_temp.g2_check(public.request_connection(pg_temp.e6('05'),current_setting('g2.new')::uuid)='requested','03 could not ask 05 on the group');
+select pg_temp.g2_refused($$select public.request_connection(pg_temp.e6('05'),pg_temp.e6p('05'))$$,'42501','Not on this resbite');
+select pg_temp.g2_check(public.series_is_group((select series_id from public.plans where id=pg_temp.e6p('01'))),'series_is_group says no to 03 from the past occurrence');
+-- G-S3: 05 leaves. On the past occurrence, where 05's row is not answered: no guests, and asking 03 there is 42501
+-- 'Names required'. series_is_group: no.
+select pg_temp.g2_as(pg_temp.e6('05'));
+select public.leave_series(pg_temp.e6p('01'));
+select pg_temp.g2_check((select response from public.attendees where plan_id=pg_temp.e6p('01') and user_id=pg_temp.e6('05'))='pending',
+ '05 has no unanswered row on the past occurrence');
+select pg_temp.g2_check((select count(*) from public.attendees where plan_id=pg_temp.e6p('01'))=1,'05, who left, reads the past occurrence''s guests');
+select pg_temp.g2_refused($$select public.request_connection(pg_temp.e6('03'),pg_temp.e6p('01'))$$,'42501','Names required');
+select pg_temp.g2_check(not public.series_is_group(pg_temp.e6p('01')),'series_is_group says yes to 05, who left');
+-- Removed rather than left (challenge NOTE 12): 01 removes 07 from the current occurrence; on the past one, where 07 is
+-- not answered, 07 sees no guests.
+select pg_temp.g2_as(pg_temp.e6('01'));
+select public.remove_guest(current_setting('g2.new')::uuid,pg_temp.e6('07'));
+reset role;
+do $$ begin
+ perform pg_temp.g2_as(pg_temp.e6('05'));
+ perform pg_temp.g2_check(not private.can_see_guests(pg_temp.e6p('01')),'05, who left, may see the past occurrence''s guests');
+ perform pg_temp.g2_as(pg_temp.e6('07'));
+ perform pg_temp.g2_check((select response from public.attendees where plan_id=pg_temp.e6p('01') and user_id=pg_temp.e6('07'))='pending'
+   and not private.can_see_guests(pg_temp.e6p('01')),'07, who was removed, may see the past occurrence''s guests');
+end $$;
+rollback;
+
+-- 2f. Pushes in a cancelled week (P2-Q1, Decision 7, B1), through notification_recipient_eligible. No roll. Each message
+-- is the first in its chat in this block, so the one-a-minute rule holds no notice back.
+begin;
+select pg_temp.e6_cast();
+-- Board game night, "Cancel just this one": 03's message and 02's announcement to everyone may both be told to 04. 05
+-- mutes the chat: the message no longer, the announcement still. 06 mutes the resbite: neither.
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('01'));
+select pg_temp.g2_cancel(pg_temp.e6p('01'),false);
+select pg_temp.g2_as(pg_temp.e6('03'));
+select set_config('g2.m1',pg_temp.g2_send(pg_temp.e6p('01'),'Drinks anyway?')::text,true);
+select pg_temp.g2_as(pg_temp.e6('02'));
+select set_config('g2.a1',(public.send_announcement(pg_temp.e6p('01'),'The pub instead, same time','everyone',gen_random_uuid())->>'id'),true);
+select pg_temp.g2_as(pg_temp.e6('05'));
+select public.set_chat_mute(pg_temp.e6p('01'),true);
+reset role;
+insert into public.plan_mutes(series_id,user_id) values (pg_temp.e6p('01'),pg_temp.e6('06'));
+do $$ declare m bigint := current_setting('g2.m1')::bigint; a bigint := current_setting('g2.a1')::bigint; begin
+ perform pg_temp.g2_check(pg_temp.g2_told('chat_message',m,pg_temp.e6('04')) and pg_temp.g2_told('announcement',a,pg_temp.e6('04')),
+  'A group''s message or announcement in a cancelled week may not be told to 04');
+ perform pg_temp.g2_check(not pg_temp.g2_told('chat_message',m,pg_temp.e6('05')) and pg_temp.g2_told('announcement',a,pg_temp.e6('05')),
+  '05, who muted the chat, may be told the message, or not the announcement');
+ perform pg_temp.g2_check(not pg_temp.g2_told('chat_message',m,pg_temp.e6('06')) and not pg_temp.g2_told('announcement',a,pg_temp.e6('06')),
+  '06, who muted the resbite, may be told');
+end $$;
+-- Film club, "Cancel this and stop repeating", its stop time 47 hours back: both may be told to 04. At 48 hours and a
+-- minute (closed): neither.
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('01'));
+select pg_temp.g2_cancel(pg_temp.e6p('02'),true);
+reset role;
+update public.chats set stopped_at=stopped_at-interval '47 hours' where series_id=pg_temp.e6p('02');
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('03'));
+select set_config('g2.m2',pg_temp.g2_send(pg_temp.e6p('02'),'Same crew, new night?')::text,true);
+select pg_temp.g2_as(pg_temp.e6('02'));
+select set_config('g2.a2',(public.send_announcement(pg_temp.e6p('02'),'Thanks for every film','everyone',gen_random_uuid())->>'id'),true);
+reset role;
+select pg_temp.g2_check(pg_temp.g2_told('chat_message',current_setting('g2.m2')::bigint,pg_temp.e6('04'))
+ and pg_temp.g2_told('announcement',current_setting('g2.a2')::bigint,pg_temp.e6('04')),'The stopped group''s goodbye may not be told within 48 hours');
+update public.chats set stopped_at=now()-interval '48 hours 1 minute' where series_id=pg_temp.e6p('02');
+select pg_temp.g2_check(private.chat_open(pg_temp.e6p('02')) is false
+ and not pg_temp.g2_told('chat_message',current_setting('g2.m2')::bigint,pg_temp.e6('04'))
+ and not pg_temp.g2_told('announcement',current_setting('g2.a2')::bigint,pg_temp.e6('04')),'A closed group''s message may still be told');
+-- The one-off (H30): 03 writes, then 01 cancels the Picnic: 04's notice may no longer be told.
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('03'));
+select set_config('g2.m3',pg_temp.g2_send(pg_temp.e6p('05'),'Blanket or chairs?')::text,true);
+select pg_temp.g2_as(pg_temp.e6('01'));
+select pg_temp.g2_cancel(pg_temp.e6p('05'),false);
+reset role;
+select pg_temp.g2_check(not pg_temp.g2_told('chat_message',current_setting('g2.m3')::bigint,pg_temp.e6('04')),'A cancelled one-off''s message may still be told');
 rollback;

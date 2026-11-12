@@ -381,7 +381,8 @@ reset role;
 -- The page's rows and names. names maps each author and each person in a payload (actor, user, brought_by: H22) to a
 -- first name: 03 'Mia', 04 'Leo', 01 'Ana' (an actor); 09, being deleted, and c1…99, with no profile, to null (the app
 -- shows "Someone"). The `changed` line maps nothing: its place label is free text, though it holds 08's uuid. Every row
--- has the plan's shape; client_id is there only on the viewer's own rows, and is the one stored.
+-- has the plan's shape, with its plan_id since chat plan 2 (its chat_row); client_id is there only on the viewer's own
+-- rows, and is the one stored.
 do $$ declare r jsonb; v_row jsonb; m public.messages; begin
  perform pg_temp.ch_as(pg_temp.c1('03'));
  r := public.chat_messages(pg_temp.c1p('01'));
@@ -392,10 +393,10 @@ do $$ declare r jsonb; v_row jsonb; m public.messages; begin
  for v_row in select e.value from jsonb_array_elements(r->'rows') e loop
   select * into m from public.messages where id=(v_row->>'id')::bigint;
   if m.author_id=pg_temp.c1('03') then
-   perform pg_temp.ch_check(pg_temp.ch_keys(v_row)='audience,author_id,body,client_id,created_at,event,id,kind,payload,state,updated_at'
+   perform pg_temp.ch_check(pg_temp.ch_keys(v_row)='audience,author_id,body,client_id,created_at,event,id,kind,payload,plan_id,state,updated_at'
     and (v_row->>'client_id')::uuid=m.client_id,'03''s own row has no client_id, or the wrong one: '||v_row::text);
   else
-   perform pg_temp.ch_check(pg_temp.ch_keys(v_row)='audience,author_id,body,created_at,event,id,kind,payload,state,updated_at',
+   perform pg_temp.ch_check(pg_temp.ch_keys(v_row)='audience,author_id,body,created_at,event,id,kind,payload,plan_id,state,updated_at',
     'Someone else''s row shows a client_id, or has the wrong keys: '||v_row::text);
   end if;
  end loop;
@@ -524,7 +525,9 @@ delete from public.chat_reads where user_id=pg_temp.c1('03');
 -- count, names covering each last row, and no announcement (03 has no unanswered invitation). As 05: one chat, the
 -- weekly series' (a group since chat plan 2, so 05's unanswered row there makes 05 a member; not the one-off's) and,
 -- for the one-off, where 05 has not answered, that announcement with its id, author and words (SHOULD 7), names
--- covering its author. As 07 (Can't go after Going): no chat and no announcement.
+-- covering its author. As 07 (Can't go after Going): no chat and no announcement. Since chat plan 2 the weekly
+-- series' last row is the roll's next line (actor null, so unread for both): 03, Going on the rolled occurrence, reads
+-- its place; 05, who has not answered there, reads it without (Decision 11).
 -- The card's announcement (H22, H23) is the series' latest sent announcement whose audience includes the caller: a
 -- newer one to Going, or a newer one to everyone that was removed, leaves 05's card on the first. It is listed only for
 -- the caller's unanswered row on the series' current occurrence while that is active and has not ended: a cancelled
@@ -532,7 +535,8 @@ delete from public.chat_reads where user_id=pg_temp.c1('03');
 -- past occurrence is listed under the current one's id, and a row left only on the past occurrence gives none.
 -- Every announcement here leaves 'sent' and both ids go back afterwards, so slice 2 starts with no pinned announcement.
 do $$ declare v_ann bigint; v_going bigint; v_gone bigint; v_week bigint; v_msg bigint; v_last bigint; v_pinned bigint; v_next uuid;
- s jsonb; o jsonb; begin
+ s jsonb; o jsonb; v_line public.messages; begin
+ select * into v_line from public.messages where series_id=pg_temp.c1p('02') and kind='system' and event='next';
  select c.last_message_id,c.pinned_message_id into v_last,v_pinned from public.chats c where c.series_id=pg_temp.c1p('01');
  select id into v_next from public.plans where repeats_from=pg_temp.c1p('02');
  insert into public.messages(series_id,plan_id,author_id,kind,audience,body,created_at,updated_at) values
@@ -550,17 +554,21 @@ do $$ declare v_ann bigint; v_going bigint; v_gone bigint; v_week bigint; v_msg 
   'my_chat_overview as 03: '||o::text);
  perform pg_temp.ch_check(o->'chats'->(pg_temp.c1p('01')::text)=jsonb_build_object('unread',true,'last',s->'last','open',true,
    'count',(select message_count from public.chats where series_id=pg_temp.c1p('01'))),'The overview''s one-off entry: '||(o->'chats'->(pg_temp.c1p('01')::text))::text);
- perform pg_temp.ch_check(o->'chats'->(pg_temp.c1p('02')::text)=jsonb_build_object('unread',false,'last',null,'open',true,
-   'count',(select message_count from public.chats where series_id=pg_temp.c1p('02'))),'The overview''s weekly entry: '||o::text);
+ perform pg_temp.ch_check(o->'chats'->(pg_temp.c1p('02')::text)=jsonb_build_object('unread',true,'last',private.chat_row(v_line,pg_temp.c1('03')),
+   'open',true,'count',(select message_count from public.chats where series_id=pg_temp.c1p('02')))
+  and (select last_message_id from public.chats where series_id=pg_temp.c1p('02'))=v_line.id
+  and o->'chats'->(pg_temp.c1p('02')::text)->'last'->'payload'->>'place_label'='The park','The overview''s weekly entry: '||o::text);
  perform pg_temp.ch_check(o->'announcements'='{}'::jsonb and o->'names'=jsonb_build_object(pg_temp.c1('04')::text,'Leo'),
   'The overview''s announcements or names as 03: '||o::text);
  perform pg_temp.ch_as(pg_temp.c1('05'));
  o := public.my_chat_overview();
- perform pg_temp.ch_check(o=jsonb_build_object('chats',jsonb_build_object(pg_temp.c1p('02')::text,jsonb_build_object('unread',false,'last',null,
-   'open',true,'count',(select message_count from public.chats where series_id=pg_temp.c1p('02')))),
+ perform pg_temp.ch_check(o=jsonb_build_object('chats',jsonb_build_object(pg_temp.c1p('02')::text,jsonb_build_object('unread',true,
+   'last',private.chat_row(v_line,pg_temp.c1('05')),'open',true,'count',(select message_count from public.chats where series_id=pg_temp.c1p('02')))),
   'announcements',jsonb_build_object(pg_temp.c1p('01')::text,
   jsonb_build_object('id',v_ann,'author_id',pg_temp.c1('01'),'body','Doors open at 7')),'names',jsonb_build_object(pg_temp.c1('01')::text,'Ana')),
   'my_chat_overview as 05: '||o::text);
+ perform pg_temp.ch_check(v_line.id is not null and not (o->'chats'->(pg_temp.c1p('02')::text)->'last'->'payload' ? 'place_label')
+   and o->'chats'->(pg_temp.c1p('02')::text)->'last'->'payload' ? 'place_tbd','05 reads the next line''s place: '||o::text);
  perform pg_temp.ch_as(pg_temp.c1('07'));
  o := public.my_chat_overview();
  perform pg_temp.ch_check(o=jsonb_build_object('chats','{}'::jsonb,'announcements','{}'::jsonb,'names','{}'::jsonb),'my_chat_overview as 07: '||o::text);
@@ -1434,8 +1442,10 @@ select public.change_plan_v4(pg_temp.c1p('06'),current_setting('c1.v6')::int,'Cr
 reset role;
 -- The change is a real event, so its chat has its line (Task 3, H9): so far the one line any trigger writes in slices 1
 -- and 2, where every other row set by hand sits under the roll's flag (the pick's change below writes the other).
+-- Beside it, the two the roll writes itself since chat plan 2, ended and next, on the weekly series in slice 1.
 select pg_temp.ch_check(pg_temp.ch_lines(pg_temp.c1p('06'))='changed:-'
- and (select string_agg(right(m.series_id::text,2)||':'||m.event,',') from public.messages m where m.kind='system' and m.created_at>=now())='06:changed',
+ and (select string_agg(right(m.series_id::text,2)||':'||m.event,',' order by m.id) from public.messages m where m.kind='system' and m.created_at>=now())
+  ='02:ended,02:next,06:changed',
  'Slices 1 and 2 wrote other lines: '||coalesce((select string_agg(right(m.series_id::text,2)||':'||m.event,',' order by m.id) from public.messages m
   where m.kind='system' and m.created_at>=now()),'none'));
 insert into private.device_endpoints(token,user_id,platform) values
@@ -2130,13 +2140,17 @@ release savepoint ch_no_realtime;
 select pg_temp.ch_check(pg_catalog.to_regprocedure('realtime.send(jsonb,text,text,boolean)') is not null
  and not exists(select 1 from public.messages where series_id=pg_temp.c3p('01') and body='Is it still on?'),'The savepoint did not undo the failing signal''s test');
 
--- 01 cancels the party through change_plan_v4: cancelled {actor 01}.
-do $$ declare m public.messages; begin
+-- 01 cancels the party through change_plan_v4: cancelled {actor 01, stop, starts_at, time_zone} (chat plan 2, G-S2):
+-- stop true, as a one-off has no rule to stop, and the cancelled occurrence's start and zone.
+do $$ declare m public.messages; p public.plans; begin
  perform pg_temp.ch_as(pg_temp.c1('01'));
  perform public.change_plan_v4(pg_temp.c3p('01'),(select version from public.plans where id=pg_temp.c3p('01')),'Summer garden party','',
   array['community'],null,null,null,null,null,null::smallint,null,null,true);
  m := pg_temp.ch_last_line(pg_temp.c3p('01'));
- perform pg_temp.ch_check(m.event='cancelled' and m.payload=jsonb_build_object('actor',pg_temp.c1('01')) and pg_temp.ch_signals(m.id)=1,
+ select * into p from public.plans where id=pg_temp.c3p('01');
+ perform pg_temp.ch_check(m.event='cancelled' and pg_temp.ch_keys(m.payload)='actor,starts_at,stop,time_zone'
+   and m.payload->>'actor'=pg_temp.c1('01')::text and m.payload->'stop'='true'::jsonb
+   and (m.payload->>'starts_at')::timestamptz=p.starts_at and m.payload->>'time_zone'=p.time_zone and pg_temp.ch_signals(m.id)=1,
   'The cancel''s line: '||coalesce(row_to_json(m)::text,'none'));
  perform set_config('c3.cancelled',m.id::text,true);
 end $$;

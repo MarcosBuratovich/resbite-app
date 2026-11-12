@@ -11,11 +11,19 @@
 # A session holds the X–Y connection row, which both deletions delete after their plan loop, so both wait there; when
 # it lets go, each takes the chat row of the series it wrote in. Expected: no 40P01, both deletions recorded.
 # (2) The roll racing a deletion. D wrote in two groups' chats: A (series e8b…41, its current occurrence e8b…49, owned
-# by O2) and B (e8b…45, owned by O1), both just ended, so the roll takes B's occurrence before A's (plan order) while the
-# deletion takes A's chat row before B's (series order). A session holds O2's profile row, so the roll, having rolled B,
-# waits on the key check of A's next occurrence (its owner), which runs before the group trigger; the deletion runs
-# meanwhile; the hold lets go and the roll goes on to A. Expected: the roll takes no running group's chat row, so no
-# deadlock: both groups rolled, the deletion recorded, D's words gone.
+# by O2) and B (e8b…45, owned by O1), both just ended. The deletion takes A's chat row before B's (series order). Since
+# Task 2 the roll writes ended and next lines in each group it rolls, which takes that group's chat row, so it rolls in
+# series order too (A, then B), though B's occurrence has the lower plan id. A session holds O2's profile row, so the
+# roll waits on the key check of A's next occurrence (its owner), before any line, holding no chat row; the deletion
+# runs meanwhile; the hold lets go and the roll goes on. Expected: no deadlock: both groups rolled, the deletion
+# recorded, D's words gone.
+# (3) The roll writing lines in two groups racing a deletion that wrote in both (Task 2, carry 3). The same shape, with
+# D3, A3 (series e8b…51, current occurrence e8b…59, owned by O4) and B3 (e8b…55, owned by O3): B3's occurrence has the
+# lower plan id, A3 the lower series id. A session holds B3's chat row, so the roll, having written A3's lines (A3's
+# chat row held), waits on B3's; the deletion then waits on A3's. When the hold lets go, the roll takes B3's row, ends
+# and commits, and the deletion goes on. A roll in plan order would take B3's row first, then wait for A3's while the
+# deletion holds A3's and waits for B3's: a deadlock. Expected: no deadlock, both groups rolled with a next line each,
+# the deletion recorded, D3's words gone.
 # The seed's guest rows are the cast, not answers, so they are made under the roll's flag and write no chat line.
 set -euo pipefail
 pg_bin="$1"
@@ -179,12 +187,77 @@ do \$\$ begin
   raise exception 'FAIL: the roll did not roll both groups';
  end if;
  if not exists(select 1 from private.account_deletion_jobs where user_id='$D')
- or exists(select 1 from public.messages where series_id in ('$SA','$SB') and (author_id is not null or state<>'deleted')) then
+ or exists(select 1 from public.messages where series_id in ('$SA','$SB') and kind='message' and (author_id is not null or state<>'deleted')) then
   raise exception 'FAIL: the deletion was not recorded, or D''s words stayed';
  end if;
 end \$\$;
 SQL
-echo "PASS: the roll racing an account deletion takes no running group's chat row: both groups roll, the deletion goes through"
+echo "PASS: the roll racing an account deletion, waiting before any line, holds no chat row: both groups roll, the deletion goes through"
+
+# (3) The roll writing lines in two groups, racing a deletion that wrote in both.
+D3="$(u 51)"; O3="$(u 52)"; O4="$(u 53)"; SA3="$(p 51)"; SB3="$(p 55)"; PA3="$(p 59)"
+"$pg_bin/psql" "${args[@]}" >"$socket/chat-groups-concurrency-seed3.log" <<SQL
+$(person "$D3" 'Dex Leaving')
+$(person "$O3" 'Oz Owner')
+$(person "$O4" 'Ora Owner')
+insert into auth.sessions(id,user_id,created_at) values ('$(s 51)','$D3',now());
+insert into public.plans(id,owner_id,title,starts_at,ends_at,time_zone,place_label,categories,repeat_weeks) values
+ ('$SA3','$O4','Race choir three',now()-interval '7 days 2 hours',now()-interval '7 days 1 hour','UTC','Hall',array['community'],1),
+ ('$SB3','$O3','Race swim three',now()-interval '2 hours',now()-interval '1 hour','UTC','Pool',array['physical'],1);
+insert into public.plans(id,owner_id,title,starts_at,ends_at,time_zone,place_label,categories,repeat_weeks,series_id,repeats_from) values
+ ('$PA3','$O4','Race choir three',now()-interval '2 hours',now()-interval '1 hour','UTC','Hall',array['community'],1,'$SA3','$SA3');
+select set_config('resbite.system','roll',false);
+insert into public.attendees(plan_id,user_id,response) values ('$PA3','$D3','accepted'),('$SB3','$D3','accepted');
+select set_config('resbite.system','',false);
+insert into public.messages(series_id,plan_id,author_id,kind,body) values ('$SA3','$PA3','$D3','message','Sing again'),('$SB3','$SB3','$D3','message','Swim again');
+do \$\$ begin
+ if (select count(*) from public.chats where series_id in ('$SA3','$SB3') and is_group and stopped_at is null)<>2 then
+  raise exception 'The race''s two series are not running groups';
+ end if;
+end \$\$;
+SQL
+PGAPPNAME=resbite_g2_block3 "$pg_bin/psql" "${args[@]}" >"$socket/chat-groups-concurrency-block3.log" 2>&1 <<SQL &
+begin;
+select 1 from public.chats where series_id='$SB3' for update;
+select pg_sleep(2);
+commit;
+SQL
+block_pid=$!
+wait_for resbite_g2_block3 "wait_event='PgSleep'" 'The chat row holder did not become ready'
+PGAPPNAME=resbite_g2_roll3 "$pg_bin/psql" "${args[@]}" -At >"$socket/chat-groups-concurrency-roll3.log" 2>&1 <<'SQL' &
+\set VERBOSITY verbose
+select 'ROLLED '||private.roll_repeating_plans();
+SQL
+roll_pid=$!
+wait_for resbite_g2_roll3 "wait_event_type='Lock'" "The roll did not wait on B3's chat row"
+PGAPPNAME=resbite_g2_delete_d3 "$pg_bin/psql" "${args[@]}" >"$socket/chat-groups-concurrency-d3.log" 2>&1 <<SQL &
+\\set VERBOSITY verbose
+select private.request_account_deletion('$D3','$(s 51)','$(r 51)',repeat('e',64));
+SQL
+d_pid=$!
+wait_lock_or_done resbite_g2_delete_d3
+block_status=0; roll_status=0; d_status=0
+wait "$block_pid" || block_status=$?
+wait "$roll_pid" || roll_status=$?
+wait "$d_pid" || d_status=$?
+if [[ "$block_status" != 0 || "$roll_status" != 0 || "$d_status" != 0 ]] \
+  || grep -q -E '40P01|deadlock' "$socket/chat-groups-concurrency-roll3.log" "$socket/chat-groups-concurrency-d3.log"; then
+ cat "$socket/chat-groups-concurrency-roll3.log" "$socket/chat-groups-concurrency-d3.log"
+ echo "FAIL: the roll writing lines and a deletion at once deadlocked, or one failed"; exit 1
+fi
+"$pg_bin/psql" "${args[@]}" >"$socket/chat-groups-concurrency-verify3.log" <<SQL
+do \$\$ begin
+ if (select count(*) from public.plans where repeats_from in ('$SB3','$PA3'))<>2
+ or (select count(*) from public.messages m join public.plans n on n.id=m.plan_id where n.repeats_from in ('$SB3','$PA3') and m.event='next')<>2 then
+  raise exception 'FAIL: the roll did not roll both groups, each with its next line';
+ end if;
+ if not exists(select 1 from private.account_deletion_jobs where user_id='$D3')
+ or exists(select 1 from public.messages where series_id in ('$SA3','$SB3') and kind='message' and (author_id is not null or state<>'deleted')) then
+  raise exception 'FAIL: the deletion was not recorded, or D3''s words stayed';
+ end if;
+end \$\$;
+SQL
+echo "PASS: the roll writing lines in two groups, racing a deletion that wrote in both, takes their chat rows in series order: no deadlock"
 
 # Cleanup: the plans (their guest rows, admins and messages go with them), the chat rows, the deletion jobs, the
 # broadcasts, and the people (their profiles, grants, sessions and connections go with them).
