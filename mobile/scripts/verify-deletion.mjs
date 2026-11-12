@@ -1,14 +1,198 @@
+// The Privacy screen (Data & privacy) and account deletion in headless Chrome.
+//   preview   each topic opens its sheet with today's text; the Chat messages topic keeps chat core's words, then what a
+//             report keeps (G-S11); the Contact topic only when the build has an address (below); Blocked people opens
+//             and says nobody is blocked, with no request sent; Delete account's What happens; no backend request
+//   contact   EXPO_PUBLIC_SUPPORT_ADDRESS is inlined when the bundle is built (G-S14), so this runs twice:
+//             - Expo started without it: no Contact topic and no empty placeholder (the gap between the topics' card
+//               and Blocked people's is the gap between Blocked people's and Delete account's);
+//             - Expo restarted with EXPO_PUBLIC_SUPPORT_ADDRESS=help@x.example and this script run with
+//               EXPECT_SUPPORT=help@x.example: the line "Questions, or something wrong in a chat? Write to help@x.example."
+//               is selectable text (user-select: text), Copy address is a button that copies the address and says
+//               Copied, and the address is a link whose href is mailto:help@x.example (G-N10)
+//   blocked   signed in on a stubbed Supabase (start Expo with a stand-in https EXPO_PUBLIC_SUPABASE_URL and
+//             EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY, and pass the same URL to this script): my_blocks answering Leo, a
+//             nameless account and a name holding bidi and zero-width marks lists Leo, Someone and Ana; Unblock Leo
+//             sends block_user { p_user, p_block: false } and the row goes, with no second read; the last one leaves
+//             "You haven’t blocked anyone."; a failed read shows the error line with Try again and names nobody; a
+//             failed unblock keeps the row and says why beside it; a refresh still running when Unblock goes never
+//             brings the row back; Larger Text at 320 px fits (G-S10)
+// Every Supabase request is answered or refused by the fixture; nothing reaches a real account.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium, expect } from "@playwright/test";
+import { AUTH_STORAGE_KEY, button, heading, noChat, visible } from "./qa-helpers.mjs";
 const base = process.env.RESBITE_QA_URL || "http://localhost:8081";
 const enabled = process.env.RESBITE_QA_DELETION_ENABLED === "true";
+// The address this build was started with (EXPO_PUBLIC_SUPPORT_ADDRESS), or none: the Contact topic must match it.
+const expectSupport = process.env.EXPECT_SUPPORT || null;
+const pass = (name) => console.log(`PASS ${name}`);
+const CHAT_CORE =
+  "Chat messages are stored on Resbite’s servers so everyone in a resbite’s chat can read them, including people who join later. They are not end-to-end encrypted. Deleting your account removes the text of your messages as cleanup finishes. Review account deletion’s availability in this build under Delete account.";
+const REPORTS =
+  "If you report a message or a person, the Resbite team reads the report and keeps a copy of what was reported, even if the message or that person’s account is deleted. If you delete your account, the reports you sent are deleted too. A report is deleted 180 days after the team closes it.";
+const NONE_BLOCKED = "You haven’t blocked anyone.";
+const OFFLINE = "Check your connection and try again.";
+const contactLine = (address) => `Questions, or something wrong in a chat? Write to ${address}.`;
+/** The vertical gap between two rows' boxes, in CSS px. */
+async function gapBetween(upper, lower) {
+  const a = await upper.boundingBox(),
+    b = await lower.boundingBox();
+  assert.ok(a && b, "both rows are drawn");
+  return Math.round(b.y - (a.y + a.height));
+}
 const browser = await chromium.launch({
   channel: process.env.RESBITE_QA_BROWSER || "chrome",
   headless: true,
 });
+
+// Blocked people's fixture: Ana, signed in (approved, phone verified), on a stubbed Supabase.
+const ANA = "11111111-1111-4111-8111-111111111111";
+const LEO = "44444444-4444-4444-8444-444444444444";
+const MIA = "33333333-3333-4333-8333-333333333333";
+const SOL = "55555555-5555-4555-8555-555555555555";
+const fixtureJwt = (sub) =>
+  [
+    Buffer.from('{"alg":"HS256","typ":"JWT"}').toString("base64url"),
+    Buffer.from(JSON.stringify({ sub, exp: Math.floor(Date.now() / 1000) + 3600, role: "authenticated" })).toString("base64url"),
+    "fixture-only",
+  ].join(".");
+const ana = {
+  id: ANA,
+  aud: "authenticated",
+  role: "authenticated",
+  email: "fixture@example.invalid",
+  email_confirmed_at: "2026-01-01T00:00:00Z",
+  phone: "447700900834",
+  phone_confirmed_at: "2026-01-01T00:00:00Z",
+  app_metadata: {},
+  user_metadata: { registration_details_version: 1 },
+  created_at: "2026-01-01T00:00:00Z",
+};
+/** my_blocks' rows as the server sends them, newest first. */
+const blockRow = (user_id, name) => ({ user_id, name });
+/** Puts the app in the background and brings it back: RN-web's AppState follows document.visibilityState. */
+async function foreground(page) {
+  await page.evaluate(() => {
+    const set = (v) => Object.defineProperty(document, "visibilityState", { configurable: true, get: () => v });
+    set("hidden");
+    document.dispatchEvent(new Event("visibilitychange"));
+    set("visible");
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+}
+/**
+ * A page signed in as Ana whose blocks change as the app unblocks. `failReads` and `failUnblocks` are how many of the
+ * next my_blocks reads, or block_user calls, fail as a lost connection would; while `holdReads` is set, each read is
+ * parked until `release()`, answered as it would have been on arrival.
+ */
+async function signedIn({ blocks = [], width = 390, failReads = 0, failUnblocks = 0 } = {}) {
+  const context = await browser.newContext({ viewport: { width, height: 844 }, reducedMotion: "reduce", locale: "en-GB" });
+  // No "Get notified?" on any screen this opens.
+  await context.addInitScript(() => {
+    globalThis.__resbiteDevice ??= { reminders: [], calendar: [], permission: "denied" };
+  });
+  const page = await context.newPage();
+  await page.addInitScript(
+    ({ key, session }) => {
+      if (!sessionStorage.getItem("fixture-seeded")) {
+        sessionStorage.setItem(key, JSON.stringify(session));
+        sessionStorage.setItem("fixture-seeded", "1");
+      }
+    },
+    {
+      key: AUTH_STORAGE_KEY,
+      session: {
+        user: ana,
+        access_token: fixtureJwt(ANA),
+        refresh_token: "fixture",
+        token_type: "bearer",
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+        expires_in: 3600,
+      },
+    },
+  );
+  const state = { blocks: [...blocks], failReads, failUnblocks, holdReads: false, parked: [] };
+  const log = [],
+    errors = [],
+    unexpected = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  page.on("console", (m) => {
+    // The 503s are the lost connections under test.
+    if (m.type() === "error" && !/Failed to load resource: the server responded with a status of 503/.test(m.text())) errors.push(m.text());
+  });
+  await page.route("**/*", async (route) => {
+    const req = route.request();
+    const url = new URL(req.url());
+    if (url.origin === new URL(base).origin) return route.continue();
+    if (!url.hostname.endsWith(".supabase.co")) {
+      unexpected.push(`${req.method()} ${url.origin}${url.pathname}`);
+      return route.abort("blockedbyclient");
+    }
+    const path = url.pathname;
+    let body = null;
+    try {
+      body = req.postDataJSON();
+    } catch {
+      body = req.postData();
+    }
+    log.push({ method: req.method(), path, body });
+    const reply = (value, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(value) });
+    const empty = () => route.fulfill({ status: 204, body: "" });
+    const lost = () => reply({ message: "Fixture: lost connection" }, 503);
+    if (path === "/auth/v1/user") return reply(ana);
+    if (path === "/rest/v1/rpc/account_access_status") return reply({ account_id: ANA, status: "approved" });
+    if (path === "/rest/v1/rpc/note_app_session") return empty();
+    if (path === "/rest/v1/profiles") return reply({ id: ANA, display_name: "Ana", avatar_path: null, avatar_revision: 0 });
+    if (path === "/rest/v1/rpc/my_blocks") {
+      const fail = state.failReads > 0;
+      if (fail) state.failReads--;
+      const rows = state.blocks.map((b) => ({ ...b }));
+      const answer = () => (fail ? lost() : reply(rows));
+      if (state.holdReads) return void state.parked.push(answer);
+      return answer();
+    }
+    if (path === "/rest/v1/rpc/block_user") {
+      if (state.failUnblocks > 0) {
+        state.failUnblocks--;
+        return lost();
+      }
+      if (body.p_block === false) state.blocks = state.blocks.filter((b) => b.user_id !== body.p_user);
+      return empty();
+    }
+    // The reads of the signed-in shell that this screen doesn't need (My resbites' chats and the like).
+    if (["/rest/v1/plans", "/rest/v1/attendees", "/rest/v1/plan_mutes", "/rest/v1/activities"].includes(path)) return reply([]);
+    if (path === "/rest/v1/rpc/my_join_requests") return reply([]);
+    if (path === "/rest/v1/rpc/my_connections") return reply({ requests: [], connected: [] });
+    if (noChat(path) !== undefined) return reply(noChat(path));
+    unexpected.push(`${req.method()} ${path}`);
+    return reply({ message: `Unexpected fixture request ${path}` }, 404);
+  });
+  return {
+    page,
+    state,
+    calls: (name) => log.filter((x) => x.method === "POST" && x.path === `/rest/v1/rpc/${name}`).map((x) => x.body),
+    async release() {
+      const answer = state.parked.shift();
+      assert.ok(answer, "a read is held");
+      await answer();
+    },
+    async done() {
+      assert.deepEqual(unexpected, [], "every request was one the fixture expects");
+      assert.deepEqual(errors, [], "no page or console errors");
+      await context.close();
+    },
+  };
+}
+/** Opens Blocked people from Data & privacy's row, as a person does. */
+async function openBlocked(page, query = "") {
+  await page.goto(`${base}/data-privacy${query}`);
+  await expect(heading(page, "Privacy")).toBeVisible();
+  await button(page, "Blocked people").click();
+  await expect(heading(page, "Blocked people")).toBeVisible();
+}
+const shown = (page, words) => visible(page.getByText(words, { exact: true }));
 try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } }),
     errors = [],
@@ -46,6 +230,71 @@ try {
   await expect(
     page.getByRole("button", { name: "Close sheet", exact: true }),
   ).toHaveCount(0);
+  // The Chat messages topic: chat core's words, hedged as Delete account's What happens is, then what a report keeps.
+  await page.getByRole("button", { name: "Chat messages", exact: true }).click();
+  await expect(page.getByText(CHAT_CORE, { exact: true })).toBeVisible();
+  await expect(page.getByText(REPORTS, { exact: true })).toBeVisible();
+  assert.ok(
+    await page.evaluate(
+      ([first, second]) => {
+        const find = (text) => [...document.querySelectorAll("div,span")].find((el) => el.textContent === text);
+        const a = find(first),
+          b = find(second);
+        return Boolean(a && b && a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+      },
+      [CHAT_CORE, REPORTS],
+    ),
+    "the reports line follows chat core's",
+  );
+  await page.getByRole("button", { name: "Close sheet", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Close sheet", exact: true })).toHaveCount(0);
+  pass("preview: the Chat messages topic keeps chat core's words, then what a report keeps");
+  // The Contact topic, as this build was started (G-N10, G-S14).
+  const lastTopic = expectSupport ? "Contact" : "Preview & samples";
+  const blockedRow = button(page, "Blocked people");
+  await expect(blockedRow).toBeVisible();
+  // No empty card or placeholder: the topics' card meets Blocked people's as Blocked people's meets Delete account's.
+  assert.equal(
+    await gapBetween(button(page, lastTopic), blockedRow),
+    await gapBetween(blockedRow, button(page, "Delete account")),
+    "nothing drawn between the topics and Blocked people",
+  );
+  await page.screenshot({ path: join(tmpdir(), `resbite-privacy${expectSupport ? "-contact" : ""}.png`), fullPage: true });
+  if (!expectSupport) {
+    await expect(page.getByRole("button", { name: "Contact", exact: true })).toHaveCount(0);
+    await expect(page.getByText(/Write to|Copy address|Questions, or something wrong/)).toHaveCount(0);
+    await expect(page.locator('a[href^="mailto:"]')).toHaveCount(0);
+    pass("contact: no address in this build, so no Contact topic and no placeholder");
+  } else {
+    const context = page.context();
+    await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: new URL(base).origin });
+    await page.getByRole("button", { name: "Contact", exact: true }).click();
+    await expect(heading(page, "Contact")).toBeVisible();
+    const line = page.getByText(contactLine(expectSupport), { exact: true });
+    await expect(line).toBeVisible();
+    assert.equal(await line.evaluate((el) => getComputedStyle(el).userSelect), "text", "the line, address and all, is selectable");
+    const link = page.getByRole("link", { name: expectSupport, exact: true });
+    await expect(link).toBeVisible();
+    await expect(link).toHaveAttribute("href", `mailto:${expectSupport}`);
+    const copy = page.getByRole("button", { name: "Copy address", exact: true });
+    await expect(copy).toBeVisible();
+    await expect(page.getByText("Copied", { exact: true })).toHaveCount(0);
+    await copy.click();
+    await expect(page.getByText("Copied", { exact: true })).toBeVisible();
+    assert.equal(await page.evaluate(() => navigator.clipboard.readText()), expectSupport, "the address alone is copied");
+    await page.screenshot({ path: join(tmpdir(), "resbite-privacy-contact-sheet.png") });
+    await page.getByRole("button", { name: "Close sheet", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Close sheet", exact: true })).toHaveCount(0);
+    pass(`contact: ${expectSupport} as selectable text, Copy address copies it and says Copied, mailto: link`);
+  }
+  // Blocked people in the preview: no account, so nobody is blocked, and nothing is asked of the server.
+  await blockedRow.click();
+  await expect(heading(page, "Blocked people")).toBeVisible();
+  await expect(page.getByText(NONE_BLOCKED, { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Unblock / })).toHaveCount(0);
+  await button(page, "Privacy").click();
+  await expect(heading(page, "Privacy")).toBeVisible();
+  pass("preview: Blocked people opens, says nobody is blocked, and reads nothing");
   await page
     .getByRole("button", { name: "Delete account", exact: true })
     .click();
@@ -503,6 +752,144 @@ try {
     );
   }
   assert.deepEqual(errors, []);
+  // Blocked people, signed in (G-S10).
+  {
+    const f = await signedIn({ blocks: [blockRow(LEO, "Leo"), blockRow(MIA, null), blockRow(SOL, "\u200FAna\u200B")] }),
+      { page } = f;
+    await openBlocked(page);
+    for (const name of ["Leo", "Someone", "Ana"]) {
+      await expect(shown(page, name)).toBeVisible();
+      await expect(button(page, `Unblock ${name}`)).toBeVisible();
+    }
+    // The marks are gone from what is drawn and what is spoken.
+    await expect(page.getByText(/\u200F|\u200B/)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /\u200F|\u200B/ })).toHaveCount(0);
+    await expect(page.getByText(NONE_BLOCKED, { exact: true })).toHaveCount(0);
+    await page.screenshot({ path: join(tmpdir(), "resbite-blocked-people.png"), fullPage: true });
+    await button(page, "Unblock Leo").click();
+    await expect(shown(page, "Leo")).toHaveCount(0);
+    await expect(button(page, "Unblock Leo")).toHaveCount(0);
+    assert.deepEqual(f.calls("block_user"), [{ p_user: LEO, p_block: false }]);
+    assert.equal(f.calls("my_blocks").length, 1, "the row goes without a second read");
+    await expect(shown(page, "Someone")).toBeVisible();
+    await expect(shown(page, "Ana")).toBeVisible();
+    await button(page, "Unblock Someone").click();
+    await expect(button(page, "Unblock Someone")).toHaveCount(0);
+    await button(page, "Unblock Ana").click();
+    await expect(page.getByText(NONE_BLOCKED, { exact: true })).toBeVisible();
+    assert.deepEqual(f.calls("block_user"), [
+      { p_user: LEO, p_block: false },
+      { p_user: MIA, p_block: false },
+      { p_user: SOL, p_block: false },
+    ]);
+    await button(page, "Privacy").click();
+    await expect(heading(page, "Privacy")).toBeVisible();
+    await f.done();
+    pass("blocked: Leo, Someone and Ana listed; each Unblock sends block_user { p_user, p_block: false } and its row goes; then nobody");
+  }
+  {
+    const f = await signedIn({ blocks: [] }),
+      { page } = f;
+    await openBlocked(page);
+    await expect(page.getByText(NONE_BLOCKED, { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Unblock / })).toHaveCount(0);
+    await f.done();
+    pass("blocked: nobody blocked says so");
+  }
+  {
+    const f = await signedIn({ blocks: [blockRow(LEO, "Leo")], failReads: 1 }),
+      { page } = f;
+    await openBlocked(page);
+    await expect(page.getByRole("alert").filter({ hasText: OFFLINE })).toBeVisible();
+    await expect(button(page, "Try again")).toBeVisible();
+    await expect(page.getByText(NONE_BLOCKED, { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Leo", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Unblock / })).toHaveCount(0);
+    await button(page, "Try again").click();
+    await expect(shown(page, "Leo")).toBeVisible();
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await expect(button(page, "Try again")).toHaveCount(0);
+    assert.equal(f.calls("my_blocks").length, 2);
+    await f.done();
+    pass("blocked: a failed read shows the error line with Try again and names nobody; Try again lists Leo");
+  }
+  {
+    const f = await signedIn({ blocks: [blockRow(LEO, "Leo"), blockRow(MIA, "Mia")], failUnblocks: 1 }),
+      { page } = f;
+    await openBlocked(page);
+    await button(page, "Unblock Leo").click();
+    await expect(page.getByRole("alert").filter({ hasText: OFFLINE })).toBeVisible();
+    await expect(page.getByRole("alert")).toHaveCount(1);
+    await expect(shown(page, "Leo")).toBeVisible();
+    await expect(button(page, "Unblock Leo")).toBeEnabled();
+    // The line sits with Leo's row, before Mia's.
+    const order = await page.evaluate(
+      ([alert, mia]) => {
+        const a = document.querySelector('[role="alert"]');
+        const m = [...document.querySelectorAll('[role="button"]')].find((el) => el.getAttribute("aria-label") === mia);
+        const leo = [...document.querySelectorAll('[role="button"]')].find((el) => el.getAttribute("aria-label") === alert);
+        return Boolean(a && m && leo && leo.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING && a.compareDocumentPosition(m) & Node.DOCUMENT_POSITION_FOLLOWING);
+      },
+      ["Unblock Leo", "Unblock Mia"],
+    );
+    assert.ok(order, "the error follows Leo's Unblock and comes before Mia's row");
+    await button(page, "Unblock Leo").click();
+    await expect(button(page, "Unblock Leo")).toHaveCount(0);
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    assert.deepEqual(f.calls("block_user"), [
+      { p_user: LEO, p_block: false },
+      { p_user: LEO, p_block: false },
+    ]);
+    await f.done();
+    pass("blocked: a failed unblock keeps the row and says why beside it; the next one goes through");
+  }
+  {
+    const f = await signedIn({ blocks: [blockRow(LEO, "Leo")] }),
+      { page } = f;
+    await openBlocked(page);
+    await expect(shown(page, "Leo")).toBeVisible();
+    // A refresh starts (the app comes back to the foreground) and its answer, read before the unblock, is held.
+    f.state.holdReads = true;
+    await foreground(page);
+    await expect.poll(() => f.state.parked.length).toBe(1);
+    await button(page, "Unblock Leo").click();
+    await expect(page.getByText(NONE_BLOCKED, { exact: true })).toBeVisible();
+    f.state.holdReads = false;
+    await f.release();
+    await page.waitForTimeout(300);
+    await expect(page.getByText("Leo", { exact: true })).toHaveCount(0);
+    await expect(page.getByText(NONE_BLOCKED, { exact: true })).toBeVisible();
+    await f.done();
+    pass("blocked: a refresh still running when Unblock goes never brings the row back");
+  }
+  {
+    const long = "Maximiliana Montgomery-Fitzgerald de la Fuente";
+    const f = await signedIn({ blocks: [blockRow(LEO, long), blockRow(MIA, "Mia")], width: 320, failUnblocks: 1 }),
+      { page } = f;
+    await openBlocked(page, "?largeText=1");
+    await page.addStyleTag({ content: '[dir="auto"] { zoom: 1.4; }' });
+    await expect(shown(page, long)).toBeVisible();
+    await button(page, `Unblock ${long}`).click();
+    await expect(page.getByRole("alert").filter({ hasText: OFFLINE })).toBeVisible();
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "fits at 320 px under Larger Text");
+    const clipped = await page.evaluate(() =>
+      [...document.querySelectorAll("[role=button],[role=heading],[role=alert]")]
+        .filter((el) => el.getBoundingClientRect().width > 0)
+        .filter((el) => {
+          const b = el.getBoundingClientRect();
+          return b.left < -1 || b.right > window.innerWidth + 1;
+        })
+        .map((el) => el.getAttribute("aria-label") || el.textContent.trim().slice(0, 40)),
+    );
+    assert.deepEqual(clipped, [], "nothing clipped at 320 px under Larger Text");
+    for (const name of [`Unblock ${long}`, "Unblock Mia"]) {
+      const box = await button(page, name).boundingBox();
+      assert.ok(box.height >= 44, `${name} is at least 44 pt tall`);
+    }
+    await page.screenshot({ path: join(tmpdir(), "resbite-blocked-people-large-320.png"), fullPage: true });
+    await f.done();
+    pass("blocked: Larger Text at 320 px fits, nothing clipped, each Unblock at least 44 pt");
+  }
   console.log(
     `Deletion UI passed: preview/disabled no outbound calls${enabled ? ", enabled synthetic password/OTP (an email account opens on the code, the password one switch away), lost reply, local cleanup failure/retry including drafts, restart receipt recovery, Apple-only account confirms with Apple (closed sheet quiet, different Apple ID refused with the app session unchanged, isolated proof)" : ""}. No real account, email or deletion request.`,
   );

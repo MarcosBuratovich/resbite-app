@@ -15,7 +15,7 @@ import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium, expect } from "@playwright/test";
-import { AUTH_STORAGE_KEY, button, createPlan, fillPlan, heading, later, openEvent, openWhen, openWhere, quietReminders, visible } from "./qa-helpers.mjs";
+import { AUTH_STORAGE_KEY, button, createPlan, fillPlan, heading, inOrder, later, openEvent, openWhen, openWhere, quietReminders, visible } from "./qa-helpers.mjs";
 const base = process.env.RESBITE_QA_URL || "http://localhost:8081";
 const out = process.env.RESBITE_QA_SHOTS || join(tmpdir(), "resbite-ui-audit");
 await mkdir(out, { recursive: true });
@@ -137,15 +137,21 @@ try {
     await button(page, "Close sheet").click();
     const closed = () => expect(page.getByRole("button", { name: "Close sheet" })).toHaveCount(0);
     await closed();
-    // Task 8 (K-N5): the chat's line, hedged as Delete account's What happens is; and the samples line without the
-    // sample chat, and without "this build does not send push notifications".
+    // Task 8 (K-N5): the chat's line, hedged as Delete account's What happens is, followed by chat plan 3's line on what a
+    // report keeps (G-S11); and the samples line without the sample chat, and without "this build does not send push
+    // notifications".
     await button(page, "Chat messages").click();
-    await expect(
-      page.getByText(
-        "Chat messages are stored on Resbite’s servers so everyone in a resbite’s chat can read them, including people who join later. They are not end-to-end encrypted. Deleting your account removes the text of your messages as cleanup finishes. Review account deletion’s availability in this build under Delete account.",
-        { exact: true },
-      ),
-    ).toBeVisible();
+    const chatLine = page.getByText(
+      "Chat messages are stored on Resbite’s servers so everyone in a resbite’s chat can read them, including people who join later. They are not end-to-end encrypted. Deleting your account removes the text of your messages as cleanup finishes. Review account deletion’s availability in this build under Delete account.",
+      { exact: true },
+    );
+    const reportsLine = page.getByText(
+      "If you report a message or a person, the Resbite team reads the report and keeps a copy of what was reported, even if the message or that person’s account is deleted. If you delete your account, the reports you sent are deleted too. A report is deleted 180 days after the team closes it.",
+      { exact: true },
+    );
+    await expect(chatLine).toBeVisible();
+    await expect(reportsLine).toBeVisible();
+    assert.ok(await inOrder(page, [chatLine, reportsLine]), "the reports line follows chat core's");
     await shot("privacy-chat", false);
     await button(page, "Close sheet").click();
     await closed();
@@ -279,6 +285,11 @@ try {
     await button(page, "Profile").click();
     await button(page, "Data & privacy").click();
     await visit("privacy", "Privacy");
+    // Chat plan 3's Blocked people (G-S10): in the preview, nobody is blocked and nothing is read.
+    await button(page, "Blocked people").click();
+    await visit("blocked-people", "Blocked people");
+    await expect(page.getByText("You haven’t blocked anyone.", { exact: true })).toBeVisible();
+    await button(page, "Privacy").click();
     await button(page, "Delete account").click();
     await visit("delete-account", "Delete account");
     if (errors.length) throw Error(errors.join("\n"));
