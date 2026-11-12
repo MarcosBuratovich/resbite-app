@@ -77,7 +77,7 @@ export const CHAT_COPY = {
   /** The announcement limit, one a minute per chat (K-S8, H32 Q35). */
   announceTooFast: "You can send one announcement a minute.",
   /** A paste longer than a message may be, cut where a character ends (H32 Q26). */
-  tooLong: "Only the first 1000 characters fit.",
+  tooLong: "Only the first 1,000 characters fit.",
   /** Over the words the field held when the chat closed (H32 Q46). */
   notSentDraft: "Not sent:",
 } as const;

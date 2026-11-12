@@ -10,6 +10,7 @@ import {
   dayLabel,
   defaultAudience,
   fitBody,
+  fitEdit,
   hasVisibleText,
   headerLine,
   isSeriesId,
@@ -663,4 +664,28 @@ test("an unsent message in a closed chat says the close overtook it (H32 29)", (
 
 test("phoneZone is the phone's zone, one helper for the whole chat", () => {
   assert.equal(phoneZone(), Intl.DateTimeFormat().resolvedOptions().timeZone);
+});
+
+test("fitEdit: an insertion past the limit keeps only what fits, so the text around it is never cut (H35)", () => {
+  const full = "a".repeat(1000);
+  // Typing in the middle of a full message is refused, and the message stays as it was.
+  assert.deepEqual(fitEdit(full, full.slice(0, 500) + "XY" + full.slice(500)), { text: full, cut: true });
+  // At the end too.
+  assert.deepEqual(fitEdit(full, full + "Z"), { text: full, cut: true });
+  // A paste into an empty field keeps its first 1000, as fitBody does.
+  assert.deepEqual(fitEdit("", "P".repeat(4990) + "END"), { text: "P".repeat(1000), cut: true });
+  // A paste in the middle keeps the tail, and as much of the paste as fits.
+  const before = "a".repeat(500) + "b".repeat(497);
+  assert.deepEqual(fitEdit(before, "a".repeat(500) + "XYZW" + "b".repeat(497)), { text: "a".repeat(500) + "XYZ" + "b".repeat(497), cut: true });
+  // A family emoji with room for 3 code points goes whole or not at all.
+  const room3 = "a".repeat(997);
+  assert.deepEqual(fitEdit(room3, "a".repeat(500) + "👨‍👩‍👧‍👦" + "a".repeat(497)), { text: room3, cut: true });
+  // An emoji typed next to another isn't split at the seam.
+  const emoji = "🎉".repeat(999);
+  assert.deepEqual(fitEdit(emoji, "🎉".repeat(500) + "😀😀" + "🎉".repeat(499)), { text: "🎉".repeat(500) + "😀" + "🎉".repeat(499), cut: true });
+  // Within the limit, deleting, and replacing a selection that frees room: as typed.
+  assert.deepEqual(fitEdit("abc", "abXc"), { text: "abXc", cut: false });
+  assert.deepEqual(fitEdit(full, full.slice(1)), { text: full.slice(1), cut: false });
+  const replaced = "a".repeat(400) + "XY" + "a".repeat(590);
+  assert.deepEqual(fitEdit(full, replaced), { text: replaced, cut: false });
 });

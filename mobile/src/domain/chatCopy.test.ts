@@ -79,7 +79,7 @@ test("the copy Task 7's fix round added reads exactly (H31, H32)", () => {
   // H32 (Q35): the announcement limit.
   assert.equal(C.announceTooFast, "You can send one announcement a minute.");
   // H32 (Q26): a paste longer than the limit.
-  assert.equal(C.tooLong, "Only the first 1000 characters fit.");
+  assert.equal(C.tooLong, "Only the first 1,000 characters fit.");
   // H32 (Q46): the draft the close left behind.
   assert.equal(C.notSentDraft, "Not sent:");
 });

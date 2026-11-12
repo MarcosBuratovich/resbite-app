@@ -2015,3 +2015,19 @@ test("nothing is sent or announced without a visible character, by the server's 
   assert.equal(t.server.calls("announce").length, 0);
   assert.deepEqual(t.state().pending, []);
 });
+
+test("a closed chat's unsent messages, failed or not, expire after 7 days (H35)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  t.server.setSummary({ open: false, closesAt: iso(START - 8 * 86_400_000) });
+  await t.queue.put(ME, queuedItem("old-left", START - 8 * 86_400_000));
+  await t.queue.put(ME, queuedItem("old-failed", START - 8 * 86_400_000, { failed: true }));
+  await t.queue.put(ME, queuedItem("new-left", START - 60_000));
+  // Another chat's is that chat's to judge when it is opened.
+  await t.queue.put(ME, queuedItem("other-left", START - 8 * 86_400_000, { series: OTHER_SERIES }));
+  await t.open();
+  assert.deepEqual((await t.queue.list(ME, SERIES)).map((q) => q.clientId), ["new-left"]);
+  assert.deepEqual(t.state().pending.map((q) => q.clientId), ["new-left"]);
+  assert.deepEqual((await t.queue.list(ME, OTHER_SERIES)).map((q) => q.clientId), ["other-left"]);
+  assert.equal(t.server.calls("send").length, 0);
+});

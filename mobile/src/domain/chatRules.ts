@@ -432,3 +432,41 @@ export function fitBody(text: string): { text: string; cut: boolean } {
   }
   return { text: kept, cut: true };
 }
+
+const codePoints = (text: string): number => {
+  let n = 0;
+  for (const _ of text) n++;
+  return n;
+};
+const isHigh = (c: number) => c >= 0xd800 && c <= 0xdbff;
+const isLow = (c: number) => c >= 0xdc00 && c <= 0xdfff;
+
+/**
+ * The field after an edit, within the limit (H35): only what was inserted is cut, to the room the rest leaves, so typing
+ * past the limit in the middle is refused and never cuts the end of the message. A paste into an empty field keeps its
+ * start, as `fitBody` does. `cut` says something was left out.
+ */
+export function fitEdit(before: string, after: string): { text: string; cut: boolean } {
+  if (codePoints(after) <= BODY_LIMIT) return { text: after, cut: false };
+  if (codePoints(before) > BODY_LIMIT) return fitBody(after);
+  // The edit is what lies between the longest common start and end, never splitting a surrogate pair.
+  let start = 0;
+  const most = Math.min(before.length, after.length);
+  while (start < most && before.charCodeAt(start) === after.charCodeAt(start)) start++;
+  if (start > 0 && start < after.length && isHigh(after.charCodeAt(start - 1))) start--;
+  let end = 0;
+  while (end < most - start && before.charCodeAt(before.length - 1 - end) === after.charCodeAt(after.length - 1 - end)) end++;
+  if (end > 0 && isLow(after.charCodeAt(after.length - end))) end--;
+  const head = after.slice(0, start);
+  const tail = after.slice(after.length - end);
+  const inserted = after.slice(start, after.length - end);
+  let room = BODY_LIMIT - codePoints(head) - codePoints(tail);
+  let kept = "";
+  for (const c of characters(inserted)) {
+    const size = codePoints(c);
+    if (size > room) break;
+    kept += c;
+    room -= size;
+  }
+  return { text: head + kept + tail, cut: true };
+}

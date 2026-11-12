@@ -157,7 +157,7 @@ const PICNIC = {
  * the server clock against `closes_at` unless the summary says otherwise. `socket: "refuse"` closes every socket.
  * `queue` seeds the phone's unsent messages.
  */
-async function fixture({ viewer = PEDRO, now = OCT.now, rows = octRows(), summary = {}, socket = "ok", width = 390, height = 844, queue = null } = {}) {
+async function fixture({ viewer = PEDRO, now = OCT.now, rows = octRows(), summary = {}, socket = "ok", width = 390, height = 844, queue = null, refusals = [] } = {}) {
   const context = await browser.newContext({
     viewport: { width, height },
     reducedMotion: "reduce",
@@ -224,8 +224,9 @@ async function fixture({ viewer = PEDRO, now = OCT.now, rows = octRows(), summar
       unread: false,
       ...summary,
     },
-    // How many of the next sends fail as a lost connection.
+    // How many of the next sends fail as a lost connection, and how long each send waits before its answer.
     failSends: 0,
+    delaySends: 0,
     // The next send_announcement's refusal ({ code, message }), once.
     refuseAnnounce: null,
     // send_message answers 22023 'Chat closed', and the summary then reads closed.
@@ -246,8 +247,10 @@ async function fixture({ viewer = PEDRO, now = OCT.now, rows = octRows(), summar
   let lastRequest = Date.now();
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => {
-    // A refusal (403), a lost connection and a refused socket are the failures under test.
-    if (m.type() === "error" && !/status of 40[03]|ERR_INTERNET_DISCONNECTED|ERR_FAILED|WebSocket/.test(m.text())) errors.push(m.text());
+    // A lost connection and a refused socket are failures under test; a refusal's status (403, 400) only where the
+    // scenario expects one (`refusals`).
+    const refused = refusals.some((status) => m.text().includes(`status of ${status}`));
+    if (m.type() === "error" && !refused && !/ERR_INTERNET_DISCONNECTED|ERR_FAILED|WebSocket/.test(m.text())) errors.push(m.text());
   });
 
   const visibleRows = () => state.rows.filter((r) => !r.hidden).sort((a, b) => a.id - b.id);
@@ -351,6 +354,7 @@ async function fixture({ viewer = PEDRO, now = OCT.now, rows = octRows(), summar
       return reply({ code: "22023", message: "Chat closed", details: null, hint: null }, 400);
     }
     if (rpc === "send_message" || rpc === "send_announcement") {
+      if (state.delaySends) await new Promise((r) => setTimeout(r, state.delaySends));
       if (state.failSends > 0) {
         state.failSends--;
         return route.abort("internetdisconnected");
@@ -932,7 +936,7 @@ try {
 
   // (i) 'Not in this chat' on a refresh: notInChat, a phx_leave, and nothing more.
   {
-    const f = await fixture();
+    const f = await fixture({ refusals: [403] });
     const { page } = f;
     await openChat(page);
     await expect.poll(() => f.joins().length).toBe(1);
@@ -1098,6 +1102,63 @@ try {
   }
   console.log("PASS (r): the pinned card loads three earlier pages, then scrolls to its message.");
 
+  // (r2) After a pinned jump lands, nothing pulls the list back to it: not a message that arrives, not a send (H35 I1).
+  {
+    const rows = [row(301, { kind: "announcement", audience: "going", author: ANA, body: "The very first plan", at: "2026-10-26T09:00:00Z" })];
+    for (let i = 1; i <= 129; i++) rows.push(say(301 + i, i % 2 ? LEO : MIA, `Message number ${i}`, iso(Date.parse("2026-10-27T09:00:00Z") + i * 60_000)));
+    const f = await fixture({ rows });
+    const { page } = f;
+    await openChat(page);
+    await expect.poll(() => f.joins().length).toBe(1);
+    await f.settle();
+    const pinnedRow = labelled(page, starts("Announcement to people going, Ana, The very first plan, "));
+    await button(page, /^PINNED, /).click();
+    await expect.poll(() => inViewport(pinnedRow), { timeout: 20_000 }).toBe(true);
+    await f.settle();
+    // A message arrives while the announcement is being read: the list stays where it is.
+    f.add(say(431, LEO, "A new one meanwhile", iso(f.serverNow())));
+    f.signal({ id: 431, kind: "message", state: "sent" });
+    await expect.poll(() => f.calls("chat_messages_since").some((b) => b.p_after === 430)).toBe(true);
+    await page.waitForTimeout(800);
+    assert.equal(await inViewport(pinnedRow), true, "a message arriving doesn't move the list");
+    // A send goes to the newest, and stays there.
+    await field(page).fill("Sent after the jump");
+    await button(page, "Send").click();
+    const sent = labelled(page, starts("You, Sent after the jump, "));
+    await expect.poll(() => inViewport(sent)).toBe(true);
+    await page.waitForTimeout(1500);
+    assert.equal(await inViewport(sent), true, "the list stays on the sent message");
+    assert.equal(await inViewport(pinnedRow), false);
+    await f.done();
+  }
+  console.log("PASS (r2): after a pinned jump lands, an arriving message doesn't move the list, and a send goes to the newest and stays.");
+
+  // (a1) DEFECT 12: the link confirm shows the whole host, at 390 and 320 px.
+  for (const [width, host] of [
+    [390, "www.paypal.com.account.verify.session.update.billing.support.attacker.io"],
+    [320, `${"a".repeat(63)}.${"b".repeat(63)}.${"c".repeat(60)}.example`],
+  ]) {
+    const f = await fixture({ width, rows: [...octRows(), say(106, LEO, `Your refund: https://${host}/login`, "2026-10-28T09:45:00Z")] });
+    const { page } = f;
+    await openChat(page);
+    await labelled(page, starts("Leo, Your refund: ")).getByRole("link").click();
+    const ask = heading(page, `Open ${host}?`);
+    await expect(ask).toBeVisible();
+    await unclipped(page, [ask], width);
+    // The end of the host, the site that opens, is on screen.
+    const end = await ask.evaluate((el) => {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const rects = [...range.getClientRects()];
+      const last = rects[rects.length - 1];
+      return { right: last.right, bottom: last.bottom };
+    });
+    assert.ok(end.right <= width && end.bottom <= 844, `the host's end is in view (${JSON.stringify(end)})`);
+    await f.shot(`task-7-link-confirm-${width}.png`);
+    await f.done();
+  }
+  console.log("PASS (a1): the link confirm wraps the whole host at 390 and 320 px, so the site that opens is in view.");
+
   // (s) An earlier page that fails: the spinner while it loads, then Try again; a page that loads clears the line (H31, H32 24).
   {
     const f = await fixture({ rows: [...octRows(), ...many(115)] });
@@ -1144,12 +1205,28 @@ try {
     f.add(say(106, LEO, "Back online", iso(f.serverNow())));
     f.signal({ id: 106, kind: "message", state: "sent" });
     await expect(labelled(page, starts("Leo, Back online, "))).toBeVisible();
-    await expect(page.getByText("Check your connection and try again.")).toHaveCount(0);
+    // (H35) Shown, it stays at least 4 s; the read that succeeded clears it after that.
+    await expect(text(page, "Check your connection and try again.")).toBeVisible();
+    await expect(page.getByText("Check your connection and try again.")).toHaveCount(0, { timeout: 8_000 });
     await expect(labelled(page, starts("You, Sent while offline, "))).toHaveAccessibleName(/Not sent\. Tap to retry\.$/);
+    // (H35) An error that comes while the link sheet (with no place for it) is open isn't lost: the band shows it once
+    // the sheet closes.
+    await f.settle();
+    f.state.failSends = 1;
+    f.state.delaySends = 1500;
+    await field(page).fill("Sent under a sheet");
+    await button(page, "Send").click();
+    await labelled(page, starts("Mia, Map: ")).getByRole("link").click();
+    await expect(heading(page, "Open example.com?")).toBeVisible();
+    await expect(labelled(page, starts("You, Sent under a sheet, "))).toHaveAccessibleName(/Not sent\. Tap to retry\.$/, { timeout: 5_000 });
+    await expect(page.getByText("Check your connection and try again.")).toHaveCount(0);
+    await button(page, "Cancel").click();
+    await expect(text(page, "Check your connection and try again.")).toBeVisible();
+    f.state.delaySends = 0;
     await f.done();
   }
   {
-    const f = await fixture({ viewer: ANA });
+    const f = await fixture({ viewer: ANA, refusals: [400, 403] });
     const { page } = f;
     await openChat(page);
     await f.settle();
@@ -1174,6 +1251,7 @@ try {
   // (u) A send the close overtook stays, says so, and can only be deleted, across a return (H32 29).
   {
     const f = await fixture({
+      refusals: [400],
       now: "2025-11-17T17:59:30Z",
       rows: novRows(),
       summary: { starts_at: NOV.startsAt, ends_at: NOV.endsAt, closes_at: NOV.closesAt, accepted: 7 },
@@ -1222,15 +1300,22 @@ try {
     assert.equal(await field(page).getAttribute("maxlength"), null, "no maxLength: the limit counts code points");
     await field(page).fill("P".repeat(4990) + "THE END!!!");
     await expect(field(page)).toHaveValue("P".repeat(1000));
-    await expect(text(page, "Only the first 1000 characters fit.")).toBeVisible();
+    await expect(text(page, "Only the first 1,000 characters fit.")).toBeVisible();
     await field(page).fill("🎉".repeat(700));
     await expect(field(page)).toHaveValue("🎉".repeat(700));
-    await expect(page.getByText("Only the first 1000 characters fit.")).toHaveCount(0);
+    await expect(page.getByText("Only the first 1,000 characters fit.")).toHaveCount(0);
+    // (H35) Typing past the limit in the middle is refused; the end of the message is never cut.
+    const full = "a".repeat(500) + "b".repeat(500);
+    await field(page).fill(full);
+    await field(page).evaluate((el) => el.setSelectionRange(500, 500));
+    await page.keyboard.type("XY");
+    await expect(field(page)).toHaveValue(full);
+    await expect(text(page, "Only the first 1,000 characters fit.")).toBeVisible();
     await field(page).fill("");
     assert.equal(f.calls("send_message").length, 0);
     await f.done();
   }
-  console.log("PASS (v, z): Send stays off for invisible-only text; a 5000-character paste keeps 1000 with the notice; 700 emoji fit.");
+  console.log("PASS (v, z): Send stays off for invisible-only text; a 5000-character paste keeps 1000 with the notice; 700 emoji fit; typing in the middle at the limit is refused.");
 
   // (y) An old chat's dates carry their year (H32 Q50).
   {
@@ -1266,9 +1351,12 @@ try {
     await expect(text(page, "This chat closed on Mon 17 Nov.")).toBeVisible();
     await expect(heading(page, "New announcement")).toHaveCount(0);
     assert.equal(f.calls("send_announcement").length, 0);
+    // (H35) The announcement's words stay too, under the card.
+    await expect(text(page, "Not sent:")).toBeVisible();
+    await expect(text(page, "Photos tomorrow")).toBeVisible();
     await f.done();
   }
-  console.log("PASS (g4): the announcement sheet closes when the chat closes.");
+  console.log("PASS (g4): the announcement sheet closes when the chat closes, and its words stay under the closed card as Not sent:.");
 
   // (kb) The keyboard up on a small phone under Larger Text: the field stays above it (H32 52; ?keyboard=1 stands in).
   {

@@ -30,7 +30,7 @@ import {
   closedCard,
   closingLine,
   defaultAudience,
-  fitBody,
+  fitEdit,
   hasVisibleText,
   headerLine,
   isSeriesId,
@@ -45,6 +45,7 @@ import { useApp } from "../src/state/AppState";
 import { useChat, type Chat } from "../src/state/useChat";
 import { withEndedLine, withPending } from "../src/state/chatModel";
 import { chatFeed, nothingSaid, type FeedLink, type FeedRow, type MessageAction } from "../src/state/chatFeed";
+import { dismissed, holdError, heldUntil, type HeldError } from "../src/state/heldError";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -59,6 +60,8 @@ const FIELD_MAX_LARGE = 200;
 const JUMP_STEP_MS = 150;
 const JUMP_STALLS = 10;
 const JUMP_GIVE_UP_MS = 20_000;
+/** A long-press, on a bubble and on a link inside it alike (H35). */
+const LONG_PRESS_MS = 400;
 
 const ACTION_LABEL: Record<MessageAction, string> = {
   delete: CHAT_COPY.deleteMine,
@@ -109,6 +112,11 @@ function useMinuteTick(closesAt: string | null, serverNow: () => number): number
     return () => clearTimeout(timer);
   }, [closesAt, serverNow, tick]);
   return tick;
+}
+
+/** The notice when text was left out: a live region on Android, said aloud on iOS (H35). */
+function sayTooLong() {
+  if (Platform.OS === "ios") AccessibilityInfo.announceForAccessibility(CHAT_COPY.tooLong);
 }
 
 function useMounted() {
@@ -255,6 +263,8 @@ function Conversation({
   // What Send reads: two presses before a redraw still send once (H32 Q27).
   const draftRef = useRef("");
   const [cut, setCut] = useState(false);
+  // The announcement's words live here, so they outlive the sheet and show under the closed card (H35).
+  const [announceBody, setAnnounceBody] = useState("");
   const [sheet, setSheet] = useState<ActionSheet | null>(null);
   const [announcing, setAnnouncing] = useState(false);
   const [link, setLink] = useState<{ href: string; host: string } | null>(null);
@@ -282,7 +292,8 @@ function Conversation({
   const byKey = useMemo(() => new Map(rows.map((r) => [r.key, r])), [rows]);
 
   const editDraft = useCallback((text: string) => {
-    const fit = fitBody(text);
+    const fit = fitEdit(draftRef.current, text);
+    if (fit.cut) sayTooLong();
     draftRef.current = fit.text;
     setDraft(fit.text);
     setCut(fit.cut);
@@ -294,6 +305,8 @@ function Conversation({
   const latest = useRef(data);
   latest.current = data;
   const jump = useRef<{ key: string; loaded: boolean; furthest: number; stalls: number } | null>(null);
+  // Set by onScrollToIndexFailed, which the list calls during scrollToIndex when it can't place the row.
+  const missed = useRef(false);
   const tryJump = useCallback(() => {
     const j = jump.current;
     if (!j) return;
@@ -302,8 +315,11 @@ function Conversation({
       if (j.loaded) jump.current = null;
       return;
     }
-    list.current?.scrollToIndex({ index, viewPosition: 0.5, animated: false });
-  }, []);
+    missed.current = false;
+    list.current?.scrollToIndex({ index, viewPosition: 0.5, animated: !reduce });
+    // It landed: the jump is over, so nothing later (a send, a message arriving) pulls the list back to it (H35 I1).
+    if (!missed.current && jump.current === j) jump.current = null;
+  }, [reduce]);
   useEffect(tryJump, [data, tryJump]);
   const pinned = summary.pinned;
   const pinnedLabel = pinned ? messageLabel(pinned, chat.names, viewerId, now, zone) : null;
@@ -326,6 +342,7 @@ function Conversation({
   // exact place), and the rows beyond lay out for the next try; with nothing measured, near it by the average.
   const onScrollToIndexFailed = useCallback(
     (info: { index: number; averageItemLength: number; highestMeasuredFrameIndex: number }) => {
+      missed.current = true;
       if (info.highestMeasuredFrameIndex > 0)
         list.current?.scrollToIndex({ index: info.highestMeasuredFrameIndex, viewPosition: 0.5, animated: false });
       else list.current?.scrollToOffset({ offset: Math.max(0, info.averageItemLength * info.index), animated: false });
@@ -358,7 +375,25 @@ function Conversation({
   // (H32 52).
   const closing = open && !keyboard ? closingLine(summary.closesAt, now, summary.timeZone) : null;
   // The closed card says why, so its own refusal isn't repeated above.
-  const shownError = chat.error && !(chat.error === CHAT_COPY.closedShort && !open) ? chat.error : null;
+  const incoming = chat.error && !(chat.error === CHAT_COPY.closedShort && !open) ? chat.error : null;
+  // Once shown, an error stays at least 4 s; one that comes while the link sheet (no place for it) is open waits for the
+  // band (H35). Every other sheet shows it.
+  const [held, setHeld] = useState<HeldError>(null);
+  const showing = link === null;
+  useEffect(() => setHeld((h) => holdError(h, incoming, showing, Date.now())), [incoming, showing]);
+  useEffect(() => {
+    const until = incoming === null ? heldUntil(held) : null;
+    if (until === null) return;
+    const timer = setTimeout(() => setHeld((h) => holdError(h, null, true, Date.now())), Math.max(0, until - Date.now()) + 20);
+    return () => clearTimeout(timer);
+  }, [held, incoming]);
+  const shownError = held?.message ?? null;
+  // Cancel, Keep or closing a sheet: what was shown goes, never what wasn't yet (H35).
+  const dismissError = () => {
+    if (dismissed(held) !== null) return;
+    setHeld(null);
+    chat.clearError();
+  };
 
   // At the close the card takes the field's place; VoiceOver says so, and nothing moves focus (K-S10, H31).
   const wasOpen = useRef(open);
@@ -437,6 +472,8 @@ function Conversation({
   const send = () => {
     const body = draftRef.current;
     if (!hasVisibleText(body)) return;
+    // A send goes to the newest: a pinned jump still under way stops here (H35 I1).
+    jump.current = null;
     draftRef.current = "";
     setDraft("");
     setCut(false);
@@ -461,7 +498,7 @@ function Conversation({
   }, [sheet]);
   const closeSheet = () => {
     setSheet(null);
-    chat.clearError();
+    dismissError();
   };
   const takeDown = async (kind: "delete" | "remove") => {
     if (!target || (target.type !== "bubble" && target.type !== "announcement")) return;
@@ -502,7 +539,7 @@ function Conversation({
         ) : null}
         {closing ? <Text style={styles.closing}>{closing}</Text> : null}
         {/* A sheet that is open says it there: one alert, not two. */}
-        {shownError && !menuOpen && !sheet && !announcing ? (
+        {shownError && showing && !menuOpen && !sheet && !announcing ? (
           <View style={styles.errorBand}>
             <ErrorNote message={shownError} />
           </View>
@@ -550,7 +587,7 @@ function Conversation({
             onAnnounce={() => setAnnouncing(true)}
           />
         ) : (
-          <ClosedCard summary={summary} now={now} draft={draft} onAgain={again} />
+          <ClosedCard summary={summary} now={now} drafts={[draft, announceBody]} onAgain={again} />
         )}
       </KeyboardAvoidingView>
 
@@ -559,7 +596,7 @@ function Conversation({
         label={EVENT_COPY.moreButton}
         onClose={() => {
           onMenu(false);
-          chat.clearError();
+          dismissError();
         }}
       >
         <View>
@@ -602,6 +639,7 @@ function Conversation({
                   }}
                 />
               ))}
+              <ErrorNote message={shownError} />
             </View>
           ) : (
             <View style={styles.question}>
@@ -622,7 +660,7 @@ function Conversation({
                 title={CHAT_COPY.keep}
                 disabled={working}
                 onPress={() => {
-                  chat.clearError();
+                  dismissError();
                   setSheet(sheet.direct ? null : { ...sheet, view: "menu" });
                 }}
               />
@@ -632,7 +670,19 @@ function Conversation({
         ) : null}
       </GrabberSheet>
 
-      <AnnounceSheet visible={announcing} chat={chat} summary={summary} onClose={() => setAnnouncing(false)} />
+      <AnnounceSheet
+        visible={announcing}
+        chat={chat}
+        summary={summary}
+        body={announceBody}
+        onBody={setAnnounceBody}
+        error={announcing ? shownError : null}
+        onCancel={() => {
+          setAnnouncing(false);
+          dismissError();
+        }}
+        onSent={() => setAnnouncing(false)}
+      />
 
       <GrabberSheet
         visible={link !== null}
@@ -750,7 +800,7 @@ function RowBody({ row, planId, largeText, onLink, onActions, onAction, onRetry 
             onAccessibilityAction={(e: AccessibilityActionEvent) => onAction(row, e.nativeEvent.actionName)}
             onPress={retries ? () => onRetry(row.clientId) : undefined}
             onLongPress={actions.length ? () => onActions(row.key) : undefined}
-            delayLongPress={400}
+            delayLongPress={LONG_PRESS_MS}
             style={({ pressed }) => [styles.bubble, styles.bubbleMine, (row.failed || row.closed) && styles.bubbleFailed, pressed && styles.pressed]}
           >
             <Text style={[styles.body, ownDirection]}>{row.body}</Text>
@@ -771,16 +821,7 @@ function RowBody({ row, planId, largeText, onLink, onActions, onAction, onRetry 
             ? row.text
             : linkParts(row.text).map((p, i) =>
                 p.href ? (
-                  <Text
-                    key={i}
-                    accessibilityRole="link"
-                    onPress={() => onLink(p.href!)}
-                    // A long-press on a link is a long-press on its message, so Remove reaches link spam (H31 Q4).
-                    onLongPress={longPress}
-                    style={styles.link}
-                  >
-                    {p.text}
-                  </Text>
+                  <LinkText key={i} text={p.text} href={p.href} onLink={onLink} onLongPress={longPress} />
                 ) : (
                   <React.Fragment key={i}>{p.text}</React.Fragment>
                 ),
@@ -795,7 +836,7 @@ function RowBody({ row, planId, largeText, onLink, onActions, onAction, onRetry 
         accessibilityActions: actions.length ? actions : undefined,
         onAccessibilityAction: (e: AccessibilityActionEvent) => onAction(row, e.nativeEvent.actionName),
         onLongPress: longPress,
-        delayLongPress: 400,
+        delayLongPress: LONG_PRESS_MS,
       };
       if (row.type === "announcement")
         return (
@@ -818,6 +859,48 @@ function RowBody({ row, planId, largeText, onLink, onActions, onAction, onRetry 
       );
     }
   }
+}
+
+/**
+ * A link in a message: a tap asks before the browser; a hold opens its message's actions, so Remove reaches link spam
+ * (H31 Q4). Text has no delayLongPress (Pressability's is fixed at 500 ms), so the hold is timed here to match the
+ * bubble's 400 ms (H35). The web's Text takes no press-in: there the bubble's own Pressable times the hold.
+ */
+function LinkText({ text, href, onLink, onLongPress }: { text: string; href: string; onLink: (href: string) => void; onLongPress?: () => void }) {
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const held = useRef(false);
+  const stop = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+  };
+  useEffect(() => stop, []);
+  return (
+    <Text
+      accessibilityRole="link"
+      style={styles.link}
+      onPressIn={
+        onLongPress
+          ? () => {
+              held.current = false;
+              stop();
+              timer.current = setTimeout(() => {
+                timer.current = null;
+                held.current = true;
+                onLongPress();
+              }, LONG_PRESS_MS);
+            }
+          : undefined
+      }
+      onPressOut={stop}
+      onPress={() => {
+        // The hold opened the actions; its release isn't a tap.
+        if (held.current) held.current = false;
+        else onLink(href);
+      }}
+    >
+      {text}
+    </Text>
+  );
 }
 
 /** The line in words, Announce for hosts, the growing field and Send (CH-02, CH-02a; K-S14, K-S15). */
@@ -899,10 +982,10 @@ function AnnouncePill({ onPress }: { onPress: () => void }) {
 }
 
 /**
- * In place of the field once the chat closed (CH-06), with Do this again for the hosts (H12). Words the field still held
- * at the close stay readable and selectable under it (K-S10, H32 Q46).
+ * In place of the field once the chat closed (CH-06), with Do this again for the hosts (H12). Words the field, or the
+ * announcement sheet, still held at the close stay readable and selectable under it (K-S10, H32 Q46, H35).
  */
-function ClosedCard({ summary, now, draft, onAgain }: { summary: ChatSummary; now: number; draft: string; onAgain: () => void }) {
+function ClosedCard({ summary, now, drafts, onAgain }: { summary: ChatSummary; now: number; drafts: string[]; onAgain: () => void }) {
   const insets = useSafeAreaInsets();
   const card = closedCard(summary, now);
   return (
@@ -911,14 +994,14 @@ function ClosedCard({ summary, now, draft, onAgain }: { summary: ChatSummary; no
         <Copy style={styles.closedLine}>{card.line}</Copy>
         {card.why ? <Copy style={styles.closedWhy}>{card.why}</Copy> : null}
       </View>
-      {hasVisibleText(draft) ? (
-        <View style={styles.draft}>
+      {drafts.filter(hasVisibleText).map((words, i) => (
+        <View key={i} style={styles.draft}>
           <Text style={styles.draftLabel}>{CHAT_COPY.notSentDraft}</Text>
           <Text selectable style={[styles.draftText, ownDirection]}>
-            {draft}
+            {words}
           </Text>
         </View>
-      ) : null}
+      ))}
       {summary.host ? (
         <View style={styles.centre}>
           <Button icon={false} secondary title={EVENT_COPY.doThisAgain} onPress={onAgain} />
@@ -932,38 +1015,50 @@ function ClosedCard({ summary, now, draft, onAgain }: { summary: ChatSummary; no
  * New announcement (CH-03): who gets it with live counts, the text and Send. It starts on `defaultAudience` (K-N7);
  * Cancel keeps the audience and the text for the next opening (H32 34); a send that goes through resets both.
  */
-function AnnounceSheet({ visible, chat, summary, onClose }: { visible: boolean; chat: Chat; summary: ChatSummary; onClose: () => void }) {
+function AnnounceSheet({
+  visible,
+  chat,
+  summary,
+  body,
+  onBody,
+  error,
+  onCancel,
+  onSent,
+}: {
+  visible: boolean;
+  chat: Chat;
+  summary: ChatSummary;
+  /** The words, kept by the screen so they outlive the sheet (H35). */
+  body: string;
+  onBody: (text: string) => void;
+  /** The chat's error to show here while the sheet is open: its own refusal, or a send's (H35). */
+  error: string | null;
+  onCancel: () => void;
+  onSent: () => void;
+}) {
   const [audience, setAudience] = useState<ChatAudience>(defaultAudience(summary));
-  const [body, setBody] = useState("");
   const [cut, setCut] = useState(false);
   const [sending, setSending] = useState(false);
-  const [failed, setFailed] = useState(false);
   const mounted = useMounted();
   const largeText = useLargeText();
-  const cancel = () => {
-    setFailed(false);
-    chat.clearError();
-    onClose();
-  };
   const send = async () => {
     setSending(true);
-    setFailed(false);
     const done = await chat.announce(body, audience);
     if (!mounted.current) return;
     setSending(false);
     if (done) {
-      setBody("");
+      onBody("");
       setCut(false);
       setAudience(defaultAudience(summary));
-      onClose();
-    } else setFailed(true);
+      onSent();
+    }
   };
   const options: Array<{ key: ChatAudience; title: string }> = [
     { key: "going", title: CHAT_COPY.audienceGoing(summary.going) },
     { key: "everyone", title: CHAT_COPY.audienceEveryone(summary.everyone) },
   ];
   return (
-    <GrabberSheet visible={visible} title={CHAT_COPY.newAnnouncement} onClose={cancel}>
+    <GrabberSheet visible={visible} title={CHAT_COPY.newAnnouncement} onClose={onCancel}>
       <Text style={styles.sheetLabel}>{CHAT_COPY.whoGetsIt}</Text>
       <View accessibilityRole="radiogroup" accessibilityLabel={CHAT_COPY.whoGetsIt}>
         {options.map((o) => {
@@ -988,8 +1083,9 @@ function AnnounceSheet({ visible, chat, summary, onClose }: { visible: boolean; 
         multiline
         value={body}
         onChangeText={(text) => {
-          const fit = fitBody(text);
-          setBody(fit.text);
+          const fit = fitEdit(body, text);
+          if (fit.cut) sayTooLong();
+          onBody(fit.text);
           setCut(fit.cut);
         }}
         placeholder={CHAT_COPY.announcePlaceholder}
@@ -1003,7 +1099,7 @@ function AnnounceSheet({ visible, chat, summary, onClose }: { visible: boolean; 
           {CHAT_COPY.tooLong}
         </Text>
       ) : null}
-      <ErrorNote message={failed ? chat.error : null} />
+      <ErrorNote message={error} />
       <Button
         icon={false}
         title={CHAT_COPY.sendAnnouncement}
@@ -1012,7 +1108,7 @@ function AnnounceSheet({ visible, chat, summary, onClose }: { visible: boolean; 
         onPress={() => void send()}
       />
       <View style={styles.centre}>
-        <TextAction title={CHAT_COPY.cancel} onPress={cancel} />
+        <TextAction title={CHAT_COPY.cancel} onPress={onCancel} />
       </View>
     </GrabberSheet>
   );

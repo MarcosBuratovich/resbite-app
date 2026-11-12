@@ -583,15 +583,18 @@ export function createChatSession(deps: ChatSessionDeps) {
   /**
    * After a focus read: failed messages over 7 days old leave the queue in any chat, and this chat's failed ones when
    * it still refuses this person (H26 Q5, Q6). A closed chat keeps its unsent messages, shown as overtaken by the close,
-   * until they are deleted or 7 days old: nothing vanishes unseen (H32 29). Then what was left behind is resent.
+   * until they are deleted or 7 days old, failed or not: nothing vanishes unseen, and nothing stays for ever (H32 29,
+   * H35). Then what was left behind is resent.
    */
   async function afterFocus() {
     if (!live()) return;
     const now = timers.now();
     const refused = shut;
+    const closed = state.summary?.open === false;
+    const old = (q: QueuedMessage) => !(now - instantOf(q.createdAt) <= FAILED_KEPT_MS);
     const drop = (q: QueuedMessage) =>
       !sending.has(q.clientId) &&
-      ((q.failed && !(now - instantOf(q.createdAt) <= FAILED_KEPT_MS)) || (q.series === series && refused && q.failed));
+      ((q.failed && old(q)) || (q.series === series && ((refused && q.failed) || (closed && old(q)))));
     try {
       await queue.prune(scope, drop);
     } catch {
