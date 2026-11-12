@@ -205,7 +205,7 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
       case "block":
         return setSheet({ row, view: "block" });
       case "unblock":
-        return run(() => safetyGateway.unblock(row.userId!), false);
+        return run(async () => void (await safetyGateway.unblock(row.userId!)), false);
     }
   };
   // Each person's row on the list, so focus can move to the next one after a remove (D4). It moves once the sheet has
@@ -271,6 +271,15 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
   useEffect(() => {
     if (sheet?.view !== "remove" && sheet?.view !== "decline") return;
     const frame = requestAnimationFrame(() => focusHeading(question.current));
+    return () => cancelAnimationFrame(frame);
+  }, [sheet?.view, sheet?.row.key]);
+  // Keep after the block confirm gives focus back to Block (H32 Q53, ruling SR6 D1).
+  const blockRow = useRef<View | null>(null);
+  const backToBlock = useRef(false);
+  useEffect(() => {
+    if (sheet?.view !== "menu" || !backToBlock.current) return;
+    backToBlock.current = false;
+    const frame = requestAnimationFrame(() => focusHeading(blockRow.current));
     return () => cancelAnimationFrame(frame);
   }, [sheet?.view, sheet?.row.key]);
   const shownError = error ?? resend.error ?? event.error;
@@ -362,10 +371,15 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
               <BlockQuestion
                 userId={current.userId}
                 name={current.name}
-                youHost={host}
+                // A waiting join requester isn't on the resbite: there is nothing of theirs a host could remove, so even a
+                // host reads the guest's confirm (ruling SR6 draft).
+                youHost={host && current.kind !== "request"}
                 theyHost={current.kind === "owner" || current.admin}
                 onBlocked={() => setSheet({ row: current, view: "blocked" })}
-                onKeep={() => setSheet({ row: current, view: "menu" })}
+                onKeep={() => {
+                  backToBlock.current = true;
+                  setSheet({ row: current, view: "menu" });
+                }}
               />
             ) : sheet?.view === "menu" ? (
               <View>
@@ -394,6 +408,7 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
                           : []),
                         <Row
                           key={action}
+                          rowRef={action === "block" ? blockRow : undefined}
                           action={action}
                           row={current}
                           disabled={off}
@@ -452,12 +467,15 @@ function Row({
   disabled,
   onPress,
   via,
+  rowRef,
 }: {
   action: PersonAction;
   row: PersonRow;
   disabled: boolean;
   onPress: () => void;
   via?: "whatsapp" | "messages";
+  /** The row's own view, so focus can come back to it (Block, after Keep). */
+  rowRef?: React.Ref<View>;
 }) {
   const destructive = action === "remove" || action === "removeInvite";
   // Block is red too, and asks in place (plan 3, G-N9); it needs no band of its own after Report.
@@ -488,6 +506,7 @@ function Row({
         destructive={destructive || action === "block"}
         disabled={disabled}
         onPress={onPress}
+        ref={rowRef}
       />
     </>
   );

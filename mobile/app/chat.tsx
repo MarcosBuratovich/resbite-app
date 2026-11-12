@@ -28,7 +28,7 @@ import { ChatRulesSheet } from "../src/design/ChatRulesSheet";
 import { NotificationAsk } from "../src/design/NotificationAsk";
 import { colors as c, depth, fonts, space } from "../src/design/tokens";
 import { CHAT_COPY, type ChatAudience } from "../src/domain/chatCopy";
-import { SAFETY_COPY, showsReportOrBlock, shownName } from "../src/domain/safetyCopy";
+import { SAFETY_COPY, rulesHeldLine, showsReportOrBlock, shownName } from "../src/domain/safetyCopy";
 import {
   audienceOptions,
   canAnnounce,
@@ -149,7 +149,11 @@ function useMounted() {
   return mounted;
 }
 
-type ActionSheet = { key: string; view: "menu" | "delete" | "remove" | "report"; direct: boolean };
+/**
+ * The long-press sheet: its rows, Delete's or Remove's question, or plan 3's report. `reportId` is the message reported,
+ * kept so the report stays open with what was typed if the message is taken down meanwhile (ruling SR6 Q1).
+ */
+type ActionSheet = { key: string; view: "menu" | "delete" | "remove" | "report"; direct: boolean; reportId?: number };
 
 /**
  * Plan 3's Report or block, in the menu's sheet (Decision 3, G-N6): the chat's people, or one person's sheet (Report,
@@ -372,6 +376,12 @@ function Conversation({
   const leftQuestion = useRef(false);
   // Plan 3: Report or block in the menu's sheet, and an Unblock running from it.
   const [safety, setSafety] = useState<Safety | null>(null);
+  // Each of Report or block's views takes focus (H32 Q53, ruling SR6): the list's heading, the person's name, and Block
+  // again after Keep.
+  const peopleHeading = useRef<Text | null>(null);
+  const personHeading = useRef<Text | null>(null);
+  const blockRow = useRef<View | null>(null);
+  const backToBlock = useRef(false);
   const [unblocking, setUnblocking] = useState(false);
   const [safetyError, setSafetyError] = useState<string | null>(null);
   // The chat rules (G-B4(d), I6): asked before a first message, or after a refusal (`chat.rulesNeeded`).
@@ -525,7 +535,9 @@ function Conversation({
   }, []);
   const onAction = useCallback(
     (row: FeedRow, name: string) => {
-      if (name === "delete" || name === "remove" || name === "report") return openActions(row.key, name);
+      if (name === "delete" || name === "remove") return openActions(row.key, name);
+      if (name === "report" && (row.type === "bubble" || row.type === "announcement"))
+        return setSheet({ key: row.key, view: "report", direct: true, reportId: row.message.id });
       if (name === "deleteUnsent" && row.type === "pending") return void chat.discard(row.clientId);
       if (row.type === "bubble" || row.type === "announcement") {
         const href = row.links.find((l) => l.name === name)?.href;
@@ -618,10 +630,12 @@ function Conversation({
 
   const target = sheet ? byKey.get(sheet.key) : undefined;
   const targetActions = target && "actions" in target ? target.actions : [];
-  // The row changed under the sheet (taken down elsewhere, or sent): nothing left to offer.
+  // The row changed under the sheet (taken down elsewhere, or sent): nothing left to offer. A report stays open with what
+  // was typed, and says it can't go any more (ruling SR6 Q1): nothing closes without a word.
   useEffect(() => {
-    if (sheet && targetActions.length === 0) setSheet(null);
+    if (sheet && sheet.view !== "report" && targetActions.length === 0) setSheet(null);
   }, [sheet, targetActions.length]);
+  const reportGone = sheet?.view === "report" && !targetActions.includes("report");
   // The sheet's next view takes focus: the question after Delete or Remove, the menu again after Keep (H32 Q53).
   useEffect(() => {
     if (!sheet) return;
@@ -649,6 +663,18 @@ function Conversation({
     setWorking(false);
     if (done) onMenu(false);
   };
+  const safetyView = !safety ? null : safety.kind === "people" ? "people" : `${safety.userId}:${safety.step}`;
+  useEffect(() => {
+    if (!menuOpen || !safety) return;
+    const back = backToBlock.current;
+    backToBlock.current = false;
+    const target =
+      safety.kind === "people" ? peopleHeading.current : safety.step === "actions" ? (back ? blockRow.current : personHeading.current) : null;
+    if (!target) return;
+    const frame = requestAnimationFrame(() => focusHeading(target));
+    return () => cancelAnimationFrame(frame);
+    // When the view changes, not on every redraw of the same one.
+  }, [menuOpen, safetyView]);
   // The menu opens on its rows, never on a question or a refusal left from before (Report or block's included).
   useEffect(() => {
     if (menuOpen) return;
@@ -814,7 +840,7 @@ function Conversation({
       >
         {safety?.kind === "people" ? (
           <View>
-            <Text accessibilityRole="header" style={styles.sheetHeading}>
+            <Text ref={peopleHeading} accessibilityRole="header" style={styles.sheetHeading}>
               {SAFETY_COPY.reportOrBlock}
             </Text>
             {people.map((p) => (
@@ -822,6 +848,8 @@ function Conversation({
                 key={p.userId}
                 title={shownName(p.name)}
                 hint={p.blocked ? SAFETY_COPY.blocked : undefined}
+                // The label already says Blocked: said once (ruling SR6 draft).
+                spokenHint={false}
                 label={p.blocked ? `${shownName(p.name)}, ${SAFETY_COPY.blocked}` : shownName(p.name)}
                 icon={UserRound}
                 onPress={() => {
@@ -834,7 +862,7 @@ function Conversation({
         ) : safety?.kind === "person" && person ? (
           <View style={styles.question}>
             {safety.step !== "report" ? (
-              <Text accessibilityRole={safety.step === "actions" ? "header" : undefined} style={styles.sheetHeading}>
+              <Text ref={personHeading} accessibilityRole={safety.step === "actions" ? "header" : undefined} style={styles.sheetHeading}>
                 {shownName(person.name)}
               </Text>
             ) : null}
@@ -850,7 +878,10 @@ function Conversation({
                 youHost={summary.host}
                 theyHost={person.theyHost}
                 onBlocked={() => setSafety({ ...safety, step: "blocked" })}
-                onKeep={() => setSafety({ ...safety, step: "actions" })}
+                onKeep={() => {
+                  backToBlock.current = true;
+                  setSafety({ ...safety, step: "actions" });
+                }}
               />
             ) : safety.step === "blocked" ? (
               <BlockedLine />
@@ -868,6 +899,7 @@ function Conversation({
                   ) : action === "block" ? (
                     <MenuRow
                       key={action}
+                      ref={blockRow}
                       title={SAFETY_COPY.block(shownName(person.name))}
                       icon={Ban}
                       destructive
@@ -958,12 +990,17 @@ function Conversation({
         )}
       </GrabberSheet>
 
-      <GrabberSheet visible={sheet !== null && target !== undefined} label={target && "label" in target ? target.label : undefined} onClose={closeSheet}>
-        {sheet && target ? (
-          sheet.view === "report" && (target.type === "bubble" || target.type === "announcement") ? (
-            // Someone else's message or announcement, sent (G-N12): its report, in place.
-            <ReportSheet target={{ kind: "message", id: target.message.id }} onDone={() => setSheet(null)} />
-          ) : sheet.view === "menu" ? (
+      <GrabberSheet
+        visible={sheet !== null && (target !== undefined || sheet.view === "report")}
+        label={target && "label" in target ? target.label : SAFETY_COPY.reportMessage}
+        onClose={closeSheet}
+      >
+        {sheet && sheet.view === "report" && sheet.reportId !== undefined ? (
+          // Someone else's message or announcement, sent (G-N12): its report, in place. Taken down meanwhile, it stays
+          // with what was typed and says so (ruling SR6 Q1).
+          <ReportSheet target={{ kind: "message", id: sheet.reportId }} unavailable={reportGone} onDone={() => setSheet(null)} />
+        ) : sheet && target ? (
+          sheet.view === "menu" ? (
             <View>
               {targetActions.map((action, i) => (
                 <MenuRow
@@ -978,7 +1015,9 @@ function Conversation({
                     if (action === "deleteUnsent" && target.type === "pending") {
                       setSheet(null);
                       void chat.discard(target.clientId);
-                    } else if (action === "delete" || action === "remove" || action === "report") setSheet({ ...sheet, view: action });
+                    } else if (action === "report" && (target.type === "bubble" || target.type === "announcement"))
+                      setSheet({ ...sheet, view: "report", reportId: target.message.id });
+                    else if (action === "delete" || action === "remove") setSheet({ ...sheet, view: action });
                   }}
                 />
               ))}
@@ -1031,7 +1070,7 @@ function Conversation({
       <GrabberSheet visible={rulesShown} label={SAFETY_COPY.rulesTitle} onClose={cancelRules}>
         {rulesShown ? (
           <ChatRulesSheet
-            held={heldMessages > 0 ? SAFETY_COPY.rulesHeldMessage(heldMessages) : null}
+            held={rulesHeldLine(heldMessages, false)}
             error={rulesError}
             onAgree={agree}
             onCancel={cancelRules}
@@ -1504,7 +1543,7 @@ function AnnounceSheet({
         }}
       >
         <ChatRulesSheet
-          held={heldAnnounce ? SAFETY_COPY.rulesHeldAnnouncement : null}
+          held={heldAnnounce ? rulesHeldLine(chat.rulesNeeded?.clientIds.length ?? 0, true) : null}
           error={rulesError}
           onAgree={agree}
           onCancel={cancelRules}

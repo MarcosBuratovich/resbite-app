@@ -44,7 +44,19 @@ function sayOnIos(line: string) {
  * it; refused or offline, the sheet stays with what was typed and says why (`safetyErrorMessage`). Reporting stops
  * nothing else: the reporter goes on using the chat.
  */
-export function ReportSheet({ target, onDone }: { target: ReportTarget; onDone: () => void }) {
+export function ReportSheet({
+  target,
+  onDone,
+  unavailable = false,
+}: {
+  target: ReportTarget;
+  onDone: () => void;
+  /**
+   * What is reported can't be any more (a message taken down while the sheet is open, ruling SR6 Q1): the sheet stays
+   * with what was typed, says so, and Send report is off.
+   */
+  unavailable?: boolean;
+}) {
   const [reason, setReason] = useState<ReportReason | null>(null);
   const [details, setDetails] = useState("");
   const [sending, setSending] = useState(false);
@@ -62,7 +74,7 @@ export function ReportSheet({ target, onDone }: { target: ReportTarget; onDone: 
     // The heading on opening, the thanks once sent.
   }, [sent]);
   const send = async () => {
-    if (!reason || sending) return;
+    if (!reason || sending || unavailable) return;
     setSending(true);
     setError(null);
     try {
@@ -127,13 +139,13 @@ export function ReportSheet({ target, onDone }: { target: ReportTarget; onDone: 
         {...(Platform.OS === "web" ? { rows: 3 } : null)}
         style={[s.field, styles.details]}
       />
-      <ErrorNote message={error} />
+      <ErrorNote message={unavailable ? SAFETY_COPY.unavailable : error} />
       <Button
         icon={false}
         title={SAFETY_COPY.sendReport}
-        hint={reason ? undefined : SAFETY_COPY.pickReason}
+        hint={reason || unavailable ? undefined : SAFETY_COPY.pickReason}
         loading={sending}
-        disabled={!reason || sending}
+        disabled={!reason || sending || unavailable}
         onPress={() => void send()}
       />
       <View style={styles.centre}>

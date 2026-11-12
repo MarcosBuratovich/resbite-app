@@ -31,7 +31,9 @@
 //              blocked person's row reads Blocked with no Connect; with my_blocks failing no row offers Block or Connect
 //              and nothing says why (N13); Block then Unblock read my_blocks and the states again (NOTE 2); an unanswered
 //              invitee's Report or block beside the announcement and in More (B1, B4, R-Q1, I-2), also when the
-//              overview fails, and no row at all with nobody to name
+//              overview fails, and no row at all with nobody to name. Fix round 1 (ruling SR6): Keep after a block
+//              confirm puts focus back on its Block row (the people list, the resbite page); a host blocking a waiting
+//              join requester reads the guest's confirm; a block the server took stays known when my_blocks then fails
 //   edges      /guests and /event without a plan; Back with no history; a failed read offers Try again
 //   idea       Back over the image, Use idea
 import assert from "node:assert/strict";
@@ -182,8 +184,14 @@ async function open(world = {}) {
     // my_chat_overview's answer: nothing unread and no announcement unless a scenario gives one; "failed" is a 500.
     overview: world.overview ?? { chats: {}, announcements: {}, names: {} },
     // Chat plan 3: the people the viewer blocked (my_blocks), or "failed" (a 500); the viewer's connection states
-    // (plan_connection_states), which a block ends; the host's name as their profile gives it.
+    // (plan_connection_states), which a block ends; the host's name as their profile gives it. `blocksFailAfterBlock`:
+    // once a block went through, every my_blocks read fails (fix round 1, Q2).
     blocked: world.blocked ?? [],
+    blocksFailAfterBlock: Boolean(world.blocksFailAfterBlock),
+    // block_user answers `stored` (server review M7): true for a block unless `blockNotStored` (the person stopped
+    // being readable, so nothing was stored), false for an unblock.
+    blockNotStored: Boolean(world.blockNotStored),
+    blockedOnce: false,
     pairs: { ...(world.pairs ?? {}) },
     hostName: world.hostName ?? HOST.name,
     // my_bring_allowance's answer for a guest, when the scenario lets them bring.
@@ -365,15 +373,17 @@ async function open(world = {}) {
       // Chat plan 3: the viewer's blocks; a block ends any connection between the two (G-B1), and unblocking brings
       // none back; the reports.
       case "my_blocks":
-        if (state.blocked === "failed") return reply({ message: "Fixture: the blocks read failed" }, 500);
-        return reply(state.blocked.map((id) => ({ user_id: id, name: null })));
+        if (state.blocked === "failed" || (state.blocksFailAfterBlock && state.blockedOnce))
+          return reply({ message: "Fixture: the blocks read failed" }, 500);
+        return reply(state.blocked.map((id) => ({ user_id: id, name: null, at: "2099-02-01T10:00:00Z" })));
       case "block_user":
+        state.blockedOnce = true;
         if (Array.isArray(state.blocked)) {
           state.blocked = state.blocked.filter((id) => id !== body.p_user);
-          if (body.p_block) state.blocked.unshift(body.p_user);
+          if (body.p_block && !state.blockNotStored) state.blocked.unshift(body.p_user);
         }
         delete state.pairs[body.p_user];
-        return none();
+        return reply(body.p_block === true && !state.blockNotStored);
       case "report_message":
       case "report_user":
         return none();
@@ -1585,6 +1595,8 @@ try {
   const LEO_G = g("g6", "Leo", "accepted");
   const INVITER = "66666666-6666-4666-8666-666666666666";
   const sheetOf = (page) => page.locator("[aria-modal]").filter({ visible: true });
+  /** The element that has focus now, by its text. */
+  const focusedText = (page) => page.evaluate(() => document.activeElement?.textContent ?? null);
   /** The open sheet's buttons by their spoken names, the grabber's Close sheet left out. */
   const sheetButtons = (page) =>
     sheetOf(page)
@@ -1602,10 +1614,20 @@ try {
     for (const row of ["Connect on Resbite", "Report Bea", "Block Bea"]) await expect(btn(page, row)).toBeVisible();
     assert.ok(await inOrder(page, [btn(page, "Remove from this resbite"), btn(page, "Report Bea"), btn(page, "Block Bea")]), "Report, then Block, last");
     await page.getByRole("button", { name: "Close sheet" }).first().click();
-    // A waiting join request: Block, never Report (G-S9).
+    // A waiting join request: Block, never Report (G-S9). They aren't on the resbite, so even a host reads the guest's
+    // confirm: nothing about removing their messages, and no R-Q6 line (ruling SR6 draft).
     await btn(page, "Actions for Sam Reed").click();
     await expect(btn(page, "Block Sam Reed")).toBeVisible();
     await expect(btn(page, "Report Sam Reed")).toHaveCount(0);
+    await btn(page, "Block Sam Reed").click();
+    await expect(sheetOf(page).getByText(
+      "Block Sam Reed? You won’t see Sam Reed’s messages, and Sam Reed won’t know. Any connection between you ends, and unblocking won’t bring it back.",
+      { exact: true },
+    )).toBeVisible();
+    await expect(sheetOf(page).getByText(/^This hides their messages/)).toHaveCount(0);
+    // Keep: back to the sheet, with focus on Block Sam Reed (H32 Q53, ruling SR6 D1).
+    await btn(page, "Keep").click();
+    await expect.poll(() => focusedText(page)).toBe("Block Sam Reed");
     // The host blocking a guest reads the host's confirm with R-Q6's line.
     await page.getByRole("button", { name: "Close sheet" }).first().click();
     await btn(page, "Actions for Bea").click();
@@ -1685,6 +1707,53 @@ try {
       await expect(btn(page, "Block Leo")).toBeVisible();
     },
   );
+  // Ruling SR6 Q2: a block the server took stays known on this phone even when the blocks can't be read again.
+  await scenario(
+    "safety, blocks fail after a block",
+    { viewer: "guest", attendee: { version: 1, response: "accepted" }, guests: [ALEX, LEO_G], blocksFailAfterBlock: true },
+    async (f) => {
+      const { page } = f;
+      await page.goto(`${base}/guests?plan=${PLAN_ID}`);
+      await btn(page, "Actions for Leo").click();
+      await btn(page, "Block Leo").click();
+      const blocked = f.log.length;
+      await btn(page, "Block Leo").click();
+      await expect(sheetOf(page).getByText("Blocked", { exact: true })).toBeVisible();
+      await expect.poll(() => after(f, blocked, "my_blocks").length).toBeGreaterThan(0);
+      await page.getByRole("button", { name: "Close sheet" }).first().click();
+      await expect(page.getByLabel("Leo, Blocked", { exact: true })).toBeVisible();
+      await btn(page, "Actions for Leo").click();
+      await expect(btn(page, "Unblock Leo")).toBeVisible();
+      await expect(btn(page, "Block Leo")).toHaveCount(0);
+      await expect(page.getByRole("alert")).toHaveCount(0);
+    },
+  );
+  // Server review M7: a block that stored nothing isn't taken as known; with the read after it failing, the blocks are
+  // unknown, so no row offers Block, Unblock or Connect, and nothing says why (N13).
+  await scenario(
+    "safety, block not stored",
+    { viewer: "guest", attendee: { version: 1, response: "accepted" }, guests: [ALEX, LEO_G], blocksFailAfterBlock: true, blockNotStored: true },
+    async (f) => {
+      const { page } = f;
+      await page.goto(`${base}/guests?plan=${PLAN_ID}`);
+      await btn(page, "Actions for Leo").click();
+      await btn(page, "Block Leo").click();
+      const blocked = f.log.length;
+      await btn(page, "Block Leo").click();
+      await expect.poll(() => after(f, blocked, "my_blocks").length).toBeGreaterThan(0);
+      await page.getByRole("button", { name: "Close sheet" }).first().click();
+      await expect(page.getByLabel("Leo, Blocked", { exact: true })).toHaveCount(0);
+      for (const name of ["Leo", "Alex"]) {
+        await btn(page, `Actions for ${name}`).click();
+        await expect(btn(page, `Report ${name}`)).toBeVisible();
+        await expect(btn(page, `Block ${name}`)).toHaveCount(0);
+        await expect(btn(page, `Unblock ${name}`)).toHaveCount(0);
+        await expect(btn(page, "Connect on Resbite")).toHaveCount(0);
+        await page.getByRole("button", { name: "Close sheet" }).first().click();
+      }
+      await expect(page.getByRole("alert")).toHaveCount(0);
+    },
+  );
   pass("safety, people: the people sheet offers Report and Block (last, Report first); a waiting join request Block only; a host's confirm adds R-Q6's line; a blocked person's row reads Blocked with Unblock and no Connect; with my_blocks failing no row offers Block, Unblock or Connect and no alert shows (N13); Block Leo (connected) reads my_blocks and plan_connection_states again and the row reads Blocked; Unblock reads both again and the row offers Connect, not Connected (NOTE 2)");
 
   // B1: the announcement line's Report or block, on Ana's resbite.
@@ -1748,6 +1817,8 @@ try {
       await btn(page, "Block Ana").click();
       await expect(sheetOf(page).getByText(QUESTION_ANA, { exact: true })).toBeVisible();
       await btn(page, "Keep").click();
+      // Back on the list, focus on Block Ana (H32 Q53, ruling SR6 D1).
+      await expect.poll(() => focusedText(page)).toBe("Block Ana");
       await btn(page, "Block Pedro").click();
       await expect(sheetOf(page).getByText(QUESTION_PEDRO, { exact: true })).toBeVisible();
       await btn(page, "Block Pedro").click();

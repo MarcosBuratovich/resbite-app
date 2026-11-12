@@ -21,7 +21,7 @@ import { formatPhone, phoneSendForm } from "../domain/phone";
 import { joinRequestGateway, type HostRequest } from "../services/joinRequests";
 import { connectionErrorMessage, connectionGateway, type ConnectionState } from "../services/connections";
 import { chatGateway, isNotInChat, type ChatSummary } from "../services/chat";
-import { onBlocksChanged, safetyGateway } from "../services/safety";
+import { blockConfirmed, knownBlocksAfter, onBlocksChanged, safetyGateway } from "../services/safety";
 import { invitationEntry, type InvitationEntry } from "../domain/safetyCopy";
 import { readProfile } from "../services/profile";
 import { requestGone } from "./connectionsModel";
@@ -253,14 +253,20 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
     setEntry(NO_ENTRY);
     if (afterBlocks.current) afterBlocks.current = { ...afterBlocks.current, invitee: null };
   };
-  /** The people blocked, as `my_blocks` lists them; a failure keeps what was known and says nothing (N13). */
-  const readBlocks = (valid: () => boolean) => {
+  /**
+   * The people blocked, as `my_blocks` lists them; a failure keeps what was known and says nothing (N13), unless
+   * `unknownOnFailure`: after a block the server didn't confirm, what was known may be wrong, so they become unknown
+   * (server review M7).
+   */
+  const readBlocks = (valid: () => boolean, unknownOnFailure = false) => {
     const ticket = ++blocksRead.current;
     void safetyGateway.myBlocks().then(
       (list) => {
         if (valid() && ticket === blocksRead.current) setBlocks(new Set(list.map((b) => b.userId)));
       },
-      () => {},
+      () => {
+        if (unknownOnFailure && valid() && ticket === blocksRead.current) setBlocks(null);
+      },
     );
   };
   // UX3: this phone's reminders follow every event load, answer and cancellation; failures wait for the next sync.
@@ -444,13 +450,17 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
   // `none`, not `connected`), and for an unanswered invitee the overview again, so the announcement and the inviter go.
   useEffect(
     () =>
-      onBlocksChanged(() => {
+      onBlocksChanged((change) => {
         const again = afterBlocks.current;
         if (!again || !userId || !planId || again.key !== `${userId}:${planId}`) return;
         const mine = currentIdentity.current;
         const valid = () => currentIdentity.current === mine;
         if (again.named) {
-          readBlocks(valid);
+          // What the server confirmed it holds (a block stored, an unblock leaving none) is known now, whatever the read
+          // below answers (ruling SR6 Q2): a failed read never offers Block again for someone just blocked. A change it
+          // didn't confirm waits for the read, and if that fails the blocks are unknown (server review M7, N13).
+          setBlocks((known) => knownBlocksAfter(known, change));
+          readBlocks(valid, !blockConfirmed(change));
           const ticket = ++statesRead.current;
           void connectionGateway.statesFor(planId).then(
             (states) => {

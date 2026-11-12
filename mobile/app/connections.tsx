@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { ArrowLeft, Ban, Ellipsis, Flag, Unlink2 } from "lucide-react-native";
@@ -8,6 +8,7 @@ import { IconButton, focusHeading } from "../src/design/kit";
 import { GrabberSheet } from "../src/design/GrabberSheet";
 import { MenuRow } from "../src/design/MenuRow";
 import { BlockQuestion, ReportSheet } from "../src/design/ReportSheet";
+import { useAnnounce } from "../src/design/useAnnounce";
 import { colors as c, depth, fonts, r, space } from "../src/design/tokens";
 import { CONNECTIONS_COPY as C, requestLine } from "../src/domain/connectionsCopy";
 import { EVENT_COPY } from "../src/domain/eventPage";
@@ -37,12 +38,40 @@ export default function Connections() {
   const k = useConnections();
   const largeText = useLargeText();
   const [sheet, setSheet] = useState<Sheet | null>(null);
+  // After a block (ruling SR6 Q4): "Blocked <name>." in a polite live region (said aloud on iPhone), and focus on the next
+  // card or row, else a heading, once the sheet has gone.
+  const [blockedNotice, setBlockedNotice] = useState<string | null>(null);
+  useAnnounce(blockedNotice);
+  const nameRefs = useRef(new Map<string, View>());
+  const requestsHeading = useRef<Text | null>(null);
+  const connectedHeading = useRef<Text | null>(null);
+  const titleRef = useRef<Text | null>(null);
+  const focusNext = useRef<(() => View | Text | null) | null>(null);
+  const moveFocus = () => {
+    const target = focusNext.current?.() ?? null;
+    focusNext.current = null;
+    if (target) focusHeading(target);
+  };
+  // Android's Modal says nothing when it has closed: there focus moves as soon as the sheet is off.
+  useEffect(() => {
+    if (Platform.OS === "android" && !sheet) moveFocus();
+  });
+  // Keep after the block confirm gives focus back to Block (H32 Q53, ruling SR6 D1).
+  const blockRow = useRef<View | null>(null);
+  const backToBlock = useRef(false);
+  useEffect(() => {
+    if (sheet?.view !== "menu" || !backToBlock.current) return;
+    backToBlock.current = false;
+    const frame = requestAnimationFrame(() => focusHeading(blockRow.current));
+    return () => cancelAnimationFrame(frame);
+  }, [sheet?.view, sheet?.person.userId]);
   const data = k.data;
   const off = k.acting !== null;
   const loading = !data && k.busy && !k.readError;
   const retry = () => void k.load();
   const open = (person: ConnectionPerson, from: Sheet["from"] = "connection") => {
     k.sheetMoved();
+    setBlockedNotice(null);
     setSheet({ person, from, view: "menu" });
   };
   const close = () => {
@@ -56,15 +85,40 @@ export default function Connections() {
   };
   const current = sheet?.person ?? null;
   const free = largeText && styles.free;
-  /** After a block the sheet closes and the list is read again: the server no longer lists them (I3). */
+  /**
+   * After a block the sheet closes and the list is read again: the server no longer lists them (I3). It says so by name,
+   * and focus goes to the next card or row in the same group, else that group's heading while it still has someone,
+   * else the other group's heading, else the screen's title (ruling SR6 Q4).
+   */
   const afterBlock = () => {
+    if (sheet && data) {
+      const { person, from } = sheet;
+      const group = from === "request" ? data.requests : data.connected;
+      const other = from === "request" ? data.connected : data.requests;
+      const next = group[group.findIndex((p) => p.userId === person.userId) + 1] ?? null;
+      const heading = (which: "request" | "connection") => (which === "request" ? requestsHeading.current : connectedHeading.current);
+      focusNext.current = () =>
+        next
+          ? (nameRefs.current.get(next.userId) ?? null)
+          : group.length > 1
+            ? heading(from)
+            : other.length > 0
+              ? heading(from === "request" ? "connection" : "request")
+              : titleRef.current;
+      setBlockedNotice(SAFETY_COPY.blockedName(shownName(person.name)));
+    }
     setSheet(null);
     k.sheetMoved();
     void k.load();
   };
+  /** Each card's and row's name, so focus can move to it after a block. */
+  const nameRef = (userId: string) => (node: View | null) => {
+    if (node) nameRefs.current.set(userId, node);
+    else nameRefs.current.delete(userId);
+  };
   return (
     <View style={s.page}>
-      <Bar />
+      <Bar titleRef={titleRef} />
       {!data ? (
         <View style={styles.state}>
           <ErrorNote message={k.readError} />
@@ -88,9 +142,14 @@ export default function Connections() {
               <TextAction title={EVENT_COPY.tryAgain} busy={k.busy} disabled={off} onPress={retry} />
             </View>
           ) : null}
+          {blockedNotice ? (
+            <Copy accessibilityLiveRegion="polite" style={styles.notice}>
+              {blockedNotice}
+            </Copy>
+          ) : null}
           {data.requests.length > 0 ? (
             <View style={styles.group}>
-              <Text accessibilityRole="header" style={[styles.groupTitle, free]}>
+              <Text ref={requestsHeading} accessibilityRole="header" style={[styles.groupTitle, free]}>
                 {`${C.requests}${SEPARATOR}${data.requests.length}`}
               </Text>
               {data.requests.map((person) => {
@@ -100,6 +159,7 @@ export default function Connections() {
                     <View style={styles.cardHead}>
                       <Avatar name={person.name} />
                       <View
+                        ref={nameRef(person.userId)}
                         style={styles.name}
                         accessible
                         accessibilityLabel={`${person.name}, ${requestLine(person.context, person.title)}`}
@@ -147,14 +207,14 @@ export default function Connections() {
           ) : null}
           {data.connected.length > 0 ? (
             <View style={styles.group}>
-              <Text accessibilityRole="header" style={[styles.groupTitle, free]}>
+              <Text ref={connectedHeading} accessibilityRole="header" style={[styles.groupTitle, free]}>
                 {`${C.connected}${SEPARATOR}${data.connected.length}`}
               </Text>
               <View style={{ gap: 2 }}>
                 {data.connected.map((person) => (
                   <View key={person.userId} style={styles.person}>
                     <Avatar name={person.name} />
-                    <View style={styles.name} accessible accessibilityLabel={`${person.name}, ${metLine(person)}`}>
+                    <View ref={nameRef(person.userId)} style={styles.name} accessible accessibilityLabel={`${person.name}, ${metLine(person)}`}>
                       <Text style={[styles.nameText, free]}>{person.name}</Text>
                       <Text style={[styles.sub, free]}>{metLine(person)}</Text>
                     </View>
@@ -177,7 +237,7 @@ export default function Connections() {
           )}
         </ScrollView>
       )}
-      <GrabberSheet visible={sheet !== null} onClose={close} label={current?.name}>
+      <GrabberSheet visible={sheet !== null} onClose={close} onDismissed={moveFocus} label={current?.name}>
         {current ? (
           <>
             <View style={styles.head}>
@@ -202,7 +262,10 @@ export default function Connections() {
                 youHost={false}
                 theyHost={false}
                 onBlocked={afterBlock}
-                onKeep={() => setSheet({ ...sheet, view: "menu" })}
+                onKeep={() => {
+                  backToBlock.current = true;
+                  setSheet({ ...sheet, view: "menu" });
+                }}
               />
             ) : sheet?.view === "menu" ? (
               <View>
@@ -224,6 +287,7 @@ export default function Connections() {
                   />
                 ) : null}
                 <MenuRow
+                  ref={blockRow}
                   title={SAFETY_COPY.block(shownName(current.name))}
                   icon={Ban}
                   destructive
@@ -253,9 +317,10 @@ export default function Connections() {
 }
 
 /** The title bar, as on the people list. Back returns to where Connections was opened from, else to Profile. */
-function Bar() {
+function Bar({ titleRef }: { titleRef?: React.MutableRefObject<Text | null> }) {
   const insets = useSafeAreaInsets();
-  const title = useRef<Text | null>(null);
+  const own = useRef<Text | null>(null);
+  const title = titleRef ?? own;
   useEffect(() => {
     const frame = requestAnimationFrame(() => focusHeading(title.current));
     return () => cancelAnimationFrame(frame);
@@ -312,6 +377,7 @@ const styles = StyleSheet.create({
   sub: { fontFamily: fonts.body, fontSize: 12, lineHeight: 16, color: c.muted },
   free: { lineHeight: undefined },
   hint: { fontSize: 13, lineHeight: 18, color: c.muted, marginTop: 4 },
+  notice: { fontFamily: fonts.medium, fontSize: 14 },
   avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: c.aquaSoft, alignItems: "center", justifyContent: "center" },
   avatarBig: { width: 44, height: 44, borderRadius: 22 },
   avatarText: { fontFamily: fonts.bold, fontSize: 13, color: c.aquaDark },

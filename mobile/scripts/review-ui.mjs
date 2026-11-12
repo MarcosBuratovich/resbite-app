@@ -468,6 +468,9 @@ try {
     let invitationRepeats = false;
     // Fix round 1: how long my_chat_overview takes to answer (H36 Q4: the list never waits for it).
     let overviewDelay = 0;
+    // Chat plan 3, fix round 1 (ruling SR6 draft, review M5): the next overview read answers this much later, with what
+    // held when it was asked (a refresh in flight across a block).
+    let slowNextOverview = 0;
     // Chat plan 3: the invitation's owner as named (Ana for the safety checks), the overview's announcements and inviters
     // for them, and the people Stephen blocked, whom my_chat_overview leaves out, as the server does.
     let joName = "Jo";
@@ -587,17 +590,20 @@ try {
           inviters: Object.fromEntries(Object.entries(read.inviters ?? {}).filter(([, id]) => !blocked.includes(id))),
         };
         const answer = invitationChat ? { ...shown, chats: { ...shown.chats, [invitation.series_id]: invitationChat } } : shown;
-        return overviewDelay ? new Promise((r) => setTimeout(r, overviewDelay)).then(() => reply(answer)) : reply(answer);
+        const wait = slowNextOverview || overviewDelay;
+        slowNextOverview = 0;
+        return wait ? new Promise((r) => setTimeout(r, wait)).then(() => reply(answer)) : reply(answer);
       }
       // Chat plan 2's group flag on the resbite page: these resbites are one-offs.
       if (path === "/rest/v1/rpc/series_is_group") return reply(false);
       // Chat plan 3: Stephen's blocks (the people list reads them beside the states), block and unblock, and reports.
-      if (path === "/rest/v1/rpc/my_blocks") return reply(blocked.map((id) => ({ user_id: id, name: null })));
+      if (path === "/rest/v1/rpc/my_blocks") return reply(blocked.map((id) => ({ user_id: id, name: null, at: "2099-02-01T10:00:00Z" })));
       if (path === "/rest/v1/rpc/block_user") {
         const { p_user, p_block } = req.postDataJSON();
         blocked = blocked.filter((id) => id !== p_user);
         if (p_block) blocked.unshift(p_user);
-        return route.fulfill({ status: 204, body: "" });
+        // `stored` (server review M7): a block row exists afterwards for a block, none for an unblock.
+        return reply(p_block === true);
       }
       if (path === "/rest/v1/rpc/report_message" || path === "/rest/v1/rpc/report_user") return route.fulfill({ status: 204, body: "" });
       // Named, so a failure says which request nobody planned for.
@@ -812,18 +818,37 @@ try {
       assert.deepEqual(calls("report_message"), [{ p_id: 41, p_reason: "spam", p_details: null }]);
       await button(page, "Done").click();
       await expect(sheet).toHaveCount(0);
+      // A refresh still in flight across the block (the return to the app reads the overview again, slowly, with what
+      // held before the block) must not bring the line back once the post-block read has landed (review M5).
+      const asked = calls("my_chat_overview").length;
+      slowNextOverview = 8000;
+      await page.evaluate(() => {
+        const set = (v) => Object.defineProperty(document, "visibilityState", { configurable: true, get: () => v });
+        set("hidden");
+        document.dispatchEvent(new Event("visibilitychange"));
+        set("visible");
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      await expect.poll(() => calls("my_chat_overview").length).toBeGreaterThan(asked);
       await anaCard.first().click({ delay: 700 });
       await button(page, "Block Ana").click();
       await expect(
         sheet.getByText("Block Ana? You won’t see Ana’s messages or announcements, and Ana won’t know. Any connection between you ends, and unblocking won’t bring it back.", { exact: true }),
       ).toBeVisible();
       await shot("plans-invitation-block", false);
+      // Keep: back to the list, focus on Block Ana (H32 Q53, ruling SR6 D1).
+      await button(page, "Keep").click();
+      await expect.poll(() => page.evaluate(() => document.activeElement?.textContent ?? null)).toBe("Block Ana");
+      await button(page, "Block Ana").click();
       const overviews = calls("my_chat_overview").length;
       await button(page, "Block Ana").click();
       await expect(sheet.getByText("Blocked", { exact: true })).toBeVisible();
       assert.deepEqual(calls("block_user"), [{ p_user: jo, p_block: true }]);
       await expect.poll(() => calls("my_chat_overview").length).toBeGreaterThan(overviews);
       await button(page, "Close sheet").click();
+      await expect(page.getByText(anaLine, { exact: true })).toHaveCount(0);
+      // The slow read, asked before the block, has landed by now: the line stays gone.
+      await page.waitForTimeout(8500);
       await expect(page.getByText(anaLine, { exact: true })).toHaveCount(0);
       // No announcement, and Pedro invited Stephen: Pedro first, then Ana, whom the byline names.
       blocked = [];

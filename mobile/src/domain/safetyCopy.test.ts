@@ -8,6 +8,7 @@ import {
   invitationActionLabel,
   invitationActions,
   invitationEntry,
+  rulesHeldLine,
   showsReportOrBlock,
   shownName,
   supportAddress,
@@ -324,4 +325,20 @@ test("an invitation's actions read as their menu rows, and their accessibility a
     { name: `block:${PEDRO}`, label: "Block Pedro" },
   ]);
   assert.deepEqual(invitationAccessibilityActions([]), []);
+});
+
+// Fix round 1 (ruling SR6 draft, review M6): the rules sheet says what waits, a message, an announcement or both.
+test("rulesHeldLine words what waits for the rules: messages, an announcement, or both together", () => {
+  assert.equal(rulesHeldLine(0, false), null);
+  assert.equal(rulesHeldLine(1, false), "Your message hasn’t been sent. Agree to the chat rules to send it.");
+  assert.equal(rulesHeldLine(3, false), "3 messages haven’t been sent. Agree to the chat rules to send them.");
+  assert.equal(rulesHeldLine(0, true), "Your announcement hasn’t been sent. Agree to the chat rules to send it.");
+  assert.equal(rulesHeldLine(1, true), "Your announcement and a message haven’t been sent. Agree to the chat rules to send them.");
+  assert.equal(rulesHeldLine(2, true), "Your announcement and 2 messages haven’t been sent. Agree to the chat rules to send them.");
+});
+
+// Fix round 1 (ruling SR6, Q4): Connections says the block went through, by name, as the list closes over it.
+test("blockedName says Blocked and the cleaned name", () => {
+  assert.equal(S.blockedName("Pedro"), "Blocked Pedro.");
+  assert.equal(S.blockedName(shownName("\u200bPedro")), "Blocked Pedro.");
 });

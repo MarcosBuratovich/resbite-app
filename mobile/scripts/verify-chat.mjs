@@ -88,6 +88,13 @@
 //   s8  a send refused 'Not allowed' reads "That message can’t be sent."
 //   s9  alone in the chat, the menu has no Report or block
 //   s10 a row removed by Resbite reads "Message removed by Resbite"; a host's removal "Message removed by an admin"
+// Fix round 1 (ruling SR6): focus moves into each new view of the menu's Report or block and back to Block after Keep
+// (H32 Q53, in s4); "Blocked" is said once on a blocked person's row (s4);
+//   s2b a message removed while its report is open keeps the sheet and the typed text, and says it can't be reported
+//   s7e Send announcement before the rules are agreed: the rules first; Cancel brings the words and audience back; I
+//       agree sends it
+//   s7f Cancel on an announcement held for the rules: the form again with its words and audience; it goes later with
+//       the same p_client_id
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -452,11 +459,13 @@ async function fixture({ viewer = PEDRO, now = OCT.now, rows = octRows(), summar
 
     const rpc = path.startsWith("/rest/v1/rpc/") ? path.slice("/rest/v1/rpc/".length) : null;
     // Chat plan 3: the viewer's blocks, block and unblock, the reports and the chat rules, as Tasks 1 and 2 define them.
-    if (rpc === "my_blocks") return reply(state.blocked.map((id) => ({ user_id: id, name: NAMES[id] ?? null })));
+    // Newest first, with each block's time, as the server answers (ad0a3e6).
+    if (rpc === "my_blocks") return reply(state.blocked.map((id) => ({ user_id: id, name: NAMES[id] ?? null, at: iso(serverNow()) })));
     if (rpc === "block_user") {
       state.blocked = state.blocked.filter((id) => id !== body.p_user);
       if (body.p_block) state.blocked.unshift(body.p_user);
-      return empty();
+      // `stored` (server review M7): a block row exists afterwards for a block, none for an unblock.
+      return reply(body.p_block === true);
     }
     if (rpc === "report_message" || rpc === "report_user") {
       if (state.failReports > 0) {
@@ -2197,6 +2206,33 @@ try {
   }
   console.log("PASS (s2): a report answered offline keeps the sheet, the reason and the typed details, with Check your connection and try again.; a second Send report goes through with the details.");
 
+  // (s2b) Ruling SR6 Q1: the message is removed while its report is open: the sheet stays with what was typed and says so.
+  {
+    const f = await fixture({ guests: PEOPLE });
+    const { page } = f;
+    await openChat(page);
+    await expect.poll(() => f.joins().length).toBe(1);
+    await f.settle();
+    await longPress(leoBubble(page));
+    await button(page, "Report message").click();
+    await page.getByRole("radio", { name: "Harassment", exact: true }).click();
+    await labelled(page, "Anything else? (optional)").fill("He keeps messaging me");
+    const reads = f.calls("chat_messages_since").length;
+    f.change(103, { state: "removed", body: null });
+    f.signal({ id: 103, kind: "message", state: "removed" });
+    await expect.poll(() => f.calls("chat_messages_since").length).toBeGreaterThan(reads);
+    await expect(heading(page, "Report message")).toBeVisible();
+    await expect(sheet(page).getByText("You can’t report that any more.", { exact: true })).toBeVisible();
+    await expect(labelled(page, "Anything else? (optional)")).toHaveValue("He keeps messaging me");
+    await expect(button(page, "Send report")).toBeDisabled();
+    assert.deepEqual(f.calls("report_message"), []);
+    await button(page, "Cancel").click();
+    await expect(heading(page, "Report message")).toHaveCount(0);
+    await expect(labelled(page, "Leo, Message removed by an admin, Tue 27 Oct, 18:10")).toBeVisible();
+    await f.done();
+  }
+  console.log("PASS (s2b): Leo's message removed while its report is open: the sheet stays with the reason and the typed text, says You can’t report that any more., Send report is disabled, and nothing is sent.");
+
   // (s3) Nothing to report on one's own message, nor on a system line.
   {
     const f = await fixture({ guests: PEOPLE, rows: [...octRows(), say(106, PEDRO, "See you there", "2026-10-28T09:45:00Z")] });
@@ -2233,9 +2269,17 @@ try {
     await entry.click();
     for (const name of ["Ana", "Leo", "Mia"]) await expect(inSheet(page, name)).toBeVisible();
     await expect(inSheet(page, "Pedro")).toHaveCount(0);
+    // Each new view takes focus (H32 Q53, ruling SR6): the list's heading, then the person's.
+    await expect.poll(() => focusedText(page)).toBe("Report or block");
     await inSheet(page, "Leo").click();
     await expect(button(page, "Report Leo")).toBeVisible();
+    await expect.poll(() => focusedText(page)).toBe("Leo");
     assert.ok(await inOrder(page, [button(page, "Report Leo"), button(page, "Block Leo")]), "Report, then Block");
+    await button(page, "Block Leo").click();
+    await expect(text(page, BLOCK_LEO)).toBeVisible();
+    // Keep goes back to the person's sheet, with focus on Block Leo.
+    await button(page, "Keep").click();
+    await expect.poll(() => focusedText(page)).toBe("Block Leo");
     await button(page, "Block Leo").click();
     await expect(text(page, BLOCK_LEO)).toBeVisible();
     const before = f.mark();
@@ -2252,12 +2296,14 @@ try {
     // The menu's list now offers Unblock Leo, and Leo reads Blocked.
     await button(page, "More").click();
     await button(page, "Report or block").click();
+    // "Blocked" is said once: in the row's name, not again as its hint (ruling SR6 draft).
+    assert.equal(await hintOf(button(page, "Leo, Blocked")), null);
     await button(page, "Leo, Blocked").click();
     await expect(button(page, "Unblock Leo")).toBeVisible();
     await expect(button(page, "Block Leo")).toHaveCount(0);
     await f.done();
   }
-  console.log("PASS (s4): the menu's Report or block (after Mute chat) lists Ana, Leo and Mia; Leo → Report Leo then Block Leo → the confirm reads Leo's question → block_user { p_user, p_block: true }, then chat_summary and chat_messages once each, and no bubble by Leo; Leo then reads Blocked with Unblock Leo.");
+  console.log("PASS (s4): the menu's Report or block (after Mute chat) lists Ana, Leo and Mia, with focus on its heading; Leo → his sheet, focused on his name: Report Leo then Block Leo → the confirm reads Leo's question; Keep → focus on Block Leo; confirm → block_user { p_user, p_block: true }, then chat_summary and chat_messages once each, and no bubble by Leo; Leo then reads Blocked, said once, with Unblock Leo.");
 
   // (s4b) Blocked from People in this chat, over the mounted chat: its list is replaced before Back (B3).
   {
@@ -2451,6 +2497,65 @@ try {
     await f.done();
   }
   console.log("PASS (s7d): a host's announcement refused 'Rules not accepted' closes the Announce sheet into Chat rules with Your announcement hasn’t been sent…; I agree calls accept_chat_rules, then send_announcement with the same p_client_id, p_body and p_audience.");
+
+  // (s7e) Ruling SR6 draft (review M3): Send announcement before the rules are agreed: the rules first, in the sheet's
+  // place; Cancel brings the words and audience back; I agree sends it.
+  {
+    const f = await fixture({ viewer: ANA, summary: { rules_accepted: false } });
+    const { page } = f;
+    await openChat(page);
+    await button(page, "Announce").click();
+    await page.getByRole("radio", { name: "Everyone invited · 5", exact: true }).click();
+    await labelled(page, "Write an update for your guests").fill("Doors open at 19:30");
+    await button(page, "Send announcement").click();
+    await expect(heading(page, "Chat rules")).toBeVisible();
+    await expect(heading(page, "New announcement")).toHaveCount(0);
+    assert.equal(f.calls("send_announcement").length, 0, "nothing is called before I agree");
+    await button(page, "Cancel").click();
+    await expect(heading(page, "New announcement")).toBeVisible();
+    await expect(labelled(page, "Write an update for your guests")).toHaveValue("Doors open at 19:30");
+    await expect(page.getByRole("radio", { name: "Everyone invited · 5", exact: true })).toBeChecked();
+    assert.equal(f.calls("accept_chat_rules").length, 0);
+    await button(page, "Send announcement").click();
+    await button(page, "I agree").click();
+    await expect.poll(() => f.calls("send_announcement").length).toBe(1);
+    assert.deepEqual(f.calls("accept_chat_rules"), [{}]);
+    const [sent] = f.calls("send_announcement");
+    assert.deepEqual([sent.p_body, sent.p_audience], ["Doors open at 19:30", "everyone"]);
+    await expect(heading(page, "New announcement")).toHaveCount(0);
+    await expect(labelled(page, starts("Announcement to everyone invited, You, Doors open at 19:30"))).toBeVisible();
+    await f.done();
+  }
+  console.log("PASS (s7e): Send announcement with rules_accepted false turns the sheet into Chat rules and calls nothing; Cancel brings back the words and Everyone invited; I agree calls accept_chat_rules, then send_announcement once with them.");
+
+  // (s7f) Ruling SR6 draft (review M3): Cancel on an announcement held for the rules: the form again with its words and
+  // audience, and the wait dropped; sent later, it keeps its client id.
+  {
+    const f = await fixture({ viewer: ANA, refusals: [400] });
+    const { page } = f;
+    await openChat(page);
+    f.state.refuseAnnounce = RULES;
+    await button(page, "Announce").click();
+    await page.getByRole("radio", { name: "Everyone invited · 5", exact: true }).click();
+    await labelled(page, "Write an update for your guests").fill("Doors open at 19:30");
+    await button(page, "Send announcement").click();
+    await expect(text(page, "Your announcement hasn’t been sent. Agree to the chat rules to send it.")).toBeVisible();
+    await button(page, "Cancel").click();
+    await expect(heading(page, "New announcement")).toBeVisible();
+    await expect(heading(page, "Chat rules")).toHaveCount(0);
+    await expect(labelled(page, "Write an update for your guests")).toHaveValue("Doors open at 19:30");
+    await expect(page.getByRole("radio", { name: "Everyone invited · 5", exact: true })).toBeChecked();
+    assert.equal(f.calls("accept_chat_rules").length, 0);
+    assert.equal(f.calls("send_announcement").length, 1, "only the refused one");
+    // Sent again (the server now takes it), with the client id kept for the same words and audience.
+    await button(page, "Send announcement").click();
+    await expect.poll(() => f.calls("send_announcement").length).toBe(2);
+    const [refused, sent] = f.calls("send_announcement");
+    assert.deepEqual(sent, refused);
+    await expect(heading(page, "New announcement")).toHaveCount(0);
+    await f.done();
+  }
+  console.log("PASS (s7f): Cancel on an announcement held for the rules brings back the form with its words and Everyone invited, sends nothing more, and the announcement then goes with the same p_client_id.");
 
   // (s8) A blocked term.
   {

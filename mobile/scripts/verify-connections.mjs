@@ -30,7 +30,9 @@
 //   safety     chat plan 3 (challenge I3): a request card's dots → Report Pedro → Spam → report_user with the request's
 //              series_id as p_series (none for a request with no resbite); → Block Pedro → the confirm → block_user
 //              { p_user, p_block: true }, then my_connections again, and the card goes; a connection's dots → Block
-//              Marta after Remove connection, the same, and the row goes; a connection has no Report
+//              Marta after Remove connection, the same, and the row goes; a connection has no Report. Fix round 1
+//              (ruling SR6): Keep puts focus back on Block; after a block "Blocked <name>." is said and focus moves
+//              to the next card or row
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { AUTH_STORAGE_KEY, button, heading, heightOf, inOrder, noChat, quietReminders, visible } from "./qa-helpers.mjs";
@@ -249,7 +251,7 @@ async function fixture({
     }
     if (path === "/rest/v1/rpc/my_join_requests") return reply([]);
     // Chat plan 3: Ana's blocks, block and unblock, and reporting a person.
-    if (path === "/rest/v1/rpc/my_blocks") return reply(state.blocked.map((id) => ({ user_id: id, name: null })));
+    if (path === "/rest/v1/rpc/my_blocks") return reply(state.blocked.map((id) => ({ user_id: id, name: null, at: "2099-02-01T10:00:00Z" })));
     if (path === "/rest/v1/rpc/block_user") {
       state.blocked = state.blocked.filter((id) => id !== body.p_user);
       if (body.p_block) {
@@ -258,7 +260,8 @@ async function fixture({
         state.connected = state.connected.filter((r) => r.user_id !== body.p_user);
         delete state.pairs[body.p_user];
       }
-      return empty();
+      // `stored` (server review M7): a block row exists afterwards for a block, none for an unblock.
+      return reply(body.p_block === true);
     }
     if (path === "/rest/v1/rpc/report_user") return empty();
     if (path === "/rest/v1/rpc/my_connections") {
@@ -318,6 +321,9 @@ async function fixture({
 }
 
 const connectionsRow = (page, label) => page.getByRole("button", { name: label, exact: true });
+/** The element that has focus now: its text, or its spoken name. */
+const focusedText = (page) => page.evaluate(() => document.activeElement?.textContent ?? null);
+const focusedLabel = (page) => page.evaluate(() => document.activeElement?.getAttribute("aria-label") ?? null);
 const tick = (page, name) => visible(page.getByRole("checkbox", { name: `Select ${name}`, exact: true }));
 const text = (page, words) => visible(page.getByText(words, { exact: true }));
 const REFUSED = "One connection you picked can't be invited right now. The others were invited.";
@@ -920,9 +926,16 @@ try {
     await expect(
       sheet.getByText("Block Pedro? You won’t see Pedro’s messages, and Pedro won’t know. Any connection between you ends, and unblocking won’t bring it back.", { exact: true }),
     ).toBeVisible();
+    // Keep: back to the sheet, with focus on Block Pedro (H32 Q53, ruling SR6 D1).
+    await button(page, "Keep").click();
+    await expect.poll(() => focusedText(page)).toBe("Block Pedro");
+    await button(page, "Block Pedro").click();
     const reads = f.calls("my_connections").length;
     await button(page, "Block Pedro").click();
     await expect(button(page, "Actions for Pedro")).toHaveCount(0);
+    // Said by name, and focus on the next card (ruling SR6 Q4).
+    await expect(visible(page.getByText("Blocked Pedro.", { exact: true }))).toBeVisible();
+    await expect.poll(() => focusedLabel(page)).toMatch(/^Sofía Gil, /);
     assert.deepEqual(f.calls("block_user").map((x) => x.body), [{ p_user: PEDRO, p_block: true }]);
     assert.ok(f.calls("my_connections").length > reads, "the list is read again");
     await expect(heading(page, "Requests · 1")).toBeVisible();
@@ -937,11 +950,13 @@ try {
     ).toBeVisible();
     await button(page, "Block Marta").click();
     await expect(button(page, "Actions for Marta")).toHaveCount(0);
+    await expect(visible(page.getByText("Blocked Marta.", { exact: true }))).toBeVisible();
+    await expect.poll(() => focusedLabel(page)).toBe("Tomás, Met on Resbite");
     assert.deepEqual(f.calls("block_user").map((x) => x.body).at(-1), { p_user: MARTA, p_block: true });
     await expect(heading(page, "Connected · 1")).toBeVisible();
     await f.done();
   }
-  console.log("PASS (safety): a request card's dots → Report Pedro → Spam → report_user { p_series: the request's series_id }; a request with no resbite has Block only; Block Pedro → the confirm → block_user, my_connections again, and the card goes; a connection's dots → Block Marta after Remove connection (no Report) → block_user, and the row goes.");
+  console.log("PASS (safety): a request card's dots → Report Pedro → Spam → report_user { p_series: the request's series_id }; a request with no resbite has Block only; Block Pedro → the confirm → Keep (focus on Block Pedro) → confirm → block_user, my_connections again, the card goes, Blocked Pedro. is said and focus moves to Sofía's card; a connection's dots → Block Marta after Remove connection (no Report) → block_user, the row goes, Blocked Marta. and focus on Tomás.");
 
   console.log("PASS: Connections, the people list's Connect, Cancel request and Accept, and Your connections on Invite people. All Supabase requests intercepted.");
 } finally {

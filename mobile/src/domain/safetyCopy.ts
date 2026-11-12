@@ -22,6 +22,8 @@ export const SAFETY_COPY = {
   block: (name: string) => `Block ${name}`,
   unblock: (name: string) => `Unblock ${name}`,
   blocked: "Blocked",
+  /** Connections, once a block went through and its card or row is gone (fix round 1, ruling SR6 Q4). */
+  blockedName: (name: string) => `Blocked ${name}.`,
   /**
    * The block confirm (G-N9), naming the person, never a pronoun: a reader who hosts is told what they give up; a host
    * being blocked loses their announcements too (NOTE 7). The last sentence says what a block does to a connection, and
@@ -59,6 +61,11 @@ export const SAFETY_COPY = {
       ? "Your message hasn’t been sent. Agree to the chat rules to send it."
       : `${n} messages haven’t been sent. Agree to the chat rules to send them.`,
   rulesHeldAnnouncement: "Your announcement hasn’t been sent. Agree to the chat rules to send it.",
+  /** An announcement and messages both held for the rules (fix round 1, review M6). */
+  rulesHeldBoth: (n: number) =>
+    n === 1
+      ? "Your announcement and a message haven’t been sent. Agree to the chat rules to send them."
+      : `Your announcement and ${n} messages haven’t been sent. Agree to the chat rules to send them.`,
   rulesNotSaved: "That didn’t go through, so nothing was sent. Try again.",
 
   // Blocked people (G-S10).
@@ -206,4 +213,13 @@ export function invitationAccessibilityActions(actions: readonly InvitationActio
     name: action.kind === "reportMessage" ? `reportMessage:${action.id}` : `${action.kind}:${action.userId}`,
     label: invitationActionLabel(action),
   }));
+}
+
+/**
+ * The rules sheet's line on what waits for the rules (I6, review M6): the messages held, the announcement held, or both
+ * together; null when nothing waits (before a first send).
+ */
+export function rulesHeldLine(messages: number, announcement: boolean): string | null {
+  if (announcement) return messages > 0 ? SAFETY_COPY.rulesHeldBoth(messages) : SAFETY_COPY.rulesHeldAnnouncement;
+  return messages > 0 ? SAFETY_COPY.rulesHeldMessage(messages) : null;
 }

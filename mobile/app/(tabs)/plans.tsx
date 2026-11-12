@@ -8,7 +8,7 @@ import { eventPicture } from "../../src/domain/events";
 import { supabase } from "../../src/services/supabase";
 import { useApp, LocalPlan } from "../../src/state/AppState";
 import { Copy, Title, ErrorNote, Reveal, TextAction, s, useLargeText } from "../../src/design/ui";
-import { Chip, chipToneFor, CoverCard, Fab, IconButton, Segmented, Tile } from "../../src/design/kit";
+import { Chip, chipToneFor, CoverCard, Fab, IconButton, Segmented, Tile, focusHeading } from "../../src/design/kit";
 import { fonts } from "../../src/design/tokens";
 import { PreviewNotice } from "../../src/design/Chrome";
 import { GrabberSheet } from "../../src/design/GrabberSheet";
@@ -98,6 +98,8 @@ export default function Plans() {
   identity.current = scope;
   const [loadedFor, setLoadedFor] = useState<string>();
   const request = useRef<AbortController | null>(null);
+  // The latest read of the overview wins (review M5): a refresh still in flight can't land after the read a block makes.
+  const overviewRead = useRef(0);
   useEffect(() => {
     setPlans([]);
     setAttendees([]);
@@ -129,9 +131,10 @@ export default function Plans() {
     setError(null);
     // The chats never hold the list back (H36): the overview lands when it arrives, and a failure keeps the last dots and
     // announcements (K-S13), as the requests' read does.
+    const overviewTicket = ++overviewRead.current;
     void chatGateway.overview().then(
       (chats) => {
-        if (isCurrent()) setOverview(chats);
+        if (isCurrent() && overviewTicket === overviewRead.current) setOverview(chats);
       },
       () => {},
     );
@@ -214,9 +217,10 @@ export default function Plans() {
   readOverview.current = () => {
     if (preview || !session) return;
     const uid = session.user.id;
+    const ticket = ++overviewRead.current;
     void chatGateway.overview().then(
       (chats) => {
-        if (identity.current === uid) setOverview(chats);
+        if (identity.current === uid && ticket === overviewRead.current) setOverview(chats);
       },
       () => {},
     );
@@ -544,6 +548,20 @@ function InvitationSheet({
   onClose: () => void;
 }) {
   const step = reporting?.step ?? null;
+  // The list takes focus on its first row, and after Keep on the Block row it came from (H32 Q53, ruling SR6 D1).
+  const rows = React.useRef(new Map<string, View>());
+  const backTo = React.useRef<string | null>(null);
+  const keyOf = (action: InvitationAction) => (action.kind === "reportMessage" ? `message:${action.id}` : `${action.kind}:${action.userId}`);
+  const actions = plan ? actionsFor(plan) : [];
+  const first = actions[0] ? keyOf(actions[0]) : null;
+  useEffect(() => {
+    if (step?.kind !== "list") return;
+    const key = backTo.current ?? first;
+    backTo.current = null;
+    const frame = requestAnimationFrame(() => focusHeading((key ? rows.current.get(key) : undefined) ?? null));
+    return () => cancelAnimationFrame(frame);
+    // When the list comes into view, not on every redraw.
+  }, [step?.kind, reporting?.planId]);
   return (
     <GrabberSheet visible={reporting !== null && plan !== null} label={SAFETY_COPY.reportOrBlock} onClose={onClose}>
       {!plan || !step ? null : step.kind === "report" ? (
@@ -555,15 +573,22 @@ function InvitationSheet({
           youHost={false}
           theyHost={step.theyHost}
           onBlocked={() => onStep({ kind: "blocked" })}
-          onKeep={() => onStep({ kind: "list" })}
+          onKeep={() => {
+            backTo.current = `block:${step.userId}`;
+            onStep({ kind: "list" });
+          }}
         />
       ) : step.kind === "blocked" ? (
         <BlockedLine />
       ) : (
         <View>
-          {actionsFor(plan).map((action) => (
+          {actions.map((action) => (
             <MenuRow
-              key={action.kind === "reportMessage" ? `message:${action.id}` : `${action.kind}:${action.userId}`}
+              key={keyOf(action)}
+              ref={(node) => {
+                if (node) rows.current.set(keyOf(action), node);
+                else rows.current.delete(keyOf(action));
+              }}
               title={invitationActionLabel(action)}
               icon={action.kind === "block" ? Ban : Flag}
               destructive={action.kind === "block"}

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createSafetyGateway, onBlocksChanged, safetyErrorMessage } from "./safety";
+import { blockConfirmed, createSafetyGateway, knownBlocksAfter, onBlocksChanged, safetyErrorMessage } from "./safety";
 
 type Call = { fn: string; args: Record<string, unknown> };
 function gateway(data: unknown = null, error: unknown = null) {
@@ -33,8 +33,9 @@ async function heard(run: () => Promise<unknown>): Promise<number> {
 
 test("block and unblock send block_user with the person and p_block", async () => {
   const { calls, gw } = gateway();
-  assert.equal(await gw.block(LEO), undefined);
-  assert.equal(await gw.unblock(LEO), undefined);
+  // The answer says nothing here (null): the result says so (server review M7).
+  assert.deepEqual(await gw.block(LEO), { stored: null });
+  assert.deepEqual(await gw.unblock(LEO), { stored: null });
   assert.deepEqual(calls, [
     { fn: "block_user", args: { p_user: LEO, p_block: true } },
     { fn: "block_user", args: { p_user: LEO, p_block: false } },
@@ -47,10 +48,25 @@ test("myBlocks sends my_blocks and reads each person as { userId, name }, newest
     { user_id: ANA, name: null },
   ]);
   assert.deepEqual(await gw.myBlocks(), [
-    { userId: LEO, name: "Leo" },
-    { userId: ANA, name: null },
+    { userId: LEO, name: "Leo", at: null },
+    { userId: ANA, name: null, at: null },
   ]);
   assert.deepEqual(calls, [{ fn: "my_blocks", args: {} }]);
+});
+
+// The server (ad0a3e6) adds each block's time, `at`, newest first: kept for Blocked people (Task 6, ruling SR7).
+test("myBlocks keeps each block's time, at, and reads one that isn't text as null", async () => {
+  const at = "2026-11-12T10:00:00.123456+00:00";
+  assert.deepEqual(
+    await gateway([
+      { user_id: LEO, name: "Leo", at },
+      { user_id: ANA, name: null, at: 5 },
+    ]).gw.myBlocks(),
+    [
+      { userId: LEO, name: "Leo", at },
+      { userId: ANA, name: null, at: null },
+    ],
+  );
 });
 
 test("myBlocks reads odd rows defensively: a row without an id goes, a name that isn't text is null", async () => {
@@ -58,8 +74,8 @@ test("myBlocks reads odd rows defensively: a row without an id goes, a name that
   assert.deepEqual(
     await gateway([{ user_id: LEO, name: 5 }, { name: "Ana" }, { user_id: "", name: "Bo" }, null, "x", { user_id: ANA }]).gw.myBlocks(),
     [
-      { userId: LEO, name: null },
-      { userId: ANA, name: null },
+      { userId: LEO, name: null, at: null },
+      { userId: ANA, name: null, at: null },
     ],
   );
 });
@@ -199,7 +215,7 @@ test("a listener that throws neither stops the others nor fails the block that w
   });
   const stopGood = onBlocksChanged(() => later++);
   try {
-    assert.equal(await gw.block(LEO), undefined);
+    assert.deepEqual(await gw.block(LEO), { stored: null });
   } finally {
     stopBad();
     stopGood();
@@ -263,4 +279,61 @@ test("report details are well formed, and text with nothing visible is sent as n
   );
   // The cut field is 500 characters as the server counts them (code points), within its limit.
   assert.equal([...(calls[0].args.p_details as string)].length, 500);
+});
+
+// Fix round 1 (ruling SR6, Q2): the event says whom it was about and which way, so a screen can keep a block the server
+// confirmed even when its next read of the blocks fails.
+test("'blocks changed' says who was blocked or unblocked", async () => {
+  const { gw } = gateway();
+  const heardChanges: unknown[] = [];
+  const stop = onBlocksChanged((change) => heardChanges.push(change));
+  await gw.block(LEO);
+  await gw.unblock(ANA);
+  stop();
+  assert.deepEqual(heardChanges, [
+    { userId: LEO, blocked: true, stored: null },
+    { userId: ANA, blocked: false, stored: null },
+  ]);
+});
+
+// Server final review M7: block_user answers `stored`, true only when a block row exists afterwards; a block can succeed
+// and store nothing (the person stopped being readable between the screen and the tap).
+test("block and unblock read block_user's stored answer, whatever shape it comes in, and the event carries it", async () => {
+  for (const [data, stored] of [
+    [true, true],
+    [false, false],
+    [{ stored: true }, true],
+    [{ stored: false }, false],
+    [[{ stored: true }], true],
+    [null, null],
+    [{}, null],
+    ["yes", null],
+  ] as const) {
+    const { gw } = gateway(data);
+    const changes: unknown[] = [];
+    const stop = onBlocksChanged((change) => changes.push(change));
+    assert.deepEqual(await gw.block(LEO), { stored }, JSON.stringify(data));
+    stop();
+    assert.deepEqual(changes, [{ userId: LEO, blocked: true, stored }], JSON.stringify(data));
+  }
+});
+
+test("blockConfirmed: a block stored, or an unblock leaving no block; anything else is unconfirmed", () => {
+  assert.equal(blockConfirmed({ userId: LEO, blocked: true, stored: true }), true);
+  assert.equal(blockConfirmed({ userId: LEO, blocked: true, stored: false }), false);
+  assert.equal(blockConfirmed({ userId: LEO, blocked: true, stored: null }), false);
+  assert.equal(blockConfirmed({ userId: LEO, blocked: false, stored: false }), true);
+  assert.equal(blockConfirmed({ userId: LEO, blocked: false, stored: true }), false);
+  assert.equal(blockConfirmed({ userId: LEO, blocked: false, stored: null }), false);
+});
+
+test("knownBlocksAfter: a confirmed change is applied to what is known; an unconfirmed one changes nothing; unknown stays unknown", () => {
+  const known = new Set([ANA]);
+  assert.deepEqual([...knownBlocksAfter(known, { userId: LEO, blocked: true, stored: true })!], [ANA, LEO]);
+  assert.deepEqual([...knownBlocksAfter(known, { userId: ANA, blocked: false, stored: false })!], []);
+  assert.equal(knownBlocksAfter(known, { userId: LEO, blocked: true, stored: false }), known);
+  assert.equal(knownBlocksAfter(known, { userId: LEO, blocked: true, stored: null }), known);
+  assert.equal(knownBlocksAfter(null, { userId: LEO, blocked: true, stored: true }), null);
+  // The set it was given is never changed in place.
+  assert.deepEqual([...known], [ANA]);
 });

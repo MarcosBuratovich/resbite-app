@@ -106,6 +106,19 @@ export default function EventPage() {
     | { kind: "block"; userId: string; name: string; theyHost: boolean }
     | { kind: "blocked" }
   >({ kind: "list" });
+  // Report or block's list takes focus on its first row, and after Keep on the Block row it came from (H32 Q53, ruling
+  // SR6 D1).
+  const safetyRows = useRef(new Map<string, View>());
+  const safetyFocus = useRef<string | null>(null);
+  const firstSafetyRow = useRef<string | null>(null);
+  useEffect(() => {
+    if (!moreOpen || moreView !== "safety" || safety.kind !== "list") return;
+    const key = safetyFocus.current ?? firstSafetyRow.current;
+    safetyFocus.current = null;
+    const frame = requestAnimationFrame(() => focusHeading((key ? safetyRows.current.get(key) : undefined) ?? null));
+    return () => cancelAnimationFrame(frame);
+    // When the list comes into view, not on every redraw.
+  }, [moreOpen, moreView, safety.kind]);
   // Leave's question takes focus, and Keep gives it back to the Leave row, as the chat's does (H32 Q53, review M2).
   const leaveQuestion = useRef<Text | null>(null);
   const leaveRow = useRef<View | null>(null);
@@ -225,6 +238,9 @@ export default function EventPage() {
   }).filter((row) => row !== "reportOrBlock" || reportable.length > 0);
   const hasMore = rows.length > 0;
   const closeMore = () => setMoreOpen(false);
+  const safetyKey = (action: (typeof reportable)[number]) =>
+    action.kind === "reportMessage" ? `message:${action.id}` : `${action.kind}:${action.userId}`;
+  firstSafetyRow.current = reportable[0] ? safetyKey(reportable[0]) : null;
   /** Report or block, in the More sheet: from its row, or from the button beside the announcement (B1). */
   function openSafety() {
     event.clearError();
@@ -538,14 +554,21 @@ export default function EventPage() {
               youHost={false}
               theyHost={safety.theyHost}
               onBlocked={() => setSafety({ kind: "blocked" })}
-              onKeep={() => setSafety({ kind: "list" })}
+              onKeep={() => {
+                safetyFocus.current = `block:${safety.userId}`;
+                setSafety({ kind: "list" });
+              }}
             />
           ) : safety.kind === "blocked" ? (
             <BlockedLine />
           ) : (
             reportable.map((action) => (
               <MenuRow
-                key={action.kind === "reportMessage" ? `message:${action.id}` : `${action.kind}:${action.userId}`}
+                key={safetyKey(action)}
+                ref={(node) => {
+                  if (node) safetyRows.current.set(safetyKey(action), node);
+                  else safetyRows.current.delete(safetyKey(action));
+                }}
                 title={invitationActionLabel(action)}
                 icon={action.kind === "block" ? Ban : Flag}
                 destructive={action.kind === "block"}
