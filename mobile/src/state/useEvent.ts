@@ -96,8 +96,8 @@ export type EventPage = {
   /**
    * The series' chat for the Chat row (`chat_summary`, K-S13), read after the event and landing when it arrives, and
    * again after an answer. Null until then, for someone who isn't in the chat (42501), when a first read or a read after
-   * an answer fails, in the preview and on the people list (`chain`, which has no Chat row): the row hides. A refresh
-   * that fails keeps the last one (H36).
+   * a confirmed answer fails, in the preview and on the people list (`chain`, which has no Chat row): the row hides. A
+   * refresh, or a read after an answer that wasn't confirmed, that fails keeps the last one (H36, H38).
    */
   chat: ChatSummary | null;
   /**
@@ -177,8 +177,8 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
   const chatRead = useRef(0);
   /**
    * Reads the series' chat for the Chat row. 'Not in this chat' always hides the row (K-S13). Any other failure keeps
-   * the row as it was when `keepOnFailure` (the page's loads: offline, a refresh mustn't make it vanish, H36), and hides
-   * it after an answer, which can move the person out of the chat. On a page's first read there is nothing to keep.
+   * the row as it was when `keepOnFailure` (the page's loads, and an answer that wasn't confirmed: H36, H38), and hides it
+   * after a confirmed answer, which can move the person out of the chat. On a page's first read there is nothing to keep.
    */
   const readChat = (series: string, valid: () => boolean, keepOnFailure: boolean) => {
     const ticket = ++chatRead.current;
@@ -430,14 +430,15 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
           setPending(null);
           setError(result === "review" ? EVENT_COPY.responseReview : EVENT_COPY.responsesClosed);
         } else setError(EVENT_COPY.responseUnconfirmed);
-        // The answer stands somewhere between: the chat is read again, as after an answer (H36).
-        if (!chain) readChat(confirmed.plan.series_id, valid, false);
+        // Not confirmed, so it can't have changed who is in the chat: the chat is read again, keeping the row on a
+        // failure as a refresh does (H38).
+        if (!chain) readChat(confirmed.plan.series_id, valid, true);
       }
     } catch {
       if (valid()) {
         setError(EVENT_COPY.responseOffline);
-        // Whether the answer landed isn't known: the chat is read again, as after an answer (H36).
-        if (!chain) readChat(current.plan.series_id, valid, false);
+        // Not confirmed (offline), so the row stays: the chat is read again, keeping it on a failure (H38).
+        if (!chain) readChat(current.plan.series_id, valid, true);
       }
     } finally {
       if (currentIdentity.current === identity) {

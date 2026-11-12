@@ -140,7 +140,7 @@ try {
     await button(page, "Chat messages").click();
     await expect(
       page.getByText(
-        "Chat messages are stored on Resbite’s servers so everyone in a resbite’s chat can read them, including people who join later. They are not end-to-end encrypted. Deleting your account removes the text of your messages as cleanup finishes. Review the chat’s availability in this build under Delete account.",
+        "Chat messages are stored on Resbite’s servers so everyone in a resbite’s chat can read them, including people who join later. They are not end-to-end encrypted. Deleting your account removes the text of your messages as cleanup finishes. Review account deletion’s availability in this build under Delete account.",
         { exact: true },
       ),
     ).toBeVisible();

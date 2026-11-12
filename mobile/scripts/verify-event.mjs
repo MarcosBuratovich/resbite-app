@@ -162,6 +162,8 @@ async function open(world = {}) {
     neverUsedApp: world.neverUsedApp ?? [],
     // chat_summary's answer (Task 8): a summary, "refused" (42501 'Not in this chat', the default) or "failed" (a 500).
     chat: world.chat ?? "refused",
+    // The connection drops: the answer's reads and the chat's fail as a lost connection would (fix round 2).
+    offline: false,
     // my_chat_overview's answer: nothing unread and no announcement unless a scenario gives one.
     overview: world.overview ?? { chats: {}, announcements: {}, names: {} },
     // my_bring_allowance's answer for a guest, when the scenario lets them bring.
@@ -240,6 +242,7 @@ async function open(world = {}) {
     if (path === "/rest/v1/attendees") {
       const select = url.searchParams.get("select");
       attendeeSelects.add(select);
+      if (state.offline && select === "version,response") return route.abort("internetdisconnected");
       if (select === "plan_id,response") return reply(state.attendee ? [{ plan_id: PLAN_ID, response: state.attendee.response }] : []);
       if (one) return reply(state.attendee);
       const own = state.attendee ? [g(user.id, "Fixture", state.attendee.response)] : [];
@@ -327,6 +330,7 @@ async function open(world = {}) {
       // Task 8: the Chat row reads the series' summary (K-S13).
       case "chat_summary":
         if (body.p_series !== state.plan.series_id) mismatches.push(`chat_summary p_series ${body.p_series}`);
+        if (state.offline) return route.abort("internetdisconnected");
         if (state.chat === "refused") return reply({ code: "42501", message: "Not in this chat", details: null, hint: null }, 403);
         if (state.chat === "failed") return reply({ message: "Fixture: the chat read failed" }, 500);
         return reply(state.chat);
@@ -1035,6 +1039,30 @@ try {
     await expect(page.getByRole("button", { name: /^Chat/ })).toHaveCount(0);
   });
   pass("chat row, refresh: back on the page, a chat_summary that fails (500) keeps the row; one that refuses (42501) removes it (H36)");
+
+  // Fix round 2 (H38): an answer that wasn't confirmed can't have changed who is in the chat, so the row stays.
+  await scenario("chat row, offline answer", { viewer: "guest", attendee: { version: 1, response: "accepted" }, guests: [ALEX], chat: chatSummary() }, async (f) => {
+    const { page } = f;
+    const row = btn(page, "Chat. Leo: I can bring the snacks, unread messages");
+    await goto(f, `/event?plan=${PLAN_ID}`);
+    await expect(row).toBeVisible();
+    const before = f.rpcs("chat_summary").length;
+    f.state.offline = true;
+    // The chat's re-read after the answer, failing as a lost connection does.
+    const chatFailed = page.waitForEvent("requestfailed", { predicate: (r) => r.url().includes("/rest/v1/rpc/chat_summary"), timeout: 30_000 });
+    await btn(page, "Change your answer").click();
+    await page.getByRole("radio", { name: "Can’t go", exact: true }).click();
+    // The answer's reads fail as a lost connection does, after supabase-js's retries of a GET (about 7 s).
+    await expect(page.getByText("We could not confirm your response. Check your connection, then retry.").first()).toBeVisible({ timeout: 30_000 });
+    await chatFailed;
+    assert.equal(f.rpcs("chat_summary").length, before + 1, "the chat was read again after the answer");
+    // Two frames after that read failed, the row is as it was.
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    await page.getByRole("button", { name: "Close sheet" }).first().click();
+    await expect(row).toBeVisible();
+    assert.deepEqual(f.rpcs("respond"), []);
+  });
+  pass("chat row, offline answer: an answer that couldn't be confirmed (offline) reads the chat again, and that failed read keeps the row (H38)");
 
   // Fix round 1 (H37 D1): the tester's newline and bidi messages read as one line of Leo's.
   await scenario(
