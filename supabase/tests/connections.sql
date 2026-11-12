@@ -36,7 +36,8 @@ insert into public.attendees(plan_id,user_id,response) values
  ('f1100000-0000-4000-8000-000000000002','f1000000-0000-4000-8000-000000000002','accepted'),
  ('f1100000-0000-4000-8000-000000000002','f1000000-0000-4000-8000-000000000003','accepted');
 
--- 02 asks 03, twice: one row, one notice.
+-- 02 asks 03, twice: one row, one notice, whose detail says both are going (02 Going, 03 Maybe; the follow-ups
+-- migration, 20261111120000).
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 do $$ begin
@@ -59,7 +60,7 @@ do $$ declare c public.connections; o private.notification_outbox; v_series uuid
  if (select count(*) from private.notification_outbox where kind='connection_request')<>1 then raise exception 'One request notice expected'; end if;
  select * into o from private.notification_outbox where kind='connection_request';
  if o.recipient_id is distinct from 'f1000000-0000-4000-8000-000000000003' or o.actor_id is distinct from 'f1000000-0000-4000-8000-000000000002'
- or o.plan_id is distinct from 'f1100000-0000-4000-8000-000000000001' or o.detail is not null
+ or o.plan_id is distinct from 'f1100000-0000-4000-8000-000000000001' or o.detail is distinct from 'going'
  or o.dedupe_key is distinct from 'connect:f1000000-0000-4000-8000-000000000002:f1000000-0000-4000-8000-000000000003:'||v_series||':f1000000-0000-4000-8000-000000000002' then
   raise exception 'Request notice wrong: %', o;
  end if;
@@ -744,7 +745,7 @@ end $$;
 set local role authenticated;
 
 -- Profiles: 05 shares no plan with 02 and reads only their own; connected directly, 05 and 02 read each other; a
--- request is enough too; 07 still reads nobody else. A pair with no series has no title and is only 'met'.
+-- request is enough too; 07 still reads nobody else. A pair with no series has no title and is only 'from'.
 select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-000000000005","role":"authenticated"}',true);
 do $$ begin
  if exists(select 1 from public.profiles where id='f1000000-0000-4000-8000-000000000002') or (select count(*) from public.profiles)<>1 then
@@ -787,7 +788,7 @@ do $$ begin
  end if;
  if public.my_connections() is distinct from jsonb_build_object(
    'requests',jsonb_build_array(jsonb_build_object('user_id','f1000000-0000-4000-8000-000000000002','name','Guest A','avatar_path',null,
-    'avatar_revision',0,'series_id',null,'title',null,'context','met')),
+    'avatar_revision',0,'series_id',null,'title',null,'context','from')),
    'connected','[]'::jsonb) then
   raise exception 'A request with no series wrong: %', public.my_connections();
  end if;
@@ -801,9 +802,10 @@ do $$ begin
 end $$;
 
 -- The title and the context come from the series' latest occurrence the caller may read (CO-R9): with 03 on neither
--- Film night nor the later 'Film night again', no title ("Met on Resbite") and 'met'; back on Film night, its title
--- (both going); on the later one too, its title, 'met' while 02 is not on it. With both answered it is 'going', and a
--- host counts as going (01 asks 03); once it has ended it is 'met'.
+-- Film night nor the later 'Film night again', no title ("Met on Resbite") and 'from'; back on Film night, its title
+-- (both going); on the later one too, its title, 'from' while 02 is not on it (someone with no place on the
+-- occurrence: private.pair_standing has nothing to say, the follow-ups migration 20261111120000). With both answered it
+-- is 'going', and a host counts as going (01 asks 03); once it has ended it is 'met'.
 reset role;
 insert into public.plans(id,owner_id,title,starts_at,ends_at,time_zone,place_label,categories,series_id) values
  ('f1100000-0000-4000-8000-000000000003','f1000000-0000-4000-8000-000000000001','Film night again',
@@ -815,7 +817,7 @@ select set_config('request.jwt.claims','{"sub":"f1000000-0000-4000-8000-00000000
 do $$ begin
  if jsonb_array_length(public.my_connections()->'requests')<>1
  or public.my_connections()->'requests'->0->>'title' is not null
- or public.my_connections()->'requests'->0->>'context' is distinct from 'met' then
+ or public.my_connections()->'requests'->0->>'context' is distinct from 'from' then
   raise exception 'An occurrence the caller may not read gave the title: %', public.my_connections();
  end if;
 end $$;
@@ -835,7 +837,7 @@ insert into public.attendees(plan_id,user_id,response) values
 set local role authenticated;
 do $$ begin
  if public.my_connections()->'requests'->0->>'title' is distinct from 'Film night again'
- or public.my_connections()->'requests'->0->>'context' is distinct from 'met' then
+ or public.my_connections()->'requests'->0->>'context' is distinct from 'from' then
   raise exception 'The latest occurrence did not give the title, or the context: %', public.my_connections();
  end if;
 end $$;
@@ -863,13 +865,13 @@ do $$ begin
   raise exception 'Requests not newest first: %', public.my_connections();
  end if;
 end $$;
--- A cancelled latest occurrence is 'met'.
+-- A cancelled latest occurrence that has not ended is 'invited'.
 reset role;
 update public.plans set status='cancelled' where id='f1100000-0000-4000-8000-000000000003';
 set local role authenticated;
 do $$ begin
  if (select jsonb_agg(jsonb_build_array(r->>'name',r->>'title',r->>'context') order by n) from jsonb_array_elements(public.my_connections()->'requests') with ordinality e(r,n))
-   is distinct from '[["Guest A","Film night again","met"],["Owner","Film night again","met"]]'::jsonb then
+   is distinct from '[["Guest A","Film night again","invited"],["Owner","Film night again","invited"]]'::jsonb then
   raise exception 'A cancelled latest occurrence wrong: %', public.my_connections();
  end if;
 end $$;

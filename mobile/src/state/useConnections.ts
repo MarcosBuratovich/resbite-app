@@ -1,31 +1,58 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useApp } from "./AppState";
 import { useFocusedRefresh, type Run } from "./useFocusedRefresh";
-import { applyDecision, requestGone, type ConnectionDecision } from "./connectionsModel";
+import {
+  NO_ERRORS,
+  applyDecision,
+  keepOnFailure,
+  nextErrors,
+  requestGone,
+  type ActionError,
+  type ConnectionDecision,
+  type ConnectionErrors,
+  type ErrorEvent,
+} from "./connectionsModel";
 import { connectionErrorMessage, connectionGateway, type MyConnections } from "../services/connections";
 
-export { applyDecision, requestGone, type ConnectionDecision } from "./connectionsModel";
+export {
+  actionErrorFor,
+  applyDecision,
+  keepOnFailure,
+  requestGone,
+  type ActionError,
+  type ConnectionDecision,
+} from "./connectionsModel";
 
 /** The preview has no account: nobody to connect with, and nothing is read or sent. */
 const NOBODY: MyConnections = { requests: [], connected: [] };
 
 export type Connections = {
-  /** The last list read, with the decisions taken since; null before the first read and after a failed one. */
+  /**
+   * The last list read, with the decisions taken since; null before the first read and after a first read that
+   * failed. A failed refresh keeps the list (keepOnFailure), with `readError` above it.
+   */
   data: MyConnections | null;
   /** A read is running. */
   busy: boolean;
+  /**
+   * Why the last read failed: from the failure until a read succeeds, a retry, a sheet and a decision included
+   * (nextErrors). Profile shows no badge meanwhile (CO-P6), whatever list is kept.
+   */
+  readError: string | null;
+  /** Why the last decision failed, and whose it was: its card or sheet says so (actionErrorFor). */
+  actionError: ActionError | null;
   /** The decision running, and whose request or connection it is about: one runs at a time. */
   acting: { userId: string; decision: ConnectionDecision } | null;
-  error: string | null;
   load: () => Promise<void>;
   /**
-   * Each answers whether the server took the decision. False: `error` says why and the list is as it was; or, for a
-   * request no longer there (withdrawn, or answered elsewhere), no error and the list is read again.
+   * Each answers whether the server took the decision. False: `actionError` says why and the list is as it was; or,
+   * for a request no longer there (withdrawn, or answered elsewhere), no error and the list is read again.
    */
   accept: (userId: string) => Promise<boolean>;
   decline: (userId: string) => Promise<boolean>;
   remove: (userId: string) => Promise<boolean>;
-  clearError: () => void;
+  /** A sheet opened or closed: a decision's error goes, a read's stays. */
+  sheetMoved: () => void;
 };
 
 /**
@@ -43,10 +70,11 @@ export function useConnections(): Connections {
   const [data, setData] = useState<MyConnections | null>(null);
   const [busy, setBusy] = useState(!preview);
   const [acting, setActing] = useState<Connections["acting"]>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<ConnectionErrors>(NO_ERRORS);
+  const note = useCallback((event: ErrorEvent) => setErrors((old) => nextErrors(old, event)), []);
   useEffect(() => {
     setData(null);
-    setError(null);
+    setErrors(NO_ERRORS);
     setActing(null);
     working.current = false;
   }, [identity]);
@@ -55,20 +83,23 @@ export function useConnections(): Connections {
       if (!userId || preview || signingOut || working.current) return;
       const { valid } = begin();
       setBusy(true);
-      setError(null);
+      note({ type: "readStarted" });
       try {
         const next = await connectionGateway.mine();
-        if (valid()) setData(next);
+        if (valid()) {
+          setData(next);
+          note({ type: "readSucceeded" });
+        }
       } catch (e) {
         if (valid()) {
-          setData(null);
-          setError(connectionErrorMessage(e));
+          setData((old) => keepOnFailure(old, true));
+          note({ type: "readFailed", message: connectionErrorMessage(e) });
         }
       } finally {
         if (valid()) setBusy(false);
       }
     },
-    [userId, preview, signingOut],
+    [userId, preview, signingOut, note],
   );
   const { refresh: load, begin } = useFocusedRefresh(read, { identity });
 
@@ -88,7 +119,7 @@ export function useConnections(): Connections {
       return currentIdentity.current === mine;
     };
     setActing({ userId: person, decision });
-    setError(null);
+    note({ type: "decisionStarted" });
     let done = false,
       gone = false;
     try {
@@ -100,7 +131,8 @@ export function useConnections(): Connections {
       if (current()) setData((old) => (old ? applyDecision(old, person, decision) : old));
     } catch (e) {
       gone = requestGone(e);
-      if (current() && !gone) setError(connectionErrorMessage(e));
+      if (current() && !gone)
+        note({ type: "decisionFailed", userId: person, decision, message: connectionErrorMessage(e) });
     } finally {
       working.current = false;
       setActing(null);
@@ -115,12 +147,13 @@ export function useConnections(): Connections {
   return {
     data: preview ? NOBODY : data,
     busy: busy && !preview,
+    readError: preview ? null : errors.read,
+    actionError: errors.action,
     acting,
-    error,
     load,
     accept: (person) => decide(person, "accept"),
     decline: (person) => decide(person, "decline"),
     remove: (person) => decide(person, "remove"),
-    clearError: () => setError(null),
+    sheetMoved: () => note({ type: "sheet" }),
   };
 }

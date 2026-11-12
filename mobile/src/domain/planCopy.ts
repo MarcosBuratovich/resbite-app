@@ -31,7 +31,8 @@ export const PLAN_COPY = {
   d120: "2 h",
   d180: "3 h",
   allDay: "All day",
-  chatCloses: "The chat closes 7 days after the end time.",
+  /** The When sheet's line (CH-P16): a one-off's chat closes 48 hours after its end (CH-D4). */
+  chatCloses: "The chat closes 48 hours after the end time.",
   repeats: "Repeats",
   done: "Done",
   notSet: "Not set",

@@ -10,16 +10,35 @@
 //   running    Edit is there and a guest reply is accepted
 //   admin      You’re an admin; Invite opens the contacts and the link; the invitations and requests (Approve);
 //              Edit’s new photo goes into the owner’s folder; Change my reply; Can’t go → the guest page
-//   guest      Hosted by Ana; You’re going + Change; an unanswered guest sees the server’s counts, Your answer, no More
+//   guest      Hosted by Ana; You’re going + Change; an unanswered guest sees the server’s counts, Your answer, and More
+//              holding Report or block alone
 //   people     the groups (Going counts the owner's Hosting row, Ruling 21), Make admin (and its refusal), Remove as
 //              admin on a Maybe admin, Approve, Send again only for a code this phone holds, an app invitation’s Remove
 // Nobody here is connected with the viewer (plan_connection_states answers {}), so every answered row but the
 // viewer's own, the owner's included, offers Connect on Resbite before any host action.
+//   chat       Task 8 (CH-P14, K-S13): the Chat row after the people row and Bring someone, with the latest line and the
+//              dot in words; its tap opens /chat?series=; closed it reads Chat closed · 23 messages with no dot, and a
+//              closed chat with no message has no row; a refused (42501) or failing chat_summary hides the row while the
+//              page still renders. Unless a scenario gives `chat`, chat_summary refuses (not in the chat).
+//              Fix round 1: a failed re-read on return keeps the row, a refusal removes it (H36); the line is one
+//              cleaned line (H37 D1); a pending invitee reads the whole "Everyone invited" announcement (H37 D3).
+//   group      chat plan 2, Task 4: More's Leave this group on a group (never a one-off), also for a member who hasn't
+//              answered and on an ended page with the chat open; the Chat row's Group chat; a pending guest's people
+//              list on a group (everyone, Connect, no number); a bringer's own invitee and link; Leave from the
+//              resbite page lands on My resbites, which reads its plans again without the group (I10), and offline it
+//              stays in the confirm; a group's failed chat re-read after an answer keeps the row (challenge NOTE 6)
+//   safety     chat plan 3, Task 5: the people sheet's Report and Block (Block only for a waiting join request); a
+//              blocked person's row reads Blocked with no Connect; with my_blocks failing no row offers Block or Connect
+//              and nothing says why (N13); Block then Unblock read my_blocks and the states again (NOTE 2); an unanswered
+//              invitee's Report or block beside the announcement and in More (B1, B4, R-Q1, I-2), also when the
+//              overview fails, and no row at all with nobody to name. Fix round 1 (ruling SR6): Keep after a block
+//              confirm puts focus back on its Block row (the people list, the resbite page); a host blocking a waiting
+//              join requester reads the guest's confirm; a block the server took stays known when my_blocks then fails
 //   edges      /guests and /event without a plan; Back with no history; a failed read offers Try again
 //   idea       Back over the image, Use idea
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
-import { quietReminders } from "./qa-helpers.mjs";
+import { AUTH_STORAGE_KEY, inOrder, quietReminders } from "./qa-helpers.mjs";
 
 const base = process.env.RESBITE_QA_URL || "http://localhost:8081";
 const browser = await chromium.launch({
@@ -59,11 +78,15 @@ const PLAN_SELECT = "*,plan_meeting_details(note),plan_admins(user_id)";
 const COVER_SELECT = "cover_path,cover_description,cover_revision";
 const COVER_REVISION_SELECT = "cover_path,cover_revision";
 // The guest-list and own-row reads (src/services/rsvp.ts) and the reminder sync's (deviceReminders), and the mutes'.
-const ATTENDEE_SELECTS = ["user_id,response,profiles(display_name)", "version,response", "plan_id,response"];
+// My resbites reads every attendee row of the account's plans (Leave lands there, I10).
+const MY_ATTENDEES = "plan_id,user_id,response,version,profiles(display_name)";
+const ATTENDEE_SELECTS = ["user_id,response,brought_by,level,profiles(display_name)", "version,response", "plan_id,response", MY_ATTENDEES];
 const MUTE_SELECT = "series_id";
 // ...and the named-columns read the plan gateway sends (src/services/plans.ts `planColumns`, used by the reminder sync).
+// ...and My resbites' list read (src/services/plans.ts `planListColumns`).
+const PLAN_LIST = "*,plan_admins(user_id)";
 const PLAN_COLUMNS =
-  "id,activity_id,title,description,categories,starts_at,ends_at,time_zone,place_label,status,version,owner_id,has_meeting_details,guest_note,guest_note_at,area,place_tbd,repeat_weeks,series_id,repeats_from,plan_meeting_details(note),plan_admins(user_id)";
+  "id,activity_id,title,description,categories,starts_at,ends_at,time_zone,place_label,status,version,owner_id,has_meeting_details,guest_note,guest_note_at,area,place_tbd,repeat_weeks,series_id,repeats_from,bring_invites,bring_levels,plan_meeting_details(note),plan_admins(user_id)";
 const HOST = { id: "33333333-3333-4333-8333-333333333333", name: "Ana" };
 const PLAN_ID = "22222222-2222-4222-8222-222222222222";
 const SERIES_ID = "55555555-5555-4555-8555-555555555555";
@@ -154,6 +177,45 @@ async function open(world = {}) {
     endsOnCancel: Boolean(world.endsOnCancel),
     // appoint_admin refuses these people: they have never used the app.
     neverUsedApp: world.neverUsedApp ?? [],
+    // chat_summary's answer (Task 8): a summary, "refused" (42501 'Not in this chat', the default) or "failed" (a 500).
+    chat: world.chat ?? "refused",
+    // The connection drops: the answer's reads and the chat's fail as a lost connection would (fix round 2).
+    offline: false,
+    // my_chat_overview's answer: nothing unread and no announcement unless a scenario gives one; "failed" is a 500.
+    overview: world.overview ?? { chats: {}, announcements: {}, names: {} },
+    // Chat plan 3: the people the viewer blocked (my_blocks), or "failed" (a 500); the viewer's connection states
+    // (plan_connection_states), which a block ends; the host's name as their profile gives it. `blocksFailAfterBlock`:
+    // once a block went through, every my_blocks read fails (fix round 1, Q2).
+    blocked: world.blocked ?? [],
+    blocksFailAfterBlock: Boolean(world.blocksFailAfterBlock),
+    // block_user answers `stored` (server review M7): true for a block unless `blockNotStored` (the person stopped
+    // being readable, so nothing was stored), false for an unblock.
+    blockNotStored: Boolean(world.blockNotStored),
+    // Final fix wave (I1): once a block went through, chat_summary answers what the server shows the blocker then
+    // (`chatAfterBlock`: the line before the blocked person's), or fails (`chatFailsAfterBlock`).
+    chatAfterBlock: world.chatAfterBlock ?? null,
+    chatFailsAfterBlock: Boolean(world.chatFailsAfterBlock),
+    // Ruling SR12: once a block went through, my_chat_overview fails.
+    overviewFailsAfterBlock: Boolean(world.overviewFailsAfterBlock),
+    blockedOnce: false,
+    pairs: { ...(world.pairs ?? {}) },
+    hostName: world.hostName ?? HOST.name,
+    // my_bring_allowance's answer for a guest, when the scenario lets them bring.
+    allowance: world.allowance ?? null,
+    // Chat plan 2: the series is a group the viewer is in (series_is_group), so every member's row is read, whatever
+    // the viewer's reply; `left` once leave_series went through, and `failLeaves` lost as a lost connection would.
+    group: Boolean(world.group),
+    left: false,
+    failLeaves: world.failLeaves ?? 0,
+    // How long leave_series waits before its answer (UI Q4); after a leave, My resbites' list read fails (UI Q3).
+    delayLeaves: world.delayLeaves ?? 0,
+    // How long series_is_group takes to answer (ruling GR6 M7: the page never waits for it).
+    delayGroup: world.delayGroup ?? 0,
+    failListAfterLeave: Boolean(world.failListAfterLeave),
+    // The links a guest sent bringing someone (plan_phone_invitations answers a guest with their own only).
+    guestLinks: world.guestLinks ?? [],
+    // How many times My resbites read its list of plans.
+    listReads: 0,
     uploads: [],
   };
   const log = [];
@@ -168,11 +230,12 @@ async function open(world = {}) {
   const page = await context.newPage();
   page.on("pageerror", (e) => errors.push(e.message));
   await page.addInitScript(
-    ({ s, store }) => {
-      sessionStorage.setItem("sb-ewcsgvhuojxdpaspwsrx-auth-token", JSON.stringify(s));
+    ({ key, s, store }) => {
+      sessionStorage.setItem(key, JSON.stringify(s));
       if (store.value && !sessionStorage.getItem(store.key)) sessionStorage.setItem(store.key, JSON.stringify(store.value));
     },
     {
+      key: AUTH_STORAGE_KEY,
       s: session,
       store: {
         key: CODE_STORE,
@@ -193,7 +256,7 @@ async function open(world = {}) {
     if (path === "/rest/v1/rpc/note_app_session") return none();
     if (path === "/rest/v1/rpc/account_access_status") return reply({ account_id: user.id, status: "approved" });
     if (path === "/rest/v1/profiles") {
-      if (url.searchParams.get("id") === `eq.${HOST.id}`) return reply({ display_name: HOST.name });
+      if (url.searchParams.get("id") === `eq.${HOST.id}`) return reply({ display_name: state.hostName });
       return reply({ id: user.id, display_name: "Fixture", avatar_path: null, avatar_revision: 0 });
     }
     // A cover: the upload, its signed link and the picture behind it.
@@ -215,6 +278,10 @@ async function open(world = {}) {
       planSelects.add(select);
       if (state.failPlanRead) return reply({ message: "Fixture: the read failed" }, 500);
       const insider = state.plan.owner_id === user.id || ["accepted", "maybe"].includes(state.attendee?.response);
+      if (select === PLAN_LIST) state.listReads++;
+      if (select === PLAN_LIST && state.left && state.failListAfterLeave) return reply({ message: "Fixture: the list read failed" }, 500);
+      // After a leave, My resbites no longer lists the group's occurrence.
+      if (!one && state.left) return reply([]);
       const row = {
         ...state.plan,
         note: "",
@@ -227,9 +294,18 @@ async function open(world = {}) {
     if (path === "/rest/v1/attendees") {
       const select = url.searchParams.get("select");
       attendeeSelects.add(select);
+      if (state.offline && select === "version,response") return route.abort("internetdisconnected");
       if (select === "plan_id,response") return reply(state.attendee ? [{ plan_id: PLAN_ID, response: state.attendee.response }] : []);
+      if (select === MY_ATTENDEES)
+        return reply(
+          state.left || !state.attendee
+            ? []
+            : [{ plan_id: PLAN_ID, user_id: user.id, response: state.attendee.response, version: state.attendee.version, profiles: { display_name: "Fixture" } }],
+        );
       if (one) return reply(state.attendee);
       const own = state.attendee ? [g(user.id, "Fixture", state.attendee.response)] : [];
+      // A group's member reads every member's row, answered or not (G-B5).
+      if (state.group) return reply([...state.guests, ...own]);
       // The server shows an unanswered invitee only their own row (UX-P5).
       return reply(state.attendee?.response === "pending" ? own : [...state.guests, ...own.filter((r) => r.response !== "pending")]);
     }
@@ -274,10 +350,19 @@ async function open(world = {}) {
       case "remove_admin":
         state.admins = state.admins.filter((id) => id !== body.p_user);
         return none();
+      // As the server does: a host reads every link; a guest only the links they sent bringing someone (none here).
       case "plan_phone_invitations":
-        return reply(state.phoneInvites);
+        return reply(state.plan.owner_id === user.id || state.admins.includes(user.id) ? state.phoneInvites : state.guestLinks);
       case "plan_join_requests":
         return reply(state.requests);
+      // The chain (circles of trust): nobody here was brought, and no guest sent a link. As the server does, a guest
+      // gets no guests' links.
+      case "plan_bringers":
+        return reply({});
+      case "plan_brought_invitations":
+        return state.plan.owner_id === user.id || state.admins.includes(user.id)
+          ? reply([])
+          : reply({ code: "42501", message: "Plan owner required" }, 403);
       // The server's counts for an invitee who hasn't answered (plan_people_counts): every guest row, the viewer's too.
       case "plan_people_counts": {
         const all = [...state.guests, ...(state.attendee ? [g(user.id, "Fixture", state.attendee.response)] : [])];
@@ -290,7 +375,24 @@ async function open(world = {}) {
       // Connections: the viewer is connected with nobody here, so every answered row offers Connect on Resbite, and
       // Invite people shows no "Your connections" (verify-connections covers it).
       case "plan_connection_states":
-        return reply({});
+        return reply(state.pairs);
+      // Chat plan 3: the viewer's blocks; a block ends any connection between the two (G-B1), and unblocking brings
+      // none back; the reports.
+      case "my_blocks":
+        if (state.blocked === "failed" || (state.blocksFailAfterBlock && state.blockedOnce))
+          return reply({ message: "Fixture: the blocks read failed" }, 500);
+        return reply(state.blocked.map((id) => ({ user_id: id, name: null, at: "2099-02-01T10:00:00Z" })));
+      case "block_user":
+        state.blockedOnce = true;
+        if (Array.isArray(state.blocked)) {
+          state.blocked = state.blocked.filter((id) => id !== body.p_user);
+          if (body.p_block && !state.blockNotStored) state.blocked.unshift(body.p_user);
+        }
+        delete state.pairs[body.p_user];
+        return reply(body.p_block === true && !state.blockNotStored);
+      case "report_message":
+      case "report_user":
+        return none();
       case "my_connections":
         return reply({ requests: [], connected: [] });
       case "set_plan_cover_if_current": {
@@ -302,6 +404,50 @@ async function open(world = {}) {
         state.plan = { ...state.plan, cover_path: body.p_path, cover_revision: state.plan.cover_revision + 1, cover_description: "" };
         return reply({ cover_path: state.plan.cover_path, cover_revision: state.plan.cover_revision });
       }
+      // Task 8: the Chat row reads the series' summary (K-S13).
+      case "chat_summary":
+        if (body.p_series !== state.plan.series_id) mismatches.push(`chat_summary p_series ${body.p_series}`);
+        if (state.offline) return route.abort("internetdisconnected");
+        if (state.chat === "refused") return reply({ code: "42501", message: "Not in this chat", details: null, hint: null }, 403);
+        if (state.chat === "failed" || (state.chatFailsAfterBlock && state.blockedOnce))
+          return reply({ message: "Fixture: the chat read failed" }, 500);
+        if (state.chatAfterBlock && state.blockedOnce) return reply({ ...state.chat, ...state.chatAfterBlock });
+        return reply(state.chat);
+      // The chat screen a Chat row tap opens: an empty page, marked read. Its socket is refused below.
+      case "chat_messages":
+      case "chat_messages_since":
+        if (state.chat === "refused") return reply({ code: "42501", message: "Not in this chat", details: null, hint: null }, 403);
+        return reply({ rows: [], names: {}, as_of: new Date().toISOString() });
+      case "mark_chat_read":
+        return none();
+      case "my_chat_overview": {
+        if (state.overview === "failed" || (state.overviewFailsAfterBlock && state.blockedOnce))
+          return reply({ message: "Fixture: the overview failed" }, 500);
+        // As the server does: nothing by or about someone the viewer blocked (plan 3).
+        const blocked = Array.isArray(state.blocked) ? state.blocked : [];
+        const announcements = Object.fromEntries(Object.entries(state.overview.announcements ?? {}).filter(([, a]) => !blocked.includes(a.author_id)));
+        const inviters = Object.fromEntries(Object.entries(state.overview.inviters ?? {}).filter(([, id]) => !blocked.includes(id)));
+        return reply({ ...state.overview, announcements, inviters });
+      }
+      // Chat plan 2: whether the series is a group the viewer is in (I4), and Leave group (G-N13, I10).
+      case "series_is_group":
+        if (body.p_series !== state.plan.series_id) mismatches.push(`series_is_group p_series ${body.p_series}`);
+        if (state.delayGroup) await new Promise((r) => setTimeout(r, state.delayGroup));
+        return reply(state.group && !state.left);
+      case "leave_series":
+        if (body.p_series !== state.plan.series_id) mismatches.push(`leave_series p_series ${body.p_series}`);
+        if (state.delayLeaves) await new Promise((r) => setTimeout(r, state.delayLeaves));
+        if (state.failLeaves > 0) {
+          state.failLeaves--;
+          return route.abort("internetdisconnected");
+        }
+        state.left = true;
+        return none();
+      // My resbites' open-link requests (Leave lands there): none.
+      case "my_join_requests":
+        return reply([]);
+      case "my_bring_allowance":
+        return state.allowance ? reply(state.allowance) : reply({ code: "42501", message: "Not invited" }, 403);
       case "decide_join_request": {
         const asked = state.requests.find((r) => r.user_id === body.p_user);
         state.requests = state.requests.filter((r) => r !== asked);
@@ -313,6 +459,8 @@ async function open(world = {}) {
         return reply({ message: `Unexpected rpc ${rpc}` }, 400);
     }
   });
+  // The chat's Realtime socket never connects here (verify-chat covers it): nothing leaves the page.
+  await page.routeWebSocket(/\/realtime\/v1\/websocket/, (ws) => ws.close());
   return {
     page,
     state,
@@ -346,7 +494,7 @@ async function scenario(name, fixture, walk) {
     if (fixture.noPlanRead) assert.equal(f.planSelects.size, 0, `${name}: no plan read`);
     else assert.ok(f.planSelects.size > 0, `${name}: the plan was read`);
     for (const select of f.planSelects)
-      assert.ok([PLAN_SELECT, PLAN_COLUMNS, COVER_SELECT, COVER_REVISION_SELECT].includes(select), `${name}: the plan select ${select}`);
+      assert.ok([PLAN_SELECT, PLAN_COLUMNS, COVER_SELECT, COVER_REVISION_SELECT, PLAN_LIST].includes(select), `${name}: the plan select ${select}`);
     // The guest list and the mutes are served by their selects too: a drift would otherwise be answered with defaults.
     for (const select of f.attendeeSelects) assert.ok(ATTENDEE_SELECTS.includes(select), `${name}: the attendees select ${select}`);
     for (const select of f.muteSelects) assert.equal(select, MUTE_SELECT, `${name}: the plan_mutes select`);
@@ -381,10 +529,12 @@ try {
     await expect(btn(page, `${row}. Alex and Bea`)).toBeVisible();
     await expect(page.getByText("Hosted by")).toHaveCount(0);
     assert.deepEqual(f.rpcs("plan_phone_invitations"), [{ p_plan: PLAN_ID }]);
+    // With the links their guests sent bringing someone, counted in "N invited" (none here).
+    assert.deepEqual(f.rpcs("plan_brought_invitations"), [{ p_plan: PLAN_ID }]);
     assert.deepEqual(f.rpcs("plan_join_requests"), [{ p_plan: PLAN_ID }]);
     // The host reads every guest row, so the counts come from them, not from plan_people_counts.
     assert.deepEqual(f.rpcs("plan_people_counts"), []);
-    assert.ok(f.attendeeSelects.has("user_id,response,profiles(display_name)"), "the guest list was read");
+    assert.ok(f.attendeeSelects.has("user_id,response,brought_by,level,profiles(display_name)"), "the guest list was read");
     assert.ok(f.muteSelects.has(MUTE_SELECT), "the mutes were read");
     // Invite opens the Invite screen for this resbite.
     await btn(page, "Invite").click();
@@ -730,6 +880,9 @@ try {
       await page.getByRole("button", { name: "Close sheet" }).first().click();
       // An answered guest reads every row: no plan_people_counts.
       assert.deepEqual(f.rpcs("plan_people_counts"), []);
+      // ...and not the links they sent bringing someone (circles of trust): this resbite's circle is Nobody and they
+      // brought nobody, so there are none to read (verify-circle reads them where the circle lets guests bring).
+      assert.deepEqual(f.rpcs("plan_phone_invitations"), [], "no links read for a guest who can't have any");
     },
   );
   await scenario("guest, not answered", { viewer: "guest", guests: going2 }, async (f) => {
@@ -745,16 +898,22 @@ try {
     await expect(page.getByText("Fixture café")).toHaveCount(0);
     await expect(page.getByRole("radiogroup", { name: "Your answer" })).toBeVisible();
     await expect(page.getByRole("radio")).toHaveText(["Going", "Maybe", "Can’t go"]);
-    await expect(btn(page, "More")).toHaveCount(0);
+    // Plan 3 (B4, I-2): More beside the answer control, holding Report or block alone (Ana, the host the byline names).
+    await btn(page, "More").click();
+    await expect(btn(page, "Report or block")).toBeVisible();
+    for (const row of ["Add to calendar", "Mute this resbite", "Change my reply", "Cancel resbite"]) await expect(btn(page, row)).toHaveCount(0);
+    await page.getByRole("button", { name: "Close sheet" }).first().click();
     await expect(btn(page, "Change your answer")).toHaveCount(0);
     assert.deepEqual(f.rpcs("respond"), []);
+    // A guest who hasn't answered has brought no one: no links read.
+    assert.deepEqual(f.rpcs("plan_phone_invitations"), []);
     // Answering Going brings the whole list, and the row counts it (the guest among the Going).
     await page.getByRole("radio", { name: "Going", exact: true }).click();
     await expect(text(page, "You’re going")).toBeVisible();
     await expect(page.getByRole("button", { name: /^Going 3 · Maybe 1 · Can’t go 1\. Alex, Bea and Fixture$/ })).toBeVisible();
     assert.deepEqual(f.rpcs("plan_people_counts"), [{ p_plan: PLAN_ID }]);
   });
-  pass("guest: Hosted by Ana; You’re going + Change opens the answer sheet (Going selected) and Maybe saves; More has Add to calendar and Mute only; the people row opens a list headed by Ana's Hosting row (Going · 3) with only Connect on the others' rows; an unanswered guest sees the server’s counts Going 2 · Maybe 1 · Can’t go 1 (plan_people_counts), the Your answer control and no More, and after Going the row reads Going 3 from the whole list");
+  pass("guest: Hosted by Ana; You’re going + Change opens the answer sheet (Going selected) and Maybe saves; More has Add to calendar and Mute only; the people row opens a list headed by Ana's Hosting row (Going · 3) with only Connect on the others' rows; an unanswered guest sees the server’s counts Going 2 · Maybe 1 · Can’t go 1 (plan_people_counts), the Your answer control and More holding Report or block alone, and after Going the row reads Going 3 from the whole list");
 
   // --- The people list ---
   // Cy (Maybe) is an admin already; Alex has never used the app, so he can’t be made one; Eli is invited in the app.
@@ -839,7 +998,954 @@ try {
   );
   pass("people: the groups in order with counts, Going · 3 headed by the host's own Hosting row (no dots on it); Actions for Bea (head: Going) → Make admin → appoint_admin and the Admin badge, Remove as admin offered after; Alex, who never used the app, → Only someone who uses the app can be an admin. in the sheet; Cy, a Maybe admin, → Remove as admin → remove_admin; Send again on WhatsApp only for the code this phone holds; Eli, invited in the app, → Remove and Remove the invitation for Eli?; Approve → decide_join_request {p_approve: true} and Sam moves to Going");
 
+  // --- The Chat row (Task 8: CH-P14, CH-01, K-S13) ---
+  const LEO = "44444444-4444-4444-8444-444444444444";
+  const chatSummary = (over = {}) => ({
+    series_id: SERIES_ID,
+    plan_id: PLAN_ID,
+    title: "Coffee evening",
+    starts_at: THURSDAY,
+    ends_at: "2099-03-05T17:00:00Z",
+    time_zone: "UTC",
+    status: "active",
+    repeat_weeks: null,
+    is_group: false,
+    stopped: false,
+    closes_at: "2099-03-07T17:00:00Z",
+    open: true,
+    host: false,
+    accepted: 3,
+    members: 4,
+    going: 4,
+    everyone: 5,
+    pinned: null,
+    last: {
+      id: 12,
+      kind: "message",
+      audience: null,
+      event: null,
+      payload: null,
+      body: "I can bring the snacks",
+      state: "sent",
+      author_id: LEO,
+      created_at: "2099-03-05T12:00:00Z",
+      updated_at: "2099-03-05T12:00:00Z",
+      client_id: null,
+    },
+    names: { [LEO]: "Leo" },
+    muted_chat: false,
+    muted_resbite: false,
+    last_read_id: 11,
+    unread: true,
+    message_count: 23,
+    ...over,
+  });
+  const bringing = {
+    viewer: "guest",
+    attendee: { version: 1, response: "accepted" },
+    guests: [ALEX, BEA],
+    plan: { bring_invites: 1, bring_levels: 1 },
+    allowance: { allowed: 1, used: 0, remaining: 1, level: 1, may_bring: true },
+  };
+  await scenario("chat row", { ...bringing, chat: chatSummary() }, async (f) => {
+    const { page } = f;
+    await goto(f, `/event?plan=${PLAN_ID}`);
+    const chatRow = btn(page, "Chat. Leo: I can bring the snacks, unread messages");
+    await expect(chatRow).toBeVisible();
+    await expect(chatRow.getByText("Chat", { exact: true })).toBeVisible();
+    await expect(chatRow.getByText("Leo: I can bring the snacks", { exact: true })).toBeVisible();
+    // Right after the people row and after Bring someone (CH-P14).
+    const people = page.getByRole("button", { name: /^Going 3 · / });
+    const bring = page.getByRole("button", { name: /^Bring someone\. / });
+    await expect(bring).toBeVisible();
+    assert.ok(await inOrder(page, [people, bring, chatRow]), "people row, Bring someone, then Chat");
+    assert.ok(await inOrder(page, [chatRow, text(page, "Bring a book")]), "the Chat row comes before the description");
+    // The summary is the series' (K-S13), read once for the page.
+    assert.deepEqual(f.rpcs("chat_summary"), [{ p_series: SERIES_ID }]);
+    // The row is a 44 pt target.
+    const box = await chatRow.boundingBox();
+    assert.ok(box && box.height >= 44, "the Chat row is at least 44 pt tall");
+    await chatRow.click();
+    await expect(page).toHaveURL(new RegExp(`/chat\\?series=${SERIES_ID}$`));
+  });
+  await scenario("chat row, read", { viewer: "guest", attendee: { version: 1, response: "accepted" }, guests: [ALEX], chat: chatSummary({ unread: false }) }, async (f) => {
+    const { page } = f;
+    await goto(f, `/event?plan=${PLAN_ID}`);
+    await expect(btn(page, "Chat. Leo: I can bring the snacks")).toBeVisible();
+    await expect(page.getByRole("button", { name: /unread messages/ })).toHaveCount(0);
+  });
+  await scenario("chat row, empty", hostFixture, async (f) => {
+    // The host's own chat with nothing said yet: No messages yet.
+    f.state.chat = chatSummary({ host: true, last: null, names: {}, unread: false, message_count: 0 });
+    const { page } = f;
+    await goto(f, `/event?plan=${PLAN_ID}`);
+    await expect(btn(page, "Chat. No messages yet")).toBeVisible();
+  });
+  pass("chat row: Chat with Leo: I can bring the snacks, its label ending “, unread messages” (no suffix once read), after the people row and Bring someone and before the description, at least 44 pt; chat_summary {p_series} read once; the tap opens /chat?series=; the host's empty chat reads No messages yet");
+
+  await scenario("chat row, closed", { viewer: "guest", attendee: { version: 1, response: "accepted" }, guests: [ALEX], chat: chatSummary({ open: false, unread: true }) }, async (f) => {
+    const { page } = f;
+    await goto(f, `/event?plan=${PLAN_ID}`);
+    const closed = btn(page, "Chat closed · 23 messages");
+    await expect(closed).toBeVisible();
+    // No dot, and no latest line, after the close.
+    await expect(page.getByRole("button", { name: /unread messages/ })).toHaveCount(0);
+    await expect(page.getByText("Leo: I can bring the snacks", { exact: true })).toHaveCount(0);
+    await closed.click();
+    await expect(page).toHaveURL(new RegExp(`/chat\\?series=${SERIES_ID}$`));
+  });
+  await scenario("chat row, closed and empty", { viewer: "guest", attendee: { version: 1, response: "accepted" }, guests: [ALEX], chat: chatSummary({ open: false, last: null, names: {}, unread: false, message_count: 0 }) }, async (f) => {
+    const { page } = f;
+    await goto(f, `/event?plan=${PLAN_ID}`);
+    await expect(text(page, "Going 2 · Can’t go 0")).toBeVisible();
+    assert.deepEqual(f.rpcs("chat_summary"), [{ p_series: SERIES_ID }]);
+    await expect(page.getByRole("button", { name: /^Chat/ })).toHaveCount(0);
+  });
+  pass("chat row, closed: Chat closed · 23 messages with no dot and no latest line, still opening the chat; a closed chat with no message shows no row (K-S13)");
+
+  for (const [name, chat] of [["refused", "refused"], ["failing", "failed"]])
+    await scenario(`chat row, ${name}`, { ...bringing, chat }, async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      // The page renders in full: the people row, Bring someone, the reply.
+      await expect(page.getByRole("button", { name: /^Going 3 · / })).toBeVisible();
+      await expect(page.getByRole("button", { name: /^Bring someone\. / })).toBeVisible();
+      await expect(text(page, "You’re going")).toBeVisible();
+      await expect(text(page, "Bring a book")).toBeVisible();
+      assert.deepEqual(f.rpcs("chat_summary"), [{ p_series: SERIES_ID }]);
+      await expect(page.getByRole("button", { name: /^Chat/ })).toHaveCount(0);
+      await expect(text(page, "Chat")).toHaveCount(0);
+      // Nothing about the chat is said as an error.
+      await expect(text(page, "You’re not in this chat.")).toHaveCount(0);
+    });
+  pass("chat row, refused or failing: a 42501 'Not in this chat' or a 500 from chat_summary hides the row, says nothing, and the page renders in full (K-S13)");
+
+  // Fix round 1 (H36 I1): back on the page, a re-read that fails keeps the row it had; one that refuses removes it.
+  await scenario("chat row, refresh", { viewer: "guest", attendee: { version: 1, response: "accepted" }, guests: [ALEX], chat: chatSummary() }, async (f) => {
+    const { page } = f;
+    const row = btn(page, "Chat. Leo: I can bring the snacks, unread messages");
+    const away = async () => {
+      // The people list has no Chat row (no chat read there); Back makes the page read the event and the chat again.
+      const before = f.rpcs("chat_summary").length;
+      await page.getByRole("button", { name: /^Going 2 · / }).click();
+      await expect(heading(page, "People")).toBeVisible();
+      await btn(page, "Back").click();
+      await expect(heading(page, "Coffee evening")).toBeVisible();
+      await expect.poll(() => f.rpcs("chat_summary").length).toBe(before + 1);
+    };
+    await goto(f, `/event?plan=${PLAN_ID}`);
+    await expect(row).toBeVisible();
+    assert.equal(f.rpcs("chat_summary").length, 1);
+    f.state.chat = "failed";
+    await away();
+    // The read that failed (offline, a server error) keeps what was known: the row stays as it was.
+    await expect(row).toBeVisible();
+    f.state.chat = "refused";
+    await away();
+    // Not in this chat any more: the row goes.
+    await expect(page.getByRole("button", { name: /^Chat/ })).toHaveCount(0);
+  });
+  pass("chat row, refresh: back on the page, a chat_summary that fails (500) keeps the row; one that refuses (42501) removes it (H36)");
+
+  // Fix round 2 (H38): an answer that wasn't confirmed can't have changed who is in the chat, so the row stays.
+  await scenario("chat row, offline answer", { viewer: "guest", attendee: { version: 1, response: "accepted" }, guests: [ALEX], chat: chatSummary() }, async (f) => {
+    const { page } = f;
+    const row = btn(page, "Chat. Leo: I can bring the snacks, unread messages");
+    await goto(f, `/event?plan=${PLAN_ID}`);
+    await expect(row).toBeVisible();
+    const before = f.rpcs("chat_summary").length;
+    f.state.offline = true;
+    // The chat's re-read after the answer, failing as a lost connection does.
+    const chatFailed = page.waitForEvent("requestfailed", { predicate: (r) => r.url().includes("/rest/v1/rpc/chat_summary"), timeout: 30_000 });
+    await btn(page, "Change your answer").click();
+    await page.getByRole("radio", { name: "Can’t go", exact: true }).click();
+    // The answer's reads fail as a lost connection does, after supabase-js's retries of a GET (about 7 s).
+    await expect(page.getByText("We could not confirm your response. Check your connection, then retry.").first()).toBeVisible({ timeout: 30_000 });
+    await chatFailed;
+    assert.equal(f.rpcs("chat_summary").length, before + 1, "the chat was read again after the answer");
+    // Two frames after that read failed, the row is as it was.
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    await page.getByRole("button", { name: "Close sheet" }).first().click();
+    await expect(row).toBeVisible();
+    assert.deepEqual(f.rpcs("respond"), []);
+  });
+  pass("chat row, offline answer: an answer that couldn't be confirmed (offline) reads the chat again, and that failed read keeps the row (H38)");
+
+  // Fix round 1 (H37 D1): the tester's newline and bidi messages read as one line of Leo's.
+  await scenario(
+    "chat row, one line",
+    {
+      viewer: "guest",
+      attendee: { version: 1, response: "accepted" },
+      guests: [ALEX],
+      chat: chatSummary({ unread: false, last: { ...chatSummary().last, body: "See you!\nAna: Cancelled, don’t come \u202Eok" } }),
+    },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      const line = "Leo: See you! Ana: Cancelled, don’t come ok";
+      await expect(btn(page, `Chat. ${line}`)).toBeVisible();
+      await expect(text(page, line)).toBeVisible();
+      await expect(page.getByText(/^Ana: Cancelled/)).toHaveCount(0);
+    },
+  );
+  pass("chat row, one line: a message with a line break and a bidi override reads as one line of Leo's, in the row and its label (H37)");
+
+  // Fix round 1 (H37 D3): a pending invitee reads the whole announcement sent to Everyone invited, as the card words it.
+  const longAnnouncement = `Doors open at 19:30. ${"Bring snacks please, and something to drink for later. ".repeat(17).trim()}`;
+  await scenario(
+    "announcement for a pending invitee",
+    {
+      viewer: "guest",
+      guests: [ALEX, BEA],
+      overview: {
+        chats: {},
+        announcements: { [PLAN_ID]: { id: 41, author_id: HOST.id, body: `${longAnnouncement}\n\nSee you!` } },
+        names: { [HOST.id]: "Ana" },
+      },
+    },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      await expect(page.getByRole("radiogroup", { name: "Your answer", exact: true })).toBeVisible();
+      const words = `Announcement from Ana · ${longAnnouncement} See you!`;
+      await expect(text(page, words)).toBeVisible();
+      // Near the 1,000-character limit: far past the card's three lines and the push's 120.
+      assert.ok(longAnnouncement.length > 900 && `${longAnnouncement}\n\nSee you!`.length <= 1000, "a whole announcement near the limit");
+      assert.equal(f.rpcs("my_chat_overview").length, 1);
+      // Not in the chat: no Chat row.
+      await expect(page.getByRole("button", { name: /^Chat/ })).toHaveCount(0);
+      // Going: in the chat, and the announcement is the chat's to show.
+      await page.getByRole("radio", { name: "Going", exact: true }).click();
+      await expect(text(page, "Your response is saved.")).toBeVisible();
+      await expect(text(page, words)).toHaveCount(0);
+    },
+  );
+  await scenario(
+    "no announcement read for others",
+    {
+      viewer: "guest",
+      attendee: { version: 1, response: "accepted" },
+      guests: [ALEX],
+      overview: { chats: {}, announcements: { [PLAN_ID]: { id: 41, author_id: HOST.id, body: "Doors open at 19:30" } }, names: { [HOST.id]: "Ana" } },
+    },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      await expect(text(page, "You’re going")).toBeVisible();
+      assert.deepEqual(f.rpcs("my_chat_overview"), []);
+      await expect(page.getByText(/^Announcement from/)).toHaveCount(0);
+    },
+  );
+  pass("announcement for a pending invitee: the event page shows the whole Everyone invited announcement (965 characters, line breaks read as spaces) as Announcement from Ana · …, and it goes once they answer Going; nobody else reads the overview there (H37)");
+
+
+  // --- A group (chat plan 2, Task 4) ---
+  // Coffee evening every Thursday (5 March 2099 is one), its chat open with no close time while it repeats.
+  const groupChat = (over = {}) => chatSummary({ is_group: true, repeat_weeks: 1, closes_at: null, ...over });
+  const groupPlan = { repeat_weeks: 1 };
+  const QUESTION = "Leave Coffee evening? You’ll stop getting its Thursdays and its chat.";
+  await scenario(
+    "group, More",
+    { viewer: "guest", group: true, plan: groupPlan, attendee: { version: 1, response: "accepted" }, guests: [ALEX, BEA], chat: groupChat() },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      // The Chat row's title is the group's (its label already said so).
+      const chatRow = btn(page, "Group chat. Leo: I can bring the snacks, unread messages");
+      await expect(chatRow).toBeVisible();
+      await expect(chatRow.getByText("Group chat", { exact: true })).toBeVisible();
+      await btn(page, "More").click();
+      await expect(btn(page, "Add to calendar")).toBeVisible();
+      await expect(btn(page, "Mute this resbite")).toBeVisible();
+      await expect(btn(page, "Leave this group")).toBeVisible();
+      assert.ok(await inOrder(page, [btn(page, "Mute this resbite"), btn(page, "Leave this group")]), "Leave this group comes last");
+    },
+  );
+  await scenario("one-off, More", { viewer: "guest", attendee: { version: 1, response: "accepted" }, guests: [ALEX, BEA], chat: chatSummary() }, async (f) => {
+    const { page } = f;
+    await goto(f, `/event?plan=${PLAN_ID}`);
+    await expect(btn(page, "Chat. Leo: I can bring the snacks, unread messages")).toBeVisible();
+    await btn(page, "More").click();
+    await expect(btn(page, "Mute this resbite")).toBeVisible();
+    await expect(btn(page, "Leave this group")).toHaveCount(0);
+  });
+  // Someone who hasn't answered this week is in the group too: their More holds Leave this group alone (G-N13).
+  await scenario(
+    "group, More, not answered",
+    { viewer: "guest", group: true, plan: groupPlan, guests: [ALEX, BEA], chat: groupChat() },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      await expect(page.getByRole("radiogroup", { name: "Your answer" })).toBeVisible();
+      // The labelled More pill of the member's other bars, under the answer control (review M1).
+      const more = bar(f).getByRole("button", { name: "More", exact: true });
+      await expect(more.getByText("More", { exact: true })).toBeVisible();
+      const [answer, pill] = [await page.getByRole("radiogroup", { name: "Your answer" }).boundingBox(), await more.boundingBox()];
+      assert.ok(pill.y >= answer.y + answer.height, "More sits under the answer control");
+      await more.click();
+      await expect(btn(page, "Leave this group")).toBeVisible();
+      // Plan 3: a pending member keeps Report or block, before Leave this group, which stays last.
+      await expect(btn(page, "Report or block")).toBeVisible();
+      assert.ok(await inOrder(page, [btn(page, "Report or block"), btn(page, "Leave this group")]), "Leave this group stays last");
+      await expect(btn(page, "Mute this resbite")).toHaveCount(0);
+      await expect(btn(page, "Add to calendar")).toHaveCount(0);
+    },
+  );
+  // An ended occurrence with the group's chat still open: More holds Leave this group and stays open (Task 3's carry).
+  // Its start is five hours ago, so the question names that day's weekday in the plan's zone (UTC), whatever today is.
+  const endedStart = Date.now() - 5 * hour;
+  const endedDay = new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: "UTC" }).format(new Date(endedStart));
+  await scenario(
+    "group, More, ended",
+    {
+      viewer: "guest",
+      group: true,
+      plan: { ...groupPlan, starts_at: iso(endedStart), ends_at: iso(endedStart + 3 * hour) },
+      attendee: { version: 1, response: "accepted" },
+      guests: [ALEX],
+      chat: groupChat(),
+    },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      await expect(text(page, "Ended")).toBeVisible();
+      await btn(page, "More").click();
+      await expect(btn(page, "Leave this group")).toBeVisible();
+      await page.waitForTimeout(500);
+      await expect(btn(page, "Leave this group")).toBeVisible();
+      await btn(page, "Leave this group").click();
+      await expect(text(page, `Leave Coffee evening? You’ll stop getting its ${endedDay}s and its chat.`)).toBeVisible();
+    },
+  );
+  // A week cancelled with "Cancel just this one", where this member hasn't answered: no answer to give and no reply to
+  // show, so the page's bar is More alone, labelled, holding Leave this group (review M1).
+  await scenario(
+    "group, More-only bar",
+    { viewer: "guest", group: true, plan: { ...groupPlan, status: "cancelled" }, guests: [ALEX], chat: groupChat({ status: "cancelled" }) },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      await expect(page.getByRole("radiogroup", { name: "Your answer" })).toHaveCount(0);
+      const more = bar(f).getByRole("button", { name: "More", exact: true });
+      await expect(more).toBeVisible();
+      await expect(more.getByText("More", { exact: true })).toBeVisible();
+      await more.click();
+      await expect(btn(page, "Leave this group")).toBeVisible();
+      await expect(btn(page, "Mute this resbite")).toHaveCount(0);
+      await btn(page, "Leave this group").click();
+      await expect(text(page, QUESTION)).toBeVisible();
+    },
+  );
+  pass("group, More: Leave this group last in More on a group (after Add to calendar and Mute), alone for a member who hasn't answered, and on an ended occurrence with the chat open, where the sheet stays; never on a one-off; the Chat row reads Group chat");
+
+  // A guest who hasn't answered, right after a roll: every co-member pending, none answered (G-B5, G-S14).
+  const MIA = g("p1", "Mia", "pending");
+  const SOL = g("p2", "Sol", "pending");
+  const PEDRO = g("p3", "Pedro", "pending");
+  await scenario(
+    "group, people, not answered",
+    { viewer: "guest", group: true, plan: groupPlan, guests: [MIA, SOL, PEDRO], chat: groupChat({ accepted: 0, members: 5, going: 1, everyone: 5 }) },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      // Names whatever their reply: the people row opens the list, and no server counts are read.
+      await page.getByRole("button", { name: /^Going \d/ }).click();
+      await expect(page).toHaveURL(new RegExp(`/guests\\?plan=${PLAN_ID}`));
+      await expect(heading(page, "People")).toBeVisible();
+      await expect(page.getByRole("heading")).toHaveText(["People", "Going · 1", "Not answered yet · 4"]);
+      await expect(page.getByLabel("Ana, Hosting", { exact: true })).toBeVisible();
+      for (const name of ["Mia", "Sol", "Pedro", "Fixture"]) await expect(page.getByLabel(`${name}, Invited in the app`, { exact: true })).toBeVisible();
+      // As many app and owner rows as the chat's members.
+      const rows = (await page.getByLabel(/, Invited in the app$/).count()) + (await page.getByLabel("Ana, Hosting", { exact: true }).count());
+      assert.equal(rows, 5, "the people list holds the chat's 5 members");
+      for (const name of ["Ana", "Mia", "Sol", "Pedro"]) {
+        await btn(page, `Actions for ${name}`).click();
+        await expect(btn(page, "Connect on Resbite")).toBeVisible();
+        await expect(btn(page, "Remove")).toHaveCount(0);
+        await page.getByRole("button", { name: "Close sheet" }).first().click();
+      }
+      await expect(btn(page, "Actions for Fixture")).toHaveCount(0);
+      // No phone number anywhere on the list.
+      const body = await page.locator("body").innerText();
+      assert.ok(!/\d{4} ?\d{6}|Number ending/.test(body), "no phone number on the list");
+      assert.deepEqual(f.rpcs("plan_people_counts"), []);
+    },
+  );
+  pass("group, people, not answered: a guest who hasn't answered, with every co-member pending, opens the people list from the people row: Ana's Hosting row and Mia, Sol, Pedro and themselves under Not answered yet · 4, five rows for the chat's five members, Connect on each other row, no Remove, no phone number, and no plan_people_counts");
+
+  // A bringer on a group: the person they brought, not answered, once, with Remove; their link under Invited (S4).
+  await scenario(
+    "group, people, bringer",
+    {
+      viewer: "guest",
+      group: true,
+      plan: groupPlan,
+      attendee: { version: 1, response: "accepted" },
+      guests: [{ ...g("p4", "Clara", "pending"), brought_by: user.id, level: 2 }, SOL],
+      guestLinks: [phoneRow(PAT.phone)],
+      storedCodes: { [PAT.e164]: { code: PAT.code, name: PAT.name, sentVia: "whatsapp" } },
+      chat: groupChat({ members: 4 }),
+    },
+    async (f) => {
+      const { page } = f;
+      await page.goto(`${base}/guests?plan=${PLAN_ID}`);
+      await expect(heading(page, "People")).toBeVisible();
+      await expect(page.getByRole("heading")).toHaveText(["People", "Going · 2", "Not answered yet · 2", "Invited, not answered yet · 1"]);
+      await expect(page.getByLabel("Clara, brought by you, Invited in the app", { exact: true })).toHaveCount(1);
+      await expect(page.getByText("Clara", { exact: true })).toHaveCount(1);
+      await expect(page.getByLabel("Sol, Invited in the app", { exact: true })).toBeVisible();
+      await expect(page.getByLabel("Pat Lee, brought by you, Invited by WhatsApp", { exact: true })).toBeVisible();
+      await btn(page, "Actions for Clara").click();
+      await expect(btn(page, "Remove")).toBeVisible();
+      await expect(btn(page, "Connect on Resbite")).toBeVisible();
+      await page.getByRole("button", { name: "Close sheet" }).first().click();
+      await btn(page, "Actions for Sol").click();
+      await expect(btn(page, "Connect on Resbite")).toBeVisible();
+      await expect(btn(page, "Remove")).toHaveCount(0);
+      await page.getByRole("button", { name: "Close sheet" }).first().click();
+    },
+  );
+  pass("group, people, bringer: the guest's own brought invitee Clara shows once, under Not answered yet with Remove and Connect, beside Sol (Connect only); their link to Pat Lee sits under Invited, not answered yet");
+
+  // Leave from the resbite page (I10): My resbites, More, Leave this group, the question, Leave group.
+  await scenario(
+    "group, leave",
+    { viewer: "guest", group: true, plan: groupPlan, attendee: { version: 1, response: "accepted" }, guests: [ALEX, BEA], chat: groupChat() },
+    async (f) => {
+      const { page } = f;
+      await page.goto(`${base}/plans`);
+      const tile = page.getByRole("button", { name: /^Coffee evening, / });
+      await expect(tile).toBeVisible();
+      await tile.click();
+      await expect(heading(page, "Coffee evening")).toBeVisible();
+      await btn(page, "More").click();
+      await btn(page, "Leave this group").click();
+      await expect(text(page, QUESTION)).toBeVisible();
+      // The question takes focus, as the chat's does (review M2).
+      await expect.poll(() => page.evaluate(() => document.activeElement?.textContent)).toBe(QUESTION);
+      // Keep goes back to the rows, with nothing called, and focus to Leave this group.
+      await btn(page, "Keep").click();
+      await expect(btn(page, "Leave this group")).toBeVisible();
+      await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute("aria-label"))).toBe("Leave this group");
+      assert.deepEqual(f.rpcs("leave_series"), []);
+      await btn(page, "Leave this group").click();
+      const lists = () => f.state.listReads;
+      const before = lists();
+      await btn(page, "Leave group").click();
+      await expect(page).toHaveURL(new RegExp(`/plans$`));
+      await expect(heading(page, "My resbites")).toBeVisible();
+      assert.deepEqual(f.rpcs("leave_series"), [{ p_series: SERIES_ID }]);
+      // My resbites read its plans again, and the group is gone from them.
+      await expect.poll(lists).toBeGreaterThan(before);
+      await expect(page.getByRole("button", { name: /^Coffee evening, / })).toHaveCount(0);
+      await expect(text(page, "Nothing planned")).toBeVisible();
+    },
+  );
+  await scenario(
+    "group, leave offline",
+    { viewer: "guest", group: true, plan: groupPlan, attendee: { version: 1, response: "accepted" }, guests: [ALEX], chat: groupChat(), failLeaves: 1 },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      await btn(page, "More").click();
+      await btn(page, "Leave this group").click();
+      await btn(page, "Leave group").click();
+      // The question stays open, with the reason inside the sheet.
+      const sheet = page.locator("[aria-modal]");
+      await expect(sheet.getByText("Check your connection and try again.", { exact: true })).toBeVisible();
+      await expect(sheet.getByText(QUESTION, { exact: true })).toBeVisible();
+      await expect(page).toHaveURL(new RegExp(`/event\\?plan=${PLAN_ID}$`));
+      assert.equal(f.rpcs("leave_series").length, 1);
+      await expect(btn(page, "Leave group")).toBeEnabled();
+      await btn(page, "Leave group").click();
+      await expect(page).toHaveURL(new RegExp(`/plans$`));
+      assert.deepEqual(f.rpcs("leave_series"), [{ p_series: SERIES_ID }, { p_series: SERIES_ID }]);
+    },
+  );
+  // UI Q3: the leave went through but My resbites' next read fails: the group is gone from the list it shows anyway.
+  await scenario(
+    "group, leave, list fails",
+    { viewer: "guest", group: true, plan: groupPlan, attendee: { version: 1, response: "accepted" }, guests: [ALEX], chat: groupChat(), failListAfterLeave: true },
+    async (f) => {
+      const { page } = f;
+      await page.goto(`${base}/plans`);
+      const tile = page.getByRole("button", { name: /^Coffee evening, / });
+      await tile.click();
+      await expect(heading(page, "Coffee evening")).toBeVisible();
+      await btn(page, "More").click();
+      await btn(page, "Leave this group").click();
+      await btn(page, "Leave group").click();
+      await expect(page).toHaveURL(new RegExp(`/plans$`));
+      await expect(text(page, "We couldn’t refresh your plans. Previously loaded details may be out of date. Try again when you’re connected.")).toBeVisible();
+      await expect(page.getByRole("button", { name: /^Coffee evening, / })).toHaveCount(0);
+    },
+  );
+  // UI Q4: Back while a slow leave is on its way. Landing on that group's resbite page, the leave still ends on My
+  // resbites; gone further, to My resbites itself, it reads its list again and the group goes.
+  for (const [name, backs] of [
+    ["group, leave, back to the page", 1],
+    ["group, leave, back to My resbites", 2],
+  ])
+    await scenario(name, { viewer: "guest", group: true, plan: groupPlan, attendee: { version: 1, response: "accepted" }, guests: [ALEX], chat: groupChat(), delayLeaves: 2500 }, async (f) => {
+      const { page } = f;
+      await page.goto(`${base}/plans`);
+      await page.getByRole("button", { name: /^Coffee evening, / }).click();
+      await expect(heading(page, "Coffee evening")).toBeVisible();
+      await btn(page, "Group chat. Leo: I can bring the snacks, unread messages").click();
+      await expect(page).toHaveURL(new RegExp(`/chat\\?series=${SERIES_ID}$`));
+      await btn(page, "More").click();
+      await btn(page, "Leave group").click();
+      await btn(page, "Leave group").click();
+      await expect.poll(() => f.rpcs("leave_series").length).toBe(1);
+      for (let i = 0; i < backs; i++) await page.goBack();
+      if (backs === 1) {
+        await expect(page).toHaveURL(new RegExp(`/event\\?plan=${PLAN_ID}$`));
+        await expect(page).toHaveURL(new RegExp(`/plans$`), { timeout: 10_000 });
+        await expect(heading(page, "My resbites")).toBeVisible();
+      } else {
+        await expect(page).toHaveURL(new RegExp(`/plans$`));
+        await expect(page.getByRole("button", { name: /^Coffee evening, / })).toBeVisible();
+        const reads = f.state.listReads;
+        await expect.poll(() => f.state.left, { timeout: 10_000 }).toBe(true);
+        await expect.poll(() => f.state.listReads, { timeout: 10_000 }).toBeGreaterThan(reads);
+      }
+      await expect(page.getByRole("button", { name: /^Coffee evening, / })).toHaveCount(0);
+      assert.equal(f.rpcs("leave_series").length, 1);
+    });
+  // Ruling GR6 M3: Back to the group's resbite page while the leave is on its way, and the page's re-read fails there
+  // (it can't be read once the leave goes through): the leave still lands on My resbites.
+  await scenario(
+    "group, leave, page read fails",
+    { viewer: "guest", group: true, plan: groupPlan, attendee: { version: 1, response: "accepted" }, guests: [ALEX], chat: groupChat(), delayLeaves: 2500 },
+    async (f) => {
+      const { page } = f;
+      await page.goto(`${base}/plans`);
+      await page.getByRole("button", { name: /^Coffee evening, / }).click();
+      await expect(heading(page, "Coffee evening")).toBeVisible();
+      await btn(page, "Group chat. Leo: I can bring the snacks, unread messages").click();
+      await expect(page).toHaveURL(new RegExp(`/chat\\?series=${SERIES_ID}$`));
+      await btn(page, "More").click();
+      await btn(page, "Leave group").click();
+      await btn(page, "Leave group").click();
+      await expect.poll(() => f.rpcs("leave_series").length).toBe(1);
+      f.state.failPlanRead = true;
+      await page.goBack();
+      await expect(page).toHaveURL(new RegExp(`/event\\?plan=${PLAN_ID}$`));
+      await expect(page).toHaveURL(new RegExp(`/plans$`), { timeout: 10_000 });
+      await expect(heading(page, "My resbites")).toBeVisible();
+      f.state.failPlanRead = false;
+    },
+  );
+  // Ruling GR6 M7: the page doesn't wait for series_is_group. It shows as a one-off until the flag lands, then as the
+  // group's.
+  await scenario(
+    "group, flag late",
+    { viewer: "guest", group: true, plan: groupPlan, attendee: { version: 1, response: "accepted" }, guests: [ALEX], chat: groupChat(), delayGroup: 4000 },
+    async (f) => {
+      const { page } = f;
+      const started = Date.now();
+      await page.goto(`${base}/event?plan=${PLAN_ID}`);
+      await expect(heading(page, "Coffee evening")).toBeVisible({ timeout: 2500 });
+      assert.ok(Date.now() - started < 3500, "the page showed before the flag answered");
+      await expect(text(page, "You’re going")).toBeVisible();
+      // Once the flag lands: the group's Chat row and More's Leave this group.
+      await expect(btn(page, "Group chat. Leo: I can bring the snacks, unread messages")).toBeVisible({ timeout: 10_000 });
+      await btn(page, "More").click();
+      await expect(btn(page, "Leave this group")).toBeVisible({ timeout: 10_000 });
+    },
+  );
+  pass("group, leave, page read fails / flag late: a leave lands on My resbites even when the resbite page's re-read fails first (GR6 M3); the resbite page shows before series_is_group answers and turns into the group's when it does (GR6 M7)");
+  pass("group, leave: after a leave whose next list read fails, My resbites still drops the group (UI Q3); with Back pressed while a slow leave is on its way, it still lands on My resbites from the group's resbite page, and My resbites reads its list again and drops the group when they went back to it (UI Q4)");
+  pass("group, leave: from My resbites' tile, More → Leave this group asks Leave Coffee evening? You’ll stop getting its Thursdays and its chat. (Keep goes back); Leave group calls leave_series {p_series} once and lands on My resbites, which reads its plans again with the group gone; offline the question stays with Check your connection and try again., and a second tap calls leave_series again and lands on My resbites");
+
+  // Challenge NOTE 6: in a group an answer moves nobody, so a failed re-read of the chat keeps the row; on a one-off a
+  // confirmed answer can move the person out, so the same failure hides it, as built.
+  await scenario(
+    "group, answer keeps the chat row",
+    { viewer: "guest", group: true, plan: groupPlan, guests: [ALEX], chat: groupChat() },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      const row = btn(page, "Group chat. Leo: I can bring the snacks, unread messages");
+      await expect(row).toBeVisible();
+      f.state.chat = "failed";
+      // The re-read after the answer fails; once its failure has been handled, the row is still there (review M4).
+      const failed = page.waitForResponse((r) => r.url().includes("/rest/v1/rpc/chat_summary") && r.status() === 500);
+      await page.getByRole("radio", { name: "Going", exact: true }).click();
+      await expect(text(page, "Your response is saved.")).toBeVisible();
+      await failed;
+      await page.waitForTimeout(1000);
+      await expect(row).toBeVisible();
+    },
+  );
+  await scenario(
+    "one-off, answer hides the chat row",
+    { viewer: "guest", attendee: { version: 1, response: "accepted" }, guests: [ALEX], chat: chatSummary() },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      const row = btn(page, "Chat. Leo: I can bring the snacks, unread messages");
+      await expect(row).toBeVisible();
+      const before = f.rpcs("chat_summary").length;
+      f.state.chat = "failed";
+      await btn(page, "Change your answer").click();
+      await page.getByRole("radio", { name: "Maybe", exact: true }).click();
+      await expect(text(page, "Your response is saved.")).toBeVisible();
+      await expect.poll(() => f.rpcs("chat_summary").length).toBeGreaterThan(before);
+      await expect(page.getByRole("button", { name: /^Chat/ })).toHaveCount(0);
+    },
+  );
+  pass("group, answer keeps the chat row: a not-answered group member answers Going and the chat re-read fails: the Group chat row stays; on a one-off the same failure after a confirmed answer hides the row (challenge NOTE 6)");
+
   // --- Edges of the people list and the page ---
+
+  // --- Report and block (chat plan 3, Task 5) ---
+  const LEO_G = g("g6", "Leo", "accepted");
+  const INVITER = "66666666-6666-4666-8666-666666666666";
+  const sheetOf = (page) => page.locator("[aria-modal]").filter({ visible: true });
+  /** The element that has focus now, by its text. */
+  const focusedText = (page) => page.evaluate(() => document.activeElement?.textContent ?? null);
+  /** The open sheet's buttons by their spoken names, the grabber's Close sheet left out. */
+  const sheetButtons = (page) =>
+    sheetOf(page)
+      .getByRole("button")
+      .evaluateAll((els) => els.map((el) => el.getAttribute("aria-label") ?? el.textContent.trim()).filter((name) => name !== "Close sheet"));
+  const after = (f, mark, name) => f.log.slice(mark).filter((c) => c.name === name).map((c) => c.body);
+  const QUESTION_ANA =
+    "Block Ana? You won’t see Ana’s messages or announcements, and Ana won’t know. Any connection between you ends, and unblocking won’t bring it back.";
+  const QUESTION_PEDRO = "Block Pedro? You won’t see Pedro’s messages, and Pedro won’t know. Any connection between you ends, and unblocking won’t bring it back.";
+  await scenario("safety, people", { guests: [ALEX, BEA], requests: [SAM] }, async (f) => {
+    const { page } = f;
+    await page.goto(`${base}/guests?plan=${PLAN_ID}`);
+    await expect(heading(page, "People")).toBeVisible();
+    await btn(page, "Actions for Bea").click();
+    for (const row of ["Connect on Resbite", "Report Bea", "Block Bea"]) await expect(btn(page, row)).toBeVisible();
+    assert.ok(await inOrder(page, [btn(page, "Remove from this resbite"), btn(page, "Report Bea"), btn(page, "Block Bea")]), "Report, then Block, last");
+    await page.getByRole("button", { name: "Close sheet" }).first().click();
+    // A waiting join request: Block, never Report (G-S9). They aren't on the resbite, so even a host reads the guest's
+    // confirm: nothing about removing their messages, and no R-Q6 line (ruling SR6 draft).
+    await btn(page, "Actions for Sam Reed").click();
+    await expect(btn(page, "Block Sam Reed")).toBeVisible();
+    await expect(btn(page, "Report Sam Reed")).toHaveCount(0);
+    await btn(page, "Block Sam Reed").click();
+    await expect(sheetOf(page).getByText(
+      "Block Sam Reed? You won’t see Sam Reed’s messages, and Sam Reed won’t know. Any connection between you ends, and unblocking won’t bring it back.",
+      { exact: true },
+    )).toBeVisible();
+    await expect(sheetOf(page).getByText(/^This hides their messages/)).toHaveCount(0);
+    // Keep: back to the sheet, with focus on Block Sam Reed (H32 Q53, ruling SR6 D1).
+    await btn(page, "Keep").click();
+    await expect.poll(() => focusedText(page)).toBe("Block Sam Reed");
+    // The host blocking a guest reads the host's confirm with R-Q6's line.
+    await page.getByRole("button", { name: "Close sheet" }).first().click();
+    await btn(page, "Actions for Bea").click();
+    await btn(page, "Block Bea").click();
+    await expect(sheetOf(page).getByText(
+      "Block Bea? You won’t see Bea’s messages or announcements, and you won’t be able to remove Bea’s messages. Any connection between you ends, and unblocking won’t bring it back.",
+      { exact: true },
+    )).toBeVisible();
+    await expect(sheetOf(page).getByText("This hides their messages from you only. To stop them for everyone, remove them from the resbite.", { exact: true })).toBeVisible();
+    await btn(page, "Keep").click();
+    await expect(btn(page, "Report Bea")).toBeVisible();
+    assert.deepEqual(f.rpcs("block_user"), []);
+  });
+  await scenario("safety, blocked", { viewer: "guest", attendee: { version: 1, response: "accepted" }, guests: [ALEX, BEA], blocked: ["g2"] }, async (f) => {
+    const { page } = f;
+    await page.goto(`${base}/guests?plan=${PLAN_ID}`);
+    await expect(page.getByLabel("Bea, Blocked", { exact: true })).toBeVisible();
+    await expect(page.getByText("Blocked", { exact: true })).toHaveCount(1);
+    await btn(page, "Actions for Bea").click();
+    await expect(btn(page, "Unblock Bea")).toBeVisible();
+    await expect(btn(page, "Report Bea")).toBeVisible();
+    await expect(btn(page, "Connect on Resbite")).toHaveCount(0);
+    await expect(btn(page, "Block Bea")).toHaveCount(0);
+    await page.getByRole("button", { name: "Close sheet" }).first().click();
+    // Alex isn't blocked: Connect and Block as ever.
+    await btn(page, "Actions for Alex").click();
+    await expect(btn(page, "Connect on Resbite")).toBeVisible();
+    await expect(btn(page, "Block Alex")).toBeVisible();
+  });
+  await scenario("safety, blocks unknown", { viewer: "guest", attendee: { version: 1, response: "accepted" }, guests: [ALEX, BEA], blocked: "failed" }, async (f) => {
+    const { page } = f;
+    await page.goto(`${base}/guests?plan=${PLAN_ID}`);
+    await expect(heading(page, "People")).toBeVisible();
+    await expect.poll(() => f.rpcs("my_blocks").length).toBeGreaterThan(0);
+    for (const name of ["Ana", "Alex", "Bea"]) {
+      await btn(page, `Actions for ${name}`).click();
+      await expect(btn(page, `Report ${name}`)).toBeVisible();
+      await expect(btn(page, `Block ${name}`)).toHaveCount(0);
+      await expect(btn(page, `Unblock ${name}`)).toHaveCount(0);
+      await expect(btn(page, "Connect on Resbite")).toHaveCount(0);
+      // Nothing says why: a failed read of one's own blocks names nobody (N13).
+      await expect(page.getByRole("alert")).toHaveCount(0);
+      await page.getByRole("button", { name: "Close sheet" }).first().click();
+    }
+    await expect(page.getByRole("alert")).toHaveCount(0);
+  });
+  await scenario(
+    "safety, block and unblock",
+    { viewer: "guest", attendee: { version: 1, response: "accepted" }, guests: [ALEX, LEO_G], pairs: { g6: "connected" } },
+    async (f) => {
+      const { page } = f;
+      await page.goto(`${base}/guests?plan=${PLAN_ID}`);
+      await expect(page.getByLabel("Leo, Connected", { exact: true })).toBeVisible();
+      await btn(page, "Actions for Leo").click();
+      await btn(page, "Block Leo").click();
+      await expect(sheetOf(page).getByText("Block Leo? You won’t see Leo’s messages, and Leo won’t know. Any connection between you ends, and unblocking won’t bring it back.", { exact: true })).toBeVisible();
+      const blocked = f.log.length;
+      await btn(page, "Block Leo").click();
+      await expect(sheetOf(page).getByText("Blocked", { exact: true })).toBeVisible();
+      assert.deepEqual(f.rpcs("block_user"), [{ p_user: "g6", p_block: true }]);
+      await expect.poll(() => after(f, blocked, "my_blocks").length).toBeGreaterThan(0);
+      await expect.poll(() => after(f, blocked, "plan_connection_states").length).toBeGreaterThan(0);
+      await page.getByRole("button", { name: "Close sheet" }).first().click();
+      await expect(page.getByLabel("Leo, Blocked", { exact: true })).toBeVisible();
+      await btn(page, "Actions for Leo").click();
+      await expect(btn(page, "Connect on Resbite")).toHaveCount(0);
+      const unblocked = f.log.length;
+      await btn(page, "Unblock Leo").click();
+      // Said in place, with focus on it, as Blocked people does (final review M4).
+      await expect(sheetOf(page).getByText("Unblocked Leo.", { exact: true })).toBeVisible();
+      await expect.poll(() => focusedText(page)).toBe("Unblocked Leo.");
+      await page.getByRole("button", { name: "Close sheet" }).first().click();
+      await expect.poll(() => f.rpcs("block_user").at(-1)).toEqual({ p_user: "g6", p_block: false });
+      await expect.poll(() => after(f, unblocked, "my_blocks").length).toBeGreaterThan(0);
+      await expect.poll(() => after(f, unblocked, "plan_connection_states").length).toBeGreaterThan(0);
+      // The server answers none after Unblock: Connect, not Connected.
+      await expect(page.getByLabel("Leo", { exact: true })).toBeVisible();
+      await expect(page.getByLabel("Leo, Connected", { exact: true })).toHaveCount(0);
+      await btn(page, "Actions for Leo").click();
+      await expect(btn(page, "Connect on Resbite")).toBeVisible();
+      await expect(btn(page, "Block Leo")).toBeVisible();
+    },
+  );
+  // Ruling SR6 Q2: a block the server took stays known on this phone even when the blocks can't be read again.
+  await scenario(
+    "safety, blocks fail after a block",
+    { viewer: "guest", attendee: { version: 1, response: "accepted" }, guests: [ALEX, LEO_G], blocksFailAfterBlock: true },
+    async (f) => {
+      const { page } = f;
+      await page.goto(`${base}/guests?plan=${PLAN_ID}`);
+      await btn(page, "Actions for Leo").click();
+      await btn(page, "Block Leo").click();
+      const blocked = f.log.length;
+      await btn(page, "Block Leo").click();
+      await expect(sheetOf(page).getByText("Blocked", { exact: true })).toBeVisible();
+      await expect.poll(() => after(f, blocked, "my_blocks").length).toBeGreaterThan(0);
+      await page.getByRole("button", { name: "Close sheet" }).first().click();
+      await expect(page.getByLabel("Leo, Blocked", { exact: true })).toBeVisible();
+      await btn(page, "Actions for Leo").click();
+      await expect(btn(page, "Unblock Leo")).toBeVisible();
+      await expect(btn(page, "Block Leo")).toHaveCount(0);
+      await expect(page.getByRole("alert")).toHaveCount(0);
+    },
+  );
+  // Server review M7: a block that stored nothing isn't taken as known; with the read after it failing, the blocks are
+  // unknown, so no row offers Block, Unblock or Connect, and nothing says why (N13).
+  await scenario(
+    "safety, block not stored",
+    { viewer: "guest", attendee: { version: 1, response: "accepted" }, guests: [ALEX, LEO_G], blocksFailAfterBlock: true, blockNotStored: true },
+    async (f) => {
+      const { page } = f;
+      await page.goto(`${base}/guests?plan=${PLAN_ID}`);
+      await btn(page, "Actions for Leo").click();
+      await btn(page, "Block Leo").click();
+      const blocked = f.log.length;
+      await btn(page, "Block Leo").click();
+      await expect.poll(() => after(f, blocked, "my_blocks").length).toBeGreaterThan(0);
+      // Ruling SR9: nothing was stored, so the confirm closes with no "Blocked" and no other line (a "couldn't" line
+      // could tell that Leo blocked the caller).
+      await expect(sheetOf(page)).toHaveCount(0);
+      await expect(page.getByText("Blocked", { exact: true })).toHaveCount(0);
+      await expect(page.getByLabel("Leo, Blocked", { exact: true })).toHaveCount(0);
+      for (const name of ["Leo", "Alex"]) {
+        await btn(page, `Actions for ${name}`).click();
+        await expect(btn(page, `Report ${name}`)).toBeVisible();
+        await expect(btn(page, `Block ${name}`)).toHaveCount(0);
+        await expect(btn(page, `Unblock ${name}`)).toHaveCount(0);
+        await expect(btn(page, "Connect on Resbite")).toHaveCount(0);
+        await page.getByRole("button", { name: "Close sheet" }).first().click();
+      }
+      await expect(page.getByRole("alert")).toHaveCount(0);
+    },
+  );
+  // Final review I1: a block made on a screen over the resbite page (here its people list) takes the person's line off
+  // the page's Chat row at once: the page beneath reads its chat again, and drops the line itself if that read fails.
+  const LEO_ON = g(LEO, "Leo", "accepted");
+  await scenario(
+    "safety, chat row after a block",
+    {
+      viewer: "guest",
+      attendee: { version: 1, response: "accepted" },
+      guests: [ALEX, LEO_ON],
+      chat: chatSummary({ names: { [LEO]: "Leo", g1: "Alex" } }),
+      chatAfterBlock: { last: { ...chatSummary().last, id: 11, body: "See you there", author_id: "g1" } },
+    },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      await expect(btn(page, "Chat. Leo: I can bring the snacks, unread messages")).toBeVisible();
+      await page.getByRole("button", { name: /^Going \d/ }).click();
+      await expect(heading(page, "People")).toBeVisible();
+      await btn(page, "Actions for Leo").click();
+      await btn(page, "Block Leo").click();
+      const blocked = f.log.length;
+      await btn(page, "Block Leo").click();
+      await expect(sheetOf(page).getByText("Blocked", { exact: true })).toBeVisible();
+      // The page beneath read its chat again, before Back.
+      await expect.poll(() => after(f, blocked, "chat_summary").length).toBeGreaterThan(0);
+      // Its own read on return then fails, so the row shows what that read before Back brought.
+      f.state.chat = "failed";
+      await page.getByRole("button", { name: "Close sheet" }).first().click();
+      await btn(page, "Back").click();
+      await expect(heading(page, "Coffee evening")).toBeVisible();
+      await expect(btn(page, "Chat. Alex: See you there, unread messages")).toBeVisible();
+      await expect(page.getByRole("button", { name: /^Chat\. Leo/ })).toHaveCount(0);
+    },
+  );
+  await scenario(
+    "safety, chat row after a block, its read failing",
+    { viewer: "guest", attendee: { version: 1, response: "accepted" }, guests: [ALEX, LEO_ON], chat: chatSummary(), chatFailsAfterBlock: true },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      await expect(btn(page, "Chat. Leo: I can bring the snacks, unread messages")).toBeVisible();
+      await page.getByRole("button", { name: /^Going \d/ }).click();
+      await btn(page, "Actions for Leo").click();
+      await btn(page, "Block Leo").click();
+      await btn(page, "Block Leo").click();
+      await expect(sheetOf(page).getByText("Blocked", { exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "Close sheet" }).first().click();
+      await btn(page, "Back").click();
+      // The block went through, so Leo's line is gone even though no read could say what came before it.
+      await expect(btn(page, "Chat, unread messages")).toBeVisible();
+      await expect(page.getByRole("button", { name: /^Chat\. Leo/ })).toHaveCount(0);
+    },
+  );
+  pass("safety, chat row after a block: blocking Leo from the people list over the resbite page reads the page's chat again before Back, so its Chat row reads Alex's line; with that read failing, Leo's line is dropped all the same");
+  pass("safety, people: the people sheet offers Report and Block (last, Report first); a waiting join request Block only; a host's confirm adds R-Q6's line; a blocked person's row reads Blocked with Unblock and no Connect; with my_blocks failing no row offers Block, Unblock or Connect and no alert shows (N13); Block Leo (connected) reads my_blocks and plan_connection_states again and the row reads Blocked; Unblock reads both again and the row offers Connect, not Connected (NOTE 2)");
+
+  // B1: the announcement line's Report or block, on Ana's resbite.
+  await scenario(
+    "safety, invitation announcement",
+    {
+      viewer: "guest",
+      guests: [ALEX, BEA],
+      overview: { chats: {}, announcements: { [PLAN_ID]: { id: 41, author_id: HOST.id, body: "Doors open at 19:30" } }, names: { [HOST.id]: "Ana" } },
+    },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      await expect(text(page, "Hosted by Ana")).toBeVisible();
+      await expect(text(page, "Announcement from Ana · Doors open at 19:30")).toBeVisible();
+      const action = btn(page, "Report or block");
+      await expect(action).toBeVisible();
+      const box = await action.boundingBox();
+      assert.ok(box.height >= 44, `Report or block is at least 44 pt (${box.height})`);
+      assert.ok(await inOrder(page, [text(page, "Announcement from Ana · Doors open at 19:30"), action]), "beside the line, after it");
+      await action.click();
+      await expect.poll(() => sheetButtons(page)).toEqual(["Report message", "Report Ana", "Block Ana"]);
+      await btn(page, "Report message").click();
+      await page.getByRole("radio", { name: "Spam", exact: true }).click();
+      await btn(page, "Send report").click();
+      await expect(text(page, "Thanks. The Resbite team will look at it.")).toBeVisible();
+      assert.deepEqual(f.rpcs("report_message"), [{ p_id: 41, p_reason: "spam", p_details: null }]);
+      await btn(page, "Done").click();
+      await btn(page, "Report or block").click();
+      await btn(page, "Block Ana").click();
+      await expect(sheetOf(page).getByText(QUESTION_ANA, { exact: true })).toBeVisible();
+      const overviews = f.rpcs("my_chat_overview").length;
+      await btn(page, "Block Ana").click();
+      await expect(sheetOf(page).getByText("Blocked", { exact: true })).toBeVisible();
+      assert.deepEqual(f.rpcs("block_user"), [{ p_user: HOST.id, p_block: true }]);
+      await expect.poll(() => f.rpcs("my_chat_overview").length).toBeGreaterThan(overviews);
+      await page.getByRole("button", { name: "Close sheet" }).first().click();
+      await expect(text(page, "Announcement from Ana · Doors open at 19:30")).toHaveCount(0);
+    },
+  );
+  // Ruling SR12: the same block with the overview's re-read failing: the line goes all the same.
+  await scenario(
+    "safety, invitation announcement, its read failing",
+    {
+      viewer: "guest",
+      guests: [ALEX, BEA],
+      overview: { chats: {}, announcements: { [PLAN_ID]: { id: 41, author_id: HOST.id, body: "Doors open at 19:30" } }, names: { [HOST.id]: "Ana" } },
+      overviewFailsAfterBlock: true,
+    },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      await expect(text(page, "Announcement from Ana · Doors open at 19:30")).toBeVisible();
+      await btn(page, "Report or block").click();
+      await btn(page, "Block Ana").click();
+      const overviews = f.rpcs("my_chat_overview").length;
+      await btn(page, "Block Ana").click();
+      await expect(sheetOf(page).getByText("Blocked", { exact: true })).toBeVisible();
+      await expect.poll(() => f.rpcs("my_chat_overview").length).toBeGreaterThan(overviews);
+      await page.getByRole("button", { name: "Close sheet" }).first().click();
+      await expect(text(page, "Announcement from Ana · Doors open at 19:30")).toHaveCount(0);
+      await expect(page.getByRole("alert")).toHaveCount(0);
+    },
+  );
+  // B4, R-Q1, I-2: no announcement; Pedro invited them, on Ana's resbite.
+  await scenario(
+    "safety, invitation inviter",
+    { viewer: "guest", guests: [ALEX, BEA], overview: { chats: {}, announcements: {}, names: { [INVITER]: "Pedro" }, inviters: { [PLAN_ID]: INVITER } } },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      await expect(btn(page, "Report or block")).toHaveCount(0);
+      const more = bar(f).getByRole("button", { name: "More", exact: true });
+      await more.click();
+      await btn(page, "Report or block").click();
+      await expect.poll(() => sheetButtons(page)).toEqual(["Report Pedro", "Block Pedro", "Report Ana", "Block Ana"]);
+      await btn(page, "Report Pedro").click();
+      await page.getByRole("radio", { name: "Spam", exact: true }).click();
+      await btn(page, "Send report").click();
+      await expect(text(page, "Thanks. The Resbite team will look at it.")).toBeVisible();
+      assert.deepEqual(f.rpcs("report_user"), [{ p_user: INVITER, p_series: SERIES_ID, p_reason: "spam", p_details: null }]);
+      await btn(page, "Done").click();
+      await more.click();
+      await btn(page, "Report or block").click();
+      await btn(page, "Block Ana").click();
+      await expect(sheetOf(page).getByText(QUESTION_ANA, { exact: true })).toBeVisible();
+      await btn(page, "Keep").click();
+      // Back on the list, focus on Block Ana (H32 Q53, ruling SR6 D1).
+      await expect.poll(() => focusedText(page)).toBe("Block Ana");
+      await btn(page, "Block Pedro").click();
+      await expect(sheetOf(page).getByText(QUESTION_PEDRO, { exact: true })).toBeVisible();
+      await btn(page, "Block Pedro").click();
+      await expect(sheetOf(page).getByText("Blocked", { exact: true })).toBeVisible();
+      assert.deepEqual(f.rpcs("block_user"), [{ p_user: INVITER, p_block: true }]);
+      // The overview read again leaves Pedro out: Ana alone.
+      await page.getByRole("button", { name: "Close sheet" }).first().click();
+      await more.click();
+      await btn(page, "Report or block").click();
+      await expect.poll(() => sheetButtons(page)).toEqual(["Report Ana", "Block Ana"]);
+    },
+  );
+  // I-2: the overview failing still leaves the owner to offer.
+  await scenario("safety, invitation without the overview", { viewer: "guest", guests: [ALEX, BEA], overview: "failed" }, async (f) => {
+    const { page } = f;
+    await goto(f, `/event?plan=${PLAN_ID}`);
+    await expect.poll(() => f.rpcs("my_chat_overview").length).toBeGreaterThan(0);
+    await bar(f).getByRole("button", { name: "More", exact: true }).click();
+    await btn(page, "Report or block").click();
+    await expect.poll(() => sheetButtons(page)).toEqual(["Report Ana", "Block Ana"]);
+  });
+  // Nobody to name (the host's name blank, no overview entry): no Report or block row, so no More either.
+  await scenario("safety, invitation with nobody", { viewer: "guest", guests: [ALEX, BEA], hostName: "  " }, async (f) => {
+    const { page } = f;
+    await goto(f, `/event?plan=${PLAN_ID}`);
+    await expect(page.getByRole("radiogroup", { name: "Your answer" })).toBeVisible();
+    await expect.poll(() => f.rpcs("my_chat_overview").length).toBeGreaterThan(0);
+    await page.waitForTimeout(300);
+    await expect(btn(page, "More")).toHaveCount(0);
+    await expect(btn(page, "Report or block")).toHaveCount(0);
+  });
+  pass("safety, invitation: on Ana's resbite, Announcement from Ana · Doors open at 19:30 has a Report or block button after it (44 pt) offering Report message, Report Ana and Block Ana (Ana once); Report message → Spam → report_message { p_id: 41 }; Block Ana's confirm (Ana hosts) → block_user, my_chat_overview again, and the line goes; with Pedro the inviter and no announcement, More → Report or block lists Report Pedro, Block Pedro, Report Ana, Block Ana; Report Pedro → report_user { p_series }; Block Pedro's guest confirm → block_user, and Pedro goes; a failing overview leaves Report Ana and Block Ana; with nobody to name, no row and no More");
+
   await scenario("edges", { guests: going2, failPlanRead: true }, async (f) => {
     const { page } = f;
     // No plan: not available, no spinner.

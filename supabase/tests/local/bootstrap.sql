@@ -20,3 +20,29 @@ create function storage.foldername(name text) returns text[] language sql immuta
 grant usage on schema storage to authenticated,service_role;
 grant select,insert,update,delete on storage.objects to authenticated;
 grant all on all tables in schema storage to service_role;
+-- Supabase's default privileges, as the hosted project has them (K-S5): every table, sequence and function a migration
+-- creates in public is granted to the three API roles unless the migration revokes it, so a local "no access" test
+-- means what it means on hosted.
+alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
+alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
+alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
+-- A stub of the Realtime pieces the chat uses (K-S6); hosted has the real ones and the migration never creates them.
+-- realtime.send records each broadcast as a row, so a test reads what was sent; realtime.topic() reads the topic a test
+-- sets with set_config('realtime.topic', …, true), as Realtime sets it for a channel's policy check.
+create schema realtime;
+create table realtime.messages (
+ id bigint generated always as identity,
+ topic text not null,
+ extension text not null default 'broadcast',
+ event text,
+ payload jsonb,
+ private boolean not null default true,
+ inserted_at timestamptz not null default now()
+);
+alter table realtime.messages enable row level security;
+create function realtime.topic() returns text language sql stable as $$ select nullif(current_setting('realtime.topic', true), '') $$;
+create function realtime.send(payload jsonb, event text, topic text, private boolean default true) returns void language sql as $$
+ insert into realtime.messages(topic, extension, event, payload, private) values (send.topic, 'broadcast', send.event, send.payload, send.private)
+$$;
+grant usage on schema realtime to authenticated;
+grant select on realtime.messages to authenticated;

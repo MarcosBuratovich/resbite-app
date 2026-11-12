@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import {
+  AUTH_STORAGE_KEY,
   button,
   card,
   cancelFromList,
@@ -19,6 +20,7 @@ import {
   inOrder,
   inviteFromList,
   later,
+  noChat,
   openWhen,
   openWhere,
   quietReminders,
@@ -197,11 +199,10 @@ async function signedInPage({ plans = [], guests = [], failJournal = false, ...o
       };
     });
   await page.addInitScript(
-    (value) => {
-      if (!sessionStorage.getItem("sb-ewcsgvhuojxdpaspwsrx-auth-token"))
-        sessionStorage.setItem("sb-ewcsgvhuojxdpaspwsrx-auth-token", JSON.stringify(value));
+    ({ key, value }) => {
+      if (!sessionStorage.getItem(key)) sessionStorage.setItem(key, JSON.stringify(value));
     },
-    session,
+    { key: AUTH_STORAGE_KEY, value: session },
   );
   await page.route("**/*.supabase.co/**", async (route) => {
     const request = route.request();
@@ -259,6 +260,14 @@ async function signedInPage({ plans = [], guests = [], failJournal = false, ...o
     if (url.pathname === "/rest/v1/rpc/plan_link") return reply("AbCdEfGhIjKlMnOpQrStUv");
     // The resbite page reads the person's muted series; none here.
     if (url.pathname === "/rest/v1/plan_mutes") return reply([]);
+    // The resbite page's connection states and the links its guests sent (verify-connections and verify-circle cover
+    // them): none here.
+    if (url.pathname === "/rest/v1/rpc/plan_connection_states") return reply({});
+    // Chat plan 3's blocks, read beside the states: nobody blocked (verify-event and verify-chat cover them).
+    if (url.pathname === "/rest/v1/rpc/my_blocks") return reply([]);
+    if (url.pathname === "/rest/v1/rpc/plan_brought_invitations") return reply([]);
+    // Task 8's chat reads: no Chat row, nothing unread (verify-event and review-ui cover them).
+    if (noChat(url.pathname) !== undefined) return reply(noChat(url.pathname));
     state.unexpected.push(`${request.method()} ${url.pathname}`);
     return reply({ message: "Unexpected fixture request" }, 404);
   });
@@ -314,7 +323,19 @@ try {
     await button(page, "3 h").click();
     await expect(visible(page.getByLabel("End time", { exact: true }))).toHaveValue("13:00");
     await expect(button(page, "3 h")).toHaveAttribute("aria-selected", "true");
+    // The chat's closing line is a one-off's (P2-Q2, chat plan 2's Decision 8): it shows while the resbite doesn't
+    // repeat, and hides once it repeats, when no closing time exists.
+    const chatCloses = visible(page.getByText("The chat closes 48 hours after the end time.", { exact: true }));
+    await expect(page.getByRole("radio", { name: "Doesn’t repeat", exact: true })).toBeChecked();
+    await expect(chatCloses).toBeVisible();
     await page.getByRole("radio", { name: "Every week", exact: true }).click();
+    await expect(chatCloses).toHaveCount(0);
+    await page.getByRole("radio", { name: "Every 2 weeks", exact: true }).click();
+    await expect(chatCloses).toHaveCount(0);
+    await page.getByRole("radio", { name: "Doesn’t repeat", exact: true }).click();
+    await expect(chatCloses).toBeVisible();
+    await page.getByRole("radio", { name: "Every week", exact: true }).click();
+    await expect(chatCloses).toHaveCount(0);
     await done.click();
     await expect(heading(page, "When")).toHaveCount(0);
     await expect(button(page, /^When, .* · 10:00 to 13:00, Every week$/)).toBeVisible();
@@ -339,7 +360,7 @@ try {
     await expect(card(page, "Coffee together").first()).toBeVisible();
     assert.equal(await card(page, "Coffee together").count(), 1);
     assert.ok(await inOrder(page, [card(page, "Coffee together"), card(page, "Garden picnic")]), "The earlier resbite is on top");
-    console.log("PASS: from an idea, Create names the missing date and place and reddens both rows; the When sheet needs date, start and end (3 h, Every week); Where accepts To be decided; It’s on! ends in Every week and the resbite is on My resbites.");
+    console.log("PASS: from an idea, Create names the missing date and place and reddens both rows; the When sheet needs date, start and end (3 h, Every week), and shows The chat closes 48 hours after the end time. only while it doesn’t repeat; Where accepts To be decided; It’s on! ends in Every week and the resbite is on My resbites.");
 
     // Edit in the same session: the first screen after creating is the same plan screen with Save.
     await editEvent(page, "Coffee together");
@@ -819,10 +840,10 @@ try {
           document.dispatchEvent(new Event("visibilitychange"));
         }
       });
-    await fixture.addInitScript(
-      (value) => sessionStorage.setItem("sb-ewcsgvhuojxdpaspwsrx-auth-token", JSON.stringify(value)),
-      session,
-    );
+    await fixture.addInitScript(({ key, value }) => sessionStorage.setItem(key, JSON.stringify(value)), {
+      key: AUTH_STORAGE_KEY,
+      value: session,
+    });
     await fixture.route("**/*.supabase.co/**", async (route) => {
       const request = route.request();
       const url = new URL(request.url());
@@ -857,6 +878,7 @@ try {
       }
       if (url.pathname === "/rest/v1/rpc/plan_join_requests" || url.pathname === "/rest/v1/rpc/my_join_requests") return reply([]);
       if (url.pathname === "/rest/v1/plan_mutes") return reply([]);
+      if (noChat(url.pathname) !== undefined) return reply(noChat(url.pathname));
       throw new Error(`Unexpected fixture request: ${url.pathname}`);
     });
     await fixture.goto(`${baseURL}/plans`);

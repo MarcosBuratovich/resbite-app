@@ -3,6 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium, expect } from "@playwright/test";
+import { AUTH_STORAGE_KEY, noChat } from "./qa-helpers.mjs";
 const browser = await chromium.launch({ channel: "chrome", headless: true });
 const base = process.env.RESBITE_QA_URL || "http://localhost:8081";
 const shots = join(tmpdir(), "resbite-account");
@@ -51,22 +52,22 @@ async function fixture(
   });
   page.on("dialog", (dialog) => dialog.accept());
   await page.addInitScript(
-    (session) => {
+    ({ key, session }) => {
       if (!sessionStorage.getItem("fixture-seeded")) {
-        sessionStorage.setItem(
-          "sb-ewcsgvhuojxdpaspwsrx-auth-token",
-          JSON.stringify(session),
-        );
+        sessionStorage.setItem(key, JSON.stringify(session));
         sessionStorage.setItem("fixture-seeded", "1");
       }
     },
     {
-      user,
-      access_token: token,
-      refresh_token: "fixture",
-      token_type: "bearer",
-      expires_at,
-      expires_in: 3600,
+      key: AUTH_STORAGE_KEY,
+      session: {
+        user,
+        access_token: token,
+        refresh_token: "fixture",
+        token_type: "bearer",
+        expires_at,
+        expires_in: 3600,
+      },
     },
   );
   await page.route("**/*.supabase.co/**", async (route) => {
@@ -142,6 +143,8 @@ async function fixture(
     if (path === "/rest/v1/plan_mutes") return reply([]);
     // The resbite page's counts for an invitee who hasn't answered: only them, pending, so none.
     if (path === "/rest/v1/rpc/plan_people_counts") return reply({ going: 0, maybe: 0, cant_go: 0 });
+    // Task 8's chat reads: no Chat row, nothing unread (verify-event and review-ui cover them).
+    if (noChat(path) !== undefined) return reply(noChat(path));
     throw Error(`Unexpected fixture request ${path}`);
   });
   return {

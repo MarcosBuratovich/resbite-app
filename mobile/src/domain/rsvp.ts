@@ -16,9 +16,6 @@ export function canRespond(snapshot: RsvpSnapshot, now = Date.now()) {
     snapshot.plan.status === "active" && planEnd(snapshot.plan) > now
   );
 }
-export function canReadSample(snapshot: RsvpSnapshot, now = Date.now()) {
-  return canRespond(snapshot, now) && snapshot.attendee.response === "accepted";
-}
 export function reconcileRsvp(
   attempt: RsvpAttempt,
   snapshot: RsvpSnapshot,

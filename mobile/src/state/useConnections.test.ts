@@ -1,6 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applyDecision, requestGone } from "./connectionsModel";
+import {
+  NO_ERRORS,
+  actionErrorFor,
+  applyDecision,
+  keepOnFailure,
+  nextErrors,
+  requestGone,
+  type ConnectionErrors,
+} from "./connectionsModel";
 import type { ConnectionPerson, MyConnections } from "../services/connections";
 
 const person = (userId: string, name: string, title: string | null, context?: "going" | "met"): ConnectionPerson => ({
@@ -76,4 +84,53 @@ test("a request the server no longer holds (withdrawn or already answered) is to
   assert.equal(requestGone({ code: "22023", message: "No request" }), false);
   assert.equal(requestGone(new TypeError("Failed to fetch")), false);
   assert.equal(requestGone(null), false);
+});
+
+test("a failed read keeps the list already held; with none held yet there is still none", () => {
+  const list = mine();
+  assert.equal(keepOnFailure(list, true), list);
+  assert.equal(keepOnFailure(null, true), null);
+  // Only a failure keeps it: a read that brought a list puts its own in place.
+  assert.equal(keepOnFailure(list, false), null);
+});
+
+const OFFLINE = "Check your connection and try again.";
+
+test("a read's error stays through a retry, a sheet and a decision, and goes only when a read succeeds", () => {
+  let e: ConnectionErrors = nextErrors(NO_ERRORS, { type: "readFailed", message: OFFLINE });
+  assert.deepEqual(e, { read: OFFLINE, action: null });
+  for (const event of [{ type: "readStarted" }, { type: "sheet" }, { type: "decisionStarted" }] as const) {
+    e = nextErrors(e, event);
+    assert.equal(e.read, OFFLINE, event.type);
+  }
+  e = nextErrors(e, { type: "decisionFailed", userId: "p", decision: "accept", message: "Couldn't do that. Try again." });
+  assert.equal(e.read, OFFLINE, "a failed decision leaves the read's error where it is");
+  e = nextErrors(e, { type: "readFailed", message: "Couldn't do that. Try again." });
+  assert.equal(e.read, "Couldn't do that. Try again.", "the latest failed read says why");
+  e = nextErrors(e, { type: "readSucceeded" });
+  assert.equal(e.read, null);
+});
+
+test("a decision's error belongs to whose it was, and goes with the next decision or a sheet opening or closing", () => {
+  const failed = nextErrors(NO_ERRORS, { type: "decisionFailed", userId: "m", decision: "remove", message: OFFLINE });
+  assert.deepEqual(failed, { read: null, action: { userId: "m", decision: "remove", message: OFFLINE } });
+  // Reads leave it.
+  const reads = [{ type: "readStarted" }, { type: "readSucceeded" }, { type: "readFailed", message: OFFLINE }] as const;
+  for (const event of reads) assert.deepEqual(nextErrors(failed, event).action, failed.action, event.type);
+  assert.equal(nextErrors(failed, { type: "sheet" }).action, null);
+  assert.equal(nextErrors(failed, { type: "decisionStarted" }).action, null);
+});
+
+test("a decision's error shows in its own card (Accept, Not now) or its own sheet (Remove), nowhere else", () => {
+  const accept = { userId: "p", decision: "accept" as const, message: OFFLINE };
+  const decline = { userId: "p", decision: "decline" as const, message: OFFLINE };
+  const remove = { userId: "m", decision: "remove" as const, message: OFFLINE };
+  assert.equal(actionErrorFor(accept, "p", "card"), OFFLINE);
+  assert.equal(actionErrorFor(decline, "p", "card"), OFFLINE);
+  assert.equal(actionErrorFor(accept, "i", "card"), null);
+  assert.equal(actionErrorFor(accept, "p", "sheet"), null);
+  assert.equal(actionErrorFor(remove, "m", "sheet"), OFFLINE);
+  assert.equal(actionErrorFor(remove, "t", "sheet"), null);
+  assert.equal(actionErrorFor(remove, "m", "card"), null);
+  assert.equal(actionErrorFor(null, "p", "card"), null);
 });

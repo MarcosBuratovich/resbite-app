@@ -27,9 +27,16 @@ export function personalHeaders(supabaseUrl) {
   return { ...pageHeaders(), "Content-Security-Policy": personalCsp(supabaseUrl) };
 }
 
+/** A name without the blanks a trim misses: NBSP, zero-width characters and the byte-order mark. "" for none. */
+const clean = (name) => String(name ?? "").replace(/^[\s\u00a0\u200b-\u200d\ufeff]+|[\s\u00a0\u200b-\u200d\ufeff]+$/g, "");
+const firstWord = (name) => clean(name).split(/[\s\u00a0\u200b-\u200d\ufeff]+/)[0];
+
 /** The page's own words, in one place. Task 11's script carries its step strings in personal-flow.mjs. */
 export const PERSONAL_WORDS = {
   invited: (host) => `${host} invited you`,
+  // A guest brought you: they are named, and the host by first name (as the pushes do).
+  invitedBy: (inviter, host) =>
+    firstWord(host) ? `${inviter} invited you to ${firstWord(host)}’s resbite` : `${inviter} invited you`,
   forNumber: (code, ending) => `This invitation is for a +${code} number ending ••${ending}.`,
   answer: "Answer",
   notYours: (host) => `Not your number? Ask ${host} to check it.`,
@@ -49,17 +56,30 @@ export const PERSONAL_WORDS = {
 const escape = (text) =>
   String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
+/** The data with a blank inviter taken away, so the host's wording applies. */
+function withInviter(data) {
+  if (!data || data.inviter === undefined) return data;
+  const { inviter, ...rest } = data;
+  const name = clean(inviter);
+  return name ? { ...rest, inviter: name } : rest;
+}
+
+/** The chat preview: "Invited by <inviter>" when a guest brought you, else the host's. */
+const previewFor = (data) =>
+  data.inviter ? previewDescription({ ...data, host: data.inviter }) : previewDescription(data);
+
 /**
  * The whole document. `options`: origin, code, appStoreUrl, supabaseUrl, publishableKey, termsVersion, termsUrl,
  * privacyUrl. The publishable key appears once, in a data- attribute on <main>, and only on an open invitation.
  */
-export function renderPersonalPage(data, options) {
+export function renderPersonalPage(rawData, options) {
+  const data = withInviter(rawData);
   const { origin, code, supabaseUrl } = options;
   const state = data?.state;
   const open = state === "open";
   const image = open ? `${origin}/i/${code}/image` : `${origin}/resbite-mark.png`;
   const title = open ? data.title : PERSONAL_WORDS.genericTitle;
-  const description = open ? previewDescription(data) : PERSONAL_WORDS.genericPreview;
+  const description = open ? previewFor(data) : PERSONAL_WORDS.genericPreview;
   const body = open ? stepsBody(data, image, options, "personal") : closedBody(state, data, options.appStoreUrl);
   return documentHtml({ title, description, image, csp: personalCsp(supabaseUrl), banner: "", body, script: open });
 }
@@ -69,12 +89,13 @@ export function renderPersonalPage(data, options) {
  * answer and the answer waits for the host. `options` are renderPersonalPage's plus appStoreId (the smart app banner).
  * A closed link's page is render.mjs's renderClosedPage, with the strict CSP.
  */
-export function renderOpenLinkPage(data, options) {
+export function renderOpenLinkPage(rawData, options) {
+  const data = withInviter(rawData);
   const image = `${options.origin}/r/${options.code}/image`;
   const body = stepsBody(data, image, options, "open");
   return documentHtml({
     title: data.title,
-    description: previewDescription(data),
+    description: previewFor(data),
     image,
     csp: personalCsp(options.supabaseUrl),
     banner: smartBanner(options),
@@ -130,6 +151,7 @@ function stepsBody(data, image, options, mode) {
     code: options.code,
     ...(open ? { mode: "open", country: OPEN_LINK_COUNTRY } : { country: data.country, ending: data.ending }),
     host: data.host,
+    ...(data.inviter ? { inviter: data.inviter } : {}),
     "terms-version": options.termsVersion,
     "terms-url": options.termsUrl,
     "privacy-url": options.privacyUrl,
@@ -140,13 +162,14 @@ function stepsBody(data, image, options, mode) {
   const dataAttrs = Object.entries(attrs)
     .map(([name, value]) => `data-${name}="${escape(value)}"`)
     .join(" ");
+  const who = data.inviter || data.host;
   const note = open ? "" : `\n        <p class="note">${escape(w.forNumber(data.country, data.ending))}</p>`;
   const after = open
     ? `\n        <p><a class="button secondary" id="open-app" href="resbite://r/${escape(options.code)}">${w.haveApp}</a></p>`
-    : `\n        <p class="muted">${escape(w.notYours(data.host))}</p>`;
+    : `\n        <p class="muted">${escape(w.notYours(who))}</p>`;
   return `    <main id="main" ${dataAttrs}>
       <section id="step-invitation">
-        <p class="invited"><span class="dot" aria-hidden="true"></span>${escape(w.invited(data.host))}</p>
+        <p class="invited"><span class="dot" aria-hidden="true"></span>${escape(data.inviter ? w.invitedBy(data.inviter, data.host) : w.invited(data.host))}</p>
         <img class="hero" src="${escape(image)}" alt="" />
         <h1>${escape(data.title)}</h1>
         <p class="detail">${escape(when)}</p>${repeatHtml}${tbd}${area}
@@ -157,7 +180,7 @@ function stepsBody(data, image, options, mode) {
       <section id="step-code" aria-live="polite" hidden></section>
       <section id="step-answer" aria-live="polite" hidden></section>
       <section id="step-app" aria-live="polite" hidden></section>
-      <noscript><p class="muted">Answering needs JavaScript. Ask ${escape(data.host)} for help if it is off.</p></noscript>
+      <noscript><p class="muted">Answering needs JavaScript. Ask ${escape(who)} for help if it is off.</p></noscript>
     </main>`;
 }
 

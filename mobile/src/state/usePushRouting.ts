@@ -7,6 +7,8 @@ import { supabase } from "../services/supabase";
 import { phoneVerified } from "../domain/phone";
 import { withDeadline } from "../services/plans";
 import { createPushTapRouter, type TapContext } from "../services/pushTaps";
+import { chatGateway } from "../services/chat";
+import { focusedChat } from "../services/deviceReminders";
 
 /** Reads the plan with the signed-in client (as that person). An empty read is null ("gone"); a read that
  * fails (offline, timed out, a server error) rejects, and the tap opens the event, which retries. */
@@ -18,10 +20,15 @@ async function readAuthorizedPlan(_account: string, plan: string): Promise<{ id:
   return data ?? null;
 }
 
+/** Reads the chat with the signed-in client (`chat_summary`): 42501 'Not in this chat' when this account isn't in it,
+ * any other rejection when the read failed. */
+const readChat = (_account: string, series: string): Promise<unknown> => chatGateway.summary(series);
+
 /**
  * Opens the event when a Resbite push is tapped, while running or from a cold start. Waits for the session
  * and account to settle and the navigator to mount; an event that reads empty lands on My resbites with a note,
- * and one whose read failed opens the event page (its own retry and offline states).
+ * and one whose read failed opens the event page (its own retry and offline states). A chat push opens its chat, or
+ * the event when the chat refuses this account (K-B4).
  * `ready` is false while the root layout holds the navigator back.
  */
 export function usePushRouting(ready: boolean) {
@@ -45,6 +52,8 @@ export function usePushRouting(ready: boolean) {
   tapRouter.current ??= createPushTapRouter({
     context: () => context.current,
     readAuthorizedPlan,
+    readChat,
+    focusedChat,
     refreshAccount: async () => {
       const user = await accountRef.current.refresh();
       return user ? accountRef.current.latestStatus() === "approved" && phoneVerified(user) : null;

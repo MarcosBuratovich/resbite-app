@@ -8,12 +8,13 @@ import type { NotificationAskState } from "../state/useNotificationAsk";
 /**
  * Plan 4: "Get notified?", the one notification ask, shown once before iPhone's own prompt (it replaced
  * UX3's "Get reminders?"). Either answer counts as asked; "Not now" never blocks anything. Used by the event
- * page, My resbites and the open link's waiting screen (useNotificationAsk).
+ * page, My resbites and the open link's waiting screen (useNotificationAsk); in a chat, with `body` its chat line
+ * (`NOTIFICATION_ASK.chatBody`, H37 Q7).
  */
-export function NotificationAsk({ ask }: { ask: NotificationAskState }) {
+export function NotificationAsk({ ask, body = NOTIFICATION_ASK.body }: { ask: NotificationAskState; body?: string }) {
   return (
     <InfoSheet visible={ask.visible} title={NOTIFICATION_ASK.title} onClose={ask.notNow}>
-      <Copy>{NOTIFICATION_ASK.body}</Copy>
+      <Copy>{body}</Copy>
       <View style={styles.actions}>
         <Button title={NOTIFICATION_ASK.turnOn} icon={false} onPress={ask.turnOn} />
         <Button title={NOTIFICATION_ASK.notNow} secondary icon={false} onPress={ask.notNow} />

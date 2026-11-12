@@ -1,5 +1,7 @@
 import { parsePhoneNumberFromString } from "libphonenumber-js/min";
 import { formatPhone, parsePhone, phoneKey, phoneSendForm, regionOf } from "./phone";
+import { firstName } from "./circle";
+import { INVITE_COPY } from "./inviteCopy";
 
 export type ContactNumber = {
   /** The phone key: what two spellings of one number share. */
@@ -65,6 +67,63 @@ export function usersToInvite(chosenUsers: ReadonlySet<string>, invitedUsers: Re
 }
 
 /**
+ * Whether one more pick fits bring mode's cap: `count` is what Invite N counts (numbers and connections together),
+ * `limit` the invites left (none for a host), and `replacing` a pick that swaps the number of a contact already picked,
+ * which adds no one.
+ */
+export function canPick(count: number, limit: number | undefined, replacing: boolean): boolean {
+  return limit === undefined || replacing || count < limit;
+}
+
+/**
+ * More picked than bring mode's cap (the allowance dropped after they were picked): Invite waits until some are
+ * unticked, as the server would refuse the batch. A host has no cap.
+ */
+export function overCap(count: number, limit: number | undefined): boolean {
+  return limit !== undefined && count > limit;
+}
+
+type Picks = Record<string, ContactNumber>;
+
+/**
+ * A tap on a number: picks it for its contact (replacing another of theirs), or clears it when it is the one picked.
+ * `users` is how many connections are picked to invite. A new contact past the cap leaves the picks as they are (the
+ * same object).
+ */
+export function pickToggled(picked: Picks, n: ContactNumber, users: number, limit?: number): Picks {
+  if (picked[n.contact]?.key === n.key) {
+    const { [n.contact]: _gone, ...rest } = picked;
+    return rest;
+  }
+  return pickChosen(picked, n, users, limit);
+}
+
+/** Picks this number for its contact, replacing another of theirs; a new contact past the cap changes nothing. */
+export function pickChosen(picked: Picks, n: ContactNumber, users: number, limit?: number): Picks {
+  const replacing = picked[n.contact] !== undefined;
+  if (!canPick(Object.keys(picked).length + users, limit, replacing)) return picked;
+  return { ...picked, [n.contact]: n };
+}
+
+/**
+ * A tap on a connection: picks them, or clears the pick. `numbers` is how many numbers are picked. Someone already on
+ * the resbite can't be picked, and a new pick past the cap changes nothing (the same set).
+ */
+export function userToggled(
+  chosen: Set<string>,
+  userId: string,
+  invited: ReadonlySet<string>,
+  numbers: number,
+  limit?: number,
+): Set<string> {
+  if (invited.has(userId)) return chosen;
+  const next = new Set(chosen);
+  if (next.delete(userId)) return next;
+  if (!canPick(usersToInvite(chosen, invited).length + numbers, limit, false)) return chosen;
+  return next.add(userId);
+}
+
+/**
  * What Invite people sends: one phone item per number key (the first pick wins: a typed number equal to a contact's
  * other number has a pick of its own, and two items with one key would land on one invitation, leaving the first
  * link shown dead), each with the code `codeFor` gives it; and the connections, apart, as they go in calls of their
@@ -123,8 +182,32 @@ export function personalLink(origin: string, code: string): string {
   return `${origin}/i/${code}`;
 }
 
-export function inviteMessage(a: { host: string; title: string; when: string; link: string }): string {
-  return `${a.host} invited you to ${a.title}, ${a.when}. Reply here: ${a.link}`;
+/**
+ * A personal link's message. A host's (no `inviter`) says "Ana invited you to …". A guest bringing someone (`inviter`
+ * given) names both (CO-P9): "Pedro invited you to Ana’s …". In a bringer's, an unknown name is "" (C20): without
+ * theirs it reads "You’re invited to Ana’s …", and without the organizer's it has no possessive.
+ */
+export function inviteMessage(a: { inviter?: string; host: string; title: string; when: string; link: string }): string {
+  if (a.inviter === undefined) return `${a.host} invited you to ${a.title}, ${a.when}. Reply here: ${a.link}`;
+  const who = a.inviter ? `${a.inviter} invited you to` : "You’re invited to";
+  const what = a.host ? `${a.host}’s ${a.title}` : a.title;
+  return `${who} ${what}, ${a.when}. Reply here: ${a.link}`;
+}
+
+/**
+ * The message's names, from the sender's own name (`own`, null when it isn't known). A host's message (no `organizer`)
+ * carries their name, else "Your host". A bringer's (`organizer` given: the organizer's name, null when it isn't known)
+ * carries both first names, each "" when unknown, which `inviteMessage` words without it (C20).
+ */
+export function messageFor(a: {
+  own: string | null;
+  organizer?: string | null;
+  title: string;
+  when: string;
+}): { inviter?: string; host: string; title: string; when: string } {
+  const { title, when } = a;
+  if (a.organizer === undefined) return { host: a.own ?? INVITE_COPY.hostFallback, title, when };
+  return { inviter: firstName(a.own), host: firstName(a.organizer), title, when };
 }
 
 export function whatsappUrl(e164: string, text: string): string {

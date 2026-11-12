@@ -31,7 +31,8 @@ export async function sendPersonalLink(a: {
   code: string;
   via: SendVia;
   origin: string;
-  message: { host: string; title: string; when: string };
+  /** `inviter` only when a guest brings someone (CO-P9). */
+  message: { inviter?: string; host: string; title: string; when: string };
 }): Promise<string | null> {
   const text = inviteMessage({ ...a.message, link: personalLink(a.origin, a.code) });
   try {

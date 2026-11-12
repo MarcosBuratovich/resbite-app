@@ -195,3 +195,32 @@ test("the personal page shows the repeat line and Place to be decided under the 
   assert.ok(html.includes('<p class="detail">Every other Monday</p>'));
   assert.ok(html.includes('<p class="detail">Place to be decided</p>'));
 });
+
+test("a guest's link names the inviter, and the host by first name; a host's link is as before", () => {
+  const html = renderPersonalPage({ ...open, host: "Ana Host", inviter: "Pedro" }, options);
+  for (const text of ["Pedro invited you to Ana’s resbite", "Not your number? Ask Pedro to check it.", 'data-inviter="Pedro"',
+    "Ask Pedro for help if it is off."])
+    assert.ok(html.includes(text), text);
+  assert.ok(html.includes('data-host="Ana Host"'));
+  const plain = renderPersonalPage({ ...open, host: "Ana Host" }, options);
+  for (const text of ["Ana Host invited you", "Ask Ana Host to check it.", "Ask Ana Host for help if it is off."]) assert.ok(plain.includes(text), text);
+  assert.ok(!plain.includes("data-inviter"));
+  assert.ok(!plain.includes("’s resbite"));
+});
+
+test("a blank inviter is absent; a blank host drops 'to ’s resbite'; the preview names the inviter", () => {
+  for (const inviter of ["", "   ", " ", "​‌‍", "﻿  "]) {
+    const html = renderPersonalPage({ ...open, host: "Ana Host", inviter }, options);
+    assert.ok(html.includes("Ana Host invited you"), JSON.stringify(inviter));
+    assert.ok(html.includes("Ask Ana Host to check it.") && !html.includes("data-inviter"));
+    assert.ok(html.includes("Invited by Ana Host"));
+  }
+  for (const host of ["", "​", "   "]) {
+    const html = renderPersonalPage({ ...open, host, inviter: "Pedro" }, options);
+    assert.ok(html.includes(">Pedro invited you<") || html.includes("</span>Pedro invited you</p>"), JSON.stringify(host));
+    assert.ok(!html.includes("’s resbite"));
+  }
+  const html = renderPersonalPage({ ...open, host: "Ana Host", inviter: "Pedro" }, options);
+  assert.ok(html.includes('content="Mon 2 Nov, 13:00 · Invited by Pedro"'));
+  assert.ok(!html.includes("Invited by Ana Host"));
+});

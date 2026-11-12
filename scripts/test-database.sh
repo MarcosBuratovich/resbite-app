@@ -36,6 +36,12 @@ if [ "$mode" = full ]; then
   "$repo/supabase/tests/local/avatar-revision-concurrency.sh" "$pg_bin" "$work" 55437
   "$repo/supabase/tests/local/join-by-link-concurrency.sh" "$pg_bin" "$work" 55437
   "$repo/supabase/tests/local/decide-join-concurrency.sh" "$pg_bin" "$work" 55437
+  "$repo/supabase/tests/local/leave-series-concurrency.sh" "$pg_bin" "$work" 55437
+  "$repo/supabase/tests/local/chat-send-concurrency.sh" "$pg_bin" "$work" 55437
+  "$repo/supabase/tests/local/connections-concurrency.sh" "$pg_bin" "$work" 55437
+  "$repo/supabase/tests/local/circles-concurrency.sh" "$pg_bin" "$work" 55437
+  "$repo/supabase/tests/local/chat-groups-concurrency.sh" "$pg_bin" "$work" 55437
+  "$repo/supabase/tests/local/chat-safety-concurrency.sh" "$pg_bin" "$work" 55437
 else
   baseline="$repo/supabase/tests/hosted-baseline"
   while read -r name _; do

@@ -1,0 +1,732 @@
+import type { ChatMessage, ChatNames, ChatOverview, ChatSummary } from "../services/chat";
+import { CHAT_COPY, type ChatAudience } from "./chatCopy";
+import { UUID_PATTERN } from "./covers";
+import { PLAN_COPY } from "./planCopy";
+import { planEnd } from "./planEnd";
+import { clockTime, localParts, repeatLine, shortDate } from "./whenText";
+
+const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
+/** The closing line shows only in the chat's last 48 hours (CH-P15). */
+const CLOSING_WINDOW = 48 * HOUR;
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+const text = (value: unknown): string | null => (typeof value === "string" && value !== "" ? value : null);
+
+// Bad input never throws (H20): a zone this phone doesn't know reads in the phone's own zone, and a time that can't be
+// read is left out of the line.
+/** The phone's zone: message stamps and day separators read in it (K-N4). */
+export const phoneZone = (): string => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
+};
+const zoneChecks = new Map<string, boolean>();
+function knownZone(zone: string): boolean {
+  let known = zoneChecks.get(zone);
+  if (known === undefined) {
+    try {
+      new Intl.DateTimeFormat("en-GB", { timeZone: zone });
+      known = true;
+    } catch {
+      known = false;
+    }
+    zoneChecks.set(zone, known);
+  }
+  return known;
+}
+const zoneOr = (zone: unknown): string => (typeof zone === "string" && zone !== "" && knownZone(zone) ? zone : phoneZone());
+/** ISO text the phone can read as an instant, else null. */
+const instant = (iso: unknown): string | null =>
+  typeof iso === "string" && Number.isFinite(Date.parse(iso)) ? iso : null;
+
+/**
+ * "Sat 15 Nov", and "Sat 15 Nov 2025" when `now` is given and the date's year isn't now's, in the same zone (H32 Q50).
+ * Day separators and stamps pass the phone's zone; the header and the closed card the plan's (K-N4).
+ */
+export function dayLabel(iso: string, zone: string, now?: number): string {
+  const at = instant(iso);
+  if (!at) return "";
+  const z = zoneOr(zone);
+  const day = shortDate(at, z);
+  if (now === undefined || !Number.isFinite(now)) return day;
+  const year = localParts(at, z).date.slice(0, 4);
+  return year === localParts(new Date(now).toISOString(), z).date.slice(0, 4) ? day : `${day} ${year}`;
+}
+/** "18:02" in the zone given. */
+export function timeLabel(iso: string, zone: string): string {
+  const at = instant(iso);
+  return at ? clockTime(at, zoneOr(zone)) : "";
+}
+const weekday = (iso: string, zone: string) =>
+  new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: zoneOr(zone) }).format(new Date(iso));
+/** "Thursday", as `repeatLine` writes it, in the zone given (an unknown one in the phone's); "" when unreadable. */
+function longWeekday(iso: unknown, zone: unknown): string {
+  const at = instant(iso);
+  return at ? new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: zoneOr(zone) }).format(new Date(at)) : "";
+}
+const localDate = (iso: string, zone: string) => localParts(iso, zoneOr(zone));
+
+/**
+ * "This chat closes Mon 17 Nov at 18:00, in 31 hours. Any final words?", in the plan's zone (K-N4, Decision 11). Whole
+ * hours, floored; minutes in the last hour, floored; "in 1 minute" in the last one. Null with no close time, once it
+ * has passed, while it is more than 48 hours away, and when the plan's zone is missing (H20).
+ */
+export function closingLine(closesAt: string | null, now: number, zone: string): string | null {
+  if (!closesAt || !text(zone)) return null;
+  const left = Date.parse(closesAt) - now;
+  if (!(left > 0) || left > CLOSING_WINDOW) return null;
+  const hours = Math.floor(left / HOUR);
+  const span = hours >= 1 ? plural(hours, "hour") : plural(Math.max(1, Math.floor(left / MINUTE)), "minute");
+  return `This chat closes ${dayLabel(closesAt, zone, now)} at ${timeLabel(closesAt, zone)}, in ${span}. Any final words?`;
+}
+
+// Text a person wrote, cleaned for a line as a push's is (H18): well formed, no bidi, zero-width or format
+// characters, no controls, white space collapsed.
+const FORMAT = /[­؜᠎​-‏‪-‮⁠-⁤⁦-⁯﻿￹-￻]/g;
+const CONTROL = /[\u0000-\u001f\u007f-\u009f]/g;
+/** The text with each lone surrogate taken out, or replaced by `lone`. */
+function wellFormed(s: string, lone = ""): string {
+  let out = "";
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c >= 0xd800 && c <= 0xdbff) {
+      const next = s.charCodeAt(i + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) out += s[i] + s[++i];
+      else out += lone;
+    } else if (c < 0xdc00 || c > 0xdfff) out += s[i];
+    else out += lone;
+  }
+  return out;
+}
+/**
+ * Words as they can be sent (H41 m2): a lone surrogate, which no stored text can hold, reads as U+FFFD, and NUL, which
+ * Postgres text can't hold, goes; everything else stays as written. The fields keep text so (`fitEdit`), and `send`
+ * and `announce` do it again whatever called them, so no message is refused for ever as a connection error.
+ */
+export function wellFormedText(text: string): string {
+  if (typeof text !== "string") return "";
+  return /[\u0000\ud800-\udfff]/.test(text) ? wellFormed(text, "\ufffd").replace(/\u0000/g, "") : text;
+}
+function cleanText(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return wellFormed(value).replace(FORMAT, "").replace(/\s/g, " ").replace(CONTROL, "").replace(/ +/g, " ").trim();
+}
+/** Bidi embeddings, overrides and isolates (U+202A–202E, U+2066–2069): what could reorder a line's words (H18). */
+const BIDI = /[\u202a-\u202e\u2066-\u2069]/g;
+/**
+ * A message's words as one line for a preview (H37 D1, H18's stripping): lone surrogates, bidi controls and control
+ * characters go, and white space and line breaks read as single spaces. What a person sees stays: emoji keep their
+ * joiners, so a line can never fake a second speaker or flip its words, and still reads as written.
+ */
+function oneLine(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return wellFormed(value).replace(BIDI, "").replace(/\s/g, " ").replace(CONTROL, "").replace(/ +/g, " ").trim();
+}
+/**
+ * A first name for a line: cleaned, without trailing ":", "," or ";" (H18). Blank reads as no name. Every name in a chat
+ * is cleaned so (`nameOf`), and plan 3's names too (Blocked people, Report and Block on an invitation): `cleanText`, not
+ * `oneLine`, so no zero-width or directional mark stays in a name.
+ */
+export const cleanName = (value: unknown): string => cleanText(value).replace(/[:;,]+$/, "").trim();
+
+/** The name the read gave a uuid, from the map's own keys only (H20), cleaned; "" when there is none. */
+const nameOf = (uuid: string | null, names: ChatNames): string =>
+  uuid && isObject(names) && Object.prototype.hasOwnProperty.call(names, uuid) ? cleanName(names[uuid]) : "";
+
+/**
+ * A person in a line: "You" (or "you" after a verb) for the reader, their first name from `names`, else "Someone" —
+ * a uuid the read could not name (a deleted, deleting or folded account) or one missing from the map (K-B2).
+ */
+function person(id: unknown, names: ChatNames, viewerId: string, subject = true): string {
+  const uuid = text(id);
+  if (uuid && uuid === viewerId) return subject ? CHAT_COPY.you : CHAT_COPY.you.toLowerCase();
+  return nameOf(uuid, names) || CHAT_COPY.someone;
+}
+
+/** The name over someone's bubble: their first name from the read's `names`, "You" for the reader, else "Someone". */
+export const authorName = (m: ChatMessage, names: ChatNames, viewerId: string): string => person(m.authorId, names, viewerId);
+
+/**
+ * How a start or an end moved, each read in its own zone: "19:00 → 19:30" on the same day, "Fri 19:00 → Sat 19:00"
+ * within the week, and with the dates ("Fri 14 Nov 19:00 → Fri 21 Nov 19:00") a week or more apart, where the weekday
+ * alone would read the same twice. Null when both read the same.
+ */
+function moved(from: string, fromZone: string, to: string, toZone: string): string | null {
+  const a = localDate(from, fromZone);
+  const b = localDate(to, toZone);
+  if (a.date === b.date && a.time === b.time) return null;
+  if (a.date === b.date) return `${a.time} → ${b.time}`;
+  const label = Math.abs(Date.parse(b.date) - Date.parse(a.date)) < 7 * DAY ? weekday : dayLabel;
+  return `${label(from, fromZone)} ${a.time} → ${label(to, toZone)} ${b.time}`;
+}
+
+/** Both ends, each an instant or null for none; null when one is there but can't be read. */
+function ends(from: unknown, to: unknown): [string | null, string | null] | null {
+  const read = (v: unknown) => (v == null ? null : (instant(v) ?? undefined));
+  const a = read(from);
+  const b = read(to);
+  return a === undefined || b === undefined ? null : [a, b];
+}
+
+const withDetail = (head: string, ...details: (string | null)[]) =>
+  [head, ...details.filter((d): d is string => !!d)].join(" · ");
+
+/** A `changed` line (K-S3): the payload's starts, ends and zones, and the new place label, as the mockup shows. */
+function changedText(p: Record<string, unknown>, who: string | null): string {
+  const by = (verb: string, nobody: string) => (who ? `${who} ${verb}` : nobody);
+  const fromZoneGiven = text(p.from_zone);
+  const toZoneGiven = text(p.to_zone);
+  const fromZone = zoneOr(fromZoneGiven ?? toZoneGiven);
+  const toZone = zoneOr(toZoneGiven ?? fromZoneGiven);
+  const label = cleanText(p.place_label) || null;
+  if (p.what === "place") return withDetail(by("changed the place", "The place changed"), label);
+  if (p.what === "time_place") {
+    const to = instant(p.to_start);
+    const when = to ? `${weekday(to, toZone)} ${timeLabel(to, toZone)}` : null;
+    return withDetail(by("changed the time and place", "The time and place changed"), when, label);
+  }
+  if (p.what !== "time") return "";
+  const fromStart = instant(p.from_start);
+  const toStart = instant(p.to_start);
+  const sameStart = !!fromStart && !!toStart && Date.parse(fromStart) === Date.parse(toStart);
+  if (fromStart && toStart && !sameStart) {
+    const start = moved(fromStart, fromZone, toStart, toZone);
+    if (start) return withDetail(by("changed the time", "The time changed"), start);
+  }
+  const end = ends(p.from_end, p.to_end);
+  if (end) {
+    const [from, to] = end;
+    const sameEnd = from && to ? Date.parse(from) === Date.parse(to) : from === to;
+    if (!sameEnd) {
+      // "" when the end was taken away; the new end alone when there was none.
+      const detail = from && to ? moved(from, fromZone, to, toZone) : to ? timeLabel(to, toZone) : "";
+      if (detail !== null) return withDetail(by("changed the end", "The end changed"), detail);
+    } else if (sameStart && fromZoneGiven && toZoneGiven && fromZoneGiven !== toZoneGiven) {
+      // The same instants in a new zone: the clock didn't move, the zone did (H20).
+      return by("changed the time zone", "The time zone changed");
+    }
+  }
+  return by("changed the time", "The time changed");
+}
+
+/** A group's `next` line (I11): its day in its own zone, with no year, then the place as the host typed it. */
+function nextText(p: Record<string, unknown>): string {
+  const day = instant(p.starts_at) ? dayLabel(p.starts_at as string, text(p.time_zone) ?? "") : "";
+  const place = p.place_tbd === true ? PLAN_COPY.placeToBeDecided : cleanText(p.place_label);
+  const detail = [day, place].filter(Boolean).join(" · ");
+  return detail ? `Next one: ${detail}` : "Next one";
+}
+
+/**
+ * A `cancelled` line: a one-off's as built; a group's names the week it cancelled ("this Thursday") while that week is
+ * the current one (`current`), or the group if it stops (G-S2). An earlier week's names that occurrence's date, "Ana
+ * cancelled Thu 20 Nov", in its own zone and with no year, as the "Next one" line words a day (rulings GR6 I1, GR7):
+ * never "this Thursday" above next week's, and never "the resbite", which in a group reads as the whole group ending.
+ * With no date it can read, it falls back to the one-off words.
+ */
+function cancelledText(p: Record<string, unknown>, who: string | null, group: boolean, current: boolean): string {
+  if (!who) return "The resbite was cancelled";
+  if (group && p.stop === true) return `${who} cancelled the group`;
+  if (group && !current) {
+    const date = instant(p.starts_at) ? dayLabel(p.starts_at as string, text(p.time_zone) ?? "") : "";
+    return date ? `${who} cancelled ${date}` : `${who} cancelled the resbite`;
+  }
+  const day = group ? longWeekday(p.starts_at, p.time_zone) : "";
+  return day ? `${who} cancelled this ${day}` : `${who} cancelled the resbite`;
+}
+
+/**
+ * Resbite's own line, worded on the phone (Decision 1, K-B2). A person is named through `names`, "Someone" when the read
+ * could not name them, and "You" when they are the reader. `group` picks a group's words where they differ (plan
+ * 2: "can’t make it this week", a cancelled week); `title` names an `ended` line whose payload has none. `current` says
+ * the row is the current occurrence's (`isCurrentRow`): a group's line about an earlier week reads in the one-off words,
+ * never "this week" or "this Thursday" (ruling GR6 I1). A line that is no longer `sent` (a group's deleted `cant_go` or
+ * `stopped`, Decision 6) and an event this build does not know give no line (""). A line's day is worded with no `now`,
+ * so it never shows a year (challenge NOTE 2).
+ */
+export function systemText(
+  m: ChatMessage,
+  names: ChatNames,
+  viewerId: string,
+  group: boolean,
+  title: string,
+  current = true,
+): string {
+  if (m.state !== "sent") return "";
+  const p = isObject(m.payload) ? m.payload : {};
+  const actor = text(p.actor);
+  const who = actor ? person(actor, names, viewerId) : null;
+  const subject = person(p.user, names, viewerId);
+  switch (m.event) {
+    case "joined": {
+      const bringer = text(p.brought_by);
+      const brought = bringer && (bringer === viewerId || nameOf(bringer, names)) ? person(bringer, names, viewerId, false) : null;
+      return withDetail(`${subject} joined`, brought && `brought by ${brought}`);
+    }
+    case "cant_go":
+      return group && current ? `${subject} can’t make it this week` : `${subject} can’t make it`;
+    case "admin":
+      return text(p.user) === viewerId ? `${subject} are now an admin` : `${subject} is now an admin`;
+    case "changed":
+      return changedText(p, who);
+    case "cancelled":
+      return cancelledText(p, who, group, current);
+    case "ended": {
+      const name = cleanText(p.title) || cleanText(title);
+      return name ? CHAT_COPY.ended(name) : "";
+    }
+    // A group's own lines (plan 2). Only a group writes them; they read the same whatever the flag says now.
+    case "left":
+      return `${subject} left the group`;
+    case "next":
+      return nextText(p);
+    case "stopped": {
+      const day = instant(p.starts_at) ? dayLabel(p.starts_at as string, text(p.time_zone) ?? "") : "";
+      return withDetail(`${who ?? CHAT_COPY.someone} stopped repeating this`, day && `the last one is ${day}`);
+    }
+    case "made_group":
+      return `${who ?? CHAT_COPY.someone} made this a group · everyone invited can read this chat`;
+    default:
+      return "";
+  }
+}
+
+/**
+ * A removed row's words: "Message removed by Resbite" when the team took it down (`payload.by` is "resbite", written by
+ * `remove-reported-message.sql`, CH-R-A3), else plan 1's "Message removed by an admin". The bubble, the announcement card,
+ * the Chat row and the screen reader's label all word it here.
+ */
+export const removedText = (m: Pick<ChatMessage, "payload">): string =>
+  isObject(m.payload) && m.payload.by === "resbite" ? CHAT_COPY.removedByResbite : CHAT_COPY.removed;
+
+/** The words of a person's row by its state; null for a kind or a state this build doesn't know (fails closed, H20). */
+function words(m: ChatMessage): string | null {
+  if (m.kind !== "message" && m.kind !== "announcement") return null;
+  if (m.state === "deleted") return CHAT_COPY.deleted;
+  if (m.state === "removed") return removedText(m);
+  return m.state === "sent" ? (m.body ?? "") : null;
+}
+
+/**
+ * The Chat row's line: "Leo: I can bring the snacks", a system line's text, or "No messages yet" (CH-P9), always one
+ * cleaned line (H37 D1). Null for a line it can't word, so the row shows no preview line (H20).
+ */
+export function rowText(last: ChatMessage | null, names: ChatNames, viewerId: string, group: boolean): string | null {
+  if (!last) return CHAT_COPY.noMessages;
+  if (last.kind === "system") return oneLine(systemText(last, names, viewerId, group, "")) || null;
+  const shown = words(last);
+  if (shown === null || last.state !== "sent") return shown;
+  // One line of the person's words (H37 D1); none left to show gives no line.
+  const line = oneLine(shown);
+  if (!line) return null;
+  if (last.kind === "announcement") return CHAT_COPY.invitationLine(person(last.authorId, names, viewerId, false), line);
+  return `${person(last.authorId, names, viewerId)}: ${line}`;
+}
+
+/**
+ * A My resbites tile's unread dot (CH-P9), from the overview's entry for its series: only while the chat is open, as the
+ * Chat row's (a closed chat shows its count, never a dot).
+ */
+export const unreadDot = (entry: ChatOverview["chats"][string] | undefined): boolean =>
+  entry?.open === true && entry.unread === true;
+
+/**
+ * An invitation card's unread dot (I3, ruling GR6 M6): a group member's, as the tile's (`unreadDot`, the current
+ * occurrence only). Someone who hasn't answered is in a one-off's chat only as an admin, a host, whose card gains no dot;
+ * so an admin's card carries it only when the plan shows it is a group's (it repeats, or was rolled from another).
+ */
+export function invitationDot(
+  plan: { id: string; series_id: string; repeat_weeks?: number | null; repeats_from?: string | null; admins?: readonly string[] },
+  viewerId: string,
+  current: ReadonlySet<string>,
+  overview: ChatOverview | null,
+): boolean {
+  const group = plan.repeat_weeks != null || !!plan.repeats_from;
+  const admin = (plan.admins ?? []).includes(viewerId);
+  return current.has(plan.id) && (group || !admin) && unreadDot(overview?.chats[plan.series_id]);
+}
+
+/**
+ * The line under an invitation card's title for someone invited who hasn't answered: the latest "Everyone invited"
+ * announcement (spec "The announcement on the invitation card"), "Announcement from Ana · Doors open at 19:30". The author
+ * is named from the overview's `names` ("Someone" when they can't be, K-B2). The card keeps to its lines, so the words read
+ * as one line the way the Chat row's do (`oneLine`), emoji with their joiners (H41 m1); null when nothing in them shows.
+ */
+export function invitationNote(
+  announcement: ChatOverview["announcements"][string] | undefined,
+  names: ChatNames,
+  viewerId: string,
+): string | null {
+  if (!announcement) return null;
+  const body = oneLine(announcement.body);
+  return hasVisibleText(body) ? CHAT_COPY.invitationLine(person(announcement.authorId, names, viewerId, false), body) : null;
+}
+
+/**
+ * The line on a card for someone who hasn't answered (H37 Q5): the invitation's latest "Everyone invited" announcement
+ * from the overview (`invitationNote`), from the invitation until the resbite has ended, whether it has started or not.
+ */
+export function pendingCardNote(
+  plan: { id: string; starts_at: string; ends_at?: string | null },
+  response: string | null | undefined,
+  overview: ChatOverview | null,
+  viewerId: string,
+  now: number,
+): string | null {
+  if (response !== "pending" || !overview || !(planEnd(plan) > now)) return null;
+  return invitationNote(overview.announcements[plan.id], overview.names, viewerId);
+}
+
+/**
+ * Each listed series' current occurrence, as `private.current_occurrence` picks it (H37 Q4): a plan no listed plan repeats
+ * from, then the latest start, then the highest id. Only its tile carries the series' unread dot.
+ */
+export function currentOccurrences(
+  plans: readonly { id: string; series_id: string; starts_at: string; repeats_from?: string | null }[],
+): Set<string> {
+  const followed = new Set(plans.map((p) => p.repeats_from).filter((id): id is string => !!id));
+  const best = new Map<string, (typeof plans)[number]>();
+  for (const p of plans) {
+    if (followed.has(p.id)) continue;
+    const held = best.get(p.series_id);
+    const [start, heldStart] = [Date.parse(p.starts_at), held ? Date.parse(held.starts_at) : NaN];
+    const later = !held || start > heldStart || (start === heldStart && p.id > held.id);
+    if (later) best.set(p.series_id, p);
+  }
+  return new Set([...best.values()].map((p) => p.id));
+}
+
+/**
+ * The header's second line: "Fri 30 Oct · 6 going", "Ended · Sat 15 Nov · 7 going" from the end on, and "Cancelled" for
+ * a cancelled one-off (H20). The date is in the plan's zone and the number is the event page's Going (`accepted`,
+ * K-N7). A group's reads how it repeats and who is in it, "Every Thursday · 9 in the group", and once it stopped
+ * repeating its last one, "Last one · Thu 27 Nov · 9 in the group" (G-S7), whatever this week's status. Null when the
+ * summary has no start or no zone, or a running group has no repeat (H20).
+ */
+export function headerLine(summary: ChatSummary, now: number): string | null {
+  if (!summary.isGroup && summary.status === "cancelled") return CHAT_COPY.cancelled;
+  const start = instant(summary.startsAt);
+  if (!start || !text(summary.timeZone)) return null;
+  if (summary.isGroup) {
+    const members = Number.isFinite(summary.members) ? summary.members : 0;
+    if (summary.stopped) return CHAT_COPY.groupStoppedHeader(dayLabel(start, summary.timeZone, now), members);
+    const repeat = repeatLine(start, zoneOr(summary.timeZone), summary.repeatWeeks);
+    return repeat ? CHAT_COPY.groupHeader(repeat, members) : null;
+  }
+  const going = Number.isFinite(summary.accepted) ? summary.accepted : 0;
+  const line = `${dayLabel(start, summary.timeZone, now)} · ${going} going`;
+  return planEnd({ starts_at: start, ends_at: instant(summary.endsAt) }) <= now ? `Ended · ${line}` : line;
+}
+
+/**
+ * Leave group in the chat's menu (G-N13, CH-P4): a group's member who isn't a host (the owner, or an admin until they
+ * step down), while its chat is open; whatever this week's reply. A one-off has no Leave: Can't go is the way out.
+ */
+export const canLeave = (summary: ChatSummary): boolean => summary.isGroup && summary.host !== true && summary.open === true;
+
+/** The menu's people row (CH-04): "People in this group · 9" on a group, "People in this chat · 6" on a one-off. */
+export const peopleLine = (summary: ChatSummary): string =>
+  summary.isGroup ? CHAT_COPY.peopleInGroup(summary.members) : CHAT_COPY.peopleInChat(summary.members);
+
+/**
+ * A host's words before anything is said (CH-07): on a one-off while nobody is going, "Nobody’s going yet" with who
+ * messages reach; on a group only while its owner is alone in it, "Messages here reach everyone in the group." Null for
+ * everyone else, who reads "No messages yet": a group with anyone else in it, Going or not, isn't empty of people.
+ */
+export function emptyState(summary: ChatSummary): { title: string; hint: string } | null {
+  if (summary.host !== true) return null;
+  if (summary.isGroup) return summary.members <= 1 ? { title: CHAT_COPY.nobodyGoing, hint: CHAT_COPY.groupEmptyHint } : null;
+  return summary.accepted === 0 ? { title: CHAT_COPY.nobodyGoing, hint: CHAT_COPY.nobodyGoingHint } : null;
+}
+
+const PLAN_ID = new RegExp(`^${UUID_PATTERN}$`);
+/**
+ * A "Next one" line opens the summary's current occurrence (Decision 14, I5) only when there is one to open: a plan id
+ * as the server writes it. The mapper reads a missing `plan_id` as "", and then the tap reads the chat again instead of
+ * opening an event page that can't load.
+ */
+export const nextOpens = (planId: string): boolean => typeof planId === "string" && PLAN_ID.test(planId);
+
+/** Owners and admins announce while the chat is open (CH-P6; the server refuses anyone else). */
+export const canAnnounce = (summary: ChatSummary): boolean => summary.host === true && summary.open === true;
+
+/** The announcement sheet starts on Going on a one-off, and on everyone in a group (K-N7). */
+export const defaultAudience = (summary: ChatSummary): ChatAudience => (summary.isGroup ? "everyone" : "going");
+
+/**
+ * A group's weekday, "Thursday", as `repeatLine` writes it: the current occurrence's start in the plan's zone, an
+ * unknown zone read in the phone's. "" when the start can't be read. Its announcements, audiences and Leave question
+ * name it.
+ */
+export const groupDay = (summary: Pick<ChatSummary, "startsAt" | "timeZone">): string =>
+  longWeekday(summary.startsAt, summary.timeZone);
+
+/**
+ * The weekday a group's row is worded with (Ruling GR1): the group's `day` for a row of the current occurrence
+ * (`planId`, the summary's), or a row that doesn't say which it belongs to; none ("") for a row of an earlier one, so
+ * last week's "Going this Thursday" never reads as sent to next week's people. With no current occurrence to compare,
+ * a row that names one isn't taken for it.
+ */
+export const dayFor = (m: Pick<ChatMessage, "planId">, planId: string, day: string): string =>
+  isCurrentRow(m, planId) ? day : "";
+
+/** A row of the current occurrence (`planId`, the summary's), or one that doesn't say which it belongs to (GR1, GR6). */
+export const isCurrentRow = (m: Pick<ChatMessage, "planId">, planId: string): boolean => !m.planId || m.planId === planId;
+
+/**
+ * The announcement sheet's two radios, in order, the first its starting audience (`defaultAudience`, K-N7). A
+ * group's: "Everyone in the group · 9", then "Going this Thursday · 6" (G-S7). A one-off's: "Going · 6", then
+ * "Everyone invited · 9".
+ */
+export function audienceOptions(summary: ChatSummary): Array<{ key: ChatAudience; title: string }> {
+  if (summary.isGroup)
+    return [
+      { key: "everyone", title: CHAT_COPY.audienceGroup(summary.everyone) },
+      { key: "going", title: CHAT_COPY.audienceGoingDay(groupDay(summary), summary.going) },
+    ];
+  return [
+    { key: "going", title: CHAT_COPY.audienceGoing(summary.going) },
+    { key: "everyone", title: CHAT_COPY.audienceEveryone(summary.everyone) },
+  ];
+}
+
+/**
+ * The card in place of the field once the chat is closed (CH-06). The screen decides "closed" from `summary.open` only;
+ * this picks the words from `(isGroup, stopped, status)` (G-N5): a cancelled one-off's, a group's ("This group’s chat
+ * closed on Thu 27 Nov.", cancelled or not), else a one-off's with its date; with no close time, the short line.
+ */
+export function closedCard(summary: ChatSummary, now?: number): { line: string; why: string | null } {
+  if (!summary.isGroup && summary.status === "cancelled") return { line: CHAT_COPY.cancelledClosed, why: null };
+  const closes = instant(summary.closesAt);
+  if (!closes) return { line: CHAT_COPY.closedShort, why: null };
+  const day = dayLabel(closes, summary.timeZone, now);
+  return { line: summary.isGroup ? CHAT_COPY.groupClosedOn(day) : CHAT_COPY.closedOn(day), why: CHAT_COPY.closedWhy };
+}
+
+/** A control, bidi, zero-width or format character anywhere in a link keeps it plain (H20). */
+const UNSAFE = /[\u0000-\u001f\u007f-\u009f­؜᠎​-‏‪-‮⁠-⁤⁦-⁯﻿￹-￻]/;
+/**
+ * Text holding a control (C0 or C1), bidi, zero-width or format character: what can make text read differently from what
+ * opens, as a link's would. Plan 3's support address is refused for it too.
+ */
+export const hasHiddenCharacter = (text: string): boolean => typeof text === "string" && UNSAFE.test(text);
+
+/**
+ * A link's host, lowercase, or null when the text is not a link this chat opens (K-N14, Decision 15, H20):
+ * - only http and https;
+ * - an authority of ASCII letters, digits, dots and hyphens with an optional port up to 65535, so a user part (`@`),
+ *   a backslash, a percent-encoding or any other character keeps it plain: each can make the host read differently
+ *   from the one a browser opens;
+ * - a domain: two labels or more, the last of letters only, so no IP address in any form and no single label;
+ * - no punycode (`xn--`) label and no `localhost`.
+ * Parsed here rather than with `URL`, whose React Native version does not normalise hosts as Node's does.
+ */
+function hostOf(href: string): string | null {
+  if (UNSAFE.test(href)) return null;
+  const authority = /^https?:\/\/([^/?#]*)/i.exec(href)?.[1];
+  const parts = authority === undefined ? null : /^([A-Za-z0-9.-]+)(?::(\d{1,5}))?$/.exec(authority);
+  if (!parts || (parts[2] !== undefined && Number(parts[2]) > 65535)) return null;
+  const host = parts[1].toLowerCase().replace(/\.$/, "");
+  const labels = host.split(".");
+  const last = labels[labels.length - 1];
+  if (labels.length < 2 || !/^[a-z]{2,63}$/.test(last) || last === "localhost") return null;
+  if (labels.some((l) => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(l) || l.startsWith("xn--"))) return null;
+  return host;
+}
+
+/** The lowercase host a link opens, for `CHAT_COPY.openQuestion`; "" for anything `linkParts` would not link. */
+export const linkHost = (href: string): string => hostOf(href) ?? "";
+
+const CLOSERS: Record<string, string> = { ")": "(", "]": "[", "}": "{" };
+const count = (s: string, c: string) => s.split(c).length - 1;
+/** Drops the punctuation a sentence puts after a link, and a closing bracket the link didn't open. */
+function trimLink(raw: string): string {
+  let s = raw;
+  for (;;) {
+    const last = s[s.length - 1];
+    if (last && ".,;:!?'’”…".includes(last)) s = s.slice(0, -1);
+    else if (last && CLOSERS[last] && count(s, last) > count(s, CLOSERS[last])) s = s.slice(0, -1);
+    else return s;
+  }
+}
+
+/**
+ * A message's text in runs, the links among them with their `href` (K-N14). Only http and https links to a domain
+ * are linked (`hostOf`); phone numbers and every other scheme stay text (CH-P11). A link stops at white space, `"`,
+ * `<` and `>` (H20).
+ */
+export function linkParts(body: string): Array<{ text: string; href?: string }> {
+  const parts: Array<{ text: string; href?: string }> = [];
+  const links = /https?:\/\/[^\s"<>]+/gi;
+  let at = 0;
+  for (let m = links.exec(body); m; m = links.exec(body)) {
+    // "nothttps://…" is a word, not a link.
+    if (m.index > 0 && /[A-Za-z0-9]/.test(body[m.index - 1])) continue;
+    const href = trimLink(m[0]);
+    if (!hostOf(href)) continue;
+    if (m.index > at) parts.push({ text: body.slice(at, m.index) });
+    parts.push({ text: href, href });
+    at = m.index + href.length;
+  }
+  if (at < body.length) parts.push({ text: body.slice(at) });
+  return parts;
+}
+
+/**
+ * What the screen reader says for a row (K-S14): "Leo, I can bring the snacks, 18:02", with the day when it isn't today
+ * in `zone` (the phone's), "You" for the reader and the send state when unsent. A system line is "Resbite: " and its
+ * text; an announcement starts with its audience in words. On a group (`group`, plan 2) the lines take the group's
+ * words and an announcement its audience by the group's weekday (`day`, "Thursday": `announcementLabelGroup`). A time
+ * that can't be read is left out; null for a line it can't word (H20).
+ */
+export function messageLabel(
+  m: ChatMessage,
+  names: ChatNames,
+  viewerId: string,
+  now: number,
+  zone: string,
+  sending?: "sending" | "failed" | "closed",
+  group = false,
+  day = "",
+  current = true,
+): string | null {
+  if (m.kind === "system") {
+    const line = systemText(m, names, viewerId, group, "", current);
+    return line ? `Resbite: ${line}` : null;
+  }
+  const shown = words(m);
+  if (shown === null) return null;
+  const parts = [person(m.authorId, names, viewerId), shown];
+  const at = instant(m.createdAt);
+  if (at) {
+    const today = Number.isFinite(now) && localDate(at, zone).date === localDate(new Date(now).toISOString(), zone).date;
+    parts.push(today ? timeLabel(at, zone) : `${dayLabel(at, zone, now)}, ${timeLabel(at, zone)}`);
+  }
+  if (m.kind === "announcement")
+    parts.unshift(group ? CHAT_COPY.announcementLabelGroup(m.audience, day) : CHAT_COPY.announcementLabel(m.audience));
+  if (sending)
+    parts.push(sending === "sending" ? CHAT_COPY.sending : sending === "closed" ? CHAT_COPY.closedBeforeSent : CHAT_COPY.notSent);
+  return parts.join(", ");
+}
+
+const SERIES_ID = new RegExp(`^${UUID_PATTERN}$`);
+/** A series id as the server writes it, lowercase, which the route checks before any call (K-N14). */
+export const isSeriesId = (value: unknown): value is string => typeof value === "string" && SERIES_ID.test(value);
+
+/**
+ * The server's test of a body (`private.chat_body`, H30): at least one character that isn't white space, a control, a
+ * format character or one of the fillers that draw nothing (Hangul fillers, the braille blank, variation selectors,
+ * tags…). Send is offered only then, so a blank-looking message is never written (H32 30).
+ */
+const VISIBLE =
+  /[^\s\u0000-\u001f\u007f-\u00a0\u00ad\u034f\u0600-\u0605\u061c\u06dd\u070f\u0890\u0891\u08e2\u115f\u1160\u1680\u17b4\u17b5\u180b-\u180f\u2000-\u200f\u2028-\u202f\u205f-\u206f\u2800\u3000\u3164\ufe00-\ufe0f\ufeff\uffa0\ufff0-\ufffb\u{110bd}\u{110cd}\u{13430}-\u{1343f}\u{1bca0}-\u{1bca3}\u{1d173}-\u{1d17a}\u{e0000}-\u{e0fff}]/u;
+export const hasVisibleText = (body: string): boolean => typeof body === "string" && VISIBLE.test(body);
+
+/** A message holds at most this many characters, counted as the server counts them: by code point (CH-P11). */
+export const BODY_LIMIT = 1000;
+
+// A code point that belongs to the character before it: a combining mark, a joiner, a variation selector, a skin tone
+// or a tag. Property escapes are tried first; an engine without them gets the common ranges.
+const JOINS = (() => {
+  try {
+    return new RegExp("^[\\p{M}\\u200d\\ufe00-\\ufe0f\\u{1f3fb}-\\u{1f3ff}\\u{e0020}-\\u{e007f}]$", "u");
+  } catch {
+    return /^(?:[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f\u200d\ufe00-\ufe0f]|\ud83c[\udffb-\udfff]|\udb40[\udc20-\udc7f])$/;
+  }
+})();
+const REGIONAL = /^\ud83c[\udde6-\uddff]$/;
+
+/** The text's characters as a person sees them (grapheme clusters): Intl.Segmenter where there is one, else by rule. */
+function characters(text: string): string[] {
+  const Segmenter = (Intl as { Segmenter?: new (l?: string, o?: { granularity: string }) => { segment(t: string): Iterable<{ segment: string }> } }).Segmenter;
+  if (typeof Segmenter === "function") {
+    try {
+      return Array.from(new Segmenter(undefined, { granularity: "grapheme" }).segment(text), (s) => s.segment);
+    } catch {
+      // The rule below.
+    }
+  }
+  const out: string[] = [];
+  let prev = "";
+  let regional = 0;
+  for (const cp of text) {
+    const isRegional = REGIONAL.test(cp);
+    const joins = out.length > 0 && (JOINS.test(cp) || prev === "\u200d" || (isRegional && regional % 2 === 1));
+    if (joins) out[out.length - 1] += cp;
+    else out.push(cp);
+    regional = isRegional ? regional + 1 : 0;
+    prev = cp;
+  }
+  return out;
+}
+
+/** The first `max` characters a person sees, never splitting one, with "…" after a cut (white space before it goes). */
+export function cutLine(text: string, max: number): string {
+  const chars = characters(text);
+  if (chars.length <= max) return text;
+  return `${chars.slice(0, max).join("").trimEnd()}…`;
+}
+
+/**
+ * The text as the field keeps it: at most `BODY_LIMIT` code points, cut where a character ends so an emoji or an accent
+ * is never split; `cut` says some was left out, for the notice (H32 Q26).
+ */
+export function fitBody(text: string): { text: string; cut: boolean } {
+  let count = 0;
+  for (const _ of text) if (++count > BODY_LIMIT) break;
+  if (count <= BODY_LIMIT) return { text, cut: false };
+  let kept = "";
+  let used = 0;
+  for (const c of characters(text)) {
+    const size = [...c].length;
+    if (used + size > BODY_LIMIT) break;
+    kept += c;
+    used += size;
+  }
+  return { text: kept, cut: true };
+}
+
+const codePoints = (text: string): number => {
+  let n = 0;
+  for (const _ of text) n++;
+  return n;
+};
+const isHigh = (c: number) => c >= 0xd800 && c <= 0xdbff;
+const isLow = (c: number) => c >= 0xdc00 && c <= 0xdfff;
+
+/**
+ * The field after an edit, well formed (`wellFormedText`, H41 m2) and within the limit (H35): only what was inserted is
+ * cut, to the room the rest leaves, so typing past the limit in the middle is refused and never cuts the end of the
+ * message. A paste into an empty field keeps its start, as `fitBody` does. `cut` says something was left out.
+ */
+export function fitEdit(before: string, edited: string): { text: string; cut: boolean } {
+  const after = wellFormedText(edited);
+  if (codePoints(after) <= BODY_LIMIT) return { text: after, cut: false };
+  if (codePoints(before) > BODY_LIMIT) return fitBody(after);
+  // The edit is what lies between the longest common start and end, never splitting a surrogate pair.
+  let start = 0;
+  const most = Math.min(before.length, after.length);
+  while (start < most && before.charCodeAt(start) === after.charCodeAt(start)) start++;
+  if (start > 0 && start < after.length && isHigh(after.charCodeAt(start - 1))) start--;
+  let end = 0;
+  while (end < most - start && before.charCodeAt(before.length - 1 - end) === after.charCodeAt(after.length - 1 - end)) end++;
+  if (end > 0 && isLow(after.charCodeAt(after.length - end))) end--;
+  const head = after.slice(0, start);
+  const tail = after.slice(after.length - end);
+  const inserted = after.slice(start, after.length - end);
+  let room = BODY_LIMIT - codePoints(head) - codePoints(tail);
+  let kept = "";
+  for (const c of characters(inserted)) {
+    const size = codePoints(c);
+    if (size > room) break;
+    kept += c;
+    room -= size;
+  }
+  return { text: head + kept + tail, cut: true };
+}

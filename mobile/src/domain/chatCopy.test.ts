@@ -1,0 +1,142 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { CHAT_COPY as C } from "./chatCopy";
+
+test("chat copy reads exactly", () => {
+  assert.equal(C.chat, "Chat");
+  assert.equal(C.noMessages, "No messages yet");
+  assert.equal(C.closedRow(0), "Chat closed · 0 messages");
+  assert.equal(C.closedRow(1), "Chat closed · 1 message");
+  assert.equal(C.closedRow(23), "Chat closed · 23 messages");
+  assert.equal(C.field, "Message");
+  assert.equal(C.send, "Send");
+  assert.equal(C.toGoing, "To: people going. People who join later can read this too.");
+  assert.equal(C.announce, "Announce");
+  assert.equal(C.newAnnouncement, "New announcement");
+  assert.equal(C.whoGetsIt, "Who gets it");
+  assert.equal(C.audienceGoing(6), "Going · 6");
+  assert.equal(C.audienceEveryone(9), "Everyone invited · 9");
+  assert.equal(C.announcePlaceholder, "Write an update for your guests");
+  assert.equal(C.sendAnnouncement, "Send announcement");
+  assert.equal(C.cancel, "Cancel");
+  assert.equal(C.pinned, "PINNED");
+  assert.equal(C.announcementTo("everyone"), "ANNOUNCEMENT · TO EVERYONE INVITED");
+  assert.equal(C.announcementTo("going"), "ANNOUNCEMENT · TO GOING");
+  assert.equal(C.peopleInChat(6), "People in this chat · 6");
+  assert.equal(C.mute, "Mute chat");
+  assert.equal(C.muteHint, "Changes and announcements still arrive");
+  assert.equal(C.unmute, "Unmute chat");
+  assert.equal(C.deleted, "Message deleted");
+  assert.equal(C.removed, "Message removed by an admin");
+  assert.equal(C.deleteMine, "Delete message");
+  assert.equal(C.deleteQuestion, "Delete this message for everyone?");
+  assert.equal(C.removeTheirs, "Remove message");
+  assert.equal(C.removeQuestion, "Remove this message?");
+  assert.equal(C.keep, "Keep");
+  assert.equal(C.sending, "Sending…");
+  assert.equal(C.notSent, "Not sent. Tap to retry.");
+  assert.equal(C.closedOn("Mon 17 Nov"), "This chat closed on Mon 17 Nov.");
+  assert.equal(
+    C.closedWhy,
+    "Resbite chats close 48 hours after the resbite, so the plan stays offline. You can still read everything here.",
+  );
+  assert.equal(C.cancelledClosed, "This chat is read-only because the resbite was cancelled.");
+  assert.equal(C.nobodyGoing, "Nobody’s going yet");
+  assert.equal(C.nobodyGoingHint, "Messages here reach everyone going. Invite people to get started.");
+  assert.equal(C.invitePeople, "Invite people");
+  assert.equal(C.invitationLine("Ana", "Doors open at 19:30"), "Announcement from Ana · Doors open at 19:30");
+  assert.equal(C.notInChat, "You’re not in this chat.");
+  assert.equal(C.hostsOnly, "Only hosts can do that.");
+  assert.equal(C.closedShort, "This chat is closed.");
+  assert.equal(C.slowDown, "You’re sending messages too fast. Wait a moment.");
+  assert.equal(C.invalid, "Write something first, up to 1,000 characters.");
+});
+
+test("the copy the rulings added reads exactly", () => {
+  assert.equal(C.someone, "Someone");
+  assert.equal(C.you, "You");
+  assert.equal(C.ended("Picnic in the park"), "Picnic in the park ended");
+  assert.equal(C.tapToSee, "Tap to see");
+  assert.equal(C.notYours, "You can only delete your own messages.");
+  assert.equal(C.deleteUnsent, "Delete unsent message");
+  assert.equal(C.openQuestion("example.com"), "Open example.com?");
+  assert.equal(C.open, "Open");
+  assert.equal(C.announcementLabel("everyone"), "Announcement to everyone invited");
+  assert.equal(C.announcementLabel("going"), "Announcement to people going");
+  // H20 (Q8): a cancelled one-off's header.
+  assert.equal(C.cancelled, "Cancelled");
+});
+
+test("the copy Task 7's fix round added reads exactly (H31, H32)", () => {
+  // H31: a link's accessibility action; H32 (Q13): the same host twice is numbered.
+  assert.equal(C.openLink("example.com"), "Open example.com");
+  assert.equal(C.openLink("example.com", 1), "Open example.com");
+  assert.equal(C.openLink("example.com", 2), "Open example.com (2)");
+  // H31: the spinner while an earlier page loads.
+  assert.equal(C.loadingEarlier, "Loading earlier messages");
+  // H32 (29): a message the close overtook.
+  assert.equal(C.closedBeforeSent, "This chat closed before it was sent.");
+  // H32 (Q35): the announcement limit.
+  assert.equal(C.announceTooFast, "You can send one announcement a minute.");
+  // H32 (Q26): a paste longer than the limit.
+  assert.equal(C.tooLong, "Only the first 1,000 characters fit.");
+  // H32 (Q46): the draft the close left behind.
+  assert.equal(C.notSentDraft, "Not sent:");
+});
+
+test("the copy the ways in add reads exactly (Task 8)", () => {
+  // The words a card's or the Chat row's label ends with when there is something unread (CH-P9): the dot in words.
+  assert.equal(C.unreadMessages, "unread messages");
+});
+
+test("the group copy reads exactly (plan 2: G-S7, G-N13, CH-03, CH-07, confirmation NOTE 14)", () => {
+  assert.equal(C.toGroup, "To: everyone in the group, now and later");
+  assert.equal(C.groupChat, "Group chat");
+  assert.equal(C.opensResbite, "Opens the resbite");
+  assert.equal(C.audienceGroup(9), "Everyone in the group · 9");
+  assert.equal(C.audienceGoingDay("Thursday", 6), "Going this Thursday · 6");
+  assert.equal(C.announcementToGroup("everyone", "Thursday"), "ANNOUNCEMENT · TO EVERYONE IN THE GROUP");
+  assert.equal(C.announcementToGroup("going", "Thursday"), "ANNOUNCEMENT · TO GOING THIS THURSDAY");
+  assert.equal(C.announcementLabelGroup("everyone", "Thursday"), "Announcement to everyone in the group");
+  assert.equal(C.announcementLabelGroup("going", "Thursday"), "Announcement to people going this Thursday");
+  assert.equal(C.announcePlaceholderGroup, "Write an update for the group");
+  assert.equal(C.groupEmptyHint, "Messages here reach everyone in the group.");
+  assert.equal(C.peopleInGroup(9), "People in this group · 9");
+  assert.equal(C.groupHeader("Every Thursday", 9), "Every Thursday · 9 in the group");
+  assert.equal(C.groupStoppedHeader("Thu 27 Nov", 9), "Last one · Thu 27 Nov · 9 in the group");
+  assert.equal(C.leaveGroup, "Leave group");
+  assert.equal(C.leaveThisGroup, "Leave this group");
+  assert.equal(C.leaveQuestion("Board game night", "Thursday"), "Leave Board game night? You’ll stop getting its Thursdays and its chat.");
+  assert.equal(C.groupClosedOn("Thu 27 Nov"), "This group’s chat closed on Thu 27 Nov.");
+  assert.equal(C.notInGroup, "You’re not in this group.");
+  assert.equal(C.hostsCantLeave, "To leave, step down first: change your reply to Can’t go.");
+  assert.equal(C.ownerCantLeave, "You own this group, so you can’t leave it.");
+});
+
+test("every user-facing apostrophe in the chat copy is the curly one (H37 Q7)", () => {
+  const words = (value: unknown): string[] =>
+    typeof value === "string" ? [value] : typeof value === "function" ? [String(value)] : [];
+  for (const [key, value] of Object.entries(C)) for (const w of words(value)) assert.equal(w.includes("'"), false, key);
+});
+
+// Ruling GR1 (2): with no readable day, a group's going words are a one-off's, and nothing dangles.
+test("a group's day-bearing words with no readable day fall back to the one-off's, with no dangling 'this'", () => {
+  for (const day of ["", "  "]) {
+    assert.equal(C.audienceGoingDay(day, 6), "Going · 6");
+    assert.equal(C.announcementToGroup("going", day), "ANNOUNCEMENT · TO GOING");
+    assert.equal(C.announcementLabelGroup("going", day), "Announcement to people going");
+    // Everyone in the group names no day, so it keeps the group's words.
+    assert.equal(C.announcementToGroup("everyone", day), "ANNOUNCEMENT · TO EVERYONE IN THE GROUP");
+    assert.equal(C.announcementLabelGroup("everyone", day), "Announcement to everyone in the group");
+    assert.equal(C.leaveQuestion("Board game night", day), "Leave Board game night? You’ll stop getting its invitations and its chat.");
+  }
+  assert.equal(C.audienceGoingDay("", 6), C.audienceGoing(6));
+  assert.equal(C.announcementToGroup("going", ""), C.announcementTo("going"));
+  assert.equal(C.announcementLabelGroup("going", ""), C.announcementLabel("going"));
+});
+
+// Plan 3 (CH-R-A3): a message the Resbite team took down says so; a host's removal keeps its words.
+test("a removal by Resbite reads exactly, apart from a host's", () => {
+  assert.equal(C.removedByResbite, "Message removed by Resbite");
+  assert.equal(C.removed, "Message removed by an admin");
+});

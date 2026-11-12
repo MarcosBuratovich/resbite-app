@@ -225,6 +225,10 @@ insert into public.plans(id,owner_id,title,starts_at,time_zone,place_label,area,
 update public.plans set starts_at='2020-01-01 12:00+00' where id='d1100000-0000-4000-8000-000000000003';
 update public.plans set area='Riverside' where id='d1100000-0000-4000-8000-000000000001';
 update private.phone_invitations set revoked_at=null, user_id=null, answered_at=null, code_hash=extensions.digest(repeat('A',22),'sha256'), check_count=0, check_window=null where phone='447700900202';
+-- As the host's invitation this stands in for, the reopened link clears the removal records the revocation and
+-- remove_guest above wrote for 202 and its holder 04 (circles of trust: with them, answering it would be refused and
+-- its page would be the unavailable one).
+delete from private.plan_removals where phone='447700900202' or user_id='d1000000-0000-4000-8000-000000000004';
 insert into private.phone_invitations(plan_id,phone,country,code_hash,invited_by) values
  ('d1100000-0000-4000-8000-000000000001','447700900207','44',extensions.digest(repeat('F',22),'sha256'),'d1000000-0000-4000-8000-000000000001'),
  ('d1100000-0000-4000-8000-000000000002','447700900202','44',extensions.digest(repeat('G',22),'sha256'),'d1000000-0000-4000-8000-000000000001'),
@@ -722,13 +726,14 @@ reset role;
 
 -- M3: the tables follow auth.users. Deleting an account forgets who sent or answered an invitation (the invitation
 -- stays) and removes its daily lookup count. 31 invited someone to the Walk and looked numbers up; 04 answered the Quiz.
+-- brought_by (20261111130000_circles_of_trust, the guest who sent a link) is forgotten the same way.
 do $$ begin
  if (select is_nullable from information_schema.columns where table_schema='private' and table_name='phone_invitations' and column_name='invited_by')<>'YES' then
   raise exception 'invited_by must be nullable';
  end if;
  if (select array_agg(a.attname::text||':'||c.confdeltype::text order by a.attname) from pg_catalog.pg_constraint c
      join pg_catalog.pg_attribute a on a.attrelid=c.conrelid and a.attnum=c.conkey[1]
-     where c.contype='f' and c.confrelid='auth.users'::regclass and c.conrelid='private.phone_invitations'::regclass) is distinct from array['invited_by:n','user_id:n']
+     where c.contype='f' and c.confrelid='auth.users'::regclass and c.conrelid='private.phone_invitations'::regclass) is distinct from array['brought_by:n','invited_by:n','user_id:n']
  or (select array_agg(a.attname::text||':'||c.confdeltype::text) from pg_catalog.pg_constraint c
      join pg_catalog.pg_attribute a on a.attrelid=c.conrelid and a.attnum=c.conkey[1]
      where c.contype='f' and c.confrelid='auth.users'::regclass and c.conrelid='private.lookup_usage'::regclass) is distinct from array['user_id:c'] then

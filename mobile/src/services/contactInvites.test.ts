@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createContactInviteGateway, inviteConnections, inviteErrorMessage, isNotAConnection } from "./contactInvites";
+import { CIRCLE_COPY } from "../domain/circleCopy";
+import { INVITE_COPY } from "../domain/inviteCopy";
 
 type Call = { fn: string; args: Record<string, unknown> };
 function gateway(reply: (c: Call) => { data: unknown; error: unknown }) {
@@ -173,6 +175,25 @@ test("inviteConnections sends a refused call again one by one, so the others are
   );
 });
 
+test("inviteConnections does not send a refused call holding one connection again: that connection is refused", async () => {
+  const refuse = (users: string[]) =>
+    gateway((c) => {
+      const asked = (c.args.p_invites as { user: string }[]).map((x) => x.user);
+      if (asked.some((user) => users.includes(user))) return { data: null, error: { code: "42501", message: "Not a connection" } };
+      return { data: asked.map((user) => ({ user, kind: "app" })), error: null };
+    });
+  const one = refuse(["u-gone"]);
+  assert.deepEqual(await inviteConnections(one.gw, "plan", ["u-gone"]), { results: [], refused: ["u-gone"] });
+  assert.equal(one.calls.length, 1, "the one connection is asked once");
+  // The 51st of 51 goes in a call of its own: refused there, it is not asked again either.
+  const users = Array.from({ length: 51 }, (_, i) => `u-${i}`);
+  const last = refuse(["u-50"]);
+  const { results, refused } = await inviteConnections(last.gw, "plan", users);
+  assert.deepEqual(last.calls.map((c) => (c.args.p_invites as unknown[]).length), [50, 1]);
+  assert.deepEqual(results.map((r) => r.user), users.slice(0, 50));
+  assert.deepEqual(refused, ["u-50"]);
+});
+
 test("inviteConnections sends 60 connections in calls of at most 50; a lost connection still fails the whole invite", async () => {
   const users = Array.from({ length: 60 }, (_, i) => `u-${i}`);
   const ok = gateway((c) => ({
@@ -191,7 +212,7 @@ test("list and revoke call their RPCs", async () => {
     data: c.fn === "plan_phone_invitations" ? [{ phone: "447700900202", country: "44", answered: true, response: "accepted" }] : null,
     error: null,
   }));
-  assert.deepEqual(await gw.list("p"), [{ phone: "447700900202", country: "44", answered: true, response: "accepted" }]);
+  assert.deepEqual(await gw.list("p"), [{ phone: "447700900202", country: "44", answered: true, response: "accepted", brought: false }]);
   await gw.revoke("p", "447700900202");
   assert.deepEqual(calls[1], { fn: "revoke_phone_invitation", args: { p_plan: "p", p_phone: "447700900202" } });
 });
@@ -207,4 +228,39 @@ test("error mapping", () => {
   assert.equal(inviteErrorMessage({ code: "22023" }), "Check your connection and try again.");
   assert.equal(inviteErrorMessage(new Error("network")), "Check your connection and try again.");
   assert.equal(inviteErrorMessage(null), "Check your connection and try again.");
+});
+
+test("the two circle refusals are worded by their message, before their code; everything else as before", () => {
+  assert.equal(inviteErrorMessage({ code: "42501", message: "Not allowed to bring people here" }), CIRCLE_COPY.notAllowed);
+  assert.equal(inviteErrorMessage({ code: "22023", message: "No invites left" }), CIRCLE_COPY.noneLeft);
+  assert.equal(inviteErrorMessage({ code: "42501", message: "Active plan owner required" }), INVITE_COPY.hostsOnly);
+  assert.equal(inviteErrorMessage({ code: "22023", message: "Invalid circle" }), "Invalid circle");
+});
+
+test("a bring the server refuses is thrown in the circle's words, by invite and by a connection's own call", async () => {
+  const { gw } = gateway(() => ({ data: null, error: { code: "42501", message: "Not allowed to bring people here" } }));
+  await assert.rejects(gw.invite("p", [{ phone: "447700900201", country: "44", code: "A".repeat(22) }]), (e) => {
+    assert.ok(e instanceof Error);
+    assert.equal(e.message, CIRCLE_COPY.notAllowed);
+    assert.equal(isNotAConnection(e), false);
+    return true;
+  });
+  // A refused bring is no 'Not a connection': the connections aren't sent again one by one.
+  const many = gateway(() => ({ data: null, error: { code: "42501", message: "Not allowed to bring people here" } }));
+  await assert.rejects(inviteConnections(many.gw, "p", ["u1", "u2"]), { message: CIRCLE_COPY.notAllowed });
+  assert.equal(many.calls.length, 1);
+  const none = gateway(() => ({ data: null, error: { code: "22023", message: "No invites left" } }));
+  await assert.rejects(none.gw.invite("p", [{ user: "u1" }]), { message: CIRCLE_COPY.noneLeft });
+});
+
+test("list marks a link the caller brought, so a host's own brought links read as theirs (C31)", async () => {
+  const gw = createContactInviteGateway(async () => ({
+    data: [
+      { phone: "447700900101", country: "44", answered: false, response: null },
+      { phone: "447700900123", country: "44", answered: false, response: null, brought: true },
+      { phone: "447700900124", country: "44", answered: false, response: null, brought: "yes" },
+    ],
+    error: null,
+  }));
+  assert.deepEqual((await gw.list("p")).map((r) => r.brought), [false, true, false]);
 });

@@ -1,6 +1,7 @@
 import React from "react";
 import {
   AccessibilityInfo,
+  type AccessibilityActionEvent,
   ActivityIndicator,
   Image,
   KeyboardAvoidingView,
@@ -35,6 +36,7 @@ import type { CategoryKey } from "../domain/categories";
 import type { EventPicture } from "../domain/events";
 import { dateBadgeParts, spokenWhen, type CoverCardPart } from "../domain/eventView";
 import { timeRange } from "../domain/eventTime";
+import { CHAT_COPY } from "../domain/chatCopy";
 
 /** "Step 2 of 4" for the step screens' progress bar. */
 const progressLabel = (step: number, total: number) => `Step ${step} of ${total}`;
@@ -307,6 +309,11 @@ export function CoverArt({ picture, uri }: { picture: EventPicture; uri?: string
  * - `pictureLabel`: the organizer's photo description; on a static card the picture is an image with this label.
  * - `endsAt` (UX3): the time line reads "10:00 – 12:00" and the static card says "from 10:00 to 12:00".
  * - `place` null (GI1): no place line, as on the link's preview before people reply; `byline` adds a line under it.
+ * - `note` (Task 8): a line under the title, such as an invitation's latest announcement; a pressable card says it at the
+ *   end of its label.
+ * - `dot` (CH-P9): a neutral dot beside the title for unread chat messages; the label ends ", unread messages".
+ * - `onLongPress` with `accessibilityActions` and `onAccessibilityAction` (chat plan 3, S7): a pressable card's other
+ *   actions, held or chosen from the screen reader's actions, such as an invitation's Report and Block.
  */
 export function CoverCard({
   picture,
@@ -326,6 +333,11 @@ export function CoverCard({
   hero = false,
   heading = true,
   pictureLabel,
+  note,
+  dot = false,
+  onLongPress,
+  accessibilityActions,
+  onAccessibilityAction,
 }: {
   picture: EventPicture;
   uri?: string | null;
@@ -345,8 +357,14 @@ export function CoverCard({
   hero?: boolean;
   heading?: boolean;
   pictureLabel?: string;
+  note?: string | null;
+  dot?: boolean;
+  onLongPress?: () => void;
+  accessibilityActions?: ReadonlyArray<{ name: string; label: string }>;
+  onAccessibilityAction?: (name: string) => void;
 }) {
   const largeText = useLargeText();
+  const spokenLabel = label === undefined ? undefined : [label, note?.trim()].filter(Boolean).join(", ") + (dot ? `, ${CHAT_COPY.unreadMessages}` : "");
   const [focused, setFocused] = React.useState(false);
   const parts = Boolean(onPressPart && partLabels);
   const part = (key: CoverCardPart, children: React.ReactNode, style?: StyleProp<ViewStyle>, spoken?: string) =>
@@ -366,6 +384,14 @@ export function CoverCard({
       </View>
     );
   const time = timeRange(startsAt, endsAt);
+  const titleText = (
+    <Text
+      accessibilityRole={!onPress && !parts && heading ? "header" : undefined}
+      style={[styles.cardTitle, dot && styles.titleShrink, hero && styles.cardTitleHero, largeText && { lineHeight: undefined }]}
+    >
+      {title}
+    </Text>
+  );
   const content = (
     <>
       {part(
@@ -388,12 +414,26 @@ export function CoverCard({
       <View style={styles.panel}>
         {part(
           "title",
-          <Text
-            accessibilityRole={!onPress && !parts && heading ? "header" : undefined}
-            style={[styles.cardTitle, hero && styles.cardTitleHero, largeText && { lineHeight: undefined }]}
-          >
-            {title}
-          </Text>,
+          dot ? (
+            <View style={styles.titleRow}>
+              {titleText}
+              <View
+                testID="unread-dot"
+                style={styles.unreadDot}
+                // A pressable card says it in its label; a static one names the dot itself.
+                {...(onPress
+                  ? { "aria-hidden": true, importantForAccessibility: "no-hide-descendants" as const, accessibilityElementsHidden: true }
+                  : { accessible: true, accessibilityLabel: CHAT_COPY.unreadMessages, "aria-label": CHAT_COPY.unreadMessages })}
+              />
+            </View>
+          ) : (
+            titleText
+          ),
+        )}
+        {!!note?.trim() && (
+          <Copy numberOfLines={3} style={[styles.cardLine, styles.cardNote]}>
+            {note.trim()}
+          </Copy>
         )}
         {part(
           "date",
@@ -437,8 +477,13 @@ export function CoverCard({
       <ScalePressable
         outerStyle={styles.card}
         accessibilityRole="button"
-        accessibilityLabel={label}
+        accessibilityLabel={spokenLabel}
         onPress={onPress}
+        onLongPress={onLongPress}
+        accessibilityActions={accessibilityActions && accessibilityActions.length ? accessibilityActions : undefined}
+        onAccessibilityAction={
+          onAccessibilityAction ? (e: AccessibilityActionEvent) => onAccessibilityAction(e.nativeEvent.actionName) : undefined
+        }
         onFocus={(e) => {
           // Keyboard focus only (focus-visible); the ring sits inside the card so overflow cannot clip it.
           const node = e.target as unknown as { matches?: (selector: string) => boolean };
@@ -491,7 +536,11 @@ export function AvatarStack({ names, label, onPress }: { names: readonly string[
   );
 }
 
-/** Two or three options as a radio group (Upcoming/Past, Going/Maybe/Can’t go). */
+/**
+ * Options as a radio group (Upcoming/Past, Going/Maybe/Can’t go, the circle's four). Every option's text is ink, which
+ * meets 4.5:1 on the surface behind it (muted gives 4.32:1); the chosen one is told by its paper pill and the medium
+ * font (`fonts.medium`).
+ */
 export function Segmented<K extends string>({
   label,
   options,
@@ -743,7 +792,7 @@ export function InfoSheet({
 }
 
 /** Moves VoiceOver (or browser focus) to a step's title after the step changes. */
-export function focusHeading(target: Text | null) {
+export function focusHeading(target: Text | View | null) {
   if (!target) return;
   if (Platform.OS === "web") {
     const node = target as unknown as HTMLElement;
@@ -818,7 +867,8 @@ export function RowGroup({ children }: { children: React.ReactNode }) {
 
 /**
  * One settings row: a tinted icon circle, a short title and a chevron; at least 60 pt tall. `badge` is a short count
- * before the chevron (Connections' pending requests); say what it counts in `label`.
+ * before the chevron (Connections' pending requests, "99+" at most), kept to one line; say what it counts, in full,
+ * in `label`. The badge and the chevron keep their size: under Larger Text the title wraps instead (Ruling 10).
  */
 export function Row({
   title,
@@ -861,10 +911,16 @@ export function Row({
       <Copy style={destructive ? [styles.rowTitle, { color: c.error }] : styles.rowTitle}>{title}</Copy>
       {badge ? (
         <View style={styles.rowBadge}>
-          <Text style={styles.rowBadgeText}>{badge}</Text>
+          <Text numberOfLines={1} style={styles.rowBadgeText}>
+            {badge}
+          </Text>
         </View>
       ) : null}
-      {chevron && <ChevronRight size={18} strokeWidth={2.2} color={c.muted} />}
+      {chevron && (
+        <View style={styles.rowChevron}>
+          <ChevronRight size={18} strokeWidth={2.2} color={c.muted} />
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -1113,6 +1169,12 @@ const styles = StyleSheet.create({
   placeRow: { flexDirection: "row", alignItems: "center", justifyContent: "flex-start", gap: space.s },
   stacked: { flexDirection: "column", alignItems: "flex-start" },
   cardLine: { flexShrink: 1, fontSize: 15 },
+  // A note under the title (an invitation's announcement), muted so the title leads (4.7:1 on the panel).
+  cardNote: { color: c.muted },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: space.s },
+  titleShrink: { flexShrink: 1 },
+  // The unread dot (CH-P9): neutral, no number, as on the resbite page's Chat row.
+  unreadDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: c.ink },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: space.s },
   avatarRow: { flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: space.m, minHeight: 44 },
   avatars: { flexDirection: "row", alignItems: "center" },
@@ -1131,7 +1193,7 @@ const styles = StyleSheet.create({
   segmented: { flexDirection: "row", gap: 4, padding: 4, borderRadius: r.tile, backgroundColor: c.surface },
   segment: { flex: 1, minHeight: 44, paddingHorizontal: 12, borderRadius: r.tile, alignItems: "center", justifyContent: "center" },
   segmentOn: { backgroundColor: c.paper, boxShadow: depth.small },
-  segmentText: { fontSize: 14, color: c.muted, textAlign: "center" },
+  segmentText: { fontSize: 14, color: c.ink, textAlign: "center" },
   segmentTextOn: { fontFamily: fonts.medium, color: c.ink },
   // Steps v2 (owner-approved mockup): full-width bars, 48 pt round buttons, a 36 pt title.
   progress: { flexDirection: "row", gap: 6, marginHorizontal: 20, paddingTop: space.m },
@@ -1166,8 +1228,18 @@ const styles = StyleSheet.create({
   rowDivider: { height: 1, backgroundColor: c.line, marginLeft: 68 },
   row: { flexDirection: "row", alignItems: "center", gap: space.m, minHeight: 60, paddingHorizontal: 18, paddingVertical: 8 },
   rowIcon: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
-  rowTitle: { flex: 1, fontFamily: fonts.medium, fontSize: 16, color: c.ink },
-  rowBadge: { minWidth: 24, borderRadius: 12, paddingHorizontal: 7, paddingVertical: 2, backgroundColor: c.pink, alignItems: "center" },
+  // minWidth 0: on the web a one-word title would otherwise keep its full width and squeeze the badge and chevron.
+  rowTitle: { flex: 1, minWidth: 0, fontFamily: fonts.medium, fontSize: 16, color: c.ink },
+  rowBadge: {
+    flexShrink: 0,
+    minWidth: 24,
+    borderRadius: 12,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    backgroundColor: c.pink,
+    alignItems: "center",
+  },
+  rowChevron: { flexShrink: 0 },
   rowBadgeText: { fontFamily: fonts.bold, fontSize: 13, lineHeight: 18, color: c.ink, textAlign: "center" },
   // The focus ring is the card's (a 2 pt aqua ring, web and native alike), not the browser outline.
   inputCard: {

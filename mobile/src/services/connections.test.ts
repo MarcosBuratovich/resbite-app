@@ -65,6 +65,33 @@ test("mine sends my_connections and maps the server's rows", async () => {
   assert.equal("context" in mine.connected[0], false);
 });
 
+test("mine keeps a request's five contexts and reads any other as met", async () => {
+  const row = (user_id: string, context: string) => ({
+    user_id,
+    name: user_id,
+    avatar_path: null,
+    avatar_revision: 0,
+    series_id: "s1",
+    title: "Picnic",
+    context,
+  });
+  const { gw } = gateway({
+    requests: [
+      row("a", "going"),
+      row("b", "invited"),
+      row("c", "met"),
+      row("d", "were_invited"),
+      row("e", "from"),
+      row("f", "soon"),
+    ],
+    connected: [],
+  });
+  assert.deepEqual(
+    (await gw.mine()).requests.map((p) => p.context),
+    ["going", "invited", "met", "were_invited", "from", "met"],
+  );
+});
+
 test("mine reads missing arrays as empty", async () => {
   assert.deepEqual(await gateway({}).gw.mine(), { requests: [], connected: [] });
   assert.deepEqual(await gateway(null).gw.mine(), { requests: [], connected: [] });
@@ -85,4 +112,12 @@ test("the server's refusals read as plain words; anything else is the connection
   assert.equal(connectionErrorMessage({ code: "22023", message: "That is you" }), "Couldn't do that. Try again.");
   for (const other of [new Error("Failed to fetch"), { code: "42501", message: "Something new" }, { code: "57014" }, null])
     assert.equal(connectionErrorMessage(other), "Check your connection and try again.");
+});
+
+// Plan 3 (confirmation NOTE 5): a Connect from a stale blocks list reaches request_connection, never the safety gateway.
+test("Connect to someone the reader blocked reads 'Unblock this person first.'; any other 22023 is as before", () => {
+  assert.equal(connectionErrorMessage({ code: "22023", message: "Unblock first" }), "Unblock this person first.");
+  assert.equal(connectionErrorMessage({ code: "22023", message: "That is you" }), "Couldn't do that. Try again.");
+  assert.equal(connectionErrorMessage({ code: "22023", message: "Something new" }), "Couldn't do that. Try again.");
+  assert.equal(connectionErrorMessage({ code: "42501", message: "Unblock first" }), "Check your connection and try again.");
 });

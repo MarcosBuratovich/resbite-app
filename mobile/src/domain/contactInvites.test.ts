@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { contactNumbers, hostRegion, inviteMessage, newInviteCode, personalLink, sendOrder, smsUrl, whatsappUrl, whatsappAppUrl, groupContacts, storedFor, storedEntry, inviteItems, usersToInvite } from "./contactInvites";
+import { readFileSync } from "node:fs";
+import { canPick, contactNumbers, hostRegion, inviteMessage, messageFor, newInviteCode, overCap, personalLink, pickChosen, pickToggled, sendOrder, smsUrl, userToggled, whatsappUrl, whatsappAppUrl, groupContacts, storedFor, storedEntry, inviteItems, usersToInvite, type ContactNumber } from "./contactInvites";
 import { INVITE_COPY } from "./inviteCopy";
 
 test("contactNumbers gives one entry per distinct number and counts the unparseable", () => {
@@ -159,4 +160,151 @@ test("inviteItems leaves out a chosen connection already on the resbite", () => 
   assert.deepEqual(items, { numbers: [], phones: [], users: [{ user: "u-marta" }] });
   assert.deepEqual(usersToInvite(new Set(["u-lucas"]), new Set(["u-lucas"])), []);
   assert.deepEqual(usersToInvite(new Set(["u-sofia", "u-marta"]), new Set()), [{ user: "u-sofia" }, { user: "u-marta" }]);
+});
+
+const LINK = "https://link.resbite.com/i/abc";
+
+test("a bringer's message names who invited and whose resbite it is (CO-P9); without an inviter, the host's", () => {
+  assert.equal(
+    inviteMessage({ inviter: "Pedro", host: "Ana", title: "Board game night", when: "Thu 20 Nov 19:00", link: LINK }),
+    `Pedro invited you to Ana’s Board game night, Thu 20 Nov 19:00. Reply here: ${LINK}`,
+  );
+  assert.equal(
+    inviteMessage({ host: "Ana", title: "Board game night", when: "Thu 20 Nov 19:00", link: LINK }),
+    `Ana invited you to Board game night, Thu 20 Nov 19:00. Reply here: ${LINK}`,
+  );
+});
+
+test("canPick: under the limit, a replacement, or no limit", () => {
+  assert.equal(canPick(3, 3, false), false);
+  assert.equal(canPick(3, 3, true), true);
+  assert.equal(canPick(2, 3, false), true);
+  assert.equal(canPick(9, undefined, false), true);
+  assert.equal(canPick(1, 0, false), false);
+  assert.equal(canPick(0, 0, false), false);
+});
+
+const [ben, ben2, cy] = contactNumbers(
+  [
+    { fullName: "Ben Ito", phones: [{ number: "+44 7700 900456" }, { number: "+44 7700 900457" }] },
+    { fullName: "Cy Okafor", phones: [{ number: "+44 7700 900789" }] },
+  ],
+  "GB",
+).numbers;
+const picks = (...numbers: ContactNumber[]) => Object.fromEntries(numbers.map((n) => [n.contact, n]));
+
+test("the cap on numbers: at the limit a new contact isn't picked; clearing and switching a contact's number still work", () => {
+  assert.equal(ben.contact, ben2.contact, "two numbers of one contact");
+  const one = picks(ben);
+  // Bring mode with one invite left: Ben is picked, so Cy can't be.
+  assert.equal(pickToggled(one, cy, 0, 1), one, "the same object: nothing changes");
+  assert.equal(pickChosen(one, cy, 0, 1), one);
+  // Ben's other number replaces his first: no extra invite.
+  assert.deepEqual(pickToggled(one, ben2, 0, 1), picks(ben2));
+  assert.deepEqual(pickChosen(one, ben2, 0, 1), picks(ben2));
+  // Tapping Ben's picked number clears it, whatever the cap.
+  assert.deepEqual(pickToggled(one, ben, 0, 1), {});
+  assert.deepEqual(pickToggled({}, cy, 0, 1), picks(cy));
+  // No limit (a host): as before.
+  assert.deepEqual(pickToggled(one, cy, 5, undefined), picks(ben, cy));
+  assert.deepEqual(pickChosen(one, cy, 5, undefined), picks(ben, cy));
+});
+
+test("the cap counts numbers and connections together (inviteCount)", () => {
+  // One connection picked, one invite: no number can be picked.
+  assert.deepEqual(pickToggled({}, cy, 1, 1), {});
+  const none = {};
+  assert.equal(pickChosen(none, cy, 1, 1), none);
+  assert.deepEqual(pickToggled({}, cy, 1, 2), picks(cy));
+  // One number picked, one invite: no connection can be picked; one can be cleared.
+  const chosen = new Set<string>();
+  assert.equal(userToggled(chosen, "u-marta", new Set(), 1, 1), chosen);
+  assert.deepEqual([...userToggled(new Set(["u-marta"]), "u-marta", new Set(), 1, 1)], []);
+  assert.deepEqual([...userToggled(new Set(["u-marta"]), "u-sofia", new Set(), 0, 2)], ["u-marta", "u-sofia"]);
+  assert.deepEqual([...userToggled(new Set(["u-marta"]), "u-sofia", new Set(), 1, 2)], ["u-marta"]);
+  // A chosen connection already on the resbite isn't invited, so it isn't counted.
+  assert.deepEqual([...userToggled(new Set(["u-lucas"]), "u-sofia", new Set(["u-lucas"]), 0, 1)], ["u-lucas", "u-sofia"]);
+  // Someone on the resbite can't be picked, cap or not.
+  const empty = new Set<string>();
+  assert.equal(userToggled(empty, "u-lucas", new Set(["u-lucas"]), 0, undefined), empty);
+  assert.deepEqual([...userToggled(new Set(["u-marta", "u-sofia"]), "u-ines", new Set(), 4, undefined)], ["u-marta", "u-sofia", "u-ines"]);
+});
+
+test("the four pick functions of useContactInvites go through the cap helpers, and invite() is unchanged", () => {
+  const source = readFileSync(new URL("../state/useContactInvites.ts", import.meta.url), "utf8");
+  const body = (name: string) => {
+    const start = source.indexOf(`function ${name}(`);
+    assert.ok(start >= 0, `${name} is defined`);
+    return source.slice(start, source.indexOf("\n  }\n", start));
+  };
+  assert.match(body("toggle"), /pickToggled\(old, n, usersCount, limit\)/);
+  assert.match(body("choose"), /pickChosen\(old, n, usersCount, limit\)/);
+  assert.match(body("addNumber"), /pickChosen\(old, n, usersCount, limit\)/);
+  assert.match(body("toggleUser"), /userToggled\(old, userId, invitedUsers, numbersCount, limit\)/);
+  assert.doesNotMatch(body("invite"), /limit|canPick/);
+});
+
+test("the personal link's message: a host's own name, or a bringer's first name and the organizer's", () => {
+  const at = { title: "Board game night", when: "Thu 20 Nov 19:00" };
+  assert.deepEqual(messageFor({ own: "Marcos Buratovich", ...at }), { host: "Marcos Buratovich", ...at });
+  assert.deepEqual(messageFor({ own: null, ...at }), { host: INVITE_COPY.hostFallback, ...at });
+  assert.deepEqual(messageFor({ own: "  Pedro Gómez ", organizer: "Ana", ...at }), { inviter: "Pedro", host: "Ana", ...at });
+  // Without their own name, a bringer's message says "You’re invited" (C20), never "Ana invited you" or "Your host".
+  assert.deepEqual(messageFor({ own: null, organizer: "Ana", ...at }), { inviter: "", host: "Ana", ...at });
+  assert.deepEqual(messageFor({ own: "   ", organizer: "Ana", ...at }), { inviter: "", host: "Ana", ...at });
+  // Without the organizer's, no possessive (C20); the organizer is named by first name.
+  assert.deepEqual(messageFor({ own: "Pedro Pérez", organizer: null, ...at }), { inviter: "Pedro", host: "", ...at });
+  assert.deepEqual(messageFor({ own: "Pedro Pérez", organizer: "Ana María López", ...at }), { inviter: "Pedro", host: "Ana", ...at });
+  assert.equal(
+    inviteMessage({ ...messageFor({ own: "Pedro Gómez", organizer: "Ana", ...at }), link: LINK }),
+    `Pedro invited you to Ana’s Board game night, Thu 20 Nov 19:00. Reply here: ${LINK}`,
+  );
+});
+
+test("Send again (useResend) words a bringer's message with the organizer it is given, and a host's as before", () => {
+  const source = readFileSync(new URL("../state/useResend.ts", import.meta.url), "utf8");
+  // The organizer may be unknown (null): the message then has no possessive.
+  assert.match(source, /bringing\?: \{ organizer: string \| null \}/);
+  // The sender's name comes from the session's profile first (C23), read only when that has none.
+  assert.match(source, /account\.displayName \?\?/);
+  assert.match(source, /message: messageFor\(\{ own, organizer: bringing\?\.organizer,/);
+  assert.doesNotMatch(source, /host: host \?\? INVITE_COPY\.hostFallback/);
+});
+
+test("a bringer's message without a name: 'You’re invited to Ana’s …'; without the organizer's, no possessive (C20)", () => {
+  const at = { title: "Board game night", when: "Thu 20 Nov 19:00", link: LINK };
+  assert.equal(inviteMessage({ inviter: "", host: "Ana", ...at }), `You’re invited to Ana’s Board game night, Thu 20 Nov 19:00. Reply here: ${LINK}`);
+  assert.equal(inviteMessage({ inviter: "Pedro", host: "", ...at }), `Pedro invited you to Board game night, Thu 20 Nov 19:00. Reply here: ${LINK}`);
+  assert.equal(inviteMessage({ inviter: "", host: "", ...at }), `You’re invited to Board game night, Thu 20 Nov 19:00. Reply here: ${LINK}`);
+  assert.equal(
+    inviteMessage({ ...messageFor({ own: null, organizer: null, title: "Board game night", when: "Thu 20 Nov 19:00" }), link: LINK }),
+    `You’re invited to Board game night, Thu 20 Nov 19:00. Reply here: ${LINK}`,
+  );
+  // A host's message is as before, "Your host" included.
+  assert.equal(
+    inviteMessage({ ...messageFor({ own: null, title: "Board game night", when: "Thu 20 Nov 19:00" }), link: LINK }),
+    `Your host invited you to Board game night, Thu 20 Nov 19:00. Reply here: ${LINK}`,
+  );
+});
+
+test("overCap: more picked than the invites left (the allowance dropped after they were picked)", () => {
+  assert.equal(overCap(3, 1), true);
+  assert.equal(overCap(1, 0), true);
+  assert.equal(overCap(1, 1), false);
+  assert.equal(overCap(0, 1), false);
+  assert.equal(overCap(9, undefined), false);
+});
+
+test("the pickers at the cap: Invite waits past it, Add is off at it, a number added there says why, capped rows say why (C20, C23)", () => {
+  const hook = readFileSync(new URL("../state/useContactInvites.ts", import.meta.url), "utf8");
+  assert.match(hook, /const overCapped = overCap\(inviteCount, limit\);/);
+  const add = hook.slice(hook.indexOf("function addNumber("), hook.indexOf("\n  }\n", hook.indexOf("function addNumber(")));
+  // Checked before the number is listed, so a refused number stays in the fields with the line.
+  assert.ok(add.indexOf("return CIRCLE_COPY.cantAddMore;") >= 0 && add.indexOf("return CIRCLE_COPY.cantAddMore;") < add.indexOf("setManual("));
+  const picker = readFileSync(new URL("../design/ContactPicker.tsx", import.meta.url), "utf8");
+  assert.match(picker, /disabled=\{k\.inviteCount === 0 \|\| k\.overCap \|\| k\.busy \|\| previewing\}/);
+  assert.match(picker, /disabled=\{!number\.trim\(\) \|\| k\.atCap\}/);
+  assert.match(picker, /accessibilityHint=\{disabled \? CIRCLE_COPY\.cappedHint : T\.rowHint\}/);
+  const connections = readFileSync(new URL("../design/ConnectionsPicker.tsx", import.meta.url), "utf8");
+  assert.match(connections, /accessibilityHint=\{capped \? CIRCLE_COPY\.cappedHint : undefined\}/);
 });

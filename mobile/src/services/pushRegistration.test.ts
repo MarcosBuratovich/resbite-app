@@ -212,6 +212,9 @@ test("tap rejects arbitrary routes and only resolves fresh authorized account re
     /changed/,
   );
 });
+test("a report push has no plan, so it parses to no target", () => {
+  assert.equal(parseNotificationTarget({ type: "report", notificationId: "7" }), null);
+});
 test("a connection target parses with its kind; a plan target carries kind plan; unknown types fail", () => {
   const planId = "20000000-0000-4000-8000-000000000001";
   assert.deepEqual(parseNotificationTarget({ type: "connection", planId, notificationId: "7" }), {
@@ -226,4 +229,26 @@ test("a connection target parses with its kind; a plan target carries kind plan;
   });
   assert.equal(parseNotificationTarget({ type: "other", planId, notificationId: "7" }), null);
   assert.equal(parseNotificationTarget({ type: "connection", planId: "x", notificationId: "7" }), null);
+});
+test("a chat push parses with its series (Task 4's payload); a chat key on another type, or a bad series, fails", () => {
+  const planId = "20000000-0000-4000-8000-000000000001";
+  const seriesId = "3a000000-0000-4000-8000-00000000000b";
+  const chat = { type: "chat", seriesId, planId, notificationId: "7" };
+  assert.deepEqual(parseNotificationTarget(chat), { kind: "chat", seriesId, planId, notificationId: "7" });
+  // Every key is required, nothing else is allowed, and the series is a lowercase uuid as the server writes it (K-N14).
+  for (const bad of [
+    { ...chat, seriesId: undefined },
+    { type: "chat", planId, notificationId: "7" },
+    { ...chat, seriesId: "../profile" },
+    { ...chat, seriesId: seriesId.toUpperCase() },
+    { ...chat, seriesId: 7 },
+    { ...chat, planId: "x" },
+    { ...chat, notificationId: "0" },
+    { ...chat, url: "https://evil.invalid" },
+    { ...chat, body: "Leo: hi" },
+  ])
+    assert.equal(parseNotificationTarget(bad), null, JSON.stringify(bad));
+  // seriesId belongs to a chat push only.
+  assert.equal(parseNotificationTarget({ type: "plan_update", seriesId, planId, notificationId: "7" }), null);
+  assert.equal(parseNotificationTarget({ type: "connection", seriesId, planId, notificationId: "7" }), null);
 });

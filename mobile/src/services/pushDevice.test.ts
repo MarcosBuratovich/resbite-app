@@ -5,6 +5,7 @@ import {
   createPushDeviceAdapter,
   createPushSession,
   createSessionTokens,
+  dismissShownPushes,
   isServerAnswer,
   pushEnabled,
   pushRpc,
@@ -118,6 +119,8 @@ function phone(options: { platform?: string; enabled?: boolean } = {}) {
     },
     clearRecentPlaces: async () => {},
     clearInviteCodes: async () => {},
+    clearChatQueue: async () => {},
+    clearKnownNames: () => {},
     clearReminders: async () => {},
     clearCalendarRecords: async () => {},
     clearPhoto: async () => {},
@@ -574,4 +577,28 @@ test("the RPC client tells a server answer from a request that never got one", a
     (e: unknown) => e,
   );
   assert.ok(offline instanceof TypeError && !isServerAnswer(offline));
+});
+
+test("sign-out's dismissal clears every push the sender sets (a plan update, a chat message, a connection) and leaves a reminder alone (H39)", async () => {
+  const PLAN = "123e4567-e89b-42d3-a456-426614174000";
+  const SERIES = "0b000000-0000-4000-8000-000000000001";
+  const shown = (identifier: string, data: Record<string, unknown> | null) => ({ request: { identifier, content: { data } } });
+  const tray = [
+    shown("remote-plan", { type: "plan_update", planId: PLAN, notificationId: "7" }),
+    // A chat push carries a person's words: the next account on the phone must not see them.
+    shown("remote-chat", { type: "chat", seriesId: SERIES, planId: PLAN, notificationId: "8" }),
+    shown("remote-connection", { type: "connection", planId: PLAN, notificationId: "9" }),
+    // A moderator's push leaves with the account too.
+    shown("remote-report", { type: "report", notificationId: "7" }),
+    // Reminders go with clearReminders, on their own schedule; anything else isn't the sender's.
+    shown("resbite-reminder:p1:1h", { planId: PLAN, at: 1 }),
+    shown("remote-other", { type: "other" }),
+    shown("remote-bare", null),
+  ];
+  const dismissed: string[] = [];
+  await dismissShownPushes({
+    getPresentedNotificationsAsync: async () => tray,
+    dismissNotificationAsync: async (id) => void dismissed.push(id),
+  });
+  assert.deepEqual(dismissed, ["remote-plan", "remote-chat", "remote-connection", "remote-report"]);
 });

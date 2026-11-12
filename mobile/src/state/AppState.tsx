@@ -18,6 +18,8 @@ import { planCoverStore } from "../services/planCovers";
 import { peopleStore } from "../services/people";
 import { recentPlaces } from "../services/recentPlaces";
 import { inviteCodeStore } from "../services/inviteCodeStore";
+import { chatQueue } from "../services/chatQueue";
+import { forgetNames } from "./knownNames";
 import { clearReminders } from "../services/deviceReminders";
 import { clearCalendarRecords } from "../services/deviceCalendar";
 import { clearAttestation } from "../services/phoneAccount";
@@ -115,14 +117,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       suspend: (scope) => {
         peopleStore.suspend(scope);
         inviteCodeStore.suspend(scope);
+        chatQueue.suspend(scope);
       },
       resume: (scope) => {
         peopleStore.resume(scope);
         inviteCodeStore.resume(scope);
+        chatQueue.resume(scope);
       },
       clearPeople: peopleStore.clear,
       clearRecentPlaces: (scope) => recentPlaces.clear(scope),
       clearInviteCodes: (scope) => inviteCodeStore.clear(scope),
+      clearChatQueue: (scope) => chatQueue.clear(scope),
+      clearKnownNames: forgetNames,
       clearReminders,
       clearCalendarRecords,
       clearPhoto: (scope) => profilePhotoStore.clear(scope),

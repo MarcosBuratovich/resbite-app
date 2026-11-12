@@ -99,6 +99,7 @@ function lifecycleHarness() {
     events: string[] = [],
     places: string[] = [],
     invites: string[] = [],
+    chats: string[] = [],
     device: string[] = [];
   let auth = async () => {
       events.push("auth");
@@ -126,6 +127,12 @@ function lifecycleHarness() {
     clearInviteCodes: async (scope) => {
       invites.push(scope);
     },
+    clearChatQueue: async (scope) => {
+      chats.push(scope);
+    },
+    clearKnownNames: (scope) => {
+      events.push(`names:${scope}`);
+    },
     clearCovers: async (scope) => {
       events.push(`covers:${scope}`);
     },
@@ -152,6 +159,7 @@ function lifecycleHarness() {
     events,
     places,
     invites,
+    chats,
     device,
     setAuth: (fn: () => Promise<void>) => {
       auth = fn;
@@ -208,6 +216,63 @@ test("sign-out clears cover journals for the account after the photo; preview do
   await p.life.signOut();
   assert(!p.events.some((e) => e.startsWith("covers")));
 });
+test("sign-out forgets the names this account read, before auth sign-out; preview has none to forget (C25)", async () => {
+  const h = lifecycleHarness();
+  h.life.update({ account: "owner", preview: false });
+  await h.life.signOut();
+  const names = h.events.indexOf("names:owner");
+  assert(names >= 0, "names forgotten");
+  assert(names < h.events.indexOf("auth"));
+  const p = lifecycleHarness();
+  p.life.update({ account: "owner", preview: true });
+  await p.life.signOut();
+  assert(!p.events.some((e) => e.startsWith("names")));
+});
+test("the names are forgotten first in the account's cleanup, so a step that fails after it still leaves them forgotten", async () => {
+  const h = lifecycleHarness();
+  h.life.update({ account: "owner", preview: false });
+  await h.life.signOut();
+  assert.deepEqual(h.events.slice(0, 4), ["block", "busy:true", "names:owner", "clear:owner"], "first, before the people clear");
+  const quiet = async () => {};
+  const failing = (step: "people" | "journal") => {
+    const calls: string[] = [];
+    const life = createSessionLifecycle({
+      suspend: () => {},
+      resume: () => {},
+      clearPeople: async () => {
+        calls.push("people");
+        if (step === "people") throw Error("disk");
+      },
+      clearRecentPlaces: quiet,
+      clearReminders: quiet,
+      clearCalendarRecords: quiet,
+      clearPhoto: quiet,
+      clearInviteCodes: quiet,
+      clearChatQueue: quiet,
+      clearKnownNames: (scope) => {
+        calls.push(`names:${scope}`);
+      },
+      clearCovers: quiet,
+      blockPending: () => () => {},
+      clearPending: quiet,
+      authSignOut: async () => {
+        calls.push("auth");
+      },
+      finish: () => {},
+      busy: () => {},
+    });
+    life.update({ account: "owner", preview: false });
+    return { life, calls };
+  };
+  // The first clear fails: sign-out fails before auth sign-out, and the names are already gone.
+  const people = failing("people");
+  await assert.rejects(people.life.signOut(), /disk/);
+  assert.deepEqual(people.calls, ["names:owner", "people"]);
+  // Deleting the account with no journal cleanup throws at its first step: the names are gone all the same.
+  const journal = failing("journal");
+  await assert.rejects(journal.life.finishAccountDeletion("owner"), /Journal cleanup is unavailable/);
+  assert.deepEqual(journal.calls, ["names:owner"]);
+});
 test("a failed cover clear fails sign-out before auth sign-out", async () => {
   const events: string[] = [];
   const life = createSessionLifecycle({
@@ -219,6 +284,8 @@ test("a failed cover clear fails sign-out before auth sign-out", async () => {
     clearCalendarRecords: async () => {},
     clearPhoto: async () => {},
     clearInviteCodes: async () => {},
+    clearChatQueue: async () => {},
+    clearKnownNames: () => {},
     clearCovers: async () => {
       throw Error("disk");
     },
@@ -343,6 +410,8 @@ test("a failed recent-places clear fails sign-out before auth sign-out", async (
       events.push("photo");
     },
     clearInviteCodes: async () => {},
+    clearChatQueue: async () => {},
+    clearKnownNames: () => {},
     clearCovers: async () => {},
     blockPending: () => () => {},
     clearPending: async () => {},
@@ -385,6 +454,8 @@ test("a failed reminder or calendar clear fails sign-out before auth sign-out", 
         events.push("photo");
       },
       clearInviteCodes: async () => {},
+      clearChatQueue: async () => {},
+      clearKnownNames: () => {},
       clearCovers: async () => {},
       blockPending: () => () => {},
       clearPending: async () => {},
@@ -416,6 +487,8 @@ test("a push cleanup failure refuses sign-out first, with its own notice; other 
     clearCalendarRecords: async () => {},
     clearPhoto: async () => {},
     clearInviteCodes: async () => {},
+    clearChatQueue: async () => {},
+    clearKnownNames: () => {},
     clearCovers: async () => {},
     blockPending: () => () => {},
     clearPending: async () => {},
@@ -457,6 +530,8 @@ test("sign-out dismisses the pushes still shown, after removing the endpoint and
     shown("remote-2", { type: "other" }),
     shown("remote-3", { type: "plan_update", planId: PLAN, notificationId: "8" }),
     shown("remote-4", null),
+    shown("remote-5", { type: "chat", seriesId: "0b000000-0000-4000-8000-000000000001", planId: PLAN, notificationId: "9" }),
+    shown("remote-6", { type: "connection", planId: PLAN, notificationId: "10" }),
   ];
   function signOutWith(notifications: (events: string[]) => ShownNotifications, preview = false, waitMs?: number) {
     const events: string[] = [];
@@ -471,6 +546,8 @@ test("sign-out dismisses the pushes still shown, after removing the endpoint and
       clearCalendarRecords: async () => {},
       clearPhoto: async () => {},
       clearInviteCodes: async () => {},
+      clearChatQueue: async () => {},
+      clearKnownNames: () => {},
       clearCovers: async () => {},
       blockPending: () => () => {},
       clearPending: async () => {},
@@ -499,17 +576,12 @@ test("sign-out dismisses the pushes still shown, after removing the endpoint and
         if (id === options.failOn) throw Error("busy");
       },
     });
-  // Only the sender's pushes ("plan_update") go; reminders are cleared with the reminders, the rest is left.
-  assert.deepEqual(await signOutWith(fake()), ["push", "reminders", "dismiss:remote-1", "dismiss:remote-3", "auth", "finish"]);
+  // Only the sender's pushes ("plan_update", "chat", "connection") go; reminders are cleared with the reminders, the
+  // rest is left (H39).
+  const theSenders = ["dismiss:remote-1", "dismiss:remote-3", "dismiss:remote-5", "dismiss:remote-6"];
+  assert.deepEqual(await signOutWith(fake()), ["push", "reminders", ...theSenders, "auth", "finish"]);
   // One that can't be dismissed doesn't stop the others, nor sign-out.
-  assert.deepEqual(await signOutWith(fake({ failOn: "remote-1" })), [
-    "push",
-    "reminders",
-    "dismiss:remote-1",
-    "dismiss:remote-3",
-    "auth",
-    "finish",
-  ]);
+  assert.deepEqual(await signOutWith(fake({ failOn: "remote-1" })), ["push", "reminders", ...theSenders, "auth", "finish"]);
   // The tray can't be read, or never answers: sign-out goes ahead anyway.
   const unreadable = fake({ list: async () => Promise.reject(Error("unavailable")) });
   assert.deepEqual(await signOutWith(unreadable), ["push", "reminders", "auth", "finish"]);
@@ -522,4 +594,78 @@ test("sign-out dismisses the pushes still shown, after removing the endpoint and
   assert.deepEqual(await signOutWith(throwing), ["push", "reminders", "auth", "finish"]);
   // Leaving preview signs nobody out and touches no notification.
   assert.deepEqual(await signOutWith(fake(), true), ["reminders", "finish"]);
+});
+
+function orderedLifecycle(preview: boolean, failChat = false) {
+  const calls: string[] = [];
+  const step = (name: string) => async (scope: string) => {
+    calls.push(`${name}:${scope}`);
+    if (failChat && name === "chat") throw Error("disk");
+  };
+  const life = createSessionLifecycle({
+    suspend: () => {},
+    resume: () => {},
+    clearPeople: step("people"),
+    clearRecentPlaces: step("places"),
+    clearInviteCodes: step("invites"),
+    clearChatQueue: step("chat"),
+    clearKnownNames: (scope) => {
+      calls.push(`names:${scope}`);
+    },
+    clearReminders: step("reminders"),
+    clearCalendarRecords: step("calendar"),
+    clearPhoto: step("photo"),
+    clearCovers: step("covers"),
+    clearJournal: step("journal"),
+    blockPending: () => () => {},
+    clearPending: async () => {
+      calls.push("pending");
+    },
+    authSignOut: async () => {
+      calls.push("auth");
+    },
+    finish: () => {
+      calls.push("finish");
+    },
+    busy: () => {},
+  });
+  life.update({ account: "owner", preview });
+  return { life, calls };
+}
+test("sign-out and account deletion clear the unsent chat messages right after the invitation codes (K-S7)", async () => {
+  const signOut = orderedLifecycle(false);
+  await signOut.life.signOut();
+  assert.deepEqual(signOut.calls, [
+    "names:owner",
+    "people:owner",
+    "places:owner",
+    "invites:owner",
+    "chat:owner",
+    "reminders:owner",
+    "calendar:owner",
+    "photo:owner",
+    "covers:owner",
+    "pending",
+    "auth",
+    "finish",
+  ]);
+  const deletion = orderedLifecycle(false);
+  await deletion.life.finishAccountDeletion("owner");
+  assert.deepEqual(deletion.calls.slice(0, 6), [
+    "names:owner",
+    "journal:owner",
+    "people:owner",
+    "places:owner",
+    "invites:owner",
+    "chat:owner",
+  ]);
+  assert(deletion.calls.includes("auth"));
+  const preview = orderedLifecycle(true);
+  await preview.life.signOut();
+  assert.equal(preview.calls.indexOf("chat:preview"), preview.calls.indexOf("invites:preview") + 1);
+});
+test("a failed chat queue clear fails sign-out before auth sign-out", async () => {
+  const h = orderedLifecycle(false, true);
+  await assert.rejects(h.life.signOut(), /disk/);
+  assert.deepEqual(h.calls, ["names:owner", "people:owner", "places:owner", "invites:owner", "chat:owner"]);
 });

@@ -1,6 +1,7 @@
 import { errorField, passThrough, planDeadline, type Deadline, type Rpc } from "./contactInvites";
 import { CONNECTIONS_COPY } from "../domain/connectionsCopy";
 import { INVITE_COPY } from "../domain/inviteCopy";
+import { SAFETY_COPY } from "../domain/safetyCopy";
 
 export type ConnectionState = "none" | "requested_by_me" | "requested_by_them" | "connected";
 
@@ -11,9 +12,16 @@ export type ConnectionPerson = {
   avatarRevision: number;
   seriesId: string | null;
   title: string | null;
-  /** On a request only: how the two met. */
-  context?: "going" | "met";
+  /** On a request only: how the two stand on its resbite (as its push says). */
+  context?: RequestContext;
 };
+
+/**
+ * Going or invited on a resbite still to end; at it, or invited to it, once it has ended. 'from' when the server can't
+ * say: one of the two isn't on the resbite the card names, or the person reading hasn't answered it.
+ */
+export type RequestContext = "going" | "invited" | "met" | "were_invited" | "from";
+const CONTEXTS: readonly string[] = ["going", "invited", "met", "were_invited", "from"];
 
 export type MyConnections = { requests: ConnectionPerson[]; connected: ConnectionPerson[] };
 
@@ -34,7 +42,7 @@ type Row = {
   avatar_revision: number;
   series_id: string | null;
   title: string | null;
-  context?: "going" | "met";
+  context?: string;
 };
 
 function person(row: Row): ConnectionPerson {
@@ -46,7 +54,8 @@ function person(row: Row): ConnectionPerson {
     seriesId: row.series_id,
     title: row.title,
   };
-  if (row.context) p.context = row.context;
+  // A context this app doesn't know yet reads as met there.
+  if (row.context) p.context = CONTEXTS.includes(row.context) ? (row.context as RequestContext) : "met";
   return p;
 }
 
@@ -79,13 +88,18 @@ export const connectionGateway = createConnectionGateway(
   planDeadline,
 );
 
-/** Why a connection call was refused, in words; anything else, a lost connection included, keeps the connection line. */
+/**
+ * Why a connection call was refused, in words; anything else, a lost connection included, keeps the connection line. A
+ * Connect to someone the reader blocked (on another phone, so this one's list was stale) is refused 22023 'Unblock
+ * first' (plan 3, confirmation NOTE 5).
+ */
 export function connectionErrorMessage(e: unknown): string {
   const code = errorField(e, "code");
   const message = errorField(e, "message");
   if (code === "42501" && message === "Names required") return CONNECTIONS_COPY.namesFirst;
   if (code === "42501" && message === "Not on this resbite") return CONNECTIONS_COPY.notHere;
   if (code === "42501" && message === "Not a connection") return CONNECTIONS_COPY.failed;
+  if (code === "22023" && message === "Unblock first") return SAFETY_COPY.unblockFirst;
   if (code === "22023") return CONNECTIONS_COPY.failed;
   return INVITE_COPY.offline;
 }

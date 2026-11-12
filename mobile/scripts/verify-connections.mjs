@@ -6,29 +6,40 @@
 //              Met on Resbite), the footer line; Accept sends accept_connection { p_user } and moves the person under
 //              Connected · 3; the dots → Remove connection → the in-place confirm: Keep goes back, Remove sends
 //              remove_connection { p_user } and the row goes; Back returns to Profile, whose badge has gone
-//   decline    under Larger Text the two pills stack; a failed Accept keeps the card and says why; Not now sends
-//              decline_connection { p_user } and removes the card; Accept on a request withdrawn meanwhile (42501 'No
-//              request') says nothing and reads the list again, so the card goes
+//   decline    under Larger Text the two pills stack; a failed Accept keeps the card and says why in it; Not now
+//              sends decline_connection { p_user } and removes the card; Accept on a request withdrawn meanwhile (42501
+//              'No request') says nothing and reads the list again, so the card goes
+//   refresh    a read that fails keeps the list, with why and Try again above it; a refresh failing under a sheet
+//              says nothing in the sheet, and opening or closing a sheet leaves the line; Try again shows busy in place
+//              (nothing moves) and the line goes when a read succeeds; request cards say "You're both invited to …"
+//              and "You were both invited to …"; Profile's row keeps its chevron beside "99+" at 320 px, Larger Text
 //   edges      the empty state (no footer line); a failed read offers Try again
 //   invite     Invite people as the host: Your connections · 3 above Phone contacts, alphabetical, Lucas (on the
 //              resbite) "Invited" without a tick, the event link's hint; ticking Marta makes Invite 1, which sends
 //              invite_contacts { p_plan, p_invites: [{ user }] } and Almost there names her
 //   mixed      a number and two connections: the number's call first, then the connections' own; one of them refused
 //              (42501 'Not a connection') is sent again one by one, so Marta is invited, Ben's link is offered and a
-//              line says one connection couldn't be
-//   more       nine connections bring the search field (accent-blind); the only connection picked being refused says
-//              so and stays on the Pick step; a failed read leaves the section out, with no error
+//              line says one connection couldn't be; with both refused, the line says two couldn't be
+//   more       nine connections bring the search field (accent-blind); the only connection picked being refused (asked
+//              once) says that it can't be invited and stays on the Pick step; a failed read leaves the section out,
+//              with no error
 //   people     as a guest who answered Going, on Pedro's resbite's people list: the dots on the host → Connect on
 //              Resbite sends request_connection { p_user, p_plan }; the sheet then says Request sent with Cancel
 //              request, which sends cancel_connection_request { p_user } and brings Connect back; Inés's request is
 //              accepted from her dots (accept_connection { p_user }) and her row shows Connected
+//   safety     chat plan 3 (challenge I3): a request card's dots → Report Pedro → Spam → report_user with the request's
+//              series_id as p_series (none for a request with no resbite); → Block Pedro → the confirm → block_user
+//              { p_user, p_block: true }, then my_connections again, and the card goes; a connection's dots → Block
+//              Marta after Remove connection, the same, and the row goes; a connection has no Report. Fix round 1
+//              (ruling SR6): Keep puts focus back on Block; after a block "Blocked <name>." is said and focus moves
+//              to the next card or row
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
-import { button, heading, heightOf, inOrder, quietReminders, visible } from "./qa-helpers.mjs";
+import { AUTH_STORAGE_KEY, button, heading, heightOf, inOrder, noChat, quietReminders, visible } from "./qa-helpers.mjs";
 
 const browser = await chromium.launch({ channel: process.env.RESBITE_QA_BROWSER || "chrome", headless: true });
 const base = process.env.RESBITE_QA_URL || "http://localhost:8081";
-const STORAGE_KEY = "sb-ewcsgvhuojxdpaspwsrx-auth-token";
+const STORAGE_KEY = AUTH_STORAGE_KEY;
 const ANA = "11111111-1111-4111-8111-111111111111";
 const PEDRO = "22222222-2222-4222-8222-222222222222";
 const MARTA = "33333333-3333-4333-8333-333333333333";
@@ -147,8 +158,14 @@ async function fixture({
     // How many of the next reads, or accepts, fail as a lost connection would.
     failReads: 0,
     failAccepts: 0,
+    // While true, each read is parked until released (release), answered as it would have been on arrival.
+    holdReads: false,
+    parked: [],
     guests: guests.map(({ user_id, name, response = "pending" }) => ({ user_id, response, profiles: { display_name: name } })),
     pairs: { ...pairs },
+    // Chat plan 3: the people Ana blocked. As the server does, my_connections leaves them out (a block ends any
+    // connection and any request between the two, G-B1).
+    blocked: [],
   };
   const log = [],
     errors = [],
@@ -192,6 +209,20 @@ async function fixture({
       assert.equal(body.p_plan, plan.id);
       return reply(state.pairs);
     }
+    // A guest who has answered reads the links they sent bringing someone (circles of trust); Ana brought nobody.
+    if (plan && path === "/rest/v1/rpc/plan_phone_invitations") {
+      assert.equal(body.p_plan, plan.id);
+      return reply([]);
+    }
+    // The chain on the people list (circles of trust): nobody here was brought, and no guest sent a link.
+    if (plan && path === "/rest/v1/rpc/plan_bringers") {
+      assert.equal(body.p_plan, plan.id);
+      return reply({});
+    }
+    if (plan && path === "/rest/v1/rpc/plan_brought_invitations") {
+      assert.equal(body.p_plan, plan.id);
+      return reply([]);
+    }
     if (plan && path === "/rest/v1/rpc/request_connection") {
       assert.equal(body.p_plan, plan.id);
       state.pairs[body.p_user] = "requested_by_me";
@@ -219,12 +250,26 @@ async function fixture({
       );
     }
     if (path === "/rest/v1/rpc/my_join_requests") return reply([]);
-    if (path === "/rest/v1/rpc/my_connections") {
-      if (state.failReads > 0) {
-        state.failReads--;
-        return lost();
+    // Chat plan 3: Ana's blocks, block and unblock, and reporting a person.
+    if (path === "/rest/v1/rpc/my_blocks") return reply(state.blocked.map((id) => ({ user_id: id, name: null, at: "2099-02-01T10:00:00Z" })));
+    if (path === "/rest/v1/rpc/block_user") {
+      state.blocked = state.blocked.filter((id) => id !== body.p_user);
+      if (body.p_block) {
+        state.blocked.unshift(body.p_user);
+        state.requests = state.requests.filter((r) => r.user_id !== body.p_user);
+        state.connected = state.connected.filter((r) => r.user_id !== body.p_user);
+        delete state.pairs[body.p_user];
       }
-      return reply({ requests: state.requests, connected: state.connected });
+      // `stored` (server review M7): a block row exists afterwards for a block, none for an unblock.
+      return reply(body.p_block === true);
+    }
+    if (path === "/rest/v1/rpc/report_user") return empty();
+    if (path === "/rest/v1/rpc/my_connections") {
+      const fail = state.failReads > 0;
+      if (fail) state.failReads--;
+      const answer = () => (fail ? lost() : reply({ requests: state.requests, connected: state.connected }));
+      if (state.holdReads) return void state.parked.push(answer);
+      return answer();
     }
     if (path === "/rest/v1/rpc/accept_connection") {
       if (state.failAccepts > 0) {
@@ -252,6 +297,8 @@ async function fixture({
       state.connected = state.connected.filter((p) => p.user_id !== body.p_user);
       return empty();
     }
+    // Task 8's chat reads: no Chat row, nothing unread (verify-event and review-ui cover them).
+    if (noChat(path) !== undefined) return reply(noChat(path));
     unexpected.push(`${method} ${path}`);
     return reply({ message: `Unexpected fixture request ${path}` }, 404);
   });
@@ -259,6 +306,12 @@ async function fixture({
     page,
     state,
     calls: (name) => log.filter((x) => x.method === "POST" && x.path === `/rest/v1/rpc/${name}`),
+    /** Answers the oldest held read. */
+    async release() {
+      const answer = state.parked.shift();
+      assert.ok(answer, "a read is held");
+      await answer();
+    },
     async done() {
       assert.deepEqual(unexpected, [], "every request was one the fixture expects");
       assert.deepEqual(errors, [], "no page or console errors");
@@ -268,9 +321,23 @@ async function fixture({
 }
 
 const connectionsRow = (page, label) => page.getByRole("button", { name: label, exact: true });
+/** The element that has focus now: its text, or its spoken name. */
+const focusedText = (page) => page.evaluate(() => document.activeElement?.textContent ?? null);
+const focusedLabel = (page) => page.evaluate(() => document.activeElement?.getAttribute("aria-label") ?? null);
 const tick = (page, name) => visible(page.getByRole("checkbox", { name: `Select ${name}`, exact: true }));
 const text = (page, words) => visible(page.getByText(words, { exact: true }));
-const REFUSED = "One of your connections can't be invited right now. The others were.";
+const REFUSED = "One connection you picked can't be invited right now. The others were invited.";
+const OFFLINE = "Check your connection and try again.";
+/** Puts the app in the background and brings it back: RN-web's AppState follows document.visibilityState. */
+async function foreground(page) {
+  await page.evaluate(() => {
+    const set = (v) => Object.defineProperty(document, "visibilityState", { configurable: true, get: () => v });
+    set("hidden");
+    document.dispatchEvent(new Event("visibilitychange"));
+    set("visible");
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+}
 
 try {
   // 1. Profile: Connections sits above People lists with the count of pending requests; the old name is gone.
@@ -306,8 +373,10 @@ try {
       await inOrder(page, [heading(page, "Requests · 1"), visible(page.getByText("Pedro", { exact: true })), heading(page, "Connected · 2")]),
       "the requests come first",
     );
-    // A request has no dots; the pills are labelled with the person and sit side by side, each 44 pt or taller.
-    await expect(button(page, "Actions for Pedro")).toHaveCount(0);
+    // A request card's dots hold Report and Block (plan 3, I3); the pills are labelled with the person and sit side by
+    // side, each 44 pt or taller.
+    await expect(button(page, "Actions for Pedro")).toBeVisible();
+    assert.ok((await heightOf(button(page, "Actions for Pedro"))) >= 44, "the card's dots are a 44 pt target");
     const accept = button(page, "Accept Pedro's request"),
       notNow = button(page, "Not now, Pedro's request");
     await expect(accept).toBeVisible();
@@ -383,6 +452,11 @@ try {
 
     await accept.click();
     await expect(visible(page.getByText("Check your connection and try again.", { exact: true }))).toBeVisible();
+    assert.ok(
+      await inOrder(page, [notNow, text(page, OFFLINE), button(page, "Accept Pedro's request")]),
+      "why sits in Inés's card, under its pills",
+    );
+    await expect(button(page, "Try again")).toHaveCount(0);
     await expect(heading(page, "Requests · 2")).toBeVisible();
     await expect(heading(page, "Connected · 1")).toBeVisible();
     assert.deepEqual(f.calls("accept_connection").map((x) => x.body), [{ p_user: INES }]);
@@ -412,6 +486,120 @@ try {
   }
   console.log("PASS: under Larger Text the pills stack; a failed Accept keeps the card; Not now declines; a withdrawn request goes quietly.");
 
+  // A refresh that fails keeps the list, with why and Try again above it: Pedro withdrew his request, so Accept reads
+  // the list again, and that read fails.
+  {
+    const f = await fixture({ requests: [pedro], connected: [marta] }),
+      { page } = f;
+    await page.goto(`${base}/connections`);
+    await expect(heading(page, "Requests · 1")).toBeVisible();
+    f.state.requests = [];
+    f.state.failReads = 1;
+    await button(page, "Accept Pedro's request").click();
+    const why = text(page, OFFLINE);
+    await expect(why).toBeVisible();
+    assert.equal(f.calls("my_connections").length, 2, "the list was read again");
+    await expect(heading(page, "Requests · 1")).toBeVisible();
+    await expect(button(page, "Accept Pedro's request")).toBeVisible();
+    await expect(heading(page, "Connected · 1")).toBeVisible();
+    await expect(button(page, "Actions for Marta")).toBeVisible();
+    assert.ok(
+      await inOrder(page, [
+        why,
+        button(page, "Try again"),
+        heading(page, "Requests · 1"),
+        heading(page, "Connected · 1"),
+      ]),
+      "why and Try again sit above the kept list",
+    );
+    await expect(visible(page.getByRole("alert"))).toHaveCount(1);
+    await f.done();
+  }
+  // A refresh failing while Marta's sheet is open says nothing in the sheet; the line is above the list once the
+  // sheet closes, and opening and closing a sheet leaves it. Try again shows busy where it is and nothing moves; the
+  // line goes when that read succeeds.
+  {
+    const f = await fixture({ requests: [pedro], connected: [marta] }),
+      { page } = f;
+    await page.goto(`${base}/connections`);
+    await expect(heading(page, "Connected · 1")).toBeVisible();
+    await button(page, "Actions for Marta").click();
+    await expect(button(page, "Remove connection")).toBeVisible();
+    f.state.failReads = 1;
+    const failed = page.waitForResponse((r) => new URL(r.url()).pathname === "/rest/v1/rpc/my_connections");
+    await foreground(page);
+    assert.equal((await failed).status(), 503);
+    // Once, above the list behind the sheet; not in the sheet.
+    await expect(text(page, OFFLINE)).toHaveCount(1);
+    await expect(page.getByTestId("sheet-scroll").getByText(OFFLINE, { exact: true })).toHaveCount(0);
+    await button(page, "Close sheet").click();
+    await expect(button(page, "Remove connection")).toHaveCount(0);
+    await expect(text(page, OFFLINE)).toBeVisible();
+    await button(page, "Actions for Marta").click();
+    await expect(page.getByTestId("sheet-scroll").getByText(OFFLINE, { exact: true })).toHaveCount(0);
+    await button(page, "Close sheet").click();
+    await expect(text(page, OFFLINE)).toBeVisible();
+    assert.equal(f.calls("my_connections").length, 2, "opening and closing a sheet reads nothing");
+
+    const accept = button(page, "Accept Pedro's request");
+    const before = await accept.boundingBox();
+    f.state.holdReads = true;
+    f.state.requests = [pedro, ines];
+    await button(page, "Try again").click();
+    await expect.poll(() => f.calls("my_connections").length).toBe(3);
+    await expect(button(page, "Try again")).toHaveAttribute("aria-busy", "true");
+    await expect(button(page, "Try again")).toBeDisabled();
+    await expect(text(page, OFFLINE)).toBeVisible();
+    assert.deepEqual(await accept.boundingBox(), before, "nothing moves while the retry runs");
+    f.state.holdReads = false;
+    await f.release();
+    await expect(heading(page, "Requests · 2")).toBeVisible();
+    await expect(text(page, OFFLINE)).toHaveCount(0);
+    await expect(button(page, "Try again")).toHaveCount(0);
+    await f.done();
+  }
+  // How the two stand on a request's resbite, as its push says: invited to one still to end, or invited to one ended.
+  {
+    const invited = row(INES, "Inés", "Picnic in the park", "invited");
+    const wereInvited = row(LUCAS, "Lucas", "Board game night", "were_invited");
+    const f = await fixture({ requests: [invited, wereInvited, pedro], connected: [] }),
+      { page } = f;
+    await page.goto(`${base}/connections`);
+    await expect(heading(page, "Requests · 3")).toBeVisible();
+    await expect(text(page, "You're both invited to Picnic in the park")).toBeVisible();
+    await expect(text(page, "You were both invited to Board game night")).toBeVisible();
+    await expect(text(page, "You're both going to Board game night")).toBeVisible();
+    await f.done();
+  }
+  // Profile's row at 320 px under Larger Text: "99+" and the chevron keep their size, and both stay in the row.
+  {
+    const many = Array.from({ length: 100 }, (_, i) =>
+      row(`99999999-9999-4999-8999-${String(i).padStart(12, "0")}`, `P${i}`, null, "met"),
+    );
+    const f = await fixture({ requests: many, connected: [], width: 320 }),
+      { page } = f;
+    await page.goto(`${base}/profile?largeText=1`);
+    const r = connectionsRow(page, "Connections, 100 requests");
+    await expect(r).toBeVisible();
+    await page.addStyleTag({ content: '[dir="auto"] { zoom: 1.4; }' });
+    await expect(r.getByText("99+", { exact: true })).toBeVisible();
+    const m = await r.evaluate((el) => {
+      const svgs = [...el.querySelectorAll("svg")];
+      const chevron = svgs[svgs.length - 1].getBoundingClientRect();
+      const badge = [...el.querySelectorAll("div")].find((d) => d.children.length === 0 && d.textContent === "99+");
+      const badgeRight = badge.getBoundingClientRect().right;
+      const rowRight = el.getBoundingClientRect().right;
+      return { chevron: chevron.width, left: chevron.left, right: chevron.right, badge: badgeRight, row: rowRight };
+    });
+    const at = JSON.stringify(m);
+    assert.ok(m.chevron >= 17.5, `the chevron keeps its size (${at})`);
+    assert.ok(m.badge <= m.left && m.right <= m.row, `the badge, then the chevron, inside the row (${at})`);
+    await f.done();
+  }
+  console.log(
+    "PASS: a failed read keeps the list with why and Try again above it, never in a sheet, through a sheet opening and closing; Try again shows busy in place and the line goes when a read succeeds; both invited, and were both invited; the row keeps its chevron beside 99+.",
+  );
+
   // 4. Nobody yet: the empty state and no footer line, and no badge on Profile. A failed read offers Try again, and
   // on Profile a failed read shows no badge.
   {
@@ -439,12 +627,23 @@ try {
     await connectionsRow(page, "Connections").click();
     await expect(visible(page.getByText("Check your connection and try again.", { exact: true }))).toBeVisible();
     await expect(button(page, "Accept Pedro's request")).toHaveCount(0);
-    await button(page, "Try again").click();
+    // While the retry runs, the line stays and Try again is busy where it is: no spinner takes their place.
+    const retry = button(page, "Try again");
+    const at = await retry.boundingBox();
+    f.state.holdReads = true;
+    await retry.click();
+    await expect.poll(() => f.calls("my_connections").length).toBe(3);
+    await expect(retry).toBeDisabled();
+    await expect(text(page, OFFLINE)).toBeVisible();
+    await expect(page.getByRole("progressbar", { name: "Loading your connections" })).toHaveCount(0);
+    assert.deepEqual(await retry.boundingBox(), at, "Try again stays where it was");
+    f.state.holdReads = false;
+    await f.release();
     await expect(heading(page, "Requests · 1")).toBeVisible();
     await expect(visible(page.getByText("Check your connection and try again.", { exact: true }))).toHaveCount(0);
     await f.done();
   }
-  console.log("PASS: the empty state without the footer line; a failed read shows no badge and offers Try again.");
+  console.log("PASS: the empty state without the footer line; a failed read shows no badge and offers Try again, which stays in place, busy, while it runs.");
 
   // 5. Invite people as the host: Your connections above the phone contacts, alphabetical; Lucas is on the resbite
   // already, so he reads "Invited" and can't be ticked; ticking Marta makes Invite 1, which invites her by user id.
@@ -537,8 +736,25 @@ try {
     await expect(text(page, REFUSED)).toBeVisible();
     await f.done();
   }
+  {
+    const f = await fixture({ requests: [], connected: [marta, sofia], plan: PICNIC, refuse: [MARTA, SOFIA] }),
+      { page } = f;
+    await page.goto(`${base}/invitations?plan=${PICNIC.id}`);
+    await expect(heading(page, "Your connections · 2")).toBeVisible();
+    await page.getByLabel("Name (optional)", { exact: true }).fill("Ben Ito");
+    await page.getByLabel("Phone number", { exact: true }).fill("+44 7700 900456");
+    await button(page, "Add").click();
+    await tick(page, "Marta").click();
+    await tick(page, "Sofía Gil").click();
+    await button(page, "Invite 3").click();
+    await expect(heading(page, "Almost there")).toBeVisible();
+    await expect(button(page, "WhatsApp: Ben Ito")).toBeVisible();
+    await expect(text(page, "2 connections you picked can't be invited right now. The others were invited.")).toBeVisible();
+    await expect(text(page, REFUSED)).toHaveCount(0);
+    await f.done();
+  }
   console.log(
-    "PASS: a number and two connections: the number's own call first, then the connections'; a refused call is sent again one by one, so Marta and Ben are invited and the refusal line shows.",
+    "PASS: a number and two connections: the number's own call first, then the connections'; a refused call is sent again one by one, so Marta and Ben are invited and the refusal line shows; with both refused it counts two.",
   );
 
   // 7. Nine connections bring a search field, accent-blind; the count stays. The only pick refused says so and keeps
@@ -566,29 +782,39 @@ try {
     await expect(visible(page.getByRole("checkbox", { name: /^Select / }))).toHaveCount(9);
     await expect(tick(page, "Sofía Gil")).toHaveAttribute("aria-checked", "true");
     await button(page, "Invite 1").click();
-    await expect(text(page, "Couldn't do that. Try again.")).toBeVisible();
+    await expect(text(page, "One connection you picked can't be invited right now.")).toBeVisible();
+    await expect(text(page, "Couldn't do that. Try again.")).toHaveCount(0);
     await expect(heading(page, "Invite people")).toBeVisible();
     await expect(heading(page, "Almost there")).toHaveCount(0);
     await expect(tick(page, "Sofía Gil")).toHaveAttribute("aria-checked", "true");
-    assert.deepEqual(f.calls("invite_contacts").map((x) => x.body.p_invites), [[{ user: SOFIA }], [{ user: SOFIA }]]);
+    // A refused call of one is not sent again.
+    assert.deepEqual(f.calls("invite_contacts").map((x) => x.body.p_invites), [[{ user: SOFIA }]]);
     await f.done();
   }
   {
     const f = await fixture({ requests: [], connected: [marta], plan: PICNIC }),
       { page } = f;
     f.state.failReads = 1;
+    const failedRead = page.waitForResponse((r) => new URL(r.url()).pathname === "/rest/v1/rpc/my_connections");
     await page.goto(`${base}/invitations?plan=${PICNIC.id}`);
     await expect(heading(page, "Invite people")).toBeVisible();
     await expect(button(page, "Invite 0")).toBeVisible();
-    await expect.poll(() => f.calls("my_connections").length).toBe(1);
-    await page.waitForTimeout(300);
-    await expect(page.getByRole("heading", { name: /^Your connections/ })).toHaveCount(0);
-    await expect(page.getByRole("heading", { name: "Phone contacts", exact: true })).toHaveCount(0);
-    await expect(visible(page.getByRole("alert"))).toHaveCount(0);
+    assert.equal((await failedRead).status(), 503);
+    assert.equal(f.calls("my_connections").length, 1);
+    // From the failed read's return, the section, the phone contacts' title and any error stay out: looked for until
+    // five looks running find none; a look that finds one fails the run (a count once spoiled stays spoiled).
+    const shown = async () =>
+      (await page.getByRole("heading", { name: /^Your connections/ }).count()) +
+      (await page.getByRole("heading", { name: "Phone contacts", exact: true }).count()) +
+      (await visible(page.getByRole("alert")).count());
+    let looks = 0;
+    await expect
+      .poll(async () => (looks = (await shown()) > 0 ? -Infinity : looks + 1), { intervals: [50], timeout: 3000 })
+      .toBe(5);
     await f.done();
   }
   console.log(
-    "PASS: nine connections bring an accent-blind search above the rows; the only pick refused says Couldn't do that and keeps the Pick step; a failed read leaves the section out with no error.",
+    "PASS: nine connections bring an accent-blind search above the rows; the only pick refused says it can't be invited and keeps the Pick step; a failed read leaves the section out with no error.",
   );
 
   // 8. The people list, as a guest who answered Going on Pedro's resbite: Ana asks the host to connect, sees the
@@ -651,7 +877,12 @@ try {
     assert.deepEqual(f.calls("accept_connection").map((x) => x.body), [{ p_user: INES }]);
     await expect(page.getByLabel("Inés, Connected", { exact: true })).toBeVisible();
     await expect(visible(page.getByText("Connected", { exact: true }))).toHaveCount(1);
-    await expect(button(page, "Actions for Inés")).toHaveCount(0);
+    // Nothing left to do about the connection there; Report and Block stay theirs (plan 3).
+    await button(page, "Actions for Inés").click();
+    await expect(button(page, "Report Inés")).toBeVisible();
+    await expect(button(page, "Block Inés")).toBeVisible();
+    for (const row of ["Accept Inés's request", "Not now", "Connect on Resbite", "Cancel request"]) await expect(button(page, row)).toHaveCount(0);
+    await closeSheet();
     // Tomás was never asked: Connect stays on his row; nothing was declined.
     await expect(button(page, "Actions for Tomás")).toBeVisible();
     assert.equal(f.calls("decline_connection").length, 0);
@@ -661,6 +892,71 @@ try {
   console.log(
     "PASS: the people list as a guest: Connect on the host's row sends request_connection { p_user, p_plan }, then Request sent with Cancel request, which sends cancel_connection_request { p_user } and brings Connect back; Accept Inés's request sends accept_connection { p_user } and her row shows Connected.",
   );
+
+
+  // 9. Report and block from Connections (chat plan 3, challenge I3).
+  {
+    const nowhere = row(SOFIA, "Sofía Gil", null, "from");
+    const f = await fixture({ requests: [pedro, nowhere] }),
+      { page } = f;
+    const sheet = visible(page.locator("[aria-modal]"));
+    await page.goto(`${base}/connections`);
+    await expect(heading(page, "Requests · 2")).toBeVisible();
+    // A request card: Report Pedro (the request's resbite as the series), then Block Pedro.
+    await button(page, "Actions for Pedro").click();
+    await expect(button(page, "Report Pedro")).toBeVisible();
+    assert.ok(await inOrder(page, [button(page, "Report Pedro"), button(page, "Block Pedro")]), "Report, then Block");
+    await button(page, "Report Pedro").click();
+    await page.getByRole("radio", { name: "Spam", exact: true }).click();
+    await button(page, "Send report").click();
+    await expect(sheet.getByText("Thanks. The Resbite team will look at it.", { exact: true })).toBeVisible();
+    assert.deepEqual(
+      f.calls("report_user").map((x) => x.body),
+      [{ p_user: PEDRO, p_series: "series-Pedro", p_reason: "spam", p_details: null }],
+    );
+    await button(page, "Done").click();
+    // A request with no resbite to name has nothing to report it on: Block only.
+    await button(page, "Actions for Sofía Gil").click();
+    await expect(button(page, "Block Sofía Gil")).toBeVisible();
+    await expect(button(page, "Report Sofía Gil")).toHaveCount(0);
+    await button(page, "Close sheet").click();
+    // Block Pedro: the confirm, then block_user and the list read again, without the card.
+    await button(page, "Actions for Pedro").click();
+    await button(page, "Block Pedro").click();
+    await expect(
+      sheet.getByText("Block Pedro? You won’t see Pedro’s messages, and Pedro won’t know. Any connection between you ends, and unblocking won’t bring it back.", { exact: true }),
+    ).toBeVisible();
+    // Keep: back to the sheet, with focus on Block Pedro (H32 Q53, ruling SR6 D1).
+    await button(page, "Keep").click();
+    await expect.poll(() => focusedText(page)).toBe("Block Pedro");
+    await button(page, "Block Pedro").click();
+    const reads = f.calls("my_connections").length;
+    await button(page, "Block Pedro").click();
+    await expect(button(page, "Actions for Pedro")).toHaveCount(0);
+    // Said by name, and focus on the next card (ruling SR6 Q4).
+    await expect(visible(page.getByText("Blocked Pedro.", { exact: true }))).toBeVisible();
+    await expect.poll(() => focusedLabel(page)).toMatch(/^Sofía Gil, /);
+    assert.deepEqual(f.calls("block_user").map((x) => x.body), [{ p_user: PEDRO, p_block: true }]);
+    assert.ok(f.calls("my_connections").length > reads, "the list is read again");
+    await expect(heading(page, "Requests · 1")).toBeVisible();
+    await expect(sheet).toHaveCount(0);
+    // A connection's dots: Remove connection, then Block Marta; no Report.
+    await button(page, "Actions for Marta").click();
+    await expect(button(page, "Report Marta")).toHaveCount(0);
+    assert.ok(await inOrder(page, [button(page, "Remove connection"), button(page, "Block Marta")]), "Block after Remove connection");
+    await button(page, "Block Marta").click();
+    await expect(
+      sheet.getByText("Block Marta? You won’t see Marta’s messages, and Marta won’t know. Any connection between you ends, and unblocking won’t bring it back.", { exact: true }),
+    ).toBeVisible();
+    await button(page, "Block Marta").click();
+    await expect(button(page, "Actions for Marta")).toHaveCount(0);
+    await expect(visible(page.getByText("Blocked Marta.", { exact: true }))).toBeVisible();
+    await expect.poll(() => focusedLabel(page)).toBe("Tomás, Met on Resbite");
+    assert.deepEqual(f.calls("block_user").map((x) => x.body).at(-1), { p_user: MARTA, p_block: true });
+    await expect(heading(page, "Connected · 1")).toBeVisible();
+    await f.done();
+  }
+  console.log("PASS (safety): a request card's dots → Report Pedro → Spam → report_user { p_series: the request's series_id }; a request with no resbite has Block only; Block Pedro → the confirm → Keep (focus on Block Pedro) → confirm → block_user, my_connections again, the card goes, Blocked Pedro. is said and focus moves to Sofía's card; a connection's dots → Block Marta after Remove connection (no Report) → block_user, the row goes, Blocked Marta. and focus on Tomás.");
 
   console.log("PASS: Connections, the people list's Connect, Cancel request and Accept, and Your connections on Invite people. All Supabase requests intercepted.");
 } finally {

@@ -88,11 +88,12 @@ const ERROR_KEYS = new Set([
 ]);
 
 /** The words for an error the reducer holds; "" for none. */
-export function errorText(error, host) {
+export function errorText(error, host, inviter) {
+  if (!inviter || !inviter.replace(/[\s\u00a0\u200b-\u200d\ufeff]+/g, "")) inviter = host;
   if (!error) return "";
   if (!ERROR_KEYS.has(error)) return String(error);
   const copy = PAGE_COPY[error];
-  return typeof copy === "function" ? copy(host) : copy;
+  return typeof copy === "function" ? copy(error === "wrongNumber" ? inviter : host) : copy;
 }
 
 export const RESPONSES = ["accepted", "maybe", "declined"];

@@ -300,9 +300,13 @@ select set_config('request.jwt.claims','{"sub":"f4000000-0000-4000-8000-00000000
 select public.change_plan_v3('f4100000-0000-4000-8000-000000000002',1,'Walk','',array['community'],'2099-07-02 10:00+00',null,'UTC','Hill','',true);
 reset role;
 update public.profiles set deletion_requested_at=now() where id='f4000000-0000-4000-8000-000000000020';
+-- Since circles of trust, the host's invitation also ends Fay's wait (the attendees_close_waiting trigger): her request
+-- is gone, and her notice is not sent either way.
 do $$ begin
  if (select count(*) from private.join_requests where status='waiting' and user_id in ('f4000000-0000-4000-8000-000000000017',
-   'f4000000-0000-4000-8000-000000000018','f4000000-0000-4000-8000-000000000019','f4000000-0000-4000-8000-000000000020')) is distinct from 4
+   'f4000000-0000-4000-8000-000000000019','f4000000-0000-4000-8000-000000000020')) is distinct from 3
+ or exists(select 1 from private.join_requests where status='waiting' and user_id='f4000000-0000-4000-8000-000000000018'
+   and pg_catalog.to_regprocedure('private.attendees_close_waiting()') is not null)
  or not exists(select 1 from public.attendees where plan_id='f4100000-0000-4000-8000-000000000001' and user_id='f4000000-0000-4000-8000-000000000018')
  or (select count(*) from private.notification_outbox where kind='join_request' and actor_id='f4000000-0000-4000-8000-000000000017') is distinct from 2 then
   raise exception 'The requests are not set up as the test needs';
@@ -576,11 +580,12 @@ do $$ declare v text; begin
   is distinct from 'Worker processing finished across all endpoints; not a guarantee of delivery or reading. Inspect delivery ledger outcomes.' then
   raise exception 'delivered_at''s comment differs';
  end if;
- -- No other index on the outbox than the ones both modes share.
+ -- No other index on the outbox than the ones both modes share (chat core adds the message's notices, and the
+ -- recipient's notices by kind and time, in both).
  select string_agg(c.relname,', ' order by c.relname) into v
   from pg_catalog.pg_index i join pg_catalog.pg_class c on c.oid=i.indexrelid where i.indrelid='private.notification_outbox'::regclass;
- if v is distinct from 'notification_outbox_actor_idx, notification_outbox_dedupe_key_key, notification_outbox_pending_idx, notification_outbox_pkey, '
-  ||'notification_outbox_plan_idx, notification_outbox_recipient_idx' then
+ if v is distinct from 'notification_outbox_actor_idx, notification_outbox_dedupe_key_key, notification_outbox_message_idx, notification_outbox_pending_idx, notification_outbox_pkey, '
+  ||'notification_outbox_plan_idx, notification_outbox_recipient_idx, notification_outbox_recipient_kind_idx' then
   raise exception 'Outbox indexes differ: %', v;
  end if;
 end $$;

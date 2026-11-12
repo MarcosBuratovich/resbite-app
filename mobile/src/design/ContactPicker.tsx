@@ -7,6 +7,8 @@ import { CountrySheet } from "./CountrySheet";
 import { Chip, IconButton, InfoSheet, Tile } from "./kit";
 import { colors as c } from "./tokens";
 import { INVITE_COPY as T } from "../domain/inviteCopy";
+import { CIRCLE_COPY } from "../domain/circleCopy";
+import { useAnnounce } from "./useAnnounce";
 import { countryByRegion } from "../domain/countries";
 import { regionOf } from "../domain/phone";
 import { groupContacts, type ContactNumber } from "../domain/contactInvites";
@@ -18,16 +20,30 @@ type Contacts = ReturnType<typeof import("../state/useContactInvites").useContac
 
 type Group = ReturnType<typeof groupContacts>[number];
 
-function Row({ g, chosen, badge, onPress }: { g: Group; chosen?: ContactNumber; badge: boolean; onPress: () => void }) {
+/** `disabled`: bring mode's cap is reached and this contact isn't picked (`Pressable` sets `accessibilityState.disabled`). */
+function Row({
+  g,
+  chosen,
+  badge,
+  disabled,
+  onPress,
+}: {
+  g: Group;
+  chosen?: ContactNumber;
+  badge: boolean;
+  disabled: boolean;
+  onPress: () => void;
+}) {
   const detail = chosen?.label ?? (g.numbers.length > 1 ? T.numbersCount(g.numbers.length) : g.numbers[0].label);
   return (
     <Pressable
       accessibilityRole="checkbox"
       accessibilityLabel={`${g.name}, ${detail}${badge ? `, ${T.onResbite}` : ""}`}
-      accessibilityHint={T.rowHint}
+      accessibilityHint={disabled ? CIRCLE_COPY.cappedHint : T.rowHint}
       aria-checked={!!chosen}
+      disabled={disabled}
       onPress={onPress}
-      style={styles.row}
+      style={[styles.row, disabled && styles.off]}
     >
       <View style={styles.who}>
         <Copy style={styles.name}>{g.name}</Copy>
@@ -67,6 +83,8 @@ export function PickStep({ k, previewing }: { k: Contacts; previewing: boolean }
     }
   }
   const settings = () => void Linking.openSettings().catch(() => k.setError(T.settingsFailed));
+  // Bring mode's cap (C20, C23): Add is off and says why; said aloud as the cap is reached (past it, the screen's line).
+  useAnnounce(k.atCap && !k.overCap ? CIRCLE_COPY.cantAddMore : null);
   return (
     <View style={{ gap: 14 }}>
       {previewing && <Copy>{T.previewNotice}</Copy>}
@@ -111,6 +129,7 @@ export function PickStep({ k, previewing }: { k: Contacts; previewing: boolean }
                 g={g}
                 chosen={chosen}
                 badge={!!chosen && k.onResbite.has(chosen.key)}
+                disabled={!chosen && k.atCap}
                 onPress={() => (g.numbers.length === 1 ? k.toggle(g.numbers[0]) : setChoosing(g))}
               />
             );
@@ -137,14 +156,19 @@ export function PickStep({ k, previewing }: { k: Contacts; previewing: boolean }
           </View>
         </View>
         <ErrorNote message={problem} />
-        <Button title={T.addButton} secondary disabled={!number.trim()} onPress={add} />
+        {k.atCap && (
+          <Copy accessibilityLiveRegion="polite" style={s.muted}>
+            {CIRCLE_COPY.cantAddMore}
+          </Copy>
+        )}
+        <Button title={T.addButton} secondary disabled={!number.trim() || k.atCap} onPress={add} />
       </View>
       <View style={{ gap: 6 }}>
         {/* The count takes in the connections picked above the contacts (CO-03). */}
         <Button
           title={T.invite(k.inviteCount)}
           hint={T.inviteHint}
-          disabled={k.inviteCount === 0 || k.busy || previewing}
+          disabled={k.inviteCount === 0 || k.overCap || k.busy || previewing}
           loading={k.busy}
           onPress={() => void k.invite()}
         />
@@ -250,5 +274,6 @@ const styles = StyleSheet.create({
   heading: { fontWeight: "700", color: c.muted, textTransform: "uppercase", fontSize: 12 },
   box: { width: 22, height: 22, borderRadius: 7, borderWidth: 1.5, borderColor: "#cfc9d6", alignItems: "center", justifyContent: "center" },
   boxOn: { backgroundColor: c.aquaDark, borderColor: c.aquaDark },
+  off: { opacity: 0.55 },
   ok: { backgroundColor: c.aquaSoft, borderRadius: 14, padding: 12 },
 });

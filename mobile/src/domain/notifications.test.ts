@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  askMoment,
   NOTIFICATION_ASK,
   NOTIFICATION_EVENTS,
   NOTIFICATIONS_TURN_ON_FAILED,
@@ -24,6 +25,17 @@ test("the ask comes for the organizer, after creating, and after answering Going
   assert.equal(shouldAsk({ ...never, created: true }), true, "My resbites after creating");
   assert.equal(shouldAsk({ ...never, response: "accepted" }), true, "Going");
   assert.equal(shouldAsk({ ...never, response: "maybe" }), true, "Maybe");
+});
+
+test("the first open of a chat is a moment for the ask (CH-P17, K-N15)", () => {
+  assert.equal(askMoment({ chat: true }), true);
+  assert.equal(askMoment({ chat: false }), false);
+  assert.equal(askMoment({}), false);
+  assert.equal(shouldAsk({ ...never, chat: true }), true);
+  // Still once, and only while the permission was never asked for.
+  assert.equal(shouldAsk({ ...never, chat: true, notificationsAsked: true }), false);
+  assert.equal(shouldAsk({ permission: "granted", notificationsAsked: false, chat: true }), false);
+  assert.equal(shouldAsk({ permission: "denied", notificationsAsked: false, chat: true }), false);
 });
 
 test("Can’t go, no answer yet or no moment at all never brings the ask", () => {
@@ -94,6 +106,8 @@ test("the ask's wording", () => {
   assert.deepEqual(NOTIFICATION_ASK, {
     title: "Get notified?",
     body: "Resbite can tell you when people answer or ask to join, when a resbite changes or gets a note, and before it starts.",
+    // The same card in a chat (CH-P17, H37 Q7): its line is about messages.
+    chatBody: "Turn on notifications to hear about new messages.",
     turnOn: "Turn on notifications",
     notNow: "Not now",
   });
@@ -173,7 +187,7 @@ test("Updates: every action is a labelled button", () => {
   });
 });
 
-test("the About sheet lists the eight events in the spec’s words", () => {
+test("the About sheet lists the nine events in the spec’s words, a chat’s pushes last (CH-P7)", () => {
   assert.deepEqual(NOTIFICATION_EVENTS, [
     "A new invitation, to the person invited.",
     "An answer, to the host: “Sam is going.”",
@@ -183,6 +197,7 @@ test("the About sheet lists the eight events in the spec’s words", () => {
     "A Note to guests.",
     "Being made an admin, to that person.",
     "A repeating resbite’s next date, to everyone invited.",
+    "A chat message, to the others in the chat (at most one a minute), and a host’s announcement, to the people it’s sent to.",
   ]);
   assert.equal(notificationEventsLead(true), "Resbite sends updates for:");
   assert.equal(notificationEventsLead(false), "Once updates are on, Resbite sends them for:");

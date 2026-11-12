@@ -4,7 +4,7 @@ import { planFromRow, type Plan } from "../domain/plans";
 import type { RsvpAttempt, RsvpSnapshot } from "../domain/rsvp";
 import { isInviteToken } from "../domain/appLinks";
 import { claimLinkErrorMessage, incompleteInvitation } from "../domain/eventLinks";
-import { answerCountsFrom, type AnswerCounts } from "../domain/eventPage";
+import { answerCountsFrom, broughtFrom, type AnswerCounts } from "../domain/eventPage";
 const eventUnavailable =
   "This invitation is unavailable, or its details could not be refreshed. Check your connection and try again.";
 export async function readRsvp(
@@ -64,7 +64,17 @@ export async function writeRsvp(attempt: RsvpAttempt) {
   if (error) throw error;
 }
 
-export type Guest = { userId: string; name: string; response: string };
+export type Guest = {
+  userId: string;
+  name: string;
+  response: string;
+  /** The guest who brought them (CO-P9); null for someone a host invited, or who asked through the link. */
+  broughtById: string | null;
+  /** Their level in the circle: 1 for a host's guest, one more per hop. */
+  level: number;
+};
+/** The name `readGuests` gives a guest whose profile name is missing or blank (a hidden or missing profile row). */
+export const UNNAMED_GUEST = "Tester";
 export type EventSnapshot = {
   plan: Plan;
   /** The signed-in invitee's own row; null for the organizer. */
@@ -76,9 +86,15 @@ export type EventSnapshot = {
   admins: string[];
   /**
    * How many are going, maybe and can't go, from the server, for an invitee who hasn't answered (they read only their
-   * own guest row); null when `guests` is the whole list.
+   * own guest row); null when `guests` is the whole list, as it is for everyone in a group.
    */
   counts: AnswerCounts | null;
+  /**
+   * The resbite is a group's and the signed-in person is in it (`series_is_group`, G-N13): they see everyone in it,
+   * answered or not. False on a one-off, whenever the flag couldn't be read (I4), and from `readEvent` itself: the page
+   * reads the flag beside it with `readIsGroup` and sets it when it lands (ruling GR6 M7).
+   */
+  isGroup: boolean;
 };
 
 /**
@@ -89,25 +105,49 @@ export async function readGuests(planId: string): Promise<Guest[]> {
   const { data, error } = await withDeadline((signal) =>
     supabase
       .from("attendees")
-      .select("user_id,response,profiles(display_name)")
+      .select("user_id,response,brought_by,level,profiles(display_name)")
       .eq("plan_id", planId)
       .abortSignal(signal),
   );
   if (error) throw new Error(eventUnavailable);
   const rows: unknown = data;
   return Array.isArray(rows)
-    ? rows.map((row: { user_id: string; response: string; profiles: { display_name: string } | null }) => ({
-        userId: row.user_id,
-        name: row.profiles?.display_name || "Tester",
-        response: row.response,
-      }))
+    ? rows.map(
+        (row: { user_id: string; response: string; brought_by?: unknown; level?: unknown; profiles: { display_name: string } | null }) => ({
+          userId: row.user_id,
+          name: row.profiles?.display_name || UNNAMED_GUEST,
+          response: row.response,
+          // A browser stub or an old cache lacks the two columns: nobody's, level 1.
+          ...broughtFrom(row),
+        }),
+      )
     : [];
 }
 
 /**
+ * Whether the plan's series is a group the signed-in person is in (`series_is_group`). Never throws: any failure reads
+ * as a one-off, the function missing after plan 2's rollback (PostgREST `PGRST202`) included, since the one-off rules
+ * show less, never more (I4). The page reads it beside `readEvent` and never waits for it (ruling GR6 M7).
+ */
+export async function readIsGroup(series: unknown): Promise<boolean> {
+  if (typeof series !== "string" || !series) return false;
+  try {
+    const reply = await withDeadline((signal) =>
+      supabase.rpc("series_is_group", { p_series: series }).abortSignal(signal),
+    );
+    return !reply.error && reply.data === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The event page's read. Any failed read, the guest list, the organizer's name and the counts included, makes the
- * whole event unavailable. An invitee's own row and the organizer's name are read together; an invitee who hasn't
- * answered (and isn't an admin, who sees every row) also gets the counts (`plan_people_counts`, CR-P4).
+ * whole event unavailable. After the plan row, an invitee's own row and the organizer's name are read together. An
+ * invitee who hasn't answered (and isn't an admin, who sees every row) reads only their own guest row on a one-off, so
+ * they also get the counts (`plan_people_counts`, CR-P4); a group's member reads every row, so whenever the guest list
+ * holds anyone else, no counts are read. The group flag isn't read here: `isGroup` is false until the page's own
+ * `readIsGroup` lands (ruling GR6 M7).
  */
 export async function readEvent(planId: string, userId: string): Promise<EventSnapshot> {
   const [plan, guests] = await Promise.all([
@@ -140,7 +180,8 @@ export async function readEvent(planId: string, userId: string): Promise<EventSn
   }
   const mapped = planFromRow(plan.data);
   let counts: AnswerCounts | null = null;
-  if (attendee?.response === "pending" && !mapped.admins.includes(userId)) {
+  const seesOthers = guests.some((g) => g.userId !== userId);
+  if (!seesOthers && attendee?.response === "pending" && !mapped.admins.includes(userId)) {
     const reply = await withDeadline((signal) =>
       supabase.rpc("plan_people_counts", { p_plan: planId }).abortSignal(signal),
     );
@@ -151,5 +192,5 @@ export async function readEvent(planId: string, userId: string): Promise<EventSn
       throw new Error(eventUnavailable);
     }
   }
-  return { plan: mapped, attendee, organizer, guests, admins: mapped.admins, counts };
+  return { plan: mapped, attendee, organizer, guests, admins: mapped.admins, counts, isGroup: false };
 }

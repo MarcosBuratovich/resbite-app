@@ -76,6 +76,8 @@ function start(main, answerButton) {
   const callingCode = data.country || "";
   const ending = data.ending || "";
   const host = data.host || "";
+  // A guest's link names who brought you; a host's link has none, and the host stands in.
+  const inviter = (data.inviter || "").replace(/[\s\u00a0\u200b-\u200d\ufeff]+/g, "") ? data.inviter : host;
   const termsVersion = data.termsVersion || "";
   // When the event ends (the start, with no end) the answer closes, and the kept session goes with it.
   const endsAt = Date.parse(data.endsAt || "");
@@ -89,7 +91,7 @@ function start(main, answerButton) {
   // ---- Screen 1, as the server drew it: the host's initial in the avatar, and what the answer step repeats. ----
   const dot = sections.invite.querySelector(".dot");
   // Drawn by CSS from the attribute, so the line's text stays "<host> invited you".
-  if (dot) dot.dataset.initial = (Array.from(host.trim())[0] || "").toUpperCase();
+  if (dot) dot.dataset.initial = (Array.from(inviter.trim())[0] || "").toUpperCase();
   const title = sections.invite.querySelector("h1")?.textContent ?? "";
   const heroSrc = sections.invite.querySelector(".hero")?.getAttribute("src") ?? "";
   // The detail lines are the time, the area when there is one, and the going count (last).
@@ -149,7 +151,7 @@ function start(main, answerButton) {
     confirmError,
     sendButton,
   );
-  sections.confirm.append(confirmHeading, h("p", { class: "lead", text: open ? C.numberHint : C.confirmBody(host) }), confirmForm);
+  sections.confirm.append(confirmHeading, h("p", { class: "lead", text: open ? C.numberHint : C.confirmBody(inviter) }), confirmForm);
 
   // ---- The code. ----
   const codeHeading = h("h1", { tabindex: "-1", text: C.codeHeading });
@@ -271,7 +273,7 @@ function start(main, answerButton) {
       else button.removeAttribute("aria-disabled");
     }
 
-    const error = errorText(s.error, host);
+    const error = errorText(s.error, host, inviter);
     tick.checked = s.ticked;
     ageHelper.hidden = s.ticked;
     sendButton.disabled = !s.ticked;

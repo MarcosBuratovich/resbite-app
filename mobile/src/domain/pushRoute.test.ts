@@ -20,3 +20,11 @@ test("a connection tap opens Connections whatever the read said", () => {
   assert.deepEqual(pushDestination("p", "connection"), { pathname: "/connections" });
   assert.deepEqual(pushDestination("p", "plan"), { pathname: "/event", params: { plan: "p" } });
 });
+test("a chat tap's form: pushDestination(series, \"chat\") opens /chat?series=", () => {
+  const series = "30000000-0000-4000-8000-000000000001";
+  assert.deepEqual(pushDestination(series, "chat"), { pathname: "/chat", params: { series } });
+  // Without a series there is no chat to open: the gone note, as for an unreadable plan.
+  const gone = pushDestination(null, "chat") as Extract<PushDestination, { pathname: "/plans" }>;
+  assert.equal(gone.pathname, "/plans");
+  assert.equal((gone.params as { notice: string }).notice, "gone");
+});

@@ -19,6 +19,8 @@ export function MenuRow({
   hint,
   busy = false,
   disabled = false,
+  spokenHint = true,
+  ref,
 }: {
   title: string;
   icon: LucideIcon;
@@ -30,14 +32,19 @@ export function MenuRow({
   busy?: boolean;
   /** Another action is running: dimmed and not pressable. */
   disabled?: boolean;
+  /** False when `label` already says what the hint line shows ("Leo, Blocked"), so it is said once (Task 5 fix round 1). */
+  spokenHint?: boolean;
+  /** The row's own view, so a sheet can move focus to it. */
+  ref?: React.Ref<View>;
 }) {
   const largeText = useLargeText();
   const ink = destructive ? c.error : c.ink;
   return (
     <Pressable
+      ref={ref}
       accessibilityRole="button"
       accessibilityLabel={label ?? title}
-      accessibilityHint={hint}
+      accessibilityHint={spokenHint ? hint : undefined}
       accessibilityState={{ busy, disabled: disabled || busy }}
       aria-busy={busy}
       disabled={disabled || busy}

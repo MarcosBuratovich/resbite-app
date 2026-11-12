@@ -1,23 +1,44 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
-import { ArrowLeft, Check, Clock, Ellipsis, Link2, Send, UserMinus, UserPlus, X } from "lucide-react-native";
+import { ArrowLeft, Ban, Check, Clock, Ellipsis, Flag, Link2, Phone, Send, UserMinus, UserPlus, X } from "lucide-react-native";
 import type { LucideIcon } from "lucide-react-native";
-import { Button, Copy, ErrorNote, s } from "../src/design/ui";
+import { Button, Copy, ErrorNote, s, useLargeText } from "../src/design/ui";
 import { IconButton, focusHeading } from "../src/design/kit";
 import { GrabberSheet } from "../src/design/GrabberSheet";
 import { MenuLabel, MenuRow, MenuSeparator } from "../src/design/MenuRow";
+import { BlockQuestion, BlockedLine, ReportSheet, UnblockedLine } from "../src/design/ReportSheet";
 import { colors as c, fonts, space } from "../src/design/tokens";
-import { EVENT_COPY, pageState, peopleGroups, type PersonAction, type PersonRow } from "../src/domain/eventPage";
+import {
+  EVENT_COPY,
+  avatarLetter,
+  focusAfterRemove,
+  pageState,
+  peopleGroups,
+  personLabel,
+  removalOf,
+  removeQuestion,
+  rowByKey,
+  sheetHead,
+  spokenName,
+  type PersonAction,
+  type PersonRow,
+} from "../src/domain/eventPage";
+import { circleOf, firstName } from "../src/domain/circle";
+import { CIRCLE_COPY } from "../src/domain/circleCopy";
 import { CONNECTIONS_COPY } from "../src/domain/connectionsCopy";
-import { removeGuestQuestion } from "../src/domain/eventLinks";
 import { INVITE_COPY } from "../src/domain/inviteCopy";
+import { SAFETY_COPY, shownName } from "../src/domain/safetyCopy";
 import { invitationGateway } from "../src/services/invitations";
 import { contactInviteGateway } from "../src/services/contactInvites";
+import { bringerRevokeError, circleGateway, takingBack } from "../src/services/circle";
+import { UNNAMED_GUEST } from "../src/services/rsvp";
 import { joinRequestGateway } from "../src/services/joinRequests";
+import { safetyErrorMessage, safetyGateway } from "../src/services/safety";
 import { useApp } from "../src/state/AppState";
 import { useEvent, type EventPage } from "../src/state/useEvent";
+import { useGroupScreen } from "../src/state/useGroupLeave";
 import { useResend } from "../src/state/useResend";
 
 const ACTION_ICON: Partial<Record<PersonAction, LucideIcon>> = {
@@ -32,15 +53,25 @@ const ACTION_ICON: Partial<Record<PersonAction, LucideIcon>> = {
   decline: X,
   remove: X,
   removeInvite: X,
+  // Plan 3: Report, and Block or Unblock.
+  report: Flag,
+  block: Ban,
+  unblock: Ban,
 };
 
 /**
- * The people list (spec CR-P4, CR-P16, CO-01): /guests?plan=<id>. Everyone who answered, and for hosts the rest, with a
- * sheet of actions per person: the connection ones for everyone, then the hosts' own.
+ * The people list (spec CR-P4, CR-P16, CO-01, CO-07): /guests?plan=<id>. Everyone who answered, and for hosts the rest,
+ * with a sheet of actions per person: the connection ones for everyone, then the hosts' own. Who brought whom shows as
+ * a chain: a brought person sits under whoever brought them, indented one step per hop. A guest who brought people sees
+ * their own unanswered invitations, with Send again and Remove.
  */
 export default function Guests() {
   const { plan: planId } = useLocalSearchParams<{ plan?: string }>();
-  const event = useEvent(planId);
+  // The list shows who brought whom, so it reads the bringers' names (C28).
+  const event = useEvent(planId, { chain: true });
+  // A group's people list is one of its screens: a leave that goes through while it is in focus lands on My resbites
+  // (ruling GR6 M4).
+  useGroupScreen(event.plan?.series_id);
   if (event.plan) return <People event={event} plan={event.plan} />;
   const loading = event.busy && !event.error;
   return (
@@ -83,12 +114,22 @@ function Bar({ planId }: { planId?: string }) {
   );
 }
 
-type Sheet = { row: PersonRow; view: "menu" | "remove" | "decline" };
+/**
+ * A person's sheet and what it shows: its rows, Remove's or Decline's question, and plan 3's report, block confirm and
+ * the block's result line, each in place.
+ */
+type Sheet = { row: PersonRow; view: "menu" | "remove" | "decline" | "report" | "block" | "blocked" | "unblocked" };
 
 function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage["plan"]> }) {
   const { role, guests, invited, requests, admins, owner, connections } = event;
   const me = useApp().session?.user.id ?? null;
-  const resend = useResend(plan, event.load);
+  const host = (role ?? "guest") !== "guest";
+  // A bringer's Send again names them and the organizer (CO-P9); null when the organizer's name isn't known.
+  const resend = useResend(plan, event.load, role === "guest" ? { organizer: firstName(event.organizer) || null } : undefined);
+  const largeText = useLargeText();
+  // The chain's step: a smaller one under Larger Text, so a deep row keeps room for its name.
+  const step = largeText ? 8 : 16;
+  const circle = circleOf(plan);
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -103,6 +144,13 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
     owner,
     userId: me,
     connections,
+    // Plan 3: the people this person blocked; while unknown, no Block, Unblock or Connect (N13).
+    blocks: event.blocks,
+    bringerNames: event.bringerNames,
+    broughtLinks: event.broughtLinks,
+    unnamed: UNNAMED_GUEST,
+    // A group's guest sees everyone in it, answered or not (G-B5).
+    isGroup: event.isGroup,
   });
   const off = working || event.acting !== null || resend.busy !== null;
   const open = (row: PersonRow) => {
@@ -150,24 +198,114 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
         return run(() => event.demote(row.userId!), false);
       case "approve":
         return run(async () => void (await joinRequestGateway.decide(plan.id, row.userId!, true)));
+      // Plan 3: Report and Block ask in place; Unblock acts at once, through the gateway, so every open chat and this
+      // list hear it (B3, NOTE 2).
+      case "report":
+        return setSheet({ row, view: "report" });
+      case "block":
+        return setSheet({ row, view: "block" });
+      case "unblock":
+        return unblock(row);
     }
   };
-  const confirmRemove = (row: PersonRow) =>
-    run(async () => {
-      if (row.kind === "linkInvite") {
-        const person = invitee(row);
-        await contactInviteGateway.revoke(plan.id, row.phone!);
-        if (person) await resend.forget(person);
-      } else await invitationGateway.removeGuest(plan.id, row.userId!);
+  /**
+   * Unblock, through the gateway (B3, NOTE 2): then "Unblocked <name>." in the sheet with focus on it, as Blocked people
+   * says it (final review M4); refused or offline, the sheet says why in the safety words (final review M7).
+   */
+  async function unblock(row: PersonRow) {
+    if (off) return;
+    setWorking(true);
+    setError(null);
+    try {
+      await safetyGateway.unblock(row.userId!);
+      setSheet({ row, view: "unblocked" });
+    } catch (e) {
+      setError(safetyErrorMessage(e));
+    } finally {
+      setWorking(false);
+    }
+  }
+  // Each person's row on the list, so focus can move to the next one after a remove (D4). It moves once the sheet has
+  // gone: until then the sheet holds focus, and on the web gives it back to the row it was opened from.
+  const rowRefs = useRef(new Map<string, View>());
+  const focusNext = useRef<string | null>(null);
+  const focusNextRow = () => {
+    const key = focusNext.current;
+    const target = key ? rowRefs.current.get(key) : undefined;
+    focusNext.current = null;
+    if (target) focusHeading(target);
+  };
+  // Android's Modal says nothing when it has closed: there focus moves as soon as the sheet is off.
+  useEffect(() => {
+    if (Platform.OS === "android" && !sheet) focusNextRow();
+  });
+  /**
+   * Remove, three ways: a guest's link a host sees by its id; an in-app invitee the viewer brought, taken back by them,
+   * host or not (C31); a link by its number (the server admits a bringer for their own). A refusal says it in words
+   * (C14), and a refused take-back reads the list again first, so the row shows what holds now (C28). Focus then goes
+   * to the next row on the list.
+   */
+  const confirmRemove = (row: PersonRow) => {
+    const next = focusAfterRemove(groups, row.key);
+    const reload = () => event.load();
+    return run(async () => {
+      switch (removalOf(row, host)) {
+        case "brought":
+          await takingBack(() => circleGateway.revokeBrought(plan.id, row.invitationId!), reload);
+          break;
+        case "withdraw":
+          await takingBack(() => circleGateway.withdraw(plan.id, row.userId!), reload);
+          break;
+        case "link": {
+          const person = invitee(row);
+          // A host's own link is a host's removal; one the viewer brought is their take-back, worded as one.
+          const revoke = () =>
+            contactInviteGateway.revoke(plan.id, row.phone!).catch((e: unknown) => {
+              throw host && !row.broughtByMe ? e : bringerRevokeError(e);
+            });
+          await takingBack(revoke, reload);
+          if (person) await resend.forget(person);
+          break;
+        }
+        default:
+          await invitationGateway.removeGuest(plan.id, row.userId!);
+      }
+      focusNext.current = next;
     });
+  };
   const confirmDecline = (row: PersonRow) => run(async () => void (await joinRequestGateway.decide(plan.id, row.userId!, false)));
 
-  const current = sheet?.row ?? null;
+  // The sheet follows the person's row as the list changes (the names landing, a reload after a refusal, C31 Q6). Once
+  // the row is gone it keeps the last one shown, with nothing left to do but close.
+  const live = sheet ? rowByKey(groups, sheet.row.key) : null;
+  const current = live ?? sheet?.row ?? null;
+  const gone = sheet !== null && live === null;
+  const head = current ? sheetHead(current) : null;
+  const asking = sheet?.view === "remove" || sheet?.view === "decline" ? sheet.view : null;
+  const ask = current && asking ? removeQuestion(current, { guests, host, view: asking }) : null;
+  // The question takes focus when Remove (or Decline) asks it (D4).
+  const question = useRef<Text | null>(null);
+  useEffect(() => {
+    if (sheet?.view !== "remove" && sheet?.view !== "decline") return;
+    const frame = requestAnimationFrame(() => focusHeading(question.current));
+    return () => cancelAnimationFrame(frame);
+  }, [sheet?.view, sheet?.row.key]);
+  // Keep after the block confirm gives focus back to Block (H32 Q53, ruling SR6 D1).
+  const blockRow = useRef<View | null>(null);
+  const backToBlock = useRef(false);
+  useEffect(() => {
+    if (sheet?.view !== "menu" || !backToBlock.current) return;
+    backToBlock.current = false;
+    const frame = requestAnimationFrame(() => focusHeading(blockRow.current));
+    return () => cancelAnimationFrame(frame);
+  }, [sheet?.view, sheet?.row.key]);
   const shownError = error ?? resend.error ?? event.error;
   return (
     <View style={s.page}>
       <Bar planId={plan.id} />
       <ScrollView contentContainerStyle={styles.list}>
+        {/* The host's circle, in words (CO-07). */}
+        {host && circle.invites > 0 ? <Text style={styles.circleLine}>{CIRCLE_COPY.listLine(circle.invites, circle.levels)}</Text> : null}
         {!sheet && <ErrorNote message={event.error} />}
         {groups.map((group) => (
           <View key={group.title} style={{ gap: 2 }}>
@@ -175,14 +313,37 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
               {group.title}
             </Text>
             {group.rows.map((row) => (
-              <View key={row.key} style={styles.person}>
-                <Avatar name={row.name} />
-                <View style={styles.name} accessible accessibilityLabel={nameLabel(row)}>
+              <View key={row.key} style={[styles.person, row.depth > 0 && { paddingLeft: step * row.depth }]}>
+                {/* One thin rule per step in, so a chain reads as nested (CO-07); the words say it too (rule 11). */}
+                {Array.from({ length: row.depth }, (_, k) => (
+                  <View
+                    key={k}
+                    aria-hidden
+                    importantForAccessibility="no"
+                    pointerEvents="none"
+                    style={[styles.rule, { left: step * k + step / 2 - 1 }]}
+                  />
+                ))}
+                <Avatar row={row} />
+                <View
+                  ref={(node) => {
+                    if (node) rowRefs.current.set(row.key, node);
+                    else rowRefs.current.delete(row.key);
+                  }}
+                  style={styles.name}
+                  accessible
+                  accessibilityLabel={personLabel(row)}
+                >
                   <View style={styles.nameLine}>
                     <Text style={styles.nameText}>{row.name}</Text>
                     {row.kind === "owner" ? <Badge text={EVENT_COPY.hostingBadge} /> : null}
                     {row.admin ? <Badge text={EVENT_COPY.adminBadge} /> : null}
-                    {row.connection === "connected" ? <Badge text={CONNECTIONS_COPY.connectedBadge} /> : null}
+                    {/* Blocked shows to the blocker only (plan 3); a block ends any connection, so never both. */}
+                    {row.blocked ? (
+                      <Badge text={SAFETY_COPY.blocked} />
+                    ) : row.connection === "connected" ? (
+                      <Badge text={CONNECTIONS_COPY.connectedBadge} />
+                    ) : null}
                   </View>
                   {row.status ? <Text style={styles.sub}>{row.status}</Text> : null}
                 </View>
@@ -190,7 +351,7 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
                   <IconButton
                     icon={Ellipsis}
                     tone="plain"
-                    label={`${EVENT_COPY.actionsFor}${row.name}`}
+                    label={`${EVENT_COPY.actionsFor}${spokenName(row)}`}
                     onPress={() => open(row)}
                   />
                 ) : null}
@@ -199,20 +360,52 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
           </View>
         ))}
       </ScrollView>
-      <GrabberSheet visible={sheet !== null} onClose={close} label={current?.name}>
+      <GrabberSheet
+        visible={sheet !== null}
+        onClose={close}
+        onDismissed={focusNextRow}
+        label={current ? spokenName(current) : undefined}
+      >
         {current ? (
           <>
             <View style={styles.head}>
-              <Avatar name={current.name} big />
+              <Avatar row={current} big />
               <View style={{ flex: 1 }}>
                 <Text style={styles.headName}>{current.name}</Text>
-                {/* The group title is out of sight inside the sheet: the head says the answer, or how they were invited. */}
-                {(current.status ?? current.reply) ? <Text style={styles.headSub}>{current.status ?? current.reply}</Text> : null}
+                {/* The group title is out of sight inside the sheet: the head says the answer and who brought them, or how
+                    they were invited. */}
+                {head ? <Text style={styles.headSub}>{head}</Text> : null}
               </View>
             </View>
-            {sheet?.view === "menu" ? (
+            {sheet?.view === "blocked" ? (
+              <BlockedLine />
+            ) : sheet?.view === "unblocked" ? (
+              <UnblockedLine name={current.name} />
+            ) : gone ? null : sheet?.view === "report" && current.userId ? (
+              <ReportSheet
+                target={{ kind: "user", userId: current.userId, series: plan.series_id, name: current.name }}
+                onDone={() => setSheet(null)}
+              />
+            ) : sheet?.view === "block" && current.userId ? (
+              <BlockQuestion
+                userId={current.userId}
+                name={current.name}
+                // A waiting join requester isn't on the resbite: there is nothing of theirs a host could remove, so even a
+                // host reads the guest's confirm (ruling SR6 draft).
+                youHost={host && current.kind !== "request"}
+                theyHost={current.kind === "owner" || current.admin}
+                onBlocked={() => setSheet({ row: current, view: "blocked" })}
+                onClosed={() => setSheet(null)}
+                onKeep={() => {
+                  backToBlock.current = true;
+                  setSheet({ row: current, view: "menu" });
+                }}
+              />
+            ) : sheet?.view === "menu" ? (
               <View>
-                {current.connection === "connected" ? <MenuLabel title={CONNECTIONS_COPY.connectedBadge} icon={Link2} /> : null}
+                {current.connection === "connected" && !current.blocked ? (
+                  <MenuLabel title={CONNECTIONS_COPY.connectedBadge} icon={Link2} />
+                ) : null}
                 {current.actions.flatMap((action) =>
                   action === "sendAgain"
                     ? sendVias(invitee(current)?.stored?.sentVia).map((via) => (
@@ -235,6 +428,7 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
                           : []),
                         <Row
                           key={action}
+                          rowRef={action === "block" ? blockRow : undefined}
                           action={action}
                           row={current}
                           disabled={off}
@@ -249,12 +443,8 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
               </View>
             ) : (
               <View style={{ gap: space.m }}>
-                <Copy accessibilityRole="header">
-                  {sheet?.view === "decline"
-                    ? INVITE_COPY.declineQuestion(current.name)
-                    : current.kind === "guest"
-                      ? removeGuestQuestion(current.name)
-                      : INVITE_COPY.removeInvite(current.name)}
+                <Copy ref={question} accessibilityRole="header" accessibilityLabel={ask?.spoken}>
+                  {ask?.text}
                 </Copy>
                 <Button
                   title={sheet?.view === "decline" ? EVENT_COPY.decline : EVENT_COPY.remove}
@@ -271,7 +461,7 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
                 />
               </View>
             )}
-            {sheet ? <ErrorNote message={shownError} /> : null}
+            {sheet && (sheet.view === "menu" || asking) ? <ErrorNote message={shownError} /> : null}
           </>
         ) : null}
       </GrabberSheet>
@@ -281,17 +471,6 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
 
 /** Send again goes by the app the invitation went by; with none recorded, either. */
 const sendVias = (sent?: "whatsapp" | "messages"): ("whatsapp" | "messages")[] => (sent ? [sent] : ["whatsapp", "messages"]);
-
-const nameLabel = (row: PersonRow) =>
-  [
-    row.name,
-    row.kind === "owner" ? EVENT_COPY.hostingBadge : null,
-    row.admin ? EVENT_COPY.adminBadge : null,
-    row.connection === "connected" ? CONNECTIONS_COPY.connectedBadge : null,
-    row.status,
-  ]
-    .filter(Boolean)
-    .join(", ");
 
 /** A small chip on the name line: Hosting, Admin, Connected. */
 function Badge({ text }: { text: string }) {
@@ -308,14 +487,18 @@ function Row({
   disabled,
   onPress,
   via,
+  rowRef,
 }: {
   action: PersonAction;
   row: PersonRow;
   disabled: boolean;
   onPress: () => void;
   via?: "whatsapp" | "messages";
+  /** The row's own view, so focus can come back to it (Block, after Keep). */
+  rowRef?: React.Ref<View>;
 }) {
   const destructive = action === "remove" || action === "removeInvite";
+  // Block is red too, and asks in place (plan 3, G-N9); it needs no band of its own after Report.
   const text: Record<PersonAction, string> = {
     connect: CONNECTIONS_COPY.connect,
     cancelRequest: CONNECTIONS_COPY.cancelRequest,
@@ -329,6 +512,9 @@ function Row({
     sendAgain: via === "messages" ? EVENT_COPY.sendAgainMessages : EVENT_COPY.sendAgainWhatsApp,
     approve: EVENT_COPY.approve,
     decline: EVENT_COPY.decline,
+    report: SAFETY_COPY.reportPerson(shownName(row.name)),
+    block: SAFETY_COPY.block(shownName(row.name)),
+    unblock: SAFETY_COPY.unblock(shownName(row.name)),
   };
   return (
     <>
@@ -337,18 +523,25 @@ function Row({
         title={text[action]}
         hint={action === "connect" ? CONNECTIONS_COPY.connectHint(row.name) : undefined}
         icon={ACTION_ICON[action] ?? X}
-        destructive={destructive}
+        destructive={destructive || action === "block"}
         disabled={disabled}
         onPress={onPress}
+        ref={rowRef}
       />
     </>
   );
 }
 
-function Avatar({ name, big = false }: { name: string; big?: boolean }) {
+/** The name's first letter, else a phone (a number, a name of emoji, a guest's link by its digits). */
+function Avatar({ row, big = false }: { row: Pick<PersonRow, "name" | "invitationId">; big?: boolean }) {
+  const letter = avatarLetter(row);
   return (
     <View aria-hidden importantForAccessibility="no-hide-descendants" style={[styles.avatar, big && styles.avatarBig]}>
-      <Text style={[styles.avatarText, big && { fontSize: 15 }]}>{(name.trim()[0] ?? "?").toLocaleUpperCase()}</Text>
+      {letter ? (
+        <Text style={[styles.avatarText, big && { fontSize: 15 }]}>{letter}</Text>
+      ) : (
+        <Phone size={big ? 18 : 16} color={c.aquaDark} strokeWidth={2} />
+      )}
     </View>
   );
 }
@@ -358,11 +551,16 @@ const styles = StyleSheet.create({
   back: { position: "absolute", left: 16 },
   barTitle: { fontFamily: fonts.medium, fontSize: 17, lineHeight: 22, color: c.ink, textAlign: "center" },
   list: { paddingHorizontal: 20, paddingBottom: 40, gap: 14 },
+  // Ink, not muted: muted on the page is 4.48:1, under 4.5:1 for text this size.
+  circleLine: { fontFamily: fonts.body, fontSize: 13, lineHeight: 18, color: c.ink },
   groupTitle: { fontFamily: fonts.bold, fontSize: 13, lineHeight: 18, color: c.muted, letterSpacing: 0.4, textTransform: "uppercase", marginTop: 6 },
   person: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 56, paddingVertical: 6 },
-  name: { flex: 1, gap: 1 },
+  // Reaches into the 2 pt gap above, so the rules of a chain join up.
+  rule: { position: "absolute", top: -2, bottom: 0, width: 2, backgroundColor: c.line },
+  // A long name deep in the chain wraps beside the dots, never under them (D3).
+  name: { flex: 1, minWidth: 0, gap: 1 },
   nameLine: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 },
-  nameText: { fontFamily: fonts.medium, fontSize: 15, lineHeight: 20, color: c.ink },
+  nameText: { fontFamily: fonts.medium, fontSize: 15, lineHeight: 20, color: c.ink, flexShrink: 1, minWidth: 0 },
   sub: { fontFamily: fonts.body, fontSize: 12, lineHeight: 16, color: c.muted },
   badge: { backgroundColor: c.aquaSoft, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 1 },
   badgeText: { fontFamily: fonts.medium, fontSize: 11, lineHeight: 16, color: c.aquaDark },

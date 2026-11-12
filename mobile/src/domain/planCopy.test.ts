@@ -19,7 +19,8 @@ test("titles, buttons and durations", () => {
     [PLAN_COPY.d30, PLAN_COPY.d60, PLAN_COPY.d120, PLAN_COPY.d180, PLAN_COPY.allDay],
     ["30 min", "1 h", "2 h", "3 h", "All day"],
   );
-  assert.equal(PLAN_COPY.chatCloses, "The chat closes 7 days after the end time.");
+  // The When sheet’s line, in this build (CH-P16).
+  assert.equal(PLAN_COPY.chatCloses, "The chat closes 48 hours after the end time.");
   assert.equal(PLAN_COPY.placeSearch, "A café, a park, your place…");
 });
 

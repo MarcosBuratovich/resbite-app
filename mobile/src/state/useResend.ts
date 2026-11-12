@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { getRandomBytes } from "expo-crypto";
-import { newInviteCode } from "../domain/contactInvites";
+import { messageFor, newInviteCode } from "../domain/contactInvites";
 import { linkDate } from "../domain/eventLinks";
 import { INVITE_COPY } from "../domain/inviteCopy";
 import { contactInviteGateway } from "../services/contactInvites";
@@ -8,6 +8,7 @@ import { inviteCodeStore } from "../services/inviteCodeStore";
 import { putInviteQuietly, sendPersonalLink } from "../services/inviteSend";
 import { readProfile } from "../services/profile";
 import { useApp } from "./AppState";
+import { useAccount } from "./AccountState";
 import { DEFAULT_ORIGIN } from "./useContactInvites";
 import type { InvitedPerson } from "./useEvent";
 
@@ -17,11 +18,15 @@ import type { InvitedPerson } from "./useEvent";
  * people list offers Send again only where this phone holds the code (`InvitedPerson.stored`, found under the number
  * or another spelling of it). `busy` is the phone being worked on, `error` what went wrong; `reload` runs when a
  * fresh invitation turned out to be something else (an app invitation), so the list is read again. `resend`
- * answers whether the link went out (false: `error` says why).
+ * answers whether the link went out (false: `error` says why). `bringing` is given for a guest who brought the person
+ * (`organizer`: the organizer's name, null when it isn't known): the message then reads "Pedro invited you to Ana’s …"
+ * (CO-P9), where a host's names the host alone. The sender's own name is the session's profile's, read again only
+ * when that has none (C23).
  */
 export function useResend(
   plan: { id: string; title: string; starts_at: string; ends_at?: string | null },
   reload?: () => Promise<void>,
+  bringing?: { organizer: string | null },
 ): {
   resend: (person: InvitedPerson, via: "whatsapp" | "messages") => Promise<boolean>;
   /**
@@ -34,6 +39,7 @@ export function useResend(
   clearError: () => void;
 } {
   const { session, preview } = useApp();
+  const account = useAccount();
   const scope = preview ? "preview" : session?.user.id;
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -56,10 +62,12 @@ export function useResend(
       setBusy(person.phone);
       setError(null);
       try {
-        const host = await readProfile(scope).then(
-          (profile) => profile?.display_name?.trim() || null,
-          () => null,
-        );
+        const own =
+          account.displayName ??
+          (await readProfile(scope).then(
+            (profile) => profile?.display_name?.trim() || null,
+            () => null,
+          ));
         let saved = person.stored ?? minted.current[person.e164];
         if (!saved) {
           // This phone has no code for them (the host changed phones): a fresh code replaces the old link.
@@ -83,11 +91,7 @@ export function useResend(
           code: saved.code,
           via,
           origin: process.env.EXPO_PUBLIC_INVITATION_ORIGIN || DEFAULT_ORIGIN,
-          message: {
-            host: host ?? INVITE_COPY.hostFallback,
-            title: plan.title.trim(),
-            when: linkDate(plan.starts_at, plan.ends_at ?? null),
-          },
+          message: messageFor({ own, organizer: bringing?.organizer, title: plan.title.trim(), when: linkDate(plan.starts_at, plan.ends_at ?? null) }),
         });
         if (failure) {
           setError(failure);
@@ -101,7 +105,7 @@ export function useResend(
         setBusy(null);
       }
     },
-    [busy, scope, plan.id, plan.title, plan.starts_at, plan.ends_at, reload],
+    [busy, scope, plan.id, plan.title, plan.starts_at, plan.ends_at, reload, bringing?.organizer, account.displayName],
   );
   const clearError = useCallback(() => setError(null), []);
   return { resend, forget, busy, error, clearError };

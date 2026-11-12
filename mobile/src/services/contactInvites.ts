@@ -1,3 +1,4 @@
+import { CIRCLE_COPY } from "../domain/circleCopy";
 import { CONNECTIONS_COPY } from "../domain/connectionsCopy";
 import { INVITE_COPY } from "../domain/inviteCopy";
 export type InviteKind = "app" | "link" | "self" | "already";
@@ -14,6 +15,8 @@ export type PhoneInvitation = {
   country: string;
   answered: boolean;
   response: string | null;
+  /** The caller brought them (a guest's links, and a host's own from before they were one): theirs to take back (C31). */
+  brought: boolean;
 };
 export type ContactInviteGateway = {
   /** Which of these numbers (digits) belong to people already on Resbite. */
@@ -30,7 +33,14 @@ export const errorField = (e: unknown, field: "code" | "message") =>
     ? String((e as Record<string, unknown>)[field])
     : "";
 
+/**
+ * An invite's refusal in words. The circle's two refusals are told by their message, before the code: 42501 'Not
+ * allowed to bring people here' (no allowance, or someone a host removed) and 22023 'No invites left'.
+ */
 export function inviteErrorMessage(e: unknown): string {
+  const message = errorField(e, "message");
+  if (message === "Not allowed to bring people here") return CIRCLE_COPY.notAllowed;
+  if (message === "No invites left") return CIRCLE_COPY.noneLeft;
   const code = errorField(e, "code");
   if (code === "42501") return INVITE_COPY.hostsOnly;
   if (code === "22023") return errorField(e, "message") || offline;
@@ -40,7 +50,8 @@ export function inviteErrorMessage(e: unknown): string {
 /**
  * A `{user}` item the server refused (42501 'Not a connection'): someone not, or no longer, connected, or who may no
  * longer use the app. The server refuses the whole call for it, so `inviteConnections` sends such a call again one
- * by one. Told by its name, as a class's `instanceof` may not survive the transform to older JavaScript.
+ * by one, unless it held only that one. Told by its name, as a class's `instanceof` may not survive the transform to
+ * older JavaScript.
  */
 const NOT_A_CONNECTION = "NotAConnection";
 export const isNotAConnection = (e: unknown): boolean => e instanceof Error && e.name === NOT_A_CONNECTION;
@@ -139,6 +150,7 @@ export function createContactInviteGateway(
         country: String(d.country),
         answered: d.answered === true,
         response: typeof d.response === "string" ? d.response : null,
+        brought: d.brought === true,
       }));
     },
     async revoke(plan, phone) {
@@ -151,8 +163,8 @@ export function createContactInviteGateway(
  * Invites connections by user id (CO-P4), in calls of their own: Invite people sends them after the numbers, so a
  * refusal here never loses the numbers' invitations. A call refused for one of its connections (42501 'Not a
  * connection': `my_connections` may still list someone who can no longer be invited) is sent again one by one, so
- * the others are still invited; those refused alone are left out of the results and listed in `refused`. Any other
- * failure throws, as `invite` does.
+ * the others are still invited; those refused alone are left out of the results and listed in `refused`. A refused
+ * call that held one connection is not sent again: that one is refused. Any other failure throws, as `invite` does.
  */
 export async function inviteConnections(
   gateway: Pick<ContactInviteGateway, "invite">,
@@ -170,6 +182,10 @@ export async function inviteConnections(
       keep(await gateway.invite(plan, batch.map((user) => ({ user }))));
     } catch (e) {
       if (!isNotAConnection(e)) throw e;
+      if (batch.length === 1) {
+        refused.push(batch[0]);
+        continue;
+      }
       for (const user of batch) {
         try {
           keep(await gateway.invite(plan, [{ user }]));
