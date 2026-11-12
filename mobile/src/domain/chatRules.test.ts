@@ -7,6 +7,7 @@ import {
   authorName,
   canAnnounce,
   canLeave,
+  cleanName,
   closedCard,
   closingLine,
   currentOccurrences,
@@ -96,6 +97,7 @@ const summary = (over: Partial<ChatSummary> = {}): ChatSummary => ({
   lastReadId: null,
   unread: false,
   messageCount: 0,
+  rulesAccepted: true,
   ...over,
 });
 
@@ -811,6 +813,7 @@ test("a pending card's announcement line, from its start until its end", () => {
     chats: {},
     announcements: { p1: { id: 41, authorId: ANA, body: "Doors open at 19:30" } },
     names,
+    inviters: {},
   };
   const plan = (starts_at: string, ends_at: string | null) => ({ id: "p1", starts_at, ends_at });
   const line = "Announcement from Ana · Doors open at 19:30";
@@ -1110,7 +1113,7 @@ test("invitationDot: a group member's invitation card carries the chat's dot; a 
   const ME = "0a000000-0000-4000-8000-000000000003";
   const SERIES = "0b000000-0000-4000-8000-000000000001";
   const plan = { id: "0c000000-0000-4000-8000-000000000001", series_id: SERIES, repeat_weeks: null, repeats_from: null, admins: [] as string[] };
-  const overview = (unread: boolean, open = true) => ({ chats: { [SERIES]: { unread, open, last: null, count: 3 } }, announcements: {}, names: {} });
+  const overview = (unread: boolean, open = true) => ({ chats: { [SERIES]: { unread, open, last: null, count: 3 } }, announcements: {}, names: {}, inviters: {} });
   const current = new Set([plan.id]);
   // A guest who hasn't answered is listed in a chat only on a group: the dot.
   assert.equal(invitationDot(plan, ME, current, overview(true)), true);
@@ -1124,5 +1127,36 @@ test("invitationDot: a group member's invitation card carries the chat's dot; a 
   assert.equal(invitationDot(plan, ME, current, overview(true, false)), false);
   assert.equal(invitationDot(plan, ME, new Set(), overview(true)), false);
   assert.equal(invitationDot(plan, ME, current, null), false);
-  assert.equal(invitationDot(plan, ME, current, { chats: {}, announcements: {}, names: {} }), false);
+  assert.equal(invitationDot(plan, ME, current, { chats: {}, announcements: {}, names: {}, inviters: {} }), false);
+});
+
+// Plan 3 (CH-R-A3): a message the Resbite team took down (`remove-reported-message.sql`) says so wherever a removed row
+// is worded; a host's removal, which writes no payload, keeps plan 1's words.
+test("rowText and messageLabel word a removal by Resbite apart from a host's", () => {
+  const saturday = Date.parse("2025-11-15T20:00:00Z");
+  const byResbite = msg({ state: "removed", body: null, payload: { by: "resbite" } });
+  const byHost = msg({ state: "removed", body: null });
+  assert.equal(rowText(byResbite, names, ANA, false), "Message removed by Resbite");
+  assert.equal(rowText(byHost, names, ANA, false), "Message removed by an admin");
+  assert.equal(messageLabel(byResbite, names, ANA, saturday, LONDON), "Leo, Message removed by Resbite, 18:02");
+  assert.equal(messageLabel(byHost, names, ANA, saturday, LONDON), "Leo, Message removed by an admin, 18:02");
+  // An announcement the team took down, on a group too.
+  const announcement = msg({ kind: "announcement", audience: "everyone", authorId: ANA, state: "removed", body: null, payload: { by: "resbite" } });
+  assert.equal(rowText(announcement, names, LEO, true), "Message removed by Resbite");
+  assert.equal(messageLabel(announcement, names, LEO, saturday, LONDON, undefined, true, "Thursday"), "Announcement to everyone in the group, Ana, Message removed by Resbite, 18:02");
+  // Only a removed row with `by: "resbite"`: anyone else's `by`, or a sent or deleted row with that payload, reads as before.
+  assert.equal(rowText(msg({ state: "removed", body: null, payload: { by: ANA } }), names, ANA, false), "Message removed by an admin");
+  assert.equal(rowText(msg({ state: "removed", body: null, payload: { by: "Resbite" } }), names, ANA, false), "Message removed by an admin");
+  assert.equal(rowText(msg({ state: "deleted", body: null, payload: { by: "resbite" } }), names, ANA, false), "Message deleted");
+  assert.equal(rowText(msg({ payload: { by: "resbite" } }), names, ANA, false), "Leo: I can bring the snacks");
+});
+
+// Plan 3 (Task 6's Blocked people): a name reads as the chat reads it (`cleanText`), so a zero-width or directional mark
+// can't hide in it or flip it.
+test("cleanName takes zero-width and directional marks out of a name", () => {
+  assert.equal(cleanName("Le\u200bo\u200f"), "Leo");
+  assert.equal(cleanName("\u202eLeo\u202c"), "Leo");
+  assert.equal(cleanName("  Ana  María: "), "Ana María");
+  assert.equal(cleanName(null), "");
+  assert.equal(cleanName("\u200b"), "");
 });

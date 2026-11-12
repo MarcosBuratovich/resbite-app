@@ -1,6 +1,7 @@
 import { errorField, passThrough, planDeadline, type Deadline, type Rpc } from "./contactInvites";
 import { CHAT_COPY, type ChatAudience } from "../domain/chatCopy";
 import { INVITE_COPY } from "../domain/inviteCopy";
+import { SAFETY_COPY } from "../domain/safetyCopy";
 
 export type { ChatAudience } from "../domain/chatCopy";
 
@@ -69,6 +70,8 @@ export type ChatSummary = {
   unread: boolean;
   /** Messages and announcements still `sent` (K-N12). */
   messageCount: number;
+  /** The reader agreed to the current chat rules (plan 3, G-B4(d)); until then Send opens the rules first. */
+  rulesAccepted: boolean;
 };
 
 /** My resbites' view: each chat the reader is in by series, and each invitation's latest "Everyone invited" announcement by plan. */
@@ -77,6 +80,11 @@ export type ChatOverview = {
   /** Each keeps its message id, so it can be reported from the invitation card (SHOULD 7). */
   announcements: Record<string, { id: number; authorId: string | null; body: string }>;
   names: ChatNames;
+  /**
+   * Who invited the reader, by plan (plan id → user id), for each invitation they haven't answered, announcement or not
+   * (plan 3, B4): the card and the resbite page offer Report and Block for them. `names` names each.
+   */
+  inviters: Record<string, string>;
 };
 
 export type ChatGateway = {
@@ -202,6 +210,7 @@ function summary(data: unknown): ChatSummary {
     lastReadId: finite(data.last_read_id),
     unread: data.unread === true,
     messageCount: count(data.message_count),
+    rulesAccepted: data.rules_accepted === true,
   };
 }
 
@@ -223,7 +232,11 @@ function overview(data: unknown): ChatOverview {
     if (!isObject(a) || id === null) continue;
     announcements[plan] = { id, authorId: textOrNull(a.author_id), body: textOf(a.body) };
   }
-  return { chats, announcements, names: names(d.names) };
+  // An inviter that isn't an id is none; an answer without the map has no inviters.
+  const inviters: ChatOverview["inviters"] = {};
+  for (const [plan, user] of Object.entries(isObject(d.inviters) ? d.inviters : {}))
+    if (typeof user === "string" && user !== "") inviters[plan] = user;
+  return { chats, announcements, names: names(d.names), inviters };
 }
 
 /** The chat's reads and writes; a refusal is thrown as the server sent it, as `connectionGateway` does. */
@@ -278,6 +291,8 @@ export const isNotInGroup = (e: unknown): boolean => refusal(e, "42501", "Not in
 export const isHostsOnly = (e: unknown): boolean => refusal(e, "42501", "Hosts only");
 /** An announcement within a minute of the last one (K-S8): its own words, not the messages line (H32 Q35). */
 export const isTooFast = (e: unknown): boolean => refusal(e, "22023", "Too fast");
+/** A send or an announcement before the reader agreed to the chat rules (plan 3, I6): the rules sheet, not an error line. */
+export const needsChatRules = (e: unknown): boolean => refusal(e, "22023", "Rules not accepted");
 
 /** Why a chat call was refused, in words; anything else, a lost connection included, keeps the connection line. */
 export function chatErrorMessage(e: unknown): string {
@@ -296,6 +311,9 @@ export function chatErrorMessage(e: unknown): string {
     if (message === "Chat closed") return CHAT_COPY.closedShort;
     if (message === "Slow down" || message === "Too fast") return CHAT_COPY.slowDown;
     if (message === "Invalid message") return CHAT_COPY.invalid;
+    // Plan 3: a blocked term (G-B4(a)), and the chat rules not agreed yet (I6).
+    if (message === "Not allowed") return SAFETY_COPY.notAllowed;
+    if (message === "Rules not accepted") return SAFETY_COPY.rulesFirst;
   }
   return INVITE_COPY.offline;
 }

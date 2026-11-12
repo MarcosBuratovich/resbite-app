@@ -128,8 +128,12 @@ function oneLine(value: unknown): string {
   if (typeof value !== "string") return "";
   return wellFormed(value).replace(BIDI, "").replace(/\s/g, " ").replace(CONTROL, "").replace(/ +/g, " ").trim();
 }
-/** A first name for a line: cleaned, without trailing ":", "," or ";" (H18). Blank reads as no name. */
-const cleanName = (value: unknown): string => cleanText(value).replace(/[:;,]+$/, "").trim();
+/**
+ * A first name for a line: cleaned, without trailing ":", "," or ";" (H18). Blank reads as no name. Every name in a chat
+ * is cleaned so (`nameOf`), and plan 3's names too (Blocked people, Report and Block on an invitation): `cleanText`, not
+ * `oneLine`, so no zero-width or directional mark stays in a name.
+ */
+export const cleanName = (value: unknown): string => cleanText(value).replace(/[:;,]+$/, "").trim();
 
 /** The name the read gave a uuid, from the map's own keys only (H20), cleaned; "" when there is none. */
 const nameOf = (uuid: string | null, names: ChatNames): string =>
@@ -293,11 +297,19 @@ export function systemText(
   }
 }
 
+/**
+ * A removed row's words: "Message removed by Resbite" when the team took it down (`payload.by` is "resbite", written by
+ * `remove-reported-message.sql`, CH-R-A3), else plan 1's "Message removed by an admin". The bubble, the announcement card,
+ * the Chat row and the screen reader's label all word it here.
+ */
+export const removedText = (m: Pick<ChatMessage, "payload">): string =>
+  isObject(m.payload) && m.payload.by === "resbite" ? CHAT_COPY.removedByResbite : CHAT_COPY.removed;
+
 /** The words of a person's row by its state; null for a kind or a state this build doesn't know (fails closed, H20). */
 function words(m: ChatMessage): string | null {
   if (m.kind !== "message" && m.kind !== "announcement") return null;
   if (m.state === "deleted") return CHAT_COPY.deleted;
-  if (m.state === "removed") return CHAT_COPY.removed;
+  if (m.state === "removed") return removedText(m);
   return m.state === "sent" ? (m.body ?? "") : null;
 }
 

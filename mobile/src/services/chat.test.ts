@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chatErrorMessage, createChatGateway, isChatClosed, isHostsOnly, isNotInChat, isNotInGroup, isTooFast, serverTime } from "./chat";
+import { chatErrorMessage, createChatGateway, isChatClosed, isHostsOnly, isNotInChat, isNotInGroup, isTooFast, needsChatRules, serverTime } from "./chat";
 
 type Call = { fn: string; args: Record<string, unknown> };
 function gateway(data: unknown = null, error: unknown = null) {
@@ -101,6 +101,8 @@ test("summary sends chat_summary with the series and reads the server's answer i
     lastReadId: 39,
     unread: true,
     messageCount: 23,
+    // The answer has no rules_accepted: not agreed (plan 3, G-B4(d)).
+    rulesAccepted: false,
   });
   assert.deepEqual(calls, [{ fn: "chat_summary", args: { p_series: SERIES } }]);
 });
@@ -247,10 +249,11 @@ test("overview sends my_chat_overview and keeps each announcement's id (SHOULD 7
     },
     announcements: { [PLAN]: { id: 40, authorId: ANA, body: "Doors open at 19:30" } },
     names: { [ANA]: "Ana", [LEO]: "Leo" },
+    inviters: {},
   });
   assert.deepEqual(calls, [{ fn: "my_chat_overview", args: {} }]);
-  assert.deepEqual(await gateway({}).gw.overview(), { chats: {}, announcements: {}, names: {} });
-  assert.deepEqual(await gateway(null).gw.overview(), { chats: {}, announcements: {}, names: {} });
+  assert.deepEqual(await gateway({}).gw.overview(), { chats: {}, announcements: {}, names: {}, inviters: {} });
+  assert.deepEqual(await gateway(null).gw.overview(), { chats: {}, announcements: {}, names: {}, inviters: {} });
 });
 
 test("a refusal is thrown as the server sent it", async () => {
@@ -519,4 +522,45 @@ test("isNotInGroup tells leave_series' 'Not in this group' by code and message (
     null,
   ])
     assert.equal(isNotInGroup(other), false);
+});
+
+// Plan 3 (safety).
+test("summary reads rules_accepted as rulesAccepted: true only when the server says true (G-B4(d))", async () => {
+  assert.equal((await gateway({ rules_accepted: true }).gw.summary(SERIES)).rulesAccepted, true);
+  assert.equal((await gateway({ rules_accepted: false }).gw.summary(SERIES)).rulesAccepted, false);
+  assert.equal((await gateway({}).gw.summary(SERIES)).rulesAccepted, false);
+  for (const odd of ["true", 1, null, {}]) assert.equal((await gateway({ rules_accepted: odd }).gw.summary(SERIES)).rulesAccepted, false);
+});
+
+test("overview reads each invitation's inviter by plan, and {} when the answer has none (B4)", async () => {
+  const o = await gateway({ chats: {}, announcements: {}, names: { [LEO]: "Leo" }, inviters: { [PLAN]: LEO, p2: ANA } }).gw.overview();
+  assert.deepEqual(o.inviters, { [PLAN]: LEO, p2: ANA });
+  assert.deepEqual((await gateway({ chats: {}, announcements: {}, names: {} }).gw.overview()).inviters, {});
+  // An odd value is no inviter; the rest stay.
+  assert.deepEqual((await gateway({ inviters: { a: 5, b: "", c: null, d: LEO } }).gw.overview()).inviters, { d: LEO });
+  assert.deepEqual((await gateway({ inviters: [LEO] }).gw.overview()).inviters, {});
+  assert.deepEqual((await gateway({ inviters: "x" }).gw.overview()).inviters, {});
+});
+
+test("a blocked term and a rules refusal have their own words, never the connection line (G-B4(a), I6)", () => {
+  assert.equal(chatErrorMessage({ code: "22023", message: "Not allowed" }), "That message can’t be sent.");
+  assert.equal(chatErrorMessage({ code: "22023", message: "Rules not accepted" }), "Agree to the chat rules first.");
+  for (const other of [{ code: "42501", message: "Not allowed" }, { code: "42501", message: "Rules not accepted" }, { message: "Rules not accepted" }])
+    assert.equal(chatErrorMessage(other), "Check your connection and try again.");
+  // Chat core's refusals are as built.
+  assert.equal(chatErrorMessage({ code: "22023", message: "Chat closed" }), "This chat is closed.");
+});
+
+test("needsChatRules tells 22023 'Rules not accepted' by code and message (I6)", () => {
+  assert.equal(needsChatRules({ code: "22023", message: "Rules not accepted" }), true);
+  for (const other of [
+    { code: "42501", message: "Rules not accepted" },
+    { code: "22023", message: "Not allowed" },
+    { code: "22023", message: "Too fast" },
+    { message: "Rules not accepted" },
+    Error("Rules not accepted"),
+    null,
+    undefined,
+  ])
+    assert.equal(needsChatRules(other), false);
 });

@@ -75,6 +75,7 @@ const summary = (over: Partial<ChatSummary> = {}): ChatSummary => ({
   lastReadId: null,
   unread: false,
   messageCount: 0,
+  rulesAccepted: true,
   ...over,
 });
 

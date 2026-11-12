@@ -1,14 +1,15 @@
 import type { ChatMessage, ChatNames } from "../services/chat";
 import { CHAT_COPY } from "../domain/chatCopy";
-import { authorName, dayFor, dayLabel, isCurrentRow, linkHost, linkParts, messageLabel, systemText } from "../domain/chatRules";
+import { authorName, dayFor, dayLabel, isCurrentRow, linkHost, linkParts, messageLabel, removedText, systemText } from "../domain/chatRules";
 import { localParts } from "../domain/whenText";
 import type { EndedLine, PendingMessage } from "./chatModel";
 
 /**
  * What a long-press (and VoiceOver's actions) offers on a row: Delete message on your own, Remove message on someone
- * else's for a host (Decision 5, K-S17), Delete unsent message on one that failed to send (K-S7). Plan 3 appends Report.
+ * else's for a host (Decision 5, K-S17), Delete unsent message on one that failed to send (K-S7), and Report message on
+ * someone else's (plan 3, G-N12).
  */
-export type MessageAction = "delete" | "remove" | "deleteUnsent";
+export type MessageAction = "delete" | "remove" | "deleteUnsent" | "report";
 
 /** A link in a message, with the name of its accessibility action ("Open example.com", numbered when a host repeats). */
 export type FeedLink = { name: string; href: string; host: string; label: string };
@@ -110,15 +111,19 @@ function linksOf(text: string): FeedLink[] {
     });
 }
 
-/** Delete for your own sent message or announcement, Remove for a host on anyone else's; nothing on what's gone. */
+/**
+ * Delete for your own sent message or announcement; on anyone else's, Remove for a host, then Report for anyone, host or
+ * not (plan 3, G-N12). A row with no author is no one's to report. Nothing on what's gone, nor on a system line.
+ */
 export function messageActions(m: ChatMessage, viewerId: string, host: boolean): MessageAction[] {
   if ((m.kind !== "message" && m.kind !== "announcement") || m.state !== "sent") return [];
   if (m.authorId !== null && m.authorId === viewerId) return ["delete"];
-  return host ? ["remove"] : [];
+  const remove: MessageAction[] = host ? ["remove"] : [];
+  return typeof m.authorId === "string" && m.authorId !== "" ? [...remove, "report"] : remove;
 }
 
 const goneOf = (m: ChatMessage) => (m.state === "deleted" || m.state === "removed" ? m.state : null);
-const wordsOf = (m: ChatMessage) => (m.state === "deleted" ? CHAT_COPY.deleted : m.state === "removed" ? CHAT_COPY.removed : (m.body ?? ""));
+const wordsOf = (m: ChatMessage) => (m.state === "deleted" ? CHAT_COPY.deleted : m.state === "removed" ? removedText(m) : (m.body ?? ""));
 
 /** An unsent message as the row it will become, for its label: yours, now, with its send state. */
 const asMessage = (p: PendingMessage, viewerId: string): ChatMessage => ({

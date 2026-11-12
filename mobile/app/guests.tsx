@@ -28,6 +28,7 @@ import { circleOf, firstName } from "../src/domain/circle";
 import { CIRCLE_COPY } from "../src/domain/circleCopy";
 import { CONNECTIONS_COPY } from "../src/domain/connectionsCopy";
 import { INVITE_COPY } from "../src/domain/inviteCopy";
+import { SAFETY_COPY } from "../src/domain/safetyCopy";
 import { invitationGateway } from "../src/services/invitations";
 import { contactInviteGateway } from "../src/services/contactInvites";
 import { bringerRevokeError, circleGateway, takingBack } from "../src/services/circle";
@@ -51,6 +52,18 @@ const ACTION_ICON: Partial<Record<PersonAction, LucideIcon>> = {
   remove: X,
   removeInvite: X,
 };
+
+const NOBODY_BLOCKED: ReadonlySet<string> = new Set();
+const SAFETY_ACTIONS: readonly PersonAction[] = ["report", "block", "unblock"];
+/**
+ * Report, Block and Unblock (plan 3) open sheets this screen doesn't have yet: until it does, no row offers them, and the
+ * list and each person's sheet are as before.
+ */
+const withoutSafety = (groups: ReturnType<typeof peopleGroups>): ReturnType<typeof peopleGroups> =>
+  groups.map((g) => ({
+    ...g,
+    rows: g.rows.map((row) => ({ ...row, actions: row.actions.filter((a) => !SAFETY_ACTIONS.includes(a)) })),
+  }));
 
 /**
  * The people list (spec CR-P4, CR-P16, CO-01, CO-07): /guests?plan=<id>. Everyone who answered, and for hosts the rest,
@@ -123,22 +136,26 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // After the end, or once cancelled, the hosts' actions go; connecting stays (CO rule 7).
-  const groups = peopleGroups({
-    role: role ?? "guest",
-    state: pageState(plan),
-    guests,
-    invited,
-    requests,
-    admins,
-    owner,
-    userId: me,
-    connections,
-    bringerNames: event.bringerNames,
-    broughtLinks: event.broughtLinks,
-    unnamed: UNNAMED_GUEST,
-    // A group's guest sees everyone in it, answered or not (G-B5).
-    isGroup: event.isGroup,
-  });
+  const groups = withoutSafety(
+    peopleGroups({
+      role: role ?? "guest",
+      state: pageState(plan),
+      guests,
+      invited,
+      requests,
+      admins,
+      owner,
+      userId: me,
+      connections,
+      // This screen reads no blocks yet (plan 3's `my_blocks`), so nobody is blocked here, as before.
+      blocks: NOBODY_BLOCKED,
+      bringerNames: event.bringerNames,
+      broughtLinks: event.broughtLinks,
+      unnamed: UNNAMED_GUEST,
+      // A group's guest sees everyone in it, answered or not (G-B5).
+      isGroup: event.isGroup,
+    }),
+  );
   const off = working || event.acting !== null || resend.busy !== null;
   const open = (row: PersonRow) => {
     setError(null);
@@ -428,6 +445,9 @@ function Row({
     sendAgain: via === "messages" ? EVENT_COPY.sendAgainMessages : EVENT_COPY.sendAgainWhatsApp,
     approve: EVENT_COPY.approve,
     decline: EVENT_COPY.decline,
+    report: SAFETY_COPY.reportPerson(row.name),
+    block: SAFETY_COPY.block(row.name),
+    unblock: SAFETY_COPY.unblock(row.name),
   };
   return (
     <>

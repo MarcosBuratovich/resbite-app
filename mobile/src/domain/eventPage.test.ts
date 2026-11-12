@@ -96,7 +96,8 @@ test("moreRows by role, state and answer", () => {
   assert.deepEqual(moreRows({ role: "admin", state: "open", muted: false, response: "accepted", calendar }), ["calendar", "mute", "again", "changeReply", "cancel"]);
   assert.deepEqual(moreRows({ role: "guest", state: "open", muted: false, response: "maybe", calendar }), ["calendar", "mute"]);
   assert.deepEqual(moreRows({ role: "guest", state: "open", muted: true, response: "accepted", calendar }), ["calendar", "unmute"]);
-  assert.deepEqual(moreRows({ role: "guest", state: "open", muted: false, response: "pending", calendar }), []);
+  // Plan 3 (B1, B4): an unanswered invitee may report or block the people who invited them.
+  assert.deepEqual(moreRows({ role: "guest", state: "open", muted: false, response: "pending", calendar }), ["reportOrBlock"]);
   assert.deepEqual(moreRows({ role: "guest", state: "open", muted: false, response: null, calendar }), []);
   for (const role of ["owner", "admin", "guest"] as const)
     for (const state of ["ended", "cancelled"] as const)
@@ -150,6 +151,10 @@ const linkPerson = (phone: string, name: string, sentVia?: "whatsapp" | "message
   storedKey: held ? `+44${phone}` : null,
 });
 const request = (user_id: string, name: string) => ({ user_id, name, response: "accepted", ending: null, created_at: "2099-01-01T00:00:00Z" });
+/** Plan 3: nobody blocked, as `my_blocks` reads once it lands empty. */
+const NONE: ReadonlySet<string> = new Set();
+/** Plan 3: what every other row with an account ends with, nobody blocked: Report, then Block (G-S9). */
+const S = ["report", "block"] as const;
 
 test("peopleCounts and peopleRowText", () => {
   const counts = peopleCounts({
@@ -226,25 +231,26 @@ test("peopleGroups for an owner", () => {
     owner: null,
     userId: "u-me",
     connections: null,
+    blocks: NONE,
   });
   assert.deepEqual(groups.map((g) => g.title), [
     "Going · 2", "Maybe · 1", "Can’t go · 1", "Invited, not answered yet · 4", "Waiting for you · 1",
   ]);
   const [going, maybe, cant, invited, waiting] = groups.map((g) => g.rows);
-  assert.deepEqual(going[0], { key: "guest:adm", name: "Leo", status: null, reply: "Going", admin: true, kind: "guest", userId: "adm", connection: null, me: false, actions: ["removeAdmin", "remove"], depth: 0, broughtByName: null, broughtByMe: false });
-  assert.deepEqual(going[1].actions, ["makeAdmin", "remove"]);
+  assert.deepEqual(going[0], { key: "guest:adm", name: "Leo", status: null, reply: "Going", admin: true, kind: "guest", userId: "adm", connection: null, me: false, blocked: false, actions: ["removeAdmin", "remove", ...S], depth: 0, broughtByName: null, broughtByMe: false });
+  assert.deepEqual(going[1].actions, ["makeAdmin", "remove", ...S]);
   assert.equal(going[1].admin, false);
-  assert.deepEqual(maybe[0], { key: "guest:m1", name: "Sol", status: null, reply: "Maybe", admin: false, kind: "guest", userId: "m1", connection: null, me: false, actions: ["remove"], depth: 0, broughtByName: null, broughtByMe: false });
-  assert.deepEqual(cant[0].actions, ["remove"]);
+  assert.deepEqual(maybe[0], { key: "guest:m1", name: "Sol", status: null, reply: "Maybe", admin: false, kind: "guest", userId: "m1", connection: null, me: false, blocked: false, actions: ["remove", ...S], depth: 0, broughtByName: null, broughtByMe: false });
+  assert.deepEqual(cant[0].actions, ["remove", ...S]);
   assert.equal(cant[0].reply, "Can’t go");
-  assert.deepEqual(invited[0], { key: "link:111", name: "Dan", status: "Invited by WhatsApp", reply: null, admin: false, kind: "linkInvite", phone: "111", connection: null, me: false, actions: ["sendAgain", "removeInvite"], depth: 0, broughtByName: null, broughtByMe: false });
+  assert.deepEqual(invited[0], { key: "link:111", name: "Dan", status: "Invited by WhatsApp", reply: null, admin: false, kind: "linkInvite", phone: "111", connection: null, me: false, blocked: false, actions: ["sendAgain", "removeInvite"], depth: 0, broughtByName: null, broughtByMe: false });
   // Send again needs this phone's code for the person, found under any spelling of their number (`stored`).
   assert.equal(invited[1].status, "Invited by link");
   assert.deepEqual(invited[1].actions, ["removeInvite"]);
   assert.equal(invited[2].status, "Invited by link");
   assert.deepEqual(invited[2].actions, ["sendAgain", "removeInvite"]);
-  assert.deepEqual(invited[3], { key: "app:p1", name: "Pat", status: "Invited in the app", reply: null, admin: false, kind: "appInvite", userId: "p1", connection: null, me: false, actions: ["remove"], depth: 0, broughtByName: null, broughtByMe: false });
-  assert.deepEqual(waiting[0], { key: "request:r1", name: "Rae", status: "Asked through the link", reply: null, admin: false, kind: "request", userId: "r1", connection: null, me: false, actions: ["approve", "decline"], depth: 0, broughtByName: null, broughtByMe: false });
+  assert.deepEqual(invited[3], { key: "app:p1", name: "Pat", status: "Invited in the app", reply: null, admin: false, kind: "appInvite", userId: "p1", connection: null, me: false, blocked: false, actions: ["remove", ...S], depth: 0, broughtByName: null, broughtByMe: false });
+  assert.deepEqual(waiting[0], { key: "request:r1", name: "Rae", status: "Asked through the link", reply: null, admin: false, kind: "request", userId: "r1", connection: null, me: false, blocked: false, actions: ["approve", "decline", "block"], depth: 0, broughtByName: null, broughtByMe: false });
 });
 
 test("peopleGroups: the owner removes an admin's role whatever their answer; Make admin only on Going", () => {
@@ -259,13 +265,14 @@ test("peopleGroups: the owner removes an admin's role whatever their answer; Mak
     owner: null,
     userId: "u-me",
     connections: null,
+    blocks: NONE,
   });
   const rows = groups.flatMap((g) => g.rows);
   const by = (name: string) => rows.find((r) => r.name === name)!;
-  assert.deepEqual(by("Ana").actions, ["removeAdmin", "remove"]);
-  assert.deepEqual(by("Bo").actions, ["removeAdmin", "remove"]);
-  assert.deepEqual([by("Cy").kind, by("Cy").admin, by("Cy").actions], ["appInvite", true, ["removeAdmin", "remove"]]);
-  assert.deepEqual(by("Di").actions, ["remove"]);
+  assert.deepEqual(by("Ana").actions, ["removeAdmin", "remove", ...S]);
+  assert.deepEqual(by("Bo").actions, ["removeAdmin", "remove", ...S]);
+  assert.deepEqual([by("Cy").kind, by("Cy").admin, by("Cy").actions], ["appInvite", true, ["removeAdmin", "remove", ...S]]);
+  assert.deepEqual(by("Di").actions, ["remove", ...S]);
   assert.equal(by("Ana").admin, true);
 });
 
@@ -279,21 +286,22 @@ test("peopleGroups for an admin and a guest", () => {
     owner: null,
     userId: "u-me",
     connections: null,
+    blocks: NONE,
   };
   const admin = peopleGroups({ ...input, role: "admin" });
   assert.deepEqual(admin.map((g) => g.title), ["Going · 2", "Invited, not answered yet · 3", "Waiting for you · 1"]);
   // An admin removes guests and decides requests, but never touches another admin (CR-P15) or the admin roles.
-  assert.deepEqual(admin[0].rows.map((r) => [r.name, r.actions]), [["Marta", ["remove"]], ["Leo", []]]);
-  assert.deepEqual(admin[1].rows.map((r) => [r.name, r.actions]), [["Dan", ["removeInvite"]], ["Pat", ["remove"]], ["Cy", []]]);
-  assert.deepEqual(admin[2].rows[0].actions, ["approve", "decline"]);
+  assert.deepEqual(admin[0].rows.map((r) => [r.name, r.actions]), [["Marta", ["remove", ...S]], ["Leo", [...S]]]);
+  assert.deepEqual(admin[1].rows.map((r) => [r.name, r.actions]), [["Dan", ["removeInvite"]], ["Pat", ["remove", ...S]], ["Cy", [...S]]]);
+  assert.deepEqual(admin[2].rows[0].actions, ["approve", "decline", "block"]);
   // A guest's `invited` holds only the links they sent (the server lists no one else's to a guest): none here.
   const asGuest = peopleGroups({ ...input, role: "guest", invited: [] });
   assert.deepEqual(asGuest.map((g) => g.title), ["Going · 2"]);
-  assert.deepEqual(asGuest[0].rows.map((r) => r.actions), [[], []]);
+  assert.deepEqual(asGuest[0].rows.map((r) => r.actions), [[...S], [...S]]);
   assert.deepEqual(peopleGroups({ ...input, guests: [], invited: [], requests: [], role: "owner" }), []);
 });
 
-test("peopleGroups after the end and once cancelled: the same groups, no actions", () => {
+test("peopleGroups after the end and once cancelled: the same groups, no host actions; Report and Block stay", () => {
   for (const state of ["ended", "cancelled"] as const) {
     const groups = peopleGroups({
       role: "owner",
@@ -305,9 +313,10 @@ test("peopleGroups after the end and once cancelled: the same groups, no actions
       owner: null,
     userId: "u-me",
       connections: null,
+      blocks: NONE,
     });
     assert.deepEqual(groups.map((g) => g.title), ["Going · 2", "Invited, not answered yet · 2", "Waiting for you · 1"], state);
-    assert.deepEqual(groups.flatMap((g) => g.rows.map((r) => r.actions)), [[], [], [], [], []], state);
+    assert.deepEqual(groups.flatMap((g) => g.rows.map((r) => r.actions)), [[...S], [...S], [], [...S], ["block"]], state);
     // The roles still show.
     assert.equal(groups[0].rows[0].admin, true, state);
   }
@@ -327,16 +336,17 @@ test("the people list offers Connect to a guest on everyone with an account but 
     owner: null,
     userId: "u-me",
     connections: { "u-ana": "none", "u-leo": "connected", "u-sol": "requested_by_them", "u-nico": "requested_by_me" },
+    blocks: NONE,
   });
   const row = (id: string) => groups.flatMap((g) => g.rows).find((r) => r.userId === id)!;
-  assert.deepEqual(row("u-ana").actions, ["connect"]);
-  assert.deepEqual(row("u-leo").actions, []);
+  assert.deepEqual(row("u-ana").actions, ["connect", ...S]);
+  assert.deepEqual(row("u-leo").actions, [...S]);
   assert.equal(row("u-leo").connection, "connected");
-  assert.deepEqual(row("u-sol").actions, ["acceptConnection", "declineConnection"]);
+  assert.deepEqual(row("u-sol").actions, ["acceptConnection", "declineConnection", ...S]);
   // A request refused unseen reads as sent too (CO-P3): Cancel request either way.
-  assert.deepEqual(row("u-nico").actions, ["cancelRequest"]);
+  assert.deepEqual(row("u-nico").actions, ["cancelRequest", ...S]);
   // Someone the states leave out, once they were read, has no pair with the viewer.
-  assert.deepEqual([row("u-ivy").connection, row("u-ivy").actions], ["none", ["connect"]]);
+  assert.deepEqual([row("u-ivy").connection, row("u-ivy").actions], ["none", ["connect", ...S]]);
   assert.deepEqual([row("u-me").connection, row("u-me").me, row("u-me").actions], [null, true, []]);
   assert.equal(row("u-ana").me, false);
 });
@@ -352,10 +362,11 @@ test("with the states unknown (not read, or the read failed), the people list of
     owner: null,
     userId: "u-me",
     connections: null,
+    blocks: NONE,
   });
   assert.deepEqual(groups.flatMap((g) => g.rows.map((r) => [r.connection, r.actions])), [
-    [null, ["makeAdmin", "remove"]],
-    [null, ["remove"]],
+    [null, ["makeAdmin", "remove", ...S]],
+    [null, ["remove", ...S]],
   ]);
 });
 
@@ -370,11 +381,12 @@ test("hosts get the connection action before their own, and link invitees get no
     owner: null,
     userId: "u-me",
     connections: { g1: "none", adm: "requested_by_them" },
+    blocks: NONE,
   });
   const rows = groups.flatMap((g) => g.rows);
   const by = (name: string) => rows.find((r) => r.name === name)!;
-  assert.deepEqual(by("Marta").actions, ["connect", "makeAdmin", "remove"]);
-  assert.deepEqual(by("Leo").actions, ["acceptConnection", "declineConnection", "removeAdmin", "remove"]);
+  assert.deepEqual(by("Marta").actions, ["connect", "makeAdmin", "remove", ...S]);
+  assert.deepEqual(by("Leo").actions, ["acceptConnection", "declineConnection", "removeAdmin", "remove", ...S]);
   assert.deepEqual([by("Dan").connection, by("Dan").me, by("Dan").actions], [null, false, ["sendAgain", "removeInvite"]]);
 });
 
@@ -390,9 +402,10 @@ test("connecting is offered after the end, host actions are not", () => {
       owner: null,
     userId: "u-me",
       connections: { g1: "none", adm: "connected" },
+      blocks: NONE,
     });
     assert.deepEqual(groups.flatMap((g) => g.rows.map((r) => [r.name, r.actions])), [
-      ["Marta", ["connect"]], ["Leo", []], ["Dan", []], ["Rae", []],
+      ["Marta", ["connect", ...S]], ["Leo", [...S]], ["Dan", []], ["Rae", ["block"]],
     ], state);
   }
 });
@@ -411,13 +424,14 @@ test("someone who hasn't answered, or waits for approval, can't be asked; a requ
     owner: null,
     userId: "u-me",
     connections: { p1: "none", p2: "requested_by_them", a3: "none" },
+    blocks: NONE,
   });
   const rows = groups.flatMap((g) => g.rows);
   const by = (name: string) => rows.find((r) => r.name === name)!;
-  assert.deepEqual([by("Pat").connection, by("Pat").actions], ["none", ["remove"]]);
-  assert.deepEqual(by("Quin").actions, ["acceptConnection", "declineConnection", "remove"]);
-  assert.deepEqual(by("Cy").actions, ["connect", "removeAdmin", "remove"]);
-  assert.deepEqual([by("Rae").connection, by("Rae").actions], [null, ["approve", "decline"]]);
+  assert.deepEqual([by("Pat").connection, by("Pat").actions], ["none", ["remove", ...S]]);
+  assert.deepEqual(by("Quin").actions, ["acceptConnection", "declineConnection", "remove", ...S]);
+  assert.deepEqual(by("Cy").actions, ["connect", "removeAdmin", "remove", ...S]);
+  assert.deepEqual([by("Rae").connection, by("Rae").actions], [null, ["approve", "decline", "block"]]);
 });
 
 test("the owner's row comes first under Going: Hosting, the connection actions, never a host action", () => {
@@ -428,31 +442,33 @@ test("the owner's row comes first under Going: Hosting, the connection actions, 
     requests: [],
     admins: [],
     owner: { userId: "own", name: "Ana" },
+    blocks: NONE,
   };
   // A guest connects with the host from here (CO-P2). The title counts the rows shown, the owner's included.
   const asGuest = peopleGroups({ ...input, role: "guest", userId: "m1", connections: { own: "none", g1: "connected" } });
   assert.deepEqual(asGuest.map((g) => g.title), ["Going · 2", "Maybe · 1"]);
   assert.deepEqual(asGuest[0].rows[0], {
     key: "owner:own", name: "Ana", status: null, reply: "Hosting", admin: false, kind: "owner", userId: "own",
-    connection: "none", me: false, actions: ["connect"], depth: 0, broughtByName: null, broughtByMe: false,
+    connection: "none", me: false, blocked: false, actions: ["connect", ...S], depth: 0, broughtByName: null, broughtByMe: false,
   });
   assert.deepEqual(asGuest[0].rows.map((r) => r.name), ["Ana", "Marta"]);
   // The owner's own list: their row, with no dots.
   const own = peopleGroups({ ...input, role: "owner", userId: "own", connections: { g1: "none", m1: "none" } });
   assert.deepEqual(own.map((g) => g.title), ["Going · 2", "Maybe · 1"]);
   assert.deepEqual([own[0].rows[0].kind, own[0].rows[0].me, own[0].rows[0].connection, own[0].rows[0].actions], ["owner", true, null, []]);
-  assert.deepEqual(own[0].rows[1].actions, ["connect", "makeAdmin", "remove"]);
-  // Nobody removes the owner: an admin has only the connection actions on that row, after the end as before it.
+  assert.deepEqual(own[0].rows[1].actions, ["connect", "makeAdmin", "remove", ...S]);
+  // Nobody removes the owner: an admin has only the connection actions on that row, then Report and Block, after the end
+  // as before it.
   for (const state of ["open", "ended"] as const) {
     const admin = peopleGroups({ ...input, state, role: "admin", admins: ["g1"], userId: "g1", connections: { own: "requested_by_them" } });
-    assert.deepEqual(admin[0].rows[0].actions, ["acceptConnection", "declineConnection"], state);
+    assert.deepEqual(admin[0].rows[0].actions, ["acceptConnection", "declineConnection", ...S], state);
   }
   // Nobody going yet: the owner's row still opens the list, counted, so a title never reads 0 over a row.
   const quiet = peopleGroups({ ...input, guests: [guest("m1", "Sol", "maybe")], role: "owner", userId: "own", connections: {} });
   assert.deepEqual(quiet.map((g) => [g.title, g.rows.map((r) => r.name)]), [["Going · 1", ["Ana"]], ["Maybe · 1", ["Sol"]]]);
-  // The states unknown: the owner's row shows, with nothing to do.
+  // The states unknown: the owner's row shows, with no connection action.
   const unknown = peopleGroups({ ...input, role: "guest", userId: "m1", connections: null as Record<string, ConnectionState> | null });
-  assert.deepEqual([unknown[0].rows[0].connection, unknown[0].rows[0].actions], [null, []]);
+  assert.deepEqual([unknown[0].rows[0].connection, unknown[0].rows[0].actions], [null, [...S]]);
 });
 
 test("EVENT_COPY pins the page, sheet and list words", () => {
@@ -641,6 +657,7 @@ const base: Parameters<typeof peopleGroups>[0] = {
   owner: null,
   userId: "owner",
   connections: null,
+  blocks: NONE,
   bringerNames: {},
   broughtLinks: [],
 };
@@ -740,8 +757,8 @@ test("a bringer sees their own unanswered links and in-app invitees", () => {
   assert.deepEqual(invited.map((r) => [r.name, r.status, r.actions, r.depth]), [
     ["Juli", "Invited by WhatsApp · brought by you", ["sendAgain", "removeInvite"], 0],
     ["Inés", "Invited by link · brought by you", ["removeInvite"], 0],
-    ["Clara", "Invited in the app · brought by you", ["removeInvite"], 0],
-    ["Leo", "Invited in the app · brought by you", [], 0],
+    ["Clara", "Invited in the app · brought by you", ["removeInvite", ...S], 0],
+    ["Leo", "Invited in the app · brought by you", [...S], 0],
   ]);
   assert.deepEqual([invited[2].kind, invited[2].userId, invited[2].broughtByName], ["appInvite", "clara", "Pedro"]);
   assert.deepEqual(invited.map((r) => r.broughtByMe), [true, true, true, true]);
@@ -750,10 +767,10 @@ test("a bringer sees their own unanswered links and in-app invitees", () => {
   assert.equal(groups.flatMap((x) => x.rows).some((r) => r.name === "Sol" || r.name === "Nico"), false);
   // Their own connection actions come first on an in-app invitee, as anywhere else; a pending row can't be asked.
   const connected = group(peopleGroups({ ...input, connections: { clara: "requested_by_them", owner: "connected" } }), "Invited");
-  assert.deepEqual(connected[2].actions, ["acceptConnection", "declineConnection", "removeInvite"]);
-  // After the end, or once cancelled: the same rows, nothing to do.
+  assert.deepEqual(connected[2].actions, ["acceptConnection", "declineConnection", "removeInvite", ...S]);
+  // After the end, or once cancelled: the same rows, nothing to take back.
   for (const state of ["ended", "cancelled"] as const)
-    assert.deepEqual(group(peopleGroups({ ...input, state }), "Invited").map((r) => r.actions), [[], [], [], []], state);
+    assert.deepEqual(group(peopleGroups({ ...input, state }), "Invited").map((r) => r.actions), [[], [], [...S], [...S]], state);
   // Marta sees only Nico, whom she brought; Pedro's stay hidden from her.
   assert.deepEqual(group(peopleGroups({ ...input, userId: "marta", invited: [] }), "Invited").map((r) => [r.name, r.status]), [
     ["Nico", "Invited in the app · brought by you"],
@@ -779,18 +796,18 @@ test("a host sees a bringer's link by its last digits", () => {
   assert.deepEqual(invited.map((r) => r.name), ["Dan", "Number ending ••23", "Number ending ••07", "Pat"]);
   assert.deepEqual(invited[1], {
     key: "brought:inv-1", name: "Number ending ••23", status: "Invited by link · brought by Sol", reply: null, admin: false,
-    kind: "linkInvite", invitationId: "inv-1", connection: null, me: false, actions: ["removeInvite"], depth: 0, broughtByName: "Sol",
+    kind: "linkInvite", invitationId: "inv-1", connection: null, me: false, blocked: false, actions: ["removeInvite"], depth: 0, broughtByName: "Sol",
     broughtByMe: false,
   });
   // No Send again: the host has no code for it. No name to show for a bringer who has none.
   assert.deepEqual([invited[2].status, invited[2].invitationId, invited[2].actions, invited[2].broughtByName], ["Invited by link", "inv-2", ["removeInvite"], null]);
   // An app invitee someone brought.
-  assert.deepEqual([invited[3].status, invited[3].actions, invited[3].broughtByName], ["Invited in the app · brought by Pedro", ["remove"], "Pedro"]);
+  assert.deepEqual([invited[3].status, invited[3].actions, invited[3].broughtByName], ["Invited in the app · brought by Pedro", ["remove", ...S], "Pedro"]);
   // The host's own link is nobody's.
   assert.deepEqual([invited[0].status, invited[0].broughtByName, invited[0].invitationId], ["Invited by WhatsApp", null, undefined]);
   // An admin removes them too; after the end nobody does.
   assert.deepEqual(group(peopleGroups({ ...input, role: "admin", userId: "leo" }), "Invited")[1].actions, ["removeInvite"]);
-  assert.deepEqual(group(peopleGroups({ ...input, state: "ended" }), "Invited").map((r) => r.actions), [[], [], [], []]);
+  assert.deepEqual(group(peopleGroups({ ...input, state: "ended" }), "Invited").map((r) => r.actions), [[], [], [], [...S]]);
   // A guest never gets them, whatever is passed.
   assert.equal(peopleGroups({ ...input, role: "guest", userId: "sol", invited: [] }).flatMap((x) => x.rows).some((r) => r.invitationId), false);
 });
@@ -852,6 +869,7 @@ test("a brought row is labelled 'Clara, brought by Pedro', its other words after
     broughtLinks: [{ id: "inv-1", ending: "23", country: "44", broughtByName: "Sol" }],
     bringerNames: { pedro: "Pedro" },
     connections: { marta: "connected" },
+    blocks: NONE,
   });
   const rows = groups.flatMap((x) => x.rows);
   const by = (name: string) => rows.find((r) => r.name === name)!;
@@ -1028,7 +1046,7 @@ test("a host's own brought links and invitees are theirs: 'brought by you', Send
   assert.deepEqual([by("Juli").status, by("Juli").broughtByMe, by("Juli").actions], ["Invited by WhatsApp · brought by you", true, ["sendAgain", "removeInvite"]]);
   assert.deepEqual([by("+44 124").status, by("+44 124").actions], ["Invited by link · brought by you", ["removeInvite"]]);
   assert.equal(personLabel(by("Juli")), "Juli, brought by you, Invited by WhatsApp");
-  assert.deepEqual([by("Sofía").status, by("Sofía").broughtByMe, by("Sofía").actions], ["Invited in the app · brought by you", true, ["remove"]]);
+  assert.deepEqual([by("Sofía").status, by("Sofía").broughtByMe, by("Sofía").actions], ["Invited in the app · brought by you", true, ["remove", ...S]]);
   assert.deepEqual([by("Pat").status, by("Pat").broughtByMe], ["Invited in the app", false]);
   // Remove: their own invitee is taken back (withdraw), their own link by its number; anyone else's as a host.
   assert.equal(removalOf(by("Sofía"), true), "withdraw");
@@ -1179,6 +1197,7 @@ const chat = (over: Partial<ChatSummary> = {}): ChatSummary => ({
   lastReadId: 6,
   unread: true,
   messageCount: 23,
+  rulesAccepted: true,
   ...over,
 });
 
@@ -1260,8 +1279,8 @@ test("moreRows: a group's guest leaves the group last, while the chat is open, o
   assert.deepEqual(row({}), ["calendar", "mute", "leaveGroup"]);
   assert.deepEqual(row({ muted: true, response: "maybe" }), ["calendar", "unmute", "leaveGroup"]);
   assert.deepEqual(row({ response: "declined", calendar: false }), ["mute", "leaveGroup"]);
-  // Whatever their reply: one who hasn't answered gets it alone.
-  assert.deepEqual(row({ response: "pending" }), ["leaveGroup"]);
+  // Whatever their reply: one who hasn't answered gets it after Report or block (plan 3), and alone with no reply.
+  assert.deepEqual(row({ response: "pending" }), ["reportOrBlock", "leaveGroup"]);
   assert.deepEqual(row({ response: null }), ["leaveGroup"]);
   // A one-off guest never; and the flags left out read as a one-off's.
   assert.deepEqual(row({ isGroup: false }), ["calendar", "mute"]);
@@ -1296,6 +1315,7 @@ const ROLLED = {
   // The waiting requests are a host's only, and the server lists a guest no one else's links.
   requests: [request("r1", "Rae")],
   connections: {},
+  blocks: NONE,
   isGroup: true,
 };
 /** The chat's `members` for a fixture: the owner and every attendee row of the current occurrence. */
@@ -1308,7 +1328,7 @@ test("peopleGroups as a guest on a group right after a roll: every member, by na
   const rows = groups.flatMap((x) => x.rows);
   assert.deepEqual(rows.map((r) => r.name).sort(), ["Ana", "Clara", "Leo", "Mia", "Pedro", "Sol"]);
   const by = (id: string) => rows.find((r) => r.userId === id)!;
-  for (const id of ["m02", "m04", "m05", "m06"]) assert.deepEqual([by(id).connection, by(id).actions], ["none", ["connect"]], id);
+  for (const id of ["m02", "m04", "m05", "m06"]) assert.deepEqual([by(id).connection, by(id).actions], ["none", ["connect", ...S]], id);
   assert.deepEqual([by("m03").me, by("m03").actions], [true, []]);
   assert.deepEqual(group(groups, "Not answered yet").map((r) => [r.kind, r.status]), [
     ["appInvite", "Invited in the app"],
@@ -1341,14 +1361,15 @@ test("a bringer on a group: their brought invitee once, under Not answered yet; 
     invited: [linkPerson("111", "Juli", "whatsapp")],
     bringerNames: { pedro: "Pedro" },
     connections: {},
+    blocks: NONE,
     isGroup: true,
   };
   const groups = peopleGroups(input);
   assert.deepEqual(groups.map((x) => x.title), ["Going · 2", "Not answered yet · 2", "Invited, not answered yet · 1"]);
   const waiting = group(groups, "Not answered yet");
   assert.deepEqual(waiting.map((r) => [r.name, r.status, r.actions]), [
-    ["Clara", "Invited in the app · brought by you", ["connect", "removeInvite"]],
-    ["Sol", "Invited in the app", ["connect"]],
+    ["Clara", "Invited in the app · brought by you", ["connect", "removeInvite", ...S]],
+    ["Sol", "Invited in the app", ["connect", ...S]],
   ]);
   assert.deepEqual([waiting[0].kind, waiting[0].broughtByMe, waiting[0].broughtByName], ["appInvite", true, "Pedro"]);
   assert.deepEqual(group(groups, "Invited").map((r) => [r.name, r.kind, r.status, r.actions]), [
@@ -1360,10 +1381,10 @@ test("a bringer on a group: their brought invitee once, under Not answered yet; 
   assert.equal(groups.filter((x) => !x.title.startsWith("Invited")).flatMap((x) => x.rows).length, membersOf(input));
   // After the end, or once cancelled: nothing to take back; Connect stays (CO rule 7).
   for (const state of ["ended", "cancelled"] as const)
-    assert.deepEqual(group(peopleGroups({ ...input, state }), "Not answered yet").map((r) => r.actions), [["connect"], ["connect"]], state);
+    assert.deepEqual(group(peopleGroups({ ...input, state }), "Not answered yet").map((r) => r.actions), [["connect", ...S], ["connect", ...S]], state);
   // A pending admin they brought is a host, whom the server never lets them withdraw (C18-I1).
   const admin = group(peopleGroups({ ...input, admins: ["clara"] }), "Not answered yet");
-  assert.deepEqual(admin[0].actions, ["connect"]);
+  assert.deepEqual(admin[0].actions, ["connect", ...S]);
 });
 
 test("on a group, a bringer missing from bringerNames gets no Brought by line; until they are read, a shown row names them (G-N3, C28)", () => {
@@ -1380,6 +1401,7 @@ test("on a group, a bringer missing from bringerNames gets no Brought by line; u
     ],
     bringerNames: {},
     connections: {},
+    blocks: NONE,
     isGroup: true,
   };
   const rows = peopleGroups(input).flatMap((x) => x.rows);
@@ -1438,4 +1460,99 @@ test("useEvent carries the group flag: names, the snapshot an answer builds, and
   assert.match(page, /moreRows\(\{\s*role,\s*state,\s*muted: event\.muted,\s*response,\s*calendar: device\.shown,\s*isGroup: event\.isGroup,\s*chatOpen: event\.chat\?\.open === true,?\s*\}\)/);
   const list = readFileSync(new URL("../../app/guests.tsx", import.meta.url), "utf8");
   assert.match(list, /isGroup: event\.isGroup,/);
+});
+
+// Plan 3 (safety): Report and Block on the people list, and an unanswered invitee's Report or block in More.
+test("moreRows: Report or block for a guest who hasn't answered, while the page is open, before Leave group (B1, B4)", () => {
+  const calendar = true;
+  const pending = { role: "guest" as const, state: "open" as const, muted: false, response: "pending", calendar };
+  // A one-off: with or without an announcement, the one row.
+  assert.deepEqual(moreRows(pending), ["reportOrBlock"]);
+  // A group with its chat open: Report or block, then Leave group, which stays last.
+  assert.deepEqual(moreRows({ ...pending, isGroup: true, chatOpen: true }), ["reportOrBlock", "leaveGroup"]);
+  assert.deepEqual(moreRows({ ...pending, isGroup: true, chatOpen: false }), ["reportOrBlock"]);
+  // Answered: none, whatever the answer; no reply at all: none.
+  for (const response of ["accepted", "maybe", "declined", "withdrawn", null])
+    assert.equal(moreRows({ ...pending, response }).includes("reportOrBlock"), false, String(response));
+  assert.deepEqual(moreRows({ ...pending, response: "accepted", isGroup: true, chatOpen: true }), ["calendar", "mute", "leaveGroup"]);
+  // Ended or cancelled: a group's guest keeps only Leave group; a one-off's has nothing.
+  for (const state of ["ended", "cancelled"] as const) {
+    assert.deepEqual(moreRows({ ...pending, state, isGroup: true, chatOpen: true }), ["leaveGroup"], state);
+    assert.deepEqual(moreRows({ ...pending, state }), [], state);
+  }
+  // Hosts who haven't answered see what they saw before.
+  assert.deepEqual(moreRows({ ...pending, role: "admin", calendar: false }), ["mute", "again", "changeReply", "cancel"]);
+});
+
+const SAFE = {
+  ...base,
+  role: "owner" as const,
+  userId: "owner",
+  owner: { userId: "owner", name: "Owner" },
+  guests: [g("ana"), g("leo", { response: "maybe" }), g("pat", { response: "pending" })],
+  invited: [linkPerson("111", "Dan", "whatsapp")],
+  requests: [request("rae", "Rae")],
+  connections: { ana: "none" as ConnectionState, leo: "connected" as ConnectionState, pat: "none" as ConnectionState },
+  blocks: NONE,
+};
+const rowsOf = (i: Parameters<typeof peopleGroups>[0]) => peopleGroups(i).flatMap((x) => x.rows);
+const named = (rows: PersonRow[], name: string) => rows.find((r) => r.name === name)!;
+
+test("peopleGroups: every other row with an account ends with Report then Block; a waiting request gets Block only (G-S9)", () => {
+  const rows = rowsOf(SAFE);
+  assert.deepEqual(named(rows, "Ana").actions, ["connect", "makeAdmin", "remove", "report", "block"]);
+  assert.deepEqual(named(rows, "Leo").actions, ["remove", "report", "block"]);
+  assert.deepEqual(named(rows, "Pat").actions, ["remove", "report", "block"]);
+  // A join requester isn't on the resbite: Block, never Report.
+  assert.deepEqual(named(rows, "Rae").actions, ["approve", "decline", "block"]);
+  // A link has no account: nothing of the sort.
+  assert.deepEqual(named(rows, "Dan").actions, ["sendAgain", "removeInvite"]);
+  // The viewer's own row: none of them.
+  assert.deepEqual([named(rows, "Owner").me, named(rows, "Owner").actions], [true, []]);
+  assert.equal(rows.some((r) => r.blocked), false);
+  // A guest's list: the owner's row and the others' too.
+  const asGuest = rowsOf({ ...SAFE, role: "guest", userId: "ana", connections: { owner: "none", leo: "none" } });
+  assert.deepEqual(named(asGuest, "Owner").actions, ["connect", "report", "block"]);
+  assert.deepEqual(named(asGuest, "Leo").actions, ["connect", "report", "block"]);
+  assert.deepEqual(named(asGuest, "Ana").actions, []);
+});
+
+test("peopleGroups: a blocked person's row has Unblock for Block, no connection action, and blocked: true (G-N9, G-S10)", () => {
+  const rows = rowsOf({ ...SAFE, blocks: new Set(["ana", "leo", "rae"]) });
+  // Host actions stay; the connection's go.
+  assert.deepEqual(named(rows, "Ana").actions, ["makeAdmin", "remove", "report", "unblock"]);
+  assert.deepEqual(named(rows, "Leo").actions, ["remove", "report", "unblock"]);
+  assert.deepEqual(named(rows, "Rae").actions, ["approve", "decline", "unblock"]);
+  assert.deepEqual(rows.filter((r) => r.blocked).map((r) => r.name), ["Ana", "Leo", "Rae"]);
+  // Everyone else as before.
+  assert.deepEqual([named(rows, "Pat").blocked, named(rows, "Pat").actions], [false, ["remove", "report", "block"]]);
+  // A request either way is no action while blocked.
+  const asked = rowsOf({ ...SAFE, role: "guest", userId: "pat", connections: { ana: "requested_by_them", leo: "requested_by_me" }, blocks: new Set(["ana", "leo"]) });
+  assert.deepEqual(named(asked, "Ana").actions, ["report", "unblock"]);
+  assert.deepEqual(named(asked, "Leo").actions, ["report", "unblock"]);
+  // After the end: Report and Unblock stay, as connecting does (CO rule 7).
+  const ended = rowsOf({ ...SAFE, state: "ended", blocks: new Set(["ana"]) });
+  assert.deepEqual(named(ended, "Ana").actions, ["report", "unblock"]);
+  assert.deepEqual(named(ended, "Rae").actions, ["block"]);
+  // The viewer can't be in their own list of blocks; their row stays theirs.
+  const self = rowsOf({ ...SAFE, blocks: new Set(["owner"]) });
+  assert.deepEqual([named(self, "Owner").blocked, named(self, "Owner").actions], [false, []]);
+});
+
+test("peopleGroups: blocks not known yet (null) offers no Block, Unblock or Connect, and Report stays (N13)", () => {
+  const rows = rowsOf({ ...SAFE, blocks: null });
+  assert.deepEqual(named(rows, "Ana").actions, ["makeAdmin", "remove", "report"]);
+  assert.deepEqual(named(rows, "Leo").actions, ["remove", "report"]);
+  assert.deepEqual(named(rows, "Pat").actions, ["remove", "report"]);
+  assert.deepEqual(named(rows, "Rae").actions, ["approve", "decline"]);
+  assert.deepEqual(named(rows, "Owner").actions, []);
+  for (const r of rows) {
+    assert.equal(r.actions.some((a) => a === "block" || a === "unblock" || a === "connect"), false, r.name);
+    assert.equal(r.blocked, false, r.name);
+  }
+  // A request already made can still be answered or taken back: only Connect waits for the blocks.
+  const asked = rowsOf({ ...SAFE, role: "guest", userId: "pat", connections: { ana: "requested_by_them", leo: "requested_by_me", owner: "none" }, blocks: null });
+  assert.deepEqual(named(asked, "Ana").actions, ["acceptConnection", "declineConnection", "report"]);
+  assert.deepEqual(named(asked, "Leo").actions, ["cancelRequest", "report"]);
+  assert.deepEqual(named(asked, "Owner").actions, ["report"]);
 });

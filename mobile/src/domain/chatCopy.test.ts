@@ -134,3 +134,9 @@ test("a group's day-bearing words with no readable day fall back to the one-off'
   assert.equal(C.announcementToGroup("going", ""), C.announcementTo("going"));
   assert.equal(C.announcementLabelGroup("going", ""), C.announcementLabel("going"));
 });
+
+// Plan 3 (CH-R-A3): a message the Resbite team took down says so; a host's removal keeps its words.
+test("a removal by Resbite reads exactly, apart from a host's", () => {
+  assert.equal(C.removedByResbite, "Message removed by Resbite");
+  assert.equal(C.removed, "Message removed by an admin");
+});

@@ -184,7 +184,8 @@ export default function EventPage() {
   });
   // CH-P14: the series' chat, for the people in it; none when the read was refused or failed (K-S13).
   const chat = chatRow(event.chat, session?.user.id ?? "");
-  // A group's guest may leave it while its chat is open (G-N13): the Chat row's summary says so.
+  // A group's guest may leave it while its chat is open (G-N13): the Chat row's summary says so. Report or block (plan
+  // 3) opens a sheet this page doesn't have yet: until it does, More is as before.
   const rows = moreRows({
     role,
     state,
@@ -193,7 +194,7 @@ export default function EventPage() {
     calendar: device.shown,
     isGroup: event.isGroup,
     chatOpen: event.chat?.open === true,
-  });
+  }).filter((row) => row !== "reportOrBlock");
   const hasMore = rows.length > 0;
   const closeMore = () => setMoreOpen(false);
 

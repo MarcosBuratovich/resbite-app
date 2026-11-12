@@ -65,7 +65,7 @@ test("a day separator comes before each day's first row, in the zone given (K-N4
   assert.equal(new Set(keys).size, keys.length);
 });
 
-test("someone's message: their name above it, the body, the screen reader's label with its day, no actions for a guest", () => {
+test("someone's message: their name above it, the body, the screen reader's label with its day, Report for a guest", () => {
   const [, row] = feed([msg(7, { body: "Count me in", createdAt: "2026-10-27T18:10:00Z" })]);
   assert.equal(row.type, "bubble");
   if (row.type !== "bubble") return;
@@ -74,13 +74,14 @@ test("someone's message: their name above it, the body, the screen reader's labe
   assert.equal(row.text, "Count me in");
   assert.equal(row.gone, null);
   assert.equal(row.label, "Leo, Count me in, Tue 27 Oct, 18:10");
-  assert.deepEqual(row.actions, []);
+  // Plan 3 (G-N12): someone else's message can be reported.
+  assert.deepEqual(row.actions, ["report"]);
   assert.equal(row.key, "m:7");
 });
 
 test("a host may remove someone else's message; their own is deleted, never removed (K-N12)", () => {
   const theirs = only(feed([msg(7)], { host: true, viewerId: ANA }), "bubble")[0];
-  assert.deepEqual(theirs.actions, ["remove"]);
+  assert.deepEqual(theirs.actions, ["remove", "report"]);
   const mine = only(feed([msg(8, { authorId: ANA })], { host: true, viewerId: ANA }), "bubble")[0];
   assert.equal(mine.own, true);
   assert.equal(mine.author, null);
@@ -117,9 +118,9 @@ test("an announcement is a card naming its audience in words; its author deletes
   assert.equal(guestView.heading, "ANNOUNCEMENT · TO EVERYONE INVITED");
   assert.equal(guestView.text, "Doors open at 11:30");
   assert.equal(guestView.label, "Announcement to everyone invited, Ana, Doors open at 11:30, 09:00");
-  assert.deepEqual(guestView.actions, []);
+  assert.deepEqual(guestView.actions, ["report"]);
   assert.deepEqual(only(feed([ann], { viewerId: ANA, host: true }), "announcement")[0].actions, ["delete"]);
-  assert.deepEqual(only(feed([ann], { viewerId: MIA, host: true }), "announcement")[0].actions, ["remove"]);
+  assert.deepEqual(only(feed([ann], { viewerId: MIA, host: true }), "announcement")[0].actions, ["remove", "report"]);
   const going = only(feed([{ ...ann, audience: "going" }]), "announcement")[0];
   assert.equal(going.heading, "ANNOUNCEMENT · TO GOING");
   const removed = only(feed([{ ...ann, state: "removed", body: null }], { viewerId: MIA, host: true }), "announcement")[0];
@@ -201,11 +202,12 @@ test("the name shows once over a run of one person's messages, and again after a
 });
 
 test("messageActions follows the same rules for any row", () => {
-  assert.deepEqual(messageActions(msg(1), ANA, true), ["remove"]);
+  assert.deepEqual(messageActions(msg(1), ANA, true), ["remove", "report"]);
   assert.deepEqual(messageActions(msg(1, { authorId: ANA }), ANA, true), ["delete"]);
-  assert.deepEqual(messageActions(msg(1), PEDRO, false), []);
-  // A sent row with no author can't be anyone's own: a host can still take it down.
+  assert.deepEqual(messageActions(msg(1), PEDRO, false), ["report"]);
+  // A sent row with no author can't be anyone's own: a host can still take it down, and nobody can report it (G-N12).
   assert.deepEqual(messageActions(msg(1, { authorId: null }), ANA, true), ["remove"]);
+  assert.deepEqual(messageActions(msg(1, { authorId: null }), PEDRO, false), []);
   assert.deepEqual(messageActions(sys(1, "joined", { user: MIA }), ANA, true), []);
 });
 
@@ -403,4 +405,44 @@ test("on a group, an earlier week's cancel names its date and its can't-go the o
   // A cancel that stopped the group names no week either way.
   const stopped = groupFeed([{ ...sys(6, "cancelled", { actor: ANA, stop: true, starts_at: "2025-11-20T19:00:00Z", time_zone: LONDON }), planId: EARLIER }], { planId: CURRENT });
   assert.equal(only(stopped, "system")[0].text, "Ana cancelled the group");
+});
+
+// Plan 3 (G-N12): Report message on someone else's message or announcement while it is sent, whoever reads it.
+test("messageActions offers Report after Delete or Remove, on someone else's sent message or announcement only", () => {
+  const ann = msg(5, { kind: "announcement", audience: "everyone", authorId: ANA });
+  // Someone else's: Report for a guest, Remove then Report for a host.
+  assert.deepEqual(messageActions(msg(1), PEDRO, false), ["report"]);
+  assert.deepEqual(messageActions(msg(1), ANA, true), ["remove", "report"]);
+  assert.deepEqual(messageActions(ann, PEDRO, false), ["report"]);
+  assert.deepEqual(messageActions(ann, MIA, true), ["remove", "report"]);
+  // One's own: Delete only.
+  assert.deepEqual(messageActions(msg(1, { authorId: PEDRO }), PEDRO, false), ["delete"]);
+  assert.deepEqual(messageActions(ann, ANA, true), ["delete"]);
+  // Gone, or a system line: nothing, for a guest or a host.
+  for (const host of [false, true]) {
+    assert.deepEqual(messageActions(msg(1, { state: "removed", body: null }), PEDRO, host), []);
+    assert.deepEqual(messageActions(msg(1, { state: "deleted", body: null }), PEDRO, host), []);
+    assert.deepEqual(messageActions({ ...ann, state: "removed", body: null }, PEDRO, host), []);
+    assert.deepEqual(messageActions(sys(1, "joined", { actor: MIA, user: MIA }), PEDRO, host), []);
+  }
+  // The feed's rows carry the same.
+  assert.deepEqual(only(feed([msg(1)]), "bubble")[0].actions, ["report"]);
+  assert.deepEqual(only(feed([msg(1, { state: "removed", body: null })]), "bubble")[0].actions, []);
+});
+
+// Plan 3 (CH-R-A3): the bubble and the announcement card word a removal by Resbite apart from a host's.
+test("a removed row with payload { by: 'resbite' } reads 'Message removed by Resbite' in the bubble, the card and the label", () => {
+  const byResbite = only(feed([msg(2, { state: "removed", body: null, payload: { by: "resbite" } })]), "bubble")[0];
+  assert.equal(byResbite.text, "Message removed by Resbite");
+  assert.equal(byResbite.gone, "removed");
+  assert.equal(byResbite.label, "Leo, Message removed by Resbite, 09:00");
+  assert.deepEqual(byResbite.links, []);
+  const byHost = only(feed([msg(2, { state: "removed", body: null })]), "bubble")[0];
+  assert.equal(byHost.text, "Message removed by an admin");
+  assert.equal(byHost.label, "Leo, Message removed by an admin, 09:00");
+  const ann = msg(5, { kind: "announcement", audience: "everyone", authorId: ANA, state: "removed", body: null, payload: { by: "resbite" } });
+  const card = only(feed([ann]), "announcement")[0];
+  assert.equal(card.text, "Message removed by Resbite");
+  assert.equal(card.gone, "removed");
+  assert.equal(only(feed([{ ...ann, payload: null }]), "announcement")[0].text, "Message removed by an admin");
 });

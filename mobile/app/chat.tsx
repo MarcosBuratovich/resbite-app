@@ -26,6 +26,7 @@ import { MenuRow } from "../src/design/MenuRow";
 import { NotificationAsk } from "../src/design/NotificationAsk";
 import { colors as c, depth, fonts, space } from "../src/design/tokens";
 import { CHAT_COPY, type ChatAudience } from "../src/domain/chatCopy";
+import { SAFETY_COPY } from "../src/domain/safetyCopy";
 import {
   audienceOptions,
   canAnnounce,
@@ -79,6 +80,7 @@ const ACTION_LABEL: Record<MessageAction, string> = {
   delete: CHAT_COPY.deleteMine,
   remove: CHAT_COPY.removeTheirs,
   deleteUnsent: CHAT_COPY.deleteUnsent,
+  report: SAFETY_COPY.reportMessage,
 };
 
 /**
@@ -336,18 +338,20 @@ function Conversation({
   // oldest first; reversed for the inverted list.
   const rows = useMemo(
     () =>
-      chatFeed(withEndedLine(withPending(shownMessages(chat.messages), chat.pending), summary, chat.hasEarlier, now), {
-        names: chat.names,
-        viewerId,
-        now,
-        zone,
-        title: summary.title,
-        host: summary.host,
-        closed: !open,
-        group: summary.isGroup,
-        day,
-        planId: summary.planId,
-      }),
+      withoutReport(
+        chatFeed(withEndedLine(withPending(shownMessages(chat.messages), chat.pending), summary, chat.hasEarlier, now), {
+          names: chat.names,
+          viewerId,
+          now,
+          zone,
+          title: summary.title,
+          host: summary.host,
+          closed: !open,
+          group: summary.isGroup,
+          day,
+          planId: summary.planId,
+        }),
+      ),
     [chat.messages, chat.pending, chat.names, chat.hasEarlier, summary, now, viewerId, zone, open, day],
   );
   const data = useMemo(() => [...rows].reverse(), [rows]);
@@ -770,7 +774,7 @@ function Conversation({
                     if (action === "deleteUnsent" && target.type === "pending") {
                       setSheet(null);
                       void chat.discard(target.clientId);
-                    } else if (action !== "deleteUnsent") setSheet({ ...sheet, view: action });
+                    } else if (action === "delete" || action === "remove") setSheet({ ...sheet, view: action });
                   }}
                 />
               ))}
@@ -887,6 +891,15 @@ type RowProps = {
   /** Reads the chat again: a "Next one" line with no current occurrence to open (Decision 14). */
   onReread: () => void;
 };
+
+/**
+ * Report message (plan 3) opens the report sheet, which this screen doesn't have yet: until it does, no row offers it,
+ * and the long-press sheet and the screen reader's actions are as before.
+ */
+const withoutReport = (rows: FeedRow[]): FeedRow[] =>
+  rows.map((row) =>
+    "actions" in row && row.actions.includes("report") ? { ...row, actions: row.actions.filter((a) => a !== "report") } : row,
+  );
 
 const actionsOf = (actions: MessageAction[], links: FeedLink[] = []) => [
   ...actions.map((name) => ({ name, label: ACTION_LABEL[name] })),

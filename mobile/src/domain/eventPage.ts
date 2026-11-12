@@ -286,13 +286,14 @@ export function chatRowLabel(row: ChatRow): string {
   return [row.title, line].filter(Boolean).join(". ") + (row.dot ? `, ${CHAT_COPY.unreadMessages}` : "");
 }
 
-export type MoreRow = "calendar" | "mute" | "unmute" | "again" | "changeReply" | "cancel" | "leaveGroup";
+export type MoreRow = "calendar" | "mute" | "unmute" | "again" | "changeReply" | "cancel" | "reportOrBlock" | "leaveGroup";
 /**
  * The More sheet's rows. `calendar` is UX3's rule (`canAddToCalendar`: the organizer and Going or Maybe guests), so a
- * Can’t go guest or an admin who hasn't answered gets no Add to calendar. A guest of a group (`isGroup`), whatever their
- * reply, gets Leave this group last while its chat is open (`chatOpen`: the Chat row's summary says so, so a failed or
- * refused read hides it); on an ended or cancelled page it is their only row (G-N13). Hosts can't leave. Left out, the
- * two read false: a one-off's rows.
+ * Can’t go guest or an admin who hasn't answered gets no Add to calendar. A guest who hasn't answered (`pending`) gets
+ * Report or block while the page is open, with or without an announcement (plan 3, B1, B4): the people who invited them.
+ * A guest of a group (`isGroup`), whatever their reply, gets Leave this group last while its chat is open (`chatOpen`:
+ * the Chat row's summary says so, so a failed or refused read hides it); on an ended or cancelled page it is their only
+ * row (G-N13). Hosts can't leave. Left out, the two read false: a one-off's rows.
  */
 export function moreRows(i: {
   role: Viewer;
@@ -305,6 +306,7 @@ export function moreRows(i: {
 }): MoreRow[] {
   const leave: MoreRow[] = i.role === "guest" && i.isGroup === true && i.chatOpen === true ? ["leaveGroup"] : [];
   if (i.state !== "open") return leave;
+  const report: MoreRow[] = i.role === "guest" && i.response === "pending" ? ["reportOrBlock"] : [];
   const mute: MoreRow = i.muted ? "unmute" : "mute";
   const rows: MoreRow[] =
     i.role === "owner"
@@ -314,7 +316,7 @@ export function moreRows(i: {
         : answered(i.response)
           ? ["calendar", mute]
           : [];
-  return [...(i.calendar ? rows : rows.filter((row) => row !== "calendar")), ...leave];
+  return [...(i.calendar ? rows : rows.filter((row) => row !== "calendar")), ...report, ...leave];
 }
 
 export function whenLines(
@@ -442,7 +444,11 @@ export type PersonAction =
   | "sendAgain"
   | "removeInvite"
   | "approve"
-  | "decline";
+  | "decline"
+  // Plan 3: report the person, and block or unblock them (G-S9, G-S10).
+  | "report"
+  | "block"
+  | "unblock";
 export type PersonRow = {
   key: string;
   name: string;
@@ -464,6 +470,8 @@ export type PersonRow = {
   connection: ConnectionState | null;
   /** The viewer's own row: no dots, whoever they are. */
   me: boolean;
+  /** The viewer blocked this person (plan 3): the "Blocked" badge, which only the blocker ever sees. */
+  blocked: boolean;
   actions: PersonAction[];
   /**
    * How far in this row sits under the person who brought them (CO-07): 0 for someone nobody brought, or whose bringer
@@ -566,6 +574,13 @@ function chained(items: readonly Placed[]): PersonRow[] {
  * (it carries a number) or waiting request is ever theirs to see. Anyone with an account is askable there, so Connect
  * is offered on a pending row too (CH-P21). Hosts see what they saw before. Left out, `isGroup` reads false: the
  * one-off rule, which shows less.
+ *
+ * Report and Block (plan 3, G-S9, G-S10) come last on every row with an account but the viewer's own, for hosts and
+ * guests alike and after the end too: Report, then Block, or Unblock for someone the viewer blocked (`blocks`, the
+ * server's `my_blocks`). A waiting join requester isn't on the resbite, so their row gets Block or Unblock, never Report.
+ * A blocked person's row is marked `blocked` and has no connection action. `blocks` is null until its read lands, or
+ * when it failed, as `connections` is: then no row offers Block, Unblock or Connect, since any of them could be wrong
+ * for someone blocked, and Report stays (N13).
  */
 export function peopleGroups(i: {
   role: Viewer;
@@ -577,6 +592,8 @@ export function peopleGroups(i: {
   owner: { userId: string; name: string } | null;
   userId: string | null;
   connections: Record<string, ConnectionState> | null;
+  /** The people the viewer blocked (`my_blocks`, plan 3); null while not known. */
+  blocks: ReadonlySet<string> | null;
   /** The bringers' first names by account id (`plan_bringers`); null (or left out) until a read lands. */
   bringerNames?: Readonly<Record<string, string>> | null;
   /** The name a guest row carries when its profile has none (`UNNAMED_GUEST`): never a bringer's name. */
@@ -595,11 +612,28 @@ export function peopleGroups(i: {
   const owner = i.role === "owner";
   const connectionOf = (userId: string): ConnectionState | null =>
     i.connections === null || userId === i.userId ? null : (i.connections[userId] ?? "none");
-  /** A row for someone with an account: their connection, and its actions before the host's; none on the viewer's own. */
+  const blocked = (userId: string): boolean => userId !== i.userId && i.blocks !== null && i.blocks.has(userId);
+  /** Report (not for a join requester), then Block or Unblock once the blocks are known; none on the viewer's own row. */
+  const safetyActions = (userId: string, reportable: boolean): PersonAction[] => {
+    if (userId === i.userId) return [];
+    const block: PersonAction[] = i.blocks === null ? [] : [blocked(userId) ? "unblock" : "block"];
+    return reportable ? ["report", ...block] : block;
+  };
+  /**
+   * A row for someone with an account: their connection, and its actions before the host's, then Report and Block;
+   * none on the viewer's own. Connect waits until the blocks are known, and is never offered to someone blocked.
+   */
   const person = (userId: string, askable: boolean, hostActions: PersonAction[]) => {
     const me = userId === i.userId;
     const connection = connectionOf(userId);
-    return { userId, connection, me, actions: me ? [] : [...connectionActions(connection, askable), ...hostActions] };
+    const connecting = blocked(userId) ? [] : connectionActions(connection, askable && i.blocks !== null);
+    return {
+      userId,
+      connection,
+      me,
+      blocked: blocked(userId),
+      actions: me ? [] : [...connecting, ...hostActions, ...safetyActions(userId, true)],
+    };
   };
   // Until the bringers' names are read, a bringer's own row on the list names them (C28): the rows this viewer sees.
   const ownRows = new Map<string, string>();
@@ -689,6 +723,7 @@ export function peopleGroups(i: {
         phone: p.phone,
         connection: null,
         me: false,
+        blocked: false,
         actions: !(host ? acts : bringerActs) ? [] : p.stored !== null ? ["sendAgain", "removeInvite"] : ["removeInvite"],
         broughtByName: nameOf(by),
         broughtByMe: mine(by),
@@ -711,6 +746,7 @@ export function peopleGroups(i: {
             invitationId: l.id,
             connection: null,
             me: false,
+            blocked: false,
             actions: acts ? ["removeInvite"] : [],
             broughtByName: by,
             broughtByMe: false,
@@ -755,7 +791,8 @@ export function peopleGroups(i: {
       userId: r.user_id,
       connection: null,
       me: false,
-      actions: acts ? ["approve", "decline"] : [],
+      blocked: blocked(r.user_id),
+      actions: [...(acts ? (["approve", "decline"] as PersonAction[]) : []), ...safetyActions(r.user_id, false)],
       broughtByName: null,
       broughtByMe: false,
     },

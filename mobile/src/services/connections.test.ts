@@ -113,3 +113,11 @@ test("the server's refusals read as plain words; anything else is the connection
   for (const other of [new Error("Failed to fetch"), { code: "42501", message: "Something new" }, { code: "57014" }, null])
     assert.equal(connectionErrorMessage(other), "Check your connection and try again.");
 });
+
+// Plan 3 (confirmation NOTE 5): a Connect from a stale blocks list reaches request_connection, never the safety gateway.
+test("Connect to someone the reader blocked reads 'Unblock this person first.'; any other 22023 is as before", () => {
+  assert.equal(connectionErrorMessage({ code: "22023", message: "Unblock first" }), "Unblock this person first.");
+  assert.equal(connectionErrorMessage({ code: "22023", message: "That is you" }), "Couldn't do that. Try again.");
+  assert.equal(connectionErrorMessage({ code: "22023", message: "Something new" }), "Couldn't do that. Try again.");
+  assert.equal(connectionErrorMessage({ code: "42501", message: "Unblock first" }), "Check your connection and try again.");
+});

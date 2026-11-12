@@ -38,6 +38,8 @@ export const CHAT_COPY = {
   unmute: "Unmute chat",
   deleted: "Message deleted",
   removed: "Message removed by an admin",
+  /** A message the Resbite team took down after a report (plan 3, CH-R-A3). */
+  removedByResbite: "Message removed by Resbite",
   deleteMine: "Delete message",
   deleteQuestion: "Delete this message for everyone?",
   removeTheirs: "Remove message",

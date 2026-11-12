@@ -1,6 +1,7 @@
 import { errorField, passThrough, planDeadline, type Deadline, type Rpc } from "./contactInvites";
 import { CONNECTIONS_COPY } from "../domain/connectionsCopy";
 import { INVITE_COPY } from "../domain/inviteCopy";
+import { SAFETY_COPY } from "../domain/safetyCopy";
 
 export type ConnectionState = "none" | "requested_by_me" | "requested_by_them" | "connected";
 
@@ -87,13 +88,18 @@ export const connectionGateway = createConnectionGateway(
   planDeadline,
 );
 
-/** Why a connection call was refused, in words; anything else, a lost connection included, keeps the connection line. */
+/**
+ * Why a connection call was refused, in words; anything else, a lost connection included, keeps the connection line. A
+ * Connect to someone the reader blocked (on another phone, so this one's list was stale) is refused 22023 'Unblock
+ * first' (plan 3, confirmation NOTE 5).
+ */
 export function connectionErrorMessage(e: unknown): string {
   const code = errorField(e, "code");
   const message = errorField(e, "message");
   if (code === "42501" && message === "Names required") return CONNECTIONS_COPY.namesFirst;
   if (code === "42501" && message === "Not on this resbite") return CONNECTIONS_COPY.notHere;
   if (code === "42501" && message === "Not a connection") return CONNECTIONS_COPY.failed;
+  if (code === "22023" && message === "Unblock first") return SAFETY_COPY.unblockFirst;
   if (code === "22023") return CONNECTIONS_COPY.failed;
   return INVITE_COPY.offline;
 }
