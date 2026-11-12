@@ -125,8 +125,37 @@ const plainSnapshot = (snapshot: Record<string, unknown>) => {
   return JSON.parse(JSON.stringify(rest));
 };
 
-test("readEvent reads the group flag with series_is_group for the plan's series, after the plan row (G-N13, I4)", async () => {
-  const { readEvent, calls } = load(guestPage());
+/**
+ * An answer held until `series_is_group` has been asked, so a read that waits for this one before asking the flag
+ * never gets it: it fails after half a second instead of hanging the run.
+ */
+function untilFlagAsked() {
+  let asked = () => {};
+  const flag = new Promise<void>((resolve) => (asked = resolve));
+  const held = (a: Answer) => () =>
+    new Promise<Answer>((resolve, reject) => {
+      const timer = setTimeout(() => reject(Error("answered only once the flag was asked: it never was")), 500);
+      void flag.then(() => {
+        clearTimeout(timer);
+        resolve(a);
+      });
+    });
+  return { asked, held };
+}
+
+test("readEvent asks series_is_group for the plan's series after the plan row, beside the own row and the organizer, before they answer (G-N13, I4)", async () => {
+  const gate = untilFlagAsked();
+  const { readEvent, calls } = load(
+    guestPage({
+      // Neither answers until the flag has been asked: a read that asked it after them would fail here.
+      "attendees:own": gate.held(ok({ version: 3, response: "accepted" })),
+      profiles: gate.held(ok({ display_name: "Ana" })),
+      series_is_group: () => {
+        gate.asked();
+        return ok(true);
+      },
+    }),
+  );
   const snapshot = await readEvent(PLAN, ME);
   assert.equal(snapshot.isGroup, true);
   assert.deepEqual(rpcCalls(calls, "series_is_group").map((c) => c.args), [{ p_series: SERIES }]);

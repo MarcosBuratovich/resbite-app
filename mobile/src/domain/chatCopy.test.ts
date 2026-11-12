@@ -118,3 +118,19 @@ test("every user-facing apostrophe in the chat copy is the curly one (H37 Q7)", 
     typeof value === "string" ? [value] : typeof value === "function" ? [String(value)] : [];
   for (const [key, value] of Object.entries(C)) for (const w of words(value)) assert.equal(w.includes("'"), false, key);
 });
+
+// Ruling GR1 (2): with no readable day, a group's going words are a one-off's, and nothing dangles.
+test("a group's day-bearing words with no readable day fall back to the one-off's, with no dangling 'this'", () => {
+  for (const day of ["", "  "]) {
+    assert.equal(C.audienceGoingDay(day, 6), "Going · 6");
+    assert.equal(C.announcementToGroup("going", day), "ANNOUNCEMENT · TO GOING");
+    assert.equal(C.announcementLabelGroup("going", day), "Announcement to people going");
+    // Everyone in the group names no day, so it keeps the group's words.
+    assert.equal(C.announcementToGroup("everyone", day), "ANNOUNCEMENT · TO EVERYONE IN THE GROUP");
+    assert.equal(C.announcementLabelGroup("everyone", day), "Announcement to everyone in the group");
+    assert.equal(C.leaveQuestion("Board game night", day), "Leave Board game night? You’ll stop getting its invitations and its chat.");
+  }
+  assert.equal(C.audienceGoingDay("", 6), C.audienceGoing(6));
+  assert.equal(C.announcementToGroup("going", ""), C.announcementTo("going"));
+  assert.equal(C.announcementLabelGroup("going", ""), C.announcementLabel("going"));
+});

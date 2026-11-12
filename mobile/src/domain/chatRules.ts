@@ -392,6 +392,15 @@ export const groupDay = (summary: Pick<ChatSummary, "startsAt" | "timeZone">): s
   longWeekday(summary.startsAt, summary.timeZone);
 
 /**
+ * The weekday a group's row is worded with (Ruling GR1): the group's `day` for a row of the current occurrence
+ * (`planId`, the summary's), or a row that doesn't say which it belongs to; none ("") for a row of an earlier one, so
+ * last week's "Going this Thursday" never reads as sent to next week's people. With no current occurrence to compare,
+ * a row that names one isn't taken for it.
+ */
+export const dayFor = (m: Pick<ChatMessage, "planId">, planId: string, day: string): string =>
+  !m.planId || m.planId === planId ? day : "";
+
+/**
  * The announcement sheet's two radios, in order, the first its starting audience (`defaultAudience`, K-N7). A
  * group's: "Everyone in the group · 9", then "Going this Thursday · 6" (G-S7). A one-off's: "Going · 6", then
  * "Everyone invited · 9".

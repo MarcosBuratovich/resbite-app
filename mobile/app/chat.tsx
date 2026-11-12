@@ -30,6 +30,7 @@ import {
   canAnnounce,
   closedCard,
   closingLine,
+  dayFor,
   defaultAudience,
   fitEdit,
   groupDay,
@@ -312,6 +313,7 @@ function Conversation({
         closed: !open,
         group: summary.isGroup,
         day,
+        planId: summary.planId,
       }),
     [chat.messages, chat.pending, chat.names, chat.hasEarlier, summary, now, viewerId, zone, open, day],
   );
@@ -350,7 +352,7 @@ function Conversation({
   useEffect(tryJump, [data, tryJump]);
   const pinned = summary.pinned;
   const pinnedLabel = pinned
-    ? messageLabel(pinned, chat.names, viewerId, now, zone, undefined, summary.isGroup, day)
+    ? messageLabel(pinned, chat.names, viewerId, now, zone, undefined, summary.isGroup, dayFor(pinned, summary.planId, day))
     : null;
   const jumpToPinned = async () => {
     if (!pinned) return;

@@ -495,3 +495,16 @@ test("leaving's refusals read as plain words, the server's straight apostrophe m
   // Chat core's refusals are as built.
   assert.equal(chatErrorMessage({ code: "42501", message: "Not in this chat" }), "You’re not in this chat.");
 });
+
+// Ruling GR1 (4): a row may say which occurrence it belongs to (Task 2's chat_row adds plan_id).
+test("a row keeps its plan id when the server sends one, and has none otherwise", async () => {
+  const { gw } = gateway({
+    rows: [row({ id: 1, plan_id: PLAN }), row({ id: 2 }), row({ id: 3, plan_id: "" }), row({ id: 4, plan_id: 7 })],
+    names: {},
+    as_of: "2025-11-15T18:03:00+00:00",
+  });
+  const page = await gw.messages(SERIES);
+  assert.deepEqual(page.rows.map((r) => r.planId), [PLAN, undefined, undefined, undefined]);
+  assert.deepEqual(page.rows[0], message({ id: 1, planId: PLAN }));
+  assert.equal("planId" in page.rows[1], false);
+});

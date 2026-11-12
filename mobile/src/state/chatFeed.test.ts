@@ -41,7 +41,7 @@ const pending = (clientId: string, over: Partial<PendingMessage> = {}): PendingM
   ...over,
 });
 const feed = (items: Array<ChatMessage | PendingMessage | EndedLine>, over: Partial<Parameters<typeof chatFeed>[1]> = {}) =>
-  chatFeed(items, { names, viewerId: PEDRO, now: NOW, zone: LONDON, title: TITLE, host: false, group: false, day: "", ...over });
+  chatFeed(items, { names, viewerId: PEDRO, now: NOW, zone: LONDON, title: TITLE, host: false, group: false, day: "", planId: "", ...over });
 const types = (rows: FeedRow[]) => rows.map((r) => r.type);
 const only = <T extends FeedRow["type"]>(rows: FeedRow[], type: T) =>
   rows.filter((r): r is Extract<FeedRow, { type: T }> => r.type === type);
@@ -329,5 +329,45 @@ test("the chat screen hides deleted lines before anything else, and words its fe
   assert.match(screen, /chatFeed\(withEndedLine\(withPending\(shownMessages\(chat\.messages\), chat\.pending\), summary, chat\.hasEarlier, now\), \{/);
   assert.match(screen, /group: summary\.isGroup,\s*day,/);
   assert.match(screen, /const day = groupDay\(summary\);/);
-  assert.match(screen, /messageLabel\(pinned, chat\.names, viewerId, now, zone, undefined, summary\.isGroup, day\)/);
+  assert.match(screen, /messageLabel\(pinned, chat\.names, viewerId, now, zone, undefined, summary\.isGroup, dayFor\(pinned, summary\.planId, day\)\)/);
+  assert.match(screen, /group: summary\.isGroup,\s*day,\s*planId: summary\.planId,/);
+});
+
+// Ruling GR1 (2) and (4).
+const CURRENT_PLAN = "0c000000-0000-4000-8000-000000000001";
+const EARLIER_PLAN = "0c000000-0000-4000-8000-000000000000";
+test("on a group, an announcement says this week's day only for the current occurrence; an earlier one's going reads as a one-off's", () => {
+  const going = (id: number, planId?: string) =>
+    msg(id, { kind: "announcement", audience: "going", body: "Doors at 19:30", authorId: ANA, ...(planId ? { planId } : {}) });
+  const rows = only(
+    groupFeed(
+      [
+        going(1, EARLIER_PLAN),
+        msg(2, { kind: "announcement", audience: "everyone", body: "Bring a game", authorId: ANA, planId: EARLIER_PLAN }),
+        going(3, CURRENT_PLAN),
+        going(4),
+      ],
+      { planId: CURRENT_PLAN },
+    ),
+    "announcement",
+  );
+  assert.deepEqual(rows.map((r) => r.heading), [
+    "ANNOUNCEMENT · TO GOING",
+    "ANNOUNCEMENT · TO EVERYONE IN THE GROUP",
+    "ANNOUNCEMENT · TO GOING THIS THURSDAY",
+    "ANNOUNCEMENT · TO GOING THIS THURSDAY",
+  ]);
+  assert.ok(rows[0].label.startsWith("Announcement to people going, Ana"), rows[0].label);
+  assert.ok(rows[1].label.startsWith("Announcement to everyone in the group, Ana"), rows[1].label);
+  assert.ok(rows[2].label.startsWith("Announcement to people going this Thursday, Ana"), rows[2].label);
+  assert.ok(rows[3].label.startsWith("Announcement to people going this Thursday, Ana"), rows[3].label);
+  // A one-off ignores it: its words never name a day.
+  const oneOff = only(feed([going(1, EARLIER_PLAN)], { planId: CURRENT_PLAN }), "announcement");
+  assert.equal(oneOff[0].heading, "ANNOUNCEMENT · TO GOING");
+});
+
+test("on a group whose day can't be read, a going announcement reads as a one-off's, with no dangling 'this'", () => {
+  const [card] = only(groupFeed([msg(1, { kind: "announcement", audience: "going", body: "Doors at 19:30", authorId: ANA })], { day: "" }), "announcement");
+  assert.equal(card.heading, "ANNOUNCEMENT · TO GOING");
+  assert.ok(card.label.startsWith("Announcement to people going, Ana"), card.label);
 });

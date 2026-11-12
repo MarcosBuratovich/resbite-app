@@ -4,6 +4,13 @@
  */
 export type ChatAudience = "going" | "everyone";
 
+// A one-off's going words, which a group's fall back to when its day can't be read (Ruling GR1).
+const audienceGoing = (n: number) => `Going · ${n}`;
+const toGoing = "ANNOUNCEMENT · TO GOING";
+const toPeopleGoing = "Announcement to people going";
+/** A weekday to name, or none: "" or white space is no day, and nothing reads "this " with nothing after it. */
+const named = (day: string) => day.trim() !== "";
+
 export const CHAT_COPY = {
   chat: "Chat",
   noMessages: "No messages yet",
@@ -16,7 +23,7 @@ export const CHAT_COPY = {
   announce: "Announce",
   newAnnouncement: "New announcement",
   whoGetsIt: "Who gets it",
-  audienceGoing: (n: number) => `Going · ${n}`,
+  audienceGoing,
   audienceEveryone: (n: number) => `Everyone invited · ${n}`,
   announcePlaceholder: "Write an update for your guests",
   sendAnnouncement: "Send announcement",
@@ -24,7 +31,7 @@ export const CHAT_COPY = {
   pinned: "PINNED",
   /** An announcement card's label, its audience in words. */
   announcementTo: (a: ChatAudience | null) =>
-    a === "everyone" ? "ANNOUNCEMENT · TO EVERYONE INVITED" : "ANNOUNCEMENT · TO GOING",
+    a === "everyone" ? "ANNOUNCEMENT · TO EVERYONE INVITED" : toGoing,
   peopleInChat: (n: number) => `People in this chat · ${n}`,
   mute: "Mute chat",
   muteHint: "Changes and announcements still arrive",
@@ -68,7 +75,7 @@ export const CHAT_COPY = {
   open: "Open",
   /** An announcement's audience for the screen reader (K-S14). */
   announcementLabel: (a: ChatAudience | null) =>
-    a === "everyone" ? "Announcement to everyone invited" : "Announcement to people going",
+    a === "everyone" ? "Announcement to everyone invited" : toPeopleGoing,
   /** A cancelled one-off's header, in place of its date line (H20). */
   cancelled: "Cancelled",
   /** A link's accessibility action; a host that comes again in the same message is numbered (H31, H32 Q13). */
@@ -93,15 +100,26 @@ export const CHAT_COPY = {
   groupChat: "Group chat",
   /** The "Next one" button's hint. */
   opensResbite: "Opens the resbite",
-  /** A group's two audiences (G-S7); `day` is the long weekday, "Thursday". */
+  /**
+   * A group's two audiences (G-S7); `day` is the long weekday, "Thursday". With no day (a start that can't be read, or
+   * an announcement from an earlier week), the going words are a one-off's (Ruling GR1).
+   */
   audienceGroup: (n: number) => `Everyone in the group · ${n}`,
-  audienceGoingDay: (day: string, n: number) => `Going this ${day} · ${n}`,
+  audienceGoingDay: (day: string, n: number) => (named(day) ? `Going this ${day} · ${n}` : audienceGoing(n)),
   /** A group's announcement card label (confirmation NOTE 14). */
   announcementToGroup: (a: ChatAudience | null, day: string) =>
-    a === "everyone" ? "ANNOUNCEMENT · TO EVERYONE IN THE GROUP" : `ANNOUNCEMENT · TO GOING THIS ${day.toUpperCase()}`,
+    a === "everyone"
+      ? "ANNOUNCEMENT · TO EVERYONE IN THE GROUP"
+      : named(day)
+        ? `ANNOUNCEMENT · TO GOING THIS ${day.toUpperCase()}`
+        : toGoing,
   /** The same, for the screen reader. */
   announcementLabelGroup: (a: ChatAudience | null, day: string) =>
-    a === "everyone" ? "Announcement to everyone in the group" : `Announcement to people going this ${day}`,
+    a === "everyone"
+      ? "Announcement to everyone in the group"
+      : named(day)
+        ? `Announcement to people going this ${day}`
+        : toPeopleGoing,
   announcePlaceholderGroup: "Write an update for the group",
   /** The owner alone in a group (CH-07). */
   groupEmptyHint: "Messages here reach everyone in the group.",
@@ -112,7 +130,11 @@ export const CHAT_COPY = {
   /** The chat menu's row, and the resbite page's More row, then the question both ask (G-N13). */
   leaveGroup: "Leave group",
   leaveThisGroup: "Leave this group",
-  leaveQuestion: (title: string, day: string) => `Leave ${title}? You’ll stop getting its ${day}s and its chat.`,
+  /** With no day to name, it names what they stop getting without one (Ruling GR1). */
+  leaveQuestion: (title: string, day: string) =>
+    named(day)
+      ? `Leave ${title}? You’ll stop getting its ${day}s and its chat.`
+      : `Leave ${title}? You’ll stop getting its invitations and its chat.`,
   /** A group's closed card. */
   groupClosedOn: (day: string) => `This group’s chat closed on ${day}.`,
   /** Leaving's refusals (G-N13). */

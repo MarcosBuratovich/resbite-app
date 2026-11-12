@@ -1,6 +1,6 @@
 import type { ChatMessage, ChatNames } from "../services/chat";
 import { CHAT_COPY } from "../domain/chatCopy";
-import { authorName, dayLabel, linkHost, linkParts, messageLabel, systemText } from "../domain/chatRules";
+import { authorName, dayFor, dayLabel, linkHost, linkParts, messageLabel, systemText } from "../domain/chatRules";
 import { localParts } from "../domain/whenText";
 import type { EndedLine, PendingMessage } from "./chatModel";
 
@@ -86,6 +86,11 @@ export type FeedContext = {
   group: boolean;
   /** The group's weekday, "Thursday" (`groupDay(summary)`), for its announcements' audience. */
   day: string;
+  /**
+   * The current occurrence (`summary.planId`): a group's announcement from an earlier one names no day (`dayFor`,
+   * Ruling GR1).
+   */
+  planId: string;
 };
 
 /** Nothing said yet: no message, announcement or unsent one, whatever Resbite's lines say (H31 Q3). */
@@ -151,7 +156,7 @@ const asEndedLine = (e: EndedLine, title: string): ChatMessage => ({
  * word (an unknown kind, event or state) is left out (H20). The screen reverses it for its inverted list.
  */
 export function chatFeed(items: Array<ChatMessage | PendingMessage | EndedLine>, ctx: FeedContext): FeedRow[] {
-  const { names, viewerId, now, zone, title, host, closed = false, group, day: weekday } = ctx;
+  const { names, viewerId, now, zone, title, host, closed = false, group, day: weekday, planId } = ctx;
   const rows: FeedRow[] = [];
   let day: string | null = null;
   let lastAuthor: string | null = null;
@@ -196,7 +201,8 @@ export function chatFeed(items: Array<ChatMessage | PendingMessage | EndedLine>,
     const m = item;
     // A sent row with no words draws nothing (H32 Q8).
     if ((m.kind === "message" || m.kind === "announcement") && m.state === "sent" && m.body === null) continue;
-    const label = messageLabel(m, names, viewerId, now, zone, undefined, group, weekday);
+    const day = dayFor(m, planId, weekday);
+    const label = messageLabel(m, names, viewerId, now, zone, undefined, group, day);
     if (!label) continue;
     const key = `m:${m.id}`;
     if (m.kind === "system") {
@@ -220,7 +226,7 @@ export function chatFeed(items: Array<ChatMessage | PendingMessage | EndedLine>,
         key,
         message: m,
         own,
-        heading: group ? CHAT_COPY.announcementToGroup(m.audience, weekday) : CHAT_COPY.announcementTo(m.audience),
+        heading: group ? CHAT_COPY.announcementToGroup(m.audience, day) : CHAT_COPY.announcementTo(m.audience),
         text: wordsOf(m),
         gone: goneOf(m),
         label,

@@ -21,6 +21,11 @@ export type ChatMessage = {
   createdAt: string;
   updatedAt: string;
   clientId: string | null;
+  /**
+   * The occurrence the row belongs to (`plan_id`), when the read says so (chat plan 2's `chat_row`). A group's
+   * announcement names this week's day only for the current occurrence's; a row without it reads as current.
+   */
+  planId?: string | null;
 };
 
 /** The server's `names` map: a first name per uuid, null for someone who can't be named (shown as "Someone"). */
@@ -150,6 +155,8 @@ function chatMessage(value: unknown): ChatMessage | null {
     createdAt: timeOf(value.created_at),
     updatedAt: timeOf(value.updated_at),
     clientId: textOrNull(value.client_id),
+    // Only when the read names one, so a read from before plan 2 gives rows exactly as it did.
+    ...(typeof value.plan_id === "string" && value.plan_id !== "" ? { planId: value.plan_id } : {}),
   };
 }
 const rows = (value: unknown): ChatMessage[] =>

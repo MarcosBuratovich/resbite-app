@@ -10,6 +10,7 @@ import {
   closingLine,
   currentOccurrences,
   cutLine,
+  dayFor,
   dayLabel,
   defaultAudience,
   fitBody,
@@ -1015,4 +1016,42 @@ test("closedCard on a group: its own words with the date; a one-off's two cards 
   assert.deepEqual(closedCard({ ...stopped, closesAt: null }, now), { line: CHAT_COPY.closedShort, why: null });
   assert.deepEqual(closedCard(summary({ status: "cancelled", closesAt: null, open: false }), now), { line: CHAT_COPY.cancelledClosed, why: null });
   assert.deepEqual(closedCard(summary({ open: false }), Date.parse("2026-11-05T12:00:00Z")), { line: "This chat closed on Sun 1 Nov.", why: CHAT_COPY.closedWhy });
+});
+
+// Ruling GR1 (1): Task 2 sends every cancelled line with `stop`, and a cancelled one-off's is true.
+test("a one-off's cancelled line with Task 2's payload, stop true, reads as a one-off's", () => {
+  const payload = { actor: ANA, stop: true, starts_at: THU_20, time_zone: LONDON };
+  assert.equal(line("cancelled", payload), "Ana cancelled the resbite");
+  assert.equal(line("cancelled", payload, ANA), "You cancelled the resbite");
+  assert.equal(rowText(sys("cancelled", payload), names, UNKNOWN, false), "Ana cancelled the resbite");
+  assert.equal(messageLabel(sys("cancelled", payload), names, UNKNOWN, Date.now(), LONDON), "Resbite: Ana cancelled the resbite");
+});
+
+// Ruling GR1 (2): a group summary whose start can't be read.
+test("with no readable day, a group's going radio, label and Leave question read without one", () => {
+  const noDay = group({ startsAt: "" });
+  assert.equal(groupDay(noDay), "");
+  assert.deepEqual(audienceOptions(noDay), [
+    { key: "everyone", title: "Everyone in the group · 9" },
+    { key: "going", title: "Going · 6" },
+  ]);
+  const going = msg({ kind: "announcement", audience: "going", body: "Doors at 19:30", authorId: ANA });
+  assert.ok(messageLabel(going, names, UNKNOWN, Date.now(), LONDON, undefined, true, groupDay(noDay))!.startsWith("Announcement to people going, Ana"));
+  assert.equal(CHAT_COPY.leaveQuestion(noDay.title, groupDay(noDay)), "Leave Board game night? You’ll stop getting its invitations and its chat.");
+  assert.equal(CHAT_COPY.leaveQuestion("Board game night", groupDay(group())), "Leave Board game night? You’ll stop getting its Thursdays and its chat.");
+});
+
+// Ruling GR1 (4): an announcement names this week's day only when it belongs to the current occurrence.
+test("dayFor: the group's day for a row of the current occurrence or one with no planId; none for an earlier one", () => {
+  const CURRENT = "0c000000-0000-4000-8000-000000000001";
+  const EARLIER = "0c000000-0000-4000-8000-000000000000";
+  const going = msg({ kind: "announcement", audience: "going", body: "Doors at 19:30", authorId: ANA });
+  assert.equal(dayFor({ ...going, planId: CURRENT }, CURRENT, "Thursday"), "Thursday");
+  assert.equal(dayFor(going, CURRENT, "Thursday"), "Thursday", "a row without planId reads as current");
+  assert.equal(dayFor({ ...going, planId: null }, CURRENT, "Thursday"), "Thursday");
+  assert.equal(dayFor({ ...going, planId: EARLIER }, CURRENT, "Thursday"), "");
+  // With no current occurrence to compare, a row that names one isn't taken for it.
+  assert.equal(dayFor({ ...going, planId: EARLIER }, "", "Thursday"), "");
+  const label = messageLabel({ ...going, planId: EARLIER }, names, UNKNOWN, Date.now(), LONDON, undefined, true, dayFor({ ...going, planId: EARLIER }, CURRENT, "Thursday"));
+  assert.ok(label!.startsWith("Announcement to people going, Ana"), label!);
 });
