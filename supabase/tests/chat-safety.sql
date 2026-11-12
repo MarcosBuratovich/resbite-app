@@ -528,9 +528,12 @@ do $$ begin
 end $$;
 set local role authenticated;
 select pg_temp.s3_as(pg_temp.e7('03'));
-select public.block_user(gen_random_uuid(),true);
-select public.block_user(pg_temp.e7('08'),true);
-select public.block_user(pg_temp.e7('09'),true);
+-- block_user answers stored (SR8's M7): true only when the block row exists afterwards. A random id and 08: false; 09:
+-- true, and true again for the same block (it exists).
+select pg_temp.s3_check(public.block_user(gen_random_uuid(),true) is false,'block_user stored a block of a random id');
+select pg_temp.s3_check(public.block_user(pg_temp.e7('08'),true) is false,'block_user says stored for 08, whom 03 may not read');
+select pg_temp.s3_check(public.block_user(pg_temp.e7('09'),true) is true,'block_user does not say stored for 09');
+select pg_temp.s3_check((select b.stored from public.block_user(pg_temp.e7('09'),true) b) is true,'block_user''s answer is not named stored, or not true again');
 select pg_temp.s3_refused(format('select public.block_user(%L,true)',pg_temp.e7('03')),'22023','That is you');
 select pg_temp.s3_refused('select public.block_user(null,true)','22023','Invalid block');
 select pg_temp.s3_refused(format('select public.block_user(%L,null)',pg_temp.e7('05')),'22023','Invalid block');
@@ -556,7 +559,7 @@ do $$ begin
 end $$;
 set local role authenticated;
 select pg_temp.s3_as(pg_temp.e7('03'));
-select public.block_user(pg_temp.e7('13'),false);
+select pg_temp.s3_check(public.block_user(pg_temp.e7('13'),false) is false,'An unblock says a block is stored');
 reset role;
 select pg_temp.s3_check(not pg_temp.s3_blocked(pg_temp.e7('03'),pg_temp.e7('13')),'I2: unblocking 13 kept the row');
 
@@ -590,16 +593,22 @@ select pg_temp.s3_check(pg_temp.s3_blocked(pg_temp.e7('11'),pg_temp.e7('03')) an
 set local role authenticated;
 select pg_temp.s3_as(pg_temp.e7('03'));
 select public.block_user(pg_temp.e7('04'),true);
-select pg_temp.s3_check(public.my_blocks()=jsonb_build_array(jsonb_build_object('user_id',pg_temp.e7('04'),'name','Leo'),
-  jsonb_build_object('user_id',pg_temp.e7('09'),'name','Zed'),jsonb_build_object('user_id',pg_temp.e7('07'),'name','Eva'),
-  jsonb_build_object('user_id',pg_temp.e7('05'),'name','Sol'),jsonb_build_object('user_id',pg_temp.e7('02'),'name','Ada')),
- '03''s blocks: '||public.my_blocks()::text);
+select set_config('s3.my_blocks',public.my_blocks()::text,true);
 reset role;
+-- Each entry also carries at, its block's time (SR7), so two people of one first name are told apart.
+select pg_temp.s3_check((select jsonb_agg(e.value - 'at' order by e.n) from jsonb_array_elements(current_setting('s3.my_blocks')::jsonb)
+   with ordinality e(value,n))=jsonb_build_array(jsonb_build_object('user_id',pg_temp.e7('04'),'name','Leo'),
+  jsonb_build_object('user_id',pg_temp.e7('09'),'name','Zed'),jsonb_build_object('user_id',pg_temp.e7('07'),'name','Eva'),
+  jsonb_build_object('user_id',pg_temp.e7('05'),'name','Sol'),jsonb_build_object('user_id',pg_temp.e7('02'),'name','Ada'))
+ and not exists(select 1 from jsonb_array_elements(current_setting('s3.my_blocks')::jsonb) e
+  where (e.value->>'at')::timestamptz is distinct from (select b.created_at from private.blocks b
+   where b.blocker_id=pg_temp.e7('03') and b.blocked_id=(e.value->>'user_id')::uuid)),
+ '03''s blocks: '||current_setting('s3.my_blocks'));
 savepoint s3_deleting;
 update public.profiles set deletion_requested_at=now() where id=pg_temp.e7('04');
 set local role authenticated;
 select pg_temp.s3_as(pg_temp.e7('03'));
-select pg_temp.s3_check(public.my_blocks()->0=jsonb_build_object('user_id',pg_temp.e7('04'),'name',null),
+select pg_temp.s3_check((public.my_blocks()->0) - 'at'=jsonb_build_object('user_id',pg_temp.e7('04'),'name',null),
  'A deleting account''s name in 03''s blocks: '||public.my_blocks()::text);
 rollback to savepoint s3_deleting;
 reset role;
@@ -1633,33 +1642,47 @@ rollback to savepoint s3_deletion;
 \endif
 
 -- suspend-account.sql (G-B4(b), N14 (b)): on a report about 04 (05's open one on the group), 04's roster row is
--- disabled: user_eligible(04) is false, and it prints 1 and 0. On 03's report about 16 (a live grant, no roster row):
--- user_eligible(16) is false, and it prints 0 and 1.
+-- disabled: user_eligible(04) is false, and it prints 04's account, 1 and 0. On 03's report about 16 (a live grant, no
+-- roster row): user_eligible(16) is false, and it prints 16's account, 0 and 1. Each suspension is recorded in
+-- private.suspensions by the suspended account (SR8's M1): what it changed, and the report that led to it.
 select pg_temp.s3_id('ru2') as s3_rid \gset
 \set s3_script `sed -e 's/(values (0))/(values (:s3_rid))/' :'resbite_repo'/supabase/ops/suspend-account.sql`
 select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
-select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('roster_rows_disabled',1,'grants_revoked',0))
- and not private.user_eligible(pg_temp.e7('04')),'suspend-account.sql on 04: '||current_setting('s3.out'));
+select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('account',pg_temp.e7('04'),'roster_rows_disabled',1,'grants_revoked',0))
+ and not private.user_eligible(pg_temp.e7('04'))
+ and (select (report_id,roster,grant_at,at) from private.suspensions where user_id=pg_temp.e7('04'))
+  is not distinct from (pg_temp.s3_id('ru2'),true,null::timestamptz,now()),'suspend-account.sql on 04: '||current_setting('s3.out'));
 select pg_temp.s3_id('r16') as s3_rid \gset
 \set s3_script `sed -e 's/(values (0))/(values (:s3_rid))/' :'resbite_repo'/supabase/ops/suspend-account.sql`
 select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
-select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('roster_rows_disabled',0,'grants_revoked',1))
- and not private.user_eligible(pg_temp.e7('16')),'suspend-account.sql on 16: '||current_setting('s3.out'));
--- D3 (SR3 additions): the undo in suspend-account.sql's closing comment, run with the same report's id, puts back only
--- what that suspension changed. In savepoints: on 16's, the grant comes back ({0,1}) and 16 may use the app again; on
--- 04's, the roster row comes back ({1,0}). Then two people banned a month earlier (in one savepoint): 13 (roster row
--- disabled and a grant revoked then) is suspended ({0,0}) and undone ({0,0}), and stays banned, the grant's month-old
--- time kept; 07 (roster row on, a grant revoked a month ago) is suspended ({1,0}) and undone ({1,0}): the roster row
--- comes back, the old revocation stays.
+select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('account',pg_temp.e7('16'),'roster_rows_disabled',0,'grants_revoked',1))
+ and not private.user_eligible(pg_temp.e7('16'))
+ and (select (report_id,roster,grant_at) from private.suspensions where user_id=pg_temp.e7('16'))
+  is not distinct from (pg_temp.s3_id('r16'),false,now()),'suspend-account.sql on 16: '||current_setting('s3.out'));
+-- The undo in suspend-account.sql's closing comment takes the suspended account and puts back only what its recorded
+-- suspension changed (D3, SR8's M1), then deletes the record. In savepoints: on 16, the grant comes back ({0,1}) and 16
+-- may use the app again; on 04, the roster row comes back ({1,0}), even after 05, who reported 04, deleted their
+-- profile by hand, which takes 05's reports, the one the suspension came from among them (the record stays, its report
+-- forgotten). Then two people banned a month earlier (in one savepoint): 13 (roster row disabled and a grant revoked
+-- then) is suspended ({0,0}, nothing recorded) and undone ({0,0}), and stays banned, the grant's month-old time kept;
+-- 07 (roster row on, a grant revoked a month ago) is suspended ({1,0}) and undone ({1,0}): the roster row comes back,
+-- the old revocation stays.
 savepoint s3_undo;
-\set s3_undo `sed -n -e '/^-- To undo it/,$ s/^--   //p' :'resbite_repo'/supabase/ops/suspend-account.sql | sed -e 's/(values (0))/(values (:s3_rid))/'`
+select pg_temp.e7('16') as s3_uid \gset
+\set s3_undo `sed -n -e '/^-- To undo it/,$ s/^--   //p' :'resbite_repo'/supabase/ops/suspend-account.sql | sed -e 's/00000000-0000-0000-0000-000000000000/:s3_uid/'`
 select set_config('s3.out',pg_temp.s3_run(:'s3_undo')::text,true);
 select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('roster_rows_enabled',0,'grants_restored',1))
- and private.user_eligible(pg_temp.e7('16')),'The undo on 16: '||current_setting('s3.out'));
+ and private.user_eligible(pg_temp.e7('16')) and not exists(select 1 from private.suspensions where user_id=pg_temp.e7('16')),
+ 'The undo on 16: '||current_setting('s3.out'));
 rollback to savepoint s3_undo;
 savepoint s3_undo;
-select pg_temp.s3_id('ru2') as s3_rid \gset
-\set s3_undo `sed -n -e '/^-- To undo it/,$ s/^--   //p' :'resbite_repo'/supabase/ops/suspend-account.sql | sed -e 's/(values (0))/(values (:s3_rid))/'`
+delete from public.attendees where user_id=pg_temp.e7('05');
+delete from public.profiles where id=pg_temp.e7('05');
+select pg_temp.s3_check(not exists(select 1 from private.reports where id=pg_temp.s3_id('ru2'))
+ and (select report_id from private.suspensions where user_id=pg_temp.e7('04')) is null
+ and (select roster from private.suspensions where user_id=pg_temp.e7('04')),'M1: the suspension''s record did not outlive the reporter''s account');
+select pg_temp.e7('04') as s3_uid \gset
+\set s3_undo `sed -n -e '/^-- To undo it/,$ s/^--   //p' :'resbite_repo'/supabase/ops/suspend-account.sql | sed -e 's/00000000-0000-0000-0000-000000000000/:s3_uid/'`
 select set_config('s3.out',pg_temp.s3_run(:'s3_undo')::text,true);
 select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('roster_rows_enabled',1,'grants_restored',0))
  and private.user_eligible(pg_temp.e7('04')),'The undo on 04: '||current_setting('s3.out'));
@@ -1673,26 +1696,47 @@ select pg_temp.s3_as(pg_temp.e7('03'));
 select public.report_user(pg_temp.e7(n),pg_temp.e7p('01'),'harassment',null) from unnest(array['13','07']) n;
 reset role;
 select pg_temp.s3_report_about(pg_temp.e7('03'),pg_temp.e7('13'),pg_temp.e7p('01')) as s3_rid \gset
+select pg_temp.e7('13') as s3_uid \gset
 \set s3_script `sed -e 's/(values (0))/(values (:s3_rid))/' :'resbite_repo'/supabase/ops/suspend-account.sql`
-\set s3_undo `sed -n -e '/^-- To undo it/,$ s/^--   //p' :'resbite_repo'/supabase/ops/suspend-account.sql | sed -e 's/(values (0))/(values (:s3_rid))/'`
+\set s3_undo `sed -n -e '/^-- To undo it/,$ s/^--   //p' :'resbite_repo'/supabase/ops/suspend-account.sql | sed -e 's/00000000-0000-0000-0000-000000000000/:s3_uid/'`
 select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
 select set_config('s3.out2',pg_temp.s3_run(:'s3_undo')::text,true);
-select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('roster_rows_disabled',0,'grants_revoked',0))
+select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('account',pg_temp.e7('13'),'roster_rows_disabled',0,'grants_revoked',0))
  and current_setting('s3.out2')::jsonb=jsonb_build_array(jsonb_build_object('roster_rows_enabled',0,'grants_restored',0))
  and not private.user_eligible(pg_temp.e7('13'))
  and (select revoked_at from private.beta_access where user_id=pg_temp.e7('13'))=now()-interval '30 days',
  'D3: the undo lifted 13''s earlier ban: '||current_setting('s3.out')||' '||current_setting('s3.out2'));
 select pg_temp.s3_report_about(pg_temp.e7('03'),pg_temp.e7('07'),pg_temp.e7p('01')) as s3_rid \gset
+select pg_temp.e7('07') as s3_uid \gset
 \set s3_script `sed -e 's/(values (0))/(values (:s3_rid))/' :'resbite_repo'/supabase/ops/suspend-account.sql`
-\set s3_undo `sed -n -e '/^-- To undo it/,$ s/^--   //p' :'resbite_repo'/supabase/ops/suspend-account.sql | sed -e 's/(values (0))/(values (:s3_rid))/'`
+\set s3_undo `sed -n -e '/^-- To undo it/,$ s/^--   //p' :'resbite_repo'/supabase/ops/suspend-account.sql | sed -e 's/00000000-0000-0000-0000-000000000000/:s3_uid/'`
 select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
-select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('roster_rows_disabled',1,'grants_revoked',0))
+select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('account',pg_temp.e7('07'),'roster_rows_disabled',1,'grants_revoked',0))
  and not private.user_eligible(pg_temp.e7('07')),'D3: the suspension of 07: '||current_setting('s3.out'));
 select set_config('s3.out',pg_temp.s3_run(:'s3_undo')::text,true);
 select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('roster_rows_enabled',1,'grants_restored',0))
  and private.user_eligible(pg_temp.e7('07'))
  and (select revoked_at from private.beta_access where user_id=pg_temp.e7('07'))=now()-interval '30 days',
  'D3: the undo did not put back only 07''s roster row: '||current_setting('s3.out'));
+-- And 12, banned by roster a month ago but with a live grant: suspended ({0,1}, the grant) and undone ({0,1}): the
+-- grant comes back, the roster row stays disabled.
+update private.tester_roster set enabled=false where email='s3-12@resbite-test.invalid';
+insert into private.beta_access(user_id,source) values (pg_temp.e7('12'),'link');
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('03'));
+select public.report_user(pg_temp.e7('12'),pg_temp.e7p('03'),'harassment',null);
+reset role;
+select pg_temp.s3_report_about(pg_temp.e7('03'),pg_temp.e7('12'),pg_temp.e7p('03')) as s3_rid \gset
+select pg_temp.e7('12') as s3_uid \gset
+\set s3_script `sed -e 's/(values (0))/(values (:s3_rid))/' :'resbite_repo'/supabase/ops/suspend-account.sql`
+\set s3_undo `sed -n -e '/^-- To undo it/,$ s/^--   //p' :'resbite_repo'/supabase/ops/suspend-account.sql | sed -e 's/00000000-0000-0000-0000-000000000000/:s3_uid/'`
+select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
+select set_config('s3.out2',pg_temp.s3_run(:'s3_undo')::text,true);
+select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('account',pg_temp.e7('12'),'roster_rows_disabled',0,'grants_revoked',1))
+ and current_setting('s3.out2')::jsonb=jsonb_build_array(jsonb_build_object('roster_rows_enabled',0,'grants_restored',1))
+ and not (select enabled from private.tester_roster where email='s3-12@resbite-test.invalid')
+ and (select revoked_at from private.beta_access where user_id=pg_temp.e7('12')) is null,
+ 'D3: the undo lifted 12''s earlier roster ban: '||current_setting('s3.out')||' '||current_setting('s3.out2'));
 rollback to savepoint s3_undo;
 
 -- close-report.sql records the action on 05's report of the removed words: ('actioned', 'both', 'Removed and
@@ -1702,6 +1746,22 @@ select pg_temp.s3_id('rgroup') as s3_rid \gset
 select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
 select pg_temp.s3_check((select (status,action,review_note,reviewed_at,target_user_id,frozen_author) from private.reports where id=pg_temp.s3_id('rgroup'))
  =('actioned'::text,'both'::text,'Removed and suspended'::text,now(),pg_temp.e7('07'),pg_temp.e7('07')),'close-report.sql on the removed words: '||current_setting('s3.out'));
+-- SR8's M2: run again on that closed report (moved back 100 days first, in a savepoint), it prints no row and changes
+-- nothing, so a closed report's 180 days never start again; with the status 'open' on an open report, the same.
+savepoint s3_reclose;
+update private.reports set reviewed_at=now()-interval '100 days' where id=pg_temp.s3_id('rgroup');
+\set s3_script `sed -e "s/^ (0, 'reviewed', 'none', 'No action needed')/ (:s3_rid, 'reviewed', 'none', 'Typo fixed')/" :'resbite_repo'/supabase/ops/close-report.sql`
+select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
+select pg_temp.s3_check(current_setting('s3.out')::jsonb='[]'::jsonb
+ and (select (status,action,review_note,reviewed_at) from private.reports where id=pg_temp.s3_id('rgroup'))
+  =('actioned'::text,'both'::text,'Removed and suspended'::text,now()-interval '100 days'),'close-report.sql reopened the clock of a closed report: '||current_setting('s3.out'));
+select pg_temp.s3_id('r1') as s3_rid \gset
+\set s3_script `sed -e "s/^ (0, 'reviewed', 'none', 'No action needed')/ (:s3_rid, 'open', 'none', 'Still open')/" :'resbite_repo'/supabase/ops/close-report.sql`
+select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
+select pg_temp.s3_check(current_setting('s3.out')::jsonb='[]'::jsonb
+ and (select (status,reviewed_at,review_note) from private.reports where id=pg_temp.s3_id('r1')) is not distinct from ('open'::text,null::timestamptz,null::text),
+ 'close-report.sql stamped an open report: '||current_setting('s3.out'));
+rollback to savepoint s3_reclose;
 
 -- purge-closed-reports.sql (I11, R-Q3), in a savepoint: 05's first report about 04 closed 181 days ago goes; the report
 -- of the removed words, closed 179 days ago, and the open ones stay, 05's new open report about 16 with its target;
@@ -1746,11 +1806,17 @@ select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb
  and pg_temp.s3_who(array(select user_id from private.moderators))='17','moderators.sql with an unknown email: '||current_setting('s3.out'));
 \set s3_script `sed -e "s/array\[\]::text\[\]/array['ZZone ',' zz'||chr(160)||'two','zzone']::text[]/" :'resbite_repo'/supabase/ops/blocked-terms.sql`
 select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
-select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('terms',2))
+select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('terms',2,'refused',0))
  and (select string_agg(term,',' order by term collate "C") from private.blocked_terms)='zz two,zzone','blocked-terms.sql with two terms: '||current_setting('s3.out'));
+-- SR8's M4: a list holding a term the table would refuse changes nothing and prints only counts, the terms it holds
+-- now and how many were refused; never a term, and no error that would print one.
+\set s3_script `sed -e "s/array\[\]::text\[\]/array['zz-secret*','fine one','@hidden']::text[]/" :'resbite_repo'/supabase/ops/blocked-terms.sql`
+select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
+select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('terms',2,'refused',2))
+ and (select string_agg(term,',' order by term collate "C") from private.blocked_terms)='zz two,zzone','blocked-terms.sql with refused terms: '||current_setting('s3.out'));
 \set s3_script `cat :'resbite_repo'/supabase/ops/blocked-terms.sql`
 select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
-select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('terms',0))
+select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('terms',0,'refused',0))
  and not exists(select 1 from private.blocked_terms),'blocked-terms.sql with the empty list: '||current_setting('s3.out'));
 rollback;
 
@@ -1790,10 +1856,10 @@ select pg_temp.s3_check(replace(replace(pg_temp.s3_nth(:'s3_migration','create o
 
 -- The way back (Task 2; G-N11, challenge B2), rehearsed in a transaction that ends in rollback, in both modes (the
 -- deletion's body only where the deletion lifecycle exists, in full mode; 20261111160000_chat_safety.after.sql also
--- compares each body with the one before the migration, on the hosted baseline). Seeded: a block, a report, a
+-- compares each body with the one before the migration, on the hosted baseline). Seeded: a suspension, a block, a report, a
 -- moderator, an acceptance, a blocked term and a report_filed notice with a delivery. The rollback restores each of the
 -- fourteen bodies the migration replaced: no longer the migration's, its grants as they were, and its source
--- migration's text exactly (running that text again, as create or replace, changes nothing). The five tables, the ten
+-- migration's text exactly (running that text again, as create or replace, changes nothing). The six tables, the ten
 -- functions and every report_filed notice go, and the kind check is chat core's thirteen kinds again. Then plan 2's
 -- rollback, whose guard refuses while private.blocks exists, runs.
 \set s3_core `cat :'resbite_repo'/supabase/migrations/20261111140000_chat_core.sql`
@@ -1831,6 +1897,7 @@ insert into private.reports(reporter_id,target_user_id,series_id,plan_id,about,r
 insert into private.moderators(user_id) values (pg_temp.e7('09'));
 insert into private.chat_rules_acceptances(user_id,version) values (pg_temp.e7('03'),private.chat_rules_version());
 insert into private.blocked_terms(term) values ('zzbadword');
+insert into private.suspensions(user_id,roster) values (pg_temp.e7('04'),true);
 insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key) values (pg_temp.e7p('01'),pg_temp.e7('09'),'report_filed','s3:wayback');
 insert into private.notification_deliveries(outbox_id,token,endpoint_updated_at)
  select id,'ExpoPushToken[s3wayback]',now() from private.notification_outbox where dedupe_key='s3:wayback';
@@ -1846,7 +1913,7 @@ do $$ declare f record; v_def text; begin
  end loop;
  perform pg_temp.s3_check(pg_catalog.to_regclass('private.blocks') is null and pg_catalog.to_regclass('private.reports') is null
   and pg_catalog.to_regclass('private.moderators') is null and pg_catalog.to_regclass('private.chat_rules_acceptances') is null
-  and pg_catalog.to_regclass('private.blocked_terms') is null,'The rollback left a table');
+  and pg_catalog.to_regclass('private.blocked_terms') is null and pg_catalog.to_regclass('private.suspensions') is null,'The rollback left a table');
  perform pg_temp.s3_check(not exists(select 1 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
    where n.nspname in ('public','private') and p.proname in ('block_user','my_blocks','report_message','report_user','accept_chat_rules',
     'chat_rules_version','report_keep_days','invited_by','inviter_of')),'The rollback left a function');

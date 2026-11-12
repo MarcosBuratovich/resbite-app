@@ -34,7 +34,7 @@ create table private.ch3_rehearsal_outbox as
  where c.conrelid='private.notification_outbox'::regclass and c.conname='notification_outbox_kind_check';
 alter table private.ch3_rehearsal_outbox enable row level security;
 
--- 3. The pre-state: chat groups is applied (its leave records exist); every body to redefine is there; none of the five
+-- 3. The pre-state: chat groups is applied (its leave records exist); every body to redefine is there; none of the six
 -- tables exists, nor any function the migration makes; the kind check has chat core's thirteen kinds, no report_filed.
 do $$ begin
  if pg_catalog.to_regclass('private.series_leaves') is null then
@@ -46,7 +46,7 @@ do $$ begin
  end if;
  if pg_catalog.to_regclass('private.blocks') is not null or pg_catalog.to_regclass('private.reports') is not null
  or pg_catalog.to_regclass('private.moderators') is not null or pg_catalog.to_regclass('private.chat_rules_acceptances') is not null
- or pg_catalog.to_regclass('private.blocked_terms') is not null then
+ or pg_catalog.to_regclass('private.blocked_terms') is not null or pg_catalog.to_regclass('private.suspensions') is not null then
   raise exception 'A chat safety table exists before the migration';
  end if;
  if exists(select 1 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','private')

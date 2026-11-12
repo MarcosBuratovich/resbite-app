@@ -20,6 +20,11 @@
 # outbox last, so it waits for the send, which goes through, and then runs (in a transaction rolled back here).
 # (4) remove-reported-message.sql while the author's delete_message holds the chat's row: the script waits, removes
 # nothing, and prints the message's final state (deleted), never the one it read before waiting.
+# (5) Reports under parallel calls (SR8's M8). A session holds a barrier; the callers wait on it, then all go at once.
+# (5a) One person at 18 reports in the last day sends eight reports of eight messages at once: exactly 20 are stored,
+# two calls succeed and six answer 'Report limit'. (5b) Six people report one message at once: six reports, and one
+# report_filed notice to each of the two moderators (coalesced). (5c) One person reports one message five times at
+# once: one report, five successes, and one notice to each moderator.
 set -euo pipefail
 pg_bin="$1"
 socket="$2"
@@ -286,6 +291,99 @@ if [[ "$send_status" != 0 || "$rollback_status" != 0 ]] || ! grep -q 'ROLLBACK R
  cat "$socket/resbite_safety_send.log" "$socket/resbite_safety_rollback.log"; echo 'FAIL: the rollback and a send did not both go through'; exit 1
 fi
 echo "PASS: the plan-3 rollback waits for a send already reading the rules, takes the outbox last, and both go through"
+
+# (5) Reports under parallel calls. 12 to 18 Going on (3)'s resbite, 19 a second moderator; 12 already has 18 reports
+# from the last day; 08's words to report.
+"$pg_bin/psql" "${args[@]}" >"$socket/chat-safety-concurrency-seed5.log" <<'SQL'
+select set_config('resbite.system','roll',false);
+insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data)
+ select ('e8000000-0000-4000-8000-0000000000'||n)::uuid,'chat-safety-race-'||n||'@resbite-test.invalid',now(),'{}' from generate_series(12,19) n;
+insert into public.profiles(id,display_name) select ('e8000000-0000-4000-8000-0000000000'||n)::uuid,'Race '||n from generate_series(12,19) n;
+insert into private.beta_access(user_id,source) select ('e8000000-0000-4000-8000-0000000000'||n)::uuid,'maintainer' from generate_series(12,19) n;
+insert into private.app_sessions(user_id) select ('e8000000-0000-4000-8000-0000000000'||n)::uuid from generate_series(12,19) n;
+insert into public.attendees(plan_id,user_id,response)
+ select 'e8100000-0000-4000-8000-000000000003',('e8000000-0000-4000-8000-0000000000'||n)::uuid,'accepted' from generate_series(12,18) n;
+insert into private.moderators(user_id) values ('e8000000-0000-4000-8000-000000000019');
+insert into public.messages(series_id,plan_id,author_id,kind,body)
+ select 'e8100000-0000-4000-8000-000000000003','e8100000-0000-4000-8000-000000000003','e8000000-0000-4000-8000-000000000008','message',b
+ from unnest(array['Limit words 1','Limit words 2','Limit words 3','Limit words 4','Limit words 5','Limit words 6','Limit words 7',
+  'Limit words 8','Burst words','Repeat words']) b;
+insert into private.reports(reporter_id,about,reason,created_at)
+ select 'e8000000-0000-4000-8000-000000000012','message','spam',now()-interval '1 hour' from generate_series(1,18);
+SQL
+barrier() {
+ PGAPPNAME=resbite_safety_barrier "$pg_bin/psql" "${args[@]}" >"$socket/chat-safety-barrier.log" 2>&1 <<'SQL' &
+select pg_advisory_lock(777);
+select pg_sleep(4);
+SQL
+ barrier_pid=$!
+ wait_for resbite_safety_barrier wait_event PgSleep 'The barrier did not become ready'
+}
+racer() {
+ local app="$1" user="$2" call="$3"
+ PGAPPNAME="$app" "$pg_bin/psql" "${args[@]}" -At >"$socket/$app.log" 2>&1 <<SQL &
+set role authenticated;
+select set_config('request.jwt.claims','{"sub":"$user","role":"authenticated"}',false) is null;
+select pg_advisory_lock_shared(777);
+select pg_advisory_unlock_shared(777);
+select $call;
+select 'r:ok';
+SQL
+ racer_pids+=($!)
+}
+wait_racers() {
+ local prefix="$1" n="$2"
+ for attempt in {1..120}; do
+  if [[ "$("$pg_bin/psql" "${args[@]}" -Atc "select count(*) from pg_stat_activity where application_name like '${prefix}%' and wait_event='advisory'")" == "$n" ]]; then return 0; fi
+  sleep 0.025
+ done
+ echo "The $n callers $prefix did not all wait on the barrier"; exit 1
+}
+finish_racers() {
+ wait "$barrier_pid" || { cat "$socket/chat-safety-barrier.log"; exit 1; }
+ for pid in "${racer_pids[@]}"; do wait "$pid" || true; done
+}
+words() { "$pg_bin/psql" "${args[@]}" -Atc "select id from public.messages where body='$1'"; }
+back() { "$pg_bin/psql" "${args[@]}" -qAtc "update private.notification_outbox set created_at=created_at-interval '11 minutes' where kind='report_filed'"; }
+# (5a) The limit.
+racer_pids=(); barrier
+for k in 1 2 3 4 5 6 7 8; do racer "resbite_safety_lim$k" "$(u 12)" "public.report_message($(words "Limit words $k"),'spam')"; done
+wait_racers resbite_safety_lim 8
+finish_racers
+stored="$("$pg_bin/psql" "${args[@]}" -Atc "select count(*) from private.reports where reporter_id='$(u 12)'")"
+ok="$(cat "$socket"/resbite_safety_lim*.log | grep -c '^r:ok$' || true)"
+limited="$(cat "$socket"/resbite_safety_lim*.log | grep -c 'Report limit' || true)"
+if [[ "$stored|$ok|$limited" != "20|2|6" ]]; then
+ cat "$socket"/resbite_safety_lim*.log; echo "FAIL: eight reports at once from one person at 18 gave stored|ok|limited $stored|$ok|$limited, not 20|2|6"; exit 1
+fi
+echo "PASS: eight reports at once from one person at 18 store exactly 20; two succeed and six answer Report limit"
+# (5b) One notice to each moderator for six reporters at once.
+back
+burst="$(words 'Burst words')"
+racer_pids=(); barrier
+for n in 13 14 15 16 17 18; do racer "resbite_safety_burst$n" "$(u $n)" "public.report_message($burst,'harassment')"; done
+wait_racers resbite_safety_burst 6
+finish_racers
+result="$("$pg_bin/psql" "${args[@]}" -Atc "select (select count(*) from private.reports where message_id=$burst)||'|'||(select string_agg(right(o.recipient_id::text,2),',' order by o.recipient_id)
+ from private.notification_outbox o where o.kind='report_filed' and split_part(o.dedupe_key,':',2)::bigint in (select r.id from private.reports r where r.message_id=$burst))")"
+if [[ "$result" != "6|03,19" ]] || grep -q ERROR "$socket"/resbite_safety_burst*.log; then
+ cat "$socket"/resbite_safety_burst*.log; echo "FAIL: six reporters at once gave reports|notices $result, not 6|03,19"; exit 1
+fi
+echo "PASS: six people reporting one message at once give six reports and one notice to each moderator"
+# (5c) One report sent five times at once.
+back
+repeat="$(words 'Repeat words')"
+racer_pids=(); barrier
+for k in 1 2 3 4 5; do racer "resbite_safety_again$k" "$(u 13)" "public.report_message($repeat,'spam')"; done
+wait_racers resbite_safety_again 5
+finish_racers
+result="$("$pg_bin/psql" "${args[@]}" -Atc "select (select count(*) from private.reports where message_id=$repeat)||'|'||(select string_agg(right(o.recipient_id::text,2),',' order by o.recipient_id)
+ from private.notification_outbox o where o.kind='report_filed' and split_part(o.dedupe_key,':',2)::bigint in (select r.id from private.reports r where r.message_id=$repeat))")"
+ok="$(cat "$socket"/resbite_safety_again*.log | grep -c '^r:ok$' || true)"
+if [[ "$result|$ok" != "1|03,19|5" ]]; then
+ cat "$socket"/resbite_safety_again*.log; echo "FAIL: one report five times at once gave reports|notices|ok $result|$ok, not 1|03,19|5"; exit 1
+fi
+echo "PASS: one report sent five times at once is one report, five successes and one notice to each moderator"
 
 "$pg_bin/psql" "${args[@]}" >"$socket/chat-safety-concurrency-cleanup.log" <<'SQL'
 delete from public.plans where id::text like 'e8100000-%';

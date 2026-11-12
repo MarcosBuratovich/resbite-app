@@ -8,9 +8,12 @@
 --   - every report (private.reports), open or closed, with its frozen words, and every report_filed notice, sent or not,
 --     with its deliveries, so chat core's kind check can come back. Pushes already sent are not recalled;
 --   - every moderator (private.moderators), every acceptance of the chat rules (private.chat_rules_acceptances) and
---     every blocked term (private.blocked_terms).
+--     every blocked term (private.blocked_terms);
+--   - every suspension's record (private.suspensions): an account suspended with suspend-account.sql stays suspended
+--     (its roster row disabled, its grant revoked), and what its undo would put back is gone. Undo a suspension made in
+--     error before this file, or restore it by hand after.
 -- It drops block_user, my_blocks, report_message, report_user and accept_chat_rules (each in both schemas),
--- chat_rules_version, report_keep_days, invited_by and inviter_of, and the five tables (their indexes and the reports'
+-- chat_rules_version, report_keep_days, invited_by and inviter_of, and the six tables (their indexes and the reports'
 -- id sequence with them).
 -- It restores, each byte for byte and keeping its grants (create or replace):
 --   private.chat_messages, chat_messages_since, send_message, send_announcement, fold_web_account,
@@ -28,13 +31,13 @@
 --   private.contacts_on_resbite               from 20261030130000_phone_key.sql (sha256
 --                                             d7cf188f6b63d14453a2b34d6c8c85838ed196d7a06e01e3bd94c66ae0a14667)
 -- and the outbox's kind check with chat core's thirteen kinds. Every restored body comes back before the tables go, and
--- none of them names one of the five.
+-- none of them names one of the six.
 -- What people notice:
 --   - a message the team removed stays removed, with payload {"by": "resbite"}: a build without plan 3 words it as
 --     "Message removed by an admin";
 --   - nobody is asked to accept the chat rules, and no term is refused;
 --   - a closed report's record, and the daily read of reports and blocks, are gone; the scripts in supabase/ops that
---     read or write the five tables fail.
+--     read or write the six tables fail.
 -- Builds and the sender (challenge I9): a build with plan 3's app calls accept_chat_rules, report_message, report_user,
 -- block_user and my_blocks, which this file drops, and reads chat_summary's rules_accepted as missing, so it holds every
 -- first message for the rules sheet and its I agree fails: it cannot send. Roll the app back first, or with this file,
@@ -752,7 +755,8 @@ begin
  return v_out;
 end $$;
 
--- 7. What this plan made: the calls (public wrapper first), the helpers, then the five tables.
+-- 7. What this plan made: the calls (public wrapper first), the helpers, then the six tables (the suspensions before
+-- the reports they name).
 drop function public.block_user(uuid,boolean);
 drop function private.block_user(uuid,boolean);
 drop function public.my_blocks();
@@ -768,6 +772,7 @@ drop function private.report_keep_days();
 drop function private.invited_by(uuid,uuid);
 drop function private.inviter_of(uuid);
 drop table private.blocks;
+drop table private.suspensions;
 drop table private.reports;
 drop table private.moderators;
 drop table private.chat_rules_acceptances;

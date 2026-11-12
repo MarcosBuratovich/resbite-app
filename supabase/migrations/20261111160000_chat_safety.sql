@@ -58,13 +58,15 @@ create function private.inviter_of(p_plan uuid) returns uuid language sql stable
 $$;
 revoke all on function private.inviter_of(uuid) from public, anon, authenticated, service_role;
 
--- 1c. Blocking and unblocking (G-B1, G-N12, G-S10, challenges B4 and I2). Silent either way. In order:
+-- 1c. Blocking and unblocking (G-B1, G-N12, G-S10, challenges B4 and I2). Its answer is stored (SR8's M7): true only
+-- when the caller's block of p_user exists once the call is done, so the app shows a block only on true; false after an
+-- unblock and after a block that stored nothing (step 3). In order:
 --  0. a null person or a null p_block: 22023 'Invalid block', as decide_join_request refuses a null decision
 --     (circles_of_trust.sql:695), so a malformed call never reads as done; it names nobody;
 --  1. the pair's lock, as the connection functions take it (hashtextextended(a||':'||b, 53)), so a request, an
 --     acceptance or a removal at the same moment goes first or waits;
 --  2. oneself: 22023 'That is you';
---  3. blocking (p_block true) someone the caller may not read gets the same success and stores nothing (G-N12). The
+--  3. blocking (p_block true) someone the caller may not read raises nothing and stores nothing (G-N12; stored false). The
 --     caller may read p_user when: can_read_profile says so; p_user wrote a message or an announcement in a chat the
 --     caller is in now; p_user wrote a sent announcement whose audience includes the caller now (the invitation card
 --     shows only sent ones, confirmation S7); p_user's request to join a resbite the caller hosts is waiting; or
@@ -77,9 +79,10 @@ revoke all on function private.inviter_of(uuid) from public, anon, authenticated
 --     request by the blocker goes as cancel_connection_request takes it, the blocker's refusals by p_user hidden;
 --  5. unblocking (p_block false) deletes the caller's own block of p_user, whatever the caller may read now (I2), and
 --     nothing else: refusals stay, as after a "Not now".
-create function private.block_user(p_user uuid, p_block boolean) returns void language plpgsql security definer set search_path = '' as $$
+create function private.block_user(p_user uuid, p_block boolean, out stored boolean) language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester(); v_a uuid; v_b uuid; v_row public.connections;
 begin
+ stored := false;
  if p_user is null or p_block is null then raise exception 'Invalid block' using errcode='22023'; end if;
  select p.user_a,p.user_b into v_a,v_b from private.pair(v_uid,p_user) p;
  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_a::text||':'||v_b::text,53));
@@ -100,6 +103,7 @@ begin
   return;
  end if;
  insert into private.blocks(blocker_id,blocked_id,created_at) values(v_uid,p_user,pg_catalog.clock_timestamp()) on conflict do nothing;
+ stored := true;
  delete from public.connections where user_a=v_a and user_b=v_b returning * into v_row;
  if v_row.user_a is null then return; end if;
  if v_row.state='connected' then
@@ -117,19 +121,20 @@ begin
  end if;
 end $$;
 revoke all on function private.block_user(uuid,boolean) from public, anon, authenticated, service_role;
-create function public.block_user(p_user uuid, p_block boolean) returns void language sql security invoker set search_path = '' as $$
+create function public.block_user(p_user uuid, p_block boolean, out stored boolean) language sql security invoker set search_path = '' as $$
  select private.block_user(p_user, p_block)
 $$;
 revoke all on function public.block_user(uuid,boolean) from public, anon, authenticated, service_role;
 grant execute on function private.block_user(uuid,boolean), public.block_user(uuid,boolean) to authenticated;
 
--- 1d. Blocked people (G-S10): [{user_id, name}] for the people the caller blocked, newest first. name is chat_first_name
--- (chat_core.sql:201-203), the helper behind every names map: the first word of display_name, or null for a deleted,
--- deleting or folded profile (the app shows "Someone").
+-- 1d. Blocked people (G-S10): [{user_id, name, at}] for the people the caller blocked, newest first. name is
+-- chat_first_name (chat_core.sql:201-203), the helper behind every names map: the first word of display_name, or null
+-- for a deleted, deleting or folded profile (the app shows "Someone"). at is the block's time, so two people of one
+-- first name are told apart (SR7).
 create function private.my_blocks() returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester();
 begin
- return coalesce((select jsonb_agg(jsonb_build_object('user_id', b.blocked_id, 'name', private.chat_first_name(b.blocked_id))
+ return coalesce((select jsonb_agg(jsonb_build_object('user_id', b.blocked_id, 'name', private.chat_first_name(b.blocked_id), 'at', b.created_at)
    order by b.created_at desc, b.blocked_id)
   from private.blocks b where b.blocker_id = v_uid), '[]'::jsonb);
 end $$;
@@ -754,9 +759,7 @@ end $$;
 -- frozen_author are the words and the author when the message was reported. One report per reporter and message
 -- (G-N12), and one open report per reporter, person and series (confirmation NOTE 8), keyed on about so a message
 -- report whose message row went never meets a report about the person. The other two indexes serve the limit's count
--- and reporter_id's cascade, and message_id's set null. suspended_roster and suspended_grant_at record what
--- suspend-account.sql changed when it suspended the reported person (their roster row disabled; the time it revoked
--- their live grant), so its undo puts back only that, never an earlier ban (SR3).
+-- and reporter_id's cascade, and message_id's set null.
 create table private.reports (
  id bigint generated always as identity primary key,
  reporter_id uuid null references public.profiles(id) on delete cascade,
@@ -773,9 +776,7 @@ create table private.reports (
  status text not null default 'open' check (status in ('open','reviewed','actioned')),
  reviewed_at timestamptz null,
  review_note text null,
- action text null check (action is null or action in ('none','message_removed','account_suspended','both')),
- suspended_roster boolean not null default false,
- suspended_grant_at timestamptz null
+ action text null check (action is null or action in ('none','message_removed','account_suspended','both'))
 );
 create unique index reports_reporter_message_key on private.reports(reporter_id, message_id) where message_id is not null;
 create unique index reports_open_user_key on private.reports(reporter_id, target_user_id, series_id) where about = 'user' and status = 'open';
@@ -784,6 +785,22 @@ create index reports_message_idx on private.reports(message_id);
 alter table private.reports enable row level security;
 revoke all on private.reports from public, anon, authenticated, service_role;
 revoke all on sequence private.reports_id_seq from public, anon, authenticated, service_role;
+-- Suspensions (G-B4(b); SR3's D3, SR8's M1): one row per account suspend-account.sql suspended, kept until its undo.
+-- It records what that suspension changed (roster: it disabled the account's roster row; grant_at: when it revoked the
+-- account's live grant), so the undo puts back only that, never an earlier ban, and the report that led to it
+-- (report_id, null once the report is gone: purged 180 days after closing, or taken with its reporter's account,
+-- CH-P18). Keyed by the suspended account and taken with it, so it outlives the report. at is when it was first made.
+-- Nobody reads or writes it but the owner's scripts.
+create table private.suspensions (
+ user_id uuid primary key references auth.users(id) on delete cascade,
+ report_id bigint null references private.reports(id) on delete set null,
+ roster boolean not null default false,
+ grant_at timestamptz null,
+ at timestamptz not null default now()
+);
+create index suspensions_report_idx on private.suspensions(report_id);
+alter table private.suspensions enable row level security;
+revoke all on private.suspensions from public, anon, authenticated, service_role;
 
 -- 2b. The moderators (G-B4(c)): the accounts each new report pushes. moderators.sql sets them; the migration seeds
 -- nobody (the owner is the one moderator until they name a backup, R-Q4). A profile that goes takes its row.

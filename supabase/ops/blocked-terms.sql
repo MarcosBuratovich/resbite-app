@@ -8,11 +8,16 @@
 -- message or an announcement holding a term as a whole word (in any case; a space in a term matches any run of blanks
 -- or a line break) is refused before it is stored, and the app says the message can't be sent. Each term: 1 to 80
 -- characters, a letter, digit or underscore first and last, its words one space apart, and none of [ ] \ . ^ $ * + ? (
--- ) { } |. One that breaks these stops the whole run, and nothing changes. It prints how many terms there are now, never
--- the terms.
+-- ) { } |. If any term in the list breaks these, nothing changes and the run says how many were refused. It prints
+-- only counts, never a term: how many terms there are now (terms), and how many in the list were refused (refused).
 -- Edit: the list, e.g. array['first term', 'second']::text[]
 with listed(term) as (select distinct lower(btrim(regexp_replace(t, '[\s\u0085\u00a0\u115f\u1680\u2000-\u200c\u2028\u2029\u202f\u205f\u2060\u2800\u3000\u3164\ufeff\uffa0]+', ' ', 'g'))) from unnest(array[]::text[]) t
   where btrim(regexp_replace(t, '[\s\u0085\u00a0\u115f\u1680\u2000-\u200c\u2028\u2029\u202f\u205f\u2060\u2800\u3000\u3164\ufeff\uffa0]+', ' ', 'g')) <> ''),
- gone as (delete from private.blocked_terms b where b.term not in (select l.term from listed l) returning 1),
- added as (insert into private.blocked_terms(term) select l.term from listed l on conflict do nothing returning 1)
-select (select count(*) from listed) as terms;
+ -- The table's check on each term, written out, so a term it would refuse is counted here and never printed by an error.
+ refused as (select count(*) as n from listed l
+  where not (pg_catalog.char_length(l.term) between 1 and 80 and l.term !~ '[][\\.^$*+?(){}|]' and l.term ~ '^\w(.*\w)?$')),
+ gone as (delete from private.blocked_terms b where (select n from refused) = 0 and b.term not in (select l.term from listed l) returning 1),
+ added as (insert into private.blocked_terms(term) select l.term from listed l where (select n from refused) = 0 on conflict do nothing
+  returning 1)
+select case when (select n from refused) = 0 then (select count(*) from listed)
+  else (select count(*) from private.blocked_terms) end as terms, (select n from refused) as refused;

@@ -1,10 +1,11 @@
 -- Rehearsal checks for 20261111160000_chat_safety (hosted-baseline mode only), after .before.sql recorded what the
 -- migration replaces.
--- 1. The five tables (K-S5): private.blocks, reports, moderators, chat_rules_acceptances and blocked_terms each have RLS
--- on, no policy and no privilege for any role, and the reports' id sequence none either. The migration seeds nothing:
--- the five are empty here, blocked_terms and moderators included.
+-- 1. The six tables (K-S5): private.blocks, reports, moderators, chat_rules_acceptances, blocked_terms and suspensions
+-- each have RLS on, no policy and no privilege for any role, and the reports' id sequence none either. The migration
+-- seeds nothing: the six are empty here, blocked_terms and moderators included.
 do $$ declare t text; r text; p text; begin
- foreach t in array array['private.blocks','private.reports','private.moderators','private.chat_rules_acceptances','private.blocked_terms'] loop
+ foreach t in array array['private.blocks','private.reports','private.moderators','private.chat_rules_acceptances','private.blocked_terms',
+   'private.suspensions'] loop
   if pg_catalog.to_regclass(t) is null
   or not (select relrowsecurity from pg_catalog.pg_class where oid=t::regclass)
   or exists(select 1 from pg_catalog.pg_policy where polrelid=t::regclass) then
@@ -22,7 +23,8 @@ do $$ declare t text; r text; p text; begin
   end if;
  end loop;
  if exists(select 1 from private.blocks) or exists(select 1 from private.reports) or exists(select 1 from private.moderators)
- or exists(select 1 from private.chat_rules_acceptances) or exists(select 1 from private.blocked_terms) then
+ or exists(select 1 from private.chat_rules_acceptances) or exists(select 1 from private.blocked_terms)
+ or exists(select 1 from private.suspensions) then
   raise exception 'The migration seeded a chat safety table';
  end if;
 end $$;
@@ -89,13 +91,13 @@ do $$ begin
 end $$;
 
 -- 4. The rollback, rehearsed and undone (G-N11; the plan's Task 2, Step 4), in a transaction that ends in rollback, as
--- 20261110120000_connections.after.sql does. Seeded first: a block, a report, a moderator, an acceptance, a blocked term
+-- 20261110120000_connections.after.sql does. Seeded first: a suspension, a block, a report, a moderator, an acceptance, a blocked term
 -- and a report_filed notice with a delivery. Each body it restores is what .before.sql recorded (pg_get_functiondef,
 -- with the same grants), and running that body's statement from its source migration again, as create or replace (chat
 -- core and the connections made some with create function), changes nothing: chat core's for its seven (cut from its
 -- file as chat.sql's ch_source does), plan 2's for chat_summary, request_connection, notification_recipient_eligible
 -- and my_chat_overview (its own statement, never chat core's), the connections', the circles' and the phone_key's for
--- one each. The five tables, the functions this file made and every report_filed notice are gone, and the kind check is
+-- one each. The six tables, the functions this file made and every report_filed notice are gone, and the kind check is
 -- what .before.sql recorded. Then plan 2's rollback, which refuses while private.blocks exists, runs.
 begin;
 create function pg_temp.ch3_source(p_text text, p_from text, p_to text) returns text language plpgsql immutable as $fn$
@@ -132,6 +134,7 @@ insert into private.reports(reporter_id,target_user_id,series_id,plan_id,about,r
 insert into private.moderators(user_id) values ('e7800000-0000-4000-8000-000000000001');
 insert into private.chat_rules_acceptances(user_id,version) values ('e7800000-0000-4000-8000-000000000002',private.chat_rules_version());
 insert into private.blocked_terms(term) values ('zzbadword');
+insert into private.suspensions(user_id,roster) values ('e7800000-0000-4000-8000-000000000002',true);
 insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key) values
  ('e7810000-0000-4000-8000-000000000001','e7800000-0000-4000-8000-000000000001','report_filed','s3:rehearsal');
 insert into private.notification_deliveries(outbox_id,token,endpoint_updated_at)
@@ -171,7 +174,7 @@ do $$ declare f record; v_def text; begin
  end loop;
  if pg_catalog.to_regclass('private.blocks') is not null or pg_catalog.to_regclass('private.reports') is not null
  or pg_catalog.to_regclass('private.moderators') is not null or pg_catalog.to_regclass('private.chat_rules_acceptances') is not null
- or pg_catalog.to_regclass('private.blocked_terms') is not null then
+ or pg_catalog.to_regclass('private.blocked_terms') is not null or pg_catalog.to_regclass('private.suspensions') is not null then
   raise exception 'The rollback left a chat safety table';
  end if;
  if exists(select 1 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','private')
