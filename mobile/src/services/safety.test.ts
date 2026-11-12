@@ -53,9 +53,8 @@ test("myBlocks sends my_blocks and reads each person as { userId, name }, newest
   assert.deepEqual(calls, [{ fn: "my_blocks", args: {} }]);
 });
 
-test("myBlocks reads an odd answer defensively: no list is none, a row without an id goes, a name that isn't text is null", async () => {
-  assert.deepEqual(await gateway(null).gw.myBlocks(), []);
-  assert.deepEqual(await gateway({}).gw.myBlocks(), []);
+test("myBlocks reads odd rows defensively: a row without an id goes, a name that isn't text is null", async () => {
+  assert.deepEqual(await gateway([]).gw.myBlocks(), []);
   assert.deepEqual(
     await gateway([{ user_id: LEO, name: 5 }, { name: "Ana" }, { user_id: "", name: "Bo" }, null, "x", { user_id: ANA }]).gw.myBlocks(),
     [
@@ -63,6 +62,14 @@ test("myBlocks reads an odd answer defensively: no list is none, a row without a
       { userId: ANA, name: null },
     ],
   );
+});
+
+// Ruling SR2: an answer that isn't a list is a failed read, so the blocks stay unknown (N13), never "known, nobody".
+test("myBlocks refuses an answer that isn't a list, so the blocks stay unknown", async () => {
+  for (const odd of [null, undefined, {}, { user_id: LEO }, "x", 5, true])
+    await assert.rejects(gateway(odd).gw.myBlocks(), /Unexpected blocked people/, JSON.stringify(odd));
+  // A list with no usable row is still an answer: nobody.
+  assert.deepEqual(await gateway([null, "x", 5, {}]).gw.myBlocks(), []);
 });
 
 test("reportMessage sends report_message with the id, the reason and the details, null when there are none", async () => {
@@ -237,4 +244,23 @@ test("no file under app or src but services/safety.ts and the tests names block_
     .filter((f) => readFileSync(f, "utf8").includes("block_user"))
     .map((f) => relative(mobile, f));
   assert.deepEqual(naming, ["src/services/safety.ts"]);
+});
+
+// Ruling SR2 (Q1): report details are cleaned as a message is (H41 m2), so the server never refuses them for ever.
+test("report details are well formed, and text with nothing visible is sent as null", async () => {
+  const { calls, gw } = gateway();
+  // A 500-character field that cut an emoji in half: the lone half reads as U+FFFD, as a send's would.
+  await gw.reportMessage(41, "other", `${"x".repeat(499)}\ud83d`);
+  // NUL, which Postgres text can't hold, goes; a whole emoji stays.
+  await gw.reportUser(LEO, SERIES, "other", "a\u0000b 👍");
+  // Nothing visible: zero-width, bidi and joiner characters alone, or a lone half with nothing else.
+  await gw.reportMessage(42, "spam", "\u200b");
+  await gw.reportMessage(43, "spam", "\u202e\u2066 \u200d");
+  await gw.reportUser(LEO, SERIES, "spam", "\u3000\u00a0");
+  assert.deepEqual(
+    calls.map((c) => c.args.p_details),
+    [`${"x".repeat(499)}\ufffd`, "ab 👍", null, null, null],
+  );
+  // The cut field is 500 characters as the server counts them (code points), within its limit.
+  assert.equal([...(calls[0].args.p_details as string)].length, 500);
 });

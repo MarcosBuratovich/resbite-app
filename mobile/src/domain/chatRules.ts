@@ -511,6 +511,11 @@ export function closedCard(summary: ChatSummary, now?: number): { line: string; 
 
 /** A control, bidi, zero-width or format character anywhere in a link keeps it plain (H20). */
 const UNSAFE = /[\u0000-\u001f\u007f-\u009f­؜᠎​-‏‪-‮⁠-⁤⁦-⁯﻿￹-￻]/;
+/**
+ * Text holding a control (C0 or C1), bidi, zero-width or format character: what can make text read differently from what
+ * opens, as a link's would. Plan 3's support address is refused for it too.
+ */
+export const hasHiddenCharacter = (text: string): boolean => typeof text === "string" && UNSAFE.test(text);
 
 /**
  * A link's host, lowercase, or null when the text is not a link this chat opens (K-N14, Decision 15, H20):

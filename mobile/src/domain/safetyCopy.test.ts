@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { ChatNames } from "../services/chat";
-import { SAFETY_COPY as S, invitationActions, showsReportOrBlock, supportAddress, thanksLines, type ReportTarget } from "./safetyCopy";
+import { SAFETY_COPY as S, invitationActions, showsReportOrBlock, shownName, supportAddress, thanksLines, type ReportTarget } from "./safetyCopy";
 
 const ANA = "0a000000-0000-4000-8000-000000000001";
 const PEDRO = "0a000000-0000-4000-8000-000000000005";
@@ -204,4 +204,45 @@ test("invitationActions leaves out the viewer, and anyone whose name is null or 
 test("invitationActions names people as the chat does: zero-width and directional marks go", () => {
   assert.deepEqual(actions({ inviterId: PEDRO, names: { ...names, [PEDRO]: "Pe​dro‏" }, owner: null }), [reportPedro, blockPedro]);
   assert.deepEqual(actions({ owner: { userId: ANA, name: " An​a " } }), [reportAna, blockAna]);
+});
+
+// Ruling SR2 (review test gap): `inviter_of` falls back to the owner, so the inviter is often the owner, whom `names` may
+// not name. A place with no name doesn't use up the person: a later place that names them lists them.
+test("invitationActions: a nameless first place doesn't use up the person; a later place with a name lists them", () => {
+  // Ana the inviter (the owner, by `inviter_of`'s fallback), with no name in `names`: listed from the owner's place.
+  assert.deepEqual(actions({ inviterId: ANA, names: { [PEDRO]: "Pedro" } }), [reportAna, blockAna]);
+  // Ana's announcement, Ana unnamed in `names`, Pedro the inviter: Ana comes at the owner's place, after Pedro.
+  assert.deepEqual(actions({ announcement: { id: 41, authorId: ANA }, inviterId: PEDRO, names: { [PEDRO]: "Pedro" } }), [
+    { kind: "reportMessage", id: 41 },
+    reportPedro,
+    blockPedro,
+    reportAna,
+    blockAna,
+  ]);
+});
+
+// Ruling SR2 (Q2): no control (C0 or C1) and no invisible format character, which would break the mailto: or flip the line.
+test("supportAddress refuses C1 controls and invisible format characters anywhere", () => {
+  for (const hidden of ["\u0085", "\u0090", "\u009f", "\u0080", "\u200b", "\u200f", "\u202e", "\u2066", "\u2060", "\u00ad", "\u061c"]) {
+    assert.equal(supportAddress(`help@x.exa${hidden}mple`), null, JSON.stringify(hidden));
+    assert.equal(supportAddress(`${hidden}help@x.example`), null, JSON.stringify(hidden));
+    assert.equal(supportAddress(`help@x.example${hidden}`), null, JSON.stringify(hidden));
+  }
+  // A byte-order mark inside is refused; at either end the trim takes it, as it takes a blank, and leaves the address.
+  assert.equal(supportAddress("help@x.exa\ufeffmple"), null);
+  assert.equal(supportAddress("\ufeffhelp@x.example\ufeff"), "help@x.example");
+  // Text the address may hold stays: letters beyond ASCII, digits, dots, plus and hyphens.
+  assert.equal(supportAddress("ayuda+app@correo-x.example"), "ayuda+app@correo-x.example");
+  assert.equal(supportAddress("josé@x.example"), "josé@x.example");
+});
+
+// Ruling SR2 (Q4): a person's name in Report and Block reads as the chat reads it (cleanName), as on the card.
+test("shownName cleans a name for Report and Block, and says Someone when nothing is left", () => {
+  assert.equal(shownName("\u202eevE"), "evE");
+  assert.equal(shownName("Le\u200bo\u200f"), "Leo");
+  assert.equal(shownName("  Ana María: "), "Ana María");
+  assert.equal(shownName("\u200b"), "Someone");
+  assert.equal(shownName(""), "Someone");
+  assert.equal(shownName(null), "Someone");
+  assert.equal(S.block(shownName("\u202eevE")), "Block evE");
 });

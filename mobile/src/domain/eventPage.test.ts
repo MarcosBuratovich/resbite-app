@@ -1556,3 +1556,12 @@ test("peopleGroups: blocks not known yet (null) offers no Block, Unblock or Conn
   assert.deepEqual(named(asked, "Leo").actions, ["cancelRequest", "report"]);
   assert.deepEqual(named(asked, "Owner").actions, ["report"]);
 });
+
+// Ruling SR2 (Q4): the people list words Report, Block and Unblock with the person's name cleaned, as the card does.
+test("the people list's Report, Block and Unblock labels use the cleaned name", () => {
+  const list = readFileSync(new URL("../../app/guests.tsx", import.meta.url), "utf8");
+  assert.match(list, /report: SAFETY_COPY\.reportPerson\(shownName\(row\.name\)\),/);
+  assert.match(list, /block: SAFETY_COPY\.block\(shownName\(row\.name\)\),/);
+  assert.match(list, /unblock: SAFETY_COPY\.unblock\(shownName\(row\.name\)\),/);
+  assert.doesNotMatch(list, /SAFETY_COPY\.\w+\(row\.name\)/);
+});

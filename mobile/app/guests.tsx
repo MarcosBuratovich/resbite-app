@@ -28,7 +28,7 @@ import { circleOf, firstName } from "../src/domain/circle";
 import { CIRCLE_COPY } from "../src/domain/circleCopy";
 import { CONNECTIONS_COPY } from "../src/domain/connectionsCopy";
 import { INVITE_COPY } from "../src/domain/inviteCopy";
-import { SAFETY_COPY } from "../src/domain/safetyCopy";
+import { SAFETY_COPY, shownName } from "../src/domain/safetyCopy";
 import { invitationGateway } from "../src/services/invitations";
 import { contactInviteGateway } from "../src/services/contactInvites";
 import { bringerRevokeError, circleGateway, takingBack } from "../src/services/circle";
@@ -445,9 +445,9 @@ function Row({
     sendAgain: via === "messages" ? EVENT_COPY.sendAgainMessages : EVENT_COPY.sendAgainWhatsApp,
     approve: EVENT_COPY.approve,
     decline: EVENT_COPY.decline,
-    report: SAFETY_COPY.reportPerson(row.name),
-    block: SAFETY_COPY.block(row.name),
-    unblock: SAFETY_COPY.unblock(row.name),
+    report: SAFETY_COPY.reportPerson(shownName(row.name)),
+    block: SAFETY_COPY.block(shownName(row.name)),
+    unblock: SAFETY_COPY.unblock(shownName(row.name)),
   };
   return (
     <>

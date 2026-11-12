@@ -1,5 +1,6 @@
 import type { ChatNames } from "../services/chat";
-import { cleanName } from "./chatRules";
+import { CHAT_COPY } from "./chatCopy";
+import { cleanName, hasHiddenCharacter } from "./chatRules";
 
 /** Report and block (chat plan 3), as the rulings word them. The apostrophe is the curly one, as in chat core's copy. */
 export const SAFETY_COPY = {
@@ -74,13 +75,22 @@ export type ReportReason = keyof typeof SAFETY_COPY.reasons;
 
 /**
  * The support address from the build's `EXPO_PUBLIC_SUPPORT_ADDRESS`, trimmed; null when unset or blank, or when it isn't
- * an address (one `@` with text before it, a dot with text either side in the part after it, no blank and no control
- * character), so a broken `mailto:` is never shown and the release gate catches the value (G-N10, N9).
+ * an address (one `@` with text before it, a dot with text either side in the part after it, no blank), or when it holds
+ * a control (C0 or C1), bidi, zero-width or format character (`hasHiddenCharacter`), so a broken `mailto:` or a flipped
+ * contact line is never shown and the release gate catches the value (G-N10, N9, ruling SR2).
  */
 export function supportAddress(env: string | undefined): string | null {
   const value = typeof env === "string" ? env.trim() : "";
-  return /^[^@\s\u0000-\u001f\u007f]+@[^@\s\u0000-\u001f\u007f]+\.[^@\s\u0000-\u001f\u007f]+$/.test(value) ? value : null;
+  if (hasHiddenCharacter(value)) return null;
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value) ? value : null;
 }
+
+/**
+ * A person's name as Report, Block and Unblock name them on the people list (and their questions): cleaned as every name
+ * in a chat is (`cleanName`), as the invitation card and Blocked people do, and "Someone" when nothing is left (ruling
+ * SR2).
+ */
+export const shownName = (name: unknown): string => cleanName(name) || CHAT_COPY.someone;
 
 /** What a sent report says: the thanks, and the contact line when there is an address (G-N10). */
 export const thanksLines = (address: string | null): string[] =>

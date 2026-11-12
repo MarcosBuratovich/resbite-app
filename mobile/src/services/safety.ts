@@ -1,4 +1,5 @@
 import { errorField, passThrough, planDeadline, type Deadline, type Rpc } from "./contactInvites";
+import { hasVisibleText, wellFormedText } from "../domain/chatRules";
 import { INVITE_COPY } from "../domain/inviteCopy";
 import { SAFETY_COPY, type ReportReason } from "../domain/safetyCopy";
 
@@ -40,13 +41,22 @@ function blocksChanged(): void {
   }
 }
 
-/** The optional line: what was typed, trimmed, or null when nothing was. */
-const detailsOf = (details?: string | null): string | null =>
-  typeof details === "string" && details.trim() !== "" ? details.trim() : null;
+/**
+ * The optional line, cleaned as a message is (H41 m2, ruling SR2): well formed (a lone half of an emoji, which a cut field
+ * can leave, reads as U+FFFD, and NUL goes), trimmed, and null when nothing in it shows (`hasVisibleText`), so the server
+ * never refuses a report for ever over its details.
+ */
+function detailsOf(details?: string | null): string | null {
+  if (typeof details !== "string") return null;
+  const text = wellFormedText(details).trim();
+  return hasVisibleText(text) ? text : null;
+}
 
+/** `my_blocks`' list; an answer that isn't one is a failed read, so the blocks stay unknown (N13, ruling SR2). */
 function blockedPeople(data: unknown): BlockedPerson[] {
+  if (!Array.isArray(data)) throw Error("Unexpected blocked people");
   const out: BlockedPerson[] = [];
-  for (const row of Array.isArray(data) ? data : []) {
+  for (const row of data) {
     if (typeof row !== "object" || row === null) continue;
     const { user_id: userId, name } = row as Record<string, unknown>;
     if (typeof userId === "string" && userId !== "") out.push({ userId, name: typeof name === "string" ? name : null });
