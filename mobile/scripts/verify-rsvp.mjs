@@ -99,6 +99,8 @@ try {
     // An invitee who hasn't answered reads the people counts from the server (plan_people_counts): here, only them.
     if (path === "/rest/v1/rpc/plan_people_counts")
       return reply({ going: attendee.response === "accepted" ? 1 : 0, maybe: attendee.response === "maybe" ? 1 : 0, cant_go: ["declined", "withdrawn"].includes(attendee.response) ? 1 : 0 });
+    // Chat plan 2: whether the series is a group (series_is_group); this resbite is a one-off.
+    if (path === "/rest/v1/rpc/series_is_group") return reply(false);
     // Task 8: the Chat row. Someone who hasn't answered, or can't go, is not in a one-off's chat (42501, no row); Going
     // or Maybe is, and the row shows.
     if (path === "/rest/v1/rpc/chat_summary") {

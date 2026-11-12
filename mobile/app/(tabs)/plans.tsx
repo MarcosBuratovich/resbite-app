@@ -316,6 +316,9 @@ export default function Plans() {
                     place={place}
                     byline={INVITE_COPY.invitedYou(host)}
                     note={note}
+                    // I3: on a group, someone who hasn't answered is in its chat (my_chat_overview lists it), so the card
+                    // carries the series' unread dot as the tile does; a one-off invitee has no chats entry and no dot.
+                    dot={current.has(p.id) && unreadDot(overview?.chats[p.series_id])}
                     chips={chips.map((text) => ({ key: text, text, tone: chipToneFor(text) }))}
                     label={`${INVITE_COPY.invitedYou(host)}, ${cardLabel(
                       { title: p.title, startsAt: p.starts_at, endsAt: p.ends_at, place: place ?? "", chips, photo: p.cover_description },

@@ -46,6 +46,21 @@
 //       (H41 m2)
 //   ask Task 8 (CH-P17, K-N15): the first open of a chat, with the phone's permission never asked for, brings "Get
 //       notified?" once; Not now closes it, and the next open doesn't bring it again; nobody outside the chat is asked
+// A group (chat plan 2, Task 4): Board game night, every Thursday at 19:00 London. 20 and 27 Nov 2025 are Thursdays.
+//   gr1 a member who said Can't go still reads and writes, sees "Sol can’t make it this week", and the field's line
+//       is the group's
+//   gr2 "Next one: Thu 20 Nov · Ana's flat" is a button with the hint "Opens the resbite" that opens the summary's
+//       current occurrence; an older one, whose payload names an occurrence the reader has no row on, opens the same;
+//       with no plan_id in the summary a tap re-reads the chat and stays on it (Decision 14, I5)
+//   gr3 Leave group asks in place and calls leave_series { p_series }, then lands on My resbites
+//   gr4 Leave group answered offline: the confirm stays with the error line, and a second tap calls leave_series again
+//   gr5 the header "Every Thursday · 9 in the group"; stopped, "Last one · Thu 27 Nov · 9 in the group", which wraps
+//       whole at 320 px under Larger Text (G-N7); after the last one, the closing line and the computed ended line
+//   gr6 the host's Announce on a group: "Everyone in the group · 9" first and checked, then "Going this Thursday · 6",
+//       "Write an update for the group"; the card is read as "Announcement to everyone in the group"
+//   gr7 a stopped group after its close: "This group’s chat closed on Thu 27 Nov." and no field
+//   gr8 after "Cancel just this one": "Ana cancelled this Thursday", no ended line, and the field stays
+//   gr9 a can't-go line taken back (state deleted) leaves the open screen by the signal; "Sol joined" stays (Decision 6)
 import assert from "node:assert/strict";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -63,7 +78,8 @@ const ANA = "11111111-1111-4111-8111-111111111111";
 const PEDRO = "22222222-2222-4222-8222-222222222222";
 const MIA = "33333333-3333-4333-8333-333333333333";
 const LEO = "44444444-4444-4444-8444-444444444444";
-const NAMES = { [ANA]: "Ana", [PEDRO]: "Pedro", [MIA]: "Mia", [LEO]: "Leo" };
+const SOL = "55555555-5555-4555-8555-555555555555";
+const NAMES = { [ANA]: "Ana", [PEDRO]: "Pedro", [MIA]: "Mia", [LEO]: "Leo", [SOL]: "Sol" };
 const SERIES = "5e000000-0000-4000-8000-000000000001";
 const PLAN = "9a000000-0000-4000-8000-000000000001";
 const TOPIC = `realtime:chat:${SERIES}`;
@@ -79,8 +95,10 @@ const OCT = { now: "2026-10-28T10:00:00Z", startsAt: "2026-10-30T12:00:00Z", end
 const NOV = { startsAt: "2025-11-15T14:00:00Z", endsAt: "2025-11-15T18:00:00Z", closesAt: "2025-11-17T18:00:00Z" };
 
 /** A row as `chat_row` returns it. */
-const row = (id, { kind = "message", author = null, body = null, state = "sent", at, event = null, payload = null, audience = null, clientId = null, hidden = false } = {}) => ({
+const row = (id, { kind = "message", author = null, body = null, state = "sent", at, event = null, payload = null, audience = null, clientId = null, hidden = false, plan = undefined } = {}) => ({
   id,
+  // Chat plan 2's chat_row names the occurrence a row belongs to; chat core's rows have none.
+  ...(plan ? { plan_id: plan } : {}),
   kind,
   audience,
   event,
@@ -108,6 +126,37 @@ const novRows = () => [
   say(203, LEO, "Best afternoon in ages", "2025-11-15T19:30:00Z"),
   say(204, PEDRO, "Same again next month?", "2025-11-15T20:00:00Z"),
   say(205, ANA, "Yes! I'll set it up with Do this again", "2025-11-16T09:00:00Z"),
+];
+
+// A group (chat plan 2): Board game night, every Thursday at 19:00 London; Thu 20 Nov 2025 is the current occurrence,
+// and Thu 13 Nov last week's. Sol joined last week, the roll ended it and wrote the Next one line, and Sol can't go
+// this week.
+const GROUP_PLAN = "9a000000-0000-4000-8000-000000000020";
+const OLD_PLAN = "9a000000-0000-4000-8000-000000000013";
+const THU = { now: "2025-11-18T10:00:00Z", startsAt: "2025-11-20T19:00:00Z", endsAt: "2025-11-20T22:00:00Z", next: "2025-11-27T19:00:00Z" };
+const GROUP = {
+  title: "Board game night",
+  plan_id: GROUP_PLAN,
+  starts_at: THU.startsAt,
+  ends_at: THU.endsAt,
+  repeat_weeks: 1,
+  is_group: true,
+  // A running group has no close time and is open.
+  closes_at: null,
+  open: true,
+  accepted: 6,
+  members: 9,
+  going: 6,
+  everyone: 9,
+};
+const nextLine = (id, plan, startsAt, at) =>
+  row(id, { kind: "system", event: "next", payload: { actor: null, plan_id: plan, starts_at: startsAt, time_zone: "Europe/London", place_label: "Ana's flat", place_tbd: false }, at, plan });
+const groupRows = () => [
+  row(401, { kind: "system", event: "joined", payload: { actor: SOL, user: SOL }, at: "2025-11-10T18:00:00Z", plan: OLD_PLAN }),
+  row(402, { kind: "system", event: "ended", payload: { actor: null, title: "Board game night" }, at: "2025-11-13T22:00:00Z", plan: OLD_PLAN }),
+  nextLine(403, GROUP_PLAN, THU.startsAt, "2025-11-14T03:00:00Z"),
+  row(404, { author: ANA, body: "Who’s bringing Catan?", at: "2025-11-17T09:00:00Z", plan: GROUP_PLAN }),
+  row(405, { kind: "system", event: "cant_go", payload: { actor: SOL, user: SOL }, at: "2025-11-17T10:00:00Z", plan: GROUP_PLAN }),
 ];
 
 const jwt = (sub) =>
@@ -261,6 +310,8 @@ async function fixture({ viewer = PEDRO, now = OCT.now, rows = octRows(), summar
     // The answers to the next phx_leave frames; "ok" once these run out, or always `leaveDefault`.
     leaves: [],
     leaveDefault: "ok",
+    // How many of the next leave_series calls fail as a lost connection (gr4).
+    failLeaves: 0,
     socket,
   };
   const log = [],
@@ -336,6 +387,9 @@ async function fixture({ viewer = PEDRO, now = OCT.now, rows = octRows(), summar
     if (path === "/rest/v1/profiles") return reply({ id: viewer, display_name: NAMES[viewer], avatar_path: null, avatar_revision: 0 });
     // The people list (scenario l): the plan, nobody else on it, and the reads around it.
     if (path === "/rest/v1/plans" && url.searchParams.get("id") === `eq.${PLAN}`) return reply({ ...PICNIC, plan_meeting_details: null, plan_admins: [] });
+    // A group's current occurrence, which a Next one line opens (gr2).
+    if (path === "/rest/v1/plans" && url.searchParams.get("id") === `eq.${GROUP_PLAN}`)
+      return reply({ ...PICNIC, id: GROUP_PLAN, title: "Board game night", starts_at: THU.startsAt, ends_at: THU.endsAt, repeat_weeks: 1, plan_meeting_details: null, plan_admins: [] });
     if (path === "/rest/v1/attendees" && url.searchParams.get("plan_id") === `eq.${PLAN}`)
       return reply(url.searchParams.get("select") === "version,response" ? { version: 1, response: "accepted" } : []);
     if (["/rest/v1/rpc/plan_connection_states", "/rest/v1/rpc/plan_bringers"].includes(path)) return reply({});
@@ -344,6 +398,20 @@ async function fixture({ viewer = PEDRO, now = OCT.now, rows = octRows(), summar
     if (["/rest/v1/plans", "/rest/v1/attendees", "/rest/v1/plan_mutes", "/rest/v1/activities"].includes(path)) return reply([]);
 
     const rpc = path.startsWith("/rest/v1/rpc/") ? path.slice("/rest/v1/rpc/".length) : null;
+    // The resbite page's group flag (chat plan 2's series_is_group), as the summary says.
+    if (rpc === "series_is_group") return reply(state.member && state.summary.is_group === true);
+    // My resbites, where Leave group lands (gr3): nothing listed, nothing unread.
+    if (rpc === "my_chat_overview") return reply({ chats: {}, announcements: {}, names: {} });
+    // Leave group (gr3, gr4): the next `failLeaves` are lost as a lost connection would; then the reader is out.
+    if (rpc === "leave_series") {
+      assert.equal(body?.p_series, SERIES, "leave_series names the series");
+      if (state.failLeaves > 0) {
+        state.failLeaves--;
+        return route.abort("internetdisconnected");
+      }
+      state.member = false;
+      return empty();
+    }
     if (rpc && (rpc.startsWith("chat_") || ["send_message", "send_announcement", "remove_message", "delete_message", "mark_chat_read", "set_chat_mute"].includes(rpc))) {
       if (body?.p_series !== undefined) assert.equal(body.p_series, SERIES, `${rpc} names the series`);
       if (!state.member) return refused(route);
@@ -540,6 +608,20 @@ const pressableProps = (el) => {
         return copy.memoizedProps;
   return null;
 };
+/**
+ * The hint the screen reader reads after an element's label (accessibilityHint), as React holds it: react-native-web
+ * renders no hint, so the check reads the props of the component that gives the element its label, as above.
+ */
+const hintOf = (locator) =>
+  locator.first().evaluate((el) => {
+    const label = el.getAttribute("aria-label");
+    const key = Object.keys(el).find((k) => k.startsWith("__reactFiber$"));
+    for (let f = el[key]; f; f = f.return)
+      for (const copy of [f, f.alternate])
+        if (copy?.memoizedProps && "accessibilityHint" in copy.memoizedProps && copy.memoizedProps.accessibilityLabel === label)
+          return copy.memoizedProps.accessibilityHint ?? null;
+    return null;
+  });
 const a11yActions = (locator) =>
   locator.first().evaluate((el, find) => new Function("el", `return (${find})(el)`)(el)?.accessibilityActions ?? [], pressableProps.toString());
 const runA11yAction = (locator, actionName) =>
@@ -1574,6 +1656,253 @@ try {
     await f.done();
   }
   console.log("PASS (j): under Larger Text at 320 px the composer, the pinned card and the closed card fit; each bubble carries its actions.");
+
+  // --- A group (chat plan 2, Task 4) ---
+  const openGroup = async (page, query = "") => {
+    await page.goto(`${base}/chat?series=${SERIES}${query}`);
+    await expect(heading(page, "Board game night")).toBeVisible();
+  };
+
+  // (gr1) A member who said Can't go this week still reads and writes.
+  {
+    const f = await fixture({
+      now: THU.now,
+      rows: [...groupRows(), row(406, { kind: "system", event: "cant_go", payload: { actor: PEDRO, user: PEDRO }, at: "2025-11-17T11:00:00Z", plan: GROUP_PLAN })],
+      summary: GROUP,
+    });
+    const { page } = f;
+    await openGroup(page);
+    await expect(text(page, "Sol can’t make it this week")).toBeVisible();
+    await expect(labelled(page, "Resbite: You can’t make it this week")).toBeVisible();
+    await expect(labelled(page, starts("Ana, Who’s bringing Catan?, "))).toBeVisible();
+    await expect(text(page, "To: everyone in the group, now and later")).toBeVisible();
+    await expect(text(page, "To: people going. People who join later can read this too.")).toHaveCount(0);
+    await field(page).fill("Count me in next week");
+    await button(page, "Send").click();
+    await expect(labelled(page, starts("You, Count me in next week, "))).toBeVisible();
+    const sent = f.calls("send_message");
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].p_series, SERIES);
+    assert.equal(sent[0].p_body, "Count me in next week");
+    // The menu: the group's people row, Mute, then Leave group for a member.
+    await button(page, "More").click();
+    await expect(button(page, "People in this group · 9")).toBeVisible();
+    await expect(button(page, "People in this chat · 9")).toHaveCount(0);
+    await expect(button(page, "Leave group")).toBeVisible();
+    await f.done();
+  }
+  console.log("PASS (gr1): a group member who said Can’t go reads Sol can’t make it this week and their own line, writes with send_message, and reads the group's field line and People in this group · 9.");
+
+  // (gr2) Next one: a button with a hint, opening the summary's current occurrence, never the line's own plan_id.
+  {
+    const f = await fixture({ now: THU.now, rows: [nextLine(400, OLD_PLAN, "2025-11-13T19:00:00Z", "2025-11-07T03:00:00Z"), ...groupRows()], summary: GROUP });
+    const { page } = f;
+    await openGroup(page);
+    const latest = button(page, "Resbite: Next one: Thu 20 Nov · Ana's flat");
+    const older = button(page, "Resbite: Next one: Thu 13 Nov · Ana's flat");
+    await expect(latest).toBeVisible();
+    await expect(latest).toHaveText("Next one: Thu 20 Nov · Ana's flat");
+    await expect(older).toBeVisible();
+    assert.equal(await hintOf(latest), "Opens the resbite");
+    assert.equal(await hintOf(older), "Opens the resbite");
+    await latest.click();
+    await expect(page).toHaveURL(new RegExp(`/event\\?plan=${GROUP_PLAN}$`));
+    await page.goBack();
+    await expect(heading(page, "Board game night")).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/chat\\?series=${SERIES}$`));
+    // A late joiner has no row on last week's occurrence: the older line opens this week's too.
+    await older.click();
+    await expect(page).toHaveURL(new RegExp(`/event\\?plan=${GROUP_PLAN}$`));
+    await f.settle();
+    await f.done();
+  }
+  {
+    const f = await fixture({ now: THU.now, rows: groupRows(), summary: { ...GROUP, plan_id: "" } });
+    const { page } = f;
+    await openGroup(page);
+    await f.settle();
+    const [summaries, pages] = [f.calls("chat_summary").length, f.calls("chat_messages").length];
+    const navigations = [];
+    page.on("framenavigated", (frame) => frame === page.mainFrame() && navigations.push(frame.url()));
+    await button(page, "Resbite: Next one: Thu 20 Nov · Ana's flat").click();
+    await expect.poll(() => f.calls("chat_summary").length).toBeGreaterThan(summaries);
+    await expect.poll(() => f.calls("chat_messages").length).toBeGreaterThan(pages);
+    await f.settle();
+    await expect(page).toHaveURL(new RegExp(`/chat\\?series=${SERIES}$`));
+    await expect(heading(page, "Board game night")).toBeVisible();
+    assert.deepEqual(navigations.filter((u) => u.includes("/event")), [], "no event page opened");
+    await f.done();
+  }
+  console.log("PASS (gr2): Next one: Thu 20 Nov · Ana's flat is a button with the hint Opens the resbite and opens /event?plan=<the current occurrence>; an older Next one opens the same occurrence, never its own plan_id; with no plan_id the tap reads chat_summary and chat_messages again and the chat stays.");
+
+  // (gr3) Leave group: the question in place, leave_series { p_series }, then My resbites.
+  {
+    const f = await fixture({ now: THU.now, rows: groupRows(), summary: GROUP });
+    const { page } = f;
+    await openGroup(page);
+    await button(page, "More").click();
+    await button(page, "Leave group").click();
+    const question = heading(page, "Leave Board game night? You’ll stop getting its Thursdays and its chat.");
+    await expect(question).toBeVisible();
+    await expect.poll(() => page.evaluate(() => document.activeElement?.textContent)).toBe("Leave Board game night? You’ll stop getting its Thursdays and its chat.");
+    // Keep goes back to the menu, with nothing called.
+    await button(page, "Keep").click();
+    await expect(question).toHaveCount(0);
+    await expect(button(page, "Leave group")).toBeVisible();
+    assert.deepEqual(f.calls("leave_series"), []);
+    await button(page, "Leave group").click();
+    await expect(question).toBeVisible();
+    await button(page, "Leave group").click();
+    await expect(page).toHaveURL(new RegExp(`/plans$`));
+    await expect(heading(page, "My resbites")).toBeVisible();
+    assert.deepEqual(f.calls("leave_series"), [{ p_series: SERIES }]);
+    await f.settle();
+    await f.done();
+  }
+  console.log("PASS (gr3): Leave group asks Leave Board game night? You’ll stop getting its Thursdays and its chat. in place (Keep goes back), calls leave_series { p_series } once, and lands on My resbites.");
+
+  // (gr4) Leave group answered offline: the confirm stays with the error, and Leave group can be tapped again.
+  {
+    const f = await fixture({ now: THU.now, rows: groupRows(), summary: GROUP });
+    const { page } = f;
+    f.state.failLeaves = 1;
+    await openGroup(page);
+    await f.settle();
+    await button(page, "More").click();
+    await button(page, "Leave group").click();
+    const question = heading(page, "Leave Board game night? You’ll stop getting its Thursdays and its chat.");
+    await button(page, "Leave group").click();
+    await expect(text(page, "Check your connection and try again.")).toBeVisible();
+    await expect(question).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/chat\\?series=${SERIES}$`));
+    assert.equal(f.calls("leave_series").length, 1);
+    await expect(button(page, "Leave group")).toBeEnabled();
+    await button(page, "Leave group").click();
+    await expect(page).toHaveURL(new RegExp(`/plans$`));
+    assert.deepEqual(f.calls("leave_series"), [{ p_series: SERIES }, { p_series: SERIES }]);
+    await f.settle();
+    await f.done();
+  }
+  console.log("PASS (gr4): Leave group answered offline keeps the question open with Check your connection and try again.; a second tap calls leave_series again and lands on My resbites.");
+
+  // (gr5) The group's header, running and stopped; under Larger Text at 320 px it wraps whole (G-N7).
+  {
+    const f = await fixture({ now: THU.now, rows: groupRows(), summary: GROUP });
+    await openGroup(f.page);
+    await expect(text(f.page, "Every Thursday · 9 in the group")).toBeVisible();
+    await f.done();
+  }
+  {
+    const stopped = { ...GROUP, stopped: true, repeat_weeks: null, starts_at: THU.next, ends_at: "2025-11-27T22:00:00Z", closes_at: "2025-11-29T22:00:00Z", open: undefined };
+    const f = await fixture({ now: THU.now, rows: groupRows(), summary: stopped });
+    await openGroup(f.page);
+    await expect(text(f.page, "Last one · Thu 27 Nov · 9 in the group")).toBeVisible();
+    await f.done();
+    const g = await fixture({ now: THU.now, width: 320, rows: groupRows(), summary: { ...stopped, members: 12 } });
+    await openGroup(g.page, "&largeText=1");
+    const line = text(g.page, "Last one · Thu 27 Nov · 12 in the group");
+    await expect(line).toBeVisible();
+    await unclipped(g.page, [line], 320);
+    await g.shot("task-4-group-header-320-large-text.png");
+    await g.done();
+    // After its last one ended, in its goodbye window: the closing line, and the computed ended line under last week's
+    // stored one (withEndedLine).
+    const h = await fixture({ now: "2025-11-28T09:59:30Z", rows: groupRows(), summary: stopped });
+    await openGroup(h.page);
+    await expect(text(h.page, "This chat closes Sat 29 Nov at 22:00, in 36 hours. Any final words?")).toBeVisible();
+    await expect(h.page.getByText("Board game night ended", { exact: true })).toHaveCount(2);
+    await expect(field(h.page)).toBeVisible();
+    await h.done();
+  }
+  console.log("PASS (gr5): the header reads Every Thursday · 9 in the group, and once stopped Last one · Thu 27 Nov · 9 in the group, whole at 320 px under Larger Text; after its last one the chat says when it closes and shows the computed ended line.");
+
+  // (gr6) The host announces to a group.
+  {
+    const f = await fixture({ viewer: ANA, now: THU.now, rows: groupRows(), summary: { ...GROUP, host: true } });
+    const { page } = f;
+    await openGroup(page);
+    await button(page, "Announce").click();
+    await expect(heading(page, "New announcement")).toBeVisible();
+    await expect(visible(page.getByRole("radio"))).toHaveText(["Everyone in the group · 9", "Going this Thursday · 6"]);
+    const everyone = page.getByRole("radio", { name: "Everyone in the group · 9", exact: true });
+    await expect(everyone).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByRole("radio", { name: "Going this Thursday · 6", exact: true })).toHaveAttribute("aria-checked", "false");
+    const update = visible(page.getByRole("textbox", { name: "Write an update for the group", exact: true }));
+    await expect(update).toHaveAttribute("placeholder", "Write an update for the group");
+    await update.fill("Bring your own dice");
+    await f.shot("task-4-group-announce-390.png");
+    await button(page, "Send announcement").click();
+    await expect(heading(page, "New announcement")).toHaveCount(0);
+    const ann = f.calls("send_announcement");
+    assert.equal(ann.length, 1);
+    assert.equal(ann[0].p_audience, "everyone");
+    const card = labelled(page, starts("Announcement to everyone in the group, You, Bring your own dice, "));
+    await expect(card).toBeVisible();
+    await expect(visible(card.getByText("ANNOUNCEMENT · TO EVERYONE IN THE GROUP", { exact: true }))).toBeVisible();
+    await f.done();
+  }
+  console.log("PASS (gr6): on a group the host's Announce starts on Everyone in the group · 9, then Going this Thursday · 6, with Write an update for the group; the card reads ANNOUNCEMENT · TO EVERYONE IN THE GROUP and is read as Announcement to everyone in the group.");
+
+  // (gr7) A stopped group after its close: Cancel this and stop repeating on Tue 25 Nov closed it on Thu 27 Nov.
+  {
+    const f = await fixture({
+      now: "2025-11-28T10:00:00Z",
+      rows: [
+        ...groupRows(),
+        row(407, { kind: "system", event: "cancelled", payload: { actor: ANA, stop: true, starts_at: THU.next, time_zone: "Europe/London" }, at: "2025-11-25T19:00:00Z", plan: GROUP_PLAN }),
+      ],
+      summary: { ...GROUP, status: "cancelled", stopped: true, repeat_weeks: null, starts_at: THU.next, ends_at: "2025-11-27T22:00:00Z", closes_at: "2025-11-27T19:00:00Z", open: undefined },
+    });
+    const { page } = f;
+    await openGroup(page);
+    await expect(text(page, "This group’s chat closed on Thu 27 Nov.")).toBeVisible();
+    await expect(text(page, "Ana cancelled the group")).toBeVisible();
+    await expect(field(page)).toHaveCount(0);
+    await expect(button(page, "Announce")).toHaveCount(0);
+    await button(page, "More").click();
+    await expect(button(page, "People in this group · 9")).toBeVisible();
+    await expect(button(page, "Leave group")).toHaveCount(0);
+    await f.done();
+  }
+  console.log("PASS (gr7): a stopped group after its close shows This group’s chat closed on Thu 27 Nov. with no field and no Leave group.");
+
+  // (gr8) Cancel just this one: the week's line, no ended line, and the chat carries on.
+  {
+    const f = await fixture({
+      now: "2025-11-21T10:00:00Z",
+      rows: [
+        ...groupRows(),
+        row(408, { kind: "system", event: "cancelled", payload: { actor: ANA, stop: false, starts_at: THU.startsAt, time_zone: "Europe/London" }, at: "2025-11-19T08:00:00Z", plan: GROUP_PLAN }),
+      ],
+      summary: { ...GROUP, status: "cancelled" },
+    });
+    const { page } = f;
+    await openGroup(page);
+    await expect(text(page, "Ana cancelled this Thursday")).toBeVisible();
+    await expect(text(page, "Every Thursday · 9 in the group")).toBeVisible();
+    await expect(page.getByText("Board game night ended", { exact: true })).toHaveCount(1);
+    await expect(field(page)).toBeVisible();
+    await f.done();
+  }
+  console.log("PASS (gr8): after Cancel just this one the chat reads Ana cancelled this Thursday, adds no ended line of its own (last week's stored one stays), and keeps the field.");
+
+  // (gr9) A can't-go line taken back within 10 minutes leaves the open screen; the earlier joined line stays.
+  {
+    const f = await fixture({ now: THU.now, rows: groupRows(), summary: GROUP });
+    const { page } = f;
+    await openGroup(page);
+    await expect(text(page, "Sol can’t make it this week")).toBeVisible();
+    await expect.poll(() => f.joins().length).toBe(1);
+    await f.settle();
+    f.change(405, { state: "deleted" });
+    f.signal({ id: 405, kind: "system", state: "deleted" });
+    await expect(text(page, "Sol can’t make it this week")).toHaveCount(0);
+    await expect(text(page, "Sol joined")).toBeVisible();
+    const since = f.calls("chat_messages_since");
+    assert.ok(since.length >= 1, "the signal read chat_messages_since");
+    await f.done();
+  }
+  console.log("PASS (gr9): a signal for Sol's can't-go line, now deleted, takes it off the open screen through chat_messages_since; Sol joined stays.");
 
   console.log("PASS: the chat screen. Every request intercepted; the Realtime socket stubbed.");
 } finally {

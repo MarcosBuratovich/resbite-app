@@ -112,7 +112,9 @@ export function WhenSheet({
           />
         ))}
       </View>
-      <Copy style={styles.note}>{PLAN_COPY.chatCloses}</Copy>
+      {/* A one-off's line (P2-Q2): while it repeats no closing time exists, so it hides; a stopped group closes 48 hours
+          after its last end, as the line says. */}
+      {draft.repeatWeeks === null ? <Copy style={styles.note}>{PLAN_COPY.chatCloses}</Copy> : null}
       <Copy style={styles.section}>{PLAN_COPY.repeats}</Copy>
       <Segmented<RepeatKey>
         label={PLAN_COPY.repeats}

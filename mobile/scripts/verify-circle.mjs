@@ -361,7 +361,7 @@ async function fixture({ me, guests, links = [], connections = [], bringers = nu
       return empty();
     }
     // Task 8's chat reads: no Chat row, nothing unread (verify-event and review-ui cover them).
-    if (noChat(path)) return reply(noChat(path));
+    if (noChat(path) !== undefined) return reply(noChat(path));
     unexpected.push(`${method} ${path}${url.search}`);
     return reply({ message: `Unexpected fixture request ${path}` }, 404);
   });

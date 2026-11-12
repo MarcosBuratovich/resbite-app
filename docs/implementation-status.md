@@ -12,6 +12,8 @@
 
 **Chat core, 11 to 12 November 2026:** chat plan 1 of 3 is **built, not hosted**, on branch `ch1-core`, stacked on the circles branch. Every resbite gets a chat: the people going and the hosts read and write it with the whole history, hosts send announcements, and Resbite writes the system lines. Messages arrive live through Realtime, with a push and a 20-second fallback poll. A one-off's chat goes read-only 48 hours after its end. The migration is `supabase/migrations/20261111140000_chat_core.sql`. The sender's chat words and claim loop are in `supabase/functions/_shared/`, and the screen is `mobile/app/chat.tsx`. **The labelled sample conversation is gone:** `mobile/app/sample-chat.tsx` and its content were removed with the chat build. Nothing is applied to the hosted project, no function is deployed, Realtime's settings are unchanged and no TestFlight build is made. Chat core is not meant to go live on its own: plans 2 (groups) and 3 (report and block) ship with it in one release. The release runbook is [`qa/chat-release/README.md`](../qa/chat-release/README.md), and the record is under Chat core in the [decision log](../knowledge-base/08-decisions.md).
 
+**Chat groups, 12 November 2026:** chat plan 2 of 3 is **built, not hosted**, on branch `ch2-groups`, stacked on chat core. A repeating resbite's chat is a group's: everyone invited to its current occurrence reads and writes it whatever they answered this week, it stays open while the series repeats, and it closes 48 hours after the series stops. The roll carries the chat to the next occurrence with "ended" and "Next one" lines, and a member can leave the group from the chat or the resbite page. The migration is `supabase/migrations/20261111150000_chat_groups.sql`; the screens are `mobile/app/chat.tsx` and `mobile/app/event.tsx`. Nothing is applied to the hosted project and no build is made. It goes live with chat core and plan 3 in one sitting, after the owner's three questions (G-QA, G-QB, G-QC; the build ships their defaults). The steps are in the [chat release runbook](../qa/chat-release/README.md), and the record is under Chat groups in the [decision log](../knowledge-base/08-decisions.md).
+
 This document records the mobile foundation and successive implementation milestones. It is **not yet an accepted standalone two-person test release**. The current development target is the [expanded private beta](milestones/2026-09-23-expanded-private-beta.md), selected on 23 September; older scope/access statements below are historical and superseded by dated updates.
 
 ## Created and verified
@@ -815,3 +817,30 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
   - Other scripts derive the key from `EXPO_PUBLIC_SUPABASE_URL` (`mobile/scripts/qa-helpers.mjs`, `verify-chat.mjs`, `verify-circle.mjs`).
 - **Sign-out and the pushes left on the phone: fixed (H39).** Sign-out now clears every Resbite push from Notification Center (`plan_update`, chat and connection; `mobile/src/services/pushDevice.ts:349`), so a chat push's words no longer stay for whoever signs in next.
 - **The local deletion path.** `private.activate_deletion_intent`, which the deletion gateway calls, predates connections, circles and chat. Locally it writes chat lines when it cancels and scrubs a leaving owner's resbites, and keeps their messages. The roadmap's account-deletion item carries this.
+
+## Chat groups build — 12 November 2026
+
+**Built on branch `ch2-groups` (chat plan 2 of 3), stacked on chat core; nothing is applied to the hosted project, Supabase functions or TestFlight.** It ships with chat core and plan 3, in one release.
+
+**What is built.**
+- **The database.** `supabase/migrations/20261111150000_chat_groups.sql`:
+  - the group flag set for every repeating series and kept by a trigger, and a stop time per series;
+  - a group's membership (its hosts and every guest of its current occurrence, whatever their reply) and its close, 48 hours after it stops;
+  - `leave_series` and its leave record, which the roll skips and any way back in clears;
+  - the group's lines ("ended", "Next one", "left the group", "can’t make it this week", a cancelled week, "stopped repeating", "made this a group"), and the roll, which sets the roll flag and writes no line for anyone it carries;
+  - the people list for every member, pushes in a group's cancelled week, and no exact place in the chat for a member who hasn't answered.
+  - Its rollback, `supabase/rollback/20261111150000_chat_groups.rollback.sql`, restores chat core's, the circles' and the earlier bodies byte for byte; the hosted-baseline rehearsal passes.
+- **The app.**
+  - The chat screen on a group: its header, field line, audiences, cards, empty state and closed card; "Next one" as a button that opens this week's resbite; Leave group in the menu, asking in place.
+  - The resbite page: "Group chat", names for every member, the people list's "Not answered yet", and Leave this group in More, also for a member who hasn't answered.
+  - My resbites: the unread dot on a group member's invitation card. The When sheet hides the chat's closing line while the resbite repeats.
+
+**Checks (12 November 2026),** at `Task 4's commit (base `333747d`)`:
+- `bash scripts/test-database-docker.sh`: 55 PASS lines.
+- The hosted baseline with the four candidates: 27 PASS lines.
+- `(cd mobile && npm run check)`: 1,086 tests.
+- The edge tests: 107 in 11 files tests.
+- The fingerprint replay (464, then 479; the rollback back to 464).
+- The browser scripts with a fake project URL: `verify-chat.mjs` 55, `verify-event.mjs` 28, `review-ui.mjs` passed and `verify-planning.mjs` 16.
+
+**What the owner still runs** is the groups part of [`qa/chat-release/README.md`](../qa/chat-release/README.md): the three owner questions, `ch2-apply.sh` right after chat core's, its after checks and advisors, the device checks, and the rollback if it is ever needed.

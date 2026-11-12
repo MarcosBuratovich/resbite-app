@@ -377,6 +377,35 @@ export function headerLine(summary: ChatSummary, now: number): string | null {
   return planEnd({ starts_at: start, ends_at: instant(summary.endsAt) }) <= now ? `Ended · ${line}` : line;
 }
 
+/**
+ * Leave group in the chat's menu (G-N13, CH-P4): a group's member who isn't a host (the owner, or an admin until they
+ * step down), while its chat is open; whatever this week's reply. A one-off has no Leave: Can't go is the way out.
+ */
+export const canLeave = (summary: ChatSummary): boolean => summary.isGroup && summary.host !== true && summary.open === true;
+
+/** The menu's people row (CH-04): "People in this group · 9" on a group, "People in this chat · 6" on a one-off. */
+export const peopleLine = (summary: ChatSummary): string =>
+  summary.isGroup ? CHAT_COPY.peopleInGroup(summary.members) : CHAT_COPY.peopleInChat(summary.members);
+
+/**
+ * A host's words before anything is said (CH-07): on a one-off while nobody is going, "Nobody’s going yet" with who
+ * messages reach; on a group only while its owner is alone in it, "Messages here reach everyone in the group." Null for
+ * everyone else, who reads "No messages yet": a group with anyone else in it, Going or not, isn't empty of people.
+ */
+export function emptyState(summary: ChatSummary): { title: string; hint: string } | null {
+  if (summary.host !== true) return null;
+  if (summary.isGroup) return summary.members <= 1 ? { title: CHAT_COPY.nobodyGoing, hint: CHAT_COPY.groupEmptyHint } : null;
+  return summary.accepted === 0 ? { title: CHAT_COPY.nobodyGoing, hint: CHAT_COPY.nobodyGoingHint } : null;
+}
+
+const PLAN_ID = new RegExp(`^${UUID_PATTERN}$`);
+/**
+ * A "Next one" line opens the summary's current occurrence (Decision 14, I5) only when there is one to open: a plan id
+ * as the server writes it. The mapper reads a missing `plan_id` as "", and then the tap reads the chat again instead of
+ * opening an event page that can't load.
+ */
+export const nextOpens = (planId: string): boolean => typeof planId === "string" && PLAN_ID.test(planId);
+
 /** Owners and admins announce while the chat is open (CH-P6; the server refuses anyone else). */
 export const canAnnounce = (summary: ChatSummary): boolean => summary.host === true && summary.open === true;
 

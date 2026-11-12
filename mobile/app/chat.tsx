@@ -18,7 +18,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
-import { ArrowLeft, ArrowUp, Bell, BellOff, ChevronRight, Ellipsis, Trash2, UserPlus, Users } from "lucide-react-native";
+import { ArrowLeft, ArrowUp, Bell, BellOff, ChevronRight, Ellipsis, LogOut, Trash2, UserPlus, Users } from "lucide-react-native";
 import { Button, Copy, ErrorNote, TextAction, s, useLargeText, useReduceMotion } from "../src/design/ui";
 import { Chip, IconButton, focusHeading } from "../src/design/kit";
 import { GrabberSheet } from "../src/design/GrabberSheet";
@@ -27,11 +27,14 @@ import { NotificationAsk } from "../src/design/NotificationAsk";
 import { colors as c, depth, fonts, space } from "../src/design/tokens";
 import { CHAT_COPY, type ChatAudience } from "../src/domain/chatCopy";
 import {
+  audienceOptions,
   canAnnounce,
+  canLeave,
   closedCard,
   closingLine,
   dayFor,
   defaultAudience,
+  emptyState,
   fitEdit,
   groupDay,
   hasVisibleText,
@@ -40,11 +43,13 @@ import {
   linkHost,
   linkParts,
   messageLabel,
+  nextOpens,
+  peopleLine,
   phoneZone,
 } from "../src/domain/chatRules";
 import { EVENT_COPY } from "../src/domain/eventPage";
 import { NOTIFICATION_ASK } from "../src/domain/notifications";
-import type { ChatSummary } from "../src/services/chat";
+import { chatErrorMessage, chatGateway, type ChatSummary } from "../src/services/chat";
 import { useApp } from "../src/state/AppState";
 import { useChat, type Chat } from "../src/state/useChat";
 import { shownMessages, withEndedLine, withPending } from "../src/state/chatModel";
@@ -187,6 +192,7 @@ export default function ChatScreen() {
         <Loading chat={chat} />
       ) : (
         <Conversation
+          series={series}
           chat={chat}
           summary={summary}
           now={now}
@@ -261,6 +267,7 @@ function Bar({
 }
 
 function Conversation({
+  series,
   chat,
   summary,
   now,
@@ -268,6 +275,8 @@ function Conversation({
   menuOpen,
   onMenu,
 }: {
+  /** The route's series, a valid one (the screen checked it): Leave group names it. */
+  series: string;
   chat: Chat;
   summary: ChatSummary;
   now: number;
@@ -298,6 +307,13 @@ function Conversation({
   const loadingRef = useRef(false);
   const question = useRef<Text | null>(null);
   const firstMenuRow = useRef<View | null>(null);
+  // The ••• menu shows its rows, or Leave group's question in their place (G-N13), as Delete and Remove ask in place.
+  const [menuView, setMenuView] = useState<"menu" | "leave">("menu");
+  const [leaving, setLeaving] = useState(false);
+  const [leaveError, setLeaveError] = useState<string | null>(null);
+  const leaveQuestion = useRef<Text | null>(null);
+  const leaveRow = useRef<View | null>(null);
+  const leftQuestion = useRef(false);
 
   // The list: rows (a deleted system line never shows, Decision 6), the ended line and the unsent messages, worded,
   // oldest first; reversed for the inverted list.
@@ -467,9 +483,10 @@ function Conversation({
         onActions={openActions}
         onAction={onAction}
         onRetry={chat.retry}
+        onReread={chat.replace}
       />
     ),
-    [summary.planId, largeText, askLink, openActions, onAction, chat.retry, onRowLayout],
+    [summary.planId, largeText, askLink, openActions, onAction, chat.retry, chat.replace, onRowLayout],
   );
 
   // Earlier pages: a spinner only while one loads; a failed one offers Try again (H31, H32 24).
@@ -546,11 +563,45 @@ function Conversation({
     setWorking(false);
     if (done) onMenu(false);
   };
+  // The menu opens on its rows, never on a question or a refusal left from before.
+  useEffect(() => {
+    if (menuOpen) return;
+    setMenuView("menu");
+    setLeaveError(null);
+  }, [menuOpen]);
+  // The question takes focus; after Keep, the Leave group row does (H32 Q53).
+  useEffect(() => {
+    if (!menuOpen) return;
+    const back = leftQuestion.current;
+    leftQuestion.current = false;
+    if (menuView === "menu" && !back) return;
+    const frame = requestAnimationFrame(() => focusHeading(menuView === "leave" ? leaveQuestion.current : leaveRow.current));
+    return () => cancelAnimationFrame(frame);
+  }, [menuOpen, menuView]);
+  /**
+   * Leave group (G-N13): `leave_series`, then My resbites, which reads its list again on focus. Leaving this screen runs
+   * its focus cleanup, so the push router stops skipping this series (H36). A failure keeps the question open with its
+   * reason, and Leave group can be tapped again (G-N7).
+   */
+  const leave = async () => {
+    if (leaving) return;
+    setLeaving(true);
+    setLeaveError(null);
+    try {
+      await chatGateway.leave(series);
+    } catch (e) {
+      if (!mounted.current) return;
+      setLeaving(false);
+      setLeaveError(chatErrorMessage(e));
+      return;
+    }
+    if (!mounted.current) return;
+    onMenu(false);
+    router.dismissTo("/plans");
+  };
 
   const said = !nothingSaid(rows);
-  const emptyBlock = said ? null : (
-    <EmptyState host={summary.host && summary.accepted === 0} open={open} planId={summary.planId} />
-  );
+  const emptyBlock = said ? null : <EmptyState words={emptyState(summary)} open={open} planId={summary.planId} />;
   return (
     <>
       <KeyboardAvoidingView behavior="padding" style={styles.fill}>
@@ -630,24 +681,61 @@ function Conversation({
           dismissError();
         }}
       >
-        <View>
-          <MenuRow
-            title={CHAT_COPY.peopleInChat(summary.members)}
-            icon={Users}
-            onPress={() => {
-              onMenu(false);
-              router.push({ pathname: "/guests", params: { plan: summary.planId } });
-            }}
-          />
-          <MenuRow
-            title={summary.mutedChat ? CHAT_COPY.unmute : CHAT_COPY.mute}
-            hint={summary.mutedChat ? undefined : CHAT_COPY.muteHint}
-            icon={summary.mutedChat ? Bell : BellOff}
-            busy={working}
-            onPress={() => void mute()}
-          />
-        </View>
-        <ErrorNote message={menuOpen ? shownError : null} />
+        {menuView === "leave" ? (
+          <View style={styles.question}>
+            <Copy ref={leaveQuestion} accessibilityRole="header" style={styles.questionText}>
+              {CHAT_COPY.leaveQuestion(summary.title, groupDay(summary))}
+            </Copy>
+            <Button icon={false} destructive title={CHAT_COPY.leaveGroup} loading={leaving} disabled={leaving} onPress={() => void leave()} />
+            <Button
+              icon={false}
+              secondary
+              title={CHAT_COPY.keep}
+              disabled={leaving}
+              onPress={() => {
+                setLeaveError(null);
+                leftQuestion.current = true;
+                setMenuView("menu");
+              }}
+            />
+            <ErrorNote message={leaveError} />
+          </View>
+        ) : (
+          <>
+            <View>
+              <MenuRow
+                title={peopleLine(summary)}
+                icon={Users}
+                onPress={() => {
+                  onMenu(false);
+                  router.push({ pathname: "/guests", params: { plan: summary.planId } });
+                }}
+              />
+              <MenuRow
+                title={summary.mutedChat ? CHAT_COPY.unmute : CHAT_COPY.mute}
+                hint={summary.mutedChat ? undefined : CHAT_COPY.muteHint}
+                icon={summary.mutedChat ? Bell : BellOff}
+                busy={working}
+                onPress={() => void mute()}
+              />
+              {/* A group's member who isn't a host, while its chat is open (G-N13), in red after Mute. */}
+              {canLeave(summary) ? (
+                <MenuRow
+                  ref={leaveRow}
+                  title={CHAT_COPY.leaveGroup}
+                  icon={LogOut}
+                  destructive
+                  disabled={working}
+                  onPress={() => {
+                    dismissError();
+                    setMenuView("leave");
+                  }}
+                />
+              ) : null}
+            </View>
+            <ErrorNote message={menuOpen ? shownError : null} />
+          </>
+        )}
       </GrabberSheet>
 
       <GrabberSheet visible={sheet !== null && target !== undefined} label={target && "label" in target ? target.label : undefined} onClose={closeSheet}>
@@ -740,15 +828,18 @@ function Conversation({
   );
 }
 
-/** Nothing said yet (CH-07): the host's invitation to invite, anyone else's "No messages yet". */
-function EmptyState({ host, open, planId }: { host: boolean; open: boolean; planId: string }) {
-  if (!host) return <Copy style={styles.emptyHint}>{CHAT_COPY.noMessages}</Copy>;
+/**
+ * Nothing said yet (CH-07): a host's words while nobody is going, or while a group's owner is alone in it, with the
+ * invitation to invite (`emptyState`); anyone else's "No messages yet".
+ */
+function EmptyState({ words, open, planId }: { words: { title: string; hint: string } | null; open: boolean; planId: string }) {
+  if (!words) return <Copy style={styles.emptyHint}>{CHAT_COPY.noMessages}</Copy>;
   return (
     <View style={styles.emptyBlock}>
       <Text accessibilityRole="header" style={styles.emptyTitle}>
-        {CHAT_COPY.nobodyGoing}
+        {words.title}
       </Text>
-      <Copy style={styles.emptyHint}>{CHAT_COPY.nobodyGoingHint}</Copy>
+      <Copy style={styles.emptyHint}>{words.hint}</Copy>
       {open ? (
         <Chip
           text={CHAT_COPY.invitePeople}
@@ -777,6 +868,8 @@ type RowProps = {
   onActions: (key: string) => void;
   onAction: (row: FeedRow, name: string) => void;
   onRetry: (clientId: string) => void;
+  /** Reads the chat again: a "Next one" line with no current occurrence to open (Decision 14). */
+  onReread: () => void;
 };
 
 const actionsOf = (actions: MessageAction[], links: FeedLink[] = []) => [
@@ -785,8 +878,11 @@ const actionsOf = (actions: MessageAction[], links: FeedLink[] = []) => [
   ...links.map((l) => ({ name: l.name, label: l.label })),
 ];
 
-/** One row of the feed: a day, Resbite's line, a change chip, the ended line, a bubble, an announcement, or an unsent one. */
-function RowBody({ row, planId, largeText, onLink, onActions, onAction, onRetry }: RowProps) {
+/**
+ * One row of the feed: a day, Resbite's line, a change chip, a group's "Next one", the ended line, a bubble, an
+ * announcement, or an unsent one.
+ */
+function RowBody({ row, planId, largeText, onLink, onActions, onAction, onRetry, onReread }: RowProps) {
   switch (row.type) {
     case "day":
       // Each message's label carries its day, so the separator is for the eye only (K-S14).
@@ -814,6 +910,21 @@ function RowBody({ row, planId, largeText, onLink, onActions, onAction, onRetry 
             {row.text}
             {row.tail ? <Text style={styles.changeTail}>{` · ${row.tail}`}</Text> : null}
           </Text>
+        </Pressable>
+      );
+    case "next":
+      // A group's "Next one", old or new, drawn as the change chip and opening the same: the summary's current
+      // occurrence, the newest the reader may read, never the line's own plan (Decision 14, I5). With none to open, the
+      // chat is read again and stays on screen (G-N7).
+      return (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={row.label}
+          accessibilityHint={CHAT_COPY.opensResbite}
+          onPress={() => (nextOpens(planId) ? router.push({ pathname: "/event", params: { plan: planId } }) : onReread())}
+          style={({ pressed }) => [styles.change, pressed && styles.pressed]}
+        >
+          <Text style={styles.changeText}>{row.text}</Text>
         </Pressable>
       );
     case "pending": {
@@ -963,7 +1074,7 @@ function Composer({
   return (
     <View style={[styles.composer, { paddingBottom: keyboard ? space.s : Math.max(insets.bottom, space.s) }]}>
       <View style={[styles.toRow, largeText && styles.toRowStacked]}>
-        <Text style={[styles.to, largeText && styles.toLarge]}>{CHAT_COPY.toGoing}</Text>
+        <Text style={[styles.to, largeText && styles.toLarge]}>{summary.isGroup ? CHAT_COPY.toGroup : CHAT_COPY.toGoing}</Text>
         {canAnnounce(summary) ? <AnnouncePill onPress={onAnnounce} /> : null}
       </View>
       <View style={styles.inputRow}>
@@ -1084,10 +1195,9 @@ function AnnounceSheet({
       onSent();
     }
   };
-  const options: Array<{ key: ChatAudience; title: string }> = [
-    { key: "going", title: CHAT_COPY.audienceGoing(summary.going) },
-    { key: "everyone", title: CHAT_COPY.audienceEveryone(summary.everyone) },
-  ];
+  // A group's: everyone in the group first, then going this week; a one-off's: Going, then Everyone invited (G-S7).
+  const options = audienceOptions(summary);
+  const placeholder = summary.isGroup ? CHAT_COPY.announcePlaceholderGroup : CHAT_COPY.announcePlaceholder;
   return (
     <GrabberSheet visible={visible} title={CHAT_COPY.newAnnouncement} onClose={onCancel}>
       <Text style={styles.sheetLabel}>{CHAT_COPY.whoGetsIt}</Text>
@@ -1119,8 +1229,8 @@ function AnnounceSheet({
           onBody(fit.text);
           setCut(fit.cut);
         }}
-        placeholder={CHAT_COPY.announcePlaceholder}
-        accessibilityLabel={CHAT_COPY.announcePlaceholder}
+        placeholder={placeholder}
+        accessibilityLabel={placeholder}
         placeholderTextColor="#99929F"
         {...(Platform.OS === "web" ? { rows: largeText ? 5 : 3 } : null)}
         style={[s.field, styles.announceField]}

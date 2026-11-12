@@ -144,7 +144,7 @@ async function fixture(
     // The resbite page's counts for an invitee who hasn't answered: only them, pending, so none.
     if (path === "/rest/v1/rpc/plan_people_counts") return reply({ going: 0, maybe: 0, cant_go: 0 });
     // Task 8's chat reads: no Chat row, nothing unread (verify-event and review-ui cover them).
-    if (noChat(path)) return reply(noChat(path));
+    if (noChat(path) !== undefined) return reply(noChat(path));
     throw Error(`Unexpected fixture request ${path}`);
   });
   return {

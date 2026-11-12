@@ -6,6 +6,7 @@ import {
   audienceOptions,
   authorName,
   canAnnounce,
+  canLeave,
   closedCard,
   closingLine,
   currentOccurrences,
@@ -13,6 +14,7 @@ import {
   dayFor,
   dayLabel,
   defaultAudience,
+  emptyState,
   fitBody,
   fitEdit,
   groupDay,
@@ -23,6 +25,8 @@ import {
   linkHost,
   linkParts,
   messageLabel,
+  nextOpens,
+  peopleLine,
   pendingCardNote,
   phoneZone,
   rowText,
@@ -1054,4 +1058,47 @@ test("dayFor: the group's day for a row of the current occurrence or one with no
   assert.equal(dayFor({ ...going, planId: EARLIER }, "", "Thursday"), "");
   const label = messageLabel({ ...going, planId: EARLIER }, names, UNKNOWN, Date.now(), LONDON, undefined, true, dayFor({ ...going, planId: EARLIER }, CURRENT, "Thursday"));
   assert.ok(label!.startsWith("Announcement to people going, Ana"), label!);
+});
+
+// Task 4: the chat screen's group parts (CH-04, CH-07, G-N13, Decision 14).
+test("canLeave: a group's member who isn't a host, while its chat is open; never on a one-off (G-N13)", () => {
+  assert.equal(canLeave(group()), true);
+  // Whatever this week's reply: the summary carries none, and a member who hasn't answered may leave too.
+  assert.equal(canLeave(group({ accepted: 0 })), true);
+  // Hosts can't leave (the owner, and an admin until they step down), and nobody leaves a closed chat from it.
+  assert.equal(canLeave(group({ host: true })), false);
+  assert.equal(canLeave(group({ open: false })), false);
+  // A stopped group still open for its goodbye: they may still leave.
+  assert.equal(canLeave(group({ stopped: true, repeatWeeks: null })), true);
+  // A one-off has no Leave: Can't go is the way out.
+  assert.equal(canLeave(summary()), false);
+  assert.equal(canLeave(summary({ host: true })), false);
+});
+
+test("peopleLine: the menu's people row, by the group or by the chat (CH-04)", () => {
+  assert.equal(peopleLine(group()), "People in this group · 9");
+  assert.equal(peopleLine(group({ members: 1 })), "People in this group · 1");
+  assert.equal(peopleLine(summary()), "People in this chat · 8");
+});
+
+test("emptyState: the host's words before anything is said; a group's when its owner is alone (CH-07)", () => {
+  // A one-off as built: a host while nobody is going.
+  assert.deepEqual(emptyState(summary({ host: true, accepted: 0 })), { title: CHAT_COPY.nobodyGoing, hint: CHAT_COPY.nobodyGoingHint });
+  assert.equal(emptyState(summary({ host: true, accepted: 2 })), null);
+  assert.equal(emptyState(summary({ host: false, accepted: 0 })), null);
+  // A group: the owner alone in it reads that messages reach everyone in the group.
+  assert.deepEqual(emptyState(group({ host: true, accepted: 0, members: 1 })), { title: CHAT_COPY.nobodyGoing, hint: CHAT_COPY.groupEmptyHint });
+  assert.equal(CHAT_COPY.groupEmptyHint, "Messages here reach everyone in the group.");
+  // Anyone else in it, Going or not, and the owner isn't alone: no "Nobody’s going yet", whatever this week's answers.
+  assert.equal(emptyState(group({ host: true, accepted: 0, members: 9 })), null);
+  assert.equal(emptyState(group({ host: true, accepted: 1, members: 2 })), null);
+  assert.equal(emptyState(group({ host: false, accepted: 0, members: 1 })), null);
+});
+
+test("nextOpens: a Next one line opens the current occurrence only when the summary names one (Decision 14, I5)", () => {
+  assert.equal(nextOpens("0c000000-0000-4000-8000-000000000001"), true);
+  // The mapper reads a missing plan_id as "": nothing to open, so the chat is read again instead.
+  assert.equal(nextOpens(""), false);
+  assert.equal(nextOpens("not-a-plan"), false);
+  assert.equal(nextOpens("0C000000-0000-4000-8000-000000000001"), false, "the server writes ids in lower case");
 });

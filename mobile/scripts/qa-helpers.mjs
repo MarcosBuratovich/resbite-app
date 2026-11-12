@@ -12,10 +12,13 @@ export const AUTH_STORAGE_KEY = `sb-${new URL(process.env.EXPO_PUBLIC_SUPABASE_U
  * Chat row, and My resbites reads my_chat_overview for the dots and the invitations' announcements. `NO_CHAT_ROW` is a
  * closed chat with no message, the backfilled chat of a resbite nobody wrote in, so the row hides (K-S13);
  * `NO_CHATS` has nothing unread and no announcement. Both are 200s, so no console error and no change on screen.
- * Returns the answer for those two paths, or undefined for any other.
+ * Chat plan 2 adds a third: the resbite page reads whether the series is a group (series_is_group), here never one
+ * (`false`, so callers test the answer against undefined). Returns the answer for those paths, or undefined for any
+ * other.
  */
 export function noChat(path) {
   if (path === "/rest/v1/rpc/my_chat_overview") return { chats: {}, announcements: {}, names: {} };
+  if (path === "/rest/v1/rpc/series_is_group") return false;
   if (path === "/rest/v1/rpc/chat_summary")
     return {
       series_id: "00000000-0000-4000-8000-000000000000",

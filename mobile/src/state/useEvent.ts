@@ -19,7 +19,7 @@ import { inviteCodeStore, type StoredInvite } from "../services/inviteCodeStore"
 import { formatPhone, phoneSendForm } from "../domain/phone";
 import { joinRequestGateway, type HostRequest } from "../services/joinRequests";
 import { connectionErrorMessage, connectionGateway, type ConnectionState } from "../services/connections";
-import { chatGateway, isNotInChat, type ChatSummary } from "../services/chat";
+import { chatErrorMessage, chatGateway, isNotInChat, type ChatSummary } from "../services/chat";
 import { pendingCardNote } from "../domain/chatRules";
 import { readProfile } from "../services/profile";
 import { requestGone } from "./connectionsModel";
@@ -117,13 +117,19 @@ export type EventPage = {
   error: string | null;
   notice: string | null;
   pending: RsvpAttempt | null;
-  /** Which side action is running (mute, an admin change or a connection one), so two taps cannot overlap. */
-  acting: "mute" | "admin" | "connection" | null;
+  /** Which side action is running (mute, an admin change, a connection one or a leave), so two taps cannot overlap. */
+  acting: "mute" | "admin" | "connection" | "leave" | null;
   load: () => Promise<void>;
   respond: (value: Response, retry?: RsvpAttempt) => Promise<boolean>;
   /** True once the resbite is cancelled (false: `error` says why). */
   cancel: (opts?: { stopRepeating?: boolean }) => Promise<boolean>;
   mute: (muted: boolean) => Promise<void>;
+  /**
+   * Leaves the group this resbite belongs to (`leave_series`, G-N13, I10). True once the server took it: the guest row
+   * on the current occurrence is gone, so the page can't be read again and the screen leaves for My resbites. False:
+   * `error` says why (`chatErrorMessage`), and it can be tried again.
+   */
+  leave: () => Promise<boolean>;
   /** Both answer whether the server made the change (false: `error` says why). */
   appoint: (userId: string) => Promise<boolean>;
   demote: (userId: string) => Promise<boolean>;
@@ -516,6 +522,29 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
       }
     }
   }
+  async function leave(): Promise<boolean> {
+    const target = plan;
+    if (!target || preview || !accountReady || working.current || actingRef.current) return false;
+    const valid = () => currentIdentity.current === identity;
+    actingRef.current = true;
+    setActing("leave");
+    setError(null);
+    let left = false;
+    try {
+      await chatGateway.leave(target.series_id);
+      left = true;
+      // Its reminders and calendar entry follow the guest row the leave took away.
+      if (valid()) syncDevice();
+    } catch (e) {
+      if (valid()) setError(chatErrorMessage(e));
+    } finally {
+      if (valid()) {
+        actingRef.current = false;
+        setActing(null);
+      }
+    }
+    return left;
+  }
   /** The owner's: make a guest an admin, or take it back. The list is read again so it shows what the server holds. */
   async function changeAdmin(userId: string, appointing: boolean): Promise<boolean> {
     const target = plan;
@@ -608,6 +637,7 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
     respond,
     cancel,
     mute,
+    leave,
     appoint: (userId) => changeAdmin(userId, true),
     demote: (userId) => changeAdmin(userId, false),
     connect: (userId) => changeConnection(userId, "request"),

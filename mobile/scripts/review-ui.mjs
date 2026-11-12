@@ -457,6 +457,9 @@ try {
       names: { g1: "Alex", [jo]: "Jo" },
     };
     let overviewFails = false;
+    // Chat plan 2 (I3): for one pass Jo's invitation is a group's, whose chat lists its members who haven't answered,
+    // with this entry in my_chat_overview's chats; null, it is a one-off invitation, with no entry and no dot.
+    let invitationChat = null;
     // Fix round 1: how long my_chat_overview takes to answer (H36 Q4: the list never waits for it).
     let overviewDelay = 0;
     // Fix round 1 (H37 Q4): last week's occurrence of the organizer's series, ended, which carries no dot; and (H37 Q5)
@@ -557,8 +560,11 @@ try {
           : reply({ code: "42501", message: "Not in this chat", details: null, hint: null }, 403);
       if (path === "/rest/v1/rpc/my_chat_overview") {
         if (overviewFails) return reply({ message: "Fixture: the overview failed" }, 500);
-        return overviewDelay ? new Promise((r) => setTimeout(r, overviewDelay)).then(() => reply(overview)) : reply(overview);
+        const answer = invitationChat ? { ...overview, chats: { ...overview.chats, [invitation.series_id]: invitationChat } } : overview;
+        return overviewDelay ? new Promise((r) => setTimeout(r, overviewDelay)).then(() => reply(answer)) : reply(answer);
       }
+      // Chat plan 2's group flag on the resbite page: these resbites are one-offs.
+      if (path === "/rest/v1/rpc/series_is_group") return reply(false);
       // Named, so a failure says which request nobody planned for.
       errors.push(`Unexpected ${req.method()} ${path}${url.search}`);
       return reply({ message: `Unexpected ${path}` }, 400);
@@ -700,6 +706,25 @@ try {
       await expect(button(page, /^Film club: Paris, Texas, .*, unread messages$/)).toBeVisible({ timeout: 15000 });
       await expect(page.getByText(announcement, { exact: true })).toBeVisible();
       overviewDelay = 0;
+      // I3: on a group, someone who hasn't answered is in its chat, so the invitation card carries its unread dot, said
+      // at the end of its label; read, it carries neither. A one-off invitation (above) has no chats entry and no dot.
+      const invitationCard = button(page, /^Jo invited you, Board games at the café, /);
+      const unreadInvitation = button(page, /^Jo invited you, Board games at the café, .*, unread messages$/);
+      const dotsOn = (card) => card.evaluate((el) => [...el.querySelectorAll("div")].filter((d) => getComputedStyle(d).borderRadius === "5px" && d.getBoundingClientRect().width === 10).length);
+      assert.equal(await dotsOn(invitationCard), 0, "a one-off invitation draws no dot");
+      invitationChat = { unread: true, open: true, last: { ...chatLast, id: 7, author_id: jo }, count: 3 };
+      await open("/plans");
+      await expect(unreadInvitation).toBeVisible();
+      await expect(page.getByText(announcement, { exact: true })).toBeVisible();
+      assert.equal(await dotsOn(invitationCard), 1, "the group invitation's card draws the dot");
+      await invitationCard.scrollIntoViewIfNeeded();
+      await shot("plans-group-invitation-unread", false);
+      invitationChat = { ...invitationChat, unread: false };
+      await open("/plans");
+      await expect(invitationCard).toBeVisible();
+      await expect(unreadInvitation).toHaveCount(0);
+      assert.equal(await dotsOn(invitationCard), 0, "read, the group invitation's card draws no dot");
+      invitationChat = null;
     }
     // The waiting screen in both states: the card, "Waiting for <host>", the answer; and "You weren’t added".
     await open(`/waiting?plan=${mine[0].plan_id}`);

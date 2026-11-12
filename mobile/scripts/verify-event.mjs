@@ -21,6 +21,11 @@
 //              page still renders. Unless a scenario gives `chat`, chat_summary refuses (not in the chat).
 //              Fix round 1: a failed re-read on return keeps the row, a refusal removes it (H36); the line is one
 //              cleaned line (H37 D1); a pending invitee reads the whole "Everyone invited" announcement (H37 D3).
+//   group      chat plan 2, Task 4: More's Leave this group on a group (never a one-off), also for a member who hasn't
+//              answered and on an ended page with the chat open; the Chat row's Group chat; a pending guest's people
+//              list on a group (everyone, Connect, no number); a bringer's own invitee and link; Leave from the
+//              resbite page lands on My resbites, which reads its plans again without the group (I10), and offline it
+//              stays in the confirm; a group's failed chat re-read after an answer keeps the row (challenge NOTE 6)
 //   edges      /guests and /event without a plan; Back with no history; a failed read offers Try again
 //   idea       Back over the image, Use idea
 import assert from "node:assert/strict";
@@ -65,9 +70,13 @@ const PLAN_SELECT = "*,plan_meeting_details(note),plan_admins(user_id)";
 const COVER_SELECT = "cover_path,cover_description,cover_revision";
 const COVER_REVISION_SELECT = "cover_path,cover_revision";
 // The guest-list and own-row reads (src/services/rsvp.ts) and the reminder sync's (deviceReminders), and the mutes'.
-const ATTENDEE_SELECTS = ["user_id,response,brought_by,level,profiles(display_name)", "version,response", "plan_id,response"];
+// My resbites reads every attendee row of the account's plans (Leave lands there, I10).
+const MY_ATTENDEES = "plan_id,user_id,response,version,profiles(display_name)";
+const ATTENDEE_SELECTS = ["user_id,response,brought_by,level,profiles(display_name)", "version,response", "plan_id,response", MY_ATTENDEES];
 const MUTE_SELECT = "series_id";
 // ...and the named-columns read the plan gateway sends (src/services/plans.ts `planColumns`, used by the reminder sync).
+// ...and My resbites' list read (src/services/plans.ts `planListColumns`).
+const PLAN_LIST = "*,plan_admins(user_id)";
 const PLAN_COLUMNS =
   "id,activity_id,title,description,categories,starts_at,ends_at,time_zone,place_label,status,version,owner_id,has_meeting_details,guest_note,guest_note_at,area,place_tbd,repeat_weeks,series_id,repeats_from,bring_invites,bring_levels,plan_meeting_details(note),plan_admins(user_id)";
 const HOST = { id: "33333333-3333-4333-8333-333333333333", name: "Ana" };
@@ -168,6 +177,15 @@ async function open(world = {}) {
     overview: world.overview ?? { chats: {}, announcements: {}, names: {} },
     // my_bring_allowance's answer for a guest, when the scenario lets them bring.
     allowance: world.allowance ?? null,
+    // Chat plan 2: the series is a group the viewer is in (series_is_group), so every member's row is read, whatever
+    // the viewer's reply; `left` once leave_series went through, and `failLeaves` lost as a lost connection would.
+    group: Boolean(world.group),
+    left: false,
+    failLeaves: world.failLeaves ?? 0,
+    // The links a guest sent bringing someone (plan_phone_invitations answers a guest with their own only).
+    guestLinks: world.guestLinks ?? [],
+    // How many times My resbites read its list of plans.
+    listReads: 0,
     uploads: [],
   };
   const log = [];
@@ -230,6 +248,9 @@ async function open(world = {}) {
       planSelects.add(select);
       if (state.failPlanRead) return reply({ message: "Fixture: the read failed" }, 500);
       const insider = state.plan.owner_id === user.id || ["accepted", "maybe"].includes(state.attendee?.response);
+      if (select === PLAN_LIST) state.listReads++;
+      // After a leave, My resbites no longer lists the group's occurrence.
+      if (!one && state.left) return reply([]);
       const row = {
         ...state.plan,
         note: "",
@@ -244,8 +265,16 @@ async function open(world = {}) {
       attendeeSelects.add(select);
       if (state.offline && select === "version,response") return route.abort("internetdisconnected");
       if (select === "plan_id,response") return reply(state.attendee ? [{ plan_id: PLAN_ID, response: state.attendee.response }] : []);
+      if (select === MY_ATTENDEES)
+        return reply(
+          state.left || !state.attendee
+            ? []
+            : [{ plan_id: PLAN_ID, user_id: user.id, response: state.attendee.response, version: state.attendee.version, profiles: { display_name: "Fixture" } }],
+        );
       if (one) return reply(state.attendee);
       const own = state.attendee ? [g(user.id, "Fixture", state.attendee.response)] : [];
+      // A group's member reads every member's row, answered or not (G-B5).
+      if (state.group) return reply([...state.guests, ...own]);
       // The server shows an unanswered invitee only their own row (UX-P5).
       return reply(state.attendee?.response === "pending" ? own : [...state.guests, ...own.filter((r) => r.response !== "pending")]);
     }
@@ -292,7 +321,7 @@ async function open(world = {}) {
         return none();
       // As the server does: a host reads every link; a guest only the links they sent bringing someone (none here).
       case "plan_phone_invitations":
-        return reply(state.plan.owner_id === user.id || state.admins.includes(user.id) ? state.phoneInvites : []);
+        return reply(state.plan.owner_id === user.id || state.admins.includes(user.id) ? state.phoneInvites : state.guestLinks);
       case "plan_join_requests":
         return reply(state.requests);
       // The chain (circles of trust): nobody here was brought, and no guest sent a link. As the server does, a guest
@@ -343,6 +372,21 @@ async function open(world = {}) {
         return none();
       case "my_chat_overview":
         return reply(state.overview);
+      // Chat plan 2: whether the series is a group the viewer is in (I4), and Leave group (G-N13, I10).
+      case "series_is_group":
+        if (body.p_series !== state.plan.series_id) mismatches.push(`series_is_group p_series ${body.p_series}`);
+        return reply(state.group && !state.left);
+      case "leave_series":
+        if (body.p_series !== state.plan.series_id) mismatches.push(`leave_series p_series ${body.p_series}`);
+        if (state.failLeaves > 0) {
+          state.failLeaves--;
+          return route.abort("internetdisconnected");
+        }
+        state.left = true;
+        return none();
+      // My resbites' open-link requests (Leave lands there): none.
+      case "my_join_requests":
+        return reply([]);
       case "my_bring_allowance":
         return state.allowance ? reply(state.allowance) : reply({ code: "42501", message: "Not invited" }, 403);
       case "decide_join_request": {
@@ -391,7 +435,7 @@ async function scenario(name, fixture, walk) {
     if (fixture.noPlanRead) assert.equal(f.planSelects.size, 0, `${name}: no plan read`);
     else assert.ok(f.planSelects.size > 0, `${name}: the plan was read`);
     for (const select of f.planSelects)
-      assert.ok([PLAN_SELECT, PLAN_COLUMNS, COVER_SELECT, COVER_REVISION_SELECT].includes(select), `${name}: the plan select ${select}`);
+      assert.ok([PLAN_SELECT, PLAN_COLUMNS, COVER_SELECT, COVER_REVISION_SELECT, PLAN_LIST].includes(select), `${name}: the plan select ${select}`);
     // The guest list and the mutes are served by their selects too: a drift would otherwise be answered with defaults.
     for (const select of f.attendeeSelects) assert.ok(ATTENDEE_SELECTS.includes(select), `${name}: the attendees select ${select}`);
     for (const select of f.muteSelects) assert.equal(select, MUTE_SELECT, `${name}: the plan_mutes select`);
@@ -1132,6 +1176,236 @@ try {
   );
   pass("announcement for a pending invitee: the event page shows the whole Everyone invited announcement (965 characters, line breaks read as spaces) as Announcement from Ana · …, and it goes once they answer Going; nobody else reads the overview there (H37)");
 
+
+  // --- A group (chat plan 2, Task 4) ---
+  // Coffee evening every Thursday (5 March 2099 is one), its chat open with no close time while it repeats.
+  const groupChat = (over = {}) => chatSummary({ is_group: true, repeat_weeks: 1, closes_at: null, ...over });
+  const groupPlan = { repeat_weeks: 1 };
+  const QUESTION = "Leave Coffee evening? You’ll stop getting its Thursdays and its chat.";
+  await scenario(
+    "group, More",
+    { viewer: "guest", group: true, plan: groupPlan, attendee: { version: 1, response: "accepted" }, guests: [ALEX, BEA], chat: groupChat() },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      // The Chat row's title is the group's (its label already said so).
+      const chatRow = btn(page, "Group chat. Leo: I can bring the snacks, unread messages");
+      await expect(chatRow).toBeVisible();
+      await expect(chatRow.getByText("Group chat", { exact: true })).toBeVisible();
+      await btn(page, "More").click();
+      await expect(btn(page, "Add to calendar")).toBeVisible();
+      await expect(btn(page, "Mute this resbite")).toBeVisible();
+      await expect(btn(page, "Leave this group")).toBeVisible();
+      assert.ok(await inOrder(page, [btn(page, "Mute this resbite"), btn(page, "Leave this group")]), "Leave this group comes last");
+    },
+  );
+  await scenario("one-off, More", { viewer: "guest", attendee: { version: 1, response: "accepted" }, guests: [ALEX, BEA], chat: chatSummary() }, async (f) => {
+    const { page } = f;
+    await goto(f, `/event?plan=${PLAN_ID}`);
+    await expect(btn(page, "Chat. Leo: I can bring the snacks, unread messages")).toBeVisible();
+    await btn(page, "More").click();
+    await expect(btn(page, "Mute this resbite")).toBeVisible();
+    await expect(btn(page, "Leave this group")).toHaveCount(0);
+  });
+  // Someone who hasn't answered this week is in the group too: their More holds Leave this group alone (G-N13).
+  await scenario(
+    "group, More, not answered",
+    { viewer: "guest", group: true, plan: groupPlan, guests: [ALEX, BEA], chat: groupChat() },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      await expect(page.getByRole("radiogroup", { name: "Your answer" })).toBeVisible();
+      await btn(page, "More").click();
+      await expect(btn(page, "Leave this group")).toBeVisible();
+      await expect(btn(page, "Mute this resbite")).toHaveCount(0);
+      await expect(btn(page, "Add to calendar")).toHaveCount(0);
+    },
+  );
+  // An ended occurrence with the group's chat still open: More holds Leave this group and stays open (Task 3's carry).
+  await scenario(
+    "group, More, ended",
+    {
+      viewer: "guest",
+      group: true,
+      plan: { ...groupPlan, starts_at: iso(Date.now() - 5 * hour), ends_at: iso(Date.now() - 2 * hour) },
+      attendee: { version: 1, response: "accepted" },
+      guests: [ALEX],
+      chat: groupChat(),
+    },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      await expect(text(page, "Ended")).toBeVisible();
+      await btn(page, "More").click();
+      await expect(btn(page, "Leave this group")).toBeVisible();
+      await page.waitForTimeout(500);
+      await expect(btn(page, "Leave this group")).toBeVisible();
+      await btn(page, "Leave this group").click();
+      await expect(text(page, QUESTION)).toBeVisible();
+    },
+  );
+  pass("group, More: Leave this group last in More on a group (after Add to calendar and Mute), alone for a member who hasn't answered, and on an ended occurrence with the chat open, where the sheet stays; never on a one-off; the Chat row reads Group chat");
+
+  // A guest who hasn't answered, right after a roll: every co-member pending, none answered (G-B5, G-S14).
+  const MIA = g("p1", "Mia", "pending");
+  const SOL = g("p2", "Sol", "pending");
+  const PEDRO = g("p3", "Pedro", "pending");
+  await scenario(
+    "group, people, not answered",
+    { viewer: "guest", group: true, plan: groupPlan, guests: [MIA, SOL, PEDRO], chat: groupChat({ accepted: 0, members: 5, going: 1, everyone: 5 }) },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      // Names whatever their reply: the people row opens the list, and no server counts are read.
+      await page.getByRole("button", { name: /^Going \d/ }).click();
+      await expect(page).toHaveURL(new RegExp(`/guests\\?plan=${PLAN_ID}`));
+      await expect(heading(page, "People")).toBeVisible();
+      await expect(page.getByRole("heading")).toHaveText(["People", "Going · 1", "Not answered yet · 4"]);
+      await expect(page.getByLabel("Ana, Hosting", { exact: true })).toBeVisible();
+      for (const name of ["Mia", "Sol", "Pedro", "Fixture"]) await expect(page.getByLabel(`${name}, Invited in the app`, { exact: true })).toBeVisible();
+      // As many app and owner rows as the chat's members.
+      const rows = (await page.getByLabel(/, Invited in the app$/).count()) + (await page.getByLabel("Ana, Hosting", { exact: true }).count());
+      assert.equal(rows, 5, "the people list holds the chat's 5 members");
+      for (const name of ["Ana", "Mia", "Sol", "Pedro"]) {
+        await btn(page, `Actions for ${name}`).click();
+        await expect(btn(page, "Connect on Resbite")).toBeVisible();
+        await expect(btn(page, "Remove")).toHaveCount(0);
+        await page.getByRole("button", { name: "Close sheet" }).first().click();
+      }
+      await expect(btn(page, "Actions for Fixture")).toHaveCount(0);
+      // No phone number anywhere on the list.
+      const body = await page.locator("body").innerText();
+      assert.ok(!/\d{4} ?\d{6}|Number ending/.test(body), "no phone number on the list");
+      assert.deepEqual(f.rpcs("plan_people_counts"), []);
+    },
+  );
+  pass("group, people, not answered: a guest who hasn't answered, with every co-member pending, opens the people list from the people row: Ana's Hosting row and Mia, Sol, Pedro and themselves under Not answered yet · 4, five rows for the chat's five members, Connect on each other row, no Remove, no phone number, and no plan_people_counts");
+
+  // A bringer on a group: the person they brought, not answered, once, with Remove; their link under Invited (S4).
+  await scenario(
+    "group, people, bringer",
+    {
+      viewer: "guest",
+      group: true,
+      plan: groupPlan,
+      attendee: { version: 1, response: "accepted" },
+      guests: [{ ...g("p4", "Clara", "pending"), brought_by: user.id, level: 2 }, SOL],
+      guestLinks: [phoneRow(PAT.phone)],
+      storedCodes: { [PAT.e164]: { code: PAT.code, name: PAT.name, sentVia: "whatsapp" } },
+      chat: groupChat({ members: 4 }),
+    },
+    async (f) => {
+      const { page } = f;
+      await page.goto(`${base}/guests?plan=${PLAN_ID}`);
+      await expect(heading(page, "People")).toBeVisible();
+      await expect(page.getByRole("heading")).toHaveText(["People", "Going · 2", "Not answered yet · 2", "Invited, not answered yet · 1"]);
+      await expect(page.getByLabel("Clara, brought by you, Invited in the app", { exact: true })).toHaveCount(1);
+      await expect(page.getByText("Clara", { exact: true })).toHaveCount(1);
+      await expect(page.getByLabel("Sol, Invited in the app", { exact: true })).toBeVisible();
+      await expect(page.getByLabel("Pat Lee, brought by you, Invited by WhatsApp", { exact: true })).toBeVisible();
+      await btn(page, "Actions for Clara").click();
+      await expect(btn(page, "Remove")).toBeVisible();
+      await expect(btn(page, "Connect on Resbite")).toBeVisible();
+      await page.getByRole("button", { name: "Close sheet" }).first().click();
+      await btn(page, "Actions for Sol").click();
+      await expect(btn(page, "Connect on Resbite")).toBeVisible();
+      await expect(btn(page, "Remove")).toHaveCount(0);
+      await page.getByRole("button", { name: "Close sheet" }).first().click();
+    },
+  );
+  pass("group, people, bringer: the guest's own brought invitee Clara shows once, under Not answered yet with Remove and Connect, beside Sol (Connect only); their link to Pat Lee sits under Invited, not answered yet");
+
+  // Leave from the resbite page (I10): My resbites, More, Leave this group, the question, Leave group.
+  await scenario(
+    "group, leave",
+    { viewer: "guest", group: true, plan: groupPlan, attendee: { version: 1, response: "accepted" }, guests: [ALEX, BEA], chat: groupChat() },
+    async (f) => {
+      const { page } = f;
+      await page.goto(`${base}/plans`);
+      const tile = page.getByRole("button", { name: /^Coffee evening, / });
+      await expect(tile).toBeVisible();
+      await tile.click();
+      await expect(heading(page, "Coffee evening")).toBeVisible();
+      await btn(page, "More").click();
+      await btn(page, "Leave this group").click();
+      await expect(text(page, QUESTION)).toBeVisible();
+      // Keep goes back to the rows, with nothing called.
+      await btn(page, "Keep").click();
+      await expect(btn(page, "Leave this group")).toBeVisible();
+      assert.deepEqual(f.rpcs("leave_series"), []);
+      await btn(page, "Leave this group").click();
+      const lists = () => f.state.listReads;
+      const before = lists();
+      await btn(page, "Leave group").click();
+      await expect(page).toHaveURL(new RegExp(`/plans$`));
+      await expect(heading(page, "My resbites")).toBeVisible();
+      assert.deepEqual(f.rpcs("leave_series"), [{ p_series: SERIES_ID }]);
+      // My resbites read its plans again, and the group is gone from them.
+      await expect.poll(lists).toBeGreaterThan(before);
+      await expect(page.getByRole("button", { name: /^Coffee evening, / })).toHaveCount(0);
+      await expect(text(page, "Nothing planned")).toBeVisible();
+    },
+  );
+  await scenario(
+    "group, leave offline",
+    { viewer: "guest", group: true, plan: groupPlan, attendee: { version: 1, response: "accepted" }, guests: [ALEX], chat: groupChat(), failLeaves: 1 },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      await btn(page, "More").click();
+      await btn(page, "Leave this group").click();
+      await btn(page, "Leave group").click();
+      // The question stays open, with the reason inside the sheet.
+      const sheet = page.locator("[aria-modal]");
+      await expect(sheet.getByText("Check your connection and try again.", { exact: true })).toBeVisible();
+      await expect(sheet.getByText(QUESTION, { exact: true })).toBeVisible();
+      await expect(page).toHaveURL(new RegExp(`/event\\?plan=${PLAN_ID}$`));
+      assert.equal(f.rpcs("leave_series").length, 1);
+      await expect(btn(page, "Leave group")).toBeEnabled();
+      await btn(page, "Leave group").click();
+      await expect(page).toHaveURL(new RegExp(`/plans$`));
+      assert.deepEqual(f.rpcs("leave_series"), [{ p_series: SERIES_ID }, { p_series: SERIES_ID }]);
+    },
+  );
+  pass("group, leave: from My resbites' tile, More → Leave this group asks Leave Coffee evening? You’ll stop getting its Thursdays and its chat. (Keep goes back); Leave group calls leave_series {p_series} once and lands on My resbites, which reads its plans again with the group gone; offline the question stays with Check your connection and try again., and a second tap calls leave_series again and lands on My resbites");
+
+  // Challenge NOTE 6: in a group an answer moves nobody, so a failed re-read of the chat keeps the row; on a one-off a
+  // confirmed answer can move the person out, so the same failure hides it, as built.
+  await scenario(
+    "group, answer keeps the chat row",
+    { viewer: "guest", group: true, plan: groupPlan, guests: [ALEX], chat: groupChat() },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      const row = btn(page, "Group chat. Leo: I can bring the snacks, unread messages");
+      await expect(row).toBeVisible();
+      const before = f.rpcs("chat_summary").length;
+      f.state.chat = "failed";
+      await page.getByRole("radio", { name: "Going", exact: true }).click();
+      await expect(text(page, "Your response is saved.")).toBeVisible();
+      await expect.poll(() => f.rpcs("chat_summary").length).toBeGreaterThan(before);
+      await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+      await expect(row).toBeVisible();
+    },
+  );
+  await scenario(
+    "one-off, answer hides the chat row",
+    { viewer: "guest", attendee: { version: 1, response: "accepted" }, guests: [ALEX], chat: chatSummary() },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      const row = btn(page, "Chat. Leo: I can bring the snacks, unread messages");
+      await expect(row).toBeVisible();
+      const before = f.rpcs("chat_summary").length;
+      f.state.chat = "failed";
+      await btn(page, "Change your answer").click();
+      await page.getByRole("radio", { name: "Maybe", exact: true }).click();
+      await expect(text(page, "Your response is saved.")).toBeVisible();
+      await expect.poll(() => f.rpcs("chat_summary").length).toBeGreaterThan(before);
+      await expect(page.getByRole("button", { name: /^Chat/ })).toHaveCount(0);
+    },
+  );
+  pass("group, answer keeps the chat row: a not-answered group member answers Going and the chat re-read fails: the Group chat row stays; on a one-off the same failure after a confirmed answer hides the row (challenge NOTE 6)");
 
   // --- Edges of the people list and the page ---
   await scenario("edges", { guests: going2, failPlanRead: true }, async (f) => {
