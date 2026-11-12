@@ -5,7 +5,6 @@ import { cleanName, hasHiddenCharacter, pendingCardNote } from "./chatRules";
 /** Report and block (chat plan 3), as the rulings word them. The apostrophe is the curly one, as in chat core's copy. */
 export const SAFETY_COPY = {
   // The report sheet.
-  report: "Report",
   reportMessage: "Report message",
   reportPerson: (name: string) => `Report ${name}`,
   /** The chat menu's entry, the resbite page's More row and the button beside its announcement line (B1, B4). */
@@ -85,8 +84,11 @@ export const SAFETY_COPY = {
   /** Data & privacy's line on reports (G-S11, N9, I11): a person as well as a message, the reporter's own, the period. */
   reportsPrivacy:
     "If you report a message or a person, the Resbite team reads the report and keeps a copy of what was reported, even if the message or that person’s account is deleted. If you delete your account, the reports you sent are deleted too. A report is deleted 180 days after the team closes it.",
-  /** Data & privacy's line on blocks (ruling SR4, owner question R-Q7's default; I10's 7-day read). */
-  blocksPrivacy: "Blocks stay until you undo them. The Resbite team can see who blocked whom for 7 days.",
+  /**
+   * Data & privacy's line on blocks (ruling SR4, owner question R-Q7's default, worded by SR10): a block row stays until
+   * undone, and the team can read it (the daily read lists the last 7 days; that is a list, not a limit).
+   */
+  blocksPrivacy: "Blocks stay until you undo them. The Resbite team can see who blocked whom.",
 } as const;
 
 /** A report's reason, as the server stores it. */

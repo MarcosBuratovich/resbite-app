@@ -119,6 +119,9 @@ test("an announcement is a card naming its audience in words; its author deletes
   assert.equal(guestView.text, "Doors open at 11:30");
   assert.equal(guestView.label, "Announcement to everyone invited, Ana, Doors open at 11:30, 09:00");
   assert.deepEqual(guestView.actions, ["report"]);
+  // Final fix wave (ruling SR10, M2): its author's name, to open their sheet from the card; none on your own.
+  assert.equal(guestView.author, "Ana");
+  assert.equal(only(feed([ann], { viewerId: ANA, host: true }), "announcement")[0].author, null);
   assert.deepEqual(only(feed([ann], { viewerId: ANA, host: true }), "announcement")[0].actions, ["delete"]);
   assert.deepEqual(only(feed([ann], { viewerId: MIA, host: true }), "announcement")[0].actions, ["remove", "report"]);
   const going = only(feed([{ ...ann, audience: "going" }]), "announcement")[0];

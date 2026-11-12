@@ -749,7 +749,7 @@ Chat plan 3 of 3 ([plan](../docs/superpowers/plans/2026-11-11-chat-3-safety.md))
 - **R-Q4, who answers within 24 hours when the owner is away.** Release-blocking: the owner names a backup reader before the release, and until then reads the queue alone, daily.
 - **R-Q5, a blocked person's join requests.** Default: no push of any kind from a blocked person to the blocker, join requests included (CH-S18).
 - **R-Q6, what a host's block does.** Default: it hides the person's messages from that host only, and the host's confirm says "This hides their messages from you only. To stop them for everyone, remove them from the resbite." (ruling SR1).
-- **R-Q7, what Data & privacy says of blocks.** Default: "Blocks stay until you undo them. The Resbite team can see who blocked whom for 7 days." (ruling SR4).
+- **R-Q7, what Data & privacy says of blocks.** Default: "Blocks stay until you undo them. The Resbite team can see who blocked whom." (ruling SR4).
 
 *Calls made while planning and building* (rulings SR1 to SR9; they change what the plan or the spec describes).
 - **CH-S19.** A message the team removes keeps its row, `removed`, with `payload {"by": "resbite"}`, and reads "Message removed by Resbite"; a host's removal still reads "Message removed by an admin" (CH-R-A3).

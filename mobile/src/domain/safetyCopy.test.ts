@@ -23,7 +23,8 @@ const ME = "0a000000-0000-4000-8000-000000000009";
 const names: ChatNames = { [ANA]: "Ana", [PEDRO]: "Pedro", [ADA]: "Ada", [ME]: "Mia" };
 
 test("the report sheet's words read exactly", () => {
-  assert.equal(S.report, "Report");
+  // Final fix wave (M7): the unused "Report" title is gone.
+  assert.equal("report" in S, false);
   assert.equal(S.reportMessage, "Report message");
   assert.equal(S.reportPerson("Leo"), "Report Leo");
   assert.equal(S.reportOrBlock, "Report or block");

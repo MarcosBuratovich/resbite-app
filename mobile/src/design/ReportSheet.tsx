@@ -214,6 +214,26 @@ export function BlockQuestion({
   );
 }
 
+/**
+ * After an unblock, the sheet's result line, "Unblocked <name>.": focus moves to it and it is said aloud, as Blocked
+ * people does (final review M4).
+ */
+export function UnblockedLine({ name }: { name: string }) {
+  const line = useRef<Text | null>(null);
+  const words = SAFETY_COPY.unblocked(shownName(name));
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => focusHeading(line.current));
+    sayOnIos(words);
+    return () => cancelAnimationFrame(frame);
+    // Once, when it appears.
+  }, []);
+  return (
+    <Copy ref={line} accessibilityLiveRegion="polite" style={styles.blocked}>
+      {words}
+    </Copy>
+  );
+}
+
 /** After a block, the sheet's result line, "Blocked": focus moves to it and it is said aloud (G-N7). */
 export function BlockedLine() {
   const line = useRef<Text | null>(null);

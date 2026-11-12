@@ -8,7 +8,7 @@ import { Button, Copy, ErrorNote, s, useLargeText } from "../src/design/ui";
 import { IconButton, focusHeading } from "../src/design/kit";
 import { GrabberSheet } from "../src/design/GrabberSheet";
 import { MenuLabel, MenuRow, MenuSeparator } from "../src/design/MenuRow";
-import { BlockQuestion, BlockedLine, ReportSheet } from "../src/design/ReportSheet";
+import { BlockQuestion, BlockedLine, ReportSheet, UnblockedLine } from "../src/design/ReportSheet";
 import { colors as c, fonts, space } from "../src/design/tokens";
 import {
   EVENT_COPY,
@@ -35,7 +35,7 @@ import { contactInviteGateway } from "../src/services/contactInvites";
 import { bringerRevokeError, circleGateway, takingBack } from "../src/services/circle";
 import { UNNAMED_GUEST } from "../src/services/rsvp";
 import { joinRequestGateway } from "../src/services/joinRequests";
-import { safetyGateway } from "../src/services/safety";
+import { safetyErrorMessage, safetyGateway } from "../src/services/safety";
 import { useApp } from "../src/state/AppState";
 import { useEvent, type EventPage } from "../src/state/useEvent";
 import { useGroupScreen } from "../src/state/useGroupLeave";
@@ -118,7 +118,7 @@ function Bar({ planId }: { planId?: string }) {
  * A person's sheet and what it shows: its rows, Remove's or Decline's question, and plan 3's report, block confirm and
  * the block's result line, each in place.
  */
-type Sheet = { row: PersonRow; view: "menu" | "remove" | "decline" | "report" | "block" | "blocked" };
+type Sheet = { row: PersonRow; view: "menu" | "remove" | "decline" | "report" | "block" | "blocked" | "unblocked" };
 
 function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage["plan"]> }) {
   const { role, guests, invited, requests, admins, owner, connections } = event;
@@ -205,9 +205,26 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
       case "block":
         return setSheet({ row, view: "block" });
       case "unblock":
-        return run(async () => void (await safetyGateway.unblock(row.userId!)), false);
+        return unblock(row);
     }
   };
+  /**
+   * Unblock, through the gateway (B3, NOTE 2): then "Unblocked <name>." in the sheet with focus on it, as Blocked people
+   * says it (final review M4); refused or offline, the sheet says why in the safety words (final review M7).
+   */
+  async function unblock(row: PersonRow) {
+    if (off) return;
+    setWorking(true);
+    setError(null);
+    try {
+      await safetyGateway.unblock(row.userId!);
+      setSheet({ row, view: "unblocked" });
+    } catch (e) {
+      setError(safetyErrorMessage(e));
+    } finally {
+      setWorking(false);
+    }
+  }
   // Each person's row on the list, so focus can move to the next one after a remove (D4). It moves once the sheet has
   // gone: until then the sheet holds focus, and on the web gives it back to the row it was opened from.
   const rowRefs = useRef(new Map<string, View>());
@@ -362,6 +379,8 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
             </View>
             {sheet?.view === "blocked" ? (
               <BlockedLine />
+            ) : sheet?.view === "unblocked" ? (
+              <UnblockedLine name={current.name} />
             ) : gone ? null : sheet?.view === "report" && current.userId ? (
               <ReportSheet
                 target={{ kind: "user", userId: current.userId, series: plan.series_id, name: current.name }}

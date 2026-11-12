@@ -23,7 +23,7 @@ import { Button, Copy, ErrorNote, TextAction, s, useLargeText, useReduceMotion }
 import { Chip, IconButton, focusHeading } from "../src/design/kit";
 import { GrabberSheet } from "../src/design/GrabberSheet";
 import { MenuRow } from "../src/design/MenuRow";
-import { BlockQuestion, BlockedLine, ReportSheet } from "../src/design/ReportSheet";
+import { BlockQuestion, BlockedLine, ReportSheet, UnblockedLine } from "../src/design/ReportSheet";
 import { ChatRulesSheet } from "../src/design/ChatRulesSheet";
 import { NotificationAsk } from "../src/design/NotificationAsk";
 import { colors as c, depth, fonts, space } from "../src/design/tokens";
@@ -159,7 +159,15 @@ type ActionSheet = { key: string; view: "menu" | "delete" | "remove" | "report";
  * Plan 3's Report or block, in the menu's sheet (Decision 3, G-N6): the chat's people, or one person's sheet (Report,
  * then Block or Unblock), their report, the block confirm, or its result line. An author's name opens their sheet there.
  */
-type Safety = { kind: "people" } | { kind: "person"; userId: string; step: "actions" | "report" | "block" | "blocked" };
+type Safety =
+  | { kind: "people" }
+  | {
+      kind: "person";
+      userId: string;
+      step: "actions" | "report" | "block" | "blocked" | "unblocked";
+      /** Opened from an announcement's card: its author announced, so they host, whatever the people list says now. */
+      announcer?: boolean;
+    };
 
 /**
  * The chat (CH-02 to CH-08): /chat?series=<series id>. The header with the date and the going count, the pinned
@@ -549,9 +557,9 @@ function Conversation({
 
   // A tap on an author's name opens their sheet in the menu's sheet (G-N6), over the chat, which stays on screen.
   const openPerson = useCallback(
-    (userId: string) => {
+    (userId: string, announcer?: boolean) => {
       setSafetyError(null);
-      setSafety({ kind: "person", userId, step: "actions" });
+      setSafety({ kind: "person", userId, step: "actions", announcer });
       onMenu(true);
     },
     [onMenu],
@@ -635,7 +643,9 @@ function Conversation({
   useEffect(() => {
     if (sheet && sheet.view !== "report" && targetActions.length === 0) setSheet(null);
   }, [sheet, targetActions.length]);
-  const reportGone = sheet?.view === "report" && !targetActions.includes("report");
+  // Only a row still loaded that no longer offers Report (taken down) can't be reported: one that merely left the loaded
+  // rows still can, and the server says so if it can't (final review M3).
+  const reportGone = sheet?.view === "report" && target !== undefined && !targetActions.includes("report");
   // The sheet's next view takes focus: the question after Delete or Remove, the menu again after Keep (H32 Q53).
   useEffect(() => {
     if (!sheet) return;
@@ -722,7 +732,8 @@ function Conversation({
     try {
       // Through the gateway, so this chat and every other replace their lists (B3).
       await safetyGateway.unblock(who.userId);
-      if (mounted.current) onMenu(false);
+      // Said in place, with focus on it, as Blocked people does (final review M4).
+      if (mounted.current) setSafety((now) => (now?.kind === "person" ? { ...now, step: "unblocked" } : now));
     } catch (e) {
       if (mounted.current) setSafetyError(safetyErrorMessage(e));
     } finally {
@@ -876,9 +887,13 @@ function Conversation({
                 userId={person.userId}
                 name={person.name}
                 youHost={summary.host}
-                theyHost={person.theyHost}
+                theyHost={person.theyHost || safety.announcer === true}
                 onBlocked={() => setSafety({ ...safety, step: "blocked" })}
-                onClosed={() => onMenu(false)}
+                // Nothing stored (ruling SR9): closed saying nothing, an earlier error included (re-review N1).
+                onClosed={() => {
+                  dismissError();
+                  onMenu(false);
+                }}
                 onKeep={() => {
                   backToBlock.current = true;
                   setSafety({ ...safety, step: "actions" });
@@ -886,6 +901,8 @@ function Conversation({
               />
             ) : safety.step === "blocked" ? (
               <BlockedLine />
+            ) : safety.step === "unblocked" ? (
+              <UnblockedLine name={person.name} />
             ) : (
               <View>
                 {person.actions.map((action) =>
@@ -1147,7 +1164,7 @@ type RowProps = {
   /** Reads the chat again: a "Next one" line with no current occurrence to open (Decision 14). */
   onReread: () => void;
   /** A tap on an author's name: their sheet (plan 3, G-N6). */
-  onPerson: (userId: string) => void;
+  onPerson: (userId: string, announcer?: boolean) => void;
 };
 
 const actionsOf = (actions: MessageAction[], links: FeedLink[] = []) => [
@@ -1260,26 +1277,22 @@ function RowBody({ row, planId, largeText, onLink, onActions, onAction, onRetry,
       };
       if (row.type === "announcement")
         return (
-          <Pressable {...press} style={({ pressed }) => [styles.announcement, pressed && styles.pressed]}>
-            <Text style={styles.announcementKey}>{row.heading}</Text>
-            {body}
-          </Pressable>
+          <View style={styles.announcementWrap}>
+            {/* Its author's name opens their sheet, even once they have left the occurrence (final review M2). */}
+            {row.author && row.message.authorId ? (
+              <AuthorName name={row.author} onPress={() => onPerson(row.message.authorId!, true)} />
+            ) : null}
+            <Pressable {...press} style={({ pressed }) => [styles.announcement, pressed && styles.pressed]}>
+              <Text style={styles.announcementKey}>{row.heading}</Text>
+              {body}
+            </Pressable>
+          </View>
         );
       return (
         <View style={[styles.message, row.own && styles.mine, largeText && styles.messageWide]}>
           {row.showAuthor && row.author ? (
             row.message.authorId ? (
-              // The name opens the person's sheet: Report, and Block or Unblock (plan 3, G-N6). The bubble's label says
-              // the name too, so the screen reader meets it once as text and once as this button.
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={row.author}
-                onPress={() => onPerson(row.message.authorId!)}
-                hitSlop={{ top: 10, bottom: 4, left: 10, right: 10 }}
-                style={({ pressed }) => [styles.whoButton, pressed && styles.pressed]}
-              >
-                <Text style={styles.who}>{row.author}</Text>
-              </Pressable>
+              <AuthorName name={row.author} onPress={() => onPerson(row.message.authorId!)} />
             ) : (
               <Text aria-hidden style={styles.who}>
                 {row.author}
@@ -1293,6 +1306,26 @@ function RowBody({ row, planId, largeText, onLink, onActions, onAction, onRetry,
       );
     }
   }
+}
+
+/**
+ * An author's name over their bubble or announcement: it opens the person's sheet, Report and Block or Unblock (plan 3,
+ * G-N6), and its hint says so (final review M5). The row's label says the name too, so the screen reader meets it once
+ * as text and once as this button.
+ */
+function AuthorName({ name, onPress }: { name: string; onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={name}
+      accessibilityHint={SAFETY_COPY.reportOrBlock}
+      onPress={onPress}
+      hitSlop={{ top: 10, bottom: 4, left: 10, right: 10 }}
+      style={({ pressed }) => [styles.whoButton, pressed && styles.pressed]}
+    >
+      <Text style={styles.who}>{name}</Text>
+    </Pressable>
+  );
 }
 
 /**
@@ -1692,6 +1725,7 @@ const styles = StyleSheet.create({
   mine: { alignSelf: "flex-end", alignItems: "flex-end" },
   who: { fontFamily: fonts.medium, fontSize: 11, color: c.muted, marginLeft: 10 },
   whoButton: { alignSelf: "flex-start" },
+  announcementWrap: { gap: 2 },
   sheetHeading: { fontFamily: fonts.display, fontSize: 22, color: c.ink, marginBottom: space.s },
   bubble: {
     minHeight: 44,

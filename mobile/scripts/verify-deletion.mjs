@@ -38,7 +38,7 @@ const CHAT_CORE =
   "Chat messages are stored on Resbite’s servers so everyone in a resbite’s chat can read them, including people who join later. They are not end-to-end encrypted. Deleting your account removes the text of your messages as cleanup finishes. Review account deletion’s availability in this build under Delete account.";
 const REPORTS =
   "If you report a message or a person, the Resbite team reads the report and keeps a copy of what was reported, even if the message or that person’s account is deleted. If you delete your account, the reports you sent are deleted too. A report is deleted 180 days after the team closes it.";
-const BLOCKS = "Blocks stay until you undo them. The Resbite team can see who blocked whom for 7 days.";
+const BLOCKS = "Blocks stay until you undo them. The Resbite team can see who blocked whom.";
 const NONE_BLOCKED = "You haven’t blocked anyone.";
 const OFFLINE = "Check your connection and try again.";
 const contactLine = (address) => `Questions, or something wrong in a chat? Write to ${address}.`;

@@ -171,7 +171,7 @@ test("the words: Unblock on the row, Unblocked <name>. once it went through, and
   assert.equal(SAFETY_COPY.unblocked("Leo"), "Unblocked Leo.");
   assert.equal(
     SAFETY_COPY.blocksPrivacy,
-    "Blocks stay until you undo them. The Resbite team can see who blocked whom for 7 days.",
+    "Blocks stay until you undo them. The Resbite team can see who blocked whom.",
   );
 });
 

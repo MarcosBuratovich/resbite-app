@@ -93,6 +93,10 @@
 //   s2b a message removed while its report is open keeps the sheet and the typed text, and says it can't be reported
 //   s6b ruling SR9: a block the server answered false (nothing stored) closes the confirm with no "Blocked" and no other
 //       line; the list then shows what my_blocks says
+// Final fix wave (ruling SR10): (r) is deterministic (a second tap when the first jump drifts); s1 checks the contact
+// line under EXPECT_SUPPORT; s2c a reported message dropped from the loaded rows stays reportable; s4 and s6b say
+// "Unblocked Leo." with focus and dismiss an earlier error on the silent close; s6 the name's hint;
+//   s11 an announcement's author who left: their name on the card opens their sheet
 //   s7e Send announcement before the rules are agreed: the rules first; Cancel brings the words and audience back; I
 //       agree sends it
 //   s7f Cancel on an announcement held for the rules: the form again with its words and audience; it goes later with
@@ -693,6 +697,28 @@ const scrollList = (page, to) =>
     el.scrollTop = to === "top" ? el.scrollHeight : to;
     return el.scrollTop;
   }, to);
+/**
+ * Taps the pinned card and waits until its message is in view and stays there (ruling SR10, verify-chat's (r) made
+ * deterministic). In headless Chrome a jump can land and then drift out of view while the rows above it are measured
+ * late (2 runs in 14 at 290c3b3); a second tap then lands exactly, as a person would tap again. Returns the taps used.
+ */
+async function reachPinned(page, pinnedRow, name) {
+  await button(page, /^PINNED, /).click();
+  for (let tap = 1; ; tap++) {
+    const shown = await expect
+      .poll(() => inViewport(pinnedRow), { timeout: tap === 1 ? 8_000 : 20_000 })
+      .toBe(true)
+      .then(() => true, () => false);
+    if (shown) {
+      // Still in view once the late measurements have landed.
+      await page.waitForTimeout(600);
+      if (await inViewport(pinnedRow)) return tap;
+    }
+    if (tap >= 3) throw Error(`${name}: the pinned message never stayed in view`);
+    console.log(`NOTE (${name}): the jump drifted out of view as the rows above it were measured; another tap.`);
+    await button(page, /^PINNED, /).click();
+  }
+}
 /** Opens a screen in place, by expo-router's own router as the development bundle registers it (no reload). */
 const pushRoute = (page, to) =>
   page.evaluate((to) => {
@@ -1345,9 +1371,10 @@ try {
     await openChat(page);
     await f.settle();
     const pinnedRow = labelled(page, starts("Announcement to people going, Ana, The very first plan, "));
-    await button(page, /^PINNED, /).click();
-    await expect.poll(() => f.calls("chat_messages").map((b) => b.p_before)).toContain(381);
-    await expect.poll(() => inViewport(pinnedRow), { timeout: 20_000 }).toBe(true);
+    // Ruling SR10: deterministic (reachPinned taps again if the first jump drifts as rows above it are measured late).
+    await reachPinned(page, pinnedRow, "r");
+    assert.deepEqual(f.calls("chat_messages").map((b) => b.p_before).filter((b) => b !== null), [381 + 200, 381 + 100, 381]);
+    assert.equal(f.calls("chat_messages").filter((b) => b.p_before !== null).length, 3, "three earlier pages, each once");
     await f.done();
   }
   console.log("PASS (r): the pinned card loads three earlier pages, then scrolls to its message.");
@@ -1362,8 +1389,8 @@ try {
     await expect.poll(() => f.joins().length).toBe(1);
     await f.settle();
     const pinnedRow = labelled(page, starts("Announcement to people going, Ana, The very first plan, "));
-    await button(page, /^PINNED, /).click();
-    await expect.poll(() => inViewport(pinnedRow), { timeout: 20_000 }).toBe(true);
+    // Landed and settled first (ruling SR10), so what follows tests only what moves the list after.
+    await reachPinned(page, pinnedRow, "r2");
     await f.settle();
     // A message arrives while the announcement is being read: the list stays where it is.
     f.add(say(431, LEO, "A new one meanwhile", iso(f.serverNow())));
@@ -2176,6 +2203,14 @@ try {
     await expect(text(page, "Thanks. The Resbite team will look at it.")).toBeVisible();
     assert.deepEqual(f.calls("report_message"), [{ p_id: 103, p_reason: "spam", p_details: null }]);
     await expect.poll(() => focusedText(page)).toBe("Thanks. The Resbite team will look at it.");
+    // The contact line comes with the thanks only when the build has an address (G-N10; final review M6): run with
+    // EXPECT_SUPPORT=<the address> against a build started with EXPO_PUBLIC_SUPPORT_ADDRESS set to it.
+    const contact = (address) => `Questions, or something wrong in a chat? Write to ${address}.`;
+    if (process.env.EXPECT_SUPPORT) {
+      const line = sheet(page).getByText(contact(process.env.EXPECT_SUPPORT), { exact: true });
+      await expect(line).toBeVisible();
+      assert.equal(await line.evaluate((el) => getComputedStyle(el).userSelect), "text", "the address can be selected");
+    } else await expect(sheet(page).getByText(/^Questions, or something wrong in a chat\?/)).toHaveCount(0);
     await button(page, "Done").click();
     await expect(heading(page, "Report message")).toHaveCount(0);
     // The reporter keeps using the chat.
@@ -2235,6 +2270,33 @@ try {
     await f.done();
   }
   console.log("PASS (s2b): Leo's message removed while its report is open: the sheet stays with the reason and the typed text, says You can’t report that any more., Send report is disabled, and nothing is sent.");
+
+  // (s2c) Final review M3: a list read again while a report is open (here a gap: 200 new rows at once) drops the reported
+  // message from the loaded rows. It can still be reported: no "can't report" line, and Send report goes.
+  {
+    const f = await fixture({ guests: PEOPLE });
+    const { page } = f;
+    await openChat(page);
+    await expect.poll(() => f.joins().length).toBe(1);
+    await f.settle();
+    await longPress(leoBubble(page));
+    await button(page, "Report message").click();
+    await page.getByRole("radio", { name: "Spam", exact: true }).click();
+    const replaced = f.calls("chat_messages").length;
+    for (let i = 0; i < 210; i++) f.add(say(400 + i, MIA, `Burst ${i}`, iso(f.serverNow())));
+    f.signal({ id: 609, kind: "message", state: "sent" });
+    await expect.poll(() => f.calls("chat_messages").length).toBeGreaterThan(replaced);
+    await f.settle();
+    await expect(leoBubble(page)).toHaveCount(0);
+    await expect(heading(page, "Report message")).toBeVisible();
+    await expect(sheet(page).getByText("You can’t report that any more.", { exact: true })).toHaveCount(0);
+    await expect(button(page, "Send report")).toBeEnabled();
+    await button(page, "Send report").click();
+    await expect(sheet(page).getByText("Thanks. The Resbite team will look at it.", { exact: true })).toBeVisible();
+    assert.deepEqual(f.calls("report_message"), [{ p_id: 103, p_reason: "spam", p_details: null }]);
+    await f.done();
+  }
+  console.log("PASS (s2c): a gap read that drops Leo's message from the loaded rows leaves its report open and sendable (no can't-report line), and report_message goes with its id.");
 
   // (s3) Nothing to report on one's own message, nor on a system line.
   {
@@ -2303,6 +2365,11 @@ try {
     assert.equal(await hintOf(button(page, "Leo, Blocked")), null);
     await button(page, "Leo, Blocked").click();
     await expect(button(page, "Unblock Leo")).toBeVisible();
+    // Unblock says so in place and takes focus, as Blocked people does (final review M4).
+    await button(page, "Unblock Leo").click();
+    await expect(sheet(page).getByText("Unblocked Leo.", { exact: true })).toBeVisible();
+    await expect.poll(() => focusedText(page)).toBe("Unblocked Leo.");
+    assert.deepEqual(f.calls("block_user").at(-1), { p_user: LEO, p_block: false });
     await expect(button(page, "Block Leo")).toHaveCount(0);
     await f.done();
   }
@@ -2390,6 +2457,8 @@ try {
     const { page } = f;
     await openChat(page);
     await peopleRead(f);
+    // The name says what it opens (final review M5).
+    assert.equal(await hintOf(button(page, "Leo")), "Report or block");
     await button(page, "Leo").first().click();
     await expect(button(page, "Report Leo")).toBeVisible();
     await button(page, "Block Leo").click();
@@ -2409,13 +2478,21 @@ try {
     const { page } = f;
     await openChat(page);
     await peopleRead(f);
+    await f.settle();
+    // An earlier error on screen (a send lost offline) must not come back as the silent close's only words (re-review
+    // N1): it could read as "the block failed".
+    f.state.failSends = 1;
+    await field(page).fill("Are we still on?");
+    await button(page, "Send").click();
+    await expect(text(page, "Check your connection and try again.")).toBeVisible();
     await button(page, "Leo").first().click();
     await button(page, "Block Leo").click();
     await expect(text(page, BLOCK_LEO)).toBeVisible();
     const before = f.mark();
     await button(page, "Block Leo").click();
-    await expect.poll(() => f.callsSince(before, "my_blocks").length).toBeGreaterThan(0);
     await expect(sheet(page)).toHaveCount(0);
+    assert.equal(await page.getByRole("alert").count(), 0, "no earlier error shows again on the close");
+    await expect.poll(() => f.callsSince(before, "my_blocks").length).toBeGreaterThan(0);
     await expect(page.getByText("Blocked", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("alert")).toHaveCount(0);
     assert.deepEqual(f.callsSince(before, "block_user"), [{ p_user: LEO, p_block: true }]);
@@ -2598,6 +2675,37 @@ try {
     await f.done();
   }
   console.log("PASS (s8): a send refused 'Not allowed' reads That message can’t be sent.");
+
+  // (s11) Final review M2: an announcement's author who isn't among the chat's people any more (Sol, an admin who
+  // left) is reported and blocked from the card itself: its author's name opens their sheet, with a host's confirm.
+  {
+    const f = await fixture({
+      guests: PEOPLE,
+      rows: [...octRows(), row(106, { kind: "announcement", audience: "going", author: SOL, body: "Bring chairs", at: "2026-10-28T09:40:00Z" })],
+    });
+    const { page } = f;
+    await openChat(page);
+    await peopleRead(f);
+    await button(page, "More").click();
+    await button(page, "Report or block").click();
+    await expect(inSheet(page, "Sol")).toHaveCount(0);
+    await button(page, "Close sheet").click();
+    assert.equal(await hintOf(button(page, "Sol")), "Report or block");
+    await button(page, "Sol").click();
+    await expect(button(page, "Report Sol")).toBeVisible();
+    await button(page, "Block Sol").click();
+    await expect(
+      text(page, "Block Sol? You won’t see Sol’s messages or announcements, and Sol won’t know. Any connection between you ends, and unblocking won’t bring it back."),
+    ).toBeVisible();
+    await button(page, "Keep").click();
+    await button(page, "Report Sol").click();
+    await page.getByRole("radio", { name: "Spam", exact: true }).click();
+    await button(page, "Send report").click();
+    await expect(sheet(page).getByText("Thanks. The Resbite team will look at it.", { exact: true })).toBeVisible();
+    assert.deepEqual(f.calls("report_user"), [{ p_user: SOL, p_series: SERIES, p_reason: "spam", p_details: null }]);
+    await f.done();
+  }
+  console.log("PASS (s11): Sol, who announced and left, isn't in Report or block's list; the card's name Sol (its hint: Report or block) opens his sheet: Block Sol asks the host's question (announcements too), and Report Sol sends report_user with the series.");
 
   // (s9) Alone in the chat: nobody to report or block.
   {

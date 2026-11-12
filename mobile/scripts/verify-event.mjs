@@ -191,6 +191,10 @@ async function open(world = {}) {
     // block_user answers `stored` (server review M7): true for a block unless `blockNotStored` (the person stopped
     // being readable, so nothing was stored), false for an unblock.
     blockNotStored: Boolean(world.blockNotStored),
+    // Final fix wave (I1): once a block went through, chat_summary answers what the server shows the blocker then
+    // (`chatAfterBlock`: the line before the blocked person's), or fails (`chatFailsAfterBlock`).
+    chatAfterBlock: world.chatAfterBlock ?? null,
+    chatFailsAfterBlock: Boolean(world.chatFailsAfterBlock),
     blockedOnce: false,
     pairs: { ...(world.pairs ?? {}) },
     hostName: world.hostName ?? HOST.name,
@@ -403,7 +407,9 @@ async function open(world = {}) {
         if (body.p_series !== state.plan.series_id) mismatches.push(`chat_summary p_series ${body.p_series}`);
         if (state.offline) return route.abort("internetdisconnected");
         if (state.chat === "refused") return reply({ code: "42501", message: "Not in this chat", details: null, hint: null }, 403);
-        if (state.chat === "failed") return reply({ message: "Fixture: the chat read failed" }, 500);
+        if (state.chat === "failed" || (state.chatFailsAfterBlock && state.blockedOnce))
+          return reply({ message: "Fixture: the chat read failed" }, 500);
+        if (state.chatAfterBlock && state.blockedOnce) return reply({ ...state.chat, ...state.chatAfterBlock });
         return reply(state.chat);
       // The chat screen a Chat row tap opens: an empty page, marked read. Its socket is refused below.
       case "chat_messages":
@@ -1696,6 +1702,10 @@ try {
       await expect(btn(page, "Connect on Resbite")).toHaveCount(0);
       const unblocked = f.log.length;
       await btn(page, "Unblock Leo").click();
+      // Said in place, with focus on it, as Blocked people does (final review M4).
+      await expect(sheetOf(page).getByText("Unblocked Leo.", { exact: true })).toBeVisible();
+      await expect.poll(() => focusedText(page)).toBe("Unblocked Leo.");
+      await page.getByRole("button", { name: "Close sheet" }).first().click();
       await expect.poll(() => f.rpcs("block_user").at(-1)).toEqual({ p_user: "g6", p_block: false });
       await expect.poll(() => after(f, unblocked, "my_blocks").length).toBeGreaterThan(0);
       await expect.poll(() => after(f, unblocked, "plan_connection_states").length).toBeGreaterThan(0);
@@ -1757,6 +1767,60 @@ try {
       await expect(page.getByRole("alert")).toHaveCount(0);
     },
   );
+  // Final review I1: a block made on a screen over the resbite page (here its people list) takes the person's line off
+  // the page's Chat row at once: the page beneath reads its chat again, and drops the line itself if that read fails.
+  const LEO_ON = g(LEO, "Leo", "accepted");
+  await scenario(
+    "safety, chat row after a block",
+    {
+      viewer: "guest",
+      attendee: { version: 1, response: "accepted" },
+      guests: [ALEX, LEO_ON],
+      chat: chatSummary({ names: { [LEO]: "Leo", g1: "Alex" } }),
+      chatAfterBlock: { last: { ...chatSummary().last, id: 11, body: "See you there", author_id: "g1" } },
+    },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      await expect(btn(page, "Chat. Leo: I can bring the snacks, unread messages")).toBeVisible();
+      await page.getByRole("button", { name: /^Going \d/ }).click();
+      await expect(heading(page, "People")).toBeVisible();
+      await btn(page, "Actions for Leo").click();
+      await btn(page, "Block Leo").click();
+      const blocked = f.log.length;
+      await btn(page, "Block Leo").click();
+      await expect(sheetOf(page).getByText("Blocked", { exact: true })).toBeVisible();
+      // The page beneath read its chat again, before Back.
+      await expect.poll(() => after(f, blocked, "chat_summary").length).toBeGreaterThan(0);
+      // Its own read on return then fails, so the row shows what that read before Back brought.
+      f.state.chat = "failed";
+      await page.getByRole("button", { name: "Close sheet" }).first().click();
+      await btn(page, "Back").click();
+      await expect(heading(page, "Coffee evening")).toBeVisible();
+      await expect(btn(page, "Chat. Alex: See you there, unread messages")).toBeVisible();
+      await expect(page.getByRole("button", { name: /^Chat\. Leo/ })).toHaveCount(0);
+    },
+  );
+  await scenario(
+    "safety, chat row after a block, its read failing",
+    { viewer: "guest", attendee: { version: 1, response: "accepted" }, guests: [ALEX, LEO_ON], chat: chatSummary(), chatFailsAfterBlock: true },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      await expect(btn(page, "Chat. Leo: I can bring the snacks, unread messages")).toBeVisible();
+      await page.getByRole("button", { name: /^Going \d/ }).click();
+      await btn(page, "Actions for Leo").click();
+      await btn(page, "Block Leo").click();
+      await btn(page, "Block Leo").click();
+      await expect(sheetOf(page).getByText("Blocked", { exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "Close sheet" }).first().click();
+      await btn(page, "Back").click();
+      // The block went through, so Leo's line is gone even though no read could say what came before it.
+      await expect(btn(page, "Chat, unread messages")).toBeVisible();
+      await expect(page.getByRole("button", { name: /^Chat\. Leo/ })).toHaveCount(0);
+    },
+  );
+  pass("safety, chat row after a block: blocking Leo from the people list over the resbite page reads the page's chat again before Back, so its Chat row reads Alex's line; with that read failing, Leo's line is dropped all the same");
   pass("safety, people: the people sheet offers Report and Block (last, Report first); a waiting join request Block only; a host's confirm adds R-Q6's line; a blocked person's row reads Blocked with Unblock and no Connect; with my_blocks failing no row offers Block, Unblock or Connect and no alert shows (N13); Block Leo (connected) reads my_blocks and plan_connection_states again and the row reads Blocked; Unblock reads both again and the row offers Connect, not Connected (NOTE 2)");
 
   // B1: the announcement line's Report or block, on Ana's resbite.

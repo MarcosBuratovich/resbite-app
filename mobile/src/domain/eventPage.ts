@@ -271,7 +271,9 @@ export function chatRow(summary: ChatSummary | null, viewerId: string): ChatRow 
     return summary.messageCount > 0 ? { text: CHAT_COPY.closedRow(summary.messageCount), dot: false, closed: true } : null;
   return {
     title: summary.isGroup ? CHAT_COPY.groupChat : CHAT_COPY.chat,
-    text: rowText(summary.last, summary.names, viewerId, summary.isGroup) || null,
+    // Messages but none to show (the last one's author was just blocked, final review I1): the title alone, never "No
+    // messages yet".
+    text: summary.last === null && summary.messageCount > 0 ? null : rowText(summary.last, summary.names, viewerId, summary.isGroup) || null,
     dot: summary.unread,
     closed: false,
   };

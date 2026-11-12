@@ -200,7 +200,7 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
    * What the last read of this page reads again after a block or unblock anywhere (NOTE 2): the states and the blocks
    * where names show, and an unanswered invitee's overview. Keyed by the identity it was read for.
    */
-  const afterBlocks = useRef<{ key: string; named: boolean; invitee: Plan | null } | null>(null);
+  const afterBlocks = useRef<{ key: string; named: boolean; invitee: Plan | null; series: string } | null>(null);
   /** The owner's own name, read for their row on the people list; everyone else has it as `organizer`. */
   const [ownName, setOwnName] = useState<string | null>(null);
   // The latest read of the states wins: a whole-event read and a re-read after a connection action can overlap.
@@ -361,7 +361,7 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
         // An invitee who hasn't answered isn't in the chat: the page shows them the announcement sent to everyone invited.
         const waitingAnswer = !chain && !host && next.attendee?.response === "pending";
         if (waitingAnswer) readAnnouncement(next.plan, userId, valid);
-        afterBlocks.current = { key: flagKey, named, invitee: waitingAnswer ? next.plan : null };
+        afterBlocks.current = { key: flagKey, named, invitee: waitingAnswer ? next.plan : null, series: next.plan.series_id };
         // Likewise the owner's own name for their row: it lands when it arrives; a failure keeps the one known.
         if (next.plan.owner_id === userId)
           void readProfile(userId).then(
@@ -470,9 +470,18 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
           );
         }
         if (again.invitee) readAnnouncement(again.invitee, userId, valid);
+        // The Chat row (final review I1): a confirmed block takes the person's line off it at once, and the chat is read
+        // again for the line before theirs; a failed read keeps the row as it now is (H36).
+        if (!chain) {
+          if (change.blocked && blockConfirmed(change))
+            setChat((summary) =>
+              summary && summary.last?.authorId === change.userId ? { ...summary, last: null } : summary,
+            );
+          readChat(again.series, valid, true);
+        }
       }),
     // The handler reads the latest refs; the setters and the gateways don't change.
-    [userId, planId],
+    [userId, planId, chain],
   );
   const plan = preview ? (localPlans.find((p) => p.id === planId) ?? null) : (snapshot?.plan ?? null);
   const admins = snapshot?.admins ?? [];

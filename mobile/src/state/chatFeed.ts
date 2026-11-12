@@ -41,6 +41,8 @@ export type FeedRow =
       own: boolean;
       /** "ANNOUNCEMENT · TO GOING": the audience in words (CH-08); a group's names its weekday or the group. */
       heading: string;
+      /** Its author's name, which opens their sheet (plan 3, final review M2); null on your own. */
+      author: string | null;
       text: string;
       gone: "deleted" | "removed" | null;
       label: string;
@@ -234,6 +236,7 @@ export function chatFeed(items: Array<ChatMessage | PendingMessage | EndedLine>,
         message: m,
         own,
         heading: group ? CHAT_COPY.announcementToGroup(m.audience, rowDay) : CHAT_COPY.announcementTo(m.audience),
+        author: own ? null : authorName(m, names, viewerId),
         text: wordsOf(m),
         gone: goneOf(m),
         label,

@@ -149,7 +149,7 @@ try {
       "If you report a message or a person, the Resbite team reads the report and keeps a copy of what was reported, even if the message or that person’s account is deleted. If you delete your account, the reports you sent are deleted too. A report is deleted 180 days after the team closes it.",
       { exact: true },
     );
-    const blocksLine = page.getByText("Blocks stay until you undo them. The Resbite team can see who blocked whom for 7 days.", { exact: true });
+    const blocksLine = page.getByText("Blocks stay until you undo them. The Resbite team can see who blocked whom.", { exact: true });
     await expect(chatLine).toBeVisible();
     await expect(reportsLine).toBeVisible();
     await expect(blocksLine).toBeVisible();

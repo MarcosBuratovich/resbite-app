@@ -1628,3 +1628,15 @@ test("chatPersonFor: an author on the occurrence is their row; one who left gets
   assert.equal(chatPersonFor(people, "me", {}, CHAT.blocks, "me"), null);
   assert.equal(chatPersonFor(people, null, {}, CHAT.blocks, "me"), null);
 });
+
+// Final fix wave (I1): after a block the page drops the blocked person's line before the chat is read again; a chat with
+// messages but no line to show says nothing rather than "No messages yet".
+test("chatRow: messages but no line to show (the last one's author just blocked) shows the title alone", () => {
+  const summary = chat({ last: null, messageCount: 3, unread: true });
+  const row = chatRow(summary, ME);
+  assert.deepEqual(row && { text: row.text, closed: row.closed }, { text: null, closed: false });
+  assert.equal(row && chatRowLabel(row), "Chat, unread messages");
+  // No message at all is still "No messages yet".
+  const empty = chatRow(chat({ last: null, messageCount: 0, unread: false }), ME);
+  assert.equal(empty?.text, "No messages yet");
+});
