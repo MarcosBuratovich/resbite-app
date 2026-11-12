@@ -793,13 +793,13 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
   - the When sheet's 48-hour line, the notification ask on a chat's first open, and Data & privacy's Chat messages topic.
   - The labelled sample conversation is removed.
 
-**Checks (12 November 2026).** The server's at `2bb3929`, after the final fix wave; the app's at `99d4035`.
+**Checks (12 November 2026).** The server's at `2bb3929`, after the final fix wave; the app's at `f9ee5ff`.
 - `bash scripts/test-database-docker.sh`: 45 PASS lines, `chat.sql` and `chat-send-concurrency.sh` (six races) included.
 - The hosted baseline with the follow-ups, circles and chat core candidates: 25 PASS lines.
-- `(cd mobile && npm run check)`: 1,024 tests.
+- `(cd mobile && npm run check)`: 1,036 tests.
 - The edge tests: 11 files, 107 tests.
 - The fingerprint replay (355, 356, 387, then 464; the rollback back to 387) and the owner scripts, rehearsed on a local replay.
-- The browser scripts (`verify-chat.mjs`, `verify-event.mjs`, `review-ui.mjs` and the others) passed during the build with a fake project URL.
+- The browser scripts (`verify-chat.mjs`, `verify-event.mjs`, `review-ui.mjs` and the others) passed during the build with a fake project URL; `verify-chat.mjs` gave 46 after the final fix wave.
 
 **What the owner still runs** is in [`qa/chat-release/README.md`](../qa/chat-release/README.md):
 - the owner questions (K-S17, the sender's budget, the lock-screen words);
@@ -813,5 +813,5 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
 - **Twelve browser scripts still hard-code the hosted project's auth storage key** (`grep -rl` over `mobile/scripts` and `scripts/`, at `6862a5d`): `mobile/scripts/verify-auth.mjs`, `verify-catalogue.mjs`, `verify-covers.mjs`, `verify-deletion.mjs`, `verify-invitations.mjs`, `verify-links.mjs`, `verify-notifications.mjs`, `verify-open-link-app.mjs`, `verify-phone.mjs`, `verify-profile.mjs`, `verify-session.mjs` and `verify-signup-callback.mjs`.
   - They can't sign in against a fake project URL, so the chat build didn't run the six it would have used: `verify-covers`, `verify-links`, `verify-open-link-app`, `verify-invitations`, `verify-notifications` and `verify-auth`. None of those six fails on an unexpected request.
   - Other scripts derive the key from `EXPO_PUBLIC_SUPABASE_URL` (`mobile/scripts/qa-helpers.mjs`, `verify-chat.mjs`, `verify-circle.mjs`).
-- **Sign-out and the pushes left on the phone: fixed (H39).** Sign-out now clears every Resbite push from Notification Center (`plan_update`, chat and connection), so a chat push's words no longer stay for whoever signs in next.
+- **Sign-out and the pushes left on the phone: fixed (H39).** Sign-out now clears every Resbite push from Notification Center (`plan_update`, chat and connection; `mobile/src/services/pushDevice.ts:349`), so a chat push's words no longer stay for whoever signs in next.
 - **The local deletion path.** `private.activate_deletion_intent`, which the deletion gateway calls, predates connections, circles and chat. Locally it writes chat lines when it cancels and scrubs a leaving owner's resbites, and keeps their messages. The roadmap's account-deletion item carries this.

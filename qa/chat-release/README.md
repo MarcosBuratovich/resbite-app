@@ -119,7 +119,7 @@ The database suites, the edge tests, the fingerprint replay and the scripts' reh
     - the seven triggers;
     - the redefined functions keep their grants.
   - It then rehearses the rollback in a transaction it rolls back. The guard refuses while a stand-in `private.series_leaves` exists, and changes nothing. Run for real, the rollback restores each redefined function, the outbox's check, columns and indexes and the triggers exactly, and removes the policy, the four tables, the functions and the chat notices. The resbites, the guest and an ordinary notice stay.
-- The app check passes (at `99d4035`): the typecheck, 1,024 tests in 92 runs, and the content validation.
+- The app check passes (at `f9ee5ff`, after the final fix wave): the typecheck, 1,036 tests in 92 runs, and the content validation.
 
   ```
   (cd mobile && npm run check)
@@ -131,7 +131,7 @@ The database suites, the edge tests, the fingerprint replay and the scripts' reh
   node --import ./mobile/node_modules/tsx/dist/loader.mjs --test $(find supabase/functions -name "*.test.ts" | sort)
   ```
 
-- **The browser scripts** passed during the build, against a fake project URL with every Supabase request stubbed. They were not run again for this task. The last runs are `verify-chat.mjs` 44, `verify-event.mjs` 23, `review-ui.mjs`, `verify-rsvp.mjs`, `verify-circle.mjs`, `verify-connections.mjs`, `verify-contact-invites.mjs`, `verify-planning.mjs` and `verify-account.mjs`. The Realtime socket is answered by `page.routeWebSocket`.
+- **The browser scripts** passed during the build, against a fake project URL with every Supabase request stubbed. They were not run again for this task. The last runs are `verify-chat.mjs` 46 (at `fa211c8`, after the final fix wave), `verify-event.mjs` 23, `review-ui.mjs`, `verify-rsvp.mjs`, `verify-circle.mjs`, `verify-connections.mjs`, `verify-contact-invites.mjs`, `verify-planning.mjs` and `verify-account.mjs`. The Realtime socket is answered by `page.routeWebSocket`.
 - **The fingerprint, on a local replay** (Docker, `supabase/ops/hosted-fingerprint.sql` with `psql --csv`).
   - `migrations.txt` alone gives 355 objects. With the follow-ups file there are 356, and with circles 387.
   - With chat core there are 464. From 387, 77 objects are added:
@@ -505,7 +505,7 @@ Accepted during the build, unless marked; none blocks the rollout.
 - **Account deletion is local only.** On hosted no account can be deleted yet, so the chat's deletion step (`supabase/migrations/20261111140000_chat_core.sql:805-877`) runs nowhere there. A profile deleted there by hand still loses its words (`private.messages_touch`, H42). The roadmap's account-deletion item says what that project must carry, including the local `activate_deletion_intent`, which writes chat lines and keeps messages.
 - **Outbox retention** (K-N11). Chat writes one notice per recipient per message. A cleanup of delivered rows is on the roadmap's later list.
 - **A claim whose answer is lost** (pre-existing). A claim marks its jobs `sending`. If its answer never reaches the sender (the 10-second call timeout, `supabase/functions/_shared/notification-adapters.ts:78`), up to 25 jobs stay `sending` until their two-minute lease ends, then turn `unknown`, never sent. `deferred` cannot help: the sender never learned their ids. The loop now claims several times a run, so the exposure is a little wider.
-- **Sign-out and the pushes left on the phone: fixed (H39).** Sign-out now clears every Resbite push from Notification Center: `plan_update`, chat and connection. So a chat push's words no longer stay for whoever signs in next.
+- **Sign-out and the pushes left on the phone: fixed (H39).** Sign-out now clears every Resbite push from Notification Center: `plan_update`, chat and connection (`dismissShownPushes`, `mobile/src/services/pushDevice.ts:349`). So a chat push's words no longer stay for whoever signs in next.
 
 ## Not done here
 
