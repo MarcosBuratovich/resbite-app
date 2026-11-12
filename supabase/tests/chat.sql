@@ -1589,6 +1589,23 @@ reset role;
 select pg_temp.ch_check(exists(select 1 from ch_jobs where step='read2' and job->>'recipient_id'=current_setting('c1.late_reader')
   and job->>'message_id'=current_setting('c1.cups')),'A read after the expansion held back a push already made');
 
+-- An announcement read before the claim is still pushed (H43; announcements always go, CH-P7). 40 announces, and 41 reads
+-- up to it before any claim. The claim expands the notices: 41's gets its delivery all the same.
+set local role authenticated;
+select pg_temp.ch_as(pg_temp.c1('40'));
+select set_config('c1.cups_ann',(public.send_announcement(pg_temp.c1p('07'),'Cups are on the stage','everyone',gen_random_uuid())->>'id'),true);
+select pg_temp.ch_as(pg_temp.c1('41'));
+select public.mark_chat_read(pg_temp.c1p('07'),current_setting('c1.cups_ann')::bigint);
+reset role;
+select pg_temp.ch_check(pg_temp.ch_notice('announcement',current_setting('c1.cups_ann')::bigint,'41') is not null,
+ 'The announcement was not queued to 41');
+set local role service_role;
+insert into ch_jobs select 'read3', j from jsonb_array_elements(public.claim_notification_deliveries(25)) j;
+reset role;
+select pg_temp.ch_check(exists(select 1 from private.notification_deliveries d
+  where d.outbox_id=pg_temp.ch_notice('announcement',current_setting('c1.cups_ann')::bigint,'41')),
+ '41 read the announcement before the claim, and has no push for it');
+
 -- The schema (K-S5, K-N11, K-N13, H21). The six writers and their private bodies are for signed-in accounts only; the
 -- public ones are not definers; every private one is a definer with an empty search path, and the stats trigger and
 -- the words' helper are for no role. The trigger, the outbox's message_id (a cascading key to messages, with its own

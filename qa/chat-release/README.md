@@ -223,7 +223,7 @@ The database suites, the edge tests, the fingerprint replay and the scripts' reh
      - `realtime_usage` and `may_send` true for the role the CLI applies with. That role owns `private.messages_signal`, the definer that calls `realtime.send`.
        - Without them nothing fails: every broadcast becomes a WARNING and the write commits (lines 1103-1107). But no phone hears a signal, and every open chat waits for its 20-second poll.
      - `send_is_definer` says whether hosted's `realtime.send` runs as its owner. If it is false, it inserts into `realtime.messages` as its caller, the signal's owner (the applying role), so `may_insert_messages` must be true.
-       - Without that grant nothing fails and no WARNING shows either: hosted's `realtime.send` catches its own insert error. The broadcasts just never happen, and step 7's count would read 0 after the build. Stop here instead.
+       - Without that grant nothing fails and no `messages_signal` WARNING shows (hosted's own `realtime.send` may raise a warning of its own). The write commits and the broadcasts just never happen, and step 7's count would read 0 after the build. Stop here instead.
      - `may_add_policy` true: that role may act as `realtime.messages`' owner, which `create policy` needs. Without it the apply fails at the policy and rolls back whole.
      - If `to_regprocedure` reads false, the `may_send` query fails instead, and the script stops there.
    - **The series count** is what step 3's `public.chats` row count should be (the backfill), plus any resbite made in between.
@@ -421,14 +421,16 @@ The database suites, the edge tests, the fingerprint replay and the scripts' reh
 
    ```bash
    #!/bin/bash
-   # Read-only: the outbox's queue and the sender's last hour (chat core, step 8).
+   # Read-only: the outbox's queue, the deliveries waiting and the sender's last hour (chat core, step 8).
    set -euo pipefail
    cd "${REPO:-$HOME/dev/resbite-app}"
    supabase db query --linked "select count(*) as waiting, count(*) filter (where kind in ('chat_message', 'announcement')) as chat_waiting, coalesce(max(now() - created_at), interval '0') as oldest_wait from private.notification_outbox where expanded_at is null"
    supabase db query --linked "with r as (select status_code, case when left(content, 1) = '{' then content::jsonb end as body from net._http_response where created > now() - interval '1 hour') select count(*) as calls, count(*) filter (where status_code = 200 and body->>'disabled' = 'false' and body->>'error' is null) as clean, count(*) filter (where status_code = 200 and body->>'error' is not null) as cut_short, count(*) filter (where status_code is distinct from 200) as failed_or_timed_out, coalesce(sum((body->>'processed')::int), 0) as processed, coalesce(sum((body->>'deferred')::int), 0) as deferred from r"
+   supabase db query --linked "select count(*) filter (where o.kind in ('chat_message', 'announcement')) as chat_pending, count(*) filter (where o.kind not in ('chat_message', 'announcement')) as other_pending, coalesce(max(now() - o.created_at) filter (where o.kind in ('chat_message', 'announcement')), interval '0') as oldest_chat_notice, coalesce(max(now() - o.created_at) filter (where o.kind not in ('chat_message', 'announcement')), interval '0') as oldest_other_notice from private.notification_deliveries d join private.notification_outbox o on o.id = d.outbox_id where d.state in ('pending', 'ticket')"
    ```
 
    - `waiting` stays under 100, and `oldest_wait` under 2 minutes.
+   - **The second line shows where a chat backlog waits.** The claim expands up to 100 outbox rows at a time, so a chat backlog sits as `pending` deliveries behind other kinds, not as unexpanded rows in `waiting`. Trouble is `oldest_chat_notice` over 1 hour: the sender drops a chat message push that old (an announcement after a day), without a trace in the other counts. `chat_pending` growing for several runs, or `other_pending` waiting with `oldest_other_notice` over 2 minutes, is also trouble.
    - **The check keys on the status and the `error` field together.** `clean` equals `calls`, and `cut_short` and `failed_or_timed_out` are 0. A run cut short by a later claim answers 200 with `error` set, so it counts under `cut_short`, never `clean`.
    - `deferred` above 0 in a burst is the loop handing back jobs it had no time for; the next run takes them. Many runs with `deferred` above 0, or any `failed_or_timed_out`, bring back step 0's budget question.
    - **A `plan_changed` made then reaches the other phone within two minutes.** Ana changes the time of another resbite Pedro is Going to while the chat is busy (the claim expands and sends it before the chat kinds, `supabase/migrations/20261111140000_chat_core.sql:712` and `:743`).
@@ -455,9 +457,9 @@ Only with the owner's approval, in one transaction.
 1. **The app first.** Once this file has run, a chat build gets errors from every chat call and a refused channel. Make a build without chat the testers' build first, or accept that the Chat row hides, the chat screen fails and chat pushes stop until one is.
 2. **The old sender goes back before or with this file.** The rollback restores `finish_notification_delivery` from `20261030120000_push_delivery.sql`, which refuses `deferred` again (rollback header, lines 21-25).
    - Against the restored finish, a hand-back from the chat sender fails. The job stays leased as `sending`, and the next claim after the lease marks it `unknown`, never sent.
-   - So first redeploy the sender chat core was built on: `supabase/functions` as of commit `5772898`, the circles build's sender, with the follow-ups and circles words and no chat.
+   - So first redeploy the sender chat core was built on: the circles build's sender, with the follow-ups and circles words and no chat. It is the `supabase/functions` directory whose tree id is `1ea91086716d9e0b566e5d21bdd693d0b333b392`, at commit `5772898` on this stack. Commit ids change when work is cherry-picked or rebased, the tree id does not. In your checkout, find a commit that has it with `git log --all --format=%h | while read c; do [ "$(git rev-parse $c:supabase/functions 2>/dev/null)" = 1ea91086716d9e0b566e5d21bdd693d0b333b392 ] && echo $c; done`, and deploy from one of those.
      - If the follow-ups and circles runbooks redeployed their own sender before this sitting, it is also the version recorded under "Applied" as live before step 4.
-     - If step 4 carried their words instead, the version before step 4 lacks them, so redeploy from `5772898`, not that one.
+     - If step 4 carried their words instead, the version before step 4 lacks them, so redeploy from a commit with that tree id, not that one.
      - It handles a chat job as a generic push until the rollback removes those jobs.
 3. The owner runs the rollback with `! bash ~/ch1-rollback.sh`. It checks the hash, then runs the file in one transaction, with no psql `\i`, and takes a fingerprint:
 
@@ -500,7 +502,8 @@ Accepted during the build, unless marked; none blocks the rollout.
 
 - **A minute's first message deleted before delivery** (K-S1, Decision 6). That minute then pushes nothing: the later messages were never queued.
 - **A bare signal after a removal** (K-N1). A removed person's open socket may still hear a bare `{id, kind, state}` until its token refreshes. It never carries words, and their next read is refused.
-- **A line committing late can sit below a read mark** (`supabase/migrations/20261111140000_chat_core.sql:886-889`). A system line takes no chat lock. One that commits after a reader marked a later id read never reads as unread. `chat_messages_since` still brings it.
+- **A minute's first message read before the claim** (same kind as K-S1, H42). Its reader gets no push for it, and none for the rest of that minute: the later messages were coalesced into that first notice and never queued for them. Their unread count still shows them.
+- **A line committing late can sit below a read mark** (`supabase/migrations/20261111140000_chat_core.sql:886-889`). A system line, or a message that waited on its plan's row, takes no chat lock. One that commits after a reader marked a later id read never reads as unread. `chat_messages_since` still brings it.
 - **The roll and plan 1** (Decision 4). Until plan 2, the roll writes an `admin` line for each carried admin.
 - **Account deletion is local only.** On hosted no account can be deleted yet, so the chat's deletion step (`supabase/migrations/20261111140000_chat_core.sql:805-877`) runs nowhere there. A profile deleted there by hand still loses its words (`private.messages_touch`, H42). The roadmap's account-deletion item says what that project must carry, including the local `activate_deletion_intent`, which writes chat lines and keeps messages.
 - **Outbox retention** (K-N11). Chat writes one notice per recipient per message. A cleanup of delivered rows is on the roadmap's later list.
