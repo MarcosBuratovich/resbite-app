@@ -45,6 +45,14 @@ insert into public.profiles(id,display_name) values
  ('e9000000-0000-4000-8000-000000000005','Race leaver');
 insert into private.beta_access(user_id,source)
  select ('e9000000-0000-4000-8000-00000000000'||n)::uuid,'maintainer' from generate_series(1,5) n;
+-- The chat rules (chat plan 3, confirmation S6): once its table exists, the writers accept its current version, so the
+-- races here pass its check in both plans' worlds.
+do $$ begin
+ if pg_catalog.to_regclass('private.chat_rules_acceptances') is not null then
+  execute 'insert into private.chat_rules_acceptances(user_id,version) select p.id,private.chat_rules_version() from public.profiles p '
+   'where p.id::text like ''e9000000-%'' on conflict do nothing';
+ end if;
+end $$;
 -- Two resbites (one for each race, so the first race's notices never hold the second's back), each with the host and
 -- the three others Going.
 insert into public.plans(id,owner_id,title,starts_at,time_zone,place_label,categories) values

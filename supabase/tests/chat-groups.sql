@@ -115,6 +115,12 @@ begin
   cross join (values ('02','accepted'),('03','accepted'),('04','maybe'),('05','pending'),('06','declined')) g(n,response);
  insert into public.plan_admins(plan_id,user_id,appointed_by) select pg_temp.e6p('0'||x.k),pg_temp.e6('02'),pg_temp.e6('01') from generate_series(1,7) x(k);
  perform set_config('resbite.system','',true);
+ -- The chat rules (chat plan 3, confirmation S6): once its table exists, the cast's twelve accept its current version,
+ -- so the writers here pass its check in both modes.
+ if pg_catalog.to_regclass('private.chat_rules_acceptances') is not null then
+  execute 'insert into private.chat_rules_acceptances(user_id,version) select pg_temp.e6(n),private.chat_rules_version() '
+   'from unnest(array[''01'',''02'',''03'',''04'',''05'',''06'',''07'',''08'',''09'',''10'',''11'',''12'']) n on conflict do nothing';
+ end if;
 end $cast$;
 
 -- Slice 1 (Task 1): the group flag, who is in a group's chat, when it closes, and the summary.

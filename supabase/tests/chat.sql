@@ -136,6 +136,16 @@ begin
  if v_len=0 then raise exception 'No % after %', p_to, p_from; end if;
  return substring(p_text from v_start for v_len+length(p_to)-1);
 end $$;
+-- The chat rules (chat plan 3, confirmation 2's 2-a): once plan 3's table exists, every profile so far accepts its
+-- current version, so this file's writers pass the check in both modes. Called after each insert of people who write.
+-- The superuser's; nothing to do before plan 3.
+create function pg_temp.ch_rules() returns void language plpgsql as $$
+begin
+ if pg_catalog.to_regclass('private.chat_rules_acceptances') is not null then
+  execute 'insert into private.chat_rules_acceptances(user_id,version) select p.id,private.chat_rules_version() from public.profiles p '
+   'on conflict do nothing';
+ end if;
+end $$;
 -- The c1 cast's accounts (see the header); the plans and guest rows are made at the start of the first transaction.
 create function pg_temp.c1_cast() returns void language sql as $cast$
 insert into auth.users(id,email,email_confirmed_at)
@@ -152,6 +162,7 @@ $cast$;
 -- Slice 1 (Task 1): a chat per series, who is in it, when it closes, and the reads.
 begin;
 select pg_temp.c1_cast();
+select pg_temp.ch_rules();
 set local role authenticated;
 select pg_temp.ch_as(pg_temp.c1('01'));
 select public.create_plan_v4(pg_temp.c1p('01'),'Board game night','',array['community'],null,pg_temp.c1_start(),
@@ -225,7 +236,7 @@ set local role authenticated;
 select pg_temp.ch_as(pg_temp.c1('03'));
 do $$ declare s jsonb := public.chat_summary(pg_temp.c1p('01')); begin
  perform pg_temp.ch_check(pg_temp.ch_keys(s)='accepted,closes_at,ends_at,everyone,going,host,is_group,last,last_read_id,members,'
-  'message_count,muted_chat,muted_resbite,names,open,pinned,plan_id,repeat_weeks,series_id,starts_at,status,stopped,time_zone,title,unread',
+  'message_count,muted_chat,muted_resbite,names,open,pinned,plan_id,repeat_weeks,rules_accepted,series_id,starts_at,status,stopped,time_zone,title,unread',
   'chat_summary''s keys: '||pg_temp.ch_keys(s));
  perform pg_temp.ch_check(s @> jsonb_build_object('series_id',pg_temp.c1p('01'),'plan_id',pg_temp.c1p('01'),'title','Board game night',
   'time_zone','Europe/London','status','active','repeat_weeks',null,'is_group',false,'stopped',false,'open',true,'host',false,
@@ -1287,6 +1298,7 @@ end $$;
 insert into auth.users(id,email,email_confirmed_at) values (pg_temp.c1('10'),'chat1-10@resbite-test.invalid',now());
 insert into private.tester_roster(email) values ('chat1-10@resbite-test.invalid');
 insert into public.profiles(id,display_name) values (pg_temp.c1('10'),'Pip Gone');
+select pg_temp.ch_rules();
 select set_config('resbite.system','roll',true);
 insert into public.attendees(plan_id,user_id,response) values (pg_temp.c1p('01'),pg_temp.c1('10'),'accepted');
 insert into public.plan_admins(plan_id,user_id,appointed_by) values (pg_temp.c1p('01'),pg_temp.c1('10'),pg_temp.c1('01'));
@@ -1417,6 +1429,7 @@ insert into auth.users(id,email,email_confirmed_at)
  select pg_temp.c1(n::text),'chat1-'||n||'@resbite-test.invalid',now() from generate_series(11,39) n;
 insert into private.tester_roster(email) select 'chat1-'||n||'@resbite-test.invalid' from generate_series(11,39) n;
 insert into public.profiles(id,display_name) select pg_temp.c1(n::text),'Guest '||n from generate_series(11,39) n;
+select pg_temp.ch_rules();
 set local role authenticated;
 do $$ declare v_owner text[] := array['11','20','29','38']; v_plan text[] := array['03','04','05','06']; i int; begin
  for i in 1..4 loop
@@ -1505,6 +1518,7 @@ insert into auth.users(id,email,email_confirmed_at)
  select pg_temp.c1(n::text),'chat1-'||n||'@resbite-test.invalid',now() from generate_series(40,84) n;
 insert into private.tester_roster(email) select 'chat1-'||n||'@resbite-test.invalid' from generate_series(40,84) n;
 insert into public.profiles(id,display_name) select pg_temp.c1(n::text),'Guest '||n from generate_series(40,84) n;
+select pg_temp.ch_rules();
 insert into private.device_endpoints(token,user_id,platform)
  select 'ExpoPushToken[c1p'||n||']',pg_temp.c1(n::text),'ios' from generate_series(41,84) n;
 set local role authenticated;
@@ -1665,7 +1679,8 @@ do $$ declare f text; r text; begin
  perform pg_temp.ch_check((select string_agg(k[1],',' order by k[1]) from regexp_matches(pg_catalog.pg_get_constraintdef(
    (select oid from pg_catalog.pg_constraint where conname='notification_outbox_kind_check')),'''([a-z_]+)''','g') k)
    ='admin_added,announcement,chat_message,connection_accepted,connection_request,guest_note,invitation,invited,join_approved,'
-    'join_request,plan_cancelled,plan_changed,rsvp','The outbox''s kinds are wrong');
+    'join_request,plan_cancelled,plan_changed,'||case when pg_catalog.to_regclass('private.reports') is not null then 'report_filed,' else '' end||'rsvp',
+  'The outbox''s kinds are wrong (chat plan 3 adds report_filed)');
  foreach f in array array['claim_notification_deliveries(integer)','validate_notification_delivery(uuid,uuid)',
    'finish_notification_delivery(uuid,uuid,text,text,integer)'] loop
   perform pg_temp.ch_check(has_function_privilege('service_role','public.'||f,'execute') and not has_function_privilege('anon','public.'||f,'execute')
@@ -1703,6 +1718,7 @@ insert into private.beta_access(user_id,source) values (pg_temp.c3('12'),'mainta
 insert into private.app_sessions(user_id) values (pg_temp.c3('13')),(pg_temp.c3('14'));
 insert into public.profiles(id,display_name) values (pg_temp.c3('10'),'Kai Joiner'),(pg_temp.c3('11'),'Zoe Invited'),
  (pg_temp.c3('12'),'Rob Web'),(pg_temp.c3('13'),'Wren App'),(pg_temp.c3('14'),'Ivy Brought');
+select pg_temp.ch_rules();
 set local role authenticated;
 select pg_temp.ch_as(pg_temp.c1('01'));
 select public.create_plan_v4(pg_temp.c3p('01'),'Garden party','',array['community'],null,pg_temp.c1_start(),
@@ -2427,6 +2443,7 @@ insert into auth.users(id,email,email_confirmed_at)
 insert into private.tester_roster(email) select 'chat5-'||n||'@resbite-test.invalid' from unnest(array['01','03','04','09']) n;
 insert into public.profiles(id,display_name) values
  (pg_temp.c5('01'),'Ana Host'),(pg_temp.c5('03'),'Mia Leaving'),(pg_temp.c5('04'),'Leo Going'),(pg_temp.c5('09'),'Kai Brought');
+select pg_temp.ch_rules();
 set local role authenticated;
 select pg_temp.ch_as(pg_temp.c5('03'));
 select public.create_plan_v4(pg_temp.c5p('01'),'Picnic','',array['community'],null,pg_temp.c1_start(),pg_temp.c1_start()+interval '2 hours',

@@ -1,8 +1,10 @@
--- Chat safety (docs/superpowers/plans/2026-11-11-chat-3-safety.md, Task 1; docs/superpowers/specs/2026-11-10-groups-and-chat-design.md,
--- CH-P13, with the rulings G-B1 to G-B3, G-N12, G-S10, G-S13 and the challenge's B4, I1, I2, I5, N1 to N3, R-Q5,
--- and the confirmation's I-2, I-3, S2, S7, SHOULD 4 and NOTEs 1, 3 and 13): blocks, and the block rule in every read,
--- push and way to connect. Slice 1 (Task 1). Synthetic identities only: emails s3-…@resbite-test.invalid, ids with the
--- prefix e7, and two phone numbers from Ofcom's drama range (07700 900xxx, kept for fiction).
+-- Chat safety (docs/superpowers/plans/2026-11-11-chat-3-safety.md, Tasks 1 and 2; docs/superpowers/specs/2026-11-10-groups-and-chat-design.md,
+-- CH-P13 and CH-P18, with the rulings G-B1 to G-B4, G-N12, G-S9 to G-S14 and the challenge's B4, I1 to I11, N1 to
+-- N8, R-Q1 to R-Q5, and the confirmations' I-1 to I-4, S2, S5 to S7, SHOULD 3 and 4 and NOTEs): blocks, and the block
+-- rule in every read, push and way to connect (slice 1, Task 1); reports, moderators and their push, the chat rules,
+-- the blocked terms, the deletion, the fold and the team's scripts (slice 2, Task 2); the way back (the rollback,
+-- rehearsed). Synthetic identities only: emails s3-…@resbite-test.invalid (and one nobody@resbite-test.invalid that no
+-- account holds), ids with the prefix e7, and two phone numbers from Ofcom's drama range (07700 900xxx, kept for fiction).
 --
 -- One transaction per slice, begin … rollback, as connections.sql does. Times, rows and flags set by hand sit between
 -- set_config('resbite.system','roll',true) and set_config('resbite.system','',true) where they would otherwise write a
@@ -770,4 +772,949 @@ select pg_temp.s3_check(pg_temp.s3_blocked(pg_temp.e7('07'),pg_temp.e7('01'))
  and private.notification_recipient_eligible((select o.id from private.notification_outbox o where o.kind='plan_cancelled'
   and o.plan_id=pg_temp.e7p('02') and o.recipient_id=pg_temp.e7('07') and o.actor_id=pg_temp.e7('01'))),
  'B2: 01''s plan_cancelled may not be told to 07, who blocked 01');
+rollback;
+
+-- Slice 2 (Task 2): reports, moderators and their push, the chat rules, the blocked terms, the deletion and the fold,
+-- and the team's scripts (supabase/ops), run as text. The cast is slice 1's, plus 14 'Wes Web' (a web account: an
+-- email, no app session, no roster row, owns nothing), 15 'Wes App' (an app account), 16 'Gil Grant' (a live grant, no
+-- roster row) and 17 'Mod Seventeen' (a tester, a moderator-to-be: neither 09 nor 17 is in private.moderators until a
+-- line below puts them there). 10, 14 and 16 are Going on the one-off as well. The group rolls once in the setup, so it
+-- has a previous occurrence (confirmation NOTE 1): 03's words and 01's announcement to everyone, by hand on its first
+-- occurrence an hour back; that occurrence then ends and the roll makes the current one, where everyone the roll
+-- carries (02, 03, 04, 05, 07 and 10) has not answered and 02 is still an admin; every row on the first occurrence stays.
+-- Nobody has accepted the chat rules until the rules lines; then everyone does. The scripts are read through
+-- resbite_repo (a backtick cat, as chat.sql's way back does), each with its one literal swapped by sed for an id this
+-- transaction made, and run as the superuser.
+
+-- Slice 2's helpers. A call that must be refused with exactly this code, whatever its message (a table's check).
+create function pg_temp.s3_refused_state(p_sql text, p_state text) returns void language plpgsql as $$
+declare v_state text;
+begin
+ begin
+  execute p_sql;
+ exception when others then
+  get stacked diagnostics v_state = returned_sqlstate;
+ end;
+ if v_state is distinct from p_state then raise exception 'Expected %, got %: %', p_state, v_state, p_sql; end if;
+end $$;
+-- A uuid kept for later in this transaction (set_config 's3.<name>').
+create function pg_temp.s3_uuid(p_name text) returns uuid language sql stable as $$ select current_setting('s3.'||p_name)::uuid $$;
+-- The report_filed notices, the superuser's: how many there are; the people one report's went to, as s3_who writes them.
+create function pg_temp.s3_filed() returns integer language plpgsql stable as $$
+begin
+ return (select count(*)::integer from private.notification_outbox o where o.kind='report_filed');
+end $$;
+create function pg_temp.s3_filed_to(p_report bigint) returns text language plpgsql stable as $$
+begin
+ return pg_temp.s3_who(array(select o.recipient_id from private.notification_outbox o
+  where o.kind='report_filed' and o.dedupe_key like 'report:'||p_report||':%'));
+end $$;
+-- A report's id, the superuser's: one person's report of a message; one person's open report about another on a series.
+create function pg_temp.s3_report_of(p_reporter uuid, p_message bigint) returns bigint language plpgsql stable as $$
+begin
+ return (select r.id from private.reports r where r.reporter_id=p_reporter and r.message_id=p_message);
+end $$;
+create function pg_temp.s3_report_about(p_reporter uuid, p_target uuid, p_series uuid) returns bigint language plpgsql stable as $$
+begin
+ return (select r.id from private.reports r where r.reporter_id=p_reporter and r.about='user' and r.target_user_id=p_target
+  and r.series_id=p_series and r.status='open');
+end $$;
+-- An owner-run script's rows, run from its text as the current role: a jsonb array, one object per row.
+create function pg_temp.s3_run(p_sql text) returns jsonb language plpgsql as $$
+declare r record; v jsonb := '[]'::jsonb;
+begin
+ if coalesce(length(btrim(p_sql)),0)=0 then raise exception 'The script text is empty'; end if;
+ for r in execute p_sql loop v := v||jsonb_build_array(to_jsonb(r)); end loop;
+ return v;
+end $$;
+-- The same in a read-only subtransaction, undone after: a script that writes anything fails with 25006.
+create function pg_temp.s3_run_read_only(p_sql text) returns jsonb language plpgsql as $$
+declare v jsonb;
+begin
+ begin
+  perform set_config('transaction_read_only','on',true);
+  v := pg_temp.s3_run(p_sql);
+  raise exception 's3: the read-only run is over';
+ exception when raise_exception then
+  if sqlerrm is distinct from 's3: the read-only run is over' then raise; end if;
+ end;
+ return v;
+end $$;
+-- A script's column names, in order, as 'create temporary table … as <script>' makes them.
+create function pg_temp.s3_columns(p_sql text) returns text language plpgsql as $$
+declare v text;
+begin
+ execute 'create temporary table s3_columns_probe as '||regexp_replace(p_sql,';\s*$','');
+ select string_agg(a.attname,',' order by a.attnum) into v from pg_catalog.pg_attribute a
+ where a.attrelid='pg_temp.s3_columns_probe'::regclass and a.attnum>0 and not a.attisdropped;
+ drop table pg_temp.s3_columns_probe;
+ return v;
+end $$;
+-- One statement of a source file, from its first line (p_from) to the first p_to after it, both included, as create or
+-- replace (chat core made most of its bodies with create function), as chat_groups.after.sql's ch2_source does.
+create function pg_temp.s3_source(p_text text, p_from text, p_to text) returns text language plpgsql immutable as $$
+declare v_start integer := position(p_from in p_text); v_len integer;
+begin
+ if v_start=0 then raise exception 'Not in the source: %', p_from; end if;
+ v_len := position(p_to in substring(p_text from v_start));
+ if v_len=0 then raise exception 'No % after %', p_to, p_from; end if;
+ return regexp_replace(substring(p_text from v_start for v_len+length(p_to)-1),'^create function ','create or replace function ');
+end $$;
+-- The same statement from the n-th time p_from occurs (the migration's section 2 copies of section 1's bodies).
+create function pg_temp.s3_nth(p_text text, p_from text, p_n integer) returns text language plpgsql immutable as $fn$
+declare v_at integer := 0; v_rest text := p_text; i integer; v_pos integer;
+begin
+ for i in 1..p_n loop
+  v_pos := position(p_from in v_rest);
+  if v_pos=0 then raise exception 'Fewer than % of %', p_n, p_from; end if;
+  v_at := v_at+v_pos;
+  v_rest := substring(p_text from v_at+1);
+ end loop;
+ return pg_temp.s3_source(substring(p_text from v_at),p_from,'$$;');
+end $fn$;
+
+begin;
+select pg_temp.e7_cast();
+insert into auth.users(id,email,email_confirmed_at)
+ select pg_temp.e7(n),'s3-'||n||'@resbite-test.invalid',now() from unnest(array['14','15','16','17']) n;
+insert into private.tester_roster(email) select 's3-'||n||'@resbite-test.invalid' from unnest(array['15','17']) n;
+insert into private.beta_access(user_id,source) values (pg_temp.e7('16'),'link');
+insert into public.profiles(id,display_name) values (pg_temp.e7('14'),'Wes Web'),(pg_temp.e7('15'),'Wes App'),
+ (pg_temp.e7('16'),'Gil Grant'),(pg_temp.e7('17'),'Mod Seventeen');
+insert into private.app_sessions(user_id) select pg_temp.e7(n) from unnest(array['15','16','17']) n;
+select set_config('resbite.system','roll',true);
+insert into public.attendees(plan_id,user_id,response) select pg_temp.e7p('01'),pg_temp.e7(n),'accepted' from unnest(array['10','14','16']) n;
+-- The group's first occurrence: 03's words and 01's announcement to everyone, an hour back; then it ends and rolls.
+insert into public.messages(series_id,plan_id,author_id,kind,audience,body,created_at,updated_at) values
+ (pg_temp.e7p('02'),pg_temp.e7p('02'),pg_temp.e7('03'),'message',null,'Mia on week one',now()-interval '1 hour',now()-interval '1 hour'),
+ (pg_temp.e7p('02'),pg_temp.e7p('02'),pg_temp.e7('01'),'announcement','everyone','Week one news',now()-interval '1 hour',now()-interval '1 hour');
+update public.plans set starts_at=now()-interval '3 hours',ends_at=now()-interval '2 hours' where id=pg_temp.e7p('02');
+select pg_temp.s3_check(private.roll_repeating_plans()>=1,'The roll made no occurrence');
+select set_config('resbite.system','',true);
+select set_config('s3.next',(select id::text from public.plans where repeats_from=pg_temp.e7p('02')),true);
+select set_config('s3.w1',(select id::text from public.messages where body='Mia on week one'),true);
+select set_config('s3.w1a',(select id::text from public.messages where body='Week one news'),true);
+select pg_temp.s3_check(pg_temp.s3_who(array(select a.user_id from public.attendees a where a.plan_id=pg_temp.s3_uuid('next')
+  and a.response='pending'))='02,03,04,05,07,10' and private.is_host(pg_temp.s3_uuid('next'),pg_temp.e7('02'))
+ and (select response from public.attendees where plan_id=pg_temp.e7p('02') and user_id=pg_temp.e7('04'))='accepted'
+ and (private.current_occurrence(pg_temp.e7p('02'))).id=pg_temp.s3_uuid('next'),'The roll did not carry the group as slice 2 needs it');
+
+-- Rules (G-B4(d), Decision 8): 03 writes before accepting: 22023 'Rules not accepted'. 02 announces on the group (an
+-- admin carried by the roll, a host of its current occurrence) before accepting: the same. accept_chat_rules as 03,
+-- twice: one row, version '2026-11'. chat_summary's rules_accepted: true for 03, false for 05. Then 03 writes.
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('03'));
+select pg_temp.s3_refused(format('select public.send_message(%L,%L,gen_random_uuid())',pg_temp.e7p('01'),'Hello all'),'22023','Rules not accepted');
+select pg_temp.s3_as(pg_temp.e7('02'));
+select pg_temp.s3_refused(format('select public.send_announcement(%L,%L,''everyone'',gen_random_uuid())',pg_temp.e7p('02'),'This week'),
+ '22023','Rules not accepted');
+select pg_temp.s3_as(pg_temp.e7('03'));
+select public.accept_chat_rules();
+select public.accept_chat_rules();
+select pg_temp.s3_check((public.chat_summary(pg_temp.e7p('01'))->>'rules_accepted')::boolean is true,'rules_accepted for 03 is not true');
+select pg_temp.s3_as(pg_temp.e7('05'));
+select pg_temp.s3_check((public.chat_summary(pg_temp.e7p('01'))->>'rules_accepted')::boolean is false,'rules_accepted for 05 is not false');
+select pg_temp.s3_as(pg_temp.e7('03'));
+select set_config('s3.hi_client',gen_random_uuid()::text,true);
+select set_config('s3.hi',public.send_message(pg_temp.e7p('01'),'Hello all',pg_temp.s3_uuid('hi_client'))->>'id',true);
+reset role;
+select pg_temp.s3_check((select string_agg(user_id::text||' '||version,',') from private.chat_rules_acceptances)=pg_temp.e7('03')::text||' 2026-11'
+ and private.chat_rules_version()='2026-11','03''s acceptances: '||coalesce((select string_agg(user_id::text||' '||version,',') from private.chat_rules_acceptances),'none'));
+-- A resend with the same client id after the rules moved on (03's acceptance gone, in a savepoint) gets its stored row
+-- (plan 1's step 1 comes first); a new message does not.
+savepoint s3_rules;
+delete from private.chat_rules_acceptances where user_id=pg_temp.e7('03');
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('03'));
+select pg_temp.s3_check((public.send_message(pg_temp.e7p('01'),'Hello all',pg_temp.s3_uuid('hi_client'))->>'id')::bigint=pg_temp.s3_id('hi'),
+ 'A resend after the rules moved on is not its stored row');
+select pg_temp.s3_refused(format('select public.send_message(%L,%L,gen_random_uuid())',pg_temp.e7p('01'),'Hello again'),'22023','Rules not accepted');
+reset role;
+rollback to savepoint s3_rules;
+-- The slice's other senders accept the rules before they write (SHOULD 3): 02, 04, 05 and 10 through accept_chat_rules,
+-- everyone else by hand.
+set local role authenticated;
+do $$ declare n text; begin
+ foreach n in array array['02','04','05','10'] loop
+  perform pg_temp.s3_as(pg_temp.e7(n));
+  perform public.accept_chat_rules();
+ end loop;
+end $$;
+reset role;
+insert into private.chat_rules_acceptances(user_id,version) select p.id,private.chat_rules_version() from public.profiles p
+ where p.id::text like 'e7000000-%' on conflict do nothing;
+
+-- GR4 kept, in a savepoint, on the rolled group: 02 announces to everyone on its current occurrence. 05 (carried by the
+-- roll, so not answered there) blocks 02: 05's pinned is null and 05's card has no announcement for the current
+-- occurrence, since the only other one, 01's, was written on the previous occurrence and the fallback past a blocked
+-- author keeps plan 2's current-occurrence rule. For 07 (no block), pinned is 02's.
+savepoint s3_gr4;
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('02'));
+select set_config('s3.gr4',pg_temp.s3_announce(pg_temp.e7p('02'),'This week at mine')::text,true);
+select pg_temp.s3_as(pg_temp.e7('05'));
+select public.block_user(pg_temp.e7('02'),true);
+reset role;
+do $$ declare s jsonb; o jsonb; begin
+ perform pg_temp.s3_check(pg_temp.s3_blocked(pg_temp.e7('05'),pg_temp.e7('02')),'GR4 kept: 05''s block of 02 is not stored');
+ perform pg_temp.s3_as(pg_temp.e7('05'));
+ s := public.chat_summary(pg_temp.e7p('02'));
+ o := public.my_chat_overview();
+ perform pg_temp.s3_check(s->'pinned'='null'::jsonb,'GR4 kept: 05''s pinned: '||(s->'pinned')::text);
+ perform pg_temp.s3_check(not (o->'announcements' ? pg_temp.s3_uuid('next')::text) and (o->'inviters' ? pg_temp.s3_uuid('next')::text),
+  'GR4 kept: 05''s card on the current occurrence: '||o::text);
+ perform pg_temp.s3_as(pg_temp.e7('07'));
+ perform pg_temp.s3_check((public.chat_summary(pg_temp.e7p('02'))->'pinned'->>'id')::bigint=pg_temp.s3_id('gr4'),'GR4 kept: 07''s pinned is not 02''s');
+end $$;
+rollback to savepoint s3_gr4;
+
+-- Blocked terms (G-B4(a), challenge N4): with 'zzbadword' listed, 'this has ZZBADWORD in it' is 22023 'Not allowed';
+-- 'zzbadwords' is sent; an announcement holding it is refused too. A term with a regex character, one that cannot
+-- start or end on a word character, one with two spaces or another blank, one not lowercased or trimmed: each a
+-- check_violation. With 'zz bad' listed, its space matches a line break and a run of spaces; 'zzbad' is sent.
+insert into private.blocked_terms(term) values ('zzbadword');
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('03'));
+select pg_temp.s3_refused(format('select public.send_message(%L,%L,gen_random_uuid())',pg_temp.e7p('01'),'this has ZZBADWORD in it'),'22023','Not allowed');
+select pg_temp.s3_check(pg_temp.s3_send(pg_temp.e7p('01'),'zzbadwords') is not null,'zzbadwords was refused');
+select pg_temp.s3_as(pg_temp.e7('01'));
+select pg_temp.s3_refused(format('select public.send_announcement(%L,%L,''everyone'',gen_random_uuid())',pg_temp.e7p('01'),'Bring zzbadword snacks'),
+ '22023','Not allowed');
+reset role;
+select pg_temp.s3_refused_state(format('insert into private.blocked_terms(term) values (%L)',t),'23514')
+ from unnest(array['a.b','@ss','n-','two  spaces',e'tab\tterm','Caps',' padded','x(y)','a|b',repeat('z',81)]) t;
+insert into private.blocked_terms(term) values ('zz bad');
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('03'));
+select pg_temp.s3_refused(format('select public.send_message(%L,%L,gen_random_uuid())',pg_temp.e7p('01'),'it was zz'||e'\n'||'bad'),'22023','Not allowed');
+select pg_temp.s3_refused(format('select public.send_message(%L,%L,gen_random_uuid())',pg_temp.e7p('01'),'zz   bad'),'22023','Not allowed');
+select pg_temp.s3_check(pg_temp.s3_send(pg_temp.e7p('01'),'zzbad') is not null,'zzbad was refused');
+reset role;
+select pg_temp.s3_check((select count(*) from public.messages where body ilike '%zzbadword %' or body ilike '%zz%bad' and body<>'zzbad')=0,
+ 'A refused message was stored');
+delete from private.blocked_terms;
+
+-- The words reported below, on the one-off unless they say: 04's five (m4a to m4e), 05's, 07's five (m7a to m7e), 16's,
+-- 10's, 02's announcement to everyone, and 07's on the group's current occurrence; a line on the one-off, by hand.
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('04'));
+select set_config('s3.m4'||k,pg_temp.s3_send(pg_temp.e7p('01'),'Leo '||k)::text,true) from unnest(array['a','b','c','d','e']) k;
+select pg_temp.s3_as(pg_temp.e7('05'));
+select set_config('s3.m5a',pg_temp.s3_send(pg_temp.e7p('01'),'Sol here')::text,true);
+select pg_temp.s3_as(pg_temp.e7('07'));
+select set_config('s3.m7'||k,pg_temp.s3_send(pg_temp.e7p('01'),'Eva '||k)::text,true) from unnest(array['a','b','c','d','e']) k;
+select set_config('s3.m7g',pg_temp.s3_send(pg_temp.e7p('02'),'Eva on the group')::text,true);
+select pg_temp.s3_as(pg_temp.e7('16'));
+select set_config('s3.m16',pg_temp.s3_send(pg_temp.e7p('01'),'Gil here')::text,true);
+select pg_temp.s3_as(pg_temp.e7('10'));
+select set_config('s3.m10',pg_temp.s3_send(pg_temp.e7p('01'),'Noa here')::text,true);
+select pg_temp.s3_as(pg_temp.e7('02'));
+select set_config('s3.a02',pg_temp.s3_announce(pg_temp.e7p('01'),'Everyone welcome')::text,true);
+reset role;
+insert into public.messages(series_id,plan_id,kind,event,payload,created_at,updated_at) values
+ (pg_temp.e7p('01'),pg_temp.e7p('01'),'system','joined',jsonb_build_object('actor',pg_temp.e7('04'),'user',pg_temp.e7('04')),now()-interval '1 hour',now()-interval '1 hour');
+select set_config('s3.line',(select max(id)::text from public.messages where series_id=pg_temp.e7p('01') and kind='system'),true);
+
+-- report_message (G-S9, G-B4(e), G-N12). 05 reports 04's m4a: a row, the words and the author frozen, about 'message',
+-- on the message's series and plan. The same report again (17 a moderator, in a savepoint): success, still one row,
+-- and no report_filed row. 04 then deletes it: the report keeps its words.
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('05'));
+select public.report_message(pg_temp.s3_id('m4a'),'harassment','Rude to everyone');
+reset role;
+select set_config('s3.r1',pg_temp.s3_report_of(pg_temp.e7('05'),pg_temp.s3_id('m4a'))::text,true);
+select pg_temp.s3_check((select (r.about,r.reason,r.details,r.frozen_body,r.frozen_author,r.target_user_id,r.series_id,r.plan_id,r.status,r.action,r.reviewed_at)
+  is not distinct from ('message'::text,'harassment'::text,'Rude to everyone'::text,'Leo a'::text,pg_temp.e7('04'),pg_temp.e7('04'),pg_temp.e7p('01'),pg_temp.e7p('01'),
+   'open'::text,null::text,null::timestamptz) from private.reports r where r.id=pg_temp.s3_id('r1')),
+ '05''s report of 04''s message: '||coalesce((select row_to_json(r)::text from private.reports r where r.id=pg_temp.s3_id('r1')),'none'));
+savepoint s3_repeat;
+insert into private.moderators(user_id) values (pg_temp.e7('17'));
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('05'));
+select public.report_message(pg_temp.s3_id('m4a'),'spam',null);
+reset role;
+select pg_temp.s3_check((select count(*) from private.reports where reporter_id=pg_temp.e7('05'))=1 and pg_temp.s3_filed()=0
+ and (select reason from private.reports where id=pg_temp.s3_id('r1'))='harassment','The repeated report stored or queued something');
+rollback to savepoint s3_repeat;
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('04'));
+select public.delete_message(pg_temp.s3_id('m4a'));
+reset role;
+select pg_temp.s3_check((select state from public.messages where id=pg_temp.s3_id('m4a'))='deleted'
+ and (select (frozen_body,message_id) from private.reports where id=pg_temp.s3_id('r1'))=('Leo a'::text,pg_temp.s3_id('m4a')),
+ 'The report did not keep the deleted message''s words');
+-- 08 (a stranger): 22023 'Report unavailable'. 05 on a system line, on the deleted message, on its own message and on no
+-- message at all: the same.
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('08'));
+select pg_temp.s3_refused(format('select public.report_message(%s,''spam'')',pg_temp.s3_id('m4b')),'22023','Report unavailable');
+select pg_temp.s3_as(pg_temp.e7('05'));
+select pg_temp.s3_refused(format('select public.report_message(%s,''spam'')',m),'22023','Report unavailable')
+ from unnest(array[pg_temp.s3_id('line'),pg_temp.s3_id('m4a'),pg_temp.s3_id('m5a'),9007199254740991]) m;
+reset role;
+-- A leaver (plan 2): 03's words on the group's current occurrence, by hand an hour back. 04 leaves the group (its row
+-- on the current occurrence goes, as it has not ended), then reports them: a row (04 left after they were written). 04
+-- reports 03's words of the previous occurrence, where 04's row stays: a row.
+insert into public.messages(series_id,plan_id,author_id,kind,body,created_at,updated_at) values
+ (pg_temp.e7p('02'),pg_temp.s3_uuid('next'),pg_temp.e7('03'),'message','Mia this week',now()-interval '1 hour',now()-interval '1 hour');
+select set_config('s3.wcur',(select id::text from public.messages where body='Mia this week'),true);
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('04'));
+select public.leave_series(pg_temp.e7p('02'));
+select public.report_message(pg_temp.s3_id('wcur'),'other',null);
+select public.report_message(pg_temp.s3_id('w1'),'other',null);
+reset role;
+select pg_temp.s3_check(not private.chat_member(pg_temp.e7p('02'),pg_temp.e7('04'))
+ and not exists(select 1 from public.attendees where plan_id=pg_temp.s3_uuid('next') and user_id=pg_temp.e7('04'))
+ and pg_temp.s3_report_of(pg_temp.e7('04'),pg_temp.s3_id('wcur')) is not null and pg_temp.s3_report_of(pg_temp.e7('04'),pg_temp.s3_id('w1')) is not null
+ and (select plan_id from private.reports where id=pg_temp.s3_report_of(pg_temp.e7('04'),pg_temp.s3_id('wcur')))=pg_temp.s3_uuid('next'),
+ 'The leaver''s reports of the group''s words');
+-- 06 (not answered on the one-off) reports 02's announcement to everyone, which reaches 06: a row. NOTE 15: 06 reports
+-- 04's plain message there: 22023 'Report unavailable' (not answered on a one-off is not enough).
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('06'));
+select public.report_message(pg_temp.s3_id('a02'),'inappropriate',null);
+select pg_temp.s3_refused(format('select public.report_message(%s,''spam'')',pg_temp.s3_id('m4b')),'22023','Report unavailable');
+reset role;
+select pg_temp.s3_check((select (frozen_author,target_user_id) from private.reports where id=pg_temp.s3_report_of(pg_temp.e7('06'),pg_temp.s3_id('a02')))
+ =(pg_temp.e7('02'),pg_temp.e7('02')),'06''s report of 02''s announcement');
+-- Decision 13, in a savepoint: after the one-off's chat closes (moved 50 hours back), 05 reports 04's m4c: a row.
+savepoint s3_closed;
+select set_config('resbite.system','roll',true);
+update public.plans set starts_at=now()-interval '52 hours',ends_at=now()-interval '50 hours' where id=pg_temp.e7p('01');
+select set_config('resbite.system','',true);
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('05'));
+select public.report_message(pg_temp.s3_id('m4c'),'spam',null);
+reset role;
+select pg_temp.s3_check(not private.chat_open(pg_temp.e7p('01')) and pg_temp.s3_report_of(pg_temp.e7('05'),pg_temp.s3_id('m4c')) is not null,
+ 'Decision 13: no report after the one-off''s chat closed');
+rollback to savepoint s3_closed;
+
+-- report_user (G-S9). 05 about 04 on the group: a row, about 'user', on the latest occurrence the two share: the first,
+-- since 04 left the current one. About 08 and about oneself: 22023 'Report unavailable'. NOTE 8: the same report again
+-- while it is open (17 a moderator, in a savepoint): success, still one row, no report_filed row.
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('05'));
+select public.report_user(pg_temp.e7('04'),pg_temp.e7p('02'),'harassment','On the group');
+select pg_temp.s3_refused(format('select public.report_user(%L,%L,''spam'')',u,pg_temp.e7p('02')),'22023','Report unavailable')
+ from unnest(array[pg_temp.e7('08'),pg_temp.e7('05'),gen_random_uuid()]) u;
+reset role;
+select set_config('s3.ru1',pg_temp.s3_report_about(pg_temp.e7('05'),pg_temp.e7('04'),pg_temp.e7p('02'))::text,true);
+select pg_temp.s3_check((select (r.plan_id,r.message_id,r.frozen_body,r.frozen_author,r.reason,r.details) from private.reports r where r.id=pg_temp.s3_id('ru1'))
+ is not distinct from (pg_temp.e7p('02'),null::bigint,null::text,null::uuid,'harassment'::text,'On the group'::text),
+ '05''s report about 04: '||coalesce((select row_to_json(r)::text from private.reports r where r.id=pg_temp.s3_id('ru1')),'none'));
+savepoint s3_repeat;
+insert into private.moderators(user_id) values (pg_temp.e7('17'));
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('05'));
+select public.report_user(pg_temp.e7('04'),pg_temp.e7p('02'),'spam',null);
+reset role;
+select pg_temp.s3_check((select count(*) from private.reports where reporter_id=pg_temp.e7('05') and about='user')=1 and pg_temp.s3_filed()=0,
+ 'NOTE 8: the repeated report about 04 stored or queued something');
+rollback to savepoint s3_repeat;
+-- close-report.sql closes it ('reviewed', 'none'): status, action, note and time set, the reported id kept (04 is
+-- still here). Then 05's new report about 04 on the group stores a row.
+select pg_temp.s3_id('ru1') as s3_rid \gset
+\set s3_script `sed -e "s/^ (0, 'reviewed', 'none', 'No action needed')/ (:s3_rid, 'reviewed', 'none', 'Checked')/" :'resbite_repo'/supabase/ops/close-report.sql`
+select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
+select pg_temp.s3_check(jsonb_array_length(current_setting('s3.out')::jsonb)=1
+ and current_setting('s3.out')::jsonb->0 @> jsonb_build_object('id',pg_temp.s3_id('ru1'),'status','reviewed','action','none','review_note','Checked',
+  'target_user_id',pg_temp.e7('04'))
+ and (select (status,action,review_note,reviewed_at,target_user_id) from private.reports where id=pg_temp.s3_id('ru1'))
+  =('reviewed'::text,'none'::text,'Checked'::text,now(),pg_temp.e7('04')),'close-report.sql: '||current_setting('s3.out'));
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('05'));
+select public.report_user(pg_temp.e7('04'),pg_temp.e7p('02'),'harassment','Again');
+reset role;
+select set_config('s3.ru2',pg_temp.s3_report_about(pg_temp.e7('05'),pg_temp.e7('04'),pg_temp.e7p('02'))::text,true);
+select pg_temp.s3_check(pg_temp.s3_id('ru2')<>pg_temp.s3_id('ru1')
+ and (select count(*) from private.reports where reporter_id=pg_temp.e7('05') and about='user' and target_user_id=pg_temp.e7('04'))=2,
+ 'After the close, the new report about 04 was not stored');
+-- S5: 10 wrote in the one-off's chat (m10); 01 removes 10. 05 reports 10 on the one-off's series: a row on the one-off.
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('01'));
+select public.remove_guest(pg_temp.e7p('01'),pg_temp.e7('10'));
+select pg_temp.s3_as(pg_temp.e7('05'));
+select public.report_user(pg_temp.e7('10'),pg_temp.e7p('01'),'spam',null);
+-- Reasons outside the four, and details over 500 characters: check_violation (500 are fine, in a savepoint).
+select pg_temp.s3_refused_state(format('select public.report_user(%L,%L,''rude'')',pg_temp.e7('07'),pg_temp.e7p('01')),'23514');
+select pg_temp.s3_refused_state(format('select public.report_message(%s,''sad'')',pg_temp.s3_id('m7a')),'23514');
+select pg_temp.s3_refused_state(format('select public.report_user(%L,%L,''other'',%L)',pg_temp.e7('07'),pg_temp.e7p('01'),repeat('x',501)),'23514');
+savepoint s3_details;
+select public.report_user(pg_temp.e7('07'),pg_temp.e7p('01'),'other',repeat('x',500));
+rollback to savepoint s3_details;
+reset role;
+select pg_temp.s3_check((select plan_id from private.reports where id=pg_temp.s3_report_about(pg_temp.e7('05'),pg_temp.e7('10'),pg_temp.e7p('01')))
+ =pg_temp.e7p('01') and not exists(select 1 from public.attendees where plan_id=pg_temp.e7p('01') and user_id=pg_temp.e7('10'))
+ and pg_temp.s3_report_about(pg_temp.e7('05'),pg_temp.e7('07'),pg_temp.e7p('01')) is null,'S5: 05''s report about the removed 10');
+
+-- N14 (d): 05 blocks 04, then reports 04's m4b by its id: a row.
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('05'));
+select public.block_user(pg_temp.e7('04'),true);
+select public.report_message(pg_temp.s3_id('m4b'),'harassment',null);
+reset role;
+select pg_temp.s3_check(pg_temp.s3_blocked(pg_temp.e7('05'),pg_temp.e7('04')) and pg_temp.s3_report_of(pg_temp.e7('05'),pg_temp.s3_id('m4b')) is not null,
+ 'N14 (d): 05''s report of a blocked person''s message');
+
+-- R-Q1: 06 (not answered on the one-off, so no can_see_guests) reports 01, its owner, on the one-off's series: a row on
+-- the one-off; and 02, whose announcement to everyone reaches 06: a row. 11 (not answered on the third plan, brought
+-- by 03) reports 03 on that series: a row. 12 (invited there by 04) reports 03: 22023 'Report unavailable'.
+do $$ begin
+ perform pg_temp.s3_as(pg_temp.e7('06'));
+ perform pg_temp.s3_check(not private.can_see_guests(pg_temp.e7p('01')),'06 sees the one-off''s guests');
+end $$;
+-- Only a sent announcement admits it, as block_user reads it: with 02's deleted (in a savepoint), 'Report unavailable'.
+set local role authenticated;
+savepoint s3_gone_announcement;
+select pg_temp.s3_as(pg_temp.e7('02'));
+select public.delete_message(pg_temp.s3_id('a02'));
+select pg_temp.s3_as(pg_temp.e7('06'));
+select pg_temp.s3_refused(format('select public.report_user(%L,%L,''other'')',pg_temp.e7('02'),pg_temp.e7p('01')),'22023','Report unavailable');
+rollback to savepoint s3_gone_announcement;
+select pg_temp.s3_as(pg_temp.e7('06'));
+select public.report_user(pg_temp.e7('01'),pg_temp.e7p('01'),'other',null);
+select public.report_user(pg_temp.e7('02'),pg_temp.e7p('01'),'other',null);
+select pg_temp.s3_as(pg_temp.e7('11'));
+select public.report_user(pg_temp.e7('03'),pg_temp.e7p('03'),'other',null);
+select pg_temp.s3_as(pg_temp.e7('12'));
+select pg_temp.s3_refused(format('select public.report_user(%L,%L,''other'')',pg_temp.e7('03'),pg_temp.e7p('03')),'22023','Report unavailable');
+reset role;
+select pg_temp.s3_check((select plan_id from private.reports where id=pg_temp.s3_report_about(pg_temp.e7('06'),pg_temp.e7('01'),pg_temp.e7p('01')))
+  =pg_temp.e7p('01')
+ and (select plan_id from private.reports where id=pg_temp.s3_report_about(pg_temp.e7('06'),pg_temp.e7('02'),pg_temp.e7p('01')))=pg_temp.e7p('01')
+ and (select plan_id from private.reports where id=pg_temp.s3_report_about(pg_temp.e7('11'),pg_temp.e7('03'),pg_temp.e7p('03')))=pg_temp.e7p('03'),
+ 'R-Q1: the invitees'' reports');
+
+-- I3, in a savepoint (confirmation 2's 2-b): 07 asks 05 to connect on the one-off's series, then 01 removes 05. 05
+-- reports 07 there: a row (the waiting request admits it), on the series' current occurrence.
+savepoint s3_request;
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('07'));
+select pg_temp.s3_check(public.request_connection(pg_temp.e7('05'),pg_temp.e7p('01'))='requested','I3: 07 asking 05 is not requested');
+select pg_temp.s3_as(pg_temp.e7('01'));
+select public.remove_guest(pg_temp.e7p('01'),pg_temp.e7('05'));
+select pg_temp.s3_as(pg_temp.e7('05'));
+select public.report_user(pg_temp.e7('07'),pg_temp.e7p('01'),'spam',null);
+reset role;
+select pg_temp.s3_check((select plan_id from private.reports where id=pg_temp.s3_report_about(pg_temp.e7('05'),pg_temp.e7('07'),pg_temp.e7p('01')))
+ =pg_temp.e7p('01') and not exists(select 1 from public.attendees where plan_id=pg_temp.e7p('01') and user_id=pg_temp.e7('05')),
+ 'I3: 05''s report about the person whose request is waiting');
+rollback to savepoint s3_request;
+
+-- N5: 05 reports 04's m4d and, with report_user, 04 on the one-off's series; m4d's row is then deleted by hand: the
+-- delete goes through and both reports stay, one about 'message' (its message_id now null), one about 'user'.
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('05'));
+select public.report_message(pg_temp.s3_id('m4d'),'harassment',null);
+select public.report_user(pg_temp.e7('04'),pg_temp.e7p('01'),'harassment',null);
+reset role;
+select set_config('s3.rn5',pg_temp.s3_report_of(pg_temp.e7('05'),pg_temp.s3_id('m4d'))::text,true);
+delete from public.messages where id=pg_temp.s3_id('m4d');
+select pg_temp.s3_check((select (about,message_id,frozen_body,target_user_id) from private.reports where id=pg_temp.s3_id('rn5'))
+  is not distinct from ('message'::text,null::bigint,'Leo d'::text,pg_temp.e7('04'))
+ and pg_temp.s3_report_about(pg_temp.e7('05'),pg_temp.e7('04'),pg_temp.e7p('01')) is not null,'N5: the two reports after the message went');
+
+-- I7, the limit, in a savepoint (NOTE 1), with 17 a moderator: 05's reports topped up by hand to exactly 20 made in the
+-- last 24 hours, whatever their status, and one more 25 hours old. report_message and report_user as 05: 22023 'Report
+-- limit', nothing stored, nothing queued. One of the 20 moved back 25 hours: report_message as 05 stores a row.
+savepoint s3_limit;
+insert into private.moderators(user_id) values (pg_temp.e7('17'));
+do $$ declare v_n integer; begin
+ select count(*) into v_n from private.reports where reporter_id=pg_temp.e7('05') and created_at>now()-interval '24 hours';
+ perform pg_temp.s3_check(v_n between 1 and 19,'05 already filed '||v_n||' reports');
+ insert into private.reports(reporter_id,about,reason,status,created_at)
+  select pg_temp.e7('05'),'message','spam',case when g%2=0 then 'reviewed' else 'open' end,now()-interval '1 hour' from generate_series(1,20-v_n) g;
+ insert into private.reports(reporter_id,about,reason,created_at) values (pg_temp.e7('05'),'message','spam',now()-interval '25 hours');
+end $$;
+select set_config('s3.count',(select count(*)::text from private.reports),true);
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('05'));
+select pg_temp.s3_refused(format('select public.report_message(%s,''spam'')',pg_temp.s3_id('m7a')),'22023','Report limit');
+select pg_temp.s3_refused(format('select public.report_user(%L,%L,''spam'')',pg_temp.e7('07'),pg_temp.e7p('01')),'22023','Report limit');
+reset role;
+select pg_temp.s3_check((select count(*) from private.reports)=pg_temp.s3_id('count') and pg_temp.s3_filed()=0,'The 21st report stored or queued something');
+update private.reports set created_at=now()-interval '25 hours' where id=(select min(id) from private.reports where reporter_id=pg_temp.e7('05')
+ and created_at=now()-interval '1 hour');
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('05'));
+select public.report_message(pg_temp.s3_id('m7a'),'spam',null);
+reset role;
+select pg_temp.s3_check(pg_temp.s3_report_of(pg_temp.e7('05'),pg_temp.s3_id('m7a')) is not null
+ and pg_temp.s3_filed_to(pg_temp.s3_report_of(pg_temp.e7('05'),pg_temp.s3_id('m7a')))='17','Under the limit again, the report was not stored and queued');
+rollback to savepoint s3_limit;
+
+-- I4 (the fold): 03 blocks 14 (Going on the one-off); 05 reports 14 with report_user and 14's words (by hand). By hand
+-- too: 14 blocks 05, and 14 blocks 15 (after the fold, a block of oneself). NOTE 2-b first, in a savepoint: 15 is Going
+-- on the one-off too and 05 reports 15 there; the fold leaves one open report by 05 about 15 there, and nothing naming
+-- 14. Then the fold itself: blocks (03, 15) and (15, 05) and none naming 14, and no block of oneself; the user report's
+-- target is 15; the message report's frozen author and target are 15, its words as they were.
+insert into public.messages(series_id,plan_id,author_id,kind,body,created_at,updated_at) values
+ (pg_temp.e7p('01'),pg_temp.e7p('01'),pg_temp.e7('14'),'message','Wes from the web',now()-interval '1 hour',now()-interval '1 hour');
+select set_config('s3.m14',(select id::text from public.messages where body='Wes from the web'),true);
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('03'));
+select public.block_user(pg_temp.e7('14'),true);
+select pg_temp.s3_as(pg_temp.e7('05'));
+select public.report_user(pg_temp.e7('14'),pg_temp.e7p('01'),'spam',null);
+select public.report_message(pg_temp.s3_id('m14'),'spam',null);
+reset role;
+insert into private.blocks(blocker_id,blocked_id) values (pg_temp.e7('14'),pg_temp.e7('05')),(pg_temp.e7('14'),pg_temp.e7('15'));
+select set_config('s3.r14u',pg_temp.s3_report_about(pg_temp.e7('05'),pg_temp.e7('14'),pg_temp.e7p('01'))::text,true);
+select set_config('s3.r14m',pg_temp.s3_report_of(pg_temp.e7('05'),pg_temp.s3_id('m14'))::text,true);
+select pg_temp.s3_check(pg_temp.s3_blocked(pg_temp.e7('03'),pg_temp.e7('14')) and pg_temp.s3_id('r14u') is not null and pg_temp.s3_id('r14m') is not null,
+ 'I4: the block of 14 or the reports about 14');
+savepoint s3_fold;
+select set_config('resbite.system','roll',true);
+insert into public.attendees(plan_id,user_id,response) values (pg_temp.e7p('01'),pg_temp.e7('15'),'accepted');
+select set_config('resbite.system','',true);
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('05'));
+select public.report_user(pg_temp.e7('15'),pg_temp.e7p('01'),'spam',null);
+reset role;
+select private.fold_web_account(pg_temp.e7('14'),pg_temp.e7('15'));
+select pg_temp.s3_check((select count(*) from private.reports where reporter_id=pg_temp.e7('05') and about='user' and status='open'
+  and target_user_id=pg_temp.e7('15') and series_id=pg_temp.e7p('01'))=1
+ and not exists(select 1 from private.reports where pg_temp.e7('14') in (reporter_id,target_user_id,frozen_author)),
+ 'NOTE 2-b: the fold did not leave one open report about 15');
+rollback to savepoint s3_fold;
+select private.fold_web_account(pg_temp.e7('14'),pg_temp.e7('15'));
+select pg_temp.s3_check(pg_temp.s3_blocked(pg_temp.e7('03'),pg_temp.e7('15')) and pg_temp.s3_blocked(pg_temp.e7('15'),pg_temp.e7('05'))
+ and not exists(select 1 from private.blocks where pg_temp.e7('14') in (blocker_id,blocked_id))
+ and not exists(select 1 from private.blocks where blocker_id=blocked_id),'I4: the blocks after the fold');
+select pg_temp.s3_check((select target_user_id from private.reports where id=pg_temp.s3_id('r14u'))=pg_temp.e7('15')
+ and (select (frozen_author,target_user_id,frozen_body) from private.reports where id=pg_temp.s3_id('r14m'))=(pg_temp.e7('15'),pg_temp.e7('15'),'Wes from the web'::text)
+ and not exists(select 1 from private.reports where pg_temp.e7('14') in (reporter_id,target_user_id,frozen_author)),'I4: the reports after the fold');
+
+-- I11 (CH-P18, Decision 7): 03 reports 05's m5a and 16's m16. (A profile deleted by hand goes after its guest rows:
+-- on the hosted baseline a guest row holds its profile.) In a savepoint, 05's profile deleted by hand: every
+-- report 05 filed is gone (on delete cascade), and 03's report about 05 stays, with its words, target 05 and frozen
+-- author 05. In another, 16's profile deleted by hand: 03's report about 16 keeps target 16; close-report.sql on it
+-- then forgets who it was about (target and frozen author null).
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('03'));
+select public.report_message(pg_temp.s3_id('m5a'),'spam',null);
+select public.report_message(pg_temp.s3_id('m16'),'spam',null);
+reset role;
+select set_config('s3.r05',pg_temp.s3_report_of(pg_temp.e7('03'),pg_temp.s3_id('m5a'))::text,true);
+select set_config('s3.r16',pg_temp.s3_report_of(pg_temp.e7('03'),pg_temp.s3_id('m16'))::text,true);
+select set_config('s3.filed05',(select string_agg(id::text,',') from private.reports where reporter_id=pg_temp.e7('05')),true);
+savepoint s3_gone;
+delete from public.attendees where user_id=pg_temp.e7('05');
+delete from public.profiles where id=pg_temp.e7('05');
+select pg_temp.s3_check(not exists(select 1 from private.reports where id=any(string_to_array(current_setting('s3.filed05'),',')::bigint[]))
+ and cardinality(string_to_array(current_setting('s3.filed05'),','))>=8,'CH-P18: a report 05 filed outlived 05''s profile');
+select pg_temp.s3_check((select (frozen_body,target_user_id,frozen_author) from private.reports where id=pg_temp.s3_id('r05'))
+ =('Sol here'::text,pg_temp.e7('05'),pg_temp.e7('05')),'CH-P18: the report about 05 did not stay as it was');
+rollback to savepoint s3_gone;
+savepoint s3_gone;
+delete from public.attendees where user_id=pg_temp.e7('16');
+delete from public.profiles where id=pg_temp.e7('16');
+select pg_temp.s3_check((select (target_user_id,frozen_author,frozen_body) from private.reports where id=pg_temp.s3_id('r16'))
+ =(pg_temp.e7('16'),pg_temp.e7('16'),'Gil here'::text),'I11: the open report about 16 did not keep its target');
+select pg_temp.s3_id('r16') as s3_rid \gset
+\set s3_script `sed -e "s/^ (0, 'reviewed', 'none', 'No action needed')/ (:s3_rid, 'actioned', 'account_suspended', 'Account gone')/" :'resbite_repo'/supabase/ops/close-report.sql`
+select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
+select pg_temp.s3_check((select (status,action,target_user_id,frozen_author,frozen_body) from private.reports where id=pg_temp.s3_id('r16'))
+ is not distinct from ('actioned'::text,'account_suspended'::text,null::uuid,null::uuid,'Gil here'::text)
+ and current_setting('s3.out')::jsonb->0->'target_user_id'='null'::jsonb,'I11: close-report.sql kept the id of a profile that has gone');
+rollback to savepoint s3_gone;
+
+-- The moderators' push (G-B4(c), Decision 10): 09 is put in private.moderators. 05 reports 07's m7b: one report_filed
+-- row, to 09, on the report's plan, with no actor and no message, dedupe 'report:<id>:<09>', and it may be told.
+insert into private.moderators(user_id) values (pg_temp.e7('09'));
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('05'));
+select public.report_message(pg_temp.s3_id('m7b'),'spam',null);
+reset role;
+select set_config('s3.rmod',pg_temp.s3_report_of(pg_temp.e7('05'),pg_temp.s3_id('m7b'))::text,true);
+select set_config('s3.omod',(select id::text from private.notification_outbox where kind='report_filed' and recipient_id=pg_temp.e7('09')),true);
+select pg_temp.s3_check(pg_temp.s3_filed()=1 and (select (o.recipient_id,o.plan_id,o.actor_id,o.message_id,o.dedupe_key,o.detail)
+  is not distinct from (pg_temp.e7('09'),pg_temp.e7p('01'),null::uuid,null::bigint,'report:'||pg_temp.s3_id('rmod')||':'||pg_temp.e7('09'),null::text)
+  from private.notification_outbox o where o.id=pg_temp.s3_id('omod'))
+ and private.notification_recipient_eligible(pg_temp.s3_id('omod')),'The moderator''s report_filed row: '
+ ||coalesce((select row_to_json(o)::text from private.notification_outbox o where o.kind='report_filed'),'none'));
+-- I-4 (each exclusion can fail): 17 is a moderator too, and every report_filed row is moved 11 minutes back. 09 reports
+-- 04's m4e: one row, to 17, none to 09 (the reporter). Every row moved back again; N8: 05 reports 09 on the one-off's
+-- series: one row, to 17, none to 09 (the reported person).
+insert into private.moderators(user_id) values (pg_temp.e7('17'));
+update private.notification_outbox set created_at=now()-interval '11 minutes' where kind='report_filed';
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('09'));
+select public.report_message(pg_temp.s3_id('m4e'),'spam',null);
+reset role;
+select pg_temp.s3_check(pg_temp.s3_filed_to(pg_temp.s3_report_of(pg_temp.e7('09'),pg_temp.s3_id('m4e')))='17',
+ 'I-4: 09''s report went to '||pg_temp.s3_filed_to(pg_temp.s3_report_of(pg_temp.e7('09'),pg_temp.s3_id('m4e'))));
+update private.notification_outbox set created_at=now()-interval '11 minutes' where kind='report_filed';
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('05'));
+select public.report_user(pg_temp.e7('09'),pg_temp.e7p('01'),'spam',null);
+reset role;
+select pg_temp.s3_check(pg_temp.s3_filed_to(pg_temp.s3_report_about(pg_temp.e7('05'),pg_temp.e7('09'),pg_temp.e7p('01')))='17',
+ 'N8: the report about 09 went to '||pg_temp.s3_filed_to(pg_temp.s3_report_about(pg_temp.e7('05'),pg_temp.e7('09'),pg_temp.e7p('01'))));
+-- N14 (a): 09 is a Going guest of the reported resbite and mutes it: 09's row (omod) may still be told (no mute applies
+-- to report_filed). 09 unmutes, and moderators.sql leaves 09 out (17's email only): the row may no longer be told, as
+-- the first branch leaves the kind out and 09's guest row doesn't make it eligible.
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('09'));
+select public.set_plan_mute(pg_temp.e7p('01'),true);
+reset role;
+select pg_temp.s3_check(exists(select 1 from public.plan_mutes where series_id=pg_temp.e7p('01') and user_id=pg_temp.e7('09'))
+ and private.notification_recipient_eligible(pg_temp.s3_id('omod')),'N14 (a): a mute stopped the moderator''s push');
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('09'));
+select public.set_plan_mute(pg_temp.e7p('01'),false);
+reset role;
+\set s3_script `sed -e "s/array\[\]::text\[\]/array['s3-17@resbite-test.invalid']::text[]/" :'resbite_repo'/supabase/ops/moderators.sql`
+select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
+select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('moderators',1,'no_account',jsonb_build_array()))
+ and pg_temp.s3_who(array(select user_id from private.moderators))='17'
+ and not private.notification_recipient_eligible(pg_temp.s3_id('omod')),'N14 (a): moderators.sql or the eligibility after it: '||current_setting('s3.out'));
+
+-- I7, coalescing: 09 and 17 are moderators. Every report_filed row is moved 11 minutes back, then one to 09 is made 5
+-- minutes ago (by hand). 05 reports m7c: one row, to 17. Every row to 09 moved back 11 minutes (I-4: all of them, not
+-- only the hand-made one): 05 reports m7d: one row, to 09, and none to 17, whose row is from this transaction.
+insert into private.moderators(user_id) values (pg_temp.e7('09'));
+update private.notification_outbox set created_at=now()-interval '11 minutes' where kind='report_filed';
+insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,created_at)
+ values (pg_temp.e7p('01'),pg_temp.e7('09'),'report_filed','s3:coalesce:09',now()-interval '5 minutes');
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('05'));
+select public.report_message(pg_temp.s3_id('m7c'),'spam',null);
+reset role;
+select pg_temp.s3_check(pg_temp.s3_filed_to(pg_temp.s3_report_of(pg_temp.e7('05'),pg_temp.s3_id('m7c')))='17',
+ 'I7: the report after 09''s recent push went to '||pg_temp.s3_filed_to(pg_temp.s3_report_of(pg_temp.e7('05'),pg_temp.s3_id('m7c'))));
+update private.notification_outbox set created_at=now()-interval '11 minutes' where kind='report_filed' and recipient_id=pg_temp.e7('09');
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('05'));
+select public.report_message(pg_temp.s3_id('m7d'),'spam',null);
+reset role;
+select pg_temp.s3_check(pg_temp.s3_filed_to(pg_temp.s3_report_of(pg_temp.e7('05'),pg_temp.s3_id('m7d')))='09',
+ 'I7: the next report went to '||pg_temp.s3_filed_to(pg_temp.s3_report_of(pg_temp.e7('05'),pg_temp.s3_id('m7d'))));
+
+-- I7, priority, in a savepoint: every notice so far delivered; a device each for 09 and three of the one-off's people.
+-- 150 chat_message rows about 07's m7e, then a report_filed row to 09 (05 reports m7e; 09's rows moved back first). One
+-- claim(25) returns 09's job, expanded before any chat job, with a uuid plan_id and a digits-only outbox id (the
+-- sender's checks), its title, and no chat fields, actor or bringer; most of the crowd waits.
+savepoint s3_claim;
+update private.notification_outbox set expanded_at=now(),delivered_at=now();
+update private.notification_outbox set created_at=now()-interval '11 minutes' where kind='report_filed' and recipient_id=pg_temp.e7('09');
+insert into private.device_endpoints(token,user_id,platform) select 'ExpoPushToken[s3c'||n||']',pg_temp.e7(n),'ios' from unnest(array['02','03','09','13']) n;
+insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,message_id)
+ select pg_temp.e7p('01'),pg_temp.e7((array['02','03','13'])[1+g%3]),'chat_message','s3:crowd:'||g,pg_temp.e7('07'),pg_temp.s3_id('m7e')
+ from generate_series(1,150) g;
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('05'));
+select public.report_message(pg_temp.s3_id('m7e'),'spam',null);
+reset role;
+select set_config('s3.oprio',(select o.id::text from private.notification_outbox o where o.kind='report_filed' and o.recipient_id=pg_temp.e7('09')
+ and o.dedupe_key='report:'||pg_temp.s3_report_of(pg_temp.e7('05'),pg_temp.s3_id('m7e'))||':'||pg_temp.e7('09')),true);
+select pg_temp.s3_check(pg_temp.s3_id('oprio')>(select max(id) from private.notification_outbox where dedupe_key like 's3:crowd:%')
+ and (select bool_and(private.notification_recipient_eligible(id)) from private.notification_outbox where dedupe_key like 's3:crowd:%'),
+ 'The crowd is not 150 eligible chat notices before 09''s report_filed row');
+set local role service_role;
+select set_config('s3.jobs',public.claim_notification_deliveries(25)::text,true);
+reset role;
+do $$ declare j jsonb; begin
+ select e.value into j from jsonb_array_elements(current_setting('s3.jobs')::jsonb) e where e.value->>'outbox_id'=pg_temp.s3_id('oprio')::text;
+ perform pg_temp.s3_check(j is not null,'I7: the claim did not return 09''s report_filed job: '||current_setting('s3.jobs'));
+ perform pg_temp.s3_check(j->>'kind'='report_filed' and j->>'recipient_id'=pg_temp.e7('09')::text and j->>'plan_id'=pg_temp.e7p('01')::text
+  and j->>'plan_id' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' and j->>'outbox_id' ~ '^\d+$'
+  and j->>'title'='Picnic' and j->'actor_name'='null'::jsonb and j->'brought_by_name'='null'::jsonb and j->'series_id'='null'::jsonb
+  and j->'message_id'='null'::jsonb and j->'message_body'='null'::jsonb and j->'audience'='null'::jsonb and j->'detail'='null'::jsonb,
+  'I7: 09''s job: '||j::text);
+ perform pg_temp.s3_check((select count(*) from private.notification_outbox where dedupe_key like 's3:crowd:%' and expanded_at is not null)<=99
+  and (select count(*) from jsonb_array_elements(current_setting('s3.jobs')::jsonb))=25,'I7: the claim is not the crowd''s first page');
+end $$;
+rollback to savepoint s3_claim;
+
+-- N14 (d), on the group, after its chat closed (stopped and 48 hours past by hand, under the roll's flag): 05 reports
+-- 07's words there: a row. remove-reported-message.sql uses it below: 05 is still in the chat.
+select set_config('resbite.system','roll',true);
+update public.chats set stopped_at=now()-interval '50 hours' where series_id=pg_temp.e7p('02');
+update public.plans set starts_at=now()-interval '52 hours',ends_at=now()-interval '50 hours' where id=pg_temp.s3_uuid('next');
+select set_config('resbite.system','',true);
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('05'));
+select public.report_message(pg_temp.s3_id('m7g'),'harassment','On the group');
+reset role;
+select set_config('s3.rgroup',pg_temp.s3_report_of(pg_temp.e7('05'),pg_temp.s3_id('m7g'))::text,true);
+select pg_temp.s3_check(not private.chat_open(pg_temp.e7p('02')) and private.chat_member(pg_temp.e7p('02'),pg_temp.e7('05'))
+ and pg_temp.s3_id('rgroup') is not null,'N14 (d): no report on the closed group');
+
+-- open-reports.sql (G-S14, I10, I11, R-Q2): 03 blocks 04 (the block the team should read, confirmation 2's 2-b), 07
+-- blocks 03, and 05's block of 04 is moved 8 days back. One report is moved two hours back, so it reads first.
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('03'));
+select public.block_user(pg_temp.e7('04'),true);
+select pg_temp.s3_as(pg_temp.e7('07'));
+select public.block_user(pg_temp.e7('03'),true);
+reset role;
+update private.blocks set created_at=now()-interval '8 days' where blocker_id=pg_temp.e7('05') and blocked_id=pg_temp.e7('04');
+update private.reports set created_at=now()-interval '2 hours' where id=pg_temp.s3_id('rgroup');
+\set s3_script `cat :'resbite_repo'/supabase/ops/open-reports.sql`
+select pg_temp.s3_check(pg_temp.s3_columns(:'s3_script')='item,id,created_at,reason,details,frozen_body,reporter_name,target_name,resbite_title,resbite_date',
+ 'open-reports.sql''s columns: '||pg_temp.s3_columns(:'s3_script'));
+select set_config('s3.out',pg_temp.s3_run_read_only(:'s3_script')::text,true);
+do $$ declare v jsonb := current_setting('s3.out')::jsonb; b jsonb; begin
+ -- Its 'report' rows are the open reports, oldest first, then the blocks, then nothing due.
+ perform pg_temp.s3_check((select string_agg(t.value->>'id',',' order by t.n) from jsonb_array_elements(v) with ordinality t(value,n)
+   where t.value->>'item'='report')
+  =(select string_agg(id::text,',' order by created_at,id) from private.reports where status='open'),'open-reports.sql''s reports: '||v::text);
+ perform pg_temp.s3_check(v->0->>'id'=pg_temp.s3_id('rgroup')::text and v->0 @> jsonb_build_object('item','report','reason','harassment',
+   'details','On the group','frozen_body','Eva on the group','reporter_name','Sol Going','target_name','Eva Going','resbite_title','Board game night'),
+  'open-reports.sql''s first row: '||(v->0)::text);
+ perform pg_temp.s3_check((select string_agg(e.value->>'item',',' order by n) from jsonb_array_elements(v) with ordinality e(value,n))
+  ~ '^(report,)+(block,)+block$','open-reports.sql''s items are not reports, then blocks: '||v::text);
+ select e.value into b from jsonb_array_elements(v) e where e.value->>'item'='block' and e.value->>'reporter_name'='Mia Going'
+  and e.value->>'target_name'='Leo Going';
+ perform pg_temp.s3_check(b is not null and b->'id'='null'::jsonb and b->'details'='null'::jsonb and b->'frozen_body'='null'::jsonb
+  and b->'reason'='null'::jsonb and b->'resbite_title'='null'::jsonb and b->'resbite_date'='null'::jsonb
+  and (b->>'created_at')::timestamptz=(select created_at from private.blocks where blocker_id=pg_temp.e7('03') and blocked_id=pg_temp.e7('04')),
+  'open-reports.sql: 03''s block of 04: '||coalesce(b::text,'none'));
+ perform pg_temp.s3_check(not exists(select 1 from jsonb_array_elements(v) e where e.value->>'item'='block' and e.value->>'reporter_name'='Sol Going'
+   and e.value->>'target_name'='Leo Going'),'open-reports.sql lists a block from 8 days ago');
+ perform pg_temp.s3_check((select string_agg(e.value->>'created_at',',' order by n) from jsonb_array_elements(v) with ordinality e(value,n) where e.value->>'item'='block')
+  =(select string_agg(to_jsonb(created_at)#>>'{}',',' order by created_at desc) from private.blocks where created_at>now()-interval '7 days'),
+  'open-reports.sql''s blocks are not the last 7 days'', newest first');
+ perform pg_temp.s3_check(v::text !~ '@|447700','open-reports.sql shows an email or a phone number');
+end $$;
+-- With a report closed 181 days ago (in a savepoint): one 'due' row, saying how many and what to run; nothing else.
+savepoint s3_due;
+update private.reports set reviewed_at=now()-interval '181 days' where id=pg_temp.s3_id('ru1');
+select set_config('s3.out',pg_temp.s3_run_read_only(:'s3_script')::text,true);
+select pg_temp.s3_check((select count(*) from jsonb_array_elements(current_setting('s3.out')::jsonb) e where e.value->>'item'='due')=1
+ and (select e.value - 'details' - 'item' = jsonb_build_object('id',null,'created_at',null,'reason',null,'frozen_body',null,'reporter_name',null,
+   'target_name',null,'resbite_title',null,'resbite_date',null)
+  and e.value->>'details' ~ '^1 \S.*purge-closed-reports\.sql' from jsonb_array_elements(current_setting('s3.out')::jsonb) e where e.value->>'item'='due'),
+ 'open-reports.sql''s due row: '||current_setting('s3.out'));
+rollback to savepoint s3_due;
+
+-- remove-reported-message.sql on 05's report of 07's words on the group: the message reads removed, with no body and
+-- payload {"by": "resbite"}; the chat's count drops by one; the report stays open. chat_messages as 05 returns that
+-- payload, and its names map has no 'resbite' key. A second run changes nothing.
+select set_config('s3.count',(select message_count::text from public.chats where series_id=pg_temp.e7p('02')),true);
+select pg_temp.s3_id('rgroup') as s3_rid \gset
+\set s3_script `sed -e 's/(values (0))/(values (:s3_rid))/' :'resbite_repo'/supabase/ops/remove-reported-message.sql`
+select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
+select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('message_id',pg_temp.s3_id('m7g'),'state','removed'))
+ and (select (state,body,payload) from public.messages where id=pg_temp.s3_id('m7g')) is not distinct from ('removed'::text,null::text,'{"by": "resbite"}'::jsonb)
+ and (select message_count from public.chats where series_id=pg_temp.e7p('02'))=pg_temp.s3_id('count')-1
+ and (select status from private.reports where id=pg_temp.s3_id('rgroup'))='open','remove-reported-message.sql: '||current_setting('s3.out'));
+do $$ declare r jsonb; begin
+ perform pg_temp.s3_as(pg_temp.e7('05'));
+ r := public.chat_messages(pg_temp.e7p('02'));
+ perform pg_temp.s3_check(exists(select 1 from jsonb_array_elements(r->'rows') e where (e.value->>'id')::bigint=pg_temp.s3_id('m7g')
+   and e.value->'payload'='{"by": "resbite"}'::jsonb and e.value->>'state'='removed' and e.value->'body'='null'::jsonb)
+  and not (r->'names' ? 'resbite'),'05''s read of the removed message: '||r::text);
+end $$;
+select set_config('s3.ctid',(select ctid::text from public.messages where id=pg_temp.s3_id('m7g')),true);
+select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
+select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('message_id',pg_temp.s3_id('m7g'),'state','removed'))
+ and (select ctid::text from public.messages where id=pg_temp.s3_id('m7g'))=current_setting('s3.ctid'),'remove-reported-message.sql run again changed the message');
+
+-- Deletion (guarded: only where the deletion lifecycle exists), in a savepoint (confirmation 2's 2-b). 04's account is
+-- deleted first: every report about 04 stays, with its words, though 04's messages lose theirs. Then 03's, 05's and 09's:
+-- 03's blocks both ways go, and so does 03's acceptance; 05's reports go (CH-P18); 09's moderator row goes.
+select to_regprocedure('private.request_account_deletion(uuid,uuid,uuid,text)') is not null as s3_deletion \gset
+\if :s3_deletion
+savepoint s3_deletion;
+select set_config('s3.about04',(select string_agg(id||':'||coalesce(frozen_body,'-'),',' order by id) from private.reports
+ where target_user_id=pg_temp.e7('04')),true);
+select pg_temp.s3_check(current_setting('s3.about04') like '%:Leo a%' and (select count(*) from private.blocks where pg_temp.e7('03') in (blocker_id,blocked_id))>=3
+ and exists(select 1 from private.blocks where blocked_id=pg_temp.e7('03'))
+ and exists(select 1 from private.chat_rules_acceptances where user_id=pg_temp.e7('03')) and exists(select 1 from private.moderators where user_id=pg_temp.e7('09'))
+ and exists(select 1 from private.reports where reporter_id=pg_temp.e7('05')),'The deletion''s rows are not there before it');
+insert into auth.sessions(id,user_id,created_at) select ('e7200000-0000-4000-8000-0000000000'||n)::uuid,pg_temp.e7(n),now() from unnest(array['03','04','05','09']) n;
+select private.request_account_deletion(pg_temp.e7('04'),'e7200000-0000-4000-8000-000000000004','e7300000-0000-4000-8000-000000000004',repeat('d',64));
+select pg_temp.s3_check((select string_agg(id||':'||coalesce(frozen_body,'-'),',' order by id) from private.reports where target_user_id=pg_temp.e7('04'))
+  =current_setting('s3.about04') and (select body from public.messages where id=pg_temp.s3_id('m4b')) is null,
+ 'Deletion: the reports about 04 did not stay with their words');
+select private.request_account_deletion(pg_temp.e7(n),('e7200000-0000-4000-8000-0000000000'||n)::uuid,('e7300000-0000-4000-8000-0000000000'||n)::uuid,
+ repeat('d',64)) from unnest(array['03','05','09']) n;
+select pg_temp.s3_check(not exists(select 1 from private.blocks where pg_temp.e7('03') in (blocker_id,blocked_id)),'Deletion: 03''s blocks stayed');
+select pg_temp.s3_check(not exists(select 1 from private.chat_rules_acceptances where user_id=pg_temp.e7('03')),'Deletion: 03''s acceptance stayed');
+select pg_temp.s3_check(not exists(select 1 from private.reports where reporter_id=pg_temp.e7('05')),'Deletion: 05''s reports stayed');
+select pg_temp.s3_check(not exists(select 1 from private.moderators where user_id=pg_temp.e7('09')),'Deletion: 09''s moderator row stayed');
+rollback to savepoint s3_deletion;
+\endif
+
+-- suspend-account.sql (G-B4(b), N14 (b)): on a report about 04 (05's open one on the group), 04's roster row is
+-- disabled: user_eligible(04) is false, and it prints 1 and 0. On 03's report about 16 (a live grant, no roster row):
+-- user_eligible(16) is false, and it prints 0 and 1.
+select pg_temp.s3_id('ru2') as s3_rid \gset
+\set s3_script `sed -e 's/(values (0))/(values (:s3_rid))/' :'resbite_repo'/supabase/ops/suspend-account.sql`
+select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
+select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('roster_rows_disabled',1,'grants_revoked',0))
+ and not private.user_eligible(pg_temp.e7('04')),'suspend-account.sql on 04: '||current_setting('s3.out'));
+select pg_temp.s3_id('r16') as s3_rid \gset
+\set s3_script `sed -e 's/(values (0))/(values (:s3_rid))/' :'resbite_repo'/supabase/ops/suspend-account.sql`
+select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
+select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('roster_rows_disabled',0,'grants_revoked',1))
+ and not private.user_eligible(pg_temp.e7('16')),'suspend-account.sql on 16: '||current_setting('s3.out'));
+
+-- close-report.sql records the action on 05's report of the removed words: ('actioned', 'both', 'Removed and
+-- suspended'), with the time; 07 still has a profile, so who it was about stays.
+select pg_temp.s3_id('rgroup') as s3_rid \gset
+\set s3_script `sed -e "s/^ (0, 'reviewed', 'none', 'No action needed')/ (:s3_rid, 'actioned', 'both', 'Removed and suspended')/" :'resbite_repo'/supabase/ops/close-report.sql`
+select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
+select pg_temp.s3_check((select (status,action,review_note,reviewed_at,target_user_id,frozen_author) from private.reports where id=pg_temp.s3_id('rgroup'))
+ =('actioned'::text,'both'::text,'Removed and suspended'::text,now(),pg_temp.e7('07'),pg_temp.e7('07')),'close-report.sql on the removed words: '||current_setting('s3.out'));
+
+-- purge-closed-reports.sql (I11, R-Q3), in a savepoint: 05's first report about 04 closed 181 days ago goes; the report
+-- of the removed words, closed 179 days ago, and the open ones stay, 05's new open report about 16 with its target;
+-- 03's report about 16, closed, whose profile is then deleted by hand, stays with no target and no frozen author. It
+-- prints 1 and 1. open-reports.sql shows 2 due before, none after.
+savepoint s3_purge;
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('05'));
+select public.report_user(pg_temp.e7('16'),pg_temp.e7p('01'),'spam',null);
+reset role;
+select set_config('s3.ru16',pg_temp.s3_report_about(pg_temp.e7('05'),pg_temp.e7('16'),pg_temp.e7p('01'))::text,true);
+update private.reports set reviewed_at=now()-interval '181 days' where id=pg_temp.s3_id('ru1');
+update private.reports set reviewed_at=now()-interval '179 days' where id=pg_temp.s3_id('rgroup');
+update private.reports set status='reviewed',action='none',reviewed_at=now() where id=pg_temp.s3_id('r16');
+delete from public.attendees where user_id=pg_temp.e7('16');
+delete from public.profiles where id=pg_temp.e7('16');
+\set s3_open `cat :'resbite_repo'/supabase/ops/open-reports.sql`
+select pg_temp.s3_check((select e.value->>'details' from jsonb_array_elements(pg_temp.s3_run_read_only(:'s3_open')) e where e.value->>'item'='due') ~ '^2 ',
+ 'open-reports.sql does not show 2 due');
+\set s3_script `cat :'resbite_repo'/supabase/ops/purge-closed-reports.sql`
+select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
+select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('deleted',1,'cleared',1))
+ and not exists(select 1 from private.reports where id=pg_temp.s3_id('ru1'))
+ and exists(select 1 from private.reports where id=pg_temp.s3_id('rgroup')) and exists(select 1 from private.reports where id=pg_temp.s3_id('r1') and status='open')
+ and (select (target_user_id,frozen_author,frozen_body) from private.reports where id=pg_temp.s3_id('r16')) is not distinct from (null::uuid,null::uuid,'Gil here'::text)
+ and (select (status,target_user_id) from private.reports where id=pg_temp.s3_id('ru16'))=('open'::text,pg_temp.e7('16')),
+ 'purge-closed-reports.sql: '||current_setting('s3.out'));
+select pg_temp.s3_check(not exists(select 1 from jsonb_array_elements(pg_temp.s3_run_read_only(:'s3_open')) e where e.value->>'item'='due'),
+ 'open-reports.sql still shows reports due after the purge');
+rollback to savepoint s3_purge;
+
+-- moderators.sql with one email: one row; with an email no account holds besides: still one, and that email listed.
+-- blocked-terms.sql with two terms (three written, one twice in another case and with blanks round it): two rows, and
+-- it prints 2, never a term. With the repository's empty list: none, and it prints 0.
+\set s3_script `sed -e "s/array\[\]::text\[\]/array['S3-17@resbite-test.invalid ']::text[]/" :'resbite_repo'/supabase/ops/moderators.sql`
+select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
+select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('moderators',1,'no_account',jsonb_build_array()))
+ and pg_temp.s3_who(array(select user_id from private.moderators))='17','moderators.sql with one email: '||current_setting('s3.out'));
+\set s3_script `sed -e "s/array\[\]::text\[\]/array['s3-17@resbite-test.invalid','nobody@resbite-test.invalid']::text[]/" :'resbite_repo'/supabase/ops/moderators.sql`
+select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
+select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('moderators',1,'no_account',jsonb_build_array('nobody@resbite-test.invalid')))
+ and pg_temp.s3_who(array(select user_id from private.moderators))='17','moderators.sql with an unknown email: '||current_setting('s3.out'));
+\set s3_script `sed -e "s/array\[\]::text\[\]/array['ZZone ',' zz two','zzone']::text[]/" :'resbite_repo'/supabase/ops/blocked-terms.sql`
+select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
+select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('terms',2))
+ and (select string_agg(term,',' order by term collate "C") from private.blocked_terms)='zz two,zzone','blocked-terms.sql with two terms: '||current_setting('s3.out'));
+\set s3_script `cat :'resbite_repo'/supabase/ops/blocked-terms.sql`
+select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
+select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('terms',0))
+ and not exists(select 1 from private.blocked_terms),'blocked-terms.sql with the empty list: '||current_setting('s3.out'));
+rollback;
+
+-- Section 2 of the migration redefines three of section 1's bodies, chat_summary, send_message and
+-- notification_recipient_eligible, each copied from section 1 with only Task 2's lines added (rules_accepted; the rules
+-- and the blocked terms; report_filed in the kind list and the fourth branch). With those lines taken out, each copy
+-- must read exactly as section 1's statement, so a later change to section 1 cannot be lost under a stale copy.
+\set s3_migration `cat :'resbite_repo'/supabase/migrations/20261111160000_chat_safety.sql`
+select pg_temp.s3_check(replace(pg_temp.s3_nth(:'s3_migration','create or replace function private.chat_summary(',2),$ins$
+  'rules_accepted', exists (select 1 from private.chat_rules_acceptances r where r.user_id = v_uid and r.version = private.chat_rules_version()),$ins$,'')
+ =pg_temp.s3_nth(:'s3_migration','create or replace function private.chat_summary(',1),
+ 'Section 2''s chat_summary is not section 1''s with rules_accepted');
+select pg_temp.s3_check(replace(replace(pg_temp.s3_nth(:'s3_migration','create or replace function private.send_message(',2),$ins$
+ -- The chat rules (G-B4(d), Decision 8): the current version accepted, else 22023 'Rules not accepted'.
+ if not exists (select 1 from private.chat_rules_acceptances r where r.user_id = v_uid and r.version = private.chat_rules_version()) then
+  raise exception 'Rules not accepted' using errcode='22023';
+ end if;$ins$,''),$ins$
+ -- The blocked terms (G-B4(a), challenge N4): a listed term as a whole word, in any case; a space in it is any run of
+ -- blanks or a line break. chat_body has already refused a body over 16,000 bytes, so no term meets a huge one.
+ if exists (select 1 from private.blocked_terms t where v_body ~* ('\m' || replace(t.term, ' ', '\s+') || '\M')) then
+  raise exception 'Not allowed' using errcode='22023';
+ end if;$ins$,'')
+ =pg_temp.s3_nth(:'s3_migration','create or replace function private.send_message(',1),
+ 'Section 2''s send_message is not section 1''s with the rules and the blocked terms');
+select pg_temp.s3_check(replace(replace(pg_temp.s3_nth(:'s3_migration','create or replace function private.notification_recipient_eligible(',2),
+ $ins$'chat_message','announcement','report_filed')$ins$,$ins$'chat_message','announcement')$ins$),$ins$
+ ) or exists (
+ select 1 from private.notification_outbox o
+ where o.id=p_outbox and o.kind='report_filed'
+ and exists(select 1 from private.moderators m where m.user_id=o.recipient_id)
+ and private.user_eligible(o.recipient_id) and not private.deletion_pending(o.recipient_id)
+ and o.created_at>now()-interval '24 hours'$ins$,'')
+ =pg_temp.s3_nth(:'s3_migration','create or replace function private.notification_recipient_eligible(',1),
+ 'Section 2''s notification_recipient_eligible is not section 1''s with report_filed');
+
+-- The way back (Task 2; G-N11, challenge B2), rehearsed in a transaction that ends in rollback, in both modes (the
+-- deletion's body only where the deletion lifecycle exists, in full mode; 20261111160000_chat_safety.after.sql also
+-- compares each body with the one before the migration, on the hosted baseline). Seeded: a block, a report, a
+-- moderator, an acceptance, a blocked term and a report_filed notice with a delivery. The rollback restores each of the
+-- fourteen bodies the migration replaced: no longer the migration's, its grants as they were, and its source
+-- migration's text exactly (running that text again, as create or replace, changes nothing). The five tables, the ten
+-- functions and every report_filed notice go, and the kind check is chat core's thirteen kinds again. Then plan 2's
+-- rollback, whose guard refuses while private.blocks exists, runs.
+\set s3_core `cat :'resbite_repo'/supabase/migrations/20261111140000_chat_core.sql`
+\set s3_groups `cat :'resbite_repo'/supabase/migrations/20261111150000_chat_groups.sql`
+\set s3_connections `cat :'resbite_repo'/supabase/migrations/20261110120000_connections.sql`
+\set s3_circles `cat :'resbite_repo'/supabase/migrations/20261111130000_circles_of_trust.sql`
+\set s3_phone_key `cat :'resbite_repo'/supabase/migrations/20261030130000_phone_key.sql`
+begin;
+select pg_temp.e7_cast();
+create temporary table s3_restores on commit drop as
+ select x.signature, x.source, (select p.proacl::text from pg_catalog.pg_proc p where p.oid=x.signature::regprocedure) as grants,
+  pg_catalog.pg_get_functiondef(x.signature::regprocedure) as migration_definition
+ from (values
+  ('private.chat_messages(uuid,bigint,integer)',pg_temp.s3_source(:'s3_core','create function private.chat_messages(','$$;')),
+  ('private.chat_messages_since(uuid,bigint,timestamp with time zone)',pg_temp.s3_source(:'s3_core','create function private.chat_messages_since(','$$;')),
+  ('private.send_message(uuid,text,uuid)',pg_temp.s3_source(:'s3_core','create function private.send_message(','$$;')),
+  ('private.send_announcement(uuid,text,text,uuid)',pg_temp.s3_source(:'s3_core','create function private.send_announcement(','$$;')),
+  ('public.claim_notification_deliveries(integer)',pg_temp.s3_source(:'s3_core','create or replace function public.claim_notification_deliveries(','$$;')),
+  ('private.request_account_deletion(uuid,uuid,uuid,text)',pg_temp.s3_source(:'s3_core','create or replace function private.request_account_deletion(','$$;')),
+  ('private.fold_web_account(uuid,uuid)',pg_temp.s3_source(:'s3_core','create or replace function private.fold_web_account(','$$;')),
+  ('private.chat_summary(uuid)',pg_temp.s3_source(:'s3_groups','create or replace function private.chat_summary(','$$;')),
+  ('private.request_connection(uuid,uuid)',pg_temp.s3_source(:'s3_groups','create or replace function private.request_connection(','$$;')),
+  ('private.notification_recipient_eligible(bigint)',pg_temp.s3_source(:'s3_groups','create or replace function private.notification_recipient_eligible(','$$;')),
+  ('private.my_chat_overview()',pg_temp.s3_source(:'s3_groups','create or replace function private.my_chat_overview(','$$;')),
+  ('private.plan_connection_states(uuid)',pg_temp.s3_source(:'s3_connections','create function private.plan_connection_states(','$$;')),
+  ('private.invite_contacts(uuid,jsonb)',pg_temp.s3_source(:'s3_circles','create or replace function private.invite_contacts(','$$;')),
+  ('private.contacts_on_resbite(text[])',pg_temp.s3_source(:'s3_phone_key','create or replace function private.contacts_on_resbite(','$$;'))) x(signature,source)
+ where pg_catalog.to_regprocedure(x.signature) is not null;
+select pg_temp.s3_check((select count(*) from s3_restores where source like 'create or replace function %' and grants is not null)
+ =case when pg_catalog.to_regprocedure('private.request_account_deletion(uuid,uuid,uuid,text)') is null then 13 else 14 end,
+ 'A body to restore, or its source, is missing');
+insert into private.blocks(blocker_id,blocked_id) values (pg_temp.e7('03'),pg_temp.e7('04'));
+insert into private.reports(reporter_id,target_user_id,series_id,plan_id,about,reason) values
+ (pg_temp.e7('03'),pg_temp.e7('04'),pg_temp.e7p('01'),pg_temp.e7p('01'),'user','spam');
+insert into private.moderators(user_id) values (pg_temp.e7('09'));
+insert into private.chat_rules_acceptances(user_id,version) values (pg_temp.e7('03'),private.chat_rules_version());
+insert into private.blocked_terms(term) values ('zzbadword');
+insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key) values (pg_temp.e7p('01'),pg_temp.e7('09'),'report_filed','s3:wayback');
+insert into private.notification_deliveries(outbox_id,token,endpoint_updated_at)
+ select id,'ExpoPushToken[s3wayback]',now() from private.notification_outbox where dedupe_key='s3:wayback';
+\ir ../rollback/20261111160000_chat_safety.rollback.sql
+do $$ declare f record; v_def text; begin
+ for f in select * from s3_restores loop
+  v_def := pg_catalog.pg_get_functiondef(f.signature::regprocedure);
+  perform pg_temp.s3_check(v_def is distinct from f.migration_definition,'The rollback left the migration''s body of '||f.signature);
+  perform pg_temp.s3_check((select p.proacl::text from pg_catalog.pg_proc p where p.oid=f.signature::regprocedure) is not distinct from f.grants,
+   'The rollback changed the grants of '||f.signature);
+  execute f.source;
+  perform pg_temp.s3_check(pg_catalog.pg_get_functiondef(f.signature::regprocedure)=v_def,'The rollback did not restore '||f.signature||' as its source has it');
+ end loop;
+ perform pg_temp.s3_check(pg_catalog.to_regclass('private.blocks') is null and pg_catalog.to_regclass('private.reports') is null
+  and pg_catalog.to_regclass('private.moderators') is null and pg_catalog.to_regclass('private.chat_rules_acceptances') is null
+  and pg_catalog.to_regclass('private.blocked_terms') is null,'The rollback left a table');
+ perform pg_temp.s3_check(not exists(select 1 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
+   where n.nspname in ('public','private') and p.proname in ('block_user','my_blocks','report_message','report_user','accept_chat_rules',
+    'chat_rules_version','report_keep_days','invited_by','inviter_of')),'The rollback left a function');
+ perform pg_temp.s3_check(not exists(select 1 from private.notification_outbox where kind='report_filed')
+  and not exists(select 1 from private.notification_deliveries where token='ExpoPushToken[s3wayback]'),'The rollback left a report_filed notice');
+ perform pg_temp.s3_check((select pg_catalog.pg_get_constraintdef(oid) from pg_catalog.pg_constraint where conname='notification_outbox_kind_check'
+   and conrelid='private.notification_outbox'::regclass)=
+  'CHECK ((kind = ANY (ARRAY[''invitation''::text, ''rsvp''::text, ''plan_changed''::text, ''plan_cancelled''::text, ''guest_note''::text, ''invited''::text, '
+  '''join_request''::text, ''join_approved''::text, ''admin_added''::text, ''connection_request''::text, ''connection_accepted''::text, '
+  '''chat_message''::text, ''announcement''::text])))','The rollback did not restore chat core''s kind check');
+end $$;
+\ir ../rollback/20261111150000_chat_groups.rollback.sql
+select pg_temp.s3_check(pg_catalog.to_regclass('private.series_leaves') is null,'Plan 2''s rollback did not run after this one');
 rollback;
