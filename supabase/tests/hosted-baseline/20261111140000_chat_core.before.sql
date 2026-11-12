@@ -30,14 +30,14 @@ do $$ begin
 end $$;
 
 -- 3. What the migration changes and the rollback puts back, as it stands, so .after.sql can prove the apply keeps the
--- grants and the rollback restores each exactly: the three functions it redefines that exist on the hosted project
+-- grants and the rollback restores each exactly: the four functions it redefines that exist on the hosted project
 -- (request_account_deletion does not: the deletion lifecycle is local-only), with their grants; the outbox's kind check,
 -- columns and indexes; and the triggers of the three tables the chat's line triggers go on.
 create table private.ch1_rehearsal_functions as
  select f as signature, pg_catalog.pg_get_functiondef(f::regprocedure) as definition,
   (select p.proacl::text from pg_catalog.pg_proc p where p.oid=f::regprocedure) as grants
  from unnest(array['private.notification_recipient_eligible(bigint)','public.claim_notification_deliveries(integer)',
-  'public.finish_notification_delivery(uuid,uuid,text,text,integer)']) f;
+  'public.finish_notification_delivery(uuid,uuid,text,text,integer)','private.fold_web_account(uuid,uuid)']) f;
 alter table private.ch1_rehearsal_functions enable row level security;
 create table private.ch1_rehearsal_outbox as
  select (select pg_catalog.pg_get_constraintdef(c.oid) from pg_catalog.pg_constraint c
@@ -53,20 +53,23 @@ create table private.ch1_rehearsal_triggers as
 alter table private.ch1_rehearsal_triggers enable row level security;
 
 -- 4. The pre-state: the circles migration is applied (the chat's first names are its helper's, the claim names a
--- bringer), the outcome is push_delivery's (no 'deferred'), the notice audience is connections' (no chat kinds), and
+-- bringer, the fold keeps the removal records), the outcome is push_delivery's (no 'deferred'), the notice audience is
+-- connections' (no chat kinds), the fold knows nothing of chat, and
 -- none of the four tables, the new functions or the chat's triggers exist yet; request_account_deletion does not exist.
 do $$ begin
  if pg_catalog.to_regprocedure('private.first_name(text)') is null then
   raise exception 'private.first_name is missing: apply 20261111130000_circles_of_trust first';
  end if;
- if (select count(*) from private.ch1_rehearsal_functions where definition is not null and grants is not null)<>3 then
+ if (select count(*) from private.ch1_rehearsal_functions where definition is not null and grants is not null)<>4 then
   raise exception 'A function to redefine is missing';
  end if;
  if (select definition from private.ch1_rehearsal_functions where signature='public.claim_notification_deliveries(integer)') not like '%brought_by_name%'
  or (select definition from private.ch1_rehearsal_functions where signature='public.finish_notification_delivery(uuid,uuid,text,text,integer)') like '%deferred%'
  or (select definition from private.ch1_rehearsal_functions where signature='private.notification_recipient_eligible(bigint)') not like '%connection_request%'
- or (select definition from private.ch1_rehearsal_functions where signature='private.notification_recipient_eligible(bigint)') like '%chat_message%' then
-  raise exception 'The claim is not the circles one, the outcome not push_delivery''s, or the notice audience not connections''';
+ or (select definition from private.ch1_rehearsal_functions where signature='private.notification_recipient_eligible(bigint)') like '%chat_message%'
+ or (select definition from private.ch1_rehearsal_functions where signature='private.fold_web_account(uuid,uuid)') not like '%plan_removals%'
+ or (select definition from private.ch1_rehearsal_functions where signature='private.fold_web_account(uuid,uuid)') like '%public.messages%' then
+  raise exception 'The claim or the fold is not the circles one, the outcome not push_delivery''s, or the notice audience not connections''';
  end if;
  if (select kind_check from private.ch1_rehearsal_outbox) like '%chat_message%'
  or (select columns from private.ch1_rehearsal_outbox) like '%message_id%' then

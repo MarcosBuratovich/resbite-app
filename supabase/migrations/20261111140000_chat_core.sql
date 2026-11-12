@@ -4,8 +4,8 @@
 -- Spec: docs/superpowers/specs/2026-11-10-groups-and-chat-design.md (CH-D1–D6; CH-P1–P3, P5–P12, P14–P19)
 -- Plan: docs/superpowers/plans/2026-11-11-chat-1-core.md (Tasks 1 to 3), with the rulings in its Revised lists
 -- Hosted-compatible: depends only on the migrations in supabase/tests/hosted-baseline/migrations.txt,
--- 20261111120000_connections_follow_ups.sql and 20261111130000_circles_of_trust.sql (private.first_name, and the claim
--- and the deletion request this file copies), and on the hosted project's Realtime (locally a stub in
+-- 20261111120000_connections_follow_ups.sql and 20261111130000_circles_of_trust.sql (private.first_name, and the claim,
+-- the deletion request and the fold this file copies), and on the hosted project's Realtime (locally a stub in
 -- supabase/tests/local/bootstrap.sql; this file never creates it).
 -- Rollback: supabase/rollback/20261111140000_chat_core.rollback.sql (Task 3)
 --
@@ -888,13 +888,15 @@ revoke all on function private.chat_lines_off() from public, anon, authenticated
 -- An answer (K-S2, Decision 10, H8). Into Going or Maybe from anything else: joined {actor, user, brought_by when the
 -- guest row has a bringer}. Out of Going or Maybe into Can't go: cant_go {actor, user}. A row put in not answered
 -- writes nothing, and so does a move between Going and Maybe. When that person's latest joined or cant_go line in the
--- series was made in the last 10 minutes, it is that line that changes (its event and payload; created_at stays,
--- updated_at moves, and messages_signal tells the open chats again) instead of a new one, so a reply flipped back and
--- forth is one line. The trigger fires on the answer only (insert, or update of response): a guest row moved between
+-- series was made in the last 10 minutes and no later system line names them (as actor, user or brought_by: H33), it is
+-- that line that changes (its event and payload; created_at stays, updated_at moves, and messages_signal tells the open
+-- chats again) instead of a new one, so a reply flipped back and forth is one line, and the feed's order stays true:
+-- "Leo is now an admin" never sits under a "Leo can't make it" that came after it. Only joined and cant_go lines merge.
+-- The trigger fires on the answer only (insert, or update of response): a guest row moved between
 -- accounts (fold_web_account) or ended by the circles trigger beside it (attendees_close_waiting) writes nothing of its
 -- own, and a row deleted later in the same transaction keeps the line it wrote. The database's own: no role may call it.
 create function private.attendees_chat_lines() returns trigger language plpgsql security definer set search_path = '' as $$
-declare v_event text; v_payload jsonb; v_line bigint; v_made timestamptz;
+declare v_event text; v_payload jsonb; v_series uuid; v_line bigint; v_made timestamptz;
 begin
  if private.chat_lines_off() then return null; end if;
  if new.response in ('accepted','maybe') and (tg_op = 'INSERT' or old.response not in ('accepted','maybe')) then
@@ -907,13 +909,17 @@ begin
  else
   return null;
  end if;
- -- That person's latest line, looked for among the rows changed in the last 10 minutes (messages_series_updated_idx):
- -- a line made in them was changed in them too, and rows are made in id order.
+ -- That person's latest joined or cant_go line. Only a line made in the last 10 minutes can merge, and its updated_at is
+ -- never before its created_at, so the search keeps to the rows updated in those 10 minutes (messages_series_updated_idx)
+ -- and misses none that could; ids follow the order rows are made in, so the highest id found is the latest line.
+ select p.series_id into v_series from public.plans p where p.id = new.plan_id;
  select m.id, m.created_at into v_line, v_made from public.messages m
- where m.series_id = (select p.series_id from public.plans p where p.id = new.plan_id) and m.updated_at > now() - interval '10 minutes'
+ where m.series_id = v_series and m.updated_at > now() - interval '10 minutes'
   and m.kind = 'system' and m.event in ('joined','cant_go') and m.payload->>'user' = new.user_id::text
  order by m.id desc limit 1;
- if v_line is not null and v_made > now() - interval '10 minutes' then
+ if v_line is not null and v_made > now() - interval '10 minutes'
+  and not exists (select 1 from public.messages l where l.series_id = v_series and l.id > v_line and l.kind = 'system'
+   and new.user_id::text in (l.payload->>'actor', l.payload->>'user', l.payload->>'brought_by')) then
   update public.messages set event = v_event, payload = v_payload where id = v_line;
  else
   perform private.chat_system_line(new.plan_id, v_event, v_payload);
@@ -962,14 +968,119 @@ end $$;
 revoke all on function private.plan_admins_chat_lines() from public, anon, authenticated, service_role;
 create trigger plan_admins_chat_lines after insert on public.plan_admins for each row execute function private.plan_admins_chat_lines();
 
--- 3b. The live signal (CH-D2, K-S6, NOTE 3). Every row written to a chat and every update of one (a removal, a
+-- 3b. Folding a web account into an app account (H34). The 20261111130000_circles_of_trust body, verbatim, with one step
+-- added before the web profile goes: the web account's messages and its place in the chat's system lines (the payload
+-- keys that hold people) move to the app account, so a merged person keeps their name in the chat ("Wren joined",
+-- not "Someone joined") and their next answer merges with their own line. The guest rows it moves keep their answers
+-- and write no line (attendees_chat_lines fires on an answer, never on a move). Its grants are kept.
+create or replace function private.fold_web_account(p_from uuid, p_into uuid) returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_moved integer; v_disabled boolean; v_row record;
+begin
+ if p_from is null or p_into is null or p_from=p_into then raise exception 'Invalid accounts' using errcode='22023'; end if;
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(least(p_from,p_into)::text,47));
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(greatest(p_from,p_into)::text,47));
+ if not exists(select 1 from auth.users where id=p_into) then raise exception 'Unknown account' using errcode='22023'; end if;
+ if private.used_app(p_from) then raise exception 'The account has used the app' using errcode='22023'; end if;
+ if exists(select 1 from public.plans where owner_id=p_from) then raise exception 'The account organizes events' using errcode='22023'; end if;
+ -- Add your number comes before About you, so the account may have no profile yet: it takes the name given on the web.
+ insert into public.profiles(id,display_name) select p_into, display_name from public.profiles where id=p_from
+  on conflict (id) do nothing;
+ -- 1. Places: where the account is already on the event, or organizes it, its own place stays and the web one goes.
+ delete from public.attendees f where f.user_id=p_from
+  and (exists(select 1 from public.attendees t where t.plan_id=f.plan_id and t.user_id=p_into)
+   or exists(select 1 from public.plans p where p.id=f.plan_id and p.owner_id=p_into));
+ update public.attendees set user_id=p_into where user_id=p_from;
+ get diagnostics v_moved = row_count;
+ -- 2. Invitations.
+ update private.phone_invitations set user_id=p_into where user_id=p_from;
+ -- 2a. Open-link requests: where the account already has its own request, is on the event or organizes it, its own
+ -- stands and the web one goes; the rest move with their answer, link and status.
+ -- Where its own request stands, the web one's unsent notice goes with it, so the host is told once.
+ delete from private.notification_outbox o where o.kind='join_request' and o.actor_id=p_from and o.delivered_at is null
+  and exists(select 1 from private.join_requests t where t.plan_id=o.plan_id and t.user_id=p_into);
+ delete from private.join_requests f where f.user_id=p_from
+  and (exists(select 1 from private.join_requests t where t.plan_id=f.plan_id and t.user_id=p_into)
+   or exists(select 1 from public.attendees t where t.plan_id=f.plan_id and t.user_id=p_into)
+   or exists(select 1 from public.plans p where p.id=f.plan_id and p.owner_id=p_into));
+ update private.join_requests set user_id=p_into where user_id=p_from;
+ -- 2b. Notices the account caused that haven't gone out yet name the app account.
+ update private.notification_outbox set actor_id=p_into where actor_id=p_from and delivered_at is null;
+ -- 2c. Removal records (circles of trust): a record of the web account is a record of the person, so it moves to the
+ -- app account before the web account goes (deleting it would cascade the record away). Where the app account already
+ -- has one for that series, it keeps the later time.
+ insert into private.plan_removals(series_id,user_id,removed_at) select series_id,p_into,removed_at from private.plan_removals
+  where user_id=p_from
+ on conflict (series_id,user_id) where user_id is not null do update set removed_at=greatest(private.plan_removals.removed_at,excluded.removed_at);
+ delete from private.plan_removals where user_id=p_from;
+ -- 2d. The removal holds (CO-R12): the app account's places on resbites not yet ended of a series where it is on
+ -- record.
+ for v_row in select a.plan_id, p.series_id,
+   (select max(r.removed_at) from private.plan_removals r where r.series_id=p.series_id and r.user_id=p_into) as removed_at
+  from public.attendees a join public.plans p on p.id=a.plan_id
+  where a.user_id=p_into and private.plan_end(p.starts_at,p.ends_at)>now()
+   and exists(select 1 from private.plan_removals r where r.series_id=p.series_id and r.user_id=p_into)
+  order by a.plan_id
+ loop
+  if exists(select 1 from private.phone_invitations i where i.plan_id=v_row.plan_id and i.user_id=p_into and i.level=1
+    and i.answered_at is not null and i.revoked_at is null and i.created_at>v_row.removed_at) then
+   -- The host's later link, made after the record.
+   delete from private.plan_removals where series_id=v_row.series_id and user_id=p_into;
+  else
+   update private.invitations set revoked_at=now() where plan_id=v_row.plan_id and claimed_by=p_into and revoked_at is null;
+   update private.phone_invitations set revoked_at=now(), code_hash=null where plan_id=v_row.plan_id and (user_id=p_into
+    or (revoked_at is null and phone=(select nullif(private.phone_key(u.phone),'') from auth.users u where u.id=p_into and u.phone_confirmed_at is not null)));
+   delete from public.plan_admins where plan_id=v_row.plan_id and user_id=p_into;
+   delete from public.attendees where plan_id=v_row.plan_id and user_id=p_into;
+  end if;
+ end loop;
+ -- 3. The tick and the grant, unless the account has its own. A revoked grant is a ban: one on either side stays. An
+ -- account whose tester-roster entry is disabled gets no live grant, as join_by_link and answer_phone_invitation.
+ v_disabled := exists(select 1 from auth.users u where u.id=p_into
+  and exists(select 1 from private.tester_roster r where r.email = lower(u.email) and not r.enabled));
+ if not exists(select 1 from private.age_attestations where user_id=p_into) then
+  update private.age_attestations set user_id=p_into where user_id=p_from;
+ end if;
+ if not exists(select 1 from private.beta_access where user_id=p_into) then
+  insert into private.beta_access(user_id,source,plan_link_id,granted_at,revoked_at)
+   select p_into,source,plan_link_id,granted_at,revoked_at from private.beta_access
+   where user_id=p_from and (revoked_at is not null or not v_disabled);
+ else
+  update private.beta_access t set revoked_at=f.revoked_at from private.beta_access f
+   where t.user_id=p_into and t.revoked_at is null and f.user_id=p_from and f.revoked_at is not null;
+ end if;
+ -- The web account's live grant and tick go, so a fold whose user deletion then fails leaves no second account that
+ -- gets in; its ban stays, so that account still can't join by a link or answer an invitation.
+ delete from private.beta_access where user_id=p_from and revoked_at is null;
+ delete from private.age_attestations where user_id=p_from;
+ -- 3b. Chat (chat core, H34): the person's words and their place in Resbite's lines go to the app account before the
+ -- web profile goes (which would leave a message with no author and a line naming nobody): a message's author, and
+ -- the person keys of a system line's payload (actor, user, brought_by; K-B2).
+ update public.messages set author_id=p_into where author_id=p_from;
+ update public.messages m set payload=m.payload
+  ||case when m.payload->>'actor'=p_from::text then jsonb_build_object('actor',p_into) else '{}'::jsonb end
+  ||case when m.payload->>'user'=p_from::text then jsonb_build_object('user',p_into) else '{}'::jsonb end
+  ||case when m.payload->>'brought_by'=p_from::text then jsonb_build_object('brought_by',p_into) else '{}'::jsonb end
+ where m.kind='system' and p_from::text in (m.payload->>'actor',m.payload->>'user',m.payload->>'brought_by');
+ -- 4. The web profile.
+ delete from public.profiles where id=p_from;
+ return jsonb_build_object('moved_attendees',v_moved);
+end $$;
+
+-- 3c. The live signal (CH-D2, K-S6, NOTE 3). Every row written to a chat and every update of one (a removal, a
 -- deletion, a line updated in place) broadcasts {id, kind, state} on the private channel chat:<series_id>, event chat:
 -- a signal only, never the words, so the app fetches through the reads (K-B1), and a phone that misses one catches up
--- on its next read. On the hosted project realtime.send turns its own errors into warnings, so a broadcast never
--- stops a write (the runbook checks Realtime before and after, K-S5). The database's own: no role may call it.
+-- on its next read. The call to realtime.send runs in a block of its own that turns any error into a warning (H33): a
+-- realtime.send that is missing, not granted, behind a schema the definer may not use, of another signature, or
+-- failing inside, so a broadcast never stops a write, and the write commits with no broadcast. (Hosted's realtime.send
+-- also catches its own insert errors.) The runbook checks Realtime before and after (K-S5). The database's own: no role
+-- may call it.
 create function private.messages_signal() returns trigger language plpgsql security definer set search_path = '' as $$
 begin
- perform realtime.send(jsonb_build_object('id', new.id, 'kind', new.kind, 'state', new.state), 'chat', 'chat:' || new.series_id::text, true);
+ begin
+  perform realtime.send(jsonb_build_object('id', new.id, 'kind', new.kind, 'state', new.state), 'chat', 'chat:' || new.series_id::text, true);
+ exception when others then
+  raise warning 'messages_signal: no broadcast for message %: % %', new.id, sqlstate, sqlerrm;
+ end;
  return null;
 end $$;
 revoke all on function private.messages_signal() from public, anon, authenticated, service_role;
@@ -989,7 +1100,9 @@ end $$;
 revoke all on function private.can_listen(text) from public, anon, authenticated, service_role;
 grant execute on function private.can_listen(text) to authenticated;
 
--- Realtime's own check when a phone joins chat:<series> (private channels): broadcasts only, through can_listen alone.
+-- Realtime's own check when a phone joins chat:<series> (private channels): a broadcast on the very topic being checked
+-- (H34: whoever selects under the check reads that chat's signals, never another's), and the topic passes can_listen.
 -- No policy lets anyone send: clients never do.
 create policy chat_members_listen on realtime.messages for select to authenticated
- using (realtime.messages.extension = 'broadcast' and private.can_listen((select realtime.topic())));
+ using (realtime.messages.extension = 'broadcast' and realtime.messages.topic = (select realtime.topic())
+  and private.can_listen((select realtime.topic())));

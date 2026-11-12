@@ -48,16 +48,17 @@ do $$ declare t text; r text; p text; begin
   raise exception 'The outbox''s chat indexes are wrong';
  end if;
 end $$;
--- 2. Realtime and the grants (K-S5, K-S6, K-N13). realtime.messages has exactly one policy, chat_members_listen, for
--- reading, to authenticated, through can_listen; no policy writes. The ten public calls and their private bodies are for
+-- 2. Realtime and the grants (K-S5, K-S6, K-N13, H34). realtime.messages has exactly one policy, chat_members_listen,
+-- for reading, to authenticated: a broadcast on the topic being checked, through can_listen, exactly; no policy writes. The ten public calls and their private bodies are for
 -- signed-in accounts only (the wrappers are no definers); can_listen too, and nothing else of the migration's is for
 -- any role; every private function of it is a definer with an empty search path. The seven triggers are in place. The
--- three redefined functions kept their grants (the worker's, and nobody's for the audience).
+-- four redefined functions kept their grants (the worker's, nobody's for the audience, the fold's).
 do $$ declare f text; r text; begin
  if (select count(*) from pg_catalog.pg_policies where schemaname='realtime')<>1
  or not exists(select 1 from pg_catalog.pg_policies where schemaname='realtime' and tablename='messages' and policyname='chat_members_listen'
    and cmd='SELECT' and permissive='PERMISSIVE' and roles='{authenticated}'::name[] and with_check is null
-   and qual like '%extension = ''broadcast''::text%private.can_listen(%realtime.topic()%') then
+   and regexp_replace(qual,'\s+',' ','g')='((extension = ''broadcast''::text) AND (topic = ( SELECT realtime.topic() AS topic)) AND '
+    'private.can_listen(( SELECT realtime.topic() AS topic)))') then
   raise exception 'realtime.messages does not have exactly the one policy';
  end if;
  foreach f in array array['chat_summary(uuid)','chat_messages(uuid,bigint,integer)','chat_messages_since(uuid,bigint,timestamptz)',
@@ -106,7 +107,7 @@ end $$;
 -- 3. The rollback, rehearsed and undone (K-N9, NOTE 4, NOTE 5). Seed what it removes: a guest's joined line (the
 -- trigger's), a message and an announcement with their notices (one with a delivery), a read and a mute, beside an
 -- ordinary notice. Try its guard: it refuses while chat plan 2 is applied (a private.series_leaves table stands in), and
--- a refusal changes nothing. Then run it: the three functions, with their grants, the outbox's kind check, columns and
+-- a refusal changes nothing. Then run it: the four functions, with their grants, the outbox's kind check, columns and
 -- indexes, and the triggers of plans, attendees and plan_admins are what .before.sql recorded; the Realtime policy, the
 -- four tables, the new functions and the chat notices are gone; request_account_deletion still does not exist; the
 -- resbites, the guest and the ordinary notice stay.

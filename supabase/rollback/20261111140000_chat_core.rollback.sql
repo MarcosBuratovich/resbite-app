@@ -1,8 +1,8 @@
 -- Rollback for 20261111140000_chat_core.sql (chat core, chat plan 1 of 3). Run as one transaction, only with the owner's
 -- approval:
 --   begin; \i supabase/rollback/20261111140000_chat_core.rollback.sql; commit;
--- It is for the hosted project, where 20261111130000_circles_of_trust.sql is applied (this file restores its claim and
--- deletion request). What is lost, with nobody told:
+-- It is for the hosted project, where 20261111130000_circles_of_trust.sql is applied (this file restores its claim, its
+-- fold and its deletion request). What is lost, with nobody told:
 --   - every chat: every message, announcement and system line, every read and every mute (public.messages,
 --     public.chats with its is_group, public.chat_reads, public.chat_mutes, and the messages' indexes and id sequence);
 --   - every 'chat_message' and 'announcement' outbox row, sent or not, with its deliveries, so the earlier kind check can
@@ -16,6 +16,8 @@
 -- It restores, each keeping its grants (create or replace):
 --   private.notification_recipient_eligible   from 20261110120000_connections.sql
 --   public.claim_notification_deliveries      from 20261111130000_circles_of_trust.sql (the worker's; no wrapper)
+--   private.fold_web_account                  from 20261111130000_circles_of_trust.sql (its public wrapper unchanged):
+--                                             a fold no longer moves chat authors and lines, which go with the chat
 --   public.finish_notification_delivery       from 20261030120000_push_delivery.sql (the worker's; no wrapper): it
 --                                             refuses the outcome 'deferred' again, so the sender that hands jobs back
 --                                             (Task 4's deliver-notifications) goes back to the earlier one before or
@@ -29,12 +31,15 @@
 -- Builds: an app build with chat (the Chat row, /chat, the unread dots, the announcement lines, chat pushes) gets errors
 -- from the calls dropped here and a refused channel. Roll the app back first. Installed builds from before chat read
 -- nothing this removes.
--- Order (NOTE 5): the three chat plans ship in one release, and roll back in this order only: chat 3 (safety), chat 2
--- (groups), chat 1 (this file), then circles, the connections follow-ups, connections and creating-a-resbite. Chat
--- plan 2 must be rolled back first: its groups read this file's tables and functions. The guard below refuses while
--- plan 2 is applied (its private.series_leaves exists); plan 2's own rollback refuses while plan 3 is applied, and the
--- circles rollback refuses while chat is (public.messages exists), so the order holds at every step. A refusal changes
--- nothing.
+-- Order (NOTE 5, H34): the three chat plans ship in one release, and roll back in this order only: chat 3 (safety),
+-- chat 2 (groups), chat 1 (this file), then circles, the connections follow-ups, connections and creating-a-resbite.
+-- Chat plan 2 must be rolled back first: its groups read this file's tables and functions. The guarded chain is
+-- chat 3 → chat 2 → chat 1 → circles → follow-ups: plan 2's rollback refuses while plan 3 is applied, the guard below
+-- refuses while plan 2 is (its private.series_leaves exists), the circles rollback refuses while chat is
+-- (public.messages exists), and the follow-ups rollback refuses while circles is. Below it nothing guards: the
+-- connections and creating-a-resbite rollbacks have no guard against chat, so never run either while chat is applied
+-- (the connections one would take the chat kinds out of the outbox's check and the chat branch out of who may be told,
+-- under a live chat). A refusal changes nothing.
 
 -- 1. Chat plan 2 is applied: its leave records exist.
 do $$ begin
@@ -43,7 +48,8 @@ do $$ begin
  end if;
 end $$;
 
--- Nothing writes a guest row, a plan, an admin, a message or a notice until this commits.
+-- Nothing reads or writes a guest row, a plan, an admin, a message, a chat row, a read, a mute or a notice until this
+-- commits.
 lock table public.plans, public.attendees, public.plan_admins, public.messages, public.chats, public.chat_reads, public.chat_mutes,
  private.notification_outbox in access exclusive mode;
 
@@ -145,6 +151,90 @@ begin
  update private.notification_outbox o set delivered_at=now() where o.expanded_at is not null and o.delivered_at is null
  and not exists(select 1 from private.notification_deliveries d where d.outbox_id=o.id and d.state in ('pending','sending','ticket'));
  return v_result;
+end $$;
+-- Folding a web account as it was (20261111130000_circles_of_trust.sql): no chat step.
+create or replace function private.fold_web_account(p_from uuid, p_into uuid) returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_moved integer; v_disabled boolean; v_row record;
+begin
+ if p_from is null or p_into is null or p_from=p_into then raise exception 'Invalid accounts' using errcode='22023'; end if;
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(least(p_from,p_into)::text,47));
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(greatest(p_from,p_into)::text,47));
+ if not exists(select 1 from auth.users where id=p_into) then raise exception 'Unknown account' using errcode='22023'; end if;
+ if private.used_app(p_from) then raise exception 'The account has used the app' using errcode='22023'; end if;
+ if exists(select 1 from public.plans where owner_id=p_from) then raise exception 'The account organizes events' using errcode='22023'; end if;
+ -- Add your number comes before About you, so the account may have no profile yet: it takes the name given on the web.
+ insert into public.profiles(id,display_name) select p_into, display_name from public.profiles where id=p_from
+  on conflict (id) do nothing;
+ -- 1. Places: where the account is already on the event, or organizes it, its own place stays and the web one goes.
+ delete from public.attendees f where f.user_id=p_from
+  and (exists(select 1 from public.attendees t where t.plan_id=f.plan_id and t.user_id=p_into)
+   or exists(select 1 from public.plans p where p.id=f.plan_id and p.owner_id=p_into));
+ update public.attendees set user_id=p_into where user_id=p_from;
+ get diagnostics v_moved = row_count;
+ -- 2. Invitations.
+ update private.phone_invitations set user_id=p_into where user_id=p_from;
+ -- 2a. Open-link requests: where the account already has its own request, is on the event or organizes it, its own
+ -- stands and the web one goes; the rest move with their answer, link and status.
+ -- Where its own request stands, the web one's unsent notice goes with it, so the host is told once.
+ delete from private.notification_outbox o where o.kind='join_request' and o.actor_id=p_from and o.delivered_at is null
+  and exists(select 1 from private.join_requests t where t.plan_id=o.plan_id and t.user_id=p_into);
+ delete from private.join_requests f where f.user_id=p_from
+  and (exists(select 1 from private.join_requests t where t.plan_id=f.plan_id and t.user_id=p_into)
+   or exists(select 1 from public.attendees t where t.plan_id=f.plan_id and t.user_id=p_into)
+   or exists(select 1 from public.plans p where p.id=f.plan_id and p.owner_id=p_into));
+ update private.join_requests set user_id=p_into where user_id=p_from;
+ -- 2b. Notices the account caused that haven't gone out yet name the app account.
+ update private.notification_outbox set actor_id=p_into where actor_id=p_from and delivered_at is null;
+ -- 2c. Removal records (circles of trust): a record of the web account is a record of the person, so it moves to the
+ -- app account before the web account goes (deleting it would cascade the record away). Where the app account already
+ -- has one for that series, it keeps the later time.
+ insert into private.plan_removals(series_id,user_id,removed_at) select series_id,p_into,removed_at from private.plan_removals
+  where user_id=p_from
+ on conflict (series_id,user_id) where user_id is not null do update set removed_at=greatest(private.plan_removals.removed_at,excluded.removed_at);
+ delete from private.plan_removals where user_id=p_from;
+ -- 2d. The removal holds (CO-R12): the app account's places on resbites not yet ended of a series where it is on
+ -- record.
+ for v_row in select a.plan_id, p.series_id,
+   (select max(r.removed_at) from private.plan_removals r where r.series_id=p.series_id and r.user_id=p_into) as removed_at
+  from public.attendees a join public.plans p on p.id=a.plan_id
+  where a.user_id=p_into and private.plan_end(p.starts_at,p.ends_at)>now()
+   and exists(select 1 from private.plan_removals r where r.series_id=p.series_id and r.user_id=p_into)
+  order by a.plan_id
+ loop
+  if exists(select 1 from private.phone_invitations i where i.plan_id=v_row.plan_id and i.user_id=p_into and i.level=1
+    and i.answered_at is not null and i.revoked_at is null and i.created_at>v_row.removed_at) then
+   -- The host's later link, made after the record.
+   delete from private.plan_removals where series_id=v_row.series_id and user_id=p_into;
+  else
+   update private.invitations set revoked_at=now() where plan_id=v_row.plan_id and claimed_by=p_into and revoked_at is null;
+   update private.phone_invitations set revoked_at=now(), code_hash=null where plan_id=v_row.plan_id and (user_id=p_into
+    or (revoked_at is null and phone=(select nullif(private.phone_key(u.phone),'') from auth.users u where u.id=p_into and u.phone_confirmed_at is not null)));
+   delete from public.plan_admins where plan_id=v_row.plan_id and user_id=p_into;
+   delete from public.attendees where plan_id=v_row.plan_id and user_id=p_into;
+  end if;
+ end loop;
+ -- 3. The tick and the grant, unless the account has its own. A revoked grant is a ban: one on either side stays. An
+ -- account whose tester-roster entry is disabled gets no live grant, as join_by_link and answer_phone_invitation.
+ v_disabled := exists(select 1 from auth.users u where u.id=p_into
+  and exists(select 1 from private.tester_roster r where r.email = lower(u.email) and not r.enabled));
+ if not exists(select 1 from private.age_attestations where user_id=p_into) then
+  update private.age_attestations set user_id=p_into where user_id=p_from;
+ end if;
+ if not exists(select 1 from private.beta_access where user_id=p_into) then
+  insert into private.beta_access(user_id,source,plan_link_id,granted_at,revoked_at)
+   select p_into,source,plan_link_id,granted_at,revoked_at from private.beta_access
+   where user_id=p_from and (revoked_at is not null or not v_disabled);
+ else
+  update private.beta_access t set revoked_at=f.revoked_at from private.beta_access f
+   where t.user_id=p_into and t.revoked_at is null and f.user_id=p_from and f.revoked_at is not null;
+ end if;
+ -- The web account's live grant and tick go, so a fold whose user deletion then fails leaves no second account that
+ -- gets in; its ban stays, so that account still can't join by a link or answer an invitation.
+ delete from private.beta_access where user_id=p_from and revoked_at is null;
+ delete from private.age_attestations where user_id=p_from;
+ -- 4. The web profile.
+ delete from public.profiles where id=p_from;
+ return jsonb_build_object('moved_attendees',v_moved);
 end $$;
 -- The worker's outcome as it was (20261030120000_push_delivery.sql): no 'deferred'.
 create or replace function public.finish_notification_delivery(p_id uuid,p_lease uuid,p_outcome text,p_ticket text default null,p_delay_seconds integer default 0)
