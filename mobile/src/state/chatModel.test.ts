@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  RESEND_LIMIT_MS,
   SEEN_LIMIT,
   changedAfter,
   createCoalescer,
@@ -11,6 +12,7 @@ import {
   remember,
   replaceOrMerge,
   staleUnsent,
+  tooOldToResend,
   withEndedLine,
   withPending,
   type PendingMessage,
@@ -331,6 +333,21 @@ test("staleUnsent counts the distance either way, so a clock moved back doesn't 
   const ahead = queued("ahead", { createdAt: "2026-11-11T12:57:00.000Z" });
   const nearAhead = queued("near", { createdAt: "2026-11-11T12:00:09.000Z" });
   assert.deepEqual(staleUnsent([ahead, nearAhead], now), [ahead]);
+});
+
+test("tooOldToResend: over an hour from now either way, or a time that can't be read, waits for a tap (H41 I2b)", () => {
+  const now = Date.parse("2026-11-11T12:00:00.000Z");
+  assert.equal(RESEND_LIMIT_MS, 3_600_000);
+  const at = (createdAt: string) => tooOldToResend(queued("q", { createdAt }), now);
+  assert.equal(at("2026-11-11T11:58:00.000Z"), false);
+  assert.equal(at("2026-11-11T11:00:00.000Z"), false);
+  assert.equal(at("2026-11-11T10:59:59.999Z"), true);
+  assert.equal(at("2026-11-05T12:00:00.000Z"), true);
+  // A clock moved back: the same hour the other way.
+  assert.equal(at("2026-11-11T13:00:00.000Z"), false);
+  assert.equal(at("2026-11-11T13:00:00.001Z"), true);
+  // A time that can't be read can't be within the hour.
+  assert.equal(at("yesterday"), true);
 });
 
 test("remember keeps at most SEEN_LIMIT entries, letting the oldest go first (H25)", () => {

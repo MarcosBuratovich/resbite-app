@@ -36,10 +36,14 @@
 //   j   Larger Text at 320 px: the composer, the pinned card and the closed card fit with no clipped text; each bubble
 //       carries its accessibility actions (K-S14)
 //   k   /chat?series=not-a-uuid shows notInChat and calls nothing (K-N14)
+//   k2  no session to read with (the preview): /chat?series=<a valid id> shows notInChat, not an endless spinner, and
+//       calls nothing (H41 m5)
 //   l   a leave answered with an error (7.5b): no channel is left behind, so each return joins anew and is live, with
 //       no poll
 //   m   the pinned card loads back to an unloaded message and scrolls to it (K-S12)
 //   n   the host's empty state: Nobody's going yet, Invite people (H12); a guest's: No messages yet
+//   z2  a lone surrogate in the composer or the announcement field reads as U+FFFD and a NUL goes, as typed and as sent
+//       (H41 m2)
 //   ask Task 8 (CH-P17, K-N15): the first open of a chat, with the phone's permission never asked for, brings "Get
 //       notified?" once; Not now closes it, and the next open doesn't bring it again; nobody outside the chat is asked
 import assert from "node:assert/strict";
@@ -191,7 +195,7 @@ async function fixture({ viewer = PEDRO, now = OCT.now, rows = octRows(), summar
         };
       }
       if (!sessionStorage.getItem("fixture-seeded")) {
-        sessionStorage.setItem(key, JSON.stringify(session));
+        if (session) sessionStorage.setItem(key, JSON.stringify(session));
         if (queue) sessionStorage.setItem(queueKey, JSON.stringify(queue));
         sessionStorage.setItem("fixture-seeded", "1");
       }
@@ -204,7 +208,8 @@ async function fixture({ viewer = PEDRO, now = OCT.now, rows = octRows(), summar
     },
     {
       key: STORAGE_KEY,
-      session: {
+      // No viewer: nobody is signed in (scenario k2).
+      session: viewer && {
         user: userOf(viewer),
         access_token: jwt(viewer),
         refresh_token: "fixture",
@@ -572,6 +577,31 @@ try {
     await f.done();
   }
   console.log("PASS (k): a malformed series shows notInChat and makes no request of the chat set.");
+
+  // (k2) No session to read with: the preview, reached by URL, gets the notice and no endless spinner (H41 m5).
+  {
+    const f = await fixture({ viewer: null });
+    const { page } = f;
+    await page.goto(base);
+    await visible(page.getByText("Preview the design", { exact: true })).click();
+    await expect(page.getByRole("tab", { name: "My resbites", exact: true })).toBeVisible();
+    // A reload would end the preview, so the screen is opened in place, by expo-router's own router as the development
+    // bundle registers it.
+    await page.evaluate((to) => {
+      const modules = globalThis.__r.getModules();
+      const entries = modules instanceof Map ? [...modules.entries()] : Object.entries(modules);
+      const [id] = entries.find(([, m]) => /expo-router\/build\/imperative-api\.js$/.test(m?.verboseName ?? ""));
+      globalThis.__r(Number(id)).router.push(to);
+    }, `/chat?series=${SERIES}`);
+    await expect(page).toHaveURL(`${base}/chat?series=${SERIES}`);
+    await expect(text(page, "You’re not in this chat.")).toBeVisible();
+    await expect(page.getByRole("progressbar", { name: "Chat", exact: true })).toHaveCount(0);
+    await page.waitForTimeout(500);
+    for (const name of CHAT_SET) assert.equal(f.calls(name).length, 0, `no ${name}`);
+    assert.equal(f.joins().length, 0, "no channel");
+    await f.done();
+  }
+  console.log("PASS (k2): with no session to read with, a valid series shows notInChat, no spinner, and makes no request of the chat set.");
 
   // (a), (a0), (b), (c), (c3), (c2), (c4), (d3) as Pedro, Going.
   {
@@ -1335,6 +1365,39 @@ try {
     await f.done();
   }
   console.log("PASS (v, z): Send stays off for invisible-only text; a 5000-character paste keeps 1000 with the notice; 700 emoji fit; typing in the middle at the limit is refused.");
+
+  // (z2) A lone surrogate reads as U+FFFD and a NUL goes, in both fields, as typed and as sent (H41 m2). The text is
+  // made in the page, so nothing on the way to the browser can mend it, and set as an input event sets it.
+  {
+    const f = await fixture({ viewer: ANA });
+    const { page } = f;
+    await openChat(page);
+    await f.settle();
+    /** Types `head` + a lone high surrogate + NUL + `tail` into the field; answers its value's UTF-16 code units. */
+    const typeBroken = (locator, head, tail) =>
+      locator.evaluate(
+        (el, [head, tail]) => {
+          const value = head + String.fromCharCode(0xd83d) + String.fromCharCode(0) + tail;
+          Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), "value").set.call(el, value);
+          el.dispatchEvent(new Event("input", { bubbles: true }));
+          return new Promise((done) => requestAnimationFrame(() => done(Array.from(el.value, (c) => c.charCodeAt(0)))));
+        },
+        [head, tail],
+      );
+    const units = (s) => Array.from(s, (c) => c.charCodeAt(0));
+    assert.deepEqual(await typeBroken(field(page), "on my way ", "soon"), units("on my way \ufffdsoon"));
+    await button(page, "Send").click();
+    await expect.poll(() => f.calls("send_message").length).toBe(1);
+    assert.equal(f.calls("send_message")[0].p_body, "on my way \ufffdsoon");
+    await button(page, "Announce").click();
+    const announcement = visible(page.getByRole("textbox", { name: "Write an update for your guests", exact: true }));
+    assert.deepEqual(await typeBroken(announcement, "Doors ", " at 7"), units("Doors \ufffd at 7"));
+    await button(page, "Send announcement").click();
+    await expect.poll(() => f.calls("send_announcement").length).toBe(1);
+    assert.equal(f.calls("send_announcement")[0].p_body, "Doors \ufffd at 7");
+    await f.done();
+  }
+  console.log("PASS (z2): a lone surrogate reads as U+FFFD and a NUL goes in the composer and the announcement field, and is sent so.");
 
   // (y) An old chat's dates carry their year (H32 Q50).
   {

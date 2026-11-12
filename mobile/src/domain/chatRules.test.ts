@@ -26,6 +26,7 @@ import {
   systemText,
   timeLabel,
   unreadDot,
+  wellFormedText,
 } from "./chatRules";
 import { CHAT_COPY } from "./chatCopy";
 
@@ -721,6 +722,46 @@ test("the invitation card's line: the latest Everyone invited announcement, its 
   assert.equal(invitationNote(undefined, names, PEDRO), null);
   assert.equal(note({ body: "" }), null);
   assert.equal(note({ body: " \u200b " }), null);
+});
+
+test("the invitation card's line keeps what a person sees, emoji with their joiners, as the Chat row's does (H41 m1)", () => {
+  const note = (body: string) => invitationNote({ id: 41, authorId: ANA, body }, names, PEDRO);
+  assert.equal(note("Bring the 👨‍👩‍👧\nDoors 19:30"), "Announcement from Ana · Bring the 👨‍👩‍👧 Doors 19:30");
+  assert.equal(note("Flags 🏳️‍🌈 and tones 👋🏽"), "Announcement from Ana · Flags 🏳️‍🌈 and tones 👋🏽");
+  // Still one line that can't flip its words or hide a half.
+  assert.equal(note("ok \u202Eemoc\u2066 x\u2069 \ud83d end\u0007"), "Announcement from Ana · ok emoc x end");
+});
+
+test("wellFormedText: a lone surrogate reads as U+FFFD and NUL goes; everything else stays as written (H41 m2)", () => {
+  assert.equal(wellFormedText("hi \ud83d"), "hi \ufffd");
+  assert.equal(wellFormedText("\ude00 low"), "\ufffd low");
+  assert.equal(wellFormedText("\ud83d\ud83d\ude00"), "\ufffd😀");
+  assert.equal(wellFormedText("a\u0000b\u0000"), "ab");
+  const kept = "👨‍👩‍👧 café\n\u200b\u202e 🇬🇧";
+  assert.equal(wellFormedText(kept), kept);
+  assert.equal(wellFormedText(""), "");
+});
+
+test("fitEdit keeps the field well formed: a lone surrogate reads as U+FFFD and NUL goes, under the limit and over it (H41 m2)", () => {
+  assert.deepEqual(fitEdit("hi", "hi \ud83d"), { text: "hi \ufffd", cut: false });
+  assert.deepEqual(fitEdit("ab", "a\u0000b"), { text: "ab", cut: false });
+  assert.deepEqual(fitEdit("", "\ude00"), { text: "\ufffd", cut: false });
+  // A paste of NULs and 1003 letters keeps 1000 letters; one of 1000 with a NUL fits whole.
+  assert.deepEqual(fitEdit("", "\u0000".repeat(5) + "a".repeat(1003)), { text: "a".repeat(1000), cut: true });
+  assert.deepEqual(fitEdit("", "a".repeat(500) + "\u0000" + "a".repeat(500)), { text: "a".repeat(1000), cut: false });
+  // Typing at the limit into a field whose paste brought a half: the half reads as U+FFFD, and nothing is split.
+  const full = "a".repeat(999) + "\ufffd";
+  assert.deepEqual(fitEdit(full, full + "\ud83d"), { text: full, cut: true });
+});
+
+test("fitEdit never leaves a lone half: replacing the last emoji at the limit with two keeps one whole (H41 m4)", () => {
+  const before = "a".repeat(999) + "😀";
+  const fit = fitEdit(before, "a".repeat(999) + "😁😁");
+  assert.deepEqual(fit, { text: "a".repeat(999) + "😁", cut: true });
+  assert.equal(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/.test(fit.text), false);
+  // From the other side too: two typed in front of the first emoji.
+  const lead = "😀" + "a".repeat(999);
+  assert.deepEqual(fitEdit(lead, "😁😁" + "a".repeat(999)), { text: "😁" + "a".repeat(999), cut: true });
 });
 
 // Fix round 1 (H37 D1): the Chat row's line is one cleaned line, so a message can't fake a second speaker or flip its text.

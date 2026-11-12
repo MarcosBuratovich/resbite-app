@@ -151,7 +151,8 @@ export default function ChatScreen() {
   const summary = chat.summary;
   const tick = useMinuteTick(summary?.closesAt ?? null, chat.serverNow);
   const now = useMemo(() => chat.serverNow(), [chat.serverNow, tick, chat.messages, chat.pending, summary]);
-  const out = !valid || (!summary && chat.error === CHAT_COPY.notInChat);
+  // No series, no session to read with (the preview, a sign-out), or the server's refusal: nothing to wait for (H41 m5).
+  const out = !valid || !chat.ready || (!summary && chat.error === CHAT_COPY.notInChat);
   // The first open of a chat the person is in, while it is open, is the moment for "Get notified?" (CH-P17, K-N15);
   // the hook shows it once per phone, only while iPhone's permission was never asked for.
   const ask = useNotificationAsk(summary?.open && !out ? { chat: true } : null);

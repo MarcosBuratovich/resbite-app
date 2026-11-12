@@ -4,6 +4,7 @@ import { createChatSession, listenWith, type ChatState, type ChatTimers } from "
 import { createChatQueue, type QueuedMessage } from "../services/chatQueue";
 import type { ChatGateway, ChatMessage, ChatSummary } from "../services/chat";
 import { CHAT_COPY } from "../domain/chatCopy";
+import { closingLine } from "../domain/chatRules";
 import { INVITE_COPY } from "../domain/inviteCopy";
 
 const SERIES = "0b000000-0000-4000-8000-000000000001";
@@ -772,16 +773,30 @@ test("a queue write after sign-out ('Session changed') sends nothing; the 101st 
   await settle();
   assert.equal(t.server.calls("send").length, 0);
   assert.deepEqual(t.state().pending.map((q) => [q.clientId, q.body, q.failed]), [["client-2", "one too many", true]]);
-  // Still full: a retry is refused the same way.
-  assert.equal(await t.session.retry("client-2"), false);
-  assert.equal(t.server.calls("send").length, 0);
-  assert.equal(t.state().pending[0].failed, true);
-  // Room again: the retry saves it and sends it.
-  await t.queue.remove(ME, "other-0");
-  assert.equal(await t.session.retry("client-2"), true);
+  // Still full: a tap sends it from the screen's copy, as one the queue couldn't keep is sent (H41 m3).
+  const held = t.server.hold("send");
+  const retried = t.session.retry("client-2");
+  await settle();
   assert.deepEqual(t.server.calls("send"), [[SERIES, "one too many", "client-2"]]);
+  assert.deepEqual(t.state().pending.map((q) => [q.clientId, q.failed]), [["client-2", false]]);
+  assert.deepEqual(await t.queue.list(ME, SERIES), []);
+  held.resolve();
+  assert.equal(await retried, true);
   await settle();
   assert.deepEqual(t.state().pending, []);
+  // Room again: the retry saves it first, then sends it.
+  assert.equal(await t.session.send("two too many"), false);
+  await t.queue.remove(ME, "other-0");
+  const again = t.server.hold("send");
+  const second = t.session.retry("client-3");
+  await settle();
+  assert.deepEqual((await t.queue.list(ME, SERIES)).map((q) => [q.clientId, q.failed]), [["client-3", false]]);
+  again.resolve();
+  assert.equal(await second, true);
+  assert.deepEqual(t.server.calls("send").map((c) => c[1]), ["one too many", "two too many"]);
+  await settle();
+  assert.deepEqual(t.state().pending, []);
+  assert.deepEqual(await t.queue.list(ME, SERIES), []);
 });
 
 test("discard takes a failed message off the queue and the screen", async () => {
@@ -2030,4 +2045,179 @@ test("a closed chat's unsent messages, failed or not, expire after 7 days (H35)"
   assert.deepEqual(t.state().pending.map((q) => q.clientId), ["new-left"]);
   assert.deepEqual((await t.queue.list(ME, OTHER_SERIES)).map((q) => q.clientId), ["other-left"]);
   assert.equal(t.server.calls("send").length, 0);
+});
+
+// The final review's fix wave (H41).
+test("a message queued behind another still goes out once the screen is left; nothing more reaches the screen (H41 I1)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  await t.open();
+  // A slow connection: the first is on its way when the second is written, and Back is pressed.
+  const slow = t.server.hold("send");
+  const first = t.session.send("On my way");
+  const second = t.session.send("Be there at 8");
+  await settle();
+  assert.deepEqual(t.server.calls("send").map((c) => c[1]), ["On my way"]);
+  // useChat's cleanup: blur, then dispose.
+  t.session.blur();
+  t.session.dispose();
+  const left = t.state();
+  const reads = t.server.calls("since").length + t.server.calls("messages").length + t.server.calls("summary").length;
+  slow.resolve();
+  assert.equal(await first, true);
+  assert.equal(await second, true);
+  await t.clock.advance(60_000);
+  assert.deepEqual(t.server.calls("send"), [
+    [SERIES, "On my way", "client-1"],
+    [SERIES, "Be there at 8", "client-2"],
+  ]);
+  assert.deepEqual(await t.queue.list(ME, SERIES), []);
+  // The screen is gone: nothing is applied, read, listened to or timed.
+  assert.equal(t.state(), left);
+  assert.equal(t.server.calls("since").length + t.server.calls("messages").length + t.server.calls("summary").length, reads);
+  assert.equal(t.openChannels(), 0);
+  assert.equal(t.clock.pending(), 0);
+
+  // The account's session ending is different: what hasn't left yet stays (H25).
+  const u = setup();
+  u.server.seed(1);
+  await u.open();
+  const held = u.server.hold("send");
+  const one = u.session.send("On my way");
+  const two = u.session.send("Be there at 8");
+  await settle();
+  u.endSession();
+  held.resolve();
+  await one;
+  assert.equal(await two, false);
+  await u.clock.advance(60_000);
+  assert.deepEqual(u.server.calls("send").map((c) => c[1]), ["On my way"]);
+});
+
+test("a message not sent because the chat refuses the person is marked failed, as the refused one is; let back in, nothing goes without a tap (H41 I2a)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  await t.open();
+  // Removed from the resbite, and two messages typed quickly.
+  t.server.fail.send = NOT_IN_CHAT;
+  const first = t.session.send("first, typed as I was removed");
+  const second = t.session.send("second: on my way, 5 min!");
+  assert.equal(await first, false);
+  assert.equal(await second, false);
+  await settle();
+  // The first was refused; nothing more goes to the server while the chat refuses this person (H26 D9).
+  assert.equal(t.server.calls("send").length, 1);
+  assert.equal(t.state().error, CHAT_COPY.notInChat);
+  assert.deepEqual((await t.queue.list(ME, SERIES)).map((q) => [q.body, q.failed]), [
+    ["first, typed as I was removed", true],
+    ["second: on my way, 5 min!", true],
+  ]);
+  // Five days later they're invited again, answer Going and open the chat.
+  t.session.blur();
+  delete t.server.fail.send;
+  await t.clock.advance(5 * 86_400_000);
+  await t.open();
+  await t.clock.advance(15_000);
+  assert.equal(t.server.calls("send").length, 1);
+  assert.deepEqual(t.state().pending.map((p) => [p.body, p.failed]), [
+    ["first, typed as I was removed", true],
+    ["second: on my way, 5 min!", true],
+  ]);
+  // A tap sends it, with its own client id.
+  assert.equal(await t.session.retry("client-2"), true);
+  assert.deepEqual(t.server.calls("send").at(-1), [SERIES, "second: on my way, 5 min!", "client-2"]);
+});
+
+test("nothing is resent by itself over an hour from when it was written, either way: it waits as not sent for a tap (H41 I2b)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  // Left in the queue by an app killed mid-send, never failed; the app is opened again now.
+  await t.queue.put(ME, queuedItem("days", START - 6 * 86_400_000, { body: "running late, start without me" }));
+  await t.queue.put(ME, queuedItem("minutes", START - 2 * 60_000));
+  await t.queue.put(ME, queuedItem("hour", START - 3_600_000));
+  await t.queue.put(ME, queuedItem("over", START - 3_600_001));
+  // A clock moved back by two hours: as far the other way.
+  await t.queue.put(ME, queuedItem("ahead", START + 7_200_000));
+  await t.open();
+  await t.clock.advance(15_000);
+  // Under the hour, K-S7's resend is as it was.
+  assert.deepEqual(t.server.calls("send").map((c) => c[2]), ["minutes", "hour"]);
+  assert.deepEqual(t.state().pending.map((p) => [p.clientId, p.failed]), [
+    ["days", true],
+    ["over", true],
+    ["ahead", true],
+  ]);
+  assert.deepEqual((await t.queue.list(ME, SERIES)).map((q) => [q.clientId, q.failed]), [
+    ["days", true],
+    ["over", true],
+    ["ahead", true],
+  ]);
+  // The return to the app doesn't send them either; a tap does.
+  t.session.background();
+  t.session.focus();
+  await t.clock.advance(15_000);
+  assert.equal(t.server.calls("send").length, 2);
+  assert.equal(await t.session.retry("days"), true);
+  assert.deepEqual(t.server.calls("send").at(-1), [SERIES, "running late, start without me", "days"]);
+});
+
+test("a phone 30 minutes fast that asks the time before the first read reads the server's time once a read gives it (H41 I3)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  const FAST = 30 * 60_000;
+  t.server.skewBy(-FAST);
+  // By the server, the close is an hour away; by this phone's own clock, half an hour.
+  t.server.setSummary({ closesAt: iso(START - FAST + 3_600_000) });
+  // The screen's first render and its minute tick ask before any read has said what the server's clock reads.
+  assert.equal(t.session.serverNow(), START);
+  await t.open();
+  t.latest().on.status("SUBSCRIBED");
+  await settle();
+  assert.equal(t.session.serverNow(), START - FAST);
+  assert.match(closingLine(t.state().summary?.closesAt ?? null, t.session.serverNow(), "Europe/London") ?? "", /, in 1 hour\. /);
+  // The close comes at the server's hour, not half an hour early.
+  t.server.setSummary({ open: false });
+  await t.clock.advance(3_600_000 - 1);
+  assert.equal(t.server.calls("summary").length, 1);
+  await t.clock.advance(1);
+  assert.equal(t.server.calls("summary").length, 2);
+  assert.equal(t.state().summary?.open, false);
+});
+
+test("a lone surrogate reaches the server as U+FFFD and a NUL not at all, in a message and an announcement (H41 m2)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  t.server.setSummary({ host: true });
+  await t.open();
+  assert.equal(await t.session.send("on my way \ud83d\u0000soon \ude00"), true);
+  assert.deepEqual(t.server.calls("send"), [[SERIES, "on my way \ufffdsoon \ufffd", "client-1"]]);
+  assert.equal(await t.session.announce("Doors\u0000 at 7 \udbff", "going"), true);
+  assert.deepEqual(t.server.calls("announce").map((c) => c[1]), ["Doors at 7 \ufffd"]);
+  // Nothing visible once a NUL goes is nothing to send; a pair stays as it is.
+  assert.equal(await t.session.send("\u0000\u0000"), false);
+  assert.equal(await t.session.send("🎉"), true);
+  assert.deepEqual(t.server.calls("send").map((c) => c[1]), ["on my way \ufffdsoon \ufffd", "🎉"]);
+});
+
+test("blur and dispose leave no timer behind: the poll, the tick, the close, the stale check and the retry all go (H41 m4)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  t.server.setSummary({ closesAt: iso(START + 3_600_000) });
+  await t.open();
+  // A read that fails while subscribed arms the retry beside the poll, the tick, the close and the stale check.
+  t.server.failOnce("since", OFFLINE);
+  t.latest().on.status("SUBSCRIBED");
+  await settle();
+  assert.equal(t.clock.pending(), 5);
+  t.session.blur();
+  assert.equal(t.clock.pending(), 0);
+  await t.clock.advance(3_600_000);
+  assert.equal(t.clock.pending(), 0);
+  // Disposed while still focused, as when another account takes the screen.
+  await t.open();
+  assert.ok(t.clock.pending() > 0);
+  t.session.dispose();
+  assert.equal(t.clock.pending(), 0);
+  await t.clock.advance(3_600_000);
+  assert.equal(t.clock.pending(), 0);
 });

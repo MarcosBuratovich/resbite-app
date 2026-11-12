@@ -84,16 +84,28 @@ export function closingLine(closesAt: string | null, now: number, zone: string):
 // characters, no controls, white space collapsed.
 const FORMAT = /[­؜᠎​-‏‪-‮⁠-⁤⁦-⁯﻿￹-￻]/g;
 const CONTROL = /[\u0000-\u001f\u007f-\u009f]/g;
-function wellFormed(s: string): string {
+/** The text with each lone surrogate taken out, or replaced by `lone`. */
+function wellFormed(s: string, lone = ""): string {
   let out = "";
   for (let i = 0; i < s.length; i++) {
     const c = s.charCodeAt(i);
     if (c >= 0xd800 && c <= 0xdbff) {
       const next = s.charCodeAt(i + 1);
       if (next >= 0xdc00 && next <= 0xdfff) out += s[i] + s[++i];
+      else out += lone;
     } else if (c < 0xdc00 || c > 0xdfff) out += s[i];
+    else out += lone;
   }
   return out;
+}
+/**
+ * Words as they can be sent (H41 m2): a lone surrogate, which no stored text can hold, reads as U+FFFD, and NUL, which
+ * Postgres text can't hold, goes; everything else stays as written. The fields keep text so (`fitEdit`), and `send`
+ * and `announce` do it again whatever called them, so no message is refused for ever as a connection error.
+ */
+export function wellFormedText(text: string): string {
+  if (typeof text !== "string") return "";
+  return /[\u0000\ud800-\udfff]/.test(text) ? wellFormed(text, "\ufffd").replace(/\u0000/g, "") : text;
 }
 function cleanText(value: unknown): string {
   if (typeof value !== "string") return "";
@@ -261,7 +273,7 @@ export const unreadDot = (entry: ChatOverview["chats"][string] | undefined): boo
  * The line under an invitation card's title for someone invited who hasn't answered: the latest "Everyone invited"
  * announcement (spec "The announcement on the invitation card"), "Announcement from Ana · Doors open at 19:30". The author
  * is named from the overview's `names` ("Someone" when they can't be, K-B2). The card keeps to its lines, so the words read
- * on one line, with nothing invisible; null when there is nothing to show.
+ * as one line the way the Chat row's do (`oneLine`), emoji with their joiners (H41 m1); null when nothing in them shows.
  */
 export function invitationNote(
   announcement: ChatOverview["announcements"][string] | undefined,
@@ -269,8 +281,8 @@ export function invitationNote(
   viewerId: string,
 ): string | null {
   if (!announcement) return null;
-  const body = cleanText(announcement.body);
-  return body ? CHAT_COPY.invitationLine(person(announcement.authorId, names, viewerId, false), body) : null;
+  const body = oneLine(announcement.body);
+  return hasVisibleText(body) ? CHAT_COPY.invitationLine(person(announcement.authorId, names, viewerId, false), body) : null;
 }
 
 /**
@@ -520,11 +532,12 @@ const isHigh = (c: number) => c >= 0xd800 && c <= 0xdbff;
 const isLow = (c: number) => c >= 0xdc00 && c <= 0xdfff;
 
 /**
- * The field after an edit, within the limit (H35): only what was inserted is cut, to the room the rest leaves, so typing
- * past the limit in the middle is refused and never cuts the end of the message. A paste into an empty field keeps its
- * start, as `fitBody` does. `cut` says something was left out.
+ * The field after an edit, well formed (`wellFormedText`, H41 m2) and within the limit (H35): only what was inserted is
+ * cut, to the room the rest leaves, so typing past the limit in the middle is refused and never cuts the end of the
+ * message. A paste into an empty field keeps its start, as `fitBody` does. `cut` says something was left out.
  */
-export function fitEdit(before: string, after: string): { text: string; cut: boolean } {
+export function fitEdit(before: string, edited: string): { text: string; cut: boolean } {
+  const after = wellFormedText(edited);
   if (codePoints(after) <= BODY_LIMIT) return { text: after, cut: false };
   if (codePoints(before) > BODY_LIMIT) return fitBody(after);
   // The edit is what lies between the longest common start and end, never splitting a surrogate pair.

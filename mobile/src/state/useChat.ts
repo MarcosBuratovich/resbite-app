@@ -11,6 +11,11 @@ import { isSeriesId } from "../domain/chatRules";
 import type { ChatAudience } from "../domain/chatCopy";
 
 export type Chat = ChatState & {
+  /**
+   * There is a session to read the chat with: an account, not the preview, not signing out, and a series that is one.
+   * Without one nothing is read, so the screen says the person isn't in this chat rather than wait for ever (H41 m5).
+   */
+  ready: boolean;
   /** The page of 100 before the oldest loaded row; `hasEarlier` says whether there is one. */
   loadEarlier: () => Promise<void>;
   /** Earlier pages until the oldest loaded id is at or below `id`, for the pinned card (K-S12). */
@@ -131,5 +136,5 @@ export function useChat(series: string | undefined): Chat {
           },
     [chat],
   );
-  return { ...state, ...actions };
+  return { ...state, ...actions, ready };
 }

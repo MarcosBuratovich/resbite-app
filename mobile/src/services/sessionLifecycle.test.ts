@@ -530,6 +530,8 @@ test("sign-out dismisses the pushes still shown, after removing the endpoint and
     shown("remote-2", { type: "other" }),
     shown("remote-3", { type: "plan_update", planId: PLAN, notificationId: "8" }),
     shown("remote-4", null),
+    shown("remote-5", { type: "chat", seriesId: "0b000000-0000-4000-8000-000000000001", planId: PLAN, notificationId: "9" }),
+    shown("remote-6", { type: "connection", planId: PLAN, notificationId: "10" }),
   ];
   function signOutWith(notifications: (events: string[]) => ShownNotifications, preview = false, waitMs?: number) {
     const events: string[] = [];
@@ -574,17 +576,12 @@ test("sign-out dismisses the pushes still shown, after removing the endpoint and
         if (id === options.failOn) throw Error("busy");
       },
     });
-  // Only the sender's pushes ("plan_update") go; reminders are cleared with the reminders, the rest is left.
-  assert.deepEqual(await signOutWith(fake()), ["push", "reminders", "dismiss:remote-1", "dismiss:remote-3", "auth", "finish"]);
+  // Only the sender's pushes ("plan_update", "chat", "connection") go; reminders are cleared with the reminders, the
+  // rest is left (H39).
+  const theSenders = ["dismiss:remote-1", "dismiss:remote-3", "dismiss:remote-5", "dismiss:remote-6"];
+  assert.deepEqual(await signOutWith(fake()), ["push", "reminders", ...theSenders, "auth", "finish"]);
   // One that can't be dismissed doesn't stop the others, nor sign-out.
-  assert.deepEqual(await signOutWith(fake({ failOn: "remote-1" })), [
-    "push",
-    "reminders",
-    "dismiss:remote-1",
-    "dismiss:remote-3",
-    "auth",
-    "finish",
-  ]);
+  assert.deepEqual(await signOutWith(fake({ failOn: "remote-1" })), ["push", "reminders", ...theSenders, "auth", "finish"]);
   // The tray can't be read, or never answers: sign-out goes ahead anyway.
   const unreadable = fake({ list: async () => Promise.reject(Error("unavailable")) });
   assert.deepEqual(await signOutWith(unreadable), ["push", "reminders", "auth", "finish"]);

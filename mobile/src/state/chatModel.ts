@@ -11,6 +11,11 @@ export const SINCE_LIMIT = 200;
 export const SINCE_OVERLAP_MS = 120_000;
 /** An unsent message older than this was left behind (the app was closed mid-send) and is sent again (K-S7). */
 export const STALE_UNSENT_MS = 10_000;
+/**
+ * The automatic resend's age limit (H41 I2b): one left behind longer than this, either way, isn't sent by itself, since
+ * the conversation has moved on; it shows "Not sent. Tap to retry." and the person decides.
+ */
+export const RESEND_LIMIT_MS = 3_600_000;
 /** The most rows a session remembers having seen outside its list (H25). */
 export const SEEN_LIMIT = 500;
 
@@ -141,6 +146,13 @@ export function withPending(messages: ChatMessage[], queue: QueuedMessage[]): Ar
  */
 export const staleUnsent = (queue: QueuedMessage[], now: number): QueuedMessage[] =>
   queue.filter((q) => !q.failed && !(Math.abs(now - instantOf(q.createdAt)) <= STALE_UNSENT_MS));
+
+/**
+ * Written more than an hour from now, either way, or at a time that can't be read: left for a tap, never resent by
+ * itself (H41 I2b). Within the hour, `staleUnsent`'s resend is as it was.
+ */
+export const tooOldToResend = (q: QueuedMessage, now: number): boolean =>
+  !(Math.abs(now - instantOf(q.createdAt)) <= RESEND_LIMIT_MS);
 
 /** Notes a row's stamp, keeping at most `SEEN_LIMIT`; the one seen longest ago goes first (H25). */
 export function remember(seen: Map<number, string>, id: number, stamp: string): void {

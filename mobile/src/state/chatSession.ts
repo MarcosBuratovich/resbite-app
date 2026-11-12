@@ -11,7 +11,7 @@ import {
   type ChatSummary,
 } from "../services/chat";
 import type { QueuedMessage } from "../services/chatQueue";
-import { hasVisibleText } from "../domain/chatRules";
+import { hasVisibleText, wellFormedText } from "../domain/chatRules";
 import {
   EARLIER_PAGE,
   NEWEST_PAGE,
@@ -27,6 +27,7 @@ import {
   pageReplaces,
   remember,
   staleUnsent,
+  tooOldToResend,
 } from "./chatModel";
 
 /** While the channel isn't subscribed, the open chat reads every 20 seconds (K-N6, Decision 12). */
@@ -210,6 +211,9 @@ export function createChatSession(deps: ChatSessionDeps) {
 
   const live = () => !disposed && current();
   function serverNow(): number {
+    // Until a read has said what the server's clock reads, this phone's own, and nothing is held to it: a phone that is
+    // fast must be corrected by the first read as a slow one is (H41 I3).
+    if (samples.length === 0) return timers.now();
     const now = timers.now() + offset;
     if (now > highest) highest = now;
     return highest;
@@ -608,7 +612,10 @@ export function createChatSession(deps: ChatSessionDeps) {
     await resend();
   }
 
-  /** The queue's copy of this chat's unsent messages joins the screen's; what's left behind is sent again (K-S7). */
+  /**
+   * The queue's copy of this chat's unsent messages joins the screen's; what's left behind is sent again (K-S7), within
+   * the hour of when it was written: an older one shows as not sent and waits for a tap (H41 I2b).
+   */
   async function resend() {
     if (!live() || shut) return;
     let listed: QueuedMessage[];
@@ -626,9 +633,17 @@ export function createChatSession(deps: ChatSessionDeps) {
     if (fresh.length) set({ pending: [...state.pending, ...fresh] });
     settlePending();
     if (state.summary?.open === false) return;
-    for (const item of staleUnsent(state.pending, timers.now()))
-      if (!sending.has(item.clientId) && !delivered.has(item.clientId) && !discarded.has(item.clientId))
-        void deliver(item.clientId);
+    const now = timers.now();
+    const waiting: string[] = [];
+    for (const item of staleUnsent(state.pending, now)) {
+      if (sending.has(item.clientId) || delivered.has(item.clientId) || discarded.has(item.clientId)) continue;
+      // Over an hour from when it was written, the conversation has moved on: it waits for a tap (H41 I2b).
+      if (tooOldToResend(item, now)) waiting.push(item.clientId);
+      else void deliver(item);
+    }
+    if (waiting.length === 0) return;
+    for (const clientId of waiting) void queue.update(scope, clientId, { failed: true }).catch(noop);
+    set({ pending: state.pending.map((p) => (waiting.includes(p.clientId) ? { ...p, failed: true } : p)) });
   }
 
   /** Puts it in the queue. A full queue or one that can't be written keeps it on screen only. */
@@ -647,18 +662,24 @@ export function createChatSession(deps: ChatSessionDeps) {
 
   // Sends go one after another, so messages keep the order they were written in.
   let sends: Promise<unknown> = Promise.resolve();
-  function deliver(clientId: string): Promise<boolean> {
-    sending.add(clientId);
-    const next = sends.then(() => attempt(clientId));
+  function deliver(item: QueuedMessage): Promise<boolean> {
+    sending.add(item.clientId);
+    const next = sends.then(() => attempt(item));
     sends = next.catch(() => {});
     return next;
   }
 
-  async function attempt(clientId: string): Promise<boolean> {
-    const item = state.pending.find((p) => p.clientId === clientId);
-    if (discarded.has(clientId) || !item || !live() || shut) {
+  /**
+   * One send. It goes by the account's session, not the screen's (H41 I1): a message queued behind another still goes
+   * out once the screen is left, and `set` keeps a disposed session's answers off it.
+   */
+  async function attempt(item: QueuedMessage): Promise<boolean> {
+    const { clientId } = item;
+    if (discarded.has(clientId) || !current() || shut) {
       sending.delete(clientId);
       if (discarded.has(clientId)) void queue.remove(scope, clientId).catch(noop);
+      // Not sent while this chat refuses the person: it waits for a tap, as the refused one does (H41 I2a).
+      else if (shut && current()) void queue.update(scope, clientId, { failed: true }).catch(noop);
       return false;
     }
     try {
@@ -836,7 +857,9 @@ export function createChatSession(deps: ChatSessionDeps) {
      * brings its row. A message with nothing visible isn't sent; one written as sign-out began is dropped; one the
      * full queue refuses shows as not sent; nothing is sent while this chat refuses the person (H26 D9).
      */
-    async send(body: string): Promise<boolean> {
+    async send(text: string): Promise<boolean> {
+      // Well formed whatever called, as the field keeps it (H41 m2).
+      const body = wellFormedText(text);
       if (!live() || shut || !hasVisibleText(body)) return false;
       actionError = null;
       const item: QueuedMessage = {
@@ -856,7 +879,7 @@ export function createChatSession(deps: ChatSessionDeps) {
         set({ pending: markPending(item.clientId, true) });
         return false;
       }
-      return deliver(item.clientId);
+      return deliver(item);
     },
     /** Sends again, with its own client id, a failed message or one left behind (H26 D4). */
     async retry(clientId: string): Promise<boolean> {
@@ -867,14 +890,15 @@ export function createChatSession(deps: ChatSessionDeps) {
       actionError = null;
       const again = { ...item, failed: false };
       if (unsaved.has(clientId)) {
-        const saved = await save(again);
-        if (saved === "session" || saved === "full") {
+        // Sign-out began: nothing more is sent. A queue still full or failing doesn't stop a tap: it goes from the
+        // screen's copy (H41 m3).
+        if ((await save(again)) === "session") {
           set({});
           return false;
         }
       } else if (item.failed) void queue.update(scope, clientId, { failed: false }).catch(noop);
       set({ pending: state.pending.map((p) => (p.clientId === clientId ? again : p)) });
-      return deliver(clientId);
+      return deliver(again);
     },
     /**
      * Takes an unsent message off this phone, for good: a send or a resend still in flight checks first (H26 D5). One
@@ -890,7 +914,8 @@ export function createChatSession(deps: ChatSessionDeps) {
      * A host's announcement. A failure keeps its client id for the same text and audience, so sending it again can't
      * make two. Its row and the pinned card come by the read it asks for.
      */
-    async announce(body: string, audience: ChatAudience): Promise<boolean> {
+    async announce(text: string, audience: ChatAudience): Promise<boolean> {
+      const body = wellFormedText(text);
       if (!live() || shut || !hasVisibleText(body)) return false;
       actionError = null;
       set({});

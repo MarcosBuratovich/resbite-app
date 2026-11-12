@@ -3,6 +3,7 @@ import { permissionFrom, type NotificationPermissionResponse } from "./notificat
 import {
   createPushRegistration,
   isUnreadableRecord,
+  PUSH_TYPES,
   type PushContext,
   type PushJournal,
   type PushRegistrationAdapter,
@@ -340,16 +341,16 @@ export type ShownNotifications = {
 };
 
 /**
- * Sign-out (sessionLifecycle): dismisses the pushes from Resbite's sender (`data.type` "plan_update") still shown
- * on this phone, so the next account never sees the last one's titles. Reminders go with clearReminders; anything
- * else is left alone. Each one is tried. It rejects when one couldn't be dismissed, or after `waitMs` so it never
- * holds sign-out up; sign-out ignores that.
+ * Sign-out (sessionLifecycle): dismisses the pushes from Resbite's sender still shown on this phone (`data.type`
+ * "plan_update", "chat" or "connection"), so the next account never sees the last one's titles, nor a chat push's
+ * words (H39). Reminders go with clearReminders; anything else is left alone. Each one is tried. It rejects when one
+ * couldn't be dismissed, or after `waitMs` so it never holds sign-out up; sign-out ignores that.
  */
 export async function dismissShownPushes(notifications: ShownNotifications, waitMs = 3000): Promise<void> {
   const work = (async () => {
     let failed = false;
     for (const shown of await notifications.getPresentedNotificationsAsync())
-      if (shown.request.content.data?.type === "plan_update")
+      if (PUSH_TYPES.includes(shown.request.content.data?.type))
         await notifications.dismissNotificationAsync(shown.request.identifier).catch(() => {
           failed = true;
         });
