@@ -62,8 +62,10 @@ const definite = (e: unknown) => ["42501", "22023"].includes(String(errorField(e
  * - My resbites opens when the group's chat, resbite page or people list is the screen in focus, even if the person moved
  *   there from the screen they left from while the leave was on its way (UI Q4).
  * 42501 'Not in this group' is done too: after an attempt whose answer was lost, the leave went through (ruling GR4 M-2).
- * Any other failure changes nothing and is worded (`chatErrorMessage`); one whose outcome is unknown is remembered, so
- * the chat's own refused read ('Not in this chat') can finish it on the phone (`finish`, GR6 M5).
+ * Any other failure changes nothing and is worded (`chatErrorMessage`); one whose outcome is unknown is remembered, for
+ * the account that tried, so the chat's own refused read ('Not in this chat') can finish it on the phone (`finish`, GR6
+ * M5, GR8 n1). A refusal that came while the attempt was still on its way counts too: an attempt that then ends unknown
+ * is finished at once (GR8 R1).
  */
 export function createGroupLeave(deps: {
   leave: (series: string) => Promise<void>;
@@ -80,7 +82,10 @@ export function createGroupLeave(deps: {
   finish: (series: string, scope: LeaveScope, current?: StillCurrent) => boolean;
 } {
   const going = new Set<string>();
-  const unknown = new Set<string>();
+  /** Attempts whose outcome is unknown, by series, with the account that tried. */
+  const unknown = new Map<string, string | null>();
+  /** Series whose chat refused its reader while their attempt was on its way, with that reader's account. */
+  const refusedWhileGoing = new Map<string, string | null>();
   const done = (series: string, scope: LeaveScope, current: StillCurrent) => {
     unknown.delete(series);
     if (!current()) return;
@@ -93,13 +98,19 @@ export function createGroupLeave(deps: {
     async leave(series, scope, current = () => true) {
       if (going.has(series)) return null;
       going.add(series);
+      refusedWhileGoing.delete(series);
       try {
         try {
           await deps.leave(series);
         } catch (e) {
           if (!isNotInGroup(e)) {
+            const refused = refusedWhileGoing.has(series) && refusedWhileGoing.get(series) === scope.userId;
             if (definite(e)) unknown.delete(series);
-            else unknown.add(series);
+            else if (refused) {
+              // The chat already refused this reader: the leave went through, and its answer was lost.
+              done(series, scope, current);
+              return { left: true };
+            } else unknown.set(series, scope.userId);
             return { left: false, error: chatErrorMessage(e) };
           }
         }
@@ -107,10 +118,15 @@ export function createGroupLeave(deps: {
         return { left: true };
       } finally {
         going.delete(series);
+        refusedWhileGoing.delete(series);
       }
     },
     finish(series, scope, current = () => true) {
-      if (!unknown.has(series) || going.has(series)) return false;
+      if (going.has(series)) {
+        refusedWhileGoing.set(series, scope.userId);
+        return false;
+      }
+      if (!unknown.has(series) || unknown.get(series) !== scope.userId) return false;
       done(series, scope, current);
       return true;
     },

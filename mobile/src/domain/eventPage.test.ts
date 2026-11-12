@@ -1422,6 +1422,11 @@ test("useEvent carries the group flag: names, the snapshot an answer builds, and
   // The flag is read beside the event, never waited for, and set when it lands (ruling GR6 M7).
   assert.match(src, /void readIsGroup\(next\.plan\.series_id\)\.then\(\(isGroup\) => \{/);
   assert.doesNotMatch(src, /await readIsGroup/);
+  // It lands for the account and plan it was read for, even when an answer started a run of its own meanwhile (GR8 R2):
+  // only a later flag read or another account or plan stops it, never the read's own `valid()`.
+  const landing = src.slice(src.indexOf("void readIsGroup(next.plan.series_id).then((isGroup) => {"), src.indexOf("groupKnown.current = { key: flagKey, isGroup };"));
+  assert.match(landing, /if \(groupTicket !== groupRead\.current \|\| currentIdentity\.current !== flagIdentity\) return;/);
+  assert.doesNotMatch(landing, /valid\(\)/);
   assert.match(src, /showsNames\(role, snapshot\?\.attendee\?\.response \?\? null, isGroup\)/);
   const answer = src.slice(src.indexOf("const confirmed = next;"), src.indexOf("const result = reconcileRsvp(attempt, confirmed);"));
   assert.match(answer, /isGroup: old\?\.isGroup \?\? false,/);

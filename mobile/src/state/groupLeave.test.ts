@@ -178,3 +178,33 @@ test("left groups belong to the account that left them (GR6 M1)", () => {
   assert.equal(left.hidden(SERIES, ME), true);
   assert.deepEqual(left.without(plans, null).map((p) => p.id), ["a", "b", "c"]);
 });
+
+test("a chat refusal that comes while the leave is on its way, then a lost answer, still finishes the leave (GR8 R1)", async () => {
+  let fail: (e: unknown) => void = () => {};
+  const { calls, left, leave, finish } = setup({ leave: () => new Promise<void>((_, reject) => (fail = reject)) });
+  const attempt = leave(SERIES, scope);
+  // The server took it, and the chat's next read was refused before the answer came back.
+  assert.equal(finish(SERIES, scope), false, "nothing to finish while the attempt is on its way");
+  fail(new Error("timed out"));
+  assert.deepEqual(await attempt, { left: true });
+  assert.deepEqual(calls, [`sync ${ME}`, "toPlans"]);
+  assert.equal(left.hidden(SERIES, ME), true);
+});
+
+test("a refusal seen while the attempt was on its way doesn't turn a definite refusal into a leave (GR8 R1)", async () => {
+  let fail: (e: unknown) => void = () => {};
+  const { calls, leave, finish } = setup({ leave: () => new Promise<void>((_, reject) => (fail = reject)) });
+  const attempt = leave(SERIES, scope);
+  finish(SERIES, scope);
+  fail({ code: "42501", message: "Hosts can't leave" });
+  assert.deepEqual(await attempt, { left: false, error: "To leave, step down first: change your reply to Can’t go." });
+  assert.deepEqual(calls, []);
+});
+
+test("an unknown outcome is the account's that tried: another account's refused read finishes nothing (GR8 n1)", async () => {
+  const { calls, leave, finish } = setup({ leave: async () => Promise.reject(offline) });
+  await leave(SERIES, scope);
+  assert.equal(finish(SERIES, { userId: SOMEONE_ELSE, preview: false }), false);
+  assert.deepEqual(calls, []);
+  assert.equal(finish(SERIES, scope), true);
+});

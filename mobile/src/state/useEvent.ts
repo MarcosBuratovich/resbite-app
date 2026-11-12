@@ -291,10 +291,13 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
         let named = showsNames(viewer, next.attendee?.response ?? null, next.isGroup);
         if (named) readStates();
         if (named && chain) readBringers();
-        // The group flag lands when it arrives (GR6 M7): a member then sees names, so what names need is read then.
+        // The group flag lands when it arrives (GR6 M7): a member then sees names, so what names need is read then. It
+        // lands for the account and plan it was read for even when an answer started a run of its own meanwhile, so the
+        // page stays a group's for the visit (GR8 R2); only a later flag read, or another account or plan, stops it.
         const groupTicket = ++groupRead.current;
+        const flagIdentity = currentIdentity.current;
         void readIsGroup(next.plan.series_id).then((isGroup) => {
-          if (!valid() || groupTicket !== groupRead.current) return;
+          if (groupTicket !== groupRead.current || currentIdentity.current !== flagIdentity) return;
           groupKnown.current = { key: flagKey, isGroup };
           setSnapshot((s) => (s && s.plan.id === next.plan.id ? { ...s, isGroup, counts: isGroup ? null : s.counts } : s));
           if (isGroup && !named) {
