@@ -59,14 +59,17 @@ $$;
 revoke all on function private.inviter_of(uuid) from public, anon, authenticated, service_role;
 
 -- 1c. Blocking and unblocking (G-B1, G-N12, G-S10, challenges B4 and I2). Silent either way. In order:
+--  0. a null person or a null p_block: 22023 'Invalid block', as decide_join_request refuses a null decision
+--     (circles_of_trust.sql:695), so a malformed call never reads as done; it names nobody;
 --  1. the pair's lock, as the connection functions take it (hashtextextended(a||':'||b, 53)), so a request, an
 --     acceptance or a removal at the same moment goes first or waits;
 --  2. oneself: 22023 'That is you';
 --  3. blocking (p_block true) someone the caller may not read gets the same success and stores nothing (G-N12). The
 --     caller may read p_user when: can_read_profile says so; p_user wrote a message or an announcement in a chat the
---     caller is in now; p_user wrote an announcement whose audience includes the caller now (the invitation card,
---     confirmation S7); p_user's request to join a resbite the caller hosts is waiting; or p_user invited the caller to
---     a plan the caller may read (invited_by: a guest who brought them, a host who invited them in the app);
+--     caller is in now; p_user wrote a sent announcement whose audience includes the caller now (the invitation card
+--     shows only sent ones, confirmation S7); p_user's request to join a resbite the caller hosts is waiting; or
+--     p_user invited the caller to a plan the caller may read (invited_by: a guest who brought them, a host who
+--     invited them in the app);
 --  4. blocking stores the block (kept as first made, its time clock_timestamp, so my_blocks lists blocks made in one
 --     transaction newest first), then leaves the pair as the refusal machinery would: connected, the row goes and a
 --     hidden refusal of the blocker by the blocked person stays on the row's series, as remove_connection leaves it; a
@@ -74,14 +77,13 @@ revoke all on function private.inviter_of(uuid) from public, anon, authenticated
 --     request by the blocker goes as cancel_connection_request takes it, the blocker's refusals by p_user hidden;
 --  5. unblocking (p_block false) deletes the caller's own block of p_user, whatever the caller may read now (I2), and
 --     nothing else: refusals stay, as after a "Not now".
--- A null person or a null p_block does nothing.
 create function private.block_user(p_user uuid, p_block boolean) returns void language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester(); v_a uuid; v_b uuid; v_row public.connections;
 begin
+ if p_user is null or p_block is null then raise exception 'Invalid block' using errcode='22023'; end if;
  select p.user_a,p.user_b into v_a,v_b from private.pair(v_uid,p_user) p;
  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_a::text||':'||v_b::text,53));
  if p_user=v_uid then raise exception 'That is you' using errcode='22023'; end if;
- if p_user is null or p_block is null then return; end if;
  if not p_block then
   delete from private.blocks where blocker_id=v_uid and blocked_id=p_user;
   return;
@@ -89,7 +91,7 @@ begin
  if not (private.can_read_profile(p_user)
   or exists(select 1 from (select distinct m.series_id from public.messages m
     where m.author_id=p_user and m.kind in ('message','announcement')) s where private.chat_member(s.series_id,v_uid))
-  or exists(select 1 from public.messages m where m.author_id=p_user and m.kind='announcement'
+  or exists(select 1 from public.messages m where m.author_id=p_user and m.kind='announcement' and m.state='sent'
    and exists(select 1 from private.announcement_audience(m.series_id,m.audience) as r(id) where r.id=v_uid))
   or exists(select 1 from private.join_requests j where j.user_id=p_user and j.status='waiting' and private.is_host(j.plan_id,v_uid))
   or exists(select 1 from (select a.plan_id from public.attendees a where a.user_id=v_uid and a.brought_by=p_user

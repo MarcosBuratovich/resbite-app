@@ -295,7 +295,12 @@ end $$;
 
 -- 03 blocks host 02. 02's announcement on the group, written before, is hidden from 03 and may not be told to 03 (05
 -- still may be told it); 03's pinned is null, with no other announcement yet. G-B1: 02's chat_summary reads the same
--- going and everyone before and after.
+-- going and everyone before and after. 02 also has a message there it deleted (by hand, an hour back). For 03, the
+-- group's last falls back from 02's announcement past 07's hidden cant_go line to 05's message (the fallback's own
+-- deleted test), and its count is the built one less 02's sent announcement only (the subtraction's announcement and
+-- sent parts).
+insert into public.messages(series_id,plan_id,author_id,kind,body,state,created_at,updated_at) values
+ (pg_temp.e7p('02'),pg_temp.e7p('02'),pg_temp.e7('02'),'message',null,'deleted',now()-interval '1 hour',now()-interval '1 hour');
 set local role authenticated;
 select pg_temp.s3_as(pg_temp.e7('02'));
 select set_config('s3.a1',pg_temp.s3_announce(pg_temp.e7p('02'),'Bring snacks')::text,true);
@@ -303,7 +308,7 @@ select set_config('s3.sum02',public.chat_summary(pg_temp.e7p('02'))::text,true);
 select pg_temp.s3_as(pg_temp.e7('03'));
 select public.block_user(pg_temp.e7('02'),true);
 reset role;
-do $$ declare s jsonb; v_before jsonb := current_setting('s3.sum02')::jsonb; begin
+do $$ declare s jsonb; o jsonb; v_all integer; v_before jsonb := current_setting('s3.sum02')::jsonb; begin
  perform pg_temp.s3_check(pg_temp.s3_blocked(pg_temp.e7('03'),pg_temp.e7('02')),'03''s block of 02 is not stored');
  perform pg_temp.s3_check(not pg_temp.s3_told('announcement',pg_temp.s3_id('a1'),pg_temp.e7('03'))
   and pg_temp.s3_told('announcement',pg_temp.s3_id('a1'),pg_temp.e7('05')),'02''s announcement may be told to 03, or not to 05');
@@ -311,6 +316,15 @@ do $$ declare s jsonb; v_before jsonb := current_setting('s3.sum02')::jsonb; beg
  perform pg_temp.s3_check(not pg_temp.s3_has(public.chat_messages(pg_temp.e7p('02')),pg_temp.s3_id('a1'))
   and not pg_temp.s3_has(public.chat_messages_since(pg_temp.e7p('02'),0,null),pg_temp.s3_id('a1')),'03 still reads 02''s announcement');
  perform pg_temp.s3_check(public.chat_summary(pg_temp.e7p('02'))->'pinned'='null'::jsonb,'03''s pinned is not null');
+ select message_count into v_all from public.chats where series_id=pg_temp.e7p('02');
+ s := public.chat_summary(pg_temp.e7p('02'));
+ o := public.my_chat_overview()->'chats'->(pg_temp.e7p('02')::text);
+ perform pg_temp.s3_check((select last_message_id from public.chats where series_id=pg_temp.e7p('02'))=pg_temp.s3_id('a1') and v_all=2,
+  'The group''s built figures are not 02''s announcement and 2');
+ perform pg_temp.s3_check((s->'last'->>'id')::bigint=pg_temp.s3_id('g1') and (o->'last'->>'id')::bigint=pg_temp.s3_id('g1'),
+  '03''s last on the group: '||(s->'last')::text||' / '||(o->'last')::text);
+ perform pg_temp.s3_check((s->>'message_count')::integer=v_all-1 and (o->>'count')::integer=v_all-1,
+  '03''s counts on the group: '||(s->>'message_count')||' / '||(o->>'count'));
  perform pg_temp.s3_as(pg_temp.e7('02'));
  s := public.chat_summary(pg_temp.e7p('02'));
  perform pg_temp.s3_check((s->'going',s->'everyone')=(v_before->'going',v_before->'everyone'),'G-B1: 02''s counts moved: '||s::text);
@@ -352,10 +366,22 @@ end $$;
 -- only as the author of an announcement that reaches 06: a block row. A minute later (NOTE 1) 02 announces again. 06's
 -- card is 01's announcement, never 02's (N2: the pick falls back inside its limit); 06's inviter on the one-off is 01 (no
 -- bringer, no 'invited' notice: the owner). On the group, a member who has not answered this week has one too: 10's is
--- 05, who brought 10, whether or not an announcement exists.
+-- 05, who brought 10, whether or not an announcement exists. First, in a savepoint: an announcement of 02's that is no
+-- longer sent (removed, by hand) reaches no card, so 06 may not block 02 through it: the same success, no row.
 set local role authenticated;
 select pg_temp.s3_as(pg_temp.e7('01'));
 select set_config('s3.a4',pg_temp.s3_announce(pg_temp.e7p('01'),'Picnic at noon')::text,true);
+reset role;
+savepoint s3_unsent;
+insert into public.messages(series_id,plan_id,author_id,kind,audience,body,state,created_at,updated_at) values
+ (pg_temp.e7p('01'),pg_temp.e7p('01'),pg_temp.e7('02'),'announcement','everyone','Old news','removed',now()-interval '1 hour',now()-interval '1 hour');
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('06'));
+select public.block_user(pg_temp.e7('02'),true);
+reset role;
+select pg_temp.s3_check(not pg_temp.s3_blocked(pg_temp.e7('06'),pg_temp.e7('02')),'06 blocked 02 through an announcement no longer sent');
+rollback to savepoint s3_unsent;
+set local role authenticated;
 select pg_temp.s3_as(pg_temp.e7('02'));
 select set_config('s3.a5',pg_temp.s3_announce(pg_temp.e7p('01'),'Bring a blanket')::text,true);
 reset role;
@@ -435,7 +461,8 @@ select pg_temp.s3_check(not pg_temp.s3_paired(pg_temp.e7('03'),pg_temp.e7('05'))
  and not private.notification_recipient_eligible(pg_temp.s3_id('req05')),'G-B1 pending: the block did not leave a declined request');
 
 -- G-B2: 03 asks 07, and 07 says Not now (a refusal from 03 to 07). 03 blocks 07. 07 asks 03, which without the block
--- would accept the request 07 refused: 'requested', no pair row and no connection_accepted notice.
+-- would accept the request 07 refused: 'requested', no pair row and no connection_accepted notice. As 03, 07 reads
+-- 'none' once blocked, though 03's visible refusal by 07 would read 'requested_by_me'.
 set local role authenticated;
 select pg_temp.s3_as(pg_temp.e7('03'));
 select public.request_connection(pg_temp.e7('07'),pg_temp.e7p('01'));
@@ -443,6 +470,7 @@ select pg_temp.s3_as(pg_temp.e7('07'));
 select public.decline_connection(pg_temp.e7('03'));
 select pg_temp.s3_as(pg_temp.e7('03'));
 select public.block_user(pg_temp.e7('07'),true);
+select pg_temp.s3_check(public.plan_connection_states(pg_temp.e7p('01'))->>pg_temp.e7('07')::text='none','As 03, 07 does not read none');
 select pg_temp.s3_as(pg_temp.e7('07'));
 select pg_temp.s3_check(public.request_connection(pg_temp.e7('03'),pg_temp.e7p('01'))='requested','G-B2: 07 asking 03 is not requested');
 reset role;
@@ -454,7 +482,8 @@ select pg_temp.s3_check(pg_temp.s3_refusal(pg_temp.e7p('01'),pg_temp.e7('03'),pg
 
 -- my_connections for 03 omits 04 (no pair row survives a block; my_connections is not redefined). Mutual blocks (Review
 -- Focus 6): 03 writes; 04 blocks 03; 03 unblocks 04: 04's messages are back for 03, no connection comes back, and 04
--- still does not see 03's message. 04 unblocks 03: 04 sees it again.
+-- still does not see 03's message, and the refusals stay (04's hidden one from the block, its visible one from asking).
+-- 04 unblocks 03: 04 sees it again.
 set local role authenticated;
 select pg_temp.s3_as(pg_temp.e7('03'));
 select pg_temp.s3_check(not (public.my_connections()::text like '%'||pg_temp.e7('04')||'%'),'03''s connections list 04');
@@ -467,6 +496,8 @@ reset role;
 do $$ begin
  perform pg_temp.s3_check(not pg_temp.s3_blocked(pg_temp.e7('03'),pg_temp.e7('04')) and pg_temp.s3_blocked(pg_temp.e7('04'),pg_temp.e7('03'))
   and not pg_temp.s3_paired(pg_temp.e7('03'),pg_temp.e7('04')),'Unblocking 04 took 04''s block, or brought the connection back');
+ perform pg_temp.s3_check(pg_temp.s3_refusal(pg_temp.e7p('02'),pg_temp.e7('04'),pg_temp.e7('03'))='hidden'
+  and pg_temp.s3_refusal(pg_temp.e7p('03'),pg_temp.e7('04'),pg_temp.e7('03'))='visible','Unblocking 04 changed the refusals');
  perform pg_temp.s3_as(pg_temp.e7('03'));
  perform pg_temp.s3_check(pg_temp.s3_has(public.chat_messages(pg_temp.e7p('01')),pg_temp.s3_id('m1'))
   and pg_temp.s3_has(public.chat_messages(pg_temp.e7p('01')),pg_temp.s3_id('m3')),'04''s messages are not back for 03');
@@ -480,7 +511,8 @@ select pg_temp.s3_check(pg_temp.s3_has(public.chat_messages(pg_temp.e7p('01')),p
 reset role;
 
 -- G-N12: block_user as 03 on a random id, and on 08, whom 03 may not read: the same success, no row. 09 writes in the
--- one-off and is then removed, so 03 may read 09 only as an author in a chat 03 is in: a row.
+-- one-off and is then removed, so 03 may read 09 only as an author in a chat 03 is in: a row. A null person, or a null
+-- p_block (here on 05, whom 03 blocked), is 22023 'Invalid block' and changes nothing.
 set local role authenticated;
 select pg_temp.s3_as(pg_temp.e7('09'));
 select pg_temp.s3_send(pg_temp.e7p('01'),'Zed was here');
@@ -498,6 +530,8 @@ select public.block_user(gen_random_uuid(),true);
 select public.block_user(pg_temp.e7('08'),true);
 select public.block_user(pg_temp.e7('09'),true);
 select pg_temp.s3_refused(format('select public.block_user(%L,true)',pg_temp.e7('03')),'22023','That is you');
+select pg_temp.s3_refused('select public.block_user(null,true)','22023','Invalid block');
+select pg_temp.s3_refused(format('select public.block_user(%L,null)',pg_temp.e7('05')),'22023','Invalid block');
 reset role;
 select pg_temp.s3_check((select count(*) from private.blocks b where b.blocker_id=pg_temp.e7('03'))=4
  and not pg_temp.s3_blocked(pg_temp.e7('03'),pg_temp.e7('08')) and pg_temp.s3_blocked(pg_temp.e7('03'),pg_temp.e7('09')),
@@ -572,7 +606,9 @@ reset role;
 -- contact lookup holds 03's number (I5); and 01 inviting 03's number to the Walk would reach 03 in the app (tried in a
 -- savepoint, undone). 03 blocks 01. Then 01 invites 03's number to the Walk, a plan 03 is not on (on any other the
 -- answer is 'already', which comes before the block's choice and is unchanged): 'link', a personal invitation, and no
--- guest row and no notice for 03; the earlier notice may no longer be told.
+-- guest row and no notice for 03; the earlier notice may no longer be told. Before the block 03 asks 01, 01 says Not
+-- now, and 03 asks again from the group (a real request): the block takes 03's request as cancel_connection_request
+-- does, so 03's refusal by 01 is hidden and no pair row is left.
 insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id)
  values (pg_temp.e7p('01'),pg_temp.e7('03'),'invited','invited:'||pg_temp.e7p('01')||':'||pg_temp.e7('03'),pg_temp.e7('01'));
 select set_config('s3.inv03',(select id::text from private.notification_outbox where dedupe_key='invited:'||pg_temp.e7p('01')||':'||pg_temp.e7('03')),true);
@@ -584,6 +620,15 @@ savepoint s3_invite;
 select pg_temp.s3_check(public.invite_contacts(pg_temp.e7p('04'),jsonb_build_array(jsonb_build_object('phone','447700900703','country','44',
  'code','safetyInviteCode000004')))->0->>'kind'='app','Before the block, 03''s number is not invited in the app');
 rollback to savepoint s3_invite;
+select pg_temp.s3_as(pg_temp.e7('03'));
+select public.request_connection(pg_temp.e7('01'),pg_temp.e7p('01'));
+select pg_temp.s3_as(pg_temp.e7('01'));
+select public.decline_connection(pg_temp.e7('03'));
+select pg_temp.s3_as(pg_temp.e7('03'));
+select public.request_connection(pg_temp.e7('01'),pg_temp.e7p('02'));
+select pg_temp.s3_as(pg_temp.e7('01'));
+select pg_temp.s3_check(public.my_connections()->'requests'@>jsonb_build_array(jsonb_build_object('user_id',pg_temp.e7('03'))),
+ '03''s second request to 01 is not real');
 select pg_temp.s3_as(pg_temp.e7('03'));
 select public.block_user(pg_temp.e7('01'),true);
 select pg_temp.s3_as(pg_temp.e7('01'));
@@ -598,6 +643,8 @@ select pg_temp.s3_check(pg_temp.s3_blocked(pg_temp.e7('03'),pg_temp.e7('01'))
  and exists(select 1 from private.phone_invitations where plan_id=pg_temp.e7p('04') and phone='447700900703' and revoked_at is null),
  'G-S13: 01''s invitation of 03''s number reached 03');
 select pg_temp.s3_check(not private.notification_recipient_eligible(pg_temp.s3_id('inv03')),'G-S13: 01''s invited notice may still be told to 03');
+select pg_temp.s3_check(pg_temp.s3_refusal(pg_temp.e7p('01'),pg_temp.e7('03'),pg_temp.e7('01'))='hidden'
+ and not pg_temp.s3_paired(pg_temp.e7('03'),pg_temp.e7('01')),'03''s block of 01 did not take 03''s request as a cancel');
 -- NOTE 3: the roll's "on again" ('invited' with detail 'again', the owner its actor), made by hand on the group's
 -- current occurrence, may be told to 03 after 03's block of 01; with no detail, it may not.
 insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id,detail)
@@ -613,7 +660,9 @@ select public.block_user(pg_temp.e7('01'),false);
 reset role;
 
 -- R-Q5: 08 asks to join the one-off by its open link; 01 then blocks 08, whom 01 may read only as a waiting requester.
--- The join_request notice to 01 may not be told, the one to 02 may, and plan_join_requests as 01 still lists 08.
+-- The join_request notice to 01 may not be told, the one to 02 may, and plan_join_requests as 01 still lists 08. 08,
+-- not on the one-off, asking to connect there gets the same 42501 from 01, who blocked 08, as from 02, who did not (the
+-- block checks come after the visibility refusals, CH-R-A1).
 set local role authenticated;
 select pg_temp.s3_as(pg_temp.e7('08'));
 select pg_temp.s3_check(public.request_to_join('safetyPicnicLink000001',null,'accepted',null)->>'state'='waiting','08''s request is not waiting');
@@ -627,6 +676,9 @@ select pg_temp.s3_as(pg_temp.e7('01'));
 select public.block_user(pg_temp.e7('08'),true);
 select pg_temp.s3_check((select count(*) from jsonb_array_elements(public.plan_join_requests(pg_temp.e7p('01'))) e
  where e.value->>'user_id'=pg_temp.e7('08')::text)=1,'R-Q5: 01 no longer lists 08''s request');
+select pg_temp.s3_as(pg_temp.e7('08'));
+select pg_temp.s3_refused(format('select public.request_connection(%L,%L)',pg_temp.e7('01'),pg_temp.e7p('01')),'42501','Names required');
+select pg_temp.s3_refused(format('select public.request_connection(%L,%L)',pg_temp.e7('02'),pg_temp.e7p('01')),'42501','Names required');
 reset role;
 select pg_temp.s3_check(pg_temp.s3_blocked(pg_temp.e7('01'),pg_temp.e7('08'))
  and not private.notification_recipient_eligible((select id from private.notification_outbox where kind='join_request'
@@ -700,9 +752,12 @@ end $$;
 
 -- B2 (P2-Q1, plan 2's eligibility kept), last, with 03's block of 04 standing: a minute passes for every chat notice
 -- (NOTE 1), the group's week is cancelled just this once, and 04 writes: the chat_message to 05 may be told, and none
--- is queued for 03.
+-- is queued for 03. 07 blocks 01 first: 07's plan_cancelled notice from 01's cancel may still be told (R-Q5 keeps the
+-- resbite's own news).
 update private.notification_outbox set created_at=now()-interval '61 seconds' where kind='chat_message';
 set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('07'));
+select public.block_user(pg_temp.e7('01'),true);
 select pg_temp.s3_as(pg_temp.e7('01'));
 select pg_temp.s3_change(pg_temp.e7p('02'),null,true);
 select pg_temp.s3_as(pg_temp.e7('04'));
@@ -711,4 +766,8 @@ reset role;
 select pg_temp.s3_check((select status from public.plans where id=pg_temp.e7p('02'))='cancelled'
  and pg_temp.s3_told('chat_message',pg_temp.s3_id('b2'),pg_temp.e7('05'))
  and not ('03'=any(string_to_array(pg_temp.s3_to('chat_message',pg_temp.s3_id('b2')),','))),'B2: 04''s message in the cancelled week');
+select pg_temp.s3_check(pg_temp.s3_blocked(pg_temp.e7('07'),pg_temp.e7('01'))
+ and private.notification_recipient_eligible((select o.id from private.notification_outbox o where o.kind='plan_cancelled'
+  and o.plan_id=pg_temp.e7p('02') and o.recipient_id=pg_temp.e7('07') and o.actor_id=pg_temp.e7('01'))),
+ 'B2: 01''s plan_cancelled may not be told to 07, who blocked 01');
 rollback;
