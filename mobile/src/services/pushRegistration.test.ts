@@ -212,6 +212,9 @@ test("tap rejects arbitrary routes and only resolves fresh authorized account re
     /changed/,
   );
 });
+test("a report push has no plan, so it parses to no target", () => {
+  assert.equal(parseNotificationTarget({ type: "report", notificationId: "7" }), null);
+});
 test("a connection target parses with its kind; a plan target carries kind plan; unknown types fail", () => {
   const planId = "20000000-0000-4000-8000-000000000001";
   assert.deepEqual(parseNotificationTarget({ type: "connection", planId, notificationId: "7" }), {

@@ -79,6 +79,11 @@ test("a chat push shows while Resbite is open, unless its own chat is the focuse
   assert.equal(showsInForeground("remote-1", chat, series), false, "its own chat focused");
 });
 
+test("a moderator's report push shows while Resbite is open, whichever chat is focused", () => {
+  const series = "30000000-0000-4000-8000-000000000001";
+  for (const focused of [null, series])
+    assert.equal(showsInForeground("remote-1", { type: "report", notificationId: "7" }, focused), true);
+});
 test("reminders and plan updates show as before, whichever chat is focused; other notifications don't", () => {
   const series = "30000000-0000-4000-8000-000000000001";
   for (const focused of [null, series]) {

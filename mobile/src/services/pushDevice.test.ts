@@ -588,6 +588,8 @@ test("sign-out's dismissal clears every push the sender sets (a plan update, a c
     // A chat push carries a person's words: the next account on the phone must not see them.
     shown("remote-chat", { type: "chat", seriesId: SERIES, planId: PLAN, notificationId: "8" }),
     shown("remote-connection", { type: "connection", planId: PLAN, notificationId: "9" }),
+    // A moderator's push leaves with the account too.
+    shown("remote-report", { type: "report", notificationId: "7" }),
     // Reminders go with clearReminders, on their own schedule; anything else isn't the sender's.
     shown("resbite-reminder:p1:1h", { planId: PLAN, at: 1 }),
     shown("remote-other", { type: "other" }),
@@ -598,5 +600,5 @@ test("sign-out's dismissal clears every push the sender sets (a plan update, a c
     getPresentedNotificationsAsync: async () => tray,
     dismissNotificationAsync: async (id) => void dismissed.push(id),
   });
-  assert.deepEqual(dismissed, ["remote-plan", "remote-chat", "remote-connection"]);
+  assert.deepEqual(dismissed, ["remote-plan", "remote-chat", "remote-connection", "remote-report"]);
 });

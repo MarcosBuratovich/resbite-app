@@ -164,7 +164,7 @@ export type NotificationTarget =
   /** A chat message or an announcement (Task 4's `{type:"chat", seriesId, planId, notificationId}`). */
   | { kind: "chat"; seriesId: string; planId: string; notificationId: string };
 /** Every `data.type` Resbite's sender sets (notification-engine.ts `dataFor`). */
-export const PUSH_TYPES: readonly unknown[] = ["plan_update", "connection", "chat"];
+export const PUSH_TYPES: readonly unknown[] = ["plan_update", "connection", "chat", "report"];
 /** The data of a push from Resbite's sender, key by key: anything else, or one extra key, is no target at all. */
 export function parseNotificationTarget(
   value: unknown,

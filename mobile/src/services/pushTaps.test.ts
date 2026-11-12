@@ -56,6 +56,14 @@ test("a malformed push payload goes to My resbites without reading", async () =>
   assert.match(JSON.stringify(t.opened[0].params), /^\{"notice":"gone","n":"[0-9a-z]+"\}$/);
   assert.deepEqual(t.reads, []);
 });
+test("a moderator's report push is not a plan-update tap and routes nowhere", async () => {
+  const report = push({ type: "report", notificationId: "7" });
+  const t = setup();
+  assert.equal(isPlanUpdateTap(report), false);
+  assert.equal(t.router.receive(report), false);
+  await settle();
+  assert.deepEqual(t.opened, []);
+});
 test("a reminder tap or an unrelated notification is not a push", async () => {
   const t = setup();
   assert.equal(isPlanUpdateTap(reminder), false);

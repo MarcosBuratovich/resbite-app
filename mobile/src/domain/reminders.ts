@@ -77,7 +77,8 @@ export function showsInForeground(
 ): boolean {
   if (identifier.startsWith(REMINDER_PREFIX)) return true;
   const type = data?.type;
-  if (type === "plan_update") return true;
+  // A moderator's "A new report is waiting." shows even with Resbite open.
+  if (type === "plan_update" || type === "report") return true;
   if (type === "chat") return focusedSeries === null || data?.seriesId !== focusedSeries;
   return false;
 }
