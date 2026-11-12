@@ -771,7 +771,7 @@ select pg_temp.s3_check((select status from public.plans where id=pg_temp.e7p('0
 select pg_temp.s3_check(pg_temp.s3_blocked(pg_temp.e7('07'),pg_temp.e7('01'))
  and private.notification_recipient_eligible((select o.id from private.notification_outbox o where o.kind='plan_cancelled'
   and o.plan_id=pg_temp.e7p('02') and o.recipient_id=pg_temp.e7('07') and o.actor_id=pg_temp.e7('01'))),
- 'B2: 01''s plan_cancelled may not be told to 07, who blocked 01');
+ 'B2: 01''s plan_cancelled is no longer told to 07, who blocked 01 (the resbite''s own news must still arrive)');
 rollback;
 
 -- Slice 2 (Task 2): reports, moderators and their push, the chat rules, the blocked terms, the deletion and the fold,
@@ -796,6 +796,20 @@ begin
   get stacked diagnostics v_state = returned_sqlstate;
  end;
  if v_state is distinct from p_state then raise exception 'Expected %, got %: %', p_state, v_state, p_sql; end if;
+end $$;
+-- A call that must be refused with exactly this code and message and nothing more: no detail and no hint (ruling SR3:
+-- a table check's DETAIL would print the whole row, the reported words and ids included).
+create function pg_temp.s3_refused_bare(p_sql text, p_state text, p_message text) returns void language plpgsql as $$
+declare v_state text; v_message text; v_detail text; v_hint text;
+begin
+ begin
+  execute p_sql;
+ exception when others then
+  get stacked diagnostics v_state = returned_sqlstate, v_message = message_text, v_detail = pg_exception_detail, v_hint = pg_exception_hint;
+ end;
+ if v_state is distinct from p_state or v_message is distinct from p_message or coalesce(v_detail,'')<>'' or coalesce(v_hint,'')<>'' then
+  raise exception 'Expected % "%" alone, got % "%" detail "%" hint "%": %', p_state, p_message, v_state, v_message, v_detail, v_hint, p_sql;
+ end if;
 end $$;
 -- A uuid kept for later in this transaction (set_config 's3.<name>').
 create function pg_temp.s3_uuid(p_name text) returns uuid language sql stable as $$ select current_setting('s3.'||p_name)::uuid $$;
@@ -989,7 +1003,17 @@ select pg_temp.s3_as(pg_temp.e7('03'));
 select pg_temp.s3_refused(format('select public.send_message(%L,%L,gen_random_uuid())',pg_temp.e7p('01'),'it was zz'||e'\n'||'bad'),'22023','Not allowed');
 select pg_temp.s3_refused(format('select public.send_message(%L,%L,gen_random_uuid())',pg_temp.e7p('01'),'zz   bad'),'22023','Not allowed');
 select pg_temp.s3_check(pg_temp.s3_send(pg_temp.e7p('01'),'zzbad') is not null,'zzbad was refused');
+-- D1 (SR3 additions): any blank of chat_body's class between the words matches the term's space, a no-break space
+-- (U+00A0), a narrow one (U+202F) and an em space (U+2003) among them, in a message and in an announcement.
+select pg_temp.s3_refused(format('select public.send_message(%L,%L,gen_random_uuid())',pg_temp.e7p('01'),'it was zz'||chr(c)||'bad'),'22023','Not allowed')
+ from unnest(array[160,8239,8195,12288]) c;
+select pg_temp.s3_as(pg_temp.e7('01'));
+select pg_temp.s3_refused(format('select public.send_announcement(%L,%L,''everyone'',gen_random_uuid())',pg_temp.e7p('01'),'zz'||chr(160)||chr(8239)||'bad news'),
+ '22023','Not allowed');
 reset role;
+-- A term holding any blank but a plain space is refused by the table (blocked-terms.sql makes it one first).
+select pg_temp.s3_refused_state(format('insert into private.blocked_terms(term) values (%L)','zz'||chr(c)||'bad'),'23514')
+ from unnest(array[160,8239,8203,12288]) c;
 select pg_temp.s3_check((select count(*) from public.messages where body ilike '%zzbadword %' or body ilike '%zz%bad' and body<>'zzbad')=0,
  'A refused message was stored');
 delete from private.blocked_terms;
@@ -1069,6 +1093,19 @@ select pg_temp.s3_check(not private.chat_member(pg_temp.e7p('02'),pg_temp.e7('04
  and pg_temp.s3_report_of(pg_temp.e7('04'),pg_temp.s3_id('wcur')) is not null and pg_temp.s3_report_of(pg_temp.e7('04'),pg_temp.s3_id('w1')) is not null
  and (select plan_id from private.reports where id=pg_temp.s3_report_of(pg_temp.e7('04'),pg_temp.s3_id('wcur')))=pg_temp.s3_uuid('next'),
  'The leaver''s reports of the group''s words');
+-- The guest row alone (SR3), in a savepoint: 07's row on the group's current occurrence goes by hand, so 07 is not in
+-- the chat, has no leave and hosts nothing; 07's row on the first occurrence (any answer, on a group) still lets 07
+-- report 03's words written there.
+savepoint s3_guest_row;
+delete from public.attendees where plan_id=pg_temp.s3_uuid('next') and user_id=pg_temp.e7('07');
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('07'));
+select public.report_message(pg_temp.s3_id('w1'),'other',null);
+reset role;
+select pg_temp.s3_check(not private.chat_member(pg_temp.e7p('02'),pg_temp.e7('07'))
+ and not exists(select 1 from private.series_leaves where user_id=pg_temp.e7('07'))
+ and pg_temp.s3_report_of(pg_temp.e7('07'),pg_temp.s3_id('w1')) is not null,'The guest row alone did not admit 07''s report');
+rollback to savepoint s3_guest_row;
 -- 06 (not answered on the one-off) reports 02's announcement to everyone, which reaches 06: a row. NOTE 15: 06 reports
 -- 04's plain message there: 22023 'Report unavailable' (not answered on a one-off is not enough).
 set local role authenticated;
@@ -1145,6 +1182,28 @@ savepoint s3_details;
 select public.report_user(pg_temp.e7('07'),pg_temp.e7p('01'),'other',repeat('x',500));
 rollback to savepoint s3_details;
 reset role;
+-- SR3 (the leak): a bad reason, no reason, or details over 500 characters are refused, before anything else is read,
+-- with 23514 'Invalid report' alone: never the row a table check would print (the reported words, the reporter, the
+-- reported person and the ids). Nothing is stored, nothing counts toward the limit, and nobody is pushed (17 a
+-- moderator, in a savepoint). 04, who left the group, gets the same on the words written before they left.
+savepoint s3_invalid;
+insert into private.moderators(user_id) values (pg_temp.e7('17'));
+select set_config('s3.count',(select count(*)::text from private.reports),true);
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('05'));
+select pg_temp.s3_refused_bare(x,'23514','Invalid report') from unnest(array[
+ format('select public.report_message(%s,''rude'')',pg_temp.s3_id('m7a')),
+ format('select public.report_message(%s,null)',pg_temp.s3_id('m7a')),
+ format('select public.report_message(%s,''spam'',%L)',pg_temp.s3_id('m7a'),repeat('x',501)),
+ format('select public.report_user(%L,%L,''rude'')',pg_temp.e7('07'),pg_temp.e7p('01')),
+ format('select public.report_user(%L,%L,null)',pg_temp.e7('07'),pg_temp.e7p('01')),
+ format('select public.report_user(%L,%L,''spam'',%L)',pg_temp.e7('07'),pg_temp.e7p('01'),repeat('x',501))]) x;
+select pg_temp.s3_as(pg_temp.e7('04'));
+select pg_temp.s3_refused_bare(format('select public.report_message(%s,''x'')',pg_temp.s3_id('wcur')),'23514','Invalid report');
+reset role;
+select pg_temp.s3_check((select count(*) from private.reports)=pg_temp.s3_id('count') and pg_temp.s3_filed()=0,
+ 'SR3: a refused report stored or queued something');
+rollback to savepoint s3_invalid;
 select pg_temp.s3_check((select plan_id from private.reports where id=pg_temp.s3_report_about(pg_temp.e7('05'),pg_temp.e7('10'),pg_temp.e7p('01')))
  =pg_temp.e7p('01') and not exists(select 1 from public.attendees where plan_id=pg_temp.e7p('01') and user_id=pg_temp.e7('10'))
  and pg_temp.s3_report_about(pg_temp.e7('05'),pg_temp.e7('07'),pg_temp.e7p('01')) is null,'S5: 05''s report about the removed 10');
@@ -1233,6 +1292,10 @@ set local role authenticated;
 select pg_temp.s3_as(pg_temp.e7('05'));
 select pg_temp.s3_refused(format('select public.report_message(%s,''spam'')',pg_temp.s3_id('m7a')),'22023','Report limit');
 select pg_temp.s3_refused(format('select public.report_user(%L,%L,''spam'')',pg_temp.e7('07'),pg_temp.e7p('01')),'22023','Report limit');
+-- At exactly 20, a repeat still reads as the first did (SR3): 05's report of m4b again, and 05's open report about 04
+-- on the one-off again: success, nothing stored, nothing queued.
+select public.report_message(pg_temp.s3_id('m4b'),'spam',null);
+select public.report_user(pg_temp.e7('04'),pg_temp.e7p('01'),'spam',null);
 reset role;
 select pg_temp.s3_check((select count(*) from private.reports)=pg_temp.s3_id('count') and pg_temp.s3_filed()=0,'The 21st report stored or queued something');
 update private.reports set created_at=now()-interval '25 hours' where id=(select min(id) from private.reports where reporter_id=pg_temp.e7('05')
@@ -1273,13 +1336,28 @@ set local role authenticated;
 select pg_temp.s3_as(pg_temp.e7('05'));
 select public.report_user(pg_temp.e7('15'),pg_temp.e7p('01'),'spam',null);
 reset role;
+-- And both accounts reported 07's m7a (14's by hand: a web account reports nothing itself): the fold keeps 15's.
+insert into private.reports(reporter_id,target_user_id,message_id,series_id,plan_id,about,reason,frozen_body,frozen_author)
+ select u,m.author_id,m.id,m.series_id,m.plan_id,'message','spam',m.body,m.author_id from public.messages m,
+  unnest(array[pg_temp.e7('14'),pg_temp.e7('15')]) u where m.id=pg_temp.s3_id('m7a');
+select set_config('s3.r15m7a',pg_temp.s3_report_of(pg_temp.e7('15'),pg_temp.s3_id('m7a'))::text,true);
 select private.fold_web_account(pg_temp.e7('14'),pg_temp.e7('15'));
 select pg_temp.s3_check((select count(*) from private.reports where reporter_id=pg_temp.e7('05') and about='user' and status='open'
   and target_user_id=pg_temp.e7('15') and series_id=pg_temp.e7p('01'))=1
+ and (select string_agg(id::text,',') from private.reports where message_id=pg_temp.s3_id('m7a'))=current_setting('s3.r15m7a')
  and not exists(select 1 from private.reports where pg_temp.e7('14') in (reporter_id,target_user_id,frozen_author)),
- 'NOTE 2-b: the fold did not leave one open report about 15');
+ 'NOTE 2-b: the fold did not leave one open report about 15, and one report of m7a, 15''s');
 rollback to savepoint s3_fold;
+-- Q-1 (SR3): reports between the two accounts go with the fold, a report about oneself being meaningless: 14's about
+-- 15 and 15's of 14's words (both by hand).
+insert into private.reports(reporter_id,target_user_id,series_id,plan_id,about,reason) values
+ (pg_temp.e7('14'),pg_temp.e7('15'),pg_temp.e7p('01'),pg_temp.e7p('01'),'user','spam');
+insert into private.reports(reporter_id,target_user_id,message_id,series_id,plan_id,about,reason,frozen_body,frozen_author)
+ select pg_temp.e7('15'),m.author_id,m.id,m.series_id,m.plan_id,'message','spam',m.body,m.author_id from public.messages m
+ where m.id=pg_temp.s3_id('m14');
 select private.fold_web_account(pg_temp.e7('14'),pg_temp.e7('15'));
+select pg_temp.s3_check(not exists(select 1 from private.reports where reporter_id=pg_temp.e7('15') and pg_temp.e7('15') in (target_user_id,frozen_author)),
+ 'Q-1: a report between the two merged accounts stayed, now about oneself');
 select pg_temp.s3_check(pg_temp.s3_blocked(pg_temp.e7('03'),pg_temp.e7('15')) and pg_temp.s3_blocked(pg_temp.e7('15'),pg_temp.e7('05'))
  and not exists(select 1 from private.blocks where pg_temp.e7('14') in (blocker_id,blocked_id))
  and not exists(select 1 from private.blocks where blocker_id=blocked_id),'I4: the blocks after the fold');
@@ -1335,6 +1413,20 @@ select pg_temp.s3_check(pg_temp.s3_filed()=1 and (select (o.recipient_id,o.plan_
   from private.notification_outbox o where o.id=pg_temp.s3_id('omod'))
  and private.notification_recipient_eligible(pg_temp.s3_id('omod')),'The moderator''s report_filed row: '
  ||coalesce((select row_to_json(o)::text from private.notification_outbox o where o.kind='report_filed'),'none'));
+-- The moderators' branch, each clause (SR3), each in a savepoint: with 09's roster row disabled (09 may not use the app),
+-- 09's account being deleted, or the notice over a day old, 09's row may not be told.
+savepoint s3_mod;
+update private.tester_roster set enabled=false where email='s3-09@resbite-test.invalid';
+select pg_temp.s3_check(not private.notification_recipient_eligible(pg_temp.s3_id('omod')),'A moderator who may not use the app is pushed');
+rollback to savepoint s3_mod;
+savepoint s3_mod;
+update public.profiles set deletion_requested_at=now() where id=pg_temp.e7('09');
+select pg_temp.s3_check(not private.notification_recipient_eligible(pg_temp.s3_id('omod')),'A moderator being deleted is pushed');
+rollback to savepoint s3_mod;
+savepoint s3_mod;
+update private.notification_outbox set created_at=now()-interval '25 hours' where id=pg_temp.s3_id('omod');
+select pg_temp.s3_check(not private.notification_recipient_eligible(pg_temp.s3_id('omod')),'A report_filed notice over a day old is pushed');
+rollback to savepoint s3_mod;
 -- I-4 (each exclusion can fail): 17 is a moderator too, and every report_filed row is moved 11 minutes back. 09 reports
 -- 04's m4e: one row, to 17, none to 09 (the reporter). Every row moved back again; N8: 05 reports 09 on the one-off's
 -- series: one row, to 17, none to 09 (the reported person).
@@ -1553,6 +1645,55 @@ select pg_temp.s3_id('r16') as s3_rid \gset
 select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
 select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('roster_rows_disabled',0,'grants_revoked',1))
  and not private.user_eligible(pg_temp.e7('16')),'suspend-account.sql on 16: '||current_setting('s3.out'));
+-- D3 (SR3 additions): the undo in suspend-account.sql's closing comment, run with the same report's id, puts back only
+-- what that suspension changed. In savepoints: on 16's, the grant comes back ({0,1}) and 16 may use the app again; on
+-- 04's, the roster row comes back ({1,0}). Then two people banned a month earlier (in one savepoint): 13 (roster row
+-- disabled and a grant revoked then) is suspended ({0,0}) and undone ({0,0}), and stays banned, the grant's month-old
+-- time kept; 07 (roster row on, a grant revoked a month ago) is suspended ({1,0}) and undone ({1,0}): the roster row
+-- comes back, the old revocation stays.
+savepoint s3_undo;
+\set s3_undo `sed -n -e '/^-- To undo it/,$ s/^--   //p' :'resbite_repo'/supabase/ops/suspend-account.sql | sed -e 's/(values (0))/(values (:s3_rid))/'`
+select set_config('s3.out',pg_temp.s3_run(:'s3_undo')::text,true);
+select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('roster_rows_enabled',0,'grants_restored',1))
+ and private.user_eligible(pg_temp.e7('16')),'The undo on 16: '||current_setting('s3.out'));
+rollback to savepoint s3_undo;
+savepoint s3_undo;
+select pg_temp.s3_id('ru2') as s3_rid \gset
+\set s3_undo `sed -n -e '/^-- To undo it/,$ s/^--   //p' :'resbite_repo'/supabase/ops/suspend-account.sql | sed -e 's/(values (0))/(values (:s3_rid))/'`
+select set_config('s3.out',pg_temp.s3_run(:'s3_undo')::text,true);
+select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('roster_rows_enabled',1,'grants_restored',0))
+ and private.user_eligible(pg_temp.e7('04')),'The undo on 04: '||current_setting('s3.out'));
+rollback to savepoint s3_undo;
+savepoint s3_undo;
+update private.tester_roster set enabled=false where email='s3-13@resbite-test.invalid';
+insert into private.beta_access(user_id,source,granted_at,revoked_at) values
+ (pg_temp.e7('13'),'link',now()-interval '60 days',now()-interval '30 days'),(pg_temp.e7('07'),'link',now()-interval '60 days',now()-interval '30 days');
+set local role authenticated;
+select pg_temp.s3_as(pg_temp.e7('03'));
+select public.report_user(pg_temp.e7(n),pg_temp.e7p('01'),'harassment',null) from unnest(array['13','07']) n;
+reset role;
+select pg_temp.s3_report_about(pg_temp.e7('03'),pg_temp.e7('13'),pg_temp.e7p('01')) as s3_rid \gset
+\set s3_script `sed -e 's/(values (0))/(values (:s3_rid))/' :'resbite_repo'/supabase/ops/suspend-account.sql`
+\set s3_undo `sed -n -e '/^-- To undo it/,$ s/^--   //p' :'resbite_repo'/supabase/ops/suspend-account.sql | sed -e 's/(values (0))/(values (:s3_rid))/'`
+select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
+select set_config('s3.out2',pg_temp.s3_run(:'s3_undo')::text,true);
+select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('roster_rows_disabled',0,'grants_revoked',0))
+ and current_setting('s3.out2')::jsonb=jsonb_build_array(jsonb_build_object('roster_rows_enabled',0,'grants_restored',0))
+ and not private.user_eligible(pg_temp.e7('13'))
+ and (select revoked_at from private.beta_access where user_id=pg_temp.e7('13'))=now()-interval '30 days',
+ 'D3: the undo lifted 13''s earlier ban: '||current_setting('s3.out')||' '||current_setting('s3.out2'));
+select pg_temp.s3_report_about(pg_temp.e7('03'),pg_temp.e7('07'),pg_temp.e7p('01')) as s3_rid \gset
+\set s3_script `sed -e 's/(values (0))/(values (:s3_rid))/' :'resbite_repo'/supabase/ops/suspend-account.sql`
+\set s3_undo `sed -n -e '/^-- To undo it/,$ s/^--   //p' :'resbite_repo'/supabase/ops/suspend-account.sql | sed -e 's/(values (0))/(values (:s3_rid))/'`
+select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
+select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('roster_rows_disabled',1,'grants_revoked',0))
+ and not private.user_eligible(pg_temp.e7('07')),'D3: the suspension of 07: '||current_setting('s3.out'));
+select set_config('s3.out',pg_temp.s3_run(:'s3_undo')::text,true);
+select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('roster_rows_enabled',1,'grants_restored',0))
+ and private.user_eligible(pg_temp.e7('07'))
+ and (select revoked_at from private.beta_access where user_id=pg_temp.e7('07'))=now()-interval '30 days',
+ 'D3: the undo did not put back only 07''s roster row: '||current_setting('s3.out'));
+rollback to savepoint s3_undo;
 
 -- close-report.sql records the action on 05's report of the removed words: ('actioned', 'both', 'Removed and
 -- suspended'), with the time; 07 still has a profile, so who it was about stays.
@@ -1593,8 +1734,8 @@ select pg_temp.s3_check(not exists(select 1 from jsonb_array_elements(pg_temp.s3
 rollback to savepoint s3_purge;
 
 -- moderators.sql with one email: one row; with an email no account holds besides: still one, and that email listed.
--- blocked-terms.sql with two terms (three written, one twice in another case and with blanks round it): two rows, and
--- it prints 2, never a term. With the repository's empty list: none, and it prints 0.
+-- blocked-terms.sql with two terms (three written, one twice in another case and with blanks round it, one with a
+-- no-break space between its words): two rows, the no-break space a plain one, and it prints 2, never a term. With the repository's empty list: none, and it prints 0.
 \set s3_script `sed -e "s/array\[\]::text\[\]/array['S3-17@resbite-test.invalid ']::text[]/" :'resbite_repo'/supabase/ops/moderators.sql`
 select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
 select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('moderators',1,'no_account',jsonb_build_array()))
@@ -1603,7 +1744,7 @@ select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb
 select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
 select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('moderators',1,'no_account',jsonb_build_array('nobody@resbite-test.invalid')))
  and pg_temp.s3_who(array(select user_id from private.moderators))='17','moderators.sql with an unknown email: '||current_setting('s3.out'));
-\set s3_script `sed -e "s/array\[\]::text\[\]/array['ZZone ',' zz two','zzone']::text[]/" :'resbite_repo'/supabase/ops/blocked-terms.sql`
+\set s3_script `sed -e "s/array\[\]::text\[\]/array['ZZone ',' zz'||chr(160)||'two','zzone']::text[]/" :'resbite_repo'/supabase/ops/blocked-terms.sql`
 select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
 select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('terms',2))
  and (select string_agg(term,',' order by term collate "C") from private.blocked_terms)='zz two,zzone','blocked-terms.sql with two terms: '||current_setting('s3.out'));
@@ -1628,8 +1769,10 @@ select pg_temp.s3_check(replace(replace(pg_temp.s3_nth(:'s3_migration','create o
   raise exception 'Rules not accepted' using errcode='22023';
  end if;$ins$,''),$ins$
  -- The blocked terms (G-B4(a), challenge N4): a listed term as a whole word, in any case; a space in it is any run of
- -- blanks or a line break. chat_body has already refused a body over 16,000 bytes, so no term meets a huge one.
- if exists (select 1 from private.blocked_terms t where v_body ~* ('\m' || replace(t.term, ' ', '\s+') || '\M')) then
+ -- the blanks chat_body trims (a line break, a no-break space and the others \s here misses; SR3's D1). chat_body has
+ -- already refused a body over 16,000 bytes, so no term meets a huge one.
+ if exists (select 1 from private.blocked_terms t
+  where v_body ~* ('\m' || replace(t.term, ' ', '[\s\u0085\u00a0\u115f\u1680\u2000-\u200c\u2028\u2029\u202f\u205f\u2060\u2800\u3000\u3164\ufeff\uffa0]+') || '\M')) then
   raise exception 'Not allowed' using errcode='22023';
  end if;$ins$,'')
  =pg_temp.s3_nth(:'s3_migration','create or replace function private.send_message(',1),

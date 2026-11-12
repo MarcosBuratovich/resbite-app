@@ -40,16 +40,21 @@
 -- first message for the rules sheet and its I agree fails: it cannot send. Roll the app back first, or with this file,
 -- as chat core's runbook does for its sender. The sender (deliver-notifications, with the moderators' push) needs
 -- nothing: with no report_filed notice left it words none, so it may stay or go back.
+-- If it stops with "deadlock detected" (a worker's claim met it mid-way; step 1), nothing has changed: run it again.
 -- Order (G-N11): roll back in reverse order only: this file first, then chat groups' (plan 2), then chat core's (plan
 -- 1). The full order and the guarded chain are chat core's: chat 3 → chat 2 → chat 1 → circles → follow-ups, then
 -- connections and creating-a-resbite, which have no guard (supabase/rollback/20261111140000_chat_core.rollback.sql,
 -- lines 34-42). Plan 2's rollback refuses while private.blocks exists, so dropping it here is what lets plan 2's run
 -- next; the two in turn land on chat core's bodies, and chat core's rollback then restores the circles' claim and fold.
 
--- 1. Nothing writes a notice, a block, a report, a moderator, an acceptance or a term until this commits, so a report
--- filed meanwhile waits for it instead of making it fail (challenge N6).
-lock table private.notification_outbox, private.blocks, private.reports, private.moderators, private.chat_rules_acceptances,
- private.blocked_terms in access exclusive mode;
+-- 1. Nothing writes a notice, a block, a report, a moderator, an acceptance or a term until this commits, so a send or a
+-- report made meanwhile waits for it instead of making it fail (challenge N6). The tables are taken in the order a send
+-- or a report meets them (the rules, the terms, the blocks, the reports, the moderators), the outbox last, as chat
+-- core's rollback takes it (SR3): one already past some of them finishes first, and this then runs. The worker's claim
+-- reads the outbox before the blocks and the moderators, so a claim running at that moment can still meet it the other
+-- way: Postgres then stops this file with "deadlock detected", having changed nothing, and it is run again.
+lock table private.chat_rules_acceptances, private.blocked_terms, private.blocks, private.reports, private.moderators,
+ private.notification_outbox in access exclusive mode;
 
 -- 2. The report_filed notices, sent or not, and their deliveries with them.
 delete from private.notification_outbox where kind = 'report_filed';

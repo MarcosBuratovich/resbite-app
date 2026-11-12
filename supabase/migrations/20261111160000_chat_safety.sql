@@ -754,7 +754,9 @@ end $$;
 -- frozen_author are the words and the author when the message was reported. One report per reporter and message
 -- (G-N12), and one open report per reporter, person and series (confirmation NOTE 8), keyed on about so a message
 -- report whose message row went never meets a report about the person. The other two indexes serve the limit's count
--- and reporter_id's cascade, and message_id's set null.
+-- and reporter_id's cascade, and message_id's set null. suspended_roster and suspended_grant_at record what
+-- suspend-account.sql changed when it suspended the reported person (their roster row disabled; the time it revoked
+-- their live grant), so its undo puts back only that, never an earlier ban (SR3).
 create table private.reports (
  id bigint generated always as identity primary key,
  reporter_id uuid null references public.profiles(id) on delete cascade,
@@ -771,7 +773,9 @@ create table private.reports (
  status text not null default 'open' check (status in ('open','reviewed','actioned')),
  reviewed_at timestamptz null,
  review_note text null,
- action text null check (action is null or action in ('none','message_removed','account_suspended','both'))
+ action text null check (action is null or action in ('none','message_removed','account_suspended','both')),
+ suspended_roster boolean not null default false,
+ suspended_grant_at timestamptz null
 );
 create unique index reports_reporter_message_key on private.reports(reporter_id, message_id) where message_id is not null;
 create unique index reports_open_user_key on private.reports(reporter_id, target_user_id, series_id) where about = 'user' and status = 'open';
@@ -801,10 +805,11 @@ revoke all on private.chat_rules_acceptances from public, anon, authenticated, s
 -- 2d. The blocked terms (G-B4(a), Decision 9, challenge N4): the words no message or announcement may hold, set by
 -- blocked-terms.sql; the migration seeds none. Each term is lowercased and trimmed, 1 to 80 characters, holds no regex
 -- character (so it always matches literally), starts and ends on a word character (so \m and \M can hold: '@ss' or 'n-'
--- could never match) and has its words one space apart, with no other blank.
+-- could never match) and has its words one plain space apart, with no other blank: none \s takes, and none of the
+-- blanks chat_body names besides (a no-break space among them, which \s here does not take; SR3's D1).
 create table private.blocked_terms (
  term text primary key check (term = lower(btrim(term)) and char_length(term) between 1 and 80 and term !~ '[][\\.^$*+?(){}|]'
-  and term ~ '^\w(.*\w)?$' and term !~ '\s\s|[^\S ]')
+  and term ~ '^\w(.*\w)?$' and term !~ '\s\s|[^\S ]' and term !~ '[\u0085\u00a0\u115f\u1680\u2000-\u200c\u2028\u2029\u202f\u205f\u2060\u2800\u3000\u3164\ufeff\uffa0]')
 );
 alter table private.blocked_terms enable row level security;
 revoke all on private.blocked_terms from public, anon, authenticated, service_role;
@@ -972,8 +977,10 @@ begin
  v_body := private.chat_body(p_body);
  if v_body is null then raise exception 'Invalid message' using errcode='22023'; end if;
  -- The blocked terms (G-B4(a), challenge N4): a listed term as a whole word, in any case; a space in it is any run of
- -- blanks or a line break. chat_body has already refused a body over 16,000 bytes, so no term meets a huge one.
- if exists (select 1 from private.blocked_terms t where v_body ~* ('\m' || replace(t.term, ' ', '\s+') || '\M')) then
+ -- the blanks chat_body trims (a line break, a no-break space and the others \s here misses; SR3's D1). chat_body has
+ -- already refused a body over 16,000 bytes, so no term meets a huge one.
+ if exists (select 1 from private.blocked_terms t
+  where v_body ~* ('\m' || replace(t.term, ' ', '[\s\u0085\u00a0\u115f\u1680\u2000-\u200c\u2028\u2029\u202f\u205f\u2060\u2800\u3000\u3164\ufeff\uffa0]+') || '\M')) then
   raise exception 'Not allowed' using errcode='22023';
  end if;
  -- The author's lock (require_tester's key; already held where require_tester takes it), so one person's writes queue
@@ -1028,8 +1035,10 @@ begin
   raise exception 'Invalid message' using errcode='22023';
  end if;
  -- The blocked terms (G-B4(a), challenge N4): a listed term as a whole word, in any case; a space in it is any run of
- -- blanks or a line break. chat_body has already refused a body over 16,000 bytes, so no term meets a huge one.
- if exists (select 1 from private.blocked_terms t where v_body ~* ('\m' || replace(t.term, ' ', '\s+') || '\M')) then
+ -- the blanks chat_body trims (a line break, a no-break space and the others \s here misses; SR3's D1). chat_body has
+ -- already refused a body over 16,000 bytes, so no term meets a huge one.
+ if exists (select 1 from private.blocked_terms t
+  where v_body ~* ('\m' || replace(t.term, ' ', '[\s\u0085\u00a0\u115f\u1680\u2000-\u200c\u2028\u2029\u202f\u205f\u2060\u2800\u3000\u3164\ufeff\uffa0]+') || '\M')) then
   raise exception 'Not allowed' using errcode='22023';
  end if;
  -- The author's lock, as send_message takes it (H28).
@@ -1061,14 +1070,18 @@ begin
 end $$;
 
 -- 2k. Reporting (CH-P13, G-B4(b), (c) and (e), G-S9, G-N12, R-Q1; challenges I3, I7, N5 and N8; confirmation NOTEs 8 and
--- 15). Each refuses what the caller may not report with 22023 'Report unavailable', the same words for a stranger, a
--- system line, a message no longer sent, the caller's own message or the caller themselves; then, in this order (I7):
+-- 15). Each first refuses a reason outside the four, no reason, or details over 500 characters, with 23514 'Invalid
+-- report' and nothing more: left to the table's checks, the error's detail would print the row, the reported words and
+-- every id in it, to the caller and to the log (SR3). It refuses what the caller may not report with 22023 'Report
+-- unavailable', the same words for a stranger, a system line, a message no longer sent, the caller's own message or the
+-- caller themselves; then, in this order (I7):
 --  1. the caller's lock, the author's lock chat core's writes take (hashtextextended(uid, 47)), so one person's
 --     reports meet the limit one at a time;
 --  2. a repeat (the caller's report of the same message, or the caller's open report about the same person on the
 --     series) stores nothing, queues nothing and returns as the first did, so a repeat never reads as the limit;
 --  3. at most 20 reports by the caller made in the last 24 hours, whatever their status, else 22023 'Report limit';
---  4. the insert (the table checks the reason and the details: check_violation);
+--  4. the insert, after the plan's row for key share, so a report takes the plan before the message (the reports' key
+--     on it) as the account deletion does, and the two never deadlock (SR3);
 --  5. the notices: one report_filed to each moderator but the reporter and the reported person (N8), on the report's
 --     plan, with no actor and no message, so the push names nobody and carries nothing (Decision 10). Under the lock
 --     'report_filed' (taken after the caller's), none goes to a moderator who already has one from the last 10 minutes
@@ -1083,6 +1096,10 @@ create function private.report_message(p_id bigint, p_reason text, p_details tex
 language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester(); v_msg public.messages; v_id bigint;
 begin
+ if p_reason is null or p_reason not in ('harassment','spam','inappropriate','other')
+  or (p_details is not null and pg_catalog.char_length(p_details) > 500) then
+  raise exception 'Invalid report' using errcode='23514';
+ end if;
  select * into v_msg from public.messages m where m.id = p_id;
  if v_msg.id is null or v_msg.kind not in ('message','announcement') or v_msg.state <> 'sent' or v_msg.author_id is null
   or v_msg.author_id = v_uid or not (private.chat_member(v_msg.series_id, v_uid)
@@ -1099,6 +1116,7 @@ begin
  if (select count(*) from private.reports r where r.reporter_id = v_uid and r.created_at > now() - interval '24 hours') >= 20 then
   raise exception 'Report limit' using errcode='22023';
  end if;
+ perform 1 from public.plans p where p.id = v_msg.plan_id for key share;
  insert into private.reports(reporter_id, target_user_id, message_id, series_id, plan_id, about, reason, details, frozen_body, frozen_author)
  values (v_uid, v_msg.author_id, v_msg.id, v_msg.series_id, v_msg.plan_id, 'message', p_reason, p_details, v_msg.body, v_msg.author_id)
  on conflict do nothing returning id into v_id;
@@ -1138,6 +1156,10 @@ create function private.report_user(p_user uuid, p_series uuid, p_reason text, p
 language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester(); v_plan uuid; v_member boolean; v_id bigint;
 begin
+ if p_reason is null or p_reason not in ('harassment','spam','inappropriate','other')
+  or (p_details is not null and pg_catalog.char_length(p_details) > 500) then
+  raise exception 'Invalid report' using errcode='23514';
+ end if;
  if p_user is not null and p_series is not null and p_user <> v_uid then
   select p.id into v_plan from public.plans p
   where p.series_id = p_series
@@ -1170,6 +1192,7 @@ begin
  if (select count(*) from private.reports r where r.reporter_id = v_uid and r.created_at > now() - interval '24 hours') >= 20 then
   raise exception 'Report limit' using errcode='22023';
  end if;
+ perform 1 from public.plans p where p.id = v_plan for key share;
  insert into private.reports(reporter_id, target_user_id, series_id, plan_id, about, reason, details)
  values (v_uid, p_user, p_series, v_plan, 'user', p_reason, p_details)
  on conflict do nothing returning id into v_id;
@@ -1193,8 +1216,9 @@ grant execute on function private.report_user(uuid,uuid,text,text), public.repor
 
 -- 2l. Deletion (CH-P18, G-S11, Decision 7): chat core's body as built (chat_core.sql:817-874, inside its guard,
 -- :814-877; nothing later redefines it), redefined only where it exists, as chat core does, its grants kept and its
--- set_config('resbite.system','deletion',true) kept. Beside the built deletes of the person's connections and refusals,
--- it also deletes their blocks both ways (locked first in one order, so two deletions of people who blocked each other
+-- set_config('resbite.system','deletion',true) kept. After the built step that empties brought_by on the guest rows
+-- they brought (so it takes guest rows before blocks and reports, as the fold does; SR3), it also deletes their blocks
+-- both ways (locked first in one order, so two deletions of people who blocked each other
 -- never deadlock on them), the reports they filed, their chat-rules acceptances and their moderator row. Reports about
 -- them stay, with their frozen words (messages_touch empties their messages however the profile goes), until closed. The
 -- built body already deletes their own notices, a moderator's queued report_filed with them. These deletes take no chat
@@ -1240,17 +1264,18 @@ begin
  update private.invitations set revoked_at=coalesce(revoked_at,now()),claimed_by=null,intended_email=null where claimed_by=p_user;
  delete from public.connections where p_user in (user_a,user_b);
  delete from private.connection_refusals where from_user=p_user or to_user=p_user;
+ -- Circles of trust: nobody was brought by a deleted account, and its removal records go.
+ update public.attendees set brought_by=null where brought_by=p_user;
+ update private.phone_invitations set brought_by=null where brought_by=p_user;
+ delete from private.plan_removals where user_id=p_user;
  -- Chat safety (CH-P18, G-S11, Decision 7): the account's blocks both ways (locked in one order first), the reports it
- -- filed, its chat-rules acceptances and its moderator row. Reports about it stay, with their frozen words.
+ -- filed, its chat-rules acceptances and its moderator row. Reports about it stay, with their frozen words. After the
+ -- guest rows, as the fold takes them before blocks and reports, so the two never deadlock (SR3).
  perform 1 from private.blocks where blocker_id=p_user or blocked_id=p_user order by blocker_id, blocked_id for update;
  delete from private.blocks where blocker_id=p_user or blocked_id=p_user;
  delete from private.reports where reporter_id=p_user;
  delete from private.chat_rules_acceptances where user_id=p_user;
  delete from private.moderators where user_id=p_user;
- -- Circles of trust: nobody was brought by a deleted account, and its removal records go.
- update public.attendees set brought_by=null where brought_by=p_user;
- update private.phone_invitations set brought_by=null where brought_by=p_user;
- delete from private.plan_removals where user_id=p_user;
  -- Chat (K-B2, K-N5, Decision 14, H27): the account's messages and announcements lose their words and their author;
  -- those still sent read deleted, and one a host removed stays removed. Each chat's row is locked first, in one order,
  -- before the message rows, as delete_message, remove_message and the stats trigger take them, so they never deadlock
@@ -1369,13 +1394,16 @@ begin
  -- web account's rows go with its profile. Reports name the app account where they named the web one (reporter,
  -- reported person, frozen author). First, a report that would then repeat another (the same message by the same
  -- reporter, or an open report by one reporter about one person on one series) goes, so the move meets no unique index
- -- (confirmation 2's NOTE 2-b): the web account's, or of two that both named it, the later.
+ -- (confirmation 2's NOTE 2-b): the web account's, or of two that both named it, the later. A report one of the two
+ -- accounts filed about the other goes too: after the fold it would be about oneself (SR3, Q-1).
  insert into private.blocks(blocker_id,blocked_id,created_at)
   select k.blocker,k.blocked,k.created_at from (select case when b.blocker_id=p_from then p_into else b.blocker_id end as blocker,
    case when b.blocked_id=p_from then p_into else b.blocked_id end as blocked, b.created_at
    from private.blocks b where p_from in (b.blocker_id,b.blocked_id)) k
   where k.blocker<>k.blocked
  on conflict do nothing;
+ delete from private.reports r where (r.reporter_id=p_from and p_into in (r.target_user_id,r.frozen_author))
+  or (r.reporter_id=p_into and p_from in (r.target_user_id,r.frozen_author));
  delete from private.reports f where f.reporter_id=p_from and f.message_id is not null
   and exists(select 1 from private.reports t where t.reporter_id=p_into and t.message_id=f.message_id);
  delete from private.reports f where f.about='user' and f.status='open' and p_from in (f.reporter_id,f.target_user_id)
