@@ -87,7 +87,7 @@ From `.superpowers/sdd/challenges/chat-3-safety-after-core-challenge.md` (4 BLOC
 - **I8:** the runbook's App Review step (6a): the review account, the support address in the installed build, and the address on the App Store listing. Task 7.
 - **I9:** the rollback notes for this plan alone: the sender stays, the app goes first, and chat without this plan may not reach testers. Task 7.
 - **I10, R-Q2:** `open-reports.sql` lists the blocks of the last 7 days beside the reports (who blocked whom and when, no text). No push for a block. Decision 15, Tasks 2 and 7.
-- **I11, R-Q3:** the reports an account filed keep their frozen text and lose `reporter_id` when it goes. The reports about it keep the reported id until closed. A closed report is deleted 180 days after closing by `purge-closed-reports.sql`, which the daily read prompts (no existing purge job fits: `purge-deletion-receipts` is for deletion receipts and is not enabled). Decision 7 changes, departing from CH-P18 by the ruling. Tasks 2, 4, 6 and 7.
+- **I11, R-Q3 (as the controller corrected it: the spec wins):** the reports an account filed are deleted when it goes, as CH-P18 says, on every path. The deletion step deletes them, and `reporter_id … on delete cascade` takes them when a profile is removed any other way, as H42 made a departed author's words go however the profile went. The reports about it stay with their frozen text and keep the reported id until closed. A closed report is deleted 180 days after closing by `purge-closed-reports.sql`, which the daily read prompts (no existing purge job fits: `purge-deletion-receipts` is for deletion receipts and is not enabled). Decision 7, Tasks 2, 4, 6 and 7.
 - **R-Q1:** Report the person goes wherever Block is on an invitation (the card and the page). `report_user` admits the owner, the inviter and an announcer whose audience holds the caller. Decision 14, Tasks 2, 4 and 5.
 - **R-Q4:** the owner names a backup reader before the release (release-blocking). Until then the runbook says the owner alone reads the queue daily. Task 7.
 - **R-Q5:** no push of any kind from a blocked person to the blocker, join requests included. The request still shows to every host, the blocker included, who can decline it. `plan_changed` and `plan_cancelled`, which name nobody and are the resbite's own news, still arrive (Review Focus 3). Decision 18, Task 1.
@@ -123,7 +123,7 @@ Rulings absorbed, one line each:
 - **G-S8:** after a block or unblock the chat reloads and replaces its list. Tasks 4 and 5.
 - **G-S9:** Block only on request rows, and `report_user` and `report_message` as the finding defines them. Tasks 2 and 4.
 - **G-S10:** "Blocked people" under Data & privacy, with `my_blocks` returning `{user_id, name}`. Tasks 1 and 6.
-- **G-S11:** deleting an account deletes the reports it filed, and Data & privacy says what a report keeps. Tasks 2 and 6. (The first half is superseded by the ruling on I11, 12 November: Decision 7.)
+- **G-S11:** deleting an account deletes the reports it filed, and Data & privacy says what a report keeps. Tasks 2 and 6.
 - **G-S12:** the ops scripts are plain SQL with one literal at the top, run in the SQL editor. Tasks 2 and 7.
 - **G-S13:** the owner's default is built: a blocked person's invitation never reaches the blocker in the app. Task 1.
 - **G-S14 (plan 3 items):** the request test, the check after a block, the exact columns of `open-reports.sql`, and the address in a build. Tasks 1, 2, 5 and 6.
@@ -135,7 +135,7 @@ Rulings absorbed, one line each:
 - **G-N12:** report targets, one report per message, and a block on an unreadable id. Tasks 1, 2 and 5.
 
 Departures and choices, recorded:
-- G-S11 now follows the spec. Deleting an account deletes the reports it filed (CH-P18). The earlier text kept them with `reporter_id` null. Decision 7. (Superseded on 12 November by the ruling on I11: Decision 7 now keeps them without the reporter's id.)
+- G-S11 now follows the spec. Deleting an account deletes the reports it filed (CH-P18). The earlier text kept them with `reporter_id` null. Decision 7.
 - G-B4(d) adds chat rules the spec does not have. The Terms document and `TERMS_VERSION` stay the owner's. Decision 8.
 - G-B4(a) adds a blocked-terms filter, and G-B4(c) a moderator push. The spec has neither. Decisions 9 and 10.
 - G-S13's owner default: a blocked person's invitation reaches the blocker only as a personal link the inviter sends outside Resbite. Decision 11.
@@ -193,7 +193,7 @@ Chat plan 1's Global Constraints, verbatim, with the migration `supabase/migrati
 4. **Reasons:** Harassment · Spam · Not appropriate · Something else, plus an optional line of up to 500 characters (CH-P13).
 5. **A join requester can be blocked, not reported** (G-S9). They are not on the resbite, so `report_user` would refuse them.
 6. **One report per person per message** (G-N12). A repeat answers the same thanks and stores nothing.
-7. **An account that goes keeps its reports, without its id** (the ruling on I11, R-Q3). The reports it filed keep their frozen text, reason and details, and lose `reporter_id` (`on delete set null`, and the deletion step sets it null), however the profile goes. The reports about it keep `target_user_id` and `frozen_author` until they are closed. A closed report is deleted 180 days after closing (`private.report_keep_days()`, `purge-closed-reports.sql`). This departs from CH-P18, which deletes "reports as reporter", by the controller's ruling; G-S11's earlier reading is superseded.
+7. **Deleting an account deletes the reports it filed** (CH-P18, G-S11, challenge I11), however the account goes: the deletion step deletes them, and `reporter_id … on delete cascade` takes them when a profile is removed any other way, as chat core's H42 made a departed author's words go. Reports about the person stay, with the frozen text, and keep `target_user_id` and `frozen_author` until they are closed. A closed report is deleted 180 days after closing (R-Q3; `private.report_keep_days()`, `purge-closed-reports.sql`).
 8. **The chat rules come before a first message** (G-B4(d)). A one-time sheet, stored per person and version `2026-11`. The Terms document and `TERMS_VERSION` are the owner's, outside this plan.
 9. **A blocked-terms list stops a message before it is stored** (G-B4(a)). The migration seeds nothing, and the owner fills the list before the release.
 10. **Each new report pushes the moderators** (G-B4(c)) with "A new report is waiting.". The push carries no content, and its tap opens nothing.
@@ -372,7 +372,7 @@ Chat plan 1's Global Constraints, verbatim, with the migration `supabase/migrati
 - Produces:
   - `private.reports`, RLS on, no policies, all revoked from the four roles, with these columns:
     - `id bigint generated always as identity primary key`;
-    - `reporter_id uuid null references public.profiles(id) on delete set null` (an account that goes keeps its reports without its id, Decision 7), `target_user_id uuid null`, `message_id bigint null references public.messages(id) on delete set null`, `series_id uuid null`, `plan_id uuid null`;
+    - `reporter_id uuid null references public.profiles(id) on delete cascade` (CH-P18, Decision 7: a profile removed any way, by hand on hosted included, takes the reports it filed, as `messages_touch` takes a departed author's words whatever way the profile went, H42), `target_user_id uuid null`, `message_id bigint null references public.messages(id) on delete set null`, `series_id uuid null`, `plan_id uuid null`;
     - `about text not null check (about in ('message','user'))`: what was reported, which outlives the message row (challenge N5);
     - `reason text not null check (reason in ('harassment','spam','inappropriate','other'))`, `details text null check (details is null or char_length(details) <= 500)`;
     - `frozen_body text null`, `frozen_author uuid null`;
@@ -415,7 +415,7 @@ Chat plan 1's Global Constraints, verbatim, with the migration `supabase/migrati
     - It is not a chat kind, so the claim expands and picks it before any chat job (:712, :743): a report never waits behind a lively chat.
   - `notification_outbox_kind_check` re-added with chat core's 13 kinds (:381-382) plus `report_filed`.
   - `notification_recipient_eligible`, section 1's body, gains a fourth branch for `report_filed`: the recipient is in `private.moderators` now, `user_eligible`, not being deleted, and the row is under 24 hours old. No membership test and no mute apply. The first branch excludes the kind: it joins the list `o.kind not in ('connection_request','connection_accepted','chat_message','announcement')` (:657).
-  - The deletion function (`private.request_account_deletion`), copied from the built body inside its `do`/`execute` guard (:814-877; its base re-verified, Bases), with its `set_config('resbite.system','deletion',true)` (:837) kept. It also deletes the person's blocks both ways, their `chat_rules_acceptances` rows and their `moderators` row, and sets `reporter_id = null` on the reports they filed, which keep their frozen text (the ruling on I11, Decision 7; G-S11 had them deleted). These sit next to the built `delete from public.connections …` and `delete from private.connection_refusals …` (:853-854). Reports about them stay, with their frozen text. The freeze matters: once an author is gone, `messages_touch` empties their messages whatever way the profile went (:56-72, H42). The built body already deletes the person's own outbox rows (:872), so a moderator's queued `report_filed` goes with them. The local-only `private.activate_deletion_intent` is left to the roadmap's account-deletion item, as chat core left it (its runbook's Known gaps).
+  - The deletion function (`private.request_account_deletion`), copied from the built body inside its `do`/`execute` guard (:814-877; its base re-verified, Bases), with its `set_config('resbite.system','deletion',true)` (:837) kept. It also deletes the person's blocks both ways, the reports they filed (CH-P18, G-S11, Decision 7), their `chat_rules_acceptances` rows and their `moderators` row. These sit next to the built `delete from public.connections …` and `delete from private.connection_refusals …` (:853-854). Reports about them stay, with their frozen text. The freeze matters: once an author is gone, `messages_touch` empties their messages whatever way the profile went (:56-72, H42). The built body already deletes the person's own outbox rows (:872), so a moderator's queued `report_filed` goes with them. The local-only `private.activate_deletion_intent` is left to the roadmap's account-deletion item, as chat core left it (its runbook's Known gaps).
   - `private.fold_web_account(p_from, p_into)` redefined, copied from its latest body as built (chat core's, `chat_core.sql:1000-1091`, unless plan 2's migration redefines it: Bases), with one step added before "4. The web profile" (challenge I4). Without it the profile's delete cascades the web account's blocks away, and reports keep naming an id that no longer exists:
     - each `private.blocks` row naming `p_from`, as blocker or blocked, is inserted again with `p_into` in its place and its `created_at` kept, `on conflict do nothing`, leaving out a row that would block oneself. The old rows go with the profile (`on delete cascade`);
     - `private.reports` name `p_into` where they named `p_from`: `reporter_id`, `target_user_id` and `frozen_author`.
@@ -485,9 +485,10 @@ Chat plan 1's Global Constraints, verbatim, with the migration `supabase/migrati
 -- I4: 03 blocks 14 (Going on the one-off). 05 reports 14 with report_user, and reports 14's message (inserted by hand).
 --   fold_web_account(14, 15): a block row (03, 15) and none naming 14; the user report's target_user_id is 15, and the
 --   message report's frozen_author and target_user_id are 15.
--- I11: in a savepoint, 05's profile deleted by hand: the reports 05 filed stay with frozen_body and reason, and
---   reporter_id null. A report about 16 keeps target_user_id 16 after 16's profile is deleted by hand (in a savepoint);
---   close-report.sql on it: target_user_id and frozen_author null.
+-- I11 (CH-P18): in a savepoint, 05's profile deleted by hand: every report 05 filed is gone (on delete cascade), and
+--   a report about 05 filed by 03 stays with frozen_body, target_user_id 05 and frozen_author 05. A report about 16
+--   keeps target_user_id 16 after 16's profile is deleted by hand (in a savepoint); close-report.sql on it:
+--   target_user_id and frozen_author null.
 -- Moderator push: 09 in private.moderators. A report by 05 queues one report_filed row to 09, dedupe 'report:<id>:09', eligible.
 --   A report by 09 queues none to 09. N8: a report by 05 about 09 queues none to 09.
 --   N14 (a): 09 is also a Going guest of the reported resbite and has muted it: the queued row is eligible (no mute
@@ -497,7 +498,7 @@ Chat plan 1's Global Constraints, verbatim, with the migration `supabase/migrati
 --   report by 05 queues one report_filed row, to 17. Move 09's row back 11 minutes: the next report queues one to 09.
 -- I7, priority: 150 chat_message rows queued before a report_filed row, and a device for 09: one
 --   public.claim_notification_deliveries(25) returns 09's report_filed job (as chat.sql's crowd test, :1454).
--- Deletion (guarded): 03's blocks both ways are gone. 05's deletion keeps 05's reports, with reporter_id null (I11).
+-- Deletion (guarded): 03's blocks both ways are gone. 05's deletion deletes 05's reports (CH-P18).
 --   Reports about 04 stay after 04's deletion, with frozen_body. 03's acceptance row and 09's moderators row go with their deletions.
 -- open-reports.sql, run as 'create temporary table … as <script>': its column names, in order, are exactly
 --   item, id, created_at, reason, details, frozen_body, reporter_name, target_name, resbite_title, resbite_date.
@@ -586,7 +587,7 @@ Chat plan 1's Global Constraints, verbatim, with the migration `supabase/migrati
     - a rules refusal and a failed I agree (challenge I6), each its own line, none "Check your connection": `rulesFirst: "Agree to the chat rules first."` (the words for `'Rules not accepted'`), `rulesHeldMessage: (n) => n === 1 ? "Your message hasn’t been sent. Agree to the chat rules to send it." : \`${n} messages haven’t been sent. Agree to the chat rules to send them.\``, `rulesHeldAnnouncement: "Your announcement hasn’t been sent. Agree to the chat rules to send it."`, `rulesNotSaved: "That didn’t go through, so nothing was sent. Try again."`;
     - blocked people (G-S10): `blockedPeople: "Blocked people"`, `noneBlocked: "You haven’t blocked anyone."`;
     - contact (G-N10): `contact: (address) => \`Questions, or something wrong in a chat? Write to ${address}.\``, `copyAddress: "Copy address"`, `copied: "Copied"`;
-    - reports on Data & privacy (G-S11, challenges N9 and I11): `reportsPrivacy: "If you report a message or a person, the Resbite team reads the report and keeps a copy of what was reported, even if the message or that person’s account is deleted. If you delete your account, your reports stay, without your name. A report is deleted 180 days after the team closes it."`. It names a person as well as a message, says what happens to the reporter's own reports, and gives the period (R-Q3).
+    - reports on Data & privacy (G-S11, challenges N9 and I11): `reportsPrivacy: "If you report a message or a person, the Resbite team reads the report and keeps a copy of what was reported, even if the message or that person’s account is deleted. If you delete your account, the reports you sent are deleted too. A report is deleted 180 days after the team closes it."`. It names a person as well as a message, says what happens to the reporter's own reports (CH-P18), and gives the period (R-Q3).
   - `supportAddress(env: string | undefined): string | null`: trimmed; null when empty, or when it isn't an address (one `@` with text before it, a dot in the part after it, and no blank), so a broken `mailto:` is never shown and the release gate catches the value (challenge N9).
   - `thanksLines(address: string | null): string[]`: `[thanks]`, or `[thanks, contact(address)]` when set (G-N10).
   - `showsReportOrBlock(otherPeople: number): boolean`: false at 0 (G-N7).
