@@ -1994,8 +1994,8 @@ try {
     await f.done();
   }
   {
-    // The roll then made Thu 27 Nov the current occurrence: the cancelled week's line, and its can't-go line, are an
-    // earlier week's, and read in the one-off words, never "this Thursday" above next week's Next one (ruling GR6 I1).
+    // The roll then made Thu 27 Nov the current occurrence: the cancelled week's line names its date, and its can't-go
+    // line reads in the one-off words, never "this Thursday" above next week's Next one (rulings GR6 I1, GR7).
     const NEXT_PLAN = "9a000000-0000-4000-8000-000000000027";
     const f = await fixture({
       now: "2025-11-24T10:00:00Z",
@@ -2009,13 +2009,13 @@ try {
     const { page } = f;
     await openGroup(page);
     await expect(button(page, "Resbite: Next one: Thu 27 Nov · Ana's flat")).toBeVisible();
-    await expect(labelled(page, "Resbite: Ana cancelled the resbite")).toBeVisible();
+    await expect(labelled(page, "Resbite: Ana cancelled Thu 20 Nov")).toBeVisible();
     await expect(page.getByText("Ana cancelled this Thursday", { exact: true })).toHaveCount(0);
     await expect(text(page, "Sol can’t make it")).toBeVisible();
     await expect(page.getByText("Sol can’t make it this week", { exact: true })).toHaveCount(0);
     await f.done();
   }
-  console.log("PASS (gr8): after Cancel just this one the chat reads Ana cancelled this Thursday, adds no ended line of its own (last week's stored one stays), and keeps the field; after the roll, that week's cancelled and can't-go lines read Ana cancelled the resbite and Sol can’t make it.");
+  console.log("PASS (gr8): after Cancel just this one the chat reads Ana cancelled this Thursday, adds no ended line of its own (last week's stored one stays), and keeps the field; after the roll, that week's cancelled and can't-go lines read Ana cancelled Thu 20 Nov and Sol can’t make it.");
 
   // (gr9) A can't-go line taken back within 10 minutes leaves the open screen; the earlier joined line stays.
   {

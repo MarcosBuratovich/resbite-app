@@ -91,7 +91,7 @@ The decisions and the calls made while building are in the [decision log](../../
 - **The app** rides the TestFlight build (step 6):
   - the chat screen on a group: the header "Every Thursday · 9 in the group" (or "Last one · Thu 27 Nov · 9 in the group"), the group's field line, the audiences "Everyone in the group" and "Going this Thursday", the group's cards, the owner-alone empty state, "People in this group · 9", the closed card, and "Next one" as a button that opens this week's resbite;
   - Leave group in the chat's menu, and Leave this group in the resbite page's More, each asking in place. Either way the phone's reminders for it go, My resbites drops the group at once, and the person lands there from the group's chat, resbite page or people list, even if they moved between them while the leave was on its way;
-  - an earlier week's "cancelled" and "can't make it" lines read in the one-off words, never "this Thursday" or "this week" above next week's "Next one";
+  - an earlier week's "cancelled" line names that week's date ("Ana cancelled Thu 20 Nov") and its "can't make it" line reads in the one-off words, never "this Thursday" or "this week" above next week's "Next one";
   - the resbite page shows at once, as a one-off's, and turns into the group's when `series_is_group` answers;
   - the resbite page's "Group chat" row, the people row's names and the people list's "Not answered yet" for every member;
   - the unread dot on a group member's invitation card on My resbites;

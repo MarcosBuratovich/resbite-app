@@ -221,13 +221,19 @@ function nextText(p: Record<string, unknown>): string {
 
 /**
  * A `cancelled` line: a one-off's as built; a group's names the week it cancelled ("this Thursday") while that week is
- * the current one (`current`), or the group if it stops (G-S2). An earlier week's reads as a one-off's, with no weekday
- * (ruling GR6 I1), as an earlier announcement does (GR1).
+ * the current one (`current`), or the group if it stops (G-S2). An earlier week's names that occurrence's date, "Ana
+ * cancelled Thu 20 Nov", in its own zone and with no year, as the "Next one" line words a day (rulings GR6 I1, GR7):
+ * never "this Thursday" above next week's, and never "the resbite", which in a group reads as the whole group ending.
+ * With no date it can read, it falls back to the one-off words.
  */
 function cancelledText(p: Record<string, unknown>, who: string | null, group: boolean, current: boolean): string {
   if (!who) return "The resbite was cancelled";
   if (group && p.stop === true) return `${who} cancelled the group`;
-  const day = group && current ? longWeekday(p.starts_at, p.time_zone) : "";
+  if (group && !current) {
+    const date = instant(p.starts_at) ? dayLabel(p.starts_at as string, text(p.time_zone) ?? "") : "";
+    return date ? `${who} cancelled ${date}` : `${who} cancelled the resbite`;
+  }
+  const day = group ? longWeekday(p.starts_at, p.time_zone) : "";
   return day ? `${who} cancelled this ${day}` : `${who} cancelled the resbite`;
 }
 

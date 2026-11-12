@@ -373,8 +373,9 @@ test("on a group whose day can't be read, a going announcement reads as a one-of
 });
 
 // Ruling GR6 (I1): a system line that names this week ("this Thursday", "this week") does so only on the current
-// occurrence; an earlier week's reads in the one-off words, with no weekday, as an earlier announcement does (GR1).
-test("on a group, an earlier week's cancelled and can't-go lines read in the one-off words; this week's name the week", () => {
+// occurrence. An earlier week's cancel names that occurrence's date (ruling GR7), never "the resbite", which in a group
+// reads as the whole group ending; an earlier week's can't-go reads in the one-off words.
+test("on a group, an earlier week's cancel names its date and its can't-go the one-off words; this week's name the week", () => {
   const CURRENT = "0c000000-0000-4000-8000-000000000027";
   const EARLIER = "0c000000-0000-4000-8000-000000000020";
   const cancelled = (id: number, plan: string | undefined) => ({
@@ -387,14 +388,18 @@ test("on a group, an earlier week's cancelled and can't-go lines read in the one
   });
   const lines = only(rows, "system");
   assert.deepEqual(lines.map((l) => l.text), [
-    "Ana cancelled the resbite",
+    "Ana cancelled Thu 20 Nov",
     "Sol can’t make it",
     "Ana cancelled this Thursday",
     "Sol can’t make it this week",
     // A row that doesn't say which occurrence it belongs to reads as the current one's.
     "Ana cancelled this Thursday",
   ]);
-  assert.deepEqual(lines.slice(0, 2).map((l) => l.label), ["Resbite: Ana cancelled the resbite", "Resbite: Sol can’t make it"]);
+  assert.deepEqual(lines.slice(0, 2).map((l) => l.label), ["Resbite: Ana cancelled Thu 20 Nov", "Resbite: Sol can’t make it"]);
+  // The date in the occurrence's own zone, with no year; with none readable, the one-off words.
+  const late = { ...sys(7, "cancelled", { actor: ANA, stop: false, starts_at: "2025-11-20T23:30:00Z", time_zone: "Asia/Tokyo" }), planId: EARLIER };
+  const dateless = { ...sys(8, "cancelled", { actor: ANA, stop: false, starts_at: "soon", time_zone: LONDON }), planId: EARLIER };
+  assert.deepEqual(only(groupFeed([late, dateless], { planId: CURRENT }), "system").map((l) => l.text), ["Ana cancelled Fri 21 Nov", "Ana cancelled the resbite"]);
   // A cancel that stopped the group names no week either way.
   const stopped = groupFeed([{ ...sys(6, "cancelled", { actor: ANA, stop: true, starts_at: "2025-11-20T19:00:00Z", time_zone: LONDON }), planId: EARLIER }], { planId: CURRENT });
   assert.equal(only(stopped, "system")[0].text, "Ana cancelled the group");
