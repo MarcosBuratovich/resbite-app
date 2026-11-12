@@ -182,10 +182,28 @@ do $$ declare v_stopped bigint := current_setting('g2.stopped')::bigint; v_hello
  perform pg_temp.g2_as(pg_temp.e6('03'));
  perform pg_temp.g2_check((public.chat_summary(pg_temp.e6p('01'))->'last'->>'id')::bigint=v_hello,'The summary''s last row is not 01''s message');
 end $$;
+-- chat_hide_line leaves a row that is not a sent system line as it is (review M4): 01's message, and the stopped line
+-- already deleted. Neither row changes or is signalled again, and the chat's figures stay.
+do $$ declare v_stopped bigint := current_setting('g2.stopped')::bigint; v_hello bigint := current_setting('g2.hello')::bigint;
+ v_before text; v_signals bigint; begin
+ v_before := (select string_agg(m.id||':'||m.state||':'||coalesce(m.body,'-'),',' order by m.id) from public.messages m where m.id in (v_hello,v_stopped))
+  ||'|'||(select row_to_json(c)::text from public.chats c where c.series_id=pg_temp.e6p('01'));
+ v_signals := (select count(*) from realtime.messages r where r.topic='chat:'||pg_temp.e6p('01'));
+ perform private.chat_hide_line(v_hello);
+ perform private.chat_hide_line(v_stopped);
+ perform pg_temp.g2_check((select string_agg(m.id||':'||m.state||':'||coalesce(m.body,'-'),',' order by m.id) from public.messages m where m.id in (v_hello,v_stopped))
+   ||'|'||(select row_to_json(c)::text from public.chats c where c.series_id=pg_temp.e6p('01'))=v_before
+   and (select count(*) from realtime.messages r where r.topic='chat:'||pg_temp.e6p('01'))=v_signals,
+  'chat_hide_line changed a message, or a line already deleted, or the chat''s figures');
+end $$;
 
 -- Brunch (G-N8): a one-off with a message made weekly is a group, with one line, made_group {actor 01}. Walk, with no
--- messages, made weekly: a group, and no line. Then Walk under the roll's flag: its repeat off, then on again, by hand.
--- The stop time is still written and cleared, and no line (Global Constraints).
+-- messages but a system line (05 says Going, outside the flag: joined), made weekly: a group, and no made_group line,
+-- since message_count counts messages and announcements only (K-N12, review M6). Then Walk under the roll's flag: its
+-- repeat off, then on again, by hand. The stop time is still written and cleared, and no line (Global Constraints).
+update public.attendees set response='accepted' where plan_id=pg_temp.e6p('07') and user_id=pg_temp.e6('05');
+select pg_temp.g2_check(pg_temp.g2_lines(pg_temp.e6p('07'))='joined:sent'
+ and (select message_count from public.chats where series_id=pg_temp.e6p('07'))=0,'Walk does not have one line and no message');
 set local role authenticated;
 select pg_temp.g2_as(pg_temp.e6('01'));
 select pg_temp.g2_send(pg_temp.e6p('06'),'Pancakes or waffles?');
@@ -197,7 +215,7 @@ do $$ declare v_line public.messages; begin
  perform pg_temp.g2_check(pg_temp.g2_lines(pg_temp.e6p('06'))='made_group:sent','Brunch''s lines: '||pg_temp.g2_lines(pg_temp.e6p('06')));
  select * into v_line from public.messages where series_id=pg_temp.e6p('06') and kind='system';
  perform pg_temp.g2_check(v_line.author_id is null and v_line.payload=jsonb_build_object('actor',pg_temp.e6('01')),'The made_group line: '||row_to_json(v_line)::text);
- perform pg_temp.g2_check(pg_temp.g2_lines(pg_temp.e6p('07'))='','Walk''s lines: '||pg_temp.g2_lines(pg_temp.e6p('07')));
+ perform pg_temp.g2_check(pg_temp.g2_lines(pg_temp.e6p('07'))='joined:sent','Walk''s lines: '||pg_temp.g2_lines(pg_temp.e6p('07')));
  perform pg_temp.g2_check(not exists(select 1 from public.chats where series_id in (pg_temp.e6p('06'),pg_temp.e6p('07')) and stopped_at is not null),
   'Brunch or Walk is stopped');
  perform set_config('resbite.system','roll',true);
@@ -206,8 +224,43 @@ do $$ declare v_line public.messages; begin
  update public.plans set repeat_weeks=1 where id=pg_temp.e6p('07');
  perform set_config('resbite.system','',true);
  perform pg_temp.g2_check((select stopped_at from public.chats where series_id=pg_temp.e6p('07')) is null,'The resume under the flag left the stop time');
- perform pg_temp.g2_check(pg_temp.g2_lines(pg_temp.e6p('07'))='','Walk''s lines under the flag: '||pg_temp.g2_lines(pg_temp.e6p('07')));
+ perform pg_temp.g2_check(pg_temp.g2_lines(pg_temp.e6p('07'))='joined:sent','Walk''s lines under the flag: '||pg_temp.g2_lines(pg_temp.e6p('07')));
 end $$;
+
+-- Walk rolls (its times moved back an hour past the end, under the roll's flag, with a guest row for 13, a web
+-- account that never used the app, so the roll leaves it on the first occurrence).
+-- Only the current occurrence speaks for the series (G-N4, review M3): the repeat turned off on the occurrence the roll
+-- left behind, then that occurrence cancelled (under the flag, so chat core writes no line), stop nothing.
+-- A fold clears a leave only when the row it moves lands on the current occurrence (Q2, Decision 1, CH-P4): 09 gets a
+-- row on the rolled occurrence, which then ends, and leaves (a leave by hand). 13 folds into 09 (fold_web_account):
+-- the row it moves is on the first occurrence, so the leave stays, and 09 is still out. The leave goes after.
+insert into auth.users(id,email,email_confirmed_at) values (pg_temp.e6('13'),'g2-13@resbite-test.invalid',now());
+insert into public.profiles(id,display_name) values (pg_temp.e6('13'),'Wes Web');
+select set_config('resbite.system','roll',true);
+insert into public.attendees(plan_id,user_id,response) values (pg_temp.e6p('07'),pg_temp.e6('13'),'accepted');
+update public.plans set starts_at=now()-interval '3 hours',ends_at=now()-interval '1 hour' where id=pg_temp.e6p('07');
+select pg_temp.g2_check(private.roll_repeating_plans()=1,'The roll did not roll Walk alone');
+select set_config('resbite.system','',true);
+select set_config('g2.walk2',(select id::text from public.plans where repeats_from=pg_temp.e6p('07')),true);
+select set_config('resbite.system','roll',true);
+update public.plans set repeat_weeks=null where id=pg_temp.e6p('07');
+update public.plans set status='cancelled' where id=pg_temp.e6p('07');
+select set_config('resbite.system','',true);
+select pg_temp.g2_check((select stopped_at from public.chats where series_id=pg_temp.e6p('07')) is null and not private.group_stopped(pg_temp.e6p('07'))
+ and private.chat_open(pg_temp.e6p('07')) and pg_temp.g2_lines(pg_temp.e6p('07'))='joined:sent',
+ 'A change to the occurrence the roll left behind stopped Walk, or wrote a line');
+select set_config('resbite.system','roll',true);
+insert into public.attendees(plan_id,user_id,response) values (current_setting('g2.walk2')::uuid,pg_temp.e6('09'),'accepted');
+update public.plans set starts_at=now()-interval '3 hours',ends_at=now()-interval '1 hour' where id=current_setting('g2.walk2')::uuid;
+select set_config('resbite.system','',true);
+insert into private.series_leaves(series_id,user_id) values (pg_temp.e6p('07'),pg_temp.e6('09'));
+select pg_temp.g2_check(not private.chat_member(pg_temp.e6p('07'),pg_temp.e6('09')),'09, who left Walk after the end, is in its chat');
+select pg_temp.g2_check((private.fold_web_account(pg_temp.e6('13'),pg_temp.e6('09'))->>'moved_attendees')::int=1,'The fold moved no row');
+select pg_temp.g2_check(exists(select 1 from public.attendees where plan_id=pg_temp.e6p('07') and user_id=pg_temp.e6('09')),
+ 'The fold did not move 13''s row on the first occurrence to 09');
+select pg_temp.g2_check(exists(select 1 from private.series_leaves where series_id=pg_temp.e6p('07') and user_id=pg_temp.e6('09'))
+ and not private.chat_member(pg_temp.e6p('07'),pg_temp.e6('09')),'A fold onto an earlier occurrence cleared 09''s leave, or let 09 back in');
+delete from private.series_leaves where series_id=pg_temp.e6p('07');
 
 -- Who is in a group's chat (G-S5): the hosts of the current occurrence and everyone with a guest row on it, whatever
 -- they answered: 01 to 06 on Board game night; not 07 (no row), 08 (a stranger), nobody. The one-off keeps plan 1's
@@ -250,6 +303,10 @@ do $$ begin
  perform pg_temp.g2_check(private.chat_open(pg_temp.e6p('01')) and private.chat_closes_at(pg_temp.e6p('01')) is null,
   'A running group whose occurrence ended has a close time, or is closed');
 end $$;
+-- An update that names user_id without changing it is no way back in (review M5): the leave stays, and 03 is still out.
+update public.attendees set user_id=user_id where plan_id=pg_temp.e6p('01') and user_id=pg_temp.e6('03');
+select pg_temp.g2_check(exists(select 1 from private.series_leaves where series_id=pg_temp.e6p('01') and user_id=pg_temp.e6('03'))
+ and not private.chat_member(pg_temp.e6p('01'),pg_temp.e6('03')),'An update leaving user_id as it was cleared 03''s leave');
 set local role authenticated;
 select pg_temp.g2_as(pg_temp.e6('03'));
 select pg_temp.g2_check(not public.series_is_group(pg_temp.e6p('01')),'series_is_group says yes to 03, who left after the end');
@@ -373,6 +430,14 @@ select pg_temp.g2_refused($$select count(*) from private.series_leaves$$,'42501'
 select pg_temp.g2_refused($$insert into private.series_leaves(series_id,user_id) values (pg_temp.e6p('01'),pg_temp.e6('03'))$$,
  '42501','permission denied for table series_leaves');
 reset role;
+-- series_is_group is false for a member who may no longer use the app (Q1, review M1): 05's roster row goes, then comes
+-- back.
+delete from private.tester_roster where email='g2-05@resbite-test.invalid';
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('05'));
+select pg_temp.g2_check(public.series_is_group(pg_temp.e6p('01')) is false,'series_is_group says yes to 05, who may not use the app');
+reset role;
+insert into private.tester_roster(email) values ('g2-05@resbite-test.invalid');
 
 -- The announcement audiences, unchanged (Global Constraints), on the group: Going this Thursday is the hosts and the
 -- people Going or Maybe; Everyone in the group is every member.
@@ -425,7 +490,7 @@ end $$;
 -- An owner who can no longer use the app stops the group (G-S4): 01's roster row goes, and every series 01 owns is
 -- stopped. Board game night, running: the summary (as 05) says stopped, and the chat closes 48 hours after its current
 -- occurrence's end. Film club, its current occurrence cancelled with the repeat kept (as an account deletion leaves it):
--- the same close. 01's roster row comes back, and Board game night runs again.
+-- the same close. The Picnic, a one-off, is not stopped. 01's roster row comes back, and Board game night runs again.
 delete from private.tester_roster where email='g2-01@resbite-test.invalid';
 do $$ declare s jsonb; begin
  perform pg_temp.g2_check(not private.user_eligible(pg_temp.e6('01')),'01 may still use the app');
@@ -436,6 +501,12 @@ do $$ declare s jsonb; begin
  perform pg_temp.g2_check(private.group_stopped(pg_temp.e6p('02'))
    and private.chat_closes_at(pg_temp.e6p('02'))=pg_temp.e6_start(2)+interval '50 hours' and private.chat_open(pg_temp.e6p('02')),
   'Film club with an owner who may not use the app does not close 48 hours after its end');
+ -- The Picnic, a one-off of 01's, is never stopped (review M2): plan 1's close, and stopped false in its summary (as 03).
+ perform pg_temp.g2_check(not private.group_stopped(pg_temp.e6p('05'))
+   and private.chat_closes_at(pg_temp.e6p('05'))=pg_temp.e6_start(5)+interval '50 hours',
+  'The Picnic, a one-off whose owner may not use the app, reads stopped');
+ perform pg_temp.g2_as(pg_temp.e6('03'));
+ perform pg_temp.g2_check(public.chat_summary(pg_temp.e6p('05'))@>'{"stopped":false,"is_group":false}','The Picnic''s summary says stopped');
 end $$;
 insert into private.tester_roster(email) values ('g2-01@resbite-test.invalid');
 select pg_temp.g2_check(not private.group_stopped(pg_temp.e6p('01')) and private.chat_closes_at(pg_temp.e6p('01')) is null,

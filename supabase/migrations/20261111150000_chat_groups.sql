@@ -85,15 +85,27 @@ revoke all on function private.group_stopped(uuid) from public, anon, authentica
 --  - the repeat going from some to none while active (Edit → "Doesn't repeat"): stopped now unless it already was, on
 --    a group (always, since it repeated), and stopped {actor, plan_id, starts_at, time_zone} with this occurrence's id,
 --    start and zone (G-N13).
--- The flag never goes back to false. The chat row is written by upsert, so this never depends on firing after
--- plans_chat_row (G-N4); it is locked before it is read, before any line is written (H28). Its lines go through
--- chat_system_line and its one removal through chat_hide_line, never under the roll's or the deletion's flag
--- (chat_lines_off); the flag and the stop time are written under them too. The database's own: no role may call it.
+-- The flag never goes back to false. Its lines go through chat_system_line and its one removal through chat_hide_line,
+-- never under the roll's or the deletion's flag (chat_lines_off); the flag and the stop time are written under them too.
+-- Locks (H28, ruling GR2 D1): the plan's row first (held by the event: change_plan_v4, the roll, the deletion), then the
+-- chat's row, then a message row (a line, a hide). The chat's row is taken only where it is written, and locked before it
+-- is read: when a series becomes a group (its new row, or a one-off made weekly by Edit), on a resume, and when a group
+-- stops. A one-off's row is never taken: a cancelled one-off writes nothing here (the cancellation updates a group's row
+-- only). Nor is a running group's when the roll adds its next occurrence. So the deletion's plan loop, which cancels its
+-- owner's future resbites under its flag, takes no chat row but a stopped group's (written: the cancellation's stop
+-- time), and its ordered pass over the chat rows of the series it wrote in is otherwise the first chat lock it takes;
+-- the roll holds no chat row that a deletion waits for (supabase/tests/local/chat-groups-concurrency.sh). A repeat set
+-- and Edit's stop write the row by upsert, so the flag never depends on firing after plans_chat_row (G-N4). The
+-- database's own: no role may call it.
 create function private.plans_group_flag() returns trigger language plpgsql security definer set search_path = '' as $$
 declare v_was boolean; v_count integer; v_line bigint;
 begin
  if (private.current_occurrence(new.series_id)).id is distinct from new.id then return null; end if;
  if new.repeat_weeks is not null and (tg_op = 'INSERT' or old.repeat_weeks is null) then
+  -- The roll's next occurrence of a running group: nothing to write, so its chat row is not taken.
+  if tg_op = 'INSERT' and exists (select 1 from public.chats c where c.series_id = new.series_id and c.is_group and c.stopped_at is null) then
+   return null;
+  end if;
   select c.is_group, c.message_count into v_was, v_count from public.chats c where c.series_id = new.series_id for update;
   insert into public.chats(series_id, is_group, stopped_at) values (new.series_id, true, null)
   on conflict (series_id) do update set is_group = true, stopped_at = null;
@@ -110,8 +122,7 @@ begin
    end if;
   end if;
  elsif tg_op = 'UPDATE' and new.status = 'cancelled' and old.status is distinct from 'cancelled' and new.repeat_weeks is null then
-  insert into public.chats(series_id) values (new.series_id)
-  on conflict (series_id) do update set stopped_at = now() where public.chats.is_group;
+  update public.chats set stopped_at = now() where series_id = new.series_id and is_group;
  elsif tg_op = 'UPDATE' and old.repeat_weeks is not null and new.repeat_weeks is null and old.status = 'active' and new.status = 'active' then
   insert into public.chats(series_id) values (new.series_id)
   on conflict (series_id) do update set stopped_at = coalesce(public.chats.stopped_at, now()) where public.chats.is_group;
@@ -144,14 +155,18 @@ with s as (
 update public.chats c set stopped_at = least(now(), private.plan_end(s.starts_at, s.ends_at)) from s where s.series_id = c.series_id;
 
 -- 1f. Any way back in clears a leave (Decision 1): a guest row inserted (a host's or a circle's invitation, a link, the
--- roll) or moved to the person by a fold (update of user_id: fold_web_account moves a row by update and never inserts,
--- chat_core.sql:1016; attendees_close_waiting fires on the same update for the same reason, circles_of_trust.sql:85,
--- I7). It clears that person's leave of the plan's series, no other. The database's own: no role may call it.
+-- roll) or moved to the person by a fold onto the series' current occurrence (update of user_id: fold_web_account moves
+-- a row by update and never inserts, chat_core.sql:1016; attendees_close_waiting fires on the same update for the same
+-- reason, circles_of_trust.sql:85, I7). A row a fold moves on an earlier occurrence is an old week's attendance, not a
+-- way back in, so the leave stays (ruling GR2 Q2, CH-P4). An update that leaves user_id as it was is no move. It clears
+-- that person's leave of the plan's series, no other. The database's own: no role may call it.
 create function private.attendees_clear_leave() returns trigger language plpgsql security definer set search_path = '' as $$
+declare v_series uuid;
 begin
  if tg_op = 'UPDATE' and new.user_id is not distinct from old.user_id then return null; end if;
- delete from private.series_leaves l using public.plans p
- where p.id = new.plan_id and l.series_id = p.series_id and l.user_id = new.user_id;
+ select p.series_id into v_series from public.plans p where p.id = new.plan_id;
+ if tg_op = 'UPDATE' and (private.current_occurrence(v_series)).id is distinct from new.plan_id then return null; end if;
+ delete from private.series_leaves l where l.series_id = v_series and l.user_id = new.user_id;
  return null;
 end $$;
 revoke all on function private.attendees_clear_leave() from public, anon, authenticated, service_role;
@@ -238,13 +253,14 @@ begin
   'message_count', coalesce(v_chat.message_count, 0));
 end $$;
 
--- 1i. Whether the caller is in a group's chat, for the event page (G-N13, challenge NOTE 3): true when the series is a
--- group and chat_member holds for the caller, which covers the hosts of the current occurrence; false otherwise, never
--- an error. It is the group branch of can_see_guests (Task 2), so the event page never takes someone for a group member
--- whom the people list treats as an outsider: a leaver after the end keeps a guest row, so can_read_plan passes on the
--- current occurrence, but is no member. For signed-in accounts only.
+-- 1i. Whether the caller is in a group's chat, for the event page (G-N13, challenge NOTE 3): true when the caller may use
+-- the app (private.eligible(), as can_see_guests and can_read_plan start), the series is a group and chat_member holds
+-- for the caller, which covers the hosts of the current occurrence; false otherwise, never an error (ruling GR2 Q1). It
+-- is the group branch of can_see_guests (Task 2), so the event page never takes someone for a group member whom the
+-- people list treats as an outsider: a leaver after the end keeps a guest row, so can_read_plan passes on the current
+-- occurrence, but is no member. For signed-in accounts only.
 create function private.series_is_group(p_series uuid) returns boolean language sql stable security definer set search_path = '' as $$
- select private.chat_is_group(p_series) and private.chat_member(p_series, auth.uid())
+ select private.eligible() and private.chat_is_group(p_series) and private.chat_member(p_series, auth.uid())
 $$;
 revoke all on function private.series_is_group(uuid) from public, anon, authenticated, service_role;
 create function public.series_is_group(p_series uuid) returns boolean language sql stable security invoker set search_path = '' as $$
