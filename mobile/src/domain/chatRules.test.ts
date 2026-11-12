@@ -2,17 +2,21 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { ChatMessage, ChatNames, ChatSummary } from "../services/chat";
 import {
+  BODY_LIMIT,
   authorName,
   canAnnounce,
   closedCard,
   closingLine,
   dayLabel,
   defaultAudience,
+  fitBody,
+  hasVisibleText,
   headerLine,
   isSeriesId,
   linkHost,
   linkParts,
   messageLabel,
+  phoneZone,
   rowText,
   systemText,
   timeLabel,
@@ -584,4 +588,79 @@ test("authorName: the name over someone's bubble, from the read's names, cleaned
   assert.equal(authorName(msg({ authorId: null }), names, ANA), "Someone");
   assert.equal(authorName(msg({ authorId: LEO }), { [LEO]: "‮Leo:" }, ANA), "Leo");
   assert.equal(authorName(msg({ authorId: "constructor" }), names, ANA), "Someone");
+});
+
+test("hasVisibleText follows the server's chat_body: whitespace, controls, format and filler characters alone are nothing (H30, H32)", () => {
+  for (const blank of ["", "   ", "\n\n", "\u2800\u2800", "\u3164", "\u200b", "\u115f\u1160", "\uffa0", "\u034f", "\ufe0f",
+    "\u00ad", "\u2060", "\u202e", "\ufeff", "\u0085", "\u{e0041}", "\u{1d173}", "\u180e", "\u17b4", "\t\u000b\u0001"])
+    assert.equal(hasVisibleText(blank), false, JSON.stringify(blank));
+  for (const seen of ["a", " a ", "\u2800x", "🎉", "👨‍👩‍👧‍👦", "مرحبا", "\u200ba", "0", "."])
+    assert.equal(hasVisibleText(seen), true, JSON.stringify(seen));
+});
+
+test("fitBody keeps at most 1000 characters by code point, cut where a character ends (H32 Q26)", () => {
+  assert.equal(BODY_LIMIT, 1000);
+  const same = "a".repeat(1000);
+  assert.deepEqual(fitBody(same), { text: same, cut: false });
+  // 5000 characters: the first 1000, and the notice.
+  const long = fitBody("P".repeat(4990) + "THE END!!!");
+  assert.equal(long.text, "P".repeat(1000));
+  assert.equal(long.cut, true);
+  // An emoji is one character, as the server counts: 999 letters and 😀 fit; 700 🎉 fit.
+  assert.deepEqual(fitBody("a".repeat(999) + "😀"), { text: "a".repeat(999) + "😀", cut: false });
+  assert.deepEqual(fitBody("🎉".repeat(700)), { text: "🎉".repeat(700), cut: false });
+  // A family emoji is 7 code points: it goes whole, never split into a lone person.
+  const family = "👨‍👩‍👧‍👦";
+  assert.deepEqual(fitBody("a".repeat(995) + family), { text: "a".repeat(995), cut: true });
+  // An accent stays with its letter; a flag's two halves stay together.
+  assert.deepEqual(fitBody("a".repeat(999) + "e\u0301"), { text: "a".repeat(999), cut: true });
+  assert.deepEqual(fitBody("a".repeat(999) + "🇬🇧"), { text: "a".repeat(999), cut: true });
+  assert.deepEqual(fitBody("a".repeat(998) + "🇬🇧"), { text: "a".repeat(998) + "🇬🇧", cut: false });
+  // Without Intl.Segmenter (Hermes may lack it), the same boundaries.
+  const Segmenter = (Intl as { Segmenter?: unknown }).Segmenter;
+  try {
+    (Intl as { Segmenter?: unknown }).Segmenter = undefined;
+    assert.deepEqual(fitBody("a".repeat(995) + family), { text: "a".repeat(995), cut: true });
+    assert.deepEqual(fitBody("a".repeat(999) + "e\u0301"), { text: "a".repeat(999), cut: true });
+    assert.deepEqual(fitBody("a".repeat(999) + "🇬🇧"), { text: "a".repeat(999), cut: true });
+    assert.deepEqual(fitBody("a".repeat(998) + "👍🏽x"), { text: "a".repeat(998) + "👍🏽", cut: true });
+    assert.deepEqual(fitBody("P".repeat(1200)), { text: "P".repeat(1000), cut: true });
+  } finally {
+    (Intl as { Segmenter?: unknown }).Segmenter = Segmenter;
+  }
+});
+
+test("a date outside the current year shows the year (H32 Q50)", () => {
+  const in2026 = Date.parse("2026-11-11T12:00:00Z");
+  assert.equal(dayLabel("2025-11-15T18:00:00Z", LONDON, in2026), "Sat 15 Nov 2025");
+  assert.equal(dayLabel("2026-11-15T18:00:00Z", LONDON, in2026), "Sun 15 Nov");
+  // Without a now, as before.
+  assert.equal(dayLabel("2025-11-15T18:00:00Z", LONDON), "Sat 15 Nov");
+  // The year is the zone's: 23:30Z on 31 Dec is already 1 Jan in Auckland.
+  assert.equal(dayLabel("2026-12-31T23:30:00Z", "Pacific/Auckland", in2026), "Fri 1 Jan 2027");
+  const old = summary({ startsAt: "2025-11-15T14:00:00Z", endsAt: "2025-11-15T18:00:00Z", closesAt: "2025-11-17T18:00:00Z", open: false });
+  assert.equal(headerLine(old, in2026), `Ended · Sat 15 Nov 2025 · ${old.accepted} going`);
+  assert.deepEqual(closedCard(old, in2026), { line: "This chat closed on Mon 17 Nov 2025.", why: CHAT_COPY.closedWhy });
+  assert.deepEqual(closedCard(old), { line: "This chat closed on Mon 17 Nov.", why: CHAT_COPY.closedWhy });
+  assert.equal(
+    messageLabel(msg({ createdAt: "2025-11-15T19:00:00Z" }), names, ANA, in2026, LONDON),
+    "Leo, I can bring the snacks, Sat 15 Nov 2025, 19:00",
+  );
+  // Over New Year the closing line names the year it closes in.
+  assert.equal(
+    closingLine("2027-01-01T18:00:00Z", Date.parse("2026-12-31T18:00:00Z"), LONDON),
+    "This chat closes Fri 1 Jan 2027 at 18:00, in 24 hours. Any final words?",
+  );
+});
+
+test("an unsent message in a closed chat says the close overtook it (H32 29)", () => {
+  const now = Date.parse("2025-11-15T18:30:00Z");
+  assert.equal(
+    messageLabel(msg({ authorId: ANA, createdAt: "2025-11-15T18:02:00Z" }), names, ANA, now, LONDON, "closed"),
+    "You, I can bring the snacks, 18:02, This chat closed before it was sent.",
+  );
+});
+
+test("phoneZone is the phone's zone, one helper for the whole chat", () => {
+  assert.equal(phoneZone(), Intl.DateTimeFormat().resolvedOptions().timeZone);
 });

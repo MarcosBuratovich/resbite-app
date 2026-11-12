@@ -157,9 +157,9 @@ const PICNIC = {
  * the server clock against `closes_at` unless the summary says otherwise. `socket: "refuse"` closes every socket.
  * `queue` seeds the phone's unsent messages.
  */
-async function fixture({ viewer = PEDRO, now = OCT.now, rows = octRows(), summary = {}, socket = "ok", width = 390, largeText = false, queue = null } = {}) {
+async function fixture({ viewer = PEDRO, now = OCT.now, rows = octRows(), summary = {}, socket = "ok", width = 390, height = 844, queue = null } = {}) {
   const context = await browser.newContext({
-    viewport: { width, height: 844 },
+    viewport: { width, height },
     reducedMotion: "reduce",
     locale: "en-GB",
     timezoneId: "Europe/London",
@@ -226,6 +226,13 @@ async function fixture({ viewer = PEDRO, now = OCT.now, rows = octRows(), summar
     },
     // How many of the next sends fail as a lost connection.
     failSends: 0,
+    // The next send_announcement's refusal ({ code, message }), once.
+    refuseAnnounce: null,
+    // send_message answers 22023 'Chat closed', and the summary then reads closed.
+    closeOnSend: false,
+    // How many of the next earlier pages (p_before set) fail as a lost connection, and how long each waits first.
+    failEarlier: 0,
+    delayEarlier: 0,
     // The answers to the next phx_leave frames; "ok" once these run out, or always `leaveDefault`.
     leaves: [],
     leaveDefault: "ok",
@@ -240,7 +247,7 @@ async function fixture({ viewer = PEDRO, now = OCT.now, rows = octRows(), summar
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => {
     // A refusal (403), a lost connection and a refused socket are the failures under test.
-    if (m.type() === "error" && !/status of 403|ERR_INTERNET_DISCONNECTED|ERR_FAILED|WebSocket/.test(m.text())) errors.push(m.text());
+    if (m.type() === "error" && !/status of 40[03]|ERR_INTERNET_DISCONNECTED|ERR_FAILED|WebSocket/.test(m.text())) errors.push(m.text());
   });
 
   const visibleRows = () => state.rows.filter((r) => !r.hidden).sort((a, b) => a.id - b.id);
@@ -316,6 +323,13 @@ async function fixture({ viewer = PEDRO, now = OCT.now, rows = octRows(), summar
     }
     if (rpc === "chat_summary") return reply(summaryNow());
     if (rpc === "chat_messages") {
+      if (body.p_before !== null) {
+        if (state.delayEarlier) await new Promise((r) => setTimeout(r, state.delayEarlier));
+        if (state.failEarlier > 0) {
+          state.failEarlier--;
+          return route.abort("internetdisconnected");
+        }
+      }
       const limit = Math.min(Math.max(body.p_limit ?? 50, 1), 100);
       const before = visibleRows().filter((r) => body.p_before === null || r.id < body.p_before);
       return reply(page_(before.slice(-limit)));
@@ -325,6 +339,16 @@ async function fixture({ viewer = PEDRO, now = OCT.now, rows = octRows(), summar
       const changed = body.p_changed_after === null ? null : Date.parse(body.p_changed_after);
       const list = visibleRows().filter((r) => (after !== null && r.id > after) || (changed !== null && Date.parse(r.updated_at) > changed));
       return reply(page_(list.slice(0, 200)));
+    }
+    if (rpc === "send_announcement" && state.refuseAnnounce) {
+      const { code, message, host } = state.refuseAnnounce;
+      state.refuseAnnounce = null;
+      if (host === false) state.summary.host = false;
+      return reply({ code, message, details: null, hint: null }, code === "42501" ? 403 : 400);
+    }
+    if (rpc === "send_message" && state.closeOnSend) {
+      state.summary.open = false;
+      return reply({ code: "22023", message: "Chat closed", details: null, hint: null }, 400);
     }
     if (rpc === "send_message" || rpc === "send_announcement") {
       if (state.failSends > 0) {
@@ -458,6 +482,19 @@ async function inViewport(locator) {
   const size = locator.page().viewportSize();
   return !!box && box.y + box.height > 0 && box.y < size.height && box.x + box.width > 0 && box.x < size.width;
 }
+/** Scrolls the chat's list: "top" is the oldest end (the list is inverted), a number is a scrollTop. */
+const scrollList = (page, to) =>
+  page.evaluate((to) => {
+    const el = [...document.querySelectorAll("div")]
+      .filter((d) => /(auto|scroll)/.test(getComputedStyle(d).overflowY) && d.scrollHeight > d.clientHeight + 10)
+      .sort((a, b) => b.scrollHeight - a.scrollHeight)[0];
+    el.scrollTop = to === "top" ? el.scrollHeight : to;
+    return el.scrollTop;
+  }, to);
+/** The chat set: no request of these may leave for a series that isn't one (K-N14, H31). */
+const CHAT_SET = ["chat_summary", "chat_messages", "chat_messages_since", "send_message", "send_announcement", "remove_message", "delete_message", "mark_chat_read", "set_chat_mute", "my_chat_overview"];
+const many = (n, from = 106, at = "2026-10-28T09:40:00Z") =>
+  Array.from({ length: n }, (_, i) => say(from + i, i % 2 ? LEO : MIA, `Message number ${i + 1}`, iso(Date.parse(at) + i * 1_000)));
 const top = async (locator) => (await locator.first().boundingBox()).y;
 /** Holds the press long enough for a long-press (Pressable's 500 ms default; the bubbles use 400 ms). */
 const longPress = (locator) => locator.first().click({ delay: 700 });
@@ -507,11 +544,11 @@ try {
     await page.goto(`${base}/chat?series=${SERIES.toUpperCase()}`);
     await expect(text(page, "You’re not in this chat.")).toBeVisible();
     await page.waitForTimeout(500);
-    for (const name of ["chat_summary", "chat_messages", "chat_messages_since", "mark_chat_read"]) assert.equal(f.calls(name).length, 0, `no ${name}`);
+    for (const name of CHAT_SET) assert.equal(f.calls(name).length, 0, `no ${name}`);
     assert.equal(f.joins().length, 0, "no channel");
     await f.done();
   }
-  console.log("PASS (k): a malformed series shows notInChat and calls nothing.");
+  console.log("PASS (k): a malformed series shows notInChat and makes no request of the chat set.");
 
   // (a), (a0), (b), (c), (c3), (c2), (c4), (d3) as Pedro, Going.
   {
@@ -531,6 +568,9 @@ try {
     await expect(labelled(page, "Resbite: Mia joined")).toBeVisible();
     await expect(labelled(page, "Resbite: Mia joined")).toHaveText("Mia joined");
     await expect(labelled(page, "Leo, Count me in, Tue 27 Oct, 18:10")).toBeVisible();
+    // One element for the screen reader, named by its label, and at least 44 pt tall (H32 Q49, H31).
+    await expect(visible(page.getByRole("article", { name: "Leo, Count me in, Tue 27 Oct, 18:10", exact: true }))).toBeVisible();
+    assert.ok((await labelled(page, "Leo, Count me in, Tue 27 Oct, 18:10").boundingBox()).height >= 44, "a bubble is at least 44 pt");
     await expect(text(page, "To: people going. People who join later can read this too.")).toBeVisible();
     await expect(button(page, "Announce")).toHaveCount(0);
     await expect(page.getByText(/^This chat closes/)).toHaveCount(0);
@@ -724,7 +764,14 @@ try {
     await everyone.click();
     await expect(everyone).toHaveAttribute("aria-checked", "true");
     await expect(going).toHaveAttribute("aria-checked", "false");
-    await visible(page.getByRole("textbox", { name: "Write an update for your guests", exact: true })).fill("Rain plan: bring umbrellas");
+    const update = visible(page.getByRole("textbox", { name: "Write an update for your guests", exact: true }));
+    await update.fill("Rain plan: bring umbrellas");
+    // (34) Cancel keeps the audience as well as the text.
+    await button(page, "Cancel").click();
+    await expect(heading(page, "New announcement")).toHaveCount(0);
+    await button(page, "Announce").click();
+    await expect(everyone).toHaveAttribute("aria-checked", "true");
+    await expect(update).toHaveValue("Rain plan: bring umbrellas");
     await f.shot("task-7-announce-390.png");
     await button(page, "Send announcement").click();
     await expect(heading(page, "New announcement")).toHaveCount(0);
@@ -738,7 +785,7 @@ try {
     await expect(card).toBeVisible();
     await expect(visible(card.getByText("ANNOUNCEMENT · TO EVERYONE INVITED", { exact: true }))).toBeVisible();
     await expect(visible(button(page, /^PINNED, /).getByText("Rain plan: bring umbrellas", { exact: true }))).toBeVisible();
-    console.log("PASS (f): Announce starts on Going · 4 beside Everyone invited · 5; send_announcement { p_audience: everyone }; the card is pinned.");
+    console.log("PASS (f): Announce starts on Going · 4 beside Everyone invited · 5; Cancel keeps the audience and text; send_announcement { p_audience: everyone }; the card is pinned.");
 
     // Delete (own): asks in place; Keep goes back; Delete message calls delete_message.
     const frisbee = labelled(page, "You, Bring a frisbee, 09:40");
@@ -747,8 +794,11 @@ try {
     await expect(button(page, "Remove message")).toHaveCount(0);
     await button(page, "Delete message").click();
     await expect(heading(page, "Delete this message for everyone?")).toBeVisible();
+    // (Q53) The question takes focus; after Keep, the menu's row does.
+    await expect.poll(() => page.evaluate(() => document.activeElement?.textContent)).toBe("Delete this message for everyone?");
     await button(page, "Keep").click();
     await expect(heading(page, "Delete this message for everyone?")).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute("aria-label"))).toBe("Delete message");
     await button(page, "Delete message").click();
     await button(page, "Delete message").click();
     await expect(labelled(page, "You, Message deleted, 09:40")).toBeVisible();
@@ -762,7 +812,13 @@ try {
     await button(page, "Remove message").click();
     await expect(labelled(page, "Leo, Message removed by an admin, Tue 27 Oct, 18:10")).toBeVisible();
     assert.deepEqual(f.calls("remove_message"), [{ p_id: 103 }]);
-    console.log("PASS: Delete message and Remove message ask in place, and call delete_message and remove_message.");
+    // (H31 Q4) A long-press on a link opens its message's actions.
+    await longPress(labelled(page, starts("Mia, Map: ")).getByRole("link"));
+    await expect(button(page, "Remove message")).toBeVisible();
+    await button(page, "Close sheet").click();
+    await expect(button(page, "Remove message")).toHaveCount(0);
+    await expect(heading(page, "Open example.com?")).toHaveCount(0);
+    console.log("PASS: Delete message and Remove message ask in place, call delete_message and remove_message, and move focus to the question and back to the menu; a long-press on a link opens its message's actions.");
 
     // The menu: People in this chat, Mute chat.
     await button(page, "More").click();
@@ -827,11 +883,14 @@ try {
     await f.advance(31_000);
     await expect(text(page, "This chat closed on Mon 17 Nov.")).toBeVisible();
     await expect(field(page)).toHaveCount(0);
+    // (Q46) The words the field held stay under the card, readable.
+    await expect(text(page, "Not sent:")).toBeVisible();
+    await expect(text(page, "One last thing")).toBeVisible();
     assert.ok(f.calls("chat_summary").length > reads, "chat_summary is read again at the close");
     assert.deepEqual(navigations, [], "no refocus: the page stayed where it was");
     await expect(page.getByText(/^This chat closes/)).toHaveCount(0);
     await expect(button(page, "Do this again")).toHaveCount(0);
-    console.log("PASS (g2): at closesAt the screen reads chat_summary again and the closed card replaces the field.");
+    console.log("PASS (g2): at closesAt the screen reads chat_summary again and the closed card replaces the field, with the draft under it as Not sent:.");
     await f.done();
   }
 
@@ -968,6 +1027,276 @@ try {
   }
   console.log("PASS (n): the host's empty state says Nobody’s going yet with Invite people; a guest's says No messages yet.");
 
+  // (n2) Only Resbite's lines so far: the empty state still shows, under them (H31 Q3).
+  {
+    const f = await fixture({ viewer: ANA, rows: octRows().filter((r) => r.kind === "system"), summary: { accepted: 0 } });
+    const { page } = f;
+    await openChat(page);
+    await expect(labelled(page, "Resbite: Mia joined")).toBeVisible();
+    await expect(heading(page, "Nobody’s going yet")).toBeVisible();
+    await expect(button(page, "Invite people")).toBeVisible();
+    await f.done();
+  }
+  console.log("PASS (n2): with only Resbite's lines, the host's empty state still shows under them.");
+
+  // (o) A change chip opens the resbite (H31).
+  {
+    const f = await fixture();
+    const { page } = f;
+    await openChat(page);
+    await button(page, "Resbite: Ana changed the place · Fixture park, north gate · Tap to see").click();
+    await expect(page).toHaveURL(new RegExp(`/event\\?plan=${PLAN}$`));
+    await f.done();
+  }
+  console.log("PASS (o): a change chip opens /event?plan=<the occurrence>.");
+
+  // (p) A failed message from yesterday after today's: its day again, with keys of its own (H31; no React key error).
+  {
+    const OLD = "0e000000-0000-4000-8000-0000000000aa";
+    const f = await fixture({
+      queue: [{ clientId: OLD, series: SERIES, body: "Sent yesterday offline", createdAt: "2026-10-27T16:00:00Z", failed: true }],
+    });
+    const { page } = f;
+    await openChat(page);
+    await expect(labelled(page, "You, Sent yesterday offline, Tue 27 Oct, 16:00, Not sent. Tap to retry.")).toBeVisible();
+    await expect(page.getByText("Tue 27 Oct", { exact: true })).toHaveCount(2);
+    // The failed one is a button that sends again (H32 Q49).
+    await expect(visible(page.getByRole("button", { name: "You, Sent yesterday offline, Tue 27 Oct, 16:00, Not sent. Tap to retry.", exact: true }))).toBeVisible();
+    await f.done();
+  }
+  console.log("PASS (p): a failed message from yesterday after today's brings its day back, with no duplicate key.");
+
+  // (q) Sending while reading history brings the message into view (H32 20).
+  {
+    const f = await fixture({ rows: [...octRows(), ...many(60)] });
+    const { page } = f;
+    await openChat(page);
+    await f.settle();
+    await scrollList(page, 1500);
+    await page.waitForTimeout(300);
+    await field(page).fill("Replying while scrolled up");
+    await button(page, "Send").click();
+    const mine = labelled(page, starts("You, Replying while scrolled up, "));
+    await expect.poll(() => inViewport(mine)).toBe(true);
+    await f.done();
+  }
+  console.log("PASS (q): a message sent while scrolled up in the history comes into view.");
+
+  // (r) The pinned card three pages back (H32 22).
+  {
+    const rows = [row(301, { kind: "announcement", audience: "going", author: ANA, body: "The very first plan", at: "2026-10-26T09:00:00Z" })];
+    for (let i = 1; i <= 329; i++) rows.push(say(301 + i, i % 2 ? LEO : MIA, `Message number ${i}`, iso(Date.parse("2026-10-27T09:00:00Z") + i * 60_000)));
+    const f = await fixture({ rows });
+    const { page } = f;
+    await openChat(page);
+    await f.settle();
+    const pinnedRow = labelled(page, starts("Announcement to people going, Ana, The very first plan, "));
+    await button(page, /^PINNED, /).click();
+    await expect.poll(() => f.calls("chat_messages").map((b) => b.p_before)).toContain(381);
+    await expect.poll(() => inViewport(pinnedRow), { timeout: 20_000 }).toBe(true);
+    await f.done();
+  }
+  console.log("PASS (r): the pinned card loads three earlier pages, then scrolls to its message.");
+
+  // (s) An earlier page that fails: the spinner while it loads, then Try again; a page that loads clears the line (H31, H32 24).
+  {
+    const f = await fixture({ rows: [...octRows(), ...many(115)] });
+    const { page } = f;
+    // Armed first: the list may ask for an earlier page as soon as it draws.
+    f.state.failEarlier = 1;
+    f.state.delayEarlier = 1500;
+    await openChat(page);
+    await f.settle();
+    // The list draws in batches, and asks for the earlier page once its last row is drawn and it reaches the top.
+    await expect(async () => {
+      await scrollList(page, "top");
+      await page.waitForTimeout(150);
+      expect(f.calls("chat_messages").some((b) => b.p_before !== null)).toBe(true);
+    }).toPass({ timeout: 10_000 });
+    await expect(visible(page.getByRole("progressbar", { name: "Loading earlier messages", exact: true }))).toBeVisible();
+    await expect(button(page, "Try again")).toBeVisible({ timeout: 10_000 });
+    await expect(text(page, "Check your connection and try again.")).toBeVisible();
+    f.state.delayEarlier = 0;
+    await button(page, "Try again").click();
+    await expect(button(page, "Try again")).toHaveCount(0);
+    await expect(page.getByText("Check your connection and try again.")).toHaveCount(0);
+    await expect(async () => {
+      await scrollList(page, "top");
+      await expect(labelled(page, "Resbite: Mia joined")).toBeInViewport({ timeout: 300 });
+    }).toPass({ timeout: 10_000 });
+    await f.done();
+  }
+  console.log("PASS (s): a failing earlier page shows Loading earlier messages, then Try again; the page that loads clears the line.");
+
+  // (t) Action errors clear: a failed send's line goes when a read succeeds; 'Hosts only' reads the summary again, so
+  // Announce goes, and Cancel takes the words away; 'Too fast' names the announcement limit (H32 28, 36, Q35).
+  {
+    const f = await fixture();
+    const { page } = f;
+    await openChat(page);
+    await expect.poll(() => f.joins().length).toBe(1);
+    await f.settle();
+    f.state.failSends = 1;
+    await field(page).fill("Sent while offline");
+    await button(page, "Send").click();
+    await expect(text(page, "Check your connection and try again.")).toBeVisible();
+    await f.settle();
+    f.add(say(106, LEO, "Back online", iso(f.serverNow())));
+    f.signal({ id: 106, kind: "message", state: "sent" });
+    await expect(labelled(page, starts("Leo, Back online, "))).toBeVisible();
+    await expect(page.getByText("Check your connection and try again.")).toHaveCount(0);
+    await expect(labelled(page, starts("You, Sent while offline, "))).toHaveAccessibleName(/Not sent\. Tap to retry\.$/);
+    await f.done();
+  }
+  {
+    const f = await fixture({ viewer: ANA });
+    const { page } = f;
+    await openChat(page);
+    await f.settle();
+    f.state.refuseAnnounce = { code: "22023", message: "Too fast" };
+    await button(page, "Announce").click();
+    await visible(page.getByRole("textbox", { name: "Write an update for your guests", exact: true })).fill("Second one");
+    await button(page, "Send announcement").click();
+    await expect(text(page, "You can send one announcement a minute.")).toBeVisible();
+    f.state.refuseAnnounce = { code: "42501", message: "Hosts only", host: false };
+    const reads = f.calls("chat_summary").length;
+    await button(page, "Send announcement").click();
+    await expect(text(page, "Only hosts can do that.")).toBeVisible();
+    await expect.poll(() => f.calls("chat_summary").length).toBeGreaterThan(reads);
+    await button(page, "Cancel").click();
+    await expect(heading(page, "New announcement")).toHaveCount(0);
+    await expect(button(page, "Announce")).toHaveCount(0);
+    await expect(page.getByText("Only hosts can do that.")).toHaveCount(0);
+    await f.done();
+  }
+  console.log("PASS (t): a failed send's line clears when a read succeeds; Too fast names the announcement limit; Hosts only rereads the summary, Announce goes, and Cancel clears the line.");
+
+  // (u) A send the close overtook stays, says so, and can only be deleted, across a return (H32 29).
+  {
+    const f = await fixture({
+      now: "2025-11-17T17:59:30Z",
+      rows: novRows(),
+      summary: { starts_at: NOV.startsAt, ends_at: NOV.endsAt, closes_at: NOV.closesAt, accepted: 7 },
+    });
+    const { page } = f;
+    await openChat(page);
+    await f.settle();
+    f.state.closeOnSend = true;
+    await field(page).fill("My last words, typed for a while");
+    await button(page, "Send").click();
+    const late = labelled(page, /^You, My last words, typed for a while, 17:59, This chat closed before it was sent\.$/);
+    await expect(late).toBeVisible();
+    await expect(text(page, "This chat closed before it was sent.")).toBeVisible();
+    await expect(text(page, "This chat closed on Mon 17 Nov.")).toBeVisible();
+    const sends = f.calls("send_message").length;
+    await late.first().click();
+    await page.waitForTimeout(400);
+    assert.equal(f.calls("send_message").length, sends, "a tap doesn't send it again");
+    // Leave and come back: still there.
+    await button(page, "More").click();
+    await button(page, "People in this chat · 4").click();
+    await expect(page).toHaveURL(/\/guests\?plan=/);
+    await button(page, "Back").click();
+    await expect(heading(page, "Picnic in the park")).toBeVisible();
+    await expect(late).toBeVisible();
+    await f.settle();
+    assert.equal(f.calls("send_message").length, sends, "nothing resends it");
+    await longPress(late);
+    await button(page, "Delete unsent message").click();
+    await expect(late).toHaveCount(0);
+    await f.done();
+  }
+  console.log("PASS (u): a send refused as Chat closed stays as This chat closed before it was sent., never resent, until deleted.");
+
+  // (v) Send needs a visible character, by the server's rule (H32 30); (z) the limit counts characters (H32 Q26).
+  {
+    const f = await fixture();
+    const { page } = f;
+    await openChat(page);
+    for (const blank of ["\u2800\u2800", "\u3164", "\u200b", "   ", "\n\n"]) {
+      await field(page).fill(blank);
+      await expect(button(page, "Send")).toHaveAttribute("aria-disabled", "true");
+    }
+    await field(page).fill(" a");
+    await expect(button(page, "Send")).not.toHaveAttribute("aria-disabled", "true");
+    assert.equal(await field(page).getAttribute("maxlength"), null, "no maxLength: the limit counts code points");
+    await field(page).fill("P".repeat(4990) + "THE END!!!");
+    await expect(field(page)).toHaveValue("P".repeat(1000));
+    await expect(text(page, "Only the first 1000 characters fit.")).toBeVisible();
+    await field(page).fill("🎉".repeat(700));
+    await expect(field(page)).toHaveValue("🎉".repeat(700));
+    await expect(page.getByText("Only the first 1000 characters fit.")).toHaveCount(0);
+    await field(page).fill("");
+    assert.equal(f.calls("send_message").length, 0);
+    await f.done();
+  }
+  console.log("PASS (v, z): Send stays off for invisible-only text; a 5000-character paste keeps 1000 with the notice; 700 emoji fit.");
+
+  // (y) An old chat's dates carry their year (H32 Q50).
+  {
+    const f = await fixture({
+      now: "2026-11-11T12:00:00Z",
+      rows: novRows(),
+      summary: { starts_at: NOV.startsAt, ends_at: NOV.endsAt, closes_at: NOV.closesAt, accepted: 7 },
+    });
+    const { page } = f;
+    await openChat(page);
+    await expect(text(page, "Ended · Sat 15 Nov 2025 · 7 going")).toBeVisible();
+    await expect(text(page, "This chat closed on Mon 17 Nov 2025.")).toBeVisible();
+    await expect(text(page, "Sat 15 Nov 2025")).toBeVisible();
+    await expect(labelled(page, "Ana, Thanks for coming everyone!, Sat 15 Nov 2025, 19:00")).toBeVisible();
+    await f.done();
+  }
+  console.log("PASS (y): an old chat's header, closed card, separators and labels carry the year.");
+
+  // (g4) The announcement sheet open at the close closes with it (H32 Q45).
+  {
+    const f = await fixture({
+      viewer: ANA,
+      now: "2025-11-17T17:59:30Z",
+      rows: novRows(),
+      summary: { starts_at: NOV.startsAt, ends_at: NOV.endsAt, closes_at: NOV.closesAt, accepted: 7 },
+    });
+    const { page } = f;
+    await openChat(page);
+    await f.settle();
+    await button(page, "Announce").click();
+    await visible(page.getByRole("textbox", { name: "Write an update for your guests", exact: true })).fill("Photos tomorrow");
+    await f.advance(31_000);
+    await expect(text(page, "This chat closed on Mon 17 Nov.")).toBeVisible();
+    await expect(heading(page, "New announcement")).toHaveCount(0);
+    assert.equal(f.calls("send_announcement").length, 0);
+    await f.done();
+  }
+  console.log("PASS (g4): the announcement sheet closes when the chat closes.");
+
+  // (kb) The keyboard up on a small phone under Larger Text: the field stays above it (H32 52; ?keyboard=1 stands in).
+  {
+    const f = await fixture({
+      viewer: ANA,
+      width: 320,
+      height: 308,
+      now: "2025-11-16T10:59:30Z",
+      rows: [
+        ...novRows(),
+        row(206, { kind: "announcement", audience: "going", author: ANA, body: "Photos are going up in the shared album tonight, add yours", at: "2025-11-16T09:30:00Z" }),
+      ],
+      summary: { title: "Picnic in the park by the river with the whole crew", starts_at: NOV.startsAt, ends_at: NOV.endsAt, closes_at: NOV.closesAt, accepted: 7 },
+    });
+    const { page } = f;
+    await page.goto(`${base}/chat?series=${SERIES}&largeText=1&keyboard=1`);
+    await expect(heading(page, "Picnic in the park by the river with the whole crew")).toBeVisible();
+    await expect(field(page)).toBeVisible();
+    await expect(page.getByText(/^This chat closes/)).toHaveCount(0);
+    const box = await field(page).boundingBox();
+    assert.ok(box.y + box.height <= 308, `the field is above the keyboard (bottom ${box.y + box.height} of 308)`);
+    const pinnedBox = await button(page, /^PINNED, /).boundingBox();
+    assert.ok(pinnedBox.height <= 50, `the pinned card keeps to one line (${pinnedBox.height})`);
+    await f.shot("task-7-keyboard-320-large-text.png");
+    await f.done();
+  }
+  console.log("PASS (kb): with the keyboard up at 320×308 under Larger Text, the pinned card keeps to one line, the closing line hides, and the field stays in view.");
+
   // (j) Larger Text at 320 px: the composer, the pinned card and the closed card fit; the bubbles' actions.
   {
     const f = await fixture({ viewer: ANA, width: 320, rows: [...octRows(), say(106, ANA, "Bring a frisbee", "2026-10-28T09:40:00Z")] });
@@ -987,8 +1316,8 @@ try {
       ],
       320,
     );
-    // A long message grows the field, up to its cap, and the limit is 1,000 characters.
-    assert.equal(await field(page).getAttribute("maxlength"), "1000");
+    // A long message grows the field, up to its cap; the 1,000 limit counts code points, so no maxlength (H32 Q26, see v).
+    assert.equal(await field(page).getAttribute("maxlength"), null);
     const short = (await field(page).boundingBox()).height;
     await field(page).fill("A longer message about who brings what, so it wraps onto a few lines in a narrow field");
     await expect.poll(async () => (await field(page).boundingBox()).height).toBeGreaterThan(short);

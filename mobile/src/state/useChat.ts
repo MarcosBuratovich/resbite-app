@@ -31,6 +31,8 @@ export type Chat = ChatState & {
   replace: () => Promise<void>;
   /** The server's time by this phone, never going back: the closing countdown counts against it (H29). */
   serverNow: () => number;
+  /** Cancel: what the last action said went wrong goes (H32 36). */
+  clearError: () => void;
 };
 
 const listen = listenWith(supabase);
@@ -110,6 +112,7 @@ export function useChat(series: string | undefined): Chat {
             refresh: chat.refresh,
             replace: chat.replace,
             serverNow: chat.serverNow,
+            clearError: chat.clearError,
           }
         : {
             loadEarlier: nothing,
@@ -124,6 +127,7 @@ export function useChat(series: string | undefined): Chat {
             refresh: nothing,
             replace: nothing,
             serverNow: () => Date.now(),
+            clearError: () => {},
           },
     [chat],
   );

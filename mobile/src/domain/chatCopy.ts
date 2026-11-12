@@ -68,4 +68,16 @@ export const CHAT_COPY = {
     a === "everyone" ? "Announcement to everyone invited" : "Announcement to people going",
   /** A cancelled one-off's header, in place of its date line (H20). */
   cancelled: "Cancelled",
+  /** A link's accessibility action; a host that comes again in the same message is numbered (H31, H32 Q13). */
+  openLink: (host: string, n = 1) => (n > 1 ? `Open ${host} (${n})` : `Open ${host}`),
+  /** The spinner's name while an earlier page loads (H31). */
+  loadingEarlier: "Loading earlier messages",
+  /** An unsent message the close overtook: it can't be sent, only deleted (H32 29). */
+  closedBeforeSent: "This chat closed before it was sent.",
+  /** The announcement limit, one a minute per chat (K-S8, H32 Q35). */
+  announceTooFast: "You can send one announcement a minute.",
+  /** A paste longer than a message may be, cut where a character ends (H32 Q26). */
+  tooLong: "Only the first 1000 characters fit.",
+  /** Over the words the field held when the chat closed (H32 Q46). */
+  notSentDraft: "Not sent:",
 } as const;

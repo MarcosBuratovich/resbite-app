@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chatErrorMessage, createChatGateway, isChatClosed, isNotInChat, serverTime } from "./chat";
+import { chatErrorMessage, createChatGateway, isChatClosed, isHostsOnly, isNotInChat, isTooFast, serverTime } from "./chat";
 
 type Call = { fn: string; args: Record<string, unknown> };
 function gateway(data: unknown = null, error: unknown = null) {
@@ -443,4 +443,20 @@ test("every stamp the gateway reads goes through serverTime: rows, as_of, the su
   assert.equal(s.pinned?.createdAt, "2026-11-11T12:00:08.000+00:00");
   const sent = await gateway(row({ updated_at: micro("9.4444444") })).gw.send(SERIES, "x", CLIENT);
   assert.equal(sent.updatedAt, "2026-11-11T12:00:09.444+00:00");
+});
+
+test("isHostsOnly and isTooFast tell 'Hosts only' and the announcement limit by code and message (H32)", () => {
+  assert.equal(isHostsOnly({ code: "42501", message: "Hosts only" }), true);
+  assert.equal(isTooFast({ code: "22023", message: "Too fast" }), true);
+  for (const other of [
+    { code: "42501", message: "Not in this chat" },
+    { code: "22023", message: "Hosts only" },
+    { code: "22023", message: "Slow down" },
+    { code: "42501", message: "Too fast" },
+    Error("Too fast"),
+    null,
+  ]) {
+    assert.equal(isHostsOnly(other), false);
+    assert.equal(isTooFast(other), false);
+  }
 });

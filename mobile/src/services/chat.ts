@@ -255,6 +255,11 @@ export const isNotInChat = (e: unknown): boolean => refusal(e, "42501", "Not in 
 /** The chat closed while it was open: the screen turns to the closed card, keeping the typed text (K-S10). */
 export const isChatClosed = (e: unknown): boolean => refusal(e, "22023", "Chat closed");
 
+/** The reader isn't (or no longer) a host: the summary is read again, so Announce goes (H32 36). */
+export const isHostsOnly = (e: unknown): boolean => refusal(e, "42501", "Hosts only");
+/** An announcement within a minute of the last one (K-S8): its own words, not the messages line (H32 Q35). */
+export const isTooFast = (e: unknown): boolean => refusal(e, "22023", "Too fast");
+
 /** Why a chat call was refused, in words; anything else, a lost connection included, keeps the connection line. */
 export function chatErrorMessage(e: unknown): string {
   const code = errorField(e, "code");

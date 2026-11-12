@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { ChatMessage, ChatNames } from "../services/chat";
 import type { EndedLine, PendingMessage } from "./chatModel";
-import { chatFeed, messageActions, type FeedRow } from "./chatFeed";
+import { chatFeed, messageActions, nothingSaid, type FeedRow } from "./chatFeed";
 import { CHAT_COPY } from "../domain/chatCopy";
 
 const ANA = "0a000000-0000-4000-8000-000000000001";
@@ -138,10 +138,13 @@ test("a change is a chip that ends with Tap to see, except on the viewer's own c
   const [, theirs] = feed([change]);
   assert.equal(theirs.type, "change");
   if (theirs.type !== "change") return;
-  assert.equal(theirs.text, "Ana changed the place · Fixture park, north gate · Tap to see");
+  // The tail is drawn regular and muted, apart from the line (H31).
+  assert.equal(theirs.text, "Ana changed the place · Fixture park, north gate");
+  assert.equal(theirs.tail, "Tap to see");
   assert.equal(theirs.label, "Resbite: Ana changed the place · Fixture park, north gate · Tap to see");
   const [, mine] = feed([change], { viewerId: ANA, host: true });
   assert.equal(mine.type === "change" && mine.text, "You changed the place · Fixture park, north gate");
+  assert.equal(mine.type === "change" && mine.tail, null);
   assert.equal(mine.type === "change" && mine.label, "Resbite: You changed the place · Fixture park, north gate");
 });
 
@@ -152,7 +155,7 @@ test("a row the build can't word is left out: an unknown event, kind or state (H
     msg(3, { state: "hidden" as ChatMessage["state"] }),
     msg(4),
   ]);
-  assert.deepEqual(rows.map((r) => r.key), ["day:2026-10-28", "m:4"]);
+  assert.deepEqual(rows.map((r) => r.key), ["day:m:4", "m:4"]);
   // Nothing at all: no separator either.
   assert.deepEqual(feed([sys(1, "teleported", {})]), []);
 });
@@ -203,4 +206,66 @@ test("messageActions follows the same rules for any row", () => {
   // A sent row with no author can't be anyone's own: a host can still take it down.
   assert.deepEqual(messageActions(msg(1, { authorId: null }), ANA, true), ["remove"]);
   assert.deepEqual(messageActions(sys(1, "joined", { user: MIA }), ANA, true), []);
+});
+
+test("day separators have keys of their own even when a day comes back: an old failed message after newer ones (H31)", () => {
+  const rows = feed([
+    msg(1, { createdAt: "2026-10-27T18:10:00Z" }),
+    msg(2, { createdAt: "2026-10-28T09:00:00Z" }),
+    pending("old", { createdAt: "2026-10-27T16:00:00Z", failed: true }),
+    // A late commit across midnight does the same.
+    msg(3, { createdAt: "2026-10-27T23:59:00Z" }),
+  ]);
+  assert.deepEqual(types(rows), ["day", "bubble", "day", "bubble", "day", "pending", "bubble"]);
+  assert.deepEqual(only(rows, "day").map((d) => d.text), ["Tue 27 Oct", "Wed 28 Oct", "Tue 27 Oct"]);
+  const keys = rows.map((r) => r.key);
+  assert.equal(new Set(keys).size, keys.length, keys.join(" "));
+  assert.deepEqual(only(rows, "day").map((d) => d.key), ["day:m:1", "day:m:2", "day:p:old"]);
+});
+
+test("a sent row with no body draws nothing (H32 Q8)", () => {
+  const rows = feed([msg(1, { body: null }), msg(2, { kind: "announcement", audience: "going", body: null }), msg(3)]);
+  assert.deepEqual(rows.map((r) => r.key), ["day:m:3", "m:3"]);
+});
+
+test("each link is an action, named by its host, numbered when a host comes twice (H31, H32 Q13)", () => {
+  const body = "two https://example.com/a and https://example.com/b, then https://example.org/c";
+  const row = only(feed([msg(1, { body })], { viewerId: ANA, host: true }), "bubble")[0];
+  assert.deepEqual(row.links, [
+    { name: "link:0", href: "https://example.com/a", host: "example.com", label: "Open example.com" },
+    { name: "link:1", href: "https://example.com/b", host: "example.com", label: "Open example.com (2)" },
+    { name: "link:2", href: "https://example.org/c", host: "example.org", label: "Open example.org" },
+  ]);
+  // Gone rows have none; plain text has none.
+  assert.deepEqual(only(feed([msg(2, { body: "no links" })]), "bubble")[0].links, []);
+  assert.deepEqual(only(feed([msg(3, { state: "removed", body: null })]), "bubble")[0].links, []);
+  const ann = only(feed([msg(4, { kind: "announcement", audience: "going", body: "Map https://example.com/x" })]), "announcement")[0];
+  assert.deepEqual(ann.links.map((l) => l.label), ["Open example.com"]);
+});
+
+test("nothing said yet: system lines and the ended line don't count, a message, an announcement or an unsent one does (H31 Q3)", () => {
+  const ended: EndedLine = { kind: "ended", at: "2026-10-27T15:00:00Z" };
+  assert.equal(nothingSaid(feed([])), true);
+  assert.equal(nothingSaid(feed([sys(1, "joined", { actor: MIA, user: MIA }), ended])), true);
+  assert.equal(nothingSaid(feed([sys(1, "changed", { actor: ANA, what: "place", place_label: "Park" })])), true);
+  assert.equal(nothingSaid(feed([msg(2)])), false);
+  assert.equal(nothingSaid(feed([msg(2, { kind: "announcement", audience: "going" })])), false);
+  assert.equal(nothingSaid(feed([pending("c")])), false);
+  // A deleted message was said.
+  assert.equal(nothingSaid(feed([msg(3, { state: "deleted", body: null })])), false);
+});
+
+test("a date outside the current year shows the year in separators and labels (H32 Q50)", () => {
+  const rows = feed([msg(1, { createdAt: "2025-11-15T19:00:00Z" })]);
+  assert.equal(only(rows, "day")[0].text, "Sat 15 Nov 2025");
+  assert.equal(only(rows, "bubble")[0].label, "Leo, message 1, Sat 15 Nov 2025, 19:00");
+});
+
+test("in a closed chat an unsent message says the close overtook it, and offers only Delete (H32 29)", () => {
+  const rows = only(feed([pending("c-1"), pending("c-2", { failed: true })], { closed: true }), "pending");
+  assert.deepEqual(rows.map((r) => r.closed), [true, true]);
+  assert.equal(rows[0].label, "You, I can bring the snacks, 10:00, This chat closed before it was sent.");
+  assert.deepEqual(rows.map((r) => r.actions), [["deleteUnsent"], ["deleteUnsent"]]);
+  const open = only(feed([pending("c-3", { failed: true })]), "pending")[0];
+  assert.equal(open.closed, false);
 });

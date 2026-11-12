@@ -1,6 +1,6 @@
 import type { ChatMessage, ChatNames } from "../services/chat";
 import { CHAT_COPY } from "../domain/chatCopy";
-import { authorName, dayLabel, messageLabel, systemText } from "../domain/chatRules";
+import { authorName, dayLabel, linkHost, linkParts, messageLabel, systemText } from "../domain/chatRules";
 import { localParts } from "../domain/whenText";
 import type { EndedLine, PendingMessage } from "./chatModel";
 
@@ -9,6 +9,9 @@ import type { EndedLine, PendingMessage } from "./chatModel";
  * else's for a host (Decision 5, K-S17), Delete unsent message on one that failed to send (K-S7). Plan 3 appends Report.
  */
 export type MessageAction = "delete" | "remove" | "deleteUnsent";
+
+/** A link in a message, with the name of its accessibility action ("Open example.com", numbered when a host repeats). */
+export type FeedLink = { name: string; href: string; host: string; label: string };
 
 /** One row of the chat's list, oldest first, with the words the screen shows and the label the screen reader says. */
 export type FeedRow =
@@ -28,6 +31,7 @@ export type FeedRow =
       gone: "deleted" | "removed" | null;
       label: string;
       actions: MessageAction[];
+      links: FeedLink[];
     }
   | {
       type: "announcement";
@@ -40,14 +44,25 @@ export type FeedRow =
       gone: "deleted" | "removed" | null;
       label: string;
       actions: MessageAction[];
+      links: FeedLink[];
     }
   /** Resbite's own line, centred and plain, read as "Resbite: …". */
   | { type: "system"; key: string; text: string; label: string }
-  /** A change, a bordered chip that opens the resbite. */
-  | { type: "change"; key: string; text: string; label: string }
+  /** A change, a bordered chip that opens the resbite; `tail` ("Tap to see") is drawn regular and muted (H31). */
+  | { type: "change"; key: string; text: string; tail: string | null; label: string }
   /** The computed "<title> ended" of a one-off (K-S16). */
   | { type: "ended"; key: string; text: string; label: string }
-  | { type: "pending"; key: string; clientId: string; body: string; failed: boolean; label: string; actions: MessageAction[] };
+  /** `closed`: the chat closed before it was sent, so it can only be deleted (H32 29). */
+  | {
+      type: "pending";
+      key: string;
+      clientId: string;
+      body: string;
+      failed: boolean;
+      closed: boolean;
+      label: string;
+      actions: MessageAction[];
+    };
 
 export type FeedContext = {
   names: ChatNames;
@@ -60,7 +75,26 @@ export type FeedContext = {
   title: string;
   /** The reader is the owner or an admin (`summary.host`). */
   host: boolean;
+  /** The chat is closed (`!summary.open`): nothing unsent can be sent any more. */
+  closed?: boolean;
 };
+
+/** Nothing said yet: no message, announcement or unsent one, whatever Resbite's lines say (H31 Q3). */
+export const nothingSaid = (rows: FeedRow[]): boolean =>
+  !rows.some((r) => r.type === "bubble" || r.type === "announcement" || r.type === "pending");
+
+/** A message's links, each an action; a host that comes again is numbered, so two can be told apart (H32 Q13). */
+function linksOf(text: string): FeedLink[] {
+  const seen = new Map<string, number>();
+  return linkParts(text)
+    .filter((p): p is { text: string; href: string } => !!p.href)
+    .map((p, i) => {
+      const host = linkHost(p.href);
+      const n = (seen.get(host) ?? 0) + 1;
+      seen.set(host, n);
+      return { name: `link:${i}`, href: p.href, host, label: CHAT_COPY.openLink(host, n) };
+    });
+}
 
 /** Delete for your own sent message or announcement, Remove for a host on anyone else's; nothing on what's gone. */
 export function messageActions(m: ChatMessage, viewerId: string, host: boolean): MessageAction[] {
@@ -108,22 +142,25 @@ const asEndedLine = (e: EndedLine, title: string): ChatMessage => ({
  * word (an unknown kind, event or state) is left out (H20). The screen reverses it for its inverted list.
  */
 export function chatFeed(items: Array<ChatMessage | PendingMessage | EndedLine>, ctx: FeedContext): FeedRow[] {
-  const { names, viewerId, now, zone, title, host } = ctx;
+  const { names, viewerId, now, zone, title, host, closed = false } = ctx;
   const rows: FeedRow[] = [];
   let day: string | null = null;
   let lastAuthor: string | null = null;
+  // A separator is keyed by the row it opens, so a day that comes back (an old unsent message after newer ones, a late
+  // commit across midnight) is a separator of its own (H31).
   const place = (at: string, row: FeedRow) => {
     const date = Number.isFinite(Date.parse(at)) ? localParts(at, zone).date : null;
     if (date && date !== day) {
       day = date;
       lastAuthor = null;
-      rows.push({ type: "day", key: `day:${date}`, text: dayLabel(at, zone) });
+      rows.push({ type: "day", key: `day:${row.key}`, text: dayLabel(at, zone, now) });
     }
     rows.push(row);
   };
   for (const item of items) {
     if (item.kind === "pending") {
-      const label = messageLabel(asMessage(item, viewerId), names, viewerId, now, zone, item.failed ? "failed" : "sending");
+      const state = closed ? "closed" : item.failed ? "failed" : "sending";
+      const label = messageLabel(asMessage(item, viewerId), names, viewerId, now, zone, state);
       if (!label) continue;
       place(item.createdAt, {
         type: "pending",
@@ -131,8 +168,9 @@ export function chatFeed(items: Array<ChatMessage | PendingMessage | EndedLine>,
         clientId: item.clientId,
         body: item.body,
         failed: item.failed,
+        closed,
         label,
-        actions: item.failed ? ["deleteUnsent"] : [],
+        actions: closed || item.failed ? ["deleteUnsent"] : [],
       });
       lastAuthor = null;
       continue;
@@ -147,6 +185,8 @@ export function chatFeed(items: Array<ChatMessage | PendingMessage | EndedLine>,
       continue;
     }
     const m = item;
+    // A sent row with no words draws nothing (H32 Q8).
+    if ((m.kind === "message" || m.kind === "announcement") && m.state === "sent" && m.body === null) continue;
     const label = messageLabel(m, names, viewerId, now, zone);
     if (!label) continue;
     const key = `m:${m.id}`;
@@ -156,8 +196,8 @@ export function chatFeed(items: Array<ChatMessage | PendingMessage | EndedLine>,
       if (m.event === "changed") {
         // Someone else's change says where the tap goes; yours doesn't (the mockup).
         const actor = m.payload && typeof m.payload.actor === "string" ? m.payload.actor : null;
-        const tail = actor === viewerId ? "" : ` · ${CHAT_COPY.tapToSee}`;
-        place(m.createdAt, { type: "change", key, text: line + tail, label: label + tail });
+        const tail = actor === viewerId ? null : CHAT_COPY.tapToSee;
+        place(m.createdAt, { type: "change", key, text: line, tail, label: tail ? `${label} · ${tail}` : label });
       } else place(m.createdAt, { type: "system", key, text: line, label });
       lastAuthor = null;
       continue;
@@ -175,6 +215,7 @@ export function chatFeed(items: Array<ChatMessage | PendingMessage | EndedLine>,
         gone: goneOf(m),
         label,
         actions,
+        links: goneOf(m) ? [] : linksOf(wordsOf(m)),
       });
       lastAuthor = null;
       continue;
@@ -193,6 +234,7 @@ export function chatFeed(items: Array<ChatMessage | PendingMessage | EndedLine>,
       gone: goneOf(m),
       label,
       actions,
+      links: goneOf(m) ? [] : linksOf(wordsOf(m)),
     });
     const placed = rows[rows.length - 1];
     if (placed.type === "bubble") placed.showAuthor = rows.length - before === 1 ? lastAuthor !== (m.authorId ?? "") : true;

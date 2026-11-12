@@ -19,6 +19,7 @@ export function MenuRow({
   hint,
   busy = false,
   disabled = false,
+  ref,
 }: {
   title: string;
   icon: LucideIcon;
@@ -30,11 +31,14 @@ export function MenuRow({
   busy?: boolean;
   /** Another action is running: dimmed and not pressable. */
   disabled?: boolean;
+  /** The row's own view, so a sheet can move focus to it. */
+  ref?: React.Ref<View>;
 }) {
   const largeText = useLargeText();
   const ink = destructive ? c.error : c.ink;
   return (
     <Pressable
+      ref={ref}
       accessibilityRole="button"
       accessibilityLabel={label ?? title}
       accessibilityHint={hint}

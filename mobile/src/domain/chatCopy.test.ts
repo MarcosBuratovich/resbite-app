@@ -66,3 +66,20 @@ test("the copy the rulings added reads exactly", () => {
   // H20 (Q8): a cancelled one-off's header.
   assert.equal(C.cancelled, "Cancelled");
 });
+
+test("the copy Task 7's fix round added reads exactly (H31, H32)", () => {
+  // H31: a link's accessibility action; H32 (Q13): the same host twice is numbered.
+  assert.equal(C.openLink("example.com"), "Open example.com");
+  assert.equal(C.openLink("example.com", 1), "Open example.com");
+  assert.equal(C.openLink("example.com", 2), "Open example.com (2)");
+  // H31: the spinner while an earlier page loads.
+  assert.equal(C.loadingEarlier, "Loading earlier messages");
+  // H32 (29): a message the close overtook.
+  assert.equal(C.closedBeforeSent, "This chat closed before it was sent.");
+  // H32 (Q35): the announcement limit.
+  assert.equal(C.announceTooFast, "You can send one announcement a minute.");
+  // H32 (Q26): a paste longer than the limit.
+  assert.equal(C.tooLong, "Only the first 1000 characters fit.");
+  // H32 (Q46): the draft the close left behind.
+  assert.equal(C.notSentDraft, "Not sent:");
+});

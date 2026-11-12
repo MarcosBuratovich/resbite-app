@@ -710,9 +710,9 @@ test("42501 or 'Chat closed' marks the message failed and nothing resends it; 'C
   await t.clock.advance(30_000);
   await t.open();
   assert.equal(t.server.calls("send").length, 1);
-  // The next visit reads it closed: nothing here can be sent, so its unsent messages go (H26 Q6).
-  assert.deepEqual(t.state().pending, []);
-  assert.deepEqual(await t.queue.list(ME, SERIES), []);
+  // The next visit reads it closed: nothing is sent again, and the words stay until deleted (H32 29, overruling H26 Q6).
+  assert.deepEqual(t.state().pending.map((q) => [q.body, q.failed]), [["Thanks all", true]]);
+  assert.deepEqual((await t.queue.list(ME, SERIES)).map((q) => q.body), ["Thanks all"]);
 
   const u = setup();
   u.server.seed(1);
@@ -1444,18 +1444,23 @@ test("failed messages over 7 days old leave the queue at any chat's focus, so a 
   assert.equal(await t.session.send("room now"), true);
 });
 
-test("a chat that reads closed at focus drops its unsent messages; other chats keep theirs (H26 Q6)", async () => {
+test("a closed chat keeps its unsent messages at focus until deleted or 7 days old, and resends none (H32 29, overruling H26 Q6)", async () => {
   const t = setup();
   t.server.seed(1);
   t.server.setSummary({ open: false, closesAt: iso(START - 1_000) });
   await t.queue.put(ME, queuedItem("failed-here", START - 60_000, { failed: true }));
   await t.queue.put(ME, queuedItem("left-here", START - 60_000));
+  await t.queue.put(ME, queuedItem("old-here", START - 8 * 86_400_000, { failed: true }));
   await t.queue.put(ME, queuedItem("elsewhere", START - 60_000, { series: OTHER_SERIES, failed: true }));
   await t.open();
+  await t.clock.advance(15_000);
   assert.equal(t.server.calls("send").length, 0);
-  assert.deepEqual(t.state().pending, []);
-  assert.deepEqual(await t.queue.list(ME, SERIES), []);
+  assert.deepEqual(t.state().pending.map((q) => q.clientId), ["failed-here", "left-here"]);
+  assert.deepEqual((await t.queue.list(ME, SERIES)).map((q) => q.clientId), ["failed-here", "left-here"]);
   assert.deepEqual((await t.queue.list(ME, OTHER_SERIES)).map((q) => q.clientId), ["elsewhere"]);
+  // They go only when deleted.
+  await t.session.discard("failed-here");
+  assert.deepEqual((await t.queue.list(ME, SERIES)).map((q) => q.clientId), ["left-here"]);
 });
 
 test("the close is timed by the server's clock, from each read's as_of: a phone an hour slow closes on time (H26 Q8)", async () => {
@@ -1876,4 +1881,137 @@ test("the retry after a failed read waits while the app is in the background, as
   t.session.background();
   await t.clock.advance(30_000);
   assert.equal(t.server.calls("since").length, reads);
+});
+
+const HOSTS_ONLY = { code: "42501", message: "Hosts only" };
+const TOO_FAST = { code: "22023", message: "Too fast" };
+const SLOW_DOWN = { code: "22023", message: "Slow down" };
+
+test("an action's error clears when a later read succeeds, but not by a read that began before it (H32 28)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  await t.open();
+  t.latest().on.status("SUBSCRIBED");
+  await settle();
+  // A read in flight when the send fails doesn't clear the failure it never saw.
+  const held = t.server.hold("since");
+  t.latest().on.signal({ id: 101, kind: "message", state: "sent" });
+  await settle();
+  t.server.fail.send = OFFLINE;
+  assert.equal(await t.session.send("Sent while offline"), false);
+  await settle();
+  held.resolve();
+  await settle();
+  assert.equal(t.state().error, INVITE_COPY.offline);
+  delete t.server.fail.send;
+  // A read that began afterwards does.
+  t.server.add({ authorId: LEO });
+  t.latest().on.signal({ id: 102, kind: "message", state: "sent" });
+  await settle();
+  assert.equal(t.state().error, null);
+  // The bubble still says it wasn't sent.
+  assert.deepEqual(t.state().pending.map((q) => q.failed), [true]);
+});
+
+test("clearError takes an action's error away (Cancel), and leaving the screen does too; a read's error stays (H32 36)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  await t.open();
+  t.server.failOnce("remove", OFFLINE);
+  assert.equal(await t.session.remove(101), false);
+  assert.equal(t.state().error, INVITE_COPY.offline);
+  t.session.clearError();
+  assert.equal(t.state().error, null);
+  t.server.failOnce("deleteOwn", OFFLINE);
+  assert.equal(await t.session.deleteOwn(101), false);
+  t.session.blur();
+  assert.equal(t.state().error, null);
+  // A read's own error isn't an action's: Cancel leaves it.
+  const r = setup();
+  r.server.seed(120);
+  await r.open();
+  r.server.failOnce("messages", OFFLINE);
+  await r.session.loadEarlier();
+  assert.equal(r.state().error, INVITE_COPY.offline);
+  r.session.clearError();
+  assert.equal(r.state().error, INVITE_COPY.offline);
+});
+
+test("'Hosts only' reads the summary again, so Announce goes; its words stay through that read (H32 36)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  t.server.setSummary({ host: true });
+  await t.open();
+  t.latest().on.status("SUBSCRIBED");
+  await settle();
+  // Demoted meanwhile.
+  t.server.setSummary({ host: false });
+  t.server.failOnce("announce", HOSTS_ONLY);
+  const reads = t.server.calls("summary").length;
+  assert.equal(await t.session.announce("Doors at 7", "going"), false);
+  await settle();
+  assert.ok(t.server.calls("summary").length > reads, "the summary is read again");
+  assert.equal(t.state().summary?.host, false);
+  assert.equal(t.state().error, CHAT_COPY.hostsOnly);
+  // A later read clears it.
+  t.server.add({ authorId: LEO });
+  t.latest().on.signal({ id: 102, kind: "message", state: "sent" });
+  await settle();
+  assert.equal(t.state().error, null);
+  // Remove refused the same way reads the summary again too.
+  t.server.failOnce("remove", HOSTS_ONLY);
+  const again = t.server.calls("summary").length;
+  assert.equal(await t.session.remove(102), false);
+  await settle();
+  assert.ok(t.server.calls("summary").length > again);
+  assert.equal(t.state().error, CHAT_COPY.hostsOnly);
+});
+
+test("an announcement refused as 'Too fast' says the limit is one a minute; 'Slow down' keeps the messages line (H32 Q35)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  t.server.setSummary({ host: true });
+  await t.open();
+  t.server.failOnce("announce", TOO_FAST);
+  assert.equal(await t.session.announce("Doors at 7", "going"), false);
+  assert.equal(t.state().error, CHAT_COPY.announceTooFast);
+  t.server.failOnce("announce", SLOW_DOWN);
+  assert.equal(await t.session.announce("Doors at 7", "going"), false);
+  assert.equal(t.state().error, CHAT_COPY.slowDown);
+  // A message refused 'Slow down' is unchanged.
+  t.server.failOnce("send", SLOW_DOWN);
+  assert.equal(await t.session.send("one more"), false);
+  await settle();
+  assert.equal(t.state().error, CHAT_COPY.slowDown);
+});
+
+test("a failed earlier page says so (earlierFailed) until a page loads, which clears the line too (H32 24)", async () => {
+  const t = setup();
+  t.server.seed(120);
+  await t.open();
+  assert.equal(t.state().earlierFailed, false);
+  t.server.failOnce("messages", OFFLINE);
+  await t.session.loadEarlier();
+  assert.equal(t.state().earlierFailed, true);
+  assert.equal(t.state().error, INVITE_COPY.offline);
+  assert.deepEqual(t.ids(), range(171, 220));
+  await t.session.loadEarlier();
+  assert.equal(t.state().earlierFailed, false);
+  assert.equal(t.state().error, null);
+  assert.deepEqual(t.ids(), range(101, 220));
+});
+
+test("nothing is sent or announced without a visible character, by the server's rule (H32 30)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  t.server.setSummary({ host: true });
+  await t.open();
+  for (const blank of ["\u2800\u2800", "\u3164", "\u200b", "   ", "\n\n"]) {
+    assert.equal(await t.session.send(blank), false, JSON.stringify(blank));
+    assert.equal(await t.session.announce(blank, "going"), false, JSON.stringify(blank));
+  }
+  await settle();
+  assert.equal(t.server.calls("send").length, 0);
+  assert.equal(t.server.calls("announce").length, 0);
+  assert.deepEqual(t.state().pending, []);
 });

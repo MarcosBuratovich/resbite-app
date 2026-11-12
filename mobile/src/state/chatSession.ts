@@ -2,13 +2,16 @@ import { CHAT_COPY, type ChatAudience } from "../domain/chatCopy";
 import {
   chatErrorMessage,
   isChatClosed,
+  isHostsOnly,
   isNotInChat,
+  isTooFast,
   type ChatGateway,
   type ChatMessage,
   type ChatNames,
   type ChatSummary,
 } from "../services/chat";
 import type { QueuedMessage } from "../services/chatQueue";
+import { hasVisibleText } from "../domain/chatRules";
 import {
   EARLIER_PAGE,
   NEWEST_PAGE,
@@ -63,6 +66,8 @@ export type ChatState = {
    * counts against the session's `serverNow()`, which applies it and never goes back.
    */
   clockOffset: number;
+  /** The last earlier page failed to load: the list offers Try again, and a page that loads clears it (H32 24). */
+  earlierFailed: boolean;
 };
 
 /** Nothing open: no account, the preview, a series that isn't one, or before the chat is made. */
@@ -75,6 +80,7 @@ export const IDLE: ChatState = {
   error: null,
   hasEarlier: false,
   clockOffset: 0,
+  earlierFailed: false,
 };
 
 export type ChatTimers = {
@@ -147,6 +153,13 @@ export function createChatSession(deps: ChatSessionDeps) {
   let state: ChatState = { ...IDLE, busy: true };
   let readError: string | null = null,
     actionError: string | null = null;
+  /**
+   * Action errors are numbered, so a read clears only one raised before the read began (H32 28): a read in flight when
+   * an action fails never saw the failure. The read an action's failure asks for itself (`followUp`) leaves its words.
+   */
+  let errorSeq = 0,
+    actionErrorSeq = 0,
+    followUp = 0;
   /** The last successful read's `as_of`; null until a newest page has been read (the next read is then a full one). */
   let asOf: string | null = null;
   /**
@@ -243,6 +256,9 @@ export function createChatSession(deps: ChatSessionDeps) {
   /** A read of new rows; on focus, the newest page then a `since` from the last read's cursor (K-B1, H26 D1). */
   async function readOnce(): Promise<void> {
     if (!live() || shut) return;
+    const begun = errorSeq;
+    const quiet = followUp !== 0 && followUp === actionErrorSeq;
+    if (quiet) followUp = 0;
     const replace = wantReplace;
     const full = replace || wantFull || asOf === null;
     wantReplace = false;
@@ -256,6 +272,7 @@ export function createChatSession(deps: ChatSessionDeps) {
         if (outcome === "merged" && before !== null && !(await readSince(before))) return;
       } else if (asOf !== null && !(await readSince(asOf))) return;
       if (summaryOwed() && !(await readSummary())) return;
+      readCleared(begun, quiet);
       retries = 0;
       if (retry !== null) timers.clearTimeout(retry);
       retry = null;
@@ -358,11 +375,26 @@ export function createChatSession(deps: ChatSessionDeps) {
     });
   }
 
-  function failed(e: unknown, kind: "read" | "action") {
+  function failed(e: unknown, kind: "read" | "action", words?: string) {
     if (isNotInChat(e)) return shutOut();
-    if (kind === "read") readError = chatErrorMessage(e);
-    else actionError = chatErrorMessage(e);
+    if (kind === "read") readError = words ?? chatErrorMessage(e);
+    else {
+      actionError = words ?? chatErrorMessage(e);
+      actionErrorSeq = ++errorSeq;
+      // No longer a host: the summary says so, and Announce goes; the words stay through that read (H32 36).
+      if (isHostsOnly(e)) {
+        followUp = actionErrorSeq;
+        rereadSummary();
+      }
+    }
     set({ busy: false });
+  }
+
+  /** A read that succeeded clears an action's error raised before it began, unless it is that failure's own read. */
+  function readCleared(begun: number, quiet: boolean) {
+    if (quiet || actionError === null || actionErrorSeq > begun) return;
+    actionError = null;
+    set({});
   }
 
   /** While subscribed nothing polls: a failed read is tried again after 5 seconds, then every 20 (H26 Q11). */
@@ -386,7 +418,7 @@ export function createChatSession(deps: ChatSessionDeps) {
     floor = null;
     readError = CHAT_COPY.notInChat;
     actionError = null;
-    set({ summary: null, names: {}, messages: [], pending: [], hasEarlier: false, busy: false });
+    set({ summary: null, names: {}, messages: [], pending: [], hasEarlier: false, busy: false, earlierFailed: false });
   }
 
   /** Pending messages a read has shown, or that landed below the loaded rows, leave `pending`. */
@@ -549,18 +581,17 @@ export function createChatSession(deps: ChatSessionDeps) {
   }
 
   /**
-   * After a focus read: failed messages over 7 days old leave the queue in any chat; this chat's go too when it reads
-   * closed, and its failed ones when it still refuses this person (H26 Q5, Q6). Then what was left behind is resent.
+   * After a focus read: failed messages over 7 days old leave the queue in any chat, and this chat's failed ones when
+   * it still refuses this person (H26 Q5, Q6). A closed chat keeps its unsent messages, shown as overtaken by the close,
+   * until they are deleted or 7 days old: nothing vanishes unseen (H32 29). Then what was left behind is resent.
    */
   async function afterFocus() {
     if (!live()) return;
     const now = timers.now();
-    const closed = state.summary?.open === false;
     const refused = shut;
     const drop = (q: QueuedMessage) =>
       !sending.has(q.clientId) &&
-      ((q.failed && !(now - instantOf(q.createdAt) <= FAILED_KEPT_MS)) ||
-        (q.series === series && (closed || (refused && q.failed))));
+      ((q.failed && !(now - instantOf(q.createdAt) <= FAILED_KEPT_MS)) || (q.series === series && refused && q.failed));
     try {
       await queue.prune(scope, drop);
     } catch {
@@ -635,6 +666,11 @@ export function createChatSession(deps: ChatSessionDeps) {
       void queue.remove(scope, clientId).catch(noop);
       // After 'Not in this chat' only the queue hears of it (H26 D9).
       if (!live() || shut) return true;
+      // A send that worked clears what the last action said went wrong (H32 28).
+      if (actionError !== null) {
+        actionError = null;
+        set({});
+      }
       settlePending();
       // The row comes by a read, so the list stays as reads made it (H26 D2, D3).
       void reader.trigger();
@@ -675,22 +711,29 @@ export function createChatSession(deps: ChatSessionDeps) {
     return true;
   }
 
+  /** A failed page says so (`earlierFailed`) and keeps the line; one that loads clears both (H32 24). */
   async function readEarlier() {
     const before = oldestId(state.messages);
     if (!live() || shut || !state.hasEarlier || before === null) return;
+    const begun = errorSeq;
     try {
       const started = timers.now();
       const page = await gateway.messages(series, before, EARLIER_PAGE);
       if (!live() || shut) return;
       noteClock(page.asOf, started);
+      readError = null;
       set({
         messages: merge(state.messages, page.rows, true),
         names: { ...state.names, ...page.names },
         hasEarlier: page.rows.length >= EARLIER_PAGE,
+        earlierFailed: false,
       });
+      readCleared(begun, false);
       settlePending();
     } catch (e) {
-      if (live()) failed(e, "read");
+      if (!live()) return;
+      state = { ...state, earlierFailed: true };
+      failed(e, "read");
     }
   }
 
@@ -739,6 +782,17 @@ export function createChatSession(deps: ChatSessionDeps) {
       looking = false;
       dropChannel();
       stopTimers();
+      // Leaving takes an action's error with it (H32 36).
+      if (actionError !== null) {
+        actionError = null;
+        set({});
+      }
+    },
+    /** Cancel: what the last action said went wrong goes; a read's error stays (H32 36). */
+    clearError() {
+      if (actionError === null) return;
+      actionError = null;
+      set({});
     },
     dispose() {
       disposed = true;
@@ -780,7 +834,7 @@ export function createChatSession(deps: ChatSessionDeps) {
      * full queue refuses shows as not sent; nothing is sent while this chat refuses the person (H26 D9).
      */
     async send(body: string): Promise<boolean> {
-      if (!live() || shut || !/\S/.test(body)) return false;
+      if (!live() || shut || !hasVisibleText(body)) return false;
       actionError = null;
       const item: QueuedMessage = {
         clientId: newId(),
@@ -834,7 +888,7 @@ export function createChatSession(deps: ChatSessionDeps) {
      * make two. Its row and the pinned card come by the read it asks for.
      */
     async announce(body: string, audience: ChatAudience): Promise<boolean> {
-      if (!live() || shut || !/\S/.test(body)) return false;
+      if (!live() || shut || !hasVisibleText(body)) return false;
       actionError = null;
       set({});
       const again = lastAnnounce && lastAnnounce.body === body && lastAnnounce.audience === audience;
@@ -849,7 +903,8 @@ export function createChatSession(deps: ChatSessionDeps) {
       } catch (e) {
         if (!live()) return false;
         if (isChatClosed(e)) readClose();
-        failed(e, "action");
+        // The announcement limit has its own words (H32 Q35).
+        failed(e, "action", isTooFast(e) ? CHAT_COPY.announceTooFast : undefined);
         return false;
       }
     },

@@ -17,7 +17,8 @@ const text = (value: unknown): string | null => (typeof value === "string" && va
 
 // Bad input never throws (H20): a zone this phone doesn't know reads in the phone's own zone, and a time that can't be
 // read is left out of the line.
-const phoneZone = (): string => {
+/** The phone's zone: message stamps and day separators read in it (K-N4). */
+export const phoneZone = (): string => {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   } catch {
@@ -43,10 +44,18 @@ const zoneOr = (zone: unknown): string => (typeof zone === "string" && zone !== 
 const instant = (iso: unknown): string | null =>
   typeof iso === "string" && Number.isFinite(Date.parse(iso)) ? iso : null;
 
-/** "Sat 15 Nov". Day separators and stamps pass the phone's zone; the header and the closed card the plan's (K-N4). */
-export function dayLabel(iso: string, zone: string): string {
+/**
+ * "Sat 15 Nov", and "Sat 15 Nov 2025" when `now` is given and the date's year isn't now's, in the same zone (H32 Q50).
+ * Day separators and stamps pass the phone's zone; the header and the closed card the plan's (K-N4).
+ */
+export function dayLabel(iso: string, zone: string, now?: number): string {
   const at = instant(iso);
-  return at ? shortDate(at, zoneOr(zone)) : "";
+  if (!at) return "";
+  const z = zoneOr(zone);
+  const day = shortDate(at, z);
+  if (now === undefined || !Number.isFinite(now)) return day;
+  const year = localParts(at, z).date.slice(0, 4);
+  return year === localParts(new Date(now).toISOString(), z).date.slice(0, 4) ? day : `${day} ${year}`;
 }
 /** "18:02" in the zone given. */
 export function timeLabel(iso: string, zone: string): string {
@@ -68,7 +77,7 @@ export function closingLine(closesAt: string | null, now: number, zone: string):
   if (!(left > 0) || left > CLOSING_WINDOW) return null;
   const hours = Math.floor(left / HOUR);
   const span = hours >= 1 ? plural(hours, "hour") : plural(Math.max(1, Math.floor(left / MINUTE)), "minute");
-  return `This chat closes ${dayLabel(closesAt, zone)} at ${timeLabel(closesAt, zone)}, in ${span}. Any final words?`;
+  return `This chat closes ${dayLabel(closesAt, zone, now)} at ${timeLabel(closesAt, zone)}, in ${span}. Any final words?`;
 }
 
 // Text a person wrote, cleaned for a line as a push's is (H18): well formed, no bidi, zero-width or format
@@ -237,7 +246,7 @@ export function headerLine(summary: ChatSummary, now: number): string | null {
   const start = instant(summary.startsAt);
   if (!start || !text(summary.timeZone)) return null;
   const going = Number.isFinite(summary.accepted) ? summary.accepted : 0;
-  const line = `${dayLabel(start, summary.timeZone)} · ${going} going`;
+  const line = `${dayLabel(start, summary.timeZone, now)} · ${going} going`;
   return planEnd({ starts_at: start, ends_at: instant(summary.endsAt) }) <= now ? `Ended · ${line}` : line;
 }
 
@@ -251,11 +260,11 @@ export const defaultAudience = (summary: ChatSummary): ChatAudience => (summary.
  * The card in place of the field once the chat is closed (CH-06). The screen decides "closed" from `summary.open` only;
  * this picks the words from `(isGroup, stopped, status)`, and plan 2 adds the stopped group's card.
  */
-export function closedCard(summary: ChatSummary): { line: string; why: string | null } {
+export function closedCard(summary: ChatSummary, now?: number): { line: string; why: string | null } {
   if (!summary.isGroup && summary.status === "cancelled") return { line: CHAT_COPY.cancelledClosed, why: null };
   const closes = instant(summary.closesAt);
   if (!closes) return { line: CHAT_COPY.closedShort, why: null };
-  return { line: CHAT_COPY.closedOn(dayLabel(closes, summary.timeZone)), why: CHAT_COPY.closedWhy };
+  return { line: CHAT_COPY.closedOn(dayLabel(closes, summary.timeZone, now)), why: CHAT_COPY.closedWhy };
 }
 
 /** A control, bidi, zero-width or format character anywhere in a link keeps it plain (H20). */
@@ -334,7 +343,7 @@ export function messageLabel(
   viewerId: string,
   now: number,
   zone: string,
-  sending?: "sending" | "failed",
+  sending?: "sending" | "failed" | "closed",
 ): string | null {
   if (m.kind === "system") {
     const line = systemText(m, names, viewerId, false, "");
@@ -346,13 +355,80 @@ export function messageLabel(
   const at = instant(m.createdAt);
   if (at) {
     const today = Number.isFinite(now) && localDate(at, zone).date === localDate(new Date(now).toISOString(), zone).date;
-    parts.push(today ? timeLabel(at, zone) : `${dayLabel(at, zone)}, ${timeLabel(at, zone)}`);
+    parts.push(today ? timeLabel(at, zone) : `${dayLabel(at, zone, now)}, ${timeLabel(at, zone)}`);
   }
   if (m.kind === "announcement") parts.unshift(CHAT_COPY.announcementLabel(m.audience));
-  if (sending) parts.push(sending === "sending" ? CHAT_COPY.sending : CHAT_COPY.notSent);
+  if (sending)
+    parts.push(sending === "sending" ? CHAT_COPY.sending : sending === "closed" ? CHAT_COPY.closedBeforeSent : CHAT_COPY.notSent);
   return parts.join(", ");
 }
 
 const SERIES_ID = new RegExp(`^${UUID_PATTERN}$`);
 /** A series id as the server writes it, lowercase, which the route checks before any call (K-N14). */
 export const isSeriesId = (value: unknown): value is string => typeof value === "string" && SERIES_ID.test(value);
+
+/**
+ * The server's test of a body (`private.chat_body`, H30): at least one character that isn't white space, a control, a
+ * format character or one of the fillers that draw nothing (Hangul fillers, the braille blank, variation selectors,
+ * tags…). Send is offered only then, so a blank-looking message is never written (H32 30).
+ */
+const VISIBLE =
+  /[^\s\u0000-\u001f\u007f-\u00a0\u00ad\u034f\u0600-\u0605\u061c\u06dd\u070f\u0890\u0891\u08e2\u115f\u1160\u1680\u17b4\u17b5\u180b-\u180f\u2000-\u200f\u2028-\u202f\u205f-\u206f\u2800\u3000\u3164\ufe00-\ufe0f\ufeff\uffa0\ufff0-\ufffb\u{110bd}\u{110cd}\u{13430}-\u{1343f}\u{1bca0}-\u{1bca3}\u{1d173}-\u{1d17a}\u{e0000}-\u{e0fff}]/u;
+export const hasVisibleText = (body: string): boolean => typeof body === "string" && VISIBLE.test(body);
+
+/** A message holds at most this many characters, counted as the server counts them: by code point (CH-P11). */
+export const BODY_LIMIT = 1000;
+
+// A code point that belongs to the character before it: a combining mark, a joiner, a variation selector, a skin tone
+// or a tag. Property escapes are tried first; an engine without them gets the common ranges.
+const JOINS = (() => {
+  try {
+    return new RegExp("^[\\p{M}\\u200d\\ufe00-\\ufe0f\\u{1f3fb}-\\u{1f3ff}\\u{e0020}-\\u{e007f}]$", "u");
+  } catch {
+    return /^(?:[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f\u200d\ufe00-\ufe0f]|\ud83c[\udffb-\udfff]|\udb40[\udc20-\udc7f])$/;
+  }
+})();
+const REGIONAL = /^\ud83c[\udde6-\uddff]$/;
+
+/** The text's characters as a person sees them (grapheme clusters): Intl.Segmenter where there is one, else by rule. */
+function characters(text: string): string[] {
+  const Segmenter = (Intl as { Segmenter?: new (l?: string, o?: { granularity: string }) => { segment(t: string): Iterable<{ segment: string }> } }).Segmenter;
+  if (typeof Segmenter === "function") {
+    try {
+      return Array.from(new Segmenter(undefined, { granularity: "grapheme" }).segment(text), (s) => s.segment);
+    } catch {
+      // The rule below.
+    }
+  }
+  const out: string[] = [];
+  let prev = "";
+  let regional = 0;
+  for (const cp of text) {
+    const isRegional = REGIONAL.test(cp);
+    const joins = out.length > 0 && (JOINS.test(cp) || prev === "\u200d" || (isRegional && regional % 2 === 1));
+    if (joins) out[out.length - 1] += cp;
+    else out.push(cp);
+    regional = isRegional ? regional + 1 : 0;
+    prev = cp;
+  }
+  return out;
+}
+
+/**
+ * The text as the field keeps it: at most `BODY_LIMIT` code points, cut where a character ends so an emoji or an accent
+ * is never split; `cut` says some was left out, for the notice (H32 Q26).
+ */
+export function fitBody(text: string): { text: string; cut: boolean } {
+  let count = 0;
+  for (const _ of text) if (++count > BODY_LIMIT) break;
+  if (count <= BODY_LIMIT) return { text, cut: false };
+  let kept = "";
+  let used = 0;
+  for (const c of characters(text)) {
+    const size = [...c].length;
+    if (used + size > BODY_LIMIT) break;
+    kept += c;
+    used += size;
+  }
+  return { text: kept, cut: true };
+}
