@@ -400,11 +400,16 @@ end $$;
 --  - after the new occurrence is in, two lines through chat_system_line with no actor (NOTE 8): ended {actor, title} on
 --    the occurrence left behind, unless it was cancelled (G-S2, G-S6), and next {actor, plan_id, starts_at, time_zone,
 --    place_label, place_tbd} on the new one;
---  - it rolls in series order. A line takes its chat's row (messages_chat_stats), and the roll holds every row it takes
---    to its commit, so it takes them in the order the account deletion does (its ordered pass, chat core's deletion
---    step): a roll in plan order could hold one group's row while waiting for another's that a deletion holds, waiting
---    for the first (supabase/tests/local/chat-groups-concurrency.sh, races 2 and 3). Plan rows are taken skip locked,
---    so their order matters to nothing else.
+--  - a closed group is finished for the roll (ruling GR3 Q1; the spec's anti-goal "a chat that outlives its 48 hours").
+--    An owner who may no longer use the app stops the group with its last occurrence (G-S4), so the roll skips the
+--    plan, now in the loop rather than in its query: once the group's chat has closed, it writes the stop time (that
+--    occurrence's end), so the owner's return reads stopped and closed, as before. And it never rolls a stopped group
+--    whose chat has closed: only the owner's Edit, the repeat set again (G-QB's resume), clears the stop time;
+--  - it rolls in series order. A line takes its chat's row (messages_chat_stats), as does a stop time written, and the
+--    roll holds every row it takes to its commit, so it takes them in the order the account deletion does (its ordered
+--    pass, chat core's deletion step): a roll in plan order could hold one group's row while waiting for another's that
+--    a deletion holds, waiting for the first (supabase/tests/local/chat-groups-concurrency.sh, races 2 and 3). Plan rows
+--    are taken skip locked, so their order matters to nothing else.
 create or replace function private.roll_repeating_plans() returns integer language plpgsql security definer set search_path = '' as $$
 declare p public.plans; v_id uuid; v_start timestamptz; v_end timestamptz; v_steps integer; v_count integer := 0; v_constraint text;
 begin
@@ -415,12 +420,21 @@ begin
   select o.* from public.plans o
   where o.repeat_weeks is not null and (o.status='cancelled' or private.plan_end(o.starts_at,o.ends_at)<=now())
    and not exists(select 1 from public.plans n where n.repeats_from=o.id)
-   and private.user_eligible(o.owner_id)
   order by o.series_id, o.id
   for update of o skip locked
  loop
   -- Each plan has its own block: a plan that cannot roll (a bad time zone, say) is skipped with a warning, the rest roll.
   begin
+   -- An owner who may no longer use the app: the group stopped with this occurrence (G-S4). Once its chat has closed,
+   -- the stop time is written, so the owner's return does not reopen it (ruling GR3 Q1).
+   if not private.user_eligible(p.owner_id) then
+    if not private.chat_open(p.series_id) then
+     update public.chats set stopped_at=private.plan_end(p.starts_at,p.ends_at) where series_id=p.series_id and is_group and stopped_at is null;
+    end if;
+    continue;
+   end if;
+   -- A stopped group whose chat has closed is finished: only the owner's Edit reopens it.
+   continue when private.group_stopped(p.series_id) and not private.chat_open(p.series_id);
    v_steps := 1;
    loop
     v_start := private.next_occurrence(p.starts_at,p.time_zone,p.repeat_weeks*v_steps);
@@ -485,13 +499,19 @@ end $$;
 -- update, not for no key update, so a guest row being inserted, whose key check takes key share, waits for the leave or
 -- the leave for it. Then the current occurrence is resolved again, and the new one locked when the roll made it
 -- meanwhile (ruling GR2 Q3). So a leave racing the roll, an invitation or a guest row ends with the person in (a row, no
--- leave) or out (no row, a leave), never both (supabase/tests/local/leave-series-concurrency.sh). Then, in this order:
---  - a group, and the caller in its chat, else 42501 'Not in this group' (a one-off, or a second leave);
+-- leave) or out (no row, a leave), never both (supabase/tests/local/leave-series-concurrency.sh). Only someone on the
+-- resbite gets as far as that lock (circles_of_trust.sql:310's rule; ruling GR3, review M7): on a group, someone in its
+-- chat or with a guest row on one of its occurrences, else 42501 'Not in this group' before any lock. Then, once the
+-- row is held, in this order:
+--  - a group, and the caller in its chat, else 42501 'Not in this group' (a one-off, a second leave, a leaver after the
+--    end);
 --  - the owner: 42501 'Owner can''t leave'; an admin (a host): 42501 'Hosts can''t leave'. An admin steps down first by
 --    answering Can't go, which ends the role (CR-P15);
 --  - the leave, stored, or its time moved to now: the roll's skip list;
 --  - the caller's personal links on the current occurrence revoked, as remove_guest revokes them, so an old link lets
---    no leaver back in (G-N1);
+--    no leaver back in (G-N1): those they answered, and the live ones to their confirmed number, sent before they
+--    confirmed it (ruling GR3 D1); and their admin row, as remove_guest deletes it (review M8: none is reachable, since
+--    an admin is a host, but a stale one would make a re-invited leaver a host again);
 --  - the caller's guest row on the current occurrence deleted, with its invitation notice, sent or not, and its
 --    deliveries, as remove_guest deletes it, so an invitation back is told again, even the same week (I6). Unless that
 --    occurrence has ended and was not cancelled: then the row is a real attendance and stays, with its notice, and
@@ -502,6 +522,10 @@ end $$;
 create function private.leave_series(p_series uuid) returns void language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester(); v_plan public.plans; v_again uuid;
 begin
+ if not private.chat_is_group(p_series) or not (private.chat_member(p_series, v_uid)
+  or exists(select 1 from public.attendees a join public.plans p on p.id = a.plan_id where p.series_id = p_series and a.user_id = v_uid)) then
+  raise exception 'Not in this group' using errcode='42501';
+ end if;
  loop
   v_plan := private.current_occurrence(p_series);
   exit when v_plan.id is null;
@@ -520,6 +544,9 @@ begin
  on conflict (series_id, user_id) do update set left_at = now();
  update private.invitations set revoked_at=now() where plan_id=v_plan.id and claimed_by=v_uid and revoked_at is null;
  update private.phone_invitations set revoked_at=now(), code_hash=null where plan_id=v_plan.id and user_id=v_uid;
+ update private.phone_invitations set revoked_at=now(), code_hash=null where plan_id=v_plan.id and revoked_at is null
+  and phone=(select nullif(private.phone_key(u.phone),'') from auth.users u where u.id=v_uid and u.phone_confirmed_at is not null);
+ delete from public.plan_admins where plan_id=v_plan.id and user_id=v_uid;
  if v_plan.status = 'cancelled' or private.plan_end(v_plan.starts_at, v_plan.ends_at) > now() then
   delete from public.attendees where plan_id=v_plan.id and user_id=v_uid;
   delete from private.notification_outbox where dedupe_key='invited:'||v_plan.id||':'||v_uid;
@@ -551,10 +578,10 @@ $$;
 
 -- 2f. Asking, from a resbite (CH-P21): the follow-ups body (20261111120000_connections_follow_ups.sql:130), create or
 -- replace, its detail kept, its grants and public wrapper kept. One change, at its target check: on a group, the person
--- asked may be any guest, not answered included (they share a chat, and each sees the other's name through
--- can_see_guests). The caller still passes can_see_guests first, so a leaver asking from a past occurrence gets 42501
--- 'Names required'. Both have a place on p_plan, so pair_standing still gives one of its four values. Plan 3 copies
--- this body.
+-- asked may be any guest in its chat now, not answered included (they share a chat, and each sees the other's name
+-- through can_see_guests); someone who left is asked only as on a one-off (ruling GR3 Q2). The caller still passes
+-- can_see_guests first, so a leaver asking from a past occurrence gets 42501 'Names required'. Both have a place on
+-- p_plan, so pair_standing still gives one of its four values. Plan 3 copies this body.
 create or replace function private.request_connection(p_user uuid, p_plan uuid) returns text language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester(); v_a uuid; v_b uuid; v_series uuid; v_row public.connections; v_at timestamptz;
 begin
@@ -562,12 +589,14 @@ begin
  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_a::text||':'||v_b::text,53));
  if p_user=v_uid then raise exception 'That is you' using errcode='22023'; end if;
  if not private.can_see_guests(p_plan) then raise exception 'Names required' using errcode='42501'; end if;
- -- CH-P21 (groups and chat): on a group any guest may be asked, whatever their reply; on a one-off, a guest who has
- -- answered. Someone whose account is being deleted is not on it either, as its owner too (the owner's row outlives the
+ -- CH-P21 (groups and chat): on a group any guest in its chat now may be asked, whatever their reply; otherwise, as on a
+ -- one-off, a guest who has answered, so someone who left a group is no longer asked through an unanswered row (ruling
+ -- GR3 Q2). Someone whose account is being deleted is not on it either, as its owner too (the owner's row outlives the
  -- request).
  if private.deletion_pending(p_user) or not (private.is_host(p_plan,p_user)
   or exists(select 1 from public.attendees a where a.plan_id=p_plan and a.user_id=p_user
-   and (a.response<>'pending' or private.chat_is_group((select p.series_id from public.plans p where p.id=p_plan))))) then
+   and (a.response<>'pending' or exists(select 1 from public.plans p where p.id=p_plan and private.chat_is_group(p.series_id)
+    and private.chat_member(p.series_id,p_user))))) then
   raise exception 'Not on this resbite' using errcode='42501';
  end if;
  select series_id into v_series from public.plans where id=p_plan;

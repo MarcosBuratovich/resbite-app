@@ -19,10 +19,15 @@
 # (3) A host's invitation (invite_contacts): V, a running weekly group. (3a) 04 leaves V and holds; 01 invites 04 in
 # the app, which waits on V's row, then finds 04 gone: 'app', a row, the leave cleared (in). (3b) 01's invitation of 04
 # (already on V: 'already') holds; 04 leaves, which waits, then goes: no row, a leave (out).
-# (4) A guest row inserted (any way in): G, a running weekly group. (4a) 03 leaves G and holds; a guest row for 03 is
-# inserted, which waits, then lands and clears the leave (in). (4b) A guest row for 05 (not on G) is inserted and held;
-# 05 leaves, which waits on G's row (the insert's key share), then finds the row: no row, a leave (out). Without the
-# for update (with for no key update) the leave would not wait, and would be refused 'Not in this group'.
+# (4) A guest row inserted (any way in): G, a running weekly group, its current occurrence G1 rolled from G0, which has
+# ended. (4a) 03 leaves G and holds; a guest row for 03 on G1 is inserted, which waits, then lands and clears the leave
+# (in). (4b) A guest row for 05 (on G0, not yet on G1) is inserted on G1 and held; 05, on the resbite through G0, gets
+# past the check before the lock, and its leave waits on G1's row (the insert's key share), then finds the row: no
+# row, a leave (out). Without the for update (with for no key update) the leave would not wait, and would be refused
+# 'Not in this group'.
+# (5) Only someone on the resbite gets as far as its row's lock (ruling GR3, review M7; circles_of_trust.sql:310): while
+# a session holds V's row, 02, with no row on V's series and no host there, calls leave_series with a 200 ms lock
+# timeout and is refused 42501 'Not in this group' at once, never waiting on the row.
 set -euo pipefail
 pg_bin="$1"
 socket="$2"
@@ -65,16 +70,18 @@ insert into public.connections(user_a,user_b,state,requested_by,accepted_at)
  values (least('$(u 01)'::uuid,'$(u 04)'::uuid),greatest('$(u 01)'::uuid,'$(u 04)'::uuid),'connected','$(u 01)',now());
 $(weekly "$(p 01)" 'Leave race one' "now()-interval '2 hours'" "now()-interval '1 hour'")
 $(weekly "$(p 31)" 'Leave race invite' "now()+interval '3 days'" "now()+interval '3 days 2 hours'")
-$(weekly "$(p 41)" 'Leave race insert' "now()+interval '4 days'" "now()+interval '4 days 2 hours'")
+$(weekly "$(p 40)" 'Leave race insert' "now()-interval '7 days 2 hours'" "now()-interval '7 days 1 hour'")
+insert into public.plans(id,owner_id,title,starts_at,ends_at,time_zone,place_label,categories,repeat_weeks,series_id,repeats_from) values
+ ('$(p 41)','$(u 01)','Leave race insert',now()+interval '4 days',now()+interval '4 days 2 hours','UTC','Hall',array['community'],1,'$(p 40)','$(p 40)');
 -- The cast's rows are made under the roll's flag: they are the cast, not answers, so they write no line.
 select set_config('resbite.system','roll',false);
 insert into public.attendees(plan_id,user_id,response) values
  ('$(p 01)','$(u 02)','accepted'),('$(p 01)','$(u 03)','accepted'),('$(p 01)','$(u 04)','accepted'),
- ('$(p 31)','$(u 04)','accepted'),('$(p 41)','$(u 03)','accepted');
+ ('$(p 31)','$(u 04)','accepted'),('$(p 41)','$(u 03)','accepted'),('$(p 40)','$(u 05)','pending');
 insert into public.plan_admins(plan_id,user_id,appointed_by) values ('$(p 01)','$(u 02)','$(u 01)');
 select set_config('resbite.system','',false);
 do \$\$ begin
- if (select count(*) from public.chats where series_id in ('$(p 01)','$(p 31)','$(p 41)') and is_group and stopped_at is null)<>3 then
+ if (select count(*) from public.chats where series_id in ('$(p 01)','$(p 31)','$(p 40)') and is_group and stopped_at is null)<>3 then
   raise exception 'The race''s plans are not running groups';
  end if;
 end \$\$;
@@ -222,7 +229,7 @@ PGAPPNAME=resbite_g2l_leave4 "$pg_bin/psql" "${args[@]}" -At >"$socket/leave-con
 \\set VERBOSITY verbose
 begin;
 $(as "$(u 03)")
-select public.leave_series('$(p 41)');
+select public.leave_series('$(p 40)');
 select pg_sleep(1);
 commit;
 SQL
@@ -238,7 +245,7 @@ leave_status=0; insert_status=0
 wait "$leave_pid" || leave_status=$?
 wait "$insert_pid" || insert_status=$?
 if [[ "$leave_status" != 0 || "$insert_status" != 0 ]] \
-  || [[ "$(q "select exists(select 1 from public.attendees where plan_id='$(p 41)' and user_id='$(u 03)')::text||','||exists(select 1 from private.series_leaves where series_id='$(p 41)' and user_id='$(u 03)')::text")" != 'true,false' ]]; then
+  || [[ "$(q "select exists(select 1 from public.attendees where plan_id='$(p 41)' and user_id='$(u 03)')::text||','||exists(select 1 from private.series_leaves where series_id='$(p 40)' and user_id='$(u 03)')::text")" != 'true,false' ]]; then
  cat "$socket/leave-concurrency-leave4.log" "$socket/leave-concurrency-insert4.log"; echo "FAIL: a guest row racing a leave did not bring 03 back"; exit 1
 fi
 # (4b) A guest row for 05 holds G's key share; 05's leave waits on it, then takes 05 out.
@@ -254,7 +261,7 @@ wait_for resbite_g2l_insert4b "wait_event='PgSleep'" "The guest row for 05 did n
 PGAPPNAME=resbite_g2l_leave4b "$pg_bin/psql" "${args[@]}" -At >"$socket/leave-concurrency-leave4b.log" 2>&1 <<SQL &
 \\set VERBOSITY verbose
 $(as "$(u 05)")
-select public.leave_series('$(p 41)');
+select public.leave_series('$(p 40)');
 SQL
 leave_pid=$!
 wait_for resbite_g2l_leave4b "wait_event_type='Lock'" "05's leave did not wait on the guest row's key share (for update)"
@@ -262,10 +269,32 @@ leave_status=0; insert_status=0
 wait "$insert_pid" || insert_status=$?
 wait "$leave_pid" || leave_status=$?
 if [[ "$leave_status" != 0 || "$insert_status" != 0 ]] \
-  || [[ "$(q "select exists(select 1 from public.attendees where plan_id='$(p 41)' and user_id='$(u 05)')::text||','||exists(select 1 from private.series_leaves where series_id='$(p 41)' and user_id='$(u 05)')::text")" != 'false,true' ]]; then
+  || [[ "$(q "select exists(select 1 from public.attendees where plan_id='$(p 41)' and user_id='$(u 05)')::text||','||exists(select 1 from private.series_leaves where series_id='$(p 40)' and user_id='$(u 05)')::text")" != 'false,true' ]]; then
  cat "$socket/leave-concurrency-insert4b.log" "$socket/leave-concurrency-leave4b.log"; echo "FAIL: a leave racing a guest row did not take 05 out"; exit 1
 fi
 echo "PASS: a leave racing a guest row ends with the person in or out, never a row and a leave"
+
+# (5) A stranger's leave takes no row lock: a session holds V's row; 02's call, with a 200 ms lock timeout, gets its
+# 42501 at once rather than waiting on the row (a lock timeout).
+PGAPPNAME=resbite_g2l_hold5 "$pg_bin/psql" "${args[@]}" >"$socket/leave-concurrency-hold5.log" 2>&1 <<SQL &
+begin;
+select 1 from public.plans where id='$(p 31)' for update;
+select pg_sleep(1);
+commit;
+SQL
+hold_pid=$!
+wait_for resbite_g2l_hold5 "wait_event='PgSleep'" "V's row holder did not become ready"
+stranger="$("$pg_bin/psql" "${args[@]}" -At 2>&1 <<SQL || true
+set lock_timeout='200ms';
+$(as "$(u 02)")
+select public.leave_series('$(p 31)');
+SQL
+)"
+wait "$hold_pid" || { cat "$socket/leave-concurrency-hold5.log"; exit 1; }
+if ! grep -q 'Not in this group' <<<"$stranger" || grep -q 'lock timeout' <<<"$stranger"; then
+ echo "$stranger"; echo "FAIL: a stranger's leave waited on the plan's row, or was not refused"; exit 1
+fi
+echo "PASS: a stranger's leave is refused before it takes the plan's row"
 
 # Cleanup: the plans (their guest rows, admins and messages go with them), the chat rows, the broadcasts, and the
 # people (their profiles, grants, sessions, connections and leaves go with them).

@@ -27,7 +27,8 @@
 --   - the restored circles roll sets no flag, so a real roll writes an admin line again for each admin it carries (chat
 --     core's Decision 4);
 --   - the restored roll skips nobody, so a person who left after the end (their row kept) is carried again at the next
---     roll (challenge NOTE 10);
+--     roll (challenge NOTE 10); and it rolls a group whose owner may use the app again, even one whose chat had closed
+--     meanwhile, since that stop time goes with the column (ruling GR3 Q1);
 --   - people in a group's chat who are not Going or Maybe, or a host, lose it at once: the one-off rule applies to every
 --     chat again (challenge NOTE 10). A group member who has not answered no longer sees its people (CH-P21);
 --   - a group's messages and announcements in a cancelled week are no longer pushed (chat core's rule, H30) (B1);
