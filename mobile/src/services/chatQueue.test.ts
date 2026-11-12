@@ -195,3 +195,25 @@ test("an account holds at most 100 unsent messages (H20)", async () => {
   assert.equal(all.find((i) => i.clientId === "c5")?.failed, true);
   assert.deepEqual(await queue.list("u2", S1), [item("c100")]);
 });
+
+test("prune takes off, in one write, every one of an account's messages that its test picks, in any series (H26 Q6)", async () => {
+  const queue = createChatQueue(disk());
+  await queue.put("u1", item("c1", S1, { failed: true }));
+  await queue.put("u1", item("c2", S2, { failed: true }));
+  await queue.put("u1", item("c3", S2));
+  await queue.put("u2", item("c4", S2, { failed: true }));
+  await queue.prune("u1", (q) => q.failed);
+  assert.deepEqual(await queue.list("u1", S1), []);
+  assert.deepEqual(await queue.list("u1", S2), [item("c3", S2)]);
+  assert.deepEqual(await queue.list("u2", S2), [item("c4", S2, { failed: true })]);
+  // It makes room under the cap.
+  for (let i = 0; i < 99; i++) await queue.put("u1", item(`f${i}`, S1, { failed: true }));
+  await assert.rejects(queue.put("u1", item("one-more", S1)), /Too many unsent messages/);
+  await queue.prune("u1", (q) => q.series === S1);
+  await queue.put("u1", item("one-more", S1));
+  // After sign-out began, it writes nothing.
+  queue.suspend("u1");
+  await assert.rejects(queue.prune("u1", () => true), /Session changed/);
+  queue.resume("u1");
+  assert.equal((await queue.list("u1", S1)).length, 1);
+});

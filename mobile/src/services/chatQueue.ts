@@ -106,6 +106,9 @@ export function createChatQueue(store: KeyStore) {
     },
     remove: (scope: string, clientId: string) =>
       change(scope, (items) => items.filter((i) => i.clientId !== clientId)),
+    /** Takes off, in one write, every message of the account that `drop` picks, in any series (H26 Q6). */
+    prune: (scope: string, drop: (item: QueuedMessage) => boolean) =>
+      change(scope, (items) => items.filter((i) => !drop(i))),
     clear: (scope: string) => {
       epochs.set(scope, epochOf(scope) + 1);
       return run(() => store.removeItem(key(scope)));

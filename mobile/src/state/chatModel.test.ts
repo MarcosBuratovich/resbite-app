@@ -1,12 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  SEEN_LIMIT,
   changedAfter,
   createCoalescer,
   merge,
   needsSummary,
   newestId,
   oldestId,
+  remember,
   replaceOrMerge,
   staleUnsent,
   withEndedLine,
@@ -153,12 +155,13 @@ test("changedAfter is the read's as_of minus two minutes, as ISO text (K-B1)", (
   assert.equal(changedAfter("2026-11-11T13:00:00+01:00"), "2026-11-11T11:58:00.000Z");
 });
 
-test("needsSummary is true for an announcement and for any state but sent (K-S12)", () => {
+test("needsSummary is true for an announcement, a system line and any state but sent (K-S12, H24 (1))", () => {
   assert.equal(needsSummary({ kind: "announcement", state: "sent" }), true);
   assert.equal(needsSummary({ kind: "message", state: "removed" }), true);
   assert.equal(needsSummary({ kind: "message", state: "deleted" }), true);
   assert.equal(needsSummary({ kind: "message", state: "sent" }), false);
-  assert.equal(needsSummary({ kind: "system", state: "sent" }), false);
+  // A joined, changed or cancelled line moves the going count, the close or the closed card.
+  assert.equal(needsSummary({ kind: "system", state: "sent" }), true);
 });
 
 function deferred() {
@@ -308,4 +311,37 @@ test("server times with microseconds are read even by an engine that takes only 
   } finally {
     Date.parse = parse;
   }
+});
+
+test("an unknown state is final: no sent copy brings its body back, even one stamped the same instant (H26 Q2)", () => {
+  const hidden = row(1, { state: "hidden" as ChatMessage["state"], body: "secret", updatedAt: "2026-11-11T12:00:05.000Z" });
+  const held = merge([], [hidden]);
+  assert.equal(held[0].body, null);
+  for (const updatedAt of ["2026-11-11T12:00:00.000Z", "2026-11-11T12:00:05.000Z", "2026-11-11T12:09:00.000Z"]) {
+    const after = merge(held, [row(1, { updatedAt })]);
+    assert.equal(after[0].state, "hidden");
+    assert.equal(after[0].body, null);
+  }
+  // It may still become removed or deleted.
+  assert.equal(merge(held, [row(1, { state: "removed", body: null, updatedAt: "2026-11-11T12:09:00.000Z" })])[0].state, "removed");
+});
+
+test("staleUnsent counts the distance either way, so a clock moved back doesn't hide an item (H26 Q4)", () => {
+  const now = Date.parse("2026-11-11T12:00:00.000Z");
+  const ahead = queued("ahead", { createdAt: "2026-11-11T12:57:00.000Z" });
+  const nearAhead = queued("near", { createdAt: "2026-11-11T12:00:09.000Z" });
+  assert.deepEqual(staleUnsent([ahead, nearAhead], now), [ahead]);
+});
+
+test("remember keeps at most SEEN_LIMIT entries, letting the oldest go first (H25)", () => {
+  const seen = new Map<number, string>();
+  for (let id = 1; id <= SEEN_LIMIT + 5; id++) remember(seen, id, `t${id}`);
+  assert.equal(seen.size, SEEN_LIMIT);
+  assert.equal(seen.has(5), false);
+  assert.equal(seen.get(6), "t6");
+  // Seen again, an entry is the newest.
+  remember(seen, 6, "t6b");
+  remember(seen, SEEN_LIMIT + 6, "x");
+  assert.equal(seen.get(6), "t6b");
+  assert.equal(seen.has(7), false);
 });

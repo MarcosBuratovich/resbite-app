@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chatErrorMessage, createChatGateway, isChatClosed, isNotInChat } from "./chat";
+import { chatErrorMessage, createChatGateway, isChatClosed, isNotInChat, serverTime } from "./chat";
 
 type Call = { fn: string; args: Record<string, unknown> };
 function gateway(data: unknown = null, error: unknown = null) {
@@ -398,4 +398,49 @@ test("an overview keeps every chat when one's last line is odd, and drops an ann
 test("a send answered with a row the app can't read is refused", async () => {
   await assert.rejects(gateway(row({ id: "abc" })).gw.send(SERIES, "hi", CLIENT));
   await assert.rejects(gateway(null).gw.announce(SERIES, "hi", "going", CLIENT));
+});
+
+test("serverTime cuts a fraction to milliseconds without rounding, and pads a short one (H24 (4), H26 Q1)", () => {
+  assert.equal(serverTime("2026-11-11T12:00:00.123456+00:00"), "2026-11-11T12:00:00.123+00:00");
+  assert.equal(serverTime("2026-11-11T12:00:00.1239+00:00"), "2026-11-11T12:00:00.123+00:00");
+  assert.equal(serverTime("2026-11-11T12:00:00.999999+00:00"), "2026-11-11T12:00:00.999+00:00");
+  assert.equal(serverTime("2026-11-11T12:00:00.12+00:00"), "2026-11-11T12:00:00.120+00:00");
+  assert.equal(serverTime("2026-11-11T12:00:00.5Z"), "2026-11-11T12:00:00.500Z");
+  assert.equal(serverTime("2026-11-11T12:00:00.123+00:00"), "2026-11-11T12:00:00.123+00:00");
+  assert.equal(serverTime("2026-11-11T12:00:00+00:00"), "2026-11-11T12:00:00+00:00");
+  assert.equal(serverTime(""), "");
+  // Not a time: left as it is.
+  assert.equal(serverTime("Bring 2.5 litres"), "Bring 2.5 litres");
+});
+
+test("every stamp the gateway reads goes through serverTime: rows, as_of, the summary's times and a change line's (H24 (4))", async () => {
+  const micro = (s: string) => `2026-11-11T12:00:0${s}+00:00`;
+  const r = row({
+    created_at: micro("0.123456"),
+    updated_at: micro("1.5"),
+    event: "changed",
+    kind: "system",
+    body: null,
+    payload: { actor: ANA, what: "time", from_start: micro("2.1239"), to_start: micro("3.12"), place_label: "Hall 2.5" },
+  });
+  const { gw } = gateway({ rows: [r], names: {}, as_of: micro("4.9876543") });
+  const page = await gw.since(SERIES, 40, null);
+  assert.equal(page.asOf, "2026-11-11T12:00:04.987+00:00");
+  assert.equal(page.rows[0].createdAt, "2026-11-11T12:00:00.123+00:00");
+  assert.equal(page.rows[0].updatedAt, "2026-11-11T12:00:01.500+00:00");
+  assert.equal(page.rows[0].payload?.from_start, "2026-11-11T12:00:02.123+00:00");
+  assert.equal(page.rows[0].payload?.to_start, "2026-11-11T12:00:03.120+00:00");
+  assert.equal(page.rows[0].payload?.place_label, "Hall 2.5");
+  const s = await gateway({
+    starts_at: micro("5.1"),
+    ends_at: micro("6.123456"),
+    closes_at: micro("7.65"),
+    pinned: row({ created_at: micro("8.000001") }),
+  }).gw.summary(SERIES);
+  assert.equal(s.startsAt, "2026-11-11T12:00:05.100+00:00");
+  assert.equal(s.endsAt, "2026-11-11T12:00:06.123+00:00");
+  assert.equal(s.closesAt, "2026-11-11T12:00:07.650+00:00");
+  assert.equal(s.pinned?.createdAt, "2026-11-11T12:00:08.000+00:00");
+  const sent = await gateway(row({ updated_at: micro("9.4444444") })).gw.send(SERIES, "x", CLIENT);
+  assert.equal(sent.updatedAt, "2026-11-11T12:00:09.444+00:00");
 });

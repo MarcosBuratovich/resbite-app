@@ -27,6 +27,8 @@ export type Chat = ChatState & {
   setMute: (muted: boolean) => Promise<boolean>;
   /** Reads the summary and the newest page again, and resends what was left behind ("Try again"). */
   refresh: () => Promise<void>;
+  /** Reads the newest page and the summary again and replaces the list (plan 3's block and unblock). */
+  replace: () => Promise<void>;
 };
 
 const listen = listenWith(supabase);
@@ -49,8 +51,6 @@ export function useChat(series: string | undefined): Chat {
   const [chat, setChat] = useState<ChatSession | null>(null);
   const [state, setState] = useState<ChatState>(IDLE);
 
-  // Before the effect that makes the chat: cleanups run in this order, so an unmount (or a move to another chat)
-  // marks the old one read before it is disposed. After sign-out began, the session check stops that write.
   useFocusEffect(useCallback(() => () => chat?.blur(), [chat]));
 
   useEffect(() => {
@@ -79,8 +79,12 @@ export function useChat(series: string | undefined): Chat {
     });
     setChat(made);
     setState(made.state());
-    // Sign-out, another account, another chat or unmount: the channel and the timers go with it.
-    return () => made.dispose();
+    // Sign-out, another account, another chat or unmount: blur first, so a chat left while on screen is marked read
+    // (the session check stops that write once sign-out began), then the channel and the timers go (H25).
+    return () => {
+      made.blur();
+      made.dispose();
+    };
   }, [ready, scope, id, captureSession]);
 
   // Focus and the return to the app both read and resend; the background stops the poll and the read marks.
@@ -102,6 +106,7 @@ export function useChat(series: string | undefined): Chat {
             remove: chat.remove,
             setMute: chat.setMute,
             refresh: chat.refresh,
+            replace: chat.replace,
           }
         : {
             loadEarlier: nothing,
@@ -114,6 +119,7 @@ export function useChat(series: string | undefined): Chat {
             remove: refused,
             setMute: refused,
             refresh: nothing,
+            replace: nothing,
           },
     [chat],
   );

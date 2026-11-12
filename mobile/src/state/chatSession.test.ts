@@ -19,7 +19,7 @@ const OFFLINE = Error("Network request failed");
 
 const flush = () => new Promise<void>((r) => setImmediate(r));
 async function settle() {
-  for (let i = 0; i < 12; i++) await flush();
+  for (let i = 0; i < 40; i++) await flush();
 }
 function deferred() {
   let resolve!: () => void;
@@ -32,8 +32,10 @@ function fakeClock(start: number) {
   let now = start,
     seq = 0;
   const timers = new Map<number, { at: number; every: number; fn: () => void }>();
-  const clock: ChatTimers & { advance(ms: number): Promise<void> } = {
+  const clock: ChatTimers & { advance(ms: number): Promise<void>; sets(): number; pending(): number } = {
     now: () => now,
+    sets: () => seq,
+    pending: () => timers.size,
     setTimeout: (fn, ms) => {
       timers.set(++seq, { at: now + Math.max(0, ms), every: 0, fn });
       return seq;
@@ -115,16 +117,28 @@ function fakeServer(clock: { now(): number }) {
   let rows: ChatMessage[] = [];
   let nextId = 100;
   let summary = baseSummary();
+  /** The server's clock minus the phone's. */
+  let skew = 0;
   const calls: Array<[Method, ...unknown[]]> = [];
   const fail: Partial<Record<Method, unknown>> = {};
+  const once: Partial<Record<Method, unknown[]>> = {};
   const gates: Partial<Record<Method, Promise<void>>> = {};
-  const asOf = () => iso(clock.now());
+  /** An answer taken when the call is made and delivered on release (a slow network, not a slow server). */
+  const holds: Partial<Record<Method, Array<ReturnType<typeof deferred>>>> = {};
+  const asOf = () => iso(clock.now() + skew);
   const sorted = () => [...rows].sort((a, b) => a.id - b.id);
   async function step(name: Method, args: unknown[]) {
     calls.push([name, ...args]);
     const gate = gates[name];
     if (gate) await gate;
+    const thrown = once[name]?.shift();
+    if (thrown) throw thrown;
     if (fail[name]) throw fail[name];
+  }
+  async function late<T>(name: Method, value: T): Promise<T> {
+    const hold = holds[name]?.shift();
+    if (hold) await hold.promise;
+    return value;
   }
   const add = (over: Partial<ChatMessage> = {}): ChatMessage => {
     const id = over.id ?? ++nextId;
@@ -139,12 +153,12 @@ function fakeServer(clock: { now(): number }) {
   const gateway: ChatGateway = {
     summary: async (series) => {
       await step("summary", [series]);
-      return summary;
+      return late("summary", summary);
     },
     messages: async (series, before = null, limit = 50) => {
       await step("messages", [series, before, limit]);
       const list = sorted().filter((r) => before === null || r.id < before);
-      return { rows: list.slice(-limit), names: { [LEO]: "Leo" }, asOf: asOf() };
+      return late("messages", { rows: list.slice(-limit), names: { [LEO]: "Leo" }, asOf: asOf() });
     },
     since: async (series, after, changedAfter) => {
       await step("since", [series, after, changedAfter]);
@@ -152,11 +166,11 @@ function fakeServer(clock: { now(): number }) {
         (r) =>
           r.id > (after ?? 0) || (changedAfter !== null && Date.parse(r.updatedAt) > Date.parse(changedAfter)),
       );
-      return { rows: list.slice(0, 200), names: { [LEO]: "Leo" }, asOf: asOf() };
+      return late("since", { rows: list.slice(0, 200), names: { [LEO]: "Leo" }, asOf: asOf() });
     },
     send: async (series, body, clientId) => {
       await step("send", [series, body, clientId]);
-      return rows.find((r) => r.clientId === clientId) ?? add({ body, clientId, authorId: ME });
+      return late("send", rows.find((r) => r.clientId === clientId) ?? add({ body, clientId, authorId: ME }));
     },
     announce: async (series, body, audience, clientId) => {
       await step("announce", [series, body, audience, clientId]);
@@ -185,7 +199,19 @@ function fakeServer(clock: { now(): number }) {
   return {
     gateway,
     calls: (name: Method) => calls.filter((c) => c[0] === name).map((c) => c.slice(1)),
+    callCount: () => calls.length,
     fail,
+    failOnce(name: Method, e: unknown) {
+      (once[name] ??= []).push(e);
+    },
+    hold(name: Method) {
+      const d = deferred();
+      (holds[name] ??= []).push(d);
+      return d;
+    },
+    skewBy(ms: number) {
+      skew = ms;
+    },
     gates,
     add,
     change,
@@ -215,10 +241,11 @@ function memoryDisk() {
   };
 }
 
-function setup() {
+function setup(opts: { queue?: ReturnType<typeof createChatQueue> } = {}) {
   const clock = fakeClock(START);
   const server = fakeServer(clock);
-  const queue = createChatQueue(memoryDisk());
+  const queue = opts.queue ?? createChatQueue(memoryDisk());
+  const states: ChatState[] = [];
   const channels: FakeChannel[] = [];
   let uuid = 0;
   let current = true;
@@ -242,11 +269,20 @@ function setup() {
     newId: () => `client-${++uuid}`,
     timers: clock,
     current: () => current,
-    onChange: () => {},
+    onChange: (next) => void states.push(next),
   });
   const state = (): ChatState => session.state();
   const ids = () => state().messages.map((m) => m.id);
   const latest = () => channels[channels.length - 1];
+  const openChannels = () => channels.filter((c) => !c.removed).length;
+  /** What a call landing after the session ended must leave as it is (H25). */
+  const snapshot = () => ({
+    state: state(),
+    channels: channels.length,
+    open: openChannels(),
+    timers: clock.sets(),
+    calls: server.callCount(),
+  });
   return {
     clock,
     server,
@@ -254,8 +290,11 @@ function setup() {
     channels,
     session,
     state,
+    states,
     ids,
     latest,
+    openChannels,
+    snapshot,
     endSession: () => (current = false),
     async open() {
       session.focus();
@@ -551,7 +590,7 @@ test("the summary is read again when now reaches closesAt, by its timer, without
   assert.equal(t.server.calls("summary").length, 2);
 });
 
-test("the minute tick reads the summary while a passed closesAt still says open (a phone clock ahead, K-S10)", async () => {
+test("a passed closesAt that still says open is asked again three times a second apart, then by the minute tick (K-S10, H26 Q7)", async () => {
   const t = setup();
   t.server.seed(1);
   t.server.setSummary({ closesAt: iso(START - 1_000) });
@@ -559,8 +598,28 @@ test("the minute tick reads the summary while a passed closesAt still says open 
   t.latest().on.status("SUBSCRIBED");
   await settle();
   assert.equal(t.server.calls("summary").length, 1);
-  await t.clock.advance(60_000);
+  await t.clock.advance(3_000);
+  assert.equal(t.server.calls("summary").length, 4);
+  await t.clock.advance(56_000);
+  assert.equal(t.server.calls("summary").length, 4);
+  await t.clock.advance(1_000);
+  assert.equal(t.server.calls("summary").length, 5);
+});
+
+test("a server a moment behind at the close: the closed card comes a second later, not a minute (H26 Q7)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  const close = START + 30 * 60_000;
+  t.server.setSummary({ closesAt: iso(close) });
+  await t.open();
+  t.latest().on.status("SUBSCRIBED");
+  await settle();
+  await t.clock.advance(close - START);
   assert.equal(t.server.calls("summary").length, 2);
+  assert.equal(t.state().summary?.open, true);
+  t.server.setSummary({ open: false });
+  await t.clock.advance(1_000);
+  assert.equal(t.state().summary?.open, false);
 });
 
 test("send queues the message first, sends it with its client id and takes it off the queue once sent (K-S7)", async () => {
@@ -583,6 +642,8 @@ test("send queues the message first, sends it with its client id and takes it of
   delete t.server.gates.send;
   gate.resolve();
   assert.equal(await sent, true);
+  // Sent: it stays as pending until a read brings its row, which the send asks for (H26 D2, D3).
+  assert.deepEqual(t.state().pending.map((q) => q.clientId), ["client-1"]);
   await settle();
   assert.deepEqual(await t.queue.list(ME, SERIES), []);
   assert.deepEqual(t.state().pending, []);
@@ -634,10 +695,15 @@ test("42501 or 'Chat closed' marks the message failed and nothing resends it; 'C
   assert.deepEqual(t.state().pending.map((q) => q.failed), [true]);
   assert.equal(t.server.calls("summary").length, summaries + 1);
   assert.equal(t.state().summary?.open, false);
+  // Closed while on screen: the failed bubble stays for this visit, so its text can still be read.
+  assert.deepEqual(t.state().pending.map((q) => q.body), ["Thanks all"]);
   t.session.blur();
   await t.clock.advance(30_000);
   await t.open();
   assert.equal(t.server.calls("send").length, 1);
+  // The next visit reads it closed: nothing here can be sent, so its unsent messages go (H26 Q6).
+  assert.deepEqual(t.state().pending, []);
+  assert.deepEqual(await t.queue.list(ME, SERIES), []);
 
   const u = setup();
   u.server.seed(1);
@@ -705,6 +771,7 @@ test("a queue write after sign-out ('Session changed') sends nothing; the 101st 
   await t.queue.remove(ME, "other-0");
   assert.equal(await t.session.retry("client-2"), true);
   assert.deepEqual(t.server.calls("send"), [[SERIES, "one too many", "client-2"]]);
+  await settle();
   assert.deepEqual(t.state().pending, []);
 });
 
@@ -759,7 +826,7 @@ test("a refocus after a gap replaces the list; one that reaches the cached newes
   assert.deepEqual(t.ids(), range(101, 205));
 });
 
-test("the chat is marked read after every fetch while focused and looking, and on blur; never twice for one id (K-S11)", async () => {
+test("the chat is marked read after every fetch while focused and looking, and on blur while looking; never twice for one id (K-S11)", async () => {
   const t = setup();
   t.server.seed(3);
   await t.open();
@@ -770,7 +837,7 @@ test("the chat is marked read after every fetch while focused and looking, and o
   t.latest().on.signal({ id: 104, kind: "message", state: "sent" });
   await settle();
   assert.deepEqual(t.server.calls("markRead"), [[SERIES, 103], [SERIES, 104]]);
-  // In the background nobody is looking: the fetch lands, and the mark waits for the blur.
+  // In the background nobody is looking: the fetch lands, and neither it nor a blur then marks it (H26 Q3).
   t.session.background();
   t.server.add();
   t.latest().on.signal({ id: 105, kind: "message", state: "sent" });
@@ -778,6 +845,9 @@ test("the chat is marked read after every fetch while focused and looking, and o
   assert.deepEqual(t.ids().at(-1), 105);
   assert.equal(t.server.calls("markRead").length, 2);
   t.session.blur();
+  assert.equal(t.server.calls("markRead").length, 2);
+  // Seen at the next focus.
+  await t.open();
   assert.deepEqual(t.server.calls("markRead").at(-1), [SERIES, 105]);
   // A read that lands after the blur marks nothing.
   const u = setup();
@@ -920,4 +990,644 @@ test("listenWith opens chat:<series> as a private channel, hears its chat broadc
   early.remove();
   await settle();
   assert.equal(made.length, 1);
+});
+
+// ---- Fix round 1: H24 amended, H25, H26 ----
+
+/** Nothing changed: the same state, no channel opened, no timer set and no call made, a mark included (H25). */
+async function untouched(t: ReturnType<typeof setup>, before: ReturnType<ReturnType<typeof setup>["snapshot"]>) {
+  await settle();
+  await t.clock.advance(60_000);
+  assert.equal(t.state(), before.state);
+  assert.equal(t.channels.length, before.channels);
+  assert.equal(t.openChannels(), before.open);
+  assert.equal(t.clock.sets(), before.timers);
+  assert.equal(t.server.callCount(), before.calls);
+}
+
+test("the session ending while a since is in flight: nothing applied, no channel, no timer, no mark (H25)", async () => {
+  const t = setup();
+  t.server.seed(3);
+  await t.open();
+  t.latest().on.status("SUBSCRIBED");
+  await settle();
+  const gate = deferred();
+  t.server.gates.since = gate.promise;
+  t.server.add({ kind: "announcement", audience: "going", body: "Late news" });
+  t.latest().on.signal({ id: 104, kind: "announcement", state: "sent" });
+  await settle();
+  const before = t.snapshot();
+  t.endSession();
+  delete t.server.gates.since;
+  gate.resolve();
+  await untouched(t, before);
+});
+
+test("the session ending while a newest page is in flight: nothing applied, no channel, no timer, no mark (H25)", async () => {
+  const t = setup();
+  t.server.seed(3);
+  t.server.fail.summary = NOT_IN_CHAT;
+  await t.open();
+  delete t.server.fail.summary;
+  assert.equal(t.openChannels(), 0);
+  const gate = deferred();
+  t.server.gates.messages = gate.promise;
+  void t.session.refresh();
+  await settle();
+  const before = t.snapshot();
+  t.endSession();
+  delete t.server.gates.messages;
+  gate.resolve();
+  await untouched(t, before);
+  assert.equal(t.openChannels(), 0);
+});
+
+test("the session ending while a summary read is in flight: nothing applied, no timer, no mark (H25)", async () => {
+  const t = setup();
+  t.server.seed(3);
+  await t.open();
+  t.latest().on.status("SUBSCRIBED");
+  await settle();
+  const gate = deferred();
+  t.server.gates.summary = gate.promise;
+  t.server.setSummary({ closesAt: iso(START + 3_600_000) });
+  const pinned = t.server.add({ kind: "announcement", audience: "going", body: "Moved" });
+  t.server.setSummary({ pinned });
+  t.latest().on.signal({ id: pinned.id, kind: "announcement", state: "sent" });
+  await settle();
+  assert.equal(t.server.calls("summary").length, 2);
+  const before = t.snapshot();
+  t.endSession();
+  delete t.server.gates.summary;
+  gate.resolve();
+  await untouched(t, before);
+});
+
+test("the session ending while an earlier page is in flight: nothing applied (H25)", async () => {
+  const t = setup();
+  t.server.seed(120);
+  await t.open();
+  const gate = deferred();
+  t.server.gates.messages = gate.promise;
+  const earlier = t.session.loadEarlier();
+  await settle();
+  const before = t.snapshot();
+  t.endSession();
+  delete t.server.gates.messages;
+  gate.resolve();
+  await earlier;
+  await untouched(t, before);
+});
+
+test("the session ending while a send is in flight: nothing applied and nothing read (H25)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  await t.open();
+  const gate = deferred();
+  t.server.gates.send = gate.promise;
+  const sent = t.session.send("signing out");
+  await settle();
+  const before = t.snapshot();
+  t.endSession();
+  delete t.server.gates.send;
+  gate.resolve();
+  await sent;
+  await untouched(t, before);
+});
+
+test("the session ending while the resend lists the queue: nothing is sent (H25)", async () => {
+  const queue = createChatQueue(memoryDisk());
+  await queue.put(ME, queuedItem("left", START - 60_000));
+  const slow = deferred();
+  const list = queue.list;
+  const t = setup({
+    queue: {
+      ...queue,
+      list: async (scope: string, series: string) => {
+        const found = await list(scope, series);
+        await slow.promise;
+        return found;
+      },
+    },
+  });
+  t.server.seed(1);
+  await t.open();
+  const before = t.snapshot();
+  t.endSession();
+  slow.resolve();
+  await untouched(t, before);
+  assert.equal(t.server.calls("send").length, 0);
+});
+
+test("the resend never sends again what is still being sent (H25)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  await t.queue.put(ME, queuedItem("left", START - 60_000));
+  const gate = deferred();
+  t.server.gates.send = gate.promise;
+  await t.open();
+  assert.equal(t.server.calls("send").length, 1);
+  // The check 10 seconds after focus, and the return to the app, find it still on its way.
+  await t.clock.advance(10_000);
+  t.session.background();
+  t.session.focus();
+  await settle();
+  assert.equal(t.server.calls("send").length, 1);
+  delete t.server.gates.send;
+  gate.resolve();
+  await settle();
+  assert.equal(t.server.calls("send").length, 1);
+  assert.deepEqual(t.state().pending, []);
+});
+
+test("a refocus reads the newest page, then a since from the last read's cursor, so older loaded rows change too (H26 D1)", async () => {
+  // Back from the background after an hour: a removal outside the newest page.
+  const t = setup();
+  t.server.seed(50);
+  await t.clock.advance(180_000);
+  await t.open();
+  t.latest().on.status("SUBSCRIBED");
+  await settle();
+  t.session.background();
+  await t.clock.advance(10 * 60_000);
+  t.server.change(105, { state: "removed", body: null });
+  t.server.seed(10);
+  await t.clock.advance(50 * 60_000);
+  t.session.focus();
+  await settle();
+  const removed = t.state().messages.find((m) => m.id === 105);
+  assert.equal(removed?.state, "removed");
+  assert.equal(removed?.body, null);
+  assert.deepEqual(t.ids(), range(101, 160));
+  assert.equal(t.server.calls("since").at(-1)?.[2], iso(START + 60_000));
+
+  // Back from another screen, with earlier pages loaded.
+  const u = setup();
+  u.server.seed(200);
+  await u.clock.advance(180_000);
+  await u.open();
+  await u.session.loadEarlier();
+  u.latest().on.status("SUBSCRIBED");
+  await settle();
+  u.session.blur();
+  await u.clock.advance(180_000);
+  u.server.change(160, { state: "removed", body: null });
+  await u.clock.advance(180_000);
+  await u.open();
+  assert.equal(u.state().messages.find((m) => m.id === 160)?.state, "removed");
+  assert.deepEqual(u.ids(), range(151, 300));
+});
+
+test("a refocus whose since fails keeps the old cursor, so the next read still looks back far enough (H26 D1)", async () => {
+  const t = setup();
+  t.server.seed(60);
+  await t.clock.advance(180_000);
+  await t.open();
+  await t.session.loadEarlier();
+  assert.deepEqual(t.ids(), range(101, 160));
+  t.latest().on.status("SUBSCRIBED");
+  await settle();
+  t.session.blur();
+  await t.clock.advance(60_000);
+  t.server.change(105, { state: "removed", body: null });
+  // Long enough that the page's own as_of, minus the overlap, would miss it.
+  await t.clock.advance(540_000);
+  t.server.failOnce("since", OFFLINE);
+  await t.open();
+  assert.equal(t.state().messages.find((m) => m.id === 105)?.state, "sent");
+  t.latest().on.status("SUBSCRIBED");
+  await settle();
+  assert.equal(t.state().messages.find((m) => m.id === 105)?.state, "removed");
+});
+
+test("a send landing during a refocus read leaves no hole: the page alone decides, and the row arrives by a read (H26 D2)", async () => {
+  const t = setup();
+  t.server.seed(3);
+  await t.open();
+  t.session.blur();
+  await t.clock.advance(60_000);
+  t.server.seed(60);
+  await t.clock.advance(300_000);
+  const hold = t.server.hold("messages");
+  t.session.focus();
+  await settle();
+  assert.equal(await t.session.send("on my way"), true);
+  hold.resolve();
+  await settle();
+  const ids = t.ids();
+  assert.deepEqual(ids, range(114, 164));
+  assert.equal(t.state().hasEarlier, true);
+  assert.deepEqual(t.state().pending, []);
+});
+
+test("a send landing during a gap reload stays pending until its row is on screen (H26 D3)", async () => {
+  const t = setup();
+  t.server.seed(3);
+  await t.open();
+  t.latest().on.status("SUBSCRIBED");
+  await settle();
+  await t.clock.advance(1_000);
+  t.server.seed(210);
+  const hold = t.server.hold("messages");
+  t.latest().on.signal({ id: 313, kind: "message", state: "sent" });
+  await settle();
+  const from = t.states.length;
+  await t.session.send("me too");
+  hold.resolve();
+  await settle();
+  const mine = (s: ChatState) =>
+    s.pending.some((p) => p.body === "me too") || s.messages.some((m) => m.body === "me too");
+  assert.ok(t.states.slice(from).every(mine));
+  assert.ok(t.state().messages.some((m) => m.body === "me too" && m.clientId === "client-1"));
+  assert.deepEqual(t.state().pending, []);
+});
+
+test("an item left behind under 10 seconds is resent by the check 10 seconds after focus; retry takes it once stale (H26 D4)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  await t.queue.put(ME, queuedItem("left-1", START - 4_000));
+  await t.open();
+  t.latest().on.status("SUBSCRIBED");
+  await settle();
+  assert.equal(t.server.calls("send").length, 0);
+  assert.equal(await t.session.retry("left-1"), false);
+  await t.clock.advance(10_000);
+  assert.deepEqual(t.server.calls("send"), [[SERIES, "queued left-1", "left-1"]]);
+  assert.deepEqual(t.state().pending, []);
+
+  const u = setup();
+  u.server.seed(1);
+  await u.queue.put(ME, queuedItem("left-2", START - 4_000));
+  await u.open();
+  await u.clock.advance(7_000);
+  assert.equal(await u.session.retry("left-2"), true);
+  await u.clock.advance(10_000);
+  assert.deepEqual(u.server.calls("send").map((c) => c[2]), ["left-2"]);
+});
+
+test("an item stamped in the phone's future (a clock moved back) is stale too, and resent (H26 Q4)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  await t.queue.put(ME, queuedItem("ahead", START + 3_600_000));
+  await t.open();
+  assert.deepEqual(t.server.calls("send").map((c) => c[2]), ["ahead"]);
+});
+
+test("a discard while the resend lists the queue is final: the item never comes back and is never sent (H26 D5)", async () => {
+  const queue = createChatQueue(memoryDisk());
+  let slow: ReturnType<typeof deferred> | null = null;
+  const list = queue.list;
+  const t = setup({
+    queue: {
+      ...queue,
+      list: async (scope: string, series: string) => {
+        const found = await list(scope, series);
+        if (slow) await slow.promise;
+        return found;
+      },
+    },
+  });
+  t.server.seed(1);
+  await t.open();
+  t.server.fail.send = OFFLINE;
+  await t.session.send("typo");
+  delete t.server.fail.send;
+  slow = deferred();
+  t.session.background();
+  t.session.focus();
+  await settle();
+  await t.session.discard("client-1");
+  assert.deepEqual(t.state().pending, []);
+  slow.resolve();
+  await settle();
+  assert.deepEqual(t.state().pending, []);
+  assert.deepEqual(await list(ME, SERIES), []);
+
+  // A left-behind item, discarded while the 10-second check lists the queue.
+  const queue2 = createChatQueue(memoryDisk());
+  await queue2.put(ME, queuedItem("left-5", START - 4_000, { body: "never mind" }));
+  let slow2: ReturnType<typeof deferred> | null = null;
+  const list2 = queue2.list;
+  const u = setup({
+    queue: {
+      ...queue2,
+      list: async (scope: string, series: string) => {
+        const found = await list2(scope, series);
+        if (slow2) await slow2.promise;
+        return found;
+      },
+    },
+  });
+  u.server.seed(1);
+  await u.open();
+  slow2 = deferred();
+  await u.clock.advance(10_000);
+  await u.session.discard("left-5");
+  slow2.resolve();
+  await settle();
+  assert.equal(u.server.calls("send").length, 0);
+  assert.deepEqual(u.state().pending, []);
+  assert.deepEqual(await list2(ME, SERIES), []);
+});
+
+test("a discard of a message waiting behind a slow send takes effect when that send settles (H25)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  await t.open();
+  t.server.fail.send = OFFLINE;
+  await t.session.send("first");
+  await t.session.send("second");
+  delete t.server.fail.send;
+  const gate = deferred();
+  t.server.gates.send = gate.promise;
+  const first = t.session.retry("client-1");
+  const second = t.session.retry("client-2");
+  await settle();
+  await t.session.discard("client-2");
+  assert.deepEqual(t.state().pending.map((p) => p.clientId), ["client-1"]);
+  delete t.server.gates.send;
+  gate.resolve();
+  assert.equal(await first, true);
+  assert.equal(await second, false);
+  await settle();
+  assert.deepEqual(t.server.calls("send").map((c) => c[1]), ["first", "second", "first"]);
+  assert.deepEqual(await t.queue.list(ME, SERIES), []);
+  assert.deepEqual(t.state().pending, []);
+});
+
+test("a summary need lasts until a summary read succeeds (H26 D6)", async () => {
+  const t = setup();
+  const pinned = t.server.add({ kind: "announcement", audience: "everyone", body: "Bring hats" });
+  t.server.seed(3);
+  t.server.setSummary({ pinned });
+  await t.clock.advance(180_000);
+  await t.open();
+  await t.clock.advance(5_000);
+  t.server.change(pinned.id, { state: "removed", body: null });
+  t.server.setSummary({ pinned: null });
+  t.server.failOnce("summary", OFFLINE);
+  await t.clock.advance(15_000);
+  assert.equal(t.state().summary?.pinned?.id, pinned.id);
+  await t.clock.advance(20_000);
+  assert.equal(t.state().summary?.pinned, null);
+});
+
+test("after 'Not in this chat' a send that lands changes nothing on screen, and a new send is refused here (H26 D9, Q5)", async () => {
+  const t = setup();
+  t.server.seed(3);
+  await t.open();
+  t.latest().on.status("SUBSCRIBED");
+  await settle();
+  const gate = deferred();
+  t.server.gates.send = gate.promise;
+  const sent = t.session.send("hi");
+  await settle();
+  t.server.failOnce("since", NOT_IN_CHAT);
+  t.latest().on.signal({ id: 104, kind: "message", state: "sent" });
+  await settle();
+  delete t.server.gates.send;
+  gate.resolve();
+  await sent;
+  await settle();
+  assert.deepEqual(t.state().messages, []);
+  assert.deepEqual(t.state().pending, []);
+  assert.equal(t.state().error, CHAT_COPY.notInChat);
+  // The server has it, so it leaves the queue.
+  assert.deepEqual(await t.queue.list(ME, SERIES), []);
+  assert.equal(await t.session.send("anyone?"), false);
+  assert.equal(t.server.calls("send").length, 1);
+  assert.deepEqual(await t.queue.list(ME, SERIES), []);
+});
+
+test("a chat still refusing at the next focus loses its failed messages; one that lets the person back in keeps them (H26 Q5)", async () => {
+  const t = setup();
+  t.server.seed(3);
+  await t.open();
+  t.server.fail.send = NOT_IN_CHAT;
+  await t.session.send("hello?");
+  await settle();
+  assert.deepEqual((await t.queue.list(ME, SERIES)).map((q) => q.failed), [true]);
+  t.session.blur();
+  t.server.fail.summary = NOT_IN_CHAT;
+  await t.open();
+  assert.deepEqual(await t.queue.list(ME, SERIES), []);
+
+  const u = setup();
+  u.server.seed(3);
+  await u.open();
+  u.server.fail.send = NOT_IN_CHAT;
+  await u.session.send("hello?");
+  await settle();
+  delete u.server.fail.send;
+  u.session.blur();
+  await u.open();
+  assert.deepEqual(u.state().pending.map((p) => [p.body, p.failed]), [["hello?", true]]);
+});
+
+test("failed messages over 7 days old leave the queue at any chat's focus, so a dead chat can't fill it (H26 Q6)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  for (let i = 0; i < 99; i++)
+    await t.queue.put(ME, queuedItem(`old-${i}`, START - 8 * 86_400_000, { series: OTHER_SERIES, failed: true }));
+  await t.queue.put(ME, queuedItem("recent", START - 6 * 86_400_000, { series: OTHER_SERIES, failed: true }));
+  await t.open();
+  assert.deepEqual((await t.queue.list(ME, OTHER_SERIES)).map((q) => q.clientId), ["recent"]);
+  assert.equal(await t.session.send("room now"), true);
+});
+
+test("a chat that reads closed at focus drops its unsent messages; other chats keep theirs (H26 Q6)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  t.server.setSummary({ open: false, closesAt: iso(START - 1_000) });
+  await t.queue.put(ME, queuedItem("failed-here", START - 60_000, { failed: true }));
+  await t.queue.put(ME, queuedItem("left-here", START - 60_000));
+  await t.queue.put(ME, queuedItem("elsewhere", START - 60_000, { series: OTHER_SERIES, failed: true }));
+  await t.open();
+  assert.equal(t.server.calls("send").length, 0);
+  assert.deepEqual(t.state().pending, []);
+  assert.deepEqual(await t.queue.list(ME, SERIES), []);
+  assert.deepEqual((await t.queue.list(ME, OTHER_SERIES)).map((q) => q.clientId), ["elsewhere"]);
+});
+
+test("the close is timed by the server's clock, from each read's as_of: a phone an hour slow closes on time (H26 Q8)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  t.server.skewBy(3_600_000);
+  // By the server, the close is in 30 minutes; by this phone, in an hour and a half.
+  t.server.setSummary({ closesAt: iso(START + 3_600_000 + 1_800_000) });
+  await t.open();
+  t.latest().on.status("SUBSCRIBED");
+  await settle();
+  assert.ok(Math.abs(t.state().clockOffset - 3_600_000) < 1_000);
+  t.server.setSummary({ open: false });
+  await t.clock.advance(1_800_000 - 1);
+  assert.equal(t.server.calls("summary").length, 1);
+  await t.clock.advance(1);
+  assert.equal(t.server.calls("summary").length, 2);
+  assert.equal(t.state().summary?.open, false);
+});
+
+test("a phone a day fast doesn't read the summary every minute: the server says the close is a day away (H26 Q9)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  t.server.skewBy(-86_400_000);
+  t.server.setSummary({ closesAt: iso(START) });
+  await t.open();
+  t.latest().on.status("SUBSCRIBED");
+  await settle();
+  assert.ok(Math.abs(t.state().clockOffset + 86_400_000) < 1_000);
+  await t.clock.advance(3_600_000);
+  assert.equal(t.server.calls("summary").length, 1);
+  assert.equal(t.server.calls("since").length, 1);
+});
+
+test("the return to the app is a new start for the channel: the error count resets and a closed channel is replaced (H25 Q1)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  await t.open();
+  for (let i = 0; i < 3; i++) t.latest().on.status("CHANNEL_ERROR");
+  assert.equal(t.latest().removed, true);
+  t.session.background();
+  t.session.focus();
+  await settle();
+  assert.equal(t.channels.length, 2);
+  assert.equal(t.latest().removed, false);
+  // The server closed it.
+  t.latest().on.status("CLOSED");
+  t.session.background();
+  t.session.focus();
+  await settle();
+  assert.equal(t.channels.length, 3);
+  assert.equal(t.channels[1].removed, true);
+  assert.equal(t.openChannels(), 1);
+  // A channel that is fine stays.
+  t.latest().on.status("SUBSCRIBED");
+  t.session.background();
+  t.session.focus();
+  await settle();
+  assert.equal(t.channels.length, 3);
+});
+
+test("a read that fails while subscribed is tried again after 5 seconds, then every 20 (H26 Q11)", async () => {
+  const t = setup();
+  t.server.seed(3);
+  await t.open();
+  t.latest().on.status("SUBSCRIBED");
+  await settle();
+  t.server.add();
+  t.server.failOnce("since", OFFLINE);
+  t.server.failOnce("since", OFFLINE);
+  t.latest().on.signal({ id: 104, kind: "message", state: "sent" });
+  await settle();
+  const reads = t.server.calls("since").length;
+  await t.clock.advance(4_999);
+  assert.equal(t.server.calls("since").length, reads);
+  await t.clock.advance(1);
+  assert.equal(t.server.calls("since").length, reads + 1);
+  assert.equal(t.ids().includes(104), false);
+  await t.clock.advance(19_999);
+  assert.equal(t.server.calls("since").length, reads + 1);
+  await t.clock.advance(1);
+  assert.equal(t.ids().includes(104), true);
+  assert.equal(t.state().error, null);
+  // Recovered: nothing more.
+  await t.clock.advance(120_000);
+  assert.equal(t.server.calls("since").length, reads + 2);
+});
+
+test("after a gap reload the cursor doesn't look back past it: a 250-row burst with signals every 10 s reloads once (H24 (2))", async () => {
+  const t = setup();
+  t.server.seed(250);
+  await t.clock.advance(180_000);
+  await t.open();
+  t.latest().on.status("SUBSCRIBED");
+  await settle();
+  await t.clock.advance(1_000);
+  for (let id = 101; id <= 330; id++) t.server.change(id, { state: "deleted", body: null });
+  const pages = t.server.calls("messages").length;
+  for (let i = 0; i < 15; i++) {
+    t.server.add();
+    t.latest().on.signal({ id: 351 + i, kind: "message", state: "sent" });
+    await settle();
+    await t.clock.advance(10_000);
+  }
+  assert.equal(t.server.calls("messages").length - pages, 1);
+  assert.deepEqual(t.ids().slice(-15), range(351, 365));
+  // Once as_of − 2 minutes is past the reload, the cursor follows as_of again.
+  const cursors = t.server.calls("since").slice(-2).map((c) => Date.parse(c[2] as string));
+  assert.equal(cursors[1] - cursors[0], 10_000);
+});
+
+test("replace reads the newest page and the summary again and replaces the list (H25, for plan 3's block)", async () => {
+  const t = setup();
+  t.server.seed(120);
+  await t.open();
+  await t.session.loadEarlier();
+  assert.deepEqual(t.ids(), range(101, 220));
+  const summaries = t.server.calls("summary").length;
+  await t.session.replace();
+  assert.deepEqual(t.ids(), range(171, 220));
+  assert.equal(t.state().hasEarlier, true);
+  assert.equal(t.server.calls("summary").length, summaries + 1);
+});
+
+test("listenWith reports a channel that can't be made as an error, and the poll carries the chat (H25)", async () => {
+  const statuses: string[] = [];
+  const client = {
+    getChannels: () => [],
+    channel(): never {
+      throw Error("WebSocket not available");
+    },
+    removeChannel: async () => "ok",
+  };
+  listenWith(client)(SERIES, { signal: () => {}, status: (s) => statuses.push(s) });
+  await settle();
+  assert.deepEqual(statuses, ["CHANNEL_ERROR"]);
+});
+
+test("a resent message the server already holds below the loaded rows leaves pending at once, and not after the session ended (H25)", async () => {
+  const t = setup();
+  t.server.add({ id: 105, clientId: "old-one", authorId: ME, body: "queued old-one" });
+  t.server.seed(120);
+  await t.queue.put(ME, queuedItem("old-one", START - 60_000));
+  await t.open();
+  assert.equal(t.state().hasEarlier, true);
+  assert.deepEqual(t.server.calls("send").map((c) => c[2]), ["old-one"]);
+  assert.deepEqual(t.state().pending, []);
+  assert.equal(t.ids().includes(105), false);
+
+  const u = setup();
+  u.server.add({ id: 105, clientId: "old-one", authorId: ME, body: "queued old-one" });
+  u.server.seed(120);
+  await u.queue.put(ME, queuedItem("old-one", START - 60_000));
+  const gate = deferred();
+  u.server.gates.send = gate.promise;
+  await u.open();
+  assert.deepEqual(u.state().pending.map((p) => p.clientId), ["old-one"]);
+  const before = u.snapshot();
+  u.endSession();
+  delete u.server.gates.send;
+  gate.resolve();
+  await untouched(u, before);
+});
+
+test("a summary need raised while an older summary read is in flight outlives that read's answer (H26 D6)", async () => {
+  const t = setup();
+  t.server.seed(1);
+  t.server.setSummary({ closesAt: iso(START + 30_000) });
+  await t.open();
+  t.latest().on.status("SUBSCRIBED");
+  await settle();
+  await t.clock.advance(25_000);
+  const hold = t.server.hold("summary");
+  const pinned = t.server.add({ kind: "announcement", audience: "going", body: "Five minutes" });
+  t.server.setSummary({ pinned });
+  t.latest().on.signal({ id: pinned.id, kind: "announcement", state: "sent" });
+  await settle();
+  // The close comes while that read, answered as of before it, is still on its way.
+  await t.clock.advance(5_000);
+  t.server.setSummary({ open: false });
+  hold.resolve();
+  await settle();
+  assert.equal(t.state().summary?.open, false);
 });

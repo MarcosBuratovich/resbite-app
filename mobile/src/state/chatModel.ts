@@ -1,4 +1,4 @@
-import type { ChatMessage, ChatSummary } from "../services/chat";
+import { serverTime, type ChatMessage, type ChatSummary } from "../services/chat";
 import type { QueuedMessage } from "../services/chatQueue";
 import { planEnd } from "../domain/planEnd";
 
@@ -11,20 +11,22 @@ export const SINCE_LIMIT = 200;
 export const SINCE_OVERLAP_MS = 120_000;
 /** An unsent message older than this was left behind (the app was closed mid-send) and is sent again (K-S7). */
 export const STALE_UNSENT_MS = 10_000;
+/** The most rows a session remembers having seen outside its list (H25). */
+export const SEEN_LIMIT = 500;
 
 /** A message written on this phone that the server hasn't confirmed: "Sending…", or "Not sent. Tap to retry." */
 export type PendingMessage = { kind: "pending"; clientId: string; body: string; createdAt: string; failed: boolean };
 /** The computed separator at a one-off's end, "<title> ended" (K-S16). Nothing stores it. */
 export type EndedLine = { kind: "ended"; at: string };
 
-const trimmed = (iso: string) => iso.replace(/(\.\d{3})\d+/, "$1");
 /**
- * A server time in ms. Postgres writes microseconds ("…:00.123456+00:00"); only the milliseconds are kept, so an
- * engine whose `Date.parse` takes three fractional digits at most still reads the cursor. NaN when it can't be read.
+ * A server time in ms, read through the gateway's `serverTime` (milliseconds exactly), so an engine whose
+ * `Date.parse` takes three fractional digits still reads the cursor. NaN when it can't be read.
  */
-export const instantOf = (iso: string): number => Date.parse(trimmed(iso));
+export const instantOf = (iso: string): number => Date.parse(serverTime(iso));
 
-const isFinal = (m: ChatMessage) => m.state === "deleted" || m.state === "removed";
+/** Only `sent` shows a body; `deleted`, `removed` and any state this build doesn't know are final (H26 Q2). */
+const isFinal = (m: ChatMessage) => m.state !== "sent";
 /** Only a `sent` row has a body to show; a removal or deletion that arrives with one shows none. */
 const shown = (m: ChatMessage): ChatMessage => (m.state === "sent" || m.body === null ? m : { ...m, body: null });
 
@@ -67,24 +69,31 @@ export function merge(messages: ChatMessage[], incoming: ChatMessage[], keepOlde
   return changed ? [...byId.values()].sort((a, b) => a.id - b.id) : messages;
 }
 
+/** The newest page starts above everything held: what lies between was never read (K-B1). */
+export function pageReplaces(cached: ChatMessage[], page: ChatMessage[]): boolean {
+  const held = newestId(cached);
+  const pageOldest = oldestId(page);
+  return held !== null && pageOldest !== null && pageOldest > held;
+}
+
 /**
  * The list after a focus read the newest page (K-B1). When the page's oldest id is above the cached newest id, what
  * lies between was never read: the page replaces the list. Otherwise it merges, and the page's rows below the cached
  * oldest are kept, since the page is one stretch down from the newest.
  */
 export function replaceOrMerge(cached: ChatMessage[], page: ChatMessage[]): ChatMessage[] {
-  const held = newestId(cached);
-  const pageOldest = oldestId(page);
-  if (held !== null && pageOldest !== null && pageOldest > held) return merge([], page);
-  return merge(cached, page, true);
+  return pageReplaces(cached, page) ? merge([], page) : merge(cached, page, true);
 }
 
 /** The next read's `p_changed_after`: the last answer's `as_of` minus two minutes, as ISO text (K-B1). */
 export const changedAfter = (asOf: string): string => new Date(instantOf(asOf) - SINCE_OVERLAP_MS).toISOString();
 
-/** A signal (or a changed row) that can move the pinned card or the summary: an announcement, or any state but sent (K-S12). */
+/**
+ * A signal (or a changed row) that can move the summary: an announcement or a removal moves the pinned card (K-S12),
+ * and a system line the going count, the close or the closed card (H24 (1)).
+ */
 export const needsSummary = (signal: { kind: string; state: string }): boolean =>
-  signal.kind === "announcement" || signal.state !== "sent";
+  signal.kind === "announcement" || signal.kind === "system" || signal.state !== "sent";
 
 /**
  * Runs `run` one at a time (K-N6). A trigger while a run is in flight queues one more; a trigger while one is queued
@@ -126,9 +135,22 @@ export function withPending(messages: ChatMessage[], queue: QueuedMessage[]): Ar
   return pending.length ? [...messages, ...pending] : messages;
 }
 
-/** Unsent messages left behind: not failed, and older than 10 seconds (or with a time that can't be read) (K-S7). */
+/**
+ * Unsent messages left behind: not failed, and more than 10 seconds from now either way, so a clock moved back
+ * doesn't hide one (or with a time that can't be read) (K-S7, H26 Q4).
+ */
 export const staleUnsent = (queue: QueuedMessage[], now: number): QueuedMessage[] =>
-  queue.filter((q) => !q.failed && !(now - instantOf(q.createdAt) <= STALE_UNSENT_MS));
+  queue.filter((q) => !q.failed && !(Math.abs(now - instantOf(q.createdAt)) <= STALE_UNSENT_MS));
+
+/** Notes a row's stamp, keeping at most `SEEN_LIMIT`; the one seen longest ago goes first (H25). */
+export function remember(seen: Map<number, string>, id: number, stamp: string): void {
+  seen.delete(id);
+  seen.set(id, stamp);
+  if (seen.size > SEEN_LIMIT) {
+    const first = seen.keys().next();
+    if (!first.done) seen.delete(first.value);
+  }
+}
 
 /**
  * The list with a one-off's "<title> ended" separator (K-S16, Decision 8). Only for a one-off that isn't cancelled
@@ -143,8 +165,8 @@ export function withEndedLine<T extends ChatMessage | PendingMessage>(
   now: number,
 ): Array<T | EndedLine> {
   if (!summary || summary.isGroup || summary.status === "cancelled") return items;
-  const endsAt = summary.endsAt === null ? null : trimmed(summary.endsAt);
-  const end = planEnd({ starts_at: trimmed(summary.startsAt), ends_at: endsAt });
+  const endsAt = summary.endsAt === null ? null : serverTime(summary.endsAt);
+  const end = planEnd({ starts_at: serverTime(summary.startsAt), ends_at: endsAt });
   if (!Number.isFinite(end) || end > now) return items;
   let first = -1,
     after = -1;

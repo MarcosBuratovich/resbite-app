@@ -108,6 +108,26 @@ const idOf = (value: unknown): number | null => {
 const textOf = (value: unknown): string => (typeof value === "string" ? value : "");
 const textOrNull = (value: unknown): string | null => (typeof value === "string" ? value : null);
 
+const STAMP = /^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d+))?(Z|[+-]\d\d(?::?\d\d)?)$/;
+/**
+ * A server time as any phone can read it (H24, H26): Postgres writes up to six fractional digits and drops trailing
+ * zeros, and a `Date.parse` may take exactly three. The fraction is cut (never rounded) or padded to milliseconds.
+ * Anything that isn't a time is left as it is.
+ */
+export function serverTime(value: string): string {
+  const m = STAMP.exec(value);
+  if (!m || m[2] === undefined) return value;
+  return `${m[1]}.${(m[2] + "00").slice(0, 3)}${m[3]}`;
+}
+const timeOf = (value: unknown): string => serverTime(textOf(value));
+const timeOrNull = (value: unknown): string | null => (typeof value === "string" ? serverTime(value) : null);
+/** A change line's times are stamps too; its other values (a place label, names) are left alone. */
+function payloadOf(value: Data): Data {
+  const out: Data = {};
+  for (const [k, v] of Object.entries(value)) out[k] = typeof v === "string" ? serverTime(v) : v;
+  return out;
+}
+
 /** A row as the app holds it; null when it has no usable id. An unknown kind or state is kept, and shows no body. */
 function chatMessage(value: unknown): ChatMessage | null {
   if (!isObject(value)) return null;
@@ -118,12 +138,12 @@ function chatMessage(value: unknown): ChatMessage | null {
     kind: textOf(value.kind) as ChatMessage["kind"],
     audience: value.audience === "going" || value.audience === "everyone" ? value.audience : null,
     event: textOrNull(value.event),
-    payload: isObject(value.payload) ? value.payload : null,
+    payload: isObject(value.payload) ? payloadOf(value.payload) : null,
     body: textOrNull(value.body),
     state: textOf(value.state) as ChatMessage["state"],
     authorId: textOrNull(value.author_id),
-    createdAt: textOf(value.created_at),
-    updatedAt: textOf(value.updated_at),
+    createdAt: timeOf(value.created_at),
+    updatedAt: timeOf(value.updated_at),
     clientId: textOrNull(value.client_id),
   };
 }
@@ -137,7 +157,7 @@ function sentRow(value: unknown): ChatMessage {
 
 function page(data: unknown): ChatPage {
   if (!isObject(data) || typeof data.as_of !== "string") throw Error("Unexpected chat page");
-  return { rows: rows(data.rows), names: names(data.names), asOf: data.as_of };
+  return { rows: rows(data.rows), names: names(data.names), asOf: serverTime(data.as_of) };
 }
 
 /** A summary missing its start or zone reads them as empty, and the header and closing lines hide (H20). */
@@ -148,14 +168,14 @@ function summary(data: unknown): ChatSummary {
     seriesId: textOf(data.series_id),
     planId: textOf(data.plan_id),
     title: textOf(data.title),
-    startsAt: textOf(data.starts_at),
-    endsAt: textOrNull(data.ends_at),
+    startsAt: timeOf(data.starts_at),
+    endsAt: timeOrNull(data.ends_at),
     timeZone: textOf(data.time_zone),
     status: textOf(data.status),
     repeatWeeks: repeat === 1 || repeat === 2 ? repeat : null,
     isGroup: data.is_group === true,
     stopped: data.stopped === true,
-    closesAt: textOrNull(data.closes_at),
+    closesAt: timeOrNull(data.closes_at),
     open: data.open === true,
     host: data.host === true,
     accepted: count(data.accepted),
