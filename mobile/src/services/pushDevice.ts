@@ -342,7 +342,7 @@ export type ShownNotifications = {
 
 /**
  * Sign-out (sessionLifecycle): dismisses the pushes from Resbite's sender still shown on this phone (`data.type`
- * "plan_update", "chat" or "connection"), so the next account never sees the last one's titles, nor a chat push's
+ * "plan_update", "chat", "connection" or "report"), so the next account never sees the last one's titles, nor a chat push's
  * words (H39). Reminders go with clearReminders; anything else is left alone. Each one is tried. It rejects when one
  * couldn't be dismissed, or after `waitMs` so it never holds sign-out up; sign-out ignores that.
  */
