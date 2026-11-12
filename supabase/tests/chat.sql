@@ -551,7 +551,7 @@ do $$ declare v_ann bigint; v_going bigint; v_gone bigint; v_week bigint; v_msg 
   and (s->'last'->>'id')::bigint=v_msg and s->'last'->>'body'='New from Leo' and not (s->'last' ? 'client_id'),'The summary''s pinned or last: '||s::text);
  perform pg_temp.ch_check(s->'names'=jsonb_build_object(pg_temp.c1('01')::text,'Ana',pg_temp.c1('04')::text,'Leo'),'The summary''s names: '||(s->'names')::text);
  o := public.my_chat_overview();
- perform pg_temp.ch_check(pg_temp.ch_keys(o)='announcements,chats,names' and pg_temp.ch_keys(o->'chats')=pg_temp.c1p('01')||','||pg_temp.c1p('02'),
+ perform pg_temp.ch_check(pg_temp.ch_keys(o)='announcements,chats,inviters,names' and pg_temp.ch_keys(o->'chats')=pg_temp.c1p('01')||','||pg_temp.c1p('02'),
   'my_chat_overview as 03: '||o::text);
  perform pg_temp.ch_check(o->'chats'->(pg_temp.c1p('01')::text)=jsonb_build_object('unread',true,'last',s->'last','open',true,
    'count',(select message_count from public.chats where series_id=pg_temp.c1p('01'))),'The overview''s one-off entry: '||(o->'chats'->(pg_temp.c1p('01')::text))::text);
@@ -566,13 +566,14 @@ do $$ declare v_ann bigint; v_going bigint; v_gone bigint; v_week bigint; v_msg 
  perform pg_temp.ch_check(o=jsonb_build_object('chats',jsonb_build_object(pg_temp.c1p('02')::text,jsonb_build_object('unread',true,
    'last',private.chat_row(v_line,pg_temp.c1('05')),'open',true,'count',(select message_count from public.chats where series_id=pg_temp.c1p('02')))),
   'announcements',jsonb_build_object(pg_temp.c1p('01')::text,
-  jsonb_build_object('id',v_ann,'author_id',pg_temp.c1('01'),'body','Doors open at 7')),'names',jsonb_build_object(pg_temp.c1('01')::text,'Ana')),
+  jsonb_build_object('id',v_ann,'author_id',pg_temp.c1('01'),'body','Doors open at 7')),
+  'inviters',jsonb_build_object(pg_temp.c1p('01')::text,pg_temp.c1('01'),v_next::text,pg_temp.c1('01')),'names',jsonb_build_object(pg_temp.c1('01')::text,'Ana')),
   'my_chat_overview as 05: '||o::text);
  perform pg_temp.ch_check(v_line.id is not null and not (o->'chats'->(pg_temp.c1p('02')::text)->'last'->'payload' ? 'place_label')
    and o->'chats'->(pg_temp.c1p('02')::text)->'last'->'payload' ? 'place_tbd','05 reads the next line''s place: '||o::text);
  perform pg_temp.ch_as(pg_temp.c1('07'));
  o := public.my_chat_overview();
- perform pg_temp.ch_check(o=jsonb_build_object('chats','{}'::jsonb,'announcements','{}'::jsonb,'names','{}'::jsonb),'my_chat_overview as 07: '||o::text);
+ perform pg_temp.ch_check(o=jsonb_build_object('chats','{}'::jsonb,'announcements','{}'::jsonb,'inviters','{}'::jsonb,'names','{}'::jsonb),'my_chat_overview as 07: '||o::text);
  -- The latest announcement whose audience includes 05.
  insert into public.messages(series_id,plan_id,author_id,kind,audience,body,created_at,updated_at) values
   (pg_temp.c1p('01'),pg_temp.c1p('01'),pg_temp.c1('01'),'announcement','going','For the people going',now()-interval '1 hour',now()-interval '1 hour')

@@ -21,3 +21,4 @@ connections-follow-ups.sql
 circles-of-trust.sql
 chat.sql
 chat-groups.sql
+chat-safety.sql
