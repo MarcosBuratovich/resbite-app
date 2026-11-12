@@ -8,48 +8,50 @@
 
 **Chat core is not meant to go live on its own** (plan Decision 4).
 - Until plan 2 lands, a repeating series follows the one-off rules on its current occurrence.
-- Until plan 2's roll sets its flag, the real weekly roll writes an `admin` line, with no actor, into the chat for each admin it carries (`private.plan_admins_chat_lines`, `supabase/migrations/20261111140000_chat_core.sql:960-969`).
+- Until plan 2's roll sets its flag, the real weekly roll writes an `admin` line, with no actor, into the chat for each admin it carries (`private.plan_admins_chat_lines`, `supabase/migrations/20261111140000_chat_core.sql:984-993`).
 - Report and block (plan 3) must ship with any chat (App Store guideline 1.2, CH-P13).
 - So the three migrations go in one sitting, in order, and the app reaches testers in one TestFlight build.
 
 ## What is built (chat core)
 
 - **One hosted-compatible migration**, `20261111140000_chat_core.sql`. It depends on the files in `supabase/tests/hosted-baseline/migrations.txt`, the follow-ups migration and the circles migration. It calls `private.first_name` (circles) and copies the circles bodies of the claim, the fold and the deletion request.
-  - It writes one row per existing series into `public.chats` (the backfill, line 88) and nothing else.
+  - It writes one row per existing series into `public.chats` (the backfill, line 97) and nothing else.
   - It never creates Realtime. It uses the hosted project's `realtime.send` and `realtime.messages`. Locally a stub in `supabase/tests/local/bootstrap.sql` stands in.
-- **Four tables**, each with RLS on, no policy and no grant to any API role (lines 29-106): `public.messages`, `public.chats` (one row per series, with `is_group` false throughout plan 1), `public.chat_reads` and `public.chat_mutes`. The app reads and writes only through functions (Decision 2).
-- **Who is in a chat** is computed on the series' current occurrence (`private.chat_member`, line 123): the owner, the admins, and guests who are Going or Maybe. A one-off's chat closes 48 hours after its end, or at once when cancelled (`private.chat_closes_at`, `private.chat_open`, lines 147-160).
+- **Four tables**, each with RLS on, no policy and no grant to any API role (lines 30-115): `public.messages`, `public.chats` (one row per series, with `is_group` false throughout plan 1), `public.chat_reads` and `public.chat_mutes`. The app reads and writes only through functions (Decision 2).
+- **Who is in a chat** is computed on the series' current occurrence (`private.chat_member`, line 132): the owner, the admins, and guests who are Going or Maybe. A one-off's chat closes 48 hours after its end, or at once when cancelled (`private.chat_closes_at`, `private.chat_open`, lines 156-169).
 - **Ten calls for signed-in accounts:**
   - the reads: `chat_summary`, `chat_messages`, `chat_messages_since` and `my_chat_overview`;
   - the writes: `send_message`, `send_announcement`, `delete_message`, `remove_message`, `mark_chat_read` and `set_chat_mute`.
   - Each public call is an invoker over a private definer with an empty `search_path`.
-- **Writing** (lines 433-551):
+- **Writing** (lines 444-562):
   - a repeat of a client id returns the stored row, even after the close;
-  - 1 to 1,000 characters with at least one visible (`private.chat_body`, line 422);
+  - 1 to 1,000 characters with at least one visible (`private.chat_body`, line 433); over 16,000 bytes is refused before any pattern runs (line 434, H42);
   - 30 messages and announcements a minute per person (`22023 'Slow down'`), and one announcement a minute per person per chat (`22023 'Too fast'`).
-- **One push a minute is decided when the message is written** (Decision 6). Under the chat's lock, `send_message` queues no `chat_message` notice for a person who already has one for that chat from the last 60 seconds (lines 483-490). An announcement is always queued for its audience.
-- **Delete and remove** (lines 562-596) keep the row and drop the words. Both work after the close (K-S17, the owner's question in step 0). A host's own message is deleted, never removed.
-- **System lines** are written by triggers on `public.attendees`, `public.plans` and `public.plan_admins`, in the same transaction as the change (lines 872-969): joined, can't go, admin, changed and cancelled. The roll's and the deletion's flag (`resbite.system`) silence them.
-- **The live signal.** `private.messages_signal` broadcasts `{id, kind, state}` on the private channel `chat:<series_id>` after every insert or update of a message (lines 1077-1087).
-  - Its `perform realtime.send(...)` sits in a block that turns any error into a WARNING (lines 1079-1083). So a broadcast never stops a write.
-- **The Realtime policy** `chat_members_listen` on `realtime.messages` (lines 1106-1108), for reading, to `authenticated`. Three conditions must hold:
+- **One push a minute is decided when the message is written** (Decision 6). Under the chat's lock, `send_message` queues no `chat_message` notice for a person who already has one for that chat from the last 60 seconds (lines 494-501). An announcement is always queued for its audience.
+- **Delete and remove** (lines 573-607) keep the row and drop the words. Both work after the close (K-S17, the owner's question in step 0). A host's own message is deleted, never removed.
+- **System lines** are written by triggers on `public.attendees`, `public.plans` and `public.plan_admins`, in the same transaction as the change (lines 894-993): joined, can't go, admin, changed and cancelled. The roll's and the deletion's flag (`resbite.system`) silence them.
+- **The live signal.** `private.messages_signal` broadcasts `{id, kind, state}` on the private channel `chat:<series_id>` after every insert or update of a message (lines 1101-1111).
+  - Its `perform realtime.send(...)` sits in a block that turns any error into a WARNING (lines 1103-1107). So a broadcast never stops a write.
+- **The Realtime policy** `chat_members_listen` on `realtime.messages` (lines 1130-1132), for reading, to `authenticated`. Three conditions must hold:
   - the row is a broadcast;
   - the row is on the very topic being joined;
-  - `private.can_listen` allows it. `can_listen` (lines 1093-1101) requires the topic to be exactly `chat:<lower-case uuid>` before any cast, the caller to pass `private.user_eligible`, and the caller to be in that chat now.
-- **The notices.** Two new outbox kinds, `chat_message` and `announcement`, each with its `message_id` (line 369). Who may be told gets a chat branch (lines 640-680):
+  - `private.can_listen` allows it. `can_listen` (lines 1117-1125) requires the topic to be exactly `chat:<lower-case uuid>` before any cast, the caller to pass `private.user_eligible`, and the caller to be in that chat now.
+- **The notices.** Two new outbox kinds, `chat_message` and `announcement`, each with its `message_id` (line 378). Who may be told gets a chat branch (lines 652-692):
   - the message is still sent and its plan is not cancelled;
   - a `chat_message` is under an hour old, and its recipient is in the chat and has not muted it;
   - an announcement is under a day old, and its recipient is in its audience now;
   - Mute this resbite silences both.
 - **The sender's side of the database.**
-  - The claim expands every other kind before the chat kinds (line 698), so a change is never queued behind a lively chat.
-  - It returns `series_id`, `message_id`, `message_body` and `audience` (lines 739-741).
-  - `finish_notification_delivery` gains the outcome `deferred` (lines 758-781): a job the sender could not start goes back to pending at once, and the attempt the claim counted is given back.
-- **Account deletion**, only where the local deletion lifecycle exists (`to_regprocedure` guard, lines 792-855). On the hosted project there is none, and nothing is done.
-  - The flag goes up first (line 815).
-  - A deleted account's messages and announcements then lose their words and their author (line 844).
-  - Its reads and mutes go (line 846).
-- **The fold** (`fold_web_account`, line 976) moves a web account's messages and its place in the chat's lines to the app account (lines 1055-1063).
+  - The claim expands every other kind before the chat kinds, and picks every other kind's deliveries first (lines 712 and 743, H42), so a change is never queued or sent behind a lively chat.
+  - It makes no delivery for a `chat_message` its recipient has already read (lines 714-717, H42). The read is checked once, at the expansion: a read after that still gets its push.
+  - It returns `series_id`, `message_id`, `message_body` and `audience` (lines 761-763).
+  - `finish_notification_delivery` gains the outcome `deferred` (lines 780-803): a job the sender could not start goes back to pending at once, and the attempt the claim counted is given back.
+- **Account deletion**, only where the local deletion lifecycle exists (`to_regprocedure` guard, lines 814-877). On the hosted project there is none, and nothing is done.
+  - The flag goes up first (line 837).
+  - A deleted account's messages and announcements then lose their words and their author (line 866).
+  - Its reads and mutes go (line 868).
+- **A profile that goes any other way** (by hand, the only way an account can go on hosted today) loses its words too: when a message's or an announcement's author becomes nobody, `private.messages_touch` empties it and a sent one reads deleted (lines 62-70, H42). The count and the pin follow.
+- **The fold** (`fold_web_account`, line 1000) moves a web account's messages and its place in the chat's lines to the app account (lines 1079-1087). It moves an author, never empties one, so the words stay.
 - **The sender** (`supabase/functions/_shared/`, rides the redeploy of step 4):
   - **The words** (`notification-copy.ts:159-172`). A chat push reads "<first name>: <words>" and an announcement "Announcement from <first name>: <words>", under the resbite's title.
     - The words are made one clean line and cut at 120 graphemes, and the name at 30.
@@ -72,7 +74,7 @@ The decisions and the calls made while building are in the [decision log](../../
 
 | File | sha256 |
 | --- | --- |
-| `supabase/migrations/20261111140000_chat_core.sql` | `a7421f307cdf73bad0493bf01cf5c86ceb7292719a1d27f2a60c8296da79a079` |
+| `supabase/migrations/20261111140000_chat_core.sql` | `1047fb379a4e8a942b49db3f7134674caecf2cbb30f67e0ebf9f0f2fea6a78ce` |
 | `supabase/rollback/20261111140000_chat_core.rollback.sql` | `d212e53eacb904a260bbdd3c371ddc7424829ea7a5b7d6c98b3e7c89fb132214` |
 | `supabase/tests/hosted-baseline/20261111140000_chat_core.before.sql` | `e498c9f396a5fb1371422f9cb7f00e39ac900edc51e08aadb2a73d33d3c64db6` |
 | `supabase/tests/hosted-baseline/20261111140000_chat_core.after.sql` | `cabc541b71e8300a683e9582a6de351687664f65ebdfea36ba138b35dcc5010d` |
@@ -86,20 +88,22 @@ The before/after pair is the rehearsal, run locally only. Recompute before askin
 
 ## Checks made locally (12 November 2026)
 
-All of these ran on `ch1-core` at `99d4035`, with chat core's eight build tasks combined.
+The database suites, the edge tests, the fingerprint replay and the scripts' rehearsal ran on `ch1-core` at `2bb3929`: chat core's eight build tasks and the final fix wave (H42). The app check and the browser scripts ran at `99d4035`, before it; the server fix wave changed no app code.
 
-- Full mode passes, 44 PASS lines: 29 SQL files, 14 race lines and the final line. They include `chat.sql` and `chat-send-concurrency.sh`, whose five lines cover these races:
+- Full mode passes, 45 PASS lines: 29 SQL files, 15 race lines and the final line. They include `chat.sql` and `chat-send-concurrency.sh`, whose six lines cover these races:
   - the same message sent twice at once is one row;
   - a send meeting its own commit returns that row;
   - two writers give each member exactly one chat notice;
   - a removal and an account deletion queue on the chat's row;
-  - a host losing the role while a removal waits is refused.
+  - a host losing the role while a removal waits is refused;
+  - a send waiting on a plan's row holds no chat row, so a line writer holding the plan takes it, answers, and both go through (H42).
+- `chat.sql` holds the final fix wave's cases (H42): 44 chat notices then 44 changes, where the first claim of 25 is all changes and no claim takes a chat job while a change that is due waits; a message read before the claim makes no push, and one read after still does; a profile deleted by hand leaves none of its words; and over 16,000 bytes is refused, 16,000 kept.
 
   ```
   bash scripts/test-database-docker.sh
   ```
 
-  - Six `messages_signal: no broadcast for message …` WARNINGs are expected (`chat.sql:1906-1934`). They come from the tests that break `realtime.send` on purpose: each write still commits.
+  - Six `messages_signal: no broadcast for message …` WARNINGs are expected (`chat.sql:2083-2111`). They come from the tests that break `realtime.send` on purpose: each write still commits.
 - The hosted baseline passes with the three candidates named, in order, 25 PASS lines. Each before file passes on the baseline, each migration applies and each after file passes.
 
   ```
@@ -115,7 +119,7 @@ All of these ran on `ch1-core` at `99d4035`, with chat core's eight build tasks 
     - the seven triggers;
     - the redefined functions keep their grants.
   - It then rehearses the rollback in a transaction it rolls back. The guard refuses while a stand-in `private.series_leaves` exists, and changes nothing. Run for real, the rollback restores each redefined function, the outbox's check, columns and indexes and the triggers exactly, and removes the policy, the four tables, the functions and the chat notices. The resbites, the guest and an ordinary notice stay.
-- The app check passes: the typecheck, 1,024 tests in 92 runs, and the content validation.
+- The app check passes (at `99d4035`): the typecheck, 1,024 tests in 92 runs, and the content validation.
 
   ```
   (cd mobile && npm run check)
@@ -140,11 +144,13 @@ All of these ran on `ch1-core` at `99d4035`, with chat core's eight build tasks 
   - The rollback, wrapped as below, gives back the 387 exactly, and leaves no policy in `realtime`. Run again, it passes its guard, fails at its `lock table` (`public.messages` is gone), and changes nothing.
 - **The scripts below, rehearsed.** Each ran on a local replay through a stand-in for the CLI that sends each query to the local database. Small stand-ins took the place of the history table, `cron.job`, `cron.job_run_details` and `net._http_response`, which only hosted has. Two testers each owned a one-off.
   - With circles not yet applied, `ch1-apply.sh` refused with "The circles-of-trust migration is not applied: run its runbook first" and changed nothing.
-  - With circles applied, `ch1-before.sh` read `send_resolves` true, `columns_found` 2, `realtime_policies` 0, `realtime_usage`, `may_send` and `may_add_policy` true, and `series` 2.
+  - With circles applied, `ch1-before.sh` read `send_resolves` true, `columns_found` 2, `realtime_policies` 0, `realtime_usage`, `may_send`, `may_insert_messages` and `may_add_policy` true, `send_is_definer` false (the stub's `realtime.send` is an invoker), and `series` 2.
   - `ch1-apply.sh` applied and wrote the seven snapshot files. Run again, it refused with "The chat core migration is already applied" and changed nothing.
-  - `ch1-after-checks.sh` read one policy and the chat policy; the signal's owner `postgres`, a definer with `search_path=""` that may use `realtime` and call `realtime.send`, its failure a warning; `members_may_ask` true, `anon_may_ask` and `chat_member_granted` false; and `chats` 2 = `series` 2, `groups` 0, `messages` 0.
-  - `ch1-listen-check.sh`, for one tester: their own chat true, the other tester's false, their own topic in capitals false. A malformed id stopped it before any query.
-  - After one broadcast, the step 7 count read 1.
+  - `ch1-after-checks.sh` read one policy and the chat policy; the signal's owner `postgres`, a definer with `search_path=""` that may use `realtime` and call `realtime.send`, its failure a warning; `members_may_ask` true, `anon_may_ask` and `chat_member_granted` false; and `chats` 2 = `series` 2, `groups` 0, `messages` 0, `system_lines` 0.
+    - After a tester said Going to the other's resbite, `system_lines` read 1 and `messages` 0.
+    - With the policy put back without its own-topic condition, `the_chat_policy` read 0; restored, 1.
+  - `ch1-listen-check.sh`, before any message, read all five false. After one tester wrote in their chat: `tester_found`, `other_found` and `their_chat` true, `another_chat` and `upper_case_topic` false. A second statement in the same session found no claims set.
+  - After that message and the answer's line, the step 7 count read 2.
   - `ch1-throughput.sh`, on five sample answers (clean, clean with `deferred` 4, cut short by a later claim, 503, timed out), read `clean` 2, `cut_short` 1, `failed_or_timed_out` 2 and `deferred` 4.
   - `ch1-rollback.sh` left `realtime_policies` 0. Run again, it failed at its `lock table` and changed nothing.
 
@@ -177,13 +183,13 @@ All of these ran on `ch1-core` at `99d4035`, with chat core's eight build tasks 
 **The assistant's steps.** The advisors read (through the Supabase MCP server) and the `deliver-notifications` deploy are the assistant's. It does each once the owner approves it, as the connections record did.
 
 0. **The owner questions, before step 2.** Record each answer under "Applied". With no answer, the defaults ship.
-   - **K-S17, Delete and Remove on a closed chat.** By default an author deletes their own message, and hosts remove anyone's, after the chat closes (plan Decision 7; `delete_message` and `remove_message` check no close, `supabase/migrations/20261111140000_chat_core.sql:562-590`). The reasoning: "reading only" means no new messages, and moderation and a person's own words should not expire with the chat.
+   - **K-S17, Delete and Remove on a closed chat.** By default an author deletes their own message, and hosts remove anyone's, after the chat closes (plan Decision 7; `delete_message` and `remove_message` check no close, `supabase/migrations/20261111140000_chat_core.sql:573-601`). The reasoning: "reading only" means no new messages, and moderation and a person's own words should not expire with the chat.
      - **Built that way by default.** The alternative, refusing both after the close, is one check in each function, and a new migration hash.
    - **The sender's budget and the schedule's timeout** (an offer, as one change).
      - The schedule calls the sender with a 10-second pg_net timeout (`timeout_milliseconds := 10000`, `supabase/ops/schedule-deliver-notifications.sql:44`).
      - The claim loop starts nothing new once 5 seconds have passed (`budgetMs = 5_000`, `supabase/functions/_shared/notification-engine.ts:136`).
-     - Each provider or journal call may take up to 10 seconds (`AbortSignal.timeout(10000)`, `supabase/functions/_shared/notification-adapters.ts:23` and `:78`). So a send started just before 5 seconds can run to about 15, past the caller's 10. That call is then recorded as timed out. A send cut off mid-way stays leased as `sending`, and the claim marks it `unknown` after the two-minute lease, never sent again (`supabase/migrations/20261111140000_chat_core.sql:708-710`).
-     - The offer: raise the schedule's timeout (re-run the ops file with a larger `timeout_milliseconds`) and the loop's budget (a sender change and a redeploy) together, so the budget plus one call stays under the timeout.
+     - Each provider or journal call may take up to 10 seconds (`AbortSignal.timeout(10000)`, `supabase/functions/_shared/notification-adapters.ts:23` and `:78`). A job started just before 5 seconds makes up to three such calls in turn: validate, then the send or the receipt check, then finish (`supabase/functions/_shared/notification-engine.ts:181`, `:189` or `:197`, and `:215`). So one started job can keep the run going up to 30 seconds past the budget, about 35 in all, and each `deferred` hand-back after the budget is one more call of up to 10 seconds (`:163`). Past the caller's 10 seconds the call is recorded as timed out. A send cut off mid-way stays leased as `sending`, and the claim marks it `unknown` after the two-minute lease, never sent again (`supabase/migrations/20261111140000_chat_core.sql:725-727`).
+     - The offer: raise the schedule's timeout (re-run the ops file with a larger `timeout_milliseconds`) and the loop's budget (a sender change and a redeploy) together, so the budget plus a started job's three calls stays under the timeout.
      - **Default: unchanged** (10 seconds and 5). Step 8's `deferred` and `failed_or_timed_out` counts show whether it matters. Neither file is changed by this runbook.
    - **The words on the lock screen (CH-P7).** A chat push shows the message's words ("Leo: I can bring the snacks"). The alternative is "Leo sent a message".
      - **Built that way by default**, as the roadmap's owner table says. The alternative is a sender change and a redeploy.
@@ -201,7 +207,7 @@ All of these ran on `ch1-core` at `99d4035`, with chat core's eight build tasks 
    supabase db query --linked -o json "select policyname, cmd, qual, with_check from pg_policies where schemaname = 'storage' order by policyname" > "$D/hosted-storage-policies-before.json"
    supabase db query --linked "select count(*) as applied, max(version) as latest from supabase_migrations.schema_migrations"
    supabase db query --linked "select pg_catalog.to_regprocedure('realtime.send(jsonb,text,text,boolean)') is not null as send_resolves, (select count(*) from information_schema.columns where table_schema = 'realtime' and table_name = 'messages' and column_name in ('extension', 'topic')) as columns_found, (select count(*) from pg_catalog.pg_policies where schemaname = 'realtime') as realtime_policies"
-   supabase db query --linked "select current_user as applying_role, has_schema_privilege(current_user, 'realtime', 'usage') as realtime_usage, has_function_privilege(current_user, 'realtime.send(jsonb,text,text,boolean)', 'execute') as may_send, pg_catalog.pg_get_userbyid(c.relowner) as messages_owner, pg_catalog.pg_has_role(current_user, c.relowner, 'USAGE') as may_add_policy from pg_catalog.pg_class c where c.oid = 'realtime.messages'::regclass"
+   supabase db query --linked "select current_user as applying_role, has_schema_privilege(current_user, 'realtime', 'usage') as realtime_usage, has_function_privilege(current_user, 'realtime.send(jsonb,text,text,boolean)', 'execute') as may_send, (select p.prosecdef from pg_catalog.pg_proc p where p.oid = pg_catalog.to_regprocedure('realtime.send(jsonb,text,text,boolean)')) as send_is_definer, has_table_privilege(current_user, 'realtime.messages', 'insert') as may_insert_messages, pg_catalog.pg_get_userbyid(c.relowner) as messages_owner, pg_catalog.pg_has_role(current_user, c.relowner, 'USAGE') as may_add_policy from pg_catalog.pg_class c where c.oid = 'realtime.messages'::regclass"
    supabase db query --linked "select count(distinct series_id) as series from public.plans"
    supabase db query --linked "select jobname from cron.job where jobname in ('deliver-notifications', 'roll-repeating-plans') order by jobname"
    ```
@@ -215,7 +221,9 @@ All of these ran on `ch1-core` at `99d4035`, with chat core's eight build tasks 
    - **Realtime as the migration needs it (K-S5).** Stop on any other answer.
      - `send_resolves` true, `columns_found` 2 and `realtime_policies` 0.
      - `realtime_usage` and `may_send` true for the role the CLI applies with. That role owns `private.messages_signal`, the definer that calls `realtime.send`.
-       - Without them nothing fails: every broadcast becomes a WARNING and the write commits (lines 1079-1083). But no phone hears a signal, and every open chat waits for its 20-second poll.
+       - Without them nothing fails: every broadcast becomes a WARNING and the write commits (lines 1103-1107). But no phone hears a signal, and every open chat waits for its 20-second poll.
+     - `send_is_definer` says whether hosted's `realtime.send` runs as its owner. If it is false, it inserts into `realtime.messages` as its caller, the signal's owner (the applying role), so `may_insert_messages` must be true.
+       - Without that grant nothing fails and no WARNING shows either: hosted's `realtime.send` catches its own insert error. The broadcasts just never happen, and step 7's count would read 0 after the build. Stop here instead.
      - `may_add_policy` true: that role may act as `realtime.messages`' owner, which `create policy` needs. Without it the apply fails at the policy and rolls back whole.
      - If `to_regprocedure` reads false, the `may_send` query fails instead, and the script stops there.
    - **The series count** is what step 3's `public.chats` row count should be (the backfill), plus any resbite made in between.
@@ -232,7 +240,7 @@ All of these ran on `ch1-core` at `99d4035`, with chat core's eight build tasks 
    cd "${REPO:-$HOME/dev/resbite-app}"
    D=qa/chat-release
    F=supabase/migrations/20261111140000_chat_core.sql
-   echo "a7421f307cdf73bad0493bf01cf5c86ceb7292719a1d27f2a60c8296da79a079  $F" | sha256sum -c -
+   echo "1047fb379a4e8a942b49db3f7134674caecf2cbb30f67e0ebf9f0f2fea6a78ce  $F" | sha256sum -c -
    GUARD="if pg_catalog.to_regclass('private.plan_removals') is null or pg_catalog.to_regprocedure('private.first_name(text)') is null then raise exception 'The circles-of-trust migration is not applied: run its runbook first'; end if;
     if pg_catalog.to_regclass('public.messages') is not null then raise exception 'The chat core migration is already applied'; end if;"
    mkdir -p /tmp/ch1
@@ -267,7 +275,8 @@ All of these ran on `ch1-core` at `99d4035`, with chat core's eight build tasks 
    - `hosted-after.json` should match a local replay of `migrations.txt` plus the three files: 464 of 464 by definition, with the same 15 `acl` differences.
    - **Before to after**, by `(kind, name)`, as listed under the checks above: 77 added and 6 changed. Nothing is removed and no grant changes. `.after.sql` asserts the same shape locally.
    - **Counts.** Four tables more:
-     - `messages`, `chat_reads` and `chat_mutes` with 0 rows;
+     - `chat_reads` and `chat_mutes` with 0 rows;
+     - `messages` with 0 rows, or a few system lines if anyone answered, changed or cancelled a resbite, or made an admin, since the commit: each writes one by trigger. No installed build can write a message. The after-checks below tell the two apart (`messages` and `system_lines`);
      - `chats` with step 1's series count, plus any resbite made in between.
      - Every other table keeps its row count. The storage policies are unchanged, 7 of 7.
    - **Realtime after the migration (K-S5).** Read-only, with `! bash ~/ch1-after-checks.sh`:
@@ -277,26 +286,27 @@ All of these ran on `ch1-core` at `99d4035`, with chat core's eight build tasks 
      # Read-only: the Realtime policy, the signal's definer and the chat rows after the migration (chat core, step 3).
      set -euo pipefail
      cd "${REPO:-$HOME/dev/resbite-app}"
-     supabase db query --linked "select count(*) as realtime_policies, count(*) filter (where policyname = 'chat_members_listen' and cmd = 'SELECT' and roles = '{authenticated}'::name[] and qual like '%can_listen%' and qual like '%topic%' and with_check is null) as the_chat_policy from pg_catalog.pg_policies where schemaname = 'realtime'"
+     supabase db query --linked "select count(*) as realtime_policies, count(*) filter (where policyname = 'chat_members_listen' and cmd = 'SELECT' and roles = '{authenticated}'::name[] and qual like '%can_listen%' and regexp_replace(qual, '\s+', ' ', 'g') like '%(topic = ( SELECT realtime.topic() AS topic))%' and with_check is null) as the_chat_policy from pg_catalog.pg_policies where schemaname = 'realtime'"
      supabase db query --linked "select pg_catalog.pg_get_userbyid(p.proowner) as signal_owner, p.prosecdef as definer, p.proconfig as settings, has_schema_privilege(p.proowner, 'realtime', 'usage') as owner_realtime_usage, has_function_privilege(p.proowner, 'realtime.send(jsonb,text,text,boolean)', 'execute') as owner_may_send, p.prosrc like '%exception when others then%raise warning%' as failure_is_a_warning from pg_catalog.pg_proc p where p.oid = 'private.messages_signal()'::regprocedure"
      supabase db query --linked "select has_function_privilege('authenticated', 'private.can_listen(text)', 'execute') as members_may_ask, has_function_privilege('anon', 'private.can_listen(text)', 'execute') as anon_may_ask, has_function_privilege('authenticated', 'private.chat_member(uuid,uuid)', 'execute') as chat_member_granted"
-     supabase db query --linked "select (select count(*) from public.chats) as chats, (select count(distinct series_id) from public.plans) as series, (select count(*) from public.chats where is_group) as groups, (select count(*) from public.messages) as messages"
+     supabase db query --linked "select (select count(*) from public.chats) as chats, (select count(distinct series_id) from public.plans) as series, (select count(*) from public.chats where is_group) as groups, (select count(*) from public.messages where kind <> 'system') as messages, (select count(*) from public.messages where kind = 'system') as system_lines"
      ```
 
-     - **Exactly one policy on `realtime.messages`:** `realtime_policies` 1 and `the_chat_policy` 1. `hosted-realtime-policies-after.json` holds its text. It should read as lines 1106-1108: a broadcast, on the topic being joined, that `private.can_listen` allows.
+     - **Exactly one policy on `realtime.messages`:** `realtime_policies` 1 and `the_chat_policy` 1. `the_chat_policy` checks the own-topic condition itself (`topic = (SELECT realtime.topic())`, H34), so a policy without it reads 0. `hosted-realtime-policies-after.json` holds its text. It should read as lines 1130-1132: a broadcast, on the topic being joined, that `private.can_listen` allows.
      - **The signal's definer:**
        - `signal_owner` is step 1's `applying_role`, `definer` true, and `settings` holds `search_path=""`;
        - `owner_realtime_usage` and `owner_may_send` are true;
        - `failure_is_a_warning` is true: the call is wrapped, so a failure raises a WARNING and never fails the write.
      - `members_may_ask` true, `anon_may_ask` false and `chat_member_granted` false (K-N13).
-     - `chats` equals `series` (plus any made in between), `groups` 0 (plan 1 sets none) and `messages` 0.
+     - `chats` equals `series` (plus any made in between) and `groups` 0 (plan 1 sets none).
+     - `messages` 0. `system_lines` 0, or one for each answer, change, cancellation or appointment made on hosted since the commit.
      - A real `realtime.messages` row needs a real message, so it is checked in step 7.
    - **Advisors.** Once the owner approves, the assistant reads them (security and performance) through the Supabase MCP server, into `hosted-advisors-after.json`.
-     - Compare with the newest earlier `hosted-advisors-after.json` (circles' if it was taken, else connections': 42 findings, 10 WARN, the rest INFO, no ERROR).
+     - Compare with the newest earlier `hosted-advisors-after.json` in the chain: circles' (`qa/circles-of-trust-2026-11-10/`) if it was taken, else follow-ups' (`qa/connections-follow-ups-2026-11-11/`), else connections' (`qa/connections-2026-11-10/`: 42 findings, 10 WARN, the rest INFO, no ERROR).
      - **Expected: no new WARN and no ERROR.** The ten public calls are invokers. Their private bodies and every other new function are definers in `private`, with an empty `search_path`. So neither `*_security_definer_function_executable` lint gains a line.
      - **New INFO lines are expected, of kinds the file already has.**
        - `rls_enabled_no_policy` for the four new public tables, `messages`, `chats`, `chat_reads` and `chat_mutes`: RLS on and no policy (Decision 2). No API role may read or write them.
-       - `unindexed_foreign_keys` for `messages_plan_id_fkey`, `chat_reads_user_id_fkey` and `chat_mutes_user_id_fkey`. No index leads with those columns (lines 45-49, 91-104); they serve only cascades and the deletion step.
+       - `unindexed_foreign_keys` for `messages_plan_id_fkey`, `chat_reads_user_id_fkey` and `chat_mutes_user_id_fkey`. No index leads with those columns (lines 46-50, 100-113); they serve only cascades and the deletion step.
        - `unused_index` for the plain new indexes until they are used: `messages_series_idx`, `messages_series_updated_idx`, `messages_series_announcements_idx`, `messages_author_created_idx`, `notification_outbox_recipient_kind_idx` and `notification_outbox_message_idx`.
      - Unused-index notices can also come and go with use alone. Stop the rollout for anything else new.
    - Append this line to `supabase/tests/hosted-baseline/migrations.txt`:
@@ -336,7 +346,7 @@ All of these ran on `ch1-core` at `99d4035`, with chat core's eight build tasks 
    - **The answer's shape** (`handler.ts:22-35`, `notification-engine.ts:171-173`). Read the status and the `error` field together:
      - HTTP 200 with `{"disabled":false,"processed":N,"deferred":M}` is a clean run. `deferred` counts the jobs handed back for the next run.
      - HTTP 200 with an `"error":"Notification claim failed"` field is a run that a later claim cut short. What it did stands, and the jobs it did not reach wait for the next run. **It is not a clean run, though its status is 200.**
-     - HTTP 503 with `{"error":"Notification processing incomplete"}` is a run whose first claim failed. A 401 means the secret is wrong. `{"disabled":true,…}` means delivery is switched off.
+     - HTTP 503 with `{"error":"Notification processing incomplete"}` is a run in which a journal call failed (`handler.ts:30-35`): the first claim (`notification-engine.ts:152-154`), or any validate or finish at any point of the run (`:163`, `:181-182` and `:215`). Each throws on a non-OK answer or its 10-second timeout (`notification-adapters.ts:78-80`), a `deferred` hand-back refused by an old finish included. What the run did before the failure stands. A 401 means the secret is wrong. `{"disabled":true,…}` means delivery is switched off.
      - Each run should succeed, and each call should answer 200 with `"disabled":false` and no `error` field.
 5. **Realtime "Allow public access" off** (the owner, in the dashboard's Realtime settings, CH-P10), before the build reaches testers.
    - With it off, only private channels may be joined, so every join passes the policy of step 3.
@@ -358,31 +368,23 @@ All of these ran on `ch1-core` at `99d4035`, with chat core's eight build tasks 
        ```
 
        It should be at least 1.
-   - **A refused subscribe (the policy's topic condition).** A join is allowed only for a topic that is exactly `chat:<lower-case uuid>`, from a caller who passes `private.user_eligible`, and who is in that chat now (`can_listen`, `supabase/migrations/20261111140000_chat_core.sql:1093-1099`). The phone check above shows the allowed side.
-     - For the refused side, the owner asks the database what Realtime asks it, as a tester, inside a transaction that is rolled back. Run `! bash ~/ch1-listen-check.sh <tester account id> <a series they chat in> <a series they are not in>`. The ids go only into a temporary file that the script removes, never into this directory.
+   - **A refused subscribe (the policy's topic condition).** A join is allowed only for a topic that is exactly `chat:<lower-case uuid>`, from a caller who passes `private.user_eligible`, and who is in that chat now (`can_listen`, `supabase/migrations/20261111140000_chat_core.sql:1117-1123`). The phone check above shows the allowed side.
+     - For the refused side, the owner asks the database what Realtime asks it, for the tester who sent the newest message, right after Pedro's sends above: `! bash ~/ch1-listen-check.sh`. It takes no argument. It finds his account, his chat and a chat he is not in by itself, so no id is typed, printed or kept, and nothing is written. One statement sets his claims for its own transaction only, then asks `can_listen` three times.
 
        ```bash
        #!/bin/bash
-       # Read-only: may this tester listen to these two chats' channels, as Realtime's policy asks (chat core, step 7)?
-       # Prints three answers and nothing else. Nothing is written: the transaction is rolled back.
+       # Read-only: may the tester who sent the newest chat message listen to their chat's channel, to a chat they are not
+       # in, and to their own topic in capitals, as Realtime's policy asks (chat core, step 7)? One statement, no argument:
+       # it finds the ids itself and prints five booleans, nothing else. The claims it sets end with its transaction.
        set -euo pipefail
        cd "${REPO:-$HOME/dev/resbite-app}"
-       U='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-       for v in "${1:-}" "${2:-}" "${3:-}"; do [[ "$v" =~ $U ]] || { echo "Pass three lower-case uuids" >&2; exit 1; }; done
-       Q="$(mktemp)"; trap 'rm -f "$Q"' EXIT
-       cat > "$Q" <<SQL
-       begin;
-       do \$\$ begin perform set_config('request.jwt.claims', '{"sub":"$1","role":"authenticated"}', true); end \$\$;
-       set local role authenticated;
-       select private.can_listen('chat:$2') as their_chat, private.can_listen('chat:$3') as another_chat,
-        private.can_listen('chat:' || upper('$2')) as upper_case_topic;
-       rollback;
-       SQL
-       supabase db query --linked -f "$Q"
+       supabase db query --linked "select t.uid is not null and t.claims is not null as tester_found, t.other is not null as other_found, coalesce(private.can_listen('chat:' || t.mine::text), false) as their_chat, coalesce(private.can_listen('chat:' || t.other::text), false) as another_chat, coalesce(private.can_listen('chat:' || upper(t.mine::text)), false) as upper_case_topic from (select 1) as one left join lateral (select x.uid, x.mine, x.other, pg_catalog.set_config('request.jwt.claims', pg_catalog.jsonb_build_object('sub', x.uid, 'role', 'authenticated')::text, true) as claims from (select m.author_id as uid, m.series_id as mine, (select p.series_id from public.plans p where not private.chat_member(p.series_id, m.author_id) order by p.starts_at desc, p.id desc limit 1) as other from public.messages m where m.kind = 'message' and m.author_id is not null order by m.id desc limit 1) as x offset 0) as t on true"
        ```
 
-       - Expected: `their_chat` true, `another_chat` false and `upper_case_topic` false.
-       - It was rehearsed on a local replay through a stand-in for the CLI, with a member and a non-member (the checks above).
+       - Expected: `tester_found`, `other_found` and `their_chat` true; `another_chat` and `upper_case_topic` false.
+       - Run it before anyone else writes in a chat, or it asks about whoever did. `tester_found` false means no message yet.
+       - `can_listen` takes who is asking from the claims alone, so asking as the CLI's role gives what Realtime gets as `authenticated` (step 3 checks that `authenticated` may call it).
+       - It was rehearsed on a local replay through a stand-in for the CLI, after a message from one tester (the checks above).
        - If the dashboard's Realtime inspector can join a private channel as a chosen user, joining `chat:<another series>` as that tester should be refused too.
    - **A push, with the app closed.** Pedro sends while Ana's app is closed. Ana's phone shows "<title>" over "Pedro: …".
      - Over 120 graphemes, the words end with "…".
@@ -429,7 +431,7 @@ All of these ran on `ch1-core` at `99d4035`, with chat core's eight build tasks 
    - `waiting` stays under 100, and `oldest_wait` under 2 minutes.
    - **The check keys on the status and the `error` field together.** `clean` equals `calls`, and `cut_short` and `failed_or_timed_out` are 0. A run cut short by a later claim answers 200 with `error` set, so it counts under `cut_short`, never `clean`.
    - `deferred` above 0 in a burst is the loop handing back jobs it had no time for; the next run takes them. Many runs with `deferred` above 0, or any `failed_or_timed_out`, bring back step 0's budget question.
-   - **A `plan_changed` made then reaches the other phone within two minutes.** Ana changes the time of another resbite Pedro is Going to while the chat is busy (the claim expands it before the chat kinds, `supabase/migrations/20261111140000_chat_core.sql:698`).
+   - **A `plan_changed` made then reaches the other phone within two minutes.** Ana changes the time of another resbite Pedro is Going to while the chat is busy (the claim expands and sends it before the chat kinds, `supabase/migrations/20261111140000_chat_core.sql:712` and `:743`).
 
 ## Applied
 
@@ -453,7 +455,10 @@ Only with the owner's approval, in one transaction.
 1. **The app first.** Once this file has run, a chat build gets errors from every chat call and a refused channel. Make a build without chat the testers' build first, or accept that the Chat row hides, the chat screen fails and chat pushes stop until one is.
 2. **The old sender goes back before or with this file.** The rollback restores `finish_notification_delivery` from `20261030120000_push_delivery.sql`, which refuses `deferred` again (rollback header, lines 21-25).
    - Against the restored finish, a hand-back from the chat sender fails. The job stays leased as `sending`, and the next claim after the lease marks it `unknown`, never sent.
-   - So redeploy the sender as it was before step 4 first, from the commit recorded under "Applied". It handles a chat job as a generic push until the rollback removes those jobs.
+   - So first redeploy the sender chat core was built on: `supabase/functions` as of commit `5772898`, the circles build's sender, with the follow-ups and circles words and no chat.
+     - If the follow-ups and circles runbooks redeployed their own sender before this sitting, it is also the version recorded under "Applied" as live before step 4.
+     - If step 4 carried their words instead, the version before step 4 lacks them, so redeploy from `5772898`, not that one.
+     - It handles a chat job as a generic push until the rollback removes those jobs.
 3. The owner runs the rollback with `! bash ~/ch1-rollback.sh`. It checks the hash, then runs the file in one transaction, with no psql `\i`, and takes a fingerprint:
 
    ```bash
@@ -495,13 +500,12 @@ Accepted during the build, unless marked; none blocks the rollout.
 
 - **A minute's first message deleted before delivery** (K-S1, Decision 6). That minute then pushes nothing: the later messages were never queued.
 - **A bare signal after a removal** (K-N1). A removed person's open socket may still hear a bare `{id, kind, state}` until its token refreshes. It never carries words, and their next read is refused.
-- **A line committing late can sit below a read mark** (`supabase/migrations/20261111140000_chat_core.sql:864-867`). A system line takes no chat lock. One that commits after a reader marked a later id read never reads as unread. `chat_messages_since` still brings it.
+- **A line committing late can sit below a read mark** (`supabase/migrations/20261111140000_chat_core.sql:886-889`). A system line takes no chat lock. One that commits after a reader marked a later id read never reads as unread. `chat_messages_since` still brings it.
 - **The roll and plan 1** (Decision 4). Until plan 2, the roll writes an `admin` line for each carried admin.
-- **Account deletion is local only.** On hosted no account can be deleted yet, so the chat's deletion step (`supabase/migrations/20261111140000_chat_core.sql:783-855`) runs nowhere there. The roadmap's account-deletion item says what that project must carry, including the local `activate_deletion_intent`, which writes chat lines and keeps messages.
+- **Account deletion is local only.** On hosted no account can be deleted yet, so the chat's deletion step (`supabase/migrations/20261111140000_chat_core.sql:805-877`) runs nowhere there. A profile deleted there by hand still loses its words (`private.messages_touch`, H42). The roadmap's account-deletion item says what that project must carry, including the local `activate_deletion_intent`, which writes chat lines and keeps messages.
 - **Outbox retention** (K-N11). Chat writes one notice per recipient per message. A cleanup of delivered rows is on the roadmap's later list.
-- **Found while writing this runbook, not ruled on: sign-out leaves chat pushes on the phone.** Sign-out dismisses only the pushes typed `plan_update` (`mobile/src/services/pushDevice.ts:342-354`).
-  - A chat push carries a person's words, and it stays in Notification Center for whoever signs in next. Connection pushes stay too (before chat).
-  - The fix is one condition in `dismissShownPushes`. This task changed no app code.
+- **A claim whose answer is lost** (pre-existing). A claim marks its jobs `sending`. If its answer never reaches the sender (the 10-second call timeout, `supabase/functions/_shared/notification-adapters.ts:78`), up to 25 jobs stay `sending` until their two-minute lease ends, then turn `unknown`, never sent. `deferred` cannot help: the sender never learned their ids. The loop now claims several times a run, so the exposure is a little wider.
+- **Sign-out and the pushes left on the phone: fixed (H39).** Sign-out now clears every Resbite push from Notification Center: `plan_update`, chat and connection. So a chat push's words no longer stay for whoever signs in next.
 
 ## Not done here
 

@@ -782,7 +782,8 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
   - system lines written by triggers;
   - one push a minute, decided when the message is written;
   - the Realtime signal on the private channel `chat:<series>`, with its policy;
-  - the deletion step, local only.
+  - the deletion step, local only, and on any project a message whose author becomes nobody loses its words;
+  - the final fix wave (H42): the claim sends a change before a busy chat's pushes, a message already read is not pushed, and over 16,000 bytes is refused before any check.
   - Its rollback, `supabase/rollback/20261111140000_chat_core.rollback.sql`, and the hosted-baseline rehearsal pass.
 - **The sender.** In `supabase/functions/_shared/`, the chat push words ("Leo: …", "Announcement from Ana: …"), the chat tap data, and a claim loop that hands back what it could not start (`deferred`).
 - **The app.**
@@ -792,11 +793,12 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
   - the When sheet's 48-hour line, the notification ask on a chat's first open, and Data & privacy's Chat messages topic.
   - The labelled sample conversation is removed.
 
-**Checks (12 November 2026, at `99d4035`).**
-- `bash scripts/test-database-docker.sh`: 44 PASS lines, `chat.sql` and `chat-send-concurrency.sh` included.
+**Checks (12 November 2026).** The server's at `2bb3929`, after the final fix wave; the app's at `99d4035`.
+- `bash scripts/test-database-docker.sh`: 45 PASS lines, `chat.sql` and `chat-send-concurrency.sh` (six races) included.
 - The hosted baseline with the follow-ups, circles and chat core candidates: 25 PASS lines.
 - `(cd mobile && npm run check)`: 1,024 tests.
 - The edge tests: 11 files, 107 tests.
+- The fingerprint replay (355, 356, 387, then 464; the rollback back to 387) and the owner scripts, rehearsed on a local replay.
 - The browser scripts (`verify-chat.mjs`, `verify-event.mjs`, `review-ui.mjs` and the others) passed during the build with a fake project URL.
 
 **What the owner still runs** is in [`qa/chat-release/README.md`](../qa/chat-release/README.md):
@@ -808,8 +810,8 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
 - the device checks and the throughput check.
 
 **Known leftovers** (not changed by the chat build).
-- **Six browser scripts still hard-code the hosted project's auth storage key and aren't strict:** `mobile/scripts/verify-covers.mjs`, `verify-links.mjs`, `verify-open-link-app.mjs`, `verify-invitations.mjs`, `verify-notifications.mjs` and `verify-auth.mjs`.
-  - They can't sign in against a fake project URL, so the chat build didn't run them. None fails on an unexpected request.
+- **Twelve browser scripts still hard-code the hosted project's auth storage key** (`grep -rl` over `mobile/scripts` and `scripts/`, at `6862a5d`): `mobile/scripts/verify-auth.mjs`, `verify-catalogue.mjs`, `verify-covers.mjs`, `verify-deletion.mjs`, `verify-invitations.mjs`, `verify-links.mjs`, `verify-notifications.mjs`, `verify-open-link-app.mjs`, `verify-phone.mjs`, `verify-profile.mjs`, `verify-session.mjs` and `verify-signup-callback.mjs`.
+  - They can't sign in against a fake project URL, so the chat build didn't run the six it would have used: `verify-covers`, `verify-links`, `verify-open-link-app`, `verify-invitations`, `verify-notifications` and `verify-auth`. None of those six fails on an unexpected request.
   - Other scripts derive the key from `EXPO_PUBLIC_SUPABASE_URL` (`mobile/scripts/qa-helpers.mjs`, `verify-chat.mjs`, `verify-circle.mjs`).
-- **Sign-out leaves chat pushes on the phone.** It dismisses only pushes typed `plan_update` (`mobile/src/services/pushDevice.ts:342-354`). A chat push carries a person's words, and it stays in Notification Center for whoever signs in next; connection pushes stay too. Found while writing the runbook; not ruled on.
+- **Sign-out and the pushes left on the phone: fixed (H39).** Sign-out now clears every Resbite push from Notification Center (`plan_update`, chat and connection), so a chat push's words no longer stay for whoever signs in next.
 - **The local deletion path.** `private.activate_deletion_intent`, which the deletion gateway calls, predates connections, circles and chat. Locally it writes chat lines when it cancels and scrubs a leaving owner's resbites, and keeps their messages. The roadmap's account-deletion item carries this.
