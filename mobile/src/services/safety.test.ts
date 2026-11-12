@@ -48,14 +48,14 @@ test("myBlocks sends my_blocks and reads each person as { userId, name }, newest
     { user_id: ANA, name: null },
   ]);
   assert.deepEqual(await gw.myBlocks(), [
-    { userId: LEO, name: "Leo", at: null },
-    { userId: ANA, name: null, at: null },
+    { userId: LEO, name: "Leo" },
+    { userId: ANA, name: null },
   ]);
   assert.deepEqual(calls, [{ fn: "my_blocks", args: {} }]);
 });
 
 // The server (ad0a3e6) adds each block's time, `at`, newest first: kept for Blocked people (Task 6, ruling SR7).
-test("myBlocks keeps each block's time, at, and reads one that isn't text as null", async () => {
+test("myBlocks keeps each block's time, at, and leaves out one that isn't a readable time (SR7)", async () => {
   const at = "2026-11-12T10:00:00.123456+00:00";
   assert.deepEqual(
     await gateway([
@@ -64,7 +64,7 @@ test("myBlocks keeps each block's time, at, and reads one that isn't text as nul
     ]).gw.myBlocks(),
     [
       { userId: LEO, name: "Leo", at },
-      { userId: ANA, name: null, at: null },
+      { userId: ANA, name: null },
     ],
   );
 });
@@ -74,8 +74,8 @@ test("myBlocks reads odd rows defensively: a row without an id goes, a name that
   assert.deepEqual(
     await gateway([{ user_id: LEO, name: 5 }, { name: "Ana" }, { user_id: "", name: "Bo" }, null, "x", { user_id: ANA }]).gw.myBlocks(),
     [
-      { userId: LEO, name: null, at: null },
-      { userId: ANA, name: null, at: null },
+      { userId: LEO, name: null },
+      { userId: ANA, name: null },
     ],
   );
 });

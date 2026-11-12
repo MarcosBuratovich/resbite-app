@@ -19,7 +19,9 @@
 //             leaves "You haven’t blocked anyone.", which takes focus; a failed read shows the error line with Try again
 //             and names nobody; a failed unblock keeps the row and says why beside it; a refresh still running when
 //             Unblock goes never brings the row back; an 18- and a 40-letter single-word name wrap inside the card at
-//             390 px, at 320 px and under Larger Text at 320 px, and an ordinary name stays whole (G-S10, ruling SR4)
+//             390 px, at 320 px and under Larger Text at 320 px, and an ordinary name stays whole (G-S10, ruling SR4);
+//             two people called Leo blocked on different days read "Blocked Wed 10 Jun" and "Blocked Wed 24 Dec 2025",
+//             each row labelled with its date, and a block with no time has no second line (ruling SR7)
 // Every Supabase request is answered or refused by the fixture; nothing reaches a real account.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -76,7 +78,8 @@ const ana = {
   created_at: "2026-01-01T00:00:00Z",
 };
 /** my_blocks' rows as the server sends them, newest first. */
-const blockRow = (user_id, name) => ({ user_id, name });
+const blockRow = (user_id, name, at) => (at === undefined ? { user_id, name } : { user_id, name, at });
+const LEO_2 = "66666666-6666-4666-8666-666666666666";
 /** Puts the app in the background and brings it back: RN-web's AppState follows document.visibilityState. */
 async function foreground(page) {
   await page.evaluate(() => {
@@ -92,13 +95,20 @@ async function foreground(page) {
  * next my_blocks reads, or block_user calls, fail as a lost connection would; while `holdReads` is set, each read is
  * parked until `release()`, answered as it would have been on arrival.
  */
-async function signedIn({ blocks = [], width = 390, failReads = 0, failUnblocks = 0 } = {}) {
-  const context = await browser.newContext({ viewport: { width, height: 844 }, reducedMotion: "reduce", locale: "en-GB" });
+async function signedIn({ blocks = [], width = 390, failReads = 0, failUnblocks = 0, now = null } = {}) {
+  const context = await browser.newContext({
+    viewport: { width, height: 844 },
+    reducedMotion: "reduce",
+    locale: "en-GB",
+    timezoneId: "Europe/London",
+  });
   // No "Get notified?" on any screen this opens.
   await context.addInitScript(() => {
     globalThis.__resbiteDevice ??= { reminders: [], calendar: [], permission: "denied" };
   });
   const page = await context.newPage();
+  // The phone's date, where a scenario needs one (timers keep running).
+  if (now) await page.clock.setFixedTime(new Date(now));
   await page.addInitScript(
     ({ key, session }) => {
       if (!sessionStorage.getItem("fixture-seeded")) {
@@ -787,7 +797,7 @@ try {
     await expect(page.getByRole("button", { name: /\u200F|\u200B/ })).toHaveCount(0);
     await expect(page.getByText(NONE_BLOCKED, { exact: true })).toHaveCount(0);
     await page.screenshot({ path: join(tmpdir(), "resbite-blocked-people.png"), fullPage: true });
-    const focused = () => page.evaluate(() => document.activeElement?.textContent ?? null);
+    const focused = () => page.evaluate(() => document.activeElement?.getAttribute("aria-label") || document.activeElement?.textContent || null);
     const said = (words) => page.locator('[aria-live="polite"]').filter({ hasText: words });
     await button(page, "Unblock Leo").click();
     await expect(shown(page, "Leo")).toHaveCount(0);
@@ -826,6 +836,44 @@ try {
     await expect(page.getByRole("button", { name: /^Unblock / })).toHaveCount(0);
     await f.done();
     pass("blocked: nobody blocked says so");
+  }
+  {
+    // SR7: two people called Leo, blocked on different days, told apart by when; a block with no time has no second
+    // line. The phone's date is Mon 15 Jun 2026 in London.
+    const f = await signedIn({
+        now: "2026-06-15T12:00:00Z",
+        blocks: [
+          blockRow(LEO, "Leo", "2026-06-10T18:00:00.123456+00:00"),
+          blockRow(LEO_2, "Leo", "2025-12-24T10:00:00+00:00"),
+          blockRow(MIA, "Mia"),
+        ],
+      }),
+      { page } = f;
+    await openBlocked(page);
+    await expect(shown(page, "Blocked Wed 10 Jun")).toBeVisible();
+    await expect(shown(page, "Blocked Wed 24 Dec 2025")).toBeVisible();
+    await expect(page.getByText(/^Blocked \w{3} \d/)).toHaveCount(2);
+    // Each row is one element to the screen reader, its date included.
+    await expect(page.getByLabel("Leo, Blocked Wed 10 Jun", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Leo, Blocked Wed 24 Dec 2025", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Mia", { exact: true })).toBeVisible();
+    assert.ok(
+      await page.evaluate(() => {
+        const a = document.querySelector('[aria-label="Leo, Blocked Wed 10 Jun"]'),
+          b = document.querySelector('[aria-label="Leo, Blocked Wed 24 Dec 2025"]');
+        return Boolean(a && b && a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+      }),
+      "newest first",
+    );
+    // The second Leo's Unblock unblocks that Leo.
+    await expect(button(page, "Unblock Leo")).toHaveCount(2);
+    await button(page, "Unblock Leo").nth(1).click();
+    await expect(page.getByLabel("Leo, Blocked Wed 24 Dec 2025", { exact: true })).toHaveCount(0);
+    await expect(page.getByLabel("Leo, Blocked Wed 10 Jun", { exact: true })).toBeVisible();
+    assert.deepEqual(f.calls("block_user"), [{ p_user: LEO_2, p_block: false }]);
+    await page.screenshot({ path: join(tmpdir(), "resbite-blocked-people-dates.png"), fullPage: true });
+    await f.done();
+    pass("blocked: two Leos read Blocked Wed 10 Jun and Blocked Wed 24 Dec 2025, each row labelled with it; no time, no second line; the second's Unblock unblocks that one");
   }
   {
     const f = await signedIn({ blocks: [blockRow(LEO, "Leo")], failReads: 1 }),

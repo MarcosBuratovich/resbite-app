@@ -10,7 +10,7 @@ import {
   type BlockedPeopleState,
 } from "./blockedPeople";
 import { SAFETY_COPY } from "../domain/safetyCopy";
-import type { BlockedPerson } from "../services/safety";
+import { createSafetyGateway, type BlockedPerson } from "../services/safety";
 
 const LEO = "0a000000-0000-4000-8000-000000000002";
 const ANA = "0a000000-0000-4000-8000-000000000001";
@@ -218,6 +218,73 @@ test("nothing is read or sent without an account, in the preview, while signing 
   assert.equal(mayAct({ ...ready, preview: true }), false);
   assert.equal(mayAct({ ...ready, signingOut: true }), false);
   assert.equal(mayAct({ ...ready, working: true }), false);
+});
+
+// SR7: when each block was made. June 2026 in London (BST); 24 Dec 2025 is last year.
+const JUNE = Date.parse("2026-06-15T12:00:00Z");
+const LONDON = "Europe/London";
+const LEO_2 = "0a000000-0000-4000-8000-000000000004";
+const dated = (state: BlockedPeopleState) => blockedPeopleView(state, { preview: false, now: JUNE, zone: LONDON });
+
+test("SR7: the gateway keeps each block's time, and leaves out one it can't read", async () => {
+  const rows = [
+    { user_id: LEO, name: "Leo", at: "2026-06-10T18:00:00.123456+00:00" },
+    { user_id: LEO_2, name: "Leo", at: "2025-12-24T10:00:00Z" },
+    { user_id: ANA, name: "Ana" },
+    { user_id: MIA, name: null, at: "yesterday" },
+    { user_id: "0a000000-0000-4000-8000-000000000005", name: "Sol", at: 1781280000 },
+    { user_id: "0a000000-0000-4000-8000-000000000006", name: "Pia", at: null },
+  ];
+  const gw = createSafetyGateway(async () => ({ data: rows, error: null }));
+  assert.deepEqual(await gw.myBlocks(), [
+    { userId: LEO, name: "Leo", at: "2026-06-10T18:00:00.123456+00:00" },
+    { userId: LEO_2, name: "Leo", at: "2025-12-24T10:00:00Z" },
+    { userId: ANA, name: "Ana" },
+    { userId: MIA, name: null },
+    { userId: "0a000000-0000-4000-8000-000000000005", name: "Sol" },
+    { userId: "0a000000-0000-4000-8000-000000000006", name: "Pia" },
+  ]);
+});
+
+test("SR7: each row says when it was blocked, in the phone's zone, the year only when it isn't this one, and says so to the screen reader", () => {
+  assert.equal(SAFETY_COPY.blockedOn("Wed 10 Jun"), "Blocked Wed 10 Jun");
+  const v = dated(
+    listed([
+      { userId: LEO, name: "Leo", at: "2026-06-10T18:00:00.123456+00:00" },
+      { userId: LEO_2, name: "Leo", at: "2025-12-24T10:00:00Z" },
+      // 23:30 UTC on 30 June is 1 July in London.
+      { userId: ANA, name: "Ana", at: "2026-06-30T23:30:00Z" },
+    ]),
+  );
+  assert.equal(v.kind, "list");
+  if (v.kind !== "list") return;
+  assert.deepEqual(
+    v.rows.map((r) => [r.name, r.since, r.rowLabel, r.label]),
+    [
+      ["Leo", "Blocked Wed 10 Jun", "Leo, Blocked Wed 10 Jun", "Unblock Leo"],
+      ["Leo", "Blocked Wed 24 Dec 2025", "Leo, Blocked Wed 24 Dec 2025", "Unblock Leo"],
+      ["Ana", "Blocked Wed 1 Jul", "Ana, Blocked Wed 1 Jul", "Unblock Ana"],
+    ],
+  );
+  // Two people with the same first name are told apart.
+  assert.notEqual(v.rows[0].rowLabel, v.rows[1].rowLabel);
+});
+
+test("SR7: no time, or one that can't be read, gives no second line and never throws", () => {
+  const odd = [
+    { userId: LEO, name: "Leo" },
+    { userId: ANA, name: "Ana", at: "not a time" },
+    { userId: MIA, name: null, at: "" },
+  ] as BlockedPerson[];
+  const v = dated(listed(odd));
+  assert.deepEqual(v.kind === "list" && v.rows.map((r) => [r.since, r.rowLabel]), [
+    [null, "Leo"],
+    [null, "Ana"],
+    [null, "Someone"],
+  ]);
+  // Without a clock or a zone, the phone's own are used.
+  const plain = view(listed([{ userId: LEO, name: "Leo", at: new Date().toISOString() }]));
+  assert.match(plain.kind === "list" ? String(plain.rows[0].since) : "", /^Blocked \w{3} \d{1,2} \w{3}$/);
 });
 
 test("the screen and its hook: the gateway's reads and unblock, its error words, and the model's view", () => {

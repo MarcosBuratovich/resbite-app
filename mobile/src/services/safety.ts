@@ -3,13 +3,11 @@ import { hasVisibleText, wellFormedText } from "../domain/chatRules";
 import { INVITE_COPY } from "../domain/inviteCopy";
 import { SAFETY_COPY, type ReportReason } from "../domain/safetyCopy";
 
-/** Someone the reader blocked, as `my_blocks` lists them; `name` is null for an account that can't be named (G-S10). */
-export type BlockedPerson = {
-  userId: string;
-  name: string | null;
-  /** When the block was made, as the server sends it (`my_blocks`' `at`); null when the answer has none. */
-  at: string | null;
-};
+/**
+ * Someone the reader blocked, as `my_blocks` lists them; `name` is null for an account that can't be named (G-S10).
+ * `at` is when the block was made, as the server sent it, and only when the phone can read it (ruling SR7).
+ */
+export type BlockedPerson = { userId: string; name: string | null; at?: string };
 
 /**
  * What `block_user` answered (server review M7): `stored` is true only when a block row exists afterwards, false when
@@ -107,15 +105,20 @@ export function knownBlocksAfter(known: ReadonlySet<string> | null, change: Bloc
   return next;
 }
 
-/** `my_blocks`' list; an answer that isn't one is a failed read, so the blocks stay unknown (N13, ruling SR2). */
+/**
+ * `my_blocks`' list; an answer that isn't one is a failed read, so the blocks stay unknown (N13, ruling SR2). A time
+ * that is missing or can't be read is left out, never a failure (SR7).
+ */
 function blockedPeople(data: unknown): BlockedPerson[] {
   if (!Array.isArray(data)) throw Error("Unexpected blocked people");
   const out: BlockedPerson[] = [];
   for (const row of data) {
     if (typeof row !== "object" || row === null) continue;
     const { user_id: userId, name, at } = row as Record<string, unknown>;
-    if (typeof userId === "string" && userId !== "")
-      out.push({ userId, name: typeof name === "string" ? name : null, at: typeof at === "string" ? at : null });
+    if (typeof userId !== "string" || userId === "") continue;
+    const person: BlockedPerson = { userId, name: typeof name === "string" ? name : null };
+    if (typeof at === "string" && Number.isFinite(Date.parse(at))) person.at = at;
+    out.push(person);
   }
   return out;
 }

@@ -74,6 +74,8 @@ export const SAFETY_COPY = {
   noneBlocked: "You haven’t blocked anyone.",
   unblockAction: "Unblock",
   unblocked: (name: string) => `Unblocked ${name}.`,
+  /** A row's second line, when the block was made (ruling SR7): "Blocked Wed 10 Jun", the year only when not this one. */
+  blockedOn: (day: string) => `Blocked ${day}`,
 
   // The contact address (G-N10).
   contact: (address: string) => `Questions, or something wrong in a chat? Write to ${address}.`,

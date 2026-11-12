@@ -1,3 +1,4 @@
+import { dayLabel, phoneZone } from "../domain/chatRules";
 import { SAFETY_COPY, shownName } from "../domain/safetyCopy";
 import type { BlockedPerson } from "../services/safety";
 
@@ -107,6 +108,10 @@ export type BlockedRow = {
   action: string;
   /** "Unblock <name>". */
   label: string;
+  /** "Blocked <short date>" (ruling SR7), or null when the block's time is missing or can't be read. */
+  since: string | null;
+  /** What the screen reader says for the row: the name, and when it was blocked ("Leo, Blocked Wed 10 Jun"). */
+  rowLabel: string;
   /** This row's unblock is running. */
   busy: boolean;
   /** An unblock is running, this one or another's. */
@@ -122,11 +127,15 @@ export type BlockedPeopleView =
   | { kind: "list"; rows: BlockedRow[]; after: AfterUnblock | null };
 
 /**
- * What the screen shows: the list in my_blocks' order (newest first), `noneBlocked` when it is empty, the error line
+ * What the screen shows: the list in my_blocks' order (newest first), each row with when it was blocked (SR7; `now` and
+ * `zone` default to the phone's), `noneBlocked` when it is empty, the error line
  * with Try again when the read failed, or a spinner; the list and the empty line carry what the last unblock says. The
  * preview has no account, so nobody is blocked there.
  */
-export function blockedPeopleView(state: BlockedPeopleState, { preview }: { preview: boolean }): BlockedPeopleView {
+export function blockedPeopleView(
+  state: BlockedPeopleState,
+  { preview, now = Date.now(), zone = phoneZone() }: { preview: boolean; now?: number; zone?: string },
+): BlockedPeopleView {
   if (preview) return { kind: "none", after: null };
   if (state.people !== null) {
     if (state.people.length === 0) return { kind: "none", after: state.after };
@@ -135,11 +144,16 @@ export function blockedPeopleView(state: BlockedPeopleState, { preview }: { prev
       after: state.after,
       rows: state.people.map((p) => {
         const name = shownName(p.name);
+        // The chat's short date in the phone's zone, the year only when it isn't this one (SR7).
+        const day = typeof p.at === "string" ? dayLabel(p.at, zone, now) : "";
+        const since = day ? SAFETY_COPY.blockedOn(day) : null;
         return {
           userId: p.userId,
           name,
           action: SAFETY_COPY.unblockAction,
           label: SAFETY_COPY.unblock(name),
+          since,
+          rowLabel: since ? `${name}, ${since}` : name,
           busy: state.unblocking === p.userId,
           disabled: state.unblocking !== null,
           error: state.unblockError?.userId === p.userId ? state.unblockError.message : null,
