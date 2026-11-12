@@ -21,7 +21,7 @@ export const SEEN_LIMIT = 500;
 
 /** A message written on this phone that the server hasn't confirmed: "Sending…", or "Not sent. Tap to retry." */
 export type PendingMessage = { kind: "pending"; clientId: string; body: string; createdAt: string; failed: boolean };
-/** The computed separator at a one-off's end, "<title> ended" (K-S16). Nothing stores it. */
+/** The computed "<title> ended" at a one-off's end, or a stopped group's last one (K-S16). Nothing stores it. */
 export type EndedLine = { kind: "ended"; at: string };
 
 /**
@@ -131,6 +131,16 @@ export function createCoalescer(run: () => Promise<void>): { trigger(): Promise<
   };
 }
 
+/**
+ * The rows the feed shows: every one but a system line whose state is `deleted` (Decision 6: a group's `cant_go` taken
+ * back within 10 minutes, or a `stopped` line once the repeat is back on), which is never shown. A person's deleted or
+ * removed message stays, as "Message deleted". With nothing to drop, the list itself comes back.
+ */
+export function shownMessages(messages: ChatMessage[]): ChatMessage[] {
+  const hidden = (m: ChatMessage) => m.kind === "system" && m.state === "deleted";
+  return messages.some(hidden) ? messages.filter((m) => !hidden(m)) : messages;
+}
+
 /** The rows on screen, then the queued messages the server hasn't confirmed (matched by client id), oldest first. */
 export function withPending(messages: ChatMessage[], queue: QueuedMessage[]): Array<ChatMessage | PendingMessage> {
   const confirmed = new Set(messages.map((m) => m.clientId).filter((id): id is string => id !== null));
@@ -165,10 +175,12 @@ export function remember(seen: Map<number, string>, id: number, stamp: string): 
 }
 
 /**
- * The list with a one-off's "<title> ended" separator (K-S16, Decision 8). Only for a one-off that isn't cancelled
- * (NOTE 5) and whose end (`endsAt ?? startsAt`, `planEnd`) has passed. It goes after the last row created at or before
- * the end, or first when every row is later, and only where it can be placed: nothing earlier is left to load, or the
- * oldest loaded row is at or before the end. Pending messages are written now, so they stay after it.
+ * The list with a one-off's "<title> ended" separator (K-S16, Decision 8). Only for a one-off, or a group that has
+ * stopped repeating (no roll writes `ended` for its last occurrence; a running group's roll writes its own), that isn't
+ * cancelled (NOTE 5, G-S2) and whose end (`endsAt ?? startsAt`, `planEnd`) has passed. It goes after the last row
+ * created at or before the end, or first when every row is later, and only where it can be placed: nothing earlier is
+ * left to load, or the oldest loaded row is at or before the end. Pending messages are written now, so they stay
+ * after it.
  */
 export function withEndedLine<T extends ChatMessage | PendingMessage>(
   items: T[],
@@ -176,7 +188,7 @@ export function withEndedLine<T extends ChatMessage | PendingMessage>(
   hasEarlier: boolean,
   now: number,
 ): Array<T | EndedLine> {
-  if (!summary || summary.isGroup || summary.status === "cancelled") return items;
+  if (!summary || (summary.isGroup && !summary.stopped) || summary.status === "cancelled") return items;
   const endsAt = summary.endsAt === null ? null : serverTime(summary.endsAt);
   const end = planEnd({ starts_at: serverTime(summary.startsAt), ends_at: endsAt });
   if (!Number.isFinite(end) || end > now) return items;

@@ -196,6 +196,9 @@ function fakeServer(clock: { now(): number }) {
     overview: async () => {
       throw Error("not used by the chat");
     },
+    leave: async (series) => {
+      await step("leave", [series]);
+    },
   };
   return {
     gateway,

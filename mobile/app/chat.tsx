@@ -32,6 +32,7 @@ import {
   closingLine,
   defaultAudience,
   fitEdit,
+  groupDay,
   hasVisibleText,
   headerLine,
   isSeriesId,
@@ -45,7 +46,7 @@ import { NOTIFICATION_ASK } from "../src/domain/notifications";
 import type { ChatSummary } from "../src/services/chat";
 import { useApp } from "../src/state/AppState";
 import { useChat, type Chat } from "../src/state/useChat";
-import { withEndedLine, withPending } from "../src/state/chatModel";
+import { shownMessages, withEndedLine, withPending } from "../src/state/chatModel";
 import { chatFeed, nothingSaid, type FeedLink, type FeedRow, type MessageAction } from "../src/state/chatFeed";
 import { dismissed, holdError, heldUntil, type HeldError } from "../src/state/heldError";
 import { useNotificationAsk } from "../src/state/useNotificationAsk";
@@ -279,6 +280,8 @@ function Conversation({
   const mounted = useMounted();
   const zone = useMemo(phoneZone, []);
   const open = summary.open;
+  // A group's weekday, "Thursday", for its announcements' audience (plan 2).
+  const day = groupDay(summary);
 
   const [draft, setDraft] = useState("");
   // What Send reads: two presses before a redraw still send once (H32 Q27).
@@ -295,10 +298,11 @@ function Conversation({
   const question = useRef<Text | null>(null);
   const firstMenuRow = useRef<View | null>(null);
 
-  // The list: rows, the ended line and the unsent messages, worded, oldest first; reversed for the inverted list.
+  // The list: rows (a deleted system line never shows, Decision 6), the ended line and the unsent messages, worded,
+  // oldest first; reversed for the inverted list.
   const rows = useMemo(
     () =>
-      chatFeed(withEndedLine(withPending(chat.messages, chat.pending), summary, chat.hasEarlier, now), {
+      chatFeed(withEndedLine(withPending(shownMessages(chat.messages), chat.pending), summary, chat.hasEarlier, now), {
         names: chat.names,
         viewerId,
         now,
@@ -306,8 +310,10 @@ function Conversation({
         title: summary.title,
         host: summary.host,
         closed: !open,
+        group: summary.isGroup,
+        day,
       }),
-    [chat.messages, chat.pending, chat.names, chat.hasEarlier, summary, now, viewerId, zone, open],
+    [chat.messages, chat.pending, chat.names, chat.hasEarlier, summary, now, viewerId, zone, open, day],
   );
   const data = useMemo(() => [...rows].reverse(), [rows]);
   const byKey = useMemo(() => new Map(rows.map((r) => [r.key, r])), [rows]);
@@ -343,7 +349,9 @@ function Conversation({
   }, [reduce]);
   useEffect(tryJump, [data, tryJump]);
   const pinned = summary.pinned;
-  const pinnedLabel = pinned ? messageLabel(pinned, chat.names, viewerId, now, zone) : null;
+  const pinnedLabel = pinned
+    ? messageLabel(pinned, chat.names, viewerId, now, zone, undefined, summary.isGroup, day)
+    : null;
   const jumpToPinned = async () => {
     if (!pinned) return;
     const key = `m:${pinned.id}`;

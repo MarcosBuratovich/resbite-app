@@ -88,6 +88,11 @@ export type ChatGateway = {
   markRead(series: string, lastId: number): Promise<void>;
   setMute(series: string, muted: boolean): Promise<void>;
   overview(): Promise<ChatOverview>;
+  /**
+   * Leaves a group (`leave_series`, G-N13): out of its chat and off its next ones. Refused for anyone not in the group, a
+   * host or the owner (`chatErrorMessage` words each).
+   */
+  leave(series: string): Promise<void>;
 };
 
 type Data = Record<string, unknown>;
@@ -238,6 +243,7 @@ export function createChatGateway(rpc: Rpc, deadline: Deadline = passThrough): C
     markRead: async (series, lastId) => void (await call("mark_chat_read", { p_series: series, p_last_id: lastId })),
     setMute: async (series, muted) => void (await call("set_chat_mute", { p_series: series, p_muted: muted })),
     overview: async () => overview(await call("my_chat_overview", {})),
+    leave: async (series) => void (await call("leave_series", { p_series: series })),
   };
 }
 
@@ -268,6 +274,10 @@ export function chatErrorMessage(e: unknown): string {
     if (message === "Not in this chat") return CHAT_COPY.notInChat;
     if (message === "Hosts only") return CHAT_COPY.hostsOnly;
     if (message === "Not your message") return CHAT_COPY.notYours;
+    // Leaving a group (G-N13); the server's words keep the straight apostrophe.
+    if (message === "Not in this group") return CHAT_COPY.notInGroup;
+    if (message === "Hosts can't leave") return CHAT_COPY.hostsCantLeave;
+    if (message === "Owner can't leave") return CHAT_COPY.ownerCantLeave;
   }
   if (code === "22023") {
     if (message === "Chat closed") return CHAT_COPY.closedShort;

@@ -498,11 +498,11 @@ test("EVENT_COPY pins the page, sheet and list words", () => {
 });
 
 test("showsNames: hosts always, guests once they have answered", () => {
-  assert.equal(showsNames("owner", null), true);
-  assert.equal(showsNames("admin", "pending"), true);
-  assert.equal(showsNames("guest", null), false);
-  assert.equal(showsNames("guest", "pending"), false);
-  for (const r of ["accepted", "maybe", "declined", "withdrawn"]) assert.equal(showsNames("guest", r), true);
+  assert.equal(showsNames("owner", null, false), true);
+  assert.equal(showsNames("admin", "pending", false), true);
+  assert.equal(showsNames("guest", null, false), false);
+  assert.equal(showsNames("guest", "pending", false), false);
+  for (const r of ["accepted", "maybe", "declined", "withdrawn"]) assert.equal(showsNames("guest", r, false), true);
 });
 
 test("stateChip: Cancelled, Ended or none", () => {
@@ -1182,15 +1182,15 @@ const chat = (over: Partial<ChatSummary> = {}): ChatSummary => ({
 test("the Chat row: none outside the chat or when the read failed; the latest line and the dot while open", () => {
   // Not in the chat (42501), or the read failed: useEvent gives null, and there is no row (K-S13).
   assert.equal(chatRow(null, ME), null);
-  assert.deepEqual(chatRow(chat(), ME), { text: "Leo: I can bring the snacks", dot: true, closed: false });
-  assert.deepEqual(chatRow(chat({ unread: false }), ME), { text: "Leo: I can bring the snacks", dot: false, closed: false });
+  assert.deepEqual(chatRow(chat(), ME), { title: "Chat", text: "Leo: I can bring the snacks", dot: true, closed: false });
+  assert.deepEqual(chatRow(chat({ unread: false }), ME), { title: "Chat", text: "Leo: I can bring the snacks", dot: false, closed: false });
   // The viewer's own line, a system line in words, and an empty chat (CH-01).
   assert.equal(chatRow(chat({ last: message({ authorId: ME }), unread: false }), ME)?.text, "You: I can bring the snacks");
   assert.equal(
     chatRow(chat({ last: message({ kind: "system", event: "changed", payload: { actor: LEO, what: "place", place_label: "" }, body: null, authorId: null }) }), ME)?.text,
     "Leo changed the place",
   );
-  assert.deepEqual(chatRow(chat({ last: null, unread: false, messageCount: 0 }), ME), { text: "No messages yet", dot: false, closed: false });
+  assert.deepEqual(chatRow(chat({ last: null, unread: false, messageCount: 0 }), ME), { title: "Chat", text: "No messages yet", dot: false, closed: false });
 });
 
 test("the Chat row after the close: the count without a dot, and no row for a closed chat that never had a message", () => {
@@ -1222,7 +1222,7 @@ test("the Chat row never shows a line it can't word: no preview line, never null
 // Fix round 1 (H37 D1, Q6): the row's line is one cleaned line, and its label carries at most 120 characters of it.
 test("the Chat row's line and label: one line, never a second speaker, and a label cut at 120 characters", () => {
   const spoof = chatRow(chat({ last: message({ body: "See you!\nAna: Cancelled, don’t come" }) }), ME);
-  assert.deepEqual(spoof, { text: "Leo: See you! Ana: Cancelled, don’t come", dot: true, closed: false });
+  assert.deepEqual(spoof, { title: "Chat", text: "Leo: See you! Ana: Cancelled, don’t come", dot: true, closed: false });
   assert.equal(chatRowLabel(spoof!), "Chat. Leo: See you! Ana: Cancelled, don’t come, unread messages");
   // A 1,000-character message: the label says the first 120 characters of the line, then "…".
   const long = chatRow(chat({ last: message({ body: "word ".repeat(200).trim() }), unread: false }), ME)!;
@@ -1232,6 +1232,199 @@ test("the Chat row's line and label: one line, never a second speaker, and a lab
   // The other rows' labels.
   assert.equal(chatRowLabel(chatRow(chat({ unread: false, last: null, messageCount: 0 }), ME)!), "Chat. No messages yet");
   assert.equal(chatRowLabel(chatRow(chat({ open: false }), ME)!), "Chat closed · 23 messages");
-  assert.equal(chatRowLabel({ closed: false, text: null, dot: true }), "Chat, unread messages");
-  assert.equal(chatRowLabel({ closed: false, text: null, dot: false }), "Chat");
+  assert.equal(chatRowLabel({ closed: false, title: "Chat", text: null, dot: true }), "Chat, unread messages");
+  assert.equal(chatRowLabel({ closed: false, title: "Chat", text: null, dot: false }), "Chat");
+});
+
+// Plan 2 (groups).
+test("EVENT_COPY's group words", () => {
+  assert.equal(EVENT_COPY.groupNotAnswered, "Not answered yet");
+});
+
+test("showsNames: on a group, every role sees names, answered or not (G-B5)", () => {
+  assert.equal(showsNames("guest", "pending", true), true);
+  assert.equal(showsNames("guest", "pending", false), false);
+  assert.equal(showsNames("guest", null, true), true);
+  assert.equal(showsNames("guest", null, false), false);
+  for (const role of ["owner", "admin"] as const) assert.equal(showsNames(role, "pending", true), true);
+  for (const r of ["accepted", "maybe", "declined", "withdrawn"]) assert.equal(showsNames("guest", r, true), true);
+});
+
+test("moreRows: a group's guest leaves the group last, while the chat is open, on any page (G-N13)", () => {
+  const calendar = true;
+  const row = (over: Partial<Parameters<typeof moreRows>[0]>) =>
+    moreRows({ role: "guest", state: "open", muted: false, response: "accepted", calendar, isGroup: true, chatOpen: true, ...over });
+  assert.deepEqual(row({}), ["calendar", "mute", "leaveGroup"]);
+  assert.deepEqual(row({ muted: true, response: "maybe" }), ["calendar", "unmute", "leaveGroup"]);
+  assert.deepEqual(row({ response: "declined", calendar: false }), ["mute", "leaveGroup"]);
+  // Whatever their reply: one who hasn't answered gets it alone.
+  assert.deepEqual(row({ response: "pending" }), ["leaveGroup"]);
+  assert.deepEqual(row({ response: null }), ["leaveGroup"]);
+  // A one-off guest never; and the flags left out read as a one-off's.
+  assert.deepEqual(row({ isGroup: false }), ["calendar", "mute"]);
+  assert.deepEqual(moreRows({ role: "guest", state: "open", muted: false, response: "accepted", calendar }), ["calendar", "mute"]);
+  // An ended or cancelled page with the chat open: their only row. With the chat closed, or not read: none.
+  for (const state of ["ended", "cancelled"] as const) {
+    assert.deepEqual(row({ state }), ["leaveGroup"], state);
+    assert.deepEqual(row({ state, response: "pending" }), ["leaveGroup"], state);
+    assert.deepEqual(row({ state, chatOpen: false }), [], state);
+  }
+  assert.deepEqual(row({ chatOpen: false }), ["calendar", "mute"]);
+  // Hosts can't leave (Hosts can't leave, Owner can't leave): they see what they saw before.
+  assert.deepEqual(row({ role: "owner", response: null }), ["calendar", "mute", "again", "cancel"]);
+  assert.deepEqual(row({ role: "admin" }), ["calendar", "mute", "again", "changeReply", "cancel"]);
+  assert.deepEqual(row({ role: "admin", state: "ended" }), []);
+});
+
+/** Right after a roll: owner 01, admin 02, the viewer 03, and 04 to 06, everyone but the owner pending (G-B5, G-S14). */
+const ROLLED = {
+  ...base,
+  role: "guest" as const,
+  userId: "m03",
+  owner: { userId: "m01", name: "Ana" },
+  guests: [
+    guest("m02", "Leo", "pending"),
+    guest("m03", "Mia", "pending"),
+    guest("m04", "Sol", "pending"),
+    guest("m05", "Pedro", "pending"),
+    guest("m06", "Clara", "pending"),
+  ],
+  admins: ["m02"],
+  // The waiting requests are a host's only, and the server lists a guest no one else's links.
+  requests: [request("r1", "Rae")],
+  connections: {},
+  isGroup: true,
+};
+/** The chat's `members` for a fixture: the owner and every attendee row of the current occurrence. */
+const membersOf = (i: { owner: unknown; guests: unknown[] }) => (i.owner ? 1 : 0) + i.guests.length;
+
+test("peopleGroups as a guest on a group right after a roll: every member, by name, with Connect (G-B5)", () => {
+  const groups = peopleGroups(ROLLED);
+  assert.deepEqual(groups.map((x) => x.title), ["Going · 1", "Not answered yet · 5"]);
+  assert.deepEqual(groups[0].rows.map((r) => r.userId), ["m01"]);
+  const rows = groups.flatMap((x) => x.rows);
+  assert.deepEqual(rows.map((r) => r.name).sort(), ["Ana", "Clara", "Leo", "Mia", "Pedro", "Sol"]);
+  const by = (id: string) => rows.find((r) => r.userId === id)!;
+  for (const id of ["m02", "m04", "m05", "m06"]) assert.deepEqual([by(id).connection, by(id).actions], ["none", ["connect"]], id);
+  assert.deepEqual([by("m03").me, by("m03").actions], [true, []]);
+  assert.deepEqual(group(groups, "Not answered yet").map((r) => [r.kind, r.status]), [
+    ["appInvite", "Invited in the app"],
+    ["appInvite", "Invited in the app"],
+    ["appInvite", "Invited in the app"],
+    ["appInvite", "Invited in the app"],
+    ["appInvite", "Invited in the app"],
+  ]);
+  assert.equal(by("m02").admin, true);
+  assert.equal(rows.some((r) => r.kind === "linkInvite" || r.kind === "request"), false);
+  // As many app and owner rows as the chat's members (G-S14).
+  assert.equal(rows.filter((r) => r.kind === "appInvite" || r.kind === "owner").length, membersOf(ROLLED));
+  assert.equal(new Set(rows.map((r) => r.key)).size, rows.length);
+});
+
+test("the same people on a one-off: only Going, the one-off rule (G-S3)", () => {
+  assert.deepEqual(peopleGroups({ ...ROLLED, isGroup: false }).map((x) => x.title), ["Going · 1"]);
+  // Left out, the flag reads as a one-off's: never more.
+  const { isGroup: _flag, ...oneOff } = ROLLED;
+  assert.deepEqual(peopleGroups(oneOff).map((x) => x.title), ["Going · 1"]);
+});
+
+test("a bringer on a group: their brought invitee once, under Not answered yet; their link under Invited (S4)", () => {
+  const input = {
+    ...base,
+    role: "guest" as const,
+    userId: "pedro",
+    owner: { userId: "owner", name: "Owner" },
+    guests: [g("pedro"), g("clara", { response: "pending", broughtById: "pedro", level: 2 }), g("sol", { response: "pending" })],
+    invited: [linkPerson("111", "Juli", "whatsapp")],
+    bringerNames: { pedro: "Pedro" },
+    connections: {},
+    isGroup: true,
+  };
+  const groups = peopleGroups(input);
+  assert.deepEqual(groups.map((x) => x.title), ["Going · 2", "Not answered yet · 2", "Invited, not answered yet · 1"]);
+  const waiting = group(groups, "Not answered yet");
+  assert.deepEqual(waiting.map((r) => [r.name, r.status, r.actions]), [
+    ["Clara", "Invited in the app · brought by you", ["connect", "removeInvite"]],
+    ["Sol", "Invited in the app", ["connect"]],
+  ]);
+  assert.deepEqual([waiting[0].kind, waiting[0].broughtByMe, waiting[0].broughtByName], ["appInvite", true, "Pedro"]);
+  assert.deepEqual(group(groups, "Invited").map((r) => [r.name, r.kind, r.status, r.actions]), [
+    ["Juli", "linkInvite", "Invited by WhatsApp · brought by you", ["sendAgain", "removeInvite"]],
+  ]);
+  const rows = groups.flatMap((x) => x.rows);
+  assert.equal(new Set(rows.map((r) => r.key)).size, rows.length, "no key twice");
+  assert.equal(rows.filter((r) => r.name === "Clara").length, 1);
+  assert.equal(groups.filter((x) => !x.title.startsWith("Invited")).flatMap((x) => x.rows).length, membersOf(input));
+  // After the end, or once cancelled: nothing to take back; Connect stays (CO rule 7).
+  for (const state of ["ended", "cancelled"] as const)
+    assert.deepEqual(group(peopleGroups({ ...input, state }), "Not answered yet").map((r) => r.actions), [["connect"], ["connect"]], state);
+  // A pending admin they brought is a host, whom the server never lets them withdraw (C18-I1).
+  const admin = group(peopleGroups({ ...input, admins: ["clara"] }), "Not answered yet");
+  assert.deepEqual(admin[0].actions, ["connect"]);
+});
+
+test("on a group, a bringer missing from bringerNames gets no Brought by line; until they are read, a shown row names them (G-N3, C28)", () => {
+  const input = {
+    ...base,
+    role: "guest" as const,
+    userId: "ana",
+    owner: { userId: "owner", name: "Owner" },
+    guests: [
+      g("ana"),
+      g("clara", { broughtById: "gone" }),
+      g("nico", { response: "pending", broughtById: "marta", level: 2 }),
+      g("marta", { response: "pending" }),
+    ],
+    bringerNames: {},
+    connections: {},
+    isGroup: true,
+  };
+  const rows = peopleGroups(input).flatMap((x) => x.rows);
+  const by = (name: string) => rows.find((r) => r.name === name)!;
+  assert.deepEqual([by("Clara").status, by("Clara").broughtByName], [null, null]);
+  assert.deepEqual([by("Nico").status, by("Nico").broughtByName], ["Invited in the app", null]);
+  // Before plan_bringers lands, Marta's own row, shown on a group though she hasn't answered, names her.
+  const early = peopleGroups({ ...input, bringerNames: null }).flatMap((x) => x.rows);
+  assert.equal(early.find((r) => r.name === "Nico")!.status, "Invited in the app · brought by Marta");
+  assert.equal(early.find((r) => r.name === "Clara")!.status, null);
+});
+
+test("hosts see on a group what they saw before", () => {
+  for (const role of ["owner", "admin"] as const) {
+    const input = { ...ROLLED, role, userId: role === "owner" ? "m01" : "m02", invited: [linkPerson("111", "Dan")] };
+    assert.deepEqual(peopleGroups(input), peopleGroups({ ...input, isGroup: false }), role);
+  }
+});
+
+test("the Chat row on a group: Group chat while open; closed, the count as built, or no row (K-S13)", () => {
+  const row = chatRow(chat({ isGroup: true, repeatWeeks: 1 }), ME)!;
+  assert.deepEqual(row, { title: "Group chat", text: "Leo: I can bring the snacks", dot: true, closed: false });
+  assert.ok(chatRowLabel(row).startsWith("Group chat. "), chatRowLabel(row));
+  assert.equal(chatRowLabel(row), "Group chat. Leo: I can bring the snacks, unread messages");
+  assert.equal(chatRowLabel(chatRow(chat({ isGroup: true, last: null, unread: false, messageCount: 0 }), ME)!), "Group chat. No messages yet");
+  // A group's line in its own words.
+  const cantGo = message({ kind: "system", event: "cant_go", payload: { actor: LEO, user: LEO }, body: null, authorId: null });
+  assert.equal(chatRow(chat({ isGroup: true, last: cantGo }), ME)!.text, "Leo can’t make it this week");
+  assert.deepEqual(chatRow(chat({ isGroup: true, stopped: true, open: false }), ME), { text: "Chat closed · 23 messages", dot: false, closed: true });
+  assert.equal(chatRow(chat({ isGroup: true, stopped: true, open: false, messageCount: 0, last: null, unread: false }), ME), null);
+  // A one-off's is Chat.
+  const oneOff = chatRow(chat(), ME);
+  assert.equal(oneOff && !oneOff.closed ? oneOff.title : null, "Chat");
+});
+
+test("useEvent carries the group flag: names, the snapshot an answer builds, and a group's Chat row kept after an answer (challenge NOTE 6)", () => {
+  const src = readFileSync(new URL("../state/useEvent.ts", import.meta.url), "utf8");
+  assert.match(src, /isGroup: boolean;/);
+  assert.match(src, /const viewer = viewerRole\(next\.plan, userId, next\.admins\);\s*const named = showsNames\(viewer, next\.attendee\?\.response \?\? null, next\.isGroup\);/);
+  assert.match(src, /showsNames\(role, snapshot\?\.attendee\?\.response \?\? null, isGroup\)/);
+  const answer = src.slice(src.indexOf("const confirmed = next;"), src.indexOf("const result = reconcileRsvp(attempt, confirmed);"));
+  assert.match(answer, /isGroup: old\?\.isGroup \?\? false,/);
+  const confirmedRead = src.slice(src.indexOf('if (result === "confirmed") {'), src.indexOf("dropAnnouncement();", src.indexOf('if (result === "confirmed") {')));
+  assert.match(confirmedRead, /readChat\(confirmed\.plan\.series_id, valid, current\.isGroup\)/);
+  assert.match(src, /isGroup,\n/);
+  const page = readFileSync(new URL("../../app/event.tsx", import.meta.url), "utf8");
+  assert.match(page, /showsNames\(role, response, event\.isGroup\)/);
+  assert.match(page, /moreRows\(\{\s*role,\s*state,\s*muted: event\.muted,\s*response,\s*calendar: device\.shown,\s*isGroup: event\.isGroup,\s*chatOpen: event\.chat\?\.open === true,?\s*\}\)/);
+  const list = readFileSync(new URL("../../app/guests.tsx", import.meta.url), "utf8");
+  assert.match(list, /isGroup: event\.isGroup,/);
 });

@@ -460,3 +460,38 @@ test("isHostsOnly and isTooFast tell 'Hosts only' and the announcement limit by 
     assert.equal(isTooFast(other), false);
   }
 });
+
+// Plan 2 (groups).
+test("leave sends leave_series with the series, through the deadline, and throws a refusal as sent (G-N13)", async () => {
+  const { calls, gw } = gateway();
+  assert.equal(await gw.leave(SERIES), undefined);
+  assert.deepEqual(calls, [{ fn: "leave_series", args: { p_series: SERIES } }]);
+  const refusal = { code: "42501", message: "Owner can't leave" };
+  await assert.rejects(gateway(null, refusal).gw.leave(SERIES), (e) => e === refusal);
+  const wrapped: string[] = [];
+  const timed = createChatGateway(
+    async (fn) => ({ data: null, error: null, fn }),
+    async (request) => {
+      wrapped.push("wrapped");
+      return request(new AbortController().signal);
+    },
+  );
+  await timed.leave(SERIES);
+  assert.deepEqual(wrapped, ["wrapped"]);
+});
+
+test("leaving's refusals read as plain words, the server's straight apostrophe matched; anything else is the connection line", () => {
+  assert.equal(chatErrorMessage({ code: "42501", message: "Not in this group" }), "You’re not in this group.");
+  assert.equal(chatErrorMessage({ code: "42501", message: "Hosts can't leave" }), "To leave, step down first: change your reply to Can’t go.");
+  assert.equal(chatErrorMessage({ code: "42501", message: "Owner can't leave" }), "You own this group, so you can’t leave it.");
+  for (const other of [
+    { code: "42501", message: "Hosts can’t leave" },
+    { code: "42501", message: "Owner can’t leave" },
+    { code: "22023", message: "Not in this group" },
+    { code: "P0001", message: "Hosts can't leave" },
+    new Error("Failed to fetch"),
+  ])
+    assert.equal(chatErrorMessage(other), "Check your connection and try again.");
+  // Chat core's refusals are as built.
+  assert.equal(chatErrorMessage({ code: "42501", message: "Not in this chat" }), "You’re not in this chat.");
+});

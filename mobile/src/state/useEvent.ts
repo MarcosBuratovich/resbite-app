@@ -56,6 +56,12 @@ export type EventPage = {
   /** The server's Going, Maybe and Can't go numbers for a guest who hasn't answered (they read only their own row). */
   counts: AnswerCounts | null;
   /**
+   * The resbite is a group's and this person is in it (`readEvent`'s `series_is_group`): names show whatever their reply,
+   * the people list shows everyone in it, More offers Leave this group. False in the preview, on a one-off, and when the
+   * flag couldn't be read (I4).
+   */
+  isGroup: boolean;
+  /**
    * Personal-link invitations not answered yet: a host's (the owner and the admins) are every one; a guest who has
    * answered gets only the links they sent bringing someone, read only where there can be some (`readsOwnLinks`: the
    * circle lets guests bring, or they are known to have brought someone); empty for everyone else.
@@ -177,8 +183,9 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
   const chatRead = useRef(0);
   /**
    * Reads the series' chat for the Chat row. 'Not in this chat' always hides the row (K-S13). Any other failure keeps
-   * the row as it was when `keepOnFailure` (the page's loads, and an answer that wasn't confirmed: H36, H38), and hides it
-   * after a confirmed answer, which can move the person out of the chat. On a page's first read there is nothing to keep.
+   * the row as it was when `keepOnFailure` (the page's loads, an answer that wasn't confirmed: H36, H38, and any answer
+   * in a group, which keeps its members whatever they reply: challenge NOTE 6), and hides it after a one-off's confirmed
+   * answer, which can move the person out of the chat. On a page's first read there is nothing to keep.
    */
   const readChat = (series: string, valid: () => boolean, keepOnFailure: boolean) => {
     const ticket = ++chatRead.current;
@@ -245,7 +252,8 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
         // The connection states, only where names show (the server refuses them elsewhere). The event never waits
         // for them: they land when they arrive, and only a successful read replaces them (a failure keeps those known).
         const ticket = ++statesRead.current;
-        const named = showsNames(viewerRole(next.plan, userId, next.admins), next.attendee?.response ?? null);
+        const viewer = viewerRole(next.plan, userId, next.admins);
+        const named = showsNames(viewer, next.attendee?.response ?? null, next.isGroup);
         if (named)
           void connectionGateway.statesFor(planId).then(
             (states) => {
@@ -355,7 +363,8 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
   const muted = plan !== null && mutedSeries.has(plan.series_id);
   const ownerId = snapshot?.plan.owner_id;
   const ownerName = role === "owner" ? ownName : snapshot?.organizer?.trim() || null;
-  const namesShown = role !== null && showsNames(role, snapshot?.attendee?.response ?? null);
+  const isGroup = !preview && snapshot?.isGroup === true;
+  const namesShown = role !== null && showsNames(role, snapshot?.attendee?.response ?? null, isGroup);
   const owner = !preview && ownerId && ownerName && namesShown ? { userId: ownerId, name: ownerName } : null;
   /** True only when the answer is saved and confirmed, with nothing left to retry. */
   async function respond(value: Response, retry?: RsvpAttempt): Promise<boolean> {
@@ -401,6 +410,7 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
           g.userId === userId ? { ...g, response: confirmed.attendee.response } : g,
         ),
         counts: old?.counts ?? null,
+        isGroup: old?.isGroup ?? false,
       }));
       setFresh(true);
       const result = reconcileRsvp(attempt, confirmed);
@@ -410,8 +420,9 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
         setNotice(EVENT_COPY.responseSaved);
         syncDevice();
         // The answer moves the person into a one-off's chat (Going, Maybe) or out of it (Can't go): the row follows,
-        // and the announcement is the chat's to show now.
-        if (!chain) readChat(confirmed.plan.series_id, valid, false);
+        // and the announcement is the chat's to show now. In a group it moves nobody, so a failed read keeps the row
+        // as it was (challenge NOTE 6); a refusal still hides it.
+        if (!chain) readChat(confirmed.plan.series_id, valid, current.isGroup);
         dropAnnouncement();
         // UX-P5: answering reveals who's coming; the server now returns the whole list, so the counts come from it.
         // Read with it, what the guest may now bring: Going or Maybe may bring someone, Can't go no longer may.
@@ -575,6 +586,7 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
     organizer: snapshot?.organizer ?? null,
     guests: snapshot?.guests ?? [],
     counts: snapshot?.counts ?? null,
+    isGroup,
     invited,
     allowance: preview ? null : allowance,
     broughtNames: role === "guest" && !preview ? broughtNames({ guests: snapshot?.guests ?? [], invited, userId: userId ?? null }) : [],

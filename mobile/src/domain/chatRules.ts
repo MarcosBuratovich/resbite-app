@@ -1,8 +1,9 @@
 import type { ChatMessage, ChatNames, ChatOverview, ChatSummary } from "../services/chat";
 import { CHAT_COPY, type ChatAudience } from "./chatCopy";
 import { UUID_PATTERN } from "./covers";
+import { PLAN_COPY } from "./planCopy";
 import { planEnd } from "./planEnd";
-import { clockTime, localParts, shortDate } from "./whenText";
+import { clockTime, localParts, repeatLine, shortDate } from "./whenText";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -64,6 +65,11 @@ export function timeLabel(iso: string, zone: string): string {
 }
 const weekday = (iso: string, zone: string) =>
   new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: zoneOr(zone) }).format(new Date(iso));
+/** "Thursday", as `repeatLine` writes it, in the zone given (an unknown one in the phone's); "" when unreadable. */
+function longWeekday(iso: unknown, zone: unknown): string {
+  const at = instant(iso);
+  return at ? new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: zoneOr(zone) }).format(new Date(at)) : "";
+}
 const localDate = (iso: string, zone: string) => localParts(iso, zoneOr(zone));
 
 /**
@@ -205,12 +211,31 @@ function changedText(p: Record<string, unknown>, who: string | null): string {
   return by("changed the time", "The time changed");
 }
 
+/** A group's `next` line (I11): its day in its own zone, with no year, then the place as the host typed it. */
+function nextText(p: Record<string, unknown>): string {
+  const day = instant(p.starts_at) ? dayLabel(p.starts_at as string, text(p.time_zone) ?? "") : "";
+  const place = p.place_tbd === true ? PLAN_COPY.placeToBeDecided : cleanText(p.place_label);
+  const detail = [day, place].filter(Boolean).join(" · ");
+  return detail ? `Next one: ${detail}` : "Next one";
+}
+
+/** A `cancelled` line: a one-off's as built; a group's names the week it cancelled, or the group if it stops (G-S2). */
+function cancelledText(p: Record<string, unknown>, who: string | null, group: boolean): string {
+  if (!who) return "The resbite was cancelled";
+  if (group && p.stop === true) return `${who} cancelled the group`;
+  const day = group ? longWeekday(p.starts_at, p.time_zone) : "";
+  return day ? `${who} cancelled this ${day}` : `${who} cancelled the resbite`;
+}
+
 /**
  * Resbite's own line, worded on the phone (Decision 1, K-B2). A person is named through `names`, "Someone" when the read
- * could not name them, and "You" when they are the reader. `group` is plan 2's (its group wording); `title` names an
- * `ended` line whose payload has none. An event this build does not know gives no line ("").
+ * could not name them, and "You" when they are the reader. `group` picks a group's words where they differ (plan
+ * 2: "can’t make it this week", a cancelled week); `title` names an `ended` line whose payload has none. A line that is
+ * no longer `sent` (a group's deleted `cant_go` or `stopped`, Decision 6) and an event this build does not know give
+ * no line (""). A line's day is worded with no `now`, so it never shows a year (challenge NOTE 2).
  */
 export function systemText(m: ChatMessage, names: ChatNames, viewerId: string, group: boolean, title: string): string {
+  if (m.state !== "sent") return "";
   const p = isObject(m.payload) ? m.payload : {};
   const actor = text(p.actor);
   const who = actor ? person(actor, names, viewerId) : null;
@@ -222,17 +247,28 @@ export function systemText(m: ChatMessage, names: ChatNames, viewerId: string, g
       return withDetail(`${subject} joined`, brought && `brought by ${brought}`);
     }
     case "cant_go":
-      return `${subject} can’t make it`;
+      return group ? `${subject} can’t make it this week` : `${subject} can’t make it`;
     case "admin":
       return text(p.user) === viewerId ? `${subject} are now an admin` : `${subject} is now an admin`;
     case "changed":
       return changedText(p, who);
     case "cancelled":
-      return who ? `${who} cancelled the resbite` : "The resbite was cancelled";
+      return cancelledText(p, who, group);
     case "ended": {
       const name = cleanText(p.title) || cleanText(title);
       return name ? CHAT_COPY.ended(name) : "";
     }
+    // A group's own lines (plan 2). Only a group writes them; they read the same whatever the flag says now.
+    case "left":
+      return `${subject} left the group`;
+    case "next":
+      return nextText(p);
+    case "stopped": {
+      const day = instant(p.starts_at) ? dayLabel(p.starts_at as string, text(p.time_zone) ?? "") : "";
+      return withDetail(`${who ?? CHAT_COPY.someone} stopped repeating this`, day && `the last one is ${day}`);
+    }
+    case "made_group":
+      return `${who ?? CHAT_COPY.someone} made this a group · everyone invited can read this chat`;
     default:
       return "";
   }
@@ -322,12 +358,20 @@ export function currentOccurrences(
 /**
  * The header's second line: "Fri 30 Oct · 6 going", "Ended · Sat 15 Nov · 7 going" from the end on, and "Cancelled" for
  * a cancelled one-off (H20). The date is in the plan's zone and the number is the event page's Going (`accepted`,
- * K-N7). Null when the summary has no start or no zone (H20).
+ * K-N7). A group's reads how it repeats and who is in it, "Every Thursday · 9 in the group", and once it stopped
+ * repeating its last one, "Last one · Thu 27 Nov · 9 in the group" (G-S7), whatever this week's status. Null when the
+ * summary has no start or no zone, or a running group has no repeat (H20).
  */
 export function headerLine(summary: ChatSummary, now: number): string | null {
   if (!summary.isGroup && summary.status === "cancelled") return CHAT_COPY.cancelled;
   const start = instant(summary.startsAt);
   if (!start || !text(summary.timeZone)) return null;
+  if (summary.isGroup) {
+    const members = Number.isFinite(summary.members) ? summary.members : 0;
+    if (summary.stopped) return CHAT_COPY.groupStoppedHeader(dayLabel(start, summary.timeZone, now), members);
+    const repeat = repeatLine(start, zoneOr(summary.timeZone), summary.repeatWeeks);
+    return repeat ? CHAT_COPY.groupHeader(repeat, members) : null;
+  }
   const going = Number.isFinite(summary.accepted) ? summary.accepted : 0;
   const line = `${dayLabel(start, summary.timeZone, now)} · ${going} going`;
   return planEnd({ starts_at: start, ends_at: instant(summary.endsAt) }) <= now ? `Ended · ${line}` : line;
@@ -340,14 +384,41 @@ export const canAnnounce = (summary: ChatSummary): boolean => summary.host === t
 export const defaultAudience = (summary: ChatSummary): ChatAudience => (summary.isGroup ? "everyone" : "going");
 
 /**
+ * A group's weekday, "Thursday", as `repeatLine` writes it: the current occurrence's start in the plan's zone, an
+ * unknown zone read in the phone's. "" when the start can't be read. Its announcements, audiences and Leave question
+ * name it.
+ */
+export const groupDay = (summary: Pick<ChatSummary, "startsAt" | "timeZone">): string =>
+  longWeekday(summary.startsAt, summary.timeZone);
+
+/**
+ * The announcement sheet's two radios, in order, the first its starting audience (`defaultAudience`, K-N7). A
+ * group's: "Everyone in the group · 9", then "Going this Thursday · 6" (G-S7). A one-off's: "Going · 6", then
+ * "Everyone invited · 9".
+ */
+export function audienceOptions(summary: ChatSummary): Array<{ key: ChatAudience; title: string }> {
+  if (summary.isGroup)
+    return [
+      { key: "everyone", title: CHAT_COPY.audienceGroup(summary.everyone) },
+      { key: "going", title: CHAT_COPY.audienceGoingDay(groupDay(summary), summary.going) },
+    ];
+  return [
+    { key: "going", title: CHAT_COPY.audienceGoing(summary.going) },
+    { key: "everyone", title: CHAT_COPY.audienceEveryone(summary.everyone) },
+  ];
+}
+
+/**
  * The card in place of the field once the chat is closed (CH-06). The screen decides "closed" from `summary.open` only;
- * this picks the words from `(isGroup, stopped, status)`, and plan 2 adds the stopped group's card.
+ * this picks the words from `(isGroup, stopped, status)` (G-N5): a cancelled one-off's, a group's ("This group’s chat
+ * closed on Thu 27 Nov.", cancelled or not), else a one-off's with its date; with no close time, the short line.
  */
 export function closedCard(summary: ChatSummary, now?: number): { line: string; why: string | null } {
   if (!summary.isGroup && summary.status === "cancelled") return { line: CHAT_COPY.cancelledClosed, why: null };
   const closes = instant(summary.closesAt);
   if (!closes) return { line: CHAT_COPY.closedShort, why: null };
-  return { line: CHAT_COPY.closedOn(dayLabel(closes, summary.timeZone, now)), why: CHAT_COPY.closedWhy };
+  const day = dayLabel(closes, summary.timeZone, now);
+  return { line: summary.isGroup ? CHAT_COPY.groupClosedOn(day) : CHAT_COPY.closedOn(day), why: CHAT_COPY.closedWhy };
 }
 
 /** A control, bidi, zero-width or format character anywhere in a link keeps it plain (H20). */
@@ -417,8 +488,9 @@ export function linkParts(body: string): Array<{ text: string; href?: string }> 
 /**
  * What the screen reader says for a row (K-S14): "Leo, I can bring the snacks, 18:02", with the day when it isn't today
  * in `zone` (the phone's), "You" for the reader and the send state when unsent. A system line is "Resbite: " and its
- * text; an announcement starts with its audience in words. A time that can't be read is left out; null for a line it
- * can't word (H20).
+ * text; an announcement starts with its audience in words. On a group (`group`, plan 2) the lines take the group's
+ * words and an announcement its audience by the group's weekday (`day`, "Thursday": `announcementLabelGroup`). A time
+ * that can't be read is left out; null for a line it can't word (H20).
  */
 export function messageLabel(
   m: ChatMessage,
@@ -427,9 +499,11 @@ export function messageLabel(
   now: number,
   zone: string,
   sending?: "sending" | "failed" | "closed",
+  group = false,
+  day = "",
 ): string | null {
   if (m.kind === "system") {
-    const line = systemText(m, names, viewerId, false, "");
+    const line = systemText(m, names, viewerId, group, "");
     return line ? `Resbite: ${line}` : null;
   }
   const shown = words(m);
@@ -440,7 +514,8 @@ export function messageLabel(
     const today = Number.isFinite(now) && localDate(at, zone).date === localDate(new Date(now).toISOString(), zone).date;
     parts.push(today ? timeLabel(at, zone) : `${dayLabel(at, zone, now)}, ${timeLabel(at, zone)}`);
   }
-  if (m.kind === "announcement") parts.unshift(CHAT_COPY.announcementLabel(m.audience));
+  if (m.kind === "announcement")
+    parts.unshift(group ? CHAT_COPY.announcementLabelGroup(m.audience, day) : CHAT_COPY.announcementLabel(m.audience));
   if (sending)
     parts.push(sending === "sending" ? CHAT_COPY.sending : sending === "closed" ? CHAT_COPY.closedBeforeSent : CHAT_COPY.notSent);
   return parts.join(", ");

@@ -11,6 +11,7 @@ import {
   oldestId,
   remember,
   replaceOrMerge,
+  shownMessages,
   staleUnsent,
   tooOldToResend,
   withEndedLine,
@@ -361,4 +362,38 @@ test("remember keeps at most SEEN_LIMIT entries, letting the oldest go first (H2
   remember(seen, SEEN_LIMIT + 6, "x");
   assert.equal(seen.get(6), "t6b");
   assert.equal(seen.has(7), false);
+});
+
+// Plan 2 (groups).
+test("shownMessages drops a system line whose state is deleted, and nothing else (Decision 6)", () => {
+  const joined = row(1, { kind: "system", event: "joined", payload: { actor: ANA, user: ANA }, body: null, authorId: null });
+  const cantGo = row(2, { kind: "system", event: "cant_go", payload: { actor: ANA, user: ANA }, body: null, authorId: null, state: "deleted" });
+  const said = row(3);
+  assert.deepEqual(shownMessages([joined, cantGo, said]), [joined, said]);
+  // A person's deleted or removed message stays: it shows "Message deleted" (CH-P13).
+  const deleted = row(4, { state: "deleted", body: null });
+  const removed = row(5, { state: "removed", body: null });
+  assert.deepEqual(shownMessages([deleted, removed]), [deleted, removed]);
+  // With nothing to drop, the list itself comes back, so the screen's memo holds.
+  const list = [joined, said];
+  assert.equal(shownMessages(list), list);
+});
+
+test("withEndedLine on a group: only once it has stopped, at its current occurrence's end, never after a cancel (K-S16)", () => {
+  const end = "2026-11-14T15:00:00.000Z";
+  const now = Date.parse("2026-11-14T18:00:00.000Z");
+  const before = row(10, { createdAt: "2026-11-14T14:00:00.000Z" });
+  const after = row(12, { createdAt: "2026-11-14T16:00:00.000Z" });
+  const ended = { kind: "ended", at: end };
+  const stopped = summary({ isGroup: true, stopped: true, repeatWeeks: null });
+  assert.deepEqual(withEndedLine([before, after], stopped, false, now), [before, ended, after]);
+  // The built placement rules hold: a row before the end must be loaded, or nothing earlier left to load.
+  assert.deepEqual(withEndedLine([after], stopped, true, now), [after]);
+  assert.deepEqual(withEndedLine([after], stopped, false, now), [ended, after]);
+  // Not before its end.
+  assert.deepEqual(withEndedLine([before], stopped, false, Date.parse("2026-11-14T14:30:00.000Z")), [before]);
+  // A running group: the roll writes its ended line (G-S6), so nothing is computed.
+  assert.deepEqual(withEndedLine([before, after], summary({ isGroup: true, repeatWeeks: 1 }), false, now), [before, after]);
+  // A stopped group whose last one was cancelled: no ended line (G-S2).
+  assert.deepEqual(withEndedLine([before, after], { ...stopped, status: "cancelled" }, false, now), [before, after]);
 });

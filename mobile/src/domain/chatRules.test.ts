@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { ChatMessage, ChatNames, ChatSummary } from "../services/chat";
 import {
   BODY_LIMIT,
+  audienceOptions,
   authorName,
   canAnnounce,
   closedCard,
@@ -13,6 +14,7 @@ import {
   defaultAudience,
   fitBody,
   fitEdit,
+  groupDay,
   hasVisibleText,
   headerLine,
   invitationNote,
@@ -839,4 +841,178 @@ test("currentOccurrences: the listed plan nothing repeats from, then the latest 
   // A successor beats a later start: the server excludes anything another occurrence repeats from.
   assert.deepEqual([...currentOccurrences([p("d1", "s4", "2099-06-01T18:00:00Z"), p("d2", "s4", "2099-05-01T18:00:00Z", "d1")])], ["d2"]);
   assert.deepEqual([...currentOccurrences([])], []);
+});
+
+// Plan 2 (groups). 20 and 27 November 2025 are Thursdays; with no `now`, a line's day shows no year.
+const THU_20 = "2025-11-20T19:00:00Z";
+const THU_27 = "2025-11-27T19:00:00Z";
+const groupLine = (event: string, payload: Record<string, unknown>, viewer = UNKNOWN) =>
+  systemText(sys(event, payload), names, viewer, true, "Board game night");
+const group = (over: Partial<ChatSummary> = {}) =>
+  summary({ isGroup: true, repeatWeeks: 1, title: "Board game night", startsAt: THU_20, endsAt: "2025-11-20T22:00:00Z", members: 9, going: 6, everyone: 9, closesAt: null, ...over });
+
+test("systemText on a group: can't make it this week, left the group, each with a name, Someone and You", () => {
+  assert.equal(groupLine("cant_go", { actor: SOL, user: SOL }), "Sol can’t make it this week");
+  assert.equal(groupLine("cant_go", { actor: GONE, user: GONE }), "Someone can’t make it this week");
+  assert.equal(groupLine("cant_go", { actor: SOL, user: SOL }, SOL), "You can’t make it this week");
+  assert.equal(groupLine("left", { actor: SOL, user: SOL }), "Sol left the group");
+  assert.equal(groupLine("left", { actor: GONE, user: GONE }), "Someone left the group");
+  const STRANGER = "0a000000-0000-4000-8000-000000000009";
+  assert.equal(groupLine("left", { actor: STRANGER, user: STRANGER }), "Someone left the group", "a uuid the map doesn't name");
+  assert.equal(groupLine("left", { actor: SOL, user: SOL }, SOL), "You left the group");
+  // The one-off line is as built.
+  assert.equal(line("cant_go", { actor: SOL, user: SOL }), "Sol can’t make it");
+});
+
+test("systemText on a group: an ended line names the resbite, the payload's title first (G-S6)", () => {
+  assert.equal(groupLine("ended", { actor: null, title: "Board game night" }), "Board game night ended");
+  assert.equal(groupLine("ended", { actor: null }), "Board game night ended", "the title given when the payload has none");
+});
+
+test("systemText on a group: a cancelled week names its weekday; a cancel that stops cancels the group (G-S2)", () => {
+  const week = { stop: false, starts_at: "2025-11-20T19:00:00Z", time_zone: LONDON };
+  assert.equal(groupLine("cancelled", { actor: ANA, ...week }), "Ana cancelled this Thursday");
+  assert.equal(groupLine("cancelled", { actor: GONE, ...week }), "Someone cancelled this Thursday");
+  assert.equal(groupLine("cancelled", { actor: ANA, ...week }, ANA), "You cancelled this Thursday");
+  // The weekday is the occurrence's own, in its zone: 23:30 on Thursday in London is Friday in Tokyo.
+  assert.equal(groupLine("cancelled", { actor: ANA, stop: false, starts_at: "2025-11-20T23:30:00Z", time_zone: "Asia/Tokyo" }), "Ana cancelled this Friday");
+  assert.equal(groupLine("cancelled", { actor: ANA, ...week, stop: true }), "Ana cancelled the group");
+  assert.equal(groupLine("cancelled", { actor: GONE, ...week, stop: true }), "Someone cancelled the group");
+  assert.equal(groupLine("cancelled", { actor: ANA, ...week, stop: true }, ANA), "You cancelled the group");
+  // A start that can't be read words the cancel without a day, as built; so does a line with no actor (H20).
+  assert.equal(groupLine("cancelled", { actor: ANA, stop: false, starts_at: "soon", time_zone: LONDON }), "Ana cancelled the resbite");
+  assert.equal(groupLine("cancelled", { actor: null, ...week }), "The resbite was cancelled");
+  // The one-off lines stay.
+  assert.equal(line("cancelled", { actor: ANA, ...week }), "Ana cancelled the resbite");
+  assert.equal(line("cancelled", { actor: null }), "The resbite was cancelled");
+});
+
+test("systemText on a group: stopped repeating names the last one; made a group says who can read (G-N13, G-N8)", () => {
+  const stopped = { actor: ANA, plan_id: "0c000000-0000-4000-8000-000000000002", starts_at: THU_27, time_zone: LONDON };
+  assert.equal(groupLine("stopped", stopped), "Ana stopped repeating this · the last one is Thu 27 Nov");
+  assert.equal(groupLine("stopped", { ...stopped, actor: GONE }), "Someone stopped repeating this · the last one is Thu 27 Nov");
+  assert.equal(groupLine("stopped", stopped, ANA), "You stopped repeating this · the last one is Thu 27 Nov");
+  // No year even far from now: a line takes no `now` (challenge NOTE 2). A day that can't be read is left out.
+  assert.equal(groupLine("stopped", { ...stopped, starts_at: "2031-11-27T19:00:00Z" }), "Ana stopped repeating this · the last one is Thu 27 Nov");
+  assert.equal(groupLine("stopped", { ...stopped, starts_at: "later" }), "Ana stopped repeating this");
+  assert.equal(groupLine("made_group", { actor: ANA }), "Ana made this a group · everyone invited can read this chat");
+  assert.equal(groupLine("made_group", { actor: GONE }), "Someone made this a group · everyone invited can read this chat");
+  assert.equal(groupLine("made_group", { actor: ANA }, ANA), "You made this a group · everyone invited can read this chat");
+});
+
+test("systemText on a group: the next one, with the place as typed, to be decided, or none (I11, Decision 11)", () => {
+  const next = { actor: null, plan_id: "0c000000-0000-4000-8000-000000000002", starts_at: THU_20, time_zone: LONDON, place_tbd: false };
+  // No `place_label` key: the server leaves it out for a reader who hasn't answered.
+  assert.equal(groupLine("next", next), "Next one: Thu 20 Nov");
+  assert.equal(groupLine("next", { ...next, place_label: "" }), "Next one: Thu 20 Nov");
+  assert.equal(groupLine("next", { ...next, place_tbd: true }), "Next one: Thu 20 Nov · Place to be decided");
+  assert.equal(groupLine("next", { ...next, place_tbd: true, place_label: "Ana's flat" }), "Next one: Thu 20 Nov · Place to be decided");
+  assert.equal(groupLine("next", { ...next, place_label: "Ana's flat" }), "Next one: Thu 20 Nov · Ana's flat");
+  // Free text is cleaned as the changed line's label is (H18).
+  assert.equal(groupLine("next", { ...next, place_label: "Ana's‮ flat\n" }), "Next one: Thu 20 Nov · Ana's flat");
+  // Its day is the occurrence's, in its zone, with no year (challenge NOTE 2).
+  assert.equal(groupLine("next", { ...next, starts_at: "2025-11-20T23:30:00Z", time_zone: "Asia/Tokyo" }), "Next one: Fri 21 Nov");
+});
+
+test("systemText on a group: a place change with no place_label is worded without a place (I11)", () => {
+  assert.equal(groupLine("changed", { actor: ANA, what: "place" }), "Ana changed the place");
+  assert.equal(
+    groupLine("changed", { actor: ANA, what: "time_place", from_start: THU_20, to_start: "2025-11-20T19:30:00Z", from_zone: LONDON, to_zone: LONDON }),
+    "Ana changed the time and place · Thu 19:30",
+  );
+});
+
+test("systemText on a group: joined still names the bringer only when the reader may know them", () => {
+  assert.equal(groupLine("joined", { actor: CLARA, user: CLARA, brought_by: PEDRO }), "Clara joined · brought by Pedro");
+  assert.equal(groupLine("joined", { actor: CLARA, user: CLARA, brought_by: "0a000000-0000-4000-8000-000000000009" }), "Clara joined", "a uuid the map doesn't name");
+  assert.equal(groupLine("joined", { actor: CLARA, user: CLARA, brought_by: GONE }), "Clara joined");
+});
+
+test("rowText words a can't go line by the group flag, as one line (H37 D1)", () => {
+  const last = sys("cant_go", { actor: SOL, user: SOL });
+  assert.equal(rowText(last, names, UNKNOWN, true), "Sol can’t make it this week");
+  assert.equal(rowText(last, names, UNKNOWN, false), "Sol can’t make it");
+  assert.equal(rowText(sys("next", { actor: null, starts_at: THU_20, time_zone: LONDON, place_label: "Ana's\nflat" }), names, UNKNOWN, true), "Next one: Thu 20 Nov · Ana's flat");
+});
+
+test("messageLabel takes the group: its lines in the group's words, an announcement by the group's audience", () => {
+  const now = Date.parse("2025-11-15T20:00:00Z");
+  assert.equal(messageLabel(sys("cant_go", { actor: SOL, user: SOL }), names, UNKNOWN, now, LONDON, undefined, true, "Thursday"), "Resbite: Sol can’t make it this week");
+  assert.equal(messageLabel(sys("cant_go", { actor: SOL, user: SOL }), names, UNKNOWN, now, LONDON), "Resbite: Sol can’t make it");
+  const everyone = msg({ kind: "announcement", audience: "everyone", body: "Doors at 19:30", authorId: ANA });
+  const going = msg({ kind: "announcement", audience: "going", body: "Doors at 19:30", authorId: ANA });
+  const label = messageLabel(everyone, names, UNKNOWN, now, LONDON, undefined, true, "Thursday")!;
+  assert.ok(label.startsWith("Announcement to everyone in the group"), label);
+  assert.equal(label, "Announcement to everyone in the group, Ana, Doors at 19:30, 18:02");
+  assert.ok(messageLabel(going, names, UNKNOWN, now, LONDON, undefined, true, "Thursday")!.startsWith("Announcement to people going this Thursday, Ana"));
+  // A one-off's, as built; and the send state still comes last.
+  assert.ok(messageLabel(everyone, names, UNKNOWN, now, LONDON)!.startsWith("Announcement to everyone invited, Ana"));
+  assert.ok(messageLabel(going, names, UNKNOWN, now, LONDON, "sending", true, "Thursday")!.endsWith(", Sending…"));
+});
+
+test("a deleted system line gives no line anywhere: systemText, rowText and messageLabel (Decision 6)", () => {
+  const gone = { ...sys("cant_go", { actor: SOL, user: SOL }), state: "deleted" as const };
+  assert.equal(systemText(gone, names, UNKNOWN, true, ""), "");
+  assert.equal(rowText(gone, names, UNKNOWN, true), null);
+  assert.equal(rowText(gone, names, UNKNOWN, false), null);
+  assert.equal(messageLabel(gone, names, UNKNOWN, Date.now(), LONDON, undefined, true, "Thursday"), null);
+  assert.equal(messageLabel(gone, names, UNKNOWN, Date.now(), LONDON), null);
+});
+
+test("audienceOptions: the sheet's two radios, in order: a group's by the group, a one-off's as built (G-S7)", () => {
+  assert.deepEqual(audienceOptions(group()), [
+    { key: "everyone", title: "Everyone in the group · 9" },
+    { key: "going", title: "Going this Thursday · 6" },
+  ]);
+  assert.deepEqual(audienceOptions(summary({ going: 6, everyone: 9 })), [
+    { key: "going", title: "Going · 6" },
+    { key: "everyone", title: "Everyone invited · 9" },
+  ]);
+  // The weekday is the occurrence's in the plan's zone; a zone this phone doesn't know reads in the phone's.
+  assert.equal(audienceOptions(group({ startsAt: "2025-11-20T23:30:00Z", timeZone: "Asia/Tokyo" }))[1].title, "Going this Friday · 6");
+  assert.equal(audienceOptions(group({ timeZone: "Mars/Olympus" }))[1].title, `Going this ${groupDay({ startsAt: THU_20, timeZone: phoneZone() })} · 6`);
+  // The first radio is the sheet's starting audience (K-N7).
+  assert.equal(audienceOptions(group())[0].key, defaultAudience(group()));
+  assert.equal(audienceOptions(summary())[0].key, defaultAudience(summary()));
+});
+
+test("groupDay is the long weekday in the plan's zone, empty when the start can't be read", () => {
+  assert.equal(groupDay({ startsAt: THU_20, timeZone: LONDON }), "Thursday");
+  assert.equal(groupDay({ startsAt: "2025-11-20T23:30:00Z", timeZone: "Asia/Tokyo" }), "Friday");
+  assert.equal(groupDay({ startsAt: "", timeZone: LONDON }), "");
+  assert.equal(groupDay({ startsAt: "soon", timeZone: "" }), "");
+});
+
+test("headerLine on a group: how it repeats and who is in it; the last one once stopped (G-S7)", () => {
+  const now = Date.parse("2025-11-18T12:00:00Z");
+  assert.equal(headerLine(group(), now), "Every Thursday · 9 in the group");
+  assert.equal(headerLine(group({ repeatWeeks: 2 }), now), "Every other Thursday · 9 in the group");
+  // Running after its end, and after Cancel just this one: still how it repeats, never Ended or Cancelled.
+  assert.equal(headerLine(group(), Date.parse("2025-11-21T12:00:00Z")), "Every Thursday · 9 in the group");
+  assert.equal(headerLine(group({ status: "cancelled" }), now), "Every Thursday · 9 in the group");
+  const stopped = group({ stopped: true, repeatWeeks: null, startsAt: THU_27, endsAt: "2025-11-27T22:00:00Z" });
+  assert.equal(headerLine(stopped, now), "Last one · Thu 27 Nov · 9 in the group");
+  assert.equal(headerLine({ ...stopped, status: "cancelled" }, now), "Last one · Thu 27 Nov · 9 in the group");
+  // The year when it isn't now's, as the one-off header does (H32 Q50).
+  assert.equal(headerLine(stopped, Date.parse("2026-01-05T12:00:00Z")), "Last one · Thu 27 Nov 2025 · 9 in the group");
+  // Null with no repeat, a start or a zone that can't be read; nothing throws on a zone the phone doesn't know.
+  assert.equal(headerLine(group({ repeatWeeks: null }), now), null);
+  assert.equal(headerLine(group({ startsAt: "" }), now), null);
+  assert.equal(headerLine(group({ timeZone: "" }), now), null);
+  assert.equal(headerLine({ ...stopped, startsAt: "" }, now), null);
+  assert.equal(typeof headerLine(group({ timeZone: "Mars/Olympus" }), now), "string");
+  // The one-off lines and Cancelled are as built.
+  assert.equal(headerLine(summary({ status: "cancelled" }), now), "Cancelled");
+  assert.equal(headerLine(summary(), Date.parse("2026-10-29T12:00:00Z")), "Fri 30 Oct · 6 going");
+});
+
+test("closedCard on a group: its own words with the date; a one-off's two cards are as built (G-N5)", () => {
+  const now = Date.parse("2025-11-30T12:00:00Z");
+  const stopped = group({ stopped: true, repeatWeeks: null, open: false, startsAt: "2025-11-25T19:00:00Z", closesAt: "2025-11-27T22:00:00Z" });
+  assert.deepEqual(closedCard(stopped, now), { line: "This group’s chat closed on Thu 27 Nov.", why: CHAT_COPY.closedWhy });
+  // Cancel this and stop repeating: the group's card, never the cancelled one-off's.
+  assert.deepEqual(closedCard({ ...stopped, status: "cancelled" }, now), { line: "This group’s chat closed on Thu 27 Nov.", why: CHAT_COPY.closedWhy });
+  assert.deepEqual(closedCard({ ...stopped, closesAt: null }, now), { line: CHAT_COPY.closedShort, why: null });
+  assert.deepEqual(closedCard(summary({ status: "cancelled", closesAt: null, open: false }), now), { line: CHAT_COPY.cancelledClosed, why: null });
+  assert.deepEqual(closedCard(summary({ open: false }), Date.parse("2026-11-05T12:00:00Z")), { line: "This chat closed on Sun 1 Nov.", why: CHAT_COPY.closedWhy });
 });

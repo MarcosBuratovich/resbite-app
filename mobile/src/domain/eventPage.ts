@@ -42,6 +42,8 @@ export const EVENT_COPY = {
   keep: "Keep resbite",
   groupInvited: "Invited, not answered yet",
   groupWaiting: "Waiting for you",
+  /** A group's members who haven't answered this week, as a guest sees them (G-B5). */
+  groupNotAnswered: "Not answered yet",
   invitedByWhatsApp: "Invited by WhatsApp",
   invitedByMessages: "Invited by Messages",
   invitedByLink: "Invited by link",
@@ -150,9 +152,12 @@ export function stateChip(plan: Timed & { status: string }, now = Date.now()): t
   return state === "cancelled" ? EVENT_COPY.cancelledChip : state === "ended" ? EVENT_COPY.ended : null;
 }
 
-/** Who sees the names of those going and may open the people list: the hosts, and guests who have answered. */
-export function showsNames(role: Viewer, response: string | null): boolean {
-  return role !== "guest" || answered(response);
+/**
+ * Who sees the names of those going and may open the people list: the hosts, and guests who have answered; on a group
+ * (`isGroup`, `series_is_group`), everyone in it, whatever their reply this week (G-B5, CH-P21).
+ */
+export function showsNames(role: Viewer, response: string | null, isGroup: boolean): boolean {
+  return isGroup || role !== "guest" || answered(response);
 }
 
 export type BottomRow =
@@ -240,10 +245,12 @@ export function bringRow(i: {
 }
 
 /**
- * The Chat row's words. Open: the preview line (null: none to show) and the unread dot. Closed: the count as its only
- * line, never a dot.
+ * The Chat row's words. Open: its title ("Chat", or "Group chat" on a group), the preview line (null: none to show) and
+ * the unread dot. Closed: the count as its only line, never a dot.
  */
-export type ChatRow = { closed: false; text: string | null; dot: boolean } | { closed: true; text: string; dot: false };
+export type ChatRow =
+  | { closed: false; title: string; text: string | null; dot: boolean }
+  | { closed: true; text: string; dot: false };
 
 /** How much of the row's line its label says (H37 Q6): a long message isn't read out in full from the resbite page. */
 const CHAT_LABEL_LINE = 120;
@@ -251,8 +258,9 @@ const CHAT_LABEL_LINE = 120;
 /**
  * The resbite page's Chat row (CH-P14, CH-01), right after the people row and Bring someone, from the series' summary.
  * - No row without a summary: the reader isn't in the chat (42501) or the read failed (K-S13).
- * - Open: the latest line (`rowText`: "Leo: I can bring the snacks", a system line, "No messages yet") and the dot when
- *   unread. A line this build can't word gives no preview line, never "null" (H20).
+ * - Open: "Chat", or "Group chat" on a group, the latest line (`rowText`: "Leo: I can bring the snacks", a system line in
+ *   the group's words, "No messages yet") and the dot when unread. A line this build can't word gives no preview line,
+ *   never "null" (H20).
  * - Closed: "Chat closed · 23 messages" with no dot; and no row at all for a closed chat with no message, so an old
  *   resbite's backfilled chat doesn't show "0 messages" (K-S13, a departure from CH-P14).
  */
@@ -260,23 +268,43 @@ export function chatRow(summary: ChatSummary | null, viewerId: string): ChatRow 
   if (!summary) return null;
   if (!summary.open)
     return summary.messageCount > 0 ? { text: CHAT_COPY.closedRow(summary.messageCount), dot: false, closed: true } : null;
-  return { text: rowText(summary.last, summary.names, viewerId, summary.isGroup) || null, dot: summary.unread, closed: false };
+  return {
+    title: summary.isGroup ? CHAT_COPY.groupChat : CHAT_COPY.chat,
+    text: rowText(summary.last, summary.names, viewerId, summary.isGroup) || null,
+    dot: summary.unread,
+    closed: false,
+  };
 }
 
-/** The Chat row's label: "Chat. <the line, at most 120 characters>", ", unread messages" for the dot; closed, the count. */
+/**
+ * The Chat row's label: "Chat. <the line, at most 120 characters>" ("Group chat. …" on a group), ", unread messages" for
+ * the dot; closed, the count.
+ */
 export function chatRowLabel(row: ChatRow): string {
   if (row.closed) return row.text;
   const line = row.text ? cutLine(row.text, CHAT_LABEL_LINE) : null;
-  return [CHAT_COPY.chat, line].filter(Boolean).join(". ") + (row.dot ? `, ${CHAT_COPY.unreadMessages}` : "");
+  return [row.title, line].filter(Boolean).join(". ") + (row.dot ? `, ${CHAT_COPY.unreadMessages}` : "");
 }
 
-export type MoreRow = "calendar" | "mute" | "unmute" | "again" | "changeReply" | "cancel";
+export type MoreRow = "calendar" | "mute" | "unmute" | "again" | "changeReply" | "cancel" | "leaveGroup";
 /**
  * The More sheet's rows. `calendar` is UX3's rule (`canAddToCalendar`: the organizer and Going or Maybe guests), so a
- * Can’t go guest or an admin who hasn't answered gets no Add to calendar.
+ * Can’t go guest or an admin who hasn't answered gets no Add to calendar. A guest of a group (`isGroup`), whatever their
+ * reply, gets Leave this group last while its chat is open (`chatOpen`: the Chat row's summary says so, so a failed or
+ * refused read hides it); on an ended or cancelled page it is their only row (G-N13). Hosts can't leave. Left out, the
+ * two read false: a one-off's rows.
  */
-export function moreRows(i: { role: Viewer; state: PageState; muted: boolean; response: string | null; calendar: boolean }): MoreRow[] {
-  if (i.state !== "open") return [];
+export function moreRows(i: {
+  role: Viewer;
+  state: PageState;
+  muted: boolean;
+  response: string | null;
+  calendar: boolean;
+  isGroup?: boolean;
+  chatOpen?: boolean;
+}): MoreRow[] {
+  const leave: MoreRow[] = i.role === "guest" && i.isGroup === true && i.chatOpen === true ? ["leaveGroup"] : [];
+  if (i.state !== "open") return leave;
   const mute: MoreRow = i.muted ? "unmute" : "mute";
   const rows: MoreRow[] =
     i.role === "owner"
@@ -286,7 +314,7 @@ export function moreRows(i: { role: Viewer; state: PageState; muted: boolean; re
         : answered(i.response)
           ? ["calendar", mute]
           : [];
-  return i.calendar ? rows : rows.filter((row) => row !== "calendar");
+  return [...(i.calendar ? rows : rows.filter((row) => row !== "calendar")), ...leave];
 }
 
 export function whenLines(
@@ -531,6 +559,13 @@ function chained(items: readonly Placed[]): PersonRow[] {
  * invitees they brought, with Remove (and Send again where this phone holds the code) while the resbite is open; Remove
  * stays off a host's row, which the server never lets them withdraw (C18-I1). Everyone else's unanswered rows stay
  * hidden from guests (UX2-D6).
+ *
+ * A group (`isGroup`, plan 2, G-B5): a guest, answered or not, sees everyone in it. After Going, Maybe and Can't go
+ * comes "Not answered yet", every pending in-app invitee once, their own brought ones among them with "brought by you"
+ * and their take-back while open (confirmation S4); their own links stay in the Invited group, and no one else's link
+ * (it carries a number) or waiting request is ever theirs to see. Anyone with an account is askable there, so Connect
+ * is offered on a pending row too (CH-P21). Hosts see what they saw before. Left out, `isGroup` reads false: the
+ * one-off rule, which shows less.
  */
 export function peopleGroups(i: {
   role: Viewer;
@@ -548,8 +583,12 @@ export function peopleGroups(i: {
   unnamed?: string;
   /** The links the hosts' guests sent bringing someone (`plan_brought_invitations`); a host's only. */
   broughtLinks?: readonly BroughtLink[];
+  /** The resbite is a group's (`series_is_group`) and the viewer is in it. */
+  isGroup?: boolean;
 }): { title: string; rows: PersonRow[] }[] {
   const host = i.role !== "guest";
+  // A guest of a group sees every member, answered or not (G-B5); a host's list is the same either way.
+  const member = !host && i.isGroup === true;
   const acts = host && i.state === "open";
   // A guest takes back only their own unanswered invitations, while the resbite is open.
   const bringerActs = !host && i.state === "open";
@@ -566,7 +605,7 @@ export function peopleGroups(i: {
   const ownRows = new Map<string, string>();
   if (!i.bringerNames)
     for (const g of i.guests) {
-      const shown = host || g.response !== "pending" || (!!i.userId && g.broughtById === i.userId);
+      const shown = host || member || g.response !== "pending" || (!!i.userId && g.broughtById === i.userId);
       const first = g.name === i.unnamed ? "" : firstName(g.name);
       if (shown && first) ownRows.set(g.userId, first);
     }
@@ -679,9 +718,10 @@ export function peopleGroups(i: {
         };
       })
     : [];
-  // Not answered yet: only an admin may be asked (a host, whatever their reply). A guest sees only those they brought.
+  // Not answered yet: only an admin may be asked (a host, whatever their reply), or anyone on a group, where a guest sees
+  // them all. Elsewhere a guest sees only those they brought.
   const appItems: Placed[] = inGroup(i.guests, "pending")
-    .filter((g) => host || (!!i.userId && g.broughtById === i.userId))
+    .filter((g) => host || member || (!!i.userId && g.broughtById === i.userId))
     .map((g) => {
       const admin = i.admins.includes(g.userId);
       return {
@@ -693,7 +733,11 @@ export function peopleGroups(i: {
           reply: null,
           admin,
           kind: "appInvite",
-          ...person(g.userId, admin, host ? guestActions(g.userId, false) : bringerActs && !admin ? ["removeInvite"] : []),
+          ...person(
+            g.userId,
+            admin || member,
+            host ? guestActions(g.userId, false) : bringerActs && !admin && mine(g.broughtById) ? ["removeInvite"] : [],
+          ),
           broughtByName: nameOf(g.broughtById),
           broughtByMe: mine(g.broughtById),
         },
@@ -720,7 +764,12 @@ export function peopleGroups(i: {
     { title: going.title, items: [...ownerItems, ...going.items] },
     answeredGroup("maybe", "maybe"),
     answeredGroup("cantGo", "cant"),
-    { title: EVENT_COPY.groupInvited, items: [...linkItems, ...broughtItems, ...appItems] },
+    ...(member
+      ? [
+          { title: EVENT_COPY.groupNotAnswered, items: appItems },
+          { title: EVENT_COPY.groupInvited, items: linkItems },
+        ]
+      : [{ title: EVENT_COPY.groupInvited, items: [...linkItems, ...broughtItems, ...appItems] }]),
     ...(host ? [{ title: EVENT_COPY.groupWaiting, items: requestItems }] : []),
   ];
   return groups

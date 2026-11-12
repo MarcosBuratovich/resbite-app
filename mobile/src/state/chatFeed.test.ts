@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import type { ChatMessage, ChatNames } from "../services/chat";
 import type { EndedLine, PendingMessage } from "./chatModel";
 import { chatFeed, messageActions, nothingSaid, type FeedRow } from "./chatFeed";
@@ -40,7 +41,7 @@ const pending = (clientId: string, over: Partial<PendingMessage> = {}): PendingM
   ...over,
 });
 const feed = (items: Array<ChatMessage | PendingMessage | EndedLine>, over: Partial<Parameters<typeof chatFeed>[1]> = {}) =>
-  chatFeed(items, { names, viewerId: PEDRO, now: NOW, zone: LONDON, title: TITLE, host: false, ...over });
+  chatFeed(items, { names, viewerId: PEDRO, now: NOW, zone: LONDON, title: TITLE, host: false, group: false, day: "", ...over });
 const types = (rows: FeedRow[]) => rows.map((r) => r.type);
 const only = <T extends FeedRow["type"]>(rows: FeedRow[], type: T) =>
   rows.filter((r): r is Extract<FeedRow, { type: T }> => r.type === type);
@@ -268,4 +269,65 @@ test("in a closed chat an unsent message says the close overtook it, and offers 
   assert.deepEqual(rows.map((r) => r.actions), [["deleteUnsent"], ["deleteUnsent"]]);
   const open = only(feed([pending("c-3", { failed: true })]), "pending")[0];
   assert.equal(open.closed, false);
+});
+
+// Plan 2 (groups).
+const SOL = "0a000000-0000-4000-8000-000000000004";
+const groupNames: ChatNames = { ...names, [SOL]: "Sol" };
+const groupFeed = (items: Array<ChatMessage | PendingMessage | EndedLine>, over: Partial<Parameters<typeof chatFeed>[1]> = {}) =>
+  feed(items, { names: groupNames, group: true, day: "Thursday", title: "Board game night", ...over });
+
+test("on a group, an announcement is headed and read by the group's audience, and its lines take the group's words", () => {
+  const rows = groupFeed([
+    msg(1, { kind: "announcement", audience: "going", body: "Doors at 19:30", authorId: ANA }),
+    msg(2, { kind: "announcement", audience: "everyone", body: "Bring a game", authorId: ANA }),
+    sys(3, "left", { actor: SOL, user: SOL }),
+    sys(4, "cant_go", { actor: SOL, user: SOL }),
+  ]);
+  const cards = only(rows, "announcement");
+  assert.deepEqual(cards.map((c) => c.heading), ["ANNOUNCEMENT · TO GOING THIS THURSDAY", "ANNOUNCEMENT · TO EVERYONE IN THE GROUP"]);
+  assert.ok(cards[0].label.startsWith("Announcement to people going this Thursday, Ana"), cards[0].label);
+  assert.ok(cards[1].label.startsWith("Announcement to everyone in the group, Ana"), cards[1].label);
+  const lines = only(rows, "system");
+  assert.deepEqual(lines.map((l) => l.text), ["Sol left the group", "Sol can’t make it this week"]);
+  assert.deepEqual(lines.map((l) => l.label), ["Resbite: Sol left the group", "Resbite: Sol can’t make it this week"]);
+  // The same rows on a one-off read as built.
+  const oneOff = feed([msg(1, { kind: "announcement", audience: "going", body: "Doors at 19:30", authorId: ANA }), sys(4, "cant_go", { actor: SOL, user: SOL })], {
+    names: groupNames,
+  });
+  assert.equal(only(oneOff, "announcement")[0].heading, "ANNOUNCEMENT · TO GOING");
+  assert.equal(only(oneOff, "system")[0].text, "Sol can’t make it");
+});
+
+test("a next line is a row of its own, its words and label, with no plan id: the screen opens the current one (I5)", () => {
+  const OLD_PLAN = "0c000000-0000-4000-8000-0000000000ff";
+  const next = sys(5, "next", {
+    actor: null,
+    plan_id: OLD_PLAN,
+    starts_at: "2025-11-20T19:00:00Z",
+    time_zone: LONDON,
+    place_label: "Ana's flat",
+    place_tbd: false,
+  });
+  const rows = groupFeed([next]).filter((r) => r.type !== "day");
+  assert.deepEqual(rows, [
+    { type: "next", key: "m:5", text: "Next one: Thu 20 Nov · Ana's flat", label: "Resbite: Next one: Thu 20 Nov · Ana's flat" },
+  ]);
+  assert.equal(JSON.stringify(rows).includes(OLD_PLAN), false);
+  assert.equal(Object.keys(rows[0]).some((k) => /plan/i.test(k)), false);
+  // Every next line is one, on a one-off's build too (after a rollback the flag reads false).
+  assert.equal(feed([next]).filter((r) => r.type === "next").length, 1);
+});
+
+test("a stopped group's computed ended line reads as the roll's would (G-S6)", () => {
+  const rows = groupFeed([{ kind: "ended", at: "2026-10-28T08:00:00Z" }]);
+  assert.deepEqual(only(rows, "ended").map((r) => [r.text, r.label]), [["Board game night ended", "Resbite: Board game night ended"]]);
+});
+
+test("the chat screen hides deleted lines before anything else, and words its feed and pinned card by the group", () => {
+  const screen = readFileSync(new URL("../../app/chat.tsx", import.meta.url), "utf8");
+  assert.match(screen, /chatFeed\(withEndedLine\(withPending\(shownMessages\(chat\.messages\), chat\.pending\), summary, chat\.hasEarlier, now\), \{/);
+  assert.match(screen, /group: summary\.isGroup,\s*day,/);
+  assert.match(screen, /const day = groupDay\(summary\);/);
+  assert.match(screen, /messageLabel\(pinned, chat\.names, viewerId, now, zone, undefined, summary\.isGroup, day\)/);
 });

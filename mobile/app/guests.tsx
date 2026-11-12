@@ -132,6 +132,8 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
     bringerNames: event.bringerNames,
     broughtLinks: event.broughtLinks,
     unnamed: UNNAMED_GUEST,
+    // A group's guest sees everyone in it, answered or not (G-B5).
+    isGroup: event.isGroup,
   });
   const off = working || event.acting !== null || resend.busy !== null;
   const open = (row: PersonRow) => {

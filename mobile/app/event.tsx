@@ -149,7 +149,8 @@ export default function EventPage() {
   // A guest who hasn't answered reads only their own row: the numbers come from the server (CR-P4). A host's "N
   // invited" counts the links their guests sent too (CO-07).
   const counts = peopleCounts({ guests, invited, requests, counts: serverCounts, broughtLinks: event.broughtLinks });
-  const answeredGuest = showsNames(role, response);
+  // A group's member sees names whatever their reply (G-B5).
+  const answeredGuest = showsNames(role, response, event.isGroup);
   const going = guests.filter((g) => g.response === "accepted").map((g) => g.name);
   const row = bottomRow({ role, state, response });
   // CO-05: a guest whom the host's circle trusts may bring someone, up to their allowance.
@@ -163,7 +164,16 @@ export default function EventPage() {
   });
   // CH-P14: the series' chat, for the people in it; none when the read was refused or failed (K-S13).
   const chat = chatRow(event.chat, session?.user.id ?? "");
-  const rows = moreRows({ role, state, muted: event.muted, response, calendar: device.shown });
+  // A group's guest may leave it while its chat is open (G-N13): the Chat row's summary says so.
+  const rows = moreRows({
+    role,
+    state,
+    muted: event.muted,
+    response,
+    calendar: device.shown,
+    isGroup: event.isGroup,
+    chatOpen: event.chat?.open === true,
+  });
   const hasMore = rows.length > 0;
   const closeMore = () => setMoreOpen(false);
 

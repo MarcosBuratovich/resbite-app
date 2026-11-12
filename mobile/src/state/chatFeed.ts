@@ -38,7 +38,7 @@ export type FeedRow =
       key: string;
       message: ChatMessage;
       own: boolean;
-      /** "ANNOUNCEMENT · TO GOING": the audience in words (CH-08). */
+      /** "ANNOUNCEMENT · TO GOING": the audience in words (CH-08); a group's names its weekday or the group. */
       heading: string;
       text: string;
       gone: "deleted" | "removed" | null;
@@ -50,7 +50,12 @@ export type FeedRow =
   | { type: "system"; key: string; text: string; label: string }
   /** A change, a bordered chip that opens the resbite; `tail` ("Tap to see") is drawn regular and muted (H31). */
   | { type: "change"; key: string; text: string; tail: string | null; label: string }
-  /** The computed "<title> ended" of a one-off (K-S16). */
+  /**
+   * A group's "Next one: Thu 20 Nov · Ana's flat", old or new. Like the change chip it carries no plan id: the screen
+   * opens the summary's current occurrence, never the line's `payload.plan_id` (Decision 14, I5).
+   */
+  | { type: "next"; key: string; text: string; label: string }
+  /** The computed "<title> ended" of a one-off or a stopped group's last one (K-S16). */
   | { type: "ended"; key: string; text: string; label: string }
   /** `closed`: the chat closed before it was sent, so it can only be deleted (H32 29). */
   | {
@@ -77,6 +82,10 @@ export type FeedContext = {
   host: boolean;
   /** The chat is closed (`!summary.open`): nothing unsent can be sent any more. */
   closed?: boolean;
+  /** The chat is a group's (`summary.isGroup`): its lines and announcements take the group's words (plan 2). */
+  group: boolean;
+  /** The group's weekday, "Thursday" (`groupDay(summary)`), for its announcements' audience. */
+  day: string;
 };
 
 /** Nothing said yet: no message, announcement or unsent one, whatever Resbite's lines say (H31 Q3). */
@@ -121,7 +130,7 @@ const asMessage = (p: PendingMessage, viewerId: string): ChatMessage => ({
   clientId: p.clientId,
 });
 
-/** The ended line as the stored line plan 2 writes for a group, so it is worded and read the same way. */
+/** The ended line as the stored line the roll writes for a group (plan 2), so it is worded and read the same way. */
 const asEndedLine = (e: EndedLine, title: string): ChatMessage => ({
   id: 0,
   kind: "system",
@@ -142,7 +151,7 @@ const asEndedLine = (e: EndedLine, title: string): ChatMessage => ({
  * word (an unknown kind, event or state) is left out (H20). The screen reverses it for its inverted list.
  */
 export function chatFeed(items: Array<ChatMessage | PendingMessage | EndedLine>, ctx: FeedContext): FeedRow[] {
-  const { names, viewerId, now, zone, title, host, closed = false } = ctx;
+  const { names, viewerId, now, zone, title, host, closed = false, group, day: weekday } = ctx;
   const rows: FeedRow[] = [];
   let day: string | null = null;
   let lastAuthor: string | null = null;
@@ -160,7 +169,7 @@ export function chatFeed(items: Array<ChatMessage | PendingMessage | EndedLine>,
   for (const item of items) {
     if (item.kind === "pending") {
       const state = closed ? "closed" : item.failed ? "failed" : "sending";
-      const label = messageLabel(asMessage(item, viewerId), names, viewerId, now, zone, state);
+      const label = messageLabel(asMessage(item, viewerId), names, viewerId, now, zone, state, group, weekday);
       if (!label) continue;
       place(item.createdAt, {
         type: "pending",
@@ -177,8 +186,8 @@ export function chatFeed(items: Array<ChatMessage | PendingMessage | EndedLine>,
     }
     if (item.kind === "ended") {
       const line = asEndedLine(item, title);
-      const label = messageLabel(line, names, viewerId, now, zone);
-      const text = systemText(line, names, viewerId, false, title);
+      const label = messageLabel(line, names, viewerId, now, zone, undefined, group, weekday);
+      const text = systemText(line, names, viewerId, group, title);
       if (!label || !text) continue;
       place(item.at, { type: "ended", key: "ended", text, label });
       lastAuthor = null;
@@ -187,13 +196,14 @@ export function chatFeed(items: Array<ChatMessage | PendingMessage | EndedLine>,
     const m = item;
     // A sent row with no words draws nothing (H32 Q8).
     if ((m.kind === "message" || m.kind === "announcement") && m.state === "sent" && m.body === null) continue;
-    const label = messageLabel(m, names, viewerId, now, zone);
+    const label = messageLabel(m, names, viewerId, now, zone, undefined, group, weekday);
     if (!label) continue;
     const key = `m:${m.id}`;
     if (m.kind === "system") {
-      const line = systemText(m, names, viewerId, false, title);
+      const line = systemText(m, names, viewerId, group, title);
       if (!line) continue;
-      if (m.event === "changed") {
+      if (m.event === "next") place(m.createdAt, { type: "next", key, text: line, label });
+      else if (m.event === "changed") {
         // Someone else's change says where the tap goes; yours doesn't (the mockup).
         const actor = m.payload && typeof m.payload.actor === "string" ? m.payload.actor : null;
         const tail = actor === viewerId ? null : CHAT_COPY.tapToSee;
@@ -210,7 +220,7 @@ export function chatFeed(items: Array<ChatMessage | PendingMessage | EndedLine>,
         key,
         message: m,
         own,
-        heading: CHAT_COPY.announcementTo(m.audience),
+        heading: group ? CHAT_COPY.announcementToGroup(m.audience, weekday) : CHAT_COPY.announcementTo(m.audience),
         text: wordsOf(m),
         gone: goneOf(m),
         label,

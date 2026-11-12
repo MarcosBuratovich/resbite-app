@@ -86,9 +86,14 @@ export type EventSnapshot = {
   admins: string[];
   /**
    * How many are going, maybe and can't go, from the server, for an invitee who hasn't answered (they read only their
-   * own guest row); null when `guests` is the whole list.
+   * own guest row); null when `guests` is the whole list, as it is for everyone in a group.
    */
   counts: AnswerCounts | null;
+  /**
+   * The resbite is a group's and the signed-in person is in it (`series_is_group`, G-N13): they see everyone in it,
+   * answered or not. False on a one-off, and whenever the flag couldn't be read (I4).
+   */
+  isGroup: boolean;
 };
 
 /**
@@ -119,9 +124,28 @@ export async function readGuests(planId: string): Promise<Guest[]> {
 }
 
 /**
+ * Whether the plan's series is a group the signed-in person is in (`series_is_group`). Never throws: any failure reads
+ * as a one-off, the function missing after plan 2's rollback (PostgREST `PGRST202`) included, since the one-off rules
+ * show less, never more (I4).
+ */
+async function readIsGroup(series: unknown): Promise<boolean> {
+  if (typeof series !== "string" || !series) return false;
+  try {
+    const reply = await withDeadline((signal) =>
+      supabase.rpc("series_is_group", { p_series: series }).abortSignal(signal),
+    );
+    return !reply.error && reply.data === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The event page's read. Any failed read, the guest list, the organizer's name and the counts included, makes the
- * whole event unavailable. An invitee's own row and the organizer's name are read together; an invitee who hasn't
- * answered (and isn't an admin, who sees every row) also gets the counts (`plan_people_counts`, CR-P4).
+ * whole event unavailable, with one exception: the group flag (`readIsGroup`), whose failure reads as a one-off and
+ * keeps the page (I4). After the plan row, an invitee's own row, the organizer's name and the group flag are read
+ * together, and the owner's flag alone. An invitee who hasn't answered (and isn't an admin, who sees every row) also
+ * gets the counts (`plan_people_counts`, CR-P4), except in a group, where they read every guest row.
  */
 export async function readEvent(planId: string, userId: string): Promise<EventSnapshot> {
   const [plan, guests] = await Promise.all([
@@ -133,8 +157,10 @@ export async function readEvent(planId: string, userId: string): Promise<EventSn
   if (plan.error || !plan.data) throw new Error(eventUnavailable);
   let attendee: EventSnapshot["attendee"] = null;
   let organizer: string | null = null;
+  const group = readIsGroup(plan.data.series_id);
+  let isGroup: boolean;
   if (plan.data.owner_id !== userId) {
-    const [own, host] = await Promise.all([
+    const [own, host, inGroup] = await Promise.all([
       withDeadline((signal) =>
         supabase
           .from("attendees")
@@ -147,14 +173,16 @@ export async function readEvent(planId: string, userId: string): Promise<EventSn
       withDeadline((signal) =>
         supabase.from("profiles").select("display_name").eq("id", plan.data.owner_id).abortSignal(signal).single(),
       ),
+      group,
     ]);
     if (own.error || host.error) throw new Error(eventUnavailable);
     attendee = own.data;
     organizer = host.data?.display_name ?? null;
-  }
+    isGroup = inGroup;
+  } else isGroup = await group;
   const mapped = planFromRow(plan.data);
   let counts: AnswerCounts | null = null;
-  if (attendee?.response === "pending" && !mapped.admins.includes(userId)) {
+  if (!isGroup && attendee?.response === "pending" && !mapped.admins.includes(userId)) {
     const reply = await withDeadline((signal) =>
       supabase.rpc("plan_people_counts", { p_plan: planId }).abortSignal(signal),
     );
@@ -165,5 +193,5 @@ export async function readEvent(planId: string, userId: string): Promise<EventSn
       throw new Error(eventUnavailable);
     }
   }
-  return { plan: mapped, attendee, organizer, guests, admins: mapped.admins, counts };
+  return { plan: mapped, attendee, organizer, guests, admins: mapped.admins, counts, isGroup };
 }

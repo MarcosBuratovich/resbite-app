@@ -1,4 +1,7 @@
-/** Who an announcement went to: on a one-off, people going (Going and Maybe) or everyone invited. */
+/**
+ * Who an announcement went to: on a one-off, people going (Going and Maybe) or everyone invited; on a group, people going
+ * this week or everyone in the group.
+ */
 export type ChatAudience = "going" | "everyone";
 
 export const CHAT_COPY = {
@@ -82,4 +85,38 @@ export const CHAT_COPY = {
   notSentDraft: "Not sent:",
   /** The unread dot in words, at the end of the Chat row's and a My resbites card's label (CH-P9, Task 8). */
   unreadMessages: "unread messages",
+
+  // A group (chat plan 2): a repeating resbite's one chat, for everyone in it whatever their reply this week.
+  /** The line above the field on a group. */
+  toGroup: "To: everyone in the group, now and later",
+  /** The Chat row's title on a group's resbite page. */
+  groupChat: "Group chat",
+  /** The "Next one" button's hint. */
+  opensResbite: "Opens the resbite",
+  /** A group's two audiences (G-S7); `day` is the long weekday, "Thursday". */
+  audienceGroup: (n: number) => `Everyone in the group · ${n}`,
+  audienceGoingDay: (day: string, n: number) => `Going this ${day} · ${n}`,
+  /** A group's announcement card label (confirmation NOTE 14). */
+  announcementToGroup: (a: ChatAudience | null, day: string) =>
+    a === "everyone" ? "ANNOUNCEMENT · TO EVERYONE IN THE GROUP" : `ANNOUNCEMENT · TO GOING THIS ${day.toUpperCase()}`,
+  /** The same, for the screen reader. */
+  announcementLabelGroup: (a: ChatAudience | null, day: string) =>
+    a === "everyone" ? "Announcement to everyone in the group" : `Announcement to people going this ${day}`,
+  announcePlaceholderGroup: "Write an update for the group",
+  /** The owner alone in a group (CH-07). */
+  groupEmptyHint: "Messages here reach everyone in the group.",
+  peopleInGroup: (n: number) => `People in this group · ${n}`,
+  /** A group's header: "Every Thursday · 9 in the group", and its last one once it stopped repeating (G-S7). */
+  groupHeader: (repeat: string, n: number) => `${repeat} · ${n} in the group`,
+  groupStoppedHeader: (day: string, n: number) => `Last one · ${day} · ${n} in the group`,
+  /** The chat menu's row, and the resbite page's More row, then the question both ask (G-N13). */
+  leaveGroup: "Leave group",
+  leaveThisGroup: "Leave this group",
+  leaveQuestion: (title: string, day: string) => `Leave ${title}? You’ll stop getting its ${day}s and its chat.`,
+  /** A group's closed card. */
+  groupClosedOn: (day: string) => `This group’s chat closed on ${day}.`,
+  /** Leaving's refusals (G-N13). */
+  notInGroup: "You’re not in this group.",
+  hostsCantLeave: "To leave, step down first: change your reply to Can’t go.",
+  ownerCantLeave: "You own this group, so you can’t leave it.",
 } as const;
