@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { useApp } from "./AppState";
 import { useFocusedRefresh, type Run } from "./useFocusedRefresh";
-import { BLOCKED_PEOPLE_START, blockedPeopleStep, blockedPeopleView, type BlockedPeopleView } from "./blockedPeople";
+import { BLOCKED_PEOPLE_START, blockedPeopleStep, blockedPeopleView, mayAct, type BlockedPeopleView } from "./blockedPeople";
 import { safetyErrorMessage, safetyGateway } from "../services/safety";
 
 export type BlockedPeople = {
@@ -35,7 +35,7 @@ export function useBlockedPeople(): BlockedPeople {
   }, [identity]);
   const read = useCallback(
     async (begin: () => Run) => {
-      if (!userId || preview || signingOut || working.current) return;
+      if (!mayAct({ userId, preview, signingOut, working: working.current })) return;
       const { valid } = begin();
       dispatch({ type: "readStarted" });
       try {
@@ -50,7 +50,7 @@ export function useBlockedPeople(): BlockedPeople {
   const { refresh: load, begin } = useFocusedRefresh(read, { identity });
 
   async function unblock(person: string): Promise<void> {
-    if (!userId || preview || signingOut || working.current) return;
+    if (!mayAct({ userId, preview, signingOut, working: working.current })) return;
     working.current = true;
     // A read still running would land the list as it was before this unblock: it no longer counts.
     begin();

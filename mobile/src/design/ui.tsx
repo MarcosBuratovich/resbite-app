@@ -292,6 +292,7 @@ export function ActionRow({
 }
 export function TextAction({
   title,
+  label,
   onPress,
   disabled = false,
   busy = false,
@@ -299,6 +300,8 @@ export function TextAction({
   icon: Icon,
 }: {
   title: string;
+  /** The spoken name when it says more than the title (whose row "Unblock" is for); it starts with the title. */
+  label?: string;
   onPress: () => void;
   disabled?: boolean;
   /** Its action is running: a spinner after the title, in the same 44 pt row, and no second press. */
@@ -309,7 +312,7 @@ export function TextAction({
   return (
     <GluestackButton
       accessibilityRole="button"
-      accessibilityLabel={title}
+      accessibilityLabel={label ?? title}
       accessibilityState={{ disabled: disabled || busy, busy }}
       // react-native-web 0.21 ignores accessibilityState: the web reads these.
       aria-disabled={disabled || busy}

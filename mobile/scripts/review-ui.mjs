@@ -137,8 +137,8 @@ try {
     await button(page, "Close sheet").click();
     const closed = () => expect(page.getByRole("button", { name: "Close sheet" })).toHaveCount(0);
     await closed();
-    // Task 8 (K-N5): the chat's line, hedged as Delete account's What happens is, followed by chat plan 3's line on what a
-    // report keeps (G-S11); and the samples line without the sample chat, and without "this build does not send push
+    // Task 8 (K-N5): the chat's line, hedged as Delete account's What happens is, followed by chat plan 3's lines on what a
+    // report keeps (G-S11) and how long blocks stay (ruling SR4); and the samples line without the sample chat, and without "this build does not send push
     // notifications".
     await button(page, "Chat messages").click();
     const chatLine = page.getByText(
@@ -149,9 +149,11 @@ try {
       "If you report a message or a person, the Resbite team reads the report and keeps a copy of what was reported, even if the message or that person’s account is deleted. If you delete your account, the reports you sent are deleted too. A report is deleted 180 days after the team closes it.",
       { exact: true },
     );
+    const blocksLine = page.getByText("Blocks stay until you undo them. The Resbite team can see who blocked whom for 7 days.", { exact: true });
     await expect(chatLine).toBeVisible();
     await expect(reportsLine).toBeVisible();
-    assert.ok(await inOrder(page, [chatLine, reportsLine]), "the reports line follows chat core's");
+    await expect(blocksLine).toBeVisible();
+    assert.ok(await inOrder(page, [chatLine, reportsLine, blocksLine]), "the reports line follows chat core's, then the blocks line");
     await shot("privacy-chat", false);
     await button(page, "Close sheet").click();
     await closed();

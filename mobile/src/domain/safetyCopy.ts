@@ -68,9 +68,12 @@ export const SAFETY_COPY = {
       : `Your announcement and ${n} messages haven’t been sent. Agree to the chat rules to send them.`,
   rulesNotSaved: "That didn’t go through, so nothing was sent. Try again.",
 
-  // Blocked people (G-S10).
+  // Blocked people (G-S10). A row reads "Unblock" beside the name, spoken as "Unblock <name>" (`unblock`), and says
+  // "Unblocked <name>." once it went through (ruling SR4).
   blockedPeople: "Blocked people",
   noneBlocked: "You haven’t blocked anyone.",
+  unblockAction: "Unblock",
+  unblocked: (name: string) => `Unblocked ${name}.`,
 
   // The contact address (G-N10).
   contact: (address: string) => `Questions, or something wrong in a chat? Write to ${address}.`,
@@ -80,6 +83,8 @@ export const SAFETY_COPY = {
   /** Data & privacy's line on reports (G-S11, N9, I11): a person as well as a message, the reporter's own, the period. */
   reportsPrivacy:
     "If you report a message or a person, the Resbite team reads the report and keeps a copy of what was reported, even if the message or that person’s account is deleted. If you delete your account, the reports you sent are deleted too. A report is deleted 180 days after the team closes it.",
+  /** Data & privacy's line on blocks (ruling SR4, owner question R-Q7's default; I10's 7-day read). */
+  blocksPrivacy: "Blocks stay until you undo them. The Resbite team can see who blocked whom for 7 days.",
 } as const;
 
 /** A report's reason, as the server stores it. */

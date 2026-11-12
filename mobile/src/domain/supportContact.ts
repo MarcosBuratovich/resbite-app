@@ -17,3 +17,28 @@ export function supportContact(env: string | undefined): SupportContact | null {
     mailto: `mailto:${address.replace(/[%?#]/g, encodeURIComponent)}`,
   };
 }
+
+/**
+ * Copies the address, and answers whether the copy is confirmed (ruling SR4): on the web only when
+ * `navigator.clipboard.writeText` resolved (expo-clipboard's web fallback answers true even when the browser refused);
+ * on the phone, expo-clipboard's answer. Anything that throws is no copy, so Copied is never said for nothing.
+ */
+export async function copyConfirmed(
+  text: string,
+  deps: {
+    web: boolean;
+    clipboard: { writeText(text: string): Promise<void> } | undefined;
+    setStringAsync: (text: string) => Promise<boolean>;
+  },
+): Promise<boolean> {
+  try {
+    if (deps.web) {
+      if (!deps.clipboard) return false;
+      await deps.clipboard.writeText(text);
+      return true;
+    }
+    return (await deps.setStringAsync(text)) === true;
+  } catch {
+    return false;
+  }
+}

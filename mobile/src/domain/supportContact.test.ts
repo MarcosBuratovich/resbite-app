@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { supportContact } from "./supportContact";
+import { copyConfirmed, supportContact } from "./supportContact";
 import { SAFETY_COPY } from "./safetyCopy";
 
 test("no Contact topic while the build has no address, or a value that isn't one (G-N10, N9)", () => {
@@ -27,12 +27,33 @@ test("the mailto: link keeps the address whole: a ?, # or % in it is escaped, a 
   assert.equal(supportContact("a?b#c%d@x.example")?.address, "a?b#c%d@x.example");
 });
 
+test("Copied only when the copy is confirmed: on the web, navigator.clipboard.writeText resolved (ruling SR4)", async () => {
+  const written: string[] = [];
+  const ok = { writeText: async (text: string) => void written.push(text) };
+  const never = async () => {
+    throw Error("expo-clipboard is not used on the web");
+  };
+  assert.equal(await copyConfirmed("help@x.example", { web: true, clipboard: ok, setStringAsync: never }), true);
+  assert.deepEqual(written, ["help@x.example"]);
+  // Refused, or no clipboard at all: nothing is confirmed. expo-clipboard's web fallback would answer true regardless.
+  const refused = { writeText: async () => Promise.reject(Error("NotAllowedError")) };
+  assert.equal(await copyConfirmed("help@x.example", { web: true, clipboard: refused, setStringAsync: async () => true }), false);
+  assert.equal(await copyConfirmed("help@x.example", { web: true, clipboard: undefined, setStringAsync: async () => true }), false);
+  // The phone: expo-clipboard's answer, and a throw is no copy.
+  assert.equal(await copyConfirmed("help@x.example", { web: false, clipboard: undefined, setStringAsync: async () => true }), true);
+  assert.equal(await copyConfirmed("help@x.example", { web: false, clipboard: undefined, setStringAsync: async () => false }), false);
+  assert.equal(await copyConfirmed("help@x.example", { web: false, clipboard: undefined, setStringAsync: never }), false);
+});
+
 const mobile = fileURLToPath(new URL("../../", import.meta.url));
 const source = (path: string) => readFileSync(join(mobile, path), "utf8");
 
 test("Data & privacy reads the build's address with dot notation, the one form inlined when the bundle is built", () => {
   const page = source("app/data-privacy.tsx");
   assert.match(page, /supportContact\(process\.env\.EXPO_PUBLIC_SUPPORT_ADDRESS\)/);
+  // Copy address says Copied only on a confirmed copy, so the page never calls expo-clipboard's web path itself.
+  assert.match(page, /copyConfirmed\(/);
+  assert.equal(page.includes("Clipboard.setStringAsync("), false);
   // Nowhere in the app is it read another way (bracket or destructured reads are left undefined in a build).
   const files: string[] = [];
   const walk = (dir: string) => {
@@ -51,7 +72,7 @@ test("Data & privacy reads the build's address with dot notation, the one form i
         assert.match(line, /process\.env\.EXPO_PUBLIC_SUPPORT_ADDRESS\b/, `${relative(mobile, f)}: ${line.trim()}`);
 });
 
-test("the Chat messages topic keeps chat core's words, then says what a report keeps (G-S11)", () => {
+test("the Chat messages topic keeps chat core's words, then says what a report keeps (G-S11) and how long blocks stay", () => {
   const page = source("app/data-privacy.tsx");
   const start = page.indexOf('title="Chat messages"');
   const end = page.indexOf("<TopicRow", start);
@@ -60,8 +81,10 @@ test("the Chat messages topic keeps chat core's words, then says what a report k
   const core = topic.indexOf("Chat messages are stored on Resbite’s servers");
   const hedge = topic.indexOf("deletion’s availability in this build under Delete account.");
   const reports = topic.indexOf("SAFETY_COPY.reportsPrivacy");
+  const blocks = topic.indexOf("SAFETY_COPY.blocksPrivacy");
   assert.ok(core > 0 && hedge > core, "chat core's paragraph, with its hedge, stays");
   assert.ok(reports > hedge, "the reports line follows it, in the same topic");
+  assert.ok(blocks > reports, "then the line on blocks (ruling SR4)");
 });
 
 test("Blocked people: a row on Data & privacy after the topics, and a screen in the signed-in stack beside the chat", () => {

@@ -19,7 +19,7 @@ import { Chip, IconButton, InfoSheet, Row, RowGroup, TopicRow } from "../src/des
 import { PreviewNotice } from "../src/design/Chrome";
 import { categoryPalette, colors as c, fonts, r } from "../src/design/tokens";
 import { SAFETY_COPY } from "../src/domain/safetyCopy";
-import { supportContact, type SupportContact } from "../src/domain/supportContact";
+import { copyConfirmed, supportContact, type SupportContact } from "../src/domain/supportContact";
 
 /**
  * The build's support address (G-N10). `EXPO_PUBLIC_*` is inlined when the bundle is built, and only when read with dot
@@ -32,8 +32,8 @@ const contact = supportContact(process.env.EXPO_PUBLIC_SUPPORT_ADDRESS);
  * a red Delete account row. The account deletion paragraph now sits in Delete account's
  * "What happens" sheet. Chat messages (K-N5): what deleting an account does to them is said with the
  * deletion copy's tense and hedge, since the deletion lifecycle isn't live on the hosted service yet; then what a
- * report keeps (chat plan 3, G-S11). Contact (G-N10) shows only when the build has a support address. Blocked people
- * (G-S10) follows the topics.
+ * report keeps (chat plan 3, G-S11) and how long blocks stay (ruling SR4). Contact (G-N10) shows only when the build has
+ * a support address. Blocked people (G-S10) follows the topics.
  */
 export default function DataPrivacy() {
   const [about, setAbout] = useState(false);
@@ -122,6 +122,7 @@ export default function DataPrivacy() {
               deletion’s availability in this build under Delete account.
             </Copy>
             <Copy>{SAFETY_COPY.reportsPrivacy}</Copy>
+            <Copy>{SAFETY_COPY.blocksPrivacy}</Copy>
           </TopicRow>
           <TopicRow
             title="Preview & samples"
@@ -176,21 +177,19 @@ export default function DataPrivacy() {
 
 /**
  * The contact line, selectable so the address can be copied from it; the address as a `mailto:` link; and Copy address,
- * which says Copied (G-N10). On the web the link is a real `<a href>` (react-native-web) that the browser opens itself;
+ * which says Copied once the copy is confirmed (G-N10, ruling SR4). On the web the link is a real `<a href>` (react-native-web) that the browser opens itself;
  * on the phone a tap opens it through `Linking`, and a phone with no mail app keeps the address to copy.
  */
 function ContactTopic({ contact }: { contact: SupportContact }) {
   const [copied, setCopied] = useState(false);
   async function copy() {
     setCopied(false);
-    let done = false;
-    try {
-      // Always true on the phone; on the web, whether the browser took it.
-      done = await Clipboard.setStringAsync(contact.address);
-    } catch {
-      done = false;
-    }
-    // Nothing is said when it didn't take: the line above stays selectable.
+    const done = await copyConfirmed(contact.address, {
+      web: Platform.OS === "web",
+      clipboard: typeof navigator === "undefined" ? undefined : navigator.clipboard,
+      setStringAsync: Clipboard.setStringAsync,
+    });
+    // Nothing is said when the copy isn't confirmed (ruling SR4): the line above stays selectable.
     if (!done) return;
     setCopied(true);
     // VoiceOver ignores live regions; TalkBack reads the line below by itself, and the web's live region speaks it.

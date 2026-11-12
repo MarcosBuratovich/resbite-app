@@ -5,9 +5,11 @@ import {
   BLOCKED_PEOPLE_START,
   blockedPeopleStep,
   blockedPeopleView,
+  mayAct,
   type BlockedPeopleEvent,
   type BlockedPeopleState,
 } from "./blockedPeople";
+import { SAFETY_COPY } from "../domain/safetyCopy";
 import type { BlockedPerson } from "../services/safety";
 
 const LEO = "0a000000-0000-4000-8000-000000000002";
@@ -38,16 +40,16 @@ test("before the first read lands, the screen is loading and names nobody", () =
   assert.deepEqual(view(run([{ type: "readStarted" }])), { kind: "loading" });
 });
 
-test("the list reads my_blocks by name, cleaned as the chat cleans a name, with Someone for none, each with Unblock <name>", () => {
+test("the list reads my_blocks by name, cleaned as the chat cleans a name, with Someone for none, each with Unblock, spoken Unblock <name>", () => {
   const v = view(listed([leo, ana, nameless]));
   assert.equal(v.kind, "list");
   if (v.kind !== "list") return;
   assert.deepEqual(
-    v.rows.map((r) => [r.userId, r.name, r.action]),
+    v.rows.map((r) => [r.userId, r.name, r.action, r.label]),
     [
-      [LEO, "Leo", "Unblock Leo"],
-      [ANA, "Ana", "Unblock Ana"],
-      [MIA, "Someone", "Unblock Someone"],
+      [LEO, "Leo", "Unblock", "Unblock Leo"],
+      [ANA, "Ana", "Unblock", "Unblock Ana"],
+      [MIA, "Someone", "Unblock", "Unblock Someone"],
     ],
   );
   // In my_blocks' order (newest first), nothing running and nothing wrong.
@@ -57,11 +59,11 @@ test("the list reads my_blocks by name, cleaned as the chat cleans a name, with 
 test("a name left blank by the cleaning reads Someone too", () => {
   const v = view(listed([{ userId: LEO, name: " ​‏ " }]));
   assert.equal(v.kind === "list" && v.rows[0].name, "Someone");
-  assert.equal(v.kind === "list" && v.rows[0].action, "Unblock Someone");
+  assert.equal(v.kind === "list" && v.rows[0].label, "Unblock Someone");
 });
 
 test("with nobody blocked, the screen says so (noneBlocked)", () => {
-  assert.deepEqual(view(listed([])), { kind: "none" });
+  assert.deepEqual(view(listed([])), { kind: "none", after: null });
 });
 
 test("a failed first read shows the error line with Try again, never 'nobody blocked', and names nobody", () => {
@@ -108,7 +110,7 @@ test("an unblock that went through takes the row away at once, without a second 
 
 test("unblocking the last person leaves 'nobody blocked'", () => {
   const after = run([{ type: "unblockStarted", userId: LEO }, { type: "unblockSucceeded", userId: LEO }], listed([leo]));
-  assert.deepEqual(view(after), { kind: "none" });
+  assert.deepEqual(view(after), { kind: "none", after: { seq: 1, notice: "Unblocked Leo.", focus: null } });
 });
 
 test("a failed unblock keeps the row and says why beside that row only", () => {
@@ -161,7 +163,61 @@ test("another account starts from nothing: no list, no error, nothing running", 
 
 test("the preview has no account: nobody is blocked, whatever the state says", () => {
   for (const state of [BLOCKED_PEOPLE_START, listed([leo]), run([{ type: "readFailed", message: OFFLINE }])])
-    assert.deepEqual(view(state, true), { kind: "none" });
+    assert.deepEqual(view(state, true), { kind: "none", after: null });
+});
+
+test("the words: Unblock on the row, Unblocked <name>. once it went through, and the line on blocks (ruling SR4)", () => {
+  assert.equal(SAFETY_COPY.unblockAction, "Unblock");
+  assert.equal(SAFETY_COPY.unblocked("Leo"), "Unblocked Leo.");
+  assert.equal(
+    SAFETY_COPY.blocksPrivacy,
+    "Blocks stay until you undo them. The Resbite team can see who blocked whom for 7 days.",
+  );
+});
+
+test("after an unblock: Unblocked <name>. and focus on the row that took its place", () => {
+  const after = run([{ type: "unblockStarted", userId: LEO }, { type: "unblockSucceeded", userId: LEO }], listed([leo, ana, nameless]));
+  const v = view(after);
+  assert.equal(v.kind, "list");
+  assert.deepEqual(v.kind === "list" && v.after, { seq: 1, notice: "Unblocked Leo.", focus: ANA });
+  // From the middle: the row below moves up into its place, and takes focus.
+  const middle = view(run([{ type: "unblockStarted", userId: ANA }, { type: "unblockSucceeded", userId: ANA }], listed([leo, ana, nameless])));
+  assert.deepEqual(middle.kind === "list" && middle.after, { seq: 1, notice: "Unblocked Ana.", focus: MIA });
+});
+
+test("after unblocking the last row of several, focus goes to the row above; after the only one, to the empty line", () => {
+  const last = view(run([{ type: "unblockStarted", userId: MIA }, { type: "unblockSucceeded", userId: MIA }], listed([leo, ana, nameless])));
+  assert.deepEqual(last.kind === "list" && last.after, { seq: 1, notice: "Unblocked Someone.", focus: ANA });
+  const only = blockedPeopleView(run([{ type: "unblockStarted", userId: ANA }, { type: "unblockSucceeded", userId: ANA }], listed([ana])), { preview: false });
+  assert.deepEqual(only, { kind: "none", after: { seq: 1, notice: "Unblocked Ana.", focus: null } });
+});
+
+test("each unblock that goes through counts on, so focus moves again; a new unblock or a failure clears the line", () => {
+  const twice = run(
+    [
+      { type: "unblockStarted", userId: LEO },
+      { type: "unblockSucceeded", userId: LEO },
+      { type: "unblockStarted", userId: ANA },
+    ],
+    listed([leo, ana, nameless]),
+  );
+  assert.equal(twice.after, null, "the line goes while the next one runs");
+  const done = run([{ type: "unblockSucceeded", userId: ANA }], twice);
+  assert.deepEqual(done.after, { seq: 2, notice: "Unblocked Ana.", focus: MIA });
+  const failed = run([{ type: "unblockStarted", userId: MIA }, { type: "unblockFailed", userId: MIA, message: OFFLINE }], done);
+  assert.equal(failed.after, null);
+  // A failed read drops the list, and the line with it; a fresh list keeps it, without moving focus again.
+  assert.equal(run([{ type: "readStarted" }, { type: "readFailed", message: OFFLINE }], done).after, null);
+  assert.deepEqual(run([{ type: "readStarted" }, { type: "readSucceeded", people: [nameless] }], done).after, done.after);
+});
+
+test("nothing is read or sent without an account, in the preview, while signing out, or while an unblock runs", () => {
+  const ready = { userId: ANA, preview: false, signingOut: false, working: false };
+  assert.equal(mayAct(ready), true);
+  assert.equal(mayAct({ ...ready, userId: undefined }), false);
+  assert.equal(mayAct({ ...ready, preview: true }), false);
+  assert.equal(mayAct({ ...ready, signingOut: true }), false);
+  assert.equal(mayAct({ ...ready, working: true }), false);
 });
 
 test("the screen and its hook: the gateway's reads and unblock, its error words, and the model's view", () => {
@@ -172,8 +228,8 @@ test("the screen and its hook: the gateway's reads and unblock, its error words,
   assert.match(hook, /safetyGateway\.myBlocks\(\)/);
   assert.equal(hook.includes("safetyGateway.block("), false, "Blocked people never blocks");
   assert.match(hook, /safetyErrorMessage\(/);
-  // The preview reads nothing.
-  assert.match(hook, /preview/);
+  // Both the read and the unblock ask mayAct first, so the preview, signing out and a running unblock send nothing.
+  assert.equal(hook.match(/if \(!mayAct\(\{ userId, preview, signingOut, working: working\.current \}\)\) return;/g)?.length, 2);
   // The screen draws the model's view, and its words are the rulings'.
   assert.match(screen, /SAFETY_COPY\.noneBlocked/);
   assert.match(screen, /SAFETY_COPY\.blockedPeople/);
