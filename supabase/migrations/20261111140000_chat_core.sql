@@ -23,9 +23,10 @@
 
 -- One row per message, announcement or system line. series_id is the chat; plan_id is the occurrence current when it was
 -- written (the day grouping, and the cascade). A system line has no author (K-B2): who acted is payload.actor, and every
--- other person in its payload is a uuid. A deleted account's messages lose their author (Decision 14). client_id makes
--- a resend from the phone the same message. created_at is the moment the row was made (clock_timestamp(), so rows of
--- one transaction keep their order); updated_at moves on every update (messages_touch), for chat_messages_since.
+-- other person in its payload is a uuid. A deleted account's messages lose their author and their words (Decision 14;
+-- messages_touch, H42). client_id makes a resend from the phone the same message. created_at is the moment the row was
+-- made (clock_timestamp(), so rows of one transaction keep their order); updated_at moves on every update
+-- (messages_touch), for chat_messages_since.
 create table public.messages (
  id bigint generated always as identity primary key,
  series_id uuid not null,
@@ -53,10 +54,18 @@ revoke all on public.messages from public, anon, authenticated, service_role;
 revoke all on sequence public.messages_id_seq from public, anon, authenticated, service_role;
 
 -- Every update moves updated_at, so a removal, a deletion or a line updated in place reaches chat_messages_since.
--- The database's own: no role may call it.
+-- A message or an announcement whose author goes from someone to nobody loses its words, and reads deleted if it was
+-- still sent (CH-P18, H42): however the profile went (the deletion request does it itself; a profile deleted any other
+-- way nulls the author through the key), no words stay under "Someone". The stats trigger then fixes the count and
+-- the pin. The fold moves an author to another account, never to nobody, so its messages keep their words. The
+-- database's own: no role may call it.
 create function private.messages_touch() returns trigger language plpgsql security definer set search_path = '' as $$
 begin
  new.updated_at := now();
+ if new.kind in ('message','announcement') and old.author_id is not null and new.author_id is null then
+  new.body := null;
+  if new.state = 'sent' then new.state := 'deleted'; end if;
+ end if;
  return new;
 end $$;
 revoke all on function private.messages_touch() from public, anon, authenticated, service_role;
@@ -417,12 +426,14 @@ create trigger messages_chat_stats after insert or update on public.messages for
 -- U+1D173–U+1D17A, U+E0001, U+E0020–U+E007F), a default-ignorable one (U+034F, U+115F, U+1160, U+17B4, U+17B5,
 -- U+180B–U+180F, U+2065, U+3164, U+FE00–U+FE0F, U+FFA0, U+FFF0–U+FFF8, U+E0000–U+E0FFF) or a braille blank (U+2800).
 -- Null when they are not. A ZWJ or a zero-width space inside the words is kept: it holds an emoji or a word together.
--- The classes name every character, since \s here does not take U+00A0 and hosted's may differ. The database's own: no
--- role may call it.
+-- The classes name every character, since \s here does not take U+00A0 and hosted's may differ. Over 16,000 bytes is
+-- null, refused like any unusable body, before any pattern runs (H42): the 1,000 characters kept are at most 4,000
+-- bytes, the rest is room for blanks around them, and a megabyte posted again and again costs no regex. The
+-- database's own: no role may call it.
 create function private.chat_body(p_body text) returns text language sql immutable security definer set search_path = '' as $$
- select t.body from (select pg_catalog.regexp_replace(p_body,
+ select t.body from (select case when pg_catalog.octet_length(p_body) <= 16000 then pg_catalog.regexp_replace(p_body,
    '^[\s\u0085\u00a0\u115f\u1680\u2000-\u200c\u2028\u2029\u202f\u205f\u2060\u2800\u3000\u3164\ufeff\uffa0]+'
-   '|[\s\u0085\u00a0\u115f\u1680\u2000-\u200c\u2028\u2029\u202f\u205f\u2060\u2800\u3000\u3164\ufeff\uffa0]+$', '', 'g') as body) t
+   '|[\s\u0085\u00a0\u115f\u1680\u2000-\u200c\u2028\u2029\u202f\u205f\u2060\u2800\u3000\u3164\ufeff\uffa0]+$', '', 'g') end as body) t
  where pg_catalog.char_length(t.body) between 1 and 1000
   and t.body ~ ('[^\s\u0001-\u001f\u007f-\u00a0\u00ad\u034f\u0600-\u0605\u061c\u06dd\u070f\u0890\u0891\u08e2\u115f\u1160\u1680'
    '\u17b4\u17b5\u180b-\u180f\u2000-\u200f\u2028-\u202f\u205f-\u206f\u2800\u3000\u3164\ufe00-\ufe0f\ufeff\uffa0\ufff0-\ufffb'
@@ -596,8 +607,9 @@ revoke all on function public.remove_message(bigint) from public, anon, authenti
 grant execute on function private.remove_message(bigint), public.remove_message(bigint) to authenticated;
 
 -- 2f. Reads and mutes (K-S11, CH-P8, H23). For someone in the chat, else 42501 'Not in this chat'. mark_chat_read
--- moves the caller's read forward only, and never past the chat's last message: a larger id (or a null) reads as far as
--- that. set_chat_mute mutes the chat's pushes of messages (announcements still come) or, with false, unmutes.
+-- moves the caller's read forward only, and never past the chat's last message: a larger id reads as far as that, and
+-- a null id reads nothing (it moves no read). set_chat_mute mutes the chat's pushes of messages (announcements still
+-- come) or, with false, unmutes.
 create function private.mark_chat_read(p_series uuid, p_last_id bigint) returns void language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester(); v_id bigint;
 begin
@@ -679,15 +691,17 @@ language sql stable security definer set search_path='' as $$
  )
 $$;
 
--- 2h. The worker's claim, with the chat (K-B3.2): the expansion takes every other kind before the chat kinds, so a
--- change, a cancellation or an answer is never queued behind a lively chat's notices; and each job also carries
--- series_id (the chat it opens), message_id (as text, like outbox_id: H6), message_body (the words, for the two chat
--- kinds only, while the message is sent) and audience (an announcement's). All four are null for every other kind. A
--- chat notice over an hour old is dropped by the eligibility check (K-N3, H17), as an announcement over a day old is.
--- actor_name is null for an actor who is being deleted or was (H19), as brought_by_name is. The one push a minute is
--- send_message's (Decision 6): the claim has no such rule. Otherwise the 20261111130000_circles_of_trust body
--- (brought_by_name, the rsvp of someone no longer on the guest list suppressed, the jobs in the order the notices were
--- made); its grants are kept (service_role only).
+-- 2h. The worker's claim, with the chat (K-B3.2, H42): the expansion and the pick both take every other kind before
+-- the chat kinds, so a change, a cancellation or an answer is never queued or sent behind a lively chat's notices. The
+-- expansion makes no delivery for a chat_message its recipient has already read (chat_reads at or past the message):
+-- a push for words already read is noise. It is checked once, there: a read after the expansion still gets its push.
+-- Each job also carries series_id (the chat it opens), message_id (as text, like outbox_id: H6), message_body (the
+-- words, for the two chat kinds only, while the message is sent) and audience (an announcement's). All four are null
+-- for every other kind. A chat notice over an hour old is dropped by the eligibility check (K-N3, H17), as an
+-- announcement over a day old is. actor_name is null for an actor who is being deleted or was (H19), as
+-- brought_by_name is. The one push a minute is send_message's (Decision 6): the claim has no such rule. Otherwise the
+-- 20261111130000_circles_of_trust body (brought_by_name, the rsvp of someone no longer on the guest list suppressed,
+-- the jobs in the order the notices were made); its grants are kept (service_role only).
 create or replace function public.claim_notification_deliveries(p_limit integer default 25) returns jsonb
 language plpgsql security definer set search_path='' as $$
 declare v_outbox record; v_result jsonb;
@@ -697,7 +711,10 @@ begin
  for v_outbox in select o.id from private.notification_outbox o
  where o.expanded_at is null and o.delivered_at is null order by (o.kind in ('chat_message','announcement')), o.id limit 100 for update skip locked
  loop
-  if private.notification_recipient_eligible(v_outbox.id) then
+  if private.notification_recipient_eligible(v_outbox.id)
+   and not exists(select 1 from private.notification_outbox o join public.messages m on m.id=o.message_id
+    join public.chat_reads r on r.series_id=m.series_id and r.user_id=o.recipient_id
+    where o.id=v_outbox.id and o.kind='chat_message' and r.last_read_id>=o.message_id) then
    insert into private.notification_deliveries(outbox_id,token,endpoint_updated_at)
    select o.id,e.token,e.updated_at from private.notification_outbox o
    join private.device_endpoints e on e.user_id=o.recipient_id where o.id=v_outbox.id
@@ -716,10 +733,15 @@ begin
  update private.notification_deliveries d set state='suppressed',lease_id=null,lease_until=null
  from private.notification_outbox o where o.id=d.outbox_id and d.state='pending' and o.kind='rsvp' and o.actor_id is not null
  and not exists(select 1 from public.attendees a where a.plan_id=o.plan_id and a.user_id=o.actor_id);
+ -- The pick takes every other kind first too (K-B3.2, H42): deliveries expanded in one claim share their
+ -- next_attempt_at, and earlier ones have an earlier one, so by time alone a change would wait behind the chat jobs
+ -- expanded with it or before it.
  with picked as (
- select d.id from private.notification_deliveries d where d.state in ('pending','ticket')
+ select d.id from private.notification_deliveries d join private.notification_outbox o on o.id=d.outbox_id
+ where d.state in ('pending','ticket')
  and d.next_attempt_at<=now() and (d.lease_until is null or d.lease_until<now())
- order by d.next_attempt_at,d.id limit greatest(1,least(coalesce(p_limit,25),25)) for update skip locked
+ order by (o.kind in ('chat_message','announcement')),d.next_attempt_at,d.id limit greatest(1,least(coalesce(p_limit,25),25))
+ for update of d skip locked
  ), claimed as (
  update private.notification_deliveries d set lease_id=gen_random_uuid(),lease_until=now()+interval '2 minutes',
  attempts=d.attempts+1,state=case when d.ticket_id is null then 'sending' else 'ticket' end
@@ -909,9 +931,11 @@ begin
  else
   return null;
  end if;
- -- That person's latest joined or cant_go line. Only a line made in the last 10 minutes can merge, and its updated_at is
- -- never before its created_at, so the search keeps to the rows updated in those 10 minutes (messages_series_updated_idx)
- -- and misses none that could; ids follow the order rows are made in, so the highest id found is the latest line.
+ -- That person's latest joined or cant_go line. Only a line made in the last 10 minutes can merge, so the search keeps
+ -- to the rows updated in those 10 minutes (messages_series_updated_idx). On insert a row's updated_at (now(), its
+ -- transaction's start) is a moment before its created_at (clock_timestamp()), so a line made in the last moments of
+ -- the 10 minutes can be missed: the answer then writes a new line instead of merging, which is harmless. Ids follow
+ -- the order rows are made in, so the highest id found is the latest line.
  select p.series_id into v_series from public.plans p where p.id = new.plan_id;
  select m.id, m.created_at into v_line, v_made from public.messages m
  where m.series_id = v_series and m.updated_at > now() - interval '10 minutes'

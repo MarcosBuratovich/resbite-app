@@ -7,8 +7,8 @@
 -- Four transactions, each begin … rollback (NOTE 12). Slices 1 and 2 share the c1 cast; slice 3 has the c1 cast again,
 -- with its own plans and two more people (c3); the rollback's rehearsal has c6, and the deletion block c5. The prefixes
 -- c1 and c3 are also used by phone-accounts.sql and plan-covers.sql, which is harmless only because every transaction
--- rolls back. Since slice 3, answers, changes and appointments write system lines by trigger (Decision 1); the one
--- line slices 1 and 2 leave written is a real change's, and slice 2 counts it (H9).
+-- rolls back. Since slice 3, answers, changes and appointments write system lines by trigger (Decision 1); the only
+-- lines slices 1 and 2 leave written are two real changes' (the crowd's), and slice 2 counts the first (H9).
 -- Times moved by hand sit between set_config('resbite.system','roll',true) and set_config('resbite.system','',true), so no
 -- change line skews a later count (K-N2). The setting is transaction-local: without the reset it would last until the
 -- rollback and silence every later line (NOTE 12). An assertion that closes the c1 one-off moves its times back afterwards,
@@ -782,19 +782,23 @@ select pg_temp.ch_check((select count(*) from public.messages where client_id=cu
 -- Hangul fillers, the variation selectors, the tags) or U+2800. Refused, 22023 'Invalid message', nothing stored: '',
 -- '   ', two newlines, a lone U+00A0, a zero-width space, U+3000 with a BOM, ZWNJ, ZWJ, a word joiner, NEL, U+180E, a
 -- soft hyphen, the Hangul fillers, a braille blank, RLO, LRI with PDI, invisible times, VS16, a combining grapheme
--- joiner, a tag space, BEL, ESC, DEL, a mix of them, 1001 characters, and none at all. Stored: '  hi\n' as 'hi', ZWNJ
--- hi ZWNJ as 'hi', a word joiner, hi and a braille blank as 'hi', 1000 characters between spaces whole, an emoji held
--- together by ZWJ whole, and a zero-width space inside a word kept. None is told to anyone: 01, 02 and 04 have 03's
--- notice from this minute (one push a minute).
+-- joiner, a tag space, BEL, ESC, DEL, a mix of them, 1001 characters, and none at all. Over 16,000 bytes is refused
+-- before any pattern is run, whatever the words (H42 M4): 'hi' in 16,001 bytes of spaces, and in a megabyte of them.
+-- Stored: '  hi\n' as 'hi', ZWNJ hi ZWNJ as 'hi', a word joiner, hi and a braille blank as 'hi', 1000 characters
+-- between spaces whole, 'hi' in exactly 16,000 bytes of spaces as 'hi', an emoji held together by ZWJ whole, and a
+-- zero-width space inside a word kept. None is told to anyone: 01, 02 and 04 have 03's notice from this minute (one
+-- push a minute).
 set local role authenticated;
 select pg_temp.ch_as(pg_temp.c1('03'));
 select pg_temp.ch_refused(format('select public.send_message(%L,%L,gen_random_uuid())',pg_temp.c1p('01'),b),'22023','Invalid message')
 from unnest(array['','   ',e'\n\n',e'\u00a0',e'\u200b',e'\u3000\ufeff',e'\u200c',e'\u200d',e'\u2060',e'\u0085',e'\u180e',
  e'\u00ad',e'\u3164',e'\uffa0',e'\u115f\u1160',e'\u2800',e'\u202e',e'\u2066\u2069',e'\u2062',e'\ufe0f',e'\u034f',e'\U000e0020',
- e'\u0007',e'\u001b',e'\u007f',e' \u200d\u2060\u00ad\u034f \u2800\t',repeat('a',1001)]) b;
+ e'\u0007',e'\u001b',e'\u007f',e' \u200d\u2060\u00ad\u034f \u2800\t',repeat('a',1001),repeat(' ',7999)||'hi'||repeat(' ',8000),
+ repeat(' ',500000)||'hi'||repeat(' ',500000)]) b;
 select pg_temp.ch_refused(format('select public.send_message(%L,null,gen_random_uuid())',pg_temp.c1p('01')),'22023','Invalid message');
 select set_config('c1.hi',pg_temp.ch_send(pg_temp.c1p('01'),e'  hi\n')::text,true);
 select set_config('c1.long',pg_temp.ch_send(pg_temp.c1p('01'),e'\u00a0 '||repeat('é',1000)||e'\u3000\n')::text,true);
+select set_config('c1.padded',pg_temp.ch_send(pg_temp.c1p('01'),repeat(' ',7999)||'hi'||repeat(' ',7999))::text,true);
 select set_config('c1.zwnj',pg_temp.ch_send(pg_temp.c1p('01'),e'\u200chi\u200c')::text,true);
 select set_config('c1.joiner',pg_temp.ch_send(pg_temp.c1p('01'),e'\u2060hi\u2800')::text,true);
 select set_config('c1.emoji',pg_temp.ch_send(pg_temp.c1p('01'),e'\U0001f469\u200d\U0001f4bb')::text,true);
@@ -804,14 +808,16 @@ do $$ begin
  perform pg_temp.ch_check((select body from public.messages where id=current_setting('c1.hi')::bigint)='hi','''  hi\n'' is not stored as ''hi''');
  perform pg_temp.ch_check((select body from public.messages where id=current_setting('c1.long')::bigint)=repeat('é',1000),
   '1000 characters between spaces are not stored whole');
+ perform pg_temp.ch_check((select body from public.messages where id=current_setting('c1.padded')::bigint)='hi',
+  '''hi'' in 16,000 bytes of spaces is not stored as ''hi''');
  perform pg_temp.ch_check((select body from public.messages where id=current_setting('c1.zwnj')::bigint)='hi'
    and (select body from public.messages where id=current_setting('c1.joiner')::bigint)='hi','ZWNJ, a word joiner or a braille blank at the ends was kept');
  perform pg_temp.ch_check((select body from public.messages where id=current_setting('c1.emoji')::bigint)=e'\U0001f469\u200d\U0001f4bb'
    and (select body from public.messages where id=current_setting('c1.inner')::bigint)=e'no\u200bspace','A joined emoji or an inner zero-width space was changed');
- perform pg_temp.ch_check((select count(*) from public.messages where author_id=pg_temp.c1('03') and created_at>=now())=7,
+ perform pg_temp.ch_check((select count(*) from public.messages where author_id=pg_temp.c1('03') and created_at>=now())=8,
   'A refused message was stored');
  perform pg_temp.ch_check(not exists(select 1 from private.notification_outbox where message_id in (current_setting('c1.hi')::bigint,
-   current_setting('c1.long')::bigint,current_setting('c1.zwnj')::bigint,current_setting('c1.joiner')::bigint,current_setting('c1.emoji')::bigint,
+   current_setting('c1.long')::bigint,current_setting('c1.padded')::bigint,current_setting('c1.zwnj')::bigint,current_setting('c1.joiner')::bigint,current_setting('c1.emoji')::bigint,
    current_setting('c1.inner')::bigint)),'03''s next messages in the minute were told');
 end $$;
 
@@ -1256,6 +1262,59 @@ do $$ declare s uuid; begin
   'The summary''s message_count');
 end $$;
 
+-- A profile removed another way (H42 M1, CH-P18). Hosted has no deletion request: an account goes there only by hand
+-- (the dashboard), once what blocks it is cleared, and the author's key then nulls the author. The words go with it.
+-- 10 'Pip Gone', a tester Going on the one-off and an admin of it (both by hand, under the roll's flag), writes two
+-- messages and announces to everyone (pinned); 02 removes the second message. 10's guest and admin rows are cleared and
+-- 10's account deleted, by hand: the first message and the announcement read deleted, with no words and no author, and
+-- the removed one stays removed, with no author; nothing is pinned again and message_count leaves them out; a read as
+-- 03 shows none of 10's words; and 10's announcement notice to 05 is no longer eligible.
+insert into auth.users(id,email,email_confirmed_at) values (pg_temp.c1('10'),'chat1-10@resbite-test.invalid',now());
+insert into private.tester_roster(email) values ('chat1-10@resbite-test.invalid');
+insert into public.profiles(id,display_name) values (pg_temp.c1('10'),'Pip Gone');
+select set_config('resbite.system','roll',true);
+insert into public.attendees(plan_id,user_id,response) values (pg_temp.c1p('01'),pg_temp.c1('10'),'accepted');
+insert into public.plan_admins(plan_id,user_id,appointed_by) values (pg_temp.c1p('01'),pg_temp.c1('10'),pg_temp.c1('01'));
+select set_config('resbite.system','',true);
+set local role authenticated;
+select pg_temp.ch_as(pg_temp.c1('10'));
+select set_config('c1.pip1',pg_temp.ch_send(pg_temp.c1p('01'),'My flat is at 4 Elm Road')::text,true);
+select set_config('c1.pip2',pg_temp.ch_send(pg_temp.c1p('01'),'Ring twice')::text,true);
+select set_config('c1.pip_ann',public.send_announcement(pg_temp.c1p('01'),'Pip pinned this','everyone',gen_random_uuid())->>'id',true);
+select pg_temp.ch_as(pg_temp.c1('02'));
+select public.remove_message(current_setting('c1.pip2')::bigint);
+reset role;
+select pg_temp.ch_check((select pinned_message_id from public.chats where series_id=pg_temp.c1p('01'))=current_setting('c1.pip_ann')::bigint
+ and (select (state,body) from public.messages where id=current_setting('c1.pip1')::bigint) is not distinct from ('sent'::text,'My flat is at 4 Elm Road'::text),
+ '10''s message is not sent, or its announcement not pinned');
+select set_config('c1.pip_ann05',pg_temp.ch_notice('announcement',current_setting('c1.pip_ann')::bigint,'05')::text,true);
+delete from public.plan_admins where user_id=pg_temp.c1('10');
+delete from public.attendees where user_id=pg_temp.c1('10');
+delete from auth.users where id=pg_temp.c1('10');
+do $$ declare r jsonb; begin
+ perform pg_temp.ch_check((select (state,body,author_id) from public.messages where id=current_setting('c1.pip1')::bigint)
+   is not distinct from ('deleted'::text,null::text,null::uuid)
+  and (select (state,body,author_id) from public.messages where id=current_setting('c1.pip_ann')::bigint)
+   is not distinct from ('deleted'::text,null::text,null::uuid)
+  and (select (state,body,author_id) from public.messages where id=current_setting('c1.pip2')::bigint)
+   is not distinct from ('removed'::text,null::text,null::uuid),
+  'A deleted profile''s rows: '||(select string_agg(row_to_json(m)::text,' | ' order by m.id) from (select id,state,body,author_id
+   from public.messages where id in (current_setting('c1.pip1')::bigint,current_setting('c1.pip2')::bigint,current_setting('c1.pip_ann')::bigint)) m));
+ perform pg_temp.ch_check((select pinned_message_id from public.chats where series_id=pg_temp.c1p('01')) is null
+  and (select message_count from public.chats where series_id=pg_temp.c1p('01'))
+   =(select count(*) from public.messages where series_id=pg_temp.c1p('01') and kind in ('message','announcement') and state='sent'),
+  'A deleted profile''s announcement is still pinned, or its words still counted');
+ perform pg_temp.ch_check(not private.notification_recipient_eligible(current_setting('c1.pip_ann05')::bigint),
+  'A deleted profile''s announcement may still be told');
+ perform pg_temp.ch_as(pg_temp.c1('03'));
+ r := public.chat_messages(pg_temp.c1p('01'));
+ perform pg_temp.ch_check((select count(*) from jsonb_array_elements(r->'rows') e
+    where e.value->>'id' in (current_setting('c1.pip1'),current_setting('c1.pip_ann')) and e.value->>'state'='deleted'
+     and e.value->'body'='null'::jsonb and e.value->'author_id'='null'::jsonb)=2
+  and not exists(select 1 from jsonb_array_elements(r->'rows') e where e.value->>'body' in ('My flat is at 4 Elm Road','Ring twice','Pip pinned this')),
+  'A read still shows a deleted profile''s words: '||(r->'rows')::text);
+end $$;
+
 -- The close (CH-P15, K-S8, K-S17, Review Focus 4). At the end + 47 h 59 min 03 still writes. At the end + 48 h 01 min:
 -- 03's message and 02's announcement are refused, 22023 'Chat closed' (05, not in the chat, still gets 'Not in this
 -- chat'); the history still reads; 03's earlier client id again is its stored row, not 'Chat closed'; 03 deletes
@@ -1374,8 +1433,8 @@ select pg_temp.ch_as(pg_temp.c1('38'));
 select public.change_plan_v4(pg_temp.c1p('06'),current_setting('c1.v6')::int,'Crowd 4','',array['community'],pg_temp.c1_start(),
  pg_temp.c1_start()+interval '2 hours','Europe/London','The pub',false,null::smallint,null,null);
 reset role;
--- The change is a real event, so its chat has its line (Task 3, H9): the one line any trigger writes in slices 1 and 2,
--- where every other row set by hand sits under the roll's flag.
+-- The change is a real event, so its chat has its line (Task 3, H9): so far the one line any trigger writes in slices 1
+-- and 2, where every other row set by hand sits under the roll's flag (the pick's change below writes the other).
 select pg_temp.ch_check(pg_temp.ch_lines(pg_temp.c1p('06'))='changed:-'
  and (select string_agg(right(m.series_id::text,2)||':'||m.event,',') from public.messages m where m.kind='system' and m.created_at>=now())='06:changed',
  'Slices 1 and 2 wrote other lines: '||coalesce((select string_agg(right(m.series_id::text,2)||':'||m.event,',' order by m.id) from public.messages m
@@ -1400,6 +1459,8 @@ do $$ declare v_chat bigint[]; v_change bigint; u text; begin
  select id into v_change from private.notification_outbox where plan_id=pg_temp.c1p('06');
  perform pg_temp.ch_check((select expanded_at from private.notification_outbox where id=v_change) is not null
    and (select count(*) from private.notification_deliveries where outbox_id=v_change)=1,'The change behind 120 chat notices was not expanded');
+ perform pg_temp.ch_check(exists(select 1 from ch_jobs where step='crowd' and job->>'outbox_id'=v_change::text and job->>'kind'='plan_changed'),
+  'The claim that expanded the change did not send it');
  perform pg_temp.ch_check(not exists(select 1 from private.notification_outbox where id=any(v_chat[1:99]) and expanded_at is null)
    and not exists(select 1 from private.notification_outbox where id=any(v_chat[100:120]) and expanded_at is not null),
   'The chat notices expanded are not the first 99: '||(select count(*) from private.notification_outbox where id=any(v_chat) and expanded_at is not null));
@@ -1413,6 +1474,120 @@ do $$ declare v_chat bigint[]; v_change bigint; u text; begin
  end loop;
  perform pg_temp.ch_check(not exists(select 1 from private.notification_deliveries where outbox_id=any(v_chat[100:120])),'A waiting chat notice has a delivery');
 end $$;
+
+-- The pick's order (K-B3.2, H42 I1): a change goes out before a lively chat's pushes, not only into the queue before
+-- them. Every earlier notice is marked expanded, and every delivery still waiting is set aside by hand (suppressed).
+-- Users 40 to 84, testers named 'Guest NN', 41 to 84 each with a device. 40 owns a fifth one-off (c1…07), with 41 to 84
+-- Going. 40 writes one message (44 chat notices), then moves the start (44 plan_changed notices, made after them). The
+-- first claim expands all 88, so every delivery has the same next_attempt_at, and its 25 jobs are all plan_changed;
+-- the second takes the other 19 changes, then 6 chat jobs; the third and the fourth take the chat jobs left. No claim
+-- takes a chat job while a change that is due is left behind.
+update private.notification_outbox set expanded_at=now() where expanded_at is null;
+update private.notification_deliveries set state='suppressed',lease_id=null,lease_until=null where state in ('pending','ticket');
+insert into auth.users(id,email,email_confirmed_at)
+ select pg_temp.c1(n::text),'chat1-'||n||'@resbite-test.invalid',now() from generate_series(40,84) n;
+insert into private.tester_roster(email) select 'chat1-'||n||'@resbite-test.invalid' from generate_series(40,84) n;
+insert into public.profiles(id,display_name) select pg_temp.c1(n::text),'Guest '||n from generate_series(40,84) n;
+insert into private.device_endpoints(token,user_id,platform)
+ select 'ExpoPushToken[c1p'||n||']',pg_temp.c1(n::text),'ios' from generate_series(41,84) n;
+set local role authenticated;
+select pg_temp.ch_as(pg_temp.c1('40'));
+select public.create_plan_v4(pg_temp.c1p('07'),'Crowd 5','',array['community'],null,pg_temp.c1_start(),
+ pg_temp.c1_start()+interval '2 hours','Europe/London','The hall',false,null::smallint);
+reset role;
+select set_config('resbite.system','roll',true);
+insert into public.attendees(plan_id,user_id,response) select pg_temp.c1p('07'),pg_temp.c1(n::text),'accepted' from generate_series(41,84) n;
+select set_config('resbite.system','',true);
+set local role authenticated;
+select pg_temp.ch_as(pg_temp.c1('40'));
+select set_config('c1.crowd5',pg_temp.ch_send(pg_temp.c1p('07'),'See you all there')::text,true);
+reset role;
+select set_config('c1.v7',(select version from public.plans where id=pg_temp.c1p('07'))::text,true);
+set local role authenticated;
+select pg_temp.ch_as(pg_temp.c1('40'));
+select public.change_plan_v4(pg_temp.c1p('07'),current_setting('c1.v7')::int,'Crowd 5','',array['community'],pg_temp.c1_start()+interval '1 hour',
+ pg_temp.c1_start()+interval '3 hours','Europe/London','The hall',false,null::smallint,null,null);
+reset role;
+select pg_temp.ch_check((select string_agg(kind||'='||n,',' order by kind) from (select o.kind,count(*) n from private.notification_outbox o
+  where o.expanded_at is null group by 1) x)='chat_message=44,plan_changed=44'
+ and (select max(id) from private.notification_outbox where kind='chat_message' and expanded_at is null)
+  <(select min(id) from private.notification_outbox where kind='plan_changed' and expanded_at is null),
+ 'The crowd did not queue 44 chat notices, then 44 changes, and nothing else');
+-- After a claim: whether it took a chat job while a delivery of another kind, due, was left waiting. The superuser's.
+create function pg_temp.ch_chat_jumped(p_step text) returns boolean language sql stable as $$
+ select exists(select 1 from ch_jobs where step=p_step and job->>'kind' in ('chat_message','announcement'))
+  and exists(select 1 from private.notification_deliveries d join private.notification_outbox o on o.id=d.outbox_id
+   where d.state in ('pending','ticket') and d.next_attempt_at<=now() and o.kind not in ('chat_message','announcement'))
+$$;
+set local role service_role;
+insert into ch_jobs select 'pick1', j from jsonb_array_elements(public.claim_notification_deliveries(25)) j;
+reset role;
+select pg_temp.ch_check(not pg_temp.ch_chat_jumped('pick1'),'The first claim took chat jobs while changes were left: '
+ ||(select string_agg(k||'='||n,',' order by k) from (select job->>'kind' k,count(*) n from ch_jobs where step='pick1' group by 1) y));
+select pg_temp.ch_check((select count(*) from private.notification_outbox where expanded_at is null)=0
+ and (select count(*) from private.notification_deliveries d join private.notification_outbox o on o.id=d.outbox_id where o.plan_id=pg_temp.c1p('07'))=88,
+ 'The first claim did not expand the 88 notices');
+set local role service_role;
+insert into ch_jobs select 'pick2', j from jsonb_array_elements(public.claim_notification_deliveries(25)) j;
+reset role;
+select pg_temp.ch_check(not pg_temp.ch_chat_jumped('pick2'),'The second claim took chat jobs while changes were left');
+set local role service_role;
+insert into ch_jobs select 'pick3', j from jsonb_array_elements(public.claim_notification_deliveries(25)) j;
+reset role;
+select pg_temp.ch_check(not pg_temp.ch_chat_jumped('pick3'),'The third claim took chat jobs while changes were left');
+set local role service_role;
+insert into ch_jobs select 'pick4', j from jsonb_array_elements(public.claim_notification_deliveries(25)) j;
+reset role;
+select pg_temp.ch_check(not pg_temp.ch_chat_jumped('pick4'),'The fourth claim took chat jobs while changes were left');
+select pg_temp.ch_check(coalesce((select string_agg(x.step||' '||x.kinds,' | ' order by x.step) from (select step,
+   string_agg(k||'='||n,',' order by k) kinds from (select step,job->>'kind' k,count(*) n from ch_jobs where step like 'pick%' group by 1,2) y group by 1) x),'none')
+  ='pick1 plan_changed=25 | pick2 chat_message=6,plan_changed=19 | pick3 chat_message=25 | pick4 chat_message=13',
+ 'The claims took: '||coalesce((select string_agg(x.step||' '||x.kinds,' | ' order by x.step) from (select step,
+   string_agg(k||'='||n,',' order by k) kinds from (select step,job->>'kind' k,count(*) n from ch_jobs where step like 'pick%' group by 1,2) y group by 1) x),'none'));
+
+-- A message already read is not pushed (H42 M5). Every chat notice of the fifth one-off is moved 61 s back, so the
+-- minute's rule holds none back, and 40 writes 'Who brings cups?' (44 chat notices). Before any claim, 41 reads up to it
+-- and 42 reads only up to 40's first message. The claim expands all 44: 41's notice gets no delivery, and 42's and the
+-- 42 others' do. The read is checked once, at the expansion (best effort): one of those whose job is still waiting
+-- reads the message after the expansion, and the next claim still sends its job.
+update private.notification_outbox set created_at=created_at-interval '61 seconds' where kind='chat_message' and plan_id=pg_temp.c1p('07');
+set local role authenticated;
+select pg_temp.ch_as(pg_temp.c1('40'));
+select set_config('c1.cups',pg_temp.ch_send(pg_temp.c1p('07'),'Who brings cups?')::text,true);
+select pg_temp.ch_as(pg_temp.c1('41'));
+select public.mark_chat_read(pg_temp.c1p('07'),current_setting('c1.cups')::bigint);
+select pg_temp.ch_as(pg_temp.c1('42'));
+select public.mark_chat_read(pg_temp.c1p('07'),current_setting('c1.crowd5')::bigint);
+reset role;
+select pg_temp.ch_check(pg_temp.ch_to('chat_message',current_setting('c1.cups')::bigint)
+  =(select string_agg(lpad(n::text,2,'0'),',' order by n) from generate_series(41,84) n),
+ 'The second message was not queued to 41 to 84: '||pg_temp.ch_to('chat_message',current_setting('c1.cups')::bigint));
+set local role service_role;
+insert into ch_jobs select 'read1', j from jsonb_array_elements(public.claim_notification_deliveries(25)) j;
+reset role;
+do $$ declare v_late uuid; begin
+ perform pg_temp.ch_check((select count(*) from private.notification_outbox where message_id=current_setting('c1.cups')::bigint and expanded_at is null)=0,
+  'The second message''s notices were not all expanded');
+ perform pg_temp.ch_check(not exists(select 1 from private.notification_deliveries d where d.outbox_id=pg_temp.ch_notice('chat_message',current_setting('c1.cups')::bigint,'41')),
+  '41 read the message before the claim, and still has a push for it');
+ perform pg_temp.ch_check((select count(*) from private.notification_deliveries d join private.notification_outbox o on o.id=d.outbox_id
+   where o.message_id=current_setting('c1.cups')::bigint)=43
+  and exists(select 1 from private.notification_deliveries d where d.outbox_id=pg_temp.ch_notice('chat_message',current_setting('c1.cups')::bigint,'42')),
+  'Those who had not read the message do not each have a push for it');
+ select o.recipient_id into v_late from private.notification_deliveries d join private.notification_outbox o on o.id=d.outbox_id
+ where o.message_id=current_setting('c1.cups')::bigint and d.state='pending' order by o.recipient_id limit 1;
+ perform pg_temp.ch_check(v_late is not null,'Every push for the second message went in one claim');
+ perform set_config('c1.late_reader',v_late::text,true);
+end $$;
+set local role authenticated;
+select pg_temp.ch_as(current_setting('c1.late_reader')::uuid);
+select public.mark_chat_read(pg_temp.c1p('07'),current_setting('c1.cups')::bigint);
+reset role;
+set local role service_role;
+insert into ch_jobs select 'read2', j from jsonb_array_elements(public.claim_notification_deliveries(25)) j;
+reset role;
+select pg_temp.ch_check(exists(select 1 from ch_jobs where step='read2' and job->>'recipient_id'=current_setting('c1.late_reader')
+  and job->>'message_id'=current_setting('c1.cups')),'A read after the expansion held back a push already made');
 
 -- The schema (K-S5, K-N11, K-N13, H21). The six writers and their private bodies are for signed-in accounts only; the
 -- public ones are not definers; every private one is a definer with an empty search path, and the stats trigger and
@@ -1872,7 +2047,8 @@ end $$;
 -- The fold (fold_web_account, H33, H34). 12, a web account with a live grant, says Going (joined {actor 12, user 12})
 -- and writes 'On my way'; 14, whom 12 brought, says Going (joined {actor 14, user 14, brought_by 12}). Then 12 is
 -- folded into the app account 13: the moved guest row, already answered, writes no line; the message's author and
--- every person key naming 12 (actor, user, brought_by) now name 13, so a read names Wren, and 12 nowhere.
+-- every person key naming 12 (actor, user, brought_by) now name 13, so a read names Wren, and 12 nowhere. The message
+-- keeps its words and stays sent (H42 M1: the fold moves an author to another account, never to nobody).
 set local role authenticated;
 select pg_temp.ch_as(pg_temp.c3('12'));
 select public.respond(pg_temp.c3p('01'),'accepted',1);
@@ -1893,7 +2069,8 @@ do $$ declare r jsonb; begin
    and not exists(select 1 from public.attendees where user_id=pg_temp.c3('12')),'The fold wrote a line, or did not move 12''s answered row');
  perform pg_temp.ch_check((select payload from public.messages where id=current_setting('c3.line12')::bigint)=jsonb_build_object('actor',pg_temp.c3('13'),'user',pg_temp.c3('13'))
    and (select payload from public.messages where id=current_setting('c3.line14')::bigint)=jsonb_build_object('actor',pg_temp.c3('14'),'user',pg_temp.c3('14'),'brought_by',pg_temp.c3('13'))
-   and (select (author_id,body) from public.messages where id=current_setting('c3.onmyway')::bigint) is not distinct from (pg_temp.c3('13'),'On my way'::text)
+   and (select (author_id,body,state) from public.messages where id=current_setting('c3.onmyway')::bigint)
+    is not distinct from (pg_temp.c3('13'),'On my way'::text,'sent'::text)
    and not exists(select 1 from public.messages m where m.author_id=pg_temp.c3('12') or pg_temp.c3('12')::text in (m.payload->>'actor',m.payload->>'user',m.payload->>'brought_by')),
   'The fold left the web account in the chat: '||(select string_agg(id||' '||coalesce(author_id::text,'-')||' '||coalesce(payload::text,'-'),' | ' order by id)
    from public.messages where id in (current_setting('c3.line12')::bigint,current_setting('c3.line14')::bigint,current_setting('c3.onmyway')::bigint)));

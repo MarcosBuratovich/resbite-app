@@ -15,6 +15,12 @@
 # (4) A host loses the role while their removal waits on the chat's row (Task 3). A session holds the chat's row and
 # takes the admin's role away; the admin's remove_message passed its first check and waits. When the hold lets go, the
 # removal checks again under the lock: 42501 'Hosts only', and the message stays as it was.
+# (5) A sender and a line writer on one resbite never deadlock (H42 M2). A line writer (respond, change_plan_v4,
+# appoint_admin) holds the plan's row (for update) and then takes the chat's row (the stats trigger). A send takes the
+# chat's row only after the plan's row (its foreign-key check, key share, fires before messages_chat_stats: trigger
+# names sort RI_ConstraintTrigger_… first). A session holds plan two's row; writer one's send waits on it, holding no
+# chat row, so the session takes the chat's row nowait; then, as the reader, it says Can't go (respond), which writes
+# its line, and commits. The send then goes through: no deadlock, the message and the line both stored.
 # The seed's guest rows and admin are the cast, not answers, so they are made under the roll's flag and write no chat
 # line (K-S2); the broadcasts the races make go with the cleanup.
 set -euo pipefail
@@ -235,6 +241,49 @@ do $$ begin
 end $$;
 SQL
 echo "PASS: a host whose role goes while their removal waits on the chat's row is refused, and the message stays"
+# (5) Plan two's row is held; writer one's send waits on it; the holder takes the chat's row nowait, then answers.
+PGAPPNAME=resbite_chat_plan_hold "$pg_bin/psql" "${args[@]}" >"$socket/chat-send-concurrency-hold5.log" 2>&1 <<'SQL' &
+\set VERBOSITY verbose
+begin;
+select 1 from public.plans where id='e9100000-0000-4000-8000-000000000002' for update;
+select pg_sleep(2);
+do $$ begin
+ if not exists(select 1 from pg_catalog.pg_stat_activity where application_name='resbite_chat_plan_send' and wait_event_type='Lock') then
+  raise exception 'FAIL: the send was not waiting on the plan''s row';
+ end if;
+end $$;
+select 'CHAT ROW FREE' from public.chats where series_id='e9100000-0000-4000-8000-000000000002' for update nowait;
+select set_config('e9.version',(select version::text from public.attendees
+ where plan_id='e9100000-0000-4000-8000-000000000002' and user_id='e9000000-0000-4000-8000-000000000004'),true);
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"e9000000-0000-4000-8000-000000000004","role":"authenticated"}',true);
+select public.respond('e9100000-0000-4000-8000-000000000002','declined',current_setting('e9.version')::int);
+commit;
+SQL
+hold_pid=$!
+wait_for resbite_chat_plan_hold wait_event PgSleep "The plan row holder of race (5) did not become ready"
+send resbite_chat_plan_send e9000000-0000-4000-8000-000000000002 e9100000-0000-4000-8000-000000000002 'Waiting on the plan' e9300000-0000-4000-8000-000000000007
+send_pid=$!
+wait_for resbite_chat_plan_send wait_event_type Lock "The send did not wait on the plan's row"
+hold_status=0; send_status=0
+wait "$hold_pid" || hold_status=$?
+wait "$send_pid" || send_status=$?
+if [[ "$hold_status" != 0 || "$send_status" != 0 ]] || ! grep -q 'CHAT ROW FREE' "$socket/chat-send-concurrency-hold5.log" \
+  || grep -q 40P01 "$socket/chat-send-concurrency-hold5.log" "$socket/resbite_chat_plan_send.log"; then
+ cat "$socket/chat-send-concurrency-hold5.log" "$socket/resbite_chat_plan_send.log"
+ echo "FAIL: a send waiting on the plan's row held the chat's row, or it and a line writer did not both go through"; exit 1
+fi
+"$pg_bin/psql" "${args[@]}" >"$socket/chat-send-concurrency-verify5.log" <<'SQL'
+do $$ begin
+ if (select count(*) from public.messages where client_id='e9300000-0000-4000-8000-000000000007' and body='Waiting on the plan'
+     and series_id='e9100000-0000-4000-8000-000000000002')<>1
+  or (select count(*) from public.messages where series_id='e9100000-0000-4000-8000-000000000002' and kind='system' and event='cant_go'
+     and payload->>'user'='e9000000-0000-4000-8000-000000000004')<>1 then
+  raise exception 'FAIL: the send and the line writer did not both store their row';
+ end if;
+end $$;
+SQL
+echo "PASS: a send waiting on the plan's row holds no chat row, so a line writer holding the plan finishes and both go through"
 "$pg_bin/psql" "${args[@]}" >"$socket/chat-send-concurrency-cleanup.log" <<'SQL'
 delete from public.plans where id in ('e9100000-0000-4000-8000-000000000001','e9100000-0000-4000-8000-000000000002');
 delete from public.chats where series_id in ('e9100000-0000-4000-8000-000000000001','e9100000-0000-4000-8000-000000000002');
