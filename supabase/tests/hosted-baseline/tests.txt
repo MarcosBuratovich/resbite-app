@@ -20,3 +20,4 @@ connections.sql
 connections-follow-ups.sql
 circles-of-trust.sql
 chat.sql
+chat-groups.sql

@@ -170,17 +170,19 @@ insert into public.plan_admins(plan_id,user_id,appointed_by) values
  (pg_temp.c1p('01'),pg_temp.c1('02'),pg_temp.c1('01')),(pg_temp.c1p('02'),pg_temp.c1('02'),pg_temp.c1('01'));
 select set_config('resbite.system','',true);
 
--- A chats row for each plan's series once create_plan_v4 has made it, starting empty. Nothing in plan 1 makes a chat a
--- group: every chats row, backfilled or new, has is_group false, and chat_is_group reads that column (CH-R-A6).
+-- A chats row for each plan's series once create_plan_v4 has made it, starting empty. Since chat plan 2
+-- (plans_group_flag), the weekly series is a group from create_plan_v4 on, and every other chats row, backfilled or new,
+-- has is_group false; chat_is_group reads that column (CH-R-A6, confirmation 2 SHOULD 1).
 do $$ begin
  perform pg_temp.ch_check((select count(*) from public.chats where series_id in (pg_temp.c1p('01'),pg_temp.c1p('02')))=2,
   'create_plan_v4 did not give each series its chat row');
  perform pg_temp.ch_check((select (c.is_group,c.last_message_id,c.last_message_at,c.pinned_message_id,c.message_count)
    from public.chats c where c.series_id=pg_temp.c1p('01'))
    is not distinct from (false,null::bigint,null::timestamptz,null::bigint,0),'A new chat row does not start empty and not a group');
- perform pg_temp.ch_check(not exists(select 1 from public.chats where is_group),'A chat row is a group in plan 1');
- perform pg_temp.ch_check(not private.chat_is_group(pg_temp.c1p('01')) and not private.chat_is_group(pg_temp.c1p('02'))
-  and not private.chat_is_group(gen_random_uuid()),'chat_is_group is true in plan 1');
+ perform pg_temp.ch_check((select is_group from public.chats where series_id=pg_temp.c1p('02'))
+  and not exists(select 1 from public.chats where is_group and series_id<>pg_temp.c1p('02')),'A chat row other than the weekly series'' is a group, or it is not');
+ perform pg_temp.ch_check(not private.chat_is_group(pg_temp.c1p('01')) and private.chat_is_group(pg_temp.c1p('02'))
+  and not private.chat_is_group(gen_random_uuid()),'chat_is_group does not read the flag');
 end $$;
 
 -- Who is in the one-off's chat (CH-P2): the owner, the admin, and the people Going or Maybe; not the people who have not
@@ -205,8 +207,7 @@ do $$ declare n text; begin
 end $$;
 
 -- The announcement audiences (SHOULD 1), built from chat_members: Going is the members who are a host or Going or Maybe
--- ("Going"); Everyone adds the people who have not answered, on a chat that is not a group ("Everyone invited"). With
--- is_group set by hand, Everyone is the members only, the not-answered 05 left out; it is set back at once.
+-- ("Going"); Everyone adds the people who have not answered, on a chat that is not a group ("Everyone invited").
 do $$ begin
  perform pg_temp.ch_check(pg_temp.ch_who(array(select private.announcement_audience(pg_temp.c1p('01'),'going')))='01,02,03,04',
   'Going on the one-off: '||pg_temp.ch_who(array(select private.announcement_audience(pg_temp.c1p('01'),'going'))));
@@ -214,14 +215,6 @@ do $$ begin
   'Everyone on the one-off: '||pg_temp.ch_who(array(select private.announcement_audience(pg_temp.c1p('01'),'everyone'))));
  perform pg_temp.ch_check(not exists(select 1 from private.announcement_audience(pg_temp.c1p('01'),'all')),
   'An unknown audience has people');
- update public.chats set is_group=true where series_id=pg_temp.c1p('01');
- perform pg_temp.ch_check(private.chat_is_group(pg_temp.c1p('01')),'chat_is_group does not read chats.is_group');
- perform pg_temp.ch_check(pg_temp.ch_who(array(select private.announcement_audience(pg_temp.c1p('01'),'everyone')))='01,02,03,04',
-  'Everyone on a group: '||pg_temp.ch_who(array(select private.announcement_audience(pg_temp.c1p('01'),'everyone'))));
- perform pg_temp.ch_check(pg_temp.ch_who(array(select private.announcement_audience(pg_temp.c1p('01'),'going')))='01,02,03,04',
-  'Going on a group: '||pg_temp.ch_who(array(select private.announcement_audience(pg_temp.c1p('01'),'going'))));
- update public.chats set is_group=false where series_id=pg_temp.c1p('01');
- perform pg_temp.ch_check(not private.chat_is_group(pg_temp.c1p('01')),'The one-off is still a group');
 end $$;
 
 -- chat_summary (K-N2, K-N7), as a signed-in 03: the one-off's header (accepted: 02 and 03 are Going), the people in it
@@ -311,13 +304,16 @@ update public.plans set status='active' where id=pg_temp.c1p('01');
 select set_config('resbite.system','',true);
 select pg_temp.ch_check(private.chat_open(pg_temp.c1p('01')),'The one-off''s chat did not open again');
 
--- A weekly series (Decision 4: one-off rules on its current occurrence until plan 2). Before the roll: 01, 02 and 03 are
--- in, 05 (not answered) is not. The roll makes the next occurrence in the same series, with no second chats row; it
--- becomes the current occurrence, and membership follows it: everyone carried is not answered again, so only the
--- hosts are in (02 is carried as an admin) until 03 answers Going there. The close follows it too.
+-- A weekly series, a group since chat plan 2 (plans_group_flag on create_plan_v4): every guest row of its current
+-- occurrence is in, whatever the answer. Before the roll: 01, 02, 03 and 05 (not answered). The roll makes the next
+-- occurrence in the same series, with no second chats row; it becomes the current occurrence, and membership follows
+-- it: everyone carried is in again (not answered there; 02 carried as an admin), and still once 03 answers Going. A
+-- running group has no close time and is open, before the roll and after it.
 do $$ begin
- perform pg_temp.ch_check(pg_temp.ch_who(array(select private.chat_members(pg_temp.c1p('02'))))='01,02,03',
+ perform pg_temp.ch_check(pg_temp.ch_who(array(select private.chat_members(pg_temp.c1p('02'))))='01,02,03,05',
   'chat_members of the weekly series before the roll: '||pg_temp.ch_who(array(select private.chat_members(pg_temp.c1p('02')))));
+ perform pg_temp.ch_check(private.chat_closes_at(pg_temp.c1p('02')) is null and private.chat_open(pg_temp.c1p('02')),
+  'The running weekly chat has a close time, or is closed');
 end $$;
 select set_config('resbite.system','roll',true);
 update public.plans set starts_at=now()-interval '3 hours',ends_at=now()-interval '2 hours' where id=pg_temp.c1p('02');
@@ -329,23 +325,21 @@ do $$ declare v_next public.plans; begin
  perform pg_temp.ch_check((select count(*) from public.chats where series_id=pg_temp.c1p('02'))=1
   and not exists(select 1 from public.chats where series_id=v_next.id),'The roll made a second chats row');
  perform pg_temp.ch_check((private.current_occurrence(pg_temp.c1p('02'))).id=v_next.id,'The rolled occurrence is not the current one');
- perform pg_temp.ch_check(private.chat_closes_at(pg_temp.c1p('02'))=v_next.ends_at+interval '48 hours'
-  and private.chat_open(pg_temp.c1p('02')),'The weekly chat''s close does not follow the rolled occurrence');
- perform pg_temp.ch_check(pg_temp.ch_who(array(select private.chat_members(pg_temp.c1p('02'))))='01,02',
+ perform pg_temp.ch_check(private.chat_closes_at(pg_temp.c1p('02')) is null and private.chat_open(pg_temp.c1p('02')),
+  'The rolled weekly chat has a close time, or is closed');
+ perform pg_temp.ch_check(pg_temp.ch_who(array(select private.chat_members(pg_temp.c1p('02'))))='01,02,03,05',
   'chat_members after the roll: '||pg_temp.ch_who(array(select private.chat_members(pg_temp.c1p('02')))));
- perform pg_temp.ch_check(not private.chat_is_group(pg_temp.c1p('02')) and not exists(select 1 from public.chats where is_group),
-  'The roll made a group');
 end $$;
 select set_config('resbite.system','roll',true);
 update public.attendees set response='accepted'
  where plan_id=(select id from public.plans where repeats_from=pg_temp.c1p('02')) and user_id=pg_temp.c1('03');
 select set_config('resbite.system','',true);
 do $$ begin
- perform pg_temp.ch_check(pg_temp.ch_who(array(select private.chat_members(pg_temp.c1p('02'))))='01,02,03',
+ perform pg_temp.ch_check(pg_temp.ch_who(array(select private.chat_members(pg_temp.c1p('02'))))='01,02,03,05',
   'chat_members once 03 is Going on the rolled occurrence: '||pg_temp.ch_who(array(select private.chat_members(pg_temp.c1p('02')))));
  perform pg_temp.ch_as(pg_temp.c1('03'));
  perform pg_temp.ch_check((public.chat_summary(pg_temp.c1p('02'))->>'plan_id')::uuid=(select id from public.plans where repeats_from=pg_temp.c1p('02'))
-  and public.chat_summary(pg_temp.c1p('02'))@>jsonb_build_object('series_id',pg_temp.c1p('02'),'repeat_weeks',1,'is_group',false),
+  and public.chat_summary(pg_temp.c1p('02'))@>jsonb_build_object('series_id',pg_temp.c1p('02'),'repeat_weeks',1,'is_group',true),
   'The weekly chat''s summary is not about the rolled occurrence');
 end $$;
 
@@ -527,9 +521,10 @@ delete from public.chat_reads where user_id=pg_temp.c1('03');
 -- pinned_message_id and last_message_id set by hand to it and to 04's newest message (Task 2's trigger keeps them):
 -- chat_summary as 03 gives both rows, and names covers both. my_chat_overview as 03 lists both of 03's chats (the
 -- one-off and the weekly series, 03 Going on its current occurrence), keyed by series, with unread, last, open and the
--- count, names covering each last row, and no announcement (03 has no unanswered invitation). As 05: no chat (05 is in
--- none) and, for the one-off, where 05 has not answered, that announcement with its id, author and words (SHOULD 7),
--- names covering its author. As 07 (Can't go after Going): no chat and no announcement.
+-- count, names covering each last row, and no announcement (03 has no unanswered invitation). As 05: one chat, the
+-- weekly series' (a group since chat plan 2, so 05's unanswered row there makes 05 a member; not the one-off's) and,
+-- for the one-off, where 05 has not answered, that announcement with its id, author and words (SHOULD 7), names
+-- covering its author. As 07 (Can't go after Going): no chat and no announcement.
 -- The card's announcement (H22, H23) is the series' latest sent announcement whose audience includes the caller: a
 -- newer one to Going, or a newer one to everyone that was removed, leaves 05's card on the first. It is listed only for
 -- the caller's unanswered row on the series' current occurrence while that is active and has not ended: a cancelled
@@ -561,7 +556,9 @@ do $$ declare v_ann bigint; v_going bigint; v_gone bigint; v_week bigint; v_msg 
   'The overview''s announcements or names as 03: '||o::text);
  perform pg_temp.ch_as(pg_temp.c1('05'));
  o := public.my_chat_overview();
- perform pg_temp.ch_check(o=jsonb_build_object('chats','{}'::jsonb,'announcements',jsonb_build_object(pg_temp.c1p('01')::text,
+ perform pg_temp.ch_check(o=jsonb_build_object('chats',jsonb_build_object(pg_temp.c1p('02')::text,jsonb_build_object('unread',false,'last',null,
+   'open',true,'count',(select message_count from public.chats where series_id=pg_temp.c1p('02')))),
+  'announcements',jsonb_build_object(pg_temp.c1p('01')::text,
   jsonb_build_object('id',v_ann,'author_id',pg_temp.c1('01'),'body','Doors open at 7')),'names',jsonb_build_object(pg_temp.c1('01')::text,'Ana')),
   'my_chat_overview as 05: '||o::text);
  perform pg_temp.ch_as(pg_temp.c1('07'));
@@ -611,8 +608,8 @@ do $$ declare v_ann bigint; v_going bigint; v_gone bigint; v_week bigint; v_msg 
  perform pg_temp.ch_check(not (public.my_chat_overview()->'announcements' ? pg_temp.c1p('01')::text),'An announcement to Going is on 05''s card');
  update public.messages set state='deleted' where id in (v_ann,v_going,v_week);
  update public.messages set audience='everyone' where id=v_ann;
- perform pg_temp.ch_check(public.my_chat_overview()=jsonb_build_object('chats','{}'::jsonb,'announcements','{}'::jsonb,'names','{}'::jsonb),
-  'A deleted announcement is on 05''s card');
+ perform pg_temp.ch_check(public.my_chat_overview()->'announcements'='{}'::jsonb
+   and pg_temp.ch_keys(public.my_chat_overview()->'chats')=pg_temp.c1p('02')::text,'A deleted announcement is on 05''s card, or 05''s chats changed');
  update public.chats set pinned_message_id=v_pinned,last_message_id=v_last where series_id=pg_temp.c1p('01');
 end $$;
 -- my_chat_overview as a signed-in 03 and 05.
@@ -621,7 +618,8 @@ select pg_temp.ch_as(pg_temp.c1('03'));
 select pg_temp.ch_check(pg_temp.ch_keys(public.my_chat_overview()->'chats')=pg_temp.c1p('01')||','||pg_temp.c1p('02'),
  'my_chat_overview as a signed-in 03 does not list its two chats');
 select pg_temp.ch_as(pg_temp.c1('05'));
-select pg_temp.ch_check(public.my_chat_overview()->'chats'='{}'::jsonb,'my_chat_overview as a signed-in 05 lists a chat');
+select pg_temp.ch_check(pg_temp.ch_keys(public.my_chat_overview()->'chats')=pg_temp.c1p('02')::text,
+ 'my_chat_overview as a signed-in 05 does not list the weekly group''s chat alone');
 reset role;
 
 -- The tables' rules. A body is 1 to 1000 characters; kind, audience and state take only their words; a client id is
@@ -727,10 +725,10 @@ end $$;
 -- Slice 2 (Task 2): writing, announcements, delete and remove, mutes and reads; the two notices with one push a minute
 -- (Decision 6), the claim's chat fields and its order (K-B3), and a delivery handed back (H21). On slice 1's cast and
 -- plans: in the one-off's chat, 01 (the owner), 02 (an admin), 03 and 04 (Maybe), with 05 not answered; in the weekly
--- series' chat (its rolled occurrence), 01, 02 and 03, with 05 not answered. Every row written here is made in this
--- transaction, after now(): each send counts toward its author's 30 a minute, each announcement toward its author's one
--- a minute in that chat, and each notice is inside the 60 seconds, unless a check moves it back by hand. Ids pass
--- between statements in transaction-local settings (c1.…).
+-- series' chat (its rolled occurrence, a group since chat plan 2), 01, 02, 03 and 05, who has not answered. Every row
+-- written here is made in this transaction, after now(): each send counts toward its author's 30 a minute, each
+-- announcement toward its author's one a minute in that chat, and each notice is inside the 60 seconds, unless a check
+-- moves it back by hand. Ids pass between statements in transaction-local settings (c1.…).
 
 -- 03 writes 'I can bring the snacks', signed in: a message by 03, sent, with its client id, returned as chat_row gives
 -- it, and the chat's last message. Each other person in the chat, 01, 02 and 04, has a chat_message notice about it
@@ -874,9 +872,10 @@ do $$ declare v_id bigint := current_setting('c1.doors')::bigint; m public.messa
  perform pg_temp.ch_check((public.chat_summary(pg_temp.c1p('01'))->'pinned'->>'id')::bigint=v_id,'The summary does not pin 02''s announcement');
  perform pg_temp.ch_as(pg_temp.c1('05'));
  o := public.my_chat_overview();
- perform pg_temp.ch_check(o=jsonb_build_object('chats','{}'::jsonb,'announcements',jsonb_build_object(pg_temp.c1p('01')::text,
-   jsonb_build_object('id',v_id,'author_id',pg_temp.c1('02'),'body','Doors open at 19:30')),'names',jsonb_build_object(pg_temp.c1('02')::text,'Ada')),
-  'my_chat_overview as 05: '||o::text);
+ -- 05's one chat is the weekly group's (chat plan 2), whose last row names its author too.
+ perform pg_temp.ch_check(o->'announcements'=jsonb_build_object(pg_temp.c1p('01')::text,
+   jsonb_build_object('id',v_id,'author_id',pg_temp.c1('02'),'body','Doors open at 19:30')) and o->'names'@>jsonb_build_object(pg_temp.c1('02')::text,'Ada')
+   and pg_temp.ch_keys(o->'chats')=pg_temp.c1p('02')::text,'my_chat_overview as 05: '||o::text);
 end $$;
 select pg_temp.ch_check(pg_temp.ch_locked(pg_temp.c1('02')),'send_announcement does not take its author''s lock');
 
@@ -914,7 +913,7 @@ do $$ begin
 end $$;
 
 -- One push a minute (K-B3.1, Decision 6). Every chat notice so far is moved 61 s back. 03 writes in the weekly series:
--- 01 and 02 are told there. Then 04 writes five messages within the minute in the one-off: the first is told to 01, 02
+-- 01, 02 and 05 (a member of the group, chat plan 2) are told there. Then 04 writes five messages within the minute in the one-off: the first is told to 01, 02
 -- and 03, the other four to nobody, and those are the only chat notices of the one-off from the last 60 seconds; 01's
 -- notice from the weekly series a moment before does not hold the one-off's back. Once those three are 61 s old, 04's
 -- sixth is told to each of them again.
@@ -931,7 +930,7 @@ do $$ declare g int; v text := ''; begin
 end $$;
 reset role;
 do $$ declare v_five bigint[] := string_to_array(current_setting('c1.five'),',')::bigint[]; begin
- perform pg_temp.ch_check(pg_temp.ch_to('chat_message',current_setting('c1.weekly')::bigint)='01,02',
+ perform pg_temp.ch_check(pg_temp.ch_to('chat_message',current_setting('c1.weekly')::bigint)='01,02,05',
   '03''s weekly message was told to '||pg_temp.ch_to('chat_message',current_setting('c1.weekly')::bigint));
  perform pg_temp.ch_check(pg_temp.ch_to('chat_message',v_five[1])='01,02,03','04''s first was told to '||pg_temp.ch_to('chat_message',v_five[1]));
  perform pg_temp.ch_check(not exists(select 1 from private.notification_outbox where message_id=any(v_five[2:5])),'04''s second to fifth were told');
@@ -2240,10 +2239,12 @@ do $$ declare f text; r text; begin
 end $$;
 rollback;
 
--- The way back (Task 3; K-N9, BLOCKING 1, NOTE 4, NOTE 5), rehearsed in a transaction that ends in rollback. While chat
--- plan 2 is applied (a private.series_leaves table stands in) the rollback refuses and changes nothing. Otherwise it runs
--- on a chat with a guest's joined line, a message, an announcement, their notices (one with a delivery), a read and a
--- mute, beside an ordinary notice: the policy, the seven triggers, the four tables (and chats.is_group with them), every
+-- The way back (Task 3; K-N9, BLOCKING 1, NOTE 4, NOTE 5), rehearsed in a transaction that ends in rollback, switched on
+-- whether chat plan 2 is applied (its private.series_leaves exists), as circles-of-trust.sql's slice 17 is on chat. With
+-- plan 2 applied, the rollback refuses with plan 2's message and changes nothing. Without it, the full run: while a
+-- private.series_leaves table stands in for plan 2 the rollback refuses and changes nothing; otherwise it runs on a chat
+-- with a guest's joined line, a message, an announcement, their notices (one with a delivery), a read and a mute,
+-- beside an ordinary notice: the policy, the seven triggers, the four tables (and chats.is_group with them), every
 -- new function, the outbox's message_id (its index with it), its recipient index and the two kinds' notices go; the
 -- ordinary notice, the plan and its guest stay, and so do the other triggers of the tables the chat's triggers were on;
 -- the outbox's kind check holds the eleven kinds again. Each restored function is its source migration's text exactly
@@ -2257,6 +2258,25 @@ rollback;
 \set ch_connections `cat :'resbite_repo'/supabase/migrations/20261110120000_connections.sql`
 \set ch_circles `cat :'resbite_repo'/supabase/migrations/20261111130000_circles_of_trust.sql`
 \set ch_push `cat :'resbite_repo'/supabase/migrations/20261030120000_push_delivery.sql`
+select pg_catalog.to_regclass('private.series_leaves') is not null as ch_groups \gset
+\if :ch_groups
+begin;
+create temporary table ch_texts on commit drop as select :'ch_rollback'::text as rollback;
+do $$ begin
+ perform pg_temp.ch_check(coalesce(length(btrim((select rollback from ch_texts))),0)>0,'The rollback text is empty');
+ begin
+  execute (select rollback from ch_texts);
+  raise exception 'The chat core rollback ran while chat plan 2 is applied';
+ exception when raise_exception then
+  if sqlerrm is distinct from 'Run the chat groups rollback before the chat core rollback' then raise; end if;
+ end;
+ perform pg_temp.ch_check(pg_catalog.to_regclass('public.messages') is not null and pg_catalog.to_regclass('private.series_leaves') is not null
+   and pg_catalog.to_regprocedure('private.can_listen(text)') is not null
+   and exists(select 1 from pg_catalog.pg_policies where schemaname='realtime' and policyname='chat_members_listen')
+   and exists(select 1 from pg_catalog.pg_trigger where tgname='attendees_chat_lines'),'The refused rollback changed something');
+end $$;
+rollback;
+\else
 begin;
 create temporary table ch_texts on commit drop as select :'ch_rollback'::text as rollback, :'ch_circles_rollback'::text as circles_rollback;
 -- Each function the rollback restores, the statement that made it in its source migration, and its grants now.
@@ -2365,6 +2385,7 @@ do $$ declare f record; v_def text; begin
  perform pg_temp.ch_check(pg_catalog.to_regclass('private.plan_removals') is null,'The circles rollback did not run after the chat core rollback');
 end $$;
 rollback;
+\endif
 
 -- The deletion block (Task 2; K-B2, K-N5, K-S2, K-S3, K-S12, BLOCKING 1). Last in the file, in its own transaction with
 -- the prefix c5, because the deletion's flag lasts until the rollback (NOTE 12); only where the deletion lifecycle
