@@ -10,6 +10,11 @@
 # (2) A fold and the deletion of the person who brought the folded account and reported it. A session holds the web
 # account's phone invitation, so the fold waits there holding its guest row; the deletion then waits on that guest row
 # (its brought_by), and only after it deletes the reports it filed, as the fold re-points them: no deadlock.
+# (2b) A fold and the deletion of the person who blocked and reported the folded account, with no guest row in common
+# (ruling SR5). A session holds a notice to the web account, so the fold waits at its profile's delete, which cascades
+# to that notice before the blocks; the deletion then waits on the block. The fold takes the web account's block rows
+# in the deletion's order before it re-points the reports, so the deletion waits there holding nothing the fold needs:
+# no deadlock.
 # (3) The plan-3 rollback and a send already reading the chat rules and the blocked terms. The chat's lock is held, so
 # the send waits after those reads; the rollback then locks the tables in the order a send or a report meets them, the
 # outbox last, so it waits for the send, which goes through, and then runs (in a transaction rolled back here).
@@ -27,19 +32,21 @@ p() { echo "e8100000-0000-4000-8000-0000000000$1"; }
 select set_config('resbite.system','roll',false);
 -- 01 a host whose account is deleted in (1); 02 the reporter; 03 a moderator; 04 the person deleted in (2), who brought
 -- 05; 05 a web account (no app session, owns nothing) folded into 06, an app account; 07 the host of (2), (3) and (4);
--- 08 a writer. Live grants, no roster row (the harness checks the roster is empty at the end); 01 and 04 have a fresh
--- session for their deletions.
+-- 08 a writer; (2b): 09 the person deleted, who blocked and reported 10, a web account folded into 11, an app account.
+-- Live grants, no roster row (the harness checks the roster is empty at the end); 01, 04 and 09 have a fresh session
+-- for their deletions.
 insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data)
  select ('e8000000-0000-4000-8000-0000000000'||n)::uuid,'chat-safety-race-'||n||'@resbite-test.invalid',now(),'{}'
- from unnest(array['01','02','03','04','05','06','07','08']) n;
+ from unnest(array['01','02','03','04','05','06','07','08','09','10','11']) n;
 insert into auth.sessions(id,user_id,created_at) values ('e8200000-0000-4000-8000-000000000001','e8000000-0000-4000-8000-000000000001',now()),
- ('e8200000-0000-4000-8000-000000000004','e8000000-0000-4000-8000-000000000004',now());
+ ('e8200000-0000-4000-8000-000000000004','e8000000-0000-4000-8000-000000000004',now()),
+ ('e8200000-0000-4000-8000-000000000009','e8000000-0000-4000-8000-000000000009',now());
 insert into public.profiles(id,display_name)
- select ('e8000000-0000-4000-8000-0000000000'||n)::uuid,'Race '||n from unnest(array['01','02','03','04','05','07','08']) n;
+ select ('e8000000-0000-4000-8000-0000000000'||n)::uuid,'Race '||n from unnest(array['01','02','03','04','05','07','08','09','10']) n;
 insert into private.beta_access(user_id,source)
- select ('e8000000-0000-4000-8000-0000000000'||n)::uuid,'maintainer' from unnest(array['01','02','03','04','06','07','08']) n;
+ select ('e8000000-0000-4000-8000-0000000000'||n)::uuid,'maintainer' from unnest(array['01','02','03','04','06','07','08','09','11']) n;
 insert into private.app_sessions(user_id)
- select ('e8000000-0000-4000-8000-0000000000'||n)::uuid from unnest(array['01','02','03','04','06','07','08']) n;
+ select ('e8000000-0000-4000-8000-0000000000'||n)::uuid from unnest(array['01','02','03','04','06','07','08','09','11']) n;
 insert into private.chat_rules_acceptances(user_id,version)
  select ('e8000000-0000-4000-8000-0000000000'||n)::uuid,private.chat_rules_version() from unnest(array['01','02','07','08']) n;
 insert into private.moderators(user_id) values ('e8000000-0000-4000-8000-000000000003');
@@ -65,6 +72,13 @@ insert into private.reports(reporter_id,target_user_id,series_id,plan_id,about,r
 insert into private.reports(reporter_id,target_user_id,message_id,series_id,plan_id,about,reason,frozen_body,frozen_author)
  select 'e8000000-0000-4000-8000-000000000007','e8000000-0000-4000-8000-000000000008',m.id,m.series_id,m.plan_id,'message','spam',m.body,m.author_id
  from public.messages m where m.client_id='e8300000-0000-4000-8000-000000000002';
+-- (2b): 09's block of 10 and report about 10, and a notice to 10.
+insert into private.blocks(blocker_id,blocked_id) values ('e8000000-0000-4000-8000-000000000009','e8000000-0000-4000-8000-000000000010');
+insert into private.reports(reporter_id,target_user_id,series_id,plan_id,about,reason) values
+ ('e8000000-0000-4000-8000-000000000009','e8000000-0000-4000-8000-000000000010','e8100000-0000-4000-8000-000000000002',
+  'e8100000-0000-4000-8000-000000000002','user','harassment');
+insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key) values
+ ('e8100000-0000-4000-8000-000000000002','e8000000-0000-4000-8000-000000000010','invited','e8:invited:10');
 insert into private.phone_invitations(plan_id,phone,country,invited_by,user_id,answered_at) values
  ('e8100000-0000-4000-8000-000000000002','447700900851','44','e8000000-0000-4000-8000-000000000007','e8000000-0000-4000-8000-000000000005',now());
 SQL
@@ -167,6 +181,48 @@ do $$ begin
 end $$;
 SQL
 echo "PASS: a fold and the deletion of the person who brought and reported the folded account take guest rows first: no deadlock"
+
+# (2b) A fold and the deletion of the person who blocked and reported the folded account.
+PGAPPNAME=resbite_safety_hold2b "$pg_bin/psql" "${args[@]}" >"$socket/chat-safety-hold2b.log" 2>&1 <<'SQL' &
+begin;
+select 1 from private.notification_outbox where recipient_id='e8000000-0000-4000-8000-000000000010' for update;
+select pg_sleep(2);
+commit;
+SQL
+hold_pid=$!
+wait_for resbite_safety_hold2b wait_event PgSleep 'The notice holder did not become ready'
+PGAPPNAME=resbite_safety_fold2b "$pg_bin/psql" "${args[@]}" >"$socket/resbite_safety_fold2b.log" 2>&1 <<'SQL' &
+\set VERBOSITY verbose
+select private.fold_web_account('e8000000-0000-4000-8000-000000000010','e8000000-0000-4000-8000-000000000011');
+SQL
+fold_pid=$!
+wait_for resbite_safety_fold2b wait_event_type Lock 'The fold did not wait on the notice'
+PGAPPNAME=resbite_safety_deletion2b "$pg_bin/psql" "${args[@]}" >"$socket/resbite_safety_deletion2b.log" 2>&1 <<'SQL' &
+\set VERBOSITY verbose
+select private.request_account_deletion('e8000000-0000-4000-8000-000000000009','e8200000-0000-4000-8000-000000000009',
+ 'e8300000-0000-4000-8000-000000000019',repeat('c',64));
+SQL
+deletion_pid=$!
+wait_for resbite_safety_deletion2b wait_event_type Lock 'The deletion did not wait on the fold'
+wait "$hold_pid" || { cat "$socket/chat-safety-hold2b.log"; exit 1; }
+fold_status=0; deletion_status=0
+wait "$fold_pid" || fold_status=$?
+wait "$deletion_pid" || deletion_status=$?
+no_deadlock 'A fold and the deletion of the person who blocked and reported it' "$socket/resbite_safety_fold2b.log" "$socket/resbite_safety_deletion2b.log"
+if [[ "$fold_status" != 0 || "$deletion_status" != 0 ]]; then
+ cat "$socket/resbite_safety_fold2b.log" "$socket/resbite_safety_deletion2b.log"; echo 'FAIL: a fold and a deletion (block and report) did not both go through'; exit 1
+fi
+"$pg_bin/psql" "${args[@]}" >"$socket/chat-safety-verify2b.log" <<'SQL'
+do $$ begin
+ if exists(select 1 from public.profiles where id='e8000000-0000-4000-8000-000000000010')
+  or exists(select 1 from private.blocks where 'e8000000-0000-4000-8000-000000000009' in (blocker_id,blocked_id)
+   or 'e8000000-0000-4000-8000-000000000010' in (blocker_id,blocked_id))
+  or exists(select 1 from private.reports where reporter_id='e8000000-0000-4000-8000-000000000009') then
+  raise exception 'FAIL: the fold or the deletion (block and report) did not end as both done';
+ end if;
+end $$;
+SQL
+echo "PASS: a fold and the deletion of the person who blocked and reported the folded account take its block rows in one order: no deadlock"
 
 # (4) remove-reported-message.sql while the author's deletion of the message holds the chat's row.
 report_id="$("$pg_bin/psql" "${args[@]}" -Atc "select id from private.reports where reporter_id='e8000000-0000-4000-8000-000000000007'")"

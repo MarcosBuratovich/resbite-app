@@ -40,7 +40,8 @@
 -- first message for the rules sheet and its I agree fails: it cannot send. Roll the app back first, or with this file,
 -- as chat core's runbook does for its sender. The sender (deliver-notifications, with the moderators' push) needs
 -- nothing: with no report_filed notice left it words none, so it may stay or go back.
--- If it stops with "deadlock detected" (a worker's claim met it mid-way; step 1), nothing has changed: run it again.
+-- If it stops with "deadlock detected", nothing has changed: run it again. A worker's claim, a chat being opened or a
+-- block being made met it mid-way, each reading these tables in an order of its own (step 1).
 -- Order (G-N11): roll back in reverse order only: this file first, then chat groups' (plan 2), then chat core's (plan
 -- 1). The full order and the guarded chain are chat core's: chat 3 → chat 2 → chat 1 → circles → follow-ups, then
 -- connections and creating-a-resbite, which have no guard (supabase/rollback/20261111140000_chat_core.rollback.sql,
@@ -50,9 +51,11 @@
 -- 1. Nothing writes a notice, a block, a report, a moderator, an acceptance or a term until this commits, so a send or a
 -- report made meanwhile waits for it instead of making it fail (challenge N6). The tables are taken in the order a send
 -- or a report meets them (the rules, the terms, the blocks, the reports, the moderators), the outbox last, as chat
--- core's rollback takes it (SR3): one already past some of them finishes first, and this then runs. The worker's claim
--- reads the outbox before the blocks and the moderators, so a claim running at that moment can still meet it the other
--- way: Postgres then stops this file with "deadlock detected", having changed nothing, and it is run again.
+-- core's rollback takes it (SR3): one already past some of them finishes first, and this then runs. No one order
+-- suits every caller (SR5): the worker's claim reads the outbox before the blocks and the moderators; a chat being
+-- opened (chat_summary) reads the blocks before the rules; a block being made (block_user) reads the outbox before it
+-- writes the block. One of these running at that moment can meet this file the other way: Postgres then stops this
+-- file with "deadlock detected", having changed nothing, and it is run again.
 lock table private.chat_rules_acceptances, private.blocked_terms, private.blocks, private.reports, private.moderators,
  private.notification_outbox in access exclusive mode;
 

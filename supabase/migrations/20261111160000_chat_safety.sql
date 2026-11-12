@@ -1081,7 +1081,7 @@ end $$;
 --     series) stores nothing, queues nothing and returns as the first did, so a repeat never reads as the limit;
 --  3. at most 20 reports by the caller made in the last 24 hours, whatever their status, else 22023 'Report limit';
 --  4. the insert, after the plan's row for key share, so a report takes the plan before the message (the reports' key
---     on it) as the account deletion does, and the two never deadlock (SR3);
+--     on it) as the account deletion does, so the two queue on the plan instead of deadlocking (SR3);
 --  5. the notices: one report_filed to each moderator but the reporter and the reported person (N8), on the report's
 --     plan, with no actor and no message, so the push names nobody and carries nothing (Decision 10). Under the lock
 --     'report_filed' (taken after the caller's), none goes to a moderator who already has one from the last 10 minutes
@@ -1217,9 +1217,11 @@ grant execute on function private.report_user(uuid,uuid,text,text), public.repor
 -- 2l. Deletion (CH-P18, G-S11, Decision 7): chat core's body as built (chat_core.sql:817-874, inside its guard,
 -- :814-877; nothing later redefines it), redefined only where it exists, as chat core does, its grants kept and its
 -- set_config('resbite.system','deletion',true) kept. After the built step that empties brought_by on the guest rows
--- they brought (so it takes guest rows before blocks and reports, as the fold does; SR3), it also deletes their blocks
--- both ways (locked first in one order, so two deletions of people who blocked each other
--- never deadlock on them), the reports they filed, their chat-rules acceptances and their moderator row. Reports about
+-- they brought, it also deletes their blocks both ways (locked first, in one order), the reports they filed, their
+-- chat-rules acceptances and their moderator row. So it takes guest rows, then block rows, then reports, as the fold
+-- does (SR3, SR5): the two queue on the rows they share instead of deadlocking on them, and so do two deletions of
+-- people who blocked each other. Other paths that take these rows in another order can still meet it; Postgres then
+-- stops one with 40P01, which changes nothing and is retried. Reports about
 -- them stay, with their frozen words (messages_touch empties their messages however the profile goes), until closed. The
 -- built body already deletes their own notices, a moderator's queued report_filed with them. These deletes take no chat
 -- row, so plan 2's parked gap (ruling GR2) is neither fixed nor widened here.
@@ -1270,7 +1272,7 @@ begin
  delete from private.plan_removals where user_id=p_user;
  -- Chat safety (CH-P18, G-S11, Decision 7): the account's blocks both ways (locked in one order first), the reports it
  -- filed, its chat-rules acceptances and its moderator row. Reports about it stay, with their frozen words. After the
- -- guest rows, as the fold takes them before blocks and reports, so the two never deadlock (SR3).
+ -- guest rows, and blocks before reports, as the fold takes them, so the two queue instead of deadlocking (SR3, SR5).
  perform 1 from private.blocks where blocker_id=p_user or blocked_id=p_user order by blocker_id, blocked_id for update;
  delete from private.blocks where blocker_id=p_user or blocked_id=p_user;
  delete from private.reports where reporter_id=p_user;
@@ -1395,7 +1397,11 @@ begin
  -- reported person, frozen author). First, a report that would then repeat another (the same message by the same
  -- reporter, or an open report by one reporter about one person on one series) goes, so the move meets no unique index
  -- (confirmation 2's NOTE 2-b): the web account's, or of two that both named it, the later. A report one of the two
- -- accounts filed about the other goes too: after the fold it would be about oneself (SR3, Q-1).
+ -- accounts filed about the other goes too: after the fold it would be about oneself (SR3, Q-1). The web account's
+ -- block rows are locked first, in the order the account deletion locks a person's (blocker, then blocked), before any
+ -- report: a deletion of someone who blocked and reported the web account then waits on them holding nothing this
+ -- needs (SR5).
+ perform 1 from private.blocks where p_from in (blocker_id,blocked_id) order by blocker_id, blocked_id for update;
  insert into private.blocks(blocker_id,blocked_id,created_at)
   select k.blocker,k.blocked,k.created_at from (select case when b.blocker_id=p_from then p_into else b.blocker_id end as blocker,
    case when b.blocked_id=p_from then p_into else b.blocked_id end as blocked, b.created_at
