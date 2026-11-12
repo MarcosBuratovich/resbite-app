@@ -262,6 +262,12 @@ export default function Connections() {
                 youHost={false}
                 theyHost={false}
                 onBlocked={afterBlock}
+                // Nothing stored (ruling SR9): the sheet closes saying nothing, and the list is read again.
+                onClosed={() => {
+                  setSheet(null);
+                  k.sheetMoved();
+                  void k.load();
+                }}
                 onKeep={() => {
                   backToBlock.current = true;
                   setSheet({ ...sheet, view: "menu" });

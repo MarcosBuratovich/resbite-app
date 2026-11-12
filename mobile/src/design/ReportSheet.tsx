@@ -14,7 +14,7 @@ import {
   type ReportReason,
   type ReportTarget,
 } from "../domain/safetyCopy";
-import { safetyErrorMessage, safetyGateway } from "../services/safety";
+import { safetyErrorMessage, safetyGateway, showsBlockedLine } from "../services/safety";
 
 /** The longest optional line a report takes (Decision 4, CH-P13). */
 export const REPORT_DETAILS_MAX = 500;
@@ -159,7 +159,7 @@ export function ReportSheet({
  * The block confirm, in place (G-N9): the question for the person by name (`blockLines`, NOTE 7), and for a host of the
  * resbite the line on what a block doesn't do (R-Q6); Block in red, then Keep. The block goes through the safety gateway,
  * so every open chat hears it (B3). Refused or offline, it stays with the reason; never anything that tells the blocked
- * person (CH-P13).
+ * person (CH-P13). Answered that nothing was stored, it calls `onClosed` and the sheet closes saying nothing (ruling SR9).
  */
 export function BlockQuestion({
   userId,
@@ -168,6 +168,7 @@ export function BlockQuestion({
   theyHost,
   onBlocked,
   onKeep,
+  onClosed,
 }: {
   userId: string;
   name: string;
@@ -175,6 +176,8 @@ export function BlockQuestion({
   theyHost: boolean;
   onBlocked: () => void;
   onKeep: () => void;
+  /** The server stored nothing (ruling SR9): the screen closes the sheet, with no line of any kind. */
+  onClosed: () => void;
 }) {
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -190,8 +193,8 @@ export function BlockQuestion({
     setWorking(true);
     setError(null);
     try {
-      await safetyGateway.block(userId);
-      if (mounted.current) onBlocked();
+      const result = await safetyGateway.block(userId);
+      if (mounted.current) (showsBlockedLine(result) ? onBlocked : onClosed)();
     } catch (e) {
       if (mounted.current) setError(safetyErrorMessage(e));
     } finally {

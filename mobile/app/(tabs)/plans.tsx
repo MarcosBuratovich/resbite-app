@@ -573,6 +573,7 @@ function InvitationSheet({
           youHost={false}
           theyHost={step.theyHost}
           onBlocked={() => onStep({ kind: "blocked" })}
+          onClosed={onClose}
           onKeep={() => {
             backTo.current = `block:${step.userId}`;
             onStep({ kind: "list" });

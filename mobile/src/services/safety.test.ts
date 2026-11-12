@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { blockConfirmed, createSafetyGateway, knownBlocksAfter, onBlocksChanged, safetyErrorMessage } from "./safety";
+import { blockConfirmed, createSafetyGateway, knownBlocksAfter, onBlocksChanged, safetyErrorMessage, showsBlockedLine } from "./safety";
 
 type Call = { fn: string; args: Record<string, unknown> };
 function gateway(data: unknown = null, error: unknown = null) {
@@ -316,6 +316,14 @@ test("block and unblock read block_user's stored answer, whatever shape it comes
     stop();
     assert.deepEqual(changes, [{ userId: LEO, blocked: true, stored }], JSON.stringify(data));
   }
+});
+
+// Ruling SR9: a block the server answered `false` (nothing stored: the person can't be seen, which may be because they
+// blocked the caller) closes its confirm with no line at all; "Blocked" only when it didn't say false.
+test("showsBlockedLine: Blocked unless the server said nothing was stored", () => {
+  assert.equal(showsBlockedLine({ stored: true }), true);
+  assert.equal(showsBlockedLine({ stored: null }), true);
+  assert.equal(showsBlockedLine({ stored: false }), false);
 });
 
 test("blockConfirmed: a block stored, or an unblock leaving no block; anything else is unconfirmed", () => {

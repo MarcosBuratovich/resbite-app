@@ -554,6 +554,7 @@ export default function EventPage() {
               youHost={false}
               theyHost={safety.theyHost}
               onBlocked={() => setSafety({ kind: "blocked" })}
+              onClosed={closeMore}
               onKeep={() => {
                 safetyFocus.current = `block:${safety.userId}`;
                 setSafety({ kind: "list" });

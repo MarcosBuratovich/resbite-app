@@ -878,6 +878,7 @@ function Conversation({
                 youHost={summary.host}
                 theyHost={person.theyHost}
                 onBlocked={() => setSafety({ ...safety, step: "blocked" })}
+                onClosed={() => onMenu(false)}
                 onKeep={() => {
                   backToBlock.current = true;
                   setSafety({ ...safety, step: "actions" });

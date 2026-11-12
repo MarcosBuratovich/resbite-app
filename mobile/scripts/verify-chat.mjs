@@ -91,6 +91,8 @@
 // Fix round 1 (ruling SR6): focus moves into each new view of the menu's Report or block and back to Block after Keep
 // (H32 Q53, in s4); "Blocked" is said once on a blocked person's row (s4);
 //   s2b a message removed while its report is open keeps the sheet and the typed text, and says it can't be reported
+//   s6b ruling SR9: a block the server answered false (nothing stored) closes the confirm with no "Blocked" and no other
+//       line; the list then shows what my_blocks says
 //   s7e Send announcement before the rules are agreed: the rules first; Cancel brings the words and audience back; I
 //       agree sends it
 //   s7f Cancel on an announcement held for the rules: the form again with its words and audience; it goes later with
@@ -246,7 +248,7 @@ const PICNIC = {
  * the server clock against `closes_at` unless the summary says otherwise. `socket: "refuse"` closes every socket.
  * `queue` seeds the phone's unsent messages.
  */
-async function fixture({ viewer = PEDRO, now = OCT.now, rows = octRows(), summary = {}, socket = "ok", width = 390, height = 844, queue = null, refusals = [], permission = "denied", reminders = false, guests = [], blocked = [], serverAccepted, refuseSends = [] } = {}) {
+async function fixture({ viewer = PEDRO, now = OCT.now, rows = octRows(), summary = {}, socket = "ok", width = 390, height = 844, queue = null, refusals = [], permission = "denied", reminders = false, guests = [], blocked = [], serverAccepted, refuseSends = [], blockNotStored = false } = {}) {
   const context = await browser.newContext({
     viewport: { width, height },
     reducedMotion: "reduce",
@@ -463,9 +465,10 @@ async function fixture({ viewer = PEDRO, now = OCT.now, rows = octRows(), summar
     if (rpc === "my_blocks") return reply(state.blocked.map((id) => ({ user_id: id, name: NAMES[id] ?? null, at: iso(serverNow()) })));
     if (rpc === "block_user") {
       state.blocked = state.blocked.filter((id) => id !== body.p_user);
-      if (body.p_block) state.blocked.unshift(body.p_user);
-      // `stored` (server review M7): a block row exists afterwards for a block, none for an unblock.
-      return reply(body.p_block === true);
+      if (body.p_block && !blockNotStored) state.blocked.unshift(body.p_user);
+      // `stored` (server review M7): a block row exists afterwards for a block, none for an unblock; `blockNotStored`
+      // answers false for a block (the person can't be seen any more, so nothing was stored).
+      return reply(body.p_block === true && !blockNotStored);
     }
     if (rpc === "report_message" || rpc === "report_user") {
       if (state.failReports > 0) {
@@ -2398,6 +2401,32 @@ try {
     await f.done();
   }
   console.log("PASS (s6): a tap on Leo's name opens his sheet (Report Leo, Block Leo); after the confirm, focus is on Blocked.");
+
+  // (s6b) Ruling SR9: block_user answers false (nothing stored): the confirm closes with nothing said, and Leo's row
+  // shows what my_blocks says (not blocked).
+  {
+    const f = await fixture({ guests: PEOPLE, blockNotStored: true });
+    const { page } = f;
+    await openChat(page);
+    await peopleRead(f);
+    await button(page, "Leo").first().click();
+    await button(page, "Block Leo").click();
+    await expect(text(page, BLOCK_LEO)).toBeVisible();
+    const before = f.mark();
+    await button(page, "Block Leo").click();
+    await expect.poll(() => f.callsSince(before, "my_blocks").length).toBeGreaterThan(0);
+    await expect(sheet(page)).toHaveCount(0);
+    await expect(page.getByText("Blocked", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    assert.deepEqual(f.callsSince(before, "block_user"), [{ p_user: LEO, p_block: true }]);
+    // The menu's list reads my_blocks as answered: Leo isn't blocked, so Block Leo is offered again.
+    await button(page, "More").click();
+    await button(page, "Report or block").click();
+    await expect(inSheet(page, "Leo")).toBeVisible();
+    await expect(button(page, "Leo, Blocked")).toHaveCount(0);
+    await f.done();
+  }
+  console.log("PASS (s6b): a block answered false closes its confirm with no Blocked and no other line; the list then shows Leo as my_blocks has him, not blocked.");
 
   // (s7) Not agreed yet: Send opens the rules first; Cancel keeps the words; I agree, then one send.
   {

@@ -376,6 +376,7 @@ function People({ event, plan }: { event: EventPage; plan: NonNullable<EventPage
                 youHost={host && current.kind !== "request"}
                 theyHost={current.kind === "owner" || current.admin}
                 onBlocked={() => setSheet({ row: current, view: "blocked" })}
+                onClosed={() => setSheet(null)}
                 onKeep={() => {
                   backToBlock.current = true;
                   setSheet({ row: current, view: "menu" });

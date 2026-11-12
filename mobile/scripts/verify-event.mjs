@@ -1741,7 +1741,10 @@ try {
       const blocked = f.log.length;
       await btn(page, "Block Leo").click();
       await expect.poll(() => after(f, blocked, "my_blocks").length).toBeGreaterThan(0);
-      await page.getByRole("button", { name: "Close sheet" }).first().click();
+      // Ruling SR9: nothing was stored, so the confirm closes with no "Blocked" and no other line (a "couldn't" line
+      // could tell that Leo blocked the caller).
+      await expect(sheetOf(page)).toHaveCount(0);
+      await expect(page.getByText("Blocked", { exact: true })).toHaveCount(0);
       await expect(page.getByLabel("Leo, Blocked", { exact: true })).toHaveCount(0);
       for (const name of ["Leo", "Alex"]) {
         await btn(page, `Actions for ${name}`).click();

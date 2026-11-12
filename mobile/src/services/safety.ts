@@ -88,6 +88,13 @@ function storedOf(data: unknown): boolean | null {
 export const blockConfirmed = (change: BlockChange): boolean => (change.blocked ? change.stored === true : change.stored === false);
 
 /**
+ * Whether a block's confirm says "Blocked" (ruling SR9): not when the server answered that nothing was stored, since the
+ * person can't be seen any more, which may be because they blocked the caller; the confirm then closes saying nothing,
+ * and what holds is what `my_blocks` says.
+ */
+export const showsBlockedLine = (result: BlockResult): boolean => result.stored !== false;
+
+/**
  * The blocks a screen knows once a change went through (ruling SR6 Q2, M7): a confirmed one is applied, so a failed
  * re-read never offers Block again for someone just blocked; an unconfirmed one changes nothing until a read says what
  * holds. While they are unknown they stay so (N13). The set given is never changed in place.
