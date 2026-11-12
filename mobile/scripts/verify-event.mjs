@@ -182,6 +182,9 @@ async function open(world = {}) {
     group: Boolean(world.group),
     left: false,
     failLeaves: world.failLeaves ?? 0,
+    // How long leave_series waits before its answer (UI Q4); after a leave, My resbites' list read fails (UI Q3).
+    delayLeaves: world.delayLeaves ?? 0,
+    failListAfterLeave: Boolean(world.failListAfterLeave),
     // The links a guest sent bringing someone (plan_phone_invitations answers a guest with their own only).
     guestLinks: world.guestLinks ?? [],
     // How many times My resbites read its list of plans.
@@ -249,6 +252,7 @@ async function open(world = {}) {
       if (state.failPlanRead) return reply({ message: "Fixture: the read failed" }, 500);
       const insider = state.plan.owner_id === user.id || ["accepted", "maybe"].includes(state.attendee?.response);
       if (select === PLAN_LIST) state.listReads++;
+      if (select === PLAN_LIST && state.left && state.failListAfterLeave) return reply({ message: "Fixture: the list read failed" }, 500);
       // After a leave, My resbites no longer lists the group's occurrence.
       if (!one && state.left) return reply([]);
       const row = {
@@ -378,6 +382,7 @@ async function open(world = {}) {
         return reply(state.group && !state.left);
       case "leave_series":
         if (body.p_series !== state.plan.series_id) mismatches.push(`leave_series p_series ${body.p_series}`);
+        if (state.delayLeaves) await new Promise((r) => setTimeout(r, state.delayLeaves));
         if (state.failLeaves > 0) {
           state.failLeaves--;
           return route.abort("internetdisconnected");
@@ -1215,19 +1220,27 @@ try {
       const { page } = f;
       await goto(f, `/event?plan=${PLAN_ID}`);
       await expect(page.getByRole("radiogroup", { name: "Your answer" })).toBeVisible();
-      await btn(page, "More").click();
+      // The labelled More pill of the member's other bars, under the answer control (review M1).
+      const more = bar(f).getByRole("button", { name: "More", exact: true });
+      await expect(more.getByText("More", { exact: true })).toBeVisible();
+      const [answer, pill] = [await page.getByRole("radiogroup", { name: "Your answer" }).boundingBox(), await more.boundingBox()];
+      assert.ok(pill.y >= answer.y + answer.height, "More sits under the answer control");
+      await more.click();
       await expect(btn(page, "Leave this group")).toBeVisible();
       await expect(btn(page, "Mute this resbite")).toHaveCount(0);
       await expect(btn(page, "Add to calendar")).toHaveCount(0);
     },
   );
   // An ended occurrence with the group's chat still open: More holds Leave this group and stays open (Task 3's carry).
+  // Its start is five hours ago, so the question names that day's weekday in the plan's zone (UTC), whatever today is.
+  const endedStart = Date.now() - 5 * hour;
+  const endedDay = new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: "UTC" }).format(new Date(endedStart));
   await scenario(
     "group, More, ended",
     {
       viewer: "guest",
       group: true,
-      plan: { ...groupPlan, starts_at: iso(Date.now() - 5 * hour), ends_at: iso(Date.now() - 2 * hour) },
+      plan: { ...groupPlan, starts_at: iso(endedStart), ends_at: iso(endedStart + 3 * hour) },
       attendee: { version: 1, response: "accepted" },
       guests: [ALEX],
       chat: groupChat(),
@@ -1240,6 +1253,25 @@ try {
       await expect(btn(page, "Leave this group")).toBeVisible();
       await page.waitForTimeout(500);
       await expect(btn(page, "Leave this group")).toBeVisible();
+      await btn(page, "Leave this group").click();
+      await expect(text(page, `Leave Coffee evening? You’ll stop getting its ${endedDay}s and its chat.`)).toBeVisible();
+    },
+  );
+  // A week cancelled with "Cancel just this one", where this member hasn't answered: no answer to give and no reply to
+  // show, so the page's bar is More alone, labelled, holding Leave this group (review M1).
+  await scenario(
+    "group, More-only bar",
+    { viewer: "guest", group: true, plan: { ...groupPlan, status: "cancelled" }, guests: [ALEX], chat: groupChat({ status: "cancelled" }) },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      await expect(page.getByRole("radiogroup", { name: "Your answer" })).toHaveCount(0);
+      const more = bar(f).getByRole("button", { name: "More", exact: true });
+      await expect(more).toBeVisible();
+      await expect(more.getByText("More", { exact: true })).toBeVisible();
+      await more.click();
+      await expect(btn(page, "Leave this group")).toBeVisible();
+      await expect(btn(page, "Mute this resbite")).toHaveCount(0);
       await btn(page, "Leave this group").click();
       await expect(text(page, QUESTION)).toBeVisible();
     },
@@ -1329,9 +1361,12 @@ try {
       await btn(page, "More").click();
       await btn(page, "Leave this group").click();
       await expect(text(page, QUESTION)).toBeVisible();
-      // Keep goes back to the rows, with nothing called.
+      // The question takes focus, as the chat's does (review M2).
+      await expect.poll(() => page.evaluate(() => document.activeElement?.textContent)).toBe(QUESTION);
+      // Keep goes back to the rows, with nothing called, and focus to Leave this group.
       await btn(page, "Keep").click();
       await expect(btn(page, "Leave this group")).toBeVisible();
+      await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute("aria-label"))).toBe("Leave this group");
       assert.deepEqual(f.rpcs("leave_series"), []);
       await btn(page, "Leave this group").click();
       const lists = () => f.state.listReads;
@@ -1367,6 +1402,57 @@ try {
       assert.deepEqual(f.rpcs("leave_series"), [{ p_series: SERIES_ID }, { p_series: SERIES_ID }]);
     },
   );
+  // UI Q3: the leave went through but My resbites' next read fails: the group is gone from the list it shows anyway.
+  await scenario(
+    "group, leave, list fails",
+    { viewer: "guest", group: true, plan: groupPlan, attendee: { version: 1, response: "accepted" }, guests: [ALEX], chat: groupChat(), failListAfterLeave: true },
+    async (f) => {
+      const { page } = f;
+      await page.goto(`${base}/plans`);
+      const tile = page.getByRole("button", { name: /^Coffee evening, / });
+      await tile.click();
+      await expect(heading(page, "Coffee evening")).toBeVisible();
+      await btn(page, "More").click();
+      await btn(page, "Leave this group").click();
+      await btn(page, "Leave group").click();
+      await expect(page).toHaveURL(new RegExp(`/plans$`));
+      await expect(text(page, "We couldn’t refresh your plans. Previously loaded details may be out of date. Try again when you’re connected.")).toBeVisible();
+      await expect(page.getByRole("button", { name: /^Coffee evening, / })).toHaveCount(0);
+    },
+  );
+  // UI Q4: Back while a slow leave is on its way. Landing on that group's resbite page, the leave still ends on My
+  // resbites; gone further, to My resbites itself, it reads its list again and the group goes.
+  for (const [name, backs] of [
+    ["group, leave, back to the page", 1],
+    ["group, leave, back to My resbites", 2],
+  ])
+    await scenario(name, { viewer: "guest", group: true, plan: groupPlan, attendee: { version: 1, response: "accepted" }, guests: [ALEX], chat: groupChat(), delayLeaves: 2500 }, async (f) => {
+      const { page } = f;
+      await page.goto(`${base}/plans`);
+      await page.getByRole("button", { name: /^Coffee evening, / }).click();
+      await expect(heading(page, "Coffee evening")).toBeVisible();
+      await btn(page, "Group chat. Leo: I can bring the snacks, unread messages").click();
+      await expect(page).toHaveURL(new RegExp(`/chat\\?series=${SERIES_ID}$`));
+      await btn(page, "More").click();
+      await btn(page, "Leave group").click();
+      await btn(page, "Leave group").click();
+      await expect.poll(() => f.rpcs("leave_series").length).toBe(1);
+      for (let i = 0; i < backs; i++) await page.goBack();
+      if (backs === 1) {
+        await expect(page).toHaveURL(new RegExp(`/event\\?plan=${PLAN_ID}$`));
+        await expect(page).toHaveURL(new RegExp(`/plans$`), { timeout: 10_000 });
+        await expect(heading(page, "My resbites")).toBeVisible();
+      } else {
+        await expect(page).toHaveURL(new RegExp(`/plans$`));
+        await expect(page.getByRole("button", { name: /^Coffee evening, / })).toBeVisible();
+        const reads = f.state.listReads;
+        await expect.poll(() => f.state.left, { timeout: 10_000 }).toBe(true);
+        await expect.poll(() => f.state.listReads, { timeout: 10_000 }).toBeGreaterThan(reads);
+      }
+      await expect(page.getByRole("button", { name: /^Coffee evening, / })).toHaveCount(0);
+      assert.equal(f.rpcs("leave_series").length, 1);
+    });
+  pass("group, leave: after a leave whose next list read fails, My resbites still drops the group (UI Q3); with Back pressed while a slow leave is on its way, it still lands on My resbites from the group's resbite page, and My resbites reads its list again and drops the group when they went back to it (UI Q4)");
   pass("group, leave: from My resbites' tile, More → Leave this group asks Leave Coffee evening? You’ll stop getting its Thursdays and its chat. (Keep goes back); Leave group calls leave_series {p_series} once and lands on My resbites, which reads its plans again with the group gone; offline the question stays with Check your connection and try again., and a second tap calls leave_series again and lands on My resbites");
 
   // Challenge NOTE 6: in a group an answer moves nobody, so a failed re-read of the chat keeps the row; on a one-off a
@@ -1379,12 +1465,13 @@ try {
       await goto(f, `/event?plan=${PLAN_ID}`);
       const row = btn(page, "Group chat. Leo: I can bring the snacks, unread messages");
       await expect(row).toBeVisible();
-      const before = f.rpcs("chat_summary").length;
       f.state.chat = "failed";
+      // The re-read after the answer fails; once its failure has been handled, the row is still there (review M4).
+      const failed = page.waitForResponse((r) => r.url().includes("/rest/v1/rpc/chat_summary") && r.status() === 500);
       await page.getByRole("radio", { name: "Going", exact: true }).click();
       await expect(text(page, "Your response is saved.")).toBeVisible();
-      await expect.poll(() => f.rpcs("chat_summary").length).toBeGreaterThan(before);
-      await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+      await failed;
+      await page.waitForTimeout(1000);
       await expect(row).toBeVisible();
     },
   );

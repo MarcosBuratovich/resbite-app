@@ -829,18 +829,19 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
   - `leave_series` and its leave record, which the roll skips and any way back in clears;
   - the group's lines ("ended", "Next one", "left the group", "can’t make it this week", a cancelled week, "stopped repeating", "made this a group"), and the roll, which sets the roll flag and writes no line for anyone it carries;
   - the people list for every member, pushes in a group's cancelled week, and no exact place in the chat for a member who hasn't answered.
+  - a group's pinned announcement, and the one under an invitation, are only the current occurrence's (the server fix wave).
   - Its rollback, `supabase/rollback/20261111150000_chat_groups.rollback.sql`, restores chat core's, the circles' and the earlier bodies byte for byte; the hosted-baseline rehearsal passes.
 - **The app.**
-  - The chat screen on a group: its header, field line, audiences, cards, empty state and closed card; "Next one" as a button that opens this week's resbite; Leave group in the menu, asking in place.
+  - The chat screen on a group: its header, field line, audiences, cards, empty state and closed card; "Next one" as a button that opens this week's resbite; Leave group in the menu, asking in place. Leaving, from the chat or the resbite page, clears the phone's reminders for it and drops the group from My resbites at once.
   - The resbite page: "Group chat", names for every member, the people list's "Not answered yet", and Leave this group in More, also for a member who hasn't answered.
   - My resbites: the unread dot on a group member's invitation card. The When sheet hides the chat's closing line while the resbite repeats.
 
-**Checks (12 November 2026),** at `Task 4's commit (base `333747d`)`:
+**Checks (12 November 2026),** on `ch2-groups` with "Groups: the screens, leaving, and the record" and its fix round (base `333747d`):
 - `bash scripts/test-database-docker.sh`: 55 PASS lines.
 - The hosted baseline with the four candidates: 27 PASS lines.
-- `(cd mobile && npm run check)`: 1,086 tests.
-- The edge tests: 107 in 11 files tests.
-- The fingerprint replay (464, then 479; the rollback back to 464).
-- The browser scripts with a fake project URL: `verify-chat.mjs` 55, `verify-event.mjs` 28, `review-ui.mjs` passed and `verify-planning.mjs` 16.
+- `(cd mobile && npm run check)`: 1,094 tests.
+- The edge tests: 107 tests in 11 files.
+- The fingerprint replay (464, then 479: 15 added, 13 changed; the rollback back to 464).
+- The browser scripts with a fake project URL: `verify-chat.mjs` 57, `verify-event.mjs` 29, `review-ui.mjs` passed and `verify-planning.mjs` 16.
 
 **What the owner still runs** is the groups part of [`qa/chat-release/README.md`](../qa/chat-release/README.md): the three owner questions, `ch2-apply.sh` right after chat core's, its after checks and advisors, the device checks, and the rollback if it is ever needed.

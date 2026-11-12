@@ -7,6 +7,7 @@ import { reconcileRsvp, type Response, type RsvpAttempt } from "../domain/rsvp";
 import { planGateway } from "../services/plans";
 import { readEvent, readGuests, readRsvp, writeRsvp, type EventSnapshot, type Guest } from "../services/rsvp";
 import { syncReminders } from "../services/deviceReminders";
+import { leaveGroup } from "./useGroupLeave";
 import { adminErrorMessage, appointAdmin, removeAdmin } from "../services/admins";
 import { muteErrorMessage, readMutedSeries, setPlanMute } from "../services/mutes";
 import { broughtNames, EVENT_COPY, pageState, readsOwnLinks, showsNames, viewerRole, type AnswerCounts, type Viewer } from "../domain/eventPage";
@@ -19,7 +20,7 @@ import { inviteCodeStore, type StoredInvite } from "../services/inviteCodeStore"
 import { formatPhone, phoneSendForm } from "../domain/phone";
 import { joinRequestGateway, type HostRequest } from "../services/joinRequests";
 import { connectionErrorMessage, connectionGateway, type ConnectionState } from "../services/connections";
-import { chatErrorMessage, chatGateway, isNotInChat, type ChatSummary } from "../services/chat";
+import { chatGateway, isNotInChat, type ChatSummary } from "../services/chat";
 import { pendingCardNote } from "../domain/chatRules";
 import { readProfile } from "../services/profile";
 import { requestGone } from "./connectionsModel";
@@ -125,9 +126,9 @@ export type EventPage = {
   cancel: (opts?: { stopRepeating?: boolean }) => Promise<boolean>;
   mute: (muted: boolean) => Promise<void>;
   /**
-   * Leaves the group this resbite belongs to (`leave_series`, G-N13, I10). True once the server took it: the guest row
-   * on the current occurrence is gone, so the page can't be read again and the screen leaves for My resbites. False:
-   * `error` says why (`chatErrorMessage`), and it can be tried again.
+   * Leaves the group this resbite belongs to (`leaveGroup`, G-N13, I10). True once the server took it: the guest row on
+   * the current occurrence is gone, so the page can't be read again; `leaveGroup` syncs the reminders and opens My
+   * resbites while this page is in focus. False: `error` says why, and it can be tried again.
    */
   leave: () => Promise<boolean>;
   /** Both answer whether the server made the change (false: `error` says why). */
@@ -529,21 +530,14 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
     actingRef.current = true;
     setActing("leave");
     setError(null);
-    let left = false;
-    try {
-      await chatGateway.leave(target.series_id);
-      left = true;
-      // Its reminders and calendar entry follow the guest row the leave took away.
-      if (valid()) syncDevice();
-    } catch (e) {
-      if (valid()) setError(chatErrorMessage(e));
-    } finally {
-      if (valid()) {
-        actingRef.current = false;
-        setActing(null);
-      }
+    // It syncs the reminders and calendar entry, which follow the guest row the leave took away (review I2).
+    const result = await leaveGroup(target.series_id, { userId: userId ?? null, preview });
+    if (valid()) {
+      if (result && !result.left) setError(result.error);
+      actingRef.current = false;
+      setActing(null);
     }
-    return left;
+    return result?.left === true;
   }
   /** The owner's: make a guest an admin, or take it back. The list is read again so it shows what the server holds. */
   async function changeAdmin(userId: string, appointing: boolean): Promise<boolean> {

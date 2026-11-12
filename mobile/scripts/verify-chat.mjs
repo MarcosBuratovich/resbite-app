@@ -52,8 +52,11 @@
 //   gr2 "Next one: Thu 20 Nov · Ana's flat" is a button with the hint "Opens the resbite" that opens the summary's
 //       current occurrence; an older one, whose payload names an occurrence the reader has no row on, opens the same;
 //       with no plan_id in the summary a tap re-reads the chat and stays on it (Decision 14, I5)
-//   gr3 Leave group asks in place and calls leave_series { p_series }, then lands on My resbites
+//   gr3 Leave group asks in place and calls leave_series { p_series }, then lands on My resbites; the phone's reminders
+//       for the group go (review I2)
 //   gr4 Leave group answered offline: the confirm stays with the error line, and a second tap calls leave_series again
+//   gr4b a leave whose answer was lost, then 'Not in this group' on the next tap: done, it lands on My resbites (GR4 M-2)
+//   gr4c two taps before a redraw send one leave; a refusal that lands after the menu closed isn't shown again (M3)
 //   gr5 the header "Every Thursday · 9 in the group"; stopped, "Last one · Thu 27 Nov · 9 in the group", which wraps
 //       whole at 320 px under Larger Text (G-N7); after the last one, the closing line and the computed ended line
 //   gr6 the host's Announce on a group: "Everyone in the group · 9" first and checked, then "Going this Thursday · 6",
@@ -212,7 +215,7 @@ const PICNIC = {
  * the server clock against `closes_at` unless the summary says otherwise. `socket: "refuse"` closes every socket.
  * `queue` seeds the phone's unsent messages.
  */
-async function fixture({ viewer = PEDRO, now = OCT.now, rows = octRows(), summary = {}, socket = "ok", width = 390, height = 844, queue = null, refusals = [], permission = "denied" } = {}) {
+async function fixture({ viewer = PEDRO, now = OCT.now, rows = octRows(), summary = {}, socket = "ok", width = 390, height = 844, queue = null, refusals = [], permission = "denied", reminders = false } = {}) {
   const context = await browser.newContext({
     viewport: { width, height },
     reducedMotion: "reduce",
@@ -310,8 +313,13 @@ async function fixture({ viewer = PEDRO, now = OCT.now, rows = octRows(), summar
     // The answers to the next phx_leave frames; "ok" once these run out, or always `leaveDefault`.
     leaves: [],
     leaveDefault: "ok",
-    // How many of the next leave_series calls fail as a lost connection (gr4).
+    // How many of the next leave_series calls fail as a lost connection (gr4); how many go through on the server and
+    // then lose their answer (gr4b); how long each waits before its answer (gr4c).
     failLeaves: 0,
+    lostLeaves: 0,
+    delayLeaves: 0,
+    // The reminder sync reads the group's current occurrence, Going, while the viewer is in it (gr3, review I2).
+    reminders,
     socket,
   };
   const log = [],
@@ -390,6 +398,11 @@ async function fixture({ viewer = PEDRO, now = OCT.now, rows = octRows(), summar
     // A group's current occurrence, which a Next one line opens (gr2).
     if (path === "/rest/v1/plans" && url.searchParams.get("id") === `eq.${GROUP_PLAN}`)
       return reply({ ...PICNIC, id: GROUP_PLAN, title: "Board game night", starts_at: THU.startsAt, ends_at: THU.endsAt, repeat_weeks: 1, plan_meeting_details: null, plan_admins: [] });
+    // The phone's reminder sync (review I2): the group's occurrence, which the viewer is Going to, while they're in it.
+    if (state.reminders && path === "/rest/v1/plans" && url.searchParams.get("select") === "id,title,starts_at,status,owner_id,series_id")
+      return reply(state.member ? [{ id: GROUP_PLAN, title: "Board game night", starts_at: THU.startsAt, status: "active", owner_id: ANA, series_id: SERIES }] : []);
+    if (state.reminders && path === "/rest/v1/attendees" && url.searchParams.get("select") === "plan_id,response")
+      return reply(state.member ? [{ plan_id: GROUP_PLAN, response: "accepted" }] : []);
     if (path === "/rest/v1/attendees" && url.searchParams.get("plan_id") === `eq.${PLAN}`)
       return reply(url.searchParams.get("select") === "version,response" ? { version: 1, response: "accepted" } : []);
     if (["/rest/v1/rpc/plan_connection_states", "/rest/v1/rpc/plan_bringers"].includes(path)) return reply({});
@@ -405,11 +418,18 @@ async function fixture({ viewer = PEDRO, now = OCT.now, rows = octRows(), summar
     // Leave group (gr3, gr4): the next `failLeaves` are lost as a lost connection would; then the reader is out.
     if (rpc === "leave_series") {
       assert.equal(body?.p_series, SERIES, "leave_series names the series");
+      if (state.delayLeaves) await new Promise((r) => setTimeout(r, state.delayLeaves));
       if (state.failLeaves > 0) {
         state.failLeaves--;
         return route.abort("internetdisconnected");
       }
+      // Someone no longer in the group is refused, as leave_series refuses them.
+      if (!state.member) return reply({ code: "42501", message: "Not in this group", details: null, hint: null }, 403);
       state.member = false;
+      if (state.lostLeaves > 0) {
+        state.lostLeaves--;
+        return route.abort("internetdisconnected");
+      }
       return empty();
     }
     if (rpc && (rpc.startsWith("chat_") || ["send_message", "send_announcement", "remove_message", "delete_message", "mark_chat_read", "set_chat_mute"].includes(rpc))) {
@@ -1735,11 +1755,14 @@ try {
   }
   console.log("PASS (gr2): Next one: Thu 20 Nov · Ana's flat is a button with the hint Opens the resbite and opens /event?plan=<the current occurrence>; an older Next one opens the same occurrence, never its own plan_id; with no plan_id the tap reads chat_summary and chat_messages again and the chat stays.");
 
-  // (gr3) Leave group: the question in place, leave_series { p_series }, then My resbites.
+  // (gr3) Leave group: the question in place, leave_series { p_series }, then My resbites; the phone's reminders for the
+  // group go with it (review I2).
   {
-    const f = await fixture({ now: THU.now, rows: groupRows(), summary: GROUP });
+    const f = await fixture({ now: THU.now, rows: groupRows(), summary: GROUP, permission: "granted", reminders: true });
     const { page } = f;
+    const reminders = () => page.evaluate(() => globalThis.__resbiteDevice.reminders.map((r) => r.body));
     await openGroup(page);
+    await expect.poll(async () => (await reminders()).some((body) => body.includes("Board game night"))).toBe(true);
     await button(page, "More").click();
     await button(page, "Leave group").click();
     const question = heading(page, "Leave Board game night? You’ll stop getting its Thursdays and its chat.");
@@ -1756,10 +1779,11 @@ try {
     await expect(page).toHaveURL(new RegExp(`/plans$`));
     await expect(heading(page, "My resbites")).toBeVisible();
     assert.deepEqual(f.calls("leave_series"), [{ p_series: SERIES }]);
+    await expect.poll(reminders).toEqual([]);
     await f.settle();
     await f.done();
   }
-  console.log("PASS (gr3): Leave group asks Leave Board game night? You’ll stop getting its Thursdays and its chat. in place (Keep goes back), calls leave_series { p_series } once, and lands on My resbites.");
+  console.log("PASS (gr3): Leave group asks Leave Board game night? You’ll stop getting its Thursdays and its chat. in place (Keep goes back), calls leave_series { p_series } once, lands on My resbites, and the phone's reminders for the group are gone.");
 
   // (gr4) Leave group answered offline: the confirm stays with the error, and Leave group can be tapped again.
   {
@@ -1784,6 +1808,61 @@ try {
     await f.done();
   }
   console.log("PASS (gr4): Leave group answered offline keeps the question open with Check your connection and try again.; a second tap calls leave_series again and lands on My resbites.");
+
+  // (gr4b) The first leave went through but its answer was lost: the second is refused 'Not in this group', which is
+  // done, so it lands on My resbites (ruling GR4 M-2).
+  {
+    // The refusal's 403 is under test here.
+    const f = await fixture({ now: THU.now, rows: groupRows(), summary: GROUP, refusals: [403] });
+    const { page } = f;
+    f.state.lostLeaves = 1;
+    await openGroup(page);
+    await f.settle();
+    await button(page, "More").click();
+    await button(page, "Leave group").click();
+    await button(page, "Leave group").click();
+    await expect(text(page, "Check your connection and try again.")).toBeVisible();
+    await button(page, "Leave group").click();
+    await expect(page).toHaveURL(new RegExp(`/plans$`));
+    await expect(heading(page, "My resbites")).toBeVisible();
+    await expect(text(page, "You’re not in this group.")).toHaveCount(0);
+    assert.deepEqual(f.calls("leave_series"), [{ p_series: SERIES }, { p_series: SERIES }]);
+    await f.settle();
+    await f.done();
+  }
+  console.log("PASS (gr4b): after a leave whose answer was lost, the next attempt's 'Not in this group' counts as done and lands on My resbites.");
+
+  // (gr4c) Two taps before a redraw send one leave; a refusal that lands after the menu closed isn't shown on the next
+  // Leave group (review M3).
+  {
+    const f = await fixture({ now: THU.now, rows: groupRows(), summary: GROUP });
+    const { page } = f;
+    await openGroup(page);
+    await f.settle();
+    f.state.delayLeaves = 1500;
+    f.state.failLeaves = 1;
+    await button(page, "More").click();
+    await button(page, "Leave group").click();
+    const question = heading(page, "Leave Board game night? You’ll stop getting its Thursdays and its chat.");
+    await expect(question).toBeVisible();
+    // Two clicks in one task: nothing redraws between them.
+    await button(page, "Leave group").evaluate((el) => {
+      el.click();
+      el.click();
+    });
+    await button(page, "Close sheet").click();
+    await expect(question).toHaveCount(0);
+    await expect.poll(() => f.calls("leave_series").length).toBe(1);
+    await page.waitForTimeout(2500);
+    assert.equal(f.calls("leave_series").length, 1, "one leave for two taps");
+    f.state.delayLeaves = 0;
+    await button(page, "More").click();
+    await button(page, "Leave group").click();
+    await expect(question).toBeVisible();
+    await expect(text(page, "Check your connection and try again.")).toHaveCount(0);
+    await f.done();
+  }
+  console.log("PASS (gr4c): two taps on Leave group before a redraw send one leave_series; its refusal, landing after the menu closed, isn't shown when Leave group is asked again.");
 
   // (gr5) The group's header, running and stopped; under Larger Text at 320 px it wraps whole (G-N7).
   {

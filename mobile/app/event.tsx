@@ -23,10 +23,10 @@ import {
   Send,
   UserPlus,
 } from "lucide-react-native";
-import { Button, Copy, ErrorNote, Reveal, s, useLargeText } from "../src/design/ui";
+import { Button, Copy, ErrorNote, Reveal, s } from "../src/design/ui";
 import { MenuRow, MenuSeparator } from "../src/design/MenuRow";
 import { ActionBar, ReplyPill, type BarAction } from "../src/design/ActionBar";
-import { AvatarStack, Chip, chipToneFor, IconButton, Segmented } from "../src/design/kit";
+import { AvatarStack, Chip, chipToneFor, focusHeading, IconButton, Segmented } from "../src/design/kit";
 import { ContentPage } from "../src/design/ContentPage";
 import { GrabberSheet } from "../src/design/GrabberSheet";
 import { PreviewNotice } from "../src/design/Chrome";
@@ -67,6 +67,7 @@ import { INVITE_COPY } from "../src/domain/inviteCopy";
 import { useApp } from "../src/state/AppState";
 import { useEvent } from "../src/state/useEvent";
 import { useEventDevice } from "../src/state/useEventDevice";
+import { useGroupScreen } from "../src/state/useGroupLeave";
 
 // The last saved-edit notice already shown, so a remount or web history restoring the same URL never
 // repeats it (as on My resbites). Each save passes a fresh `notice` id (UX2-D1).
@@ -92,7 +93,10 @@ export default function EventPage() {
   const [moreOpen, setMoreOpen] = useState(false);
   // The More sheet changes its own content (GL 5): the rows, the answer control, the cancel question, or Leave group's.
   const [moreView, setMoreView] = useState<"rows" | "reply" | "cancel" | "leave">("rows");
-  const largeText = useLargeText();
+  // Leave's question takes focus, and Keep gives it back to the Leave row, as the chat's does (H32 Q53, review M2).
+  const leaveQuestion = useRef<Text | null>(null);
+  const leaveRow = useRef<View | null>(null);
+  const backFromLeave = useRef(false);
   const [answerOpen, setAnswerOpen] = useState(false);
   const [mapsError, setMapsError] = useState<string | null>(null);
   // One Do this again at a time: a quick double tap must not stack two plan screens. Back on this page lets it go again.
@@ -111,6 +115,16 @@ export default function EventPage() {
   useEffect(() => {
     if (moreOpen && !stillOpen && !leaveOffered) setMoreOpen(false);
   }, [moreOpen, stillOpen, leaveOffered]);
+  useEffect(() => {
+    if (!moreOpen) return;
+    const back = backFromLeave.current;
+    backFromLeave.current = false;
+    if (moreView !== "leave" && !(moreView === "rows" && back)) return;
+    const frame = requestAnimationFrame(() => focusHeading(moreView === "leave" ? leaveQuestion.current : leaveRow.current));
+    return () => cancelAnimationFrame(frame);
+  }, [moreOpen, moreView]);
+  // A leave of this group that goes through while this page is in focus lands on My resbites (UI Q4).
+  useGroupScreen(preview ? null : plan?.series_id);
 
   if (!plan || !role)
     return (
@@ -237,12 +251,10 @@ export default function EventPage() {
   async function cancelResbite(stop: boolean) {
     if (await event.cancel({ stopRepeating: stop })) closeMore();
   }
-  // Leave group (I10): the guest row is gone, so the page can't be read again; My resbites reads its list on focus. A
-  // failure stays in the sheet with its reason, and Leave group can be tapped again.
+  // Leave group (I10): the guest row is gone, so the page can't be read again; `leaveGroup` opens My resbites, which
+  // reads its list again. A failure stays in the sheet with its reason, and Leave group can be tapped again.
   async function leaveGroup() {
-    if (!(await event.leave())) return;
-    closeMore();
-    router.dismissTo("/plans");
+    if (await event.leave()) closeMore();
   }
   const calendarTitle = device.calendarUpdate ? EVENT_COPY.updateCalendar : EVENT_COPY.addToCalendar;
   const moreRow = (name: (typeof rows)[number]) => {
@@ -292,6 +304,7 @@ export default function EventPage() {
           <React.Fragment key={name}>
             {rows.length > 1 && <MenuSeparator />}
             <MenuRow
+              ref={leaveRow}
               title={CHAT_COPY.leaveThisGroup}
               icon={LogOut}
               destructive
@@ -358,16 +371,12 @@ export default function EventPage() {
       />
     );
   else if (row.kind === "answer")
-    bottom = (
-      // A group's member who hasn't answered still reaches More, for Leave this group (G-N13).
-      <View style={[styles.answer, hasMore && !largeText && styles.answerRow]}>
-        <View style={hasMore && !largeText ? styles.answerGrow : undefined}>{answerControl()}</View>
-        {hasMore && (
-          <View style={largeText ? styles.answerMoreStacked : undefined}>
-            <IconButton icon={Ellipsis} label={EVENT_COPY.moreButton} onPress={more.onPress} />
-          </View>
-        )}
-      </View>
+    bottom = hasMore ? (
+      // A group's member who hasn't answered still reaches More, for Leave this group (G-N13): the same labelled pill as
+      // their other bars, under the answer control (review M1).
+      <ActionBar stacked lead={answerControl()} actions={[more]} />
+    ) : (
+      <View style={styles.answer}>{answerControl()}</View>
     );
   else if (hasMore) bottom = <ActionBar actions={[more]} />;
 
@@ -473,7 +482,9 @@ export default function EventPage() {
         {moreView === "reply" && answerControl(afterMoreReply)}
         {moreView === "leave" && (
           <>
-            <Copy accessibilityRole="header">{CHAT_COPY.leaveQuestion(current.title, groupDay({ startsAt: current.starts_at, timeZone: zone }))}</Copy>
+            <Copy ref={leaveQuestion} accessibilityRole="header">
+              {CHAT_COPY.leaveQuestion(current.title, groupDay({ startsAt: current.starts_at, timeZone: zone }))}
+            </Copy>
             <Button
               large
               icon={false}
@@ -491,6 +502,7 @@ export default function EventPage() {
               disabled={acting}
               onPress={() => {
                 event.clearError();
+                backFromLeave.current = true;
                 setMoreView("rows");
               }}
             />
@@ -685,10 +697,6 @@ const styles = StyleSheet.create({
   chatLine: { fontFamily: fonts.body, fontSize: 12, lineHeight: 17, color: c.muted },
   // The unread dot: neutral, no number (CH-P9).
   dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: c.ink },
-  // Beside the answer control, More (a group's member who hasn't answered); under Larger Text it goes under it.
-  answerRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  answerGrow: { flex: 1 },
-  answerMoreStacked: { alignSelf: "flex-end", marginTop: space.s },
   answer: {
     paddingHorizontal: space.l,
     paddingTop: space.m,

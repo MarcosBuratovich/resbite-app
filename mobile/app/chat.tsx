@@ -49,7 +49,7 @@ import {
 } from "../src/domain/chatRules";
 import { EVENT_COPY } from "../src/domain/eventPage";
 import { NOTIFICATION_ASK } from "../src/domain/notifications";
-import { chatErrorMessage, chatGateway, type ChatSummary } from "../src/services/chat";
+import type { ChatSummary } from "../src/services/chat";
 import { useApp } from "../src/state/AppState";
 import { useChat, type Chat } from "../src/state/useChat";
 import { shownMessages, withEndedLine, withPending } from "../src/state/chatModel";
@@ -57,6 +57,7 @@ import { chatFeed, nothingSaid, type FeedLink, type FeedRow, type MessageAction 
 import { dismissed, holdError, heldUntil, type HeldError } from "../src/state/heldError";
 import { useNotificationAsk } from "../src/state/useNotificationAsk";
 import { focusedChat, setFocusedChat } from "../src/services/deviceReminders";
+import { leaveGroup, useGroupScreen } from "../src/state/useGroupLeave";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -175,6 +176,8 @@ export default function ChatScreen() {
       };
     }, [focusedSeries]),
   );
+  // A leave of this group that goes through while this chat is in focus lands on My resbites (UI Q4).
+  useGroupScreen(focusedSeries);
   return (
     <View style={s.page}>
       <Bar
@@ -284,7 +287,8 @@ function Conversation({
   menuOpen: boolean;
   onMenu: (open: boolean) => void;
 }) {
-  const viewerId = useApp().session?.user.id ?? "";
+  const { session, preview } = useApp();
+  const viewerId = session?.user.id ?? "";
   const largeText = useLargeText();
   const reduce = useReduceMotion();
   const mounted = useMounted();
@@ -310,7 +314,12 @@ function Conversation({
   // The ••• menu shows its rows, or Leave group's question in their place (G-N13), as Delete and Remove ask in place.
   const [menuView, setMenuView] = useState<"menu" | "leave">("menu");
   const [leaving, setLeaving] = useState(false);
+  // What a second tap reads before a redraw (review M3), as Send's does (H32 Q27).
+  const leavingRef = useRef(false);
   const [leaveError, setLeaveError] = useState<string | null>(null);
+  // Whether the menu is open now, for a leave's answer that lands later.
+  const menuShown = useRef(menuOpen);
+  menuShown.current = menuOpen;
   const leaveQuestion = useRef<Text | null>(null);
   const leaveRow = useRef<View | null>(null);
   const leftQuestion = useRef(false);
@@ -579,25 +588,22 @@ function Conversation({
     return () => cancelAnimationFrame(frame);
   }, [menuOpen, menuView]);
   /**
-   * Leave group (G-N13): `leave_series`, then My resbites, which reads its list again on focus. Leaving this screen runs
-   * its focus cleanup, so the push router stops skipping this series (H36). A failure keeps the question open with its
-   * reason, and Leave group can be tapped again (G-N7).
+   * Leave group (G-N13) through `leaveGroup`: once it goes through, the phone's reminders follow and My resbites opens
+   * while this chat is in focus. Leaving this screen runs its focus cleanup, so the push router stops skipping this
+   * series (H36). A failure keeps the question open with its reason, and Leave group can be tapped again (G-N7); one
+   * that lands after the menu closed is not kept for the next time it opens (review M3).
    */
   const leave = async () => {
-    if (leaving) return;
+    if (leavingRef.current) return;
+    leavingRef.current = true;
     setLeaving(true);
     setLeaveError(null);
-    try {
-      await chatGateway.leave(series);
-    } catch (e) {
-      if (!mounted.current) return;
-      setLeaving(false);
-      setLeaveError(chatErrorMessage(e));
-      return;
-    }
+    const result = await leaveGroup(series, { userId: viewerId || null, preview });
+    leavingRef.current = false;
     if (!mounted.current) return;
-    onMenu(false);
-    router.dismissTo("/plans");
+    setLeaving(false);
+    if (result?.left) onMenu(false);
+    else if (result && menuShown.current) setLeaveError(result.error);
   };
 
   const said = !nothingSaid(rows);
@@ -728,6 +734,7 @@ function Conversation({
                   disabled={working}
                   onPress={() => {
                     dismissError();
+                    setLeaveError(null);
                     setMenuView("leave");
                   }}
                 />

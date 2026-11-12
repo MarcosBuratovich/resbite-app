@@ -20,11 +20,14 @@ export type BarAction = {
  * The fixed row of labelled pills under a content page (M-06): a decorative icon beside a bold
  * label, on a hairline over paper. One action spans the width. `lead` sits first
  * and takes the width the other pills leave (they size to their content): the reply pill.
+ * `stacked` puts the pills under the lead, each as wide as the bar, as Larger Text does: the
+ * answer control, which needs the whole width, with More under it.
  */
-export function ActionBar({ actions, lead }: { actions: BarAction[]; lead?: React.ReactNode }) {
+export function ActionBar({ actions, lead, stacked = false }: { actions: BarAction[]; lead?: React.ReactNode; stacked?: boolean }) {
   const largeText = useLargeText();
+  const column = largeText || stacked;
   return (
-    <View testID="action-bar" style={[styles.bar, largeText && styles.barStacked]}>
+    <View testID="action-bar" style={[styles.bar, column && styles.barStacked]}>
       {lead}
       {actions.map(({ key, title, icon: Icon, onPress, primary, label }) => (
         <ScalePressable
@@ -32,7 +35,7 @@ export function ActionBar({ actions, lead }: { actions: BarAction[]; lead?: Reac
           accessibilityRole="button"
           accessibilityLabel={label ?? title}
           onPress={onPress}
-          outerStyle={largeText ? undefined : lead ? styles.fit : styles.cell}
+          outerStyle={column ? undefined : lead ? styles.fit : styles.cell}
           style={({ pressed }) => [styles.pill, primary && styles.primary, pressed && { opacity: 0.9 }]}
         >
           <View aria-hidden importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>

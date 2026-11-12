@@ -35,6 +35,7 @@ import { ANSWER_OPTIONS, reconcileRsvp, responseFor, type AnswerKey, type RsvpAt
 import { readRsvp, writeRsvp } from "../../src/services/rsvp";
 import { chatGateway, type ChatOverview } from "../../src/services/chat";
 import { currentOccurrences, pendingCardNote, unreadDot } from "../../src/domain/chatRules";
+import { leftGroups } from "../../src/state/useGroupLeave";
 
 // The last save notice already shown, so a remount or web history restoring the same URL never
 // repeats a saved toast. Each save passes a fresh `notice` id.
@@ -100,6 +101,8 @@ export default function Plans() {
     request.current = controller;
     const isCurrent = () => identity.current === uid && request.current === controller;
     const timeout = setTimeout(() => controller.abort(), 15000);
+    // A group left after this read starts stays hidden even if the read still lists it (UI Q3).
+    const startedAt = Date.now();
     setBusy(true);
     setError(null);
     // The chats never hold the list back (H36): the overview lands when it arrives, and a failure keeps the last dots and
@@ -124,6 +127,7 @@ export default function Plans() {
       if (p.error) throw p.error;
       if (a.error) throw a.error;
       setLoadedFor(uid);
+      leftGroups.settle(startedAt);
       const read = ((p.data || []) as unknown as PlanRow[]).map(planFromRow);
       setPlans(read);
       if (q) setRequests(q);
@@ -180,7 +184,10 @@ export default function Plans() {
   useEffect(() => {
     if (createdTitle) void refreshRef.current();
   }, [createdTitle]);
-  const list = preview ? localPlans : loadedFor === session?.user.id && session ? plans : [];
+  // A group left from its chat or resbite page, whichever screen the person is on by then: read the list again (UI Q4).
+  useEffect(() => leftGroups.listen(() => void refreshRef.current()), []);
+  // Every occurrence of a group left on this phone is gone from the list at once, even if the next read fails (UI Q3).
+  const list = leftGroups.without(preview ? localPlans : loadedFor === session?.user.id && session ? plans : []);
   const now = Date.now();
   const invitations = preview || !session ? [] : invitationCards(list, attendees, session.user.id, now);
   // A plan the account can already read (invited in person since) shows as itself, not as a request.

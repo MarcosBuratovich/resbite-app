@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chatErrorMessage, createChatGateway, isChatClosed, isHostsOnly, isNotInChat, isTooFast, serverTime } from "./chat";
+import { chatErrorMessage, createChatGateway, isChatClosed, isHostsOnly, isNotInChat, isNotInGroup, isTooFast, serverTime } from "./chat";
 
 type Call = { fn: string; args: Record<string, unknown> };
 function gateway(data: unknown = null, error: unknown = null) {
@@ -507,4 +507,16 @@ test("a row keeps its plan id when the server sends one, and has none otherwise"
   assert.deepEqual(page.rows.map((r) => r.planId), [PLAN, undefined, undefined, undefined]);
   assert.deepEqual(page.rows[0], message({ id: 1, planId: PLAN }));
   assert.equal("planId" in page.rows[1], false);
+});
+
+test("isNotInGroup tells leave_series' 'Not in this group' by code and message (ruling GR4 M-2)", () => {
+  assert.equal(isNotInGroup({ code: "42501", message: "Not in this group" }), true);
+  for (const other of [
+    { code: "42501", message: "Not in this chat" },
+    { code: "42501", message: "Hosts can't leave" },
+    { code: "22023", message: "Not in this group" },
+    new Error("Not in this group"),
+    null,
+  ])
+    assert.equal(isNotInGroup(other), false);
 });

@@ -268,6 +268,12 @@ export const isNotInChat = (e: unknown): boolean => refusal(e, "42501", "Not in 
 /** The chat closed while it was open: the screen turns to the closed card, keeping the typed text (K-S10). */
 export const isChatClosed = (e: unknown): boolean => refusal(e, "22023", "Chat closed");
 
+/**
+ * leave_series' refusal for someone no longer in the group (ruling GR4 M-2): after the person's own attempt, whose answer
+ * may have been lost, it means the leave went through.
+ */
+export const isNotInGroup = (e: unknown): boolean => refusal(e, "42501", "Not in this group");
+
 /** The reader isn't (or no longer) a host: the summary is read again, so Announce goes (H32 36). */
 export const isHostsOnly = (e: unknown): boolean => refusal(e, "42501", "Hosts only");
 /** An announcement within a minute of the last one (K-S8): its own words, not the messages line (H32 Q35). */
