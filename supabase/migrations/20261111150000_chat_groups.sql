@@ -228,17 +228,20 @@ create or replace function private.chat_open(p_series uuid) returns boolean lang
  from private.current_occurrence(p_series) c
 $$;
 
--- 1h. The chat's header, sheet and state: chat core's body as built (:248-274), create or replace, with one key changed:
--- stopped is group_stopped (false on a one-off) instead of false. is_group, repeat_weeks, members, going and everyone are
--- as built; members covers a group through this file's chat_member. public.chat_summary is not touched, and the grants
--- are kept (authenticated). Plan 3 copies this body.
+-- 1h. The chat's header, sheet and state: chat core's body as built (:248-274), create or replace, with two changes:
+-- stopped is group_stopped (false on a one-off) instead of false; and a group's pinned is its latest announcement only
+-- while that was written on the current occurrence, else null (ruling GR4, the final review's M-3): last week's
+-- "Tonight we meet at the Red Lion" must not head next week's chat. is_group, repeat_weeks, members, going and everyone
+-- are as built; members covers a group through this file's chat_member. public.chat_summary is not touched, and the
+-- grants are kept (authenticated). Plan 3 copies this body.
 create or replace function private.chat_summary(p_series uuid) returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare v_uid uuid := private.require_tester(); v_plan public.plans; v_chat public.chats; v_pinned jsonb; v_last jsonb; v_read bigint;
 begin
  if not private.chat_member(p_series, v_uid) then raise exception 'Not in this chat' using errcode='42501'; end if;
  v_plan := private.current_occurrence(p_series);
  select * into v_chat from public.chats c where c.series_id = p_series;
- select private.chat_row(m, v_uid) into v_pinned from public.messages m where m.id = v_chat.pinned_message_id and m.series_id = p_series;
+ select private.chat_row(m, v_uid) into v_pinned from public.messages m where m.id = v_chat.pinned_message_id and m.series_id = p_series
+  and (not coalesce(v_chat.is_group, false) or m.plan_id = v_plan.id);
  select private.chat_row(m, v_uid) into v_last from public.messages m where m.id = v_chat.last_message_id and m.series_id = p_series;
  select r.last_read_id into v_read from public.chat_reads r where r.series_id = p_series and r.user_id = v_uid;
  return jsonb_build_object(
@@ -715,3 +718,42 @@ create or replace function private.chat_row(p_message public.messages, p_viewer 
   || case when p_message.author_id is not null and p_message.author_id = p_viewer
       then jsonb_build_object('client_id', p_message.client_id) else '{}'::jsonb end
 $$;
+
+-- 2i. My resbites' view (ruling GR4, the final review's I-1): chat core's body as built (chat_core.sql:334-364), create
+-- or replace, its grants kept (authenticated). One change, in the invitation card's announcement: on a group, only an
+-- announcement written on the occurrence the card is for (the series' current one) counts. Every group member is in
+-- the "everyone" audience, so after a roll last week's "Tonight we meet at the Red Lion" would otherwise sit under next
+-- week's invitation for everyone who has not answered, keyed by the new occurrence, with nothing to tell it from this
+-- week's. One-offs are as built (one occurrence). Plan 3 copies this body.
+create or replace function private.my_chat_overview() returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_uid uuid := private.require_tester(); v_chats jsonb; v_lasts jsonb; v_announcements jsonb; v_authors jsonb;
+begin
+ select coalesce(jsonb_object_agg(s.series_id, jsonb_build_object(
+   'unread', exists (select 1 from public.messages m where m.series_id = s.series_id and m.state = 'sent' and m.id > s.read_id
+    and m.author_id is distinct from v_uid and (m.payload->>'actor') is distinct from v_uid::text),
+   'last', s.last, 'open', private.chat_open(s.series_id), 'count', s.count)), '{}'::jsonb),
+  coalesce(jsonb_agg(s.last) filter (where s.last is not null), '[]'::jsonb)
+ into v_chats, v_lasts
+ from (select c.series_id, coalesce(ch.message_count, 0) as count,
+        coalesce((select r.last_read_id from public.chat_reads r where r.series_id = c.series_id and r.user_id = v_uid), 0) as read_id,
+        (select private.chat_row(m, v_uid) from public.messages m where m.id = ch.last_message_id and m.series_id = c.series_id) as last
+       from (select p.series_id from public.plans p where p.owner_id = v_uid
+             union
+             select p.series_id from public.attendees a join public.plans p on p.id = a.plan_id where a.user_id = v_uid) c
+       left join public.chats ch on ch.series_id = c.series_id
+       where private.chat_member(c.series_id, v_uid)) s;
+ select coalesce(jsonb_object_agg(x.plan_id, jsonb_build_object('id', x.id, 'author_id', x.author_id, 'body', x.body)), '{}'::jsonb),
+  coalesce(jsonb_agg(jsonb_build_object('author_id', x.author_id)), '[]'::jsonb)
+ into v_announcements, v_authors
+ from (select p.id as plan_id, m.id, m.author_id, m.body
+       from public.attendees a join public.plans p on p.id = a.plan_id
+       cross join lateral (select m.id, m.author_id, m.body from public.messages m
+         where m.series_id = p.series_id and m.kind = 'announcement' and m.state = 'sent'
+          and (not private.chat_is_group(p.series_id) or m.plan_id = p.id)
+          and exists (select 1 from private.announcement_audience(p.series_id, m.audience) as r(id) where r.id = v_uid)
+         order by m.id desc limit 1) m
+       where a.user_id = v_uid and a.response = 'pending' and p.status = 'active'
+        and private.plan_end(p.starts_at, p.ends_at) > now()
+        and p.id = (private.current_occurrence(p.series_id)).id) x;
+ return jsonb_build_object('chats', v_chats, 'announcements', v_announcements, 'names', private.chat_names(v_lasts || v_authors));
+end $$;

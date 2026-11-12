@@ -13,7 +13,8 @@
 -- table private.series_leaves and the column public.chats.stopped_at.
 -- It restores, each byte for byte and keeping its grants (create or replace):
 --   private.attendees_chat_lines, plans_chat_lines, chat_member, chat_closes_at, chat_open, chat_summary,
---   notification_recipient_eligible, chat_row  from 20261111140000_chat_core.sql (sha256
+--   notification_recipient_eligible, chat_row, my_chat_overview
+--                                              from 20261111140000_chat_core.sql (sha256
 --                                              1047fb379a4e8a942b49db3f7134674caecf2cbb30f67e0ebf9f0f2fea6a78ce)
 --   private.can_see_guests                    from 20261031120000_creating_a_resbite.sql
 --   private.request_connection                from 20261111120000_connections_follow_ups.sql (its public wrapper unchanged)
@@ -34,6 +35,8 @@
 --   - a group's messages and announcements in a cancelled week are no longer pushed (chat core's rule, H30) (B1);
 --   - a member who has not answered reads the place in next and changed lines again (Decision 11), and rows no longer
 --     carry plan_id: the chat build then reads every announcement as the current week's (Task 3's GR1);
+--   - after a roll, a group's last announcement before it is pinned again and, sent to everyone, sits under the new
+--     week's invitation on My resbites and the resbite page for everyone who has not answered (ruling GR4);
 --   - the chat build's resbite pages keep working after this file: readEvent reads a missing series_is_group as "not a
 --     group" (I4). Its Leave group answers with an error, since leave_series is gone.
 -- Order (G-N11, B1): roll back in reverse order only, plan 3's first, because plan 3 copies this plan's
@@ -57,7 +60,8 @@ drop trigger plans_group_flag on public.plans;
 drop trigger attendees_clear_leave on public.attendees;
 
 -- 3. Chat core's bodies, as built: the one-off rules for every chat; no group line; a cancelled line is {actor}; a push
--- about a cancelled plan's chat is never told; a row has no plan_id and every reader reads the place.
+-- about a cancelled plan's chat is never told; a row has no plan_id and every reader reads the place; the pin and the
+-- invitation card's announcement are the series' latest, whatever its occurrence.
 create or replace function private.attendees_chat_lines() returns trigger language plpgsql security definer set search_path = '' as $$
 declare v_event text; v_payload jsonb; v_series uuid; v_line bigint; v_made timestamptz;
 begin
@@ -206,6 +210,38 @@ create or replace function private.chat_row(p_message public.messages, p_viewer 
   || case when p_message.author_id is not null and p_message.author_id = p_viewer
       then jsonb_build_object('client_id', p_message.client_id) else '{}'::jsonb end
 $$;
+
+create or replace function private.my_chat_overview() returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_uid uuid := private.require_tester(); v_chats jsonb; v_lasts jsonb; v_announcements jsonb; v_authors jsonb;
+begin
+ select coalesce(jsonb_object_agg(s.series_id, jsonb_build_object(
+   'unread', exists (select 1 from public.messages m where m.series_id = s.series_id and m.state = 'sent' and m.id > s.read_id
+    and m.author_id is distinct from v_uid and (m.payload->>'actor') is distinct from v_uid::text),
+   'last', s.last, 'open', private.chat_open(s.series_id), 'count', s.count)), '{}'::jsonb),
+  coalesce(jsonb_agg(s.last) filter (where s.last is not null), '[]'::jsonb)
+ into v_chats, v_lasts
+ from (select c.series_id, coalesce(ch.message_count, 0) as count,
+        coalesce((select r.last_read_id from public.chat_reads r where r.series_id = c.series_id and r.user_id = v_uid), 0) as read_id,
+        (select private.chat_row(m, v_uid) from public.messages m where m.id = ch.last_message_id and m.series_id = c.series_id) as last
+       from (select p.series_id from public.plans p where p.owner_id = v_uid
+             union
+             select p.series_id from public.attendees a join public.plans p on p.id = a.plan_id where a.user_id = v_uid) c
+       left join public.chats ch on ch.series_id = c.series_id
+       where private.chat_member(c.series_id, v_uid)) s;
+ select coalesce(jsonb_object_agg(x.plan_id, jsonb_build_object('id', x.id, 'author_id', x.author_id, 'body', x.body)), '{}'::jsonb),
+  coalesce(jsonb_agg(jsonb_build_object('author_id', x.author_id)), '[]'::jsonb)
+ into v_announcements, v_authors
+ from (select p.id as plan_id, m.id, m.author_id, m.body
+       from public.attendees a join public.plans p on p.id = a.plan_id
+       cross join lateral (select m.id, m.author_id, m.body from public.messages m
+         where m.series_id = p.series_id and m.kind = 'announcement' and m.state = 'sent'
+          and exists (select 1 from private.announcement_audience(p.series_id, m.audience) as r(id) where r.id = v_uid)
+         order by m.id desc limit 1) m
+       where a.user_id = v_uid and a.response = 'pending' and p.status = 'active'
+        and private.plan_end(p.starts_at, p.ends_at) > now()
+        and p.id = (private.current_occurrence(p.series_id)).id) x;
+ return jsonb_build_object('chats', v_chats, 'announcements', v_announcements, 'names', private.chat_names(v_lasts || v_authors));
+end $$;
 
 -- 4. Who sees a resbite's guests: the creating-a-resbite body (a host, or a guest who has answered).
 create or replace function private.can_see_guests(p_plan uuid) returns boolean language sql stable security definer set search_path = '' as $$

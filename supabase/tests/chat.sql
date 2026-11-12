@@ -531,8 +531,9 @@ delete from public.chat_reads where user_id=pg_temp.c1('03');
 -- The card's announcement (H22, H23) is the series' latest sent announcement whose audience includes the caller: a
 -- newer one to Going, or a newer one to everyone that was removed, leaves 05's card on the first. It is listed only for
 -- the caller's unanswered row on the series' current occurrence while that is active and has not ended: a cancelled
--- or ended one-off gives none, though its chat may still be open; on the weekly series, an announcement written on the
--- past occurrence is listed under the current one's id, and a row left only on the past occurrence gives none.
+-- or ended one-off gives none, though its chat may still be open; on the weekly series, a group since chat plan 2, an
+-- announcement written on the past occurrence is on no card (it was last week's: ruling GR4, I-1), one written on the
+-- current occurrence is listed under its id, and a row left only on the past occurrence gives none.
 -- Every announcement here leaves 'sent' and both ids go back afterwards, so slice 2 starts with no pinned announcement.
 do $$ declare v_ann bigint; v_going bigint; v_gone bigint; v_week bigint; v_msg bigint; v_last bigint; v_pinned bigint; v_next uuid;
  s jsonb; o jsonb; v_line public.messages; begin
@@ -595,9 +596,15 @@ do $$ declare v_ann bigint; v_going bigint; v_gone bigint; v_week bigint; v_msg 
  perform set_config('resbite.system','roll',true);
  update public.plans set starts_at=pg_temp.c1_start(),ends_at=pg_temp.c1_start()+interval '3 hours' where id=pg_temp.c1p('01');
  perform set_config('resbite.system','',true);
- -- The weekly series: written on the past occurrence, listed under the current one's id.
+ -- The weekly series: written on the past occurrence, on no card; written on the current one, listed under its id.
  insert into public.messages(series_id,plan_id,author_id,kind,audience,body,created_at,updated_at) values
-  (pg_temp.c1p('02'),pg_temp.c1p('02'),pg_temp.c1('01'),'announcement','everyone','Bring water',now()-interval '1 hour',now()-interval '1 hour')
+  (pg_temp.c1p('02'),pg_temp.c1p('02'),pg_temp.c1('01'),'announcement','everyone','Last week''s water',now()-interval '1 hour',now()-interval '1 hour')
+  returning id into v_week;
+ perform pg_temp.ch_check(pg_temp.ch_keys(public.my_chat_overview()->'announcements')=pg_temp.c1p('01')::text,
+  'Last week''s announcement is on 05''s card for this week: '||(public.my_chat_overview()->'announcements')::text);
+ update public.messages set state='deleted' where id=v_week;
+ insert into public.messages(series_id,plan_id,author_id,kind,audience,body,created_at,updated_at) values
+  (pg_temp.c1p('02'),v_next,pg_temp.c1('01'),'announcement','everyone','Bring water',now()-interval '1 hour',now()-interval '1 hour')
   returning id into v_week;
  o := public.my_chat_overview();
  perform pg_temp.ch_check(o->'announcements'=jsonb_build_object(pg_temp.c1p('01')::text,

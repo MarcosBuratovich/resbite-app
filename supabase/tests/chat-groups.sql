@@ -6,7 +6,7 @@
 -- g2-…@resbite-test.invalid, ids with the prefix e6, and one phone number, from Ofcom's drama range (07700 900xxx,
 -- kept for fiction), in 2g.
 --
--- One transaction per block, each begin … rollback, as connections.sql does: slice 1 is one block, slice 2 eight. Each
+-- One transaction per block, each begin … rollback, as connections.sql does: slice 1 is one block, slice 2 eleven. Each
 -- block starts from the same cast, made by pg_temp.e6_cast(). Times, rows and flags set by hand sit between
 -- set_config('resbite.system','roll',true) and set_config('resbite.system','',true), so they write no chat line; the
 -- setting is transaction-local, so it is reset at once (it would otherwise silence every later line).
@@ -530,7 +530,8 @@ do $$ begin
 end $$;
 rollback;
 
--- Slice 2 (Task 2): the group's lines, the roll, leaving, and who sees the group. Eight blocks, 2a to 2h, each begin …
+-- Slice 2 (Task 2): the group's lines, the roll, leaving, and who sees the group. Eleven blocks, 2a to 2k (2j and 2k
+-- only where the deletion lifecycle exists), each begin …
 -- rollback and each from the cast, so no block's roll or leave reaches another; within a block the lines run in the
 -- order written, and each block names its rolls (challenge NOTE 11). Beyond the cast: 07 is invited in the app (2a, 2b,
 -- 2e); 09, 10 and 11 are brought guests, rows made by hand under the flag, 09 by 06 and 10 and 11 by 03, at level 2
@@ -763,7 +764,7 @@ do $$ declare f text; r text; begin
   end loop;
  end loop;
  foreach f in array array['private.leave_series(uuid)','public.leave_series(uuid)','private.can_see_guests(uuid)','private.request_connection(uuid,uuid)',
-   'public.request_connection(uuid,uuid)'] loop
+   'public.request_connection(uuid,uuid)','private.my_chat_overview()','public.my_chat_overview()'] loop
   foreach r in array array['public','anon','service_role'] loop
    perform pg_temp.g2_check(not has_function_privilege(r,f,'execute'),r||' may execute '||f);
   end loop;
@@ -1289,3 +1290,114 @@ select pg_temp.g2_check((select stopped_at from public.chats where series_id=pg_
 select pg_temp.g2_check(pg_temp.g2_roll()=1,'The roll did not roll the reopened Board game night');
 select pg_temp.g2_check(pg_temp.g2_next(pg_temp.e6p('01')) is not null,'The reopened Board game night has no next occurrence');
 rollback;
+
+-- 2i. A group's announcement belongs to its week (ruling GR4: the final review's I-1 and M-3; its M-5). 01 announces to
+-- everyone on Board game night: 05, who has not answered, has it on the invitation card (my_chat_overview's
+-- announcements, keyed by the occurrence), and it is the chat's pinned announcement; 03, Going, has no card note. The
+-- roll: on the new occurrence 05 and 03 have not answered, last week's announcement is on neither card, and nothing is
+-- pinned (the row stays in the chat with its plan_id). 01 announces to everyone again, now on the new occurrence (last
+-- week's moved 61 seconds back, so 'Too fast' does not answer): it is on both cards, keyed by the new occurrence, and
+-- pinned. A one-off is as before: 01's announcement on the Picnic is on 05's card.
+begin;
+select pg_temp.e6_cast();
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('01'));
+select set_config('g2.red_lion',(public.send_announcement(pg_temp.e6p('01'),'Tonight we meet at the Red Lion','everyone',gen_random_uuid())->>'id'),true);
+select pg_temp.g2_as(pg_temp.e6('05'));
+select pg_temp.g2_check(public.my_chat_overview()->'announcements'=jsonb_build_object(pg_temp.e6p('01')::text,jsonb_build_object(
+  'id',current_setting('g2.red_lion')::bigint,'author_id',pg_temp.e6('01'),'body','Tonight we meet at the Red Lion')),
+ '05''s card before the roll: '||(public.my_chat_overview()->'announcements')::text);
+select pg_temp.g2_check((public.chat_summary(pg_temp.e6p('01'))->'pinned'->>'id')::bigint=current_setting('g2.red_lion')::bigint,
+ 'The announcement is not pinned in its week');
+select pg_temp.g2_as(pg_temp.e6('03'));
+select pg_temp.g2_check(public.my_chat_overview()->'announcements'='{}'::jsonb,'03, Going, has a card note');
+reset role;
+select pg_temp.g2_past(pg_temp.e6p('01'));
+select pg_temp.g2_check(pg_temp.g2_roll()=1,'The roll did not roll Board game night alone');
+select set_config('g2.new',pg_temp.g2_next(pg_temp.e6p('01'))::text,true);
+set local role authenticated;
+do $$ declare n text; begin
+ foreach n in array array['05','03'] loop
+  perform pg_temp.g2_as(pg_temp.e6(n));
+  perform pg_temp.g2_check(public.my_chat_overview()->'announcements'='{}'::jsonb,
+   'Last week''s announcement is on '||n||'''s card for the new week: '||(public.my_chat_overview()->'announcements')::text);
+  perform pg_temp.g2_check(public.chat_summary(pg_temp.e6p('01'))->'pinned'='null'::jsonb,
+   'Last week''s announcement is pinned for '||n||': '||(public.chat_summary(pg_temp.e6p('01'))->'pinned')::text);
+ end loop;
+end $$;
+reset role;
+update public.messages set created_at=now()-interval '61 seconds' where id=current_setting('g2.red_lion')::bigint;
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('01'));
+select set_config('g2.same_table',(public.send_announcement(pg_temp.e6p('01'),'Same table, same time','everyone',gen_random_uuid())->>'id'),true);
+select set_config('g2.picnic',(public.send_announcement(pg_temp.e6p('05'),'Bring a blanket','everyone',gen_random_uuid())->>'id'),true);
+do $$ declare n text; begin
+ foreach n in array array['05','03'] loop
+  perform pg_temp.g2_as(pg_temp.e6(n));
+  perform pg_temp.g2_check(public.my_chat_overview()->'announcements'->current_setting('g2.new')=jsonb_build_object(
+    'id',current_setting('g2.same_table')::bigint,'author_id',pg_temp.e6('01'),'body','Same table, same time')
+    and (public.chat_summary(pg_temp.e6p('01'))->'pinned'->>'id')::bigint=current_setting('g2.same_table')::bigint,
+   'This week''s announcement is not on '||n||'''s card, or not pinned: '||(public.my_chat_overview()->'announcements')::text);
+ end loop;
+ perform pg_temp.g2_as(pg_temp.e6('05'));
+ perform pg_temp.g2_check((public.my_chat_overview()->'announcements'->(pg_temp.e6p('05')::text)->>'id')::bigint=current_setting('g2.picnic')::bigint,
+  'The Picnic''s announcement is not on 05''s card');
+end $$;
+reset role;
+rollback;
+
+-- 2j and 2k. G-S4 through a real account deletion (the final review's M-5), only where the deletion lifecycle exists
+-- (full mode: it is local-only). Each in its own transaction, as the deletion's flag lasts to its end.
+select pg_catalog.to_regprocedure('private.request_account_deletion(uuid,uuid,uuid,text)') is not null as g2_deletion \gset
+\if :g2_deletion
+-- 2j. The owner goes. 01 deletes their account: the deletion's plan loop cancels every future resbite of 01's, under
+-- its flag (no line), and Board game night keeps its repeat. The group has stopped, its owner unable to use the app
+-- (G-S4): the summary, as 03, says stopped and cancelled, the chat closes 48 hours after this occurrence's end and is
+-- open until then (the final review's M-1, parked for the account-deletion lifecycle), and no line is written. The
+-- roll, run as the next cron run would (the flag empty), skips it and writes no stop time while the chat is open.
+begin;
+select pg_temp.e6_cast();
+insert into auth.sessions(id,user_id,created_at) values ('e6300000-0000-4000-8000-000000000001',pg_temp.e6('01'),now());
+select private.request_account_deletion(pg_temp.e6('01'),'e6300000-0000-4000-8000-000000000001','e6400000-0000-4000-8000-000000000001',repeat('a',64));
+do $$ declare s jsonb; p public.plans; begin
+ select * into p from public.plans where id=pg_temp.e6p('01');
+ perform pg_temp.g2_check(p.status='cancelled' and p.repeat_weeks=1,'The deletion did not cancel Board game night, or ended its repeat');
+ perform pg_temp.g2_as(pg_temp.e6('03'));
+ s := public.chat_summary(pg_temp.e6p('01'));
+ perform pg_temp.g2_check(s @> '{"is_group":true,"stopped":true,"status":"cancelled","open":true}'
+   and (s->>'closes_at')::timestamptz=p.ends_at+interval '48 hours','The summary after the owner''s deletion: '||s::text);
+ perform pg_temp.g2_check(pg_temp.g2_ulines(pg_temp.e6p('01'))='' and (select stopped_at from public.chats where series_id=pg_temp.e6p('01')) is null,
+  'The owner''s deletion wrote a line or a stop time: '||pg_temp.g2_ulines(pg_temp.e6p('01')));
+end $$;
+select set_config('request.jwt.claims','',true);
+select set_config('resbite.system','',true);
+select pg_temp.g2_check(pg_temp.g2_roll()=0,'The roll rolled a group whose owner is being deleted');
+select pg_temp.g2_check(pg_temp.g2_next(pg_temp.e6p('01')) is null and (select stopped_at from public.chats where series_id=pg_temp.e6p('01')) is null
+ and private.chat_open(pg_temp.e6p('01')),'The roll changed the owner''s open group');
+rollback;
+
+-- 2k. A member goes. 03 writes in Board game night's chat and says Can't go there (a line naming 03), then deletes their
+-- account: the message reads deleted with no author and no words, the line stays as written (K-S3), 03 is out of the
+-- group (the deletion takes the guest rows), and the group runs on: not stopped, no close time, open, five people (01,
+-- 02, 04, 05, 06). No line is written.
+begin;
+select pg_temp.e6_cast();
+set local role authenticated;
+select pg_temp.g2_as(pg_temp.e6('03'));
+select set_config('g2.m03',pg_temp.g2_send(pg_temp.e6p('01'),'Count me in for Catan')::text,true);
+select pg_temp.g2_respond(pg_temp.e6p('01'),'declined');
+reset role;
+insert into auth.sessions(id,user_id,created_at) values ('e6300000-0000-4000-8000-000000000003',pg_temp.e6('03'),now());
+select private.request_account_deletion(pg_temp.e6('03'),'e6300000-0000-4000-8000-000000000003','e6400000-0000-4000-8000-000000000003',repeat('b',64));
+do $$ declare s jsonb; begin
+ perform pg_temp.g2_check((select (state,author_id,body) from public.messages where id=current_setting('g2.m03')::bigint)
+   is not distinct from ('deleted'::text,null::uuid,null::text),'03''s message kept its author or words');
+ perform pg_temp.g2_check(pg_temp.g2_ulines(pg_temp.e6p('01'))='cant_go:03:sent','The lines after 03''s deletion: '||pg_temp.g2_ulines(pg_temp.e6p('01')));
+ perform pg_temp.g2_check(not private.chat_member(pg_temp.e6p('01'),pg_temp.e6('03'))
+   and not exists(select 1 from public.attendees where user_id=pg_temp.e6('03')),'03, deleted, is still in the group');
+ perform pg_temp.g2_as(pg_temp.e6('01'));
+ s := public.chat_summary(pg_temp.e6p('01'));
+ perform pg_temp.g2_check(s @> '{"stopped":false,"open":true,"closes_at":null,"members":5}','The summary after a member''s deletion: '||s::text);
+end $$;
+rollback;
+\endif

@@ -46,7 +46,7 @@ end $$;
 -- 2. The objects (K-S5). chats.stopped_at is a nullable timestamptz. series_leaves has RLS on, no policy and no
 -- privilege for any role. The two triggers are on their tables. Every function this file makes or redefines is a
 -- security definer with an empty search path: series_is_group and leave_series (both) only authenticated may call; the
--- others nobody but the database, and the eleven redefined ones keep their grants and no longer read as before.
+-- others nobody but the database, and the twelve redefined ones keep their grants and no longer read as before.
 do $$ declare r text; p text; f text; begin
  if (select format_type(a.atttypid,a.atttypmod)||' '||a.attnotnull::text from pg_catalog.pg_attribute a
    where a.attrelid='public.chats'::regclass and a.attname='stopped_at' and not a.attisdropped) is distinct from 'timestamp with time zone false' then
@@ -135,11 +135,12 @@ create temporary table ch2_sources on commit drop as select x.signature, x.sourc
  ('private.chat_row(public.messages,uuid)',pg_temp.ch2_source(:'ch2_core','create function private.chat_row(','$$;')),
  ('private.can_see_guests(uuid)',pg_temp.ch2_source(:'ch2_creating','create or replace function private.can_see_guests(','$$;')),
  ('private.request_connection(uuid,uuid)',pg_temp.ch2_source(:'ch2_follow_ups','create or replace function private.request_connection(','$$;')),
- ('private.roll_repeating_plans()',pg_temp.ch2_source(:'ch2_circles','create or replace function private.roll_repeating_plans(','$$;'))) x(signature,source);
+ ('private.roll_repeating_plans()',pg_temp.ch2_source(:'ch2_circles','create or replace function private.roll_repeating_plans(','$$;')),
+ ('private.my_chat_overview()',pg_temp.ch2_source(:'ch2_core','create function private.my_chat_overview(','$$;'))) x(signature,source);
 insert into private.series_leaves(series_id,user_id) values ('e6200000-0000-4000-8000-000000000007','e6000000-0000-4000-8000-0000000000a1');
 do $$ begin
  if coalesce(length(btrim((select rollback from ch2_texts))),0)=0 then raise exception 'The rollback text is empty'; end if;
- if (select count(*) from ch2_sources s join private.ch2_rehearsal_functions f using (signature) where s.source like 'create or replace function %')<>11 then
+ if (select count(*) from ch2_sources s join private.ch2_rehearsal_functions f using (signature) where s.source like 'create or replace function %')<>12 then
   raise exception 'A body to restore, or its source, is missing';
  end if;
  if not exists(select 1 from public.chats where is_group) or not exists(select 1 from public.chats where stopped_at is not null) then
