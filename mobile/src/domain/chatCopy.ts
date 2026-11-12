@@ -100,6 +100,8 @@ export const CHAT_COPY = {
   groupChat: "Group chat",
   /** The "Next one" button's hint. */
   opensResbite: "Opens the resbite",
+  /** Its hint when there is no occurrence to open, and the tap reads the chat again (Decision 14). */
+  reloadsChat: "Reloads the chat",
   /**
    * A group's two audiences (G-S7); `day` is the long weekday, "Thursday". With no day (a start that can't be read, or
    * an announcement from an earlier week), the going words are a one-off's (Ruling GR1).

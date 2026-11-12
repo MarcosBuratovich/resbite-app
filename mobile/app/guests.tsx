@@ -35,6 +35,7 @@ import { UNNAMED_GUEST } from "../src/services/rsvp";
 import { joinRequestGateway } from "../src/services/joinRequests";
 import { useApp } from "../src/state/AppState";
 import { useEvent, type EventPage } from "../src/state/useEvent";
+import { useGroupScreen } from "../src/state/useGroupLeave";
 import { useResend } from "../src/state/useResend";
 
 const ACTION_ICON: Partial<Record<PersonAction, LucideIcon>> = {
@@ -61,6 +62,9 @@ export default function Guests() {
   const { plan: planId } = useLocalSearchParams<{ plan?: string }>();
   // The list shows who brought whom, so it reads the bringers' names (C28).
   const event = useEvent(planId, { chain: true });
+  // A group's people list is one of its screens: a leave that goes through while it is in focus lands on My resbites
+  // (ruling GR6 M4).
+  useGroupScreen(event.plan?.series_id);
   if (event.plan) return <People event={event} plan={event.plan} />;
   const loading = event.busy && !event.error;
   return (

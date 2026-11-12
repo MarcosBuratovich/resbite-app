@@ -371,3 +371,31 @@ test("on a group whose day can't be read, a going announcement reads as a one-of
   assert.equal(card.heading, "ANNOUNCEMENT · TO GOING");
   assert.ok(card.label.startsWith("Announcement to people going, Ana"), card.label);
 });
+
+// Ruling GR6 (I1): a system line that names this week ("this Thursday", "this week") does so only on the current
+// occurrence; an earlier week's reads in the one-off words, with no weekday, as an earlier announcement does (GR1).
+test("on a group, an earlier week's cancelled and can't-go lines read in the one-off words; this week's name the week", () => {
+  const CURRENT = "0c000000-0000-4000-8000-000000000027";
+  const EARLIER = "0c000000-0000-4000-8000-000000000020";
+  const cancelled = (id: number, plan: string | undefined) => ({
+    ...sys(id, "cancelled", { actor: ANA, stop: false, starts_at: "2025-11-20T19:00:00Z", time_zone: LONDON }),
+    ...(plan ? { planId: plan } : {}),
+  });
+  const cantGo = (id: number, plan: string | undefined) => ({ ...sys(id, "cant_go", { actor: SOL, user: SOL }), ...(plan ? { planId: plan } : {}) });
+  const rows = groupFeed([cancelled(1, EARLIER), cantGo(2, EARLIER), cancelled(3, CURRENT), cantGo(4, CURRENT), cancelled(5, undefined)], {
+    planId: CURRENT,
+  });
+  const lines = only(rows, "system");
+  assert.deepEqual(lines.map((l) => l.text), [
+    "Ana cancelled the resbite",
+    "Sol can’t make it",
+    "Ana cancelled this Thursday",
+    "Sol can’t make it this week",
+    // A row that doesn't say which occurrence it belongs to reads as the current one's.
+    "Ana cancelled this Thursday",
+  ]);
+  assert.deepEqual(lines.slice(0, 2).map((l) => l.label), ["Resbite: Ana cancelled the resbite", "Resbite: Sol can’t make it"]);
+  // A cancel that stopped the group names no week either way.
+  const stopped = groupFeed([{ ...sys(6, "cancelled", { actor: ANA, stop: true, starts_at: "2025-11-20T19:00:00Z", time_zone: LONDON }), planId: EARLIER }], { planId: CURRENT });
+  assert.equal(only(stopped, "system")[0].text, "Ana cancelled the group");
+});

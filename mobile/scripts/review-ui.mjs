@@ -460,6 +460,9 @@ try {
     // Chat plan 2 (I3): for one pass Jo's invitation is a group's, whose chat lists its members who haven't answered,
     // with this entry in my_chat_overview's chats; null, it is a one-off invitation, with no entry and no dot.
     let invitationChat = null;
+    // Ruling GR6 M6: the viewer is an admin of Jo's invitation, and it repeats (a group's) or not (a one-off's).
+    let invitationAdmin = false;
+    let invitationRepeats = false;
     // Fix round 1: how long my_chat_overview takes to answer (H36 Q4: the list never waits for it).
     let overviewDelay = 0;
     // Fix round 1 (H37 Q4): last week's occurrence of the organizer's series, ended, which carries no dot; and (H37 Q5)
@@ -519,7 +522,14 @@ try {
       }
       if (path === "/rest/v1/activities") return reply([]);
       if (path === "/rest/v1/plans") {
-        const rows = [plan, invitation, lastWeek, running].filter((p) => !id || p.id === id).map((p) => ({ ...p, plan_meeting_details: null }));
+        const rows = [plan, invitation, lastWeek, running]
+          .filter((p) => !id || p.id === id)
+          .map((p) => ({
+            ...p,
+            plan_meeting_details: null,
+            ...(p === invitation && invitationAdmin ? { plan_admins: [{ user_id: user.id }] } : {}),
+            ...(p === invitation && invitationRepeats ? { repeat_weeks: 1 } : {}),
+          }));
         return reply(one ? rows[0] : rows);
       }
       if (path === "/rest/v1/attendees") {
@@ -710,7 +720,8 @@ try {
       // at the end of its label; read, it carries neither. A one-off invitation (above) has no chats entry and no dot.
       const invitationCard = button(page, /^Jo invited you, Board games at the café, /);
       const unreadInvitation = button(page, /^Jo invited you, Board games at the café, .*, unread messages$/);
-      const dotsOn = (card) => card.evaluate((el) => [...el.querySelectorAll("div")].filter((d) => getComputedStyle(d).borderRadius === "5px" && d.getBoundingClientRect().width === 10).length);
+      // The dot by its test id, so a change of its look can't make "no dot" pass by itself (ruling GR6 M10).
+      const dotsOn = (card) => card.locator('[data-testid="unread-dot"]').count();
       assert.equal(await dotsOn(invitationCard), 0, "a one-off invitation draws no dot");
       invitationChat = { unread: true, open: true, last: { ...chatLast, id: 7, author_id: jo }, count: 3 };
       await open("/plans");
@@ -724,6 +735,20 @@ try {
       await expect(invitationCard).toBeVisible();
       await expect(unreadInvitation).toHaveCount(0);
       assert.equal(await dotsOn(invitationCard), 0, "read, the group invitation's card draws no dot");
+      // GR6 M6: an admin who hasn't answered is in a one-off's chat too, as a host: their card gets no new dot. On a
+      // group's invitation (it repeats) they do.
+      invitationChat = { ...invitationChat, unread: true };
+      invitationAdmin = true;
+      await open("/plans");
+      await expect(invitationCard).toBeVisible();
+      await expect(unreadInvitation).toHaveCount(0);
+      assert.equal(await dotsOn(invitationCard), 0, "a one-off admin's invitation draws no dot");
+      invitationRepeats = true;
+      await open("/plans");
+      await expect(unreadInvitation).toBeVisible();
+      assert.equal(await dotsOn(invitationCard), 1, "a group admin's invitation draws the dot");
+      invitationAdmin = false;
+      invitationRepeats = false;
       invitationChat = null;
     }
     // The waiting screen in both states: the card, "Waiting for <host>", the answer; and "You weren’t added".

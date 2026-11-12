@@ -1,6 +1,6 @@
 import type { ChatMessage, ChatNames } from "../services/chat";
 import { CHAT_COPY } from "../domain/chatCopy";
-import { authorName, dayFor, dayLabel, linkHost, linkParts, messageLabel, systemText } from "../domain/chatRules";
+import { authorName, dayFor, dayLabel, isCurrentRow, linkHost, linkParts, messageLabel, systemText } from "../domain/chatRules";
 import { localParts } from "../domain/whenText";
 import type { EndedLine, PendingMessage } from "./chatModel";
 
@@ -201,12 +201,14 @@ export function chatFeed(items: Array<ChatMessage | PendingMessage | EndedLine>,
     const m = item;
     // A sent row with no words draws nothing (H32 Q8).
     if ((m.kind === "message" || m.kind === "announcement") && m.state === "sent" && m.body === null) continue;
-    const day = dayFor(m, planId, weekday);
-    const label = messageLabel(m, names, viewerId, now, zone, undefined, group, day);
+    // An earlier occurrence's row names no weekday and no "this week" (Ruling GR1, ruling GR6 I1).
+    const current = isCurrentRow(m, planId);
+    const rowDay = dayFor(m, planId, weekday);
+    const label = messageLabel(m, names, viewerId, now, zone, undefined, group, rowDay, current);
     if (!label) continue;
     const key = `m:${m.id}`;
     if (m.kind === "system") {
-      const line = systemText(m, names, viewerId, group, title);
+      const line = systemText(m, names, viewerId, group, title, current);
       if (!line) continue;
       if (m.event === "next") place(m.createdAt, { type: "next", key, text: line, label });
       else if (m.event === "changed") {
@@ -226,7 +228,7 @@ export function chatFeed(items: Array<ChatMessage | PendingMessage | EndedLine>,
         key,
         message: m,
         own,
-        heading: group ? CHAT_COPY.announcementToGroup(m.audience, day) : CHAT_COPY.announcementTo(m.audience),
+        heading: group ? CHAT_COPY.announcementToGroup(m.audience, rowDay) : CHAT_COPY.announcementTo(m.audience),
         text: wordsOf(m),
         gone: goneOf(m),
         label,

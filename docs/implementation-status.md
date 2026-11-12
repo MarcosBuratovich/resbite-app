@@ -836,12 +836,12 @@ The accumulated app, backend, artwork, QA and planning work is packaged with a [
   - The resbite page: "Group chat", names for every member, the people list's "Not answered yet", and Leave this group in More, also for a member who hasn't answered.
   - My resbites: the unread dot on a group member's invitation card. The When sheet hides the chat's closing line while the resbite repeats.
 
-**Checks (12 November 2026),** on `ch2-groups` with "Groups: the screens, leaving, and the record" and its fix round (base `333747d`):
+**Checks (12 November 2026),** on `ch2-groups` with "Groups: the screens, leaving, and the record", its fix round and the final fix wave (base `333747d`):
 - `bash scripts/test-database-docker.sh`: 55 PASS lines.
 - The hosted baseline with the four candidates: 27 PASS lines.
-- `(cd mobile && npm run check)`: 1,094 tests.
+- `(cd mobile && npm run check)`: 1,101 tests.
 - The edge tests: 107 tests in 11 files.
 - The fingerprint replay (464, then 479: 15 added, 13 changed; the rollback back to 464).
-- The browser scripts with a fake project URL: `verify-chat.mjs` 57, `verify-event.mjs` 29, `review-ui.mjs` passed and `verify-planning.mjs` 16.
+- The browser scripts with a fake project URL: `verify-chat.mjs` 58, `verify-event.mjs` 30, `review-ui.mjs` passed and `verify-planning.mjs` 16.
 
 **What the owner still runs** is the groups part of [`qa/chat-release/README.md`](../qa/chat-release/README.md): the three owner questions, `ch2-apply.sh` right after chat core's, its after checks and advisors, the device checks, and the rollback if it is ever needed.

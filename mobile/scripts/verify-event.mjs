@@ -184,6 +184,8 @@ async function open(world = {}) {
     failLeaves: world.failLeaves ?? 0,
     // How long leave_series waits before its answer (UI Q4); after a leave, My resbites' list read fails (UI Q3).
     delayLeaves: world.delayLeaves ?? 0,
+    // How long series_is_group takes to answer (ruling GR6 M7: the page never waits for it).
+    delayGroup: world.delayGroup ?? 0,
     failListAfterLeave: Boolean(world.failListAfterLeave),
     // The links a guest sent bringing someone (plan_phone_invitations answers a guest with their own only).
     guestLinks: world.guestLinks ?? [],
@@ -379,6 +381,7 @@ async function open(world = {}) {
       // Chat plan 2: whether the series is a group the viewer is in (I4), and Leave group (G-N13, I10).
       case "series_is_group":
         if (body.p_series !== state.plan.series_id) mismatches.push(`series_is_group p_series ${body.p_series}`);
+        if (state.delayGroup) await new Promise((r) => setTimeout(r, state.delayGroup));
         return reply(state.group && !state.left);
       case "leave_series":
         if (body.p_series !== state.plan.series_id) mismatches.push(`leave_series p_series ${body.p_series}`);
@@ -1452,6 +1455,49 @@ try {
       await expect(page.getByRole("button", { name: /^Coffee evening, / })).toHaveCount(0);
       assert.equal(f.rpcs("leave_series").length, 1);
     });
+  // Ruling GR6 M3: Back to the group's resbite page while the leave is on its way, and the page's re-read fails there
+  // (it can't be read once the leave goes through): the leave still lands on My resbites.
+  await scenario(
+    "group, leave, page read fails",
+    { viewer: "guest", group: true, plan: groupPlan, attendee: { version: 1, response: "accepted" }, guests: [ALEX], chat: groupChat(), delayLeaves: 2500 },
+    async (f) => {
+      const { page } = f;
+      await page.goto(`${base}/plans`);
+      await page.getByRole("button", { name: /^Coffee evening, / }).click();
+      await expect(heading(page, "Coffee evening")).toBeVisible();
+      await btn(page, "Group chat. Leo: I can bring the snacks, unread messages").click();
+      await expect(page).toHaveURL(new RegExp(`/chat\\?series=${SERIES_ID}$`));
+      await btn(page, "More").click();
+      await btn(page, "Leave group").click();
+      await btn(page, "Leave group").click();
+      await expect.poll(() => f.rpcs("leave_series").length).toBe(1);
+      f.state.failPlanRead = true;
+      await page.goBack();
+      await expect(page).toHaveURL(new RegExp(`/event\\?plan=${PLAN_ID}$`));
+      await expect(page).toHaveURL(new RegExp(`/plans$`), { timeout: 10_000 });
+      await expect(heading(page, "My resbites")).toBeVisible();
+      f.state.failPlanRead = false;
+    },
+  );
+  // Ruling GR6 M7: the page doesn't wait for series_is_group. It shows as a one-off until the flag lands, then as the
+  // group's.
+  await scenario(
+    "group, flag late",
+    { viewer: "guest", group: true, plan: groupPlan, attendee: { version: 1, response: "accepted" }, guests: [ALEX], chat: groupChat(), delayGroup: 4000 },
+    async (f) => {
+      const { page } = f;
+      const started = Date.now();
+      await page.goto(`${base}/event?plan=${PLAN_ID}`);
+      await expect(heading(page, "Coffee evening")).toBeVisible({ timeout: 2500 });
+      assert.ok(Date.now() - started < 3500, "the page showed before the flag answered");
+      await expect(text(page, "You’re going")).toBeVisible();
+      // Once the flag lands: the group's Chat row and More's Leave this group.
+      await expect(btn(page, "Group chat. Leo: I can bring the snacks, unread messages")).toBeVisible({ timeout: 10_000 });
+      await btn(page, "More").click();
+      await expect(btn(page, "Leave this group")).toBeVisible({ timeout: 10_000 });
+    },
+  );
+  pass("group, leave, page read fails / flag late: a leave lands on My resbites even when the resbite page's re-read fails first (GR6 M3); the resbite page shows before series_is_group answers and turns into the group's when it does (GR6 M7)");
   pass("group, leave: after a leave whose next list read fails, My resbites still drops the group (UI Q3); with Back pressed while a slow leave is on its way, it still lands on My resbites from the group's resbite page, and My resbites reads its list again and drops the group when they went back to it (UI Q4)");
   pass("group, leave: from My resbites' tile, More → Leave this group asks Leave Coffee evening? You’ll stop getting its Thursdays and its chat. (Keep goes back); Leave group calls leave_series {p_series} once and lands on My resbites, which reads its plans again with the group gone; offline the question stays with Check your connection and try again., and a second tap calls leave_series again and lands on My resbites");
 

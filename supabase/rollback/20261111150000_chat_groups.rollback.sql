@@ -38,7 +38,7 @@
 --   - after a roll, a group's last announcement before it is pinned again and, sent to everyone, sits under the new
 --     week's invitation on My resbites and the resbite page for everyone who has not answered (ruling GR4);
 --   - the chat build's resbite pages keep working after this file: readEvent reads a missing series_is_group as "not a
---     group" (I4). Its Leave group answers with an error, since leave_series is gone.
+--     group" (I4), and with is_group false everywhere neither screen offers Leave group any more.
 -- Order (G-N11, B1): roll back in reverse order only, plan 3's first, because plan 3 copies this plan's
 -- request_connection, chat_summary and notification_recipient_eligible. The guarded chain is chat 3 → chat 2 → chat 1 →
 -- circles → follow-ups (supabase/rollback/20261111140000_chat_core.rollback.sql, lines 34-42): this file refuses while

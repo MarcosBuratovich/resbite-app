@@ -100,7 +100,11 @@ function load(answers: Record<string, Answer | (() => Answer | Promise<Answer>)>
       throw Error(`Unexpected import: ${name}`);
     },
   });
-  return { readEvent: exports.readEvent as (plan: string, user: string) => Promise<Record<string, unknown>>, calls };
+  return {
+    readEvent: exports.readEvent as (plan: string, user: string) => Promise<Record<string, unknown>>,
+    readIsGroup: exports.readIsGroup as (series: unknown) => Promise<boolean>,
+    calls,
+  };
 }
 
 const ok = (data: unknown): Answer => ({ data, error: null });
@@ -119,65 +123,25 @@ const rpcCalls = (calls: Call[], fn: string) =>
   calls
     .filter((c): c is Extract<Call, { rpc: string }> => "rpc" in c && c.rpc === fn)
     .map((c) => ({ rpc: c.rpc, args: JSON.parse(JSON.stringify(c.args)) as Record<string, unknown> }));
-/** The snapshot as read, but for the group flag. */
-const plainSnapshot = (snapshot: Record<string, unknown>) => {
-  const { isGroup: _flag, ...rest } = snapshot;
-  return JSON.parse(JSON.stringify(rest));
-};
+test("readEvent never asks series_is_group: the page renders without waiting for it, as a one-off until it lands (GR6 M7, I4)", async () => {
+  for (const viewer of [ME, OWNER]) {
+    const { readEvent, calls } = load(
+      guestPage({ series_is_group: () => Promise.reject(Error("readEvent must not wait for the group flag")) }),
+    );
+    const snapshot = await readEvent(PLAN, viewer);
+    assert.equal(snapshot.isGroup, false, viewer);
+    assert.deepEqual(rpcCalls(calls, "series_is_group"), [], viewer);
+  }
+});
 
-/**
- * An answer held until `series_is_group` has been asked, so a read that waits for this one before asking the flag
- * never gets it: it fails after half a second instead of hanging the run.
- */
-function untilFlagAsked() {
-  let asked = () => {};
-  const flag = new Promise<void>((resolve) => (asked = resolve));
-  const held = (a: Answer) => () =>
-    new Promise<Answer>((resolve, reject) => {
-      const timer = setTimeout(() => reject(Error("answered only once the flag was asked: it never was")), 500);
-      void flag.then(() => {
-        clearTimeout(timer);
-        resolve(a);
-      });
-    });
-  return { asked, held };
-}
-
-test("readEvent asks series_is_group for the plan's series after the plan row, beside the own row and the organizer, before they answer (G-N13, I4)", async () => {
-  const gate = untilFlagAsked();
-  const { readEvent, calls } = load(
-    guestPage({
-      // Neither answers until the flag has been asked: a read that asked it after them would fail here.
-      "attendees:own": gate.held(ok({ version: 3, response: "accepted" })),
-      profiles: gate.held(ok({ display_name: "Ana" })),
-      series_is_group: () => {
-        gate.asked();
-        return ok(true);
-      },
-    }),
-  );
-  const snapshot = await readEvent(PLAN, ME);
-  assert.equal(snapshot.isGroup, true);
+test("readIsGroup asks series_is_group for the series and reads true only from true (I4)", async () => {
+  const { readIsGroup, calls } = load(guestPage());
+  assert.equal(await readIsGroup(SERIES), true);
   assert.deepEqual(rpcCalls(calls, "series_is_group").map((c) => c.args), [{ p_series: SERIES }]);
-  // Beside the viewer's own row and the organizer's name, once the plan row is in.
-  const order = calls.map((c) => ("rpc" in c ? c.rpc : "user_id" in c.eq ? "own" : c.from));
-  assert.deepEqual(order.slice(0, 2).sort(), ["attendees", "plans"]);
-  assert.deepEqual(order.slice(2, 5).sort(), ["own", "profiles", "series_is_group"]);
-  assert.deepEqual(JSON.parse(JSON.stringify(snapshot.attendee)), { version: 3, response: "accepted" });
-  assert.equal(snapshot.organizer, "Ana");
+  for (const series of [null, undefined, "", 7]) assert.equal(await load(guestPage()).readIsGroup(series), false, String(series));
 });
 
-test("readEvent reads the group flag alone for the owner", async () => {
-  const { readEvent, calls } = load(guestPage());
-  const snapshot = await readEvent(PLAN, OWNER);
-  assert.equal(snapshot.isGroup, true);
-  const order = calls.map((c) => ("rpc" in c ? c.rpc : c.from));
-  assert.deepEqual([...order.slice(0, 2).sort(), ...order.slice(2)], ["attendees", "plans", "series_is_group"]);
-  assert.deepEqual([snapshot.attendee, snapshot.organizer, snapshot.counts], [null, null, null]);
-});
-
-test("a series_is_group that is missing (PGRST202, after plan 2's rollback) or fails any way reads as a one-off, and the page is kept (I4)", async () => {
-  const asRead = plainSnapshot(await load(guestPage()).readEvent(PLAN, ME));
+test("a series_is_group that is missing (PGRST202, after plan 2's rollback) or fails any way reads as a one-off (I4)", async () => {
   const failures: Array<[string, Answer | (() => Promise<Answer>)]> = [
     ["missing", { data: null, error: { code: "PGRST202", message: "Could not find the function public.series_is_group(p_series)" } }],
     ["offline", { data: null, error: { message: "TypeError: Failed to fetch", details: "", hint: "", code: "" } }],
@@ -186,14 +150,7 @@ test("a series_is_group that is missing (PGRST202, after plan 2's rollback) or f
     ["odd", ok("true")],
     ["null", ok(null)],
   ];
-  for (const [name, failure] of failures) {
-    for (const viewer of [ME, OWNER]) {
-      const { readEvent } = load(guestPage({ series_is_group: failure }));
-      const snapshot = await readEvent(PLAN, viewer);
-      assert.equal(snapshot.isGroup, false, `${name} as ${viewer}`);
-      if (viewer === ME) assert.deepEqual(plainSnapshot(snapshot), asRead, name);
-    }
-  }
+  for (const [name, failure] of failures) assert.equal(await load(guestPage({ series_is_group: failure })).readIsGroup(SERIES), false, name);
 });
 
 test("every other part's failure still makes the page unavailable", async () => {
@@ -202,26 +159,30 @@ test("every other part's failure still makes the page unavailable", async () => 
     const { readEvent } = load(guestPage({ [key]: failed }));
     await assert.rejects(readEvent(PLAN, ME), UNAVAILABLE, key);
   }
-  // A lost connection on the attendee read, even with the group flag read fine.
+  // A lost connection on the attendee read.
   const { readEvent } = load(guestPage({ "attendees:own": () => Promise.reject(new TypeError("Network request failed")) }));
   await assert.rejects(readEvent(PLAN, ME), /Network request failed/);
   // The counts, where they are read, are still the page's.
-  const counts = load(guestPage({ "attendees:own": ok({ version: 3, response: "pending" }), series_is_group: ok(false), plan_people_counts: failed }));
+  const counts = load(guestPage({ "attendees:own": ok({ version: 3, response: "pending" }), attendees: ok([guestRows[0]]), plan_people_counts: failed }));
   await assert.rejects(counts.readEvent(PLAN, ME), UNAVAILABLE);
 });
 
-test("a member who hasn't answered: on a group no counts are read, since they read every guest row; on a one-off they are (challenge NOTE 12)", async () => {
+test("someone who hasn't answered reads the counts only when the guest list gave them just their own row (GR6 M7, challenge NOTE 12)", async () => {
   const pending = { "attendees:own": ok({ version: 3, response: "pending" }) };
+  // A group's member reads every guest row: no counts, whatever the flag will say.
   const onGroup = load(guestPage(pending));
   const group = await onGroup.readEvent(PLAN, ME);
-  assert.deepEqual([group.isGroup, group.counts], [true, null]);
+  assert.equal(group.counts, null);
   assert.equal(rpcCalls(onGroup.calls, "plan_people_counts").length, 0);
   assert.equal((group.guests as unknown[]).length, 2);
-  const onOneOff = load(guestPage({ ...pending, series_is_group: ok(false) }));
+  // A one-off's invitee who hasn't answered reads only their own row: the counts come from the server.
+  const onOneOff = load(guestPage({ ...pending, attendees: ok([guestRows[0]]) }));
   const oneOff = await onOneOff.readEvent(PLAN, ME);
-  assert.deepEqual([oneOff.isGroup, JSON.parse(JSON.stringify(oneOff.counts))], [false, { going: 1, maybe: 0, cantGo: 0 }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(oneOff.counts)), { going: 1, maybe: 0, cantGo: 0 });
   assert.deepEqual(rpcCalls(onOneOff.calls, "plan_people_counts").map((c) => c.args), [{ p_plan: PLAN }]);
-  // A flag that failed to read follows the one-off rule: the counts are read.
-  const unknown = load(guestPage({ ...pending, series_is_group: { data: null, error: { code: "PGRST202" } } }));
-  assert.deepEqual(JSON.parse(JSON.stringify((await unknown.readEvent(PLAN, ME)).counts)), { going: 1, maybe: 0, cantGo: 0 });
+  // An admin reads every row, so no counts; an answered guest neither.
+  const admin = load(guestPage({ ...pending, attendees: ok([guestRows[0]]), plans: ok({ ...planRow, plan_admins: [{ user_id: ME }] }) }));
+  assert.equal((await admin.readEvent(PLAN, ME)).counts, null);
+  const answered = load(guestPage({ attendees: ok([guestRows[0]]) }));
+  assert.equal((await answered.readEvent(PLAN, ME)).counts, null);
 });

@@ -930,11 +930,14 @@ test("useEvent reads the bringers' names for the people list only, where names s
   assert.match(src, /broughtLinks: BroughtLink\[\];/);
   assert.match(src, /export function useEvent\(planId: string \| undefined, options: \{ chain\?: boolean \} = \{\}\): EventPage/);
   // Only the people list asks (C28 Q4), where names show; only the latest read sets them; a failure changes nothing.
-  assert.match(src, /if \(named && chain\)\s*void circleGateway\.bringers\(planId\)\.then\(\s*\(names\) => \{\s*if \(valid\(\) && bringersTicket === bringersRead\.current\) setBringerNames\(names\);\s*\},\s*\(\) => \{\},\s*\);/);
+  assert.match(src, /const readBringers = \(\) =>\s*void circleGateway\.bringers\(planId\)\.then\(\s*\(names\) => \{\s*if \(valid\(\) && bringersTicket === bringersRead\.current\) setBringerNames\(names\);\s*\},\s*\(\) => \{\},\s*\);/);
+  assert.match(src, /if \(named && chain\) readBringers\(\);/);
+  // A group flag that lands later (ruling GR6 M7) reads them then, on the people list only.
+  assert.match(src, /if \(isGroup && !named\) \{\s*named = true;\s*readStates\(\);\s*if \(chain\) readBringers\(\);\s*\}/);
   // Hosts only, read with their own links; a failure gives none.
   assert.match(src, /const \[people, links\] = host\s*\? await Promise\.all\(\[\s*readInvited\(planId, userId\)\.catch\(\(\): InvitedPerson\[\] => \[\]\),\s*circleGateway\.broughtLinks\(planId\)\.catch\(\(\): BroughtLink\[\] => \[\]\),\s*\]\)\s*: \[null, NO_LINKS\];/);
   // The organizer's name is kept only from a read still current (C28).
-  const read = src.slice(src.indexOf("const next = await readEvent(planId, userId);"), src.indexOf("} catch (e) {"));
+  const read = src.slice(src.indexOf("const read = await readEvent(planId, userId);"), src.indexOf("} catch (e) {"));
   const kept = read.indexOf("rememberName(userId, next.plan.owner_id, next.organizer);");
   assert.ok(kept > read.indexOf("if (valid()) {"), "rememberName under valid()");
   // A host's own brought links are theirs (C31): the list's `brought` reaches InvitedPerson.
@@ -1415,7 +1418,10 @@ test("the Chat row on a group: Group chat while open; closed, the count as built
 test("useEvent carries the group flag: names, the snapshot an answer builds, and a group's Chat row kept after an answer (challenge NOTE 6)", () => {
   const src = readFileSync(new URL("../state/useEvent.ts", import.meta.url), "utf8");
   assert.match(src, /isGroup: boolean;/);
-  assert.match(src, /const viewer = viewerRole\(next\.plan, userId, next\.admins\);\s*const named = showsNames\(viewer, next\.attendee\?\.response \?\? null, next\.isGroup\);/);
+  assert.match(src, /const viewer = viewerRole\(next\.plan, userId, next\.admins\);[\s\S]*?let named = showsNames\(viewer, next\.attendee\?\.response \?\? null, next\.isGroup\);/);
+  // The flag is read beside the event, never waited for, and set when it lands (ruling GR6 M7).
+  assert.match(src, /void readIsGroup\(next\.plan\.series_id\)\.then\(\(isGroup\) => \{/);
+  assert.doesNotMatch(src, /await readIsGroup/);
   assert.match(src, /showsNames\(role, snapshot\?\.attendee\?\.response \?\? null, isGroup\)/);
   const answer = src.slice(src.indexOf("const confirmed = next;"), src.indexOf("const result = reconcileRsvp(attempt, confirmed);"));
   assert.match(answer, /isGroup: old\?\.isGroup \?\? false,/);

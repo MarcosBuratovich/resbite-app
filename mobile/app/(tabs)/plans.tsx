@@ -34,7 +34,7 @@ import { joinRequestGateway, type MyRequest } from "../../src/services/joinReque
 import { ANSWER_OPTIONS, reconcileRsvp, responseFor, type AnswerKey, type RsvpAttempt } from "../../src/domain/rsvp";
 import { readRsvp, writeRsvp } from "../../src/services/rsvp";
 import { chatGateway, type ChatOverview } from "../../src/services/chat";
-import { currentOccurrences, pendingCardNote, unreadDot } from "../../src/domain/chatRules";
+import { currentOccurrences, invitationDot, pendingCardNote, unreadDot } from "../../src/domain/chatRules";
 import { leftGroups } from "../../src/state/useGroupLeave";
 
 // The last save notice already shown, so a remount or web history restoring the same URL never
@@ -127,7 +127,7 @@ export default function Plans() {
       if (p.error) throw p.error;
       if (a.error) throw a.error;
       setLoadedFor(uid);
-      leftGroups.settle(startedAt);
+      leftGroups.settle(startedAt, uid);
       const read = ((p.data || []) as unknown as PlanRow[]).map(planFromRow);
       setPlans(read);
       if (q) setRequests(q);
@@ -187,7 +187,7 @@ export default function Plans() {
   // A group left from its chat or resbite page, whichever screen the person is on by then: read the list again (UI Q4).
   useEffect(() => leftGroups.listen(() => void refreshRef.current()), []);
   // Every occurrence of a group left on this phone is gone from the list at once, even if the next read fails (UI Q3).
-  const list = leftGroups.without(preview ? localPlans : loadedFor === session?.user.id && session ? plans : []);
+  const list = leftGroups.without(preview ? localPlans : loadedFor === session?.user.id && session ? plans : [], session?.user.id ?? null);
   const now = Date.now();
   const invitations = preview || !session ? [] : invitationCards(list, attendees, session.user.id, now);
   // A plan the account can already read (invited in person since) shows as itself, not as a request.
@@ -324,8 +324,9 @@ export default function Plans() {
                     byline={INVITE_COPY.invitedYou(host)}
                     note={note}
                     // I3: on a group, someone who hasn't answered is in its chat (my_chat_overview lists it), so the card
-                    // carries the series' unread dot as the tile does; a one-off invitee has no chats entry and no dot.
-                    dot={current.has(p.id) && unreadDot(overview?.chats[p.series_id])}
+                    // carries the series' unread dot as the tile does; a one-off's admin who hasn't answered is in its
+                    // chat as a host, and gets no new dot (ruling GR6 M6).
+                    dot={invitationDot(p, session?.user.id ?? "", current, overview)}
                     chips={chips.map((text) => ({ key: text, text, tone: chipToneFor(text) }))}
                     label={`${INVITE_COPY.invitedYou(host)}, ${cardLabel(
                       { title: p.title, startsAt: p.starts_at, endsAt: p.ends_at, place: place ?? "", chips, photo: p.cover_description },

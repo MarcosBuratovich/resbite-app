@@ -5,9 +5,9 @@ import { useFocusedRefresh, type Run } from "./useFocusedRefresh";
 import { cancelPlan, PlanSaveError } from "../domain/plans";
 import { reconcileRsvp, type Response, type RsvpAttempt } from "../domain/rsvp";
 import { planGateway } from "../services/plans";
-import { readEvent, readGuests, readRsvp, writeRsvp, type EventSnapshot, type Guest } from "../services/rsvp";
+import { readEvent, readGuests, readIsGroup, readRsvp, writeRsvp, type EventSnapshot, type Guest } from "../services/rsvp";
 import { syncReminders } from "../services/deviceReminders";
-import { leaveGroup } from "./useGroupLeave";
+import { leaveGroup, stillCurrent } from "./useGroupLeave";
 import { adminErrorMessage, appointAdmin, removeAdmin } from "../services/admins";
 import { muteErrorMessage, readMutedSeries, setPlanMute } from "../services/mutes";
 import { broughtNames, EVENT_COPY, pageState, readsOwnLinks, showsNames, viewerRole, type AnswerCounts, type Viewer } from "../domain/eventPage";
@@ -154,7 +154,7 @@ export type EventPage = {
 export function useEvent(planId: string | undefined, options: { chain?: boolean } = {}): EventPage {
   // Only the people list shows who brought whom, so only it reads the bringers' names (C28).
   const chain = options.chain === true;
-  const { session, preview, localPlans, setLocalPlans, signingOut } = useApp();
+  const { session, preview, localPlans, setLocalPlans, signingOut, captureSession } = useApp();
   const account = useAccount();
   const accountReady = account.status === "approved" && account.reviewed && account.profileReady;
   const userId = session?.user.id;
@@ -184,6 +184,13 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
   const [ownName, setOwnName] = useState<string | null>(null);
   // The latest read of the states wins: a whole-event read and a re-read after a connection action can overlap.
   const statesRead = useRef(0);
+  /**
+   * The group flag (`readIsGroup`), read beside the event and never waited for (ruling GR6 M7): the page shows as a
+   * one-off until it lands, and a reload of the same plan keeps the last answer until the new one lands, so a group's
+   * page doesn't flash a one-off's. The latest read wins.
+   */
+  const groupKnown = useRef<{ key: string; isGroup: boolean } | null>(null);
+  const groupRead = useRef(0);
   const [mutedSeries, setMutedSeries] = useState<Set<string>>(new Set());
   const [chat, setChat] = useState<ChatSummary | null>(null);
   // The latest read of the chat wins: an event load and a re-read after an answer can overlap.
@@ -253,15 +260,18 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
       setFresh(false);
       setError(null);
       try {
-        const next = await readEvent(planId, userId);
+        const read = await readEvent(planId, userId);
+        // Per account and plan: another account's answer is never this one's.
+        const flagKey = `${userId}:${planId}`;
+        const knownFlag = () => (groupKnown.current?.key === flagKey ? groupKnown.current.isGroup : false);
+        const next: EventSnapshot = { ...read, isGroup: knownFlag() };
         // Unanswered personal links and open-link requests are every host's: the owner's and the admins'.
         const host = next.plan.owner_id === userId || next.admins.includes(userId);
         // The connection states, only where names show (the server refuses them elsewhere). The event never waits
         // for them: they land when they arrive, and only a successful read replaces them (a failure keeps those known).
         const ticket = ++statesRead.current;
         const viewer = viewerRole(next.plan, userId, next.admins);
-        const named = showsNames(viewer, next.attendee?.response ?? null, next.isGroup);
-        if (named)
+        const readStates = () =>
           void connectionGateway.statesFor(planId).then(
             (states) => {
               if (valid() && ticket === statesRead.current) setConnections(states);
@@ -271,13 +281,28 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
         // Likewise the bringers' names for the chain (CO-07): only on the people list, where names show; a failure keeps
         // those known.
         const bringersTicket = ++bringersRead.current;
-        if (named && chain)
+        const readBringers = () =>
           void circleGateway.bringers(planId).then(
             (names) => {
               if (valid() && bringersTicket === bringersRead.current) setBringerNames(names);
             },
             () => {},
           );
+        let named = showsNames(viewer, next.attendee?.response ?? null, next.isGroup);
+        if (named) readStates();
+        if (named && chain) readBringers();
+        // The group flag lands when it arrives (GR6 M7): a member then sees names, so what names need is read then.
+        const groupTicket = ++groupRead.current;
+        void readIsGroup(next.plan.series_id).then((isGroup) => {
+          if (!valid() || groupTicket !== groupRead.current) return;
+          groupKnown.current = { key: flagKey, isGroup };
+          setSnapshot((s) => (s && s.plan.id === next.plan.id ? { ...s, isGroup, counts: isGroup ? null : s.counts } : s));
+          if (isGroup && !named) {
+            named = true;
+            readStates();
+            if (chain) readBringers();
+          }
+        });
         // Likewise the Chat row (K-S13), on the resbite page only (not the people list): the page never waits for the
         // series' chat; a refusal hides the row, and a failure keeps what was known (H36).
         if (!chain) readChat(next.plan.series_id, valid, true);
@@ -338,7 +363,9 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
           if (!named && ticket === statesRead.current) setConnections(null);
           if (!named && bringersTicket === bringersRead.current) setBringerNames(null);
           if (!waitingAnswer) dropAnnouncement();
-          setSnapshot(next);
+          // With the flag as known now: it may have landed while the rest was read.
+          const isGroup = knownFlag();
+          setSnapshot({ ...next, isGroup, counts: isGroup ? null : next.counts });
           setFresh(true);
           syncDevice();
         }
@@ -530,8 +557,10 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
     actingRef.current = true;
     setActing("leave");
     setError(null);
-    // It syncs the reminders and calendar entry, which follow the guest row the leave took away (review I2).
-    const result = await leaveGroup(target.series_id, { userId: userId ?? null, preview });
+    // It syncs the reminders, which follow the guest row the leave took away (review I2); a calendar entry the guest
+    // added stays in their calendar, as after a host's removal. What it does once it went through belongs to this session
+    // only (ruling GR6 M1).
+    const result = await leaveGroup(target.series_id, { userId: userId ?? null, preview }, stillCurrent(captureSession()));
     if (valid()) {
       if (result && !result.left) setError(result.error);
       actingRef.current = false;

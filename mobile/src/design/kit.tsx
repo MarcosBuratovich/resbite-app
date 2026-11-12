@@ -409,6 +409,7 @@ export function CoverCard({
             <View style={styles.titleRow}>
               {titleText}
               <View
+                testID="unread-dot"
                 style={styles.unreadDot}
                 // A pressable card says it in its label; a static one names the dot itself.
                 {...(onPress

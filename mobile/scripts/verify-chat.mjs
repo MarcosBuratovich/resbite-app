@@ -57,6 +57,7 @@
 //   gr4 Leave group answered offline: the confirm stays with the error line, and a second tap calls leave_series again
 //   gr4b a leave whose answer was lost, then 'Not in this group' on the next tap: done, it lands on My resbites (GR4 M-2)
 //   gr4c two taps before a redraw send one leave; a refusal that lands after the menu closed isn't shown again (M3)
+//   gr4d a leave whose answer was lost, then the chat's refused read: done, it lands on My resbites (GR6 M5)
 //   gr5 the header "Every Thursday · 9 in the group"; stopped, "Last one · Thu 27 Nov · 9 in the group", which wraps
 //       whole at 320 px under Larger Text (G-N7); after the last one, the closing line and the computed ended line
 //   gr6 the host's Announce on a group: "Everyone in the group · 9" first and checked, then "Going this Thursday · 6",
@@ -1744,6 +1745,8 @@ try {
     const [summaries, pages] = [f.calls("chat_summary").length, f.calls("chat_messages").length];
     const navigations = [];
     page.on("framenavigated", (frame) => frame === page.mainFrame() && navigations.push(frame.url()));
+    // Its hint says what it does here: it reads the chat again (ruling GR6's accessibility nit).
+    assert.equal(await hintOf(button(page, "Resbite: Next one: Thu 20 Nov · Ana's flat")), "Reloads the chat");
     await button(page, "Resbite: Next one: Thu 20 Nov · Ana's flat").click();
     await expect.poll(() => f.calls("chat_summary").length).toBeGreaterThan(summaries);
     await expect.poll(() => f.calls("chat_messages").length).toBeGreaterThan(pages);
@@ -1864,6 +1867,29 @@ try {
   }
   console.log("PASS (gr4c): two taps on Leave group before a redraw send one leave_series; its refusal, landing after the menu closed, isn't shown when Leave group is asked again.");
 
+  // (gr4d) The leave went through but its answer was lost, and the chat's next read is refused 'Not in this chat': that
+  // finishes the leave on the phone, as 'Not in this group' does (ruling GR6 M5).
+  {
+    const f = await fixture({ now: THU.now, rows: groupRows(), summary: GROUP, refusals: [403] });
+    const { page } = f;
+    f.state.lostLeaves = 1;
+    await openGroup(page);
+    await expect.poll(() => f.joins().length).toBe(1);
+    await f.settle();
+    await button(page, "More").click();
+    await button(page, "Leave group").click();
+    await button(page, "Leave group").click();
+    await expect(text(page, "Check your connection and try again.")).toBeVisible();
+    await button(page, "Close sheet").click();
+    f.signal({ id: 404, kind: "message", state: "sent" });
+    await expect(page).toHaveURL(new RegExp(`/plans$`));
+    await expect(heading(page, "My resbites")).toBeVisible();
+    assert.equal(f.calls("leave_series").length, 1);
+    await f.settle();
+    await f.done();
+  }
+  console.log("PASS (gr4d): after a leave whose answer was lost, the chat's refused read finishes it on the phone and lands on My resbites.");
+
   // (gr5) The group's header, running and stopped; under Larger Text at 320 px it wraps whole (G-N7).
   {
     const f = await fixture({ now: THU.now, rows: groupRows(), summary: GROUP });
@@ -1918,6 +1944,10 @@ try {
     const card = labelled(page, starts("Announcement to everyone in the group, You, Bring your own dice, "));
     await expect(card).toBeVisible();
     await expect(visible(card.getByText("ANNOUNCEMENT · TO EVERYONE IN THE GROUP", { exact: true }))).toBeVisible();
+    // A host's menu has no Leave group: the owner and the admins can't leave (ruling GR6 M10).
+    await button(page, "More").click();
+    await expect(button(page, "People in this group · 9")).toBeVisible();
+    await expect(button(page, "Leave group")).toHaveCount(0);
     await f.done();
   }
   console.log("PASS (gr6): on a group the host's Announce starts on Everyone in the group · 9, then Going this Thursday · 6, with Write an update for the group; the card reads ANNOUNCEMENT · TO EVERYONE IN THE GROUP and is read as Announcement to everyone in the group.");
@@ -1963,7 +1993,29 @@ try {
     await expect(field(page)).toBeVisible();
     await f.done();
   }
-  console.log("PASS (gr8): after Cancel just this one the chat reads Ana cancelled this Thursday, adds no ended line of its own (last week's stored one stays), and keeps the field.");
+  {
+    // The roll then made Thu 27 Nov the current occurrence: the cancelled week's line, and its can't-go line, are an
+    // earlier week's, and read in the one-off words, never "this Thursday" above next week's Next one (ruling GR6 I1).
+    const NEXT_PLAN = "9a000000-0000-4000-8000-000000000027";
+    const f = await fixture({
+      now: "2025-11-24T10:00:00Z",
+      rows: [
+        ...groupRows(),
+        row(408, { kind: "system", event: "cancelled", payload: { actor: ANA, stop: false, starts_at: THU.startsAt, time_zone: "Europe/London" }, at: "2025-11-19T08:00:00Z", plan: GROUP_PLAN }),
+        nextLine(409, NEXT_PLAN, THU.next, "2025-11-21T03:00:00Z"),
+      ],
+      summary: { ...GROUP, plan_id: NEXT_PLAN, starts_at: THU.next, ends_at: "2025-11-27T22:00:00Z" },
+    });
+    const { page } = f;
+    await openGroup(page);
+    await expect(button(page, "Resbite: Next one: Thu 27 Nov · Ana's flat")).toBeVisible();
+    await expect(labelled(page, "Resbite: Ana cancelled the resbite")).toBeVisible();
+    await expect(page.getByText("Ana cancelled this Thursday", { exact: true })).toHaveCount(0);
+    await expect(text(page, "Sol can’t make it")).toBeVisible();
+    await expect(page.getByText("Sol can’t make it this week", { exact: true })).toHaveCount(0);
+    await f.done();
+  }
+  console.log("PASS (gr8): after Cancel just this one the chat reads Ana cancelled this Thursday, adds no ended line of its own (last week's stored one stays), and keeps the field; after the roll, that week's cancelled and can't-go lines read Ana cancelled the resbite and Sol can’t make it.");
 
   // (gr9) A can't-go line taken back within 10 minutes leaves the open screen; the earlier joined line stays.
   {

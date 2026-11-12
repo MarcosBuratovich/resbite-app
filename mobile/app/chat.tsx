@@ -57,7 +57,7 @@ import { chatFeed, nothingSaid, type FeedLink, type FeedRow, type MessageAction 
 import { dismissed, holdError, heldUntil, type HeldError } from "../src/state/heldError";
 import { useNotificationAsk } from "../src/state/useNotificationAsk";
 import { focusedChat, setFocusedChat } from "../src/services/deviceReminders";
-import { leaveGroup, useGroupScreen } from "../src/state/useGroupLeave";
+import { finishLeave, leaveGroup, stillCurrent, useGroupScreen } from "../src/state/useGroupLeave";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -178,6 +178,14 @@ export default function ChatScreen() {
   );
   // A leave of this group that goes through while this chat is in focus lands on My resbites (UI Q4).
   useGroupScreen(focusedSeries);
+  // Refused after a leave whose answer was lost: the leave went through, so it finishes on the phone (ruling GR6 M5).
+  const { session: viewer, preview: previewing, captureSession } = useApp();
+  const refused = valid && !summary && chat.error === CHAT_COPY.notInChat;
+  useEffect(() => {
+    if (refused && focusedSeries)
+      finishLeave(focusedSeries, { userId: viewer?.user.id ?? null, preview: previewing }, stillCurrent(captureSession()));
+    // Only the moment the chat refuses.
+  }, [refused]);
   return (
     <View style={s.page}>
       <Bar
@@ -287,7 +295,7 @@ function Conversation({
   menuOpen: boolean;
   onMenu: (open: boolean) => void;
 }) {
-  const { session, preview } = useApp();
+  const { session, preview, captureSession } = useApp();
   const viewerId = session?.user.id ?? "";
   const largeText = useLargeText();
   const reduce = useReduceMotion();
@@ -598,7 +606,8 @@ function Conversation({
     leavingRef.current = true;
     setLeaving(true);
     setLeaveError(null);
-    const result = await leaveGroup(series, { userId: viewerId || null, preview });
+    // What it does once it went through belongs to this session only (ruling GR6 M1).
+    const result = await leaveGroup(series, { userId: viewerId || null, preview }, stillCurrent(captureSession()));
     leavingRef.current = false;
     if (!mounted.current) return;
     setLeaving(false);
@@ -927,7 +936,7 @@ function RowBody({ row, planId, largeText, onLink, onActions, onAction, onRetry,
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={row.label}
-          accessibilityHint={CHAT_COPY.opensResbite}
+          accessibilityHint={nextOpens(planId) ? CHAT_COPY.opensResbite : CHAT_COPY.reloadsChat}
           onPress={() => (nextOpens(planId) ? router.push({ pathname: "/event", params: { plan: planId } }) : onReread())}
           style={({ pressed }) => [styles.change, pressed && styles.pressed]}
         >

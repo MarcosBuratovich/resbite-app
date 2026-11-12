@@ -90,7 +90,9 @@ The decisions and the calls made while building are in the [decision log](../../
 - **The sender:** no change of this plan's own.
 - **The app** rides the TestFlight build (step 6):
   - the chat screen on a group: the header "Every Thursday · 9 in the group" (or "Last one · Thu 27 Nov · 9 in the group"), the group's field line, the audiences "Everyone in the group" and "Going this Thursday", the group's cards, the owner-alone empty state, "People in this group · 9", the closed card, and "Next one" as a button that opens this week's resbite;
-  - Leave group in the chat's menu, and Leave this group in the resbite page's More, each asking in place. Either way the phone's reminders for it go, My resbites drops the group at once, and the person lands there from the group's chat or resbite page, even if they moved between them while the leave was on its way;
+  - Leave group in the chat's menu, and Leave this group in the resbite page's More, each asking in place. Either way the phone's reminders for it go, My resbites drops the group at once, and the person lands there from the group's chat, resbite page or people list, even if they moved between them while the leave was on its way;
+  - an earlier week's "cancelled" and "can't make it" lines read in the one-off words, never "this Thursday" or "this week" above next week's "Next one";
+  - the resbite page shows at once, as a one-off's, and turns into the group's when `series_is_group` answers;
   - the resbite page's "Group chat" row, the people row's names and the people list's "Not answered yet" for every member;
   - the unread dot on a group member's invitation card on My resbites;
   - the When sheet hides "The chat closes 48 hours after the end time." while the resbite repeats.
@@ -108,7 +110,7 @@ The decisions and calls are in the [decision log](../../knowledge-base/08-decisi
 | `supabase/migrations/20261111120000_connections_follow_ups.sql` (applied by [its runbook](../connections-follow-ups-2026-11-11/README.md)) | `72d1536db56c956ade36844c9d4c715fffa9222090c0cb64226166fff39ae3d6` |
 | `supabase/migrations/20261111130000_circles_of_trust.sql` (applied by [its runbook](../circles-of-trust-2026-11-10/README.md); plan 2's roll copies its body, I9) | `04062e2b091fa582f59a3d1ff9a322e8019ce671c64d532d5c113d0916d77256` |
 | `supabase/migrations/20261111150000_chat_groups.sql` | `068d7f42432862749646b4f7972e6cc9bc226d2670ca82d96610fd3b66759f23` |
-| `supabase/rollback/20261111150000_chat_groups.rollback.sql` | `6927e79a01482d2c675ed84d427db1d2f221e25e70a650c0c40a10fb69b880cc` |
+| `supabase/rollback/20261111150000_chat_groups.rollback.sql` | `100f23695dd9e5d417b10f2ca5c2668864b391a81503d1bebde3a1fd884190aa` |
 | `supabase/tests/hosted-baseline/20261111150000_chat_groups.before.sql` | `5b7ea7535c13d14bd851ed4bb13f7adb4ec09cf00e332775ab9f0d32ee46abc4` |
 | `supabase/tests/hosted-baseline/20261111150000_chat_groups.after.sql` | `f17999bc73863f2e5ac1fa555c30fa2e3dbc5ea46e609c3a8b30a9d1b7c14656` |
 | `supabase/ops/hosted-fingerprint.sql` (unchanged) | `0778c53f98bc1cbdcee82487651dabc3fa246674a5d0efa1d6502e7746819a00` |
@@ -185,7 +187,7 @@ The database suites, the edge tests, the fingerprint replay and the scripts' reh
   - `ch1-throughput.sh`, on five sample answers (clean, clean with `deferred` 4, cut short by a later claim, 503, timed out), read `clean` 2, `cut_short` 1, `failed_or_timed_out` 2 and `deferred` 4.
   - `ch1-rollback.sh` left `realtime_policies` 0. Run again, it failed at its `lock table` and changed nothing.
 
-**Chat groups (12 November 2026).** On `ch2-groups`, with the commits "Groups: the screens, leaving, and the record" and its fix round on base `333747d`, and the migration and rollback at the hashes above.
+**Chat groups (12 November 2026).** On `ch2-groups`, with the commits "Groups: the screens, leaving, and the record", its fix round and the final fix wave on base `333747d`, and the migration and rollback at the hashes above.
 
 - Full mode passes, 55 PASS lines, `chat-groups.sql`, `leave-series-concurrency.sh` and `chat-groups-concurrency.sh` included. Six `messages_signal` WARNINGs are expected, as for chat core.
 
@@ -202,9 +204,9 @@ The database suites, the edge tests, the fingerprint replay and the scripts' reh
   - Name all four. Bare, this mode fails by design until all four are live.
   - `.after.sql` asserts the backfill's cases (G-B7): a long-finished stopped group comes out closed, one stopped by Edit after its end stays open until 48 hours after it, one cancelled ahead of its date stays open 48 hours from the migration, a running one has no close time, and a one-off keeps chat core's close. Then the new objects: `stopped_at`, `series_leaves` with RLS on, no policy and no grant, the two calls for `authenticated` only, every private function a definer with an empty `search_path`, the two triggers, and the redefined functions' grants kept.
   - It then rehearses the rollback in a transaction it rolls back: each of the 12 restored bodies equals its source byte for byte with its grants, every addition is gone and `is_group` reads false everywhere. Inside the same transaction chat core's, circles' and follow-ups' rollbacks then run, each passing its guard (Task 2).
-- The app check passes: the typecheck, 1,094 tests and the content validation (`(cd mobile && npm run check)`).
+- The app check passes: the typecheck, 1,101 tests and the content validation (`(cd mobile && npm run check)`).
 - Every edge test file passes, 107 tests in 11 files, unchanged by this plan.
-- **The browser scripts**, against a fake project URL with every Supabase request stubbed, on Expo web started after the last edit: `verify-chat.mjs` 57 (the group scenarios gr1 to gr9, gr4b and gr4c among them), `verify-event.mjs` 29, `review-ui.mjs` passed and `verify-planning.mjs` 16. Because the resbite page now reads `series_is_group`, the scripts that open it stub that call too; `verify-circle.mjs` 6, `verify-rsvp.mjs`, `verify-connections.mjs` 9, `verify-contact-invites.mjs` 6 and `verify-account.mjs` passed with them.
+- **The browser scripts**, against a fake project URL with every Supabase request stubbed, on Expo web started after the last edit: `verify-chat.mjs` 58 (the group scenarios gr1 to gr9 and gr4b to gr4d among them), `verify-event.mjs` 30, `review-ui.mjs` passed and `verify-planning.mjs` 16. Because the resbite page now reads `series_is_group`, the scripts that open it stub that call too; `verify-circle.mjs` 6, `verify-rsvp.mjs`, `verify-connections.mjs` 9, `verify-contact-invites.mjs` 6 and `verify-account.mjs` passed with them.
 - **The fingerprint, on a local replay** (as for chat core). From chat core's 464 there are 479.
   - 15 objects are added: nine functions (`leave_series` and `series_is_group`, each public and private, and the private `attendees_clear_leave`, `chat_hide_line`, `chat_place_hidden`, `group_stopped` and `plans_group_flag`), the table `private.series_leaves` with its key, its foreign key and its index, and the triggers `plans_group_flag` and `attendees_clear_leave`.
   - 13 change by definition: `public.chats` (its `stopped_at`), and the private `attendees_chat_lines`, `plans_chat_lines`, `chat_member`, `chat_closes_at`, `chat_open`, `chat_summary`, `chat_row`, `my_chat_overview`, `notification_recipient_eligible`, `can_see_guests`, `request_connection` and `roll_repeating_plans`.
@@ -254,6 +256,7 @@ The database suites, the edge tests, the fingerprint replay and the scripts' reh
      - **G-QA, the place in a group's chat lines (I11, Decision 11).** "Next one: Thu 20 Nov · Ana's flat" and the place-change line are read by members who haven't answered, people a guest brought among them. Their resbite page shows them only the area. **Default: the place is hidden from them, server-side** (`private.chat_place_hidden`, `private.chat_row`). The alternative, the place for every member (the spec's wording), is one condition in `private.chat_row`.
      - **G-QB, resuming a stopped group (I8, Decision 12).** After "Doesn't repeat" and then "Every week" again, the chat would still say "Ana stopped repeating this · the last one is Thu 27 Nov". **Default: that line is removed, with no new words.** The alternative, a new line such as "Ana set this to repeat again", needs approved wording.
      - **G-QC, the circles runbook's CO-Q1 (I9, Decision 13), still open there.** Is a brought person who said Can't go carried to the next occurrence? **Default: carried, as built**, the only answer that fits "everyone in a group is in its chat whatever their reply". If the owner chooses the alternative, the circles roll changes before the circles migration, and plan 2's copy of it is re-based on the new circles body and hash before step 2.
+     - **G-QD, "this Thursday" on a fortnightly group (ruling GR6 M9).** The audience row, an announcement card's heading and the cancelled line say "this Thursday" for the current occurrence, which on a group that repeats every 2 weeks can be up to 13 days ahead. That is the spec's wording, written with a weekly example. **Default: unchanged, "this Thursday" on every group.** The alternative, the date ("Going on Thu 27 Nov"), is new wording in the app only.
      - Not owner questions: P2-Q1 to P2-Q4 are ruled (plan 2's Decisions 7 to 10). Their limits are under Known gaps.
    - Plan 3 adds its own questions here (for example the support address, the moderators and the blocked terms).
 1. **Before snapshot, the history, the Realtime checks and the series count.** Read-only, into this directory, with `! bash ~/ch1-before.sh`:
@@ -429,7 +432,7 @@ The database suites, the edge tests, the fingerprint replay and the scripts' reh
        - `groups` equals `repeating_series`: the series with any occurrence whose `repeat_weeks` or `repeats_from` is set. `leaves` 0.
        - **The backfill's cases (G-B7).** `stopped_closed` counts the long-finished stopped groups, closed; `stopped_open` the recently stopped ones, open until 48 hours after their last end (a cancelled one's, 48 hours after its stop). So `latest_closed_stop` is more than 48 hours ago, and `latest_open_stop` within the last 48 hours. `running` are the groups still repeating, with no close time.
        - `members_may_leave`, `members_may_ask` and `private_granted` true: the public call is an invoker over the private body, which is granted to `authenticated`, chat core's pattern (`supabase/migrations/20261111150000_chat_groups.sql:564`). `anon_may_leave` false, and `helper_granted` false: `private.group_stopped`, a helper only the database calls, is revoked from every API role (`:77`).
-     - **Advisors.** This plan adds no public table, so no new `rls_enabled_no_policy` line. Its two public calls are invokers and every new private function is a definer with an empty `search_path`, so neither `*_security_definer_function_executable` lint gains a line. `unindexed_foreign_keys` gains an INFO line for `series_leaves_user_id_fkey`: no index leads with `user_id`, and the key serves only the cascade from `public.profiles`, as chat core's three do. No `unused_index` line is expected (that lint skips primary keys). Stop for anything else new.
+     - **Advisors.** `rls_enabled_no_policy` gains an INFO line for `private.series_leaves`: RLS on and no policy, so no API role may read or write it, as for the other private tables the advisors already list (re-review N1). This plan adds no public table. Its two public calls are invokers and every new private function is a definer with an empty `search_path`, so neither `*_security_definer_function_executable` lint gains a line. `unindexed_foreign_keys` gains an INFO line for `series_leaves_user_id_fkey`: no index leads with `user_id`, and the key serves only the cascade from `public.profiles`, as chat core's three do. No `unused_index` line is expected (that lint skips primary keys). Stop for anything else new.
      - Append this line to `supabase/tests/hosted-baseline/migrations.txt`:
 
        ```
@@ -598,7 +601,7 @@ Only with the owner's approval, in one transaction.
    cd "${REPO:-$HOME/dev/resbite-app}"
    D=qa/chat-release
    F=supabase/rollback/20261111150000_chat_groups.rollback.sql
-   echo "6927e79a01482d2c675ed84d427db1d2f221e25e70a650c0c40a10fb69b880cc  $F" | sha256sum -c -
+   echo "100f23695dd9e5d417b10f2ca5c2668864b391a81503d1bebde3a1fd884190aa  $F" | sha256sum -c -
    mkdir -p /tmp/ch2 && { echo 'begin;'; cat "$F"; echo; echo 'commit;'; } > /tmp/ch2/rollback.sql
    supabase db query --linked -f /tmp/ch2/rollback.sql
    supabase db query --linked -f supabase/ops/hosted-fingerprint.sql -o json > "$D/hosted-after-rollback-groups.json"

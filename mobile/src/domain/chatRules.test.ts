@@ -20,6 +20,7 @@ import {
   groupDay,
   hasVisibleText,
   headerLine,
+  invitationDot,
   invitationNote,
   isSeriesId,
   linkHost,
@@ -1101,4 +1102,27 @@ test("nextOpens: a Next one line opens the current occurrence only when the summ
   assert.equal(nextOpens(""), false);
   assert.equal(nextOpens("not-a-plan"), false);
   assert.equal(nextOpens("0C000000-0000-4000-8000-000000000001"), false, "the server writes ids in lower case");
+});
+
+// Ruling GR6 (M6): the invitation card's unread dot is a group member's (I3). Someone pending on a one-off is in its chat
+// only as an admin, a host, whose card gains no dot; a pending guest is in a chat only on a group.
+test("invitationDot: a group member's invitation card carries the chat's dot; a one-off admin's doesn't", () => {
+  const ME = "0a000000-0000-4000-8000-000000000003";
+  const SERIES = "0b000000-0000-4000-8000-000000000001";
+  const plan = { id: "0c000000-0000-4000-8000-000000000001", series_id: SERIES, repeat_weeks: null, repeats_from: null, admins: [] as string[] };
+  const overview = (unread: boolean, open = true) => ({ chats: { [SERIES]: { unread, open, last: null, count: 3 } }, announcements: {}, names: {} });
+  const current = new Set([plan.id]);
+  // A guest who hasn't answered is listed in a chat only on a group: the dot.
+  assert.equal(invitationDot(plan, ME, current, overview(true)), true);
+  // An admin who hasn't answered: only when the plan shows it is a group's (it repeats, or was rolled from another).
+  const admin = { ...plan, admins: [ME] };
+  assert.equal(invitationDot(admin, ME, current, overview(true)), false);
+  assert.equal(invitationDot({ ...admin, repeat_weeks: 1 }, ME, current, overview(true)), true);
+  assert.equal(invitationDot({ ...admin, repeats_from: "0c000000-0000-4000-8000-000000000000" }, ME, current, overview(true)), true);
+  // The tile's rules: read, closed, not the current occurrence, or no entry: no dot.
+  assert.equal(invitationDot(plan, ME, current, overview(false)), false);
+  assert.equal(invitationDot(plan, ME, current, overview(true, false)), false);
+  assert.equal(invitationDot(plan, ME, new Set(), overview(true)), false);
+  assert.equal(invitationDot(plan, ME, current, null), false);
+  assert.equal(invitationDot(plan, ME, current, { chats: {}, announcements: {}, names: {} }), false);
 });

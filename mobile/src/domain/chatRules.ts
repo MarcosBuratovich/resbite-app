@@ -219,22 +219,35 @@ function nextText(p: Record<string, unknown>): string {
   return detail ? `Next one: ${detail}` : "Next one";
 }
 
-/** A `cancelled` line: a one-off's as built; a group's names the week it cancelled, or the group if it stops (G-S2). */
-function cancelledText(p: Record<string, unknown>, who: string | null, group: boolean): string {
+/**
+ * A `cancelled` line: a one-off's as built; a group's names the week it cancelled ("this Thursday") while that week is
+ * the current one (`current`), or the group if it stops (G-S2). An earlier week's reads as a one-off's, with no weekday
+ * (ruling GR6 I1), as an earlier announcement does (GR1).
+ */
+function cancelledText(p: Record<string, unknown>, who: string | null, group: boolean, current: boolean): string {
   if (!who) return "The resbite was cancelled";
   if (group && p.stop === true) return `${who} cancelled the group`;
-  const day = group ? longWeekday(p.starts_at, p.time_zone) : "";
+  const day = group && current ? longWeekday(p.starts_at, p.time_zone) : "";
   return day ? `${who} cancelled this ${day}` : `${who} cancelled the resbite`;
 }
 
 /**
  * Resbite's own line, worded on the phone (Decision 1, K-B2). A person is named through `names`, "Someone" when the read
  * could not name them, and "You" when they are the reader. `group` picks a group's words where they differ (plan
- * 2: "can’t make it this week", a cancelled week); `title` names an `ended` line whose payload has none. A line that is
- * no longer `sent` (a group's deleted `cant_go` or `stopped`, Decision 6) and an event this build does not know give
- * no line (""). A line's day is worded with no `now`, so it never shows a year (challenge NOTE 2).
+ * 2: "can’t make it this week", a cancelled week); `title` names an `ended` line whose payload has none. `current` says
+ * the row is the current occurrence's (`isCurrentRow`): a group's line about an earlier week reads in the one-off words,
+ * never "this week" or "this Thursday" (ruling GR6 I1). A line that is no longer `sent` (a group's deleted `cant_go` or
+ * `stopped`, Decision 6) and an event this build does not know give no line (""). A line's day is worded with no `now`,
+ * so it never shows a year (challenge NOTE 2).
  */
-export function systemText(m: ChatMessage, names: ChatNames, viewerId: string, group: boolean, title: string): string {
+export function systemText(
+  m: ChatMessage,
+  names: ChatNames,
+  viewerId: string,
+  group: boolean,
+  title: string,
+  current = true,
+): string {
   if (m.state !== "sent") return "";
   const p = isObject(m.payload) ? m.payload : {};
   const actor = text(p.actor);
@@ -247,13 +260,13 @@ export function systemText(m: ChatMessage, names: ChatNames, viewerId: string, g
       return withDetail(`${subject} joined`, brought && `brought by ${brought}`);
     }
     case "cant_go":
-      return group ? `${subject} can’t make it this week` : `${subject} can’t make it`;
+      return group && current ? `${subject} can’t make it this week` : `${subject} can’t make it`;
     case "admin":
       return text(p.user) === viewerId ? `${subject} are now an admin` : `${subject} is now an admin`;
     case "changed":
       return changedText(p, who);
     case "cancelled":
-      return cancelledText(p, who, group);
+      return cancelledText(p, who, group, current);
     case "ended": {
       const name = cleanText(p.title) || cleanText(title);
       return name ? CHAT_COPY.ended(name) : "";
@@ -304,6 +317,22 @@ export function rowText(last: ChatMessage | null, names: ChatNames, viewerId: st
  */
 export const unreadDot = (entry: ChatOverview["chats"][string] | undefined): boolean =>
   entry?.open === true && entry.unread === true;
+
+/**
+ * An invitation card's unread dot (I3, ruling GR6 M6): a group member's, as the tile's (`unreadDot`, the current
+ * occurrence only). Someone who hasn't answered is in a one-off's chat only as an admin, a host, whose card gains no dot;
+ * so an admin's card carries it only when the plan shows it is a group's (it repeats, or was rolled from another).
+ */
+export function invitationDot(
+  plan: { id: string; series_id: string; repeat_weeks?: number | null; repeats_from?: string | null; admins?: readonly string[] },
+  viewerId: string,
+  current: ReadonlySet<string>,
+  overview: ChatOverview | null,
+): boolean {
+  const group = plan.repeat_weeks != null || !!plan.repeats_from;
+  const admin = (plan.admins ?? []).includes(viewerId);
+  return current.has(plan.id) && (group || !admin) && unreadDot(overview?.chats[plan.series_id]);
+}
 
 /**
  * The line under an invitation card's title for someone invited who hasn't answered: the latest "Everyone invited"
@@ -427,7 +456,10 @@ export const groupDay = (summary: Pick<ChatSummary, "startsAt" | "timeZone">): s
  * a row that names one isn't taken for it.
  */
 export const dayFor = (m: Pick<ChatMessage, "planId">, planId: string, day: string): string =>
-  !m.planId || m.planId === planId ? day : "";
+  isCurrentRow(m, planId) ? day : "";
+
+/** A row of the current occurrence (`planId`, the summary's), or one that doesn't say which it belongs to (GR1, GR6). */
+export const isCurrentRow = (m: Pick<ChatMessage, "planId">, planId: string): boolean => !m.planId || m.planId === planId;
 
 /**
  * The announcement sheet's two radios, in order, the first its starting audience (`defaultAudience`, K-N7). A
@@ -539,9 +571,10 @@ export function messageLabel(
   sending?: "sending" | "failed" | "closed",
   group = false,
   day = "",
+  current = true,
 ): string | null {
   if (m.kind === "system") {
-    const line = systemText(m, names, viewerId, group, "");
+    const line = systemText(m, names, viewerId, group, "", current);
     return line ? `Resbite: ${line}` : null;
   }
   const shown = words(m);

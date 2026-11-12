@@ -117,13 +117,14 @@ export default function EventPage() {
   }, [moreOpen, stillOpen, leaveOffered]);
   useEffect(() => {
     if (!moreOpen) return;
-    const back = backFromLeave.current;
+    const fromLeave = backFromLeave.current;
     backFromLeave.current = false;
-    if (moreView !== "leave" && !(moreView === "rows" && back)) return;
+    if (moreView !== "leave" && !(moreView === "rows" && fromLeave)) return;
     const frame = requestAnimationFrame(() => focusHeading(moreView === "leave" ? leaveQuestion.current : leaveRow.current));
     return () => cancelAnimationFrame(frame);
   }, [moreOpen, moreView]);
-  // A leave of this group that goes through while this page is in focus lands on My resbites (UI Q4).
+  // A leave of this group that goes through while this page is in focus lands on My resbites (UI Q4), even when the
+  // page's read failed meanwhile: the hook keeps the series it was last given (ruling GR6 M3).
   useGroupScreen(preview ? null : plan?.series_id);
 
   if (!plan || !role)
