@@ -40,6 +40,8 @@
 //       no poll
 //   m   the pinned card loads back to an unloaded message and scrolls to it (K-S12)
 //   n   the host's empty state: Nobody's going yet, Invite people (H12); a guest's: No messages yet
+//   ask Task 8 (CH-P17, K-N15): the first open of a chat, with the phone's permission never asked for, brings "Get
+//       notified?" once; Not now closes it, and the next open doesn't bring it again; nobody outside the chat is asked
 import assert from "node:assert/strict";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -157,7 +159,7 @@ const PICNIC = {
  * the server clock against `closes_at` unless the summary says otherwise. `socket: "refuse"` closes every socket.
  * `queue` seeds the phone's unsent messages.
  */
-async function fixture({ viewer = PEDRO, now = OCT.now, rows = octRows(), summary = {}, socket = "ok", width = 390, height = 844, queue = null, refusals = [] } = {}) {
+async function fixture({ viewer = PEDRO, now = OCT.now, rows = octRows(), summary = {}, socket = "ok", width = 390, height = 844, queue = null, refusals = [], permission = "denied" } = {}) {
   const context = await browser.newContext({
     viewport: { width, height },
     reducedMotion: "reduce",
@@ -170,8 +172,9 @@ async function fixture({ viewer = PEDRO, now = OCT.now, rows = octRows(), summar
   let jumped = 0;
   const serverNow = () => Date.parse(now) + (Date.now() - installed) + jumped;
   await page.addInitScript(
-    ({ key, session, queueKey, queue }) => {
-      globalThis.__resbiteDevice ??= { reminders: [], calendar: [], permission: "denied" };
+    ({ key, session, queueKey, queue, permission }) => {
+      // "denied" keeps "Get notified?" away (scenario ask covers it): it schedules nothing and never asks.
+      globalThis.__resbiteDevice ??= { reminders: [], calendar: [], permission };
       if (!sessionStorage.getItem("fixture-seeded")) {
         sessionStorage.setItem(key, JSON.stringify(session));
         if (queue) sessionStorage.setItem(queueKey, JSON.stringify(queue));
@@ -196,6 +199,7 @@ async function fixture({ viewer = PEDRO, now = OCT.now, rows = octRows(), summar
       },
       queueKey: `resbite.chat-queue.v1.${viewer}`,
       queue,
+      permission,
     },
   );
   const state = {
@@ -1333,6 +1337,37 @@ try {
     await f.done();
   }
   console.log("PASS (y): an old chat's header, closed card, separators and labels carry the year.");
+
+  // (ask) The chat is the moment for the notification ask (CH-P17, K-N15).
+  {
+    const f = await fixture({ permission: "undetermined" });
+    const { page } = f;
+    await openChat(page);
+    await expect(heading(page, "Get notified?")).toBeVisible();
+    await expect(button(page, "Turn on notifications")).toBeVisible();
+    await button(page, "Not now").click();
+    await expect(heading(page, "Get notified?")).toHaveCount(0);
+    await expect(field(page)).toBeVisible();
+    // Shown counts as asked: the next open of a chat doesn't ask again.
+    await page.reload();
+    await expect(heading(page, "Picnic in the park")).toBeVisible();
+    await expect(text(page, "Count me in")).toBeVisible();
+    await page.waitForTimeout(800);
+    await expect(heading(page, "Get notified?")).toHaveCount(0);
+    await f.done();
+  }
+  // Someone who isn't in the chat isn't asked there.
+  {
+    const f = await fixture({ permission: "undetermined", refusals: [403] });
+    f.state.member = false;
+    const { page } = f;
+    await page.goto(`${base}/chat?series=${SERIES}`);
+    await expect(text(page, "You’re not in this chat.")).toBeVisible();
+    await page.waitForTimeout(800);
+    await expect(heading(page, "Get notified?")).toHaveCount(0);
+    await f.done();
+  }
+  console.log("PASS (ask): the first open of a chat brings Get notified? once, with Turn on notifications and Not now; it doesn't come back on the next open, nor for someone outside the chat.");
 
   // (g4) The announcement sheet open at the close closes with it (H32 Q45).
   {

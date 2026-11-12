@@ -64,3 +64,20 @@ export function reminderChanges(
   const kept = new Set(ours.filter((s) => !cancel.includes(s)).map((s) => s.id));
   return { cancel: cancel.map((s) => s.id), schedule: wanted.filter((r) => !kept.has(r.id)) };
 }
+
+/**
+ * Whether a notification that arrives while Resbite is open shows as a banner and in the list (K-S9): reminders and
+ * plan-update pushes as before, and a chat push unless its own chat is the screen in focus (`focusedSeries`), where the
+ * message is already arriving. Anything else (a connection push, a type this build doesn't know) stays out, as before.
+ */
+export function showsInForeground(
+  identifier: string,
+  data: Record<string, unknown> | null | undefined,
+  focusedSeries: string | null,
+): boolean {
+  if (identifier.startsWith(REMINDER_PREFIX)) return true;
+  const type = data?.type;
+  if (type === "plan_update") return true;
+  if (type === "chat") return focusedSeries === null || data?.seriesId !== focusedSeries;
+  return false;
+}

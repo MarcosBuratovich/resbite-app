@@ -15,6 +15,7 @@ import {
   Ellipsis,
   MapPin,
   MessageCircle,
+  MessageSquare,
   Pencil,
   RefreshCw,
   Repeat,
@@ -41,6 +42,7 @@ import {
   bringRow,
   byline,
   cancelQuestion,
+  chatRow,
   EVENT_COPY,
   hostLabel,
   moreRows,
@@ -56,6 +58,7 @@ import {
 import { ANSWER_OPTIONS, answerKey, canRespond, responseFor, type Response } from "../src/domain/rsvp";
 import { firstName } from "../src/domain/circle";
 import { CIRCLE_COPY } from "../src/domain/circleCopy";
+import { CHAT_COPY } from "../src/domain/chatCopy";
 import { INVITE_COPY } from "../src/domain/inviteCopy";
 import { useApp } from "../src/state/AppState";
 import { useEvent } from "../src/state/useEvent";
@@ -70,7 +73,7 @@ const deviceZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 /** One page for both roles (spec CR-06, CR-06a, CR-07): /event?plan=<id>. */
 export default function EventPage() {
   const { plan: planId, notice, cover } = useLocalSearchParams<{ plan?: string; notice?: string; cover?: string }>();
-  const { preview } = useApp();
+  const { preview, session } = useApp();
   const event = useEvent(planId);
   const pathname = usePathname();
   const [toast, setToast] = useState<string>();
@@ -156,6 +159,8 @@ export default function EventPage() {
     broughtNames: event.broughtNames,
     host: firstName(organizer) || INVITE_COPY.hostFallback,
   });
+  // CH-P14: the series' chat, for the people in it; none when the read was refused or failed (K-S13).
+  const chat = chatRow(event.chat, session?.user.id ?? "");
   const rows = moreRows({ role, state, muted: event.muted, response, calendar: device.shown });
   const hasMore = rows.length > 0;
   const closeMore = () => setMoreOpen(false);
@@ -184,6 +189,9 @@ export default function EventPage() {
   }
   function bringSomeone() {
     router.push({ pathname: "/invitations", params: { plan: current.id, bring: "1" } });
+  }
+  function openChat() {
+    router.push({ pathname: "/chat", params: { series: current.series_id } });
   }
   const acting = event.acting !== null;
   const answerControl = (after?: (saved: Response) => void | Promise<void>) =>
@@ -374,6 +382,7 @@ export default function EventPage() {
           onOpen={answeredGuest ? openPeople : undefined}
         />
         {bring && <BringRow row={bring} onOpen={bringSomeone} />}
+        {chat && <ChatRow row={chat} onOpen={openChat} />}
         {!!current.description && <Copy>{current.description}</Copy>}
         {current.categories.length > 0 && (
           <View style={styles.chips}>
@@ -539,6 +548,36 @@ function BringRow({ row, onOpen }: { row: NonNullable<ReturnType<typeof bringRow
   );
 }
 
+/**
+ * The Chat row (CH-P14, CH-01), after the people row and Bring someone: a speech bubble, "Chat" and the latest line in
+ * the muted style, a neutral dot when unread, and the chevron; after the close, "Chat closed · 23 messages" alone. It
+ * opens the chat, closed or not (reading stays). The dot is said at the end of the label (CH-P9).
+ */
+function ChatRow({ row, onOpen }: { row: NonNullable<ReturnType<typeof chatRow>>; onOpen: () => void }) {
+  const title = row.closed ? row.text : CHAT_COPY.chat;
+  const line = row.closed ? null : row.text;
+  const label = [title, line].filter(Boolean).join(". ") + (row.dot ? `, ${CHAT_COPY.unreadMessages}` : "");
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onOpen} style={styles.card}>
+      <View aria-hidden importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={styles.chatIcon}>
+        <MessageSquare size={20} strokeWidth={1.8} color={c.ink} />
+      </View>
+      <View style={styles.rowText}>
+        <Text style={styles.rowTitle}>{title}</Text>
+        {!!line && (
+          <Text numberOfLines={2} style={styles.chatLine}>
+            {line}
+          </Text>
+        )}
+      </View>
+      {row.dot && <View aria-hidden importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={styles.dot} />}
+      <View aria-hidden importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+        <ChevronRight size={20} strokeWidth={1.8} color={c.muted} />
+      </View>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   chips: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 },
   row: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 44, paddingVertical: 6 },
@@ -564,6 +603,11 @@ const styles = StyleSheet.create({
   rowTitle: { fontFamily: fonts.medium, fontSize: 15, color: c.ink },
   // Ink, not muted: muted is 4.48:1 on the aqua wash, under 4.5:1 for 12 pt text.
   hint: { fontFamily: fonts.body, fontSize: 12, lineHeight: 17, color: c.ink },
+  // The mockup’s row card: the icon in a neutral circle; the latest line muted on white (4.7:1).
+  chatIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: c.surface, alignItems: "center", justifyContent: "center" },
+  chatLine: { fontFamily: fonts.body, fontSize: 12, lineHeight: 17, color: c.muted },
+  // The unread dot: neutral, no number (CH-P9).
+  dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: c.ink },
   answer: {
     paddingHorizontal: space.l,
     paddingTop: space.m,

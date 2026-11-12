@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
-import { quietReminders } from "./qa-helpers.mjs";
+import { AUTH_STORAGE_KEY, quietReminders } from "./qa-helpers.mjs";
 const browser = await chromium.launch({
   channel: process.env.RESBITE_QA_BROWSER || "chrome",
   headless: true,
@@ -57,22 +57,20 @@ try {
   // Answering Going would otherwise ask "Get notified?" (verify-event covers it).
   await quietReminders(page);
   await page.addInitScript(
-    (session) =>
-      sessionStorage.setItem(
-        "sb-ewcsgvhuojxdpaspwsrx-auth-token",
-        JSON.stringify(session),
-      ),
-    session,
+    ({ key, session }) => sessionStorage.setItem(key, JSON.stringify(session)),
+    { key: AUTH_STORAGE_KEY, session },
   );
   let attendee = { version: 1, response: "pending" },
     writes = 0,
     claims = 0,
     lost = true,
     conflict = false,
-    failWithoutCommit = false;
+    failWithoutCommit = false,
+    chatReads = 0;
   const fixturePlan = {
     ...plan,
     owner_id: "33333333-3333-4333-8333-333333333333",
+    series_id: "55555555-5555-4555-8555-555555555555",
   };
   await page.route("**/*.supabase.co/**", async (route) => {
     const req = route.request(),
@@ -101,6 +99,41 @@ try {
     // An invitee who hasn't answered reads the people counts from the server (plan_people_counts): here, only them.
     if (path === "/rest/v1/rpc/plan_people_counts")
       return reply({ going: attendee.response === "accepted" ? 1 : 0, maybe: attendee.response === "maybe" ? 1 : 0, cant_go: ["declined", "withdrawn"].includes(attendee.response) ? 1 : 0 });
+    // Task 8: the Chat row. Someone who hasn't answered, or can't go, is not in a one-off's chat (42501, no row); Going
+    // or Maybe is, and the row shows.
+    if (path === "/rest/v1/rpc/chat_summary") {
+      chatReads++;
+      if (!["accepted", "maybe"].includes(attendee.response))
+        return reply({ code: "42501", message: "Not in this chat", details: null, hint: null }, 403);
+      return reply({
+        series_id: fixturePlan.series_id,
+        plan_id: plan.id,
+        title: plan.title,
+        starts_at: plan.starts_at,
+        ends_at: null,
+        time_zone: "UTC",
+        status: fixturePlan.status,
+        repeat_weeks: null,
+        is_group: false,
+        stopped: false,
+        closes_at: "2099-03-03T15:00:00Z",
+        open: fixturePlan.status === "active",
+        host: false,
+        accepted: 1,
+        members: 2,
+        going: 2,
+        everyone: 2,
+        pinned: null,
+        last: null,
+        names: {},
+        muted_chat: false,
+        muted_resbite: false,
+        last_read_id: null,
+        unread: false,
+        message_count: 0,
+      });
+    }
+    if (path === "/rest/v1/rpc/my_chat_overview") return reply({ chats: {}, announcements: {}, names: {} });
     if (path === "/rest/v1/rpc/claim_invite") {
       claims++;
       assert.equal(
@@ -131,47 +164,27 @@ try {
     }
     return reply({ message: "Unexpected intercepted endpoint" }, 400);
   });
-  await page.goto(`${base}/sample-chat?plan=${plan.id}`);
-  await expect(
-    page.getByText(
-      "The sample is available after an accepted RSVP for an active plan that hasn’t ended.",
-      { exact: true },
-    ),
-  ).toBeVisible();
-  await expect(page.getByText("Sam · fictional", { exact: true })).toHaveCount(
-    0,
-  );
   await page.goto(`${base}/event?plan=${plan.id}`);
   // An unanswered guest sees the answer control in the bottom bar, and no More.
   await expect(page.getByRole("radiogroup", { name: "Your answer", exact: true })).toBeVisible();
   await expect(page.getByRole("radio", { name: "Maybe", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "More", exact: true })).toHaveCount(0);
+  // Not answered yet: not in the chat, so no Chat row (CH-P14).
+  await expect.poll(() => chatReads).toBeGreaterThan(0);
+  await expect(page.getByRole("button", { name: /^Chat\b/ })).toHaveCount(0);
   await page.getByRole("radio", { name: "Going", exact: true }).click();
   await expect(
     page.getByText("Your response is saved.", { exact: true }),
   ).toBeVisible();
   assert.equal(writes, 1);
-  // Going shows the reply with Change, and the accepted-only sample is open at its own address.
+  // Going shows the reply with Change, and the saved answer brings the Chat row with it: Going is in the chat.
   await expect(page.getByText("You’re going", { exact: true })).toBeVisible();
-  await page.goto(`${base}/sample-chat?plan=${plan.id}`);
-  await expect(
-    page.getByText("Sam · fictional", { exact: true }),
-  ).toBeVisible();
-  await expect(page.getByRole("textbox")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Chat. No messages yet", exact: true })).toBeVisible();
   attendee = { version: 3, response: "withdrawn" };
-  await page.reload();
-  await expect(
-    page.getByText(
-      "The sample is available after an accepted RSVP for an active plan that hasn’t ended.",
-      { exact: true },
-    ),
-  ).toBeVisible();
-  await expect(page.getByText("Sam · fictional", { exact: true })).toHaveCount(
-    0,
-  );
   await page.goto(`${base}/event?plan=${plan.id}`);
-  // Withdrawn reads You can’t go with Change; the answer sheet holds the control.
+  // Withdrawn reads You can’t go with Change; the answer sheet holds the control. Can’t go is out of the chat: no row.
   await expect(page.getByText("You can’t go", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Chat\b/ })).toHaveCount(0);
   conflict = true;
   await page.getByRole("button", { name: "Change your answer", exact: true }).click();
   await page.getByRole("radio", { name: "Going", exact: true }).click();
@@ -244,33 +257,16 @@ try {
   await previewPage.goto(base);
   await previewPage.getByText("Preview the design", { exact: true }).click();
   await previewPage.getByRole("tab", { name: "Profile", exact: true }).click();
-  await previewPage
-    .getByRole("button", { name: "Sample conversation", exact: true })
-    .click();
-  await expect(
-    previewPage.getByText("Sam · fictional", { exact: true }),
-  ).toBeVisible();
-  await expect(previewPage.getByRole("textbox")).toHaveCount(0);
-  await previewPage
-    .getByText("End of fictional sample. There is nothing to send.", {
-      exact: true,
-    })
-    .scrollIntoViewIfNeeded();
-  await expect(
-    previewPage.getByText("Fictional · read-only · design preview", {
-      exact: true,
-    }),
-  ).toBeInViewport();
-  await expect(
-    previewPage.getByRole("heading", {
-      name: "Sample conversation",
-      exact: true,
-    }),
-  ).toBeInViewport();
+  await expect(previewPage.getByRole("button", { name: "Data & privacy", exact: true })).toBeVisible();
+  // The sample chat is gone (Task 8): no row in the preview's Profile, and no screen at its old address.
+  await expect(previewPage.getByRole("button", { name: "Sample conversation", exact: true })).toHaveCount(0);
+  await previewPage.goto(`${base}/sample-chat?plan=${plan.id}`);
+  await expect(previewPage.getByText("Unmatched Route", { exact: true })).toBeVisible();
+  await expect(previewPage.getByText("Sam · fictional", { exact: true })).toHaveCount(0);
   assert.deepEqual(previewRequests, []);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: lost RSVP reply reconciliation, conflict review (Can’t go), cancellation, accepted-only fictional sample with no composer. All backend requests intercepted.",
+    "PASS: lost RSVP reply reconciliation, conflict review (Can’t go), cancellation; the Chat row only once the answer is Going (chat_summary refused before and after Can’t go); no sample chat in Profile or at /sample-chat. All backend requests intercepted.",
   );
 } finally {
   await browser.close();

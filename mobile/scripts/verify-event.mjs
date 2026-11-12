@@ -15,11 +15,15 @@
 //              admin on a Maybe admin, Approve, Send again only for a code this phone holds, an app invitation’s Remove
 // Nobody here is connected with the viewer (plan_connection_states answers {}), so every answered row but the
 // viewer's own, the owner's included, offers Connect on Resbite before any host action.
+//   chat       Task 8 (CH-P14, K-S13): the Chat row after the people row and Bring someone, with the latest line and the
+//              dot in words; its tap opens /chat?series=; closed it reads Chat closed · 23 messages with no dot, and a
+//              closed chat with no message has no row; a refused (42501) or failing chat_summary hides the row while the
+//              page still renders. Unless a scenario gives `chat`, chat_summary refuses (not in the chat).
 //   edges      /guests and /event without a plan; Back with no history; a failed read offers Try again
 //   idea       Back over the image, Use idea
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
-import { quietReminders } from "./qa-helpers.mjs";
+import { AUTH_STORAGE_KEY, inOrder, quietReminders } from "./qa-helpers.mjs";
 
 const base = process.env.RESBITE_QA_URL || "http://localhost:8081";
 const browser = await chromium.launch({
@@ -154,6 +158,10 @@ async function open(world = {}) {
     endsOnCancel: Boolean(world.endsOnCancel),
     // appoint_admin refuses these people: they have never used the app.
     neverUsedApp: world.neverUsedApp ?? [],
+    // chat_summary's answer (Task 8): a summary, "refused" (42501 'Not in this chat', the default) or "failed" (a 500).
+    chat: world.chat ?? "refused",
+    // my_bring_allowance's answer for a guest, when the scenario lets them bring.
+    allowance: world.allowance ?? null,
     uploads: [],
   };
   const log = [];
@@ -168,11 +176,12 @@ async function open(world = {}) {
   const page = await context.newPage();
   page.on("pageerror", (e) => errors.push(e.message));
   await page.addInitScript(
-    ({ s, store }) => {
-      sessionStorage.setItem("sb-ewcsgvhuojxdpaspwsrx-auth-token", JSON.stringify(s));
+    ({ key, s, store }) => {
+      sessionStorage.setItem(key, JSON.stringify(s));
       if (store.value && !sessionStorage.getItem(store.key)) sessionStorage.setItem(store.key, JSON.stringify(store.value));
     },
     {
+      key: AUTH_STORAGE_KEY,
       s: session,
       store: {
         key: CODE_STORE,
@@ -311,6 +320,21 @@ async function open(world = {}) {
         state.plan = { ...state.plan, cover_path: body.p_path, cover_revision: state.plan.cover_revision + 1, cover_description: "" };
         return reply({ cover_path: state.plan.cover_path, cover_revision: state.plan.cover_revision });
       }
+      // Task 8: the Chat row reads the series' summary (K-S13).
+      case "chat_summary":
+        if (body.p_series !== state.plan.series_id) mismatches.push(`chat_summary p_series ${body.p_series}`);
+        if (state.chat === "refused") return reply({ code: "42501", message: "Not in this chat", details: null, hint: null }, 403);
+        if (state.chat === "failed") return reply({ message: "Fixture: the chat read failed" }, 500);
+        return reply(state.chat);
+      // The chat screen a Chat row tap opens: an empty page, marked read. Its socket is refused below.
+      case "chat_messages":
+      case "chat_messages_since":
+        if (state.chat === "refused") return reply({ code: "42501", message: "Not in this chat", details: null, hint: null }, 403);
+        return reply({ rows: [], names: {}, as_of: new Date().toISOString() });
+      case "mark_chat_read":
+        return none();
+      case "my_bring_allowance":
+        return state.allowance ? reply(state.allowance) : reply({ code: "42501", message: "Not invited" }, 403);
       case "decide_join_request": {
         const asked = state.requests.find((r) => r.user_id === body.p_user);
         state.requests = state.requests.filter((r) => r !== asked);
@@ -322,6 +346,8 @@ async function open(world = {}) {
         return reply({ message: `Unexpected rpc ${rpc}` }, 400);
     }
   });
+  // The chat's Realtime socket never connects here (verify-chat covers it): nothing leaves the page.
+  await page.routeWebSocket(/\/realtime\/v1\/websocket/, (ws) => ws.close());
   return {
     page,
     state,
@@ -854,6 +880,129 @@ try {
     },
   );
   pass("people: the groups in order with counts, Going · 3 headed by the host's own Hosting row (no dots on it); Actions for Bea (head: Going) → Make admin → appoint_admin and the Admin badge, Remove as admin offered after; Alex, who never used the app, → Only someone who uses the app can be an admin. in the sheet; Cy, a Maybe admin, → Remove as admin → remove_admin; Send again on WhatsApp only for the code this phone holds; Eli, invited in the app, → Remove and Remove the invitation for Eli?; Approve → decide_join_request {p_approve: true} and Sam moves to Going");
+
+  // --- The Chat row (Task 8: CH-P14, CH-01, K-S13) ---
+  const LEO = "44444444-4444-4444-8444-444444444444";
+  const chatSummary = (over = {}) => ({
+    series_id: SERIES_ID,
+    plan_id: PLAN_ID,
+    title: "Coffee evening",
+    starts_at: THURSDAY,
+    ends_at: "2099-03-05T17:00:00Z",
+    time_zone: "UTC",
+    status: "active",
+    repeat_weeks: null,
+    is_group: false,
+    stopped: false,
+    closes_at: "2099-03-07T17:00:00Z",
+    open: true,
+    host: false,
+    accepted: 3,
+    members: 4,
+    going: 4,
+    everyone: 5,
+    pinned: null,
+    last: {
+      id: 12,
+      kind: "message",
+      audience: null,
+      event: null,
+      payload: null,
+      body: "I can bring the snacks",
+      state: "sent",
+      author_id: LEO,
+      created_at: "2099-03-05T12:00:00Z",
+      updated_at: "2099-03-05T12:00:00Z",
+      client_id: null,
+    },
+    names: { [LEO]: "Leo" },
+    muted_chat: false,
+    muted_resbite: false,
+    last_read_id: 11,
+    unread: true,
+    message_count: 23,
+    ...over,
+  });
+  const bringing = {
+    viewer: "guest",
+    attendee: { version: 1, response: "accepted" },
+    guests: [ALEX, BEA],
+    plan: { bring_invites: 1, bring_levels: 1 },
+    allowance: { allowed: 1, used: 0, remaining: 1, level: 1, may_bring: true },
+  };
+  await scenario("chat row", { ...bringing, chat: chatSummary() }, async (f) => {
+    const { page } = f;
+    await goto(f, `/event?plan=${PLAN_ID}`);
+    const chatRow = btn(page, "Chat. Leo: I can bring the snacks, unread messages");
+    await expect(chatRow).toBeVisible();
+    await expect(chatRow.getByText("Chat", { exact: true })).toBeVisible();
+    await expect(chatRow.getByText("Leo: I can bring the snacks", { exact: true })).toBeVisible();
+    // Right after the people row and after Bring someone (CH-P14).
+    const people = page.getByRole("button", { name: /^Going 3 · / });
+    const bring = page.getByRole("button", { name: /^Bring someone\. / });
+    await expect(bring).toBeVisible();
+    assert.ok(await inOrder(page, [people, bring, chatRow]), "people row, Bring someone, then Chat");
+    assert.ok(await inOrder(page, [chatRow, text(page, "Bring a book")]), "the Chat row comes before the description");
+    // The summary is the series' (K-S13), read once for the page.
+    assert.deepEqual(f.rpcs("chat_summary"), [{ p_series: SERIES_ID }]);
+    // The row is a 44 pt target.
+    const box = await chatRow.boundingBox();
+    assert.ok(box && box.height >= 44, "the Chat row is at least 44 pt tall");
+    await chatRow.click();
+    await expect(page).toHaveURL(new RegExp(`/chat\\?series=${SERIES_ID}$`));
+  });
+  await scenario("chat row, read", { viewer: "guest", attendee: { version: 1, response: "accepted" }, guests: [ALEX], chat: chatSummary({ unread: false }) }, async (f) => {
+    const { page } = f;
+    await goto(f, `/event?plan=${PLAN_ID}`);
+    await expect(btn(page, "Chat. Leo: I can bring the snacks")).toBeVisible();
+    await expect(page.getByRole("button", { name: /unread messages/ })).toHaveCount(0);
+  });
+  await scenario("chat row, empty", hostFixture, async (f) => {
+    // The host's own chat with nothing said yet: No messages yet.
+    f.state.chat = chatSummary({ host: true, last: null, names: {}, unread: false, message_count: 0 });
+    const { page } = f;
+    await goto(f, `/event?plan=${PLAN_ID}`);
+    await expect(btn(page, "Chat. No messages yet")).toBeVisible();
+  });
+  pass("chat row: Chat with Leo: I can bring the snacks, its label ending “, unread messages” (no suffix once read), after the people row and Bring someone and before the description, at least 44 pt; chat_summary {p_series} read once; the tap opens /chat?series=; the host's empty chat reads No messages yet");
+
+  await scenario("chat row, closed", { viewer: "guest", attendee: { version: 1, response: "accepted" }, guests: [ALEX], chat: chatSummary({ open: false, unread: true }) }, async (f) => {
+    const { page } = f;
+    await goto(f, `/event?plan=${PLAN_ID}`);
+    const closed = btn(page, "Chat closed · 23 messages");
+    await expect(closed).toBeVisible();
+    // No dot, and no latest line, after the close.
+    await expect(page.getByRole("button", { name: /unread messages/ })).toHaveCount(0);
+    await expect(page.getByText("Leo: I can bring the snacks", { exact: true })).toHaveCount(0);
+    await closed.click();
+    await expect(page).toHaveURL(new RegExp(`/chat\\?series=${SERIES_ID}$`));
+  });
+  await scenario("chat row, closed and empty", { viewer: "guest", attendee: { version: 1, response: "accepted" }, guests: [ALEX], chat: chatSummary({ open: false, last: null, names: {}, unread: false, message_count: 0 }) }, async (f) => {
+    const { page } = f;
+    await goto(f, `/event?plan=${PLAN_ID}`);
+    await expect(text(page, "Going 2 · Can’t go 0")).toBeVisible();
+    assert.deepEqual(f.rpcs("chat_summary"), [{ p_series: SERIES_ID }]);
+    await expect(page.getByRole("button", { name: /^Chat/ })).toHaveCount(0);
+  });
+  pass("chat row, closed: Chat closed · 23 messages with no dot and no latest line, still opening the chat; a closed chat with no message shows no row (K-S13)");
+
+  for (const [name, chat] of [["refused", "refused"], ["failing", "failed"]])
+    await scenario(`chat row, ${name}`, { ...bringing, chat }, async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      // The page renders in full: the people row, Bring someone, the reply.
+      await expect(page.getByRole("button", { name: /^Going 3 · / })).toBeVisible();
+      await expect(page.getByRole("button", { name: /^Bring someone\. / })).toBeVisible();
+      await expect(text(page, "You’re going")).toBeVisible();
+      await expect(text(page, "Bring a book")).toBeVisible();
+      assert.deepEqual(f.rpcs("chat_summary"), [{ p_series: SERIES_ID }]);
+      await expect(page.getByRole("button", { name: /^Chat/ })).toHaveCount(0);
+      await expect(text(page, "Chat")).toHaveCount(0);
+      // Nothing about the chat is said as an error.
+      await expect(text(page, "You’re not in this chat.")).toHaveCount(0);
+    });
+  pass("chat row, refused or failing: a 42501 'Not in this chat' or a 500 from chat_summary hides the row, says nothing, and the page renders in full (K-S13)");
+
 
   // --- Edges of the people list and the page ---
   await scenario("edges", { guests: going2, failPlanRead: true }, async (f) => {

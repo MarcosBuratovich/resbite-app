@@ -13,6 +13,7 @@ import {
   fitEdit,
   hasVisibleText,
   headerLine,
+  invitationNote,
   isSeriesId,
   linkHost,
   linkParts,
@@ -21,6 +22,7 @@ import {
   rowText,
   systemText,
   timeLabel,
+  unreadDot,
 } from "./chatRules";
 import { CHAT_COPY } from "./chatCopy";
 
@@ -688,4 +690,32 @@ test("fitEdit: an insertion past the limit keeps only what fits, so the text aro
   assert.deepEqual(fitEdit(full, full.slice(1)), { text: full.slice(1), cut: false });
   const replaced = "a".repeat(400) + "XY" + "a".repeat(590);
   assert.deepEqual(fitEdit(full, replaced), { text: replaced, cut: false });
+});
+
+// Task 8: My resbites. The tile's dot (CH-P9) and the invitation card's announcement line (spec "The announcement on the
+// invitation card"), from `my_chat_overview`.
+test("a tile's dot: unread in a chat still open; none for a closed chat, a read one, or no entry", () => {
+  const last = msg();
+  assert.equal(unreadDot({ unread: true, open: true, last, count: 3 }), true);
+  assert.equal(unreadDot({ unread: false, open: true, last, count: 3 }), false);
+  // As the Chat row: a closed chat shows its count, never a dot.
+  assert.equal(unreadDot({ unread: true, open: false, last, count: 3 }), false);
+  assert.equal(unreadDot(undefined), false);
+});
+
+test("the invitation card's line: the latest Everyone invited announcement, its author from names (CHAT_COPY.invitationLine)", () => {
+  const note = (over: Partial<{ id: number; authorId: string | null; body: string }> = {}) =>
+    invitationNote({ id: 41, authorId: ANA, body: "Doors open at 19:30", ...over }, names, PEDRO);
+  assert.equal(note(), "Announcement from Ana · Doors open at 19:30");
+  assert.equal(note(), CHAT_COPY.invitationLine("Ana", "Doors open at 19:30"));
+  // An author who can't be named (deleted, deleting, folded, or missing from the map) reads "Someone" (K-B2).
+  assert.equal(note({ authorId: GONE }), "Announcement from Someone · Doors open at 19:30");
+  assert.equal(note({ authorId: null }), "Announcement from Someone · Doors open at 19:30");
+  assert.equal(note({ authorId: UNKNOWN }), "Announcement from Someone · Doors open at 19:30");
+  // The card keeps to its lines: white space and line breaks read as single spaces, and nothing invisible shows.
+  assert.equal(note({ body: "  Doors open\n\nat 19:30  " }), "Announcement from Ana · Doors open at 19:30");
+  // No announcement, or one with nothing to show, gives no line.
+  assert.equal(invitationNote(undefined, names, PEDRO), null);
+  assert.equal(note({ body: "" }), null);
+  assert.equal(note({ body: " \u200b " }), null);
 });

@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import {
+  AUTH_STORAGE_KEY,
   button,
   card,
   cancelFromList,
@@ -19,6 +20,7 @@ import {
   inOrder,
   inviteFromList,
   later,
+  noChat,
   openWhen,
   openWhere,
   quietReminders,
@@ -197,11 +199,10 @@ async function signedInPage({ plans = [], guests = [], failJournal = false, ...o
       };
     });
   await page.addInitScript(
-    (value) => {
-      if (!sessionStorage.getItem("sb-ewcsgvhuojxdpaspwsrx-auth-token"))
-        sessionStorage.setItem("sb-ewcsgvhuojxdpaspwsrx-auth-token", JSON.stringify(value));
+    ({ key, value }) => {
+      if (!sessionStorage.getItem(key)) sessionStorage.setItem(key, JSON.stringify(value));
     },
-    session,
+    { key: AUTH_STORAGE_KEY, value: session },
   );
   await page.route("**/*.supabase.co/**", async (route) => {
     const request = route.request();
@@ -259,6 +260,12 @@ async function signedInPage({ plans = [], guests = [], failJournal = false, ...o
     if (url.pathname === "/rest/v1/rpc/plan_link") return reply("AbCdEfGhIjKlMnOpQrStUv");
     // The resbite page reads the person's muted series; none here.
     if (url.pathname === "/rest/v1/plan_mutes") return reply([]);
+    // The resbite page's connection states and the links its guests sent (verify-connections and verify-circle cover
+    // them): none here.
+    if (url.pathname === "/rest/v1/rpc/plan_connection_states") return reply({});
+    if (url.pathname === "/rest/v1/rpc/plan_brought_invitations") return reply([]);
+    // Task 8's chat reads: no Chat row, nothing unread (verify-event and review-ui cover them).
+    if (noChat(url.pathname)) return reply(noChat(url.pathname));
     state.unexpected.push(`${request.method()} ${url.pathname}`);
     return reply({ message: "Unexpected fixture request" }, 404);
   });
@@ -819,10 +826,10 @@ try {
           document.dispatchEvent(new Event("visibilitychange"));
         }
       });
-    await fixture.addInitScript(
-      (value) => sessionStorage.setItem("sb-ewcsgvhuojxdpaspwsrx-auth-token", JSON.stringify(value)),
-      session,
-    );
+    await fixture.addInitScript(({ key, value }) => sessionStorage.setItem(key, JSON.stringify(value)), {
+      key: AUTH_STORAGE_KEY,
+      value: session,
+    });
     await fixture.route("**/*.supabase.co/**", async (route) => {
       const request = route.request();
       const url = new URL(request.url());
@@ -857,6 +864,7 @@ try {
       }
       if (url.pathname === "/rest/v1/rpc/plan_join_requests" || url.pathname === "/rest/v1/rpc/my_join_requests") return reply([]);
       if (url.pathname === "/rest/v1/plan_mutes") return reply([]);
+      if (noChat(url.pathname)) return reply(noChat(url.pathname));
       throw new Error(`Unexpected fixture request: ${url.pathname}`);
     });
     await fixture.goto(`${baseURL}/plans`);

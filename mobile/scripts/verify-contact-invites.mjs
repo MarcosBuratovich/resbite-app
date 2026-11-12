@@ -10,10 +10,10 @@
 // says yes, so a refused open (window.open throwing) stands in for "WhatsApp isn’t installed".
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
-import { button, heading, inOrder, quietReminders, visible } from "./qa-helpers.mjs";
+import { AUTH_STORAGE_KEY, button, heading, inOrder, noChat, quietReminders, visible } from "./qa-helpers.mjs";
 const browser = await chromium.launch({ channel: process.env.RESBITE_QA_BROWSER || "chrome", headless: true });
 const base = process.env.RESBITE_QA_URL || "http://localhost:8081";
-const STORAGE_KEY = "sb-ewcsgvhuojxdpaspwsrx-auth-token";
+const STORAGE_KEY = AUTH_STORAGE_KEY;
 const HOST = "11111111-1111-4111-8111-111111111111";
 const JO = "33333333-3333-4333-8333-333333333333";
 const CODE_STORE = `resbite.invite-codes.v1.${HOST}`;
@@ -287,6 +287,8 @@ async function fixture({ user = host, width = 390, foldStatus = 200 } = {}) {
       state.mine[body.p_plan] = { version: mine.version + 1, response: body.p_response };
       return reply(mine.version + 1);
     }
+    // Task 8's chat reads: no Chat row, nothing unread (verify-event and review-ui cover them).
+    if (noChat(path)) return reply(noChat(path));
     unexpected.push(`${method} ${path}`);
     return reply({ message: `Unexpected fixture request ${path}` }, 404);
   });

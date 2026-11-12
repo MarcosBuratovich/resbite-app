@@ -22,7 +22,7 @@
 // stored under that project's key and only that host is answered. The hosted project's own URL is refused.
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
-import { button, heading, inOrder, quietReminders, visible } from "./qa-helpers.mjs";
+import { button, heading, inOrder, noChat, quietReminders, visible } from "./qa-helpers.mjs";
 
 const HOSTED_REF = "ewcsgvhuojxdpaspwsrx";
 const supabaseUrl = process.env.RESBITE_QA_SUPABASE_URL ? new URL(process.env.RESBITE_QA_SUPABASE_URL) : null;
@@ -360,6 +360,8 @@ async function fixture({ me, guests, links = [], connections = [], bringers = nu
       link.revoked = true;
       return empty();
     }
+    // Task 8's chat reads: no Chat row, nothing unread (verify-event and review-ui cover them).
+    if (noChat(path)) return reply(noChat(path));
     unexpected.push(`${method} ${path}${url.search}`);
     return reply({ message: `Unexpected fixture request ${path}` }, 404);
   });

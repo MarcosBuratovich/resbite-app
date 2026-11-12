@@ -1,4 +1,5 @@
 import type { NotificationPermission } from "../domain/notifications";
+import { isSeriesId } from "../domain/chatRules";
 
 export type PushContext = { account: string | null; preview: boolean };
 export type PushJournal = {
@@ -158,20 +159,22 @@ export function createPushRegistration(
   };
 }
 
-export type NotificationTarget = { kind: "plan" | "connection"; planId: string; notificationId: string };
+export type NotificationTarget =
+  | { kind: "plan" | "connection"; planId: string; notificationId: string }
+  /** A chat message or an announcement (Task 4's `{type:"chat", seriesId, planId, notificationId}`). */
+  | { kind: "chat"; seriesId: string; planId: string; notificationId: string };
+const PUSH_TYPES = ["plan_update", "connection", "chat"];
+/** The data of a push from Resbite's sender, key by key: anything else, or one extra key, is no target at all. */
 export function parseNotificationTarget(
   value: unknown,
 ): NotificationTarget | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const data = value as Record<string, unknown>;
+  const chat = data.type === "chat";
+  const keys = chat ? ["type", "seriesId", "planId", "notificationId"] : ["type", "planId", "notificationId"];
+  if (Object.keys(data).some((key) => !keys.includes(key))) return null;
   if (
-    Object.keys(data).some(
-      (key) => !["type", "planId", "notificationId"].includes(key),
-    )
-  )
-    return null;
-  if (
-    (data.type !== "plan_update" && data.type !== "connection") ||
+    !PUSH_TYPES.includes(data.type as string) ||
     typeof data.planId !== "string" ||
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
       data.planId,
@@ -180,6 +183,11 @@ export function parseNotificationTarget(
     !/^[1-9][0-9]{0,18}$/.test(data.notificationId)
   )
     return null;
+  // A chat's series as the server writes it, lowercase: the chat screen refuses anything else (K-N14).
+  if (chat)
+    return isSeriesId(data.seriesId)
+      ? { kind: "chat", seriesId: data.seriesId, planId: data.planId, notificationId: data.notificationId }
+      : null;
   return { kind: data.type === "connection" ? "connection" : "plan", planId: data.planId, notificationId: data.notificationId };
 }
 /** Returns only a refetched, account-authorized plan ID, never a payload-provided route. */

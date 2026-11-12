@@ -1,6 +1,51 @@
 // Shared browser QA steps for the plan screen (create and edit) and My resbites.
 import { expect } from "@playwright/test";
 
+/**
+ * Where supabase-js keeps the session: `sb-<the project's first label>-auth-token`, from the URL the app was started
+ * with. Start Expo with a fake https EXPO_PUBLIC_SUPABASE_URL and pass the same one to the script; every request to
+ * *.supabase.co is answered by the script's fixture, so nothing is sent.
+ */
+export const AUTH_STORAGE_KEY = `sb-${new URL(process.env.EXPO_PUBLIC_SUPABASE_URL || "https://ewcsgvhuojxdpaspwsrx.supabase.co").hostname.split(".")[0]}-auth-token`;
+/**
+ * Task 8's two reads, for scripts that aren't about chat: the resbite page reads the series' chat (chat_summary) for its
+ * Chat row, and My resbites reads my_chat_overview for the dots and the invitations' announcements. `NO_CHAT_ROW` is a
+ * closed chat with no message, the backfilled chat of a resbite nobody wrote in, so the row hides (K-S13);
+ * `NO_CHATS` has nothing unread and no announcement. Both are 200s, so no console error and no change on screen.
+ * Returns the answer for those two paths, or undefined for any other.
+ */
+export function noChat(path) {
+  if (path === "/rest/v1/rpc/my_chat_overview") return { chats: {}, announcements: {}, names: {} };
+  if (path === "/rest/v1/rpc/chat_summary")
+    return {
+      series_id: "00000000-0000-4000-8000-000000000000",
+      plan_id: "00000000-0000-4000-8000-000000000000",
+      title: "",
+      starts_at: "2000-01-01T00:00:00Z",
+      ends_at: null,
+      time_zone: "UTC",
+      status: "active",
+      repeat_weeks: null,
+      is_group: false,
+      stopped: false,
+      closes_at: "2000-01-03T00:00:00Z",
+      open: false,
+      host: false,
+      accepted: 0,
+      members: 0,
+      going: 0,
+      everyone: 0,
+      pinned: null,
+      last: null,
+      names: {},
+      muted_chat: false,
+      muted_resbite: false,
+      last_read_id: null,
+      unread: false,
+      message_count: 0,
+    };
+  return undefined;
+}
 /** Ignores matches on screens hidden underneath in the stack. */
 export const visible = (locator) => locator.filter({ visible: true });
 export const heading = (page, name) => visible(page.getByRole("heading", { name, exact: true }));

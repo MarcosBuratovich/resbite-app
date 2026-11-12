@@ -1,4 +1,4 @@
-import type { ChatMessage, ChatNames, ChatSummary } from "../services/chat";
+import type { ChatMessage, ChatNames, ChatOverview, ChatSummary } from "../services/chat";
 import { CHAT_COPY, type ChatAudience } from "./chatCopy";
 import { UUID_PATTERN } from "./covers";
 import { planEnd } from "./planEnd";
@@ -234,6 +234,29 @@ export function rowText(last: ChatMessage | null, names: ChatNames, viewerId: st
   if (shown === null || last.state !== "sent") return shown;
   if (last.kind === "announcement") return CHAT_COPY.invitationLine(person(last.authorId, names, viewerId, false), shown);
   return `${person(last.authorId, names, viewerId)}: ${shown}`;
+}
+
+/**
+ * A My resbites tile's unread dot (CH-P9), from the overview's entry for its series: only while the chat is open, as the
+ * Chat row's (a closed chat shows its count, never a dot).
+ */
+export const unreadDot = (entry: ChatOverview["chats"][string] | undefined): boolean =>
+  entry?.open === true && entry.unread === true;
+
+/**
+ * The line under an invitation card's title for someone invited who hasn't answered: the latest "Everyone invited"
+ * announcement (spec "The announcement on the invitation card"), "Announcement from Ana · Doors open at 19:30". The author
+ * is named from the overview's `names` ("Someone" when they can't be, K-B2). The card keeps to its lines, so the words read
+ * on one line, with nothing invisible; null when there is nothing to show.
+ */
+export function invitationNote(
+  announcement: ChatOverview["announcements"][string] | undefined,
+  names: ChatNames,
+  viewerId: string,
+): string | null {
+  if (!announcement) return null;
+  const body = cleanText(announcement.body);
+  return body ? CHAT_COPY.invitationLine(person(announcement.authorId, names, viewerId, false), body) : null;
 }
 
 /**

@@ -29,11 +29,11 @@
 //              accepted from her dots (accept_connection { p_user }) and her row shows Connected
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
-import { button, heading, heightOf, inOrder, quietReminders, visible } from "./qa-helpers.mjs";
+import { AUTH_STORAGE_KEY, button, heading, heightOf, inOrder, noChat, quietReminders, visible } from "./qa-helpers.mjs";
 
 const browser = await chromium.launch({ channel: process.env.RESBITE_QA_BROWSER || "chrome", headless: true });
 const base = process.env.RESBITE_QA_URL || "http://localhost:8081";
-const STORAGE_KEY = "sb-ewcsgvhuojxdpaspwsrx-auth-token";
+const STORAGE_KEY = AUTH_STORAGE_KEY;
 const ANA = "11111111-1111-4111-8111-111111111111";
 const PEDRO = "22222222-2222-4222-8222-222222222222";
 const MARTA = "33333333-3333-4333-8333-333333333333";
@@ -274,6 +274,8 @@ async function fixture({
       state.connected = state.connected.filter((p) => p.user_id !== body.p_user);
       return empty();
     }
+    // Task 8's chat reads: no Chat row, nothing unread (verify-event and review-ui cover them).
+    if (noChat(path)) return reply(noChat(path));
     unexpected.push(`${method} ${path}`);
     return reply({ message: `Unexpected fixture request ${path}` }, 404);
   });

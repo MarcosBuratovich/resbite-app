@@ -35,6 +35,7 @@ import type { CategoryKey } from "../domain/categories";
 import type { EventPicture } from "../domain/events";
 import { dateBadgeParts, spokenWhen, type CoverCardPart } from "../domain/eventView";
 import { timeRange } from "../domain/eventTime";
+import { CHAT_COPY } from "../domain/chatCopy";
 
 /** "Step 2 of 4" for the step screens' progress bar. */
 const progressLabel = (step: number, total: number) => `Step ${step} of ${total}`;
@@ -307,6 +308,9 @@ export function CoverArt({ picture, uri }: { picture: EventPicture; uri?: string
  * - `pictureLabel`: the organizer's photo description; on a static card the picture is an image with this label.
  * - `endsAt` (UX3): the time line reads "10:00 – 12:00" and the static card says "from 10:00 to 12:00".
  * - `place` null (GI1): no place line, as on the link's preview before people reply; `byline` adds a line under it.
+ * - `note` (Task 8): a line under the title, such as an invitation's latest announcement; a pressable card says it at the
+ *   end of its label.
+ * - `dot` (CH-P9): a neutral dot beside the title for unread chat messages; the label ends ", unread messages".
  */
 export function CoverCard({
   picture,
@@ -326,6 +330,8 @@ export function CoverCard({
   hero = false,
   heading = true,
   pictureLabel,
+  note,
+  dot = false,
 }: {
   picture: EventPicture;
   uri?: string | null;
@@ -345,8 +351,11 @@ export function CoverCard({
   hero?: boolean;
   heading?: boolean;
   pictureLabel?: string;
+  note?: string | null;
+  dot?: boolean;
 }) {
   const largeText = useLargeText();
+  const spokenLabel = label === undefined ? undefined : [label, note?.trim()].filter(Boolean).join(", ") + (dot ? `, ${CHAT_COPY.unreadMessages}` : "");
   const [focused, setFocused] = React.useState(false);
   const parts = Boolean(onPressPart && partLabels);
   const part = (key: CoverCardPart, children: React.ReactNode, style?: StyleProp<ViewStyle>, spoken?: string) =>
@@ -366,6 +375,14 @@ export function CoverCard({
       </View>
     );
   const time = timeRange(startsAt, endsAt);
+  const titleText = (
+    <Text
+      accessibilityRole={!onPress && !parts && heading ? "header" : undefined}
+      style={[styles.cardTitle, dot && styles.titleShrink, hero && styles.cardTitleHero, largeText && { lineHeight: undefined }]}
+    >
+      {title}
+    </Text>
+  );
   const content = (
     <>
       {part(
@@ -388,12 +405,25 @@ export function CoverCard({
       <View style={styles.panel}>
         {part(
           "title",
-          <Text
-            accessibilityRole={!onPress && !parts && heading ? "header" : undefined}
-            style={[styles.cardTitle, hero && styles.cardTitleHero, largeText && { lineHeight: undefined }]}
-          >
-            {title}
-          </Text>,
+          dot ? (
+            <View style={styles.titleRow}>
+              {titleText}
+              <View
+                style={styles.unreadDot}
+                // A pressable card says it in its label; a static one names the dot itself.
+                {...(onPress
+                  ? { "aria-hidden": true, importantForAccessibility: "no-hide-descendants" as const, accessibilityElementsHidden: true }
+                  : { accessible: true, accessibilityLabel: CHAT_COPY.unreadMessages, "aria-label": CHAT_COPY.unreadMessages })}
+              />
+            </View>
+          ) : (
+            titleText
+          ),
+        )}
+        {!!note?.trim() && (
+          <Copy numberOfLines={3} style={[styles.cardLine, styles.cardNote]}>
+            {note.trim()}
+          </Copy>
         )}
         {part(
           "date",
@@ -437,7 +467,7 @@ export function CoverCard({
       <ScalePressable
         outerStyle={styles.card}
         accessibilityRole="button"
-        accessibilityLabel={label}
+        accessibilityLabel={spokenLabel}
         onPress={onPress}
         onFocus={(e) => {
           // Keyboard focus only (focus-visible); the ring sits inside the card so overflow cannot clip it.
@@ -1124,6 +1154,12 @@ const styles = StyleSheet.create({
   placeRow: { flexDirection: "row", alignItems: "center", justifyContent: "flex-start", gap: space.s },
   stacked: { flexDirection: "column", alignItems: "flex-start" },
   cardLine: { flexShrink: 1, fontSize: 15 },
+  // A note under the title (an invitation's announcement), muted so the title leads (4.7:1 on the panel).
+  cardNote: { color: c.muted },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: space.s },
+  titleShrink: { flexShrink: 1 },
+  // The unread dot (CH-P9): neutral, no number, as on the resbite page's Chat row.
+  unreadDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: c.ink },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: space.s },
   avatarRow: { flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: space.m, minHeight: 44 },
   avatars: { flexDirection: "row", alignItems: "center" },

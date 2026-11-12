@@ -159,7 +159,6 @@ function Navigation() {
             <Stack.Screen name="connections" />
             <Stack.Screen name="invitations" />
             <Stack.Screen name="notifications" />
-            <Stack.Screen name="sample-chat" />
             <Stack.Screen name="data-privacy" />
           </Stack.Protected>
         </Stack>

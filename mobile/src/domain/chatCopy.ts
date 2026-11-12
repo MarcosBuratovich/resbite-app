@@ -80,4 +80,6 @@ export const CHAT_COPY = {
   tooLong: "Only the first 1,000 characters fit.",
   /** Over the words the field held when the chat closed (H32 Q46). */
   notSentDraft: "Not sent:",
+  /** The unread dot in words, at the end of the Chat row's and a My resbites card's label (CH-P9, Task 8). */
+  unreadMessages: "unread messages",
 } as const;

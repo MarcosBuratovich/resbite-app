@@ -3,7 +3,7 @@ import { storage, supabase } from "./supabase";
 import { withDeadline } from "./plans";
 import { readMutedSeries } from "./mutes";
 import type { NotificationPermission } from "../domain/notifications";
-import { REMINDER_PREFIX } from "../domain/reminders";
+import { showsInForeground } from "../domain/reminders";
 import { createReminderPrefsStore, type ReminderPrefs } from "./reminderPrefsStore";
 import {
   createFakeReminderAdapter,
@@ -104,9 +104,20 @@ export async function clearReminders(scope: string): Promise<void> {
   await prefs.clear(scope);
 }
 
+/** The chat on screen, whose pushes don't show while Resbite is open (K-S9); null when no chat is in focus. */
+let focused: string | null = null;
+/** The chat screen sets its series on focus and null on blur (K-S9). */
+export function setFocusedChat(series: string | null): void {
+  focused = series;
+}
+/** The series `setFocusedChat` last set: a chat leaving clears it only while it is still its own (another chat may
+ * have taken focus first). */
+export const focusedChat = (): string | null => focused;
+
 /**
  * Root layout: shows a reminder that arrives while Resbite is open (banner and list, no sound or badge) and
- * reports taps on reminders, including the one that opened the app. Plan-update pushes are shown too (their taps go to usePushRouting); others are left alone.
+ * reports taps on reminders, including the one that opened the app. Plan-update pushes are shown too, and chat pushes
+ * unless that chat is on screen (showsInForeground, K-S9); their taps go to usePushRouting. Others are left alone.
  * Returns the cleanup. Web has no notifications.
  */
 export function listenForReminders(open: (planId: string) => void): () => void {
@@ -114,10 +125,8 @@ export function listenForReminders(open: (planId: string) => void): () => void {
   const notifications = require("expo-notifications") as typeof import("expo-notifications");
   notifications.setNotificationHandler({
     handleNotification: async (notification) => {
-      // Reminders, and plan-update pushes from the sender (UX2-D4 wording); nothing else.
-      const ours =
-        notification.request.identifier.startsWith(REMINDER_PREFIX) ||
-        notification.request.content.data?.type === "plan_update";
+      // Reminders and plan-update pushes from the sender (UX2-D4 wording), and chat pushes for a chat not on screen.
+      const ours = showsInForeground(notification.request.identifier, notification.request.content.data, focused);
       return { shouldShowBanner: ours, shouldShowList: ours, shouldPlaySound: false, shouldSetBadge: false };
     },
   });

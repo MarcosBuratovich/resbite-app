@@ -3,7 +3,8 @@
 // end, where requests are answered by a local stub: a signed-in organizer's Invite people (Plan 2: the Pick step with three numbers,
 // one On Resbite, the event link below them, and Almost there), the resbite page's people row, the people list with Waiting for you and
 // the Invited group and a three-dots sheet per person, and My resbites with an Invitations card and the open-link requests
-// (waiting and declined), and the /waiting screen in both states; a signed-out invitation and a dead link; an account waiting for access with its
+// (waiting and declined), and the /waiting screen in both states; Task 8: the resbite page's Chat row, the invitation
+// card's announcement line, a tile's unread dot, My resbites with a failing my_chat_overview, and Data & privacy's chat line; a signed-out invitation and a dead link; an account waiting for access with its
 // Invitations and the inline 18+ tick on the invite screen; and phone sign-up,
 // its code, phone sign-in, About you, and Add your number with its "taken" refusal, the offer to bring in a web-only account and
 // that offer's code step.
@@ -12,7 +13,7 @@ import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium, expect } from "@playwright/test";
-import { button, createPlan, fillPlan, heading, later, openEvent, openWhen, openWhere, quietReminders, visible } from "./qa-helpers.mjs";
+import { AUTH_STORAGE_KEY, button, createPlan, fillPlan, heading, later, openEvent, openWhen, openWhere, quietReminders, visible } from "./qa-helpers.mjs";
 const base = process.env.RESBITE_QA_URL || "http://localhost:8081";
 const out = process.env.RESBITE_QA_SHOTS || join(tmpdir(), "resbite-ui-audit");
 await mkdir(out, { recursive: true });
@@ -132,6 +133,27 @@ try {
     await button(page, "On this device").click();
     await shot("privacy-topic", false);
     await button(page, "Close sheet").click();
+    const closed = () => expect(page.getByRole("button", { name: "Close sheet" })).toHaveCount(0);
+    await closed();
+    // Task 8 (K-N5): the chat's line, hedged as Delete account's What happens is; and the samples line without the
+    // sample chat, and without "this build does not send push notifications".
+    await button(page, "Chat messages").click();
+    await expect(
+      page.getByText(
+        "Chat messages are stored on Resbite’s servers so everyone in a resbite’s chat can read them, including people who join later. They are not end-to-end encrypted. Deleting your account removes the text of your messages as cleanup finishes. Review its availability in this build under Delete account.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await shot("privacy-chat", false);
+    await button(page, "Close sheet").click();
+    await closed();
+    await button(page, "Preview & samples").click();
+    await expect(
+      page.getByText("Preview actions stay on this device. Wellness figures are fictional, and there is no wellness tracking.", { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText(/push notifications|Sample conversations|live messaging/)).toHaveCount(0);
+    await button(page, "Close sheet").click();
+    await closed();
     await button(page, "Delete account").click();
     await expect(heading(page, "Delete account")).toBeVisible();
     await shot("delete-account");
@@ -363,7 +385,8 @@ try {
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
     page.on("console", (m) => {
-      if (m.type() === "error") errors.push(m.text());
+      // The overview's 500 is under test once (overviewFails); every other failed request is an error.
+      if (m.type() === "error" && !(overviewFails && /Failed to load resource/.test(m.text()))) errors.push(m.text());
     });
     const suffix = large ? "large-320" : String(width);
     const fits = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
@@ -412,6 +435,7 @@ try {
       cover_description: "",
       guest_note: "",
       guest_note_at: null,
+      series_id: "22222222-2222-4222-8222-2222222222ee",
     };
     const guests = [
       { user_id: "g1", response: "accepted", profiles: { display_name: "Alex Rivera" } },
@@ -421,7 +445,17 @@ try {
     ];
     // Jo's invitation to the organizer, not answered yet: a card under Invitations on My resbites.
     const jo = "33333333-3333-4333-8333-333333333333";
-    const invitation = { ...plan, id: "44444444-4444-4444-8444-444444444444", title: "Board games at the café", owner_id: jo, place_label: "Games room", area: "Near the station", starts_at: "2099-10-24T18:00:00Z", ends_at: null };
+    const invitation = { ...plan, id: "44444444-4444-4444-8444-444444444444", series_id: "44444444-4444-4444-8444-4444444444ee", title: "Board games at the café", owner_id: jo, place_label: "Games room", area: "Near the station", starts_at: "2099-10-24T18:00:00Z", ends_at: null };
+    // Task 8: the organizer's chat has an unread line (the Chat row and the tile's dot); Jo's invitation carries Jo's
+    // latest "Everyone invited" announcement (the invitation card's line). `overviewFails` turns my_chat_overview into a 500.
+    const chatLast = { id: 12, kind: "message", audience: null, event: null, payload: null, body: "I can bring the snacks", state: "sent", author_id: "g1", created_at: "2099-10-20T12:00:00Z", updated_at: "2099-10-20T12:00:00Z", client_id: null };
+    const chatSummary = { series_id: plan.series_id, plan_id: plan.id, title: plan.title, starts_at: plan.starts_at, ends_at: plan.ends_at, time_zone: plan.time_zone, status: "active", repeat_weeks: null, is_group: false, stopped: false, closes_at: "2099-10-25T21:00:00Z", open: true, host: true, accepted: 2, members: 4, going: 3, everyone: 4, pinned: null, last: chatLast, names: { g1: "Alex" }, muted_chat: false, muted_resbite: false, last_read_id: 11, unread: true, message_count: 12 };
+    const overview = {
+      chats: { [plan.series_id]: { unread: true, open: true, last: chatLast, count: 12 } },
+      announcements: { [invitation.id]: { id: 41, author_id: jo, body: "Doors open at 19:30" } },
+      names: { g1: "Alex", [jo]: "Jo" },
+    };
+    let overviewFails = false;
     // Three numbers to invite: Ana is on Resbite (invited in the app); Ben and Cy get personal links.
     const people = [
       ["Ana Rivera-Castellanos", "07700 900123", "447700900123"],
@@ -440,11 +474,14 @@ try {
       { ...askCard, plan_id: "55555555-5555-4555-8555-555555555555", title: "Sunday film club with a long name", host: "Samantha", status: "waiting" },
       { ...askCard, plan_id: "66666666-6666-4666-8666-666666666666", title: "Quiz night", host: "Jo", status: "declined", response: "declined" },
     ];
-    await page.addInitScript((session) => {
-      sessionStorage.setItem("sb-ewcsgvhuojxdpaspwsrx-auth-token", JSON.stringify(session));
-      // WhatsApp and Messages open with window.open on the web; nothing leaves the page.
-      window.open = () => null;
-    }, session);
+    await page.addInitScript(
+      ({ key, session }) => {
+        sessionStorage.setItem(key, JSON.stringify(session));
+        // WhatsApp and Messages open with window.open on the web; nothing leaves the page.
+        window.open = () => null;
+      },
+      { key: AUTH_STORAGE_KEY, session },
+    );
     await page.route("**/*.supabase.co/**", (route) => {
       const req = route.request();
       const url = new URL(req.url());
@@ -492,6 +529,16 @@ try {
       // row on the people list offers Connect on Resbite.
       if (path === "/rest/v1/rpc/my_connections") return reply({ requests: [], connected: [] });
       if (path === "/rest/v1/rpc/plan_connection_states") return reply({});
+      // The circle of trust's reads (verify-circle covers them): nobody here was brought, and no guest sent a link.
+      if (path === "/rest/v1/rpc/plan_brought_invitations") return reply([]);
+      if (path === "/rest/v1/rpc/plan_bringers") return reply({});
+      if (path === "/rest/v1/rpc/chat_summary")
+        return req.postDataJSON().p_series === plan.series_id
+          ? reply(chatSummary)
+          : reply({ code: "42501", message: "Not in this chat", details: null, hint: null }, 403);
+      if (path === "/rest/v1/rpc/my_chat_overview") return overviewFails ? reply({ message: "Fixture: the overview failed" }, 500) : reply(overview);
+      // Named, so a failure says which request nobody planned for.
+      errors.push(`Unexpected ${req.method()} ${path}${url.search}`);
       return reply({ message: `Unexpected ${path}` }, 400);
     });
     const open = async (path) => {
@@ -537,6 +584,12 @@ try {
     // yet, and the open-link requests waiting.
     const row = "Going 2 · Maybe 1 · Can’t go 0 · 3 invited · 2 waiting";
     await expect(page.getByText(row, { exact: true })).toBeVisible();
+    // Task 8: the Chat row under the people row, with the latest line and the dot in words.
+    const chatRow = button(page, "Chat. Alex: I can bring the snacks, unread messages");
+    await expect(chatRow).toBeVisible();
+    await chatRow.scrollIntoViewIfNeeded();
+    await shot("event-chat-row", false);
+    await heading(page, "Film club: Paris, Texas").scrollIntoViewIfNeeded();
     await expect(heading(page, "Waiting for you")).toHaveCount(0);
     await expect(heading(page, "Event link")).toHaveCount(0);
     assert.ok(await fits(), `The resbite page fits at ${suffix}`);
@@ -576,11 +629,36 @@ try {
     await open("/plans");
     await expect(heading(page, "Invitations")).toBeVisible();
     await expect(button(page, /^Jo invited you, Board games at the café, /)).toBeVisible();
+    // Task 8: the pending invitee's card carries Jo's latest Everyone invited announcement under the title, in
+    // CHAT_COPY.invitationLine's words ("Announcement from <name> · <body>"), and its label says it too.
+    const announcement = "Announcement from Jo · Doors open at 19:30";
+    await expect(page.getByText(announcement, { exact: true })).toBeVisible();
+    await expect(button(page, new RegExp(`^Jo invited you, Board games at the café, .*, ${announcement}$`))).toBeVisible();
+    // The organizer's own tile has the unread dot, said at the end of its label.
+    const unreadTile = button(page, /^Film club: Paris, Texas, .*, unread messages$/);
+    await expect(unreadTile).toBeVisible();
+    await unreadTile.scrollIntoViewIfNeeded();
+    await shot("plans-unread", false);
+    await heading(page, "Invitations").scrollIntoViewIfNeeded();
     await expect(page.getByRole("radiogroup", { name: "Your answer to Board games at the café", exact: true })).toBeVisible();
     // Open-link approval: the organizer's own requests sit with the invitations, waiting and declined.
     await expect(page.getByText("Waiting for Samantha", { exact: true })).toBeVisible();
     await expect(page.getByText("Not added", { exact: true })).toBeVisible();
     await shot("plans-invitations");
+    // A failing my_chat_overview never blanks My resbites (K-S13): the plans and the invitation stay listed, without
+    // the dot or the announcement line, and no refresh error shows.
+    if (!large && width === 390) {
+      overviewFails = true;
+      await open("/plans");
+      await expect(heading(page, "Invitations")).toBeVisible();
+      await expect(button(page, /^Jo invited you, Board games at the café, /)).toBeVisible();
+      await expect(button(page, /^Film club: Paris, Texas, /)).toBeVisible();
+      await expect(page.getByText(announcement, { exact: true })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: /unread messages$/ })).toHaveCount(0);
+      await expect(page.getByText(/We couldn’t refresh your plans/)).toHaveCount(0);
+      await shot("plans-overview-failed");
+      overviewFails = false;
+    }
     // The waiting screen in both states: the card, "Waiting for <host>", the answer; and "You weren’t added".
     await open(`/waiting?plan=${mine[0].plan_id}`);
     await expect(heading(page, "Waiting for Samantha")).toBeVisible();
@@ -618,7 +696,7 @@ try {
         if (m.type() === "error" && !/Failed to load resource/.test(m.text())) errors.push(m.text());
       });
       if (session)
-        await page.addInitScript((session) => sessionStorage.setItem("sb-ewcsgvhuojxdpaspwsrx-auth-token", JSON.stringify(session)), session);
+        await page.addInitScript(({ key, session }) => sessionStorage.setItem(key, JSON.stringify(session)), { key: AUTH_STORAGE_KEY, session });
       await page.route("**/*.supabase.co/**", (route) => {
         const req = route.request();
         const path = new URL(req.url()).pathname;
@@ -743,7 +821,7 @@ try {
           "local-fixture-only",
         ].join(".");
         const session = { access_token: jwt, refresh_token: "local-fixture", token_type: "bearer", expires_at: expiry, expires_in: 3600, user };
-        await page.addInitScript((session) => sessionStorage.setItem("sb-ewcsgvhuojxdpaspwsrx-auth-token", JSON.stringify(session)), session);
+        await page.addInitScript(({ key, session }) => sessionStorage.setItem(key, JSON.stringify(session)), { key: AUTH_STORAGE_KEY, session });
       }
       await page.route("**/*.supabase.co/**", (route) => {
         const req = route.request();
@@ -936,11 +1014,11 @@ try {
       const page = await context.newPage();
       watch(page);
       await page.addInitScript(
-        ({ session, updates }) => {
-          sessionStorage.setItem("sb-ewcsgvhuojxdpaspwsrx-auth-token", JSON.stringify(session));
+        ({ key, session, updates }) => {
+          sessionStorage.setItem(key, JSON.stringify(session));
           globalThis.__resbiteDevice = { reminders: [], calendar: [], permission: "undetermined", updates };
         },
-        { session, updates },
+        { key: AUTH_STORAGE_KEY, session, updates },
       );
       await page.route("**/*.supabase.co/**", (route) => {
         const path = new URL(route.request().url()).pathname;

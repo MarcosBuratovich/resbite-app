@@ -17,12 +17,13 @@ import {
   type TextStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { ArrowLeft, ArrowUp, Bell, BellOff, ChevronRight, Ellipsis, Trash2, UserPlus, Users } from "lucide-react-native";
 import { Button, Copy, ErrorNote, TextAction, s, useLargeText, useReduceMotion } from "../src/design/ui";
 import { Chip, IconButton, focusHeading } from "../src/design/kit";
 import { GrabberSheet } from "../src/design/GrabberSheet";
 import { MenuRow } from "../src/design/MenuRow";
+import { NotificationAsk } from "../src/design/NotificationAsk";
 import { colors as c, depth, fonts, space } from "../src/design/tokens";
 import { CHAT_COPY, type ChatAudience } from "../src/domain/chatCopy";
 import {
@@ -46,6 +47,8 @@ import { useChat, type Chat } from "../src/state/useChat";
 import { withEndedLine, withPending } from "../src/state/chatModel";
 import { chatFeed, nothingSaid, type FeedLink, type FeedRow, type MessageAction } from "../src/state/chatFeed";
 import { dismissed, holdError, heldUntil, type HeldError } from "../src/state/heldError";
+import { useNotificationAsk } from "../src/state/useNotificationAsk";
+import { focusedChat, setFocusedChat } from "../src/services/deviceReminders";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -148,6 +151,21 @@ export default function ChatScreen() {
   const tick = useMinuteTick(summary?.closesAt ?? null, chat.serverNow);
   const now = useMemo(() => chat.serverNow(), [chat.serverNow, tick, chat.messages, chat.pending, summary]);
   const out = !valid || (!summary && chat.error === CHAT_COPY.notInChat);
+  // The first open of a chat the person is in, while it is open, is the moment for "Get notified?" (CH-P17, K-N15);
+  // the hook shows it once per phone, only while iPhone's permission was never asked for.
+  const ask = useNotificationAsk(summary?.open && !out ? { chat: true } : null);
+  // While this chat is the screen in focus its pushes don't show over it (K-S9). Leaving clears it only while it is
+  // still this chat's: a chat opened on top takes focus before this one hears its blur.
+  const focusedSeries = valid ? series : null;
+  useFocusEffect(
+    useCallback(() => {
+      if (!focusedSeries) return;
+      setFocusedChat(focusedSeries);
+      return () => {
+        if (focusedChat() === focusedSeries) setFocusedChat(null);
+      };
+    }, [focusedSeries]),
+  );
   return (
     <View style={s.page}>
       <Bar
@@ -173,6 +191,7 @@ export default function ChatScreen() {
           onMenu={setMenuOpen}
         />
       )}
+      <NotificationAsk ask={ask} />
     </View>
   );
 }

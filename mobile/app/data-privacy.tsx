@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { router } from "expo-router";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Info, Smartphone, Sparkles, Trash2, UserRound } from "lucide-react-native";
+import { Info, MessageCircle, Smartphone, Sparkles, Trash2, UserRound } from "lucide-react-native";
 import { Back, Copy, Title, s } from "../src/design/ui";
 import { IconButton, InfoSheet, Row, RowGroup, TopicRow } from "../src/design/kit";
 import { PreviewNotice } from "../src/design/Chrome";
@@ -11,7 +11,8 @@ import { categoryPalette } from "../src/design/tokens";
 /**
  * Privacy (UX4): one row per topic, each opening a sheet with today's text word for word, and
  * a red Delete account row. The account deletion paragraph now sits in Delete account's
- * "What happens" sheet.
+ * "What happens" sheet. Chat messages (K-N5): what deleting an account does to them is said with the
+ * deletion copy's tense and hedge, since the deletion lifecycle isn't live on the hosted service yet.
  */
 export default function DataPrivacy() {
   const [about, setAbout] = useState(false);
@@ -87,15 +88,28 @@ export default function DataPrivacy() {
             </Copy>
           </TopicRow>
           <TopicRow
+            title="Chat messages"
+            icon={MessageCircle}
+            tint={categoryPalette.community.tint}
+            ink={categoryPalette.community.ink}
+          >
+            <Copy>
+              Chat messages are stored on Resbite’s servers so everyone in a
+              resbite’s chat can read them, including people who join later.
+              They are not end-to-end encrypted. Deleting your account removes
+              the text of your messages as cleanup finishes. Review its
+              availability in this build under Delete account.
+            </Copy>
+          </TopicRow>
+          <TopicRow
             title="Preview & samples"
             icon={Sparkles}
             tint={categoryPalette.uplifting.tint}
             ink={categoryPalette.uplifting.ink}
           >
             <Copy>
-              Preview actions stay on this device. Sample conversations and
-              wellness figures are fictional. There is no live messaging or
-              wellness tracking, and this build does not send push notifications.
+              Preview actions stay on this device. Wellness figures are
+              fictional, and there is no wellness tracking.
             </Copy>
           </TopicRow>
         </RowGroup>

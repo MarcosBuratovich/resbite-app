@@ -83,3 +83,8 @@ test("the copy Task 7's fix round added reads exactly (H31, H32)", () => {
   // H32 (Q46): the draft the close left behind.
   assert.equal(C.notSentDraft, "Not sent:");
 });
+
+test("the copy the ways in add reads exactly (Task 8)", () => {
+  // The words a card's or the Chat row's label ends with when there is something unread (CH-P9): the dot in words.
+  assert.equal(C.unreadMessages, "unread messages");
+});

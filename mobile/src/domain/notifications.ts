@@ -31,6 +31,7 @@ export const NOTIFICATION_EVENTS = [
   "A Note to guests.",
   "Being made an admin, to that person.",
   "A repeating resbite’s next date, to everyone invited.",
+  "A chat message, to the others in the chat (at most one a minute), and a host’s announcement, to the people it’s sent to.",
 ] as const;
 /** The line before NOTIFICATION_EVENTS, once updates are sent and while they aren't yet. */
 export const notificationEventsLead = (delivery: boolean) =>
@@ -108,7 +109,7 @@ export const NOTIFICATION_ASK = {
 /** iPhone's prompt couldn't be shown or read (as REMINDERS_CHANGE_FAILED for the reminders chip). */
 export const NOTIFICATIONS_TURN_ON_FAILED = "Couldn’t turn on notifications on this phone. Try again.";
 
-/** When the ask may come (spec "Notifications": after the first answer or the first created event). */
+/** When the ask may come (spec "Notifications": after the first answer or the first created event; CH-P17: a chat). */
 export type AskMoment = {
   /** The organizer, on the event page. */
   owner?: boolean;
@@ -119,11 +120,17 @@ export type AskMoment = {
    * open link's waiting screen. Going ("accepted") and Maybe bring the ask; Can’t go never does.
    */
   response?: string | null;
+  /** The first open of a chat the person is in (CH-P17, K-N15). */
+  chat?: boolean;
 };
 
 /** Whether this is a moment for the ask, before reading the phone. */
 export const askMoment = (moment: AskMoment): boolean =>
-  moment.owner === true || moment.created === true || moment.response === "accepted" || moment.response === "maybe";
+  moment.owner === true ||
+  moment.created === true ||
+  moment.chat === true ||
+  moment.response === "accepted" ||
+  moment.response === "maybe";
 
 /**
  * The ask shows once: at a moment for it, while iPhone's permission was never asked for and the ask was

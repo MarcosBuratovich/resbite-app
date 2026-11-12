@@ -19,6 +19,7 @@ import { inviteCodeStore, type StoredInvite } from "../services/inviteCodeStore"
 import { formatPhone, phoneSendForm } from "../domain/phone";
 import { joinRequestGateway, type HostRequest } from "../services/joinRequests";
 import { connectionErrorMessage, connectionGateway, type ConnectionState } from "../services/connections";
+import { chatGateway, type ChatSummary } from "../services/chat";
 import { readProfile } from "../services/profile";
 import { requestGone } from "./connectionsModel";
 import { rememberName } from "./knownNames";
@@ -91,6 +92,12 @@ export type EventPage = {
    * preview, and until the name is known.
    */
   owner: { userId: string; name: string } | null;
+  /**
+   * The series' chat for the Chat row (`chat_summary`, K-S13), read after the event and landing when it arrives, and
+   * again after a saved answer. Null until then, for someone who isn't in the chat (42501), when the read fails, in the
+   * preview and on the people list (`chain`, which has no Chat row): the row hides.
+   */
+  chat: ChatSummary | null;
   busy: boolean;
   fresh: boolean;
   error: string | null;
@@ -157,6 +164,21 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
   // The latest read of the states wins: a whole-event read and a re-read after a connection action can overlap.
   const statesRead = useRef(0);
   const [mutedSeries, setMutedSeries] = useState<Set<string>>(new Set());
+  const [chat, setChat] = useState<ChatSummary | null>(null);
+  // The latest read of the chat wins: an event load and a re-read after an answer can overlap.
+  const chatRead = useRef(0);
+  /** Reads the series' chat; a refusal or a failure gives null, so the Chat row hides and nothing is said (K-S13). */
+  const readChat = (series: string, valid: () => boolean) => {
+    const ticket = ++chatRead.current;
+    void chatGateway.summary(series).then(
+      (summary) => {
+        if (valid() && ticket === chatRead.current) setChat(summary);
+      },
+      () => {
+        if (valid() && ticket === chatRead.current) setChat(null);
+      },
+    );
+  };
   // UX3: this phone's reminders follow every event load, answer and cancellation; failures wait for the next sync.
   const syncDevice = () => void syncReminders({ userId: userId ?? null, preview }).catch(() => {});
   useEffect(() => {
@@ -170,6 +192,8 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
     setConnections(null);
     setOwnName(null);
     setMutedSeries(new Set());
+    setChat(null);
+    chatRead.current++;
     setPending(null);
     setNotice(null);
     setError(null);
@@ -210,6 +234,9 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
             },
             () => {},
           );
+        // Likewise the Chat row (K-S13), on the resbite page only (not the people list): the page never waits for the
+        // series' chat, and a refusal or a failure hides the row.
+        if (!chain) readChat(next.plan.series_id, valid);
         // Likewise the owner's own name for their row: it lands when it arrives; a failure keeps the one known.
         if (next.plan.owner_id === userId)
           void readProfile(userId).then(
@@ -270,6 +297,8 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
       } catch (e) {
         if (valid()) {
           setSnapshot(null);
+          chatRead.current++;
+          setChat(null);
           setInvited([]);
           setAllowance(null);
           setRequests([]);
@@ -347,6 +376,8 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
         setPending(null);
         setNotice(EVENT_COPY.responseSaved);
         syncDevice();
+        // The answer moves the person into a one-off's chat (Going, Maybe) or out of it (Can't go): the row follows.
+        if (!chain) readChat(confirmed.plan.series_id, valid);
         // UX-P5: answering reveals who's coming; the server now returns the whole list, so the counts come from it.
         // Read with it, what the guest may now bring: Going or Maybe may bring someone, Can't go no longer may.
         const host = confirmed.plan.owner_id === userId || confirmed.plan.admins.includes(userId);
@@ -508,6 +539,7 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
     broughtLinks: preview ? NO_LINKS : broughtLinks,
     connections: preview ? null : connections,
     owner,
+    chat: preview ? null : chat,
     // Without a plan to read nothing loads: the screens say it isn't available instead of waiting.
     busy: busy && Boolean(planId),
     fresh: preview || fresh,

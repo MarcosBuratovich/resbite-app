@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import {
   ANSWER_OPTIONS,
   answerKey,
-  canReadSample,
   canRespond,
   cantGoResponse,
   reconcileRsvp,
@@ -80,26 +79,6 @@ test("plan changes require review and closed plans reject retries", () => {
     "unavailable",
   );
 });
-test("sample access requires accepted response and future active plan", () => {
-  assert.equal(canReadSample(snapshot), false);
-  const accepted = {
-    ...snapshot,
-    attendee: { response: "accepted", version: 2 },
-  };
-  assert.equal(canReadSample(accepted), true);
-  assert.equal(
-    canReadSample({
-      ...accepted,
-      plan: { ...snapshot.plan, status: "cancelled" },
-    }),
-    false,
-  );
-  assert.equal(
-    canReadSample(accepted, Date.parse("2099-01-01T00:00:00Z")),
-    false,
-  );
-});
-
 test("Can’t go withdraws after Going and declines before ever accepting; the control reads stored answers", () => {
   assert.equal(cantGoResponse("accepted"), "withdrawn");
   assert.equal(cantGoResponse("withdrawn"), "withdrawn");
@@ -120,8 +99,6 @@ test("UX2: Maybe is its own answer; Can’t go after Maybe declines", () => {
   assert.equal(responseFor("cant", "withdrawn"), "withdrawn");
   assert.equal(responseFor("cant", "maybe"), "declined");
   assert.equal(responseFor("cant", "pending"), "declined");
-  // Only Going opens the sample chat.
-  assert.equal(canReadSample({ ...snapshot, attendee: { response: "maybe", version: 2 } }), false);
 });
 
 test("the answer control's three options, shared by the invitation rows and the waiting screen", () => {

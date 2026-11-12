@@ -7,6 +7,7 @@ import {
   bottomRow,
   bringRow,
   broughtFrom,
+  chatRow,
   broughtNames,
   readsOwnLinks,
   byline,
@@ -36,6 +37,7 @@ import {
   type PersonRow,
 } from "./eventPage.ts";
 import type { ConnectionState } from "../services/connections.ts";
+import type { ChatMessage, ChatSummary } from "../services/chat.ts";
 
 const hour = 3_600_000;
 const start = "2099-10-15T18:00:00Z";
@@ -1128,4 +1130,90 @@ test("the people list wires the fix round: take-backs reload when refused, focus
   assert.match(list, /name: \{ flex: 1, minWidth: 0, gap: 1 \}/);
   assert.match(list, /nameText: \{[^}]*flexShrink: 1, minWidth: 0/);
   assert.match(list, /unnamed: UNNAMED_GUEST/);
+});
+
+// Task 8: the Chat row (CH-P14, CH-01, K-S13), from `chat_summary` as useEvent reads it.
+const ME = "0a000000-0000-4000-8000-000000000001";
+const LEO = "0a000000-0000-4000-8000-000000000002";
+const message = (over: Partial<ChatMessage> = {}): ChatMessage => ({
+  id: 7,
+  kind: "message",
+  audience: null,
+  event: null,
+  payload: null,
+  body: "I can bring the snacks",
+  state: "sent",
+  authorId: LEO,
+  createdAt: "2099-03-05T12:00:00Z",
+  updatedAt: "2099-03-05T12:00:00Z",
+  clientId: null,
+  ...over,
+});
+const chat = (over: Partial<ChatSummary> = {}): ChatSummary => ({
+  seriesId: "0b000000-0000-4000-8000-000000000001",
+  planId: "0c000000-0000-4000-8000-000000000001",
+  title: "Coffee evening",
+  startsAt: "2099-03-05T15:00:00Z",
+  endsAt: "2099-03-05T17:00:00Z",
+  timeZone: "UTC",
+  status: "active",
+  repeatWeeks: null,
+  isGroup: false,
+  stopped: false,
+  closesAt: "2099-03-07T17:00:00Z",
+  open: true,
+  host: false,
+  accepted: 3,
+  members: 4,
+  going: 4,
+  everyone: 5,
+  pinned: null,
+  last: message(),
+  names: { [LEO]: "Leo", [ME]: "Fixture" },
+  mutedChat: false,
+  mutedResbite: false,
+  lastReadId: 6,
+  unread: true,
+  messageCount: 23,
+  ...over,
+});
+
+test("the Chat row: none outside the chat or when the read failed; the latest line and the dot while open", () => {
+  // Not in the chat (42501), or the read failed: useEvent gives null, and there is no row (K-S13).
+  assert.equal(chatRow(null, ME), null);
+  assert.deepEqual(chatRow(chat(), ME), { text: "Leo: I can bring the snacks", dot: true, closed: false });
+  assert.deepEqual(chatRow(chat({ unread: false }), ME), { text: "Leo: I can bring the snacks", dot: false, closed: false });
+  // The viewer's own line, a system line in words, and an empty chat (CH-01).
+  assert.equal(chatRow(chat({ last: message({ authorId: ME }), unread: false }), ME)?.text, "You: I can bring the snacks");
+  assert.equal(
+    chatRow(chat({ last: message({ kind: "system", event: "changed", payload: { actor: LEO, what: "place", place_label: "" }, body: null, authorId: null }) }), ME)?.text,
+    "Leo changed the place",
+  );
+  assert.deepEqual(chatRow(chat({ last: null, unread: false, messageCount: 0 }), ME), { text: "No messages yet", dot: false, closed: false });
+});
+
+test("the Chat row after the close: the count without a dot, and no row for a closed chat that never had a message", () => {
+  assert.deepEqual(chatRow(chat({ open: false }), ME), { text: "Chat closed · 23 messages", dot: false, closed: true });
+  assert.deepEqual(chatRow(chat({ open: false, unread: false, messageCount: 1 }), ME), { text: "Chat closed · 1 message", dot: false, closed: true });
+  // Every old resbite has a chat from the backfill: closed with nothing said, it shows no row (K-S13).
+  assert.equal(chatRow(chat({ open: false, unread: false, messageCount: 0, last: null }), ME), null);
+  // A cancelled one-off's chat is closed too.
+  assert.deepEqual(chatRow(chat({ open: false, status: "cancelled", closesAt: null, messageCount: 4 }), ME), {
+    text: "Chat closed · 4 messages",
+    dot: false,
+    closed: true,
+  });
+});
+
+test("the Chat row never shows a line it can't word: no preview line, never null or empty text (H20)", () => {
+  for (const last of [
+    message({ kind: "system", event: "something_new", payload: {}, body: null, authorId: null }),
+    message({ state: "hidden" as ChatMessage["state"] }),
+    message({ kind: "poll" as ChatMessage["kind"] }),
+  ]) {
+    const row = chatRow(chat({ last }), ME);
+    assert.ok(row, "the row stays");
+    assert.equal(row.text, null, "with no preview line");
+    assert.equal(row.dot, true);
+  }
 });

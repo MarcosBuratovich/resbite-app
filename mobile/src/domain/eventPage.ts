@@ -2,6 +2,9 @@ import type { Guest } from "../services/rsvp";
 import type { HostRequest } from "../services/joinRequests";
 import type { ConnectionState } from "../services/connections";
 import type { Allowance, BroughtLink } from "../services/circle";
+import type { ChatSummary } from "../services/chat";
+import { CHAT_COPY } from "./chatCopy";
+import { rowText } from "./chatRules";
 import { CIRCLE_COPY } from "./circleCopy";
 import { CONNECTIONS_COPY } from "./connectionsCopy";
 import { firstName } from "./circle";
@@ -234,6 +237,24 @@ export function bringRow(i: {
     return { kind: "bring", hint: a.used === 0 ? CIRCLE_COPY.bringHint(i.host, a.allowed) : CIRCLE_COPY.bringHintMore(i.host, a.remaining) };
   if (a.remaining === 0 && i.broughtNames.length > 0) return { kind: "brought", text: CIRCLE_COPY.youBrought(i.broughtNames) };
   return null;
+}
+
+/** The Chat row's words: the preview line (null: none to show), the unread dot, and whether the chat has closed. */
+export type ChatRow = { text: string | null; dot: boolean; closed: boolean };
+
+/**
+ * The resbite page's Chat row (CH-P14, CH-01), right after the people row and Bring someone, from the series' summary.
+ * - No row without a summary: the reader isn't in the chat (42501) or the read failed (K-S13).
+ * - Open: the latest line (`rowText`: "Leo: I can bring the snacks", a system line, "No messages yet") and the dot when
+ *   unread. A line this build can't word gives no preview line, never "null" (H20).
+ * - Closed: "Chat closed · 23 messages" with no dot; and no row at all for a closed chat with no message, so an old
+ *   resbite's backfilled chat doesn't show "0 messages" (K-S13, a departure from CH-P14).
+ */
+export function chatRow(summary: ChatSummary | null, viewerId: string): ChatRow | null {
+  if (!summary) return null;
+  if (!summary.open)
+    return summary.messageCount > 0 ? { text: CHAT_COPY.closedRow(summary.messageCount), dot: false, closed: true } : null;
+  return { text: rowText(summary.last, summary.names, viewerId, summary.isGroup) || null, dot: summary.unread, closed: false };
 }
 
 export type MoreRow = "calendar" | "mute" | "unmute" | "again" | "changeReply" | "cancel";

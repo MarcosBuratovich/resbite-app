@@ -1,6 +1,7 @@
 import { REMINDER_PREFIX } from "../domain/reminders";
 import { pushDestination, type PushDestination } from "../domain/pushRoute";
 import { parseNotificationTarget, resolveNotificationTarget } from "./pushRegistration";
+import { isNotInChat } from "./chat";
 
 export type TapResponse = {
   notification: { request: { identifier: string; content: { data?: Record<string, unknown> | null } } };
@@ -9,11 +10,12 @@ export type TapResponse = {
 export type TapContext = { ready: boolean; account: string | null; approved: boolean; preview: boolean };
 export type TapDestination = PushDestination | { pathname: "/account" };
 
-/** A push from Resbite's sender: not a local reminder, and typed as a plan update (well formed or not). */
+/** A push from Resbite's sender: not a local reminder, and typed as a plan update, a connection or a chat (well formed or not). */
 export function isPlanUpdateTap(response: TapResponse | null): boolean {
   const request = response?.notification.request;
   if (!request || request.identifier.startsWith(REMINDER_PREFIX)) return false;
-  return request.content.data?.type === "plan_update" || request.content.data?.type === "connection";
+  const type = request.content.data?.type;
+  return type === "plan_update" || type === "connection" || type === "chat";
 }
 
 /**
@@ -22,6 +24,10 @@ export function isPlanUpdateTap(response: TapResponse | null): boolean {
  * supersedes an older one still in flight. An empty read lands on My resbites with the gone note; a read that
  * failed opens the event, whose page has its own retry and offline states. A tap from an account that isn't
  * approved yet refreshes the account once; it is never held longer than `holdMs` and then goes to /account.
+ * A chat tap (Task 8) reads the chat first and opens it; when the chat refuses ('Not in this chat': a pending invitee
+ * on an "Everyone invited" announcement, a guest who left or was removed) it reads the plan as a plan tap does and
+ * opens the event, or the gone note when that reads empty (K-B4); a chat read that failed (offline, timed out) opens
+ * the chat, which has its own offline state.
  * The launch tap is taken at most once. Reminder taps are not handled here.
  */
 export function createPushTapRouter(deps: {
@@ -29,6 +35,9 @@ export function createPushTapRouter(deps: {
   /** The plan as this account may read it: null for an empty read (removed, declined, gone); rejects when the
    * read itself failed (offline, timed out, a server error). */
   readAuthorizedPlan(account: string, plan: string): Promise<{ id: string } | null>;
+  /** The chat of a series as this account may read it (`chat_summary`): rejects with 42501 'Not in this chat' when
+   * the account isn't in it, and otherwise when the read itself failed. */
+  readChat(account: string, series: string): Promise<unknown>;
   /** Re-reads the account once: true when it is now approved, false when not, null when superseded or failed. */
   refreshAccount(): Promise<boolean | null>;
   open(destination: TapDestination): void;
@@ -97,6 +106,38 @@ export function createPushTapRouter(deps: {
       const now = deps.context();
       if (generation !== mine || now.account !== start.account || now.preview) throw Error("Superseded.");
     };
+    const current = () => {
+      try {
+        assertCurrent();
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const target = parseNotificationTarget(data);
+    if (target?.kind === "chat") {
+      const account = start.account;
+      let refused = false;
+      try {
+        await deps.readChat(account, target.seriesId);
+      } catch (error) {
+        refused = isNotInChat(error);
+      }
+      if (!current()) return;
+      // Read, or a read that failed: the chat, whose screen has its own offline and not-in-this-chat states.
+      if (!refused) return deps.open(pushDestination(target.seriesId, "chat"));
+      // Refused: the event when this account can still read it (K-B4), the gone note when not; a plan read that
+      // failed opens the event, as a plan tap does.
+      let plan: string | null;
+      try {
+        const found = await deps.readAuthorizedPlan(account, target.planId);
+        plan = found?.id === target.planId ? found.id : null;
+      } catch {
+        plan = target.planId;
+      }
+      if (current()) deps.open(pushDestination(plan));
+      return;
+    }
     // The plan whose read failed, as opposed to an empty read.
     const failed: { plan?: string } = {};
     let result: string | null;
