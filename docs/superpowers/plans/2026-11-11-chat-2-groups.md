@@ -10,9 +10,62 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-10-groups-and-chat-design.md` (CH-D1–D3, CH-P1–P6, P15, P19, P21, rules 1 and 1a). CH-P20 (the roll fix) shipped earlier in the follow-ups plan.
 
-**Branch:** `ch2-groups` from `main` after chat plan 1 is merged. Ships in the same release as plans 1 and 3.
+**Branch:** `ch2-groups`, made at `43f4416` (chat core's final head on `ch1-core`), so it is stacked: `co3-follow-ups` → `co2-circles-of-trust` → `ch1-core` → `ch2-groups`. Ships in the same release as plans 1 and 3.
 
 **Tasks:** 4.
+
+## Revised 12 November 2026 (after chat core was built)
+
+Chat core (plan 1) is built and reviewed on `ch1-core` at `43f4416`. Its migration `supabase/migrations/20261111140000_chat_core.sql` has sha256 `1047fb379a4e8a942b49db3f7134674caecf2cbb30f67e0ebf9f0f2fea6a78ce`, and every `chat_core.sql:N` below is a line of that file. This revision brings the plan in line with what was built: the notes chat core left (`.superpowers/sdd/challenges/chat-1-notes-for-plans-2-3.md`, binding), its code, and its ledger's rulings (H1–H43). **Where this plan copies a chat core body to extend it, it copies the body as built at that hash, and its rollback restores that exact body.** Each correction, old → new with the built file and line, is in `.superpowers/sdd/challenges/chat-2-3-after-core.md`. The rulings' Shared interfaces table predates the build: where it and the built code differ, the built code wins (the report lists the rows).
+
+What changed, one line each:
+- **Branch:** stacked on `ch1-core` at `43f4416`, not cut from main.
+- **Copied bodies (Tasks 1, 2):** `private.chat_member` (`chat_core.sql:132-138`), `chat_closes_at` (:156-159), `chat_open` (:165-168), `private.chat_summary` (:248-274), `attendees_chat_lines()` (:920-952) and `plans_chat_lines()` (:963-980), each as built. Chat core made them with `create function`, so this plan writes `create or replace function`, and the rollback restores each body byte for byte.
+- **`chat_summary` (Task 1):** plan 1 already returns `is_group` from `chats.is_group` (:260). Plan 2 changes only `'stopped', false` to `private.group_stopped(p_series)`, and only the private body; `public.chat_summary` stays plan 1's wrapper.
+- **The flag check (Global Constraints, Task 2):** it is `private.chat_lines_off()` (:905-907). `private.chat_system_line(p_plan, p_event, p_payload)` (:894-899) sets `actor` to `auth.uid()` unless the payload names one, so the roll passes `'actor', null` itself.
+- **SQL order (Task 1):** chat core creates each SQL helper after what its body names (:117-118). `series_leaves` and `group_stopped` come before the redefined `chat_member` and `chat_closes_at`.
+- **Coalescing (Task 2):** chat core's merge searches the whole series (:939-943). Its note asks plan 2 to narrow it to the current occurrence; H33's "no later line names them" guard stays. The search also gains `state = 'sent'`, since plan 1 never changed a system line's state and a deleted line must not be merged into.
+- **The deleted `cant_go` line (Task 2):** `chat_messages_since` never reports a row removed by SQL `delete` (final review m6), so Decision 6's state change is the way, as written. The line takes no `chat:` advisory lock (:886-889). The `chats` row is locked as `messages_chat_stats` locks it (:407), since that trigger ignores a system row's state change (:400-403).
+- **`chat.sql` (Tasks 1, 2):** the plan names the assertions the group flag, the roll's two lines and the way-back block's stand-in table break, by line.
+- **`cancelled` payload (Task 2):** `chat.sql:2134-2142` compares the whole payload, so it changes.
+- **Rollback (Task 2):** chat core's rollback refuses while `private.series_leaves` exists (`supabase/rollback/20261111140000_chat_core.rollback.sql:44-49`), so dropping that table is what lets it run. The header also says that plan 2's lines stay, and that the restored roll writes `admin` lines again.
+- **The way-back block (Task 2):** `chat.sql:2243-2290` creates a stand-in `private.series_leaves`, which fails once the real one exists. It switches on `to_regclass` with `\if`, as circles' slice 17 does for chat.
+- **Rehearsal files (Tasks 1, 2):** chat core's `create function` text runs as `create or replace` when bodies are compared. `before.sql` adds no roster row, and `after.sql` deletes its rows, `public.chats` rows by series included (no foreign key to plans), as `20261111140000_chat_core.after.sql:215-219` does.
+- **Hosted-baseline runs (Tasks 1, 2, 4):** name all four candidates (follow-ups, circles, chat core, chat groups). Chat core's `after.sql` runs before this migration and needs no change.
+- **Test fixtures (Task 2):** an `update` can't set `messages.updated_at` (`messages_touch`, :62-72). A test moves `created_at`, or inserts the row by hand with both, as `chat.sql` does.
+- **App, already built (Task 3):**
+  - `ChatSummary.repeatWeeks` is already `1 | 2 | null` (`mobile/src/services/chat.ts:43`).
+  - `rowText` already takes `group` (`chatRules.ts:253`), and the Chat row already passes `summary.isGroup` (`eventPage.ts:263`).
+  - `systemText`'s `ended` with its title fallback (`chatRules.ts:232-235`) and its "joined · brought by" (:219-223) are already built for both kinds.
+- **App, widened (Tasks 3, 4):**
+  - `messageLabel` takes no group today (`chatRules.ts:423-447`), and calls `systemText(…, false, "")` and `announcementLabel`.
+  - `chatFeed` (`mobile/src/state/chatFeed.ts:143-244`) words every line, heading and label with `group` false (:181, :194, :213).
+  - Both gain the group and its weekday.
+- **App signatures (Task 3):** `headerLine(summary, now)`, `closedCard(summary, now?)`, `dayLabel(iso, zone, now?)` and `withEndedLine(items, summary, hasEarlier, now)`. The screen's `now` is `chat.serverNow()` (`chat.tsx:153`).
+- **Copy (Task 3):** `CHAT_COPY` and `systemText` write the apostrophe as ’ (U+2019; `chatRules.ts:225`, `chatCopy.ts:42`, :47), so the new strings do too: "Sol can’t make it this week", "You’re not in this group." and the rest.
+- **Leave and `focusedChat` (Task 4):** leaving the chat screen runs its focus cleanup (`chat.tsx:161-170`), which clears `focusedChat()`. Leave group needs no step of its own for the push router (H36).
+- **"Next one" (Task 4):** a feed row of its own, drawn like the change chip (`chat.tsx:796-810`) but opening `payload.plan_id`, with a new `CHAT_COPY.opensResbite`.
+- **Callers (Tasks 3, 4):**
+  - `showsNames` and `moreRows` are called in `event.tsx:152` and :166, and in `useEvent.ts:248` and :358; `peopleGroups` in `guests.tsx:122`.
+  - `chatOpen` is the Chat row's summary, `event.chat?.open`.
+  - `readEvent` is at `rsvp.ts:126`.
+- **Chat row (Task 4):** `chatRow` and `chatRowLabel` carry the group, and the open row reads "Group chat". The closed and hidden states stay as built (K-S13).
+- **When sheet (Task 4):** `PLAN_COPY.chatCloses` shows for every plan (`WhenSheet.tsx:115`). Chat core's note says it must change for a group. Its words are open question Q2.
+- **`verify-chat.mjs` labels (Task 4):** plan 1 already uses (g), (g2), (g3) and (g4), so this plan's scenarios are (gr1) to (gr9).
+- **Runbook (Task 4):** the groups part goes into the sections chat core wrote, with `ch2-apply.sh` and `ch2-rollback.sh` in the `ch1-*.sh` shape. Step 3's `groups 0` becomes the backfill's count, and the Decision 4 lines go.
+- **Decisions log (Task 4):** a "Chat groups" section after Chat core's (`knowledge-base/08-decisions.md:622-672`), one line each, and chat core's lines that point to plan 2 updated.
+- **Confirmed unchanged by the build:**
+  - `private.announcement_audience` is built on `chat_members` (:184-193);
+  - `plan_admins_chat_lines` is silenced by the roll flag (:986-993);
+  - `chat_names` needs no new key, since no payload here adds a person;
+  - `e6` and `e8` are still unused;
+  - the migration name `20261111150000_chat_groups` doesn't clash.
+
+**Open questions (chat core's build raised them; neither the code nor the spec settles them):**
+- **Q1. Pushes while a group's week is cancelled.** Plan 1's eligibility drops every chat push whose notice's plan is cancelled (`chat_core.sql:685`, H28 and H30, made for one-offs). After "Cancel just this one" a group's chat stays open (CH-P15, CH-R-A2). New messages there are queued on the cancelled current occurrence, so nobody is pushed until the roll. Should the group's members be pushed that week? If yes, Task 2 redefines the chat branch of `private.notification_recipient_eligible`, copied as built (:678-691), to test `private.chat_open(msg.series_id)` in place of `plan.status <> 'cancelled'` for a group.
+- **Q2. The When sheet's words for a repeating plan.** "The chat closes 48 hours after the end time." is untrue while a group repeats. What should a repeating draft say? Until the owner answers, Task 4 hides the line while Repeats is set.
+- **Q3. A pending group member's announcement line.** On a group, someone who hasn't answered is in the chat. Chat core still gives their card and their event page the "Announcement from Ana · …" line, since `my_chat_overview` lists the latest announcement for any unanswered row on the current occurrence (`chat_core.sql:351-362`) and `useEvent` reads it for any pending guest (`useEvent.ts:270-271`, `waitingAnswer`). Keep both the Chat row and the line (the default, as built), or drop the line on a group?
+- **Q4. My resbites' dot for a group.** `currentOccurrences` (`chatRules.ts:307-320`) sees only the plans listed on the phone. When a group's current occurrence isn't listed (for example "Cancel just this one", if cancelled plans aren't listed), the dot falls on the newest listed occurrence (accepted in H37). Does a group need a server field for its current occurrence? The default is no; the limit is recorded.
 
 ## Revised 11 November 2026
 
@@ -83,9 +136,11 @@ From `.superpowers/sdd/challenges/chat-confirmation-2.md`, adopted by CH-R-A7:
 
 Chat plan 1's Global Constraints, verbatim, with the migration `supabase/migrations/20261111150000_chat_groups.sql`. Plus:
 - The announcement audiences already mean "Going this Thursday" and "Everyone in the group" once group attendees are members (`private.announcement_audience`, plan 1, built on `private.chat_members` by confirmation S1): do not redefine them.
-- **Shared interfaces** are the rulings' table (`.superpowers/sdd/challenges/chat-rulings.md`), verbatim. Where plan 1's text differs, the table wins.
-- Every chat-line trigger function this plan defines or redefines writes nothing when `current_setting('resbite.system', true)` is `roll` or `deletion`. The roll writes `ended` and `next` itself, on purpose, through `private.chat_system_line`.
-- System lines store `author_id null` and `payload.actor`. Every other person in a payload is a uuid.
+- **Shared interfaces** are the rulings' table (`.superpowers/sdd/challenges/chat-rulings.md`), verbatim. Where plan 1's text differs, the table wins. Where chat core's built code differs from either, the built code wins (Revised 12 November; the report lists the table's out-of-date rows).
+- Every chat-line trigger function this plan defines or redefines writes nothing when `current_setting('resbite.system', true)` is `roll` or `deletion`. Plan 1 built that test as `private.chat_lines_off()` (`chat_core.sql:905-907`), the first statement of each of its line triggers: call it the same way. The roll writes `ended` and `next` itself, on purpose, through `private.chat_system_line` (which checks no flag, :894-899).
+- System lines store `author_id null` and `payload.actor`. Every other person in a payload is a uuid. `private.chat_system_line(p_plan, p_event, p_payload)` writes `actor` as `auth.uid()` unless the payload names `actor` (the payload's keys win), so a line with no actor passes `'actor', null` explicitly. `private.chat_names` names only `actor`, `user` and `brought_by` (:222-235). This plan's payloads add no other person key, so it needs no change.
+- Bodies copied from chat core are copied as built at sha256 `1047fb37…ce` (the Revised 12 November section). Each SQL function is created after what its body names, as chat core does (:117-118).
+- No line writer takes the chat's advisory lock (`hashtextextended('chat:'||series, 0)`). A line's event already holds its plan row, and a send takes the advisory lock before that row, so the two would deadlock (:886-889). Only `send_message` and `send_announcement` take it.
 - A new table revokes all from `public, anon, authenticated, service_role`. A new function revokes execute from the same four before its explicit grants (K-S5).
 
 ## Decisions this plan makes
@@ -95,7 +150,7 @@ Chat plan 1's Global Constraints, verbatim, with the migration `supabase/migrati
 3. **Two new system lines.** Edit → "Doesn't repeat" writes "Ana stopped repeating this · the last one is Thu 27 Nov" (G-N13). A one-off with messages that becomes a group writes "Ana made this a group · everyone invited can read this chat" (G-N8). The spec has neither.
 4. **A group stops when its owner can no longer use the app** (G-S4). The roll skips such a plan, so `stopped` counts an owner who is not `user_eligible`, and the chat closes 48 hours after the last end.
 5. **The roll drops a "brought by" that points outside the group** (G-N3). A carried row whose bringer is not carried gets `brought_by = null`.
-6. **On a group, a reply flip changes one fact at a time** (confirmation S3, CH-R-A5). A `cant_go` line coalesces only into that person's `cant_go` line from the last 10 minutes. A `joined` line is never rewritten, since membership did not change. A change back to Going or Maybe within 10 minutes of the person's `cant_go` line deletes that line. It takes `state = 'deleted'`, so the existing signal carries the deletion to open screens.
+6. **On a group, a reply flip changes one fact at a time** (confirmation S3, CH-R-A5). A `cant_go` line coalesces only into that person's `cant_go` line from the last 10 minutes. A `joined` line is never rewritten, since membership did not change. A change back to Going or Maybe within 10 minutes of the person's `cant_go` line deletes that line. It takes `state = 'deleted'`, so the existing signal carries the deletion to open screens. Chat core confirms this is the only way: `chat_messages_since` reports new and changed rows, never ones removed by SQL `delete` (final review m6). The app's `merge` keeps a `deleted` row as final (`mobile/src/state/chatModel.ts:33-75`).
 
 ## Review Focus
 
@@ -106,23 +161,30 @@ Chat plan 1's Global Constraints, verbatim, with the migration `supabase/migrati
 5. **A member who has not answered, right after a roll, opens the people list.** Expected: every member's name, with Connect (CH-P21, G-B5). Someone who left or was removed sees the one-off rule on every occurrence (G-S3). Tests in Tasks 2, 3 and 4.
 6. **A member who left is invited again (by a host or a circle).** Expected: the leave is cleared, and they are back in the group and its chat. Their old personal link no longer answers (G-N1). Test in Task 2.
 7. **The owner can no longer use the app, and hosted data from before the release.** Expected: the chat closes 48 hours after the last end (G-S4). Long-finished stopped groups come out closed, and recently stopped ones get their 48 hours (G-B7). Tests in Task 1 and its `after.sql`.
-8. **A group member says Can't go, then Going again a few minutes later.** Expected: "Sol can't make it this week" goes for everyone, open screens included, and an earlier "Sol joined" stays (Decision 6). Test in Task 2.
+8. **A group member says Can't go, then Going again a few minutes later.** Expected: "Sol can’t make it this week" goes for everyone, open screens included, and an earlier "Sol joined" stays (Decision 6). Test in Task 2.
 
 ---
 
 ### Task 1: Migration section 1: the group flag, membership, closing and the summary
 
 **Files:**
-- Create: `supabase/migrations/20261111150000_chat_groups.sql` (section 1), `supabase/tests/chat-groups.sql` (slice 1; add it to `supabase/tests/hosted-baseline/tests.txt`), `supabase/tests/hosted-baseline/20261111150000_chat_groups.before.sql`, `.after.sql`
-- Modify: `supabase/tests/chat.sql` (plan 1's weekly-series membership assertions, Step 3)
+- Create: `supabase/migrations/20261111150000_chat_groups.sql` (section 1), `supabase/tests/chat-groups.sql` (slice 1; add it to `supabase/tests/hosted-baseline/tests.txt`, after `chat.sql`), `supabase/tests/hosted-baseline/20261111150000_chat_groups.before.sql`, `.after.sql`
+- Modify: `supabase/tests/chat.sql` (plan 1's weekly-series assertions, Step 3)
 
 **Interfaces:**
-- Consumes: plan 1's `public.chats` with its `is_group boolean not null default false`, `private.chat_is_group(p_series)`, `private.current_occurrence`, `private.chat_member`, `private.chat_members`, `private.chat_closes_at`, `private.chat_open`, `private.chat_system_line`, `public.chat_summary`; `private.plan_end`, `private.user_eligible`, `private.is_host`, `private.can_read_plan`.
+- Consumes, as built at sha256 `1047fb37…ce`:
+  - `public.chats` (`chat_core.sql:76-83`) with its `is_group boolean not null default false`;
+  - `private.chat_is_group(p_series)` (:172-175) and `private.current_occurrence(p_series) returns public.plans` (:122-127: the plan nothing repeats from, the latest start, then the highest id);
+  - `private.chat_member(p_series, p_user)` (:132-138) and `private.chat_members(p_series)` (:143-150);
+  - `private.chat_closes_at(p_series)` (:156-159) and `private.chat_open(p_series)` (:165-168);
+  - `private.chat_system_line(p_plan, p_event, p_payload)` (:894-899) and `private.chat_lines_off()` (:905-907);
+  - `private.chat_summary(p_series)` (:248-274) behind `public.chat_summary` (:276-280);
+  - `private.plan_end`, `private.user_eligible`, `private.is_host`, `private.can_read_plan`.
 - Produces:
   - `public.chats` gains `stopped_at timestamptz null`. Plan 1 already creates `is_group boolean not null default false` and never sets it true (CH-R-A6). This plan adds no `is_group` column and no function named `chat_is_group`. It sets the flag through the backfill and `plans_group_flag`, and every group test below reads it through plan 1's `private.chat_is_group`.
   - Backfill, in the migration:
     - `is_group = true` for every series with an occurrence whose `repeat_weeks` is not null or whose `repeats_from` is not null.
-    - `stopped_at = least(now(), private.plan_end(current.starts_at, current.ends_at))` for every group whose current occurrence has `repeat_weeks` null, cancelled or not (G-B7). At `3b5be48`, `public.plans` holds no cancellation or change time (only `created_at`, `version` and `guest_note_at`), so the end stands in for it.
+    - `stopped_at = least(now(), private.plan_end(current.starts_at, current.ends_at))` for every group whose current occurrence (`private.current_occurrence`, chat core's pick) has `repeat_weeks` null, cancelled or not (G-B7). It runs after chat core's backfill, which made one `chats` row per series (`chat_core.sql:97`). At `3b5be48`, `public.plans` holds no cancellation or change time (only `created_at`, `version` and `guest_note_at`), so the end stands in for it.
     - A long-finished stopped group comes out closed. A group stopped recently, or cancelled ahead of its date, stays open until its 48 hours pass.
     - A series whose only occurrence lost its rule before the release can't be told from a one-off, and stays one. Its chat has no messages, since chat ships in this release.
   - `private.series_leaves (series_id uuid not null, user_id uuid not null references public.profiles(id) on delete cascade, left_at timestamptz not null default now(), primary key (series_id, user_id))`. RLS on, no policies, all revoked from the four roles.
@@ -134,17 +196,19 @@ Chat plan 1's Global Constraints, verbatim, with the migration `supabase/migrati
     - An update from not null to null with `status` still `active` (Edit → "Doesn't repeat"): `stopped_at = coalesce(stopped_at, now())`.
     - `is_group` never goes back to false (CH-P1).
     - It writes the `chats` row by upsert (`insert … on conflict (series_id) do update`), so it never depends on firing after plan 1's `plans_chat_row` (G-N4).
-    - Its lines go through `private.chat_system_line`, never while the roll or deletion flag is set:
-      - `made_group {actor}` when `is_group` turns true on a chat whose `message_count` is above 0 (G-N8);
+    - Its lines go through `private.chat_system_line`, never while `private.chat_lines_off()` is true (the roll or deletion flag). The flag and stop columns are still written under the flag:
+      - `made_group {actor}` when `is_group` turns true on a chat whose `message_count` is above 0 (G-N8). As built, `message_count` counts sent messages and announcements only, never system lines (`chat_core.sql:389-418`, K-N12);
       - `stopped {actor, plan_id, starts_at, time_zone}` on Edit → "Doesn't repeat", with the current occurrence's id, start and zone (G-N13).
-  - `private.chat_member(p_series, p_user)` redefined. On a group: a host of the current occurrence, or anyone with an attendee row on it, whatever the reply (G-S5). One exception, not a member: a leave exists for (series, user) and the current occurrence has ended (Decision 2). One-offs keep plan 1's rule. `private.chat_members` is not redefined, since it filters by this function.
-  - `private.chat_closes_at(p_series)` redefined, for a group:
+  - `private.chat_member(p_series, p_user)` redefined, copied from the built body (`chat_core.sql:132-138`, SQL over `private.current_occurrence`, false for a null user or a series that doesn't exist, both tested at `chat.sql:186-205`). On a group: a host of the current occurrence, or anyone with an attendee row on it, whatever the reply (G-S5). One exception, not a member: a leave exists for (series, user) and the current occurrence has ended (Decision 2). One-offs keep plan 1's rule. `private.chat_members` is not redefined, since it filters by this function (:143-150).
+    - Its cost grows with people × occurrences, chat core's note says. `chat_members` calls `chat_member` once per candidate, and each call resolves `current_occurrence` again (:122-127, through `plans_series_idx` and `plans_repeats_from_key`). This plan adds a `series_leaves` probe and, on a group, the ended test. That is accepted for groups of tens, as G-S3's note for `can_see_guests` says.
+  - `private.chat_closes_at(p_series)` redefined, copied from the built body (:156-159), for a group:
     - null while `private.group_stopped(p_series)` is false (it never closes while the series runs);
     - `stopped_at + 48 h` when the current occurrence is cancelled and `stopped_at` is set;
     - else `private.plan_end(current) + 48 h` (stopped by Edit, or an owner who may no longer use the app).
     - One-offs keep plan 1's rule.
-  - `private.chat_open(p_series)` redefined, for a group: `chat_closes_at` null means open, whatever the current occurrence's status, so "Cancel just this one" keeps the chat open (CH-P15). Else `now() < chat_closes_at`. One-offs keep plan 1's rule. The app decides "closed" only from `open` (G-N5).
-  - `public.chat_summary` redefined, copied from plan 1's latest body. It fills `is_group` from `chats.is_group` and `stopped` from `private.group_stopped`, which plan 1 returns as false. `repeat_weeks` and `members` stay as plan 1 defines them, and `members` covers a group through this plan's `chat_member`. Plan 3 copies this body.
+  - `private.chat_open(p_series)` redefined, copied from the built body (:165-168), for a group: `chat_closes_at` null means open, whatever the current occurrence's status, so "Cancel just this one" keeps the chat open (CH-P15). Else `now() < chat_closes_at`. One-offs keep plan 1's rule (`coalesce(now() < chat_closes_at, status <> 'cancelled', false)`), and a series that doesn't exist stays not open (`chat.sql:203-204`). The app decides "closed" only from `open` (G-N5).
+  - `private.chat_summary` redefined, copied from the built body (:248-274); `public.chat_summary` (:276-280) is not touched. Plan 1 already returns `is_group` as `coalesce(v_chat.is_group, false)` (:260). Plan 2 changes one key: `'stopped', false` becomes `'stopped', private.group_stopped(p_series)`. `repeat_weeks`, `members`, `going` and `everyone` stay as built, and `members` covers a group through this plan's `chat_member`. Plan 3 copies this body.
+  - Order in the file: `series_leaves` and `group_stopped` before `chat_member` and `chat_closes_at`, since those are SQL and are checked when they are created (chat core's order, :117-118).
   - `public.series_is_group(p_series uuid) returns boolean`, with `private.series_is_group`: the series' `is_group`, and false unless the caller `private.can_read_plan` the current occurrence. Execute revoked from the four roles, granted to `authenticated` only.
 
 - [ ] **Step 1: Failing SQL test, slice 1** (`supabase/tests/chat-groups.sql`; ids use the hex prefix `e6` and emails `g2-…@resbite-test.invalid`, one rolled-back block per slice as `supabase/tests/connections.sql` does; owner 01, admin 02, guests 03 Going, 04 Maybe, 05 pending, 06 Can't go, 08 stranger; a weekly plan "Board game night" and a one-off copy of the same people):
@@ -169,7 +233,17 @@ Chat plan 1's Global Constraints, verbatim, with the migration `supabase/migrati
 -- Direct select on private.series_leaves as authenticated: insufficient_privilege.
 ```
 - [ ] **Step 2: Run** `bash scripts/test-database-docker.sh` → FAIL (`chats.stopped_at` missing).
-- [ ] **Step 3: Implement** section 1. Plan 1's `supabase/tests/chat.sql` asserts one-off rules on its weekly fixture (plan 1's Decision 4). That series is now a group: change those assertions to expect every attendee row a member, and keep the one-off matrix on the one-off fixture. Plan 1's CH-R-A6 tests change too (confirmation 2, SHOULD 1). Under this plan the weekly series reads `is_group` true, so that assertion expects true. Drop plan 1's block that sets `is_group` by hand on the one-off, which proves plan 1 alone. This plan's slice 1 audiences and the S1 test in Task 2 replace it.
+- [ ] **Step 3: Implement** section 1. Plan 1's `supabase/tests/chat.sql` asserts one-off rules on its weekly fixture, "Thursday run" (`pg_temp.c1p('02')`: owner 01, admin 02 Going, 03 Going, 05 not answered; plan 1's Decision 4). That series is now a group from `create_plan_v4` on (`plans_group_flag` on insert): change those assertions to expect every attendee row a member, and keep the one-off matrix on the one-off fixture (`c1p('01')`). The ones this section breaks, as built:
+  - `chat.sql:172-183`, plan 1's CH-R-A6 block (confirmation 2, SHOULD 1). "No chat row is a group" and `chat_is_group(c1p('02'))` false now expect the weekly series true and every other row false.
+  - `chat.sql:207-224`, the block that sets `is_group` by hand on the one-off. Drop it: under this plan a hand-set flag makes the one-off's not-answered and Can't-go guests members, so its audiences change. It proved plan 1 alone. This plan's slice 1 audiences and the S1 test in Task 2 replace it.
+  - `chat.sql:314-349`, the weekly series around the roll:
+    - members before the roll are `01,02,03,05`, and after it `01,02,03,05` (everyone carried), also once 03 answers Going;
+    - `chat_closes_at` is null and `chat_open` true while it runs;
+    - "The roll made a group" goes, and the summary's `is_group` is true.
+  - `chat.sql:571` and `:621-622`: 05's `my_chat_overview` now lists the weekly chat (05 is a member).
+  - `chat.sql:727-730` (the slice's comment) and `:916-935`: 03's weekly message is told to `01,02,05`. `:912`, 02's weekly announcement to `01,03,05`, still holds.
+
+  Task 2's roll lines and way-back block break three more (Task 2, Step 4). Run the file to find any other.
 - [ ] **Step 4: Rehearsal files** (G-B7). `before.sql` runs after plan 1's migration on the hosted baseline and creates three rolled series (two occurrences each, the second with `repeats_from`):
   - (a) the current occurrence cancelled with `repeat_weeks` null, its end 10 days ago;
   - (b) the current occurrence stopped by Edit (`active`, `repeat_weeks` null), its end 1 hour ago;
@@ -181,32 +255,49 @@ Chat plan 1's Global Constraints, verbatim, with the migration `supabase/migrati
   - (b) `chat_open` true and `chat_closes_at` equal to its end + 48 h;
   - (c) `chat_open` true and `chat_closes_at` within a minute of `now() + 48 h` (recently stopped: its 48 hours);
   - `stopped_at` exists, `series_leaves` has RLS on and no grants, and `series_is_group` is executable by `authenticated` only.
-- [ ] **Step 5: Run** both modes (the hosted-baseline mode takes plan 1's candidates, then this migration) → PASS.
+
+  Follow chat core's rehearsal files (`20261111140000_chat_core.before.sql:1-14` and `.after.sql:215-219`):
+  - insert the plans directly, `series_id` and `repeats_from` set, ids with the prefix `e6`;
+  - add no roster row: the harness fails if `private.tester_roster` isn't empty at the end (`scripts/test-database.sh:61-63`);
+  - `after.sql` ends by deleting every row `before.sql` made. That includes the `public.chats` rows by series, since `chats` has no foreign key to `plans`, and any `series_leaves` rows.
+
+  Chat core's own `after.sql` runs before this migration in that mode, so its "no row is a group" check still holds there and needs no change.
+- [ ] **Step 5: Run** both modes → PASS. The hosted-baseline mode names all four candidates, in order (bare, it fails by design while `tests.txt` lists tests of migrations not yet live; `qa/chat-release/README.md:110-113`):
+
+  ```
+  bash scripts/test-database-docker.sh --hosted-baseline supabase/migrations/20261111120000_connections_follow_ups.sql supabase/migrations/20261111130000_circles_of_trust.sql supabase/migrations/20261111140000_chat_core.sql supabase/migrations/20261111150000_chat_groups.sql
+  ```
 - [ ] **Step 6: Commit:** `"Groups: the group flag, who is in a group's chat, and when it closes"`
 
 ### Task 2: Migration section 2: the group lines, the roll, leaving and visibility
 
 **Files:**
-- Modify: `supabase/migrations/20261111150000_chat_groups.sql` (section 2), `supabase/tests/chat-groups.sql` (slice 2), `scripts/test-database.sh` (run the new script with the other concurrency scripts in full mode), `supabase/tests/hosted-baseline/20261111150000_chat_groups.after.sql` (the rehearsal)
+- Modify: `supabase/migrations/20261111150000_chat_groups.sql` (section 2), `supabase/tests/chat-groups.sql` (slice 2), `supabase/tests/chat.sql` (the roll's lines, the whole `cancelled` payload and the way-back block, Step 4), `scripts/test-database.sh` (run the new script with the other concurrency scripts in full mode), `supabase/tests/hosted-baseline/20261111150000_chat_groups.after.sql` (the rehearsal)
 - Create: `supabase/tests/local/leave-series-concurrency.sh`, `supabase/rollback/20261111150000_chat_groups.rollback.sql`
 
 **Interfaces:**
-- Consumes: Task 1; plan 1's `private.attendees_chat_lines()` and `private.plans_chat_lines()`; the latest `private.can_see_guests` (`20261031120000_creating_a_resbite.sql:621`), `private.request_connection` (the follow-ups migration, `20261111120000_connections_follow_ups.sql`), `private.roll_repeating_plans` (the circles migration, `20261111130000_circles_of_trust.sql`); the personal-link revokes of the latest `private.remove_guest`.
+- Consumes: Task 1; chat core's `private.attendees_chat_lines()` (`chat_core.sql:920-955`, trigger `attendees_chat_lines` after insert or update of `response`) and `private.plans_chat_lines()` (:963-982, trigger `plans_chat_lines` after update), as built; `private.plan_admins_chat_lines()` (:986-993); `private.chat_lines_off()` (:905-907); `messages_chat_stats` (:396-418) and `messages_signal` (:1101-1111), which every insert and update of a message fires; the latest `private.can_see_guests` (`20261031120000_creating_a_resbite.sql:621`), `private.request_connection` (the follow-ups migration, `20261111120000_connections_follow_ups.sql:130`), `private.roll_repeating_plans` (the circles migration, `20261111130000_circles_of_trust.sql:585`); the personal-link revokes of the latest `private.remove_guest` (`20261111130000_circles_of_trust.sql:651`). Chat core redefined none of these four.
 - Produces:
-  - `private.attendees_chat_lines()` redefined, copied from plan 1 with its flag check. On a group (Decision 6, confirmation S3):
-    - an insert writes `joined {actor, user, brought_by?}`. A `joined` line is never rewritten;
+  - `private.attendees_chat_lines()` redefined, copied from the built body (:920-952) with its `chat_lines_off()` check first. The built merge rules stay for every chat:
+    - the search keeps to rows updated in the last 10 minutes (`messages_series_updated_idx`), then tests `created_at`;
+    - a line merges only while no later system line names the person (H33);
+    - only `joined` and `cant_go` lines are searched.
+
+    Chat core's note asks plan 2 to narrow the search from the whole series (:939-943) to the current occurrence: add `m.plan_id = new.plan_id`. A one-off has one occurrence, so nothing changes for it. The built search doesn't test `state`, since plan 1 never changes a system line's state, so add `m.state = 'sent'`: a deleted line is never merged into or brought back. On a group (Decision 6, confirmation S3):
+    - an insert, whatever its reply, writes `joined {actor, user, brought_by?}`. A `joined` line is never rewritten;
     - a change into `declined` or `withdrawn` writes `cant_go {actor, user}`, or updates in place that person's shown `cant_go` line from the last 10 minutes;
-    - a change back into `accepted` or `maybe` within 10 minutes of that person's shown `cant_go` line deletes the line. It sets `state = 'deleted'`, so `updated_at` moves and `messages_signal` fires. When `chats.last_message_id` pointed at it, it moves back to the series' newest row still shown, and `last_message_at` moves with it to that row's `created_at` (confirmation 2, NOTE 4);
+    - a change back into `accepted` or `maybe` within 10 minutes of that person's shown `cant_go` line deletes the line. It sets `state = 'deleted'` (not a SQL `delete`: `chat_messages_since` never reports one, final review m6), so `messages_touch` moves `updated_at` and `messages_signal` fires.
+    - `messages_chat_stats` ignores a system row's state change (:400-403). So when `chats.last_message_id` pointed at the line, this function moves it back itself: it locks the `chats` row as that trigger does (:407, never the `chat:` advisory lock, :886-889), then checks again that it still points there. It moves to the series' newest row that is not a deleted system line, and `last_message_at` moves with it to that row's `created_at` (confirmation 2, NOTE 4);
     - nothing else writes a line.
 
     One-offs keep plan 1's transitions and its 10-minute rule (K-S2). The roll writes nothing because it runs under the roll flag (G-B6). Nothing infers "by the roll" from `repeats_from` any more (G-N2).
-  - `private.plans_chat_lines()` redefined, copied from plan 1. The `cancelled` payload becomes `{actor, stop, starts_at, time_zone}`, where `stop` is `new.repeat_weeks is null` and the two others are the cancelled occurrence's (G-S2). Everything else as plan 1.
-  - `private.plan_admins_chat_lines()` is not redefined. Plan 1's flag check already silences it when the roll re-inserts an admin (G-B6).
+  - `private.plans_chat_lines()` redefined, copied from the built body (:963-980). The built `cancelled` line is `chat_system_line(new.id, 'cancelled', '{}')`, so its payload is `{actor}` (:967-968). It becomes `{actor, stop, starts_at, time_zone}`, where `stop` is `new.repeat_weeks is null` and the two others are the cancelled occurrence's (G-S2). Everything else as built.
+  - `private.plan_admins_chat_lines()` is not redefined. Its built `chat_lines_off()` check (:988) already silences it when the roll re-inserts an admin (G-B6). Until this plan's roll sets the flag, the real roll writes an `admin` line for each carried admin (chat core's Decision 4, L9), which is one reason the three plans ship together.
   - `private.roll_repeating_plans()` redefined, copied from the circles version. The only changes:
-    - first statement: `perform set_config('resbite.system','roll',true)`;
+    - first statement: `perform set_config('resbite.system','roll',true)`. The setting lasts to the end of the calling transaction. The older tests that call the roll (`creating-a-resbite.sql`, `connections-follow-ups.sql`, `circles-of-trust.sql`) check no chat line after it, and `chat.sql:322-325` already resets it after its roll;
     - the carried-attendee insert skips users with a `series_leaves` row for the series;
     - after that insert, a carried row whose `brought_by` has no carried row on the new occurrence gets `brought_by = null` (G-N3);
-    - after the new occurrence is in, two lines through `private.chat_system_line`, both with `actor` null:
+    - after the new occurrence is in, two lines through `private.chat_system_line`, both with `'actor', null` in the payload (else it writes `auth.uid()`):
       - `ended {actor, title}` on the previous occurrence (`plan_id = p.id`, `title = p.title`), only when `p.status <> 'cancelled'` (G-S2, G-S6);
       - `next {actor, plan_id, starts_at, time_zone, place_label, place_tbd}` on the new occurrence.
   - `public.leave_series(p_series uuid) returns void`, with `private.leave_series`:
@@ -216,23 +307,26 @@ Chat plan 1's Global Constraints, verbatim, with the migration `supabase/migrati
     - inserts the leave, `on conflict do update set left_at = now()`;
     - revokes the caller's personal links on the current occurrence as `remove_guest` does: `private.invitations` claimed by the caller and `private.phone_invitations` for the caller (G-N1);
     - deletes the caller's attendee row on the current occurrence, unless that occurrence has ended and was not cancelled. Then the row stays, a real attendance (G-N13), and `chat_member` already leaves them out (Decision 2);
-    - writes `left {actor, user}`, both the caller. No outbox.
-    - Execute revoked from the four roles, granted to `authenticated` only.
+    - writes `left {actor, user}`, both the caller. No outbox. The delete writes no line of its own, since `attendees_chat_lines` fires on insert or an update of `response` only (:954-955).
+    - Execute revoked from the four roles, granted to `authenticated` only (both bodies, as chat core grants its calls, e.g. :280).
   - `private.can_see_guests(p_plan)` redefined, copied from `creating_a_resbite.sql:621`. Its existing tests come first. A group branch comes last: the plan's series `is_group`, the caller has an attendee row on the plan (any reply), and `private.chat_member(series, auth.uid())` holds now (G-S3). Someone who left or was removed falls back to the one-off rule on every occurrence. `can_read_profile` and the avatar policy follow through it.
     - Cost (G-S3): `can_see_guests` runs per row in `attendee_read` and inside `can_read_profile`'s loop over plans. Hosts and answered guests never reach the group branch. `chat_member` resolves the current occurrence once, through `plans_series_idx` and `plans_repeats_from_key`. A pending member's people list pays one such lookup per row read, accepted for groups of tens.
   - `private.request_connection` redefined, copied from the follow-ups version with its `detail` kept. On a group the target may be any attendee, pending included. This replaces the CH-P21 comment at its target check. The caller still passes `can_see_guests` first, so a leaver asking from a past occurrence gets `42501 'Names required'`. Plan 3 copies this body.
   - Rollback, `supabase/rollback/20261111150000_chat_groups.rollback.sql`, in this order:
-    - refuse while plan 3 is applied (`private.blocks` exists) with `'Run the chat safety rollback before the chat groups rollback'`, as the connections rollback guards its order (G-N11);
+    - refuse while plan 3 is applied (`private.blocks` exists) with `'Run the chat safety rollback before the chat groups rollback'`, as the connections rollback guards its order (G-N11) and as chat core's rollback guards against this plan (`supabase/rollback/20261111140000_chat_core.rollback.sql:44-49`);
     - drop the triggers `plans_group_flag` and `attendees_clear_leave`;
-    - restore plan 1's `attendees_chat_lines()`, `plans_chat_lines()`, `chat_member`, `chat_closes_at`, `chat_open` and `chat_summary`;
+    - restore chat core's `attendees_chat_lines()`, `plans_chat_lines()`, `chat_member`, `chat_closes_at`, `chat_open` and `private.chat_summary`, each byte for byte as built at sha256 `1047fb37…ce` (:920-952, :963-980, :132-138, :156-159, :165-168, :248-274), written `create or replace` so their grants stay;
     - restore `creating_a_resbite`'s `can_see_guests`, the follow-ups `request_connection` and the circles `roll_repeating_plans`;
     - drop `leave_series` and `series_is_group` in both schemas, `group_stopped`, `plans_group_flag()` and `attendees_clear_leave()`;
-    - drop `series_leaves` and the `stopped_at` column;
+    - drop `series_leaves` and the `stopped_at` column. Dropping `series_leaves` is what lets chat core's rollback run next: its guard refuses while that table exists;
     - set `is_group = false` on every `chats` row, leaving the column to plan 1, whose rollback drops it with the table (CH-R-A6). Plan 1 sets the flag true nowhere, so its audiences then read as before.
 
-    Its header says what is lost: every leave record, every group flag's value and every stop time. It also says to roll back in reverse order only, plan 3's first, because plan 3 copies this plan's `request_connection` and `chat_summary` (G-N11).
+    Its header says what is lost: every leave record, every group flag's value and every stop time. It also says:
+    - roll back in reverse order only, plan 3's first, because plan 3 copies this plan's `request_connection` and `chat_summary` (G-N11). The guarded chain is chat 3 → chat 2 → chat 1 → circles → follow-ups (chat core rollback, lines 34-42);
+    - this plan's lines stay in the chats: `ended`, `next`, `left`, `stopped`, `made_group`, `cancelled` with `stop`, and the deleted `cant_go` lines. A build without plan 2 words an unknown event as no line (`chatRules.ts:236-237`);
+    - the restored circles roll sets no flag, so a real roll writes an `admin` line again for each admin it carries (chat core's Decision 4).
 
-- [ ] **Step 1: Failing SQL test, slice 2** (`chat-groups.sql`, Task 1's fixture). A test that calls the roll inside its own transaction resets the flag afterwards (`select set_config('resbite.system', '', true)`).
+- [ ] **Step 1: Failing SQL test, slice 2** (`chat-groups.sql`, Task 1's fixture). A test that calls the roll inside its own transaction resets the flag afterwards (`select set_config('resbite.system', '', true)`). Times inside one transaction are moved by hand, as `chat.sql` does. "5 minutes later" moves the line's `created_at` back 5 minutes. An `update` can't set `updated_at`, since `messages_touch` makes it `now()` (`chat_core.sql:62-72`), and the built search already accepts any row updated in the last 10 minutes. An update by hand that would write a line sits between `set_config('resbite.system','roll',true)` and its reset (`chat.sql:12-16`).
 ```sql
 -- 03 answers declined on the group: one line cant_go {actor: 03, user: 03}. 07 invited in the app: one line joined {user: 07}.
 -- S3: 07 declines within a minute of the invitation: two lines, joined and cant_go, the joined line unchanged.
@@ -262,16 +356,19 @@ Chat plan 1's Global Constraints, verbatim, with the migration `supabase/migrati
 -- request_connection from 03 to 05 (pending) on the group: 'requested'. On the one-off: 42501 'Not on this resbite'.
 -- series_is_group as 04 after leaving: false. As 03, with the series id read from a rolled past occurrence: true.
 ```
-- [ ] **Step 2: Concurrency script** `supabase/tests/local/leave-series-concurrency.sh`, in the shape of `decide-join-concurrency.sh` (G-S5):
+- [ ] **Step 2: Concurrency script** `supabase/tests/local/leave-series-concurrency.sh`, in the shape of `decide-join-concurrency.sh` (G-S5). Chat core's `chat-send-concurrency.sh` (prefix `e9`) shows how a session signs in as a person (an `auth.sessions` row and `request.jwt.claims`) and cleans up its rows across sessions:
   - Seed a weekly plan that has just ended, its owner, and guest 04 with a live grant. Ids use the hex prefix `e8`.
   - Roll first: session A runs `begin; select private.roll_repeating_plans(); select pg_sleep(1); commit;` as postgres. Session B calls `leave_series` as 04 once A holds the row lock (wait on `pg_stat_activity`, as the decide script does).
   - Expected after both: one new occurrence, no attendee row for 04 on it, a leave row for 04, and `chat_member(series, 04)` false.
   - Leave first, on a second seeded plan: session B holds the lock (`leave_series` in an open transaction with `pg_sleep`). The roll skips that plan (it returns 0). A second roll after B commits creates the occurrence without 04.
   - Add the script to `scripts/test-database.sh`'s full-mode list, after `decide-join-concurrency.sh`.
 - [ ] **Step 3: Run** → FAIL.
-- [ ] **Step 4: Implement** section 2 and the rollback. If plan 1's `chat.sql` compares a whole `cancelled` payload, add `stop`, `starts_at` and `time_zone` to it.
-- [ ] **Step 5: Run** both modes → PASS. The rehearsal in `after.sql` runs inside a transaction that ends in `rollback`, as `20261110120000_connections.after.sql` does. It applies the rollback and proves:
-  - each restored body equals its previous definition (`pg_get_functiondef`);
+- [ ] **Step 4: Implement** section 2 and the rollback. Then the three `chat.sql` assertions this section breaks:
+  - `chat.sql:2134-2142` compares the whole `cancelled` payload with `{actor}`: add `stop` (true: the c3 one-off has no rule), `starts_at` and `time_zone`;
+  - this plan's roll writes `ended` and `next` on the weekly series in slice 1 (`chat.sql:322-325`). Slice 1's overview entry for it (`:558-559`, `last` null and `unread` false as 03) now reads the `next` line, unread for 03 since its actor is null. Slice 2's "Slices 1 and 2 wrote other lines" (`:1436-1440`, every system line since the transaction began) now lists them too;
+  - the way-back block (`chat.sql:2243-2290`) creates a stand-in `private.series_leaves` to prove chat core's rollback refuses, which fails now that the table exists. Switch it on `to_regclass('private.series_leaves')` with psql's `\if`, as `circles-of-trust.sql:1735-1757` does for chat. With this plan applied: run chat core's rollback, expect "Run the chat groups rollback before the chat core rollback", and check nothing changed. Without it: the full run as built. Chat core's full rehearsal also runs in `20261111140000_chat_core.after.sql`, before this migration, in hosted-baseline mode.
+- [ ] **Step 5: Run** both modes (the four candidates, as in Task 1) → PASS. The rehearsal in `after.sql` runs inside a transaction that ends in `rollback`, as `20261110120000_connections.after.sql` does. It applies the rollback and proves:
+  - each restored body equals its previous definition (`pg_get_functiondef`). Chat core wrote its bodies with `create function`, so the comparison runs chat core's statement as `create or replace` and checks nothing changed: cut it from the file read through `:resbite_repo`, as `pg_temp.ch_source` does (`chat.sql:131-138`, `:2255-2259`). The circles and follow-ups bodies are already `create or replace`;
   - `series_leaves`, `stopped_at`, the two triggers and the new functions are gone, and `is_group` remains with every row false;
   - with a stand-in `private.blocks` table present, the rollback refuses with the message above and changes nothing.
 
@@ -281,39 +378,60 @@ Chat plan 1's Global Constraints, verbatim, with the migration `supabase/migrati
 ### Task 3: The app's group model and words
 
 **Files:**
-- Modify: `mobile/src/domain/chatCopy.ts` and test, `mobile/src/domain/chatRules.ts` and test, `mobile/src/state/chatModel.ts` and test (`withEndedLine` for a stopped group), `mobile/src/services/chat.ts` (summary fields, `leave(series)`, error mapping) and test, `mobile/src/domain/eventPage.ts` and test (`EVENT_COPY.groupNotAnswered`, `showsNames`, `moreRows`, `peopleGroups`), `mobile/src/services/rsvp.ts` (`readEvent` reads the group flag) and `rsvp.test.ts`, `mobile/src/state/useEvent.ts` (passes `isGroup` on)
+- Modify: `mobile/src/domain/chatCopy.ts` and test, `mobile/src/domain/chatRules.ts` and test, `mobile/src/state/chatModel.ts` and test (`shownMessages`, `withEndedLine` for a stopped group), `mobile/src/state/chatFeed.ts` and test (the group wording, headings and labels of every row), `mobile/src/services/chat.ts` (`leave(series)`, error mapping) and test, `mobile/src/domain/eventPage.ts` and test (`EVENT_COPY.groupNotAnswered`, `showsNames`, `moreRows`, `peopleGroups`, `chatRow`), `mobile/src/services/rsvp.ts` (`readEvent` reads the group flag), `mobile/src/state/useEvent.ts` (exposes `isGroup`)
+- Create: `mobile/src/services/rsvp.test.ts` (none exists at `43f4416`; append it to `package.json`'s `test` chain). `readEvent` calls the app's client directly, so the test needs a seam. One option is the injected `rpc` shape `createChatGateway(rpc, deadline)` uses (`chat.ts:218`).
 
 **Interfaces:**
-- Consumes: plan 1's `CHAT_COPY`, `systemText`, `rowText`, `dayLabel`, `headerLine`, `defaultAudience`, `closedCard`, `withEndedLine`, `ChatSummary`, `chatErrorMessage`; `repeatLine` (`mobile/src/domain/whenText.ts:51`); the circles plan's Task 5 `peopleGroups` as built: its inputs `bringerNames` (null until `plan_bringers` lands, with a fallback to the bringer's own visible row), `broughtLinks`, `unnamed` (the `UNNAMED_GUEST` placeholder), `Guest.broughtById`, `PersonRow.broughtByMe`, and a guest's "Invited, not answered yet" group of their own link rows and own pending in-app rows; plan 1's `announcementLabel`.
+- Consumes, as chat core built them:
+  - `CHAT_COPY` (`mobile/src/domain/chatCopy.ts:4-85`; `announcementTo(a)` :23-24, `announcementLabel(a)` :67-68, `ended(title)` :57, `keep` :35);
+  - in `chatRules.ts`:
+    - `systemText(m, names, viewerId, group, title)` (:213-239, `group` unused so far);
+    - `rowText(last, names, viewerId, group)` (:253-263, which already takes `group` and calls `systemText(…, group, "")`);
+    - `messageLabel(m, names, viewerId, now, zone, sending?)` (:423-447, no group: `systemText(…, false, "")` and `announcementLabel`);
+    - `dayLabel(iso, zone, now?)` (:51-59, the year when it isn't now's);
+    - `headerLine(summary, now)` (:327-334), `defaultAudience(summary)` (:340) and `closedCard(summary, now?)` (:346-351);
+    - the private `person`, `cleanText` and `oneLine` helpers (:110-140);
+  - `chatFeed(items, ctx)` with its `FeedContext` and `FeedRow` (`mobile/src/state/chatFeed.ts:17-80`, :143-244);
+  - `withPending(messages, queue)` (`chatModel.ts:135-141`) and `withEndedLine(items, summary, hasEarlier, now)` (:173-194);
+  - `ChatSummary` and `chatErrorMessage` (`chat.ts:33-67`, :264-278);
+  - `chatRow` and `chatRowLabel` (`eventPage.ts:246-271`);
+  - the screen's `now`, `chat.serverNow()` (`useChat.ts:37-38`, `chat.tsx:153`);
+  - `repeatLine` (`mobile/src/domain/whenText.ts:51`);
+  - the circles plan's Task 5 `peopleGroups` as built: its inputs `bringerNames` (null until `plan_bringers` lands, with a fallback to the bringer's own visible row), `broughtLinks`, `unnamed` (the `UNNAMED_GUEST` placeholder), `Guest.broughtById`, `PersonRow.broughtByMe`, and a guest's "Invited, not answered yet" group of their own link rows and own pending in-app rows.
 - Produces:
-  - Plan 1's `ChatSummary` already declares `isGroup`, `stopped`, `repeatWeeks` and `members` (G-N6). Plan 2 only changes their server values, and types `repeatWeeks` as `1 | 2 | null` (confirmation NOTE 2).
-  - `CHAT_COPY` adds (exact):
+  - Plan 1's `ChatSummary` already declares `isGroup`, `stopped`, `repeatWeeks` and `members` (G-N6), and already types `repeatWeeks` as `1 | 2 | null` (`chat.ts:43`, :175). Plan 2 only changes their server values (confirmation NOTE 2). Nothing changes in the mapper.
+  - `CHAT_COPY` adds (exact). The apostrophe is ’ (U+2019), as in every user-facing string of `CHAT_COPY` and `systemText` (`chatCopy.ts:42`, :47, :50; `chatRules.ts:225`; H37 Q7: "curly apostrophes"), and "Can’t go" as the answer control writes it (`mobile/src/domain/rsvp.ts:42`):
     - `toGroup: "To: everyone in the group, now and later"`, `groupChat: "Group chat"`;
+    - `opensResbite: "Opens the resbite"`, the "Next one" button's hint (Task 4);
     - `audienceGroup: (n) => \`Everyone in the group · ${n}\``, `audienceGoingDay: (day, n) => \`Going this ${day} · ${n}\``, `announcementToGroup: (a, day) => a === "everyone" ? "ANNOUNCEMENT · TO EVERYONE IN THE GROUP" : \`ANNOUNCEMENT · TO GOING THIS ${day.toUpperCase()}\``, and for the screen reader `announcementLabelGroup: (a, day) => a === "everyone" ? "Announcement to everyone in the group" : \`Announcement to people going this ${day}\`` (confirmation NOTE 14);
     - `announcePlaceholderGroup: "Write an update for the group"` (CH-03, G-S7);
     - `groupEmptyHint: "Messages here reach everyone in the group."` (CH-07, G-S7);
     - `peopleInGroup: (n) => \`People in this group · ${n}\``, `groupHeader: (repeat, n) => \`${repeat} · ${n} in the group\``, `groupStoppedHeader: (day, n) => \`Last one · ${day} · ${n} in the group\`` (G-S7);
-    - `leaveGroup: "Leave group"`, `leaveThisGroup: "Leave this group"`, `leaveQuestion: (title, day) => \`Leave ${title}? You'll stop getting its ${day}s and its chat.\``;
-    - `groupClosedOn: (day) => \`This group's chat closed on ${day}.\``, `notInGroup: "You're not in this group."`;
-    - `hostsCantLeave: "To leave, step down first: change your reply to Can't go."`, `ownerCantLeave: "You own this group, so you can't leave it."` (G-N13).
-  - `audienceOptions(summary)` in `chatRules.ts`, the sheet's two radios in order (G-S7). On a group: Everyone in the group, then Going this `<weekday>`, the weekday from `startsAt` in `timeZone`. On a one-off: plan 1's Going, then Everyone invited. Plan 1's `defaultAudience` already starts a group on `everyone` and a one-off on `going` (K-N7).
-  - `systemText(m, names, viewerId, group, title)` with `group` true. Names come from the shared `names` map: a null name reads "Someone", and the viewer reads "You".
-    - `cant_go` → "Sol can't make it this week" ("You can't make it this week");
-    - `left` → "Sol left the group";
-    - `ended` → "<payload.title> ended", with `title` when the payload has none (G-S6);
-    - `next` → "Next one: Thu 20 Nov · Ana's flat", or "Next one: Thu 20 Nov · Place to be decided" when `place_tbd`, the day from `payload.starts_at` in `payload.time_zone`;
-    - `joined` with `brought_by` → "Clara joined · brought by Pedro";
-    - `cancelled` with `stop` false → "Ana cancelled this Thursday", the weekday from `payload.starts_at` in `payload.time_zone`. With `stop` true → "Ana cancelled the group" (G-S2);
+    - `leaveGroup: "Leave group"`, `leaveThisGroup: "Leave this group"`, `leaveQuestion: (title, day) => \`Leave ${title}? You’ll stop getting its ${day}s and its chat.\``;
+    - `groupClosedOn: (day) => \`This group’s chat closed on ${day}.\``, `notInGroup: "You’re not in this group."`;
+    - `hostsCantLeave: "To leave, step down first: change your reply to Can’t go."`, `ownerCantLeave: "You own this group, so you can’t leave it."` (G-N13).
+  - `audienceOptions(summary)` in `chatRules.ts`, the sheet's two radios in order (G-S7). It replaces the two options the sheet builds inline today (`chat.tsx:1077-1080`). On a group: Everyone in the group, then Going this `<weekday>`. The weekday is the long one ("Thursday", as `repeatLine` writes it), from `startsAt` in `timeZone`, with an unknown zone read in the phone's, as `chatRules.ts` does everywhere (`zoneOr`, :42). On a one-off: plan 1's Going, then Everyone invited. Plan 1's `defaultAudience` already starts a group on `everyone` and a one-off on `going` (:340, K-N7).
+  - `systemText(m, names, viewerId, group, title)` with `group` true. Names come from the shared `names` map through the built `person` helper: a null or missing name reads "Someone", and the viewer reads "You". Free text in a payload (`place_label`) is cleaned with `cleanText`, as the `changed` line's label is (:177, H18).
+    - `cant_go` → "Sol can’t make it this week" ("You can’t make it this week"). The built one-off line is "Sol can’t make it" (:225);
+    - `left` → "Sol left the group" ("You left the group");
+    - `ended` → "<payload.title> ended", with `title` when the payload has none (G-S6). **Already built** for both kinds (:232-235), so plan 2 only tests it on a group;
+    - `next` → "Next one: Thu 20 Nov · Ana's flat" (the place label as the host typed it), or "Next one: Thu 20 Nov · Place to be decided" when `place_tbd`, the day from `dayLabel(payload.starts_at, payload.time_zone, now)`;
+    - `joined` with `brought_by` → "Clara joined · brought by Pedro". **Already built** for both kinds (:219-223): the bringer is named only when they are the reader or the map names them;
+    - `cancelled` with `stop` false → "Ana cancelled this Thursday", the long weekday from `payload.starts_at` in `payload.time_zone`. With `stop` true → "Ana cancelled the group" (G-S2). The built one-off line, "Ana cancelled the resbite" or with no actor "The resbite was cancelled" (:230-231), stays;
     - `stopped` → "Ana stopped repeating this · the last one is Thu 27 Nov" (G-N13);
     - `made_group` → "Ana made this a group · everyone invited can read this chat" (G-N8).
-  - A `system` row whose `state` is `deleted` is never shown (Decision 6). `shownMessages(messages: ChatMessage[]): ChatMessage[]` in `chatModel.ts` drops it, and the screen renders `withEndedLine` over `withPending(shownMessages(messages), queue)`. `systemText` and `rowText` give no line for it.
-  - `rowText(last, names, viewerId, group)`: the Chat row's line uses the same group wording (G-S6).
-  - `headerLine(summary, now)` on a group: running → `groupHeader(repeatLine(startsAt, timeZone, repeatWeeks), members)`. With `stopped` → `groupStoppedHeader(dayLabel(startsAt, timeZone), members)` (G-S7).
-  - Plan 1's `closedCard(summary)` gains the group case, still from `(isGroup, stopped, status)` only (G-N5): a group gives `{ line: groupClosedOn(<closesAt as dayLabel in the plan's zone>), why: closedWhy }`. Plan 1's two one-off cards stay as they are.
-  - Plan 1's `withEndedLine` (K-S16) also inserts the computed separator for a stopped group (`isGroup && stopped`) whose `status` is not `cancelled`, at its current occurrence's end. No roll writes `ended` for a group's last occurrence.
+  - A `system` row whose `state` is `deleted` is never shown (Decision 6). `shownMessages(messages: ChatMessage[]): ChatMessage[]` in `chatModel.ts` drops it. The screen today renders `chatFeed(withEndedLine(withPending(chat.messages, chat.pending), summary, chat.hasEarlier, now), …)` (`chat.tsx:301`); it becomes `withEndedLine(withPending(shownMessages(chat.messages), chat.pending), summary, chat.hasEarlier, now)`. `systemText` ignores `state` today, so `rowText` (:255) and `messageLabel` (:431-434) also give no line for it.
+  - `rowText(last, names, viewerId, group)` already takes `group` (:253), and the Chat row already passes `summary.isGroup` (`eventPage.ts:263`). With `systemText`'s group wording the row reads the same (G-S6), with no new parameter. It cuts the line to one with `oneLine`, as built (H37 D1).
+  - `messageLabel` is widened. It takes no group today and words every system line and announcement as a one-off's (:432, :443). It gains trailing `group = false` and `day = ""` (the long weekday) after `sending`, passes `group` to `systemText`, and reads an announcement with `announcementLabelGroup(audience, day)` on a group.
+  - `chatFeed` is widened too. `FeedContext` (`chatFeed.ts:67-80`) gains `group: boolean` and `day: string`, filled from the summary. The three calls that pass `false` today (`systemText` at :181 and :194, and the heading `CHAT_COPY.announcementTo` at :213) and every `messageLabel` call pass the group, so a group's heading reads `announcementToGroup(audience, day)`. The pinned card's label (`chat.tsx:346`) passes it too.
+  - `headerLine(summary, now)` on a group: running → `groupHeader(repeatLine(startsAt, timeZone, repeatWeeks), members)`. With `stopped` → `groupStoppedHeader(dayLabel(startsAt, timeZone, now), members)` (G-S7). The built one-off lines and "Cancelled" (`!isGroup && status === "cancelled"`, :328) stay. Null when `repeatLine` is null or the start or zone can't be read, as built.
+  - Plan 1's `closedCard(summary, now?)` (:346-351) gains the group case, still from `(isGroup, stopped, status)` only (G-N5). A group gives `{ line: groupClosedOn(dayLabel(closesAt, timeZone, now)), why: closedWhy }`. Today a group falls through to the one-off's "This chat closed on …", since only `!isGroup && cancelled` is singled out. With no close time it keeps the built `closedShort`. Plan 1's two one-off cards stay as they are.
+  - Plan 1's `withEndedLine(items, summary, hasEarlier, now)` (K-S16) returns at once for any group today (`chatModel.ts:179`). That guard becomes `summary.isGroup && !summary.stopped`, so the computed separator also goes in for a stopped group whose `status` is not `cancelled`, at its current occurrence's end, by the built placement rules (:183-193). No roll writes `ended` for a group's last occurrence.
+  - The chat screen's `now` stays `chat.serverNow()` (the server's clock, never stepping back, H29 and H41 I3) for every one of these, as built.
   - `EVENT_COPY.groupNotAnswered: "Not answered yet"`.
-  - `showsNames(role, response, isGroup)`: true for any role on a group.
-  - `MoreRow` gains `"leaveGroup"`. `moreRows(i)` takes `isGroup` and `chatOpen`. A guest of a group, whatever their reply, gets `leaveGroup` last while the chat is open. On an ended or cancelled page it is their only row.
+  - `showsNames(role, response, isGroup)` (built `showsNames(role, response)`, `eventPage.ts:154-156`): true for any role on a group.
+  - `MoreRow` (`eventPage.ts:273`) gains `"leaveGroup"`. `moreRows(i)` (:278-290, an object) gains the fields `isGroup` and `chatOpen`. A guest of a group, whatever their reply, gets `leaveGroup` last while the chat is open. On an ended or cancelled page it is their only row: the built early `return []` for a page that isn't open (:279) gives way to it. `chatOpen` is the Chat row's summary, `event.chat?.open === true` (`useEvent.ts`, `chat`), so a failed or refused chat read hides Leave this group.
+  - `chatRow` and `chatRowLabel` (`eventPage.ts:246-271`) carry the group. The open row's title, "Chat" today (`event.tsx`, `ChatRow`), and the label's first word become `groupChat` on a group. The closed row "Chat closed · N messages" and the hidden row (no summary, or closed with no message, K-S13) stay as built.
   - `peopleGroups(i)` gains `isGroup` (G-B5):
     - a guest on a group sees, after Going, Maybe and Can't go, a group titled `groupNotAnswered` holding every pending app invitee (`appInvite` rows), each once;
     - a bringer's own pending in-app rows sit in that group too, keeping the circles plan's status ("Invited in the app · brought by you") and `removeInvite` while open (confirmation S4);
@@ -322,9 +440,9 @@ Chat plan 1's Global Constraints, verbatim, with the migration `supabase/migrati
     - a pending member is askable on a group, so `connect` is offered while the state is `none`;
     - hosts see what they saw before;
     - a row whose `broughtById` is missing from `bringerNames` shows no "Brought by" line (G-N3).
-  - `readEvent` (`mobile/src/services/rsvp.ts:112`) reads the group flag as part of the event (G-N13). After the plan row, `series_is_group({p_series})` runs beside the attendee and organizer reads, or alone for the owner. Its failure throws `eventUnavailable`, as the other parts do. `EventSnapshot.isGroup: boolean`. `counts` stays null on a group, since a pending member reads every guest row there.
-  - `useEvent` passes `snapshot.isGroup` to `showsNames`, `moreRows` and `peopleGroups`.
-  - `chatGateway.leave(series)` → `leave_series` with `{p_series}`. `chatErrorMessage` maps `'Not in this group'` → `notInGroup`, `"Hosts can't leave"` → `hostsCantLeave`, `"Owner can't leave"` → `ownerCantLeave`.
+  - `readEvent` (`mobile/src/services/rsvp.ts:126`) reads the group flag as part of the event (G-N13). After the plan row, `series_is_group({p_series})` runs beside the attendee and organizer reads, or alone for the owner. Its failure throws `eventUnavailable`, as the other parts do. `EventSnapshot.isGroup: boolean` (`rsvp.ts:78`). `counts` stays null on a group, since a pending member reads every guest row there.
+  - `useEvent` exposes `isGroup` from the snapshot and uses it in its own two `showsNames` calls (`useEvent.ts:248`, :358). The other callers pass it: `showsNames` and `moreRows` in `event.tsx:152` and :166, and `peopleGroups` in `guests.tsx:122`.
+  - `chatGateway.leave(series)`: `ChatGateway` (`chat.ts:77-91`) and `createChatGateway` (:218-242) gain `leave`, calling `leave_series` with `{p_series}`. `chatErrorMessage`'s 42501 branch (:267-271) maps `'Not in this group'` → `notInGroup`, `"Hosts can't leave"` → `hostsCantLeave`, `"Owner can't leave"` → `ownerCantLeave`. The server's messages keep the straight apostrophe, and anything else still falls back to `INVITE_COPY.offline` (:277).
 
 - [ ] **Step 1: Failing tests:**
   - every new string, exactly;
@@ -332,10 +450,12 @@ Chat plan 1's Global Constraints, verbatim, with the migration `supabase/migrati
   - `systemText` of `ended` with `payload.title` "Board game night" → "Board game night ended";
   - `cancelled` with `{stop: false, starts_at: "2026-11-20T19:00:00Z", time_zone: "Europe/London"}` → "Ana cancelled this Thursday"; with `stop: true` → "Ana cancelled the group";
   - `stopped` with `starts_at` "2026-11-27T19:00:00Z" in Europe/London → "Ana stopped repeating this · the last one is Thu 27 Nov";
-  - `rowText` of a `cant_go` line: `group` true → "Sol can't make it this week", false → "Sol can't make it";
+  - `rowText` of a `cant_go` line: `group` true → "Sol can’t make it this week", false → "Sol can’t make it" (U+2019, as built);
+  - `messageLabel` of a `cant_go` line with `group` true → "Resbite: Sol can’t make it this week"; of an `everyone` announcement with `group` true and day "Thursday" → it starts "Announcement to everyone in the group";
+  - `chatFeed` with `group: true, day: "Thursday"`: an announcement's heading is "ANNOUNCEMENT · TO GOING THIS THURSDAY" for `going`, and a `left` line reads "Sol left the group";
   - `audienceOptions`: on a group, "Everyone in the group · 9" then "Going this Thursday · 6"; on a one-off, "Going · 6" then "Everyone invited · 9";
   - `headerLine`: running → "Every Thursday · 9 in the group"; stopped → "Last one · Thu 27 Nov · 9 in the group";
-  - `closedCard` for a stopped group gives "This group's chat closed on Thu 27 Nov." with `closedWhy`, and plan 1's two one-off cases still hold;
+  - `closedCard` for a stopped group gives "This group’s chat closed on Thu 27 Nov." with `closedWhy`, and plan 1's two one-off cases still hold;
   - `withEndedLine` for a stopped group past its end inserts the separator, and for a running group or a cancelled stopped one it does not;
   - `showsNames("guest","pending",true)` true, `showsNames("guest","pending",false)` false;
   - `moreRows`: a group guest gets `leaveGroup`, a one-off guest does not; an ended page with the chat open → `["leaveGroup"]`; the chat closed → no `leaveGroup`;
@@ -344,7 +464,8 @@ Chat plan 1's Global Constraints, verbatim, with the migration `supabase/migrati
   - the same fixture with `isGroup` false: only "Going · 1" (the one-off rule holds);
   - a guest brought by an id missing from `bringerNames`: no "Brought by" line;
   - `announcementLabelGroup("everyone", "Thursday")` → "Announcement to everyone in the group"; `("going", "Thursday")` → "Announcement to people going this Thursday";
-  - `shownMessages` of [joined, cant_go with state `deleted`, a message] gives [joined, the message], and `rowText` of the deleted line gives no line;
+  - `shownMessages` of [joined, cant_go with state `deleted`, a message] gives [joined, the message], and `rowText` and `messageLabel` of the deleted line give no line;
+  - `chatRow` of a group summary: the open row's title is "Group chat" and its label starts "Group chat."; a closed group with messages still reads "Chat closed · N messages", and with none there is no row;
   - `readEvent` with a stubbed client: `series_is_group` is called with `{p_series}`, and `isGroup` true lands in the snapshot. A failed `series_is_group` rejects with `eventUnavailable`.
 - [ ] **Step 2: Run** each with `node --import tsx` → FAIL.
 - [ ] **Step 3: Implement.**
@@ -354,34 +475,35 @@ Chat plan 1's Global Constraints, verbatim, with the migration `supabase/migrati
 ### Task 4: Group screens, Leave group, checks and record
 
 **Files:**
-- Modify: `mobile/app/chat.tsx`, `mobile/app/event.tsx` (More's Leave this group with the in-place confirm; the people row's names for a group; the Chat row's "Group chat"), `mobile/app/guests.tsx` (a guest's "Not answered yet" group), `mobile/scripts/verify-chat.mjs` (group scenarios), `mobile/scripts/verify-event.mjs`, `qa/chat-release/README.md` (groups part), `knowledge-base/08-decisions.md`, `docs/implementation-status.md`
+- Modify: `mobile/app/chat.tsx`, `mobile/app/event.tsx` (More's Leave this group with the in-place confirm; the people row's names for a group; the Chat row's "Group chat"), `mobile/app/guests.tsx` (a guest's "Not answered yet" group), `mobile/src/design/WhenSheet.tsx` and `mobile/src/domain/planCopy.ts` with its test (the When sheet's chat line), `mobile/scripts/verify-chat.mjs` (group scenarios), `mobile/scripts/verify-event.mjs`, `qa/chat-release/README.md` (groups part), `knowledge-base/08-decisions.md`, `docs/implementation-status.md`
 
 **Interfaces:**
-- Consumes: Task 3.
+- Consumes: Task 3; the chat screen as chat core built it (`mobile/app/chat.tsx`).
 - Produces:
   - **The chat screen with `summary.isGroup`:**
-    - the header from `headerLine`. At accessibility text sizes its second line wraps to as many lines as it needs and never truncates (G-N7);
-    - the field line `toGroup`;
-    - the announcement sheet from `audienceOptions`, with `announcePlaceholderGroup`;
-    - an announcement card on a group is read as `announcementLabelGroup(audience, weekday)`, so the screen reader matches "TO EVERYONE IN THE GROUP" (confirmation NOTE 14);
-    - the owner alone: `nobodyGoing` with `groupEmptyHint` in place of `nobodyGoingHint`;
-    - the menu's `peopleInGroup(members)` and the red **Leave group** for a member who is not a host, while open;
-    - the closed card from `closedCard(summary)`.
-  - **The "Next one" line** is a button (`accessibilityRole="button"`, hint "Opens the resbite") that opens `/event?plan=<payload.plan_id>` (G-N7).
+    - the header from `headerLine` (`Bar`, :175). At accessibility text sizes its second line wraps to as many lines as it needs and never truncates (G-N7);
+    - the field line `toGroup` in place of `toGoing` (`Composer`, :956);
+    - the announcement sheet from `audienceOptions`, with `announcePlaceholderGroup` (`AnnounceSheet`, :1039-1113; its options are inline at :1077-1080 today);
+    - an announcement card on a group is read as `announcementLabelGroup(audience, weekday)` and headed `announcementToGroup`, through `chatFeed`'s widened context (Task 3), so the screen reader matches "TO EVERYONE IN THE GROUP" (confirmation NOTE 14);
+    - the owner alone: `nobodyGoing` with `groupEmptyHint` in place of `nobodyGoingHint` (`EmptyState`, :734-750, which gains the group);
+    - the menu (:615-640): `peopleInGroup(members)` in place of `peopleInChat` (:625), and the red **Leave group** (`MenuRow destructive`) after Mute, for a member who is not a host, while open;
+    - the closed card from `closedCard(summary, now)` (`ClosedCard`, :1009-1011; also the close's announcement at :424).
+  - **The "Next one" line** is a button (`accessibilityRole="button"`, hint `CHAT_COPY.opensResbite`) that opens `/event?plan=<payload.plan_id>` (G-N7). Chat core's change chip is the pattern (`chat.tsx:796-810`), but it opens the summary's current `planId`. So `chatFeed` gives the `next` line a row type of its own (for example `{ type: "next"; key; text; label; planId }`, `chatFeed.ts:17-65`), drawn like the chip.
   - **A stopped group's last occurrence** shows the computed end separator from `withEndedLine` (Task 3).
-  - **Leave group** asks `leaveQuestion(title, weekday)`, with a red "Leave group" and `CHAT_COPY.keep`. On success it returns to My resbites and refreshes. On failure the confirm stays open with the line from `chatErrorMessage`, and Leave group can be tapped again (G-N7).
-  - **The event page:** More's "Leave this group" with the same confirm, names on the people row for a group, and the Chat row's first line `groupChat`.
+  - **Leave group** asks `leaveQuestion(title, weekday)` in place, as Delete and Remove ask (`chat.tsx:670-697`), with a red "Leave group" and `CHAT_COPY.keep`. On success it returns to My resbites and refreshes. Leaving the screen runs its focus cleanup (:161-170), which clears `focusedChat`, so the push router stops skipping that series (H36). On failure the confirm stays open with the line from `chatErrorMessage`, and Leave group can be tapped again (G-N7).
+  - **The event page:** More's "Leave this group" with the same confirm, names on the people row for a group, and the Chat row's first line `groupChat` (`ChatRow` in `event.tsx`, from `chatRow`).
+  - **The When sheet** (chat core's note): `PLAN_COPY.chatCloses`, "The chat closes 48 hours after the end time." (`planCopy.ts:35`), shows for every plan (`WhenSheet.tsx:115`). That isn't true while a group repeats. The words for a repeating draft are open question Q2. Until the owner answers, the line hides while Repeats is "Every week" or "Every 2 weeks" (`draft.repeatWeeks` not null), and shows as built otherwise. A stopped group closes 48 hours after its last end, as the line says.
 
-- [ ] **Step 1: Extend `verify-chat.mjs`.** The labels g1 to g9 keep clear of plans 1 and 3.
-  - (g1) A group member who said Can't go this week still reads and writes, and sees "Sol can't make it this week".
-  - (g2) The "Next one: Thu 20 Nov · Ana's flat" line is a button with the hint "Opens the resbite", and opens the new occurrence.
-  - (g3) Leave group calls `leave_series` with `{p_series}` and lands on My resbites.
-  - (g4) Leave group answered offline: the confirm stays, the error line shows, and a second tap calls `leave_series` again.
-  - (g5) The header reads "Every Thursday · 9 in the group". With `stopped` true it reads "Last one · Thu 27 Nov · 9 in the group".
-  - (g6) As host on a group, Announce opens with "Everyone in the group · 9" first and checked, then "Going this Thursday · 6", and the placeholder "Write an update for the group". The sent card is read as "Announcement to everyone in the group".
-  - (g7) A stopped group after its close shows "This group's chat closed on Thu 27 Nov." and no field.
-  - (g8) After "Cancel just this one": "Ana cancelled this Thursday", no "ended" line, and the field is still there.
-  - (g9) With the chat open on "Sol can't make it this week", a signal and `chat_messages_since` return that line with state `deleted`: the line leaves the screen, and "Sol joined" stays (Decision 6).
+- [ ] **Step 1: Extend `verify-chat.mjs`.** Plan 1 already uses (g), (g2), (g3) and (g4) (`verify-chat.mjs:890`, :910, :1458), so this plan's labels are (gr1) to (gr9). Plan 3's (s1) to (s10) are clear of plan 1's (s) (:1211). Each scenario overrides the shared summary fixture (`verify-chat.mjs:228-249`, which reads `is_group: false, stopped: false`) through its `summary` argument.
+  - (gr1) A group member who said Can't go this week still reads and writes, and sees "Sol can’t make it this week".
+  - (gr2) The "Next one: Thu 20 Nov · Ana's flat" line is a button with the hint "Opens the resbite", and opens the new occurrence.
+  - (gr3) Leave group calls `leave_series` with `{p_series}` and lands on My resbites.
+  - (gr4) Leave group answered offline: the confirm stays, the error line shows, and a second tap calls `leave_series` again.
+  - (gr5) The header reads "Every Thursday · 9 in the group". With `stopped` true it reads "Last one · Thu 27 Nov · 9 in the group".
+  - (gr6) As host on a group, Announce opens with "Everyone in the group · 9" first and checked, then "Going this Thursday · 6", and the placeholder "Write an update for the group". The sent card is read as "Announcement to everyone in the group".
+  - (gr7) A stopped group after its close shows "This group’s chat closed on Thu 27 Nov." and no field.
+  - (gr8) After "Cancel just this one": "Ana cancelled this Thursday", no "ended" line, and the field is still there.
+  - (gr9) With the chat open on "Sol can’t make it this week", a signal and `chat_messages_since` return that line with state `deleted`: the line leaves the screen, and "Sol joined" stays (Decision 6).
 
   `verify-event.mjs`:
   - More shows "Leave this group" on a group, not on a one-off.
@@ -390,18 +512,34 @@ Chat plan 1's Global Constraints, verbatim, with the migration `supabase/migrati
 - [ ] **Step 2: Run** with Expo web → FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4:** `npm run check`, `verify-chat.mjs`, `verify-event.mjs` → PASS.
-- [ ] **Step 5: Runbook** (groups part of `qa/chat-release/README.md`):
-  - the migration and rollback hashes;
-  - the expected snapshot delta: `stopped_at` on `chats`, the backfilled `is_group` values, `series_leaves`, the new functions and the two triggers;
-  - after the apply, a read in the SQL editor of the backfill cases: long-finished stopped groups closed, recently stopped ones open (G-B7);
-  - roll back in reverse order only, plan 3's first, and plan 2's rollback loses every leave record (G-N11);
-  - device checks:
+- [ ] **Step 5: Runbook** (groups part of `qa/chat-release/README.md`). Chat core wrote the runbook in parts, for plans 2 and 3 to extend (README:7). Its sections are fixed: what is built, Files and hashes, Checks made locally, the Rollout runbook's steps 0 to 8, Applied, Rollback, Known gaps and Not done here. Owner-run scripts are `! bash ~/<name>.sh`, written into the home directory from a block in the step. Each checks the file's sha256, runs from `${REPO:-$HOME/dev/resbite-app}`, and prints no secret, number or account id (README:178-183). The groups part goes into those sections:
+  - **The header** (README:5-14): the Code line names `ch2-groups`. The two plan-1-alone bullets ("a repeating series follows the one-off rules", "the real weekly roll writes an `admin` line") become history once this plan ships with it.
+  - **What is built:** a groups section in the same shape.
+  - **Files and hashes** (README:73-87): this migration, its rollback and its before/after files.
+  - **Checks made locally** (README:89-155):
+    - the hosted-baseline command with all four candidates (Task 1, Step 5) and its PASS count;
+    - the fingerprint replay from chat core's 464 objects, with what is added and changed;
+    - the rollback back to 464.
+  - **Step 0:** no owner question of this plan's own. The When sheet's words (Q2), and Q1, Q3 and Q4 if still open, go here.
+  - **Step 1** (README:197-231): the bullet "With the roll job and chat core but not plan 2, the roll writes an `admin` line" now says this plan's roll sets the flag.
+  - **Step 2** (README:233-272): after `ch1-apply.sh`, the owner runs `! bash ~/ch2-apply.sh`, in the same shape. It checks the hash, and its guard refuses unless chat core is applied (`public.messages` exists) and this plan isn't (`private.series_leaves` doesn't exist). It applies in one transaction and records with `supabase migration repair --status applied 20261111150000 --linked --yes`. The history then reads `23 | 20261111150000`. Never `supabase db push`.
+  - **Step 3** (README:274-322):
+    - the snapshot delta: `stopped_at` on `chats`, the backfilled `is_group` values, `series_leaves`, the new functions and the two triggers;
+    - `ch1-after-checks.sh`'s `groups` reads 0 today ("plan 1 sets none", README:301). After this migration it equals the backfill's count: the series with any occurrence whose `repeat_weeks` or `repeats_from` is set;
+    - a read in the SQL editor of the backfill cases: long-finished stopped groups closed, recently stopped ones open (G-B7);
+    - the advisors: this plan adds no public table, so no new `rls_enabled_no_policy` line;
+    - this migration's line for `supabase/tests/hosted-baseline/migrations.txt`.
+  - **Step 4:** no sender change of this plan's own.
+  - **Step 7** (README:361-418), the device checks:
     - a group carries its chat to next Thursday, and a Can't-go member stays in it;
+    - after the roll, no "joined" and no "admin" line for anyone carried (G-B6);
     - right after the roll, a pending member sees every name;
     - Leave group, online and offline;
     - stopping the series gives the goodbye window and the "stopped repeating" line;
     - the group header at the largest text size.
+  - **Rollback** (README:442-497): its full order and guarded chain already name this plan. Add this plan's steps with `! bash ~/ch2-rollback.sh`, in `ch1-rollback.sh`'s shape: the hash, one transaction, the fingerprint back to chat core's 464. Say what is lost: every leave record, every group flag's value, every stop time (G-N11). Say that the restored roll writes `admin` lines again, and to remove this migration's line from `migrations.txt`.
+  - **Known gaps** (README:499-511): "The roll and plan 1 (Decision 4)" goes, since this plan's roll sets the flag. Add the gaps this plan accepts (the post-end leaver who can't be re-invited until the roll, Decision 2; the open questions not yet answered).
 
-  Decisions log: this plan's Decisions 1 to 6, the group lines' wording and the Leave confirm.
+  **Decisions log:** a "Chat groups (CH), <date>" section right after Chat core's (`knowledge-base/08-decisions.md:622-672`), one line each with no nested bullets, as H40 asked of Chat core's. It holds this plan's Decisions 1 to 6, the group lines' wording and the Leave confirm. Chat core's lines that point to plan 2 now point to that section: CH-D1, CH-D3, CH-D4, CH-P2, CH-P4, CH-P5, CH-P15 and CH-R4 ("until plan 2's roll sets its flag…"), and CH-R8.
 - [ ] **Step 6: Full check** (three commands) → PASS.
 - [ ] **Step 7: Commit:** `"Groups: the screens, leaving, and the record"`
