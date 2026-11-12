@@ -103,5 +103,5 @@ test("the foreground handler and the chat screen use the rule: the handler reads
   assert.match(chat, /useFocusEffect\(\s*useCallback\(\(\) => \{\s*if \(!focusedSeries\) return;\s*setFocusedChat\(focusedSeries\);\s*return \(\) => \{\s*if \(focusedChat\(\) === focusedSeries\) setFocusedChat\(null\);/);
   // CH-P17, K-N15: the chat is the moment for the ask, while the reader is in an open chat.
   assert.match(chat, /useNotificationAsk\(summary\?\.open && !out \? \{ chat: true \} : null\)/);
-  assert.match(chat, /<NotificationAsk ask=\{ask\} \/>/);
+  assert.match(chat, /<NotificationAsk ask=\{ask\} body=\{NOTIFICATION_ASK\.chatBody\} \/>/);
 });

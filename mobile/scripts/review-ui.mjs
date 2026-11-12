@@ -140,7 +140,7 @@ try {
     await button(page, "Chat messages").click();
     await expect(
       page.getByText(
-        "Chat messages are stored on Resbite’s servers so everyone in a resbite’s chat can read them, including people who join later. They are not end-to-end encrypted. Deleting your account removes the text of your messages as cleanup finishes. Review its availability in this build under Delete account.",
+        "Chat messages are stored on Resbite’s servers so everyone in a resbite’s chat can read them, including people who join later. They are not end-to-end encrypted. Deleting your account removes the text of your messages as cleanup finishes. Review the chat’s availability in this build under Delete account.",
         { exact: true },
       ),
     ).toBeVisible();
@@ -386,7 +386,8 @@ try {
     page.on("pageerror", (e) => errors.push(e.message));
     page.on("console", (m) => {
       // The overview's 500 is under test once (overviewFails); every other failed request is an error.
-      if (m.type() === "error" && !(overviewFails && /Failed to load resource/.test(m.text()))) errors.push(m.text());
+      const overviewFailure = overviewFails && /Failed to load resource/.test(m.text()) && m.location().url.includes("/rest/v1/rpc/my_chat_overview");
+      if (m.type() === "error" && !overviewFailure) errors.push(m.text());
     });
     const suffix = large ? "large-320" : String(width);
     const fits = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
@@ -456,6 +457,23 @@ try {
       names: { g1: "Alex", [jo]: "Jo" },
     };
     let overviewFails = false;
+    // Fix round 1: how long my_chat_overview takes to answer (H36 Q4: the list never waits for it).
+    let overviewDelay = 0;
+    // Fix round 1 (H37 Q4): last week's occurrence of the organizer's series, ended, which carries no dot; and (H37 Q5)
+    // Jo's picnic, started an hour ago and still running, where Stephen hasn't answered: its tile carries Jo's announcement.
+    const lastWeek = { ...plan, id: "22222222-2222-4222-8222-222222222200", starts_at: "2026-10-16T18:30:00Z", ends_at: "2026-10-16T21:00:00Z" };
+    plan.repeats_from = lastWeek.id;
+    const running = {
+      ...plan,
+      id: "77777777-7777-4777-8777-777777777777",
+      series_id: "77777777-7777-4777-8777-7777777777ee",
+      repeats_from: null,
+      title: "Picnic by the lake",
+      owner_id: jo,
+      starts_at: new Date(Date.now() - 3_600_000).toISOString(),
+      ends_at: new Date(Date.now() + 2 * 3_600_000).toISOString(),
+    };
+    overview.announcements[running.id] = { id: 42, author_id: jo, body: "We’re by the fountain" };
     // Three numbers to invite: Ana is on Resbite (invited in the app); Ben and Cy get personal links.
     const people = [
       ["Ana Rivera-Castellanos", "07700 900123", "447700900123"],
@@ -498,7 +516,7 @@ try {
       }
       if (path === "/rest/v1/activities") return reply([]);
       if (path === "/rest/v1/plans") {
-        const rows = [plan, invitation].filter((p) => !id || p.id === id).map((p) => ({ ...p, plan_meeting_details: null }));
+        const rows = [plan, invitation, lastWeek, running].filter((p) => !id || p.id === id).map((p) => ({ ...p, plan_meeting_details: null }));
         return reply(one ? rows[0] : rows);
       }
       if (path === "/rest/v1/attendees") {
@@ -508,6 +526,7 @@ try {
           return reply([
             ...guests.map((g) => ({ ...g, plan_id: plan.id, version: 1 })),
             { plan_id: invitation.id, user_id: user.id, response: "pending", version: 1, profiles: { display_name: "Stephen" } },
+            { plan_id: running.id, user_id: user.id, response: "pending", version: 1, profiles: { display_name: "Stephen" } },
           ]);
         return reply(url.searchParams.get("plan_id") === `eq.${plan.id}` ? guests : []);
       }
@@ -536,7 +555,10 @@ try {
         return req.postDataJSON().p_series === plan.series_id
           ? reply(chatSummary)
           : reply({ code: "42501", message: "Not in this chat", details: null, hint: null }, 403);
-      if (path === "/rest/v1/rpc/my_chat_overview") return overviewFails ? reply({ message: "Fixture: the overview failed" }, 500) : reply(overview);
+      if (path === "/rest/v1/rpc/my_chat_overview") {
+        if (overviewFails) return reply({ message: "Fixture: the overview failed" }, 500);
+        return overviewDelay ? new Promise((r) => setTimeout(r, overviewDelay)).then(() => reply(overview)) : reply(overview);
+      }
       // Named, so a failure says which request nobody planned for.
       errors.push(`Unexpected ${req.method()} ${path}${url.search}`);
       return reply({ message: `Unexpected ${path}` }, 400);
@@ -639,6 +661,17 @@ try {
     await expect(unreadTile).toBeVisible();
     await unreadTile.scrollIntoViewIfNeeded();
     await shot("plans-unread", false);
+    // Fix round 1 (H37 Q5): Jo's running picnic, where Stephen hasn't answered, carries its announcement too.
+    const runningTile = button(page, /^Picnic by the lake, .*, Announcement from Jo · We’re by the fountain$/);
+    await expect(runningTile).toBeVisible();
+    await expect(page.getByText("Announcement from Jo · We’re by the fountain", { exact: true })).toBeVisible();
+    await runningTile.scrollIntoViewIfNeeded();
+    await shot("plans-running-invitation", false);
+    // H37 Q4: under Past, last week's occurrence of the same series carries no dot; only this week's does.
+    await page.getByRole("radio", { name: "Past", exact: true }).click();
+    await expect(button(page, /^Film club: Paris, Texas, /)).toHaveCount(1);
+    await expect(page.getByRole("button", { name: /unread messages$/ })).toHaveCount(0);
+    await page.getByRole("radio", { name: "Upcoming", exact: true }).click();
     await heading(page, "Invitations").scrollIntoViewIfNeeded();
     await expect(page.getByRole("radiogroup", { name: "Your answer to Board games at the café", exact: true })).toBeVisible();
     // Open-link approval: the organizer's own requests sit with the invitations, waiting and declined.
@@ -658,6 +691,15 @@ try {
       await expect(page.getByText(/We couldn’t refresh your plans/)).toHaveCount(0);
       await shot("plans-overview-failed");
       overviewFails = false;
+      // H36 Q4: a slow overview never holds the list back; its dot and line land when it answers.
+      overviewDelay = 8000;
+      await open("/plans");
+      await expect(button(page, /^Film club: Paris, Texas, /)).toBeVisible({ timeout: 3000 });
+      await expect(button(page, /^Jo invited you, Board games at the café, /)).toBeVisible({ timeout: 3000 });
+      await expect(page.getByRole("button", { name: /unread messages$/ })).toHaveCount(0);
+      await expect(button(page, /^Film club: Paris, Texas, .*, unread messages$/)).toBeVisible({ timeout: 15000 });
+      await expect(page.getByText(announcement, { exact: true })).toBeVisible();
+      overviewDelay = 0;
     }
     // The waiting screen in both states: the card, "Waiting for <host>", the answer; and "You weren’t added".
     await open(`/waiting?plan=${mine[0].plan_id}`);

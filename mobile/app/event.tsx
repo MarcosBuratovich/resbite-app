@@ -43,7 +43,9 @@ import {
   byline,
   cancelQuestion,
   chatRow,
+  chatRowLabel,
   EVENT_COPY,
+  type ChatRow as ChatRowView,
   hostLabel,
   moreRows,
   namesLine,
@@ -375,6 +377,8 @@ export default function EventPage() {
             <Copy>{guestNote}</Copy>
           </View>
         )}
+        {/* An invitee who hasn't answered: the latest announcement to everyone invited, in full, as their card words it (H37). */}
+        {!!event.announcement && <Copy>{event.announcement}</Copy>}
         <MeetingDetails view={details} owner={host} place={current.place_label} />
         <PeopleRow
           text={peopleRowText(counts, host)}
@@ -553,12 +557,11 @@ function BringRow({ row, onOpen }: { row: NonNullable<ReturnType<typeof bringRow
  * the muted style, a neutral dot when unread, and the chevron; after the close, "Chat closed · 23 messages" alone. It
  * opens the chat, closed or not (reading stays). The dot is said at the end of the label (CH-P9).
  */
-function ChatRow({ row, onOpen }: { row: NonNullable<ReturnType<typeof chatRow>>; onOpen: () => void }) {
+function ChatRow({ row, onOpen }: { row: ChatRowView; onOpen: () => void }) {
   const title = row.closed ? row.text : CHAT_COPY.chat;
   const line = row.closed ? null : row.text;
-  const label = [title, line].filter(Boolean).join(". ") + (row.dot ? `, ${CHAT_COPY.unreadMessages}` : "");
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onOpen} style={styles.card}>
+    <Pressable accessibilityRole="button" accessibilityLabel={chatRowLabel(row)} onPress={onOpen} style={styles.card}>
       <View aria-hidden importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={styles.chatIcon}>
         <MessageSquare size={20} strokeWidth={1.8} color={c.ink} />
       </View>

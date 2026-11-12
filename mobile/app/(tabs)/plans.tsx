@@ -34,7 +34,7 @@ import { joinRequestGateway, type MyRequest } from "../../src/services/joinReque
 import { ANSWER_OPTIONS, reconcileRsvp, responseFor, type AnswerKey, type RsvpAttempt } from "../../src/domain/rsvp";
 import { readRsvp, writeRsvp } from "../../src/services/rsvp";
 import { chatGateway, type ChatOverview } from "../../src/services/chat";
-import { invitationNote, unreadDot } from "../../src/domain/chatRules";
+import { currentOccurrences, pendingCardNote, unreadDot } from "../../src/domain/chatRules";
 
 // The last save notice already shown, so a remount or web history restoring the same URL never
 // repeats a saved toast. Each save passes a fresh `notice` id.
@@ -102,8 +102,16 @@ export default function Plans() {
     const timeout = setTimeout(() => controller.abort(), 15000);
     setBusy(true);
     setError(null);
+    // The chats never hold the list back (H36): the overview lands when it arrives, and a failure keeps the last dots and
+    // announcements (K-S13), as the requests' read does.
+    void chatGateway.overview().then(
+      (chats) => {
+        if (isCurrent()) setOverview(chats);
+      },
+      () => {},
+    );
     try {
-      const [p, a, q, chats] = await Promise.all([
+      const [p, a, q] = await Promise.all([
         supabase.from("plans").select(planListColumns).order("starts_at").abortSignal(controller.signal),
         supabase
           .from("attendees")
@@ -111,8 +119,6 @@ export default function Plans() {
           .abortSignal(controller.signal),
         // Requests never block My resbites: a failed read keeps the last list.
         joinRequestGateway.mine().catch(() => null),
-        // Nor do the chats (K-S13): a failed overview keeps the last dots and announcements, and the plans still list.
-        chatGateway.overview().catch(() => null),
       ]);
       if (!isCurrent()) return;
       if (p.error) throw p.error;
@@ -121,7 +127,6 @@ export default function Plans() {
       const read = ((p.data || []) as unknown as PlanRow[]).map(planFromRow);
       setPlans(read);
       if (q) setRequests(q);
-      if (chats) setOverview(chats);
       // Cover changes for cancelled or ended plans, or plans no longer this person's to host, can never complete: drop
       // them quietly. The plans carry their admins, whose changes stay.
       void planCoverStore.discardStaleCoverJournals(uid, read).catch(() => {});
@@ -186,6 +191,8 @@ export default function Plans() {
   const { upcoming: ahead, past } = groupPlans(list, now);
   const upcoming = withoutInvitations(ahead, invitations);
   const shown = segment === "upcoming" ? upcoming : past;
+  // Each series' current occurrence among the listed plans: only its tile carries the chat's dot.
+  const current = currentOccurrences(list);
   // Answers an invitation exactly as the event page does: read, reconcile, write when still needed, confirm.
   async function answer(p: LocalPlan, key: AnswerKey) {
     const me = attendees.find((a) => a.plan_id === p.id && a.user_id === session?.user.id);
@@ -296,7 +303,7 @@ export default function Plans() {
             {invitations.map((p) => {
               const host = hosts[p.owner_id ?? ""]?.trim() || INVITE_COPY.hostFallback;
               // The latest announcement sent to Everyone invited, under the title (spec "The announcement on the invitation card").
-              const note = overview ? invitationNote(overview.announcements[p.id], overview.names, session?.user.id ?? "") : null;
+              const note = pendingCardNote(p, "pending", overview, session?.user.id ?? "", now);
               const place = eventPlace({ owner: false, response: "pending", place: p.place_label, area: p.area }).line;
               const chips = cardChips({ owner: false, status: p.status, response: "pending", starts_at: p.starts_at, ends_at: p.ends_at }, now);
               return (
@@ -393,8 +400,11 @@ export default function Plans() {
             // GI1: as on the event page, an invitee who hasn’t answered sees the area (or no place), never the place.
             const place = eventPlace({ owner, response: mine?.response ?? null, place: p.place_label, area: p.area }).line;
             const over = showsDoAgain(p, preview ? undefined : session?.user.id, now, preview);
-            // CH-P9: a neutral dot while the series' chat is open and has messages this person hasn't read.
-            const dot = !preview && unreadDot(overview?.chats[p.series_id]);
+            // CH-P9: a neutral dot while the series' chat is open and has messages this person hasn't read, on its current
+            // occurrence only (H37 Q4).
+            const dot = !preview && current.has(p.id) && unreadDot(overview?.chats[p.series_id]);
+            // A resbite started without an answer yet keeps its announcement until it ends (H37 Q5).
+            const note = preview ? null : pendingCardNote(p, mine?.response, overview, session?.user.id ?? "", now);
             return (
               <View key={p.id} style={{ gap: 4 }}>
                 <CoverCard
@@ -405,6 +415,7 @@ export default function Plans() {
                   place={place}
                   dimmed={p.status === "cancelled"}
                   dot={dot}
+                  note={note}
                   chips={chips.map((text) => ({ key: text, text, tone: chipToneFor(text) }))}
                   label={cardLabel(
                     { title: p.title, startsAt: p.starts_at, endsAt: p.ends_at, place: place ?? "", chips, photo: p.cover_description },

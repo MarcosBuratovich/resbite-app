@@ -173,8 +173,23 @@ async function fixture({ viewer = PEDRO, now = OCT.now, rows = octRows(), summar
   const serverNow = () => Date.parse(now) + (Date.now() - installed) + jumped;
   await page.addInitScript(
     ({ key, session, queueKey, queue, permission }) => {
-      // "denied" keeps "Get notified?" away (scenario ask covers it): it schedules nothing and never asks.
-      globalThis.__resbiteDevice ??= { reminders: [], calendar: [], permission };
+      // "denied" keeps "Get notified?" away (scenario ask covers it): it schedules nothing and never asks. Each read of
+      // the permission is counted (`__permissionReads`), so a scenario can wait for the ask's own read.
+      if (!globalThis.__resbiteDevice) {
+        let current = permission;
+        globalThis.__permissionReads = 0;
+        globalThis.__resbiteDevice = {
+          reminders: [],
+          calendar: [],
+          get permission() {
+            globalThis.__permissionReads++;
+            return current;
+          },
+          set permission(value) {
+            current = value;
+          },
+        };
+      }
       if (!sessionStorage.getItem("fixture-seeded")) {
         sessionStorage.setItem(key, JSON.stringify(session));
         if (queue) sessionStorage.setItem(queueKey, JSON.stringify(queue));
@@ -1338,36 +1353,44 @@ try {
   }
   console.log("PASS (y): an old chat's header, closed card, separators and labels carry the year.");
 
-  // (ask) The chat is the moment for the notification ask (CH-P17, K-N15).
+  // (ask) The chat is the moment for the notification ask (CH-P17, K-N15), with its own line (H37 Q7).
   {
     const f = await fixture({ permission: "undetermined" });
     const { page } = f;
+    const reads = () => page.evaluate(() => globalThis.__permissionReads);
     await openChat(page);
     await expect(heading(page, "Get notified?")).toBeVisible();
+    await expect(text(page, "Turn on notifications to hear about new messages.")).toBeVisible();
+    await expect(page.getByText(/^Resbite can tell you when people answer/)).toHaveCount(0);
     await expect(button(page, "Turn on notifications")).toBeVisible();
+    // Every read of the permission this visit made, the ask's included.
+    const asking = await reads();
     await button(page, "Not now").click();
     await expect(heading(page, "Get notified?")).toHaveCount(0);
     await expect(field(page)).toBeVisible();
-    // Shown counts as asked: the next open of a chat doesn't ask again.
+    // Shown counts as asked: the next open of a chat doesn't ask again. The signal: the same reads have been made, the
+    // ask's included, and the page has drawn twice since.
     await page.reload();
     await expect(heading(page, "Picnic in the park")).toBeVisible();
     await expect(text(page, "Count me in")).toBeVisible();
-    await page.waitForTimeout(800);
+    await expect.poll(reads).toBeGreaterThanOrEqual(asking);
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
     await expect(heading(page, "Get notified?")).toHaveCount(0);
     await f.done();
   }
-  // Someone who isn't in the chat isn't asked there.
+  // Someone who isn't in the chat isn't asked there: with no summary there is no moment, so nothing reads the permission
+  // for the ask once the refusal shows.
   {
     const f = await fixture({ permission: "undetermined", refusals: [403] });
     f.state.member = false;
     const { page } = f;
     await page.goto(`${base}/chat?series=${SERIES}`);
     await expect(text(page, "You’re not in this chat.")).toBeVisible();
-    await page.waitForTimeout(800);
+    await f.settle();
     await expect(heading(page, "Get notified?")).toHaveCount(0);
     await f.done();
   }
-  console.log("PASS (ask): the first open of a chat brings Get notified? once, with Turn on notifications and Not now; it doesn't come back on the next open, nor for someone outside the chat.");
+  console.log("PASS (ask): the first open of a chat brings Get notified? once, with Turn on notifications to hear about new messages., Turn on notifications and Not now; it doesn't come back on the next open, nor for someone outside the chat.");
 
   // (g4) The announcement sheet open at the close closes with it (H32 Q45).
   {

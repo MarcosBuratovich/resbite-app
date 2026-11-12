@@ -99,6 +99,17 @@ function cleanText(value: unknown): string {
   if (typeof value !== "string") return "";
   return wellFormed(value).replace(FORMAT, "").replace(/\s/g, " ").replace(CONTROL, "").replace(/ +/g, " ").trim();
 }
+/** Bidi embeddings, overrides and isolates (U+202A–202E, U+2066–2069): what could reorder a line's words (H18). */
+const BIDI = /[\u202a-\u202e\u2066-\u2069]/g;
+/**
+ * A message's words as one line for a preview (H37 D1, H18's stripping): lone surrogates, bidi controls and control
+ * characters go, and white space and line breaks read as single spaces. What a person sees stays: emoji keep their
+ * joiners, so a line can never fake a second speaker or flip its words, and still reads as written.
+ */
+function oneLine(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return wellFormed(value).replace(BIDI, "").replace(/\s/g, " ").replace(CONTROL, "").replace(/ +/g, " ").trim();
+}
 /** A first name for a line: cleaned, without trailing ":", "," or ";" (H18). Blank reads as no name. */
 const cleanName = (value: unknown): string => cleanText(value).replace(/[:;,]+$/, "").trim();
 
@@ -224,16 +235,19 @@ function words(m: ChatMessage): string | null {
 }
 
 /**
- * The Chat row's line: "Leo: I can bring the snacks", a system line's text, or "No messages yet" (CH-P9). Null for a
- * line it can't word, so the row shows no preview line (H20).
+ * The Chat row's line: "Leo: I can bring the snacks", a system line's text, or "No messages yet" (CH-P9), always one
+ * cleaned line (H37 D1). Null for a line it can't word, so the row shows no preview line (H20).
  */
 export function rowText(last: ChatMessage | null, names: ChatNames, viewerId: string, group: boolean): string | null {
   if (!last) return CHAT_COPY.noMessages;
-  if (last.kind === "system") return systemText(last, names, viewerId, group, "") || null;
+  if (last.kind === "system") return oneLine(systemText(last, names, viewerId, group, "")) || null;
   const shown = words(last);
   if (shown === null || last.state !== "sent") return shown;
-  if (last.kind === "announcement") return CHAT_COPY.invitationLine(person(last.authorId, names, viewerId, false), shown);
-  return `${person(last.authorId, names, viewerId)}: ${shown}`;
+  // One line of the person's words (H37 D1); none left to show gives no line.
+  const line = oneLine(shown);
+  if (!line) return null;
+  if (last.kind === "announcement") return CHAT_COPY.invitationLine(person(last.authorId, names, viewerId, false), line);
+  return `${person(last.authorId, names, viewerId)}: ${line}`;
 }
 
 /**
@@ -257,6 +271,40 @@ export function invitationNote(
   if (!announcement) return null;
   const body = cleanText(announcement.body);
   return body ? CHAT_COPY.invitationLine(person(announcement.authorId, names, viewerId, false), body) : null;
+}
+
+/**
+ * The line on a card for someone who hasn't answered (H37 Q5): the invitation's latest "Everyone invited" announcement
+ * from the overview (`invitationNote`), from the invitation until the resbite has ended, whether it has started or not.
+ */
+export function pendingCardNote(
+  plan: { id: string; starts_at: string; ends_at?: string | null },
+  response: string | null | undefined,
+  overview: ChatOverview | null,
+  viewerId: string,
+  now: number,
+): string | null {
+  if (response !== "pending" || !overview || !(planEnd(plan) > now)) return null;
+  return invitationNote(overview.announcements[plan.id], overview.names, viewerId);
+}
+
+/**
+ * Each listed series' current occurrence, as `private.current_occurrence` picks it (H37 Q4): a plan no listed plan repeats
+ * from, then the latest start, then the highest id. Only its tile carries the series' unread dot.
+ */
+export function currentOccurrences(
+  plans: readonly { id: string; series_id: string; starts_at: string; repeats_from?: string | null }[],
+): Set<string> {
+  const followed = new Set(plans.map((p) => p.repeats_from).filter((id): id is string => !!id));
+  const best = new Map<string, (typeof plans)[number]>();
+  for (const p of plans) {
+    if (followed.has(p.id)) continue;
+    const held = best.get(p.series_id);
+    const [start, heldStart] = [Date.parse(p.starts_at), held ? Date.parse(held.starts_at) : NaN];
+    const later = !held || start > heldStart || (start === heldStart && p.id > held.id);
+    if (later) best.set(p.series_id, p);
+  }
+  return new Set([...best.values()].map((p) => p.id));
 }
 
 /**
@@ -435,6 +483,13 @@ function characters(text: string): string[] {
     prev = cp;
   }
   return out;
+}
+
+/** The first `max` characters a person sees, never splitting one, with "…" after a cut (white space before it goes). */
+export function cutLine(text: string, max: number): string {
+  const chars = characters(text);
+  if (chars.length <= max) return text;
+  return `${chars.slice(0, max).join("").trimEnd()}…`;
 }
 
 /**

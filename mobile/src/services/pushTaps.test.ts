@@ -410,3 +410,58 @@ test("a chat tap waits for readiness, is dropped when signed out, and is dropped
   await settle();
   assert.deepEqual(t.opened, [{ pathname: "/event", params: { plan: OTHER } }]);
 });
+
+// Fix round 1 (H36 Q2, the tester's 3.13): a tap for the chat already on screen opens nothing, so it never runs twice.
+test("a chat tap for the chat in focus reads and opens nothing; another chat, or a plan tap, still opens", async () => {
+  const OTHER_SERIES = "30000000-0000-4000-8000-000000000002";
+  let focused: string | null = SERIES;
+  const opened: TapDestination[] = [];
+  const reads: string[] = [];
+  let answer: () => Promise<unknown> = async () => ({});
+  const router = createPushTapRouter({
+    context: () => ({ ready: true, account: "u1", approved: true, preview: false }),
+    readChat: (_a, series) => {
+      reads.push(`chat ${series}`);
+      return answer();
+    },
+    readAuthorizedPlan: async (_a, id) => {
+      reads.push(`plan ${id}`);
+      return { id };
+    },
+    refreshAccount: async () => null,
+    focusedChat: () => focused,
+    open: (d) => void opened.push(d),
+  });
+  // That chat is on screen: the tap is taken (true) but nothing is read or opened.
+  assert.equal(router.receive(chatPush()), true);
+  await settle();
+  assert.deepEqual(opened, []);
+  assert.deepEqual(reads, []);
+  // Another chat's tap opens it; a plan tap opens its event.
+  router.receive(chatPush({ seriesId: OTHER_SERIES }));
+  await settle();
+  router.receive(push());
+  await settle();
+  assert.deepEqual(opened, [
+    { pathname: "/chat", params: { series: OTHER_SERIES } },
+    { pathname: "/event", params: { plan: PLAN } },
+  ]);
+  // The chat comes into focus while its read is in flight (the person opened it from the Chat row): nothing more opens.
+  focused = null;
+  opened.length = 0;
+  let release: () => void = () => {};
+  answer = () => new Promise((resolve) => (release = () => resolve({})));
+  router.receive(chatPush());
+  await settle();
+  focused = SERIES;
+  release();
+  await settle();
+  await settle();
+  assert.deepEqual(opened, []);
+  // With no chat in focus it opens as before.
+  focused = null;
+  answer = async () => ({});
+  router.receive(chatPush());
+  await settle();
+  assert.deepEqual(opened, [{ pathname: "/chat", params: { series: SERIES } }]);
+});

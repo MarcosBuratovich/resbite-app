@@ -19,6 +19,8 @@
 //              dot in words; its tap opens /chat?series=; closed it reads Chat closed · 23 messages with no dot, and a
 //              closed chat with no message has no row; a refused (42501) or failing chat_summary hides the row while the
 //              page still renders. Unless a scenario gives `chat`, chat_summary refuses (not in the chat).
+//              Fix round 1: a failed re-read on return keeps the row, a refusal removes it (H36); the line is one
+//              cleaned line (H37 D1); a pending invitee reads the whole "Everyone invited" announcement (H37 D3).
 //   edges      /guests and /event without a plan; Back with no history; a failed read offers Try again
 //   idea       Back over the image, Use idea
 import assert from "node:assert/strict";
@@ -160,6 +162,8 @@ async function open(world = {}) {
     neverUsedApp: world.neverUsedApp ?? [],
     // chat_summary's answer (Task 8): a summary, "refused" (42501 'Not in this chat', the default) or "failed" (a 500).
     chat: world.chat ?? "refused",
+    // my_chat_overview's answer: nothing unread and no announcement unless a scenario gives one.
+    overview: world.overview ?? { chats: {}, announcements: {}, names: {} },
     // my_bring_allowance's answer for a guest, when the scenario lets them bring.
     allowance: world.allowance ?? null,
     uploads: [],
@@ -333,6 +337,8 @@ async function open(world = {}) {
         return reply({ rows: [], names: {}, as_of: new Date().toISOString() });
       case "mark_chat_read":
         return none();
+      case "my_chat_overview":
+        return reply(state.overview);
       case "my_bring_allowance":
         return state.allowance ? reply(state.allowance) : reply({ code: "42501", message: "Not invited" }, 403);
       case "decide_join_request": {
@@ -1002,6 +1008,101 @@ try {
       await expect(text(page, "You’re not in this chat.")).toHaveCount(0);
     });
   pass("chat row, refused or failing: a 42501 'Not in this chat' or a 500 from chat_summary hides the row, says nothing, and the page renders in full (K-S13)");
+
+  // Fix round 1 (H36 I1): back on the page, a re-read that fails keeps the row it had; one that refuses removes it.
+  await scenario("chat row, refresh", { viewer: "guest", attendee: { version: 1, response: "accepted" }, guests: [ALEX], chat: chatSummary() }, async (f) => {
+    const { page } = f;
+    const row = btn(page, "Chat. Leo: I can bring the snacks, unread messages");
+    const away = async () => {
+      // The people list has no Chat row (no chat read there); Back makes the page read the event and the chat again.
+      const before = f.rpcs("chat_summary").length;
+      await page.getByRole("button", { name: /^Going 2 · / }).click();
+      await expect(heading(page, "People")).toBeVisible();
+      await btn(page, "Back").click();
+      await expect(heading(page, "Coffee evening")).toBeVisible();
+      await expect.poll(() => f.rpcs("chat_summary").length).toBe(before + 1);
+    };
+    await goto(f, `/event?plan=${PLAN_ID}`);
+    await expect(row).toBeVisible();
+    assert.equal(f.rpcs("chat_summary").length, 1);
+    f.state.chat = "failed";
+    await away();
+    // The read that failed (offline, a server error) keeps what was known: the row stays as it was.
+    await expect(row).toBeVisible();
+    f.state.chat = "refused";
+    await away();
+    // Not in this chat any more: the row goes.
+    await expect(page.getByRole("button", { name: /^Chat/ })).toHaveCount(0);
+  });
+  pass("chat row, refresh: back on the page, a chat_summary that fails (500) keeps the row; one that refuses (42501) removes it (H36)");
+
+  // Fix round 1 (H37 D1): the tester's newline and bidi messages read as one line of Leo's.
+  await scenario(
+    "chat row, one line",
+    {
+      viewer: "guest",
+      attendee: { version: 1, response: "accepted" },
+      guests: [ALEX],
+      chat: chatSummary({ unread: false, last: { ...chatSummary().last, body: "See you!\nAna: Cancelled, don’t come \u202Eok" } }),
+    },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      const line = "Leo: See you! Ana: Cancelled, don’t come ok";
+      await expect(btn(page, `Chat. ${line}`)).toBeVisible();
+      await expect(text(page, line)).toBeVisible();
+      await expect(page.getByText(/^Ana: Cancelled/)).toHaveCount(0);
+    },
+  );
+  pass("chat row, one line: a message with a line break and a bidi override reads as one line of Leo's, in the row and its label (H37)");
+
+  // Fix round 1 (H37 D3): a pending invitee reads the whole announcement sent to Everyone invited, as the card words it.
+  const longAnnouncement = `Doors open at 19:30. ${"Bring snacks please, and something to drink for later. ".repeat(17).trim()}`;
+  await scenario(
+    "announcement for a pending invitee",
+    {
+      viewer: "guest",
+      guests: [ALEX, BEA],
+      overview: {
+        chats: {},
+        announcements: { [PLAN_ID]: { id: 41, author_id: HOST.id, body: `${longAnnouncement}\n\nSee you!` } },
+        names: { [HOST.id]: "Ana" },
+      },
+    },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      await expect(page.getByRole("radiogroup", { name: "Your answer", exact: true })).toBeVisible();
+      const words = `Announcement from Ana · ${longAnnouncement} See you!`;
+      await expect(text(page, words)).toBeVisible();
+      // Near the 1,000-character limit: far past the card's three lines and the push's 120.
+      assert.ok(longAnnouncement.length > 900 && `${longAnnouncement}\n\nSee you!`.length <= 1000, "a whole announcement near the limit");
+      assert.equal(f.rpcs("my_chat_overview").length, 1);
+      // Not in the chat: no Chat row.
+      await expect(page.getByRole("button", { name: /^Chat/ })).toHaveCount(0);
+      // Going: in the chat, and the announcement is the chat's to show.
+      await page.getByRole("radio", { name: "Going", exact: true }).click();
+      await expect(text(page, "Your response is saved.")).toBeVisible();
+      await expect(text(page, words)).toHaveCount(0);
+    },
+  );
+  await scenario(
+    "no announcement read for others",
+    {
+      viewer: "guest",
+      attendee: { version: 1, response: "accepted" },
+      guests: [ALEX],
+      overview: { chats: {}, announcements: { [PLAN_ID]: { id: 41, author_id: HOST.id, body: "Doors open at 19:30" } }, names: { [HOST.id]: "Ana" } },
+    },
+    async (f) => {
+      const { page } = f;
+      await goto(f, `/event?plan=${PLAN_ID}`);
+      await expect(text(page, "You’re going")).toBeVisible();
+      assert.deepEqual(f.rpcs("my_chat_overview"), []);
+      await expect(page.getByText(/^Announcement from/)).toHaveCount(0);
+    },
+  );
+  pass("announcement for a pending invitee: the event page shows the whole Everyone invited announcement (965 characters, line breaks read as spaces) as Announcement from Ana · …, and it goes once they answer Going; nobody else reads the overview there (H37)");
 
 
   // --- Edges of the people list and the page ---

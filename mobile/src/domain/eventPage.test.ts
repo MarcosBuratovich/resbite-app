@@ -8,6 +8,7 @@ import {
   bringRow,
   broughtFrom,
   chatRow,
+  chatRowLabel,
   broughtNames,
   readsOwnLinks,
   byline,
@@ -1216,4 +1217,21 @@ test("the Chat row never shows a line it can't word: no preview line, never null
     assert.equal(row.text, null, "with no preview line");
     assert.equal(row.dot, true);
   }
+});
+
+// Fix round 1 (H37 D1, Q6): the row's line is one cleaned line, and its label carries at most 120 characters of it.
+test("the Chat row's line and label: one line, never a second speaker, and a label cut at 120 characters", () => {
+  const spoof = chatRow(chat({ last: message({ body: "See you!\nAna: Cancelled, don’t come" }) }), ME);
+  assert.deepEqual(spoof, { text: "Leo: See you! Ana: Cancelled, don’t come", dot: true, closed: false });
+  assert.equal(chatRowLabel(spoof!), "Chat. Leo: See you! Ana: Cancelled, don’t come, unread messages");
+  // A 1,000-character message: the label says the first 120 characters of the line, then "…".
+  const long = chatRow(chat({ last: message({ body: "word ".repeat(200).trim() }), unread: false }), ME)!;
+  const line = `Leo: ${"word ".repeat(200).trim()}`;
+  assert.equal(long.text, line);
+  assert.equal(chatRowLabel(long), `Chat. ${line.slice(0, 120).trimEnd()}…`);
+  // The other rows' labels.
+  assert.equal(chatRowLabel(chatRow(chat({ unread: false, last: null, messageCount: 0 }), ME)!), "Chat. No messages yet");
+  assert.equal(chatRowLabel(chatRow(chat({ open: false }), ME)!), "Chat closed · 23 messages");
+  assert.equal(chatRowLabel({ closed: false, text: null, dot: true }), "Chat, unread messages");
+  assert.equal(chatRowLabel({ closed: false, text: null, dot: false }), "Chat");
 });

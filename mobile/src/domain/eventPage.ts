@@ -4,7 +4,7 @@ import type { ConnectionState } from "../services/connections";
 import type { Allowance, BroughtLink } from "../services/circle";
 import type { ChatSummary } from "../services/chat";
 import { CHAT_COPY } from "./chatCopy";
-import { rowText } from "./chatRules";
+import { cutLine, rowText } from "./chatRules";
 import { CIRCLE_COPY } from "./circleCopy";
 import { CONNECTIONS_COPY } from "./connectionsCopy";
 import { firstName } from "./circle";
@@ -239,8 +239,14 @@ export function bringRow(i: {
   return null;
 }
 
-/** The Chat row's words: the preview line (null: none to show), the unread dot, and whether the chat has closed. */
-export type ChatRow = { text: string | null; dot: boolean; closed: boolean };
+/**
+ * The Chat row's words. Open: the preview line (null: none to show) and the unread dot. Closed: the count as its only
+ * line, never a dot.
+ */
+export type ChatRow = { closed: false; text: string | null; dot: boolean } | { closed: true; text: string; dot: false };
+
+/** How much of the row's line its label says (H37 Q6): a long message isn't read out in full from the resbite page. */
+const CHAT_LABEL_LINE = 120;
 
 /**
  * The resbite page's Chat row (CH-P14, CH-01), right after the people row and Bring someone, from the series' summary.
@@ -255,6 +261,13 @@ export function chatRow(summary: ChatSummary | null, viewerId: string): ChatRow 
   if (!summary.open)
     return summary.messageCount > 0 ? { text: CHAT_COPY.closedRow(summary.messageCount), dot: false, closed: true } : null;
   return { text: rowText(summary.last, summary.names, viewerId, summary.isGroup) || null, dot: summary.unread, closed: false };
+}
+
+/** The Chat row's label: "Chat. <the line, at most 120 characters>", ", unread messages" for the dot; closed, the count. */
+export function chatRowLabel(row: ChatRow): string {
+  if (row.closed) return row.text;
+  const line = row.text ? cutLine(row.text, CHAT_LABEL_LINE) : null;
+  return [CHAT_COPY.chat, line].filter(Boolean).join(". ") + (row.dot ? `, ${CHAT_COPY.unreadMessages}` : "");
 }
 
 export type MoreRow = "calendar" | "mute" | "unmute" | "again" | "changeReply" | "cancel";

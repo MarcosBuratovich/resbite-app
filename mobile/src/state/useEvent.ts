@@ -19,7 +19,8 @@ import { inviteCodeStore, type StoredInvite } from "../services/inviteCodeStore"
 import { formatPhone, phoneSendForm } from "../domain/phone";
 import { joinRequestGateway, type HostRequest } from "../services/joinRequests";
 import { connectionErrorMessage, connectionGateway, type ConnectionState } from "../services/connections";
-import { chatGateway, type ChatSummary } from "../services/chat";
+import { chatGateway, isNotInChat, type ChatSummary } from "../services/chat";
+import { pendingCardNote } from "../domain/chatRules";
 import { readProfile } from "../services/profile";
 import { requestGone } from "./connectionsModel";
 import { rememberName } from "./knownNames";
@@ -94,10 +95,17 @@ export type EventPage = {
   owner: { userId: string; name: string } | null;
   /**
    * The series' chat for the Chat row (`chat_summary`, K-S13), read after the event and landing when it arrives, and
-   * again after a saved answer. Null until then, for someone who isn't in the chat (42501), when the read fails, in the
-   * preview and on the people list (`chain`, which has no Chat row): the row hides.
+   * again after an answer. Null until then, for someone who isn't in the chat (42501), when a first read or a read after
+   * an answer fails, in the preview and on the people list (`chain`, which has no Chat row): the row hides. A refresh
+   * that fails keeps the last one (H36).
    */
   chat: ChatSummary | null;
+  /**
+   * For an invitee who hasn't answered, the latest "Everyone invited" announcement in full, worded as My resbites'
+   * card words it ("Announcement from Ana · …", H37 D3), from `my_chat_overview`; null for everyone else, until it is
+   * read, and after the resbite has ended. A failed read keeps the one known.
+   */
+  announcement: string | null;
   busy: boolean;
   fresh: boolean;
   error: string | null;
@@ -167,17 +175,37 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
   const [chat, setChat] = useState<ChatSummary | null>(null);
   // The latest read of the chat wins: an event load and a re-read after an answer can overlap.
   const chatRead = useRef(0);
-  /** Reads the series' chat; a refusal or a failure gives null, so the Chat row hides and nothing is said (K-S13). */
-  const readChat = (series: string, valid: () => boolean) => {
+  /**
+   * Reads the series' chat for the Chat row. 'Not in this chat' always hides the row (K-S13). Any other failure keeps
+   * the row as it was when `keepOnFailure` (the page's loads: offline, a refresh mustn't make it vanish, H36), and hides
+   * it after an answer, which can move the person out of the chat. On a page's first read there is nothing to keep.
+   */
+  const readChat = (series: string, valid: () => boolean, keepOnFailure: boolean) => {
     const ticket = ++chatRead.current;
     void chatGateway.summary(series).then(
       (summary) => {
         if (valid() && ticket === chatRead.current) setChat(summary);
       },
-      () => {
-        if (valid() && ticket === chatRead.current) setChat(null);
+      (error) => {
+        if (valid() && ticket === chatRead.current && (!keepOnFailure || isNotInChat(error))) setChat(null);
       },
     );
+  };
+  const [announcement, setAnnouncement] = useState<string | null>(null);
+  const announcementRead = useRef(0);
+  /** An invitee who hasn't answered: the latest "Everyone invited" announcement, in full (H37 D3). A failure keeps it. */
+  const readAnnouncement = (plan: Plan, viewer: string, valid: () => boolean) => {
+    const ticket = ++announcementRead.current;
+    void chatGateway.overview().then(
+      (overview) => {
+        if (valid() && ticket === announcementRead.current) setAnnouncement(pendingCardNote(plan, "pending", overview, viewer, Date.now()));
+      },
+      () => {},
+    );
+  };
+  const dropAnnouncement = () => {
+    announcementRead.current++;
+    setAnnouncement(null);
   };
   // UX3: this phone's reminders follow every event load, answer and cancellation; failures wait for the next sync.
   const syncDevice = () => void syncReminders({ userId: userId ?? null, preview }).catch(() => {});
@@ -194,6 +222,7 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
     setMutedSeries(new Set());
     setChat(null);
     chatRead.current++;
+    dropAnnouncement();
     setPending(null);
     setNotice(null);
     setError(null);
@@ -235,8 +264,11 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
             () => {},
           );
         // Likewise the Chat row (K-S13), on the resbite page only (not the people list): the page never waits for the
-        // series' chat, and a refusal or a failure hides the row.
-        if (!chain) readChat(next.plan.series_id, valid);
+        // series' chat; a refusal hides the row, and a failure keeps what was known (H36).
+        if (!chain) readChat(next.plan.series_id, valid, true);
+        // An invitee who hasn't answered isn't in the chat: the page shows them the announcement sent to everyone invited.
+        const waitingAnswer = !chain && !host && next.attendee?.response === "pending";
+        if (waitingAnswer) readAnnouncement(next.plan, userId, valid);
         // Likewise the owner's own name for their row: it lands when it arrives; a failure keeps the one known.
         if (next.plan.owner_id === userId)
           void readProfile(userId).then(
@@ -290,6 +322,7 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
           // Names hidden: no states and no bringers at all, whatever was known before.
           if (!named && ticket === statesRead.current) setConnections(null);
           if (!named && bringersTicket === bringersRead.current) setBringerNames(null);
+          if (!waitingAnswer) dropAnnouncement();
           setSnapshot(next);
           setFresh(true);
           syncDevice();
@@ -376,8 +409,10 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
         setPending(null);
         setNotice(EVENT_COPY.responseSaved);
         syncDevice();
-        // The answer moves the person into a one-off's chat (Going, Maybe) or out of it (Can't go): the row follows.
-        if (!chain) readChat(confirmed.plan.series_id, valid);
+        // The answer moves the person into a one-off's chat (Going, Maybe) or out of it (Can't go): the row follows,
+        // and the announcement is the chat's to show now.
+        if (!chain) readChat(confirmed.plan.series_id, valid, false);
+        dropAnnouncement();
         // UX-P5: answering reveals who's coming; the server now returns the whole list, so the counts come from it.
         // Read with it, what the guest may now bring: Going or Maybe may bring someone, Can't go no longer may.
         const host = confirmed.plan.owner_id === userId || confirmed.plan.admins.includes(userId);
@@ -390,12 +425,20 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
           else setError(EVENT_COPY.guestsFailed);
           setAllowance(bring);
         }
-      } else if (result === "review" || result === "unavailable") {
-        setPending(null);
-        setError(result === "review" ? EVENT_COPY.responseReview : EVENT_COPY.responsesClosed);
-      } else setError(EVENT_COPY.responseUnconfirmed);
+      } else {
+        if (result === "review" || result === "unavailable") {
+          setPending(null);
+          setError(result === "review" ? EVENT_COPY.responseReview : EVENT_COPY.responsesClosed);
+        } else setError(EVENT_COPY.responseUnconfirmed);
+        // The answer stands somewhere between: the chat is read again, as after an answer (H36).
+        if (!chain) readChat(confirmed.plan.series_id, valid, false);
+      }
     } catch {
-      if (valid()) setError(EVENT_COPY.responseOffline);
+      if (valid()) {
+        setError(EVENT_COPY.responseOffline);
+        // Whether the answer landed isn't known: the chat is read again, as after an answer (H36).
+        if (!chain) readChat(current.plan.series_id, valid, false);
+      }
     } finally {
       if (currentIdentity.current === identity) {
         working.current = false;
@@ -540,6 +583,7 @@ export function useEvent(planId: string | undefined, options: { chain?: boolean 
     connections: preview ? null : connections,
     owner,
     chat: preview ? null : chat,
+    announcement: preview ? null : announcement,
     // Without a plan to read nothing loads: the screens say it isn't available instead of waiting.
     busy: busy && Boolean(planId),
     fresh: preview || fresh,

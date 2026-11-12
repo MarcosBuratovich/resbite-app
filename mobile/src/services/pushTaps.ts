@@ -27,7 +27,7 @@ export function isPlanUpdateTap(response: TapResponse | null): boolean {
  * A chat tap (Task 8) reads the chat first and opens it; when the chat refuses ('Not in this chat': a pending invitee
  * on an "Everyone invited" announcement, a guest who left or was removed) it reads the plan as a plan tap does and
  * opens the event, or the gone note when that reads empty (K-B4); a chat read that failed (offline, timed out) opens
- * the chat, which has its own offline state.
+ * the chat, which has its own offline state. A tap for the chat already on screen opens nothing (H36).
  * The launch tap is taken at most once. Reminder taps are not handled here.
  */
 export function createPushTapRouter(deps: {
@@ -38,6 +38,8 @@ export function createPushTapRouter(deps: {
   /** The chat of a series as this account may read it (`chat_summary`): rejects with 42501 'Not in this chat' when
    * the account isn't in it, and otherwise when the read itself failed. */
   readChat(account: string, series: string): Promise<unknown>;
+  /** The chat on screen (`focusedChat`): a tap for it opens nothing more, so the same chat never runs twice (H36). */
+  focusedChat?(): string | null;
   /** Re-reads the account once: true when it is now approved, false when not, null when superseded or failed. */
   refreshAccount(): Promise<boolean | null>;
   open(destination: TapDestination): void;
@@ -117,13 +119,16 @@ export function createPushTapRouter(deps: {
     const target = parseNotificationTarget(data);
     if (target?.kind === "chat") {
       const account = start.account;
+      // Already on screen, or come onto it while the chat was read (opened from its row): it's the one shown.
+      const onScreen = () => deps.focusedChat?.() === target.seriesId;
+      if (onScreen()) return;
       let refused = false;
       try {
         await deps.readChat(account, target.seriesId);
       } catch (error) {
         refused = isNotInChat(error);
       }
-      if (!current()) return;
+      if (!current() || onScreen()) return;
       // Read, or a read that failed: the chat, whose screen has its own offline and not-in-this-chat states.
       if (!refused) return deps.open(pushDestination(target.seriesId, "chat"));
       // Refused: the event when this account can still read it (K-B4), the gone note when not; a plan read that

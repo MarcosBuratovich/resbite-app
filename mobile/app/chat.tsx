@@ -41,6 +41,7 @@ import {
   phoneZone,
 } from "../src/domain/chatRules";
 import { EVENT_COPY } from "../src/domain/eventPage";
+import { NOTIFICATION_ASK } from "../src/domain/notifications";
 import type { ChatSummary } from "../src/services/chat";
 import { useApp } from "../src/state/AppState";
 import { useChat, type Chat } from "../src/state/useChat";
@@ -191,7 +192,7 @@ export default function ChatScreen() {
           onMenu={setMenuOpen}
         />
       )}
-      <NotificationAsk ask={ask} />
+      <NotificationAsk ask={ask} body={NOTIFICATION_ASK.chatBody} />
     </View>
   );
 }

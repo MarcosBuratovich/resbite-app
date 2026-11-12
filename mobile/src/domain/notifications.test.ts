@@ -106,6 +106,8 @@ test("the ask's wording", () => {
   assert.deepEqual(NOTIFICATION_ASK, {
     title: "Get notified?",
     body: "Resbite can tell you when people answer or ask to join, when a resbite changes or gets a note, and before it starts.",
+    // The same card in a chat (CH-P17, H37 Q7): its line is about messages.
+    chatBody: "Turn on notifications to hear about new messages.",
     turnOn: "Turn on notifications",
     notNow: "Not now",
   });

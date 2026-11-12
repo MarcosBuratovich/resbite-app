@@ -8,6 +8,7 @@ import { phoneVerified } from "../domain/phone";
 import { withDeadline } from "../services/plans";
 import { createPushTapRouter, type TapContext } from "../services/pushTaps";
 import { chatGateway } from "../services/chat";
+import { focusedChat } from "../services/deviceReminders";
 
 /** Reads the plan with the signed-in client (as that person). An empty read is null ("gone"); a read that
  * fails (offline, timed out, a server error) rejects, and the tap opens the event, which retries. */
@@ -52,6 +53,7 @@ export function usePushRouting(ready: boolean) {
     context: () => context.current,
     readAuthorizedPlan,
     readChat,
+    focusedChat,
     refreshAccount: async () => {
       const user = await accountRef.current.refresh();
       return user ? accountRef.current.latestStatus() === "approved" && phoneVerified(user) : null;

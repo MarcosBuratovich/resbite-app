@@ -7,6 +7,8 @@ import {
   canAnnounce,
   closedCard,
   closingLine,
+  currentOccurrences,
+  cutLine,
   dayLabel,
   defaultAudience,
   fitBody,
@@ -18,6 +20,7 @@ import {
   linkHost,
   linkParts,
   messageLabel,
+  pendingCardNote,
   phoneZone,
   rowText,
   systemText,
@@ -718,4 +721,81 @@ test("the invitation card's line: the latest Everyone invited announcement, its 
   assert.equal(invitationNote(undefined, names, PEDRO), null);
   assert.equal(note({ body: "" }), null);
   assert.equal(note({ body: " \u200b " }), null);
+});
+
+// Fix round 1 (H37 D1): the Chat row's line is one cleaned line, so a message can't fake a second speaker or flip its text.
+test("rowText gives one cleaned line: no line breaks, bidi controls, control characters or lone surrogates", () => {
+  // The tester's newline spoof (1.20): one line, so "Ana: …" can't read as Ana's own message.
+  assert.equal(rowText(msg({ body: "See you!\nAna: Cancelled, don’t come" }), names, ANA, false), "Leo: See you! Ana: Cancelled, don’t come");
+  assert.equal(rowText(msg({ body: "a\r\n\r\nb\u2028c\u2029d\te" }), names, ANA, false), "Leo: a b c d e");
+  // The bidi override (1.21) and the isolates go; the words stay in their stored order.
+  assert.equal(rowText(msg({ body: "ok \u202Eemoc t’nod ,dellecnac" }), names, ANA, false), "Leo: ok emoc t’nod ,dellecnac");
+  assert.equal(rowText(msg({ body: "\u2066x\u2069 \u202Ay\u202C" }), names, ANA, false), "Leo: x y");
+  assert.equal(rowText(msg({ body: "bell\u0007 nul\u0000 del\u007f" }), names, ANA, false), "Leo: bell nul del");
+  assert.equal(rowText(msg({ body: "half \ud83d pair" }), names, ANA, false), "Leo: half pair");
+  // What a person sees is kept: emoji with their joiners, accents, and runs of spaces read as one.
+  assert.equal(rowText(msg({ body: "  👩‍👩‍👧   café  " }), names, ANA, false), "Leo: 👩‍👩‍👧 café");
+  // An announcement's words the same way, and a body with nothing left shows no line.
+  assert.equal(
+    rowText(msg({ kind: "announcement", audience: "going", authorId: ANA, body: "Doors\n\nopen\u202E at 19:30" }), names, LEO, false),
+    "Announcement from Ana · Doors open at 19:30",
+  );
+  assert.equal(rowText(msg({ body: "\u202E\n\u0007" }), names, ANA, false), null);
+});
+
+test("cutLine keeps the first characters a person sees, never splitting one, and marks the cut", () => {
+  assert.equal(cutLine("short", 120), "short");
+  assert.equal(cutLine("x".repeat(120), 120), "x".repeat(120));
+  assert.equal(cutLine("x".repeat(121), 120), `${"x".repeat(120)}…`);
+  // White space before the cut goes before the mark.
+  assert.equal(cutLine(`${"x".repeat(119)} yz`, 120), `${"x".repeat(119)}…`);
+  // An emoji family or a flag counts as one and is never split.
+  const family = "👩‍👩‍👧";
+  assert.equal(cutLine(family.repeat(5), 3), `${family.repeat(3)}…`);
+  assert.equal(cutLine("🇬🇧🇦🇷🇺🇾", 2), "🇬🇧🇦🇷…");
+});
+
+// H37 Q5: a pending card carries the announcement until the resbite has ended, started or not.
+test("a pending card's announcement line, from its start until its end", () => {
+  const now = Date.parse("2099-05-01T12:00:00Z");
+  const overview = {
+    chats: {},
+    announcements: { p1: { id: 41, authorId: ANA, body: "Doors open at 19:30" } },
+    names,
+  };
+  const plan = (starts_at: string, ends_at: string | null) => ({ id: "p1", starts_at, ends_at });
+  const line = "Announcement from Ana · Doors open at 19:30";
+  // Not started yet, and running (started an hour ago, ends in two): the line.
+  assert.equal(pendingCardNote(plan("2099-05-02T18:00:00Z", null), "pending", overview, PEDRO, now), line);
+  assert.equal(pendingCardNote(plan("2099-05-01T11:00:00Z", "2099-05-01T14:00:00Z"), "pending", overview, PEDRO, now), line);
+  // Ended (with an end, or a start with none): no line, whatever the overview still carries.
+  assert.equal(pendingCardNote(plan("2099-05-01T09:00:00Z", "2099-05-01T11:00:00Z"), "pending", overview, PEDRO, now), null);
+  assert.equal(pendingCardNote(plan("2099-05-01T11:00:00Z", null), "pending", overview, PEDRO, now), null);
+  // Answered, or no overview read: no line.
+  for (const response of ["accepted", "maybe", "declined", "withdrawn", null, undefined])
+    assert.equal(pendingCardNote(plan("2099-05-02T18:00:00Z", null), response, overview, PEDRO, now), null, String(response));
+  assert.equal(pendingCardNote(plan("2099-05-02T18:00:00Z", null), "pending", null, PEDRO, now), null);
+  assert.equal(pendingCardNote({ id: "p2", starts_at: "2099-05-02T18:00:00Z", ends_at: null }, "pending", overview, PEDRO, now), null);
+});
+
+// H37 Q4: only the series' current occurrence carries the unread dot, as private.current_occurrence picks it.
+test("currentOccurrences: the listed plan nothing repeats from, then the latest start, then the highest id", () => {
+  const p = (id: string, series_id: string, starts_at: string, repeats_from: string | null = null) => ({ id, series_id, starts_at, repeats_from });
+  const weekly = [
+    p("a1", "s1", "2099-05-01T18:00:00Z"),
+    p("a2", "s1", "2099-05-08T18:00:00Z", "a1"),
+    p("a3", "s1", "2099-05-15T18:00:00Z", "a2"),
+  ];
+  assert.deepEqual([...currentOccurrences(weekly)].sort(), ["a3"]);
+  // Listed out of order, with a one-off beside it.
+  assert.deepEqual([...currentOccurrences([weekly[2], p("b1", "s2", "2099-04-01T10:00:00Z"), weekly[0], weekly[1]])].sort(), ["a3", "b1"]);
+  // The newest listed one, when the one after it isn't readable here; ties on the start go to the higher id.
+  assert.deepEqual([...currentOccurrences(weekly.slice(0, 2))].sort(), ["a2"]);
+  assert.deepEqual(
+    [...currentOccurrences([p("c1", "s3", "2099-05-01T18:00:00Z"), p("c2", "s3", "2099-05-01T18:00:00Z")])].sort(),
+    ["c2"],
+  );
+  // A successor beats a later start: the server excludes anything another occurrence repeats from.
+  assert.deepEqual([...currentOccurrences([p("d1", "s4", "2099-06-01T18:00:00Z"), p("d2", "s4", "2099-05-01T18:00:00Z", "d1")])], ["d2"]);
+  assert.deepEqual([...currentOccurrences([])], []);
 });
