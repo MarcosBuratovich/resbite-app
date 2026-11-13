@@ -1,15 +1,39 @@
 import { PLAN_COPY } from "./planCopy";
 
-type Parts = { weekday: string; day: string; month: string; hour: string; minute: string; year: string };
-
-const partsIn = (iso: string, zone: string): Parts => {
-  const out: Record<string, string> = {};
-  for (const p of new Intl.DateTimeFormat("en-GB", {
-    weekday: "short", day: "numeric", month: "short", year: "numeric",
-    hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: zone,
-  }).formatToParts(new Date(iso)))
-    out[p.type] = p.value;
-  return out as Parts;
+// The plan's local wall clock, one number at a time. Never `formatToParts`: Hermes on iOS answers it with the whole
+// string as one literal part and no hour, minute, year, month or day parts, which read "undefined:undefined" on the
+// iPhone (12 Nov 2026). A one-field `format` gives just that field's digits everywhere. Formatters are kept per zone and
+// field, since a chat reads one date per message.
+type Field = "year" | "month" | "day" | "hour" | "minute";
+const FIELD_OPTIONS: Record<Field, Intl.DateTimeFormatOptions> = {
+  year: { year: "numeric" },
+  month: { month: "2-digit" },
+  day: { day: "2-digit" },
+  hour: { hour: "2-digit", hourCycle: "h23" },
+  minute: { minute: "2-digit" },
+};
+const formatters = new Map<string, Intl.DateTimeFormat>();
+const digits = (date: Date, zone: string, field: Field): string => {
+  const key = `${zone}|${field}`;
+  let f = formatters.get(key);
+  if (!f) {
+    f = new Intl.DateTimeFormat("en-GB", { ...FIELD_OPTIONS[field], timeZone: zone });
+    formatters.set(key, f);
+  }
+  return f.format(date).replace(/\D/g, "");
+};
+const pad = (n: string, width: number): string => n.padStart(width, "0").slice(-width);
+const wall = (iso: string, zone: string) => {
+  const d = new Date(iso);
+  const hour = pad(digits(d, zone, "hour"), 2);
+  return {
+    year: digits(d, zone, "year"),
+    month: pad(digits(d, zone, "month"), 2),
+    day: pad(digits(d, zone, "day"), 2),
+    // Some engines write midnight as 24 even with h23.
+    hour: hour === "24" ? "00" : hour,
+    minute: pad(digits(d, zone, "minute"), 2),
+  };
 };
 
 /** "Sat 24 Oct" in the plan's zone. */
@@ -21,18 +45,14 @@ export function shortDate(iso: string, zone: string): string {
 
 /** "19:00" in the plan's zone. */
 export function clockTime(iso: string, zone: string): string {
-  const p = partsIn(iso, zone);
+  const p = wall(iso, zone);
   return `${p.hour}:${p.minute}`;
 }
 
 /** The plan's local date and time: "2026-10-24" and "19:00". */
 export function localParts(iso: string, zone: string): { date: string; time: string } {
-  const parts: Record<string, string> = {};
-  for (const p of new Intl.DateTimeFormat("en-CA", {
-    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: zone,
-  }).formatToParts(new Date(iso)))
-    parts[p.type] = p.value;
-  return { date: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}` };
+  const p = wall(iso, zone);
+  return { date: `${p.year}-${p.month}-${p.day}`, time: `${p.hour}:${p.minute}` };
 }
 
 /** "Sat 24 Oct · 19:00 to 22:00", "… · All day", "… · 22:00 to Sun 25 Oct 02:00", or just the start. */
