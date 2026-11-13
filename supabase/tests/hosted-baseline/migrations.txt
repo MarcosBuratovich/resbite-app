@@ -21,3 +21,6 @@
 20261110120000_connections.sql                         20261110120000
 20261111120000_connections_follow_ups.sql              20261111120000
 20261111130000_circles_of_trust.sql                    20261111130000
+20261111140000_chat_core.sql                           20261111140000
+20261111150000_chat_groups.sql                         20261111150000
+20261111160000_chat_safety.sql                         20261111160000
