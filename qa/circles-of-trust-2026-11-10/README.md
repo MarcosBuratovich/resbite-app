@@ -355,7 +355,12 @@ The migration must be live before the TestFlight build. The new build reads `pla
 
 ## Applied
 
-Nothing yet. Each step's record goes here when it is done, as in the earlier runbooks. Step 0's answers to CO-Q1 and CO-Q2 go here first.
+**12 November 2026.** Step 0: the owner accepted the defaults: CO-Q1 carried (as built), CO-Q2 the rollback revokes the bringers' unanswered links.
+- Step 1: history `20 | 20261111120000` (mode `circles`); no roll job; dropped guests 0; waiting pairs 0; `hosted-before.json` identical to the follow-ups `hosted-after.json`, 356 of 356; storage 7.
+- Step 2: approved by name and sha256 (`04062e2b…d77256`); applied; history `21 | 20261111130000`.
+- Step 3: 356 → 387; 31 added, 13 changed, nothing removed, no grant changed; one new table, `private.plan_removals`, 0 rows; storage 7 unchanged. Advisors (`hosted-advisors-after.json`): 47, 10 WARN as before; new INFO lines are the predicted `rls_enabled_no_policy` and three `unused_index`, plus one not predicted, `no_primary_key` on `private.plan_removals` (keyed by two partial unique indexes on purpose; private, RLS on, no grants, not replicated); the owner accepted it as a known item.
+- Step 4: the sender was redeployed once, after the chat migrations (the chat runbook's step 4).
+- Step 5: the link site went to production on 13 Nov 2026 (UTC): deployment `resbite-link-8i8w5m0aw`, aliased to `link.resbite.com`; the previous production deployment, the rollback target, is `resbite-link-1oqqfspxh`. Preview deployments sit behind Vercel's deployment protection (a plain `curl -sI` answers 302), so the preview's script check used `npx vercel curl /<file> --deployment <preview> -- -sI` from the linked folder: the three scripts answered 200 `application/javascript`. Live: `/i/<unknown>` answers 200 "no longer active".
 
 ## Rollback
 

@@ -262,7 +262,12 @@ All of these ran on the merged branch, with the polish and the final fix wave (R
 
 ## Applied
 
-Nothing yet. Each step's record goes here when it is done, as in the earlier runbooks.
+**12 November 2026.** The owner ran the scripts from `main` at f68b60f (the merged stack) and approved the file by name and sha256 (`72d1536d…1fe3d6`, rechecked by the script).
+- Step 1: history `19 | 20261110120000`; no `roll-repeating-plans` job; dropped guests `0 | 0 | 0 | 0`; `hosted-before.json` identical to the connections `hosted-after.json`, 355 of 355; storage policies 7.
+- Step 2: applied in one transaction; history `20 | 20261111120000`.
+- Step 3: 355 → 356; added `private.pair_standing(uuid,uuid,uuid)`; changed the three functions and `notification_outbox_detail_check`; nothing removed, no grant changed; row counts unchanged; storage 7 unchanged. Advisors were read once after circles (that runbook's record), covering both.
+- Step 4: no separate redeploy. The sender was redeployed once, after the chat migrations (the chat runbook's step 4), because the merged sender needs chat core's `deferred` outcome.
+- Recorded in `supabase/tests/hosted-baseline/migrations.txt`. The bare baseline then needs the later migrations listed too (main carries their tests); with all five listed it passes.
 
 ## Rollback
 

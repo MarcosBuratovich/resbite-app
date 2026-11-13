@@ -859,7 +859,12 @@ From the release on, a standing duty, not a rollout step (challenge N11). It is 
 
 ## Applied
 
-Nothing yet. Each step's record goes here when it is done, as in the earlier runbooks. Step 0's answers go here first.
+**12–13 November 2026.** The owner ran the scripts from `main` (f68b60f, then db9d273) and approved each file by name and sha256.
+- Step 0: every default accepted (K-S17, the sender's budget unchanged, the lock-screen words, G-QA–G-QD, G-S13, R-Q1–R-Q3, R-Q5–R-Q7, the chat rules' wording). The support address: not yet (5b open; App Review waits). Moderators: the owner alone for TestFlight; the backup reader (R-Q4) is not yet named. Blocked terms: the owner's own list.
+- Step 1: history `21 | 20261111130000`; `hosted-before.json` identical to the circles `hosted-after.json`, 387 of 387; storage 7; `send_resolves` true, `columns_found` 2, `realtime_policies` 0, `realtime_usage` true, `may_send` true, `send_is_definer` false, `may_insert_messages` true; `may_add_policy` false — a false alarm (see step 1's note): `supautils.policy_grants` lists `realtime.messages` for `postgres`. Series 39; job `deliver-notifications` only. Safety's settings: `ctype` `en_US.UTF-8`, both accented checks true, `error_values_logged` 0, no overrides.
+- Step 2: chat core, groups, safety applied in that order; history `22`, `23`, `24 | 20261111160000`.
+- Step 3: 387 → 464 (77 added, 6 changed) → 479 (15 added, 13 changed) → 532 (53 added, 14 changed); nothing removed, no grant changed. `chats` 39 for 39 series; every new table empty; one Realtime policy, `chat_members_listen`, for `authenticated`. The three after-checks read as expected (groups 0 = repeating series 0; `private_granted` true; six safety tables with RLS on, no policy, no API grant; `keep_days` 180; rules `2026-11`). Advisors (`hosted-advisors-after.json`): 71, 10 WARN as before, every new INFO line predicted.
+- Step 4: `deliver-notifications` redeployed 13 Nov 2026 (UTC) from `main` 9cbb2d1: version 4 → 5, ACTIVE, `verify_jwt` false; an unauthenticated POST answers 401; the next runs answered 200 `{"disabled":false,"processed":0,"deferred":0}`. The rollback puts version 4's code (`main` 3e5d37f's sender) back first.
 - For R-Q4, record that a backup reader is named, and the date, never who: no name, number or account id in this file.
 - For step 5a, record the gate's three counts, never a term or an email. For step 5b, that the address is set, and the build that carries it.
 
