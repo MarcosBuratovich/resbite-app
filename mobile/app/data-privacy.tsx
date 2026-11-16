@@ -167,8 +167,7 @@ export default function DataPrivacy() {
       </ScrollView>
       <InfoSheet visible={about} title="About this page" onClose={() => setAbout(false)}>
         <Copy>
-          Resbite is in private development. This page describes the current
-          build; access comes with an invitation link or a tester invitation.
+          Resbite is in beta. This page describes the current build.
         </Copy>
       </InfoSheet>
     </SafeAreaView>

@@ -128,23 +128,17 @@ export default function Account() {
               {status === "access_pending" && (
                 <>
                   <Copy style={styles.line}>
-                    Your email is confirmed. Resbite’s private beta is currently
-                    limited to approved testers.
+                    This account can’t use Resbite at the moment.
                   </Copy>
                   <Copy style={styles.line}>
-                    Once your account is approved, check again here to continue.
-                    Confirming your email does not automatically grant tester
-                    access.
-                  </Copy>
-                  <Copy style={styles.line}>
-                    If someone invited you to a resbite, open their link again.
+                    If you think this is a mistake, contact the Resbite team.
                   </Copy>
                 </>
               )}
               {status === "unconfirmed" && (
                 <Copy style={styles.line}>
                   Open the confirmation email on this iPhone, or request another
-                  link. Tester approval is a separate step.
+                  link.
                 </Copy>
               )}
               {pendingInvite && (

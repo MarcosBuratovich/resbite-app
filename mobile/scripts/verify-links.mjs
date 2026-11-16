@@ -427,7 +427,7 @@ try {
     await page.goto(base);
     await expect(heading(page, "Waiting for access")).toBeVisible();
     assert.equal(new URL(page.url()).pathname, "/account");
-    await expect(page.getByText("If someone invited you to a resbite, open their link again.", { exact: true })).toBeVisible();
+    await expect(page.getByText("This account can’t use Resbite at the moment.", { exact: true })).toBeVisible();
     await expect(heading(page, "Invitations")).toHaveCount(0);
     assert.deepEqual(errors, []);
     await page.close();

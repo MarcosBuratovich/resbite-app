@@ -62,7 +62,7 @@ export const INVITE_COPY = {
   messagesFailed: "Couldn’t open Messages.",
   alreadyInvited: "Already invited",
   eventLink: "Event link",
-  previewNotice: "Preview can’t invite people. Real invitations need an approved tester account.",
+  previewNotice: "Preview can’t invite people. Real invitations need a signed-in account.",
   skippedLabel: (n: number) => `${n} contacts without a usable mobile number were skipped.`,
   numbersCount: (n: number) => `${n} numbers`,
   hostFallback: "Your host",

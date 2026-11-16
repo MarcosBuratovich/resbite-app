@@ -25,14 +25,15 @@ do $$ begin
   '2099-06-01 19:30+00',null,'UTC','Cinema room, 12 Example Street','');
  insert into gi2_codes values('one',public.plan_link('b1100000-0000-4000-8000-000000000001'));
 end $$;
--- A confirmed account with no roster row and no profile is not approved until it asks through a live link and the
--- organizer approves.
+-- A confirmed account with no roster row and no profile asks through a live link; the organizer approves the request.
+-- Since the open beta (20261116120000) the account may use the app before and after asking (it used to wait for the
+-- approval); asking still makes no grant (below).
 select set_config('request.jwt.claims','{"sub":"b1000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 do $$ declare id uuid; begin
- if public.account_access_status()->>'status'<>'access_pending' then raise exception 'Guest approved before joining'; end if;
+ if public.account_access_status()->>'status'<>'approved' then raise exception 'Open-beta guest not approved before joining'; end if;
  id := public.join_by_link((select code from gi2_codes where name='one'),'Guest Two','2026-10');
  if id<>'b1100000-0000-4000-8000-000000000001' then raise exception 'Join returned the wrong plan'; end if;
- if public.account_access_status()->>'status'<>'access_pending' then raise exception 'Guest approved by asking'; end if;
+ if public.account_access_status()->>'status'<>'approved' then raise exception 'Open-beta guest not approved after asking'; end if;
 end $$;
 reset role;
 -- One transaction wrote the tick, the profile, the waiting request and the organizer's notice; no grant, no place.
@@ -195,7 +196,8 @@ do $$ begin
  exception when others then if sqlstate<>'42501' or sqlerrm<>'Invitation unavailable' then raise; end if; end;
  begin perform public.join_by_link('AAAAAAAAAAAAAAAAAAAAAA','Guest Five','2026-10'); raise exception 'Unknown code joined';
  exception when others then if sqlstate<>'42501' or sqlerrm<>'Invitation unavailable' then raise; end if; end;
- if public.account_access_status()->>'status'<>'access_pending' then raise exception 'A refused join approved the account'; end if;
+ -- Since the open beta (20261116120000) the account may use the app all along; the refusals wrote nothing (below).
+ if public.account_access_status()->>'status'<>'approved' then raise exception 'A refused join changed the account''s access'; end if;
 end $$;
 reset role;
 -- Nothing was written for anyone who was refused.
@@ -216,7 +218,8 @@ do $$ begin
  if exists(select 1 from private.join_requests where user_id<>'b1000000-0000-4000-8000-000000000002') then raise exception 'A refused join stored a request'; end if;
 end $$;
 -- An account that already has a profile (a former tester) keeps its name: none is needed, and the one sent is ignored.
--- An account whose tick is already stored keeps the first one: none is needed. Both only ask: no grant yet.
+-- An account whose tick is already stored keeps the first one: none is needed. Both only ask: no grant yet (since the
+-- open beta, 20261116120000, they may use the app regardless).
 insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data) values
  ('b1000000-0000-4000-8000-000000000009','gi2-1-former@resbite-test.invalid',now(),'{}'),
  ('b1000000-0000-4000-8000-00000000000a','gi2-1-ticked@resbite-test.invalid',now(),'{}');
@@ -226,7 +229,7 @@ set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"b1000000-0000-4000-8000-000000000009","role":"authenticated"}',true);
 do $$ begin
  if public.join_by_link((select code from gi2_codes where name='one'),'','2026-10')<>'b1100000-0000-4000-8000-000000000001' then raise exception 'Former tester join returned another plan'; end if;
- if public.account_access_status()->>'status'<>'access_pending' then raise exception 'Former tester approved by asking'; end if;
+ if public.account_access_status()->>'status'<>'approved' then raise exception 'Former tester not approved (open beta)'; end if;
 end $$;
 select set_config('request.jwt.claims','{"sub":"b1000000-0000-4000-8000-00000000000a","role":"authenticated"}',true);
 do $$ begin
@@ -376,9 +379,11 @@ do $$ begin
  or exists(select 1 from private.join_requests where user_id='b2000000-0000-4000-8000-000000000004')
  or exists(select 1 from private.notification_outbox where actor_id='b2000000-0000-4000-8000-000000000004') then raise exception 'A started event wrote something'; end if;
 end $$;
--- Notices reach a live grant holder and the roster tester, not a revoked grant or someone with neither. The
--- sender's check comes with 20261030120000_push_delivery on the hosted baseline (20261022120001 too, locally), so a
+-- Notices reach a live grant holder and the roster tester, not a revoked grant or an outsider. Since the open beta
+-- (20261116120000) someone with neither may use the app, so the outsider is suspended instead (a disabled roster row).
+-- The sender's check comes with 20261030120000_push_delivery on the hosted baseline (20261022120001 too, locally), so a
 -- hosted-baseline run without that candidate skips these assertions.
+insert into private.tester_roster(email,enabled) values ('gi2-2-outsider@resbite-test.invalid',false);
 insert into public.profiles(id,display_name) values ('b2000000-0000-4000-8000-000000000005','Outsider');
 insert into public.attendees(plan_id,user_id) values ('b2100000-0000-4000-8000-000000000003','b2000000-0000-4000-8000-000000000005');
 insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key) values
@@ -389,7 +394,7 @@ do $$ begin
  if to_regprocedure('private.notification_recipient_eligible(bigint)') is not null then
   if not private.notification_recipient_eligible((select id from private.notification_outbox where dedupe_key='gi2-2:guest')) then raise exception 'A grant holder is not notified'; end if;
   if not private.notification_recipient_eligible((select id from private.notification_outbox where dedupe_key='gi2-2:tester')) then raise exception 'The tester is not notified'; end if;
-  if private.notification_recipient_eligible((select id from private.notification_outbox where dedupe_key='gi2-2:outsider')) then raise exception 'Someone with neither roster nor grant is notified'; end if;
+  if private.notification_recipient_eligible((select id from private.notification_outbox where dedupe_key='gi2-2:outsider')) then raise exception 'A suspended outsider is notified'; end if;
  end if;
  update private.beta_access set revoked_at=now() where user_id='b2000000-0000-4000-8000-000000000003';
  if to_regprocedure('private.notification_recipient_eligible(bigint)') is not null then
@@ -480,12 +485,13 @@ do $$ begin
   and actor_id='b2000000-0000-4000-8000-000000000002')<>1 then raise exception 'A refused join notified the organizer'; end if;
 end $$;
 -- A former tester whose roster row was deleted, not switched off, already on the event gets the event back from the
--- new link but no grant (only an approval grants access now), and the organizer no second notice.
+-- new link but no grant (only an approval grants access now), and the organizer no second notice. Since the open beta
+-- (20261116120000) a deleted roster row is no suspension: the former tester may use the app (it used to wait).
 delete from private.tester_roster where email='gi2-2-tester@resbite-test.invalid';
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"b2000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 do $$ begin
- if public.account_access_status()->>'status'<>'access_pending' then raise exception 'Former tester still approved'; end if;
+ if public.account_access_status()->>'status'<>'approved' then raise exception 'Former tester not approved (open beta)'; end if;
  if public.join_by_link((select code from gi2_codes where name='five'),'','2026-10')<>'b2100000-0000-4000-8000-000000000004' then raise exception 'Former tester join returned another plan'; end if;
 end $$;
 reset role;
@@ -509,6 +515,8 @@ insert into auth.sessions(id,user_id,created_at) values
  ('b3200000-0000-4000-8000-000000000002','b3000000-0000-4000-8000-000000000002',now()),
  ('b3200000-0000-4000-8000-000000000003','b3000000-0000-4000-8000-000000000003',now());
 insert into private.tester_roster(email) values ('gi2-3-owner@resbite-test.invalid');
+-- Since the open beta (20261116120000) only a suspended account is kept out: the outsider is suspended.
+insert into private.beta_access(user_id,source,revoked_at) values ('b3000000-0000-4000-8000-000000000003','maintainer',now());
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"b3000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 select public.save_profile('Owner');
@@ -530,13 +538,13 @@ do $$ begin
 end $$;
 reset role;
 -- The gateway's ledger path (deletion-intent.sql's pattern) and the raw request (deletion.sql's): the grant holder
--- passes the eligibility check, someone with neither a roster row nor a grant still does not.
+-- passes the eligibility check, a suspended outsider (a revoked grant, no roster row) still does not.
 set local role service_role;
 do $$ declare v_intent jsonb; begin
  if to_regprocedure('public.prepare_deletion_intent(uuid,uuid,uuid,text,text)') is not null then
   begin
    perform public.prepare_deletion_intent('b3000000-0000-4000-8000-000000000003','b3200000-0000-4000-8000-000000000003','b3300000-0000-4000-8000-000000000003',repeat('a',64),'fixture-project');
-   raise exception 'Someone with neither roster nor grant prepared a deletion';
+   raise exception 'A suspended outsider prepared a deletion';
   exception when insufficient_privilege then if sqlerrm<>'Fresh eligible authentication required' then raise; end if; end;
   v_intent := public.prepare_deletion_intent('b3000000-0000-4000-8000-000000000002','b3200000-0000-4000-8000-000000000002','b3300000-0000-4000-8000-000000000002',repeat('a',64),'fixture-project');
   if v_intent->>'userId' is distinct from 'b3000000-0000-4000-8000-000000000002' or v_intent->>'requestId' is distinct from 'b3300000-0000-4000-8000-000000000002' then raise exception 'Grant holder''s deletion not prepared'; end if;
@@ -544,7 +552,7 @@ do $$ declare v_intent jsonb; begin
  if to_regprocedure('public.request_account_deletion(uuid,uuid,uuid,text)') is not null then
   begin
    perform private.request_account_deletion('b3000000-0000-4000-8000-000000000003','b3200000-0000-4000-8000-000000000003','b3400000-0000-4000-8000-000000000003',repeat('b',64));
-   raise exception 'Someone with neither roster nor grant requested a deletion';
+   raise exception 'A suspended outsider requested a deletion';
   exception when insufficient_privilege then if sqlerrm<>'Fresh eligible authentication required' then raise; end if; end;
   if private.request_account_deletion('b3000000-0000-4000-8000-000000000002','b3200000-0000-4000-8000-000000000002','b3400000-0000-4000-8000-000000000002',repeat('b',64))->>'status'
    is distinct from 'queued' then raise exception 'Grant holder''s deletion not requested'; end if;

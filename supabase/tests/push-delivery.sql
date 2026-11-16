@@ -79,7 +79,7 @@ create temporary table push_jobs(step text, job jsonb);
 grant select, insert on push_jobs to service_role;
 
 -- Devices: who may register. The host and an invited member register; Ana, a phone-only account waiting for the host's
--- approval with no grant, registers too. Banned, leaving, anonymous, unconfirmed and signed-out callers get 42501.
+-- approval with no grant, registers too (since the open beta, 20261116120000, she may use the app while she waits). Banned, leaving, anonymous, unconfirmed and signed-out callers get 42501.
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"f4000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 select public.register_device('ExpoPushToken[hana]','ios');
@@ -117,8 +117,10 @@ do $$ begin
   or (select platform from private.device_endpoints where token='ExpoPushToken[ana]') is distinct from 'ios' then
   raise exception 'The waiting account''s endpoint is missing';
  end if;
- if private.user_eligible('f4000000-0000-4000-8000-000000000002') or exists(select 1 from private.beta_access where user_id='f4000000-0000-4000-8000-000000000002') then
-  raise exception 'Ana may already use the app: the test needs her waiting';
+ -- Since the open beta (20261116120000) Ana may use the app before the host approves her (she used to wait); she holds no
+ -- grant until the approval.
+ if not private.user_eligible('f4000000-0000-4000-8000-000000000002') or exists(select 1 from private.beta_access where user_id='f4000000-0000-4000-8000-000000000002') then
+  raise exception 'Ana should use the app with no grant before the approval';
  end if;
  if exists(select 1 from private.device_endpoints where token in ('ExpoPushToken[refused05]','ExpoPushToken[refused06]',
    'ExpoPushToken[refused11]','ExpoPushToken[refused12]','ExpoPushToken[nobody]','not-a-token')) then

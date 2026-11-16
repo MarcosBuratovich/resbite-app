@@ -4,6 +4,8 @@ insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data) values
  ('83000000-0000-4000-8000-000000000001','catalogue-owner@resbite-test.invalid',now(),'{}'),
  ('83000000-0000-4000-8000-000000000002','catalogue-outside@resbite-test.invalid',now(),'{}');
 insert into private.tester_roster(email) values ('catalogue-owner@resbite-test.invalid');
+-- Since the open beta (20261116120000) only a suspended account is kept out.
+insert into private.beta_access(user_id,source,revoked_at) values ('83000000-0000-4000-8000-000000000002','maintainer',now());
 insert into public.activities(id,title,description,category,artwork_key,source_ids,published,tips,duration_minutes,categories) values
  ('catalogue-live','Live fixture','Server wording','Creative','painting',array['fixture'],true,array['Reviewed suggestion'],30,array['creative']),
  ('catalogue-draft','Draft fixture','Unapproved wording','Creative','painting',array['fixture'],false,array['Draft suggestion'],null,null);

@@ -11,6 +11,8 @@ insert into auth.users(id,email,email_confirmed_at,is_anonymous,banned_until) va
  ('86000000-0000-4000-8000-000000000008','avatar-deleting@resbite-test.invalid',now(),false,null),
  ('86000000-0000-4000-8000-000000000009','avatar-no-profile@resbite-test.invalid',now(),false,null);
 insert into private.tester_roster(email) select email from auth.users where id::text like '86000000-%' and email<>'avatar-pending@resbite-test.invalid';
+-- Since the open beta (20261116120000) only a suspended account is kept out.
+insert into private.beta_access(user_id,source,revoked_at) values ('86000000-0000-4000-8000-000000000004','maintainer',now());
 insert into public.profiles(id,display_name,avatar_path) values
  ('86000000-0000-4000-8000-000000000001','Owner','86000000-0000-4000-8000-000000000001/a.jpg'),
  ('86000000-0000-4000-8000-000000000002','Peer',null),

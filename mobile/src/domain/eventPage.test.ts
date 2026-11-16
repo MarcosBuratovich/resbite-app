@@ -482,7 +482,7 @@ test("EVENT_COPY pins the page, sheet and list words", () => {
       "Cancel resbite", "Your answer", "Your resbite is cancelled.", "Or share the event link", "Update calendar", "Cancelled", "Back", "Loading this resbite",
       "Opening your resbite…", "This resbite isn’t available.", "Try again", "Refresh invitation", "Retry my response",
       "Changes saved", "Preview changes saved", "Couldn’t open Maps.", "Open Fixture café in Maps",
-      "Invitations are disabled in design preview. Real invitations need an approved tester account.", "Preview plan cancelled.",
+      "Invitations are disabled in design preview. Real invitations need a signed-in account.", "Preview plan cancelled.",
       "This resbite couldn’t be opened. Check your connection and try again.", "Your response is saved.",
       "Your answer is saved, but who’s coming couldn’t load. Refresh to try again.",
       "The plan or your response changed. Review the latest details before choosing again.",

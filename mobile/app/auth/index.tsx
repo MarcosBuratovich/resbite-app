@@ -185,7 +185,7 @@ export default function Auth() {
         <StatusCard icon={MailCheck}>
           <Copy style={styles.email}>{confirmedEmail}</Copy>
           <Copy style={styles.center}>
-            Open the most recent link on this device, where you requested it. Confirmation and private-beta approval are separate steps.
+            Open the most recent link on this device, where you requested it.
           </Copy>
           <Copy style={[styles.center, styles.small]}>
             This email is remembered on this device for up to 7 days. Your password is never saved with it.

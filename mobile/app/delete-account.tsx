@@ -163,7 +163,7 @@ export default function DeleteAccount() {
             <Copy style={styles.line}>
               {preview
                 ? "You are exploring the design. Preview cannot delete a real account."
-                : "Account deletion is not enabled in this development build. Its server setup and recovery checks must be completed before tester access opens."}
+                : "Account deletion is not enabled in this development build. Its server setup and recovery checks must be completed before it can be switched on."}
             </Copy>
           </StatusCard>
         ) : null}
@@ -356,7 +356,7 @@ export default function DeleteAccount() {
           Signing out does not delete your account or shared plans. Review
           what permanent deletion removes and its availability in this build.
           Backup retention and restore handling must also be verified before
-          tester access opens.
+          deletion is switched on.
         </Copy>
       </InfoSheet>
     </SafeAreaView>

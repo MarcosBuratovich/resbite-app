@@ -34,10 +34,12 @@ insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key) va
  ('b6100000-0000-4000-8000-000000000001','b6000000-0000-4000-8000-000000000002','plan_changed','gi2-rollback:guest');
 -- The GI2 definitions are in place, so the checks after the rollback compare against a real change. The audience is
 -- 20261030120000_push_delivery's, which runs after the companion and checks the grant through user_eligible().
+-- request_account_deletion is 20261116120000_open_beta's, which asks access_suspended() (a revoked grant, or a disabled
+-- roster row) where it asked has_live_grant().
 do $$ begin
  if pg_catalog.pg_get_functiondef('private.eligible()'::regprocedure) not like '%user_eligible%'
  or pg_catalog.pg_get_functiondef('private.notification_recipient_eligible(bigint)'::regprocedure) not like '%user_eligible%'
- or pg_catalog.pg_get_functiondef('private.request_account_deletion(uuid,uuid,uuid,text)'::regprocedure) not like '%has_live_grant%'
+ or pg_catalog.pg_get_functiondef('private.request_account_deletion(uuid,uuid,uuid,text)'::regprocedure) not like '%private.access_suspended(%'
  or pg_catalog.pg_get_functiondef('private.prepare_deletion_intent(uuid,uuid,uuid,text,text)'::regprocedure) not like '%has_live_grant%' then
   raise exception 'GI2 definitions not in place';
  end if;
@@ -97,6 +99,7 @@ do $$ declare f text; begin
   'private.request_account_deletion(uuid,uuid,uuid,text)','private.prepare_deletion_intent(uuid,uuid,uuid,text,text)'] loop
   if pg_catalog.pg_get_functiondef(f::regprocedure) like '%has_live_grant%'
   or pg_catalog.pg_get_functiondef(f::regprocedure) like '%beta_access%'
+  or pg_catalog.pg_get_functiondef(f::regprocedure) like '%access_suspended%'
   or pg_catalog.pg_get_functiondef(f::regprocedure) like '%user_eligible%' then
    raise exception 'Rollback left GI2 in %', f;
   end if;

@@ -35,7 +35,7 @@ Open Xcode once to accept its license and install required iOS components. Conne
 2. Confirm the provisional identifier `com.resbite.preview`, connect the Apple team and build/sign on the available Mac or EAS. Expo 57's native prerequisites need checking against that Mac before the first build.
 3. Configure Supabase Google OAuth, email confirmation, SMTP and allowed native redirect URLs. Both `resbite://auth/callback` and the recovery query variant must be allowed. Password/email confirmation cannot be called operational until exercised on-device.
 4. Review the eight draft activity descriptions/categories before publishing them to the database. No published catalogue has been seeded yet.
-5. Add approved testers later, per the user's decision. Never disable the roster requirement to work around setup.
+5. The beta is open (16 Nov 2026): any confirmed account may use the app. The owner keeps someone out with `supabase/ops/suspend-account.sql`, not the tester roster.
 6. Replace provisional `resbite://invite` links with owned HTTPS universal/app links before distribution. Current links require the app to be installed; installation fallback is not implemented.
 
 ## Current limits

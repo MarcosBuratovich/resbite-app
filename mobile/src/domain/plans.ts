@@ -198,7 +198,7 @@ export async function writePlan(
     }
     if (code === "42501" || code === "PGRST301") {
       throw new PlanSaveError(
-        "Your account can’t save this resbite. Private tester access may still be closed. Your changes are still here.",
+        "Your account can’t save this resbite right now. Your changes are still here.",
       );
     }
     if (code === "22023" && /^End time/.test(errorMessage(error))) {

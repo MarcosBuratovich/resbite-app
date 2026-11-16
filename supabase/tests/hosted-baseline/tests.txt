@@ -22,3 +22,4 @@ circles-of-trust.sql
 chat.sql
 chat-groups.sql
 chat-safety.sql
+open-beta.sql

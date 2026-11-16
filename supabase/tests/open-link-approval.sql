@@ -3,7 +3,8 @@
 -- block.
 -- Users d2…: 01 host, 02 Ana (phone only, nothing else), 03 an existing attendee, 04 Bea, 05 banned, 06 disabled on the
 -- roster, 07 Cal, 08 a roster tester, 09 Leo (phone only, nothing else), 10 Dee, 11 Eve, 12 a revoked grant, 13 an
--- organizer who may no longer use the app, 14 a new account, 15 Fay, 16 Gus, 17 Hal (a grant holder), 18 Ida.
+-- organizer who may no longer use the app (suspended: since the open beta, 20261116120000, only a suspended account is
+-- kept out), 14 a new account, 15 Fay, 16 Gus, 17 Hal (a grant holder), 18 Ida.
 -- Codes: A the Picnic's live link, O its turned-off link, C a cancelled event, S a started one, Q the Quiz, I the
 -- ineligible organizer's party, W the Walk.
 begin;
@@ -39,7 +40,8 @@ insert into private.age_attestations(user_id,terms_version)
  select ('d2000000-0000-4000-8000-0000000000'||n)::uuid,'2026-09' from unnest(array['04','05','06','07','08','10','11','12','15','16','17','18']) n;
 insert into private.beta_access(user_id,source,revoked_at) values
  ('d2000000-0000-4000-8000-000000000001','maintainer',null),('d2000000-0000-4000-8000-000000000003','maintainer',null),
- ('d2000000-0000-4000-8000-000000000017','maintainer',null),('d2000000-0000-4000-8000-000000000012','maintainer',now());
+ ('d2000000-0000-4000-8000-000000000017','maintainer',null),('d2000000-0000-4000-8000-000000000012','maintainer',now()),
+ ('d2000000-0000-4000-8000-000000000013','maintainer',now());
 insert into private.tester_roster(email,enabled) values ('olr-tester@resbite-test.invalid',true),('olr-disabled@resbite-test.invalid',false);
 insert into public.plans(id,owner_id,title,starts_at,time_zone,place_label,area,categories) values
  ('d2100000-0000-4000-8000-000000000001','d2000000-0000-4000-8000-000000000001','Picnic','2099-06-01 12:00+00','UTC','Secret Park','Riverside',array['community']),
@@ -65,7 +67,8 @@ insert into olr_codes values ('A',repeat('A',22));
 grant select, insert on olr_codes to authenticated, anon;
 
 -- request: a phone-only account with no grant asks with a name and the tick. It gets a profile, the tick, a waiting
--- request and one notice to the host; no place on the event and no access.
+-- request and one notice to the host; no place on the event and no grant. Since the open beta (20261116120000) it may
+-- use the app all along (it used to wait for the approval).
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 do $$ declare r jsonb; begin
@@ -87,7 +90,7 @@ do $$ declare v private.join_requests; begin
  if (select count(*) from private.notification_outbox where actor_id='d2000000-0000-4000-8000-000000000002') is distinct from 1 then raise exception 'Only one notice expected'; end if;
  if exists(select 1 from public.attendees where user_id='d2000000-0000-4000-8000-000000000002') then raise exception 'A request made an attendee'; end if;
  if exists(select 1 from private.beta_access where user_id='d2000000-0000-4000-8000-000000000002') then raise exception 'A request made a grant'; end if;
- if private.user_eligible('d2000000-0000-4000-8000-000000000002') then raise exception 'A request made the account eligible'; end if;
+ if not private.user_eligible('d2000000-0000-4000-8000-000000000002') then raise exception 'An open-beta account may not use the app'; end if;
 end $$;
 -- Asking again (Review Focus 1) changes the answer, needs no name or tick, keeps the waiting period and queues nothing.
 -- now() is fixed inside this block, so Ana's first request and its notice are moved an hour back, as if made then.
@@ -589,7 +592,8 @@ end $$;
 select set_config('request.jwt.claims','{"sub":"d2000000-0000-4000-8000-000000000009","role":"authenticated"}',true);
 do $$ begin
  if public.join_by_link((select code from olr_codes where name='A4'),' Leo ','2026-10') is distinct from 'd2100000-0000-4000-8000-000000000001' then raise exception 'Legacy join returned another plan'; end if;
- if public.account_access_status()->>'status' is distinct from 'access_pending' then raise exception 'Legacy join approved the account'; end if;
+ -- Since the open beta (20261116120000) the account may use the app all along; the join still only asks (below).
+ if public.account_access_status()->>'status' is distinct from 'approved' then raise exception 'Open-beta account not approved after a legacy join'; end if;
 end $$;
 reset role;
 do $$ begin
@@ -602,7 +606,7 @@ do $$ begin
  if exists(select 1 from private.notification_outbox where kind='invitation' and plan_id='d2100000-0000-4000-8000-000000000001') then raise exception 'A legacy call queued an invitation notice'; end if;
  if (select display_name from public.profiles where id='d2000000-0000-4000-8000-000000000009') is distinct from 'Leo'
   or (select terms_version from private.age_attestations where user_id='d2000000-0000-4000-8000-000000000009') is distinct from '2026-10' then raise exception 'Legacy join did not store the name and tick'; end if;
- if private.user_eligible('d2000000-0000-4000-8000-000000000009') then raise exception 'Legacy join made the account eligible'; end if;
+ if private.granted_access('d2000000-0000-4000-8000-000000000009') then raise exception 'Legacy join granted access'; end if;
 end $$;
 -- The host sees both; the tester has no number, so no ending.
 set local role authenticated;
@@ -789,13 +793,14 @@ do $$ begin
  if (select display_name from public.profiles where id='d2000000-0000-4000-8000-000000000025') is distinct from 'Quin' then raise exception 'The tester''s name changed'; end if;
 end $$;
 
--- Approval refuses the people request_to_join refuses, even when they may use the app: Quin (a roster tester) now holds
--- a revoked grant, and Max (a grant holder) an email disabled on the roster. Both stay waiting.
+-- Approval refuses the people request_to_join refuses: Quin (a roster tester) now holds a revoked grant, and Max (a grant
+-- holder) an email disabled on the roster. Both stay waiting. Before the open beta (20261116120000) the roster row or
+-- the grant still let them use the app; now either is a suspension, so neither may.
 insert into private.beta_access(user_id,source,revoked_at) values ('d2000000-0000-4000-8000-000000000025','invitation',now());
 update auth.users set email='olr-disabled@resbite-test.invalid' where id='d2000000-0000-4000-8000-000000000026';
 do $$ begin
- if not private.user_eligible('d2000000-0000-4000-8000-000000000025') or not private.user_eligible('d2000000-0000-4000-8000-000000000026') then
-  raise exception 'Quin and Max should still be eligible';
+ if private.user_eligible('d2000000-0000-4000-8000-000000000025') or private.user_eligible('d2000000-0000-4000-8000-000000000026') then
+  raise exception 'Quin and Max should be suspended';
  end if;
 end $$;
 set local role authenticated;

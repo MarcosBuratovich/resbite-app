@@ -1,6 +1,7 @@
 -- Contact invitations, host side (docs/superpowers/specs/2026-10-27-contact-invitations-design.md). Synthetic identities only.
 -- Users d1..: 01 host, 02 other eligible user, 03 the "On Resbite" contact (201), 04 eligible but never used the app (202),
--- 05 an existing attendee (205), 06 not eligible.
+-- 05 an existing attendee (205), 06 not eligible (suspended: since the open beta, 20261116120000, only a suspended
+-- account is kept out).
 begin;
 insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) values
  ('d1000000-0000-4000-8000-000000000001',null,null,'447700900200',now()),
@@ -17,6 +18,8 @@ insert into private.beta_access(user_id,source) values
  ('d1000000-0000-4000-8000-000000000001','maintainer'),('d1000000-0000-4000-8000-000000000002','maintainer'),
  ('d1000000-0000-4000-8000-000000000003','maintainer'),('d1000000-0000-4000-8000-000000000004','invitation'),
  ('d1000000-0000-4000-8000-000000000005','maintainer');
+-- Since the open beta (20261116120000) only a suspended account is kept out.
+insert into private.beta_access(user_id,source,revoked_at) values ('d1000000-0000-4000-8000-000000000006','maintainer',now());
 insert into private.app_sessions(user_id) values
  ('d1000000-0000-4000-8000-000000000001'),('d1000000-0000-4000-8000-000000000003'),('d1000000-0000-4000-8000-000000000005'),
  ('d1000000-0000-4000-8000-000000000006');
@@ -534,8 +537,10 @@ do $$ begin
   or exists(select 1 from private.age_attestations where user_id='d1000000-0000-4000-8000-000000000010') then raise exception 'Tick not moved'; end if;
  if (select source from private.beta_access where user_id='d1000000-0000-4000-8000-000000000011' and revoked_at is null) is distinct from 'invitation'
   or exists(select 1 from private.beta_access where user_id='d1000000-0000-4000-8000-000000000010') then raise exception 'Grant not moved'; end if;
- if not private.user_eligible('d1000000-0000-4000-8000-000000000011') then raise exception 'The moved grant should let the account in'; end if;
- if private.user_eligible('d1000000-0000-4000-8000-000000000010') then raise exception 'The folded account still gets in'; end if;
+ -- Since the open beta (20261116120000) any confirmed account may use the app, so the grant no longer decides who gets in
+ -- (the folded account too, until its user is deleted, with nothing left on it): the grant holder is the account it moved to.
+ if not (private.granted_access('d1000000-0000-4000-8000-000000000011') and private.user_eligible('d1000000-0000-4000-8000-000000000011')) then raise exception 'The moved grant should let the account in'; end if;
+ if private.granted_access('d1000000-0000-4000-8000-000000000010') then raise exception 'The folded account still holds a grant'; end if;
  if exists(select 1 from public.profiles where id='d1000000-0000-4000-8000-000000000010') then raise exception 'Web profile not deleted'; end if;
  if (select display_name from public.profiles where id='d1000000-0000-4000-8000-000000000011') is distinct from 'Email Ana' then raise exception 'The account''s own name changed'; end if;
  if not exists(select 1 from auth.users where id='d1000000-0000-4000-8000-000000000010') then raise exception 'The fold deleted the user'; end if;
@@ -599,7 +604,8 @@ reset role;
 do $$ begin
  if exists(select 1 from private.beta_access where user_id='d1000000-0000-4000-8000-000000000017')
   or exists(select 1 from private.age_attestations where user_id='d1000000-0000-4000-8000-000000000017') then raise exception 'The folded account kept its grant or tick'; end if;
- if private.user_eligible('d1000000-0000-4000-8000-000000000017') then raise exception 'The folded account still gets in before its user is deleted'; end if;
+ -- Since the open beta (20261116120000) a confirmed account gets in without a grant: the folded one holds none.
+ if private.granted_access('d1000000-0000-4000-8000-000000000017') then raise exception 'The folded account still holds a grant before its user is deleted'; end if;
  if (select terms_version from private.age_attestations where user_id='d1000000-0000-4000-8000-000000000011') is distinct from '2026-10' then raise exception 'The account''s own tick changed'; end if;
 end $$;
 
@@ -626,7 +632,8 @@ do $$ begin
   or (select terms_version from private.age_attestations where user_id='d1000000-0000-4000-8000-000000000018') is distinct from '2026-10' then raise exception 'The disabled tester''s answer or tick did not move'; end if;
  if exists(select 1 from private.beta_access where user_id in ('d1000000-0000-4000-8000-000000000018','d1000000-0000-4000-8000-000000000019')) then raise exception 'A live grant survived for a disabled tester'; end if;
  if private.user_eligible('d1000000-0000-4000-8000-000000000018') then raise exception 'The fold let a disabled tester in'; end if;
- if private.user_eligible('d1000000-0000-4000-8000-000000000019') then raise exception 'The folded account still gets in'; end if;
+ -- Since the open beta (20261116120000) a confirmed account gets in without a grant: the folded one holds none.
+ if private.granted_access('d1000000-0000-4000-8000-000000000019') then raise exception 'The folded account still holds a grant'; end if;
 end $$;
 
 -- fold: a ban is copied to an account with no grant and stays on the web account, so a web user that outlives the

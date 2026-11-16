@@ -17,6 +17,9 @@ insert into private.tester_roster(email,enabled) values
  ('access-disabled@resbite-test.invalid',false),
  ('access-deleting@resbite-test.invalid',true),
  ('access-deletion-job@resbite-test.invalid',true);
+-- Since the open beta (20261116120000) only a suspended account is kept out: the pending fixture is suspended, and its
+-- stale tester metadata and claims still don't let it in.
+insert into private.beta_access(user_id,source,revoked_at) values ('71000000-0000-4000-8000-000000000002','maintainer',now());
 insert into public.profiles(id,display_name,deletion_requested_at)
  values('71000000-0000-4000-8000-000000000007','Deletion fixture',now());
 insert into private.account_deletion_jobs(request_id,user_id,recovery_hash)

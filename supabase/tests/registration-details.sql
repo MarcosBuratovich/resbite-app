@@ -30,7 +30,8 @@ do $$ declare
  cleared jsonb := '{"birth_date":null,"phone":null,"city":null,"interests":[]}';
  response jsonb;
 begin
- if private.eligible() then raise exception 'Fixture unexpectedly approved'; end if;
+ -- The details never depended on approval. Since the open beta (20261116120000) this confirmed fixture is approved, so
+ -- the old "not approved yet" premise check is gone.
  response := public.save_registration_details(original,cleared);
  if response is distinct from jsonb_build_object('account_id',auth.uid(),'registration_details',cleared || '{"future_field":"keep"}'::jsonb) then
   raise exception 'Removal did not preserve unrelated nested data';

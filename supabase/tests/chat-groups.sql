@@ -440,14 +440,14 @@ select pg_temp.g2_refused($$select count(*) from private.series_leaves$$,'42501'
 select pg_temp.g2_refused($$insert into private.series_leaves(series_id,user_id) values (pg_temp.e6p('01'),pg_temp.e6('03'))$$,
  '42501','permission denied for table series_leaves');
 reset role;
--- series_is_group is false for a member who may no longer use the app (Q1, review M1): 05's roster row goes, then comes
--- back.
-delete from private.tester_roster where email='g2-05@resbite-test.invalid';
+-- series_is_group is false for a member who may no longer use the app (Q1, review M1): 05's roster row is disabled, then
+-- enabled again. Since the open beta (20261116120000) only a suspended account is kept out, so a missing row no longer does.
+update private.tester_roster set enabled=false where email='g2-05@resbite-test.invalid';
 set local role authenticated;
 select pg_temp.g2_as(pg_temp.e6('05'));
 select pg_temp.g2_check(public.series_is_group(pg_temp.e6p('01')) is false,'series_is_group says yes to 05, who may not use the app');
 reset role;
-insert into private.tester_roster(email) values ('g2-05@resbite-test.invalid');
+update private.tester_roster set enabled=true where email='g2-05@resbite-test.invalid';
 
 -- The announcement audiences, unchanged (Global Constraints), on the group: Going this Thursday is the hosts and the
 -- people Going or Maybe; Everyone in the group is every member.
@@ -497,11 +497,12 @@ do $$ declare f text; r text; p text; begin
  end loop;
 end $$;
 
--- An owner who can no longer use the app stops the group (G-S4): 01's roster row goes, and every series 01 owns is
--- stopped. Board game night, running: the summary (as 05) says stopped, and the chat closes 48 hours after its current
--- occurrence's end. Film club, its current occurrence cancelled with the repeat kept (as an account deletion leaves it):
--- the same close. The Picnic, a one-off, is not stopped. 01's roster row comes back, and Board game night runs again.
-delete from private.tester_roster where email='g2-01@resbite-test.invalid';
+-- An owner who can no longer use the app stops the group (G-S4): 01's roster row is disabled (since the open beta,
+-- 20261116120000, only a suspended account is kept out), and every series 01 owns is stopped. Board game night, running:
+-- the summary (as 05) says stopped, and the chat closes 48 hours after its current occurrence's end. Film club, its
+-- current occurrence cancelled with the repeat kept (as an account deletion leaves it): the same close. The Picnic, a
+-- one-off, is not stopped. 01's roster row is enabled again, and Board game night runs again.
+update private.tester_roster set enabled=false where email='g2-01@resbite-test.invalid';
 do $$ declare s jsonb; begin
  perform pg_temp.g2_check(not private.user_eligible(pg_temp.e6('01')),'01 may still use the app');
  perform pg_temp.g2_as(pg_temp.e6('05'));
@@ -518,7 +519,7 @@ do $$ declare s jsonb; begin
  perform pg_temp.g2_as(pg_temp.e6('03'));
  perform pg_temp.g2_check(public.chat_summary(pg_temp.e6p('05'))@>'{"stopped":false,"is_group":false}','The Picnic''s summary says stopped');
 end $$;
-insert into private.tester_roster(email) values ('g2-01@resbite-test.invalid');
+update private.tester_roster set enabled=true where email='g2-01@resbite-test.invalid';
 select pg_temp.g2_check(not private.group_stopped(pg_temp.e6p('01')) and private.chat_closes_at(pg_temp.e6p('01')) is null,
  'Board game night did not run again with its owner back');
 
@@ -1263,25 +1264,26 @@ rollback;
 
 -- 2h. A closed group is finished for the roll (ruling GR3 Q1; G-S4; the spec's anti-goal "a chat that outlives its 48
 -- hours"). Board game night ended three weeks ago, Film club an hour ago, and 01, their owner, may no longer use the
--- app (the roster row goes): the roll skips both (G-S4). Board game night's chat has closed (48 hours after its end), so
--- the roll writes its stop time, the end; Film club's is still open, so nothing is written. 01 comes back: the roll
--- rolls Film club, whose chat never closed, and leaves Board game night closed, with no line. Only the owner's Edit
--- reopens it: its repeat off and on again (by hand under the flag, since change_plan_v4 refuses an occurrence that has
--- ended) clears the stop time, and the next roll rolls it.
+-- app (the roster row is disabled: since the open beta, 20261116120000, only a suspended account is kept out): the roll
+-- skips both (G-S4). Board game night's chat has closed (48 hours after its end), so the roll writes its stop time, the
+-- end; Film club's is still open, so nothing is written. 01 comes back: the roll rolls Film club, whose chat never
+-- closed, and leaves Board game night closed, with no line. Only the owner's Edit reopens it: its repeat off and on again
+-- (by hand under the flag, since change_plan_v4 refuses an occurrence that has ended) clears the stop time, and the next
+-- roll rolls it.
 begin;
 select pg_temp.e6_cast();
 select set_config('resbite.system','roll',true);
 update public.plans set starts_at=now()-interval '21 days 3 hours',ends_at=now()-interval '21 days 1 hour' where id=pg_temp.e6p('01');
 update public.plans set starts_at=now()-interval '3 hours',ends_at=now()-interval '1 hour' where id=pg_temp.e6p('02');
 select set_config('resbite.system','',true);
-delete from private.tester_roster where email='g2-01@resbite-test.invalid';
+update private.tester_roster set enabled=false where email='g2-01@resbite-test.invalid';
 select pg_temp.g2_check(pg_temp.g2_roll()=0,'The roll rolled a plan of an owner who may not use the app');
 select pg_temp.g2_check((select stopped_at from public.chats where series_id=pg_temp.e6p('01'))=(select ends_at from public.plans where id=pg_temp.e6p('01'))
  and private.chat_open(pg_temp.e6p('01')) is false,'Board game night''s closed chat has no stop time: '
  ||coalesce((select stopped_at::text from public.chats where series_id=pg_temp.e6p('01')),'null'));
 select pg_temp.g2_check((select stopped_at from public.chats where series_id=pg_temp.e6p('02')) is null and private.chat_open(pg_temp.e6p('02')),
  'Film club, whose chat is still open, has a stop time');
-insert into private.tester_roster(email) values ('g2-01@resbite-test.invalid');
+update private.tester_roster set enabled=true where email='g2-01@resbite-test.invalid';
 select pg_temp.g2_check(pg_temp.g2_roll()=1,'With 01 back, the roll did not roll one plan');
 select pg_temp.g2_check(pg_temp.g2_next(pg_temp.e6p('02')) is not null and pg_temp.g2_next(pg_temp.e6p('01')) is null,
  'With 01 back, the roll did not roll Film club alone');

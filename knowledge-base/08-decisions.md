@@ -764,3 +764,13 @@ Chat plan 3 of 3 ([plan](../docs/superpowers/plans/2026-11-11-chat-3-safety.md))
 - **CH-S28.** Focus follows every report and block step and returns to the menu row after Keep; a message removed while its report sheet is open keeps the sheet and the typed words, with "You can’t report that any more." (SR6).
 - **CH-S29.** `report_user` admits an announcer only through a sent announcement, as `block_user` does, and a fold drops the reports between the two accounts it merges (Task 2).
 - **CH-S30.** A chat's person sheet offers Report and Block or Unblock, not Connect, which stays on People in this chat; Report and Block come last in a person's actions, and one's own announcement offers no Report message (Tasks 4 and 5).
+
+## Open beta (OB), 16 November 2026
+
+Migration `supabase/migrations/20261116120000_open_beta.sql`; branch `open-beta`.
+
+- **OB-D1 (owner).** The beta is open: "I don't want this check any more. The app is open for beta testers. So eliminate this feature." Any confirmed account may use the app. The tester roster and the access grants (`private.beta_access`) no longer decide who gets in. It came up when someone who installed the TestFlight build and signed up without an invitation landed on Waiting for access.
+- **OB-D2 (assistant's call).** Still kept out: an unconfirmed account, an anonymous session, an account banned in Auth, an account that is leaving, and an account the owner suspended: a revoked grant ("the owner's ban for abuse", GI2) or a disabled roster row. `supabase/ops/suspend-account.sql` now records a revoked grant for an account that has none, since without one nothing would keep them out.
+- **OB-D3 (assistant's call).** Unchanged: the resbite's own approval (an answer through the event link waits for the host); a new account still gives its name and the 18+ tick in the link flows; an approval still records a grant. Old testers and grant holders are still not asked for the tick again (`private.granted_access`).
+- **OB-D4 (assistant's call).** Waiting for access stays only for suspended accounts. Its text becomes "This account can’t use Resbite at the moment. If you think this is a mistake, contact the Resbite team." The heading stays, so the browser checks keep their anchor. Copy that mentioned tester approval is reworded (sign-in confirmation, Data & privacy, Delete account, the preview notices, a failed save).
+- **OB-D5.** The local-only deletion functions (`prepare_deletion_intent`, `activate_deletion_intent`) still ask for a roster row or a grant, and deletion requests still need a confirmed email. The deletion release must change them too (`qa/deletion-recovery-ledger.md`).

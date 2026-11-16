@@ -170,8 +170,9 @@ end $$;
 set local role authenticated;
 do $$ begin
  if pg_temp.phone_access('c2000000-0000-4000-8000-000000000001') is distinct from 'approved' then raise exception 'Phone-only account with a maintainer grant not approved'; end if;
- -- Without the grant it waits; with nothing confirmed it is unconfirmed; an email-confirmed roster tester is approved.
- if pg_temp.phone_access('c2000000-0000-4000-8000-000000000002') is distinct from 'access_pending' then raise exception 'Phone-only account without a grant not waiting'; end if;
+ -- Without the grant it is approved too (since the open beta, 20261116120000; it used to wait); with nothing confirmed it
+ -- is unconfirmed; an email-confirmed roster tester is approved.
+ if pg_temp.phone_access('c2000000-0000-4000-8000-000000000002') is distinct from 'approved' then raise exception 'Phone-only account without a grant not approved (open beta)'; end if;
  if pg_temp.phone_access('c2000000-0000-4000-8000-000000000003') is distinct from 'unconfirmed' then raise exception 'Account with nothing confirmed not unconfirmed'; end if;
  if pg_temp.phone_access('c2000000-0000-4000-8000-000000000004') is distinct from 'approved' then raise exception 'Email-confirmed roster tester not approved'; end if;
 end $$;
@@ -180,24 +181,29 @@ reset role;
 insert into private.beta_access(user_id,source) values ('c2000000-0000-4000-8000-000000000005','maintainer');
 insert into public.profiles(id,display_name,deletion_requested_at) values ('c2000000-0000-4000-8000-000000000005','Leaving',now());
 do $$ begin
- if private.user_eligible('c2000000-0000-4000-8000-000000000002') then raise exception 'Phone-only account without a grant eligible'; end if;
+ if not private.user_eligible('c2000000-0000-4000-8000-000000000002') then raise exception 'Phone-only account without a grant not eligible (open beta)'; end if;
  if private.user_eligible('c2000000-0000-4000-8000-000000000005') then raise exception 'Leaving phone-only account eligible'; end if;
  if not private.user_eligible('c2000000-0000-4000-8000-000000000004') then raise exception 'Email-confirmed roster tester not eligible'; end if;
 end $$;
--- A roster row needs a confirmed email: a confirmed phone with an unconfirmed roster email waits until the email
--- is confirmed.
+-- A roster row needs a confirmed email: a confirmed phone with an unconfirmed roster email is no roster tester
+-- (granted_access) until the email is confirmed. Since the open beta (20261116120000) the confirmed phone lets it use
+-- the app either way (it used to wait for the email).
 insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) values
  ('c2000000-0000-4000-8000-000000000006','phone-accounts-roster-unconfirmed@resbite-test.invalid',null,'447700900106',now());
 insert into private.tester_roster(email,enabled) values ('phone-accounts-roster-unconfirmed@resbite-test.invalid',true);
 do $$ begin
- if private.user_eligible('c2000000-0000-4000-8000-000000000006') then raise exception 'Roster match with an unconfirmed email eligible'; end if;
+ if private.granted_access('c2000000-0000-4000-8000-000000000006') then raise exception 'Roster match with an unconfirmed email counted'; end if;
+ if not private.user_eligible('c2000000-0000-4000-8000-000000000006') then raise exception 'Confirmed phone account not eligible (open beta)'; end if;
 end $$;
 set local role authenticated;
 do $$ begin
- if pg_temp.phone_access('c2000000-0000-4000-8000-000000000006') is distinct from 'access_pending' then raise exception 'Roster match with an unconfirmed email not waiting'; end if;
+ if pg_temp.phone_access('c2000000-0000-4000-8000-000000000006') is distinct from 'approved' then raise exception 'Confirmed phone account not approved (open beta)'; end if;
 end $$;
 reset role;
 update auth.users set email_confirmed_at=now() where id='c2000000-0000-4000-8000-000000000006';
+do $$ begin
+ if not private.granted_access('c2000000-0000-4000-8000-000000000006') then raise exception 'Roster match with the email confirmed not counted'; end if;
+end $$;
 set local role authenticated;
 do $$ begin
  if pg_temp.phone_access('c2000000-0000-4000-8000-000000000006') is distinct from 'approved' then raise exception 'Roster match with the email confirmed not approved'; end if;
@@ -284,9 +290,9 @@ do $$ declare r text; begin
 end $$;
 rollback;
 -- Joining by an event link (GI2's join_by_link): a confirmed phone counts as a confirmed account, so a phone-only
--- account waiting for access asks to join and becomes eligible once the host approves (open-link approval,
--- 20261029120000); an account with neither confirmed is refused. Synthetic identities only (prefix c3); one
--- rolled-back block.
+-- account asks to join and is on the event once the host approves (open-link approval, 20261029120000); an account with
+-- neither confirmed is refused. Since the open beta (20261116120000) the phone-only account may use the app before it
+-- asks (it used to wait for the approval). Synthetic identities only (prefix c3); one rolled-back block.
 begin;
 insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at) values
  ('c3000000-0000-4000-8000-000000000001','phone-accounts-link-owner@resbite-test.invalid',now(),null,null),
@@ -304,12 +310,19 @@ do $$ begin
 end $$;
 select set_config('request.jwt.claims','{"sub":"c3000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
 do $$ begin
- if public.account_access_status()->>'status'<>'access_pending' then raise exception 'Phone-only account not waiting before joining'; end if;
+ if public.account_access_status()->>'status'<>'approved' then raise exception 'Phone-only account not approved before joining (open beta)'; end if;
  if public.join_by_link((select code from phone_link_codes where name='one'),'Phone Guest','2026-10')<>'c3100000-0000-4000-8000-000000000001' then
   raise exception 'Phone-only join returned another plan';
  end if;
- if public.account_access_status()->>'status'<>'access_pending' then raise exception 'Phone-only account approved before the host approved'; end if;
+ if public.account_access_status()->>'status'<>'approved' then raise exception 'Phone-only account not approved after asking (open beta)'; end if;
 end $$;
+-- Asking only asks: no grant and no place before the host approves.
+reset role;
+do $$ begin
+ if exists(select 1 from private.beta_access where user_id='c3000000-0000-4000-8000-000000000002')
+ or exists(select 1 from public.attendees where user_id='c3000000-0000-4000-8000-000000000002') then raise exception 'Phone-only account admitted before the host approved'; end if;
+end $$;
+set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"c3000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 select public.decide_join_request('c3100000-0000-4000-8000-000000000001','c3000000-0000-4000-8000-000000000002',true);
 select set_config('request.jwt.claims','{"sub":"c3000000-0000-4000-8000-000000000002","role":"authenticated"}',true);

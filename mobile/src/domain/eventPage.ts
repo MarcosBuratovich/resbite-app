@@ -107,7 +107,7 @@ export const EVENT_COPY = {
   previewChangesSaved: "Preview changes saved",
   mapsFailed: "Couldn’t open Maps.",
   openInMaps: (place: string) => `Open ${place.trim()} in Maps`,
-  invitePreview: "Invitations are disabled in design preview. Real invitations need an approved tester account.",
+  invitePreview: "Invitations are disabled in design preview. Real invitations need a signed-in account.",
   previewCancelled: "Preview plan cancelled.",
   readFailed: "This resbite couldn’t be opened. Check your connection and try again.",
   responseSaved: "Your response is saved.",

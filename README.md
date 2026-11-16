@@ -13,7 +13,7 @@ Start with the [7 October development handoff](docs/development-handoff-2026-10-
 5. Run `npm run check` inside `mobile`.
 6. Connect Apple signing and a development iPhone before running `npx expo run:ios --device`.
 
-The existing hosted Supabase database is shared across computers. Do not create another project or reapply the initial migration manually. Tester access is limited to the explicitly approved owner account; broader tester access remains closed.
+The existing hosted Supabase database is shared across computers. Do not create another project or reapply the initial migration manually. The beta is open (16 Nov 2026): any confirmed account may use the app, and the owner keeps someone out with `supabase/ops/suspend-account.sql`.
 
 ## Project contents
 

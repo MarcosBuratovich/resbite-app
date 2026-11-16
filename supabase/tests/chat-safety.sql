@@ -1642,31 +1642,34 @@ rollback to savepoint s3_deletion;
 \endif
 
 -- suspend-account.sql (G-B4(b), N14 (b)): on a report about 04 (05's open one on the group), 04's roster row is
--- disabled: user_eligible(04) is false, and it prints 04's account, 1 and 0. On 03's report about 16 (a live grant, no
--- roster row): user_eligible(16) is false, and it prints 16's account, 0 and 1. Each suspension is recorded in
+-- disabled and, since the open beta (20261116120000), a revoked grant is recorded for it (it had none):
+-- user_eligible(04) is false, and it prints 04's account, 1 and 1. On 03's report about 16 (a live grant, no roster
+-- row): user_eligible(16) is false, and it prints 16's account, 0 and 1. Each suspension is recorded in
 -- private.suspensions by the suspended account (SR8's M1): what it changed, and the report that led to it.
 select pg_temp.s3_id('ru2') as s3_rid \gset
 \set s3_script `sed -e 's/(values (0))/(values (:s3_rid))/' :'resbite_repo'/supabase/ops/suspend-account.sql`
 select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
-select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('account',pg_temp.e7('04'),'roster_rows_disabled',1,'grants_revoked',0))
+select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('account',pg_temp.e7('04'),'roster_rows_disabled',1,'grants_revoked',1))
  and not private.user_eligible(pg_temp.e7('04'))
- and (select (report_id,roster,grant_at,at) from private.suspensions where user_id=pg_temp.e7('04'))
-  is not distinct from (pg_temp.s3_id('ru2'),true,null::timestamptz,now()),'suspend-account.sql on 04: '||current_setting('s3.out'));
+ and (select (source,revoked_at) from private.beta_access where user_id=pg_temp.e7('04')) is not distinct from ('maintainer'::text,now())
+ and (select (report_id,roster,grant_at,at,grant_made) from private.suspensions where user_id=pg_temp.e7('04'))
+  is not distinct from (pg_temp.s3_id('ru2'),true,now(),now(),true),'suspend-account.sql on 04: '||current_setting('s3.out'));
 select pg_temp.s3_id('r16') as s3_rid \gset
 \set s3_script `sed -e 's/(values (0))/(values (:s3_rid))/' :'resbite_repo'/supabase/ops/suspend-account.sql`
 select set_config('s3.out',pg_temp.s3_run(:'s3_script')::text,true);
 select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('account',pg_temp.e7('16'),'roster_rows_disabled',0,'grants_revoked',1))
  and not private.user_eligible(pg_temp.e7('16'))
- and (select (report_id,roster,grant_at) from private.suspensions where user_id=pg_temp.e7('16'))
-  is not distinct from (pg_temp.s3_id('r16'),false,now()),'suspend-account.sql on 16: '||current_setting('s3.out'));
+ and (select (report_id,roster,grant_at,grant_made) from private.suspensions where user_id=pg_temp.e7('16'))
+  is not distinct from (pg_temp.s3_id('r16'),false,now(),false),'suspend-account.sql on 16: '||current_setting('s3.out'));
 -- The undo in suspend-account.sql's closing comment takes the suspended account and puts back only what its recorded
 -- suspension changed (D3, SR8's M1), then deletes the record. In savepoints: on 16, the grant comes back ({0,1}) and 16
--- may use the app again; on 04, the roster row comes back ({1,0}), even after 05, who reported 04, deleted their
--- profile by hand, which takes 05's reports, the one the suspension came from among them (the record stays, its report
--- forgotten). Then two people banned a month earlier (in one savepoint): 13 (roster row disabled and a grant revoked
--- then) is suspended ({0,0}, nothing recorded) and undone ({0,0}), and stays banned, the grant's month-old time kept;
--- 07 (roster row on, a grant revoked a month ago) is suspended ({1,0}) and undone ({1,0}): the roster row comes back,
--- the old revocation stays.
+-- may use the app again; on 04, the roster row comes back and the grant the suspension recorded is deleted ({1,1}),
+-- even after 05, who reported 04, deleted their profile by hand, which takes 05's reports, the one the suspension came
+-- from among them (the record stays, its report forgotten). Then two people banned a month earlier (in one savepoint): 13
+-- (roster row disabled and a grant revoked then) is suspended ({0,0}, nothing recorded) and undone ({0,0}), and stays
+-- banned, the grant's month-old time kept; 07 (roster row on, a grant revoked a month ago) is suspended ({1,0}) and
+-- undone ({1,0}): the roster row comes back, the old revocation stays, and since the open beta (20261116120000) that
+-- revocation alone is a ban, so 07 still may not use the app.
 savepoint s3_undo;
 select pg_temp.e7('16') as s3_uid \gset
 \set s3_undo `sed -n -e '/^-- To undo it/,$ s/^--   //p' :'resbite_repo'/supabase/ops/suspend-account.sql | sed -e 's/00000000-0000-0000-0000-000000000000/:s3_uid/'`
@@ -1684,7 +1687,9 @@ select pg_temp.s3_check(not exists(select 1 from private.reports where id=pg_tem
 select pg_temp.e7('04') as s3_uid \gset
 \set s3_undo `sed -n -e '/^-- To undo it/,$ s/^--   //p' :'resbite_repo'/supabase/ops/suspend-account.sql | sed -e 's/00000000-0000-0000-0000-000000000000/:s3_uid/'`
 select set_config('s3.out',pg_temp.s3_run(:'s3_undo')::text,true);
-select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('roster_rows_enabled',1,'grants_restored',0))
+select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('roster_rows_enabled',1,'grants_restored',1))
+ and (select enabled from private.tester_roster where email='s3-04@resbite-test.invalid')
+ and not exists(select 1 from private.beta_access where user_id=pg_temp.e7('04'))
  and private.user_eligible(pg_temp.e7('04')),'The undo on 04: '||current_setting('s3.out'));
 rollback to savepoint s3_undo;
 savepoint s3_undo;
@@ -1715,7 +1720,8 @@ select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb
  and not private.user_eligible(pg_temp.e7('07')),'D3: the suspension of 07: '||current_setting('s3.out'));
 select set_config('s3.out',pg_temp.s3_run(:'s3_undo')::text,true);
 select pg_temp.s3_check(current_setting('s3.out')::jsonb=jsonb_build_array(jsonb_build_object('roster_rows_enabled',1,'grants_restored',0))
- and private.user_eligible(pg_temp.e7('07'))
+ and (select enabled from private.tester_roster where email='s3-07@resbite-test.invalid')
+ and not private.user_eligible(pg_temp.e7('07'))
  and (select revoked_at from private.beta_access where user_id=pg_temp.e7('07'))=now()-interval '30 days',
  'D3: the undo did not put back only 07''s roster row: '||current_setting('s3.out'));
 -- And 12, banned by roster a month ago but with a live grant: suspended ({0,1}, the grant) and undone ({0,1}): the

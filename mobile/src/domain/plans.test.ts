@@ -353,7 +353,7 @@ test("the save messages speak of the resbite and the host's changes, never a dra
   );
   assert.equal(
     (await refusal("42501")).message,
-    "Your account can’t save this resbite. Private tester access may still be closed. Your changes are still here.",
+    "Your account can’t save this resbite right now. Your changes are still here.",
   );
   assert.equal(
     (await refusal("23514")).message,

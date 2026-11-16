@@ -7,6 +7,9 @@ insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data) values
  ('10000000-0000-4000-8000-000000000004','unverified@resbite-test.invalid',null,'{"email_verified":true}'),
  ('10000000-0000-4000-8000-000000000005','other@resbite-test.invalid',now(),'{}');
 insert into private.tester_roster(email) values('owner@resbite-test.invalid'),('invitee@resbite-test.invalid'),('unverified@resbite-test.invalid'),('other@resbite-test.invalid');
+-- Since the open beta (20261116120000) only a suspended account is kept out: the outsider is suspended, and its
+-- tester metadata still doesn't let it in.
+insert into private.beta_access(user_id,source,revoked_at) values ('10000000-0000-4000-8000-000000000003','maintainer',now());
 insert into public.activities(id,title,description,category,artwork_key,source_ids,published,categories) values('test-only','Test activity','Synthetic fixture','Creative','test-only',array['test'],true,array['creative']);
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
