@@ -75,7 +75,7 @@ Record each as "set" or "unset". Never paste the command's output into the repo:
 - **Sender (live):** `NOTIFICATION_DELIVERY_ENABLED`, `NOTIFICATION_WORKER_SECRET`, `EXPO_ACCESS_TOKEN`.
 - **Deletion (C2):** `ACCOUNT_DELETION_ENABLED`, `ACCOUNT_CLEANUP_SECRET`, `ACCOUNT_RECEIPT_PURGE_ENABLED`, `ACCOUNT_RECEIPT_PURGE_SECRET`, and the Sign in with Apple key for token revocation (names set by C2).
 - **Photo clean-up (C3):** `PROFILE_PHOTO_CLEANUP_ENABLED`, `PROFILE_PHOTO_CLEANUP_SECRET`.
-- **SMS (C1):** Twilio's credentials and the hook's secret (names set by C1).
+- **SMS (C1):** `SEND_SMS_HOOK_SECRETS`, `TWILIO_ACCOUNT_SID`, `TWILIO_API_KEY_SID`, `TWILIO_API_KEY_SECRET`, `TWILIO_MESSAGING_SERVICE_SID` and `SMS_SWEEP_SECRET`, for `send-sms`. The sweep's schedule reads two Vault secrets, `sms_sweep_url` and `sms_sweep_secret` (`qa/phone-codes-2026-11-17/README.md`, steps 3 and 11).
 - `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are provided by Supabase.
 
 ### Scheduled jobs
@@ -90,25 +90,25 @@ Each sitting has before-and-after snapshots, the advisors, and an entry under "A
 
 ### Step 11. Twilio and test mode off (C1, D6, D5, F14, F5)
 
-This comes first. The current TestFlight build's `000000` swap does nothing once live mode is on, so the sitting can run before the new build.
+This comes first. The current TestFlight build's `000000` swap does nothing once live mode is on, so the sitting can run before the new build. The sitting's runbook, with its scripts, hashes and stop conditions, is `qa/phone-codes-2026-11-17/README.md` (sitting 1, steps 1 to 12; roadmap H1).
 
 - [ ] **[approval]** Open the Twilio account in Resbite Ltd's name (F8), as the owner decided (AS-D5). Choose the region: [[OWNER: Twilio's region and transfer safeguard, to confirm when Resbite Ltd's account accepts Twilio's Data Protection Addendum — proposed: the United States, Twilio's main processing location, under the UK–US data bridge (Twilio Inc. states it takes part in the UK Extension to the EU–US Data Privacy Framework; check the live listing), with the UK Addendum to the EU Standard Contractual Clauses in Twilio's addendum as the fallback; Twilio's Ireland region (IE1) also offers messaging]]. Set tight limits and a spend alert: [[OWNER: Twilio monthly budget and spend alert — proposed: about USD 60 a month at 1,000 codes: Twilio lists UK text messages at USD 0.056 a segment (pricing page, November 2026), plus any carrier fees, and a sender number from USD 1.15 a month if an alphanumeric sender name is not used]]. Accept Twilio's Data Protection Addendum and record it, with the region, in the vendor register (A18, F7) before any number is sent.
-- [ ] Set how Twilio's message records are deleted, and record it in A12: [[OWNER: how long Twilio keeps message records — proposed: the Send SMS hook deletes each message record through Twilio's API once its delivery status is final, and Twilio says a deleted message's text can stay in its backups for up to 30 days, so state "up to 31 days after sending"; Twilio's Message Redaction setting is offered only with its Editions packages]].
-- [ ] **[approval]** Before snapshot, into this folder.
-- [ ] **[approval]** Deploy the hook path from phase 2: either the Edge Function behind an HTTP Send SMS hook, or the Postgres hook body with `pg_net`. Each file is approved by name and sha256. Then set its secrets, by name.
-- [ ] **[approval]** **The switch-off sitting**, as written in `qa/phone-accounts-2026-10-27/README.md`, step 7:
-  1. test mode off and `private.test_codes` emptied;
-  2. every session revoked;
-  3. every `exchanged` row of `private.test_mode_log` reviewed against the known testers;
-  4. the Auth identities made while test mode was on reviewed too.
-  What the review queries show stays in the SQL editor.
+- [ ] Set how Twilio's message records are deleted, and record it in A12: [[OWNER: how long Twilio keeps message records — proposed: the Send SMS hook deletes each message record through Twilio's API once its delivery status is final, and Twilio says a deleted message's text can stay in its backups for up to 30 days, so state "up to 31 days after sending"; Twilio's Message Redaction setting is offered only with its Editions packages]]. If the proposal stands, the daily sweep that deletes the records is scheduled at `qa/phone-codes-2026-11-17/README.md` step 11.
+- [ ] **[approval]** Before snapshot (`qa/phone-codes-2026-11-17/README.md`, step 1).
+- [ ] **[approval]** Deploy the hook path from phase 2: the `send-sms` Edge Function behind an HTTP Send SMS hook (`qa/phone-codes-2026-11-17/README.md`). Each file is approved by name and sha256. Then set its secrets, by name, and prove a real code (steps 2 to 4).
+- [ ] **[approval]** **The switch-off sitting**, as written in `qa/phone-codes-2026-11-17/README.md`, steps 5 and 6 (it supersedes `qa/phone-accounts-2026-10-27/README.md` step 7):
+  1. test mode off and `private.test_codes` emptied (step 5, `supabase/ops/phone-test-mode-off.sql`);
+  2. every session revoked (step 5);
+  3. every `exchanged` row of `private.test_mode_log` reviewed against the known testers (step 6, `supabase/ops/phone-test-mode-review.sql`);
+  4. the Auth identities made while test mode was on reviewed too (step 6).
+  What the review shows stays in the SQL editor.
 - [ ] **Breach log, first entry (F5, A17).** Record the outcome of the review, whatever it finds. If any exchange was not a known tester's, the 72-hour clock for reporting to the Information Commission (ICO, ico.org.uk) runs from that moment. The Information Commission took over the ICO's functions on 30 September 2026 and still uses the name ICO. Follow A17.
-- [ ] **[approval]** Auth settings (C11): restore the SMS rate limit to its pre-testing value, and confirm the OTP length and expiry. Record the values.
-- [ ] **[approval: Vercel]** Deploy the link site without the `000000` swap and with true code wording (D6). Add the firewall rate limit on `/i/*`, as `/r/*` already has (D5).
+- [ ] **[approval]** Auth settings (C11), with Twilio's: the SMS rate limit back to 30 an hour (Supabase's default) from its testing value, the OTP length 6 and expiry 600 seconds, and every other row of the C11 record in `qa/phone-codes-2026-11-17/README.md` (step 7). Record the values there.
+- [ ] **[approval: Vercel]** Deploy the link site without the `000000` swap and with true code wording (D6), from plan 1's own commit (`qa/phone-codes-2026-11-17/README.md`, step 8). Add the firewall rate limit on `/i/*`, as `/r/*` already has (D5).
 - [ ] **Do not switch on CAPTCHA.** It waits until the build and the site send a token (step 21; OPS-9).
-- [ ] Check that a real code arrives on the current TestFlight build, using a tester number the owner controls, and on `/r/` and `/i/`. `000000` is now refused.
-- [ ] **[approval]** After snapshot and advisors.
-- [ ] **[approval]** Later, once the log review is recorded: the migration that drops `public.exchange_test_code`, `private.test_codes` and `private.test_mode_log`, by sha256. Older builds call that function only when someone types `000000` (`mobile/src/services/phoneCode.ts:68`), so real codes keep working on them.
+- [ ] Check that a real code arrives on the current TestFlight build, using a tester number the owner controls, and on `/r/` and `/i/`. `000000` is now refused (`qa/phone-codes-2026-11-17/README.md`, steps 4 and 9).
+- [ ] **[approval]** After snapshot and advisors (`qa/phone-codes-2026-11-17/README.md`, step 10).
+- [ ] **[approval]** Later, once the log review is recorded and the C11 record shows the HTTPS hook: the migration `20261117100000_phone_test_mode_retired.sql`, which drops `public.exchange_test_code`, `public.send_sms_hook`, `private.test_codes`, `private.test_mode_log` and `private.phone_mode`, by name and sha256 (`qa/phone-codes-2026-11-17/README.md`, sitting 2, steps 13 and 14; roadmap H3). Older builds call that function only when someone types `000000` (`mobile/src/services/phoneCode.ts:68` before plan 1's Task 3), so real codes keep working on them.
 
 ### Step 12. Roll job and backup moderator (C4, C5)
 
@@ -155,7 +155,7 @@ Each migration is approved by name and sha256, with snapshots, the advisors, the
 ### Step 15. Auth email templates and Auth settings (C13, C11, F13)
 
 - [ ] **[approval]** Paste the changed `supabase/templates/confirmation.html`, `email-code.html` and `recovery.html` into the Auth dashboard's email templates. Record each file's sha256. The "private test" line is gone, and each carries the company footer.
-- [ ] **[approval]** Confirm and record these settings:
+- [ ] **[approval]** Confirm and record these settings. Each is a row of the C11 record in `qa/phone-codes-2026-11-17/README.md` ("Auth settings record (C11)"); record them there:
   - the Apple provider is on (SI-3);
   - the Google provider is on;
   - the OTP length and expiry;
@@ -423,6 +423,6 @@ Nothing has been applied yet. Add a dated entry for each step: what was done, th
 - Gap analysis: `docs/superpowers/specs/2026-11-17-app-store-readiness-design.md`, sections 4 (workstreams C, D, E, F), 5 (decisions and retention) and 6 (order of work).
 - Release audit: `research_notes/App Store readiness/audit-release-ops.md` (EAS variables, jobs, functions, approval steps).
 - Chat runbook: `qa/chat-release/README.md` (steps 5a, 6a, 7, 8; the reports queue).
-- Phone accounts runbook: `qa/phone-accounts-2026-10-27/README.md`, step 7 (test mode off).
+- Phone codes runbook: `qa/phone-codes-2026-11-17/README.md` (Twilio, test mode off, the C11 record). It supersedes the phone accounts runbook's step 7 (`qa/phone-accounts-2026-10-27/README.md`).
 - Creating a resbite runbook: `qa/creating-a-resbite-2026-10-31/README.md` (the roll job).
 - Apple, platform version information (version release options, App Review Information): https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information
