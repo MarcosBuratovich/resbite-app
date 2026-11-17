@@ -47,7 +47,7 @@
 | File | sha256 |
 | --- | --- |
 | `supabase/functions/send-sms/index.ts` (step 2) | `503930848088f05e45747f3bf8e320ab9060823b8518ebd355e7062cf68cdaff` |
-| `supabase/functions/_shared/sms-hook.ts` (step 2) | `66cab35907963554a9870b88d0eeac796231038105ed4395818d36e5419d72be` |
+| `supabase/functions/_shared/sms-hook.ts` (step 2) | `8e99cde2b3a55c0a3747cd4e828e2a99e175e1cc5adf47f5d6bc30ebbf671135` |
 | `supabase/functions/_shared/sms-records.ts` (step 2) | `80a6bb871867c9d40aab4da8a564e3470541f2314290afaad8edbb2af636cad5` |
 | `supabase/ops/phone-test-mode-off.sql` (step 5) | `868f42730eef93d0991f7a635a6ba666e383c974df18b6fc156aa807d1b908e3` |
 | `supabase/ops/phone-test-mode-review.sql` (step 6, the SQL editor) | `91e315f8f18747fd3cd07e3b5c18be3382b901bac60f3d9a3e98c524b1aa1020` |
@@ -63,7 +63,7 @@
 
 From `sha256sum` at this record's commit. Recompute before asking for approval (`sha256sum <file>`). Approve by file name and hash, and stop if a hash differs.
 
-- **`sms-hook.ts` changed after this table was made** (the final review's fixes, under "After the final review", below). Its row above, and its line in step 2's `pc-deploy.sh`, still hold the old hash, so `pc-deploy.sh` stops at the hash check until they are updated. Recompute the hash at the commit to be deployed, compare it with the fix report, and write it into both places as part of step 2's approval. The other two function files are unchanged.
+- **`sms-hook.ts` was re-hashed after the final review's fixes** (under "After the final review", below): its row above and its line in step 2's `pc-deploy.sh` hold the hash of the file as merged. The other two function files are unchanged.
 
 - **The two bases.** Both were checked at these hashes before the rollback copied them (Global Constraints of the plan). The rollback's function bodies come from `phone_key.sql` lines 26-47 and 52-71, its tables from `phone_accounts.sql` lines 13-41 and its grants from lines 71-72 and 97-98. The mode row is the one change: it is inserted with test mode false.
 - **The review is pasted into the SQL editor**, so its hash is checked by eye: compare the file's `sha256sum` with this table before copying it. Every other file is checked by its script.
@@ -173,7 +173,7 @@ Every step needs the owner's approval at the time.
    cd "${REPO:-$HOME/dev/resbite-app}"
    sha256sum -c - <<EOF
    503930848088f05e45747f3bf8e320ab9060823b8518ebd355e7062cf68cdaff  supabase/functions/send-sms/index.ts
-   66cab35907963554a9870b88d0eeac796231038105ed4395818d36e5419d72be  supabase/functions/_shared/sms-hook.ts
+   8e99cde2b3a55c0a3747cd4e828e2a99e175e1cc5adf47f5d6bc30ebbf671135  supabase/functions/_shared/sms-hook.ts
    80a6bb871867c9d40aab4da8a564e3470541f2314290afaad8edbb2af636cad5  supabase/functions/_shared/sms-records.ts
    EOF
    REF="$(cat supabase/.temp/project-ref)"
