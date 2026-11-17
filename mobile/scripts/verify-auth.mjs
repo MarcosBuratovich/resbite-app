@@ -102,7 +102,7 @@ try {
   await expect(
     page.getByRole("heading", { name: "Your number", exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("checkbox", { name: "I’m 18 or over", exact: true })).toBeVisible();
+  await expect(page.getByRole("checkbox", { name: "I’m 18 or over and I accept the Terms of Use.", exact: true })).toBeVisible();
   // Close returns to sign-in.
   await page.getByRole("button", { name: "Close", exact: true }).click();
   await expect(page).toHaveURL(/\/auth$/);

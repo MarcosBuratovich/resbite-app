@@ -49,7 +49,7 @@ test("countdown formats", () => {
   assert.equal(formatCountdown(0), "0:00");
   assert.equal(formatCountdown(-3), "0:00");
   assert.equal(GUEST_COPY.resendIn(5), "Didn’t get it? Send a new code in 0:05");
-  assert.equal(TERMS_VERSION, "2026-10");
+  assert.equal(TERMS_VERSION, "2026-12");
 });
 
 test("state sentences", () => {

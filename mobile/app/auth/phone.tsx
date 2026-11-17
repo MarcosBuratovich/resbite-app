@@ -101,7 +101,7 @@ export default function PhoneAuth() {
             <View style={styles.tick}>
               <TickRow
                 label={GUEST_COPY.tick}
-                hint={GUEST_COPY.terms}
+                hint={GUEST_COPY.tickHint}
                 checked={phone.ticked}
                 onChange={phone.setTicked}
                 disabled={phone.busy}

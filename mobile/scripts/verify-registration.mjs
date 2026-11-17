@@ -68,7 +68,7 @@ try {
     ).toBeVisible();
     await expect(page.getByLabel("Mobile number", { exact: true })).toHaveValue("");
     await expect(
-      page.getByRole("checkbox", { name: "I’m 18 or over", exact: true }),
+      page.getByRole("checkbox", { name: "I’m 18 or over and I accept the Terms of Use.", exact: true }),
     ).not.toBeChecked();
     await expect(
       page.getByRole("button", { name: "Send code", exact: true }),

@@ -44,7 +44,10 @@ async function fixture(
   let profile = null,
     failAccess = false,
     loseReply = false,
-    claims = 0;
+    claims = 0,
+    // Plan 4: the account has yet to accept the published Terms version (2026-12).
+    termsNeeded = false;
+  const accepts = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => {
     if (m.type() === "error" && !/Failed to load resource/.test(m.text()))
@@ -87,10 +90,18 @@ async function fixture(
       return reply(
         failAccess
           ? { message: "Offline" }
-          : { account_id: user.id, status: access },
+          : { account_id: user.id, status: access, terms_version: "2026-12", terms_needed: termsNeeded },
         failAccess ? 503 : 200,
       );
     if (path === "/rest/v1/profiles") return reply(profile);
+    if (path === "/rest/v1/rpc/accept_terms") {
+      const body = req.postDataJSON();
+      accepts.push({ body, claimsBefore: claims });
+      if (body.p_terms_version !== "2026-12")
+        return reply({ code: "22023", message: "Terms changed" }, 400);
+      termsNeeded = false;
+      return route.fulfill({ status: 204, body: "" });
+    }
     if (path === "/rest/v1/rpc/save_registration_details") {
       const { p_expected, p_details } = req.postDataJSON();
       writes.push(p_details);
@@ -154,6 +165,8 @@ async function fixture(
     writes,
     user: () => user,
     claims: () => claims,
+    accepts: () => accepts,
+    termsNeeded: (next) => (termsNeeded = next),
     access: (next) => (access = next),
     failAccess: (next) => (failAccess = next),
     loseReply: () => (loseReply = true),
@@ -328,8 +341,48 @@ try {
   assert.equal(restored.claims(), 1);
   assert.deepEqual(restored.errors, []);
   await restored.page.close();
+  // Plan 4, Review Focus 5: a kept invitation on an approved account with a profile that has yet to accept the
+  // Terms. The accept screen comes first and nothing is claimed before Continue; then the invitation opens.
+  for (const width of [320, 390]) {
+    const kept = await fixture(width);
+    kept.profileReady();
+    kept.termsNeeded(true);
+    await kept.page.addInitScript((token) => {
+      if (!sessionStorage.getItem("fixture-invite-seeded")) {
+        sessionStorage.setItem("resbite.pending-invite", token);
+        sessionStorage.setItem("fixture-invite-seeded", "1");
+      }
+    }, "c".repeat(64));
+    await kept.page.goto(`${base}/account`);
+    await expect(
+      kept.page.getByRole("heading", { name: "Please accept our Terms", exact: true }),
+    ).toBeVisible();
+    await expect(kept.page).toHaveURL(/\/accept-terms$/);
+    await kept.page.waitForTimeout(500);
+    assert.equal(kept.claims(), 0, "nothing is claimed before the Terms are accepted");
+    assert.equal(
+      await kept.page.evaluate(() => sessionStorage.getItem("resbite.pending-invite")),
+      "c".repeat(64),
+      "the invitation is kept on the accept screen",
+    );
+    await kept.page
+      .getByRole("checkbox", { name: "I’m 18 or over and I accept the Terms of Use.", exact: true })
+      .click();
+    await kept.page.getByRole("button", { name: "Continue", exact: true }).click();
+    await expect(
+      kept.page.getByRole("heading", { name: "Coffee evening", exact: true }),
+    ).toBeVisible();
+    assert.deepEqual(kept.accepts(), [{ body: { p_terms_version: "2026-12" }, claimsBefore: 0 }]);
+    assert.equal(kept.claims(), 1);
+    assert.equal(
+      await kept.page.evaluate(() => sessionStorage.getItem("resbite.pending-invite")),
+      null,
+    );
+    assert.deepEqual(kept.errors, []);
+    await kept.page.close();
+  }
   console.log(
-    "Account checks passed at 320/390px: Profile first with the account's name and no details step, details edit/removal/lost reply; pending access, retry and invitation preservation through approval. All backend requests intercepted.",
+    "Account checks passed at 320/390px: Profile first with the account's name and no details step, details edit/removal/lost reply; pending access, retry and invitation preservation through approval; a kept invitation waits behind Accept your Terms and opens after Continue. All backend requests intercepted.",
   );
 } finally {
   await browser.close();

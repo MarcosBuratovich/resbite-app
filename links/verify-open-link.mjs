@@ -36,7 +36,7 @@ const COPY = {
   invited: "Marcos invited you",
   confirm: "Confirm it’s you",
   numberHint: "We’ll text you a 6-digit code.",
-  tick: "I’m 18 or over",
+  tick: "I’m 18 or over and I accept the Terms of Use.",
   codeHeading: "Enter the code",
   verified: "✓ Verified · ••34",
   hostSees: "Marcos will see your answer.",

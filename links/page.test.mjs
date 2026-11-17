@@ -171,7 +171,7 @@ test("the page options come from the environment, with one set of defaults for /
     appStoreId: "",
     supabaseUrl: "",
     publishableKey: "",
-    termsVersion: "2026-10",
+    termsVersion: "2026-12",
     termsUrl: "",
     privacyUrl: "",
   });
@@ -211,7 +211,7 @@ test("the page function renders an open link in open mode with the /i/ CSP; clos
   assert.equal(opened.headers["Cache-Control"], "no-store");
   assert.equal(opened.headers["Referrer-Policy"], "no-referrer");
   assert.equal(opened.headers["X-Robots-Tag"], "noindex, nofollow");
-  for (const attr of ['data-mode="open"', 'data-country="44"', 'data-publishable-key="sb_publishable_test"', 'data-supabase-url="https://example.supabase.co"', 'data-terms-version="2026-10"'])
+  for (const attr of ['data-mode="open"', 'data-country="44"', 'data-publishable-key="sb_publishable_test"', 'data-supabase-url="https://example.supabase.co"', 'data-terms-version="2026-12"'])
     assert.ok(opened.body.includes(attr), attr);
   const closed = [
     [async () => ({ state: "cancelled", host: "Stephen" }), "Stephen cancelled this resbite."],
