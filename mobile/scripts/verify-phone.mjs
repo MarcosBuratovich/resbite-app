@@ -34,6 +34,9 @@ const COPY = {
   tick: "I’m 18 or over and I accept the Terms of Use.",
   ageHelper: "Resbite is for people aged 18 and over.",
   termsHeading: "Please accept our Terms",
+  // A version published after the build (community-rules-short.md section 3, later versions).
+  termsUpdatedHeading: "We’ve updated our Terms",
+  termsUpdatedLine: "To keep using Resbite, please accept the new version.",
   termsChanged: "Our Terms changed while you were reading. Please read them again.",
   deleteAccount: "Delete my account",
   deletionUnavailable: "To delete your account, email privacy@resbite.com.",
@@ -69,13 +72,14 @@ async function fixture({ user = null, access = "access_pending", profile = null,
     errors = [],
     unexpected = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  // Whether the Accept your Terms heading was ever on the page, however briefly.
-  await page.addInitScript((words) => {
+  // Whether the Accept your Terms screen was ever on the page, however briefly, under either of its headings.
+  await page.addInitScript((headings) => {
     window.__sawTerms = false;
     new MutationObserver(() => {
-      if (document.documentElement.textContent.includes(words)) window.__sawTerms = true;
+      const text = document.documentElement.textContent;
+      if (headings.some((words) => text.includes(words))) window.__sawTerms = true;
     }).observe(document, { subtree: true, childList: true, characterData: true });
-  }, COPY.termsHeading);
+  }, [COPY.termsHeading, COPY.termsUpdatedHeading]);
   page.on("console", (m) => {
     // The 400, 422 and 504 replies below are deliberate; the browser reports each one.
     if (m.type() === "error" && !/Failed to load resource: the server responded with a status of (400|422|504)/.test(m.text()))
@@ -633,6 +637,7 @@ try {
 
     // 5b. The owner publishes a new version while the screen is open: the old one is refused with "Terms changed",
     // the line says so, the box is unticked and the account read again; the second Continue sends the new version.
+    // This build has no words for 2027-01, so the screen reads as an update, never as the first full version.
     {
       const f = await fixture(unnamed(width)),
         { page } = f;
@@ -646,9 +651,13 @@ try {
       await expect(tick(page)).not.toBeChecked();
       await expect(button(page, "Continue")).toBeDisabled();
       await expect.poll(() => statusReads(f)).toBeGreaterThan(before);
-      await expect(heading(page, COPY.termsHeading)).toBeVisible();
+      await expect(heading(page, COPY.termsUpdatedHeading)).toBeVisible();
+      await expect(page.getByText(COPY.termsUpdatedLine, { exact: true })).toBeVisible();
+      await expect(heading(page, COPY.termsHeading)).toHaveCount(0);
+      await expect(page.getByText(/first full version/)).toHaveCount(0);
+      await expect(button(page, "Delete my account")).toBeVisible();
       // The new version is a new text to read: focus goes back to the heading.
-      await expect.poll(() => page.evaluate(() => document.activeElement?.textContent)).toBe(COPY.termsHeading);
+      await expect.poll(() => page.evaluate(() => document.activeElement?.textContent)).toBe(COPY.termsUpdatedHeading);
       await expect(page).toHaveURL(/\/accept-terms$/);
       assert.ok(await fits(page), `the refusal fits ${width} px`);
       await tick(page).click();
@@ -726,7 +735,7 @@ try {
   }
 
   console.log(
-    `PASS: phone sign-up (the country chooser: Argentina sent with the 9, a typed +44 number switching the country; tick, invalid number, +44 number, wrong code, 000000 refused like any wrong code, the sent code → verify → attest_age, About you → name → /account), sign-in with an unknown number → Create an account, Add your number with a taken number then phone_change, Delete my account from Add your number (Apple and Google sign-ups) and from About you, ${deletionEnabled ? "each opening its proof card" : "each giving the privacy address in this build"}, Sign out from the taken refusal, a wrong code and a lost verify reply at Add your number, interrupted sign-up restored on About you, no 000000 on any screen, and Accept your Terms at 320/390 px (the gate after Add your number, the tick and one accept_terms with the server's version → About you, a version published meanwhile refused, re-read and accepted, Delete my account and Sign out, a sign-up tick that accepted already so no accept screen, a suspended account on its own screen). All Supabase requests intercepted.`,
+    `PASS: phone sign-up (the country chooser: Argentina sent with the 9, a typed +44 number switching the country; tick, invalid number, +44 number, wrong code, 000000 refused like any wrong code, the sent code → verify → attest_age, About you → name → /account), sign-in with an unknown number → Create an account, Add your number with a taken number then phone_change, Delete my account from Add your number (Apple and Google sign-ups) and from About you, ${deletionEnabled ? "each opening its proof card" : "each giving the privacy address in this build"}, Sign out from the taken refusal, a wrong code and a lost verify reply at Add your number, interrupted sign-up restored on About you, no 000000 on any screen, and Accept your Terms at 320/390 px (the gate after Add your number, the tick and one accept_terms with the server's version → About you, a version published meanwhile refused, re-read under We’ve updated our Terms and accepted, Delete my account and Sign out, a sign-up tick that accepted already so no accept screen, a suspended account on its own screen). All Supabase requests intercepted.`,
   );
 } finally {
   await browser.close();

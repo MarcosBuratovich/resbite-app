@@ -8,7 +8,7 @@ import { Chip, STEP_SETTLED_MS, announce, useFocusOnChange } from "../src/design
 import { TermsLine, TickRow } from "../src/design/TickRow";
 import { colors as c } from "../src/design/tokens";
 import { GUEST_COPY } from "../src/domain/guestAccount";
-import { TERMS_COPY } from "../src/domain/termsCopy";
+import { TERMS_COPY, termsScreen } from "../src/domain/termsCopy";
 import { acceptTerms, termsErrorMessage } from "../src/services/termsAcceptance";
 import { useAccount } from "../src/state/AccountState";
 import { useApp } from "../src/state/AppState";
@@ -23,8 +23,9 @@ const SAY_AFTER_FOCUS_MS = 150;
  * Accept your Terms (plan 4, B2): an approved account with a number that has yet to accept the Terms of Use version
  * the server reports as current, between Add your number and About you (accountGate). Continue records that version
  * (accept_terms) and goes back through /account. A version published while the screen was open is refused: the box
- * is unticked, the line says why, and the account is read again for the new one. Delete my account is the way out
- * for someone who doesn't accept (Terms section 16.2).
+ * is unticked, the line says why, and the account is read again for the new one. A version this build has no words
+ * for (published after it) reads as an update: "We’ve updated our Terms". Delete my account is the way out for
+ * someone who doesn't accept (Terms section 16.2).
  */
 export default function AcceptTerms() {
   const { session, signOut, signingOut } = useApp();
@@ -48,6 +49,8 @@ export default function AcceptTerms() {
   // Nothing to accept without a session or a published version: /account decides where to go.
   if (!session || !termsVersion) return <Redirect href="/account" />;
   const version = termsVersion;
+  // The version's own words when this build has them; a later version reads as an update.
+  const words = termsScreen(version);
 
   async function accept() {
     if (busy || !ticked) return;
@@ -81,10 +84,11 @@ export default function AcceptTerms() {
     <SafeAreaView style={s.page}>
       <ScrollView contentContainerStyle={[s.body, { paddingBottom: 40 }]}>
         <Text ref={heading} accessibilityRole="header" style={s.title}>
-          {TERMS_COPY.heading}
+          {words.heading}
         </Text>
-        <Copy>{TERMS_COPY.intro}</Copy>
-        <Copy>{TERMS_COPY.whatsNew}</Copy>
+        {words.lines.map((line) => (
+          <Copy key={line}>{line}</Copy>
+        ))}
         <View style={styles.tick}>
           <TickRow
             label={GUEST_COPY.tick}
