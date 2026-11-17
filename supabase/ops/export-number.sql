@@ -12,7 +12,11 @@
 -- It prints one row, export, the JSON to send. Matching is by the number's key (private.phone_key), so both spellings
 -- of an Argentine mobile are one number. Each list is [] when empty:
 --  - invitations: each invitation by number to it: the resbite's title and start, the host's display name (as the
---    invitation page shows it), and when it was sent, answered and revoked;
+--    invitation page shows it), and when it was sent, answered and revoked. An invitation an account answered is that
+--    account's (answering needs one signed in with the number), so it is left out: a number changes hands, and a new
+--    holder never gets the old account's data (data-requests.md section 4.4). One with an answer but no account was
+--    answered by an account since deleted, perhaps an earlier holder of the number: apply section 4.4 before sending
+--    it;
 --  - removals: each series that keeps the number so a guest can't bring it back: the resbite's title and start, and
 --    since when;
 --  - on_do_not_invite_list: whether the number is on the do-not-invite list (object-number.sql).
@@ -26,7 +30,7 @@ select jsonb_build_object(
    'host', h.display_name, 'sent_at', v.created_at, 'answered_at', v.answered_at, 'revoked_at', v.revoked_at)
    order by v.created_at, x.starts_at)
   from private.phone_invitations v join public.plans x on x.id = v.plan_id left join public.profiles h on h.id = x.owner_id
-  where v.phone = n.key), '[]'::jsonb),
+  where v.phone = n.key and v.user_id is null), '[]'::jsonb),
  'removals', coalesce((select jsonb_agg(jsonb_build_object('title', o.title, 'starts_at', o.starts_at,
    'since', r.removed_at) order by r.removed_at, o.starts_at)
   from private.plan_removals r

@@ -326,9 +326,14 @@ select pg_temp.r7_check((select count(distinct script) from pg_temp.r7_printed) 
 -- Ivo goes to Jo's weekly Board games (61), brought by Mo and invited through Ivo's number, co-hosts it, and muted it
 -- and its chat; its series keeps 799's number, removed. Ivo asked to join Kit's Quiz (62), whose invitation to Ivo's
 -- number Kit took back. Ivo was removed from Kit's past Run (63), by account and by number, and had left it. Mo asked
--- Ivo to connect, at 61, and they are connected. Jo reported Ivo's removed message ("he shouted"); Ivo reported Kit;
--- Kit blocked Ivo; Jo answered Ivo's request "Not now". Ivo has a push about Jo's answer, and Jo one from Ivo. 13 Lu
--- has an account and a profile, nothing else.
+-- Ivo to connect, at 61, and they are connected. Jo reported Ivo's removed message ("he shouted"); Ivo reported Kit.
+-- Ivo asked Jo to connect, at the Picnic, and Jo answered "Not now"; Kit blocked Ivo, and then Ivo asked Kit, which the
+-- block turns into Kit's refusal of Ivo. Both go through the app's own functions, as the person who acts, so the rows
+-- are stored as the app stores them: in private.connection_refusals, from_user asked and was refused, to_user refused
+-- (20261110120000_connections.sql's table comment, decline_connection; 20261111160000_chat_safety.sql's
+-- request_connection). Jo answered Kit's invitation to 799 at the Quiz when 799 was Jo's number: Jo's, not 799's
+-- holder's. Ivo has a push about Jo's answer, and Jo one from Ivo. 13 Lu has an account and a profile, nothing else.
+-- Ivo's deletion request is made last: the app refuses an account being deleted.
 select set_config('resbite.system','roll',true);
 insert into auth.users(id,phone,phone_confirmed_at,email,email_confirmed_at,raw_user_meta_data,created_at,last_sign_in_at) values
  (pg_temp.a7('10'),'447700900710',now()-interval '200 days','r7-10@resbite-test.invalid',now()-interval '100 days',
@@ -343,8 +348,7 @@ insert into auth.sessions(id,user_id,created_at,updated_at,user_agent,ip) values
  (pg_temp.a7('97'),pg_temp.a7('10'),now()-interval '2 days',now()-interval '1 hour','Resbite/1.0 (iPhone; iOS 18.1)','192.0.2.10');
 insert into public.profiles(id,display_name) values
  (pg_temp.a7('11'),'Jo'),(pg_temp.a7('12'),'Kit'),(pg_temp.a7('13'),'Lu'),(pg_temp.a7('14'),'Mo');
-insert into public.profiles(id,display_name,avatar_path,deletion_requested_at) values
- (pg_temp.a7('10'),'Ivo',pg_temp.r7_photo('10','a'),now());
+insert into public.profiles(id,display_name,avatar_path) values (pg_temp.a7('10'),'Ivo',pg_temp.r7_photo('10','a'));
 insert into storage.objects(bucket_id,name) values
  ('profile-photos',pg_temp.r7_photo('10','a')),('profile-photos',pg_temp.r7_photo('11','a')),
  ('plan-covers',pg_temp.r7_cover('10','60','c6')),('plan-covers',pg_temp.r7_cover('11','61','c7'));
@@ -395,6 +399,10 @@ insert into private.phone_invitations(plan_id,phone,country,invited_by,revoked_a
 -- Mo answered an invitation to Ivo's number before it was Ivo's (data-requests.md section 4.4): Mo's, not Ivo's.
 insert into private.phone_invitations(plan_id,phone,country,invited_by,user_id,answered_at) values
  (pg_temp.a7('63'),'447700900710','44',pg_temp.a7('12'),pg_temp.a7('14'),now()-interval '11 days');
+-- Jo answered an invitation to 799 when it was Jo's number: an account's (answer_phone_invitation needs one signed in
+-- with that number), so not 799's holder's now.
+insert into private.phone_invitations(plan_id,phone,country,invited_by,user_id,answered_at) values
+ (pg_temp.a7('62'),'447700900799','44',pg_temp.a7('12'),pg_temp.a7('11'),now()-interval '20 days');
 insert into public.messages(series_id,plan_id,author_id,kind,body) values
  (pg_temp.a7('60'),pg_temp.a7('60'),pg_temp.a7('10'),'message','Bring snacks please');
 insert into public.messages(series_id,plan_id,author_id,kind,body,state) values
@@ -411,8 +419,27 @@ insert into public.messages(series_id,plan_id,kind,event,payload) values
 insert into public.chat_reads(series_id,user_id,last_read_id) values (pg_temp.a7('60'),pg_temp.a7('10'),:r7_cake);
 insert into public.connections(user_a,user_b,state,requested_by,series_id,created_at,accepted_at) values
  (pg_temp.a7('10'),pg_temp.a7('14'),'connected',pg_temp.a7('14'),pg_temp.a7('61'),now()-interval '3 days',now()-interval '2 days');
-insert into private.connection_refusals(series_id,from_user,to_user) values (pg_temp.a7('60'),pg_temp.a7('11'),pg_temp.a7('10'));
+-- Ivo asks Jo, at the Picnic, and Jo answers "Not now" (decline_connection stores from_user Ivo, to_user Jo). Kit
+-- blocks Ivo; Ivo then asks Kit, which reads to Ivo as sent and is stored as Kit's refusal of Ivo (from_user Ivo,
+-- to_user Kit). Both rows are about Ivo: neither may reach Ivo's export.
+select set_config('request.jwt.claims',jsonb_build_object('sub',pg_temp.a7('10'),'role','authenticated')::text,true);
+select pg_temp.r7_check(private.request_connection(pg_temp.a7('11'),pg_temp.a7('60')) = 'requested',
+ 'The cast: Ivo''s request to Jo was not sent');
+select set_config('request.jwt.claims',jsonb_build_object('sub',pg_temp.a7('11'),'role','authenticated')::text,true);
+select private.decline_connection(pg_temp.a7('10'));
 insert into private.blocks(blocker_id,blocked_id) values (pg_temp.a7('12'),pg_temp.a7('10'));
+select set_config('request.jwt.claims',jsonb_build_object('sub',pg_temp.a7('10'),'role','authenticated')::text,true);
+select pg_temp.r7_check(private.request_connection(pg_temp.a7('12'),pg_temp.a7('60')) = 'requested',
+ 'The cast: Ivo''s request to Kit did not look sent');
+select set_config('request.jwt.claims','',true);
+select pg_temp.r7_check((select jsonb_agg(jsonb_build_array(r.from_user,r.to_user,r.hidden,r.refused_at) order by r.to_user)
+  from private.connection_refusals r where r.series_id = pg_temp.a7('60'))
+  = jsonb_build_array(jsonb_build_array(pg_temp.a7('10'),pg_temp.a7('11'),false,now()),
+   jsonb_build_array(pg_temp.a7('10'),pg_temp.a7('12'),false,now()))
+ and not exists(select 1 from public.connections c where pg_temp.a7('10') in (c.user_a,c.user_b)
+  and pg_temp.a7('14') not in (c.user_a,c.user_b)),
+ 'The cast: the refusals of Ivo, by Jo and by Kit''s block, read '
+  ||coalesce((select jsonb_agg(to_jsonb(r))::text from private.connection_refusals r),'none'));
 insert into private.reports(reporter_id,target_user_id,message_id,series_id,plan_id,about,reason,details,frozen_body,
  frozen_author,status,reviewed_at,review_note,action) values
  (pg_temp.a7('11'),pg_temp.a7('10'),:r7_removed,pg_temp.a7('60'),pg_temp.a7('60'),'message','harassment','he shouted',
@@ -427,6 +454,7 @@ insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,act
  (pg_temp.a7('60'),pg_temp.a7('10'),'rsvp','r7:rsvp:10',pg_temp.a7('11'),'accepted',now());
 insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id) values
  (pg_temp.a7('60'),pg_temp.a7('11'),'invitation','r7:invitation:11',pg_temp.a7('10'));
+update public.profiles set deletion_requested_at=now() where id=pg_temp.a7('10');
 insert into private.account_deletion_jobs(request_id,user_id,recovery_hash) values
  (pg_temp.a7('96'),pg_temp.a7('10'),extensions.digest('r7-recovery','sha256'));
 select set_config('resbite.system','',true);
@@ -578,8 +606,9 @@ select pg_temp.r7_check(e->'messages' @> jsonb_build_array(
  'export_chat: Ivo''s chat read '||e::text)
 from (select pg_temp.r7_e('10') as e) x;
 
--- export_safety: the connection with Mo; no refusal and no block of Ivo (Jo's "Not now", Kit's block), so both lists
--- of Ivo's own are empty; the report Ivo filed, with Ivo's words and Kit's name, not the review note; the report about
+-- export_safety: the connection with Mo; no refusal and no block of Ivo (Jo's "Not now", Kit's block and the refusal
+-- it made of Ivo's request), so both lists of Ivo's own are empty, and neither Jo's nor Kit's name is in them; the
+-- report Ivo filed, with Ivo's words and Kit's name, not the review note; the report about
 -- Ivo, with Ivo's frozen words, and no reporter, no reporter's words, no review note.
 select pg_temp.r7_check(e->'connections' = jsonb_build_array(jsonb_build_object('name','Mo','state','connected',
   'asked_by_you',false,'met_at','Board games','met_at_start',now()+interval '5 days','asked_at',now()-interval '3 days',
@@ -605,8 +634,8 @@ select pg_temp.r7_check(pg_temp.r7_e('10')->'notifications' = jsonb_build_array(
   ||pg_temp.r7_f('10')::text);
 
 -- export_twins: Jo's export has Jo's "Not now" of Ivo and Jo's report with Jo's words and Ivo's frozen ones; Kit's has
--- Kit's block of Ivo and Ivo's report about Kit without Ivo or Ivo's words. Each holds its own id, number and email
--- only (Ivo's number only as its ending).
+-- Kit's block of Ivo, the refusal of Ivo that Kit's block made (stored as Kit's, to_user), and Ivo's report about Kit
+-- without Ivo or Ivo's words. Each holds its own id, number and email only (Ivo's number only as its ending).
 \set r7_script `sed -e "s/('00000000-0000-0000-0000-000000000000'::uuid)/('a7000000-0000-4000-8000-000000000011'::uuid)/" :'resbite_repo'/supabase/ops/export-account.sql`
 select pg_temp.r7_export_as('11','export-account.sql',:'r7_script');
 \set r7_script `sed -e "s/('00000000-0000-0000-0000-000000000000'::uuid)/('a7000000-0000-4000-8000-000000000012'::uuid)/" :'resbite_repo'/supabase/ops/export-account.sql`
@@ -624,6 +653,8 @@ select pg_temp.r7_check(pg_temp.r7_only_id(j::text,pg_temp.a7('11')) and pg_temp
  and pg_temp.r7_only_id(k::text,pg_temp.a7('12')) and pg_temp.r7_only_number(k::text,'447700900712')
  and pg_temp.r7_only_email(k::text,null)
  and k->'blocks_made' = jsonb_build_array(jsonb_build_object('name','Ivo','blocked_at',now()))
+ and k->'refusals_made' = jsonb_build_array(jsonb_build_object('name','Ivo','title','Picnic','starts_at',now()+interval '3 days',
+  'refused_at',now()))
  and k->'reports_about_you' = jsonb_build_array(jsonb_build_object('about','user','reason','spam','created_at',now(),
   'status','reviewed','action','none','frozen_body',null))
  and strpos(k::text,'keeps posting links') = 0 and strpos(k::text,'Kit warned once') = 0,
@@ -650,8 +681,9 @@ select pg_temp.r7_check(pg_temp.r7_export_keys_ok(e)
 from (select pg_temp.r7_e('13') as e, pg_temp.r7_e('unedited') as u) x;
 
 -- export_number: unedited, export-number.sql finds nothing. For 799, written as a person may give it, it prints the
--- invitation, with its host's name, and the removal record of Board games; 799 is not on the do-not-invite list. No id
--- at all. Once 798 objects, 798 is on the list (and its invitation went with the objection).
+-- invitation, with its host's name, and the removal record of Board games, but not the Quiz invitation Jo's account
+-- answered (Jo's, not 799's holder's: data-requests.md section 4.4); 799 is not on the do-not-invite list. No id at
+-- all. Once 798 objects, 798 is on the list (and its invitation went with the objection).
 \set r7_script `cat :'resbite_repo'/supabase/ops/export-number.sql`
 select pg_temp.r7_export_as('number unedited','export-number.sql',:'r7_script');
 \set r7_script `sed -e "s/('447700900000')/('+44 7700 900799')/" :'resbite_repo'/supabase/ops/export-number.sql`

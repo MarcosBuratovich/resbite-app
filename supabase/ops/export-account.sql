@@ -14,13 +14,17 @@
 --    is named by its title and start, never by an id, and other people by their display name only. It holds no id but
 --    the person's own, other people's numbers only as their last two digits (number_ending), the person's own messages
 --    only (no words for a message deleted or removed), and no reporter, no reporter's words, no review note, and no
---    block or "Not now" of the person by anyone (section 6). Left out with them: passwords, tokens (a push token shows
---    only its first and last four characters), link codes and ids, place coordinates, cover paths, request ids and the
---    recovery hash, system lines' payloads, and every report id.
+--    block or "Not now" of the person by anyone (section 6). refusals_made is the person's own "Not now" answers and
+--    removals: the private.connection_refusals rows where they are to_user, the one who refused (from_user is the one
+--    who asked and was refused). It includes the refusal their block makes of a request the blocked person sends
+--    later, which the app never showed them. Left out with them: passwords, tokens (a push token shows only its first
+--    and last four characters), link codes and ids, place coordinates, cover paths, request ids and the recovery hash,
+--    system lines' payloads, and every report id.
 --  - files: {"profile_photos": [...], "covers": [...]}, the Storage paths under the account's folder in the buckets
 --    profile-photos and plan-covers. Download them from Storage for the archive. They are kept apart from the export
 --    because cover paths hold resbite ids.
--- It needs 20261117130000 (and plan 4's terms acceptances) applied; before that it fails and changes nothing.
+-- It needs private.suspension_history (20261117110000) and private.terms_acceptances (20261117120000) on the database;
+-- before they are there it fails and changes nothing.
 -- An id with no account prints account and profile null and every list empty: check the id. Add the short summary of
 -- what each part means, the files and, by hand where it is safe, a summary of anything withheld (sections 6.1 and
 -- 6.4), then send it as section 7 says (template R5).
@@ -153,12 +157,15 @@ select jsonb_build_object(
    left join public.profiles n on n.id = case when c.user_a = p.id then c.user_b else c.user_a end
    left join occurrence o on o.series_id = c.series_id
   where p.id in (c.user_a, c.user_b)), '[]'::jsonb),
- -- Their own "Not now" answers and removals, and their own blocks. Never a row about them (section 6.2).
+ -- Their own "Not now" answers and removals, and their own blocks. Never a row about them (section 6.2). In
+ -- connection_refusals from_user asked and was refused, and to_user refused, removed or blocked them
+ -- (20261110120000_connections.sql's table comment; 20261111160000_chat_safety.sql's block paths): theirs are the rows
+ -- where they are to_user.
  'refusals_made', coalesce((select jsonb_agg(jsonb_build_object('name', n.display_name, 'title', o.title,
    'starts_at', o.starts_at, 'refused_at', r.refused_at) order by r.refused_at, n.display_name)
-  from private.connection_refusals r left join public.profiles n on n.id = r.to_user
+  from private.connection_refusals r left join public.profiles n on n.id = r.from_user
    left join occurrence o on o.series_id = r.series_id
-  where r.from_user = p.id), '[]'::jsonb),
+  where r.to_user = p.id), '[]'::jsonb),
  'blocks_made', coalesce((select jsonb_agg(jsonb_build_object('name', n.display_name, 'blocked_at', b.created_at)
    order by b.created_at, n.display_name)
   from private.blocks b left join public.profiles n on n.id = b.blocked_id where b.blocker_id = p.id), '[]'::jsonb),
