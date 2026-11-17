@@ -30,7 +30,7 @@ const ANOTHER = "AnotherAnotherAnotherA"; // Another open invitation, whose kept
 const GUEST_LINK = "GuestGuestGuestGuestGu"; // An open invitation a guest brought: its page names Pedro.
 const LONG_NAME = "Wolfeschlegelsteinhausenbergerdorff".repeat(9).slice(0, 300); // One unbroken word.
 const LONG_LINK = "LongLongLongLongLongLo";
-const STALE = "StaleStaleStaleStaleSt"; // An invitation whose event has started.
+const STALE = "StaleStaleStaleStaleSt"; // An invitation whose event has ended.
 const INVITED = "447700900834";
 const OTHER = "447700900534"; // Another person's number with the same last two digits.
 const PRIVACY_URL = "https://link.resbite.com/privacy"; // The local origin is http:, which personal.js never links.
@@ -83,7 +83,7 @@ const PAGES = {
   [CANCELLED]: { state: "cancelled", host: "Marcos", title: "Picnic in the park" },
   [HAPPENED]: { state: "happened", host: "Marcos", title: "Picnic in the park" },
 };
-// ANOTHER is open too, for the per-code storage checks; STALE's event has started, so its page is closed.
+// ANOTHER is open too, for the per-code storage checks; STALE's event has ended, so its page is closed.
 PAGES[ANOTHER] = { ...OPEN_PAGE, title: "Board games" };
 PAGES[GUEST_LINK] = { ...OPEN_PAGE, inviter: "Pedro" };
 PAGES[LONG_LINK] = { ...OPEN_PAGE, host: LONG_NAME, inviter: LONG_NAME };

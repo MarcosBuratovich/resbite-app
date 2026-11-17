@@ -2,7 +2,7 @@
 // direction A): confirm the invited number behind the 18+ tick, the code, the answer and the get-the-app screen.
 // It talks to Supabase Auth and REST directly with the publishable key (the CSP allows only that host) and keeps the
 // session in this origin's storage, one entry per invitation code with the full number verified for it, until the
-// event starts, so the same browser sees its answer again. "Not you? Sign out" ends it. Words and step logic:
+// event ends, so the same browser sees its answer again. "Not you? Sign out" ends it. Words and step logic:
 // personal-flow.mjs.
 // The open link /r/<code> runs it in open mode (data-mode="open"; open-link approval, plan 3): any number can answer,
 // so nothing is checked against an invited number; the answer goes to request_to_join and waits for the host, and the
@@ -363,7 +363,7 @@ function start(main, answerButton) {
 
   // ---- Supabase: Auth and REST with the publishable key; the access token once signed in. ----
   // One entry per invitation code: the session and the full number this page verified for that code. Entries whose
-  // event has started go, whatever their code; this one goes too once its event starts.
+  // event has ended go, whatever their code; this one goes too once its event ends.
   const storage = pageStorage();
   sweepKept(storage, Date.now());
   if (Number.isFinite(endsAt) && endsAt <= Date.now()) dropKept(storage, code);

@@ -442,7 +442,7 @@ export const keptKey = (code) => `${KEPT_PREFIX}${code}`;
 
 /**
  * What the page stores for one invitation: the session, the full number this page verified for this code, and when
- * the event starts (ms since 1970), after which the entry is dropped.
+ * the event ends (ms since 1970; the start when it has no end), after which the entry is dropped.
  */
 export function keptEntry(session, phone, endsAt) {
   return { session, phone, until: Number.isFinite(endsAt) ? endsAt : null };
@@ -464,7 +464,7 @@ function readEntry(storage, key) {
 export const sameNumber = (session, entry) => phoneKey(entry?.phone) !== "" && phoneKey(session?.phone) === phoneKey(entry?.phone);
 
 /**
- * The entry kept for this code, or null. An entry that is malformed, whose event has started, or whose session holds
+ * The entry kept for this code, or null. An entry that is malformed, whose event has ended, or whose session holds
  * another number than the one verified for this code is dropped, so it is never restored.
  */
 export function readKept(storage, code, now) {
@@ -499,7 +499,7 @@ export function dropKept(storage, code) {
   }
 }
 
-/** Drops every kept entry, for any code, whose event has started or that can't be read. Returns the codes dropped. */
+/** Drops every kept entry, for any code, whose event has ended or that can't be read. Returns the codes dropped. */
 export function sweepKept(storage, now) {
   const dropped = [];
   try {

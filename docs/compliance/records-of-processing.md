@@ -140,7 +140,7 @@ Every purpose has one Art 6 basis, decided before the processing (Art 5(2)). The
 | LB-02 | Record the 18+, Terms and chat-rules acceptance, per version | PA-03 | (f) legitimate interests | Shows who agreed to which version, and lets the age limit be enforced the same way for everyone (LAW-37) | LI-5 |
 | LB-03 | Plan resbites, invite, answer, keep guest lists, co-hosts, covers, join requests, circles, weekly groups; show event link pages; take web answers; keep the browser session | PA-05, PA-06 | (b) contract | The core service. The public event page shows what the host chose to share by sending the link | — |
 | LB-04 | Check picked numbers and show who is "On Resbite" | PA-07, PA-20 (app sessions) | (f) | The people whose numbers are checked have no contract with us | LI-1 |
-| LB-05 | Keep a non-user's number for one personal invitation | PA-08 | (f) until they answer; then (b) for the web-only account they create | As LB-04 | LI-2 |
+| LB-05 | Keep a non-user's number for one personal invitation | PA-08 | (f) for the invitation, answered or not, until 30 days after the resbite ends; (b) for the web-only account they create when they answer | As LB-04 | LI-2 |
 | LB-06 | Keep removal records per series | PA-09 | (f) | Respects the host's decision and protects the removed person's hosts and guests | LI-3 |
 | LB-07 | Keep the objection suppression list | PA-10 | (f). The solicitor may prefer (c), as it serves the duty to honour an objection (Art 21) | Without it an objection lasts only until the next host | LI-4 |
 | LB-08 | Chat, announcements, read positions, mutes | PA-11 | (b) | A feature of the service | — |

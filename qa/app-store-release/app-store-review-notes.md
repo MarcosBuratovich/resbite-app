@@ -88,7 +88,7 @@ Reasons include Illegal or dangerous, Child safety and Intimate image shared wit
 Each report notifies our moderators. We read the queue daily, with a named backup when the owner is away, and remove content and suspend accounts within 24 hours.
 
 DELETE ACCOUNT
-Profile > Data & privacy > Delete account, for every kind of account. To try it, sign out and sign in with the second account: [[OWNER: deletion-test account email and password — proposed: account R2 of the pack's section 12, typed only into the Notes in App Store Connect, never into the repo]]. Confirm with its password. Access closes at once; deletion completes within 30 days, usually minutes, and the screen confirms it. "What happens" says what is kept, and that a host's future resbites are cancelled and guests told.
+Profile > Data & privacy > Delete account, for every kind of account; an account still on Add your number or on the Terms screen has Delete account there too. To try it, sign out and sign in with the second account: [[OWNER: deletion-test account email and password — proposed: account R2 of the pack's section 12, typed only into the Notes in App Store Connect, never into the repo]]. Confirm with its password. Access closes at once; deletion completes within 30 days, usually minutes, and the screen confirms it. "What happens" says what is kept, and that a host's future resbites are cancelled and guests told.
 
 PRIVACY, TERMS, SUPPORT
 Profile > Data & privacy > About and legal links the Privacy Policy, Terms of Use, Support and Licences; so do the first and sign-in screens. https://link.resbite.com/privacy, /terms, /support, /delete-account. Contact: support@resbite.com, also in Data & privacy > Contact and after every report.
