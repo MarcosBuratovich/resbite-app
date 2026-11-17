@@ -62,3 +62,12 @@ Remaining work: independently complete inventory/checkpoint evidence; fenced res
 ## Open beta — 16 November 2026
 
 Since `20261116120000_open_beta.sql` any confirmed account may use the app (OB-D1). That migration changes the hosted-compatible `request_account_deletion` (where it exists) to ask only that the account isn't suspended, but two things stay for the deletion release: the local-only `prepare_deletion_intent` and `activate_deletion_intent` still require a roster row or a live grant, and `request_account_deletion` still requires a confirmed email, so phone-only accounts can't request deletion. Both must change before deletion is switched on (an App Review requirement).
+
+## Retired, 17 November 2026 (D-4, AS-D8)
+
+The independent ledger and the prepare/activate path are retired. The owner's recommended default for D-4 (AS-D8) is one request path: `delete-account` calls `request_account_deletion`, which closes and erases the account in one transaction, with no ledger write first (ASR2-1 in `knowledge-base/08-decisions.md`).
+
+- **The code is removed** in the Task 6 commit, `7ca9376` ("Account deletion: a direct request path, Apple revocation, photo and cover cleanup; the ledger retires (D-4)"): `deletion-admission.ts`, `deletion-ledger.ts`, `deletion-ledger-storage.ts` and their three tests, and the gateway's `withLedger`. No bucket, key or destination was ever provisioned for the ledger, so nothing hosted is left to remove.
+- **The SQL objects stay only in the local replay**: `prepare_deletion_intent`, `activate_deletion_intent` and `deletion_intent_reservations`, from the never-apply `20260929125858_deletion_intent_reservations.sql`. Nothing calls them, and they never reach hosted (`supabase/README.md`, "Account deletion release (C2)").
+- **The restore fence** this ledger was meant to give now lives in [`qa/deletion-restore-procedure.md`](deletion-restore-procedure.md): the receipts are exported from the live database before a restore and replayed after it with their original request ids and hashes, behind the Data API being off. Its limit is written there: if the live database can't be read, deletions made after the backup can't be replayed.
+- This record stays as the history of the design. Its "Remaining work" and the open beta's note above are answered by the deletion release (`supabase/migrations/20261117110000_account_deletion_release.sql`; ASR2-1 and ASR2-3), once it is live (`qa/account-deletion-2026-11-17/README.md`).
