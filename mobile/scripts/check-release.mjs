@@ -1,4 +1,5 @@
 // The production release check. EAS runs it as `eas-build-post-install`; `npm run check:release` runs it by hand.
+// It names the variables it checks and never prints the support address, the Supabase URL or the publishable key.
 import { releaseProblems } from "../src/domain/releaseChecks.ts";
 import { legalUrls } from "../src/domain/legal.ts";
 
@@ -17,5 +18,5 @@ if (problems.length > 0) {
 
 const urls = legalUrls({ terms: process.env.EXPO_PUBLIC_TERMS_URL, privacy: process.env.EXPO_PUBLIC_PRIVACY_URL });
 console.log(
-  `PASS release check: support address set, push on, deletion on, Privacy Policy ${urls.privacy}, Terms of Use ${urls.terms}, Support ${urls.support}.`,
+  `PASS release check: support address set, Supabase URL and key set, push on, deletion on, Privacy Policy ${urls.privacy}, Terms of Use ${urls.terms}, Support ${urls.support}.`,
 );
