@@ -257,7 +257,7 @@ export default function Auth() {
       </View>
       <LegalLinks align="start" />
       <InfoSheet visible={about} title="About access" onClose={() => setAbout(false)}>
-        <Copy>Private Resbite test · access is opened by invitation.</Copy>
+        <Copy>Resbite is for people aged 18 and over. Every account needs a mobile number, confirmed with a code we text you.</Copy>
       </InfoSheet>
     </StepScreen>
   );

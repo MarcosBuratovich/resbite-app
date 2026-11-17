@@ -119,9 +119,6 @@ try {
     await page.getByRole("radio", { name: "Past", exact: true }).click();
     await shot("plans-past");
     // UX4 Profile and settings in preview, then People lists with gluestack keyboard selection.
-    await page.getByRole("tab", { name: "Wellness", exact: true }).click();
-    await expect(heading(page, "Wellness")).toBeVisible();
-    await shot("wellness");
     await page.getByRole("tab", { name: "Profile", exact: true }).click();
     await expect(heading(page, "Profile")).toBeVisible();
     await shot("profile");
@@ -240,7 +237,7 @@ try {
     if (errors.length) throw Error(errors.join("\n"));
     await page.close();
   }
-  // UX4 preview screens under Larger Text at 320 px: Profile, Notifications, Privacy, Delete account and Wellness.
+  // UX4 preview screens under Larger Text at 320 px: Profile, Notifications, Privacy and Delete account.
   {
     const page = await browser.newPage({ viewport: { width: 320, height: 844 }, reducedMotion: "reduce" });
     const errors = [];
@@ -270,8 +267,6 @@ try {
     await page.goto(`${base}/?largeText=1`);
     await page.addStyleTag({ content: '[dir="auto"] { zoom: 1.4; }' });
     await page.getByText("Preview the design", { exact: true }).click();
-    await page.getByRole("tab", { name: "Wellness", exact: true }).click();
-    await visit("wellness", "Wellness");
     await page.getByRole("tab", { name: "Profile", exact: true }).click();
     await visit("profile", "Profile");
     await button(page, "Notifications").click();

@@ -1,7 +1,6 @@
-import type { CategoryKey } from "./categories";
 import { permissionCopy, type NotificationPermission } from "./notifications";
 
-// UX4 wording for profile, settings, sign-in and Wellness (spec docs/superpowers/specs/2026-10-15-ux4-design.md).
+// UX4 wording for profile, settings, and sign-in (spec docs/superpowers/specs/2026-10-15-ux4-design.md).
 // Headings are at most three words. Protected wording (notices, guidance, warnings) stays where it was.
 
 export type AuthMode = "login" | "register" | "reset" | "confirm";
@@ -51,18 +50,3 @@ export const introSlides = [
   { title: "Your people", line: "Turn “we should catch up” into a real invitation." },
   { title: "Make memories", line: "Set a date and a place, and keep every answer together." },
 ] as const;
-
-/** Wellness sample rows (UX4-D5): approved categories, today's minutes. Sample data only. */
-export const wellnessSample: readonly { category: CategoryKey; minutes: number }[] = [
-  { category: "creative", minutes: 60 },
-  { category: "physical", minutes: 60 },
-  { category: "community", minutes: 30 },
-];
-
-/** "2h 30m", "45m" or "3h". */
-export function formatMinutes(total: number): string {
-  const hours = Math.floor(total / 60);
-  const minutes = total % 60;
-  if (!hours) return `${minutes}m`;
-  return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
-}

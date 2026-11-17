@@ -219,8 +219,8 @@ test("delivery follows the build’s push switch", () => {
   }
 });
 
-test("the permission line says updates aren’t active only while they aren’t", () => {
-  assert.equal(permissionDetail("granted", false), "Reminders can reach you. Updates aren’t active yet.");
+test("the permission line says updates are off only while they are", () => {
+  assert.equal(permissionDetail("granted", false), "Reminders can reach you. Updates are off.");
   assert.equal(permissionDetail("granted", true), "Reminders can reach you.");
   assert.equal(permissionDetail("denied", true), "Turn notifications on in Settings to get reminders.");
   assert.equal(permissionDetail("provisional", true), "Reminders arrive quietly.");
@@ -228,5 +228,5 @@ test("the permission line says updates aren’t active only while they aren’t"
   for (const permission of ["undetermined", "unknown", "preview", "unsupported"] as const)
     assert.equal(permissionDetail(permission, true), permissionDetail(permission, false), permission);
   for (const permission of ["undetermined", "denied", "granted", "provisional", "ephemeral", "unknown"] as const)
-    assert.ok(!permissionDetail(permission, true).includes("aren’t active"), permission);
+    assert.ok(!permissionDetail(permission, true).includes("Updates are off"), permission);
 });

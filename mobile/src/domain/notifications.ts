@@ -16,9 +16,9 @@ export const notificationDelivery = {
   get enabled(): boolean {
     return pushEnabled();
   },
-  label: "Updates aren’t active yet",
+  label: "Updates are off",
   detail:
-    "This build does not send plan or RSVP notifications. Open My resbites to check the latest details and responses.",
+    "Resbite isn’t sending you updates about plans and answers. Open My resbites for the latest details and answers.",
 };
 
 /** The About sheet: what updates are sent for (the spec's events, CI "Notifications"). */
@@ -37,11 +37,11 @@ export const NOTIFICATION_EVENTS = [
 export const notificationEventsLead = (delivery: boolean) =>
   delivery ? "Resbite sends updates for:" : "Once updates are on, Resbite sends them for:";
 
-const UPDATES_NOT_ACTIVE = "Updates aren’t active yet.";
+const UPDATES_NOT_ACTIVE = "Updates are off.";
 
 // UX3 (approved with the spec): reminders now use the permission, so the wording no longer says
 // there's nothing to enable or that nothing can arrive. Titles are unchanged. The details are the wording
-// while updates aren't sent; permissionDetail drops "Updates aren’t active yet." once they are.
+// while updates aren't sent; permissionDetail drops "Updates are off." once they are.
 export const permissionCopy: Record<
   NotificationPermission,
   { title: string; detail: string }

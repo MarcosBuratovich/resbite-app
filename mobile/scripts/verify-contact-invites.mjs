@@ -690,7 +690,7 @@ try {
   // folding isn't switched on. Neither keeps a Retry, and nothing posts again with the spent code.
   for (const [foldStatus, words] of [
     [409, "This number already belongs to another Resbite account. Use a different number, or ask the Resbite team for help."],
-    [404, "Bringing an invitation into this account isn’t switched on yet."],
+    [404, "Bringing an invitation into this account isn’t available right now."],
   ]) {
     const phoneless = { ...host, phone: undefined, phone_confirmed_at: undefined, app_metadata: { provider: "email", providers: ["email"] } };
     const f = await fixture({ user: phoneless, foldStatus }),

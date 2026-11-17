@@ -35,6 +35,6 @@ export const PHONE_COPY = {
   foldOffer: "If this number answered an invitation on the web, confirm it with a code to bring its resbites here.",
   /** The offer's own button, so the screen never has two "Send code" buttons. */
   foldSend: "Confirm with a code",
-  foldOff: "Bringing an invitation into this account isn’t switched on yet.",
+  foldOff: "Bringing an invitation into this account isn’t available right now.",
   foldGone: "That web account is gone, so we sent a code to add this number instead.",
 };

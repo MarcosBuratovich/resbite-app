@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 
-// Browser checks for App Store readiness plan 3's screens. Section (l*) per task; Task 1 is l1 to l3, Task 4 is l4, Task 6 is l6.
+// Browser checks for App Store readiness plan 3's screens. Section (l*) per task; Task 1 is l1 to l3, Task 4 is l4, Task 6 is l6, Task 7 is l7.
 const browser = await chromium.launch({
   channel: process.env.RESBITE_QA_BROWSER || "chrome",
   headless: true,
@@ -253,6 +253,32 @@ try {
     await large.close();
   }
   console.log("PASS (l6) Data & privacy lists the eight topics, opens the Privacy Policy and the data request, and fits at 320 px under Larger Text");
+
+  // (l7) No Wellness tab, and About access says nothing about a private test.
+  {
+    const preview = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    preview.on("pageerror", (e) => errors.push(e.message));
+    await preview.route("**/*.supabase.co/**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: "{}" }));
+    await preview.goto(base);
+    await preview.getByRole("button", { name: "Preview the design", exact: true }).click();
+    await expect(preview.getByRole("tab", { name: "Profile", exact: true })).toBeVisible();
+    const tabs = await preview.getByRole("tab").allInnerTexts();
+    assert.deepEqual(tabs.map((t) => t.trim()), ["Create", "My resbites", "Profile"], "the tab bar is Create, My resbites and Profile");
+    await preview.goto(`${base}/wellness`);
+    await expect(preview.getByRole("heading", { name: "Wellness", exact: true })).toHaveCount(0);
+    await preview.close();
+    const auth = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    auth.on("pageerror", (e) => errors.push(e.message));
+    await auth.route("**/*.supabase.co/**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: "{}" }));
+    await auth.goto(`${base}/auth?mode=login`);
+    await auth.getByRole("button", { name: "About access", exact: true }).click();
+    const line = "Resbite is for people aged 18 and over. Every account needs a mobile number, confirmed with a code we text you.";
+    await expect(auth.getByText(line, { exact: true })).toBeVisible();
+    const sheet = auth.getByRole("dialog");
+    if (await sheet.count()) assert.ok(!/private|test/i.test(await sheet.innerText()), "no private or test wording in the sheet");
+    await auth.close();
+  }
+  console.log("PASS (l7) the tab bar is Create, My resbites and Profile, /wellness shows nothing, and About access has the new line");
 
   assert.deepEqual(errors, [], `no page errors: ${errors.join(" | ")}`);
 } finally {
