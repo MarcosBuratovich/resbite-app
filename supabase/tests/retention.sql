@@ -12,7 +12,11 @@
 -- list is empty; object-number.sql lists a number by its keyed hash (the key made in Vault by the first objection),
 -- deletes its invitations and removal records but what a hold keeps, and is safe to run twice; a listed number reads
 -- 'unavailable' where it would have taken the link path, and stores nothing, while a Resbite user with it is still
--- invited in the app; withdraw-objection.sql takes it off. A later slice adds the photo and cover cleanup.
+-- invited in the app; withdraw-objection.sql takes it off. Slice 5 (Task 5): the photo and cover worker RPCs are
+-- service_role's alone and the removal helpers nobody's; an unattached cover waits 7 days observed, is retired, and
+-- can't be attached again; a held owner's cover, or one in a held series' folder, is never observed, and a hold set
+-- after a claim makes prepare answer held; retire_plan_cover_now and remove_resbite_content queue a cover at once,
+-- once however many occurrences shared it, but keep it under a hold; remove_profile_photo does the same for a photo.
 -- Synthetic identities only: ids a6000000-0000-4000-8000-0000000000NN through pg_temp.a6(text), users 01 to 49 and
 -- plans 51 to 99 (each plan its own series unless it says otherwise); emails r6-NN@resbite-test.invalid; numbers
 -- 4477009006NN (an account's NN is its user number; the numbers of people not on Resbite are 81 to 89, and slice 4's
@@ -22,7 +26,8 @@
 -- the invitations are purged, then lifted; 06 Ana, 07 Ben; 08 Cal, leaving (deletion asked); 09 Ivo, held through
 -- slice 2, lifted before the last run. Slice 3: Ben and Gus held, then lifted before the last run; web accounts 10 Pia,
 -- 11 Raj, 12 Sol, 13 Tom, 14 Uma (held), 15 Val, 16 Wes, 17 Xia, 18 Yan; Auth users with no profile 20 to 24 (24 held).
--- Slice 4: 25 Kai, on Resbite and in the app, whose number is listed.
+-- Slice 4: 25 Kai, on Resbite and in the app, whose number is listed. Slice 5: 26 Ida, hosts covers; 27 Jon, held;
+-- 28 Lea, held after her cover's claim; 29 Max, whose photo is removed; 30 Nia, held, whose photo is removed.
 -- Series a6…: 51 named by a hold (no plan: a hold names a series id); 52 Ola's one-off tomorrow; 53 a one-off that
 -- ended 2 days ago; 54 a weekly running now; 55 a weekly whose current occurrence (56, repeating from 55) stopped
 -- repeating and ended 3 days ago; 57 a weekly that ended 3 days ago, stopped, its chat closed; 58 a weekly that ended 3
@@ -36,6 +41,9 @@
 -- only occurrence ended 13 months ago, still rolling; 85 a weekly whose current occurrence (86, repeating from 85)
 -- stopped repeating and ended 13 months ago.
 -- Slice 4's: 87 Hana's one-off in 4 days; 88 Rob's one-off in 5 days, named by a hold.
+-- Slice 5's: 89 Ida's weekly, which ended 6 days ago, and 90 its next occurrence, sharing its cover; 92 Lea's one-off
+-- in 6 days, named by a hold after her cover's claim; 93 Ida's one-off in 7 days, named by a hold; 94 and 97 Lea's and
+-- Jon's resbites that are gone (no plan: only their cover folders are left); 98 no resbite at all.
 begin;
 -- A check that must hold: raises p_what when p_ok is not true (false or null).
 create function pg_temp.r6_check(p_ok boolean, p_what text) returns void language plpgsql as $$
@@ -963,5 +971,362 @@ begin
  end;
  perform pg_temp.r6_check(v_msg = 'Invalid number', 'record_objection: ''12'' was refused with '||coalesce(v_msg,'nothing'));
 end $$;
+
+-- Slice 5 (Task 5): orphan profile photos and replaced covers.
+
+-- photos_covers_locked: the eight worker RPCs, photos' and covers' (each public wrapper and the private body it calls,
+-- as 20260923152816_orphan_profile_photo_cleanup.sql:189-194 has them), are service_role's alone; the three guards and
+-- the four remove and retire functions are nobody's; the four tables are closed to every API role, with row security
+-- on. The private ones are security definer and the wrappers invoker, all with an empty search path. What this file
+-- makes carries its marker; the carried photo functions and their trigger carry it exactly when the photo tables do
+-- (made here, as on hosted; in the local replay the September file made them). The photo write guard, plan 2's or the
+-- September file's, holds the retired-path lines. The cover guard fires on a cover_path write, between the deletion's
+-- redaction and the revision counter.
+do $$ declare r text; f text; s text; t text; v pg_catalog.pg_proc; v_here boolean;
+begin
+ foreach f in array array['claim_orphan_profile_photos(integer)','prepare_orphan_profile_photo(uuid,uuid)',
+  'finish_orphan_profile_photo(uuid,uuid,boolean)','prune_profile_photo_cleanup()','claim_orphan_plan_covers(integer)',
+  'prepare_orphan_plan_cover(uuid,uuid)','finish_orphan_plan_cover(uuid,uuid,boolean)','prune_plan_cover_cleanup()'] loop
+  foreach s in array array['public.','private.'] loop
+   perform pg_temp.r6_check(has_function_privilege('service_role',s||f,'execute'), 'photos_covers_locked: service_role may not execute '||s||f);
+   foreach r in array array['public','anon','authenticated'] loop
+    perform pg_temp.r6_check(not has_function_privilege(r,s||f,'execute'), 'photos_covers_locked: '||r||' may execute '||s||f);
+   end loop;
+   select * into v from pg_catalog.pg_proc p where p.oid = (s||f)::regprocedure;
+   perform pg_temp.r6_check(v.prosecdef = (s = 'private.') and v.proconfig = array['search_path=""'],
+    'photos_covers_locked: '||s||f||' is not '||case when s = 'private.' then 'security definer' else 'invoker' end||' with an empty search path');
+  end loop;
+ end loop;
+ foreach f in array array['private.guard_photo_write()','private.guard_profile_photo_reference()','private.guard_plan_cover_reference()',
+  'private.retire_profile_photo_now(uuid,text)','private.remove_profile_photo(uuid)','private.retire_plan_cover_now(text)',
+  'private.remove_resbite_content(uuid,boolean,boolean,boolean,boolean)'] loop
+  foreach r in array array['public','anon','authenticated','service_role'] loop
+   perform pg_temp.r6_check(not has_function_privilege(r,f,'execute'), 'photos_covers_locked: '||r||' may execute '||f);
+  end loop;
+  select * into v from pg_catalog.pg_proc p where p.oid = f::regprocedure;
+  perform pg_temp.r6_check(v.prosecdef and v.proconfig = array['search_path=""'],
+   'photos_covers_locked: '||f||' is not security definer with an empty search path');
+ end loop;
+ foreach t in array array['private.profile_photo_retired_paths','private.profile_photo_cleanup_jobs','private.plan_cover_retired_paths',
+  'private.plan_cover_cleanup_jobs'] loop
+  foreach r in array array['public','anon','authenticated','service_role'] loop
+   perform pg_temp.r6_check(not has_table_privilege(r,t,'select,insert,update,delete,truncate,references,trigger'),
+    'photos_covers_locked: '||r||' may touch '||t);
+  end loop;
+  perform pg_temp.r6_check((select c.relrowsecurity from pg_catalog.pg_class c where c.oid = t::regclass),
+   'photos_covers_locked: row security is off on '||t);
+ end loop;
+ foreach t in array array['private.plan_cover_retired_paths','private.plan_cover_cleanup_jobs'] loop
+  perform pg_temp.r6_check(pg_catalog.obj_description(t::regclass,'pg_class') = 'resbite 20261117130000',
+   'photos_covers_locked: '||t||' does not carry this file''s marker');
+ end loop;
+ foreach f in array array['private.guard_plan_cover_reference()','private.retire_profile_photo_now(uuid,text)',
+  'private.remove_profile_photo(uuid)','private.retire_plan_cover_now(text)',
+  'private.remove_resbite_content(uuid,boolean,boolean,boolean,boolean)','private.claim_orphan_plan_covers(integer)',
+  'private.prepare_orphan_plan_cover(uuid,uuid)','private.finish_orphan_plan_cover(uuid,uuid,boolean)','private.prune_plan_cover_cleanup()',
+  'public.claim_orphan_plan_covers(integer)','public.prepare_orphan_plan_cover(uuid,uuid)',
+  'public.finish_orphan_plan_cover(uuid,uuid,boolean)','public.prune_plan_cover_cleanup()'] loop
+  perform pg_temp.r6_check(pg_catalog.obj_description(f::regprocedure,'pg_proc') = 'resbite 20261117130000',
+   'photos_covers_locked: '||f||' does not carry this file''s marker');
+ end loop;
+ v_here := pg_catalog.obj_description('private.profile_photo_cleanup_jobs'::regclass,'pg_class') is not distinct from 'resbite 20261117130000';
+ perform pg_temp.r6_check(v_here = (pg_catalog.obj_description('private.profile_photo_retired_paths'::regclass,'pg_class')
+  is not distinct from 'resbite 20261117130000'), 'photos_covers_locked: one photo table carries the marker, the other not');
+ foreach f in array array['private.guard_profile_photo_reference()','private.claim_orphan_profile_photos(integer)',
+  'private.prepare_orphan_profile_photo(uuid,uuid)','private.finish_orphan_profile_photo(uuid,uuid,boolean)',
+  'private.prune_profile_photo_cleanup()','public.claim_orphan_profile_photos(integer)','public.prepare_orphan_profile_photo(uuid,uuid)',
+  'public.finish_orphan_profile_photo(uuid,uuid,boolean)','public.prune_profile_photo_cleanup()'] loop
+  perform pg_temp.r6_check((pg_catalog.obj_description(f::regprocedure,'pg_proc') is not distinct from 'resbite 20261117130000') = v_here,
+   'photos_covers_locked: '||f||'''s marker does not follow the photo tables''');
+ end loop;
+ perform pg_temp.r6_check((select (pg_catalog.obj_description(t.oid,'pg_trigger') is not distinct from 'resbite 20261117130000') = v_here
+   from pg_catalog.pg_trigger t where t.tgrelid = 'public.profiles'::regclass and t.tgname = 'resbite_profile_photo_reference_guard'),
+  'photos_covers_locked: the photo reference trigger''s marker does not follow the photo tables''');
+ perform pg_temp.r6_check(pg_catalog.obj_description('private.guard_photo_write()'::regprocedure,'pg_proc') is distinct from 'resbite 20261117130000'
+  and (select p.prosrc like '%Photo path retired; choose a new photo%'
+   and p.prosrc like '%delete from private.profile_photo_cleanup_jobs where path_hash=extensions.digest(new.name,''sha256'') and status=''observed''%'
+   from pg_catalog.pg_proc p where p.oid = 'private.guard_photo_write()'::regprocedure),
+  'photos_covers_locked: the photo write guard lacks the retired-path lines, or carries this file''s marker');
+ perform pg_temp.r6_check((select pg_catalog.pg_get_triggerdef(t.oid) from pg_catalog.pg_trigger t
+   where t.tgrelid = 'public.plans'::regclass and t.tgname = 'plans_retired_cover_guard')
+  = 'CREATE TRIGGER plans_retired_cover_guard BEFORE INSERT OR UPDATE OF cover_path ON public.plans FOR EACH ROW EXECUTE FUNCTION private.guard_plan_cover_reference()'
+  and (select pg_catalog.obj_description(t.oid,'pg_trigger') from pg_catalog.pg_trigger t
+   where t.tgrelid = 'public.plans'::regclass and t.tgname = 'plans_retired_cover_guard') = 'resbite 20261117130000',
+  'photos_covers_locked: the cover guard trigger is not as it should be');
+ perform pg_temp.r6_check((select array_agg(t.tgname::text order by t.tgname) from pg_catalog.pg_trigger t
+   where t.tgrelid = 'public.plans'::regclass and t.tgname in ('plans_redact_deleting_owner','plans_retired_cover_guard','plans_track_cover_revision'))
+  = array['plans_redact_deleting_owner','plans_retired_cover_guard','plans_track_cover_revision'],
+  'photos_covers_locked: the cover guard does not fire between the redaction and the revision counter');
+ perform pg_temp.r6_check(exists(select 1 from pg_catalog.pg_trigger t where t.tgrelid = 'storage.objects'::regclass
+   and t.tgname = 'resbite_photo_write_guard' and t.tgfoid = 'private.guard_photo_write()'::regprocedure),
+  'photos_covers_locked: the photo write guard''s trigger is missing');
+end $$;
+
+-- A refusal with this code and this message.
+create function pg_temp.r6_refused_with(p_sql text, p_state text, p_msg text) returns void language plpgsql as $$
+declare v_state text; v_msg text;
+begin
+ begin
+  execute p_sql;
+ exception when others then
+  get stacked diagnostics v_state = returned_sqlstate, v_msg = message_text;
+ end;
+ if v_state is distinct from p_state or v_msg is distinct from p_msg then
+  raise exception 'Expected % %, got % %: %', p_state, p_msg, coalesce(v_state,'no error'), coalesce(v_msg,''), p_sql;
+ end if;
+end $$;
+-- A cover's path, <owner>/<plan>/<name>.jpg, and a profile photo's, <account>/<name>.jpg; each one's job and fence.
+create function pg_temp.r6_cover(p_owner text, p_plan text, p_name text) returns text language sql immutable as $$
+ select pg_temp.a6(p_owner)::text||'/'||pg_temp.a6(p_plan)::text||'/'||p_name||'.jpg' $$;
+create function pg_temp.r6_photo(p_user text, p_name text) returns text language sql immutable as $$
+ select pg_temp.a6(p_user)::text||'/'||p_name||'.jpg' $$;
+create function pg_temp.r6_cover_job(p_path text) returns private.plan_cover_cleanup_jobs language sql as $$
+ select j.* from private.plan_cover_cleanup_jobs j where j.path=p_path $$;
+create function pg_temp.r6_cover_fenced(p_path text) returns boolean language sql as $$
+ select exists(select 1 from private.plan_cover_retired_paths r where r.path_hash=extensions.digest(p_path,'sha256')) $$;
+create function pg_temp.r6_photo_job(p_path text) returns private.profile_photo_cleanup_jobs language sql as $$
+ select j.* from private.profile_photo_cleanup_jobs j where j.path=p_path $$;
+create function pg_temp.r6_photo_fenced(p_path text) returns boolean language sql as $$
+ select exists(select 1 from private.profile_photo_retired_paths r where r.path_hash=extensions.digest(p_path,'sha256')) $$;
+
+-- The cast and the files, seeded under the roll's flag. Ida (26) hosts the weekly 89, whose next occurrence 90 shares
+-- its cover C1, and the one-off 93, which a hold names, with its cover C6. Jon (27) is held; Lea (28) hosts 92. Cover
+-- files: C1; C2, in 89's folder, attached nowhere; C3, in the folder of Jon's 97, which is gone; C4, in 92's folder,
+-- attached nowhere; C6; C7, in 93's folder, attached nowhere; C9, in the folder of Lea's 94, which is gone. 89 and 90
+-- have a guest note and meeting details, as has 93. Max (29) and Nia (30, held) have profile photos, a.jpg; Nia also
+-- has b.jpg, and c.jpg, whose observation began before her hold.
+select set_config('resbite.system','roll',true);
+insert into auth.users(id,email,email_confirmed_at)
+ select pg_temp.a6(n),'r6-'||n||'@resbite-test.invalid',now() from unnest(array['26','27','28','29','30']) n;
+insert into public.profiles(id,display_name) values (pg_temp.a6('26'),'Ida'),(pg_temp.a6('27'),'Jon'),(pg_temp.a6('28'),'Lea');
+insert into public.profiles(id,display_name,avatar_path) values
+ (pg_temp.a6('29'),'Max',pg_temp.r6_photo('29','a')),(pg_temp.a6('30'),'Nia',pg_temp.r6_photo('30','a'));
+insert into storage.objects(bucket_id,name) values
+ ('plan-covers',pg_temp.r6_cover('26','89','c1')),('plan-covers',pg_temp.r6_cover('26','89','c2')),
+ ('plan-covers',pg_temp.r6_cover('27','97','c3')),('plan-covers',pg_temp.r6_cover('28','92','c4')),
+ ('plan-covers',pg_temp.r6_cover('26','93','c6')),('plan-covers',pg_temp.r6_cover('26','93','c7')),
+ ('plan-covers',pg_temp.r6_cover('28','94','c9')),
+ ('profile-photos',pg_temp.r6_photo('29','a')),('profile-photos',pg_temp.r6_photo('30','a')),
+ ('profile-photos',pg_temp.r6_photo('30','b')),('profile-photos',pg_temp.r6_photo('30','c'));
+insert into public.plans(id,owner_id,title,description,starts_at,ends_at,time_zone,place_label,categories,repeat_weeks,
+ guest_note,guest_note_at,has_meeting_details,cover_path) values
+ (pg_temp.a6('89'),pg_temp.a6('26'),'Swim','Lake swim',now()-interval '6 days 2 hours',now()-interval '6 days','UTC','Lake',
+  array['physical'],1,'Bring a towel',now(),true,pg_temp.r6_cover('26','89','c1')),
+ (pg_temp.a6('92'),pg_temp.a6('28'),'Bake','',now()+interval '6 days',now()+interval '6 days 2 hours','UTC','Kitchen',
+  array['creative'],null,'',null,false,null),
+ (pg_temp.a6('93'),pg_temp.a6('26'),'Talk','A talk',now()+interval '7 days',now()+interval '7 days 2 hours','UTC','Hall',
+  array['intellectual'],null,'Doors at six',now(),true,pg_temp.r6_cover('26','93','c6'));
+insert into public.plans(id,owner_id,title,description,starts_at,ends_at,time_zone,place_label,categories,repeat_weeks,
+ guest_note,guest_note_at,has_meeting_details,cover_path,series_id,repeats_from) values
+ (pg_temp.a6('90'),pg_temp.a6('26'),'Swim','Lake swim',now()+interval '1 day',now()+interval '1 day 2 hours','UTC','Lake',
+  array['physical'],1,'Bring a towel',now(),true,pg_temp.r6_cover('26','89','c1'),pg_temp.a6('89'),pg_temp.a6('89'));
+insert into public.plan_meeting_details(plan_id,note) values
+ (pg_temp.a6('89'),'Gate code by the shed'),(pg_temp.a6('90'),'Gate code by the shed'),(pg_temp.a6('93'),'Room 2');
+insert into private.legal_holds(user_id,reason,case_ref,review_on) values
+ (pg_temp.a6('27'),'police','LE-2026-027',current_date+90),(pg_temp.a6('30'),'police','LE-2026-030',current_date+90);
+insert into private.legal_holds(series_id,reason,case_ref,review_on) values (pg_temp.a6('93'),'court','CT-2026-093',current_date+90);
+insert into private.profile_photo_cleanup_jobs(path_hash,user_id,path,object_id,observed_at)
+ select extensions.digest(o.name,'sha256'),pg_temp.a6('30'),o.name,o.id,now()-interval '8 days'
+ from storage.objects o where o.bucket_id='profile-photos' and o.name=pg_temp.r6_photo('30','c');
+select set_config('resbite.system','',true);
+
+-- covers_observed: the first claim takes nothing, as every observation is fresh. It observes C2, C4 and C9; not C1 or
+-- C6, which occurrences use; not C3, whose owner is held; not C7, in the folder of a series a hold names.
+do $$ declare v jsonb := public.claim_orphan_plan_covers(5);
+begin
+ perform pg_temp.r6_check(v = '[]'::jsonb, 'covers_observed: the first claim took '||v::text);
+end $$;
+select pg_temp.r6_check((select array_agg(j.path order by j.path) from private.plan_cover_cleanup_jobs j)
+  = array[pg_temp.r6_cover('26','89','c2'),pg_temp.r6_cover('28','92','c4'),pg_temp.r6_cover('28','94','c9')]
+ and (select bool_and(j.status='observed' and j.attempts=0 and j.owner_id=pg_temp.a6(substr(split_part(j.path,'/',1),35,2)))
+  from private.plan_cover_cleanup_jobs j)
+ and not exists(select 1 from private.plan_cover_retired_paths),
+ 'covers_observed: the observed covers are '||coalesce((select string_agg(j.path||' '||j.status,', ' order by j.path)
+  from private.plan_cover_cleanup_jobs j),'none'));
+
+-- cover_cleanup: once C2 has waited 7 days observed, the claim takes it for Ida and retires it; prepare names it for
+-- deletion; finish refuses while the file is still there, and completes once Storage has removed it. The retired path
+-- can't be attached again. Its receipt goes after 30 days; its fence stays while Ida's account does.
+update private.plan_cover_cleanup_jobs set observed_at=now()-interval '8 days' where path=pg_temp.r6_cover('26','89','c2');
+do $$ declare c2 text := pg_temp.r6_cover('26','89','c2'); v jsonb; v_job uuid; v_lease uuid; v_prep jsonb; v_state text; v_done boolean;
+begin
+ v := public.claim_orphan_plan_covers(5);
+ perform pg_temp.r6_check(jsonb_array_length(v) = 1 and (v->0->>'jobId')::uuid = (pg_temp.r6_cover_job(c2)).job_id
+  and (v->0->>'userId')::uuid = pg_temp.a6('26') and (v->0->>'attempts')::integer = 1 and v->0->>'leaseId' is not null,
+  'cover_cleanup: the claim took '||v::text);
+ v_job := (v->0->>'jobId')::uuid;
+ v_lease := (v->0->>'leaseId')::uuid;
+ perform pg_temp.r6_check(pg_temp.r6_cover_fenced(c2) and (pg_temp.r6_cover_job(c2)).status = 'processing',
+  'cover_cleanup: C2 was not retired, or its job is not processing');
+ v_prep := public.prepare_orphan_plan_cover(v_job,v_lease);
+ perform pg_temp.r6_check(v_prep = jsonb_build_object('action','delete','path',c2), 'cover_cleanup: prepare answered '||v_prep::text);
+ begin
+  perform public.finish_orphan_plan_cover(v_job,v_lease,true);
+ exception when others then
+  get stacked diagnostics v_state = returned_sqlstate;
+ end;
+ perform pg_temp.r6_check(v_state = '22023', 'cover_cleanup: finish with the file still there answered '||coalesce(v_state,'no error'));
+ -- Storage removes the file: the worker's HTTP call, simulated.
+ delete from storage.objects where bucket_id='plan-covers' and name=c2;
+ v_done := public.finish_orphan_plan_cover(v_job,v_lease,true);
+ perform pg_temp.r6_check(v_done and (pg_temp.r6_cover_job(c2)).status = 'complete' and (pg_temp.r6_cover_job(c2)).completed_at is not null,
+  'cover_cleanup: the job did not complete once the file was gone');
+end $$;
+select pg_temp.r6_refused_with($$update public.plans set cover_path=pg_temp.r6_cover('26','89','c2') where id=pg_temp.a6('89')$$,
+ '42501','Cover retired; choose a new photo');
+update private.plan_cover_cleanup_jobs set completed_at=now()-interval '31 days' where path=pg_temp.r6_cover('26','89','c2');
+select pg_temp.r6_check(public.prune_plan_cover_cleanup() = 1, 'cover_cleanup: the old receipt was not pruned');
+select pg_temp.r6_check((pg_temp.r6_cover_job(pg_temp.r6_cover('26','89','c2'))).job_id is null
+ and pg_temp.r6_cover_fenced(pg_temp.r6_cover('26','89','c2')), 'cover_cleanup: the receipt stayed, or the fence went while Ida''s account is there');
+
+-- covers_held: Lea's C4 and C9 are claimed together. Then a hold names the series 92: C4's prepare answers held, C9's
+-- still delete, and once C4's lease has run out the next claim leaves it. Then a hold names Lea: C9's prepare answers
+-- held too, and once its lease has run out the next claim leaves it. The worker keeps both files. Jon's C3 and the held
+-- series' C7 are still not observed.
+update private.plan_cover_cleanup_jobs set observed_at=now()-interval '8 days'
+ where path in (pg_temp.r6_cover('28','92','c4'),pg_temp.r6_cover('28','94','c9'));
+do $$ declare c4 text := pg_temp.r6_cover('28','92','c4'); c9 text := pg_temp.r6_cover('28','94','c9'); v jsonb; v_prep jsonb;
+ j4 uuid; l4 uuid; j9 uuid; l9 uuid;
+begin
+ v := public.claim_orphan_plan_covers(5);
+ perform pg_temp.r6_check(jsonb_array_length(v) = 2 and (v->0->>'jobId')::uuid = (pg_temp.r6_cover_job(c4)).job_id
+  and (v->1->>'jobId')::uuid = (pg_temp.r6_cover_job(c9)).job_id
+  and (v->0->>'userId')::uuid = pg_temp.a6('28') and (v->1->>'userId')::uuid = pg_temp.a6('28'), 'covers_held: the claim took '||v::text);
+ j4 := (v->0->>'jobId')::uuid; l4 := (v->0->>'leaseId')::uuid; j9 := (v->1->>'jobId')::uuid; l9 := (v->1->>'leaseId')::uuid;
+ insert into private.legal_holds(series_id,reason,case_ref,review_on) values (pg_temp.a6('92'),'ofcom','OF-2026-092',current_date+90);
+ v_prep := public.prepare_orphan_plan_cover(j4,l4);
+ perform pg_temp.r6_check(v_prep = '{"action": "held"}'::jsonb, 'covers_held: prepare under a series hold answered '||v_prep::text);
+ v_prep := public.prepare_orphan_plan_cover(j9,l9);
+ perform pg_temp.r6_check(v_prep = jsonb_build_object('action','delete','path',c9), 'covers_held: prepare of C9 answered '||v_prep::text);
+ update private.plan_cover_cleanup_jobs set lease_until=now()-interval '1 second' where path=c4;
+ v := public.claim_orphan_plan_covers(5);
+ perform pg_temp.r6_check(v = '[]'::jsonb, 'covers_held: the claim after the series hold took '||v::text);
+ insert into private.legal_holds(user_id,reason,case_ref,review_on) values (pg_temp.a6('28'),'nca','NCA-2026-028',current_date+90);
+ v_prep := public.prepare_orphan_plan_cover(j9,l9);
+ perform pg_temp.r6_check(v_prep = '{"action": "held"}'::jsonb, 'covers_held: prepare under an account hold answered '||v_prep::text);
+ update private.plan_cover_cleanup_jobs set lease_until=now()-interval '1 second' where path=c9;
+ v := public.claim_orphan_plan_covers(5);
+ perform pg_temp.r6_check(v = '[]'::jsonb, 'covers_held: the claim after the account hold took '||v::text);
+ perform pg_temp.r6_check((select count(*) from storage.objects where bucket_id='plan-covers' and name in (c4,c9)) = 2,
+  'covers_held: a held file went');
+end $$;
+select pg_temp.r6_check((pg_temp.r6_cover_job(pg_temp.r6_cover('27','97','c3'))).job_id is null
+ and (pg_temp.r6_cover_job(pg_temp.r6_cover('26','93','c7'))).job_id is null
+ and not pg_temp.r6_cover_fenced(pg_temp.r6_cover('27','97','c3')) and not pg_temp.r6_cover_fenced(pg_temp.r6_cover('26','93','c7')),
+ 'covers_held: a held owner''s cover, or one in a held series'' folder, was observed or retired');
+
+-- cover_retire_now: retire_plan_cover_now queues C5, new in 89's folder and attached nowhere, at once, and the next claim
+-- takes it. It refuses (false) a cover an occurrence uses (C1), a held owner's (C3), one in a held series' folder (C7),
+-- one that is not there, a path that is not a cover's, and null.
+insert into storage.objects(bucket_id,name) values ('plan-covers',pg_temp.r6_cover('26','89','c5'));
+select pg_temp.r6_check(private.retire_plan_cover_now(pg_temp.r6_cover('26','89','c5')) is true, 'cover_retire_now: C5 was not queued');
+select pg_temp.r6_check(pg_temp.r6_cover_fenced(pg_temp.r6_cover('26','89','c5'))
+ and (pg_temp.r6_cover_job(pg_temp.r6_cover('26','89','c5'))).status = 'queued', 'cover_retire_now: C5 is not retired and queued');
+do $$ declare v jsonb := public.claim_orphan_plan_covers(5);
+begin
+ perform pg_temp.r6_check(jsonb_array_length(v) = 1
+  and (v->0->>'jobId')::uuid = (pg_temp.r6_cover_job(pg_temp.r6_cover('26','89','c5'))).job_id
+  and (v->0->>'userId')::uuid = pg_temp.a6('26'), 'cover_retire_now: the claim took '||v::text);
+end $$;
+do $$ declare p text;
+begin
+ foreach p in array array[pg_temp.r6_cover('26','89','c1'),pg_temp.r6_cover('27','97','c3'),pg_temp.r6_cover('26','93','c7'),
+  pg_temp.r6_cover('26','89','c8'),pg_temp.a6('26')::text||'/../c1.jpg'] loop
+  perform pg_temp.r6_check(private.retire_plan_cover_now(p) is false, 'cover_retire_now: '||p||' was queued');
+  perform pg_temp.r6_check(not pg_temp.r6_cover_fenced(p) and (pg_temp.r6_cover_job(p)).job_id is null,
+   'cover_retire_now: '||p||' was retired or has a job');
+ end loop;
+ perform pg_temp.r6_check(private.retire_plan_cover_now(null) is false, 'cover_retire_now: null did not answer false');
+end $$;
+
+-- resbite_content_removed: the team takes down 89's title, notes and cover. Both occurrences of the weekly read
+-- 'Resbite', with no cover, no meeting details and no guest note, each one version on; the description stays. C1,
+-- which both used, is queued once, and attaching it again is refused. A second run changes nothing. On 93, which a hold
+-- names, the content goes but the file stays: nothing is queued. An unknown resbite is refused.
+do $$ declare v jsonb; v89 integer; v90 integer; c1 text := pg_temp.r6_cover('26','89','c1');
+begin
+ select p.version into v89 from public.plans p where p.id=pg_temp.a6('89');
+ select p.version into v90 from public.plans p where p.id=pg_temp.a6('90');
+ v := private.remove_resbite_content(pg_temp.a6('89'),true,false,true,true);
+ perform pg_temp.r6_check(v = '{"occurrences": 2, "covers_queued": 1, "held": false}'::jsonb,
+  'resbite_content_removed: the takedown answered '||v::text);
+ perform pg_temp.r6_check((select count(*) from public.plans p where p.series_id=pg_temp.a6('89') and p.title='Resbite'
+   and p.description='Lake swim' and p.cover_path is null and p.cover_description='' and p.guest_note='' and p.guest_note_at is null
+   and not p.has_meeting_details) = 2
+  and not exists(select 1 from public.plan_meeting_details d where d.plan_id in (pg_temp.a6('89'),pg_temp.a6('90'))),
+  'resbite_content_removed: an occurrence kept its title, notes or cover, or lost its description');
+ perform pg_temp.r6_check((select p.version from public.plans p where p.id=pg_temp.a6('89')) = v89+1
+  and (select p.version from public.plans p where p.id=pg_temp.a6('90')) = v90+1, 'resbite_content_removed: not one version on each');
+ perform pg_temp.r6_check((select count(*) from private.plan_cover_cleanup_jobs j where j.path=c1) = 1
+  and (pg_temp.r6_cover_job(c1)).status = 'queued' and pg_temp.r6_cover_fenced(c1), 'resbite_content_removed: C1 is not queued once');
+ v := private.remove_resbite_content(pg_temp.a6('90'),true,false,true,true);
+ perform pg_temp.r6_check(v = '{"occurrences": 0, "covers_queued": 0, "held": false}'::jsonb,
+  'resbite_content_removed: the second takedown answered '||v::text);
+end $$;
+select pg_temp.r6_refused_with($$update public.plans set cover_path=pg_temp.r6_cover('26','89','c1') where id=pg_temp.a6('90')$$,
+ '42501','Cover retired; choose a new photo');
+do $$ declare v jsonb; c6 text := pg_temp.r6_cover('26','93','c6');
+begin
+ v := private.remove_resbite_content(pg_temp.a6('93'),true,true,true,true);
+ perform pg_temp.r6_check(v = '{"occurrences": 1, "covers_queued": 0, "held": true}'::jsonb,
+  'resbite_content_removed: the takedown on the held series answered '||v::text);
+ perform pg_temp.r6_check((select p.title='Resbite' and p.description='' and p.cover_path is null and p.guest_note=''
+   and not p.has_meeting_details from public.plans p where p.id=pg_temp.a6('93'))
+  and not exists(select 1 from public.plan_meeting_details d where d.plan_id=pg_temp.a6('93')),
+  'resbite_content_removed: the held series kept its content');
+ perform pg_temp.r6_check((pg_temp.r6_cover_job(c6)).job_id is null and not pg_temp.r6_cover_fenced(c6)
+  and exists(select 1 from storage.objects where bucket_id='plan-covers' and name=c6),
+  'resbite_content_removed: the held series'' cover was queued, retired or removed');
+end $$;
+select pg_temp.r6_refused($$select private.remove_resbite_content(pg_temp.a6('98'),true,true,true,true)$$,'P0002');
+
+-- photo_removed: remove_profile_photo takes Max's photo off his profile and queues the file, which the next claim takes
+-- at once; a hold set after the claim makes prepare answer held, and its lift lets the file go. Nia is held: her photo
+-- comes off her profile but the file stays and nothing is queued; b.jpg is never observed; c.jpg, observed before her
+-- hold, stays as it was. A second removal finds no photo.
+do $$ declare v jsonb := private.remove_profile_photo(pg_temp.a6('29'));
+begin
+ perform pg_temp.r6_check(v = '{"detached": true, "queued": true, "held": false}'::jsonb, 'photo_removed: Max''s removal answered '||v::text);
+end $$;
+select pg_temp.r6_check((select p.avatar_path is null from public.profiles p where p.id=pg_temp.a6('29'))
+ and pg_temp.r6_photo_fenced(pg_temp.r6_photo('29','a')) and (pg_temp.r6_photo_job(pg_temp.r6_photo('29','a'))).status = 'queued',
+ 'photo_removed: Max''s photo is still on his profile, or its file is not retired and queued');
+-- The fence holds in Storage too: the retired path can't be written again, nor attached.
+select pg_temp.r6_refused_with($$insert into storage.objects(bucket_id,name) values ('profile-photos',pg_temp.r6_photo('29','a'))$$,
+ '42501','Photo path retired; choose a new photo');
+select pg_temp.r6_refused_with($$update public.profiles set avatar_path=pg_temp.r6_photo('29','a') where id=pg_temp.a6('29')$$,
+ '42501','Photo path retired; choose a new photo');
+do $$ declare a text := pg_temp.r6_photo('29','a'); v jsonb; v_prep jsonb;
+begin
+ v := public.claim_orphan_profile_photos(5);
+ perform pg_temp.r6_check(jsonb_array_length(v) = 1 and (v->0->>'jobId')::uuid = (pg_temp.r6_photo_job(a)).job_id
+  and (v->0->>'userId')::uuid = pg_temp.a6('29'), 'photo_removed: the claim took '||v::text);
+ insert into private.legal_holds(user_id,reason,case_ref,review_on) values (pg_temp.a6('29'),'claim','CL-2026-029',current_date+90);
+ v_prep := public.prepare_orphan_profile_photo((v->0->>'jobId')::uuid,(v->0->>'leaseId')::uuid);
+ perform pg_temp.r6_check(v_prep = '{"action": "held"}'::jsonb, 'photo_removed: prepare under a hold answered '||v_prep::text);
+ update private.legal_holds set lifted_at=now() where user_id=pg_temp.a6('29') and lifted_at is null;
+ v_prep := public.prepare_orphan_profile_photo((v->0->>'jobId')::uuid,(v->0->>'leaseId')::uuid);
+ perform pg_temp.r6_check(v_prep = jsonb_build_object('action','delete','path',a), 'photo_removed: prepare after the lift answered '||v_prep::text);
+end $$;
+do $$ declare v jsonb := private.remove_profile_photo(pg_temp.a6('30'));
+begin
+ perform pg_temp.r6_check(v = '{"detached": true, "queued": false, "held": true}'::jsonb, 'photo_removed: Nia''s removal answered '||v::text);
+end $$;
+select pg_temp.r6_check((select p.avatar_path is null from public.profiles p where p.id=pg_temp.a6('30'))
+ and not pg_temp.r6_photo_fenced(pg_temp.r6_photo('30','a')) and (pg_temp.r6_photo_job(pg_temp.r6_photo('30','a'))).job_id is null
+ and exists(select 1 from storage.objects where bucket_id='profile-photos' and name=pg_temp.r6_photo('30','a')),
+ 'photo_removed: Nia''s photo is still on her profile, or its file was retired, queued or removed');
+do $$ declare v jsonb := public.claim_orphan_profile_photos(5);
+begin
+ perform pg_temp.r6_check(v = '[]'::jsonb, 'photo_removed: the claim after Nia''s removal took '||v::text);
+end $$;
+select pg_temp.r6_check((pg_temp.r6_photo_job(pg_temp.r6_photo('30','a'))).job_id is null
+ and (pg_temp.r6_photo_job(pg_temp.r6_photo('30','b'))).job_id is null
+ and (select j.status = 'observed' and j.attempts = 0 and j.observed_at < now()-interval '7 days'
+  from private.profile_photo_cleanup_jobs j where j.path=pg_temp.r6_photo('30','c'))
+ and not exists(select 1 from private.profile_photo_retired_paths r where r.user_id=pg_temp.a6('30')),
+ 'photo_removed: a held account''s photo was observed, or its earlier observation changed');
+select pg_temp.r6_check(private.remove_profile_photo(pg_temp.a6('29')) = '{"detached": false, "queued": false, "held": false}'::jsonb,
+ 'photo_removed: a second removal found a photo');
 
 rollback;

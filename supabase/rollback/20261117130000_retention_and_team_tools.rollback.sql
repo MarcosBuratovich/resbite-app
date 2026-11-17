@@ -21,6 +21,141 @@ do $rollback$ begin
  end if;
 end $rollback$;
 
+-- Section 5: orphan photos and replaced covers. First the covers, all this file's: the guard trigger on public.plans,
+-- the takedown helper and the "remove now" one, the four worker functions with their wrappers, the guard, then both
+-- tables (a cover fence that survived would stop no one, so it goes with its table). Then the two photo helpers. Then
+-- the photo objects carried from 20260923152816_orphan_profile_photo_cleanup.sql, each by its marker. The write guard
+-- first, while the tables its added lines read are still there: where it carries plan 2's marker (hosted), it goes back
+-- to plan 2's interim body (20261117110000_account_deletion_release.sql:401-407, verbatim), which plan 2's rollback
+-- then drops; where it carries this file's, it goes, with the trigger on it; the September body (the local replay) was
+-- never changed. Then each function and trigger this file made (hosted) goes; where the September file made them
+-- instead (the local replay, which never runs this file), the claim (:81-131) and the prepare (:133-146) go back to
+-- their bodies verbatim, and the rest were made again unchanged. Then the two tables, where this file made them.
+drop trigger if exists plans_retired_cover_guard on public.plans;
+drop function if exists private.remove_resbite_content(uuid, boolean, boolean, boolean, boolean);
+drop function if exists private.retire_plan_cover_now(text);
+drop function if exists public.claim_orphan_plan_covers(integer);
+drop function if exists public.prepare_orphan_plan_cover(uuid,uuid);
+drop function if exists public.finish_orphan_plan_cover(uuid,uuid,boolean);
+drop function if exists public.prune_plan_cover_cleanup();
+drop function if exists private.claim_orphan_plan_covers(integer);
+drop function if exists private.prepare_orphan_plan_cover(uuid,uuid);
+drop function if exists private.finish_orphan_plan_cover(uuid,uuid,boolean);
+drop function if exists private.prune_plan_cover_cleanup();
+drop function if exists private.guard_plan_cover_reference();
+drop table if exists private.plan_cover_cleanup_jobs;
+drop table if exists private.plan_cover_retired_paths;
+drop function if exists private.remove_profile_photo(uuid);
+drop function if exists private.retire_profile_photo_now(uuid, text);
+do $rollback$
+declare f text;
+begin
+ if pg_catalog.obj_description(pg_catalog.to_regprocedure('private.guard_photo_write()'),'pg_proc')='resbite 20261117110000' then
+  create or replace function private.guard_photo_write() returns trigger language plpgsql security definer set search_path='' as $fn$
+  begin
+   if new.bucket_id='profile-photos' and auth.uid() is not null then
+    perform private.require_tester();
+   end if;
+   return new;
+  end $fn$;
+ elsif pg_catalog.obj_description(pg_catalog.to_regprocedure('private.guard_photo_write()'),'pg_proc')='resbite 20261117130000' then
+  drop trigger if exists resbite_photo_write_guard on storage.objects;
+  drop function private.guard_photo_write();
+ end if;
+ if exists(select 1 from pg_catalog.pg_trigger t where t.tgrelid='storage.objects'::regclass and t.tgname='resbite_photo_write_guard'
+   and pg_catalog.obj_description(t.oid,'pg_trigger')='resbite 20261117130000') then
+  drop trigger resbite_photo_write_guard on storage.objects;
+ end if;
+ if exists(select 1 from pg_catalog.pg_trigger t where t.tgrelid='public.profiles'::regclass and t.tgname='resbite_profile_photo_reference_guard'
+   and pg_catalog.obj_description(t.oid,'pg_trigger')='resbite 20261117130000') then
+  drop trigger resbite_profile_photo_reference_guard on public.profiles;
+ end if;
+ foreach f in array array['public.claim_orphan_profile_photos(integer)','public.prepare_orphan_profile_photo(uuid,uuid)',
+  'public.finish_orphan_profile_photo(uuid,uuid,boolean)','public.prune_profile_photo_cleanup()',
+  'private.claim_orphan_profile_photos(integer)','private.prepare_orphan_profile_photo(uuid,uuid)',
+  'private.finish_orphan_profile_photo(uuid,uuid,boolean)','private.prune_profile_photo_cleanup()',
+  'private.guard_profile_photo_reference()'] loop
+  if pg_catalog.obj_description(pg_catalog.to_regprocedure(f),'pg_proc')='resbite 20261117130000' then
+   execute pg_catalog.format('drop function %s', f);
+  end if;
+ end loop;
+ if pg_catalog.to_regprocedure('private.claim_orphan_profile_photos(integer)') is not null then
+create or replace function private.claim_orphan_profile_photos(p_limit integer default 5) returns jsonb language plpgsql security definer set search_path='' as $$
+declare v_object record; v_candidate record; v_job private.profile_photo_cleanup_jobs; v_result jsonb:='[]'::jsonb;
+begin
+ -- Bounded discovery. Existing objects get a full observation period after first
+ -- discovery; creation timestamps alone do not establish when a photo detached.
+ for v_object in
+  select o.id,o.name,u.id user_id from storage.objects o
+  join auth.users u on split_part(o.name,'/',1)=u.id::text
+  where o.bucket_id='profile-photos' and length(o.name)<=1024 and position('..' in o.name)=0
+   and not exists(select 1 from public.profiles p where p.avatar_path=o.name)
+   and not exists(select 1 from private.account_deletion_jobs d where d.user_id=u.id)
+   and not exists(select 1 from private.profile_photo_retired_paths r where r.path_hash=extensions.digest(o.name,'sha256'))
+   and not exists(select 1 from private.profile_photo_cleanup_jobs j where j.path_hash=extensions.digest(o.name,'sha256'))
+  order by u.id,o.name limit 100
+ loop
+  if not pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended(v_object.user_id::text,47)) then continue; end if;
+  -- Re-read after acquiring the shared account lock: attachment/upload may have
+  -- committed while discovery was scanning its older snapshot.
+  if not exists(select 1 from storage.objects where bucket_id='profile-photos' and name=v_object.name and id=v_object.id)
+   or exists(select 1 from public.profiles where avatar_path=v_object.name)
+   or exists(select 1 from private.account_deletion_jobs where user_id=v_object.user_id) then continue; end if;
+  insert into private.profile_photo_cleanup_jobs(path_hash,user_id,path,object_id)
+   values(extensions.digest(v_object.name,'sha256'),v_object.user_id,v_object.name,v_object.id) on conflict do nothing;
+ end loop;
+ for v_candidate in
+  select job_id,user_id from private.profile_photo_cleanup_jobs
+  where status<>'complete' and next_attempt_at<=now() and (lease_until is null or lease_until<=now())
+   and (status<>'observed' or observed_at<=now()-interval '7 days')
+  order by user_id,path limit 100
+ loop
+  exit when jsonb_array_length(v_result)>=greatest(1,least(coalesce(p_limit,5),20));
+  if not pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended(v_candidate.user_id::text,47)) then continue; end if;
+  select * into v_job from private.profile_photo_cleanup_jobs where job_id=v_candidate.job_id for update skip locked;
+  if not found or v_job.status='complete' or v_job.next_attempt_at>now() or v_job.lease_until>now() then continue; end if;
+  if v_job.status='observed' then
+   if v_job.observed_at>now()-interval '7 days' then continue; end if;
+   if not exists(select 1 from auth.users where id=v_job.user_id)
+    or exists(select 1 from private.account_deletion_jobs where user_id=v_job.user_id)
+    or exists(select 1 from public.profiles where avatar_path=v_job.path)
+    or not exists(select 1 from storage.objects where bucket_id='profile-photos' and name=v_job.path and id=v_job.object_id) then
+    delete from private.profile_photo_cleanup_jobs where job_id=v_job.job_id; continue;
+   end if;
+   -- This barrier is irreversible while the Auth namespace exists, independent
+   -- of leases. A paused old HTTP request can only remove this retired path.
+   insert into private.profile_photo_retired_paths(path_hash,user_id) values(v_job.path_hash,v_job.user_id) on conflict do nothing;
+  end if;
+  update private.profile_photo_cleanup_jobs set status='processing',lease_id=gen_random_uuid(),lease_until=now()+interval '5 minutes',attempts=attempts+1 where job_id=v_job.job_id returning * into v_job;
+  v_result:=v_result||jsonb_build_array(jsonb_build_object('jobId',v_job.job_id,'userId',v_job.user_id,'leaseId',v_job.lease_id,'attempts',v_job.attempts));
+ end loop;
+ return v_result;
+end $$;
+ end if;
+ if pg_catalog.to_regprocedure('private.prepare_orphan_profile_photo(uuid,uuid)') is not null then
+create or replace function private.prepare_orphan_profile_photo(p_job uuid,p_lease uuid) returns jsonb language plpgsql security definer set search_path='' as $$
+declare v_job private.profile_photo_cleanup_jobs;
+begin
+ select * into v_job from private.profile_photo_cleanup_jobs where job_id=p_job;
+ if not found then raise exception 'Photo lease expired' using errcode='42501'; end if;
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_job.user_id::text,47));
+ select * into v_job from private.profile_photo_cleanup_jobs where job_id=p_job for update;
+ if not found or v_job.status<>'processing' or v_job.lease_id is distinct from p_lease or v_job.lease_until<=now() then raise exception 'Photo lease expired' using errcode='42501'; end if;
+ if not exists(select 1 from private.profile_photo_retired_paths where path_hash=v_job.path_hash)
+  or exists(select 1 from public.profiles where avatar_path=v_job.path) then raise exception 'Photo is not retired' using errcode='42501'; end if;
+ if not exists(select 1 from storage.objects where bucket_id='profile-photos' and name=v_job.path) then return jsonb_build_object('action','absent'); end if;
+ if exists(select 1 from private.account_deletion_jobs where user_id=v_job.user_id) then return jsonb_build_object('action','account-deletion'); end if;
+ return jsonb_build_object('action','delete','path',v_job.path);
+end $$;
+ end if;
+ if pg_catalog.obj_description(pg_catalog.to_regclass('private.profile_photo_cleanup_jobs'),'pg_class')='resbite 20261117130000' then
+  drop table private.profile_photo_cleanup_jobs;
+ end if;
+ if pg_catalog.obj_description(pg_catalog.to_regclass('private.profile_photo_retired_paths'),'pg_class')='resbite 20261117130000' then
+  drop table private.profile_photo_retired_paths;
+ end if;
+end $rollback$;
+
 -- Section 4: the do-not-invite list (the refusal above keeps an entry from being dropped). invite_contacts goes back
 -- to its base body (20261111160000_chat_safety.sql:580-723, verbatim; create or replace keeps its grants and its public
 -- wrapper), then the five functions and the list are dropped. The list's secret (invite_objection_key) stays in Vault,

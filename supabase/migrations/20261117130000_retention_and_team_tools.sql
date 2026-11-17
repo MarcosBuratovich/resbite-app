@@ -20,6 +20,13 @@
 -- hosted, and changes only the lines its comment names:
 --  - private.invite_contacts(uuid, jsonb) (section 4): 20261111160000_chat_safety.sql:580-723 (that file's sha256
 --    f8cfb5a62783528636aae2b8c461f150f8ae8f0553219d42b4b991bf66f2a2b2); no pending candidate before this one redefines it.
+--  - The photo cleanup (section 5), carried from the local-only 20260923152816_orphan_profile_photo_cleanup.sql, which
+--    hosted never ran and which no pending candidate carries: its tables (:4-26), private.guard_photo_write() (:32-54),
+--    private.guard_profile_photo_reference() and its trigger (:58-71), private.claim_orphan_profile_photos(integer)
+--    (:81-131), private.prepare_orphan_profile_photo(uuid,uuid) (:133-146), private.finish_orphan_profile_photo(uuid,
+--    uuid,boolean) (:148-160), private.prune_profile_photo_cleanup() (:165-187) and the wrappers and grants (:189-194).
+--    Plan 2's file (20261117110000_account_deletion_release.sql:395-415) makes an interim guard_photo_write only where
+--    absent, so the write guard's base is plan 2's body on hosted (:401-407) and the September body in the local replay.
 --
 -- Rollback (hosted only): supabase/rollback/20261117130000_retention_and_team_tools.rollback.sql.
 
@@ -817,3 +824,635 @@ begin
  end loop;
  return v_out;
 end $$;
+
+-- 5. Orphan profile photos and replaced covers, with the "remove now" helpers.
+
+-- Photos, carried from the local-only 20260923152816_orphan_profile_photo_cleanup.sql (the bases named in the header),
+-- which hosted never ran: the two tables made only where absent; the functions create or replace from their bases,
+-- with only the lines named below changed; trigger resbite_profile_photo_reference_guard made again; trigger
+-- resbite_photo_write_guard made only where absent. The resbite_avatar_read policy is already the hosted one
+-- (20260924150135_avatar_revision_compare_and_swap.sql:65-69) and is not touched. Nothing is scheduled here: the worker
+-- (cleanup-profile-photos) keeps its source gate, and supabase/ops/schedule-retention.sql runs it. File removal stays
+-- HTTP-only: no function here writes or deletes storage.objects.
+do $migration$ begin
+ if pg_catalog.to_regclass('private.profile_photo_retired_paths') is null then
+  create table if not exists private.profile_photo_retired_paths (
+   path_hash bytea primary key,
+   user_id uuid not null
+  );
+  comment on table private.profile_photo_retired_paths is 'resbite 20261117130000';
+ end if;
+ if pg_catalog.to_regclass('private.profile_photo_cleanup_jobs') is null then
+  create table if not exists private.profile_photo_cleanup_jobs (
+   job_id uuid primary key default gen_random_uuid(),
+   path_hash bytea not null unique,
+   user_id uuid not null,
+   path text not null,
+   object_id uuid not null,
+   observed_at timestamptz not null default now(),
+   status text not null default 'observed' check(status in ('observed','queued','processing','complete')),
+   attempts integer not null default 0,
+   next_attempt_at timestamptz not null default now(),
+   lease_id uuid,
+   lease_until timestamptz,
+   completed_at timestamptz
+  );
+  comment on table private.profile_photo_cleanup_jobs is 'resbite 20261117130000';
+ end if;
+end $migration$;
+create index if not exists profile_photo_retired_user_idx on private.profile_photo_retired_paths(user_id);
+create index if not exists profile_photo_cleanup_due_idx on private.profile_photo_cleanup_jobs(next_attempt_at,observed_at) where status<>'complete';
+create index if not exists profile_photo_cleanup_user_idx on private.profile_photo_cleanup_jobs(user_id);
+alter table private.profile_photo_retired_paths enable row level security;
+alter table private.profile_photo_cleanup_jobs enable row level security;
+revoke all on private.profile_photo_retired_paths, private.profile_photo_cleanup_jobs from public, anon, authenticated, service_role;
+
+-- The photo write guard. Its base is plan 2's where plan 2 made it, else the September body. In the local replay it is
+-- the September body (20260923152816:32-54), which already holds the retired-path lines (:48-51): it stays as it is.
+-- On hosted it is plan 2's interim body (20261117110000_account_deletion_release.sql:401-407), which lacks them: it
+-- gets them, after its own lines, for every profile-photos write, signed in or not, and keeps plan 2's marker (create
+-- or replace keeps a comment), so this file's rollback restores plan 2's body and plan 2's rollback then drops it.
+-- Where neither file made it, this file makes the same body, with its own marker. The trigger
+-- resbite_photo_write_guard is made only where absent.
+do $migration$
+declare v_src text := (select p.prosrc from pg_catalog.pg_proc p where p.oid = pg_catalog.to_regprocedure('private.guard_photo_write()'));
+begin
+ if coalesce(v_src, '') not like '%Photo path retired; choose a new photo%' then
+  create or replace function private.guard_photo_write() returns trigger language plpgsql security definer set search_path='' as $fn$
+  begin
+   if new.bucket_id='profile-photos' and auth.uid() is not null then
+    perform private.require_tester();
+   end if;
+   if new.bucket_id='profile-photos' then
+    if exists(select 1 from private.profile_photo_retired_paths where path_hash=extensions.digest(new.name,'sha256')) then
+     raise exception 'Photo path retired; choose a new photo' using errcode='42501';
+    end if;
+    delete from private.profile_photo_cleanup_jobs where path_hash=extensions.digest(new.name,'sha256') and status='observed';
+   end if;
+   return new;
+  end $fn$;
+  if v_src is null then
+   comment on function private.guard_photo_write() is 'resbite 20261117130000';
+  end if;
+ end if;
+ if not exists(select 1 from pg_catalog.pg_trigger where tgrelid='storage.objects'::regclass and tgname='resbite_photo_write_guard') then
+  create trigger resbite_photo_write_guard before insert or update on storage.objects for each row execute function private.guard_photo_write();
+  comment on trigger resbite_photo_write_guard on storage.objects is 'resbite 20261117130000';
+ end if;
+end $migration$;
+revoke all on function private.guard_photo_write() from public, anon, authenticated, service_role;
+
+-- The photo reference guard and its trigger: 20260923152816:58-71, verbatim.
+create or replace function private.guard_profile_photo_reference() returns trigger language plpgsql security definer set search_path='' as $$
+begin
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(new.id::text,47));
+ if new.avatar_path is not null and exists(select 1 from private.profile_photo_retired_paths where path_hash=extensions.digest(new.avatar_path,'sha256')) then
+  raise exception 'Photo path retired; choose a new photo' using errcode='42501';
+ end if;
+ -- Attaching and detaching both restart the full seven-day observation window.
+ delete from private.profile_photo_cleanup_jobs where status='observed' and (
+  path_hash=extensions.digest(new.avatar_path,'sha256') or
+  (tg_op='UPDATE' and path_hash=extensions.digest(old.avatar_path,'sha256')));
+ return new;
+end $$;
+revoke all on function private.guard_profile_photo_reference() from public, anon, authenticated, service_role;
+drop trigger if exists resbite_profile_photo_reference_guard on public.profiles;
+create trigger resbite_profile_photo_reference_guard before insert or update of avatar_path on public.profiles for each row execute function private.guard_profile_photo_reference();
+
+-- The photo claim: 20260923152816:81-131, with one change: a held account's photos are neither observed (discovery) nor
+-- claimed (the candidate loop), so an observed job of a held account stays as it is until the hold is lifted.
+create or replace function private.claim_orphan_profile_photos(p_limit integer default 5) returns jsonb language plpgsql security definer set search_path='' as $$
+declare v_object record; v_candidate record; v_job private.profile_photo_cleanup_jobs; v_result jsonb:='[]'::jsonb;
+begin
+ -- Bounded discovery. Existing objects get a full observation period after first
+ -- discovery; creation timestamps alone do not establish when a photo detached.
+ for v_object in
+  select o.id,o.name,u.id user_id from storage.objects o
+  join auth.users u on split_part(o.name,'/',1)=u.id::text
+  where o.bucket_id='profile-photos' and length(o.name)<=1024 and position('..' in o.name)=0
+   and not exists(select 1 from public.profiles p where p.avatar_path=o.name)
+   and not exists(select 1 from private.account_deletion_jobs d where d.user_id=u.id)
+   and not private.account_held(u.id)
+   and not exists(select 1 from private.profile_photo_retired_paths r where r.path_hash=extensions.digest(o.name,'sha256'))
+   and not exists(select 1 from private.profile_photo_cleanup_jobs j where j.path_hash=extensions.digest(o.name,'sha256'))
+  order by u.id,o.name limit 100
+ loop
+  if not pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended(v_object.user_id::text,47)) then continue; end if;
+  -- Re-read after acquiring the shared account lock: attachment/upload may have
+  -- committed while discovery was scanning its older snapshot.
+  if not exists(select 1 from storage.objects where bucket_id='profile-photos' and name=v_object.name and id=v_object.id)
+   or exists(select 1 from public.profiles where avatar_path=v_object.name)
+   or exists(select 1 from private.account_deletion_jobs where user_id=v_object.user_id) then continue; end if;
+  insert into private.profile_photo_cleanup_jobs(path_hash,user_id,path,object_id)
+   values(extensions.digest(v_object.name,'sha256'),v_object.user_id,v_object.name,v_object.id) on conflict do nothing;
+ end loop;
+ for v_candidate in
+  select job_id,user_id from private.profile_photo_cleanup_jobs
+  where status<>'complete' and next_attempt_at<=now() and (lease_until is null or lease_until<=now())
+   and (status<>'observed' or observed_at<=now()-interval '7 days')
+   and not private.account_held(user_id)
+  order by user_id,path limit 100
+ loop
+  exit when jsonb_array_length(v_result)>=greatest(1,least(coalesce(p_limit,5),20));
+  if not pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended(v_candidate.user_id::text,47)) then continue; end if;
+  select * into v_job from private.profile_photo_cleanup_jobs where job_id=v_candidate.job_id for update skip locked;
+  if not found or v_job.status='complete' or v_job.next_attempt_at>now() or v_job.lease_until>now() then continue; end if;
+  if v_job.status='observed' then
+   if v_job.observed_at>now()-interval '7 days' then continue; end if;
+   if not exists(select 1 from auth.users where id=v_job.user_id)
+    or exists(select 1 from private.account_deletion_jobs where user_id=v_job.user_id)
+    or exists(select 1 from public.profiles where avatar_path=v_job.path)
+    or not exists(select 1 from storage.objects where bucket_id='profile-photos' and name=v_job.path and id=v_job.object_id) then
+    delete from private.profile_photo_cleanup_jobs where job_id=v_job.job_id; continue;
+   end if;
+   -- This barrier is irreversible while the Auth namespace exists, independent
+   -- of leases. A paused old HTTP request can only remove this retired path.
+   insert into private.profile_photo_retired_paths(path_hash,user_id) values(v_job.path_hash,v_job.user_id) on conflict do nothing;
+  end if;
+  update private.profile_photo_cleanup_jobs set status='processing',lease_id=gen_random_uuid(),lease_until=now()+interval '5 minutes',attempts=attempts+1 where job_id=v_job.job_id returning * into v_job;
+  v_result:=v_result||jsonb_build_array(jsonb_build_object('jobId',v_job.job_id,'userId',v_job.user_id,'leaseId',v_job.lease_id,'attempts',v_job.attempts));
+ end loop;
+ return v_result;
+end $$;
+
+-- The photo prepare: 20260923152816:133-146, with one line added after the 'account-deletion' check: a held account's
+-- photo answers held, and the worker keeps the file (a hold set after the claim).
+create or replace function private.prepare_orphan_profile_photo(p_job uuid,p_lease uuid) returns jsonb language plpgsql security definer set search_path='' as $$
+declare v_job private.profile_photo_cleanup_jobs;
+begin
+ select * into v_job from private.profile_photo_cleanup_jobs where job_id=p_job;
+ if not found then raise exception 'Photo lease expired' using errcode='42501'; end if;
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_job.user_id::text,47));
+ select * into v_job from private.profile_photo_cleanup_jobs where job_id=p_job for update;
+ if not found or v_job.status<>'processing' or v_job.lease_id is distinct from p_lease or v_job.lease_until<=now() then raise exception 'Photo lease expired' using errcode='42501'; end if;
+ if not exists(select 1 from private.profile_photo_retired_paths where path_hash=v_job.path_hash)
+  or exists(select 1 from public.profiles where avatar_path=v_job.path) then raise exception 'Photo is not retired' using errcode='42501'; end if;
+ if not exists(select 1 from storage.objects where bucket_id='profile-photos' and name=v_job.path) then return jsonb_build_object('action','absent'); end if;
+ if exists(select 1 from private.account_deletion_jobs where user_id=v_job.user_id) then return jsonb_build_object('action','account-deletion'); end if;
+ if private.account_held(v_job.user_id) then return jsonb_build_object('action','held'); end if;
+ return jsonb_build_object('action','delete','path',v_job.path);
+end $$;
+
+-- The photo finish and prune: 20260923152816:148-160 and :165-187, verbatim.
+create or replace function private.finish_orphan_profile_photo(p_job uuid,p_lease uuid,p_complete boolean) returns boolean language plpgsql security definer set search_path='' as $$
+declare v_job private.profile_photo_cleanup_jobs;
+begin
+ select * into v_job from private.profile_photo_cleanup_jobs where job_id=p_job for update;
+ if not found or v_job.status<>'processing' or v_job.lease_id is distinct from p_lease or v_job.lease_until<=now() then return false; end if;
+ if p_complete then
+  if exists(select 1 from storage.objects where bucket_id='profile-photos' and name=v_job.path) then raise exception 'Photo cleanup still pending' using errcode='22023'; end if;
+  update private.profile_photo_cleanup_jobs set status='complete',completed_at=now(),lease_id=null,lease_until=null where job_id=p_job;
+ else
+  update private.profile_photo_cleanup_jobs set status='queued',next_attempt_at=now()+make_interval(secs=>least(3600,30*power(2,least(attempts,7))::integer)),lease_id=null,lease_until=null where job_id=p_job;
+ end if;
+ return true;
+end $$;
+
+-- Proposed policy: detailed successful receipts last 30 days. The path hash
+-- remains while its Auth namespace exists. It can be purged only after verified
+-- account deletion, absent Auth/profile AND absent entire Storage prefix.
+create or replace function private.prune_profile_photo_cleanup() returns integer language plpgsql security definer set search_path='' as $$
+declare v_user uuid; v_count integer;
+begin
+ delete from private.profile_photo_cleanup_jobs where job_id in (
+  select job_id from private.profile_photo_cleanup_jobs where status='complete' and completed_at<now()-interval '30 days' order by completed_at limit 100);
+ get diagnostics v_count=row_count;
+ for v_user in select distinct r.user_id from (
+  select user_id from private.profile_photo_retired_paths union select user_id from private.profile_photo_cleanup_jobs
+ ) r
+  join private.account_deletion_jobs d on d.user_id=r.user_id and d.status='complete'
+  where not exists(select 1 from auth.users u where u.id=r.user_id)
+  and not exists(select 1 from public.profiles p where p.id=r.user_id)
+  and not exists(select 1 from storage.objects o where o.bucket_id='profile-photos' and o.name like r.user_id::text||'/%')
+  order by r.user_id limit 100
+ loop
+  if not pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended(v_user::text,47)) then continue; end if;
+  if exists(select 1 from auth.users where id=v_user) or exists(select 1 from public.profiles where id=v_user)
+   or exists(select 1 from storage.objects where bucket_id='profile-photos' and name like v_user::text||'/%') then continue; end if;
+  delete from private.profile_photo_cleanup_jobs where user_id=v_user;
+  delete from private.profile_photo_retired_paths where user_id=v_user;
+ end loop;
+ return v_count;
+end $$;
+
+-- The photo worker's public wrappers and grants: 20260923152816:189-194, with service_role in the revoke first (the
+-- wrappers are new on hosted, and come with Supabase's default grants there).
+create or replace function public.claim_orphan_profile_photos(p_limit integer default 5) returns jsonb language sql security invoker set search_path='' as $$ select private.claim_orphan_profile_photos(p_limit) $$;
+create or replace function public.prepare_orphan_profile_photo(p_job uuid,p_lease uuid) returns jsonb language sql security invoker set search_path='' as $$ select private.prepare_orphan_profile_photo(p_job,p_lease) $$;
+create or replace function public.finish_orphan_profile_photo(p_job uuid,p_lease uuid,p_complete boolean) returns boolean language sql security invoker set search_path='' as $$ select private.finish_orphan_profile_photo(p_job,p_lease,p_complete) $$;
+create or replace function public.prune_profile_photo_cleanup() returns integer language sql security invoker set search_path='' as $$ select private.prune_profile_photo_cleanup() $$;
+revoke all on function private.claim_orphan_profile_photos(integer), public.claim_orphan_profile_photos(integer),
+ private.prepare_orphan_profile_photo(uuid,uuid), public.prepare_orphan_profile_photo(uuid,uuid),
+ private.finish_orphan_profile_photo(uuid,uuid,boolean), public.finish_orphan_profile_photo(uuid,uuid,boolean),
+ private.prune_profile_photo_cleanup(), public.prune_profile_photo_cleanup() from public, anon, authenticated, service_role;
+grant execute on function private.claim_orphan_profile_photos(integer), public.claim_orphan_profile_photos(integer),
+ private.prepare_orphan_profile_photo(uuid,uuid), public.prepare_orphan_profile_photo(uuid,uuid),
+ private.finish_orphan_profile_photo(uuid,uuid,boolean), public.finish_orphan_profile_photo(uuid,uuid,boolean),
+ private.prune_profile_photo_cleanup(), public.prune_profile_photo_cleanup() to service_role;
+
+-- The carried photo objects carry this file's marker where it made them: where it made the photo tables above (on
+-- hosted), it made every function and the trigger that came with them; in the local replay the September file did. The
+-- write guard is never this file's: plan 2's file, or the September one, made it.
+do $migration$ begin
+ if pg_catalog.obj_description('private.profile_photo_cleanup_jobs'::regclass,'pg_class') is not distinct from 'resbite 20261117130000' then
+  comment on function private.guard_profile_photo_reference() is 'resbite 20261117130000';
+  comment on trigger resbite_profile_photo_reference_guard on public.profiles is 'resbite 20261117130000';
+  comment on function private.claim_orphan_profile_photos(integer) is 'resbite 20261117130000';
+  comment on function private.prepare_orphan_profile_photo(uuid,uuid) is 'resbite 20261117130000';
+  comment on function private.finish_orphan_profile_photo(uuid,uuid,boolean) is 'resbite 20261117130000';
+  comment on function private.prune_profile_photo_cleanup() is 'resbite 20261117130000';
+  comment on function public.claim_orphan_profile_photos(integer) is 'resbite 20261117130000';
+  comment on function public.prepare_orphan_profile_photo(uuid,uuid) is 'resbite 20261117130000';
+  comment on function public.finish_orphan_profile_photo(uuid,uuid,boolean) is 'resbite 20261117130000';
+  comment on function public.prune_profile_photo_cleanup() is 'resbite 20261117130000';
+ end if;
+end $migration$;
+
+-- Take a profile photo down now (supabase/ops/remove-profile-photo.sql, Decision 9). Under the account's lock: when
+-- p_path is in the account's folder, no profile has it as its photo, the file is there and the account is not held, it
+-- retires the path and queues its job for the worker's next run (within 10 minutes), and answers true; a job already
+-- there is queued again, unless it is complete. Otherwise it answers false, and changes nothing. Under a hold the file
+-- is kept ("hide and preserve", docs/compliance/law-enforcement-requests.md section 11.3). The database's own: no grant.
+create function private.retire_profile_photo_now(p_user uuid, p_path text) returns boolean
+language plpgsql security definer set search_path = '' as $$
+declare v_object uuid;
+begin
+ if p_user is null or p_path is null then
+  return false;
+ end if;
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(p_user::text,47));
+ if not pg_catalog.starts_with(p_path, p_user::text || '/') or pg_catalog.length(p_path) > 1024 or pg_catalog.strpos(p_path, '..') > 0
+  or exists (select 1 from public.profiles p where p.avatar_path = p_path) or private.account_held(p_user) then
+  return false;
+ end if;
+ select o.id into v_object from storage.objects o where o.bucket_id = 'profile-photos' and o.name = p_path;
+ if v_object is null then
+  return false;
+ end if;
+ insert into private.profile_photo_retired_paths(path_hash, user_id) values (extensions.digest(p_path,'sha256'), p_user)
+  on conflict do nothing;
+ insert into private.profile_photo_cleanup_jobs(path_hash, user_id, path, object_id, status, next_attempt_at)
+  values (extensions.digest(p_path,'sha256'), p_user, p_path, v_object, 'queued', now())
+  on conflict (path_hash) do update set status = 'queued', next_attempt_at = now(), object_id = excluded.object_id,
+   lease_id = null, lease_until = null
+  where private.profile_photo_cleanup_jobs.status <> 'complete';
+ return found;
+end $$;
+revoke all on function private.retire_profile_photo_now(uuid, text) from public, anon, authenticated, service_role;
+comment on function private.retire_profile_photo_now(uuid, text) is 'resbite 20261117130000';
+
+-- Remove an account's profile photo (supabase/ops/remove-profile-photo.sql). Under the account's lock it takes the
+-- photo off the profile at once, so nobody else sees it, then retires and queues the file (retire_profile_photo_now).
+-- It answers {"detached", "queued", "held"}: held is true while a hold names the account, when the file is kept. An
+-- account with no photo, or no profile, answers detached false. The database's own: no grant.
+create function private.remove_profile_photo(p_user uuid) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare v_path text;
+begin
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(p_user::text,47));
+ select p.avatar_path into v_path from public.profiles p where p.id = p_user for update;
+ if v_path is not null then
+  update public.profiles set avatar_path = null where id = p_user;
+ end if;
+ return pg_catalog.jsonb_build_object('detached', v_path is not null,
+  'queued', v_path is not null and private.retire_profile_photo_now(p_user, v_path), 'held', private.account_held(p_user));
+end $$;
+revoke all on function private.remove_profile_photo(uuid) from public, anon, authenticated, service_role;
+comment on function private.remove_profile_photo(uuid) is 'resbite 20261117130000';
+
+-- Covers (Decision 8): a cover no plan names any more (a photo replaced or removed, or a series gone) is cleaned by the
+-- photo worker, cleanup-profile-photos, after the photos, with the photo protocol over bucket 'plan-covers': observed,
+-- 7 days, retired (its path fenced), deleted by HTTP, confirmed. A cover's path is <owner id>/<plan id>/<name>.jpg
+-- (20261007200000_plan_covers.sql:44); the owner folder's account lock (seed 47) orders each step with an attach.
+-- New on hosted and locally. Closed to every API role.
+create table private.plan_cover_retired_paths (
+ path_hash bytea primary key,
+ owner_id uuid not null
+);
+create index plan_cover_retired_owner_idx on private.plan_cover_retired_paths(owner_id);
+create table private.plan_cover_cleanup_jobs (
+ job_id uuid primary key default gen_random_uuid(),
+ path_hash bytea not null unique,
+ owner_id uuid not null,
+ path text not null,
+ object_id uuid not null,
+ observed_at timestamptz not null default now(),
+ status text not null default 'observed' check(status in ('observed','queued','processing','complete')),
+ attempts integer not null default 0,
+ next_attempt_at timestamptz not null default now(),
+ lease_id uuid,
+ lease_until timestamptz,
+ completed_at timestamptz
+);
+create index plan_cover_cleanup_due_idx on private.plan_cover_cleanup_jobs(next_attempt_at,observed_at) where status<>'complete';
+create index plan_cover_cleanup_owner_idx on private.plan_cover_cleanup_jobs(owner_id);
+alter table private.plan_cover_retired_paths enable row level security;
+alter table private.plan_cover_cleanup_jobs enable row level security;
+revoke all on private.plan_cover_retired_paths, private.plan_cover_cleanup_jobs from public, anon, authenticated, service_role;
+comment on table private.plan_cover_retired_paths is 'resbite 20261117130000';
+comment on table private.plan_cover_cleanup_jobs is 'resbite 20261117130000';
+
+-- The cover reference guard, the photo reference guard's twin on public.plans. A cover being attached (insert, or a
+-- cover_path written) takes the lock of its path's first segment, the owner folder's account, is refused while retired
+-- (42501 'Cover retired; choose a new photo'), and restarts its observation; on update the old path's too, so attaching
+-- and detaching both restart the 7 days. BEFORE triggers fire in name order: after plans_redact_deleting_owner (a
+-- deleting owner's cover reads null here) and before plans_track_cover_revision.
+create function private.guard_plan_cover_reference() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+ if new.cover_path is not null then
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(pg_catalog.split_part(new.cover_path,'/',1),47));
+  if exists (select 1 from private.plan_cover_retired_paths r where r.path_hash = extensions.digest(new.cover_path,'sha256')) then
+   raise exception 'Cover retired; choose a new photo' using errcode = '42501';
+  end if;
+ end if;
+ delete from private.plan_cover_cleanup_jobs j where j.status = 'observed' and (
+  j.path_hash = extensions.digest(new.cover_path,'sha256') or
+  (tg_op = 'UPDATE' and j.path_hash = extensions.digest(old.cover_path,'sha256')));
+ return new;
+end $$;
+revoke all on function private.guard_plan_cover_reference() from public, anon, authenticated, service_role;
+comment on function private.guard_plan_cover_reference() is 'resbite 20261117130000';
+create trigger plans_retired_cover_guard before insert or update of cover_path on public.plans
+ for each row execute function private.guard_plan_cover_reference();
+comment on trigger plans_retired_cover_guard on public.plans is 'resbite 20261117130000';
+
+-- The cover claim: the photo claim's protocol (above) over bucket 'plan-covers'. Discovery observes a file whose name
+-- is a cover's, <owner id>/<plan id>/<name>.jpg, that no plan names as its cover, whose owner folder's account has no
+-- deletion job (the account cleanup takes those files) and is not held, and, while the plan its second segment names
+-- exists, whose series is not under hold. A job waits 7 days observed (a queued one goes at once), is then retired and
+-- leased; the holds keep a job as it is. It answers [{"jobId", "userId" (the owner folder's id), "leaseId",
+-- "attempts"}]. service_role's, through its public wrapper.
+create function private.claim_orphan_plan_covers(p_limit integer default 5) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare v_object record; v_candidate record; v_job private.plan_cover_cleanup_jobs; v_result jsonb := '[]'::jsonb;
+begin
+ for v_object in
+  select o.id, o.name, u.id as owner_id from storage.objects o
+  join auth.users u on pg_catalog.split_part(o.name,'/',1) = u.id::text
+  where o.bucket_id = 'plan-covers' and o.name ~ '^[0-9a-f-]{36}/[0-9a-f-]{36}/[A-Za-z0-9-]+\.jpg$'
+   and not exists (select 1 from public.plans p where p.cover_path = o.name)
+   and not exists (select 1 from private.account_deletion_jobs d where d.user_id = u.id)
+   and not private.account_held(u.id)
+   and not exists (select 1 from public.plans p where p.id::text = pg_catalog.split_part(o.name,'/',2)
+    and private.series_under_hold(p.series_id))
+   and not exists (select 1 from private.plan_cover_retired_paths r where r.path_hash = extensions.digest(o.name,'sha256'))
+   and not exists (select 1 from private.plan_cover_cleanup_jobs j where j.path_hash = extensions.digest(o.name,'sha256'))
+  order by u.id, o.name limit 100
+ loop
+  continue when not pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended(v_object.owner_id::text,47));
+  -- Read again under the lock: an attach or an upload may have committed since discovery's snapshot.
+  continue when not exists (select 1 from storage.objects o where o.bucket_id = 'plan-covers' and o.name = v_object.name and o.id = v_object.id)
+   or exists (select 1 from public.plans p where p.cover_path = v_object.name)
+   or exists (select 1 from private.account_deletion_jobs d where d.user_id = v_object.owner_id);
+  insert into private.plan_cover_cleanup_jobs(path_hash, owner_id, path, object_id)
+   values (extensions.digest(v_object.name,'sha256'), v_object.owner_id, v_object.name, v_object.id) on conflict do nothing;
+ end loop;
+ for v_candidate in
+  select j.job_id, j.owner_id from private.plan_cover_cleanup_jobs j
+  where j.status <> 'complete' and j.next_attempt_at <= now() and (j.lease_until is null or j.lease_until <= now())
+   and (j.status <> 'observed' or j.observed_at <= now() - interval '7 days')
+   and not private.account_held(j.owner_id)
+   and not exists (select 1 from public.plans p where p.id::text = pg_catalog.split_part(j.path,'/',2)
+    and private.series_under_hold(p.series_id))
+  order by j.owner_id, j.path limit 100
+ loop
+  exit when pg_catalog.jsonb_array_length(v_result) >= greatest(1, least(coalesce(p_limit,5), 20));
+  continue when not pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended(v_candidate.owner_id::text,47));
+  select * into v_job from private.plan_cover_cleanup_jobs j where j.job_id = v_candidate.job_id for update skip locked;
+  continue when not found or v_job.status = 'complete' or v_job.next_attempt_at > now() or v_job.lease_until > now();
+  if v_job.status = 'observed' then
+   continue when v_job.observed_at > now() - interval '7 days';
+   if not exists (select 1 from auth.users u where u.id = v_job.owner_id)
+    or exists (select 1 from private.account_deletion_jobs d where d.user_id = v_job.owner_id)
+    or exists (select 1 from public.plans p where p.cover_path = v_job.path)
+    or not exists (select 1 from storage.objects o where o.bucket_id = 'plan-covers' and o.name = v_job.path and o.id = v_job.object_id) then
+    delete from private.plan_cover_cleanup_jobs j where j.job_id = v_job.job_id;
+    continue;
+   end if;
+   -- The fence stays while the owner's Auth account does: a paused old HTTP request can only remove this retired path.
+   insert into private.plan_cover_retired_paths(path_hash, owner_id) values (v_job.path_hash, v_job.owner_id) on conflict do nothing;
+  end if;
+  update private.plan_cover_cleanup_jobs j set status = 'processing', lease_id = gen_random_uuid(),
+   lease_until = now() + interval '5 minutes', attempts = j.attempts + 1
+  where j.job_id = v_job.job_id returning * into v_job;
+  v_result := v_result || pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object('jobId', v_job.job_id,
+   'userId', v_job.owner_id, 'leaseId', v_job.lease_id, 'attempts', v_job.attempts));
+ end loop;
+ return v_result;
+end $$;
+
+-- The cover prepare, the photo prepare's twin: under the owner's lock, a live lease on a retired cover no plan names
+-- answers absent (Storage already removed it), account-deletion (the account cleanup takes it), held (a hold names
+-- the owner, or the series of the plan the path's second segment names: the worker keeps the file), or
+-- {"action":"delete","path":…}.
+create function private.prepare_orphan_plan_cover(p_job uuid, p_lease uuid) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare v_job private.plan_cover_cleanup_jobs;
+begin
+ select * into v_job from private.plan_cover_cleanup_jobs j where j.job_id = p_job;
+ if not found then raise exception 'Cover lease expired' using errcode = '42501'; end if;
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_job.owner_id::text,47));
+ select * into v_job from private.plan_cover_cleanup_jobs j where j.job_id = p_job for update;
+ if not found or v_job.status <> 'processing' or v_job.lease_id is distinct from p_lease or v_job.lease_until <= now() then
+  raise exception 'Cover lease expired' using errcode = '42501';
+ end if;
+ if not exists (select 1 from private.plan_cover_retired_paths r where r.path_hash = v_job.path_hash)
+  or exists (select 1 from public.plans p where p.cover_path = v_job.path) then
+  raise exception 'Cover is not retired' using errcode = '42501';
+ end if;
+ if not exists (select 1 from storage.objects o where o.bucket_id = 'plan-covers' and o.name = v_job.path) then
+  return pg_catalog.jsonb_build_object('action','absent');
+ end if;
+ if exists (select 1 from private.account_deletion_jobs d where d.user_id = v_job.owner_id) then
+  return pg_catalog.jsonb_build_object('action','account-deletion');
+ end if;
+ if private.account_held(v_job.owner_id) or exists (select 1 from public.plans p
+   where p.id::text = pg_catalog.split_part(v_job.path,'/',2) and private.series_under_hold(p.series_id)) then
+  return pg_catalog.jsonb_build_object('action','held');
+ end if;
+ return pg_catalog.jsonb_build_object('action','delete','path',v_job.path);
+end $$;
+
+-- The cover finish, the photo finish's twin: true once Storage no longer has the file (22023 while it does), or the
+-- job queued again with the same backoff; false for a lease that is not live.
+create function private.finish_orphan_plan_cover(p_job uuid, p_lease uuid, p_complete boolean) returns boolean
+language plpgsql security definer set search_path = '' as $$
+declare v_job private.plan_cover_cleanup_jobs;
+begin
+ select * into v_job from private.plan_cover_cleanup_jobs j where j.job_id = p_job for update;
+ if not found or v_job.status <> 'processing' or v_job.lease_id is distinct from p_lease or v_job.lease_until <= now() then
+  return false;
+ end if;
+ if p_complete then
+  if exists (select 1 from storage.objects o where o.bucket_id = 'plan-covers' and o.name = v_job.path) then
+   raise exception 'Cover cleanup still pending' using errcode = '22023';
+  end if;
+  update private.plan_cover_cleanup_jobs j set status = 'complete', completed_at = now(), lease_id = null, lease_until = null
+  where j.job_id = p_job;
+ else
+  update private.plan_cover_cleanup_jobs j set status = 'queued',
+   next_attempt_at = now() + pg_catalog.make_interval(secs => least(3600, 30 * pg_catalog.power(2, least(j.attempts,7))::integer)),
+   lease_id = null, lease_until = null
+  where j.job_id = p_job;
+ end if;
+ return true;
+end $$;
+
+-- The cover prune, the photo prune's twin: a completed job goes 30 days after completion (at most 100 a run), and an
+-- owner's fences and jobs go once the owner's Auth user, profile and every file under the owner's folder are gone
+-- (nobody can then upload or attach in that folder). It needs no completed deletion receipt, as the photo prune does:
+-- plan 2's receipt purge waits on photo fences, not on cover fences, so a receipt may be gone before a cover fence. It
+-- answers how many completed jobs went.
+create function private.prune_plan_cover_cleanup() returns integer
+language plpgsql security definer set search_path = '' as $$
+declare v_owner uuid; v_count integer;
+begin
+ delete from private.plan_cover_cleanup_jobs j where j.job_id in (
+  select c.job_id from private.plan_cover_cleanup_jobs c where c.status = 'complete' and c.completed_at < now() - interval '30 days'
+  order by c.completed_at limit 100);
+ get diagnostics v_count = row_count;
+ for v_owner in select distinct r.owner_id from (
+  select f.owner_id from private.plan_cover_retired_paths f union select c.owner_id from private.plan_cover_cleanup_jobs c
+ ) r
+  where not exists (select 1 from auth.users u where u.id = r.owner_id)
+   and not exists (select 1 from public.profiles p where p.id = r.owner_id)
+   and not exists (select 1 from storage.objects o where o.bucket_id = 'plan-covers' and o.name like r.owner_id::text || '/%')
+  order by r.owner_id limit 100
+ loop
+  continue when not pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended(v_owner::text,47));
+  continue when exists (select 1 from auth.users u where u.id = v_owner) or exists (select 1 from public.profiles p where p.id = v_owner)
+   or exists (select 1 from storage.objects o where o.bucket_id = 'plan-covers' and o.name like v_owner::text || '/%');
+  delete from private.plan_cover_cleanup_jobs c where c.owner_id = v_owner;
+  delete from private.plan_cover_retired_paths f where f.owner_id = v_owner;
+ end loop;
+ return v_count;
+end $$;
+
+-- The cover worker's public wrappers (security invoker), service_role's alone, as the photo ones are.
+create function public.claim_orphan_plan_covers(p_limit integer default 5) returns jsonb language sql security invoker set search_path = '' as $$
+ select private.claim_orphan_plan_covers(p_limit) $$;
+create function public.prepare_orphan_plan_cover(p_job uuid, p_lease uuid) returns jsonb language sql security invoker set search_path = '' as $$
+ select private.prepare_orphan_plan_cover(p_job, p_lease) $$;
+create function public.finish_orphan_plan_cover(p_job uuid, p_lease uuid, p_complete boolean) returns boolean language sql security invoker set search_path = '' as $$
+ select private.finish_orphan_plan_cover(p_job, p_lease, p_complete) $$;
+create function public.prune_plan_cover_cleanup() returns integer language sql security invoker set search_path = '' as $$
+ select private.prune_plan_cover_cleanup() $$;
+revoke all on function private.claim_orphan_plan_covers(integer), public.claim_orphan_plan_covers(integer),
+ private.prepare_orphan_plan_cover(uuid,uuid), public.prepare_orphan_plan_cover(uuid,uuid),
+ private.finish_orphan_plan_cover(uuid,uuid,boolean), public.finish_orphan_plan_cover(uuid,uuid,boolean),
+ private.prune_plan_cover_cleanup(), public.prune_plan_cover_cleanup() from public, anon, authenticated, service_role;
+grant execute on function private.claim_orphan_plan_covers(integer), public.claim_orphan_plan_covers(integer),
+ private.prepare_orphan_plan_cover(uuid,uuid), public.prepare_orphan_plan_cover(uuid,uuid),
+ private.finish_orphan_plan_cover(uuid,uuid,boolean), public.finish_orphan_plan_cover(uuid,uuid,boolean),
+ private.prune_plan_cover_cleanup(), public.prune_plan_cover_cleanup() to service_role;
+comment on function private.claim_orphan_plan_covers(integer) is 'resbite 20261117130000';
+comment on function public.claim_orphan_plan_covers(integer) is 'resbite 20261117130000';
+comment on function private.prepare_orphan_plan_cover(uuid,uuid) is 'resbite 20261117130000';
+comment on function public.prepare_orphan_plan_cover(uuid,uuid) is 'resbite 20261117130000';
+comment on function private.finish_orphan_plan_cover(uuid,uuid,boolean) is 'resbite 20261117130000';
+comment on function public.finish_orphan_plan_cover(uuid,uuid,boolean) is 'resbite 20261117130000';
+comment on function private.prune_plan_cover_cleanup() is 'resbite 20261117130000';
+comment on function public.prune_plan_cover_cleanup() is 'resbite 20261117130000';
+
+-- Take a cover down now, retire_profile_photo_now's twin for a cover no plan names. Under the owner folder's lock: when
+-- p_path is a cover's, no plan names it, the file is there, the owner folder's account exists and is not held, and,
+-- while the plan its second segment names exists, its series is not under hold, it retires the path and queues its job
+-- for the worker's next run, and answers true; a job already there is queued again, unless it is complete. Otherwise
+-- it answers false, and changes nothing. The database's own: no grant.
+create function private.retire_plan_cover_now(p_path text) returns boolean
+language plpgsql security definer set search_path = '' as $$
+declare v_owner uuid; v_object uuid;
+begin
+ if p_path is null or p_path !~ '^[0-9a-f-]{36}/[0-9a-f-]{36}/[A-Za-z0-9-]+\.jpg$' then
+  return false;
+ end if;
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(pg_catalog.split_part(p_path,'/',1),47));
+ select u.id into v_owner from auth.users u where u.id::text = pg_catalog.split_part(p_path,'/',1);
+ select o.id into v_object from storage.objects o where o.bucket_id = 'plan-covers' and o.name = p_path;
+ if v_owner is null or v_object is null or private.account_held(v_owner)
+  or exists (select 1 from public.plans p where p.cover_path = p_path)
+  or exists (select 1 from public.plans p where p.id::text = pg_catalog.split_part(p_path,'/',2) and private.series_under_hold(p.series_id)) then
+  return false;
+ end if;
+ insert into private.plan_cover_retired_paths(path_hash, owner_id) values (extensions.digest(p_path,'sha256'), v_owner)
+  on conflict do nothing;
+ insert into private.plan_cover_cleanup_jobs(path_hash, owner_id, path, object_id, status, next_attempt_at)
+  values (extensions.digest(p_path,'sha256'), v_owner, p_path, v_object, 'queued', now())
+  on conflict (path_hash) do update set status = 'queued', next_attempt_at = now(), object_id = excluded.object_id,
+   lease_id = null, lease_until = null
+  where private.plan_cover_cleanup_jobs.status <> 'complete';
+ return found;
+end $$;
+revoke all on function private.retire_plan_cover_now(text) from public, anon, authenticated, service_role;
+comment on function private.retire_plan_cover_now(text) is 'resbite 20261117130000';
+
+-- Take a resbite's words or cover down (supabase/ops/remove-resbite-content.sql, Decision 9, D-21). It takes the lock
+-- of each account that owns an occurrence of p_plan's series, in id order, then every occurrence's row (for update, in
+-- id order), as an owner's cover change and the account deletion take them (account, then plan). Then, on each
+-- occurrence, what is asked: p_title, the title reads 'Resbite'; p_description, no description; p_notes, no note, no
+-- guest note and no meeting details; p_cover, no cover and no cover description; and one version on, where it changed
+-- anything. Each distinct cover it took off is retired and queued at once (retire_plan_cover_now), so the file goes at
+-- the worker's next run, unless the series is under hold, when the file is kept ("hide and preserve",
+-- law-enforcement-requests.md section 11.3). It writes no chat line (plans_chat_lines writes none for these columns)
+-- and sends no notice. It answers {"occurrences" (changed), "covers_queued", "held"}. An unknown resbite is refused
+-- (P0002 'Resbite not found'). The database's own: no grant.
+create function private.remove_resbite_content(p_plan uuid, p_title boolean, p_description boolean, p_notes boolean,
+ p_cover boolean) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+ v_series uuid;
+ v_owner uuid;
+ v_plan public.plans;
+ v_paths text[] := '{}';
+ v_path text;
+ v_count integer := 0;
+ v_queued integer := 0;
+ v_held boolean;
+begin
+ select p.series_id into v_series from public.plans p where p.id = p_plan;
+ if v_series is null then
+  raise exception 'Resbite not found' using errcode = 'P0002';
+ end if;
+ for v_owner in select distinct p.owner_id from public.plans p where p.series_id = v_series and p.owner_id is not null
+  order by p.owner_id loop
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_owner::text,47));
+ end loop;
+ for v_plan in select * from public.plans p where p.series_id = v_series order by p.id for update loop
+  continue when not ((coalesce(p_title,false) and v_plan.title <> 'Resbite')
+   or (coalesce(p_description,false) and v_plan.description <> '')
+   or (coalesce(p_notes,false) and (v_plan.note <> '' or v_plan.guest_note <> '' or v_plan.guest_note_at is not null
+    or v_plan.has_meeting_details or exists (select 1 from public.plan_meeting_details d where d.plan_id = v_plan.id)))
+   or (coalesce(p_cover,false) and (v_plan.cover_path is not null or v_plan.cover_description <> '')));
+  if coalesce(p_cover,false) then
+   if v_plan.cover_path is not null and not v_plan.cover_path = any(v_paths) then
+    v_paths := v_paths || v_plan.cover_path;
+   end if;
+   update public.plans set cover_path = null, cover_description = '' where id = v_plan.id;
+  end if;
+  if coalesce(p_notes,false) then
+   perform private.forget_meeting_details(v_plan.id);
+  end if;
+  update public.plans set
+   title = case when coalesce(p_title,false) then 'Resbite' else title end,
+   description = case when coalesce(p_description,false) then '' else description end,
+   note = case when coalesce(p_notes,false) then '' else note end,
+   guest_note = case when coalesce(p_notes,false) then '' else guest_note end,
+   guest_note_at = case when coalesce(p_notes,false) then null else guest_note_at end,
+   has_meeting_details = case when coalesce(p_notes,false) then false else has_meeting_details end,
+   version = version + 1
+  where id = v_plan.id;
+  v_count := v_count + 1;
+ end loop;
+ v_held := private.series_under_hold(v_series);
+ if not v_held then
+  foreach v_path in array v_paths loop
+   if private.retire_plan_cover_now(v_path) then
+    v_queued := v_queued + 1;
+   end if;
+  end loop;
+ end if;
+ return pg_catalog.jsonb_build_object('occurrences', v_count, 'covers_queued', v_queued, 'held', v_held);
+end $$;
+revoke all on function private.remove_resbite_content(uuid, boolean, boolean, boolean, boolean) from public, anon, authenticated, service_role;
+comment on function private.remove_resbite_content(uuid, boolean, boolean, boolean, boolean) is 'resbite 20261117130000';
