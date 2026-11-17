@@ -631,9 +631,15 @@ try {
 
     // 5d. Review Focus 1: a phone sign-up with the tick, the status reporting terms_needed until attest_age records
     // the version. The tick is recorded with the server's version, the accept screen never shows, About you does.
+    // Approved, as every confirmed new account is since open beta: only an approved account meets the Terms gate
+    // (accountGate), so an access_pending one would pass whatever the app did with the tick. The server reports a
+    // version other than the app's TERMS_VERSION, so recording the app's own version instead would show here too.
     {
-      const f = await fixture({ width, termsNeeded: true }),
+      const f = await fixture({ width, termsNeeded: true, access: "approved" }),
         { page } = f;
+      const SERVER_TERMS = "2027-01";
+      assert.notEqual(SERVER_TERMS, TERMS, "the server's version is not the app's");
+      f.state.termsVersion = SERVER_TERMS;
       await page.goto(`${base}/auth/phone`);
       await expect(heading(page, "Your number")).toBeVisible();
       await numberField(page).fill("07700 900834");
@@ -643,9 +649,14 @@ try {
       await codeField(page).fill(SENT_CODE);
       await expect(heading(page, "About you")).toBeVisible();
       await expect(page).toHaveURL(/\/about-you$/);
-      assert.deepEqual(f.calls("POST", "/rest/v1/rpc/attest_age").map((x) => x.body), [{ p_terms_version: TERMS }]);
+      assert.deepEqual(
+        f.calls("POST", "/rest/v1/rpc/attest_age").map((x) => x.body),
+        [{ p_terms_version: SERVER_TERMS }],
+        "the tick is recorded as the server's version",
+      );
       assert.deepEqual(accepts(f), [], "the sign-up tick is the acceptance");
       assert.equal(f.state.termsNeeded, false);
+      assert.ok(f.calls("GET", "/rest/v1/profiles").length > 0, "read as an approved account");
       assert.equal(await f.sawTerms(), false, "the accept screen never showed");
       await f.done();
     }

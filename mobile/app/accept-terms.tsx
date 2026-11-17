@@ -4,7 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Redirect, router } from "expo-router";
 import { LogOut } from "lucide-react-native";
 import { Button, Copy, ErrorNote, TextAction, s } from "../src/design/ui";
-import { Chip, useFocusOnChange } from "../src/design/kit";
+import { Chip, STEP_SETTLED_MS, announce, useFocusOnChange } from "../src/design/kit";
 import { TermsLine, TickRow } from "../src/design/TickRow";
 import { colors as c } from "../src/design/tokens";
 import { GUEST_COPY } from "../src/domain/guestAccount";
@@ -12,6 +12,12 @@ import { TERMS_COPY } from "../src/domain/termsCopy";
 import { acceptTerms, termsErrorMessage } from "../src/services/termsAcceptance";
 import { useAccount } from "../src/state/AccountState";
 import { useApp } from "../src/state/AppState";
+
+/**
+ * How long after the heading takes VoiceOver's focus (STEP_SETTLED_MS after a new version arrives) the refusal is
+ * said, so the focus move doesn't cut it off. A first guess: the owner's device check tunes it.
+ */
+const SAY_AFTER_FOCUS_MS = 150;
 
 /**
  * Accept your Terms (plan 4, B2): an approved account with a number that has yet to accept the Terms of Use version
@@ -28,12 +34,14 @@ export default function AcceptTerms() {
   const [error, setError] = useState<string | null>(null);
   const heading = useRef<Text>(null);
   const mounted = useRef(true);
+  const saying = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // A version published while the screen was open is a new text to read: VoiceOver goes back to the heading.
   useFocusOnChange(heading, termsVersion);
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
+      clearTimeout(saying.current);
     };
   }, []);
 
@@ -56,6 +64,10 @@ export default function AcceptTerms() {
         setTicked(false);
         await refresh();
         if (!mounted.current) return;
+        // iOS doesn't speak ErrorNote's alert role (the web does; announce does nothing there). Said once the
+        // heading has taken focus for the new version, queued behind it, so VoiceOver hears why the box is unticked.
+        clearTimeout(saying.current);
+        saying.current = setTimeout(() => announce(message, true), STEP_SETTLED_MS + SAY_AFTER_FOCUS_MS);
       }
       setBusy(false);
       return;

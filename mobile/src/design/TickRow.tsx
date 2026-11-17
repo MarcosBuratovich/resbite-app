@@ -7,9 +7,9 @@ import { LEGAL_URLS, termsRuns } from "../domain/legal";
 import { colors as c, fonts } from "./tokens";
 
 /**
- * A tick box with its label (GI2: "I’m 18 or over"): a 24 pt box in a row at least 44 pt tall, the whole
- * row being the checkbox. The sub-label (`children`) sits under it, outside the checkbox, so links in it stay
- * their own buttons for VoiceOver. `hint` says what ticking agrees to, for VoiceOver.
+ * A tick box with its label (GI2; plan 4: "I’m 18 or over and I accept the Terms of Use."): a 24 pt box in a row
+ * at least 44 pt tall, the whole row being the checkbox. The sub-label (`children`) sits under it, outside the
+ * checkbox, so links in it stay their own buttons for VoiceOver. `hint` says what ticking agrees to, for VoiceOver.
  */
 export function TickRow({
   label,
@@ -60,8 +60,8 @@ export function TickRow({
 }
 
 /**
- * "I agree to the Terms and Privacy Policy.": each document name is a link to its page (always set, from
- * LEGAL_URLS); a text with no name is plain.
+ * "Read the Terms of Use. Our Privacy Policy explains how we use your data.": each document name is a link to its
+ * page (always set, from LEGAL_URLS); a text with no name is plain.
  */
 export function TermsLine({ text }: { text: string }) {
   const parsed = termsRuns(text, LEGAL_URLS);
