@@ -45,7 +45,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DRAFT_BANNER, buildLegalPages, publicPart } from "./legal/pages.mjs";
 
-const LEGAL_SOURCES = ["privacy-notice.md", "terms-of-use.md", "support.md", "delete-account.md"];
+const LEGAL_SOURCES = ["privacy-notice.md", "terms-of-use.md", "support.md", "delete-account.md", "invitee-notice-short.md", "community-rules-short.md"];
 const finish = (md) => md.replace(/\[\[OWNER:[^\]]*\]\]/g, "Example").replace(" — draft for solicitor review, not yet published", "");
 async function legalCopy(edit) {
   const dir = await mkdtemp(join(tmpdir(), "legal-"));
@@ -69,6 +69,15 @@ test("a final build refuses unfinished documents, naming each file", async () =>
   await assert.rejects(buildLegalPages({ legalDir: dir, mode: "final" }), (e) =>
     /^The legal documents are not ready to publish:/.test(e.message) && /privacy-notice\.md: an \[\[OWNER: …\]\] placeholder/.test(e.message)
     && /support\.md: the draft status/.test(e.message) && !e.message.includes("terms-of-use.md"));
+});
+
+test("a final build also refuses a short text (invitee notice, community rules) that is still a draft", async () => {
+  for (const short of ["invitee-notice-short.md", "community-rules-short.md"]) {
+    const dir = await legalCopy((name, text) => (name === short ? text : finish(text)));
+    await assert.rejects(buildLegalPages({ legalDir: dir, mode: "final" }), (e) => e.message.includes(`${short}: `) && !e.message.includes("privacy-notice.md"), short);
+  }
+  const only = await legalCopy((name, text) => (name === "invitee-notice-short.md" ? finish(text).replace(/^(.*)$/m, "$1 — draft for solicitor review, not yet published") : finish(text)));
+  await assert.rejects(buildLegalPages({ legalDir: only, mode: "final" }), /invitee-notice-short\.md: the draft status/);
 });
 
 test("the real documents build as drafts: four pages, their anchors, the form in place, no notes", async () => {
@@ -103,4 +112,19 @@ test("checkSite reports every failing path", async () => {
   const failures = await checkSite("https://link.example", async () => new Response("nope", { status: 404 }));
   for (const path of ["/privacy", "/terms", "/support", "/delete-account", "/support/sent", "/api/contact", "/invite"])
     assert.ok(failures.some((f) => f.startsWith(`${path}: `)), path);
+});
+
+test("checkSite refuses a draft build deployed to production", async () => {
+  const pages = await buildLegalPages({ legalDir: await legalCopy((_, t) => finish(t)), mode: "draft" });
+  const byRoute = new Map(pages.map((p) => [p.route, p]));
+  const fetchDraft = async (url) => {
+    const page = byRoute.get(new URL(url).pathname);
+    if (!page) return new Response("nope", { status: 404 });
+    return new Response(page.html, { status: 200, headers: { "content-type": "text/html", "content-security-policy": page.csp, "x-content-type-options": "nosniff", "x-robots-tag": "noindex, nofollow" } });
+  };
+  const failures = await checkSite("https://link.example", fetchDraft);
+  for (const route of ["/privacy", "/terms", "/support", "/delete-account"]) {
+    assert.ok(failures.includes(`${route}: carries the draft banner`), route);
+    assert.ok(failures.includes(`${route}: asks search engines not to index it`), route);
+  }
 });

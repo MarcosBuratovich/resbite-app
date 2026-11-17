@@ -6,7 +6,7 @@ import { COMPANY } from "./server/lib/site.mjs";
 
 const CODE = "AAAAAAAAAAAAAAAAAAAAAA";
 const PARTICULARS = `${COMPANY.name} is a private limited company registered in ${COMPANY.registeredIn}, company number ${COMPANY.number}. Registered office: ${COMPANY.office}.`;
-const FORBIDDEN = ["[[OWNER:", "draft for solicitor review", "before publishing", "<script"];
+const FORBIDDEN = ["[[OWNER:", "draft for solicitor review", "not yet published", "before publishing", "<script"];
 
 /** Every failure as "<path>: <what>"; [] when all pass. `last` receives the /i/ reply's headers when given. */
 export async function checkSite(origin, fetchImpl = fetch, last = {}) {
@@ -38,6 +38,8 @@ export async function checkSite(origin, fetchImpl = fetch, last = {}) {
     if (res.headers.get("content-security-policy") !== page.csp) fail(page.route, "the CSP header is not the page's own");
     if (res.headers.get("x-content-type-options") !== "nosniff") fail(page.route, "no nosniff header");
     if (!body.includes(PARTICULARS)) fail(page.route, "the footer's particulars are missing");
+    if (body.includes('class="draft-banner"')) fail(page.route, "carries the draft banner");
+    if ((res.headers.get("x-robots-tag") ?? "").includes("noindex") || /<meta name="robots" content="noindex/.test(body)) fail(page.route, "asks search engines not to index it");
     for (const anchor of page.anchors) if (!body.includes(`id="${anchor}"`)) fail(page.route, `no id="${anchor}"`);
     for (const bad of FORBIDDEN) if (body.includes(bad)) fail(page.route, `contains "${bad}"`);
     if (page.form && !body.includes('action="/api/contact"')) fail(page.route, "the form does not post to /api/contact");

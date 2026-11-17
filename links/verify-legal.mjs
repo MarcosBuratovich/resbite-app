@@ -22,7 +22,7 @@ const ORIGIN = `http://127.0.0.1:${PORT}`;
 const here = fileURLToPath(new URL(".", import.meta.url));
 
 // Finished copies of the documents (the same two replacements as legal.test.mjs): placeholders filled, draft status gone.
-const SOURCES = ["privacy-notice.md", "terms-of-use.md", "support.md", "delete-account.md"];
+const SOURCES = ["privacy-notice.md", "terms-of-use.md", "support.md", "delete-account.md", "invitee-notice-short.md", "community-rules-short.md"];
 const finish = (md) => md.replace(/\[\[OWNER:[^\]]*\]\]/g, "Example").replace(" — draft for solicitor review, not yet published", "");
 
 Object.assign(process.env, {

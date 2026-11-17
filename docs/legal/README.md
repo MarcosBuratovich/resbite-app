@@ -59,8 +59,8 @@ Each URL is fixed in places that are slow to change. A wrong or missing URL mean
 
 A change to the Terms, of any size, also needs a new `TERMS_VERSION`, so that people accept the version they are shown:
 
-1. Set the new `TERMS_VERSION` in the app: `mobile/src/domain/guestAccount.ts`, the constant `TERMS_VERSION` (today `"2026-10"`, line 4).
-2. Set the same value on the link site: the Vercel variable `TERMS_VERSION`, and the fallback in `links/server/lib/options.mjs` (today `"2026-10"`, line 16), so a deploy without the variable still sends the right version.
+1. Set the new `TERMS_VERSION` in the app: `mobile/src/domain/guestAccount.ts`, the constant `TERMS_VERSION` (pinned with the other two by `links/terms-version.test.mjs`).
+2. Set the same value on the link site: the Vercel variable `TERMS_VERSION`, and the fallback in `links/server/lib/options.mjs` (`TERMS_VERSION_FALLBACK`; `links/terms-version.test.mjs` fails if it differs from the app's), so a deploy without the variable still sends the right version.
 3. Set it wherever the server keeps the current version, once the versioned acceptance (C8) adds one.
 4. Use the form `YYYY-MM`. The database refuses any other form (`supabase/migrations/20261022120000_gi2_guest_accounts.sql`, line 27), so there can be only one Terms version a month, unless C8 changes the form.
 5. Release the new app build and the link-site change together. The app's value is fixed when the build is made. Until the new build is in people's hands, the old build keeps recording the old version. The EAS build and the Vercel change each need the owner's approval at the time.
