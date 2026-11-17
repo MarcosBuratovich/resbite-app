@@ -1,6 +1,6 @@
 import React from "react";
 import { Tabs } from "expo-router";
-import { CirclePlus, CalendarDays, Leaf, UserRound } from "lucide-react-native";
+import { CirclePlus, CalendarDays, UserRound } from "lucide-react-native";
 import { colors as c, fonts } from "../../src/design/tokens";
 import { useReconcileCreate } from "../../src/state/useReconcileCreate";
 
@@ -34,7 +34,6 @@ export default function WebTabLayout() {
     >
       <Tabs.Screen name="create" options={{ title: "Create", tabBarIcon: ({ color }) => <CirclePlus size={22} strokeWidth={1.7} color={color} /> }} />
       <Tabs.Screen name="plans" options={{ title: "My resbites", tabBarIcon: ({ color }) => <CalendarDays size={22} strokeWidth={1.7} color={color} /> }} />
-      <Tabs.Screen name="wellness" options={{ title: "Wellness", tabBarIcon: ({ color }) => <Leaf size={22} strokeWidth={1.7} color={color} /> }} />
       <Tabs.Screen name="profile" options={{ title: "Profile", tabBarIcon: ({ color }) => <UserRound size={22} strokeWidth={1.7} color={color} /> }} />
     </Tabs>
   );

@@ -5,11 +5,9 @@ import {
   accessTitles,
   authTitle,
   callbackTitle,
-  formatMinutes,
   introSlides,
   permissionChip,
   signupTitles,
-  wellnessSample,
 } from "./accountCopy.ts";
 import { notificationDelivery, permissionCopy, reminderCopy } from "./notifications.ts";
 
@@ -46,7 +44,7 @@ test("notifications: the permission chip shows the permission's title, or checki
   assert.equal(permissionChip(null, false), "Couldn’t check permission");
 });
 
-test("UX3 notifications wording: reminders use the permission, updates aren’t active yet", () => {
+test("UX3 notifications wording: reminders use the permission, updates say they are off", () => {
   // The titles keep their UX4 wording; the details no longer say there's nothing to enable.
   assert.deepEqual(
     Object.fromEntries(Object.entries(permissionCopy).map(([key, copy]) => [key, copy.title])),
@@ -64,13 +62,13 @@ test("UX3 notifications wording: reminders use the permission, updates aren’t 
   assert.equal(permissionCopy.undetermined.detail, "Resbite asks the first time it can set a reminder.");
   assert.equal(
     permissionCopy.denied.detail,
-    "Turn notifications on in Settings to get reminders. Updates aren’t active yet.",
+    "Turn notifications on in Settings to get reminders. Updates are off.",
   );
-  assert.equal(permissionCopy.granted.detail, "Reminders can reach you. Updates aren’t active yet.");
-  assert.equal(permissionCopy.provisional.detail, "Reminders arrive quietly. Updates aren’t active yet.");
+  assert.equal(permissionCopy.granted.detail, "Reminders can reach you. Updates are off.");
+  assert.equal(permissionCopy.provisional.detail, "Reminders arrive quietly. Updates are off.");
   assert.equal(
     permissionCopy.ephemeral.detail,
-    "Reminders can reach you for now. Updates aren’t active yet.",
+    "Reminders can reach you for now. Updates are off.",
   );
   for (const copy of Object.values(permissionCopy)) {
     assert.ok(!copy.detail.includes("nothing you need to enable"), copy.detail);
@@ -96,19 +94,4 @@ test("introduction: three slides with two-word titles and one line each", () => 
     assert.equal(slide.title.split(" ").length, 2, slide.title);
     assert.ok(slide.line.length > 0 && !slide.line.includes("\n"), slide.title);
   }
-});
-
-test("Wellness sample: approved categories, today's minutes, 2h 30m in total", () => {
-  assert.deepEqual(
-    wellnessSample.map((row) => [row.category, row.minutes]),
-    [
-      ["creative", 60],
-      ["physical", 60],
-      ["community", 30],
-    ],
-  );
-  assert.equal(formatMinutes(wellnessSample.reduce((sum, row) => sum + row.minutes, 0)), "2h 30m");
-  assert.equal(formatMinutes(45), "45m");
-  assert.equal(formatMinutes(180), "3h");
-  assert.equal(formatMinutes(0), "0m");
 });

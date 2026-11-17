@@ -1,5 +1,5 @@
 // The Privacy screen (Data & privacy) and account deletion in headless Chrome.
-//   preview   each topic opens its sheet with today's text; the Chat messages topic keeps chat core's words, then what a
+//   preview   each topic opens its sheet with today's text; the Resbites and chat topic keeps chat core's words, then what a
 //             report keeps (G-S11), then how long blocks stay (ruling SR4); the Contact topic only when the build has an
 //             address (below); Blocked people opens and says nobody is blocked, with no request sent; Delete account's
 //             What happens; no backend request
@@ -34,8 +34,11 @@ const enabled = process.env.RESBITE_QA_DELETION_ENABLED === "true";
 // The address this build was started with (EXPO_PUBLIC_SUPPORT_ADDRESS), or none: the Contact topic must match it.
 const expectSupport = process.env.EXPECT_SUPPORT || null;
 const pass = (name) => console.log(`PASS ${name}`);
+// The About this page sheet's text (src/domain/privacyCopy.ts PRIVACY_ABOUT).
+const PRIVACY_ABOUT =
+  "This page sums up how Resbite uses your data. Our Privacy Policy has the full details, and you can open it below.";
 const CHAT_CORE =
-  "Chat messages are stored on Resbite’s servers so everyone in a resbite’s chat can read them, including people who join later. They are not end-to-end encrypted. Deleting your account removes the text of your messages as cleanup finishes. Review account deletion’s availability in this build under Delete account.";
+  "Chat messages are stored on our servers so everyone in a resbite’s chat can read them, including people who join later. They aren’t end-to-end encrypted.";
 const REPORTS =
   "If you report a message or a person, the Resbite team reads the report and keeps a copy of what was reported, even if the message or that person’s account is deleted. If you delete your account, the reports you sent are deleted too. A report is deleted 180 days after the team closes it.";
 const BLOCKS = "Blocks stay until you undo them. The Resbite team can see who blocked whom.";
@@ -231,7 +234,7 @@ try {
   // Each topic opens a sheet with today's text, word for word.
   await page.getByRole("button", { name: "On this device", exact: true }).click();
   await expect(
-    page.getByText(/^Contacts are read only when you choose them\./),
+    page.getByText(/^The app keeps your sign-in, people lists/),
   ).toBeVisible();
   await page.getByRole("button", { name: "Close sheet", exact: true }).click();
   await expect(
@@ -239,14 +242,14 @@ try {
   ).toHaveCount(0);
   await page.getByRole("button", { name: "About this page", exact: true }).click();
   await expect(
-    page.getByText(/^Resbite is in private development\./),
+    page.getByText(PRIVACY_ABOUT, { exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Close sheet", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Close sheet", exact: true }),
   ).toHaveCount(0);
-  // The Chat messages topic: chat core's words, hedged as Delete account's What happens is, then what a report keeps.
-  await page.getByRole("button", { name: "Chat messages", exact: true }).click();
+  // The Resbites and chat topic: chat core's words, hedged as Delete account's What happens is, then what a report keeps.
+  await page.getByRole("button", { name: "Resbites and chat", exact: true }).click();
   await expect(page.getByText(CHAT_CORE, { exact: true })).toBeVisible();
   await expect(page.getByText(REPORTS, { exact: true })).toBeVisible();
   await expect(page.getByText(BLOCKS, { exact: true })).toBeVisible();
@@ -263,14 +266,14 @@ try {
   );
   await page.getByRole("button", { name: "Close sheet", exact: true }).click();
   await expect(page.getByRole("button", { name: "Close sheet", exact: true })).toHaveCount(0);
-  pass("preview: the Chat messages topic keeps chat core's words, then what a report keeps, then how long blocks stay");
+  pass("preview: the Resbites and chat topic keeps chat core's words, then what a report keeps, then how long blocks stay");
   // The Contact topic, as this build was started (G-N10, G-S14).
-  const lastTopic = expectSupport ? "Contact" : "Preview & samples";
+  const lastTopic = expectSupport ? "Contact" : "How long we keep it";
   const blockedRow = button(page, "Blocked people");
   await expect(blockedRow).toBeVisible();
   // No empty card or placeholder: the topics' card meets Blocked people's as Blocked people's meets Delete account's.
   assert.equal(
-    await gapBetween(button(page, lastTopic), blockedRow),
+    await gapBetween(button(page, lastTopic), button(page, "Privacy Policy")),
     await gapBetween(blockedRow, button(page, "Delete account")),
     "nothing drawn between the topics and Blocked people",
   );

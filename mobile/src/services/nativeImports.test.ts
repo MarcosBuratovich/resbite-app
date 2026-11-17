@@ -7,7 +7,11 @@ import * as people from "../domain/people";
 
 // Exercise the public native boundary, not only injected adapters. React Native
 // exposes lazy enumerable getters; an unrelated legacy module may be absent.
-function loadService(file: string, namespaceImport = false) {
+function loadService(
+  file: string,
+  namespaceImport = false,
+  fields: unknown[] = [],
+) {
   const native = {
     Platform: { OS: "ios" },
     Linking: { openSettings: async () => {} },
@@ -48,7 +52,7 @@ function loadService(file: string, namespaceImport = false) {
           requestPermissionsAsync: async () => ({ granted: true }),
           Contact: {
             getAllDetails: async (
-              _fields: unknown,
+              requested: unknown[],
               options: { offset: number; limit: number; sortOrder?: string },
             ) => {
               const swift = readFileSync(
@@ -67,13 +71,14 @@ function loadService(file: string, namespaceImport = false) {
                   allowed.includes(options.sortOrder),
                 "Contact query options must match the installed iOS enum",
               );
+              fields.push(...requested);
               assert.equal(options.offset, 0);
               assert.equal(options.limit, 50);
               return [];
             },
             presentAccessPicker: async () => {},
           },
-          ContactField: {},
+          ContactField: { FULL_NAME: "name", EMAILS: "emails", PHONES: "phones" },
           ContactsSortOrder: { UserDefault: "userDefault" },
         };
       if (name === "expo-notifications")
@@ -97,6 +102,11 @@ test("contact native boundary avoids unrelated React Native lazy getters", async
     loadService("./contacts.ts", true).readContactPage(),
     /NativeEventEmitter/,
   );
+});
+test("the native read asks Contacts for names and phone numbers only (B8, PERM-3)", async () => {
+  const fields: unknown[] = [];
+  await loadService("./contacts.ts", false, fields).readContactPage();
+  assert.deepEqual(fields, ["name", "phones"]);
 });
 test("notification permission/settings boundary avoids unrelated legacy modules", async () => {
   const service = loadService("./notifications.ts");

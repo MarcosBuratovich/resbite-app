@@ -1,7 +1,9 @@
 import React from "react";
-import { Linking, Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { Check } from "lucide-react-native";
-import { Copy, TextAction } from "./ui";
+import { Copy } from "./ui";
+import { ExternalLink } from "./LegalLinks";
+import { LEGAL_URLS, termsRuns } from "../domain/legal";
 import { colors as c, fonts } from "./tokens";
 
 /**
@@ -57,41 +59,27 @@ export function TickRow({
   );
 }
 
-const termsUrl = process.env.EXPO_PUBLIC_TERMS_URL;
-const privacyUrl = process.env.EXPO_PUBLIC_PRIVACY_URL;
-
 /**
- * "I agree to the Terms and Privacy Policy." with "Terms" and "Privacy Policy" opening their documents when
- * EXPO_PUBLIC_TERMS_URL and EXPO_PUBLIC_PRIVACY_URL are set; plain words otherwise.
+ * "I agree to the Terms and Privacy Policy.": each document name is a link to its page (always set, from
+ * LEGAL_URLS); a text with no name is plain.
  */
 export function TermsLine({ text }: { text: string }) {
-  const [before, rest = ""] = text.split("Terms");
-  const [between, after = ""] = rest.split("Privacy Policy");
-  if ((!termsUrl && !privacyUrl) || !rest) return <Copy style={styles.subText}>{text}</Copy>;
-  // Plain words join the text around them; a link is its own button. A full stop after the last link stays
+  const parsed = termsRuns(text, LEGAL_URLS);
+  if (!parsed.some((run) => run.url)) return <Copy style={styles.subText}>{text}</Copy>;
+  // Plain words are their own text; a link is its own button. A full stop after the last link stays
   // with it, pulled back over the link's own padding.
-  const runs: { text: string; url?: string }[] = [];
-  const push = (part: string, url?: string) => {
-    const last = runs[runs.length - 1];
-    if (!url && last && !last.url) last.text += part;
-    else if (url || part.trim()) runs.push({ text: part, url });
-  };
-  push(before);
-  push("Terms", termsUrl);
-  push(between);
-  push("Privacy Policy", privacyUrl);
-  push(after);
+  const runs = parsed.map((run) => (run.url ? run : { ...run, text: run.text.trim() })).filter((run) => run.text);
   const tail = runs[runs.length - 1];
-  const stop = runs.length > 1 && !tail.url && /^[.,;:!?]+$/.test(tail.text.trim()) ? tail.text.trim() : null;
+  const stop = runs.length > 1 && !tail.url && /^[.,;:!?]+$/.test(tail.text) ? tail.text : null;
   if (stop) runs.pop();
   return (
     <View style={styles.line}>
       {runs.map((run, i) => {
         const node = run.url ? (
-          <TextAction key={i} title={run.text} onPress={() => void Linking.openURL(run.url!).catch(() => {})} />
+          <ExternalLink key={i} title={run.text} url={run.url} />
         ) : (
           <Copy key={i} style={styles.subText}>
-            {run.text.trim()}
+            {run.text}
           </Copy>
         );
         return stop && i === runs.length - 1 ? (

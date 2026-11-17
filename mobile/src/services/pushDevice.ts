@@ -106,7 +106,7 @@ export function createPushDeviceAdapter(deps: PushDeviceDeps): PushRegistrationA
       permissionFrom(deps.platform, await deps.notifications.getPermissionsAsync()),
     async readToken() {
       const projectId = deps.projectId();
-      if (!projectId) throw Error("This build has no project id for notifications.");
+      if (!projectId) throw Error("Notifications can’t be set up on this phone.");
       return (await deps.notifications.getExpoPushTokenAsync({ projectId })).data;
     },
     hasSession: async (account) => (await deps.liveAccount()) === account,

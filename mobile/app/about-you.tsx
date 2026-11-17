@@ -5,7 +5,7 @@ import { router } from "expo-router";
 import { LogOut, UserRound } from "lucide-react-native";
 import { Button, Copy, ErrorNote, s } from "../src/design/ui";
 import { Chip, FieldCard, announce, useFocusOnChange } from "../src/design/kit";
-import { AppleMark } from "../src/design/AppleMark";
+import { AppleButton } from "../src/design/AppleButton";
 import { colors as c } from "../src/design/tokens";
 import { GUEST_COPY, nameFromSession } from "../src/domain/guestAccount";
 import { PHONE_COPY } from "../src/domain/phoneCopy";
@@ -100,16 +100,10 @@ export default function AboutYou() {
           {PHONE_COPY.nameRule}
         </Copy>
       )}
+      {appleAvailable ? (
+        <AppleButton hint={PHONE_COPY.appleNameHint} disabled={busy} onPress={() => void link(() => linkApple(appleLinkDeps))} />
+      ) : null}
       <View style={styles.chips}>
-        {appleAvailable ? (
-          <Chip
-            text={GUEST_COPY.apple}
-            icon={AppleMark}
-            hint={PHONE_COPY.appleNameHint}
-            disabled={busy}
-            onPress={() => void link(() => linkApple(appleLinkDeps))}
-          />
-        ) : null}
         <Chip
           text={GUEST_COPY.google}
           hint={PHONE_COPY.googleNameHint}

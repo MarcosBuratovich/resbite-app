@@ -53,7 +53,7 @@ try {
     .click();
   await expect(
     page.getByText(
-      "This build does not send plan or RSVP notifications. Open My resbites to check the latest details and responses.",
+      "Resbite isn’t sending you updates about plans and answers. Open My resbites for the latest details and answers.",
       { exact: true },
     ),
   ).toBeVisible();

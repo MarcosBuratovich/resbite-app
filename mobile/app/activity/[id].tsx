@@ -80,7 +80,6 @@ export default function Detail() {
           <Copy style={{ flex: 1, fontSize: 14 }}>{tip}</Copy>
         </View>
       ))}
-      {preview && <Copy style={s.muted}>Activity content approved for the owner-only beta.</Copy>}
     </ContentPage>
   );
 }

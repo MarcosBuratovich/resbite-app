@@ -5,6 +5,7 @@ import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { copyConfirmed, supportContact } from "./supportContact";
 import { SAFETY_COPY } from "./safetyCopy";
+import { PRIVACY_TOPICS } from "./privacyCopy";
 
 test("no Contact topic while the build has no address, or a value that isn't one (G-N10, N9)", () => {
   for (const env of [undefined, "", "   ", "help", "a b@x.example", "help@", "@x.example", "help@x", "help​@x.example", "help@x.example\u0085x"])
@@ -65,26 +66,22 @@ test("Data & privacy reads the build's address with dot notation, the one form i
   };
   walk(join(mobile, "app"));
   walk(join(mobile, "src"));
-  const readers = files.filter((f) => readFileSync(f, "utf8").includes("EXPO_PUBLIC_SUPPORT_ADDRESS"));
+  // releaseChecks.ts reads a plain env object handed to it by the build-time check (scripts/check-release.mjs), never the
+  // bundle's process.env, so the inlining rule does not apply to it.
+  const readers = files.filter(
+    (f) => !f.endsWith("releaseChecks.ts") && readFileSync(f, "utf8").includes("EXPO_PUBLIC_SUPPORT_ADDRESS"),
+  );
   for (const f of readers)
     for (const line of readFileSync(f, "utf8").split("\n"))
       if (line.includes("EXPO_PUBLIC_SUPPORT_ADDRESS") && !/^\s*(\*|\/\/|\/\*)/.test(line))
         assert.match(line, /process\.env\.EXPO_PUBLIC_SUPPORT_ADDRESS\b/, `${relative(mobile, f)}: ${line.trim()}`);
 });
 
-test("the Chat messages topic keeps chat core's words, then says what a report keeps (G-S11) and how long blocks stay", () => {
-  const page = source("app/data-privacy.tsx");
-  const start = page.indexOf('title="Chat messages"');
-  const end = page.indexOf("<TopicRow", start);
-  assert.ok(start > 0 && end > start, "the Chat messages topic is followed by another topic");
-  const topic = page.slice(start, end);
-  const core = topic.indexOf("Chat messages are stored on Resbite’s servers");
-  const hedge = topic.indexOf("deletion’s availability in this build under Delete account.");
-  const reports = topic.indexOf("SAFETY_COPY.reportsPrivacy");
-  const blocks = topic.indexOf("SAFETY_COPY.blocksPrivacy");
-  assert.ok(core > 0 && hedge > core, "chat core's paragraph, with its hedge, stays");
-  assert.ok(reports > hedge, "the reports line follows it, in the same topic");
-  assert.ok(blocks > reports, "then the line on blocks (ruling SR4)");
+test("Data & privacy draws its topics from PRIVACY_TOPICS, and the chat topic keeps what a report keeps and how long blocks stay", () => {
+  assert.ok(source("app/data-privacy.tsx").includes("PRIVACY_TOPICS.map("), "the page maps PRIVACY_TOPICS");
+  const chat = PRIVACY_TOPICS.find((t) => t.key === "chat");
+  assert.ok(chat);
+  assert.deepEqual(chat.paragraphs.slice(-2), [SAFETY_COPY.reportsPrivacy, SAFETY_COPY.blocksPrivacy]);
 });
 
 test("Blocked people: a row on Data & privacy after the topics, and a screen in the signed-in stack beside the chat", () => {

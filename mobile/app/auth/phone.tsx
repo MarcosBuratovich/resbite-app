@@ -3,9 +3,10 @@ import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { Button, Copy, ErrorNote, TextAction } from "../../src/design/ui";
 import { Chip, StepScreen, useFocusOnChange } from "../../src/design/kit";
-import { AppleMark } from "../../src/design/AppleMark";
+import { AppleButton } from "../../src/design/AppleButton";
 import { CodeField } from "../../src/design/CodeField";
 import { PhoneField } from "../../src/design/PhoneField";
+import { LegalLinks } from "../../src/design/LegalLinks";
 import { TermsLine, TickRow } from "../../src/design/TickRow";
 import { colors as c } from "../../src/design/tokens";
 import { GUEST_COPY } from "../../src/domain/guestAccount";
@@ -122,13 +123,14 @@ export default function PhoneAuth() {
           ) : null}
           {!signup ? (
             <>
-              {appleAvailable ? <Chip text={GUEST_COPY.apple} icon={AppleMark} onPress={apple} /> : null}
+              {appleAvailable ? <AppleButton onPress={apple} /> : null}
               <Chip text={GUEST_COPY.google} onPress={google} />
               <View style={styles.links}>
                 <TextAction title={PHONE_COPY.useEmail} onPress={() => router.push("/auth?mode=login")} />
               </View>
             </>
           ) : null}
+          {!signup && !code ? <LegalLinks /> : null}
         </>
       )}
     </StepScreen>

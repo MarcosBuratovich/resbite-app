@@ -432,7 +432,7 @@ export default function People() {
                 {missing > 0 && (
                   <Chip
                     text={`${missing} skipped`}
-                    label={`${missing} contacts without a usable email or phone were skipped.`}
+                    label={`${missing} contacts without a usable phone number were skipped.`}
                   />
                 )}
                 {contacts.length > 0 && <Field label="Search loaded contacts" value={query} onChangeText={setQuery} />}

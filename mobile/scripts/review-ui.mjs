@@ -119,9 +119,6 @@ try {
     await page.getByRole("radio", { name: "Past", exact: true }).click();
     await shot("plans-past");
     // UX4 Profile and settings in preview, then People lists with gluestack keyboard selection.
-    await page.getByRole("tab", { name: "Wellness", exact: true }).click();
-    await expect(heading(page, "Wellness")).toBeVisible();
-    await shot("wellness");
     await page.getByRole("tab", { name: "Profile", exact: true }).click();
     await expect(heading(page, "Profile")).toBeVisible();
     await shot("profile");
@@ -138,11 +135,10 @@ try {
     const closed = () => expect(page.getByRole("button", { name: "Close sheet" })).toHaveCount(0);
     await closed();
     // Task 8 (K-N5): the chat's line, hedged as Delete account's What happens is, followed by chat plan 3's lines on what a
-    // report keeps (G-S11) and how long blocks stay (ruling SR4); and the samples line without the sample chat, and without "this build does not send push
-    // notifications".
-    await button(page, "Chat messages").click();
+    // report keeps (G-S11) and how long blocks stay (ruling SR4).
+    await button(page, "Resbites and chat").click();
     const chatLine = page.getByText(
-      "Chat messages are stored on Resbite’s servers so everyone in a resbite’s chat can read them, including people who join later. They are not end-to-end encrypted. Deleting your account removes the text of your messages as cleanup finishes. Review account deletion’s availability in this build under Delete account.",
+      "Chat messages are stored on our servers so everyone in a resbite’s chat can read them, including people who join later. They aren’t end-to-end encrypted.",
       { exact: true },
     );
     const reportsLine = page.getByText(
@@ -155,13 +151,6 @@ try {
     await expect(blocksLine).toBeVisible();
     assert.ok(await inOrder(page, [chatLine, reportsLine, blocksLine]), "the reports line follows chat core's, then the blocks line");
     await shot("privacy-chat", false);
-    await button(page, "Close sheet").click();
-    await closed();
-    await button(page, "Preview & samples").click();
-    await expect(
-      page.getByText("Preview actions stay on this device. Wellness figures are fictional, and there is no wellness tracking.", { exact: true }),
-    ).toBeVisible();
-    await expect(page.getByText(/push notifications|Sample conversations|live messaging/)).toHaveCount(0);
     await button(page, "Close sheet").click();
     await closed();
     await button(page, "Delete account").click();
@@ -248,7 +237,7 @@ try {
     if (errors.length) throw Error(errors.join("\n"));
     await page.close();
   }
-  // UX4 preview screens under Larger Text at 320 px: Profile, Notifications, Privacy, Delete account and Wellness.
+  // UX4 preview screens under Larger Text at 320 px: Profile, Notifications, Privacy and Delete account.
   {
     const page = await browser.newPage({ viewport: { width: 320, height: 844 }, reducedMotion: "reduce" });
     const errors = [];
@@ -278,8 +267,6 @@ try {
     await page.goto(`${base}/?largeText=1`);
     await page.addStyleTag({ content: '[dir="auto"] { zoom: 1.4; }' });
     await page.getByText("Preview the design", { exact: true }).click();
-    await page.getByRole("tab", { name: "Wellness", exact: true }).click();
-    await visit("wellness", "Wellness");
     await page.getByRole("tab", { name: "Profile", exact: true }).click();
     await visit("profile", "Profile");
     await button(page, "Notifications").click();

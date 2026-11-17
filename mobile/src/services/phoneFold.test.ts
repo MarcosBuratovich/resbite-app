@@ -46,7 +46,7 @@ test("503, 404, 403, 409, 401, 500 and connection failures map to their copy", a
   // Switched off (503) or not deployed (404): the same words, and no Retry.
   for (const status of [503, 404])
     assert.deepEqual(await r({ status }), { ok: false, message: PHONE_COPY.foldOff, clear: false, verified: true, blocked: true });
-  assert.equal(PHONE_COPY.foldOff, "Bringing an invitation into this account isn’t switched on yet.");
+  assert.equal(PHONE_COPY.foldOff, "Bringing an invitation into this account isn’t available right now.");
   // Refused: the taken copy with its support line, no kept proof, and no Retry.
   for (const status of [403, 409])
     assert.deepEqual(await r({ status }), { ok: false, message: PHONE_COPY.taken, clear: false, verified: true, blocked: true });

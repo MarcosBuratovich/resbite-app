@@ -74,7 +74,7 @@ export type Guest = {
   level: number;
 };
 /** The name `readGuests` gives a guest whose profile name is missing or blank (a hidden or missing profile row). */
-export const UNNAMED_GUEST = "Tester";
+export const UNNAMED_GUEST = "Guest";
 export type EventSnapshot = {
   plan: Plan;
   /** The signed-in invitee's own row; null for the organizer. */
