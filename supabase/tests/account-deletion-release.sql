@@ -1,13 +1,15 @@
 -- Account deletion release (20261117110000_account_deletion_release.sql, spec C2): the jobs table and its held status,
 -- the legal hold and the suspension history shared with plan 6, the September keys, and the two hosted
 -- redefinitions (S1); the one request path for every account, its close and erase steps, the hold, the team's script
--- and the replay (S2 to S5). Runs in both modes (supabase/tests/hosted-baseline/tests.txt). Synthetic identities only
--- (prefix dd); one rolled-back block. Users dd000000-0000-4000-8000-0000000000NN, plans dd1…, sessions dd2…,
--- requests dd3…, message client ids dd4….
+-- and the replay (S2 to S5); the worker, its two buckets and the hold in the middle of a job (S6); the receipts' 30
+-- days (S7). Runs in both modes (supabase/tests/hosted-baseline/tests.txt). Synthetic identities only (prefix dd); one
+-- rolled-back block. Users dd000000-0000-4000-8000-0000000000NN, plans dd1…, sessions dd2…, requests dd3…, message
+-- client ids dd4….
 -- Users dd…: 01 Hana, phone-only, owns three resbites (a one-off tomorrow, a weekly group next week, a one-off that
--- ended yesterday) and filed a report about 02; 02 Gus, email; 03 Sam, phone-only and suspended; 04 Ana, anonymous;
--- 05 Hal, phone-only, a guest of Hana's one-off, under a hold not lifted; 06 Ben, email, banned, under a hold lifted
--- yesterday, no session; 07 under no hold and no Auth user (S1 only); 08 Rae, email, no job.
+-- ended yesterday), has a profile photo and a cover, and filed a report about 02; 02 Gus, email; 03 Sam, phone-only
+-- and suspended; 04 Ana, anonymous; 05 Hal, phone-only, a guest of Hana's one-off, under a hold not lifted; 06 Ben,
+-- email, banned, under a hold lifted yesterday, no session; 07 under no hold and no Auth user (S1 only); 08 Rae, email,
+-- no job. 21 to 23 are receipts only, of accounts already gone (S7).
 begin;
 -- A statement that must be refused with exactly this code, whatever its message (a table's check).
 create function pg_temp.dd_refused(p_sql text, p_state text) returns void language plpgsql as $$
@@ -58,6 +60,10 @@ insert into auth.sessions(id,user_id,created_at) values
 insert into public.profiles(id,display_name,avatar_path) values
  (pg_temp.ddu('01'),'Hana',pg_temp.ddu('01')||'/a.jpg'),(pg_temp.ddu('02'),'Gus',null),(pg_temp.ddu('03'),'Sam',null),
  (pg_temp.ddu('05'),'Hal',null),(pg_temp.ddu('06'),'Ben',null),(pg_temp.ddu('08'),'Rae',null);
+-- Hana's files for S6: her profile photo and the one-off's cover. They come before her request: in full mode the local
+-- photo guard (20260923152816) refuses a profile-photos write once a job exists.
+insert into storage.objects(bucket_id,name) values
+ ('profile-photos',pg_temp.ddu('01')||'/a.jpg'),('plan-covers',pg_temp.ddu('01')||'/'||pg_temp.ddp('01')||'/c.jpg');
 insert into private.device_endpoints(token,user_id,platform) values ('dd-device-01',pg_temp.ddu('01'),'ios'),('dd-device-05',pg_temp.ddu('05'),'ios');
 -- Hana's three: a one-off tomorrow, a weekly group next week (its chat row a group), a one-off that ended yesterday.
 insert into public.plans(id,owner_id,title,starts_at,ends_at,time_zone,place_label,categories,repeat_weeks) values
@@ -450,6 +456,234 @@ do $$ declare r text; f text; begin
    raise exception 'S5.6 An app client may execute %', f;
   end if;
  end loop;
+end $$;
+
+-- S6. The worker (ASR2-9): both buckets under the account's folder, then the Auth user; a hold stops it (UGC-15).
+
+-- S6.0 A late upload can't land in a deleting account: Hana's token, which still names her, may not write a profile
+-- photo. The photo guard runs require_tester in both modes. On hosted this file makes the guard and its trigger, with
+-- its marker; the local replay keeps 20260923152816's stronger body, unmarked.
+select set_config('request.jwt.claims',jsonb_build_object('sub',pg_temp.ddu('01'),'role','authenticated')::text,true);
+select pg_temp.dd_refused(format('insert into storage.objects(bucket_id,name) values (%L,%L)','profile-photos',
+ pg_temp.ddu('01')||'/late.jpg'),'42501');
+select set_config('request.jwt.claims','',true);
+do $$ declare v_def text; v_made_here boolean; begin
+ if pg_catalog.to_regprocedure('private.guard_photo_write()') is null
+ or not exists(select 1 from pg_catalog.pg_trigger t where t.tgrelid='storage.objects'::regclass
+   and t.tgname='resbite_photo_write_guard' and t.tgfoid='private.guard_photo_write()'::regprocedure) then
+  raise exception 'S6.0 The photo guard is not on storage.objects';
+ end if;
+ v_def := pg_catalog.pg_get_functiondef('private.guard_photo_write()'::regprocedure);
+ v_made_here := strpos(v_def,'Photo account unavailable')=0;
+ if (pg_catalog.obj_description('private.guard_photo_write()'::regprocedure,'pg_proc') is not distinct from 'resbite 20261117110000')
+   is distinct from v_made_here
+ or ((select pg_catalog.obj_description(t.oid,'pg_trigger') from pg_catalog.pg_trigger t
+    where t.tgrelid='storage.objects'::regclass and t.tgname='resbite_photo_write_guard') is not distinct from 'resbite 20261117110000')
+   is distinct from v_made_here then
+  raise exception 'S6.0 The photo guard''s marker does not say who made it (made here: %)', v_made_here;
+ end if;
+end $$;
+
+-- S6.1 The worker claims Hana's job, not Hal's (held). A live lease isn't claimed again.
+set local role service_role;
+do $$ declare v jsonb; begin
+ v := public.claim_account_deletions(5);
+ if not exists(select 1 from jsonb_array_elements(v) e where e->>'userId'=pg_temp.ddu('01')::text
+   and e->>'requestId'=pg_temp.ddr('01')::text and e->>'leaseId' is not null and (e->>'attempts')::integer=1) then
+  raise exception 'S6.1 Hana''s job was not claimed: %', v;
+ end if;
+ if exists(select 1 from jsonb_array_elements(v) e where e->>'userId'=pg_temp.ddu('05')::text) then
+  raise exception 'S6.1 Hal''s held job was claimed: %', v;
+ end if;
+ perform set_config('dd.lease01',(select e->>'leaseId' from jsonb_array_elements(v) e where e->>'userId'=pg_temp.ddu('01')::text),false);
+ v := public.claim_account_deletions(5);
+ if exists(select 1 from jsonb_array_elements(v) e where e->>'userId'=pg_temp.ddu('01')::text) then
+  raise exception 'S6.1 Hana''s live lease was claimed again: %', v;
+ end if;
+end $$;
+
+-- S6.2 Her files in both buckets, by bucket then name.
+do $$ declare v jsonb; begin
+ v := public.deletion_storage_objects(pg_temp.ddr('01'),current_setting('dd.lease01')::uuid);
+ if v is distinct from jsonb_build_array(
+   jsonb_build_object('bucket','plan-covers','name',pg_temp.ddu('01')||'/'||pg_temp.ddp('01')||'/c.jpg'),
+   jsonb_build_object('bucket','profile-photos','name',pg_temp.ddu('01')||'/a.jpg')) then
+  raise exception 'S6.2 Hana''s files are %', v;
+ end if;
+end $$;
+reset role;
+
+-- S6.3 (Review Focus 2) A hold set after the request was accepted, here in the middle of Hana's claimed job: the
+-- worker may not list her files, and once her lease has passed it doesn't claim her again. Undone after.
+savepoint dd_s63;
+insert into private.legal_holds(user_id,reason,case_ref,review_on) values (pg_temp.ddu('01'),'police','LE-4',current_date+90);
+set local role service_role;
+do $$ begin
+ begin
+  perform public.deletion_storage_objects(pg_temp.ddr('01'),current_setting('dd.lease01')::uuid);
+  raise exception 'S6.3 The worker listed a held account''s files';
+ exception when insufficient_privilege then
+  if sqlerrm is distinct from 'Deletion on hold' then raise; end if;
+ end;
+end $$;
+reset role;
+update private.account_deletion_jobs set lease_until=now()-interval '1 second' where request_id=pg_temp.ddr('01');
+set local role service_role;
+do $$ declare v jsonb; begin
+ v := public.claim_account_deletions(5);
+ if exists(select 1 from jsonb_array_elements(v) e where e->>'userId'=pg_temp.ddu('01')::text) then
+  raise exception 'S6.3 Hana''s job was claimed under a hold: %', v;
+ end if;
+end $$;
+reset role;
+rollback to savepoint dd_s63;
+
+-- S6.4 Hal's hold is lifted: the worker runs the erase step it parked (his name and his words go) and claims his job.
+update private.legal_holds set lifted_at=now() where user_id=pg_temp.ddu('05') and lifted_at is null;
+set local role service_role;
+do $$ declare v jsonb; begin
+ v := public.claim_account_deletions(5);
+ if not exists(select 1 from jsonb_array_elements(v) e where e->>'userId'=pg_temp.ddu('05')::text
+   and e->>'requestId'=pg_temp.ddr('05')::text and e->>'leaseId' is not null) then
+  raise exception 'S6.4 Hal''s job was not claimed: %', v;
+ end if;
+ perform set_config('dd.lease05',(select e->>'leaseId' from jsonb_array_elements(v) e where e->>'userId'=pg_temp.ddu('05')::text),false);
+end $$;
+reset role;
+do $$ begin
+ if (select display_name from public.profiles where id=pg_temp.ddu('05')) is distinct from 'Deleted member' then
+  raise exception 'S6.4 Hal''s name is %', (select display_name from public.profiles where id=pg_temp.ddu('05'));
+ end if;
+ if not exists(select 1 from public.messages where client_id=pg_temp.ddm('05') and body is null and author_id is null) then
+  raise exception 'S6.4 Hal''s message kept its words';
+ end if;
+ if (select status from private.account_deletion_jobs where request_id=pg_temp.ddr('05')) is distinct from 'processing' then
+  raise exception 'S6.4 Hal''s job is %', (select status from private.account_deletion_jobs where request_id=pg_temp.ddr('05'));
+ end if;
+end $$;
+
+-- S6.5 Hana's job completes only once her files and her Auth user are gone. Her resbites stay, with no organiser.
+set local role service_role;
+do $$ begin
+ begin
+  perform public.finish_account_deletion(pg_temp.ddr('01'),current_setting('dd.lease01')::uuid,true);
+  raise exception 'S6.5 Hana''s job completed with her files and Auth user still there';
+ exception when invalid_parameter_value then
+  if sqlerrm is distinct from 'Cleanup still pending' then raise; end if;
+ end;
+end $$;
+reset role;
+delete from storage.objects where name like 'dd000000-0000-4000-8000-000000000001/%';
+delete from auth.users where id=pg_temp.ddu('01');
+set local role service_role;
+do $$ begin
+ if not public.finish_account_deletion(pg_temp.ddr('01'),current_setting('dd.lease01')::uuid,true) then
+  raise exception 'S6.5 Hana''s job did not complete';
+ end if;
+end $$;
+reset role;
+do $$ begin
+ if (select (status,completed_at is not null,lease_id is null) from private.account_deletion_jobs where request_id=pg_temp.ddr('01'))
+   is distinct from ('complete'::text,true,true) then
+  raise exception 'S6.5 Hana''s job is %', (select (status,completed_at,lease_id) from private.account_deletion_jobs where request_id=pg_temp.ddr('01'));
+ end if;
+ if (select count(*) from public.plans where id in (pg_temp.ddp('01'),pg_temp.ddp('02'),pg_temp.ddp('03')) and owner_id is null)<>3 then
+  raise exception 'S6.5 A resbite of Hana''s went or kept its organiser';
+ end if;
+end $$;
+
+-- S6.6 (Review Focus 5) A cover file left after Hal's Auth user has gone keeps his job open, so the file is never
+-- orphaned with no record.
+insert into storage.objects(bucket_id,name) values ('plan-covers',pg_temp.ddu('05')||'/x/c.jpg');
+delete from auth.users where id=pg_temp.ddu('05');
+do $$ begin
+ if exists(select 1 from public.profiles where id=pg_temp.ddu('05')) then raise exception 'S6.6 Hal''s profile outlived his Auth user'; end if;
+end $$;
+set local role service_role;
+do $$ begin
+ begin
+  perform public.finish_account_deletion(pg_temp.ddr('05'),current_setting('dd.lease05')::uuid,true);
+  raise exception 'S6.6 Hal''s job completed with his cover file left';
+ exception when invalid_parameter_value then
+  if sqlerrm is distinct from 'Cleanup still pending' then raise; end if;
+ end;
+end $$;
+reset role;
+
+-- S7. Receipts (ASR2-10): a complete receipt goes 30 days after completion, but not while a hold names the account
+-- or a file of it is left.
+
+-- S7.1 No app client may purge; a batch is 1 to 100.
+set local role anon;
+select pg_temp.dd_refused('select public.purge_completed_deletion_receipts()','42501');
+reset role;
+set local role authenticated;
+select set_config('request.jwt.claims',jsonb_build_object('sub',pg_temp.ddu('02'),'role','authenticated')::text,true);
+select pg_temp.dd_refused('select public.purge_completed_deletion_receipts()','42501');
+reset role;
+select set_config('request.jwt.claims','',true);
+set local role service_role;
+select pg_temp.dd_refused('select public.purge_completed_deletion_receipts(0)','22023');
+reset role;
+
+-- S7.2 Complete receipts of accounts already gone: r1, 31 days old, goes; r2, 29 days old, and r3, 60 days old under a
+-- hold not lifted, stay.
+insert into private.account_deletion_jobs(request_id,user_id,recovery_hash,status,completed_at) values
+ (pg_temp.ddr('21'),pg_temp.ddu('21'),extensions.digest(repeat('1',64),'sha256'),'complete',now()-interval '31 days'),
+ (pg_temp.ddr('22'),pg_temp.ddu('22'),extensions.digest(repeat('2',64),'sha256'),'complete',now()-interval '29 days'),
+ (pg_temp.ddr('23'),pg_temp.ddu('23'),extensions.digest(repeat('3',64),'sha256'),'complete',now()-interval '60 days');
+insert into private.legal_holds(user_id,reason,case_ref,review_on) values (pg_temp.ddu('23'),'court','LE-5',current_date+90);
+set local role service_role;
+do $$ declare n integer; begin
+ n := public.purge_completed_deletion_receipts();
+ if n is distinct from 1 then raise exception 'S7.2 The purge removed % receipts', n; end if;
+end $$;
+reset role;
+do $$ begin
+ if exists(select 1 from private.account_deletion_jobs where request_id=pg_temp.ddr('21')) then
+  raise exception 'S7.2 r1 stayed';
+ end if;
+ if (select count(*) from private.account_deletion_jobs where request_id in (pg_temp.ddr('22'),pg_temp.ddr('23')))<>2 then
+  raise exception 'S7.2 r2 or r3 went';
+ end if;
+end $$;
+
+-- S7.3 r1 no longer resolves; r2 still does.
+set local role service_role;
+do $$ begin
+ if public.account_deletion_status(pg_temp.ddr('21'),repeat('1',64)) is not null then raise exception 'S7.3 r1 still resolves'; end if;
+ if public.account_deletion_status(pg_temp.ddr('22'),repeat('2',64))->>'status' is distinct from 'complete' then
+  raise exception 'S7.3 r2 does not resolve';
+ end if;
+end $$;
+reset role;
+
+-- S7.4 (Review Focus 5) Hal's receipt, complete 60 days ago, stays while his cover file is left. Once the file has
+-- gone, the receipt goes.
+update private.account_deletion_jobs set status='complete',completed_at=now()-interval '60 days',lease_id=null,lease_until=null
+ where request_id=pg_temp.ddr('05');
+set local role service_role;
+do $$ declare n integer; begin
+ n := public.purge_completed_deletion_receipts();
+ if n is distinct from 0 then raise exception 'S7.4 The purge removed % receipts with Hal''s cover left', n; end if;
+end $$;
+reset role;
+do $$ begin
+ if not exists(select 1 from private.account_deletion_jobs where request_id=pg_temp.ddr('05')) then
+  raise exception 'S7.4 Hal''s receipt went with his cover file left';
+ end if;
+end $$;
+delete from storage.objects where name like 'dd000000-0000-4000-8000-000000000005/%';
+set local role service_role;
+do $$ declare n integer; begin
+ n := public.purge_completed_deletion_receipts();
+ if n is distinct from 1 then raise exception 'S7.4 The purge removed % receipts once Hal''s cover went', n; end if;
+end $$;
+reset role;
+do $$ begin
+ if exists(select 1 from private.account_deletion_jobs where request_id=pg_temp.ddr('05')) then
+  raise exception 'S7.4 Hal''s receipt stayed once his cover went';
+ end if;
 end $$;
 
 rollback;

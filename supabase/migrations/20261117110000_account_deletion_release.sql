@@ -322,3 +322,158 @@ revoke all on function private.request_account_deletion(uuid,uuid,uuid,text), pu
  private.account_deletion_status(uuid,text), public.account_deletion_status(uuid,text) from public, anon, authenticated;
 grant execute on function private.request_account_deletion(uuid,uuid,uuid,text), public.request_account_deletion(uuid,uuid,uuid,text),
  private.account_deletion_status(uuid,text), public.account_deletion_status(uuid,text) to service_role;
+
+-- 3. The worker (ASR2-9), the photo guard and the receipts (ASR2-10). The cleanup-account Edge function claims jobs,
+-- removes the account's files in both buckets through the Storage API, removes the Auth user, then finishes the job.
+-- purge-deletion-receipts removes a complete receipt 30 days after completion. Both run as service_role, from
+-- supabase/ops/schedule-account-deletion.sql. A hold (UGC-15) stops both: a held account's files, Auth user and
+-- receipt stay until the hold is lifted.
+
+-- The claim: 20260918001316_account_deletion_lifecycle.sql:91-98, with two changes.
+-- - First it resumes up to 5 held jobs whose account is no longer held, oldest first: each takes the account's lock,
+--   then the deletions' lock (ASR2-5), without waiting, and is skipped while either is busy. Under them, with the
+--   deletion's flag set as the request sets it, it runs the erase step the hold parked, and the job is queued now.
+-- - It claims only queued or processing jobs whose account isn't held, so a hold set after acceptance, even in the
+--   middle of a claimed job, keeps the account's files and Auth user once the lease has passed (Review Focus 2).
+create or replace function private.claim_account_deletions(p_limit integer default 5) returns jsonb language plpgsql security definer set search_path='' as $$
+declare v_result jsonb; v_job private.account_deletion_jobs;
+begin
+ for v_job in select * from private.account_deletion_jobs j where j.status='held' and not private.account_held(j.user_id)
+  order by j.requested_at limit 5 loop
+  continue when not pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended(v_job.user_id::text,47));
+  continue when not pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended('account_deletion',0));
+  perform 1 from private.account_deletion_jobs where request_id=v_job.request_id and status='held' for update skip locked;
+  continue when not found or private.account_held(v_job.user_id);
+  perform set_config('resbite.system','deletion',true);
+  perform private.erase_account(v_job.user_id);
+  update private.account_deletion_jobs set status='queued',next_attempt_at=now() where request_id=v_job.request_id;
+ end loop;
+ with chosen as (select request_id from private.account_deletion_jobs j where status in ('queued','processing') and next_attempt_at<=now() and (lease_until is null or lease_until<now()) and not private.account_held(j.user_id) order by requested_at for update skip locked limit greatest(1,least(p_limit,10))),
+ claimed as (update private.account_deletion_jobs j set status='processing',lease_id=gen_random_uuid(),lease_until=now()+interval '5 minutes',attempts=attempts+1 from chosen c where j.request_id=c.request_id returning j.*)
+ select coalesce(jsonb_agg(jsonb_build_object('requestId',request_id,'userId',user_id,'leaseId',lease_id,'attempts',attempts)),'[]'::jsonb) into v_result from claimed;
+ return v_result;
+end $$;
+create or replace function public.claim_account_deletions(p_limit integer default 5) returns jsonb language sql security invoker set search_path='' as $$ select private.claim_account_deletions(p_limit) $$;
+
+-- The account's files: 20260918001316_account_deletion_lifecycle.sql:101-108 (deletion_photo_paths), renamed, with
+-- three changes. It refuses while a hold names the account (Review Focus 2). It lists both buckets under the account's
+-- folder, profile-photos/<uid>/ and plan-covers/<uid>/ (ASR2-9). And each entry names its bucket, ordered by bucket
+-- then name, at most 100.
+drop function if exists public.deletion_photo_paths(uuid,uuid);
+drop function if exists private.deletion_photo_paths(uuid,uuid);
+create or replace function private.deletion_storage_objects(p_request uuid,p_lease uuid) returns jsonb language plpgsql security definer set search_path='' as $$
+declare v_user uuid; v_objects jsonb;
+begin
+ select user_id into v_user from private.account_deletion_jobs where request_id=p_request and lease_id=p_lease and lease_until>now() and status='processing';
+ if v_user is null then raise exception 'Deletion lease expired' using errcode='42501'; end if;
+ if private.account_held(v_user) then raise exception 'Deletion on hold' using errcode='42501'; end if;
+ select coalesce(jsonb_agg(jsonb_build_object('bucket',bucket_id,'name',name) order by bucket_id,name),'[]'::jsonb) into v_objects
+  from (select bucket_id,name from storage.objects where bucket_id in ('profile-photos','plan-covers') and name like v_user::text||'/%'
+   order by bucket_id,name limit 100) objects;
+ return v_objects;
+end $$;
+create or replace function public.deletion_storage_objects(p_request uuid,p_lease uuid) returns jsonb language sql security invoker set search_path='' as $$ select private.deletion_storage_objects(p_request,p_lease) $$;
+
+-- The finish: 20260918001316_account_deletion_lifecycle.sql:111-124, with the completion check also covering
+-- plan-covers, so a cover left after the Auth user has gone keeps the job open (Review Focus 5).
+create or replace function private.finish_account_deletion(p_request uuid,p_lease uuid,p_complete boolean) returns boolean language plpgsql security definer set search_path='' as $$
+declare v_job private.account_deletion_jobs;
+begin
+ select * into v_job from private.account_deletion_jobs where request_id=p_request for update;
+ if not found or v_job.lease_id is distinct from p_lease or v_job.status<>'processing' or v_job.lease_until<=now() then return false; end if;
+ if p_complete then
+  if exists(select 1 from auth.users where id=v_job.user_id) or exists(select 1 from public.profiles where id=v_job.user_id) or exists(select 1 from storage.objects where bucket_id in ('profile-photos','plan-covers') and name like v_job.user_id::text||'/%') then
+   raise exception 'Cleanup still pending' using errcode='22023'; end if;
+  update private.account_deletion_jobs set status='complete',completed_at=now(),lease_id=null,lease_until=null where request_id=p_request;
+ else
+  update private.account_deletion_jobs set status='queued',next_attempt_at=now()+make_interval(secs=>least(3600,30*power(2,least(attempts,7))::integer)),lease_id=null,lease_until=null where request_id=p_request;
+ end if;
+ return true;
+end $$;
+create or replace function public.finish_account_deletion(p_request uuid,p_lease uuid,p_complete boolean) returns boolean language sql security invoker set search_path='' as $$ select private.finish_account_deletion(p_request,p_lease,p_complete) $$;
+
+-- The photo guard: 20260918001316_account_deletion_lifecycle.sql:134-142, which plan 6 consumes. Storage writes use
+-- direct SQL, not the app's mutation RPCs, so a profile-photos write from a signed-in account takes the account's lock
+-- and checks it through require_tester: a late upload can't land in a deleting account. Made only where absent, with
+-- this file's marker: the local replay keeps 20260923152816_orphan_profile_photo_cleanup.sql's stronger body.
+do $migration$ begin
+ if pg_catalog.to_regprocedure('private.guard_photo_write()') is null then
+  create function private.guard_photo_write() returns trigger language plpgsql security definer set search_path='' as $fn$
+  begin
+   if new.bucket_id='profile-photos' and auth.uid() is not null then
+    perform private.require_tester();
+   end if;
+   return new;
+  end $fn$;
+  revoke all on function private.guard_photo_write() from public,anon,authenticated;
+  comment on function private.guard_photo_write() is 'resbite 20261117110000';
+ end if;
+ if not exists(select 1 from pg_catalog.pg_trigger where tgrelid='storage.objects'::regclass and tgname='resbite_photo_write_guard') then
+  create trigger resbite_photo_write_guard before insert or update on storage.objects for each row execute function private.guard_photo_write();
+  comment on trigger resbite_photo_write_guard on storage.objects is 'resbite 20261117110000';
+ end if;
+end $migration$;
+
+-- The receipts: 20260923152943_deletion_receipt_retention.sql:8-32, with three changes. A receipt stays while a hold
+-- names its account. The storage check covers both buckets. And the photo-cleanup fences (:19-20) apply only where
+-- their tables exist (the local replay today, hosted once plan 6 brings them): the statement is written twice, with
+-- them and without, so neither is planned against a table that isn't there.
+create or replace function private.purge_completed_deletion_receipts(p_limit integer default 100)
+returns integer language plpgsql security definer set search_path='' as $$
+declare v_count integer;
+begin
+ if p_limit is null or p_limit not between 1 and 100 then
+  raise exception 'Invalid purge batch size' using errcode='22023';
+ end if;
+ if pg_catalog.to_regclass('private.profile_photo_cleanup_jobs') is not null then
+  with candidates as (
+   select j.request_id from private.account_deletion_jobs j
+   where j.status='complete' and j.completed_at<=now()-interval '30 days'
+     and j.lease_id is null and j.lease_until is null
+     and not private.account_held(j.user_id)
+     and not exists(select 1 from private.profile_photo_retired_paths r where r.user_id=j.user_id)
+     and not exists(select 1 from private.profile_photo_cleanup_jobs p where p.user_id=j.user_id)
+     and not exists(select 1 from auth.users u where u.id=j.user_id)
+     and not exists(select 1 from public.profiles p where p.id=j.user_id)
+     and not exists(select 1 from storage.objects o
+       where o.bucket_id in ('profile-photos','plan-covers') and o.name like j.user_id::text||'/%')
+   order by j.completed_at,j.request_id
+   limit p_limit for update of j skip locked
+  ), removed as (
+   delete from private.account_deletion_jobs j using candidates c
+    where j.request_id=c.request_id returning j.request_id
+  ) select count(*) into v_count from removed;
+ else
+  with candidates as (
+   select j.request_id from private.account_deletion_jobs j
+   where j.status='complete' and j.completed_at<=now()-interval '30 days'
+     and j.lease_id is null and j.lease_until is null
+     and not private.account_held(j.user_id)
+     and not exists(select 1 from auth.users u where u.id=j.user_id)
+     and not exists(select 1 from public.profiles p where p.id=j.user_id)
+     and not exists(select 1 from storage.objects o
+       where o.bucket_id in ('profile-photos','plan-covers') and o.name like j.user_id::text||'/%')
+   order by j.completed_at,j.request_id
+   limit p_limit for update of j skip locked
+  ), removed as (
+   delete from private.account_deletion_jobs j using candidates c
+    where j.request_id=c.request_id returning j.request_id
+  ) select count(*) into v_count from removed;
+ end if;
+ return v_count;
+end $$;
+create or replace function public.purge_completed_deletion_receipts(p_limit integer default 100)
+returns integer language sql security invoker set search_path='' as $$
+ select private.purge_completed_deletion_receipts(p_limit)
+$$;
+
+-- The worker RPCs are service_role's (the two Edge functions), never an app client's. On hosted the new public
+-- wrappers come with Supabase's default grants, which these revokes remove.
+revoke all on function private.claim_account_deletions(integer), public.claim_account_deletions(integer),
+ private.deletion_storage_objects(uuid,uuid), public.deletion_storage_objects(uuid,uuid),
+ private.finish_account_deletion(uuid,uuid,boolean), public.finish_account_deletion(uuid,uuid,boolean),
+ private.purge_completed_deletion_receipts(integer), public.purge_completed_deletion_receipts(integer) from public, anon, authenticated;
+grant execute on function private.claim_account_deletions(integer), public.claim_account_deletions(integer),
+ private.deletion_storage_objects(uuid,uuid), public.deletion_storage_objects(uuid,uuid),
+ private.finish_account_deletion(uuid,uuid,boolean), public.finish_account_deletion(uuid,uuid,boolean),
+ private.purge_completed_deletion_receipts(integer), public.purge_completed_deletion_receipts(integer) to service_role;

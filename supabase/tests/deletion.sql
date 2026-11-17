@@ -57,9 +57,10 @@ do $$ declare jobs jsonb; lease uuid; begin
  jobs:=public.claim_account_deletions(5); lease:=(jobs->0->>'leaseId')::uuid;
  if jsonb_array_length(jobs)<>1 then raise exception 'Deletion not claimed'; end if;
  if public.claim_account_deletions(5)<>'[]'::jsonb then raise exception 'Live lease claimed twice'; end if;
- if jsonb_array_length(public.deletion_photo_paths('44000000-0000-4000-8000-000000000001',lease))<>1 then raise exception 'Photo enumeration failed'; end if;
+ -- ASR2-9: both buckets under the account's folder, the profile photo and the cover.
+ if jsonb_array_length(public.deletion_storage_objects('44000000-0000-4000-8000-000000000001',lease))<>2 then raise exception 'Storage enumeration failed'; end if;
  begin perform public.finish_account_deletion('44000000-0000-4000-8000-000000000001',lease,true); raise exception 'Premature completion'; exception when invalid_parameter_value then null; end;
- delete from storage.objects where name='41000000-0000-4000-8000-000000000001/a.jpg';
+ delete from storage.objects where name like '41000000-0000-4000-8000-000000000001/%';
  delete from auth.users where id='41000000-0000-4000-8000-000000000001';
  if not public.finish_account_deletion('44000000-0000-4000-8000-000000000001',lease,true) then raise exception 'Completion failed'; end if;
  if (public.account_deletion_status('44000000-0000-4000-8000-000000000001',repeat('a',64))->>'status')<>'complete' then raise exception 'Recovery after Auth deletion failed'; end if;
