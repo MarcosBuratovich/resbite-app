@@ -57,8 +57,8 @@ Phases 0 to 2 of the gap analysis are done when every box below is ticked. Do no
 | `EXPO_PUBLIC_SUPABASE_URL` | The hosted project's URL | the Supabase client |
 | `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | The hosted publishable key | the Supabase client |
 | `EXPO_PUBLIC_SUPPORT_ADDRESS` | The support inbox (F1): one `@`, a dot after it, no space | `mobile/app/data-privacy.tsx:28`; `mobile/src/design/ReportSheet.tsx:69`; the suspended and taken-number screens (B6) |
-| `EXPO_PUBLIC_TERMS_URL` | The published Terms of Use URL (D1) | `mobile/src/design/TickRow.tsx`; B1's legal links |
-| `EXPO_PUBLIC_PRIVACY_URL` | The published Privacy Policy URL (D1) | as above |
+| `EXPO_PUBLIC_TERMS_URL` | Optional. Unset, the app uses https://link.resbite.com/terms and /privacy; set only if the pages move (an https link) | `mobile/src/design/TickRow.tsx`; B1's legal links |
+| `EXPO_PUBLIC_PRIVACY_URL` | Optional. Unset, the app uses https://link.resbite.com/terms and /privacy; set only if the pages move (an https link) | as above |
 | `EXPO_PUBLIC_PUSH_ENABLED` | On (the string `true`) | `mobile/src/services/pushDevice.ts:21` |
 | `EXPO_PUBLIC_INVITATION_ORIGIN` | The link site's origin | `mobile/app/+native-intent.tsx:9` |
 | `EXPO_PUBLIC_ACCOUNT_DELETION_ENABLED` | On (the string `true`), only once C2 is live (step 13) | `mobile/src/services/accountDeletion.ts:11-12` |
@@ -211,6 +211,7 @@ Each migration is approved by name and sha256, with snapshots, the advisors, the
 
 - [ ] `mobile/app.json` reads version `1.0.0` and has `ios.privacyManifests` (B13).
 - [ ] **[approval: EAS / TestFlight]** From `mobile/`, at the merged commit on `main`: `npx eas build --platform ios --profile production`, then `npx eas submit --platform ios --profile production`.
+- [ ] The build log shows `PASS release check: …` from the `eas-build-post-install` hook.
 - [ ] Record in the release record: the build number (EAS increments it remotely), the commit, the date, and the Xcode version from the build log (Xcode 26 or later; CON-7).
 - [ ] Read Apple's email after the upload. Record any ITMS warning, for example missing required-reason entries (ITMS-91053) or a missing SDK manifest (ITMS-91061), and fix it before step 25.
 - [ ] TestFlight: internal testers install it first. Tell external testers to update before step 21, since sign-in on older builds may fail once CAPTCHA is on.
@@ -264,6 +265,7 @@ Run on the step 20 build, installed from TestFlight. Record each result under "A
 - [ ] The About and legal group opens the live Privacy Policy, Terms, Support and company details, and the Licences screen shows the notices.
 - [ ] The welcome and sign-in screens link the Privacy Policy and the Terms. The 18+ tick's links work.
 - [ ] Data & privacy matches the Privacy Policy.
+- [ ] Community rules opens `/terms#community-rules`.
 - [ ] "Request a copy of my data" opens a pre-filled email to privacy@resbite.com.
 - [ ] support@resbite.com shows in Data & privacy → Contact, after a report, on the suspended screen and in the taken-number line.
 

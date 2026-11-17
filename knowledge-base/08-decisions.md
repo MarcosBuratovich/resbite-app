@@ -806,3 +806,16 @@ Gap analysis: [`docs/superpowers/specs/2026-11-17-app-store-readiness-design.md`
 - **AS-R7. Legal and police requests** go to privacy@resbite.com.
 - **AS-R8. Weekly-group chat history.** Everyone on the current week, pending guests included, can read the whole history (`chat_groups.sql:194-205`). This is disclosed, and it stays as built. *To confirm with the owner.*
 - **AS-R9. The report thanks states the review time** ("We review reports every day."), for Ofcom code measure ICU D4. This joins B7.
+
+*Plan 3 (app legal and content), 17 November 2026:*
+
+- **AS-P3-1. About and legal opens from Data & privacy.** It is the path the documents give. Profile gets no new row. The route sits outside the protected stack. The welcome, phone sign-in and email sign-in screens link Privacy Policy, Terms of Use and Support.
+- **AS-P3-2. Canonical legal URLs, with two https-only overrides.** `EXPO_PUBLIC_TERMS_URL` and `EXPO_PUBLIC_PRIVACY_URL` are used only if they are https links. The release check stops a production build that sets a broken one.
+- **AS-P3-3. The support address stays build-driven.** It is required for production by the release check. privacy@resbite.com is a constant.
+- **AS-P3-4. The Wellness tab is removed, not hidden.** The route file is deleted, so no sample data or dormant screen ships. It returns from git with real data.
+- **AS-P3-5. Licences come from the npm production tree,** plus the two OFL fonts and the native libraries React Native builds in. Identical texts are stored once, and a drift test keeps the file current.
+- **AS-P3-6. The release check runs as the `eas-build-post-install` hook** for the production profile only, and as `npm run check:release`.
+- **AS-P3-7. "Request a copy of my data" opens one pre-filled email to privacy@resbite.com** with the subject, one sentence and the account id. It never includes the number or the email.
+- **AS-P3-8. Apple's own button.** Black, "Continue with Apple", 44 points tall, corner radius 22, full width. It replaces the Apple chip on About you, not the mark on Delete account.
+- **AS-P3-9. Kept as they are:** the Updates chip's "Not active yet" and `SAFETY_COPY.reportsPrivacy`.
+- **AS-P3-10. Add your number gets a second line,** "We never show your number to other people on Resbite.", which explains the required number after Apple or Google sign-in.
