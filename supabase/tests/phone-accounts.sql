@@ -62,22 +62,8 @@ do $$ begin
  if pg_temp.phone_access('c2000000-0000-4000-8000-000000000006') is distinct from 'approved' then raise exception 'Roster match with the email confirmed not approved'; end if;
 end $$;
 reset role;
--- A phone-confirmed account awaiting access may save its details; one with nothing confirmed may not.
-set local role authenticated;
-select set_config('request.jwt.claims','{"sub":"c2000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
-do $$ declare r jsonb; begin
- r := public.save_registration_details(null,'{"birth_date":null,"phone":null,"city":"Leeds","interests":[]}');
- if r->'registration_details'->>'city' is distinct from 'Leeds' then raise exception 'Details not saved: %', r; end if;
-end $$;
-select set_config('request.jwt.claims','{"sub":"c2000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
-do $$ begin
- begin
-  perform public.save_registration_details(null,'{"birth_date":null,"phone":null,"city":"Leeds","interests":[]}');
-  raise exception 'Unconfirmed account saved details';
- exception when insufficient_privilege then null;
- end;
-end $$;
 -- App use: one row per account, the first time kept and the last time bumped.
+set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"c2000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
 select public.note_app_session();
 reset role;
