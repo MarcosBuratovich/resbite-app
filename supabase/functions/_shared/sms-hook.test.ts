@@ -75,6 +75,19 @@ test("any listed signature and any listed secret will do (rotation)", async () =
   assert.deepEqual(hookSecrets(undefined), []);
 });
 
+test("signatures joined by a comma and a space verify with any one secret", async () => {
+  const id = "msg_fixture0002";
+  const sign = (secret: string) => signed(VECTOR.body, secret, TS, id).get("webhook-signature")!;
+  const header = (list: string) => new Headers({ "webhook-id": id, "webhook-timestamp": String(TS), "webhook-signature": list });
+  const joined = header(`${sign(SECRET)}, ${sign(OTHER)}`);
+  assert.equal(await verifyHookSignature([SECRET], joined, VECTOR.body, TS), true, "the first only");
+  assert.equal(await verifyHookSignature([OTHER], joined, VECTOR.body, TS), true, "the last only");
+  assert.equal(await verifyHookSignature([SECRET, OTHER], joined, VECTOR.body, TS), true, "both");
+  assert.equal(await verifyHookSignature(["v1,whsec_dGhpcmQ="], joined, VECTOR.body, TS), false, "neither");
+  assert.equal(await verifyHookSignature([SECRET], header(`${sign(SECRET)},  ${sign(OTHER)},`), VECTOR.body, TS), true, "extra spaces and a trailing comma");
+  assert.equal(await verifyHookSignature([SECRET], header("v1,, v1,"), VECTOR.body, TS), false, "empty signatures");
+});
+
 test("a missing header, no secret or a wrong id never verifies", async () => {
   const full = { "webhook-id": VECTOR.id, "webhook-timestamp": String(VECTOR.ts), "webhook-signature": VECTOR.signature };
   for (const name of Object.keys(full)) {
@@ -90,6 +103,28 @@ test("the target is the new number when one is being added, as stored digits", (
   assert.deepEqual(smsTarget(EVENT), { to: "+447700900834", otp: "123456" });
   assert.deepEqual(smsTarget({ ...EVENT, user: { phone: "+447700900834" } }), { to: "+447700900834", otp: "123456" });
   assert.deepEqual(smsTarget({ user: { phone: "447700900001", new_phone: "+44 7700 900002" }, sms: { otp: "111111" } }), { to: "+447700900002", otp: "111111" });
+  // No confirmed number (Add your number after Apple, Google or email): the number being added, never a fallback.
+  const unconfirmed = { phone: "447700900001", phone_confirmed_at: null };
+  assert.deepEqual(smsTarget({ user: { ...unconfirmed, new_phone: "447700900002" }, sms: { otp: "111111" } }), { to: "+447700900002", otp: "111111" });
+  assert.deepEqual(smsTarget({ user: { phone: "", new_phone: "447700900002" }, sms: { otp: "111111" } }), { to: "+447700900002", otp: "111111" });
+  assert.deepEqual(smsTarget({ user: { new_phone: "447700900002" }, sms: { otp: "111111" } }), { to: "+447700900002", otp: "111111" });
+  assert.deepEqual(smsTarget({ user: { phone: "", phone_confirmed_at: "2026-11-01T00:00:00Z", new_phone: "447700900002" }, sms: { otp: "111111" } }), { to: "+447700900002", otp: "111111" });
+  // An invalid new number is refused, never swapped for the old one; a blank one is no new number.
+  assert.equal(smsTarget({ user: { ...unconfirmed, new_phone: "0123" }, sms: { otp: "111111" } }), null);
+  for (const blank of ["", "  "])
+    assert.deepEqual(smsTarget({ user: { ...unconfirmed, new_phone: blank }, sms: { otp: "111111" } }), { to: "+447700900001", otp: "111111" }, JSON.stringify(blank));
+});
+
+// A confirmed number with a different pending one is Auth changing a confirmed number (PUT /auth/v1/user {phone}) or a
+// pending change left behind (a fold after an unfinished Add your number). Texting the old number would confirm a
+// number the account never proved it holds; texting the new one could text a stranger. Neither is texted.
+test("a confirmed number with a different pending number is refused: neither number is texted", () => {
+  const confirmed = { phone: "447700900834", phone_confirmed_at: "2026-11-01T00:00:00Z" };
+  for (const pending of ["447700900111", "+44 7700 900111", "0123", "x"])
+    assert.equal(smsTarget({ user: { ...confirmed, new_phone: pending }, sms: { otp: "123456" } }), null, pending);
+  // No pending number, a blank one or the same digits: the confirmed number, as before.
+  for (const same of [undefined, null, "", "  ", "447700900834", "+44 7700 900834"])
+    assert.deepEqual(smsTarget({ user: { ...confirmed, new_phone: same }, sms: { otp: "123456" } }), { to: "+447700900834", otp: "123456" }, JSON.stringify(same));
   assert.deepEqual(smsTarget({ user: { phone: "5491112345678" }, sms: { otp: "123456" } }), { to: "+5491112345678", otp: "123456" });
   for (const bad of [{}, { user: {}, sms: { otp: "123456" } }, { ...EVENT, sms: { otp: "12ab56" } }, { ...EVENT, sms: { otp: "1234567" } }, { user: { phone: "0123" }, sms: { otp: "123456" } }, null, "x"])
     assert.equal(smsTarget(bad), null);
@@ -158,6 +193,22 @@ test("a malformed event: 200 with http_code 400 and no text", async () => {
   }
 });
 
+test("a confirmed number being changed: 200 with http_code 400, no text, and its own log word", async () => {
+  const event = {
+    user: { id: EVENT.user.id, phone: "447700900834", phone_confirmed_at: "2026-11-01T00:00:00Z", new_phone: "447700900111" },
+    sms: { otp: "123456" },
+  };
+  const { d, sent, logged } = deps();
+  const body = JSON.stringify(event);
+  const r = await handleSendSms(post(body, signed(body)), d);
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get("content-type"), "application/json");
+  assert.equal(r.headers.get("retry-after"), null);
+  assert.deepEqual(await r.json(), { error: { http_code: 400, message: "Invalid code request." } });
+  assert.deepEqual(sent, []);
+  assert.deepEqual(logged, [{ route: "hook", outcome: "change-pending" }]);
+});
+
 test("a refused number: 200 with http_code 422 and the words", async () => {
   const { d, sent } = deps({ send: failing({ ok: false, kind: "refused", status: 400, code: 21614 }) });
   const body = JSON.stringify(EVENT);
@@ -170,25 +221,46 @@ test("a refused number: 200 with http_code 422 and the words", async () => {
   assert.equal(SMS_COPY.cantText, "We can’t text this number. Check it, or use another number.");
 });
 
-test("busy, down or slow: 503 with retry-after", async () => {
-  for (const status of [429, 503, 0]) {
-    const { d } = deps({ send: failing({ ok: false, kind: "transient", status, code: null }) });
+// Auth never retries: a retry would call Twilio again, after an abort Twilio may have accepted, and Auth's 5 seconds
+// cover every attempt. The 200 carries http_code 503, so Auth answers 503 and the person reads the connection copy.
+test("busy, down or slow: 200 with http_code 503 and no retry-after", async () => {
+  for (const status of [429, 500, 503, 0]) {
+    const { d, sent } = deps({ send: failing({ ok: false, kind: "transient", status, code: null }) });
     const body = JSON.stringify(EVENT);
     const r = await handleSendSms(post(body, signed(body)), d);
-    assert.equal(r.status, 503, String(status));
-    assert.equal(r.headers.get("retry-after"), "1");
+    assert.equal(r.status, 200, String(status));
+    assert.equal(r.headers.get("retry-after"), null, String(status));
     assert.equal(r.headers.get("content-type"), "application/json");
     assert.deepEqual(await r.json(), { error: { http_code: 503, message: SMS_COPY.unavailable } });
+    assert.equal(sent.length, 1, String(status));
   }
 });
 
-test("a sender that throws counts as busy: 503 with retry-after", async () => {
+test("a sender that throws counts as busy: 200 with http_code 503 and no retry-after", async () => {
   const { d, logged } = deps({ send: async () => { throw Error("boom +447700900834"); } });
   const body = JSON.stringify(EVENT);
   const r = await handleSendSms(post(body, signed(body)), d);
-  assert.equal(r.status, 503);
-  assert.equal(r.headers.get("retry-after"), "1");
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get("retry-after"), null);
+  assert.deepEqual(await r.json(), { error: { http_code: 503, message: SMS_COPY.unavailable } });
   assert.ok(!JSON.stringify(logged).includes("7700900834"));
+});
+
+test("no reply ever asks Auth to retry", async () => {
+  const results: SendResult[] = [
+    { ok: true },
+    { ok: false, kind: "refused", status: 400, code: 21614 },
+    { ok: false, kind: "transient", status: 0, code: null },
+    { ok: false, kind: "transient", status: 429, code: 20429 },
+    { ok: false, kind: "transient", status: 503, code: null },
+    { ok: false, kind: "config", status: 401, code: 20003 },
+  ];
+  for (const result of results) {
+    const body = JSON.stringify(EVENT);
+    const r = await handleSendSms(post(body, signed(body)), deps({ send: failing(result) }).d);
+    assert.equal(r.headers.get("retry-after"), null, JSON.stringify(result));
+    assert.ok(![429, 503].includes(r.status), JSON.stringify(result));
+  }
 });
 
 test("anything else: 500", async () => {
@@ -274,8 +346,8 @@ test("maps Twilio's answers", async () => {
   }
 });
 
-test("gives up after four seconds", async () => {
-  assert.equal(TWILIO_TIMEOUT_MS, 4000);
+test("gives up after three seconds, leaving a cold start and the signature check inside Auth's five", async () => {
+  assert.equal(TWILIO_TIMEOUT_MS, 3000);
   const timeouts: number[] = [];
   const original = AbortSignal.timeout;
   AbortSignal.timeout = (ms: number) => { timeouts.push(ms); return original.call(AbortSignal, ms); };
@@ -290,7 +362,7 @@ test("gives up after four seconds", async () => {
     }) as typeof fetch;
     assert.deepEqual(await twilioSender({ ...CONFIG, fetch: capture })("+447700900834", smsBody("123456")), { ok: true });
     assert.ok(signal instanceof AbortSignal);
-    assert.deepEqual(timeouts, [4000]);
+    assert.deepEqual(timeouts, [3000]);
   } finally {
     AbortSignal.timeout = original;
   }

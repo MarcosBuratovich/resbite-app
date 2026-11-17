@@ -10,7 +10,7 @@ Use Node 22.13+ and `npm ci`. Copy `.env.example` to `.env.local` and use the pr
 - `npm run ios`: open the iOS target (requires the Mac/iOS environment).
 - `npm run web`: developer-only layout review. This is not the deliverable mobile app.
 - `npm run check`: TypeScript, domain/session-storage tests and content-manifest validation.
-- `npm run check:release`: the production release check (support address, push on, deletion on, legal-link overrides). EAS runs it as the `eas-build-post-install` hook for the production profile.
+- `npm run check:release`: the production release check (support address, the Supabase URL and publishable key, push on, deletion on, legal-link overrides; it prints names, never the values). EAS runs it as the `eas-build-post-install` hook for the production profile.
 - `node --import tsx scripts/generate-licences.mjs`: regenerates the licence notices. Run it after any dependency change, then commit `src/domain/licences.json`.
 - `node scripts/verify-legal.mjs`: browser checks for the legal links, About and legal, Licences and Data & privacy, against Expo web.
 - `npx expo export --platform ios --output-dir dist-ios`: checks the iOS JavaScript bundle; does not compile/sign an iPhone app.
