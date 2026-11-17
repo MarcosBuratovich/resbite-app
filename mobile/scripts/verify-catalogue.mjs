@@ -191,11 +191,13 @@ try {
       f.page.getByText("Reviewed server tip.", { exact: true }),
     ).toBeVisible();
     await expect(f.page.getByText("45 minutes", { exact: true })).toBeVisible();
+    // A signed-in account's idea page has no Preview chip and no beta wording (App Store readiness, 5e7ea0f).
     await expect(
-      f.page.getByText("Activity content approved for the owner-only beta.", {
-        exact: true,
-      }),
+      f.page
+        .getByRole("button", { name: "Preview mode", exact: true })
+        .filter({ visible: true }),
     ).toHaveCount(0);
+    await expect(f.page.getByText(/\bbeta\b/i)).toHaveCount(0);
     await expect
       .poll(() =>
         f.page
@@ -279,19 +281,19 @@ try {
     .getByRole("button", { name: "Coffee together", exact: true })
     .click();
   await expect(
-    preview.page.getByText(
-      "Activity content approved for the owner-only beta.",
-      {
-        exact: true,
-      },
-    ),
-  ).toBeVisible();
-  await expect(
     preview.page.getByRole("button", {
       name: "Use idea",
       exact: true,
     }),
   ).toBeVisible();
+  // The preview's idea page is marked by the Preview chip at its top right. The line under the tips that named the
+  // owner-only beta went with App Store readiness (5e7ea0f), and nothing replaces it.
+  await expect(
+    preview.page
+      .getByRole("button", { name: "Preview mode", exact: true })
+      .filter({ visible: true }),
+  ).toHaveCount(1);
+  await expect(preview.page.getByText(/\bbeta\b/i)).toHaveCount(0);
   await button(preview.page, "Back").click();
   // The search field sits behind the search icon (spec "Create tab").
   await button(preview.page, "Search").click();

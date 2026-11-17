@@ -1,8 +1,9 @@
 // "Invite people" (Plan 2 checks the Pick step itself, in verify-contact-invites). Plan 3: the event's one link (Share,
 // Copy, Turn off) lives on this screen again, under the contacts with its own heading "Or share the event link"
-// (and no second title); it is read once for the organizer and never for someone else's event. The ⓘ sheet points to
-// this screen and to the people list; nothing is kept in browser storage; 320 px with Larger Text. Every Supabase
-// request is intercepted.
+// (and no second title); it is read once for the organizer and never for someone else's event. The host's Circle of
+// trust card (CO-04, verify-circle checks it) sits above the contacts with its own heading, and never shows for someone
+// else's event. The ⓘ sheet points to this screen and to the people list; nothing is kept in browser storage; 320 px
+// with Larger Text. Every Supabase request is intercepted.
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 import { button, heading } from "./qa-helpers.mjs";
@@ -66,6 +67,8 @@ const INFO = [
   "Someone you remove can ask to join again with the link, and you’ll decide.",
 ];
 const LINK_CONTROLS = ["Share link", "Copy link", "Turn off this link"];
+/** The Circle of trust card's "Each person can bring" options, as spoken (the plan sets no circle: Nobody). */
+const CIRCLE_OPTIONS = ["Nobody", "1 person each", "2 people each", "3 people each"];
 
 async function fixture({ width = 390, largeText = false } = {}) {
   const context = await browser.newContext({
@@ -115,9 +118,9 @@ try {
   {
     const { page, errors, state } = await fixture();
     await expect(heading(page, "Invite people")).toBeVisible();
-    // The Pick step, then the event link with its own heading and no second title.
+    // The Circle of trust card, the Pick step, then the event link with its own heading and no second title.
     await expect(button(page, "Invite 0")).toBeVisible();
-    await expect(page.getByRole("heading")).toHaveText(["Invite people", "Or share the event link"]);
+    await expect(page.getByRole("heading")).toHaveText(["Invite people", "Circle of trust", "Or share the event link"]);
     await expect(heading(page, "Event link")).toHaveCount(0);
     for (const name of LINK_CONTROLS) await expect(button(page, name)).toBeEnabled();
     await expect(page.getByText("Anyone who answers through the link waits for your approval.", { exact: true })).toBeVisible();
@@ -135,7 +138,7 @@ try {
     assert.deepEqual(errors, []);
     await page.context().close();
     console.log(
-      "PASS: Invite people shows the contacts, then Or share the event link (Share link, Copy link, Turn off this link; the link read once, no second title), no card and no exact place; the ⓘ sheet points to the Invite screen and the people list.",
+      "PASS: Invite people shows the Circle of trust card and the contacts, then Or share the event link (Share link, Copy link, Turn off this link; the link read once, no second title), no cover card and no exact place; the ⓘ sheet points to the Invite screen and the people list.",
     );
   }
   {
@@ -151,19 +154,22 @@ try {
     await expect(button(page, /^Invite \d+$/)).toHaveCount(0);
     assert.deepEqual(state.links, [], "No link is read for someone else's event");
     await expect(heading(page, "Or share the event link")).toHaveCount(0);
+    await expect(heading(page, "Circle of trust")).toHaveCount(0);
     assert.deepEqual(errors, []);
     await page.context().close();
-    console.log("PASS: someone else's event shows why there is no link, and reads none.");
+    console.log("PASS: someone else's event shows why there is no link, reads none, and has no Circle of trust card.");
   }
   {
     const { page, errors } = await fixture({ width: 320, largeText: true });
     await expect(heading(page, "Invite people")).toBeVisible();
     await expect(button(page, "Invite 0")).toBeVisible();
     for (const name of LINK_CONTROLS) await expect(button(page, name)).toBeVisible();
+    for (const name of CIRCLE_OPTIONS) await expect(page.getByRole("radio", { name, exact: true })).toBeVisible();
+    await expect(page.getByRole("radio", { name: "Nobody", exact: true })).toBeChecked();
     const fits = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
     assert.ok(fits, "Invite people fits 320 px under Larger Text");
     const clipped = await page.evaluate(() =>
-      [...document.querySelectorAll("[role=button],[role=heading]")]
+      [...document.querySelectorAll("[role=button],[role=heading],[role=radio]")]
         .filter((el) => el.getBoundingClientRect().width > 0)
         .filter((el) => {
           const b = el.getBoundingClientRect();
@@ -176,9 +182,13 @@ try {
       const box = await button(page, name).boundingBox();
       assert.ok(box.height >= 44 && box.width >= 44, `${name} is at least 44 pt`);
     }
+    for (const name of CIRCLE_OPTIONS) {
+      const box = await page.getByRole("radio", { name, exact: true }).boundingBox();
+      assert.ok(box.height >= 44 && box.width >= 44, `${name} is at least 44 pt`);
+    }
     assert.deepEqual(errors, []);
     await page.context().close();
-    console.log("PASS: Invite people at 320 px with Larger Text, the link controls included: no sideways overflow, 44 pt targets.");
+    console.log("PASS: Invite people at 320 px with Larger Text, the circle's options and the link controls included: no sideways overflow, 44 pt targets.");
   }
 } finally {
   await browser.close();

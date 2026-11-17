@@ -4,8 +4,10 @@
 // frames): an ok phx_reply to the join of realtime:chat:<series>, heartbeats answered, and on demand a `broadcast` frame
 // {event: "chat", payload: {id, kind, state}}. Time is page.clock's, and the fixture's server clock follows it.
 //
-// Run Expo web on 8087 (never 8081) with a fake https EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
-// then: RESBITE_QA_URL=http://localhost:8087 EXPO_PUBLIC_SUPABASE_URL=<the same URL> node scripts/verify-chat.mjs
+// Run Expo web on a port other than 8081 (8087, say) with an https EXPO_PUBLIC_SUPABASE_URL and a stand-in
+// EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY, then: RESBITE_QA_URL=http://localhost:8087 node scripts/verify-chat.mjs
+// The fixture session is stored under qa-helpers' AUTH_STORAGE_KEY, the hosted project's key unless the script is given
+// the same EXPO_PUBLIC_SUPABASE_URL as a stand-in Expo was started with; every *.supabase.co request is answered here.
 // RESBITE_QA_SHOTS=<folder> saves screenshots at 390 px and at 320 px under Larger Text.
 //
 //   a0  links: https://example.com/x is a link that asks "Open example.com?" (Open, Cancel) before the browser; a phone
@@ -105,12 +107,11 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { chromium, expect } from "@playwright/test";
-import { button, heading, inOrder, visible } from "./qa-helpers.mjs";
+import { AUTH_STORAGE_KEY, button, heading, inOrder, visible } from "./qa-helpers.mjs";
 
 const browser = await chromium.launch({ channel: process.env.RESBITE_QA_BROWSER || "chrome", headless: true });
 const base = process.env.RESBITE_QA_URL || "http://localhost:8087";
-const SUPABASE = new URL(process.env.EXPO_PUBLIC_SUPABASE_URL || "https://chatfixture.supabase.co");
-const STORAGE_KEY = `sb-${SUPABASE.hostname.split(".")[0]}-auth-token`;
+const STORAGE_KEY = AUTH_STORAGE_KEY;
 const SHOTS = process.env.RESBITE_QA_SHOTS || null;
 if (SHOTS) mkdirSync(SHOTS, { recursive: true });
 
