@@ -6,8 +6,8 @@ create role supabase_auth_admin nologin;
 create schema auth;
 create schema storage;
 create schema extensions;
-create table auth.users(id uuid primary key,email text,phone text unique,phone_change text,phone_confirmed_at timestamptz,email_confirmed_at timestamptz,raw_user_meta_data jsonb default '{}',is_anonymous boolean default false,banned_until timestamptz);
-create table auth.sessions(id uuid primary key,user_id uuid references auth.users(id) on delete cascade,created_at timestamptz default now());
+create table auth.users(id uuid primary key,email text,phone text unique,phone_change text,phone_confirmed_at timestamptz,email_confirmed_at timestamptz,raw_user_meta_data jsonb default '{}',is_anonymous boolean default false,banned_until timestamptz,created_at timestamptz not null default now(),last_sign_in_at timestamptz);
+create table auth.sessions(id uuid primary key,user_id uuid references auth.users(id) on delete cascade,created_at timestamptz default now(),updated_at timestamptz,user_agent text,ip inet);
 create table auth.refresh_tokens(id bigint generated always as identity primary key,user_id text,session_id uuid references auth.sessions(id) on delete cascade,revoked boolean not null default false,created_at timestamptz not null default now());
 create table auth.identities(id uuid primary key default gen_random_uuid(),provider_id text,user_id uuid not null references auth.users(id) on delete cascade,identity_data jsonb not null default '{}',provider text not null,last_sign_in_at timestamptz,created_at timestamptz not null default now(),email text);
 create function auth.uid() returns uuid language sql stable as $$ select (nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'sub')::uuid $$;
@@ -48,3 +48,13 @@ create function realtime.send(payload jsonb, event text, topic text, private boo
 $$;
 grant usage on schema realtime to authenticated;
 grant select on realtime.messages to authenticated;
+-- A stub of Supabase Vault (plan 6's do-not-invite key, 20261117130000_retention_and_team_tools.sql). Hosted has the
+-- real one, which keeps the secret encrypted and whose create_secret has the same first three parameters; here the
+-- secret is plain text, in a disposable cluster only. No API role may reach it.
+create schema vault;
+create table vault.secrets(id uuid primary key default gen_random_uuid(),name text unique,description text not null default '',secret text not null,created_at timestamptz not null default now());
+create view vault.decrypted_secrets as select id,name,description,secret as decrypted_secret,created_at from vault.secrets;
+create function vault.create_secret(new_secret text,new_name text default null,new_description text default '') returns uuid language sql as $$
+ insert into vault.secrets(secret,name,description) values (new_secret,new_name,new_description) returning id
+$$;
+revoke all on function vault.create_secret(text,text,text) from public;
