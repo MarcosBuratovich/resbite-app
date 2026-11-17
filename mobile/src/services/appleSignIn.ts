@@ -6,6 +6,8 @@ export type AppleCredential = {
   identityToken: string | null;
   email: string | null;
   fullName: { givenName: string | null; familyName: string | null } | null;
+  /** Short-lived and one per sign-in; account deletion sends it on so Apple's tokens can be revoked (ASR2-8). */
+  authorizationCode: string | null;
 };
 export type AppleSignInDeps = {
   randomUUID: () => string;
@@ -18,7 +20,7 @@ export type AppleSignInDeps = {
   }) => Promise<{ error: { message: string; status?: number } | null }>;
 };
 export type AppleSignInResult =
-  | { ok: true; name: string | null }
+  | { ok: true; name: string | null; authorizationCode: string | null }
   | { ok: false; cancelled: true }
   | { ok: false; cancelled: false; message: string };
 
@@ -49,7 +51,7 @@ export async function signInWithApple(d: AppleSignInDeps): Promise<AppleSignInRe
     const { error } = await d.signInWithIdToken({ provider: "apple", token: credential.identityToken, nonce });
     if (error)
       return { ok: false, cancelled: false, message: isConnectionFailure(error) ? connectionCopy : error.message };
-    return { ok: true, name: appleName(credential.fullName) };
+    return { ok: true, name: appleName(credential.fullName), authorizationCode: credential.authorizationCode };
   } catch (failure) {
     if (typeof failure === "object" && failure !== null && "code" in failure && failure.code === "ERR_REQUEST_CANCELED")
       return { ok: false, cancelled: true };
@@ -69,7 +71,12 @@ export const appleSignInDeps: AppleSignInDeps = {
       requestedScopes: [AppleAuthenticationScope.FULL_NAME, AppleAuthenticationScope.EMAIL],
       nonce: hashedNonce,
     });
-    return { identityToken: credential.identityToken, email: credential.email, fullName: credential.fullName };
+    return {
+      identityToken: credential.identityToken,
+      email: credential.email,
+      fullName: credential.fullName,
+      authorizationCode: credential.authorizationCode,
+    };
   },
   signInWithIdToken: (args) => {
     const { supabase } = require("./supabase") as typeof import("./supabase");

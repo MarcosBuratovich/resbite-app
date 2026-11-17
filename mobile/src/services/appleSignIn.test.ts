@@ -12,7 +12,12 @@ function harness(overrides: Partial<AppleSignInDeps> = {}) {
     requestCredential: [],
     signInWithIdToken: [],
   };
-  const credential: AppleCredential = { identityToken: "tok", email: null, fullName: { givenName: "Ana", familyName: "Lima" } };
+  const credential: AppleCredential = {
+    identityToken: "tok",
+    email: null,
+    fullName: { givenName: "Ana", familyName: "Lima" },
+    authorizationCode: "code-1",
+  };
   const d: AppleSignInDeps = {
     randomUUID: () => "raw-uuid",
     sha256: async (text) => `sha256(${text})`,
@@ -31,13 +36,22 @@ function harness(overrides: Partial<AppleSignInDeps> = {}) {
 
 test("hashes the nonce for Apple and sends the raw nonce to Supabase", async () => {
   const h = harness();
-  assert.deepEqual(await signInWithApple(h.d), { ok: true, name: "Ana Lima" });
+  assert.deepEqual(await signInWithApple(h.d), { ok: true, name: "Ana Lima", authorizationCode: "code-1" });
   assert.deepEqual(h.calls.requestCredential, ["sha256(raw-uuid)"]);
   assert.deepEqual(h.calls.signInWithIdToken, [{ provider: "apple", token: "tok", nonce: "raw-uuid" }]);
 });
 
+test("a missing authorisation code is passed on as null", async () => {
+  const h = harness({
+    requestCredential: async () => ({ identityToken: "tok", email: null, fullName: null, authorizationCode: null }),
+  });
+  assert.deepEqual(await signInWithApple(h.d), { ok: true, name: null, authorizationCode: null });
+});
+
 test("a missing identity token is an error with the connection copy", async () => {
-  const h = harness({ requestCredential: async () => ({ identityToken: null, email: null, fullName: null }) });
+  const h = harness({
+    requestCredential: async () => ({ identityToken: null, email: null, fullName: null, authorizationCode: "code-1" }),
+  });
   assert.deepEqual(await signInWithApple(h.d), {
     ok: false,
     cancelled: false,

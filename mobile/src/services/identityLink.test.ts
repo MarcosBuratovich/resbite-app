@@ -12,6 +12,7 @@ function apple(over: Partial<AppleLinkDeps> = {}) {
       identityToken: "tok",
       email: "sam@example.com",
       fullName: { givenName: "Sam", familyName: "Patel" },
+      authorizationCode: null,
     }),
     linkIdToken: async (a) => {
       linked.push(a);
@@ -51,7 +52,7 @@ test("Apple connection failure", async () => {
 });
 
 test("no name means saveName is not called, and a failed save is not an error", async () => {
-  const h = apple({ requestCredential: async () => ({ identityToken: "tok", email: null, fullName: null }) });
+  const h = apple({ requestCredential: async () => ({ identityToken: "tok", email: null, fullName: null, authorizationCode: null }) });
   assert.deepEqual(await linkApple(h.d), { ok: true, name: null, email: null });
   assert.deepEqual(h.saved, []);
   const f = apple({ saveName: async () => { throw new Error("no"); } });

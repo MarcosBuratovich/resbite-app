@@ -17,10 +17,10 @@ import {
   sendDeletionCode,
 } from "../src/services/accountDeletion";
 import {
-  appleOnlyAccount,
   type DeletionReceipt,
   type DeletionStatus,
 } from "../src/services/accountDeletionFlow";
+import { deletionProof } from "../src/domain/deletion";
 import { GUEST_COPY } from "../src/domain/guestAccount";
 
 export default function DeleteAccount() {
@@ -58,8 +58,14 @@ export default function DeleteAccount() {
   context.current = { accountId, preview };
   const email = session?.user.email;
   const providers: string[] = session?.user.app_metadata.providers ?? [];
-  // GI2-D10: Apple-only accounts (no "email" provider) confirm by signing in with Apple again.
-  const appleAccount = appleOnlyAccount(providers);
+  // ASR2-2: an account with Apple linked confirms by signing in with Apple again.
+  const proof = deletionProof({
+    providers,
+    email: email || null,
+    phone: session?.user.phone || null,
+    phoneConfirmed: !!session?.user.phone_confirmed_at,
+  });
+  const appleAccount = proof === "apple";
   // An "email" account may have a password or only ever have used a code (GI2's email code), and no claim says
   // which, so the code comes first and "Use my password instead" switches to the password.
   const passwordAccount = providers.includes("email");
@@ -271,8 +277,9 @@ export default function DeleteAccount() {
                   const guard = capture();
                   const flow = deletionFlow({
                     accountId: accountId!,
-                    email: email!,
-                    providers,
+                    proof,
+                    email: email ?? null,
+                    phone: null,
                     preview,
                     assertCurrent: guard,
                     credential: appleAccount
