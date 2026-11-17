@@ -2,7 +2,7 @@ import React, { useCallback, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Redirect, router, useFocusEffect } from "expo-router";
-import { Hourglass, LogOut, Mail, MailCheck, RefreshCw, ShieldCheck, Ticket, UserRound } from "lucide-react-native";
+import { Hourglass, LogOut, Mail, MailCheck, RefreshCw, ShieldCheck, Ticket } from "lucide-react-native";
 import { useApp } from "../src/state/AppState";
 import { useAccount } from "../src/state/AccountState";
 import { Button, Copy, ErrorNote, Title, s } from "../src/design/ui";
@@ -29,7 +29,7 @@ const icons: Record<AccessState, typeof ShieldCheck> = {
  * and chips for the actions. Before any of it, the phone gate (accountGate): an approved or waiting
  * account without a verified phone goes to Add your number, an approved one yet to accept the current
  * Terms of Use to Accept your Terms (plan 4), and one with a phone but no name (and no profile) to About
- * you. Details are no longer asked for here; they stay optional in Account details. Plan 3: while
+ * you. Plan 4 (D-9): the optional details are gone, and with them the Details chip. Plan 3: while
  * waiting for access, the account's open-link requests are listed under the card (as in My resbites);
  * a failed read leaves the list as it was, without a message.
  */
@@ -169,14 +169,6 @@ export default function Account() {
                   icon={Mail}
                   hint="Opens email confirmation help."
                   onPress={() => router.push("/auth?mode=confirm")}
-                />
-              )}
-              {status === "access_pending" && (
-                <Chip
-                  text="Details"
-                  icon={UserRound}
-                  label="Review optional account details"
-                  onPress={() => router.push("/account-details")}
                 />
               )}
               {signOutChip}

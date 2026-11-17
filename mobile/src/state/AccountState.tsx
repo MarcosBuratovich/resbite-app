@@ -50,7 +50,6 @@ const Context = createContext<
     refresh: () => Promise<User | null>;
     /** The access status of the newest finished read (not React state, so it is current right after `refresh`). */
     latestStatus: () => Snapshot["status"];
-    acceptDetails: (user: User) => void;
     /** The profile was saved with this name. */
     profileSaved: (name: string) => void;
   }
@@ -59,7 +58,6 @@ const Context = createContext<
   reviewed: false,
   refresh: async () => null,
   latestStatus: () => "checking",
-  acceptDetails: () => {},
   profileSaved: () => {},
 });
 
@@ -163,12 +161,6 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
           Boolean(value.user && phoneVerified(value.user)) && !value.termsNeeded,
         refresh,
         latestStatus: () => latest.current,
-        acceptDetails: (user) => {
-          if (user.id !== identity.current) return;
-          setSnapshot((old) =>
-            old.accountId === user.id ? { ...old, user } : old,
-          );
-        },
         profileSaved: (name) =>
           setSnapshot((old) =>
             old.accountId === identity.current

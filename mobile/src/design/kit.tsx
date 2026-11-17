@@ -1000,9 +1000,8 @@ export function TopicRow({
 }
 
 /**
- * A large input card (the creation steps' field, shared by sign-in, sign-up, account details
- * and deletion). The label is the input's accessible name; `accessory` sits at the right
- * (the show-password button).
+ * A large input card (the creation steps' field, shared by sign-in, sign-up and deletion). The
+ * label is the input's accessible name; `accessory` sits at the right (the show-password button).
  */
 export function FieldCard({
   label,

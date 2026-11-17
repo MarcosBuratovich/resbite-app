@@ -134,7 +134,6 @@ function Navigation() {
           <Stack.Screen name="kit" />
           <Stack.Protected guard={Boolean(session)}>
             <Stack.Screen name="account" />
-            <Stack.Screen name="account-details" />
             <Stack.Screen name="about-you" />
             <Stack.Screen name="add-phone" />
             {/* Plan 4: the current Terms of Use, accepted once, after Add your number and before About you. */}
