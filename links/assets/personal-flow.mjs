@@ -125,17 +125,29 @@ export function numberNotice({ open, who, privacyUrl }) {
   };
 }
 
-/** The error keys the reducer holds; anything else in `error` is a server message shown as it came. */
+/** The error keys the reducer holds. Anything else in `error` is a server message: shown only when it is one of the
+ * Send SMS hook's own words (HOOK_WORDS), else as the connection copy. */
 const ERROR_KEYS = new Set([
   "ageHelper", "invalidNumber", "wrongNumber", "mismatch", "expired", "wait", "connection", "tooMany", "unavailable",
   "nameRule", "nameNotAllowed", "chooseAnswer",
+]);
+
+/**
+ * The Send SMS hook's own words (`SMS_COPY` in supabase/functions/_shared/sms-hook.ts, and the app's HOOK_SMS_COPY; a
+ * test keeps the three equal): the only server messages the page shows. Any other Auth message, every `hook_*` error
+ * among them (`hook_timeout`: Auth gave up on the hook), reads as the connection copy.
+ */
+export const HOOK_WORDS = Object.freeze([
+  "Invalid code request.",
+  "We can’t text this number. Check it, or use another number.",
+  "Text messages aren’t available right now. Try again later.",
 ]);
 
 /** The words for an error the reducer holds; "" for none. */
 export function errorText(error, host, inviter) {
   if (!inviter || !inviter.replace(/[\s\u00a0\u200b-\u200d\ufeff]+/g, "")) inviter = host;
   if (!error) return "";
-  if (!ERROR_KEYS.has(error)) return String(error);
+  if (!ERROR_KEYS.has(error)) return HOOK_WORDS.includes(error) ? error : PAGE_COPY.connection;
   const copy = PAGE_COPY[error];
   return typeof copy === "function" ? copy(error === "wrongNumber" ? inviter : host) : copy;
 }
@@ -388,11 +400,13 @@ export function rpcError(status, body) {
   return "unavailable";
 }
 
-/** POST /auth/v1/otp's error, as the app maps it: the connection, a rate limit, else GoTrue's own message. */
+/** POST /auth/v1/otp's error, as the app maps it: the connection (a `hook_*` error too), a rate limit, the hook's own
+ * words as written, else the connection. */
 export function sendError(status, body) {
   if (offline(status)) return "connection";
+  if (typeof body?.error_code === "string" && body.error_code.startsWith("hook_")) return "connection";
   if (status === 429) return "wait";
-  return typeof body?.msg === "string" && body.msg ? body.msg : "connection";
+  return HOOK_WORDS.includes(body?.msg) ? body.msg : "connection";
 }
 
 /** POST /auth/v1/verify's error: GoTrue words wrong and expired codes alike, so the clock tells them apart. */

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { foldLanded, foldNext, foldPhoneAccount, retryFold, sendFoldCode, type FoldClientDeps } from "./phoneFold";
 import { PHONE_COPY } from "../domain/phoneCopy";
-import { PHONE_CODE_COPY } from "./phoneCode";
+import { PHONE_CODE_COPY, type AuthError } from "./phoneCode";
 
 const phone = "+447700900834";
 
@@ -27,6 +27,22 @@ test("the code goes to the isolated client with shouldCreateUser off", async () 
   assert.deepEqual(await sendFoldCode(h.d, phone), { ok: true, resendAt: 61_000 });
   assert.deepEqual(h.calls.otp, [{ phone, options: { shouldCreateUser: false } }]);
   assert.equal(h.calls.mainAuth, 0);
+});
+
+test("the fold's send shows only the hook's words; a hook timeout or any other Auth message is the connection", async () => {
+  const send = (error: AuthError) => sendFoldCode({ signInWithOtp: async () => ({ error }), now: () => 1_000 }, phone);
+  const words = "We can’t text this number. Check it, or use another number.";
+  assert.deepEqual(await send({ status: 422, message: words }), { ok: false, message: words });
+  for (const error of [
+    { status: 422, code: "hook_timeout", message: "Failed to reach hook within maximum time of 5.000000 seconds" },
+    { status: 422, code: "hook_timeout_after_retry", message: "Failed to reach hook after maximum retries" },
+    { status: 422, code: "hook_timeout", message: words },
+    { status: 400, code: "validation_failed", message: "Invalid phone number format (E.164 required)" },
+    { status: 400, message: "Unsupported phone provider" },
+  ])
+    assert.deepEqual(await send(error), { ok: false, message: PHONE_CODE_COPY.connection }, error.code ?? error.message);
+  assert.deepEqual(await send({ status: 422, code: "otp_disabled", message: "Signups not allowed for otp" }), { ok: false, message: PHONE_CODE_COPY.taken });
+  assert.deepEqual(await send({ status: 429, message: "x" }), { ok: false, message: PHONE_CODE_COPY.wait });
 });
 
 test("000000 goes to the isolated verify as typed", async () => {

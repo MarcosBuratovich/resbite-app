@@ -1,7 +1,7 @@
 // Bringing a web-only account (made by answering an invitation on the web) into this one. The code is
 // sent to and checked by an isolated auth client, so the app's own session never changes; the foreign
 // token then goes to the Edge Function with the app session's bearer token.
-import { PHONE_CODE_COPY, type AuthError } from "./phoneCode";
+import { PHONE_CODE_COPY, sendFailureMessage, type AuthError } from "./phoneCode";
 import { phoneVerified, samePhone } from "../domain/phone";
 import { PHONE_COPY } from "../domain/phoneCopy";
 
@@ -61,11 +61,13 @@ export async function sendFoldCode(
     const { error } = await d.signInWithOtp({ phone: e164, options: { shouldCreateUser: false } });
     if (!error) return { ok: true, resendAt: d.now() + 60_000 };
     if (isConnectionFailure(error)) return { ok: false, message: PHONE_CODE_COPY.connection };
+    if (error.code?.startsWith("hook_")) return { ok: false, message: PHONE_CODE_COPY.connection };
     if (error.status === 429 || error.message.toLowerCase().includes("rate limit"))
       return { ok: false, message: PHONE_CODE_COPY.wait };
     // No web account to confirm (or it is gone): the number is not one to bring over.
     if (error.code === "otp_disabled") return { ok: false, message: PHONE_CODE_COPY.taken };
-    return { ok: false, message: error.message || PHONE_CODE_COPY.connection };
+    // Only the Send SMS hook's own words are shown; any other Auth message is the connection copy.
+    return { ok: false, message: sendFailureMessage(error) };
   } catch {
     return { ok: false, message: PHONE_CODE_COPY.connection };
   }

@@ -19,6 +19,7 @@ import {
   errorText,
   rpcError,
   sendError,
+  HOOK_WORDS,
   verifyError,
   sessionFrom,
   sessionExpired,
@@ -44,7 +45,8 @@ import {
 import { LEGAL_PAGES } from "./legal/pages.mjs";
 import * as flow from "./assets/personal-flow.mjs";
 import { GUEST_COPY } from "../mobile/src/domain/guestAccount.ts";
-import { PHONE_CODE_COPY } from "../mobile/src/services/phoneCode.ts";
+import { HOOK_SMS_COPY, PHONE_CODE_COPY } from "../mobile/src/services/phoneCode.ts";
+import { SMS_COPY } from "../supabase/functions/_shared/sms-hook.ts";
 import { PHONE_COPY } from "../mobile/src/domain/phoneCopy.ts";
 import { INVALID_PHONE } from "../mobile/src/domain/phone.ts";
 import { SAFETY_COPY } from "../mobile/src/domain/safetyCopy.ts";
@@ -336,14 +338,17 @@ test("server errors map to the page's words", () => {
   assert.equal(rpcError(403, { code: "42501", message: "Not allowed" }), "unavailable");
   assert.equal(sendError(0, null), "connection");
   assert.equal(sendError(429, { msg: "Too many requests" }), "wait");
-  assert.equal(sendError(422, { msg: "Phone signups are disabled" }), "Phone signups are disabled");
+  // Only the hook's own words come through; any other Auth message is the connection copy.
+  assert.equal(sendError(422, { msg: "Phone signups are disabled" }), "connection");
   assert.equal(sendError(400, {}), "connection");
   assert.equal(verifyError(0, null, 0, 1), "connection");
   assert.equal(verifyError(400, { error_code: "otp_expired" }, 0, 60_000), "mismatch");
   assert.equal(verifyError(400, { error_code: "otp_expired" }, 0, 600_000), "expired");
   assert.equal(errorText("wrongNumber", "Marcos"), "That isn’t the number Marcos invited.");
   assert.equal(errorText("connection", "Marcos"), "Check your connection and try again.");
-  assert.equal(errorText("Phone signups are disabled", "Marcos"), "Phone signups are disabled");
+  assert.equal(errorText("Phone signups are disabled", "Marcos"), "Check your connection and try again.");
+  assert.equal(errorText("signedOut", "Marcos"), "Check your connection and try again.");
+  assert.equal(errorText({ msg: "x" }, "Marcos"), "Check your connection and try again.");
   assert.equal(errorText(null, "Marcos"), "");
 });
 
@@ -377,6 +382,37 @@ test("the code words match the Auth settings: six digits, ten minutes", () => {
 test("a refusal from the text-message hook reaches the page as written", () => {
   const words = "We can’t text this number. Check it, or use another number.";
   assert.equal(sendError(422, { msg: words }), words);
+  assert.equal(errorText(sendError(422, { msg: words }), "Marcos"), words);
+  assert.equal(sendError(400, { code: 400, msg: "Invalid code request." }), "Invalid code request.");
+  assert.equal(errorText("Invalid code request.", "Marcos"), "Invalid code request.");
+});
+
+test("the page's hook words are the hook's own, and the app's", () => {
+  assert.deepEqual([...HOOK_WORDS].sort(), Object.values(SMS_COPY).sort());
+  assert.deepEqual([...HOOK_WORDS].sort(), [...HOOK_SMS_COPY].sort());
+  assert.ok(Object.isFrozen(HOOK_WORDS));
+});
+
+test("a hook timeout or any other Auth message reads as the connection copy on /r/ and /i/", () => {
+  // GoTrue's error body: { code, error_code, msg }. The hook_* codes are Supabase's Auth error codes.
+  const bodies = [
+    [422, { code: 422, error_code: "hook_timeout", msg: "Failed to reach hook within maximum time of 5.000000 seconds" }],
+    [422, { code: 422, error_code: "hook_timeout_after_retry", msg: "Failed to reach hook after maximum retries" }],
+    [429, { code: 429, error_code: "hook_timeout", msg: "Failed to reach hook within maximum time of 5.000000 seconds" }],
+    [422, { code: 422, error_code: "hook_timeout", msg: "We can’t text this number. Check it, or use another number." }],
+    [400, { code: 400, error_code: "validation_failed", msg: "Invalid phone number format (E.164 required)" }],
+    [422, { code: 422, error_code: "sms_send_failed", msg: "Error sending confirmation OTP to provider: x" }],
+    [400, { code: 400, msg: "Unsupported phone provider" }],
+    [422, { msg: "" }],
+    [422, null],
+  ];
+  for (const [status, body] of bodies) {
+    assert.equal(sendError(status, body), "connection", JSON.stringify(body));
+    assert.equal(errorText(sendError(status, body), "Marcos"), "Check your connection and try again.");
+  }
+  // The hook's own busy answer arrives as Auth's 503.
+  assert.equal(sendError(503, { code: 503, msg: SMS_COPY.unavailable }), "connection");
+  assert.equal(errorText("Failed to reach hook within maximum time of 5.000000 seconds", "Marcos"), "Check your connection and try again.");
 });
 
 test("Not you? Sign out goes back to the invitation from the answer and done steps, not mid-request", () => {

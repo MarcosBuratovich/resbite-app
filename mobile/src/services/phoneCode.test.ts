@@ -1,6 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PHONE_CODE_COPY, phoneCodeDeps, sendPhoneCode, verifyPhoneCode, type AuthError, type PhoneCodeDeps } from "./phoneCode";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import {
+  HOOK_SMS_COPY,
+  PHONE_CODE_COPY,
+  phoneCodeDeps,
+  sendPhoneCode,
+  verifyPhoneCode,
+  type AuthError,
+  type PhoneCodeDeps,
+} from "./phoneCode";
 import { PHONE_COPY, takenLine } from "../domain/phoneCopy";
 
 const phone = "+447700900834";
@@ -82,6 +92,43 @@ test("nothing can swap a code any more", () => {
 test("a refusal from the text-message hook reaches the screen as written", async () => {
   const words = "We can’t text this number. Check it, or use another number.";
   assert.deepEqual(await sendPhoneCode(harness({ otp: { message: words, status: 422 } }).d, phone, "signup"), { ok: false, message: words });
+  for (const purpose of ["signup", "signin", "add"] as const)
+    assert.deepEqual(await sendPhoneCode(harness({ otp: { message: "Invalid code request.", status: 400 } }).d, phone, purpose), {
+      ok: false,
+      message: "Invalid code request.",
+    }, purpose);
+});
+
+test("the hook's words in the app are the hook's own (supabase/functions/_shared/sms-hook.ts)", () => {
+  const source = readFileSync(fileURLToPath(new URL("../../../supabase/functions/_shared/sms-hook.ts", import.meta.url)), "utf8");
+  const block = /export const SMS_COPY = \{([\s\S]*?)\} as const;/.exec(source)?.[1] ?? "";
+  const words = [...block.matchAll(/:\s*"([^"]*)"/g)].map((m) => m[1]);
+  assert.equal(words.length, 3);
+  assert.deepEqual([...HOOK_SMS_COPY].sort(), words.sort());
+});
+
+// Auth's hook error codes (Supabase's Auth error-code list: hook_timeout, hook_timeout_after_retry, hook_payload_*),
+// with words like Auth's, and other Auth messages: never shown as they came. The only server words shown are the hook's.
+const AUTH_ERRORS: NonNullable<AuthError>[] = [
+  { status: 422, code: "hook_timeout", message: "Failed to reach hook within maximum time of 5.000000 seconds" },
+  { status: 422, code: "hook_timeout_after_retry", message: "Failed to reach hook after maximum retries" },
+  { status: 400, code: "hook_payload_over_size_limit", message: "Payload size exceeded" },
+  { status: 422, code: "hook_timeout", message: "We can’t text this number. Check it, or use another number." },
+  { status: 400, code: "validation_failed", message: "Invalid phone number format (E.164 required)" },
+  { status: 422, code: "sms_send_failed", message: "Error sending confirmation OTP to provider: x" },
+  { status: 400, message: "Unsupported phone provider" },
+  { status: 422, message: "" },
+];
+
+test("a hook timeout or any other Auth message reads as the connection copy, for every purpose", async () => {
+  for (const purpose of ["signup", "signin", "add"] as const)
+    for (const otp of AUTH_ERRORS)
+      assert.deepEqual(await sendPhoneCode(harness({ otp }).d, phone, purpose), { ok: false, message: connection }, `${purpose} ${otp.code}`);
+});
+
+test("the hook's own busy answer (Auth's 503) reads as the connection copy", async () => {
+  const otp = { status: 503, message: "Text messages aren’t available right now. Try again later." };
+  assert.deepEqual(await sendPhoneCode(harness({ otp }).d, phone, "signin"), { ok: false, message: connection });
 });
 
 test("a bad code after ten minutes reads as expired", async () => {

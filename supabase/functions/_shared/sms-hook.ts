@@ -12,8 +12,8 @@ export const SMS_COPY = {
  * (21408), the number sent STOP (21610), unreachable "To" (21612) and not a mobile number (21614). */
 export const REFUSED_NUMBER_CODES: ReadonlySet<number> = new Set([21211, 21408, 21610, 21612, 21614]);
 
-/** How long the sender waits for Twilio, inside Auth's 5 seconds. */
-export const TWILIO_TIMEOUT_MS = 4000;
+/** How long the sender waits for Twilio: inside Auth's 5 seconds, with room for a cold start and the signature check. */
+export const TWILIO_TIMEOUT_MS = 3000;
 
 /** The Standard Webhooks tolerance either side of now, in seconds. */
 const SIGNATURE_WINDOW_SECONDS = 300;
@@ -80,7 +80,8 @@ export function sameText(a: string, b: string): boolean {
 }
 
 /** Standard Webhooks: HMAC-SHA256 over `id.timestamp.body` with any listed secret matches any `v1,` signature in the
- * header, and the timestamp is within five minutes of now. */
+ * header, and the timestamp is within five minutes of now. Signatures are split on whitespace, and a trailing comma is
+ * dropped, so a list joined by ", " reads like one joined by " " (a base64 signature never holds a comma). */
 export async function verifyHookSignature(secrets: string[], headers: Headers, body: string, nowSeconds: number): Promise<boolean> {
   const id = headers.get("webhook-id");
   const timestamp = headers.get("webhook-timestamp");
@@ -88,7 +89,11 @@ export async function verifyHookSignature(secrets: string[], headers: Headers, b
   if (!id || !timestamp || !header) return false;
   if (!/^\d{1,12}$/.test(timestamp)) return false;
   if (Math.abs(nowSeconds - Number(timestamp)) > SIGNATURE_WINDOW_SECONDS) return false;
-  const offered = header.split(" ").filter((s) => s.startsWith("v1,")).map((s) => s.slice(3));
+  const offered = header
+    .split(/\s+/)
+    .map((s) => s.replace(/,+$/, ""))
+    .filter((s) => s.startsWith("v1,"))
+    .map((s) => s.slice(3));
   if (offered.length === 0) return false;
   const signed = encoder.encode(`${id}.${timestamp}.${body}`);
   let match = false;
@@ -102,15 +107,23 @@ export async function verifyHookSignature(secrets: string[], headers: Headers, b
   return match;
 }
 
-/** Who to text and what code: the number being added (`user.new_phone`) when there is one, else the account's
- * number, as its stored digits (never folded to the phone key) with a leading `+`. */
+/** Who to text and what code, as the stored digits (never folded to the phone key) with a leading `+`. An account with a
+ * confirmed number (`user.phone` and `phone_confirmed_at`, the app's `phoneVerified`) is texted on that number, even
+ * when a stale `user.new_phone` is left from an Add your number that was never finished. Only an account with no
+ * confirmed number is texted on the number being added (`user.new_phone`) when there is one; an invalid one is
+ * refused, never swapped for `user.phone`. A future change-number flow for confirmed accounts must revisit this. */
 export function smsTarget(event: unknown): { to: string; otp: string } | null {
   if (!event || typeof event !== "object") return null;
   const { user, sms } = event as { user?: unknown; sms?: unknown };
   if (!user || typeof user !== "object" || !sms || typeof sms !== "object") return null;
-  const { phone, new_phone: newPhone } = user as { phone?: unknown; new_phone?: unknown };
+  const { phone, phone_confirmed_at: phoneConfirmedAt, new_phone: newPhone } = user as {
+    phone?: unknown;
+    phone_confirmed_at?: unknown;
+    new_phone?: unknown;
+  };
   const { otp } = sms as { otp?: unknown };
-  const number = typeof newPhone === "string" && newPhone.trim() !== "" ? newPhone : phone;
+  const confirmed = typeof phone === "string" && phone.trim() !== "" && Boolean(phoneConfirmedAt);
+  const number = !confirmed && typeof newPhone === "string" && newPhone.trim() !== "" ? newPhone : phone;
   if (typeof number !== "string" || typeof otp !== "string") return null;
   const digits = number.replace(/\D/g, "");
   if (!/^[1-9][0-9]{6,14}$/.test(digits) || !/^[0-9]{6}$/.test(otp)) return null;
@@ -161,7 +174,9 @@ export async function handleSendSms(request: Request, deps: HookDeps): Promise<R
   }
   deps.log({ route: "hook", outcome: result.kind, status: result.status, code: result.code });
   if (result.kind === "refused") return hookError(200, 422, SMS_COPY.cantText);
-  if (result.kind === "transient") return hookError(503, 503, SMS_COPY.unavailable, { "retry-after": "1" });
+  // Busy, down, slow or unreachable: never a retry. Auth's 5 seconds cover every attempt, and a retry after an abort
+  // could text a second code. Auth answers the 503 itself, which the app and the site read as the connection.
+  if (result.kind === "transient") return hookError(200, 503, SMS_COPY.unavailable);
   return hookError(500, 500, SMS_COPY.unavailable);
 }
 
