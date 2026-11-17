@@ -194,7 +194,7 @@ async function fixture({ people = [], seeds = [], width = 390, locale = "en-GB" 
       const { phone } = seed;
       const s = issue(person(seed));
       const session = { access_token: s.access_token, refresh_token: s.refresh_token, expires_at: s.expires_at, phone: `+${phone}` };
-      return [kept(CODE), JSON.stringify({ session, phone: `+${phone}`, until: Date.parse(OPEN_PAGE.starts_at) })];
+      return [kept(CODE), JSON.stringify({ session, phone: `+${phone}`, until: Date.parse(OPEN_PAGE.ends_at) })];
     });
     await page.addInitScript(
       ({ entries }) => {
@@ -471,11 +471,11 @@ try {
       ["/auth/v1/otp", "/auth/v1/otp", "/rest/v1/rpc/exchange_test_code", "/auth/v1/verify", "/rest/v1/rpc/my_join_request", "/rest/v1/rpc/request_to_join"],
       "the whole conversation with Supabase",
     );
-    // Kept under this code only (plan 2's scheme), with the full verified number and the event's start.
+    // Kept under this code only (plan 2's scheme), with the full verified number and the event's end.
     const entry = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)), kept(CODE));
     assert.deepEqual(
       [entry.session.access_token, entry.session.phone, entry.phone, entry.until],
-      [session, `+${SAM}`, `+${SAM}`, Date.parse(OPEN_PAGE.starts_at)],
+      [session, `+${SAM}`, `+${SAM}`, Date.parse(OPEN_PAGE.ends_at)],
     );
     assert.deepEqual(await page.evaluate(() => Object.keys(localStorage)), [kept(CODE)], "nothing else is kept");
     await noTestCode(page, "the waiting screen");
