@@ -71,6 +71,8 @@ export const PAGE_COPY = {
   connection: "Check your connection and try again.",
   tooMany: "Too many tries. Try again later.",
   unavailable: "This invitation is no longer active.",
+  // Plan 4 (C7): a name holding a word Resbite doesn’t allow. The app's SAFETY_COPY.nameNotAllowed, exactly.
+  nameNotAllowed: "That name includes a word Resbite doesn’t allow. Try another.",
   signOut: "Not you? Sign out",
   // The open link (plan 3). Its number step names no invited number: it says what the app's number step says.
   numberHint: "We’ll text you a 6-digit code.",
@@ -84,7 +86,7 @@ export const PAGE_COPY = {
 /** The error keys the reducer holds; anything else in `error` is a server message shown as it came. */
 const ERROR_KEYS = new Set([
   "ageHelper", "invalidNumber", "wrongNumber", "mismatch", "expired", "wait", "connection", "tooMany", "unavailable",
-  "nameRule", "chooseAnswer",
+  "nameRule", "nameNotAllowed", "chooseAnswer",
 ]);
 
 /** The words for an error the reducer holds; "" for none. */
@@ -338,6 +340,8 @@ export function rpcError(status, body) {
   if (status === 401 || message === "Sign-in required") return "signedOut";
   if (body?.code === "22023" && /too many/i.test(message)) return "tooMany";
   if (body?.code === "22023" && /name/i.test(message)) return "nameRule";
+  // A blocked term in the name (plan 4, C7): the chat's refusal, exactly; nothing was stored.
+  if (body?.code === "22023" && message === "Not allowed") return "nameNotAllowed";
   if (body?.code === "42501" && /invited number/i.test(message)) return "wrongNumber";
   return "unavailable";
 }

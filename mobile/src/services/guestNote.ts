@@ -1,7 +1,8 @@
 import { guestNoteError } from "../domain/eventDetails";
+import { SAFETY_COPY, wordsRefused } from "../domain/safetyCopy";
 
 export type GuestNote = { guest_note: string; guest_note_at: string | null };
-type Reply = { data: unknown; error: { code?: string } | null };
+type Reply = { data: unknown; error: { code?: string; message?: string } | null };
 
 const notYours = "You can’t post a note on this resbite.";
 const closed = "This resbite has ended or was cancelled, so its note can’t change.";
@@ -19,7 +20,8 @@ const isGuestNote = (value: unknown): value is GuestNote => {
 /**
  * UX3 Note to guests, around the `set_guest_note` call. Saving the same text again is harmless (the database
  * returns the saved note unchanged), so a retry after a lost reply is safe. The database refuses with 42501
- * for anyone but the organizer and 22023 once the event has ended or was cancelled.
+ * for anyone but the organizer, 22023 'Not allowed' for a blocked term (C7) and any other 22023 once the event has
+ * ended or was cancelled.
  */
 export function createGuestNoteWriter(call: (planId: string, text: string) => PromiseLike<Reply>) {
   return async function setGuestNote(planId: string, text: string): Promise<GuestNote> {
@@ -33,7 +35,13 @@ export function createGuestNoteWriter(call: (planId: string, text: string) => Pr
     }
     if (reply.error)
       throw Error(
-        reply.error.code === "42501" ? notYours : reply.error.code === "22023" ? closed : unsaved,
+        reply.error.code === "42501"
+          ? notYours
+          : wordsRefused(reply.error)
+            ? SAFETY_COPY.textNotAllowed
+            : reply.error.code === "22023"
+              ? closed
+              : unsaved,
       );
     if (!isGuestNote(reply.data)) throw Error(unsaved);
     return { guest_note: reply.data.guest_note, guest_note_at: reply.data.guest_note_at };

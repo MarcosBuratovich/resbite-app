@@ -77,6 +77,9 @@ try {
         failName = false;
         return reply({ message: "Offline fixture" }, 503);
       }
+      // Plan 4 (C7): a name holding a blocked term is refused as the chat refuses one; nothing is stored.
+      if (/zzbadword/.test(req.postDataJSON().p_name))
+        return reply({ code: "22023", message: "Not allowed", details: null, hint: null }, 400);
       profile.display_name = req.postDataJSON().p_name;
       return reply(user.id);
     }
@@ -166,6 +169,19 @@ try {
   ).toBeVisible();
   // A failed save keeps the sheet open with the typed name.
   await expect(name).toHaveValue("My changed name");
+  // Plan 4: a name refused for a blocked word says so, and keeps what was typed.
+  await name.fill("Ana zzbadword");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(
+    page.getByText("That name includes a word Resbite doesn’t allow. Try another.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(name).toHaveValue("Ana zzbadword");
+  await expect(page.getByText("Could not save your name. Your changes are kept.", { exact: true })).toHaveCount(0);
+  assert.equal(profile.display_name, "Saved name", "the refused name isn't stored");
+  assert.equal(writes.at(-1).p_name, "Ana zzbadword");
+  await name.fill("My changed name");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(
     page.getByText("Your profile is saved.", { exact: true }),
@@ -282,7 +298,7 @@ try {
   assert.equal(previewRequests, 0);
   assert.deepEqual(errors, []);
   console.log(
-    "Profile fixtures passed: name retention, normalized upload, lost-link reconciliation, upload restart, concurrent removal, legacy recovery and zero client file deletions.",
+    "Profile fixtures passed: name retention, a refused blocked word in the name, normalized upload, lost-link reconciliation, upload restart, concurrent removal, legacy recovery and zero client file deletions.",
   );
 } finally {
   await browser.close();
