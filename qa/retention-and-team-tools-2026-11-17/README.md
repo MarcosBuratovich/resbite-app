@@ -48,7 +48,7 @@
 | `supabase/ops/schedule-roll-repeating-plans.sql` (R8; unchanged, `qa/creating-a-resbite-2026-10-31/README.md:30`) | `3a8202877260008723648dc4723b36aedb6d772f809b2552997765773040d74e` |
 | `supabase/ops/suspend-account-by-id.sql` | `61aea0f1e9e1c8a61d4c7da7248599dee61d314554bee533be35e0c8c1722247` |
 | `supabase/ops/lift-suspension.sql` | `1b638a31e2b89b4560e7be3bbe2ec1dfb5831074c171b9bed10f57e3a43f1387` |
-| `supabase/ops/set-legal-hold.sql` | `29faeb5597bc44eaf0e168775008d9ed227b371462ec6691720f6f01fa1aabce` |
+| `supabase/ops/set-legal-hold.sql` | `4b2a8d9fd0c080b522ab57a063051724c3c366258491b31467384d7132fb3f7a` |
 | `supabase/ops/lift-legal-hold.sql` | `d03cad62fc2daf9050676e31f5d406715a928dc525c26a482860668cb939e2cc` |
 | `supabase/ops/legal-holds.sql` | `aa3fb40f2e29857ccc10dd65bbd8e4993f4d2fd8660d85c8b081bc574e794949` |
 | `supabase/ops/remove-profile-photo.sql` (R6) | `39c751f1bfa82bddb36fe9cd7f22ddaa7e84fa4613ceba8e848db7ceb3dd729a` |

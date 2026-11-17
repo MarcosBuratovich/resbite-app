@@ -143,7 +143,7 @@ Our SMS provider, Twilio, sends the codes and these texts. If you don't give a v
 
 A profile photo is optional. You choose it with your iPhone's own photo picker, so Resbite can't see the rest of your photo library. Before it is uploaded, the app resizes it and removes the hidden details photos carry, such as where and with which camera it was taken.
 
-We store it privately in London. People who can see you in a resbite, your connections, and people you have a connection request with can see it, through links that stop working after five minutes. If you change or remove your photo, we delete the old file within 7 days.
+We store it privately in London. People who can see you in a resbite, your connections, and people you have a connection request with can see it, through links that stop working after five minutes. If you change or remove your photo, we delete the old file about 7 days later.
 
 ### 3.3 Resbites and weekly groups
 
@@ -460,7 +460,7 @@ We keep personal data only as long as we need it. Then we delete it, or remove a
 | Connection requests nobody answers | 90 days |
 | "Not now" answers and removed connections | 12 months |
 | Blocks | Until you undo them, or either account is deleted |
-| Numbers of people invited who aren't on Resbite | Until they answer or the invitation is withdrawn, or 30 days after the resbite ends, whichever comes first |
+| Numbers of people invited who aren't on Resbite | 30 days after the resbite ends, or sooner if the invitation is withdrawn. An answer doesn't delete it, because the personal link lets the person change their answer until the resbite ends |
 | Numbers on a removal list | 30 days after a one-off resbite ends; 90 days after a weekly group's last week |
 | The do-not-invite list | Until the person asks to be invitable again |
 | Your push token | Until you sign out, Expo tells us it no longer works, or you delete your account |
@@ -564,7 +564,7 @@ The app reads your contacts only when you choose to invite from them, and your p
 ### On link.resbite.com
 
 - No cookies, no analytics and no third-party scripts, except the bot check below.
-- **Your session on an invitation page.** When you confirm your number on an event link or a personal invitation link, the page keeps your session in your browser's local storage: your sign-in tokens, the number you confirmed, and when the resbite starts. There is one entry for each link. It lets you see your answer if you come back. It is removed when the resbite starts, when you tap **Not you? Sign out**, or if it can't be read.
+- **Your session on an invitation page.** When you confirm your number on an event link or a personal invitation link, the page keeps your session in your browser's local storage: your sign-in tokens, the number you confirmed, and when the resbite ends. There is one entry for each link. It lets you see your answer if you come back. It is removed when the resbite ends, when you tap **Not you? Sign out**, or if it can't be read.
 - **The bot check.** When you ask for a code, [[OWNER: CAPTCHA vendor — proposed: Cloudflare Turnstile or hCaptcha]] may store or read information in your browser, or in the app, to tell people from programs. This is strictly necessary to protect sign-in.
 
 If we ever want to add analytics, we'll either ask you first or meet the law's conditions, and we'll update this policy before we start.
@@ -595,7 +595,7 @@ We don't receive your name. It stays on the host's phone. If a host removed you 
 
 **Who sees your number.** The host who invited you already has it. Other hosts of the resbite, and the invitation page, show only its last two digits. Supabase stores it for us in London (sections 5.2 and 6). If you ask for a code, our SMS provider, Twilio, receives your number to send it. We don't share it with anyone else.
 
-**How long we keep it.** Until you answer or the invitation is withdrawn, or 30 days after the resbite ends, whichever comes first. On a removal list: 30 days after a one-off resbite ends, or 90 days after a weekly group's last week.
+**How long we keep it.** Until 30 days after the resbite ends, or sooner if the host withdraws the invitation. Answering doesn't delete it, because the personal link lets you change your answer until the resbite ends. On a removal list: 30 days after a one-off resbite ends, or 90 days after a weekly group's last week.
 
 **If you answer.** Confirming your number on the invitation page creates a simple Resbite account with your number, your name and your answer. The rest of this policy then applies to you. You can ask us to delete that account at any time (section 8).
 
@@ -759,7 +759,7 @@ If a change matters to you, such as a new kind of data, a new use or a new provi
 | 7, 8 | A suspension record kept for 12 months after a suspended account is deleted, with the account id cleared and the reason and dates kept (AS-R1; today it is deleted with the account, `supabase/migrations/20261111160000_chat_safety.sql:794-795`) | C2 (D-19), C6 |
 | 3.9, 7, 8 | Reports filed by a person who deletes their account kept until closed, then 180 days, with the reporter id cleared (AS-R2; today they are deleted, `supabase/migrations/20261116120000_open_beta.sql:255`) | C2, C3 |
 | 3.12, 7, 8 | Website-only accounts with no resbite in 12 months deleted; unconfirmed code requests deleted after 30 days (AS-R4) | C3 |
-| 8 | A host's past resbites deleted 12 months after they ended; cover files removed within 7 days | C3 |
+| 8 | A host's past resbites deleted 12 months after they ended; cover files removed about 7 days later | C3 |
 | 5.2, 6 | Cloudflare's data processing agreement accepted for the DNS account (it is not automatic) | F7, F8 |
 | 8 | Website-only and banned accounts deleted by request, through the owner-run deletion script that runs the app's lifecycle (AS-R3) | D8, F3, C6 |
 | 10, 11 | Objections honoured with a do-not-invite list checked when anyone invites a number | C3 (D-23), F3 |

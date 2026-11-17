@@ -258,6 +258,16 @@ Every step needs the owner's explicit approval at the time.
    - Delete the hold row afterwards: `delete from private.legal_holds where case_ref = 'TEST';`.
 8. **The schedule.** `cron.job_run_details` shows `cleanup-account` every 5 minutes with status `succeeded`, and `purge-deletion-receipts` daily. The purge's answer in `net._http_response` reads `{"receiptsPurged":0}`.
 
+## Weekly check: stuck deletions
+
+Until the worker's alerts exist (F10, `qa/app-store-release/README.md` Step 28), the owner runs this every week in the SQL editor. A job older than 7 days that is still queued or processing means the 30-day promise is at risk.
+
+```sql
+select count(*) filter (where status in ('queued','processing') and requested_at < now() - interval '7 days') as stuck, max(attempts) filter (where status in ('queued','processing')) as max_attempts from private.account_deletion_jobs;
+```
+
+Expect `stuck` 0. Held jobs are left out on purpose. If it isn't 0, check the `cleanup-account` runs in `cron.job_run_details` and the function's logs, then fix the cause. Record the result, never an account id.
+
 ## Rollback
 
 Only with the owner's approval, in this order:

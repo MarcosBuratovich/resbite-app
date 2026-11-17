@@ -36,7 +36,7 @@ test("the eight topics, in order, with the agreed copy", () => {
   assert.deepEqual(topic("contacts").paragraphs, [
     "Resbite reads your contacts only when you choose to invite from them, and reads only names and phone numbers. Contact names never leave your phone.",
     "When you invite people, Resbite checks only the numbers you pick to see who already uses it. Your address book never leaves your phone.",
-    "If someone you invite isn’t on Resbite, we keep their number for that invitation. We delete it when they answer or you withdraw the invitation, or 30 days after the resbite ends.",
+    "If someone you invite isn’t on Resbite, we keep their number for that invitation, until 30 days after the resbite ends, or sooner if you withdraw it.",
     "Anyone on Resbite who has your number can see that you’re on Resbite, and can invite you.",
     "Signing out doesn’t stop links you’ve already shared. Withdraw them from the resbite first if you want them to stop working.",
   ]);

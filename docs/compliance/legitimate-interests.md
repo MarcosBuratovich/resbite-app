@@ -38,7 +38,7 @@ Each ends with the outcome, how an objection under Art 21 is handled, where peop
 | Id | Purpose | People mainly affected | Outcome | Period | Needs |
 |---|---|---|---|---|---|
 | LI-1 | Check picked numbers and show who is "On Resbite" | Anyone whose number a host picks | Passes, with limits | Not stored; a daily count | B8, B5 |
-| LI-2 | Keep a non-user's number for one personal invitation | Invited non-users | Passes, if the schedule, the notice and the suppression list are in place | Until answered or revoked, or 30 days after the resbite ends | C3, D3, A1, A2 |
+| LI-2 | Keep a non-user's number for one personal invitation | Invited non-users | Passes, if the schedule, the notice and the suppression list are in place | Until 30 days after the resbite ends, or sooner if revoked; an answer does not delete it | C3, D3, A1, A2 |
 | LI-3 | Keep removal records per series | Removed users and non-users | Passes | 30 days (one-off) or 90 days (series) after the end | C3 |
 | LI-4 | Keep the objection suppression list | Non-users who object | Passes | Until the objection is withdrawn | C3, D3 |
 | LI-5 | Record the 18+, Terms and chat-rules acceptance | All account holders | Passes | While the account exists | B2, C8, D3, D4 |
@@ -93,7 +93,7 @@ Each ends with the outcome, how an objection under Art 21 is handled, where peop
 
 ## LI-2 · Keep a non-user's number for one personal invitation
 
-**What happens.** When a host or a trusted guest invites someone who is not a user, `invite_contacts` stores that person's number and calling code in `private.phone_invitations`, with a SHA-256 hash of the personal code, who invited, and later who answered and when (`supabase/migrations/20261028120000_contact_invitations.sql:12-25`; the current body is `supabase/migrations/20261111160000_chat_safety.sql:686-703`). The host sends the link from their own WhatsApp or Messages, with neutral text they can edit (PERM-4). The invitee opens `/i/<code>`, sees the event, the number's calling code and last two digits, and a short notice with a separate right-to-object line **[needs D3]**. They may answer, which needs a code sent by SMS to that number and creates a web-only account, or ignore it. The number is deleted when the invitation is answered or revoked, or 30 days after the resbite ends, whichever comes first **[needs C3]**. Activity PA-08; purpose LB-05.
+**What happens.** When a host or a trusted guest invites someone who is not a user, `invite_contacts` stores that person's number and calling code in `private.phone_invitations`, with a SHA-256 hash of the personal code, who invited, and later who answered and when (`supabase/migrations/20261028120000_contact_invitations.sql:12-25`; the current body is `supabase/migrations/20261111160000_chat_safety.sql:686-703`). The host sends the link from their own WhatsApp or Messages, with neutral text they can edit (PERM-4). The invitee opens `/i/<code>`, sees the event, the number's calling code and last two digits, and a short notice with a separate right-to-object line **[needs D3]**. They may answer, which needs a code sent by SMS to that number and creates a web-only account, or ignore it. The number is deleted when the invitation is revoked, or 30 days after the resbite ends. An answer does not delete it, because the personal link lets the person change their answer until the resbite ends **[needs C3]**. Activity PA-08; purpose LB-05.
 
 **Purpose.**
 - The invitee's interest: join a friend's plan without installing the app, and only if they are the person invited.
