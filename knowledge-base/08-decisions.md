@@ -774,3 +774,35 @@ Migration `supabase/migrations/20261116120000_open_beta.sql`; branch `open-beta`
 - **OB-D3 (assistant's call).** Unchanged: the resbite's own approval (an answer through the event link waits for the host); a new account still gives its name and the 18+ tick in the link flows; an approval still records a grant. Old testers and grant holders are still not asked for the tick again (`private.granted_access`).
 - **OB-D4 (assistant's call).** Waiting for access stays only for suspended accounts. Its text becomes "This account can’t use Resbite at the moment. If you think this is a mistake, contact the Resbite team." The heading stays, so the browser checks keep their anchor. Copy that mentioned tester approval is reworded (sign-in confirmation, Data & privacy, Delete account, the preview notices, a failed save).
 - **OB-D5.** The local-only deletion functions (`prepare_deletion_intent`, `activate_deletion_intent`) still ask for a roster row or a grant, and deletion requests still need a confirmed email. The deletion release must change them too (`qa/deletion-recovery-ledger.md`).
+
+## App Store readiness (AS), 17 November 2026
+
+Gap analysis: [`docs/superpowers/specs/2026-11-17-app-store-readiness-design.md`](../docs/superpowers/specs/2026-11-17-app-store-readiness-design.md) (its decisions D-1 to D-25). Documents: `docs/legal/` (public), `docs/compliance/` (internal), `qa/app-store-release/` (App Store Connect pack, review notes, release runbook). Branch `app-store-readiness`.
+
+*The owner's answers (17 November 2026).*
+- **AS-D1 (D-1).** The operator, data controller and App Store seller is **Resbite Ltd**, company number 12450334, registered office 86-90 Paul Street, London EC2A 4NE.
+- **AS-D2 (D-2).** Version 1.0 is on the **UK storefront only**. The EU and other countries come later, with their own legal work.
+- **AS-D3 (D-5).** The public contacts are **support@resbite.com** and **privacy@resbite.com**. The owner creates both inboxes.
+- **AS-D4.** Version 1.0 is **free**, with no ads and no tracking. Paid features may follow in a later version.
+- **AS-D5 (D-3).** **Twilio** sends the sign-in codes, through Supabase's Send SMS hook. Test mode and the `000000` swap end in the same sitting. The CAPTCHA vendor stays open (Cloudflare Turnstile or hCaptcha).
+- **AS-D6 (D-6).** The owner **names a backup moderator**. The repo records only their role, and only that they are named. The signed access agreement (`docs/compliance/team-access.md`) is kept outside the repo.
+- **AS-D7 (D-12).** A **UK solicitor reviews** the public documents before they are published.
+- **AS-D8 (all other decisions).** The gap analysis' **recommended defaults** apply to D-4 and D-7 to D-25:
+  - the Wellness tab is hidden;
+  - the optional details are removed;
+  - deletion is finished within 30 days;
+  - the section 5 retention table applies;
+  - every account accepts the new Terms once;
+  - the legal pages go on link.resbite.com;
+  - release is Manual.
+
+*Calls made after the cross-check of the documents (assistant's calls; the owner may change them).*
+- **AS-R1. Suspension records outlive deletion.** C2 keeps the suspension row of an account that deletes itself while suspended (D-19). The user id is cleared, and the reason and the dates stay, for 12 months after deletion. This is what the documents promise. Today the row goes with the Auth user (`chat_safety.sql:794-795`).
+- **AS-R2. Open reports outlive the reporter.** A report filed by a person who deletes their account is kept until it is closed, then for 180 days. The reporter id is cleared. Today it is deleted (`open_beta.sql:255`).
+- **AS-R3. An owner-run deletion script runs the same lifecycle as the app.** It covers banned, web-only and under-18 accounts that cannot use the app, so their deletion is the same as one from the app, with the cancellations and the receipt. It joins C6.
+- **AS-R4. Web-only accounts.** A web-only account with no resbite in the last 12 months is deleted by the C3 job. A code request that is never confirmed is kept 30 days.
+- **AS-R5. The public name is "Privacy Policy".** The app's tick, its links and App Store Connect already use it, so `docs/legal/privacy-notice.md` is titled Privacy Policy.
+- **AS-R6. Intimate images.** The uploader is suspended at once. The owner may then ban them.
+- **AS-R7. Legal and police requests** go to privacy@resbite.com.
+- **AS-R8. Weekly-group chat history.** Everyone on the current week, pending guests included, can read the whole history (`chat_groups.sql:194-205`). This is disclosed, and it stays as built. *To confirm with the owner.*
+- **AS-R9. The report thanks states the review time** ("We review reports every day."), for Ofcom code measure ICU D4. This joins B7.
