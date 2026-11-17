@@ -60,17 +60,30 @@ try {
   await three("phone sign-in");
   console.log("PASS (l2) both sign-in screens link the three pages");
 
-  // (l3) Phone sign-up: the tick line links Terms and Privacy Policy, and nothing else.
+  // (l3) Phone sign-up: the line under the tick (plan 4, "Read the Terms of Use. Our Privacy Policy explains how we
+  // use your data.") links Terms of Use and Privacy Policy, each as the whole phrase, and nothing else.
   await page.goto(`${base}/auth/phone`);
   await expect(page.getByRole("heading", { name: "Your number", exact: true })).toBeVisible();
+  await expect(page.getByRole("checkbox", { name: "I’m 18 or over and I accept the Terms of Use.", exact: true })).toBeVisible();
+  // The line: the innermost box holding both links (its ancestors are earlier in document order).
+  const line = page
+    .locator("div")
+    .filter({ has: link("Terms of Use") })
+    .filter({ has: link("Privacy Policy") })
+    .last();
+  await expect(line).toContainText("Read the");
+  await expect(line).toContainText("explains how we use your data.");
+  const names = await line.getByRole("link").evaluateAll((links) => links.map((l) => l.getAttribute("aria-label") || l.textContent));
+  assert.deepEqual(names, ["Terms of Use", "Privacy Policy"], "the line links the two documents and nothing else");
   await page.evaluate(() => (window.__opened = []));
-  await (await visible(link("Terms"))).click();
-  await (await visible(link("Privacy Policy"))).click();
+  await (await visible(line.getByRole("link", { name: "Terms of Use", exact: true }))).click();
+  await (await visible(line.getByRole("link", { name: "Privacy Policy", exact: true }))).click();
   assert.deepEqual(await opened(), [TERMS, PRIVACY]);
+  // No part-phrase link is left over from the old line, and no Support link here.
+  await expect(link("Terms")).toHaveCount(0);
   await expect(link("Support")).toHaveCount(0);
-  await expect(link("Terms of Use")).toHaveCount(0);
   await expect(page.getByRole("checkbox").first()).not.toBeChecked();
-  console.log("PASS (l3) the sign-up tick line links Terms and Privacy Policy and stays unticked");
+  console.log("PASS (l3) the sign-up tick line links Terms of Use and Privacy Policy, nothing else, and stays unticked");
 
   // (l4) Licences: sections, a font's text, react-native's text, then Larger Text at 320 px.
   const scrollTo = async (target, name) => {
