@@ -239,6 +239,46 @@ test("no Apple call without a code, or for an account without Apple", async () =
   );
   assert.deepEqual(refused.order, ["request"]);
 });
+test("a request whose reply was lost, but which the receipt shows queued, still logs out and revokes Apple", async () => {
+  // The transaction committed (or was waiting on the deletion lock past the RPC's timeout, then committed): the
+  // receipt finds the job, so the answer is 202 and the logout and Apple's revocation run once each, in order.
+  const r = recording(["apple"]);
+  const looked: [string, string][] = [];
+  r.g.request = async () => {
+    r.order.push("request");
+    throw Error("RPC timed out");
+  };
+  r.g.status = async (id, token) => {
+    r.order.push("status");
+    looked.push([id, token]);
+    return { requestId: id, status: "queued" };
+  };
+  const response = await createDeletionHandler(r.g, true, () => 1200)(
+    req({ action: "request", ...receipt, proof: "fresh", appleAuthorizationCode: appleCode }),
+  );
+  assert.equal(response.status, 202);
+  assert.deepEqual(await response.json(), { requestId, status: "queued" });
+  assert.deepEqual(r.order, ["request", "status", "revoke", "apple"]);
+  assert.deepEqual(looked, [[requestId, receipt.recoveryToken]]);
+  assert.deepEqual(r.codes, [appleCode]);
+  // No job behind the receipt: unconfirmed, and neither the logout nor Apple runs.
+  for (const status of [async () => null, async () => Promise.reject(Error("status down"))]) {
+    const none = recording(["apple"]);
+    none.g.request = async () => {
+      none.order.push("request");
+      throw Error("Backend operation failed");
+    };
+    none.g.status = status;
+    const unconfirmed = await createDeletionHandler(none.g, true, () => 1200)(
+      req({ action: "request", ...receipt, proof: "fresh", appleAuthorizationCode: appleCode }),
+    );
+    assert.equal(unconfirmed.status, 503);
+    assert.deepEqual(await unconfirmed.json(), {
+      error: "Request unconfirmed; check the saved receipt before retrying",
+    });
+    assert.deepEqual(none.order, ["request"]);
+  }
+});
 test("a malformed Apple code is refused before any backend call", async () => {
   for (const appleAuthorizationCode of [7, "a b", "", null, "x".repeat(1025), "c/abc"]) {
     const r = recording(["apple"]);

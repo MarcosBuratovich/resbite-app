@@ -22,6 +22,12 @@
 //             390 px, at 320 px and under Larger Text at 320 px, and an ordinary name stays whole (G-S10, ruling SR4);
 //             two people called Leo blocked on different days read "Blocked Wed 10 Jun" and "Blocked Wed 24 Dec 2025",
 //             each row labelled with its date, and a block with no time has no second line (ruling SR7)
+//   deletion  runs twice too: Expo started as usual (Delete account gives the privacy address and requests nothing),
+//             and Expo restarted with EXPO_PUBLIC_ACCOUNT_DELETION_ENABLED=true (with the stand-in Supabase URL and key)
+//             and this script run with RESBITE_QA_DELETION_ENABLED=true: an email account's code and password, a lost
+//             reply, a failed cleanup, a saved receipt after a restart, an unconfirmed reply (the request and the status
+//             read after it both 503) that shows Check deletion status and finishes with Try again on the saved
+//             request, a phone-only account's texted code, and an Apple-only account's Sign in with Apple
 // Every Supabase request is answered or refused by the fixture; nothing reaches a real account.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -435,6 +441,9 @@ try {
     );
     await page.unroute("**/*.supabase.co/**");
     let accepted = null,
+      // An unconfirmed reply: the next request is taken but answers 503, and this many status reads after it fail.
+      unconfirmedReply = false,
+      statusFails = 0,
       requestCount = 0,
       proofCount = 0,
       statusCount = 0,
@@ -505,6 +514,10 @@ try {
         const body = req.postDataJSON();
         if (body.action === "status") {
           statusCount++;
+          if (statusFails > 0) {
+            statusFails--;
+            return reply({ error: "Status unavailable; keep your receipt and retry" }, 503);
+          }
           return accepted
             ? reply({ requestId: body.requestId, status: "queued" })
             : reply({}, 404);
@@ -523,6 +536,12 @@ try {
         assert.equal(saved.recoveryToken, body.recoveryToken);
         requestCount++;
         accepted = body;
+        if (unconfirmedReply) {
+          // Committed write, but the function couldn't confirm it, and the status read after it fails too.
+          unconfirmedReply = false;
+          statusFails = 1;
+          return reply({ error: "Request unconfirmed; check the saved receipt before retrying" }, 503);
+        }
         return route.abort("failed"); // Committed write, lost reply.
       }
       throw Error(`Unexpected intercepted API ${path}`);
@@ -660,6 +679,46 @@ try {
       requestBodies.every((b) => !("appleAuthorizationCode" in b)),
       "an email proof sends no Apple code",
     );
+    // An unconfirmed reply: the request answers 503 and the status read after it fails too. The line says the saved
+    // request can be checked again, so Check deletion status is there, and Try again runs on the saved request
+    // without a new code: it reads the status first and asks for no second proof or request.
+    accepted = null;
+    unconfirmedReply = true;
+    await page.evaluate(
+      ({ key, session }) => {
+        sessionStorage.clear();
+        sessionStorage.setItem(key, JSON.stringify(session));
+      },
+      { key: AUTH_STORAGE_KEY, session },
+    );
+    await page.goto(`${base}/delete-account`);
+    const checkButton = page.getByRole("button", { name: "Check deletion status", exact: true });
+    await expect(page.getByRole("button", { name: "Send code", exact: true })).toBeVisible();
+    await expect(checkButton).toHaveCount(0);
+    await page.getByRole("button", { name: "Send code", exact: true }).click();
+    await expect(page.getByText("Check your email for the code.", { exact: true })).toBeVisible();
+    await page.getByLabel("Code from the email", { exact: true }).fill("123456");
+    await page.getByLabel("Type DELETE to confirm", { exact: true }).fill("DELETE");
+    await page.getByRole("button", { name: "Permanently delete account", exact: true }).click();
+    await expect(
+      page.getByText("Deletion could not be confirmed. Your saved request can be checked again.", { exact: true }),
+    ).toBeVisible();
+    await expect(checkButton).toBeVisible();
+    const tryAgain = page.getByRole("button", { name: "Try again", exact: true });
+    await expect(tryAgain).toBeVisible();
+    await expect(page.getByLabel("Code from the email", { exact: true })).toHaveValue("");
+    await expect(tryAgain).toBeEnabled();
+    assert.equal(statusFails, 0, "the status read after the request failed");
+    const unconfirmed = { requestCount, proofCount };
+    await tryAgain.click();
+    await expect(page.getByText(/We’ve accepted your request/)).toBeVisible();
+    assert.deepEqual({ requestCount, proofCount }, unconfirmed, "Try again read the saved request: no second proof or request");
+    assert.equal(
+      await page.evaluate((key) => sessionStorage.getItem(key), AUTH_STORAGE_KEY),
+      null,
+      "signed out once the saved request read accepted",
+    );
+    pass("unconfirmed: a 503 request and a failed status read show Check deletion status, and Try again finishes on the saved request with no new code");
     const jwt = (claims) =>
       [
         Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url"),
@@ -1114,7 +1173,7 @@ try {
     pass(`blocked: an 18- and a 40-letter single-word name wrap inside the card at ${at}, Christopher stays whole, each Unblock at least 44 pt`);
   }
   console.log(
-    `Deletion UI passed: preview/disabled no outbound calls${enabled ? ", enabled synthetic password/OTP (an email account opens on the code, the password one switch away), lost reply, local cleanup failure/retry including drafts, restart receipt recovery, phone-only account confirms with a texted code (no test-code swap), Apple-only account confirms with Apple (closed sheet quiet, different Apple ID refused with the app session unchanged, isolated proof, Apple's code sent for revocation and never saved)" : ""}. No real account, email or deletion request.`,
+    `Deletion UI passed: preview/disabled no outbound calls${enabled ? ", enabled synthetic password/OTP (an email account opens on the code, the password one switch away), lost reply, local cleanup failure/retry including drafts, restart receipt recovery, an unconfirmed reply with Check deletion status and Try again on the saved request, phone-only account confirms with a texted code (no test-code swap), Apple-only account confirms with Apple (closed sheet quiet, different Apple ID refused with the app session unchanged, isolated proof, Apple's code sent for revocation and never saved)" : ""}. No real account, email or deletion request.`,
   );
 } finally {
   await browser.close();

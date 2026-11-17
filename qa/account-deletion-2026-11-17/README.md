@@ -261,6 +261,9 @@ Every step needs the owner's explicit approval at the time.
    - Lift the hold: `update private.legal_holds set lifted_at = now() where case_ref = 'TEST';`. Within 5 minutes the job completes.
    - Delete the hold row afterwards: `delete from private.legal_holds where case_ref = 'TEST';`.
 8. **The schedule.** `cron.job_run_details` shows `cleanup-account` every 5 minutes with status `succeeded`, and `purge-deletion-receipts` daily. The purge's answer in `net._http_response` reads `{"receiptsPurged":0}`.
+9. **Apple or Google sign-up, no number added, Delete my account from Add your number (DEL-2).** On "I have an account", tap Continue with Apple with the test Apple ID (and, on a second disposable account, Continue with Google). The app stops at Add your number. Don't add a number: tap **Delete my account**.
+   - Delete account opens with "Type DELETE, then confirm with Apple." for Apple, and "We’ll email a code to …" for Google. Deleting works as in tests 3 and 4.
+   - In SQL, 0 `auth.users` for the id within 10 minutes, and 1 receipt `complete`.
 
 ## Rollback
 

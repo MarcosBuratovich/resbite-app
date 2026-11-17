@@ -163,9 +163,21 @@ export function createDeletionHandler(
         recoveryToken,
       );
     } catch {
-      return reply(503, {
-        error: "Request unconfirmed; check the saved receipt before retrying",
-      });
+      // A failed call is ambiguous: the transaction may have committed after the RPC gave up (a wait on the deletion
+      // lock past its timeout) or its reply may have been lost. The receipt tells, and a job behind it is this
+      // account's accepted deletion, so the logout and Apple's revocation below still run. The identity was checked
+      // above and the lookup needs the recovery token.
+      let found: DeletionStatus | null = null;
+      try {
+        found = await gateway.status(requestId, recoveryToken);
+      } catch {
+        // Unknown either way: unconfirmed, as before.
+      }
+      if (!found)
+        return reply(503, {
+          error: "Request unconfirmed; check the saved receipt before retrying",
+        });
+      result = found;
     }
     // The deletion is durable now (D-4: one transaction). Neither the logout nor Apple can undo
     // it, and neither failing may hide it: the deletion, then the Supabase logout, then Apple.
