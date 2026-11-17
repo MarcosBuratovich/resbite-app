@@ -33,7 +33,8 @@ begin
  perform set_config('request.jwt.claims',jsonb_build_object('sub',p_uid,'role','authenticated',
    'email','access-approved@resbite-test.invalid','tester',true,'email_verified',true)::text,true);
  response := public.account_access_status();
- if response is distinct from jsonb_build_object('account_id',p_uid,'status',p_status) then
+ -- Terms acceptance (20261117120000) adds terms_version and terms_needed: none is published here.
+ if response is distinct from jsonb_build_object('account_id',p_uid,'status',p_status,'terms_version',null,'terms_needed',false) then
   raise exception 'Unexpected own-account access response: %',response;
  end if;
 end $$;
