@@ -89,6 +89,20 @@ try {
     }
     return found.first();
   };
+  // The list recycles rows while it scrolls, so a row found mid-scroll can detach or leave the window before the click: scroll back and look again.
+  const tapRow = async (target, name) => {
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const row = await scrollTo(target, name);
+      try {
+        await row.click({ timeout: 4000 });
+        return;
+      } catch {
+        await target.mouse.wheel(0, -1400);
+        await target.waitForTimeout(500);
+      }
+    }
+    throw new Error(`Licences row "${name}" could not be tapped`);
+  };
   await page.goto(`${base}/licences`);
   await expect(page.getByRole("heading", { name: "Licences", exact: true })).toBeVisible();
   await expect(page.getByText("Resbite is built with open-source software and fonts. Their licences are below.")).toBeVisible();
@@ -99,7 +113,7 @@ try {
   await montserrat.click();
   await expect(page.getByText("SIL Open Font License, Version 1.1").first()).toBeVisible();
   await page.getByRole("button", { name: "Close sheet", exact: true }).click();
-  await (await scrollTo(page, "react-native 0.86.3, MIT")).click();
+  await tapRow(page, "react-native 0.86.3, MIT");
   await expect(page.getByText("Meta Platforms").first()).toBeVisible();
   await page.getByRole("button", { name: "Close sheet", exact: true }).click();
   // Scrolling from the top, the three headers come in this order.
