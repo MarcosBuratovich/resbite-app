@@ -1,0 +1,23 @@
+-- Take down a resbite's words or cover (App Store readiness plan 6:
+-- docs/superpowers/plans/2026-11-17-asr-6-retention-and-team-scripts.md, Task 7; C6, D-21).
+--
+-- OWNER-RUN, NOT A MIGRATION. For a resbite whose title, description, notes or cover break the rules, an intimate image
+-- in a cover within the 48 hours among them (docs/compliance/moderation-standard.md sections 7, 10 and 14). In a CSEA
+-- case, or where the person shown wants to go to the police or the police ask, set the hold first (set-legal-hold.sql,
+-- on the host's account or the series): the content then comes down and the cover's file is kept ("hide and preserve",
+-- docs/compliance/law-enforcement-requests.md section 11.3). Paste it into the hosted project's SQL editor, put the
+-- resbite's id (any occurrence's) below in the editor's copy only, set to false each part to keep, and run. Never save
+-- the edited copy.
+-- In one statement (private.remove_resbite_content), on every occurrence of the resbite's series, past and future: title,
+-- it reads 'Resbite'; description, none; notes, no host note, no guest note and no meeting details; cover, no cover and
+-- no cover description. Each cover it takes off is retired (it can't be attached again) and queued once for the photo
+-- clean-up's next run (cleanup-profile-photos, every 10 minutes), which deletes the file, unless the series is under a
+-- hold. It writes no chat line and sends no notice. It prints result: {"occurrences": how many it changed,
+-- "covers_queued", "held": true when a hold keeps the files}. Run again, it changes nothing (occurrences 0). An unknown
+-- id is refused: P0002 'Resbite not found'.
+-- Then suspend the host where the case needs it (suspend-account-by-id.sql; at once for an intimate image, AS-R6),
+-- close any report with close-report.sql (the nearest action, and what was done in the note), and record the time the
+-- content went down in the moderation log.
+-- Edit: the resbite's id, and the four parts (title, description, notes, cover).
+with input(plan_id, title, description, notes, cover) as (values ('00000000-0000-0000-0000-000000000000'::uuid, true, true, true, true))
+select private.remove_resbite_content(i.plan_id, i.title, i.description, i.notes, i.cover) as result from input i;

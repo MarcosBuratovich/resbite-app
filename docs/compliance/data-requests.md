@@ -110,7 +110,11 @@ Carriers give dormant numbers to new people (SI-11). If the person who answers t
 
 ## 5. What to export, from where
 
-Export for one account (its account id and verified number) or one number (for a non-user). The export script **[needs C6]** does this, keeping only the person's own messages and never a reporter's id. Until it exists, the owner gathers the rows by hand in the SQL editor, read-only, and does not save the queries.
+Export for one account (its account id and verified number) or one number (for a non-user). Two owner-run, read-only scripts do this (C6, local only until `20261117130000_retention_and_team_tools.sql` and plan 4's `20261117120000_terms_acceptance.sql` are applied; rollout in `qa/retention-and-team-tools-2026-11-17/README.md`):
+- **`supabase/ops/export-account.sql`**, for an account. It prints `export`, the JSON to send, one key per source below, and `files`, the Storage paths of the person's profile photos and covers to download for the archive. The JSON holds no id but the person's own, other people's numbers only as their last two digits, the person's own messages only, Resbite's chat lines that name them without the payload (so nobody else is named), and never a reporter, a reporter's words, a review note, or a block or "Not now" of the person by anyone (section 6).
+- **`supabase/ops/export-number.sql`**, for a number that is not a user's (section 5.9).
+
+Each is run only after the identity check (section 4) and `supabase/ops/legal-holds.sql`, on a private copy outside the repo with the id or number typed into the copy only, and its output is kept outside the repo. Until they are live, the owner gathers the rows by hand in the SQL editor, read-only, and does not save the queries.
 
 At 1.0 the optional date of birth, second phone, city and interests are no longer stored (decision D-9) **[needs B11, C9]**. If any remain in `raw_user_meta_data.registration_details`, include them.
 
@@ -172,7 +176,7 @@ At 1.0 the optional date of birth, second phone, city and interests are no longe
 | Source | Include | Leave out |
 |---|---|---|
 | `public.messages` they wrote (`author_id`, kind `message` or `announcement`) | Each message's words, time, state (sent, deleted or removed), kind, audience, and the resbite | Words of removed or deleted messages are gone; say so |
-| `public.messages` system lines that name them (`payload`) | The event and time, with every other person shown as "another member" **[needs C6]** | Other people's ids |
+| `public.messages` system lines that name them (`payload`) | The event and time (`chat_events` in `export-account.sql`), without the payload, so no other person is named | Other people's ids |
 | `public.chat_reads` | Their read position in each chat | — |
 | Other people's messages and whole chats | **Never** (section 6) | — |
 
@@ -181,8 +185,8 @@ At 1.0 the optional date of birth, second phone, city and interests are no longe
 | Source | Include | Withhold |
 |---|---|---|
 | `public.connections` | Each connection or request: the other person's display name, whether connected, who asked, the resbite where they met, when asked and accepted | Ids |
-| `private.connection_refusals` they made (`from_user`) | Their own "Not now" answers and removals: the other person's display name, the resbite, when | — |
-| `private.connection_refusals` about them (`to_user`) | — | **All rows** (section 6.2) |
+| `private.connection_refusals` they made (`to_user`: the table's `from_user` asked and was refused, `supabase/migrations/20261110120000_connections.sql:27`) | Their own "Not now" answers and removals: the other person's display name, the resbite, when (`refusals_made` in `export-account.sql`) | — |
+| `private.connection_refusals` about them (`from_user`) | — | **All rows** (section 6.2) |
 | `private.blocks` they made (`blocker_id`) | Who they blocked (display name) and when, as Blocked people shows them | — |
 | `private.blocks` of them (`blocked_id`) | — | **All rows** (section 6.2) |
 | `private.reports` they filed (`reporter_id`) | Reason; their own words (`details`); when; status; the reported person's display name; the reported message's frozen words, which they saw | `review_note`, which is about someone else |
@@ -207,11 +211,13 @@ At 1.0 the optional date of birth, second phone, city and interests are no longe
 
 ### 5.9 For a person who is not a user
 
+`supabase/ops/export-number.sql` gathers the first three rows, matching the number by its key, so both spellings of an Argentine mobile are one number. It leaves out an invitation an account answered: that is the account's data, and a number changes hands (section 4.4).
+
 | Source | Include |
 |---|---|
 | `private.phone_invitations` with their number | Each invitation: the resbite's title and date, the inviting host's display name, when sent, answered or revoked |
 | `private.plan_removals` with their number | That a host's series keeps their number so a guest cannot bring them back, and since when |
-| The objection suppression list **[needs C3, D-23]** | Whether their number is on it |
+| The do-not-invite list (`private.invite_objections`, D-23) | Whether their number is on it |
 | Test-mode phone codes | Emptied at switch-off and then dropped **[needs C1]** |
 
 ## 6. What to withhold, and why
@@ -275,7 +281,12 @@ Every account can delete itself in the app: Profile → Data & privacy → Delet
 
 ### 8.4 Erasure that is not a whole account
 
-- **One item** (a photo, a message, a resbite): the person can remove it in the app. If they cannot, do it with the removal scripts **[needs C6]**.
+- **One item** (a photo, a message, a resbite): the person can remove it in the app. If they cannot, do it with the removal scripts, in the SQL editor's copy only (C6, local only until `20261117130000` is applied):
+  - a profile photo: `supabase/ops/remove-profile-photo.sql` takes it off the profile at once, and the file goes at the photo clean-up's next run, within 10 minutes;
+  - a resbite's title, description, notes or cover: `supabase/ops/remove-resbite-content.sql`, on every occurrence of the series; a cover's file goes at the next run too;
+  - a message: `supabase/ops/remove-reported-message.sql` blanks its words.
+
+  Under a legal hold, the photo or cover comes down and the file is kept (`law-enforcement-requests.md` section 11.3).
 - **A non-user's number:** see section 10.2.
 
 ## 9. Correction, and changes to a number or email
@@ -301,9 +312,10 @@ Push notifications and contacts access rest on iOS permissions: the person can t
 
 A person whose number a host picked can object (Art 21). We tell them this separately on the invitation page and in the Privacy Policy (PRV-19, A2). On an objection:
 1. Check control of the number (section 4.3).
-2. Add the number to the suppression list, so no host can invite it again **[needs C3, D-23: a keyed hash checked by `invite_contacts`, kept until the person withdraws the objection]**.
-3. Revoke their pending invitations and remove the number from `private.phone_invitations` and `private.plan_removals` **[needs C3 or C6: a script for this; open point]**.
+2. Run `supabase/ops/object-number.sql` with the number, in the SQL editor's copy only (C3 and C6, local only until `20261117130000` is applied). In one transaction it adds the number to the do-not-invite list (`private.invite_objections`: a keyed hash, never the number, checked by `invite_contacts`, kept until the person withdraws the objection; D-23), so no host can invite it by link again. Invite people then reads "Can’t be invited by link". A person on Resbite who holds that number is still invited in the app (LI-4).
+3. The same run deletes every invitation by number to it and every removal record of it, for every host, except those a legal hold keeps. It prints counts only (`invitations_deleted`, `removals_deleted`, `held_kept`). If a host was inviting at that moment, run it again a minute later. Once a hold is lifted, run it again to delete what the hold kept.
 4. Confirm (template R9). Do not tell them which host invited them beyond what the invitation already showed.
+5. **Withdrawing the objection:** after the phone check, `supabase/ops/withdraw-objection.sql` takes the number off the list, and hosts may invite it by link again.
 
 ### 10.3 Restriction (Art 18)
 
@@ -458,8 +470,8 @@ Square brackets mark the parts to fill in.
 | B11, C9 | The optional details removed and erased |
 | B14 | "Request a copy of my data" in the app |
 | C1 | Twilio, for the phone check and archive passwords; the test-code tables dropped |
-| C3 | The suspension, outbox and other retention jobs, including web-only accounts after 12 months without a resbite (AS-R4); the objection suppression list |
-| C6 | The owner-run deletion script for banned, web-only and under-18 accounts (AS-R3); the export script (own messages only, never a reporter's id, others shown as "another member"); the removal scripts; **a script to honour a non-user's objection** (open point) |
+| C3 | The suspension, outbox and other retention jobs, including web-only accounts after 12 months without a resbite (AS-R4); the do-not-invite list. Built locally in `20261117130000_retention_and_team_tools.sql`, not applied |
+| C6 | The owner-run deletion script for banned, web-only and under-18 accounts (AS-R3; plan 2's `delete-account.sql`); the exports `export-account.sql` and `export-number.sql` (own messages only, never a reporter's id, no other person named); the removal scripts `remove-profile-photo.sql` and `remove-resbite-content.sql`; `object-number.sql`, which honours a non-user's objection, and `withdraw-objection.sql`. Built locally in `supabase/ops/`, not live: they need `20261117130000` applied |
 | C8 | Per-version Terms acceptance |
 | D1, D8 | /support with the contact form; /delete-account with the request route |
 | F1, F3 | The inboxes; the request log |
