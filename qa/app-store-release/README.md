@@ -34,6 +34,7 @@ Phases 0 to 2 of the gap analysis are done when every box below is ticked. Do no
 - [ ] **Internal records drafted** (A8 to A18, A22 to A24). A24 is signed before the backup moderator gets any access.
 - [ ] **App changes** B1 to B14 and B16 merged to `main`, with tests passing, including B1's release test that fails without the support address and the URLs.
 - [ ] **Site changes** D1 to D3, D7, D9 and D10 merged.
+- [ ] **The final review's owner decisions answered** (`qa/app-store-release/final-review-2026-11-17.md`, "For the owner"): a series hold and other people's deletions, what a closed or held account sees, a different Apple ID when deleting, a held person's visibility, and the "We’ve updated our Terms" wording.
 - [ ] **Backend files** C2 (with the rewired entry point and the legal hold), C3 and C6 to C9 written, each with a rollback, and tested on a local replay. The C13 template files are changed. The C1 hook path is written.
 - [ ] **The app's Terms version** (`mobile/src/domain/guestAccount.ts`, B2) is bumped to placeholder 7, the same string step 16 sets on Vercel.
 
