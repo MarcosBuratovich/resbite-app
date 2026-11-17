@@ -130,6 +130,7 @@ function Navigation() {
           <Stack.Screen name="invite" />
           <Stack.Screen name="delete-account" />
           <Stack.Screen name="licences" />
+          <Stack.Screen name="about-legal" />
           <Stack.Screen name="kit" />
           <Stack.Protected guard={Boolean(session)}>
             <Stack.Screen name="account" />

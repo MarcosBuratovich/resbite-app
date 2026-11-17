@@ -137,6 +137,54 @@ try {
   }
   console.log("PASS (l4) Licences lists the three sections, opens the font and react-native texts, and fits at 320 px under Larger Text");
 
+  // (l5) About and legal: four links, Licences, the company details, Larger Text at 320 px.
+  await page.goto(`${base}/about-legal`);
+  await expect(page.getByRole("heading", { name: "About and legal", exact: true })).toBeVisible();
+  await page.evaluate(() => (window.__opened = []));
+  const TERMS_BASE = TERMS.split("#")[0];
+  for (const name of ["Privacy Policy", "Terms of Use", "Community rules", "Support"]) {
+    await page.getByRole("button", { name, exact: true }).click();
+  }
+  assert.deepEqual(await opened(), [PRIVACY, TERMS, TERMS_BASE + "#community-rules", SUPPORT]);
+  await page.getByRole("button", { name: "Licences", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Licences", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "About and legal", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "About and legal", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Company details", exact: true })).toBeVisible();
+  const first = page.getByText("Resbite is provided by Resbite Ltd, a private limited company registered in England and Wales.");
+  await expect(first).toBeVisible();
+  await expect(page.getByText("Company number: 12450334")).toBeVisible();
+  await expect(page.getByText("Registered office: 86-90 Paul Street, London EC2A 4NE, United Kingdom")).toBeVisible();
+  await expect(page.getByText("Data protection: privacy@resbite.com")).toBeVisible();
+  assert.equal(await first.evaluate((el) => getComputedStyle(el).userSelect), "text");
+  if (process.env.EXPECT_SUPPORT) {
+    await expect(page.getByText(`Help and reports: ${process.env.EXPECT_SUPPORT}`)).toBeVisible();
+  } else {
+    await expect(page.getByText("Help and reports:", { exact: false })).toHaveCount(0);
+  }
+  {
+    const large = await browser.newPage({ viewport: { width: 320, height: 844 }, reducedMotion: "reduce" });
+    large.on("pageerror", (e) => errors.push(e.message));
+    await large.route("**/*.supabase.co/**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: "{}" }));
+    await large.goto(`${base}/about-legal?largeText=1`);
+    await large.addStyleTag({ content: '[dir="auto"] { zoom: 1.4; }' });
+    await expect(large.getByRole("heading", { name: "About and legal", exact: true })).toBeVisible();
+    await expect(large.getByText("Data protection: privacy@resbite.com")).toBeAttached();
+    assert.ok(await large.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "About and legal fits at 320 px under Larger Text");
+    const clipped = await large.evaluate(() =>
+      [...document.querySelectorAll("[role=button],[role=link],[role=heading],h1,h2,h3")]
+        .filter((el) => el.getBoundingClientRect().width > 0)
+        .filter((el) => {
+          const b = el.getBoundingClientRect();
+          return b.left < -1 || b.right > window.innerWidth + 1;
+        })
+        .map((el) => el.getAttribute("aria-label") || el.textContent.trim().slice(0, 40)),
+    );
+    assert.deepEqual(clipped, [], "nothing is clipped on About and legal at 320 px under Larger Text");
+    await large.close();
+  }
+  console.log("PASS (l5) About and legal opens the four pages, Licences and shows the company details");
+
   assert.deepEqual(errors, [], `no page errors: ${errors.join(" | ")}`);
 } finally {
   await browser.close();
