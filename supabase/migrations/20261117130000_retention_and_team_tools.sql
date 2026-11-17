@@ -299,9 +299,11 @@ end $$;
 revoke all on function private.purge_suspension_history(integer) from public, anon, authenticated, service_role;
 comment on function private.purge_suspension_history(integer) is 'resbite 20261117130000';
 
--- The daily job (schedule-retention.sql). Each purge runs with a limit of 5000 in a block of its own, so one that fails
--- undoes only its own work, warns with its key and SQLSTATE, and reads null; the others still run. It logs the counts
--- and answers them: counts, never ids.
+-- The daily job (schedule-retention.sql). Section 3's series purges run first (plans, then chats), so a series that
+-- goes takes its records with it, then this section's eight, then section 3's two account purges. Each purge runs with
+-- its own default limit (5000; plans 200 series, web accounts 100) in a block of its own, so one that fails undoes only
+-- its own work, warns with its key and SQLSTATE, and reads null; the others still run. It logs the counts and answers
+-- them: counts, never ids.
 create function private.run_retention() returns jsonb
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -309,10 +311,10 @@ declare
  v_count integer;
  v_counts jsonb := '{}'::jsonb;
 begin
- foreach v_key in array array['phone_invitations','plan_removals','connection_refusals','connection_requests',
-  'notifications','link_opens','closed_reports','suspension_history'] loop
+ foreach v_key in array array['plans','chats','phone_invitations','plan_removals','connection_refusals','connection_requests',
+  'notifications','link_opens','closed_reports','suspension_history','web_accounts','unconfirmed_accounts'] loop
   begin
-   execute pg_catalog.format('select private.%I($1)', 'purge_' || v_key) into v_count using 5000;
+   execute pg_catalog.format('select private.%I()', 'purge_' || v_key) into v_count;
    v_counts := v_counts || pg_catalog.jsonb_build_object(v_key, v_count);
   exception when others then
    raise warning 'resbite retention: % failed (%)', v_key, sqlstate;
@@ -324,3 +326,206 @@ begin
 end $$;
 revoke all on function private.run_retention() from public, anon, authenticated, service_role;
 comment on function private.run_retention() is 'resbite 20261117130000';
+
+-- 3. Series purges (chats and plans), web-only and unconfirmed accounts, and the one-off leftovers.
+
+-- A chat (D-8, CH-P15). A one-off's messages, reads and mutes go 90 days after its chat closed (48 hours after its end;
+-- a cancelled one, which closes at once, 48 hours after its end too), and its row reads empty. A group's chat runs as
+-- long as its series, so its messages go one by one 12 months after they were written. Kept while the series is under
+-- hold (Decision 1). First it locks each chat row it will change, in series order, before any message row, as the
+-- account deletion and the stats trigger take them (H28, 20261116120000_open_beta.sql:258-264), so it never deadlocks
+-- with them. Then it deletes at most p_limit messages (one another transaction holds waits for the next run) and puts
+-- each chat row's figures right by the stats trigger's and chat_hide_line's rules (20261111140000_chat_core.sql:394-418,
+-- 20261111150000_chat_groups.sql:51-66), which a delete never fires: message_count is the messages and announcements
+-- still sent; the last line is the newest row left that is not a hidden system line, with its time, or none; the pin
+-- goes when its announcement went (every older one is older still, so went too). A report on a message that went keeps
+-- its frozen words (its message_id goes null by its key); a chat notice goes with its message (on delete cascade). At
+-- most p_limit chats a call; it answers how many messages it deleted. The database's own: no grant.
+create function private.purge_chats(p_limit integer default 5000) returns integer
+language plpgsql security definer set search_path = '' as $$
+declare
+ v_cutoff timestamptz := now() - interval '12 months';
+ v_series uuid[];
+ v_count integer;
+begin
+ select coalesce(pg_catalog.array_agg(d.series_id order by d.series_id), '{}') into v_series from (
+  select ch.series_id from public.chats ch cross join lateral private.current_occurrence(ch.series_id) c
+  where case when private.chat_is_group(ch.series_id)
+    then exists (select 1 from public.messages m where m.series_id = ch.series_id and m.created_at < v_cutoff)
+    else coalesce(private.chat_closes_at(ch.series_id), private.plan_end(c.starts_at, c.ends_at) + interval '48 hours')
+      + interval '90 days' < now()
+     and (exists (select 1 from public.messages m where m.series_id = ch.series_id)
+      or exists (select 1 from public.chat_reads r where r.series_id = ch.series_id)
+      or exists (select 1 from public.chat_mutes u where u.series_id = ch.series_id)) end
+   and not private.series_under_hold(ch.series_id)
+  order by ch.series_id limit p_limit
+  for update of ch
+ ) d;
+ with candidates as (
+  select m.id from public.messages m join public.chats ch on ch.series_id = m.series_id
+  where m.series_id = any(v_series) and (not ch.is_group or m.created_at < v_cutoff)
+  limit p_limit for update of m skip locked
+ ), removed as (
+  delete from public.messages m using candidates c where m.id = c.id returning 1
+ ) select count(*) into v_count from removed;
+ delete from public.chat_reads r using public.chats ch
+ where ch.series_id = r.series_id and r.series_id = any(v_series) and not ch.is_group;
+ delete from public.chat_mutes u using public.chats ch
+ where ch.series_id = u.series_id and u.series_id = any(v_series) and not ch.is_group;
+ update public.chats ch set
+  message_count = (select count(*) from public.messages m
+   where m.series_id = ch.series_id and m.kind in ('message','announcement') and m.state = 'sent'),
+  (last_message_id, last_message_at) = (select m.id, m.created_at from public.messages m
+   where m.series_id = ch.series_id and not (m.kind = 'system' and m.state = 'deleted') order by m.id desc limit 1),
+  pinned_message_id = case when exists (select 1 from public.messages m where m.id = ch.pinned_message_id)
+   then ch.pinned_message_id end
+ where ch.series_id = any(v_series);
+ return v_count;
+end $$;
+revoke all on function private.purge_chats(integer) from public, anon, authenticated, service_role;
+comment on function private.purge_chats(integer) is 'resbite 20261117130000';
+
+-- A resbite (D-8): its whole series goes 12 months after the series ends (series_end, Decision 3: never while a group
+-- still rolls), unless the series is under hold. Every occurrence goes in one statement, so repeats_from never blocks
+-- it, and the keys take the rest: guests, meeting details, co-hosts, join requests, links and their opens, invitations
+-- by number and the legacy ones, messages (a report keeps its frozen words) and notices. Then the series' own rows:
+-- its mutes, leaves, chat reads and chat mutes, and its chat row. Its removal records go in the same run (section 2's
+-- purge_plan_removals takes those of a series with no plan), and its cover files are orphans for the photo worker
+-- (section 5). Only a series whose every occurrence ended more than 12 months ago is looked at: the current occurrence
+-- is the latest, so this leaves out nothing that is due, and a series stays while any occurrence of it ended in the
+-- last 12 months. Each series is taken on its own: its plan rows in id order, then
+-- its chat row, as the account deletion and the roll take them (plan, then chat, then message: H28), without waiting
+-- (nowait), so a series another transaction is changing waits for the next run; under those locks it is checked again.
+-- At most p_limit series a call; it answers how many series it deleted. The database's own: no grant.
+create function private.purge_plans(p_limit integer default 200) returns integer
+language plpgsql security definer set search_path = '' as $$
+declare
+ v_series uuid;
+ v_count integer := 0;
+begin
+ for v_series in
+  select s.series_id from (
+   select p.series_id from public.plans p group by p.series_id
+   having max(private.plan_end(p.starts_at, p.ends_at)) < now() - interval '12 months'
+  ) s
+  where private.series_end(s.series_id) + interval '12 months' < now() and not private.series_under_hold(s.series_id)
+  order by s.series_id limit p_limit
+ loop
+  begin
+   perform 1 from public.plans p where p.series_id = v_series order by p.id for update nowait;
+   perform 1 from public.chats c where c.series_id = v_series for update nowait;
+   continue when (private.series_end(v_series) + interval '12 months' < now()) is not true
+    or private.series_under_hold(v_series);
+   delete from public.plans p where p.series_id = v_series;
+   delete from public.plan_mutes m where m.series_id = v_series;
+   delete from private.series_leaves l where l.series_id = v_series;
+   delete from public.chat_reads r where r.series_id = v_series;
+   delete from public.chat_mutes u where u.series_id = v_series;
+   delete from public.chats c where c.series_id = v_series;
+   v_count := v_count + 1;
+  exception when lock_not_available then
+   null;
+  end;
+ end loop;
+ return v_count;
+end $$;
+revoke all on function private.purge_plans(integer) from public, anon, authenticated, service_role;
+comment on function private.purge_plans(integer) is 'resbite 20261117130000';
+
+-- A web-only account no longer in use (AS-R4, Decision 11): it has a profile, a confirmed number and no email, has
+-- never signed into the app (used_app), is neither being deleted nor held, was made more than 12 months ago, and in
+-- the last 12 months hosted no resbite (made or ended in them), had no guest row on one that ended in them, asked to
+-- join none and answered no invitation by number. At most p_limit, in id order. The database's own: no grant.
+create function private.dormant_web_accounts(p_limit integer default 100) returns setof uuid
+language sql stable security definer set search_path = '' as $$
+ select u.id from auth.users u join public.profiles pr on pr.id = u.id
+ where u.email is null and u.phone_confirmed_at is not null
+  and not private.used_app(u.id) and not private.deletion_pending(u.id) and not private.account_held(u.id)
+  and u.created_at < now() - interval '12 months'
+  and not exists (select 1 from public.plans p where p.owner_id = u.id
+   and (p.created_at > now() - interval '12 months' or private.plan_end(p.starts_at, p.ends_at) > now() - interval '12 months'))
+  and not exists (select 1 from public.attendees a join public.plans p on p.id = a.plan_id
+   where a.user_id = u.id and private.plan_end(p.starts_at, p.ends_at) > now() - interval '12 months')
+  and not exists (select 1 from private.join_requests j where j.user_id = u.id and j.created_at > now() - interval '12 months')
+  and not exists (select 1 from private.phone_invitations i where i.user_id = u.id and i.answered_at > now() - interval '12 months')
+ order by u.id limit p_limit
+$$;
+revoke all on function private.dormant_web_accounts(integer) from public, anon, authenticated, service_role;
+comment on function private.dormant_web_accounts(integer) is 'resbite 20261117130000';
+
+-- Each dormant web account is deleted by plan 2's team deletion (private.operator_account_deletion, AS-R3): the app's
+-- lifecycle, with the cancellations and the receipt, after which the cleanup-account worker removes its files and Auth
+-- user. It is called by name at run time: without plan 2's function this refuses with 55000, so the daily run reads
+-- null for the key and warns, and never skips in silence. The deletion sets the deletion's flag (resbite.system) to the
+-- end of the transaction; it is put back after each call, so whatever runs after it in the same transaction writes its
+-- chat lines as before. It answers how many deletions it queued. The database's own: no grant.
+create function private.purge_web_accounts(p_limit integer default 100) returns integer
+language plpgsql security definer set search_path = '' as $$
+declare
+ v_user uuid;
+ v_flag text := pg_catalog.current_setting('resbite.system', true);
+ v_count integer := 0;
+begin
+ if pg_catalog.to_regprocedure('private.operator_account_deletion(uuid)') is null then
+  raise exception 'Operator deletion missing' using errcode = '55000';
+ end if;
+ for v_user in select d.id from private.dormant_web_accounts(p_limit) as d(id) loop
+  execute 'select private.operator_account_deletion($1)' using v_user;
+  perform pg_catalog.set_config('resbite.system', coalesce(v_flag, ''), true);
+  v_count := v_count + 1;
+ end loop;
+ return v_count;
+end $$;
+revoke all on function private.purge_web_accounts(integer) from public, anon, authenticated, service_role;
+comment on function private.purge_web_accounts(integer) is 'resbite 20261117130000';
+
+-- An Auth user that never confirmed anything (AS-R4: a code request never confirmed is kept 30 days): no confirmed
+-- email or phone, not anonymous, made more than 30 days ago, with no profile, and not held. It is deleted from
+-- auth.users, as the dashboard deletes one, and what refers to it goes by its keys. A row another transaction holds
+-- waits for the next run. At most p_limit a call; it answers how many it deleted. The database's own: no grant.
+create function private.purge_unconfirmed_accounts(p_limit integer default 5000) returns integer
+language plpgsql security definer set search_path = '' as $$
+declare v_count integer;
+begin
+ with candidates as (
+  select u.id from auth.users u
+  where u.email_confirmed_at is null and u.phone_confirmed_at is null and not coalesce(u.is_anonymous, false)
+   and u.created_at < now() - interval '30 days'
+   and not exists (select 1 from public.profiles p where p.id = u.id) and not private.account_held(u.id)
+  limit p_limit for update of u skip locked
+ ), removed as (
+  delete from auth.users u using candidates c where u.id = c.id returning 1
+ ) select count(*) into v_count from removed;
+ return v_count;
+end $$;
+revoke all on function private.purge_unconfirmed_accounts(integer) from public, anon, authenticated, service_role;
+comment on function private.purge_unconfirmed_accounts(integer) is 'resbite 20261117130000';
+
+-- The one-off leftovers (Decision 10), run once, here, as data steps. Since the open beta the tester roster and the
+-- legacy invitations gate nothing (20261116120000_open_beta.sql:1-4); only a disabled roster row still keeps someone
+-- out (private.access_suspended, :24-30). So first each disabled roster row of an Auth user becomes a revoked grant
+-- (one made, already revoked, where the account has none; a live one revoked now; a revoked one left as it was), so
+-- nobody suspended that way gets back in. A suspension that disabled that row (private.suspensions, roster true) is
+-- rewritten as if it had revoked the grant instead: roster false; grant_at the grant's revoked_at where this step
+-- made or revoked the grant, else as it was; grant_made true where this step made the grant, else as it was. So the
+-- undo at supabase/ops/suspend-account.sql:37-49 still puts back exactly what the suspension changed: it deletes a
+-- grant the suspension made, gives back a live grant it revoked, and leaves an earlier ban alone. Then both tables are
+-- emptied. access_suspended still reads the empty roster, and suspend-account.sql stays as it is. The rollback
+-- restores neither table. private.phone_rewrites waits for the C12 decision (an owner step).
+with disabled as (
+ select distinct u.id as user_id from private.tester_roster r join auth.users u on r.email = lower(u.email) where not r.enabled
+), had as (
+ select d.user_id, b.user_id is not null as had_row, b.revoked_at is not null as was_revoked
+ from disabled d left join private.beta_access b on b.user_id = d.user_id
+), grants as (
+ insert into private.beta_access(user_id, source, revoked_at) select d.user_id, 'maintainer', now() from disabled d
+ on conflict (user_id) do update set revoked_at = coalesce(private.beta_access.revoked_at, now())
+ returning private.beta_access.user_id, private.beta_access.revoked_at
+)
+update private.suspensions s set roster = false,
+ grant_at = case when h.was_revoked then s.grant_at else g.revoked_at end,
+ grant_made = s.grant_made or not h.had_row
+from grants g join had h on h.user_id = g.user_id
+where s.user_id = g.user_id and s.roster;
+delete from private.tester_roster;
+delete from private.invitations;

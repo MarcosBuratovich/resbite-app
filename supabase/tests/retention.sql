@@ -4,8 +4,11 @@
 -- held person hosted, joined or wrote in; series_end is null while the roll can still add an occurrence, else the
 -- current occurrence's end. Slice 2 (Task 2): each row purge takes what is due and nothing else, skips what a hold
 -- keeps, takes it at the next run once the hold is lifted, and stops at its limit; run_retention runs the eight and
--- answers their counts, a failing one as null. Later slices add the series purges, the do-not-invite list and the
--- photo and cover cleanup.
+-- answers their counts, a failing one as null. Slice 3 (Task 3): a one-off's chat empties 90 days after it closed and
+-- a group's messages go at 12 months, with the chat's figures right after; a series goes whole 12 months after it ends,
+-- never while a group still rolls; a web-only account idle for 12 months is queued for deletion, and an Auth user that
+-- confirmed nothing goes at 30 days; a hold keeps each, and the next run after its lift takes it; run_retention answers
+-- twelve keys. Later slices add the do-not-invite list and the photo and cover cleanup.
 -- Synthetic identities only: ids a6000000-0000-4000-8000-0000000000NN through pg_temp.a6(text), users 01 to 49 and
 -- plans 51 to 99 (each plan its own series unless it says otherwise); emails r6-NN@resbite-test.invalid; numbers
 -- 4477009006NN (an account's NN is its user number; the numbers of people not on Resbite are 81 to 89). One
@@ -13,7 +16,8 @@
 -- Users a6…: 01 Hana, held, then lifted (slice 1), hosts slice 2's resbites; 02 Ola, hosts the one-off 52; 03 Gus, a
 -- guest on 52; 04 Wen, wrote in 52's chat; 05 Rob, hosts the series the series_end checks read, held in slice 2 while
 -- the invitations are purged, then lifted; 06 Ana, 07 Ben; 08 Cal, leaving (deletion asked); 09 Ivo, held through
--- slice 2, lifted before the last run.
+-- slice 2, lifted before the last run. Slice 3: Ben and Gus held, then lifted before the last run; web accounts 10 Pia,
+-- 11 Raj, 12 Sol, 13 Tom, 14 Uma (held), 15 Val, 16 Wes, 17 Xia, 18 Yan; Auth users with no profile 20 to 24 (24 held).
 -- Series a6…: 51 named by a hold (no plan: a hold names a series id); 52 Ola's one-off tomorrow; 53 a one-off that
 -- ended 2 days ago; 54 a weekly running now; 55 a weekly whose current occurrence (56, repeating from 55) stopped
 -- repeating and ended 3 days ago; 57 a weekly that ended 3 days ago, stopped, its chat closed; 58 a weekly that ended 3
@@ -22,6 +26,9 @@
 -- 63 one that ended 31 days ago, named by a hold; 64 one that ended 31 days ago; 65 one that ended 29 days ago; 66 a
 -- weekly whose current occurrence (67) stopped repeating and ended 60 days ago; 68 the same (69) ended 91 days ago; 71
 -- a weekly that began 200 days ago and still rolls (72 is next week's); 96 a series with no plan left.
+-- Slice 3's: 73 to 75 one-offs whose chats closed 91, 89 and 91 days ago; 76 a weekly that began 13 months ago and
+-- still rolls (77 is next week's); 78 to 83 resbites that ended 13 or 11 months ago (each says which); 84 a weekly whose
+-- only occurrence ended 13 months ago, still rolling.
 begin;
 -- A check that must hold: raises p_what when p_ok is not true (false or null).
 create function pg_temp.r6_check(p_ok boolean, p_what text) returns void language plpgsql as $$
@@ -389,10 +396,11 @@ select pg_temp.r6_check((select v->'link_opens' = 'null'::jsonb and jsonb_typeof
  'run_retention: a failing purge does not read null, or stops the run');
 rollback to savepoint r6_failing;
 
--- run_retention after Ivo's hold is lifted: exactly the eight keys, each a number, and what his hold kept goes;
--- what the hold on series 63 keeps stays.
+-- run_retention after Ivo's hold is lifted: the eight keys, each a number, and what his hold kept goes; what the hold
+-- on series 63 keeps stays. Slice 3 adds four keys (the series and account purges) and checks the whole answer; here
+-- they are left out.
 update private.legal_holds set lifted_at=now() where user_id=pg_temp.a6('09') and lifted_at is null;
-do $$ declare v jsonb := private.run_retention(); k text;
+do $$ declare v jsonb := private.run_retention() - array['plans','chats','web_accounts','unconfirmed_accounts']; k text;
 begin
  perform pg_temp.r6_check((select array_agg(x order by x) from jsonb_object_keys(v) x) = array['closed_reports','connection_refusals',
   'connection_requests','link_opens','notifications','phone_invitations','plan_removals','suspension_history'],
@@ -414,5 +422,326 @@ select pg_temp.r6_check((select target_user_id is null and frozen_author is null
  'run_retention: the report Ivo filed still names leaving Cal once Ivo''s hold is lifted');
 select pg_temp.r6_check(pg_temp.r6_invited('87') and pg_temp.r6_removal('63','87') and pg_temp.r6_report('F')
  and pg_temp.r6_removal('51','86'), 'run_retention: a record on a held series went');
+
+-- Slice 3 (Task 3): the series purges (chats and plans), web-only and unconfirmed accounts.
+
+-- The cast and the records, seeded under the roll's flag. Ben (07) and Gus (03) are held for this slice, and so are the
+-- web account Uma (14) and the unconfirmed account 24.
+select set_config('resbite.system','roll',true);
+-- Web accounts: a confirmed number and no email (but Tom, 13), never in the app (but Sol, 12), all made 13 months ago
+-- (but Val, 15, 11 months ago). Pia (10) was a guest on 81, which ended 13 months ago; Raj (11) on 82, which ended 11
+-- months ago; Wes (16) asked to join 82 11 months ago; Xia (17) answered an invitation to 82 by number 11 months ago;
+-- Yan (18) hosts 83, which ended 11 months ago.
+insert into auth.users(id,phone,phone_confirmed_at,created_at) values
+ (pg_temp.a6('10'),'447700900610',now()-interval '13 months',now()-interval '13 months'),
+ (pg_temp.a6('11'),'447700900611',now()-interval '13 months',now()-interval '13 months'),
+ (pg_temp.a6('12'),'447700900612',now()-interval '13 months',now()-interval '13 months'),
+ (pg_temp.a6('13'),'447700900613',now()-interval '13 months',now()-interval '13 months'),
+ (pg_temp.a6('14'),'447700900614',now()-interval '13 months',now()-interval '13 months'),
+ (pg_temp.a6('15'),'447700900615',now()-interval '11 months',now()-interval '11 months'),
+ (pg_temp.a6('16'),'447700900616',now()-interval '13 months',now()-interval '13 months'),
+ (pg_temp.a6('17'),'447700900617',now()-interval '13 months',now()-interval '13 months'),
+ (pg_temp.a6('18'),'447700900618',now()-interval '13 months',now()-interval '13 months');
+update auth.users set email='r6-13@resbite-test.invalid' where id=pg_temp.a6('13');
+insert into public.profiles(id,display_name) values
+ (pg_temp.a6('10'),'Pia'),(pg_temp.a6('11'),'Raj'),(pg_temp.a6('12'),'Sol'),(pg_temp.a6('13'),'Tom'),(pg_temp.a6('14'),'Uma'),
+ (pg_temp.a6('15'),'Val'),(pg_temp.a6('16'),'Wes'),(pg_temp.a6('17'),'Xia'),(pg_temp.a6('18'),'Yan');
+insert into private.app_sessions(user_id) values (pg_temp.a6('12'));
+-- Unconfirmed accounts, none with a profile: 20 confirmed nothing, 31 days old; 21 the same, 29 days old; 22 confirmed
+-- its number, 31 days old; 23 anonymous, 31 days old; 24 held, confirmed nothing, 31 days old.
+insert into auth.users(id,phone,phone_confirmed_at,is_anonymous,created_at) values
+ (pg_temp.a6('20'),'447700900620',null,false,now()-interval '31 days'),
+ (pg_temp.a6('21'),'447700900621',null,false,now()-interval '29 days'),
+ (pg_temp.a6('22'),'447700900622',now()-interval '31 days',false,now()-interval '31 days'),
+ (pg_temp.a6('23'),null,null,true,now()-interval '31 days'),
+ (pg_temp.a6('24'),'447700900624',null,false,now()-interval '31 days');
+-- Chats: 73 a one-off that ended 93 days ago, so its chat closed 91 days ago; 74 one that ended 91 days ago (closed 89
+-- days ago); 75 one that ended 93 days ago, where held Ben wrote; 76 a weekly whose first occurrence ended 13 months ago
+-- and which still rolls (77 is next week's). Plans: 78 a one-off that ended 13 months ago, with one of each record the
+-- cascade takes; 79 one that ended 11 months ago; 80 one that ended 13 months ago, with held Gus as a guest; 81 and 82
+-- the web accounts' (13 and 11 months ago); 83 Yan's (11 months ago); 84 a weekly whose only occurrence ended 13 months
+-- ago and which the roll has yet to carry (it still rolls: series_end is null).
+insert into public.plans(id,owner_id,title,starts_at,ends_at,time_zone,place_label,categories,repeat_weeks) values
+ (pg_temp.a6('73'),pg_temp.a6('01'),'Quiz',now()-interval '93 days 2 hours',now()-interval '93 days','UTC','Pub',array['community'],null),
+ (pg_temp.a6('74'),pg_temp.a6('01'),'Supper',now()-interval '91 days 2 hours',now()-interval '91 days','UTC','Hall',array['community'],null),
+ (pg_temp.a6('75'),pg_temp.a6('01'),'Games',now()-interval '93 days 2 hours',now()-interval '93 days','UTC','Cafe',array['community'],null),
+ (pg_temp.a6('76'),pg_temp.a6('01'),'Swim club',now()-interval '13 months 2 hours',now()-interval '13 months','UTC','Pool',array['physical'],1),
+ (pg_temp.a6('78'),pg_temp.a6('01'),'Fair',now()-interval '13 months 2 hours',now()-interval '13 months','UTC','Green',array['community'],null),
+ (pg_temp.a6('79'),pg_temp.a6('01'),'Gig',now()-interval '11 months 2 hours',now()-interval '11 months','UTC','Club',array['creative'],null),
+ (pg_temp.a6('80'),pg_temp.a6('01'),'Market',now()-interval '13 months 2 hours',now()-interval '13 months','UTC','Square',array['community'],null),
+ (pg_temp.a6('81'),pg_temp.a6('01'),'Talk',now()-interval '13 months 2 hours',now()-interval '13 months','UTC','Library',array['intellectual'],null),
+ (pg_temp.a6('82'),pg_temp.a6('01'),'Tour',now()-interval '11 months 2 hours',now()-interval '11 months','UTC','Museum',array['intellectual'],null),
+ (pg_temp.a6('83'),pg_temp.a6('18'),'Dance',now()-interval '11 months 2 hours',now()-interval '11 months','UTC','Studio',array['physical'],null),
+ (pg_temp.a6('84'),pg_temp.a6('01'),'Choir club',now()-interval '13 months 2 hours',now()-interval '13 months','UTC','Hall',array['creative'],1);
+insert into public.plans(id,owner_id,title,starts_at,ends_at,time_zone,place_label,categories,repeat_weeks,series_id,repeats_from) values
+ (pg_temp.a6('77'),pg_temp.a6('01'),'Swim club',now()+interval '3 days',now()+interval '3 days 2 hours','UTC','Pool',array['physical'],1,
+  pg_temp.a6('76'),pg_temp.a6('76'));
+insert into public.attendees(plan_id,user_id,response) values
+ (pg_temp.a6('76'),pg_temp.a6('06'),'accepted'),(pg_temp.a6('77'),pg_temp.a6('06'),'pending'),(pg_temp.a6('78'),pg_temp.a6('06'),'accepted'),
+ (pg_temp.a6('79'),pg_temp.a6('06'),'accepted'),(pg_temp.a6('80'),pg_temp.a6('03'),'accepted'),(pg_temp.a6('81'),pg_temp.a6('10'),'accepted'),
+ (pg_temp.a6('82'),pg_temp.a6('11'),'accepted');
+-- 78's records: meeting details, a co-host, a join request, a link opened once, an invitation by number, a notice, a
+-- mute, a leave; its message, read and chat mute come with the chats below.
+insert into public.plan_meeting_details(plan_id,note) values (pg_temp.a6('78'),'Gate B');
+insert into public.plan_admins(plan_id,user_id,appointed_by) values (pg_temp.a6('78'),pg_temp.a6('06'),pg_temp.a6('01'));
+insert into private.join_requests(plan_id,user_id,response) values (pg_temp.a6('78'),pg_temp.a6('06'),'accepted');
+insert into private.join_requests(plan_id,user_id,response,created_at) values (pg_temp.a6('82'),pg_temp.a6('16'),'accepted',now()-interval '11 months');
+insert into private.plan_links(plan_id,code) values (pg_temp.a6('78'),'r6LinkCodeBBBBBBBBBBBB');
+insert into private.link_opens(plan_link_id,opened_at) select id,now()-interval '13 months' from private.plan_links where plan_id=pg_temp.a6('78');
+insert into private.phone_invitations(plan_id,phone,country,invited_by,user_id,answered_at) values
+ (pg_temp.a6('78'),'447700900681','44',pg_temp.a6('01'),null,null),
+ (pg_temp.a6('82'),'447700900617','44',pg_temp.a6('01'),pg_temp.a6('17'),now()-interval '11 months');
+insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id) values
+ (pg_temp.a6('78'),pg_temp.a6('01'),'rsvp','r6:plan78',pg_temp.a6('06'));
+insert into public.plan_mutes(series_id,user_id) values (pg_temp.a6('78'),pg_temp.a6('06'));
+insert into private.series_leaves(series_id,user_id) values (pg_temp.a6('78'),pg_temp.a6('06'));
+-- A removal from the running weekly 76: Task 2's purge keeps it while the group rolls.
+insert into private.plan_removals(series_id,user_id,phone) values (pg_temp.a6('76'),null,'447700900689');
+-- Messages: on 73, Ana's message, Hana's announcement (pinned) and Hana's message; on 74 Ana's; on 75 Ana's and held
+-- Ben's; on 78 and 80 Ana's.
+insert into public.messages(series_id,plan_id,author_id,kind,body) values
+ (pg_temp.a6('73'),pg_temp.a6('73'),pg_temp.a6('06'),'message','r6-73-ana'),
+ (pg_temp.a6('73'),pg_temp.a6('73'),pg_temp.a6('01'),'announcement','r6-73-pin'),
+ (pg_temp.a6('73'),pg_temp.a6('73'),pg_temp.a6('01'),'message','r6-73-hana'),
+ (pg_temp.a6('74'),pg_temp.a6('74'),pg_temp.a6('06'),'message','r6-74-ana'),
+ (pg_temp.a6('75'),pg_temp.a6('75'),pg_temp.a6('06'),'message','r6-75-ana'),
+ (pg_temp.a6('75'),pg_temp.a6('75'),pg_temp.a6('07'),'message','r6-75-ben'),
+ (pg_temp.a6('78'),pg_temp.a6('78'),pg_temp.a6('06'),'message','r6-78-ana'),
+ (pg_temp.a6('80'),pg_temp.a6('80'),pg_temp.a6('06'),'message','r6-80-ana');
+-- 76's chat, oldest first: Ana's message and Hana's pinned announcement, 13 months old; Ana's message and her message a
+-- host removed, 11 months old; a system line 10 months old, hidden (chat_hide_line moves the last line back to the
+-- removed one); and Ana's message written last but dated 13 months ago, so the chat's last line is one that goes.
+insert into public.messages(series_id,plan_id,author_id,kind,body,state,created_at) values
+ (pg_temp.a6('76'),pg_temp.a6('76'),pg_temp.a6('06'),'message','r6-76-old','sent',now()-interval '13 months'),
+ (pg_temp.a6('76'),pg_temp.a6('76'),pg_temp.a6('01'),'announcement','r6-76-pin','sent',now()-interval '13 months'),
+ (pg_temp.a6('76'),pg_temp.a6('77'),pg_temp.a6('06'),'message','r6-76-new','sent',now()-interval '11 months'),
+ (pg_temp.a6('76'),pg_temp.a6('77'),pg_temp.a6('06'),'message','r6-76-removed','removed',now()-interval '11 months');
+insert into public.messages(series_id,plan_id,author_id,kind,event,payload,created_at) values
+ (pg_temp.a6('76'),pg_temp.a6('77'),null,'system','joined','{"r6":"76-line"}',now()-interval '10 months');
+select private.chat_hide_line((select id from public.messages where payload->>'r6'='76-line'));
+insert into public.messages(series_id,plan_id,author_id,kind,body,created_at) values
+ (pg_temp.a6('76'),pg_temp.a6('77'),pg_temp.a6('06'),'message','r6-76-late',now()-interval '13 months');
+-- Ana's reads on 73, 74, 75, 76 and 78; Hana's chat mutes on 73, 74, 75 and 78.
+insert into public.chat_reads(series_id,user_id,last_read_id)
+ select s,pg_temp.a6('06'),(select max(m.id) from public.messages m where m.series_id=s)
+ from unnest(array[pg_temp.a6('73'),pg_temp.a6('74'),pg_temp.a6('75'),pg_temp.a6('76'),pg_temp.a6('78')]) s;
+insert into public.chat_mutes(series_id,user_id)
+ select s,pg_temp.a6('01') from unnest(array[pg_temp.a6('73'),pg_temp.a6('74'),pg_temp.a6('75'),pg_temp.a6('78')]) s;
+-- Hana's report on Ana's message in 73, tagged H, with its frozen words.
+insert into private.reports(reporter_id,target_user_id,message_id,series_id,plan_id,about,reason,details,frozen_body,frozen_author)
+ select pg_temp.a6('01'),pg_temp.a6('06'),m.id,pg_temp.a6('73'),pg_temp.a6('73'),'message','spam','r6-H','r6-73-ana',pg_temp.a6('06')
+ from public.messages m where m.body='r6-73-ana';
+insert into private.legal_holds(user_id,reason,case_ref,review_on) values
+ (pg_temp.a6('07'),'police','LE-2026-007',current_date+90),(pg_temp.a6('03'),'coroner','CO-2026-003',current_date+90),
+ (pg_temp.a6('14'),'intimate_image','II-2026-014',current_date+90),(pg_temp.a6('24'),'claim','CL-2026-024',current_date+90);
+select set_config('resbite.system','',true);
+
+-- A message by its words; a chat's row by its series number.
+create function pg_temp.r6_msg(p_body text) returns bigint language sql as $$
+ select m.id from public.messages m where m.body=p_body $$;
+create function pg_temp.r6_chat(p_series text) returns public.chats language sql as $$
+ select c.* from public.chats c where c.series_id=pg_temp.a6(p_series) $$;
+
+-- The fixtures say what they should: 76 is a running group with nothing to end it, and its chat's row names the late
+-- message as its last line and the old announcement as its pin; 73's names its announcement as its pin.
+select pg_temp.r6_check(private.chat_is_group(pg_temp.a6('76')) and private.series_end(pg_temp.a6('76')) is null
+ and private.series_end(pg_temp.a6('84')) is null and not private.chat_is_group(pg_temp.a6('73')),
+ 'series fixtures: 76 or 84 is not a running group, or 73 is a group');
+select pg_temp.r6_check((select c.message_count=4 and c.last_message_id=pg_temp.r6_msg('r6-76-late')
+  and c.pinned_message_id=pg_temp.r6_msg('r6-76-pin') from pg_temp.r6_chat('76') c), 'series fixtures: 76''s chat row is not as seeded');
+select pg_temp.r6_check((select c.message_count=3 and c.pinned_message_id=pg_temp.r6_msg('r6-73-pin') from pg_temp.r6_chat('73') c),
+ 'series fixtures: 73''s chat row is not as seeded');
+
+-- series_purges_locked: no API role may call any of the five; each is security definer, with an empty search path, and
+-- this file's; the four purges are plpgsql, the list of dormant accounts is SQL.
+do $$ declare r text; f text; v pg_catalog.pg_proc;
+begin
+ foreach f in array array['private.purge_chats(integer)','private.purge_plans(integer)','private.dormant_web_accounts(integer)',
+  'private.purge_web_accounts(integer)','private.purge_unconfirmed_accounts(integer)'] loop
+  foreach r in array array['anon','authenticated','service_role'] loop
+   perform pg_temp.r6_check(not has_function_privilege(r,f,'execute'), 'series_purges_locked: '||r||' may execute '||f);
+  end loop;
+  select * into v from pg_catalog.pg_proc p where p.oid = f::regprocedure;
+  perform pg_temp.r6_check(v.prosecdef and v.proconfig = array['search_path=""']
+   and v.prolang = (select l.oid from pg_catalog.pg_language l
+    where l.lanname = case when f like 'private.dormant_web_accounts%' then 'sql' else 'plpgsql' end),
+   'series_purges_locked: '||f||' is not security definer in its language with an empty search path');
+  perform pg_temp.r6_check(pg_catalog.obj_description(f::regprocedure,'pg_proc') = 'resbite 20261117130000',
+   'series_purges_locked: '||f||' does not carry this file''s marker');
+ end loop;
+end $$;
+
+-- dormant_web_accounts (Decision 11, AS-R4): Pia (10) only. Her guest row is on a resbite that ended 13 months ago.
+do $$ declare v_n text; v_why text;
+begin
+ perform pg_temp.r6_check(pg_temp.a6('10') in (select private.dormant_web_accounts()),
+  'dormant_web_accounts: Pia (10), web-only and idle for 12 months, is not dormant');
+ for v_n, v_why in values ('11','a guest on a resbite that ended 11 months ago'),('12','in the app (an app session)'),
+  ('13','with an email'),('14','held'),('15','made 11 months ago'),('16','asked to join 11 months ago'),
+  ('17','answered an invitation 11 months ago'),('18','hosting a resbite that ended 11 months ago') loop
+  perform pg_temp.r6_check(pg_temp.a6(v_n) not in (select private.dormant_web_accounts()),
+   'dormant_web_accounts: '||v_n||', '||v_why||', is dormant');
+ end loop;
+ perform pg_temp.r6_check((select count(*) from private.dormant_web_accounts()) = 1,
+  'dormant_web_accounts: not just Pia: '||(select array_agg(d)::text from private.dormant_web_accounts() d));
+end $$;
+
+-- purge_web_accounts: without plan 2's operator deletion it refuses with 55000 and the daily run reads null for its key
+-- (the function is hidden in a savepoint when it exists; the brief's own case is the one where it is missing).
+savepoint r6_no_operator;
+do $$ begin
+ if pg_catalog.to_regprocedure('private.operator_account_deletion(uuid)') is not null then
+  alter function private.operator_account_deletion(uuid) rename to r6_operator_hidden;
+ end if;
+end $$;
+do $$ declare v_state text; v_msg text;
+begin
+ begin
+  perform private.purge_web_accounts();
+ exception when others then
+  get stacked diagnostics v_state = returned_sqlstate, v_msg = message_text;
+ end;
+ perform pg_temp.r6_check(v_state = '55000' and v_msg = 'Operator deletion missing',
+  'purge_web_accounts: without the operator deletion it did not refuse with 55000 ''Operator deletion missing'': '
+  ||coalesce(v_state,'no error')||' '||coalesce(v_msg,''));
+ perform pg_temp.r6_check((select v->'web_accounts' = 'null'::jsonb and jsonb_typeof(v->'unconfirmed_accounts') = 'number'
+   from (select private.run_retention() v) x), 'run_retention: a missing operator deletion does not read null for web_accounts');
+end $$;
+rollback to savepoint r6_no_operator;
+-- Then a stub stands in only where plan 2's function is still missing, recording whom it was asked to delete.
+do $$ begin
+ if pg_catalog.to_regprocedure('private.operator_account_deletion(uuid)') is null then
+  create temp table r6_operator_calls(user_id uuid);
+  create function private.operator_account_deletion(p_user uuid) returns jsonb language sql as $f$
+   insert into pg_temp.r6_operator_calls values (p_user) returning jsonb_build_object('status','queued') $f$;
+ end if;
+end $$;
+select pg_temp.r6_check(private.purge_web_accounts() = 1, 'purge_web_accounts: the run did not answer 1');
+do $$ declare v_ok boolean;
+begin
+ if pg_catalog.to_regclass('pg_temp.r6_operator_calls') is not null then
+  execute 'select coalesce(array_agg(user_id) = array[pg_temp.a6(''10'')], false) from pg_temp.r6_operator_calls' into v_ok;
+ else
+  -- Plan 2's real function: Pia's deletion is queued, so she is no longer dormant.
+  v_ok := private.deletion_pending(pg_temp.a6('10')) and pg_temp.a6('10') not in (select private.dormant_web_accounts());
+ end if;
+ perform pg_temp.r6_check(v_ok, 'purge_web_accounts: Pia''s (10) deletion was not queued');
+end $$;
+select pg_temp.r6_check(not exists(select 1 from unnest(array['11','12','13','14','15','16','17','18']) n
+  where private.deletion_pending(pg_temp.a6(n))), 'purge_web_accounts: an account that is not dormant is being deleted');
+select pg_temp.r6_check(coalesce(current_setting('resbite.system',true),'') = '',
+ 'purge_web_accounts: the deletion''s flag outlived the deletion');
+
+-- purge_unconfirmed_accounts (AS-R4): an Auth user that confirmed nothing goes 30 days after it was made, unless it has
+-- a profile, is anonymous or is held.
+select pg_temp.r6_check(private.purge_unconfirmed_accounts() = 1, 'unconfirmed: the run did not answer 1');
+select pg_temp.r6_check(not exists(select 1 from auth.users where id=pg_temp.a6('20')), 'unconfirmed: one that confirmed nothing stays at 31 days');
+select pg_temp.r6_check(exists(select 1 from auth.users where id=pg_temp.a6('21')), 'unconfirmed: one that confirmed nothing goes at 29 days');
+select pg_temp.r6_check(exists(select 1 from auth.users where id=pg_temp.a6('22')), 'unconfirmed: one that confirmed its number goes');
+select pg_temp.r6_check(exists(select 1 from auth.users where id=pg_temp.a6('23')), 'unconfirmed: an anonymous one goes');
+select pg_temp.r6_check(exists(select 1 from auth.users where id=pg_temp.a6('24')), 'unconfirmed: a held one goes');
+
+-- purge_plans: 12 months after the series ends, the whole series and everything on it; never a running group, nor a
+-- series under hold. 78 and 81 (whose only guest, Pia, has just been deleted) go.
+create temp table r6_before as select (select count(*) from private.link_opens) as opens;
+select pg_temp.r6_check(private.purge_plans() = 2, 'plans: the run did not answer 2');
+select pg_temp.r6_check(not exists(select 1 from public.plans where series_id in (pg_temp.a6('78'),pg_temp.a6('81'))),
+ 'plans: a one-off that ended 13 months ago stays');
+select pg_temp.r6_check(not exists(select 1 from public.attendees where plan_id=pg_temp.a6('78'))
+ and not exists(select 1 from public.plan_meeting_details where plan_id=pg_temp.a6('78'))
+ and not exists(select 1 from public.plan_admins where plan_id=pg_temp.a6('78'))
+ and not exists(select 1 from private.join_requests where plan_id=pg_temp.a6('78'))
+ and not exists(select 1 from private.plan_links where code='r6LinkCodeBBBBBBBBBBBB')
+ and (select count(*) from private.link_opens) = (select opens-1 from r6_before)
+ and not pg_temp.r6_invited('81') and pg_temp.r6_msg('r6-78-ana') is null and not pg_temp.r6_notice('plan78'),
+ 'plans: a guest, meeting details, co-host, join request, link, link open, invitation, message or notice of 78 stays');
+select pg_temp.r6_check(not exists(select 1 from public.plan_mutes where series_id=pg_temp.a6('78'))
+ and not exists(select 1 from private.series_leaves where series_id=pg_temp.a6('78'))
+ and not exists(select 1 from public.chat_reads where series_id=pg_temp.a6('78'))
+ and not exists(select 1 from public.chat_mutes where series_id=pg_temp.a6('78'))
+ and not exists(select 1 from public.chats where series_id=pg_temp.a6('78')),
+ 'plans: a mute, leave, chat read, chat mute or the chat row of 78 stays');
+select pg_temp.r6_check(exists(select 1 from public.plans where id=pg_temp.a6('79')) and (pg_temp.r6_chat('79')).series_id is not null,
+ 'plans: a one-off that ended 11 months ago goes');
+select pg_temp.r6_check((select count(*) from public.plans where series_id=pg_temp.a6('76')) = 2
+ and (select count(*) from public.attendees where plan_id in (pg_temp.a6('76'),pg_temp.a6('77'))) = 2 and (pg_temp.r6_chat('76')).series_id is not null,
+ 'plans: an occurrence, guest or the chat of the weekly 76, which still rolls, goes');
+select pg_temp.r6_check(exists(select 1 from public.plans where id=pg_temp.a6('84')),
+ 'plans: a weekly whose only occurrence ended 13 months ago, and which still rolls, goes');
+select pg_temp.r6_check(exists(select 1 from public.plans where id=pg_temp.a6('80'))
+ and exists(select 1 from public.attendees where plan_id=pg_temp.a6('80') and user_id=pg_temp.a6('03'))
+ and pg_temp.r6_msg('r6-80-ana') is not null and (pg_temp.r6_chat('80')).series_id is not null,
+ 'plans: a one-off that ended 13 months ago with held Gus as a guest goes');
+select pg_temp.r6_check(exists(select 1 from public.plans where id=pg_temp.a6('82')) and exists(select 1 from public.plans where id=pg_temp.a6('83')),
+ 'plans: a one-off that ended 11 months ago goes');
+
+-- purge_chats: a one-off's messages, reads and mutes 90 days after its chat closed; a group's messages 12 months after
+-- they were written, with the chat's figures put right; never a series under hold. 73's three and 76's three go.
+select pg_temp.r6_check(private.purge_chats() = 6, 'chats: the run did not answer 6');
+select pg_temp.r6_check(not exists(select 1 from public.messages where series_id=pg_temp.a6('73'))
+ and not exists(select 1 from public.chat_reads where series_id=pg_temp.a6('73'))
+ and not exists(select 1 from public.chat_mutes where series_id=pg_temp.a6('73')),
+ 'chats: a message, read or mute of a one-off whose chat closed 91 days ago stays');
+select pg_temp.r6_check((select c.message_count=0 and c.last_message_id is null and c.last_message_at is null and c.pinned_message_id is null
+  from pg_temp.r6_chat('73') c), 'chats: the row of a one-off emptied is not 0, null, null, null');
+select pg_temp.r6_check((select message_id is null and frozen_body='r6-73-ana' from private.reports where details='r6-H'),
+ 'chats: a report on a message that went still names it, or lost its frozen words');
+select pg_temp.r6_check(pg_temp.r6_msg('r6-74-ana') is not null
+ and exists(select 1 from public.chat_reads where series_id=pg_temp.a6('74'))
+ and exists(select 1 from public.chat_mutes where series_id=pg_temp.a6('74')) and (pg_temp.r6_chat('74')).message_count=1,
+ 'chats: a one-off whose chat closed 89 days ago lost something');
+select pg_temp.r6_check(pg_temp.r6_msg('r6-75-ana') is not null and pg_temp.r6_msg('r6-75-ben') is not null
+ and exists(select 1 from public.chat_reads where series_id=pg_temp.a6('75'))
+ and exists(select 1 from public.chat_mutes where series_id=pg_temp.a6('75')) and (pg_temp.r6_chat('75')).message_count=2,
+ 'chats: a one-off whose chat closed 91 days ago, where held Ben wrote, lost something');
+select pg_temp.r6_check(pg_temp.r6_msg('r6-76-old') is null and pg_temp.r6_msg('r6-76-pin') is null and pg_temp.r6_msg('r6-76-late') is null,
+ 'chats: a group message 13 months old stays');
+select pg_temp.r6_check(pg_temp.r6_msg('r6-76-new') is not null and pg_temp.r6_msg('r6-76-removed') is not null
+ and exists(select 1 from public.messages where payload->>'r6'='76-line'), 'chats: a group message 11 months old goes');
+select pg_temp.r6_check((select c.message_count = (select count(*) from public.messages m where m.series_id=c.series_id
+   and m.state='sent' and m.kind in ('message','announcement')) and c.message_count=1 from pg_temp.r6_chat('76') c),
+ 'chats: the group''s message_count is not its sent messages and announcements left');
+select pg_temp.r6_check((pg_temp.r6_chat('76')).pinned_message_id is null, 'chats: the group still pins an announcement that went');
+select pg_temp.r6_check((select c.last_message_id=pg_temp.r6_msg('r6-76-removed')
+  and c.last_message_at=(select m.created_at from public.messages m where m.body='r6-76-removed') from pg_temp.r6_chat('76') c),
+ 'chats: the group''s last line is not the newest row left that is not a hidden system line');
+select pg_temp.r6_check(exists(select 1 from public.chat_reads where series_id=pg_temp.a6('76')), 'chats: the group lost its reads');
+
+-- run_retention: exactly the twelve keys, each a number. With the holds still on, no series of this slice goes: what
+-- Ben's and Gus's holds keep, and the running group's occurrences, guests, removal and newer messages, stay. One account
+-- does: Xia's (17) only trace was her answered invitation to 82, which this run's invitations purge takes (30 days after
+-- 82 ended) before the web-account purge looks, so she is idle now. (In the app, answering also makes a guest row,
+-- which stays as long as the resbite does.)
+do $$ declare v jsonb := private.run_retention(); k text;
+begin
+ perform pg_temp.r6_check((select array_agg(x order by x collate "C") from jsonb_object_keys(v) x) = array['chats','closed_reports',
+  'connection_refusals','connection_requests','link_opens','notifications','phone_invitations','plan_removals','plans',
+  'suspension_history','unconfirmed_accounts','web_accounts'], 'run_retention: not exactly the twelve keys: '||v::text);
+ for k in select jsonb_object_keys(v) loop
+  perform pg_temp.r6_check(jsonb_typeof(v->k) = 'number', 'run_retention: '||k||' is not a number: '||v::text);
+ end loop;
+ perform pg_temp.r6_check(v->'plans' = '0' and v->'chats' = '0' and v->'web_accounts' = '1' and v->'unconfirmed_accounts' = '0',
+  'run_retention: with the holds on, a series or an account purge did not take just Xia: '||v::text);
+end $$;
+select pg_temp.r6_check(private.deletion_pending(pg_temp.a6('17')) and not exists(select 1 from unnest(array['11','12','13','14','15','16','18']) n
+  where private.deletion_pending(pg_temp.a6(n))), 'run_retention: not just Xia (17) is being deleted');
+select pg_temp.r6_check(pg_temp.r6_msg('r6-75-ben') is not null and exists(select 1 from public.plans where id=pg_temp.a6('80'))
+ and (select count(*) from public.plans where series_id=pg_temp.a6('76')) = 2
+ and (select count(*) from public.attendees where plan_id in (pg_temp.a6('76'),pg_temp.a6('77'))) = 2
+ and pg_temp.r6_removal('76','89') and pg_temp.r6_msg('r6-76-new') is not null,
+ 'run_retention: a record a hold or a running group keeps went');
+-- The lift, then the next run: 80 goes (plans), and 75's two messages (chats), its row emptied.
+update private.legal_holds set lifted_at=now() where user_id in (pg_temp.a6('07'),pg_temp.a6('03')) and lifted_at is null;
+do $$ declare v jsonb := private.run_retention();
+begin
+ perform pg_temp.r6_check(v->'plans' = '1' and v->'chats' = '2',
+  'run_retention: after Ben''s and Gus''s holds were lifted it did not take 80 and 75''s two messages: '||v::text);
+end $$;
+select pg_temp.r6_check(not exists(select 1 from public.plans where id=pg_temp.a6('80'))
+ and not exists(select 1 from public.messages where series_id=pg_temp.a6('75'))
+ and (select c.message_count=0 and c.last_message_id is null from pg_temp.r6_chat('75') c),
+ 'run_retention: what Ben''s and Gus''s holds kept stays once they are lifted');
+select pg_temp.r6_check((select count(*) from public.plans where series_id=pg_temp.a6('76')) = 2 and pg_temp.r6_removal('76','89')
+ and exists(select 1 from public.plans where id=pg_temp.a6('84')), 'run_retention: a running group went');
 
 rollback;

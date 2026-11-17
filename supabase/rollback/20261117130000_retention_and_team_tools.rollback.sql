@@ -8,6 +8,16 @@
 -- private.series_held(uuid) is dropped only when its comment reads 'resbite 20261117130000': made by this file, not by
 -- plan 2's, which runs first and so normally owns all but series_held.
 
+-- Section 3: the series purges and the account purges. It restores no row: not what any purge deleted, and not the
+-- tester roster rows and legacy invitations (private.tester_roster, private.invitations) that section 3 emptied once.
+-- Each disabled roster row stays the revoked grant it became, and a suspension that disabled one keeps the grant in
+-- its record, so supabase/ops/suspend-account.sql's undo still works.
+drop function if exists private.purge_unconfirmed_accounts(integer);
+drop function if exists private.purge_web_accounts(integer);
+drop function if exists private.dormant_web_accounts(integer);
+drop function if exists private.purge_plans(integer);
+drop function if exists private.purge_chats(integer);
+
 -- Section 2: the daily run and the row purges.
 drop function if exists private.run_retention();
 drop function if exists private.purge_suspension_history(integer);
