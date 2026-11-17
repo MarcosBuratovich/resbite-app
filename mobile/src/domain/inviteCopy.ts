@@ -61,6 +61,7 @@ export const INVITE_COPY = {
   whatsappMissing: "WhatsApp isn’t installed. Try Messages.",
   messagesFailed: "Couldn’t open Messages.",
   alreadyInvited: "Already invited",
+  cannotInvite: "Can’t be invited by link",
   eventLink: "Event link",
   previewNotice: "Preview can’t invite people. Real invitations need a signed-in account.",
   skippedLabel: (n: number) => `${n} contacts without a usable mobile number were skipped.`,
