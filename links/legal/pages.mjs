@@ -15,6 +15,10 @@ const SOURCES = {
   "/delete-account": { file: "delete-account.html", source: "delete-account.md", anchors: ["ask-us-to-delete-your-account-by-email"] },
 };
 
+// Shown beside the number field on /r/ and /i/ and in the app (the notice, the tick, the chat rules). Their words are
+// copied into the code, so a final build refuses them while they are still drafts too.
+const SHORT_TEXTS = ["invitee-notice-short.md", "community-rules-short.md"];
+
 export const LEGAL_PAGES = LEGAL_LINKS.map((link) => {
   const s = SOURCES[link.href];
   return {
@@ -30,7 +34,7 @@ export const LEGAL_PAGES = LEGAL_LINKS.map((link) => {
 
 const RULE = /^-{3,}\s*$/;
 const H2 = /^##\s+(.*?)\s*#*\s*$/;
-const NOTE_HEADING = /\((?:delete|remove) before publishing\)|^Placeholders to fill$/i;
+const NOTE_HEADING = /(?:delete|remove) before publishing\)|^Placeholders to fill$/i;
 const NOTE_BOX = /(?:delete|remove) this box/i;
 
 export function publicPart(markdown) {
@@ -87,6 +91,9 @@ export async function buildLegalPages({ legalDir, mode }) {
     LEGAL_PAGES.forEach((page, n) => {
       for (const problem of publishProblems(texts[n])) lines.push(`${page.source}: ${problem}`);
     });
+    for (const name of SHORT_TEXTS) {
+      for (const problem of publishProblems(await readFile(`${dir}${name}`, "utf8"))) lines.push(`${name}: ${problem}`);
+    }
     if (lines.length) throw new Error(`The legal documents are not ready to publish:\n${lines.join("\n")}`);
   }
   const draft = mode === "draft";
