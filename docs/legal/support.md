@@ -45,7 +45,7 @@ If you're not sure which to use, write to support@resbite.com. We'll pass it on.
 
 ### By the contact form
 
-The form on this page goes straight to our support inbox. It asks for:
+The form on this page goes straight to our team. Messages about your personal data, legal requests and requests to delete an account go to our privacy inbox. Everything else goes to our support inbox. It asks for:
 
 - your name, and an email address we can reply to;
 - what your message is about;

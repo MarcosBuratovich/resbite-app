@@ -1,0 +1,50 @@
+/* The legal pages and the contact form. Loaded after site.css. */
+:root {
+  color-scheme: light;
+  --ink: #343043;
+  --muted: #6b6575;
+  --cream: #faf5f0;
+  --card: #ffffff;
+  --line: #e9e5e9;
+  --aqua-soft: #e8f6f3;
+  --aqua-dark: #245f60;
+  --pink: #f2adb2;
+  --pink-ink: #4a2230;
+  --lilac: #f0edf4;
+  --lilac-ink: #5b4876;
+  --error: #9b2c3f;
+}
+html { background: var(--cream); }
+body { margin: 0; color: var(--ink); font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; line-height: 1.55; }
+.site-header { display: flex; align-items: center; gap: 8px; max-width: 720px; margin: 0 auto; padding: 16px; font-weight: 600; }
+.site-footer { max-width: 720px; }
+main.legal { box-sizing: border-box; max-width: 720px; margin: 0 auto; padding: 0 16px 24px; overflow-wrap: anywhere; }
+main.legal h1 { font-size: 28px; line-height: 1.2; }
+main.legal h2 { font-size: 21px; margin-top: 32px; }
+main.legal h3 { font-size: 17px; }
+main.legal a { color: var(--aqua-dark); }
+.table { overflow-x: auto; margin: 16px 0; }
+.table table { border-collapse: collapse; min-width: 100%; }
+.table th, .table td { text-align: left; vertical-align: top; padding: 8px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+blockquote { margin: 16px 0; padding: 12px 16px; border: 1px solid var(--line); border-left: 4px solid var(--aqua-dark); border-radius: 8px; background: var(--card); }
+blockquote > :first-child { margin-top: 0; }
+blockquote > :last-child { margin-bottom: 0; }
+mark.placeholder { background: #fff3b0; color: var(--ink); padding: 0 2px; }
+.draft-banner { max-width: 720px; box-sizing: border-box; margin: 0 auto 16px; padding: 12px 16px; background: #fff3b0; color: var(--ink); font-weight: 600; }
+
+/* The contact form */
+.field { margin: 16px 0; }
+.field label { display: block; font-weight: 600; margin-bottom: 4px; }
+.field input, .field select, .field textarea {
+  box-sizing: border-box; width: 100%; padding: 10px 12px; font: inherit; color: var(--ink);
+  background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+}
+.field textarea { min-height: 140px; }
+.hint { color: var(--muted); font-size: 14px; margin: 4px 0 0; }
+.error { color: var(--error); font-size: 14px; margin: 4px 0 0; }
+.error-summary { border: 1px solid var(--error); border-radius: 8px; padding: 12px 16px; color: var(--error); background: var(--card); }
+.button {
+  display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 24px;
+  font: inherit; font-weight: 600; color: var(--pink-ink); background: var(--pink); border: 0; border-radius: 999px; cursor: pointer;
+}
+.trap { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
