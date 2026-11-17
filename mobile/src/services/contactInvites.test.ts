@@ -264,3 +264,9 @@ test("list marks a link the caller brought, so a host's own brought links read a
   }));
   assert.deepEqual((await gw.list("p")).map((r) => r.brought), [false, true, false]);
 });
+
+test("invite accepts 'unavailable' for a number on the do-not-invite list", async () => {
+  const { gw } = gateway(() => ({ data: [{ phone: "447700900201", kind: "unavailable" }], error: null }));
+  assert.deepEqual(await gw.invite("p", [{ phone: "447700900201", country: "44", code: "c".repeat(22) }]),
+    [{ phone: "447700900201", kind: "unavailable" }]);
+});
