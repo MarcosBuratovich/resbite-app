@@ -20,6 +20,7 @@
   - `account_access_status()` also reports `terms_version` (the current published version, or null) and `terms_needed`.
   - `accept_terms(text)` records the accept screen. It refuses `22023 'Terms changed'` for anything but the current version, null included.
   - The sign-up tick (`attest_age`), the three invitation answers (`join_by_link`, `request_to_join`, `answer_phone_invitation`) and the fold (`fold_web_account`) write the record too.
+  - The fold also refuses (`22023 'The account cannot be folded'`, which `fold-phone-account` answers as 409, deleting nothing) a web account that a legal hold names or that is being deleted: otherwise its records would move to an account no hold names and the handler would delete the held Auth user (the final review's cross-cutting #8). It reads plan 2's `private.account_held`, so plan 2's `20261117110000` must be applied first, as the roadmap orders. The rehearsal pins the fold's two named edits.
   - No server function requires acceptance (AS-P4-3): `private.user_eligible` is untouched.
   - `supabase/ops/publish-terms-version.sql` is the owner's publish script (step 7), with the literal `2026-12`. It adds a version only when it is later than every one already there, and prints `published`, `current_version` and `accounts_to_ask`, numbers only.
 - **C7, `20261117121000_safety_extension.sql` (Task 2).**
@@ -40,7 +41,7 @@
 
 | File | sha256 |
 | --- | --- |
-| `supabase/migrations/20261117120000_terms_acceptance.sql` (C8, step 2) | `895b038f6820eece64b1cae2d1f81b990ec2540afeb991d90dcdcfda8d28e9d0` |
+| `supabase/migrations/20261117120000_terms_acceptance.sql` (C8, step 2) | `3fbfc87678e6e1eb0e86f102f2eb6e16067eb00a55b3cb006d69bc0dda6ca436` |
 | `supabase/migrations/20261117121000_safety_extension.sql` (C7, step 2) | `a2ac35ac4a72b99ebddf83981f888d4c5b2fd8d7d7fd85ee151f50a83c3e702c` |
 | `supabase/migrations/20261117122000_optional_details_removal.sql` (C9, step 2) | `91a32bcba8857d95cecea9ebe26981714c3f530eaefad4fd372d27450445b8a2` |
 | `supabase/ops/publish-terms-version.sql` (step 7, the SQL editor) | `f86832b0ae4a7e15bb4164ca840bdfa04f85915fe9df45b274ac68d85d8dc36e` |
@@ -49,7 +50,7 @@
 | `supabase/rollback/20261117121000_safety_extension.rollback.sql` (Rollback) | `c3134e653ef984b67972af9116de1696a54f51fd3d835b0a2231ef6b0cbfb9f7` |
 | `supabase/rollback/20261117122000_optional_details_removal.rollback.sql` (Rollback) | `50c19f38bb8f27a8e47d042e7a15248c766351f38092acf869b0a8650251b1ec` |
 | `supabase/tests/hosted-baseline/20261117120000_terms_acceptance.before.sql` (the rehearsal) | `e54260a2dbb559c431ea614bd449cccdb2eaf95e37802ccb6650c26409fa66fb` |
-| `supabase/tests/hosted-baseline/20261117120000_terms_acceptance.after.sql` (the rehearsal) | `0bf1d94396d7c3494b5ecae20eb008a150a609104b2ce0077dc828ab496832b3` |
+| `supabase/tests/hosted-baseline/20261117120000_terms_acceptance.after.sql` (the rehearsal) | `01db3258aab4af5cc124d91eb28ea69607e577ce76f36fa67ef96994be4ab549` |
 | `supabase/tests/hosted-baseline/20261117121000_safety_extension.before.sql` (the rehearsal) | `2924481d345d8333a813f841f459310c27e604c6dcb1b8d13042c4fb075f50e9` |
 | `supabase/tests/hosted-baseline/20261117121000_safety_extension.after.sql` (the rehearsal) | `f7c7f5da6876cef4c5ad7b9307794b0cc878d3078504ab87c6a90ac59d897d70` |
 | `supabase/tests/hosted-baseline/20261117122000_optional_details_removal.before.sql` (the rehearsal) | `f5bbe2672961a17fe8f23756d707d6e36689c6f58a571ac7ee3be9f6ffc132e7` |
@@ -94,6 +95,7 @@ At `a20d8a8` (Tasks 1 to 7). Task 8 changes documents only.
 
   Exit 0, 35 PASS lines: the five candidates, each with its rehearsal pair (before, the file, after, and the rollback inside a transaction it rolls back), the 29 files of `tests.txt` and the final line. C7's rehearsal runs its rollback with one `illegal` report stored, so the run prints that rollback's notice ("1 report(s) give a reason this rollback removes…"): expected.
   - Until step 4 adds the three files to `migrations.txt`, a hosted-baseline run must name them: `tests.txt` already lists their tests.
+  - After the final review's SQL fixes (lane S, 17 November 2026; the fold's refusal of a held or deleting web account), with plan 6's candidate too: exit 0, 38 PASS lines. Full mode: exit 0, 73 PASS lines.
 - **The app**, `cd mobile && npm run check` (the typecheck, the whole `npm test` chain with the link site's tests, and content validation): exit 0, 1,306 tests, none failed.
 - **Browser checks**, headless Chrome on Expo web and the link site with each script's own fixtures, run by Tasks 5 to 7:
   - PASS: `verify-phone.mjs` (the accept screen at 320 and 390 px, a stale version refused, re-read and asked again, the sign-up path straight to About you, and a suspended account never shown it), `verify-account.mjs` (a kept invitation waits behind Accept your Terms and opens after Continue; no Account details row and no details write), `verify-auth.mjs`, `verify-open-link-app.mjs`, `verify-registration.mjs`, `review-ui.mjs`, `verify-chat.mjs` (the seven reasons in order, "We review reports every day." under the thanks, at 320 px with 200 % text, and the full community rules link), `verify-connections.mjs`; on the link site, `links/verify-personal.mjs` and `links/verify-open-link.mjs`.
@@ -158,7 +160,7 @@ Every step below needs the owner's explicit approval at the time. **Never `supab
      supabase db query --linked -f "/tmp/asr4/$v.sql"
      supabase migration repair --status applied "$v" --linked --yes
    }
-   apply 20261117120000 terms_acceptance 895b038f6820eece64b1cae2d1f81b990ec2540afeb991d90dcdcfda8d28e9d0
+   apply 20261117120000 terms_acceptance 3fbfc87678e6e1eb0e86f102f2eb6e16067eb00a55b3cb006d69bc0dda6ca436
    apply 20261117121000 safety_extension a2ac35ac4a72b99ebddf83981f888d4c5b2fd8d7d7fd85ee151f50a83c3e702c
    apply 20261117122000 optional_details_removal 91a32bcba8857d95cecea9ebe26981714c3f530eaefad4fd372d27450445b8a2
    supabase db query --linked "select count(*) as applied, max(version) as latest from supabase_migrations.schema_migrations"

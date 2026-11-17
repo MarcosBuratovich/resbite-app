@@ -6,7 +6,7 @@ create role supabase_auth_admin nologin;
 create schema auth;
 create schema storage;
 create schema extensions;
-create table auth.users(id uuid primary key,email text,phone text unique,phone_change text,phone_confirmed_at timestamptz,email_confirmed_at timestamptz,raw_user_meta_data jsonb default '{}',is_anonymous boolean default false,banned_until timestamptz,created_at timestamptz not null default now(),last_sign_in_at timestamptz);
+create table auth.users(id uuid primary key,email text,phone text unique,phone_change text,phone_change_token text default '',phone_change_sent_at timestamptz,phone_confirmed_at timestamptz,email_confirmed_at timestamptz,raw_user_meta_data jsonb default '{}',is_anonymous boolean default false,banned_until timestamptz,created_at timestamptz not null default now(),last_sign_in_at timestamptz);
 create table auth.sessions(id uuid primary key,user_id uuid references auth.users(id) on delete cascade,created_at timestamptz default now(),updated_at timestamptz,user_agent text,ip inet);
 create table auth.refresh_tokens(id bigint generated always as identity primary key,user_id text,session_id uuid references auth.sessions(id) on delete cascade,revoked boolean not null default false,created_at timestamptz not null default now());
 create table auth.identities(id uuid primary key default gen_random_uuid(),provider_id text,user_id uuid not null references auth.users(id) on delete cascade,identity_data jsonb not null default '{}',provider text not null,last_sign_in_at timestamptz,created_at timestamptz not null default now(),email text);

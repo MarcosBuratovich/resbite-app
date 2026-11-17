@@ -201,7 +201,32 @@ select pg_temp.ac_check(pg_temp.ac_rows(pg_temp.ac('11'))='2026-12:invitation','
 insert into private.terms_versions(version,published_at) values ('2027-01',now()+interval '1 day');
 select pg_temp.ac_check(private.terms_version()='2026-12','A version published for tomorrow is current: '||coalesce(private.terms_version(),'null'));
 
--- 8. The fold: the web account's records move to the app account, which keeps its own for the same version.
+-- 8. The fold refuses (22023, as for an account that used the app) a web account that a legal hold names, or one that
+-- is being deleted (a deletion job): the handler then answers 409 and deletes no Auth user. Nothing moves: the web
+-- account keeps its records, its tick and its profile, and the app account gains none (the review's cross-cutting #8).
+do $$ declare v_step text;
+begin
+ foreach v_step in array array['held','leaving'] loop
+  if v_step='held' then
+   insert into private.legal_holds(user_id,reason,case_ref,review_on) values (pg_temp.ac('05'),'police','AC-HOLD-1',current_date+90);
+  else
+   delete from private.legal_holds where case_ref='AC-HOLD-1';
+   insert into private.account_deletion_jobs(request_id,user_id,recovery_hash)
+    values (gen_random_uuid(),pg_temp.ac('05'),extensions.digest('ac-leaving','sha256'));
+  end if;
+  perform pg_temp.ac_refused(format('select private.fold_web_account(%L,%L)',pg_temp.ac('05'),pg_temp.ac('06')),'22023',
+   'The account cannot be folded');
+  perform pg_temp.ac_check(pg_temp.ac_rows(pg_temp.ac('05'))='2026-12:invitation' and pg_temp.ac_rows(pg_temp.ac('06'))=''
+   and exists(select 1 from public.profiles where id=pg_temp.ac('05') and display_name='Web')
+   and (select display_name from public.profiles where id=pg_temp.ac('06'))='App'
+   and exists(select 1 from private.age_attestations where user_id=pg_temp.ac('05'))
+   and not exists(select 1 from private.age_attestations where user_id=pg_temp.ac('06')),
+   'The fold moved something from a '||v_step||' web account: 05 '||pg_temp.ac_rows(pg_temp.ac('05'))||', 06 '||pg_temp.ac_rows(pg_temp.ac('06')));
+ end loop;
+ delete from private.account_deletion_jobs where user_id=pg_temp.ac('05');
+end $$;
+
+-- 8b. The fold: the web account's records move to the app account, which keeps its own for the same version.
 savepoint ac_own;
 insert into private.terms_acceptances(user_id,terms_version,how) values (pg_temp.ac('06'),'2026-12','terms_screen');
 select private.fold_web_account(pg_temp.ac('05'),pg_temp.ac('06'));

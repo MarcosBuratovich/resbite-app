@@ -461,8 +461,8 @@ end $$;
 -- S6. The worker (ASR2-9): both buckets under the account's folder, then the Auth user; a hold stops it (UGC-15).
 
 -- S6.0 A late upload can't land in a deleting account: Hana's token, which still names her, may not write a profile
--- photo. The photo guard runs require_tester in both modes. On hosted this file makes the guard and its trigger, with
--- its marker; the local replay keeps 20260923152816's stronger body, unmarked.
+-- photo. The photo guard runs require_tester in both modes. On hosted this file makes the guard, with its marker, and
+-- its trigger, with none; the local replay keeps 20260923152816's stronger body, unmarked.
 select set_config('request.jwt.claims',jsonb_build_object('sub',pg_temp.ddu('01'),'role','authenticated')::text,true);
 select pg_temp.dd_refused(format('insert into storage.objects(bucket_id,name) values (%L,%L)','profile-photos',
  pg_temp.ddu('01')||'/late.jpg'),'42501');
@@ -475,12 +475,13 @@ do $$ declare v_def text; v_made_here boolean; begin
  end if;
  v_def := pg_catalog.pg_get_functiondef('private.guard_photo_write()'::regprocedure);
  v_made_here := strpos(v_def,'Photo account unavailable')=0;
+ -- The marker is on the function. The trigger carries none: on hosted, commenting a trigger on storage.objects needs
+ -- that table's owner, which the applying role is not; the rollback finds the trigger through its function.
  if (pg_catalog.obj_description('private.guard_photo_write()'::regprocedure,'pg_proc') is not distinct from 'resbite 20261117110000')
    is distinct from v_made_here
- or ((select pg_catalog.obj_description(t.oid,'pg_trigger') from pg_catalog.pg_trigger t
-    where t.tgrelid='storage.objects'::regclass and t.tgname='resbite_photo_write_guard') is not distinct from 'resbite 20261117110000')
-   is distinct from v_made_here then
-  raise exception 'S6.0 The photo guard''s marker does not say who made it (made here: %)', v_made_here;
+ or (select pg_catalog.obj_description(t.oid,'pg_trigger') from pg_catalog.pg_trigger t
+    where t.tgrelid='storage.objects'::regclass and t.tgname='resbite_photo_write_guard') is not null then
+  raise exception 'S6.0 The photo guard''s marker does not say who made it (made here: %), or its trigger has a comment', v_made_here;
  end if;
 end $$;
 

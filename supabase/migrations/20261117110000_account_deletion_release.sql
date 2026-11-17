@@ -394,8 +394,12 @@ create or replace function public.finish_account_deletion(p_request uuid,p_lease
 
 -- The photo guard: 20260918001316_account_deletion_lifecycle.sql:134-142, which plan 6 consumes. Storage writes use
 -- direct SQL, not the app's mutation RPCs, so a profile-photos write from a signed-in account takes the account's lock
--- and checks it through require_tester: a late upload can't land in a deleting account. Made only where absent, with
--- this file's marker: the local replay keeps 20260923152816_orphan_profile_photo_cleanup.sql's stronger body.
+-- and checks it through require_tester: a late upload can't land in a deleting account. Made only where absent: the
+-- function with this file's marker (the local replay keeps 20260923152816_orphan_profile_photo_cleanup.sql's stronger
+-- body), the trigger with no comment. On hosted, commenting or dropping a trigger on storage.objects needs that table's
+-- owner (supabase_storage_admin), which the applying role is not, while creating one needs only the TRIGGER privilege
+-- (the final review's account-deletion #1). The function's marker stands for both: the rollback drops the function with
+-- cascade, which takes the trigger with it and needs only the function's owner.
 do $migration$ begin
  if pg_catalog.to_regprocedure('private.guard_photo_write()') is null then
   create function private.guard_photo_write() returns trigger language plpgsql security definer set search_path='' as $fn$
@@ -410,7 +414,6 @@ do $migration$ begin
  end if;
  if not exists(select 1 from pg_catalog.pg_trigger where tgrelid='storage.objects'::regclass and tgname='resbite_photo_write_guard') then
   create trigger resbite_photo_write_guard before insert or update on storage.objects for each row execute function private.guard_photo_write();
-  comment on trigger resbite_photo_write_guard on storage.objects is 'resbite 20261117110000';
  end if;
 end $migration$;
 

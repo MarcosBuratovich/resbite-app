@@ -39,8 +39,10 @@ end $$;
 -- 2. New objects and privileges (account-deletion-release.sql S1.4 and S5.6). The migration makes exactly these
 -- functions. service_role executes exactly the six public wrappers and their six private bodies; no app client
 -- executes any of them. No API role touches the three tables or asks whether an account is held; RLS is on;
--- service_role may enter the private schema. The objects shared with plan 6, and the photo guard with its trigger,
--- carry this file's marker, so its rollback drops them.
+-- service_role may enter the private schema. The objects shared with plan 6, and the photo guard, carry this file's
+-- marker, so its rollback drops them. The guard's trigger is on storage.objects, on the guard, with no comment: on
+-- hosted the applying role may not comment a trigger there (it does not own the table), and the rollback drops it with
+-- the guard, by cascade.
 create temporary table adr_new(signature text, service boolean);
 insert into adr_new values
  ('public.request_account_deletion(uuid,uuid,uuid,text)',true),('private.request_account_deletion(uuid,uuid,uuid,text)',true),
@@ -80,10 +82,12 @@ do $$ declare r record; v_made text; v_listed text; t text; begin
  if pg_catalog.obj_description('private.legal_holds'::regclass,'pg_class') is distinct from 'resbite 20261117110000'
  or pg_catalog.obj_description('private.suspension_history'::regclass,'pg_class') is distinct from 'resbite 20261117110000'
  or pg_catalog.obj_description('private.account_held(uuid)'::regprocedure,'pg_proc') is distinct from 'resbite 20261117110000'
- or pg_catalog.obj_description('private.guard_photo_write()'::regprocedure,'pg_proc') is distinct from 'resbite 20261117110000'
- or (select pg_catalog.obj_description(t.oid,'pg_trigger') from pg_catalog.pg_trigger t
-   where t.tgrelid='storage.objects'::regclass and t.tgname='resbite_photo_write_guard') is distinct from 'resbite 20261117110000' then
+ or pg_catalog.obj_description('private.guard_photo_write()'::regprocedure,'pg_proc') is distinct from 'resbite 20261117110000' then
   raise exception 'An object made here lacks this file''s marker';
+ end if;
+ if not exists(select 1 from pg_catalog.pg_trigger t where t.tgrelid='storage.objects'::regclass and t.tgname='resbite_photo_write_guard'
+   and t.tgfoid='private.guard_photo_write()'::regprocedure and pg_catalog.obj_description(t.oid,'pg_trigger') is null) then
+  raise exception 'The photo guard''s trigger is not on storage.objects, on the guard, with no comment';
  end if;
 end $$;
 

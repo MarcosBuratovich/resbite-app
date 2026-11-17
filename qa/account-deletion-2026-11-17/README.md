@@ -81,6 +81,7 @@ On this branch, on `c916456` with Task 9's changes (the commit that adds this re
   ```
 
   Name every candidate not yet in `migrations.txt`. Bare, this mode fails by design until they are live.
+- **After the final review's SQL fixes (lane S, 17 November 2026)**, with every readiness candidate: the hosted baseline exit 0, 38 PASS lines; full mode exit 0, 73 PASS lines. The photo guard's trigger now carries no comment and the rollback drops the guard with `cascade` (account-deletion #1); the rehearsal's rollback prints `drop cascades to trigger resbite_photo_write_guard on table storage.objects`.
 - **Edge**, from the repository root: 133 of 133, in 11 files.
 
   ```
@@ -118,12 +119,15 @@ Every step needs the owner's explicit approval at the time.
    supabase db query --linked "select count(*) as applied, max(version) as latest from supabase_migrations.schema_migrations"
    supabase db query --linked "select to_regclass('private.account_deletion_jobs') is null as absent"
    supabase db query --linked "select count(*) as marked from public.profiles where deletion_requested_at is not null"
-   supabase db query --linked "select has_table_privilege('storage.objects','TRIGGER') as can_trigger, exists(select 1 from pg_trigger where tgname='resbite_photo_write_guard') as guard"
+   supabase db query --linked "select has_table_privilege('storage.objects','TRIGGER') as can_trigger, pg_has_role(current_user,(select relowner from pg_class where oid='storage.objects'::regclass),'USAGE') as owns_objects, exists(select 1 from pg_trigger where tgname='resbite_photo_write_guard') as guard"
+   supabase db query --linked "begin; create trigger resbite_trigger_check before update on storage.objects for each row execute function suppress_redundant_updates_trigger(); rollback;"
+   supabase db query --linked "select count(*) as left_over from pg_trigger where tgrelid='storage.objects'::regclass and tgname='resbite_trigger_check'"
    ```
 
    - **The history line** reads `26 | 20261117100000`: plan 1's retirement went first, as the roadmap orders. `25 | 20261116120000` only if the owner chose to run this sitting before it, and then plan 1 renames its file to a later timestamp. **Stop if any version above `20261117110000` is applied.**
    - `absent` true. `marked` 0.
-   - `can_trigger | guard` reads `true | false`. **If `can_trigger` is false, stop:** the migration would fail at the photo guard and roll itself back.
+   - `can_trigger | owns_objects | guard` reads `true | … | false`. Record `owns_objects`: on Supabase it is expected to read `false` (Storage's own role, `supabase_storage_admin`, owns `storage.objects`). The migration no longer needs it: it creates the trigger, which needs only the `TRIGGER` privilege, and puts no comment on it (commenting or dropping a trigger there needs the table's owner). Its marker is on the function `private.guard_photo_write()`, and the rollback drops that function with `cascade`, which removes the trigger with it and needs only the function's owner (the final review's account-deletion #1; rehearsed locally with a role that has every privilege on `storage.objects` but does not own it). **If `can_trigger` is false, stop:** the migration would fail at the photo guard and roll itself back.
+   - **The rolled-back trigger check** creates a trigger on `storage.objects` as the applying role (the CLI's, which step 2 applies with), with Postgres's built-in `suppress_redundant_updates_trigger()`, and rolls it back. It shows no error. **If it fails (`permission denied for table objects`), the script stops there: stop the sitting before step 2.** The apply would fail the same way at the photo guard. `left_over` reads `0`. Do not move this check to the SQL editor: its point is the role the apply runs as.
    - **The fingerprint** matches a local Docker replay of `migrations.txt`, by `(kind, name)`, with only the known `acl` differences (hosted's default `service_role` grants, as in the open-beta and phone-codes records). Stop on any unexplained difference.
 2. **[approval: the migration by name and sha256]** Apply, `~/del-apply.sh`:
 
@@ -158,7 +162,7 @@ Every step needs the owner's explicit approval at the time.
      ```
 
 3. **After checks and advisors.**
-   - `hosted-after.json` against `hosted-before.json`: the fingerprint grows by this file's objects. Three tables (`account_deletion_jobs`, `legal_holds`, `suspension_history`) with their indexes; the private and public functions; the photo guard and its trigger; two redefined bodies (`private.require_tester()`, `private.deletion_pending(uuid)`); the three September keys' constraints, and `plans.owner_id`, which may now be null; and the schema grant to `service_role`. List them in "Applied". Nothing else changes, and every table keeps its row count (the three new ones start empty).
+   - `hosted-after.json` against `hosted-before.json`: the fingerprint grows by this file's objects. Three tables (`account_deletion_jobs`, `legal_holds`, `suspension_history`) with their indexes; the private and public functions; the photo guard and its trigger (the trigger with no comment); two redefined bodies (`private.require_tester()`, `private.deletion_pending(uuid)`); the three September keys' constraints, and `plans.owner_id`, which may now be null; and the schema grant to `service_role`. List them in "Applied". Nothing else changes, and every table keeps its row count (the three new ones start empty).
    - **[approval]** The assistant reads the security and performance advisors through the Supabase MCP server, and compares them with the last record's. The three new tables have row-level security on and no policy (closed to API roles), which may show as INFO lines. Every function the file makes sets an empty `search_path`. Stop the rollout for any new WARN or ERROR.
    - Append this line to `supabase/tests/hosted-baseline/migrations.txt`:
 
@@ -285,6 +289,7 @@ Only with the owner's approval, in this order:
    ```
 
    - It refuses with 42501, changing nothing, once any job, hold, suspension history row or resbite with no owner exists. Then roll back by hand.
+   - It drops the photo guard with `cascade` (its trigger on `storage.objects` goes with it: the run prints `drop cascades to trigger resbite_photo_write_guard on table storage.objects`). A plain `drop trigger` there would need the table's owner.
    - Roll back plan 6's `20261117130000` first if it is applied.
    - `hosted-after-rollback.json` should equal `hosted-before.json`.
    - Remove the line from `migrations.txt`. The history row stays. Never run `supabase migration repair --status reverted`.

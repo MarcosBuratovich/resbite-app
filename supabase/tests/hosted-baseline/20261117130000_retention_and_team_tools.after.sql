@@ -45,14 +45,15 @@ do $$ declare r record; e record; v_expected text; begin
  end loop;
 end $$;
 
--- 2. New objects and privileges. The migration makes exactly these functions and these five tables, each with this
+-- 2. New objects and privileges. The migration makes exactly these 46 functions and these five tables, each with this
 -- file's marker. service_role executes exactly the eight public worker wrappers and the eight private bodies they call
 -- (security invoker, as 20260923152816_orphan_profile_photo_cleanup.sql:189-194 has them); no app client executes any
 -- of them, and no API role executes any other new function. Every new table has row security on, no policy and no
 -- grant to any API role. The objects shared with plan 2 keep plan 2's marker; series_held is this file's.
 create temporary table r6_new(signature text, service boolean);
 insert into r6_new values
- ('private.series_held(uuid)',false),('private.series_under_hold(uuid)',false),('private.series_end(uuid)',false),
+ ('private.series_held(uuid)',false),('private.series_under_hold(uuid)',false),('private.account_in_held_series(uuid)',false),
+ ('private.series_end(uuid)',false),
  ('private.purge_phone_invitations(integer)',false),('private.purge_plan_removals(integer)',false),
  ('private.purge_connection_refusals(integer)',false),('private.purge_connection_requests(integer)',false),
  ('private.purge_notifications(integer)',false),('private.purge_link_opens(integer)',false),
@@ -60,6 +61,7 @@ insert into r6_new values
  ('private.run_retention()',false),
  ('private.purge_chats(integer)',false),('private.purge_plans(integer)',false),('private.dormant_web_accounts(integer)',false),
  ('private.purge_web_accounts(integer)',false),('private.purge_unconfirmed_accounts(integer)',false),
+ ('private.purge_pending_phone_changes(integer)',false),
  ('private.objection_key_hash(text)',false),('private.ensure_objection_key()',false),('private.number_objected(text)',false),
  ('private.record_objection(text)',false),('private.withdraw_objection(text)',false),
  ('private.guard_profile_photo_reference()',false),
@@ -117,10 +119,14 @@ do $$ declare r record; v_made text; v_listed text; v_role text; begin
  if pg_catalog.obj_description('private.legal_holds'::regclass,'pg_class') is distinct from 'resbite 20261117110000'
  or pg_catalog.obj_description('private.suspension_history'::regclass,'pg_class') is distinct from 'resbite 20261117110000'
  or pg_catalog.obj_description('private.account_held(uuid)'::regprocedure,'pg_proc') is distinct from 'resbite 20261117110000'
- or pg_catalog.obj_description('private.guard_photo_write()'::regprocedure,'pg_proc') is distinct from 'resbite 20261117110000'
- or (select pg_catalog.obj_description(t.oid,'pg_trigger') from pg_catalog.pg_trigger t
-   where t.tgrelid='storage.objects'::regclass and t.tgname='resbite_photo_write_guard') is distinct from 'resbite 20261117110000' then
+ or pg_catalog.obj_description('private.guard_photo_write()'::regprocedure,'pg_proc') is distinct from 'resbite 20261117110000' then
   raise exception 'An object plan 2 made lost plan 2''s marker';
+ end if;
+ -- Plan 2's trigger on storage.objects is still the one on plan 2's guard, with no comment (neither file may comment
+ -- it on hosted), and this file made no other there.
+ if (select count(*) from pg_catalog.pg_trigger t where t.tgrelid='storage.objects'::regclass and t.tgname='resbite_photo_write_guard'
+   and t.tgfoid='private.guard_photo_write()'::regprocedure and pg_catalog.obj_description(t.oid,'pg_trigger') is null)<>1 then
+  raise exception 'Plan 2''s photo guard trigger is not on its guard, or has a comment';
  end if;
  if (select pg_catalog.obj_description(t.oid,'pg_trigger') from pg_catalog.pg_trigger t
    where t.tgrelid='public.plans'::regclass and t.tgname='plans_retired_cover_guard') is distinct from 'resbite 20261117130000'
