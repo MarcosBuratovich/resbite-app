@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { extname, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { generate } from "./generate.mjs";
+import { PAGE_COPY, numberNotice } from "./assets/personal-flow.mjs";
 
 // Playwright lives in mobile/node_modules; resolve it from there whatever the working directory.
 const require = createRequire(new URL("../mobile/package.json", import.meta.url));
@@ -28,6 +29,7 @@ const HAPPENED = "HappenedHappenedHappen";
 const UNKNOWN = "UnknownUnknownUnknownU";
 const SAM = "447700900834";
 const ABROAD = "14155550100"; // Typed with +1: any number can answer an open link.
+const PRIVACY_URL = "https://link.resbite.com/privacy"; // The local origin is http:, which personal.js never links.
 const SENT_CODE = "123456"; // The code the text message carried.
 const PLAN_ID = "66666666-6666-4666-8666-666666666666";
 /** Where the page keeps its session for one link code (plan 2's scheme). */
@@ -36,7 +38,7 @@ const COPY = {
   invited: "Marcos invited you",
   confirm: "Confirm it’s you",
   numberHint: "We’ll text you a 6-digit code.",
-  tick: "I’m 18 or over and I accept the Terms of Use.",
+  tick: PAGE_COPY.tick,
   codeHeading: "Enter the code",
   verified: "✓ Verified · ••34",
   hostSees: "Marcos will see your answer.",
@@ -90,10 +92,10 @@ Object.assign(process.env, {
   APP_STORE_ID: "",
   TERMS_VERSION: "2026-10",
   TERMS_URL: "https://www.resbite.com/terms",
-  PRIVACY_URL: "",
+  PRIVACY_URL,
 });
 const dir = await mkdtemp(join(tmpdir(), "resbite-open-link-"));
-const out = await generate("https://link.resbite.com", "ABCDE12345", "com.resbite.app", join(dir, "out"));
+const out = await generate("https://link.resbite.com", "ABCDE12345", "com.resbite.app", join(dir, "out"), { legal: "draft" });
 const eventPage = (await import(pathToFileURL(join(out, "api", "page.mjs")).href)).default;
 const image = (await import(pathToFileURL(join(out, "api", "image.mjs")).href)).default;
 const TYPES = { ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".png": "image/png" };
@@ -315,6 +317,16 @@ const heading = (page, name) => visible(page.getByRole("heading", { name, exact:
 const button = (page, name) => visible(page.getByRole("button", { name, exact: true }));
 const link = (page, name) => visible(page.getByRole("link", { name, exact: true }));
 const text = (page, value) => visible(page.getByText(value, { exact: true }));
+/** The open link's notice: names the host, links the whole Privacy Policy, has no right to object; the footer is there. */
+async function openNotice(page, host) {
+  const expected = numberNotice({ open: true, who: host, privacyUrl: PRIVACY_URL });
+  const notice = page.locator("#number-notice");
+  await expect(notice).toBeVisible();
+  assert.equal(((await notice.textContent()) ?? "").trim(), expected.notice.map((p) => p.text).join(""));
+  await expect(notice.getByRole("link", { name: "Privacy Policy" })).toHaveAttribute("href", PRIVACY_URL);
+  await expect(page.getByText("Right to object:")).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "Legal" })).toBeVisible();
+}
 /** Focus is on the step's heading. */
 const focused = async (page, name) =>
   expect.poll(() => page.evaluate(() => (/^H[1-6]$/.test(document.activeElement?.tagName) ? document.activeElement.textContent : null))).toBe(name);
@@ -345,7 +357,7 @@ async function cantGoScreen(page) {
   const small = link(page, "Get Resbite");
   await expect(small).toHaveAttribute("href", APP_STORE_URL);
   await expect(small).not.toHaveClass(/\bdark\b/);
-  await expect(visible(page.getByRole("link"))).toHaveCount(1);
+  await expect(visible(page.locator("main").getByRole("link"))).toHaveCount(1);
   await expect(button(page, "Change answer")).toBeVisible();
   await expect(button(page, COPY.signOut)).toBeVisible();
   await expect(button(page, "Not now")).toHaveCount(0);
@@ -357,7 +369,7 @@ async function cantGoScreen(page) {
 async function notAddedScreen(page) {
   await expect(heading(page, COPY.notAdded)).toBeVisible();
   await expect(link(page, COPY.planOwn)).toHaveAttribute("href", APP_STORE_URL);
-  await expect(visible(page.getByRole("link"))).toHaveCount(1);
+  await expect(visible(page.locator("main").getByRole("link"))).toHaveCount(1);
   for (const gone of ["Change answer", "Not now"]) await expect(button(page, gone)).toHaveCount(0);
   for (const gone of [COPY.waiting, COPY.waitingBody, COPY.alreadyIn, COPY.benefits[0]]) await expect(text(page, gone)).toHaveCount(0);
   await expect(button(page, COPY.signOut)).toBeVisible();
@@ -367,7 +379,7 @@ async function alreadyInScreen(page) {
   await expect(heading(page, COPY.alreadyIn)).toBeVisible();
   await expect(link(page, "Open Resbite")).toHaveAttribute("href", `resbite://r/${CODE}`);
   await expect(link(page, "Get Resbite")).toHaveAttribute("href", APP_STORE_URL);
-  await expect(visible(page.getByRole("link"))).toHaveCount(2);
+  await expect(visible(page.locator("main").getByRole("link"))).toHaveCount(2);
   for (const gone of ["Change answer", "Not now"]) await expect(button(page, gone)).toHaveCount(0);
   for (const gone of [COPY.waiting, COPY.waitingBody, COPY.notAdded, COPY.benefits[0]]) await expect(text(page, gone)).toHaveCount(0);
   await expect(button(page, COPY.signOut)).toBeVisible();
@@ -408,6 +420,7 @@ try {
     await expect(page.getByLabel("Country", { exact: true }).locator("option:checked")).toHaveText("United Kingdom +44");
     await expect(button(page, "Send code")).toBeDisabled();
     await tick.check();
+    await openNotice(page, "Marcos");
     // From abroad: + and the country code, sent as typed.
     await number.fill("+1 (415) 555-0100");
     await button(page, "Send code").click();
@@ -758,7 +771,7 @@ try {
   }
 
   console.log(
-    "PASS: /r/<code> in headless Chrome, open mode: Answer → the 18+ tick → a +1 number sent as typed and a UK number with the page's 44 (no number check; a country dropdown that starts at the UK, or at the browser's region: es-AR shows Argentina +54, and en, which names none, the United Kingdom +44) → the sent code verified as typed → the name and Going → request_to_join with exact bodies → Waiting for Marcos with the get-the-app block; on another browser, right after the code, my_join_request shows a waiting answer (no request_to_join), Not added or already in; a reload restores the waiting answer through my_join_request and changing it sends request_to_join again with no name (one request, the latest answer), as does a request made in the app (pending); Can't go while waiting is the personal page's Can't go screen, on the reply and on a reload; I have Resbite: open the app stays on the first screen; declined shows You weren't added with only Plan your own; a guest or the owner sees You're on this resbite with Open Resbite and Get Resbite; a decline or an approval landing mid-change shows the same screens; a turned-off link refuses the answer; Not you? Sign out ends the kept session; closed links keep GI1's pages and the strict CSP; no 000000 anywhere; no request beyond the page's origin and the intercepted Supabase host; nothing scrolls sideways at 320.",
+    "PASS: /r/<code> in headless Chrome, open mode: Answer → the 18+ tick → a +1 number sent as typed and a UK number with the page's 44 (no number check; a country dropdown that starts at the UK, or at the browser's region: es-AR shows Argentina +54, and en, which names none, the United Kingdom +44) → the sent code verified as typed → the name and Going → request_to_join with exact bodies → Waiting for Marcos with the get-the-app block; on another browser, right after the code, my_join_request shows a waiting answer (no request_to_join), Not added or already in; a reload restores the waiting answer through my_join_request and changing it sends request_to_join again with no name (one request, the latest answer), as does a request made in the app (pending); Can't go while waiting is the personal page's Can't go screen, on the reply and on a reload; I have Resbite: open the app stays on the first screen; declined shows You weren't added with only Plan your own; a guest or the owner sees You're on this resbite with Open Resbite and Get Resbite; a decline or an approval landing mid-change shows the same screens; a turned-off link refuses the answer; Not you? Sign out ends the kept session; closed links keep GI1's pages and the strict CSP; no 000000 anywhere; no request beyond the page's origin and the intercepted Supabase host; nothing scrolls sideways at 320; the invitee notice beside the number (and, on /i/, the right to object on its own line); the footer.",
   );
 } finally {
   await browser?.close();

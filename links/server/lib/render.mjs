@@ -2,6 +2,8 @@
 // invitation_page returns, so nothing else about an event can reach the page or its preview. Since open-link approval
 // (plan 3) an open link's page is the personal page's steps in open mode (personal.mjs renderOpenLinkPage); this file
 // draws the closed links' pages, which keep GI1's words and the strict CSP.
+import { siteFooter } from "./site.mjs";
+
 export const PAGE_CSP =
   "default-src 'none'; img-src 'self'; script-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; connect-src 'none'; frame-ancestors 'none'";
 
@@ -115,11 +117,12 @@ export function renderClosedPage(data, options) {
     ${banner}
     <link rel="icon" href="/resbite-mark.png" />
     <link rel="stylesheet" href="/page.css" />
+    <link rel="stylesheet" href="/site.css" />
   </head>
   <body>
     <main id="main">
 ${body}
-    </main>
+    </main>${options.legal ? siteFooter() : ""}
     <script src="/page.js"></script>
   </body>
 </html>

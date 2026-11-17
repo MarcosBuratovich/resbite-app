@@ -224,3 +224,13 @@ test("a blank inviter is absent; a blank host drops 'to ’s resbite'; the previ
   assert.ok(html.includes('content="Mon 2 Nov, 13:00 · Invited by Pedro"'));
   assert.ok(!html.includes("Invited by Ana Host"));
 });
+
+test("the personal and open pages carry the footer and data-notice when the legal pages are live", () => {
+  for (const html of [renderPersonalPage(open, { ...options, legal: true }), renderOpenLinkPage(open, { ...options, legal: true, appStoreId: "" })]) {
+    assert.ok(html.match(/<main [^>]*>/)[0].includes('data-notice="on"'));
+    assert.ok(html.indexOf("</main>") < html.indexOf('<footer class="site-footer">') && html.indexOf("<footer") < html.indexOf('src="/personal.js"'));
+  }
+  const closed = renderPersonalPage({ state: "inactive" }, { ...options, legal: true });
+  assert.ok(closed.includes('<footer class="site-footer">') && !closed.includes("data-notice"));
+  assert.ok(!renderPersonalPage(open, options).includes("data-notice") && !renderPersonalPage(open, options).includes("site-footer"));
+});

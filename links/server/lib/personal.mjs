@@ -2,6 +2,7 @@
 // Pure: data in, HTML out. It uses only the keys personal_invitation_page returns, which never include the place
 // or the full number. The steps after the first (confirm, code, answer, get the app) are filled by /personal.js.
 // An open link /r/<code> whose event is open renders the same steps in open mode (open-link approval, plan 3).
+import { siteFooter } from "./site.mjs";
 import { PAGE_CSP, formatWhen, pageHeaders, previewDescription, repeatLine, smartBanner } from "./render.mjs";
 
 /** The /r/ CSP with the one Supabase host the page may call. Without a usable URL the page cannot connect at all. */
@@ -81,7 +82,7 @@ export function renderPersonalPage(rawData, options) {
   const title = open ? data.title : PERSONAL_WORDS.genericTitle;
   const description = open ? previewFor(data) : PERSONAL_WORDS.genericPreview;
   const body = open ? stepsBody(data, image, options, "personal") : closedBody(state, data, options.appStoreUrl);
-  return documentHtml({ title, description, image, csp: personalCsp(supabaseUrl), banner: "", body, script: open });
+  return documentHtml({ title, description, image, csp: personalCsp(supabaseUrl), banner: "", body, script: open, legal: options.legal });
 }
 
 /**
@@ -101,10 +102,11 @@ export function renderOpenLinkPage(rawData, options) {
     banner: smartBanner(options),
     body,
     script: true,
+    legal: options.legal,
   });
 }
 
-function documentHtml({ title, description, image, csp, banner, body, script }) {
+function documentHtml({ title, description, image, csp, banner, body, script, legal }) {
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -124,9 +126,10 @@ function documentHtml({ title, description, image, csp, banner, body, script }) 
 ${banner ? `    ${banner}\n` : ""}    <link rel="icon" href="/resbite-mark.png" />
     <link rel="stylesheet" href="/page.css" />
     <link rel="stylesheet" href="/personal.css" />
+    <link rel="stylesheet" href="/site.css" />
 ${script ? '    <script defer src="/libphonenumber-min.js"></script>\n' : ""}  </head>
   <body>
-${body}
+${body}${legal ? siteFooter() : ""}
 ${script ? '    <script type="module" src="/personal.js"></script>\n' : ""}  </body>
 </html>
 `;
@@ -158,6 +161,7 @@ function stepsBody(data, image, options, mode) {
     "app-store-url": options.appStoreUrl,
     // The script drops the session it keeps for this invitation once the event has ended (the start when it has no end).
     "ends-at": data.ends_at || data.starts_at,
+    ...(options.legal ? { notice: "on" } : {}),
   };
   const dataAttrs = Object.entries(attrs)
     .map(([name, value]) => `data-${name}="${escape(value)}"`)

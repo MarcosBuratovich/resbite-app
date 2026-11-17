@@ -169,6 +169,7 @@ Each migration is approved by name and sha256, with snapshots, the advisors, the
 
 ### Step 16. Legal pages, footer and notices (D1 to D3, D7, D9, D4)
 
+- [ ] Runbook: `qa/link-site-legal-2026-11-17/README.md`.
 - [ ] The solicitor-reviewed texts are final. Effective date: [[OWNER: effective date — proposed: the day the pages go live on link.resbite.com, after the solicitor's review and before the version 1.0 submission]]. Terms version: [[OWNER: the Terms version string for Terms of Use 1.0 — proposed: the year and month the Terms take effect, in the "YYYY-MM" form the database accepts, for example "2026-12"; it must differ from today's "2026-10"]].
 - [ ] **The inboxes exist first** (step 18, F1). `/support` must never publish an address nobody reads, and its contact form delivers to the support inbox.
 - [ ] **[approval: Vercel]** Deploy D1 to D3, D7 and D9, with the contact form.

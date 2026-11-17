@@ -49,7 +49,7 @@ Each URL is fixed in places that are slow to change. A wrong or missing URL mean
    - Change the second number (1.0 → 1.1) for wording that doesn't change what we do or what people can do.
    - Change the first number (1.1 → 2.0) for a change of substance: new data, a new purpose or vendor, new rights or duties, new times or periods.
    - Update the effective date and record the change in the change log below.
-2. **Change the file here first.** Then change the link site's page so it carries exactly the same text and version, in the same commit where you can. The published page must never differ from the file.
+2. **Change the file here first.** The link site renders its pages from these files when it is built (`links/generate.mjs`), so the next approved deploy publishes the change. A build for production refuses a file that still has a placeholder or its draft status. The published page must never differ from the file.
 3. **Changes of substance go to the solicitor before they are published** (D-12), and so does every first version.
 4. **Keep the documents consistent with each other and with the app.** The retention periods, the deletion steps, the report reasons and the contact details appear in several documents and in the app's own text (Data & privacy, Delete account, the report sheet). Change them together.
 5. **Keep the App Privacy answers in step.** When the Privacy Policy changes, check the App Store Connect App Privacy answers against it before the next submission.

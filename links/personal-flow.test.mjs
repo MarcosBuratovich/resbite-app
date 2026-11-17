@@ -37,7 +37,11 @@ import {
   screenForRequest,
   screenForReturn,
   openDoneScreen,
+  numberNotice,
+  linkedParts,
+  INVITEE_ANCHOR,
 } from "./assets/personal-flow.mjs";
+import { LEGAL_PAGES } from "./legal/pages.mjs";
 import * as flow from "./assets/personal-flow.mjs";
 import { GUEST_COPY } from "../mobile/src/domain/guestAccount.ts";
 import { PHONE_CODE_COPY } from "../mobile/src/services/phoneCode.ts";
@@ -639,4 +643,50 @@ test("wrongNumber names the inviter when there is one, else the host", () => {
 test("errorText: a blank inviter falls back to the host", () => {
   for (const blank of ["", "  ", " ", "​‍", "﻿"])
     assert.equal(errorText("wrongNumber", "Ana", blank), "That isn’t the number Ana invited.");
+});
+
+const noticeDoc = readFileSync(new URL("../docs/legal/invitee-notice-short.md", import.meta.url), "utf8");
+/** The quoted line after `label` in the section headed `heading`. */
+const quotedAfter = (heading, label) => {
+  const section = noticeDoc.slice(noticeDoc.indexOf(heading));
+  return section.slice(section.indexOf(label)).match(/^> (.+)$/m)[1];
+};
+const plain = (md) => md.replace(/\*\*/g, "").replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1").replace(/'/g, "’");
+const linkOf = (md) => md.match(/\]\(([^)]+)\)/)[1];
+const words = (parts) => parts.map((p) => p.text).join("");
+
+test("the notice and the right to object are the published words, exactly", () => {
+  const personal = quotedAfter("## Personal invitation page", "**Notice**");
+  const object = quotedAfter("## Personal invitation page", "**Right to object**");
+  const event = quotedAfter("## Event link page", "**Notice**");
+  assert.equal(PAGE_COPY.personalNotice("Marcos"), plain(personal).replace("{host}", "Marcos"));
+  assert.equal(`${PAGE_COPY.objectionLabel} ${PAGE_COPY.objection}`, plain(object));
+  assert.equal(PAGE_COPY.openNotice("Marcos"), plain(event).replace("{host}", "Marcos"));
+  const mine = numberNotice({ open: false, who: "Marcos", privacyUrl: "https://link.resbite.com/privacy" });
+  assert.equal(mine.notice.at(-1).href, linkOf(personal));
+  assert.equal(numberNotice({ open: true, who: "Marcos", privacyUrl: "https://link.resbite.com/privacy" }).notice.at(-1).href, linkOf(event));
+});
+
+test("numberNotice: the open link has no objection; the objection's label is strong; mail links; no URL, no link", () => {
+  const personal = numberNotice({ open: false, who: "Pedro", privacyUrl: "https://link.resbite.com/privacy" });
+  assert.equal(words(personal.notice), PAGE_COPY.personalNotice("Pedro"));
+  assert.deepEqual(personal.objection[0], { text: "Right to object:", href: "", strong: true });
+  assert.ok(personal.objection.some((p) => p.href === "mailto:privacy@resbite.com"));
+  const open = numberNotice({ open: true, who: "Marcos", privacyUrl: "" });
+  assert.equal(open.objection, null);
+  assert.ok(open.notice.some((p) => p.text === "privacy@resbite.com" && p.href === "mailto:privacy@resbite.com"));
+  assert.deepEqual(open.notice.at(-1), { text: "Privacy Policy", href: "" });
+});
+
+test("linkedParts links whole phrases, longest first", () => {
+  const links = { "Terms of Use": "https://t", Terms: "https://t", "Privacy Policy": "https://p" };
+  assert.deepEqual(linkedParts("I agree to the Terms and Privacy Policy.", links), [
+    { text: "I agree to the ", href: "" }, { text: "Terms", href: "https://t" }, { text: " and ", href: "" },
+    { text: "Privacy Policy", href: "https://p" }, { text: ".", href: "" }]);
+  assert.deepEqual(linkedParts("I’m 18 or over and I accept the Terms of Use.", links)[1], { text: "Terms of Use", href: "https://t" });
+  assert.deepEqual(linkedParts("I’m 18 or over", links), [{ text: "I’m 18 or over", href: "" }]);
+});
+
+test("the notice's anchor is one the Privacy Policy page must have", () => {
+  assert.ok(LEGAL_PAGES.find((p) => p.route === "/privacy").anchors.includes(INVITEE_ANCHOR));
 });
