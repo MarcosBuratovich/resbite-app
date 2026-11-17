@@ -2,15 +2,21 @@ import type {
   CleanupGateway,
   DeletionGateway,
   DeletionJob,
+  DeletionStatus,
   VerifiedIdentity,
 } from "./account-deletion.ts";
-import { ledgerBackedDeletionRequest, type DeletionAdmissionBackend, type IntentRecorder } from "./deletion-admission.ts";
+import {
+  revokeAppleAuthorization,
+  type AppleRevocationConfig,
+} from "./apple-revocation.ts";
+const statuses: DeletionStatus["status"][] = ["queued", "processing", "complete"];
 /** Server-only adapter. Never import this module from the mobile app. */
 export function accountDeletionGateway(
   url: string,
   serviceKey: string,
   fetcher: typeof fetch = fetch,
-) {
+  apple: AppleRevocationConfig | null = null,
+): { request: DeletionGateway; cleanup: CleanupGateway } {
   if (
     !url.startsWith("https://") &&
     !url.startsWith("http://127.0.0.1:") &&
@@ -59,7 +65,7 @@ export function accountDeletionGateway(
         claims.exp <= Date.now() / 1000
       )
         throw Error("Invalid identity");
-      // GI2-D10: freshIdentity reads the sign-in providers (an Apple-only account may confirm with Apple).
+      // ASR2-2: freshIdentity reads the sign-in providers (an account with Apple linked may confirm with Apple).
       const providers = claims.app_metadata?.providers;
       return {
         userId: user.id,
@@ -70,8 +76,18 @@ export function accountDeletionGateway(
           : [],
       } as VerifiedIdentity;
     },
-    request: async () => {
-      throw Error("Independent recovery ledger is not configured");
+    // D-4: one request path. request_account_deletion closes and erases the account in one
+    // transaction, and answers an existing request first, so a retry gets its receipt back.
+    async request(userId, sessionId, requestId, recoveryToken) {
+      const answer = await rpc("request_account_deletion", {
+        p_user: userId,
+        p_session: sessionId,
+        p_request: requestId,
+        p_recovery: recoveryToken,
+      });
+      if (answer?.requestId !== requestId || !statuses.includes(answer?.status))
+        throw Error("Unexpected deletion answer");
+      return { requestId: answer.requestId, status: answer.status };
     },
     status: (requestId, recoveryToken) =>
       rpc("account_deletion_status", {
@@ -81,6 +97,12 @@ export function accountDeletionGateway(
     revoke: async (token) => {
       await call("/auth/v1/logout?scope=global", "POST", undefined, token);
     },
+    // ASR2-8: best effort, and a no-op until the four Apple secrets are set.
+    // revokeAppleAuthorization never throws and has its own 5-second timeouts.
+    revokeApple: async (authorizationCode) => {
+      if (!apple) return;
+      await revokeAppleAuthorization(authorizationCode, apple, fetcher);
+    },
   };
   const lease = (job: DeletionJob) => ({
     p_request: job.requestId,
@@ -88,10 +110,11 @@ export function accountDeletionGateway(
   });
   const cleanup: CleanupGateway = {
     claim: () => rpc("claim_account_deletions", { p_limit: 2 }),
-    photoPaths: (job) => rpc("deletion_photo_paths", lease(job)),
-    removePhotos: async (paths) => {
-      await call("/storage/v1/object/profile-photos", "DELETE", {
-        prefixes: paths,
+    // ASR2-9: both buckets under the account's folder, at most 100 per page.
+    storageObjects: (job) => rpc("deletion_storage_objects", lease(job)),
+    removeObjects: async (bucket, names) => {
+      await call(`/storage/v1/object/${bucket}`, "DELETE", {
+        prefixes: names,
       });
     },
     deleteAuth: async (userId) => {
@@ -106,23 +129,5 @@ export function accountDeletionGateway(
     finish: (job, complete) =>
       rpc("finish_account_deletion", { ...lease(job), p_complete: complete }),
   };
-  function admission(project: string): DeletionAdmissionBackend {
-    return {
-      prepare: (input) => rpc("prepare_deletion_intent", {
-        p_user: input.userId, p_session: input.sessionId,
-        p_request: input.requestId, p_recovery: input.recoveryToken,
-        p_project: project,
-      }),
-      activate: (intent, recoveryToken) => rpc("activate_deletion_intent", {
-        p_user: intent.userId, p_request: intent.requestId,
-        p_recovery: recoveryToken, p_project: intent.project,
-        p_requested_at: intent.requestedAt,
-      }),
-    };
-  }
-  const withLedger = (project: string, ledger: IntentRecorder): DeletionGateway => ({
-    ...request,
-    request: ledgerBackedDeletionRequest(project, admission(project), ledger),
-  });
-  return { request, cleanup, admission, withLedger };
+  return { request, cleanup };
 }

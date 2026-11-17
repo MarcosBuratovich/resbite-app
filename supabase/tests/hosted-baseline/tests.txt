@@ -24,3 +24,4 @@ chat-groups.sql
 chat-safety.sql
 open-beta.sql
 phone-test-mode-retired.sql
+account-deletion-release.sql

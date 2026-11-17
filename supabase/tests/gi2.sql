@@ -503,9 +503,10 @@ do $$ begin
 end $$;
 rollback;
 
--- Block 3: a grant holder may delete their account, as a roster tester can. The deletion lifecycle and the
--- deletion intent are local-only (20261022120001), so the hosted-baseline run makes the grant and skips the rest.
--- The guards look up the public wrappers: on the hosted baseline service_role has no usage on the private schema.
+-- Block 3: a grant holder may delete their account, as a roster tester can. The deletion intent is local-only
+-- (20261022120001); the deletion lifecycle reaches the hosted baseline with the account deletion release
+-- (20261117110000), so a hosted-baseline run without that candidate makes the grant and skips the rest.
+-- The guards look up the public wrappers: without the release, service_role has no usage on the private schema.
 begin;
 insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data) values
  ('b3000000-0000-4000-8000-000000000001','gi2-3-owner@resbite-test.invalid',now(),'{}'),
@@ -537,8 +538,10 @@ do $$ begin
  if public.account_access_status()->>'status'<>'approved' then raise exception 'Grant holder not approved before deleting'; end if;
 end $$;
 reset role;
--- The gateway's ledger path (deletion-intent.sql's pattern) and the raw request (deletion.sql's): the grant holder
--- passes the eligibility check, a suspended outsider (a revoked grant, no roster row) still does not.
+-- The gateway's ledger path (deletion-intent.sql's pattern; local-only, retired by D-4, its body unchanged) and the
+-- raw request (deletion.sql's): the grant holder passes both eligibility checks. A suspended outsider (a revoked
+-- grant, no roster row) still fails the ledger's, but since the account deletion release (D-19) a suspended account
+-- may delete itself through the request.
 set local role service_role;
 do $$ declare v_intent jsonb; begin
  if to_regprocedure('public.prepare_deletion_intent(uuid,uuid,uuid,text,text)') is not null then
@@ -550,10 +553,8 @@ do $$ declare v_intent jsonb; begin
   if v_intent->>'userId' is distinct from 'b3000000-0000-4000-8000-000000000002' or v_intent->>'requestId' is distinct from 'b3300000-0000-4000-8000-000000000002' then raise exception 'Grant holder''s deletion not prepared'; end if;
  end if;
  if to_regprocedure('public.request_account_deletion(uuid,uuid,uuid,text)') is not null then
-  begin
-   perform private.request_account_deletion('b3000000-0000-4000-8000-000000000003','b3200000-0000-4000-8000-000000000003','b3400000-0000-4000-8000-000000000003',repeat('b',64));
-   raise exception 'A suspended outsider requested a deletion';
-  exception when insufficient_privilege then if sqlerrm<>'Fresh eligible authentication required' then raise; end if; end;
+  if private.request_account_deletion('b3000000-0000-4000-8000-000000000003','b3200000-0000-4000-8000-000000000003','b3400000-0000-4000-8000-000000000003',repeat('b',64))->>'status'
+   is distinct from 'queued' then raise exception 'A suspended outsider''s deletion not requested (D-19)'; end if;
   if private.request_account_deletion('b3000000-0000-4000-8000-000000000002','b3200000-0000-4000-8000-000000000002','b3400000-0000-4000-8000-000000000002',repeat('b',64))->>'status'
    is distinct from 'queued' then raise exception 'Grant holder''s deletion not requested'; end if;
  end if;
@@ -569,8 +570,10 @@ reset role;
 do $$ begin
  if to_regprocedure('public.request_account_deletion(uuid,uuid,uuid,text)') is not null then
   if not exists(select 1 from private.account_deletion_jobs where user_id='b3000000-0000-4000-8000-000000000002' and request_id='b3400000-0000-4000-8000-000000000002') then raise exception 'No deletion job for the grant holder'; end if;
-  if exists(select 1 from private.account_deletion_jobs where user_id='b3000000-0000-4000-8000-000000000003')
-  or exists(select 1 from private.deletion_intent_reservations where user_id='b3000000-0000-4000-8000-000000000003') then raise exception 'A refused deletion wrote something'; end if;
+  if not exists(select 1 from private.account_deletion_jobs where user_id='b3000000-0000-4000-8000-000000000003' and request_id='b3400000-0000-4000-8000-000000000003') then raise exception 'No deletion job for the suspended outsider'; end if;
+  if pg_catalog.to_regclass('private.deletion_intent_reservations') is not null then
+   if exists(select 1 from private.deletion_intent_reservations where user_id='b3000000-0000-4000-8000-000000000003') then raise exception 'A refused deletion wrote something'; end if;
+  end if;
   if not exists(select 1 from private.tester_roster where email='gi2-3-owner@resbite-test.invalid') then raise exception 'The organizer left the roster'; end if;
   -- The grant and the tick go with the auth user, which the deletion worker removes.
   delete from auth.users where id='b3000000-0000-4000-8000-000000000002';

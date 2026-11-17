@@ -34,17 +34,17 @@ insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key) va
  ('b6100000-0000-4000-8000-000000000001','b6000000-0000-4000-8000-000000000002','plan_changed','gi2-rollback:guest');
 -- The GI2 definitions are in place, so the checks after the rollback compare against a real change. The audience is
 -- 20261030120000_push_delivery's, which runs after the companion and checks the grant through user_eligible().
--- request_account_deletion is 20261116120000_open_beta's, which asks access_suspended() (a revoked grant, or a disabled
--- roster row) where it asked has_live_grant().
+-- request_account_deletion is 20261117110000_account_deletion_release's, which hands the lifecycle to
+-- queue_account_deletion, and its public wrapper is service_role's again (D-4: the Edge function calls it directly).
 do $$ begin
  if pg_catalog.pg_get_functiondef('private.eligible()'::regprocedure) not like '%user_eligible%'
  or pg_catalog.pg_get_functiondef('private.notification_recipient_eligible(bigint)'::regprocedure) not like '%user_eligible%'
- or pg_catalog.pg_get_functiondef('private.request_account_deletion(uuid,uuid,uuid,text)'::regprocedure) not like '%private.access_suspended(%'
+ or pg_catalog.pg_get_functiondef('private.request_account_deletion(uuid,uuid,uuid,text)'::regprocedure) not like '%queue_account_deletion%'
  or pg_catalog.pg_get_functiondef('private.prepare_deletion_intent(uuid,uuid,uuid,text,text)'::regprocedure) not like '%has_live_grant%' then
   raise exception 'GI2 definitions not in place';
  end if;
- if has_function_privilege('service_role','public.request_account_deletion(uuid,uuid,uuid,text)','execute') then
-  raise exception 'GI2 left service_role on the raw deletion wrapper';
+ if not has_function_privilege('service_role','public.request_account_deletion(uuid,uuid,uuid,text)','execute') then
+  raise exception 'The deletion release did not give service_role the deletion wrapper';
  end if;
  if not private.notification_recipient_eligible((select id from private.notification_outbox where dedupe_key='gi2-rollback:guest')) then
   raise exception 'Grant holder not notified before the rollback';

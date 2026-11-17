@@ -1360,9 +1360,10 @@ select pg_catalog.to_regprocedure('private.request_account_deletion(uuid,uuid,uu
 \if :g2_deletion
 -- 2j. The owner goes. 01 deletes their account: the deletion's plan loop cancels every future resbite of 01's, under
 -- its flag (no line), and Board game night keeps its repeat. The group has stopped, its owner unable to use the app
--- (G-S4): the summary, as 03, says stopped and cancelled, the chat closes 48 hours after this occurrence's end and is
--- open until then (the final review's M-1, parked for the account-deletion lifecycle), and no line is written. The
--- roll, run as the next cron run would (the flag empty), skips it and writes no stop time while the chat is open.
+-- (G-S4), and the deletion now writes its stop time (the final review's M-1, closed by the account-deletion release:
+-- D-20, ASR2-6): the summary, as 03, says stopped and cancelled, the chat closes 48 hours after that stop time and is
+-- open until then, and no line is written. The roll, run as the next cron run would (the flag empty), skips it and
+-- leaves the stop time as the deletion wrote it while the chat is open.
 begin;
 select pg_temp.e6_cast();
 insert into auth.sessions(id,user_id,created_at) values ('e6300000-0000-4000-8000-000000000001',pg_temp.e6('01'),now());
@@ -1373,14 +1374,17 @@ do $$ declare s jsonb; p public.plans; begin
  perform pg_temp.g2_as(pg_temp.e6('03'));
  s := public.chat_summary(pg_temp.e6p('01'));
  perform pg_temp.g2_check(s @> '{"is_group":true,"stopped":true,"status":"cancelled","open":true}'
-   and (s->>'closes_at')::timestamptz=p.ends_at+interval '48 hours','The summary after the owner''s deletion: '||s::text);
- perform pg_temp.g2_check(pg_temp.g2_ulines(pg_temp.e6p('01'))='' and (select stopped_at from public.chats where series_id=pg_temp.e6p('01')) is null,
-  'The owner''s deletion wrote a line or a stop time: '||pg_temp.g2_ulines(pg_temp.e6p('01')));
+   and (s->>'closes_at')::timestamptz=(select stopped_at from public.chats where series_id=pg_temp.e6p('01'))+interval '48 hours',
+  'The summary after the owner''s deletion: '||s::text);
+ perform pg_temp.g2_check(pg_temp.g2_ulines(pg_temp.e6p('01'))='' and (select stopped_at from public.chats where series_id=pg_temp.e6p('01')) is not null,
+  'The owner''s deletion wrote a line, or no stop time: '||pg_temp.g2_ulines(pg_temp.e6p('01')));
 end $$;
 select set_config('request.jwt.claims','',true);
 select set_config('resbite.system','',true);
+select set_config('g2.stopped',(select stopped_at::text from public.chats where series_id=pg_temp.e6p('01')),true);
 select pg_temp.g2_check(pg_temp.g2_roll()=0,'The roll rolled a group whose owner is being deleted');
-select pg_temp.g2_check(pg_temp.g2_next(pg_temp.e6p('01')) is null and (select stopped_at from public.chats where series_id=pg_temp.e6p('01')) is null
+select pg_temp.g2_check(pg_temp.g2_next(pg_temp.e6p('01')) is null
+ and (select stopped_at from public.chats where series_id=pg_temp.e6p('01'))=current_setting('g2.stopped')::timestamptz
  and private.chat_open(pg_temp.e6p('01')),'The roll changed the owner''s open group');
 rollback;
 
