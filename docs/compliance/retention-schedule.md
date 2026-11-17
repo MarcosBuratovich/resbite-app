@@ -26,7 +26,7 @@ This is an internal record (A12). It holds no personal data. It is not legal adv
 
 1. **Every store has a period.** No personal data is kept "forever". If a new table or store appears without a line here, it must not go live.
 2. **Deleting means deleting.** A job removes the row or the file. Where a row must stay for others, such as a chat message in a shared conversation, the personal content is blanked and the author removed, and the empty row goes when the conversation's own period ends.
-3. **Jobs run daily.** C3 adds one migration with purge functions and one cron script; C2 adds the deletion worker and the receipt purge. Each run logs only counts, never ids.
+3. **Jobs run daily.** C3 adds one migration with purge functions (`20261117130000_retention_and_team_tools.sql`, `private.run_retention()`) and one cron script (`supabase/ops/schedule-retention.sql`: `retention-purge` daily at 03:47 UTC, and `cleanup-images`, the photo and cover clean-up, every 10 minutes); C2 adds the deletion worker and the receipt purge. Each run logs only counts, never ids.
 4. **Backups and platform logs roll off in 7 days.** They cannot be edited row by row. So data deleted from the live database can survive up to 7 days in a backup. A restore replays deletions from the receipts before the app reopens **[needs C2, F11]**.
 5. **A legal hold pauses deletion** of the records it names, and nothing else (section 15).
 6. **Account deletion** is started in the app for every account type and completed within 30 days, aiming for minutes (D-4) **[needs B3, C2]**. Web-only and banned accounts ask through privacy@resbite.com or the contact form, and the same 30 days apply; the owner-run deletion script runs the same lifecycle as the app, with the cancellations and the receipt (ruling AS-R3) **[needs D8, A16, C6]**. A web-only account with no resbite in the last 12 months is deleted by the C3 job, and a code request that is never confirmed is kept 30 days (ruling AS-R4) **[needs C3]**. A suspended account can delete in the app (D-19). Section 16 lists what deletion removes and what it keeps.
@@ -37,7 +37,7 @@ This is an internal record (A12). It holds no personal data. It is not legal adv
 - **Period:** how long the data is kept. "D-8" means the period comes from the gap analysis' default table.
 - **Clock starts:** the event that starts the period.
 - **Deleted by:** the job, script, cascade or platform that deletes it.
-- **Built?** **Live** (on the hosted project today); **Live (manual)** (an owner-run script exists); **Local only — C2** (written, not deployed); **Not built — C3** (to build); **Platform** (the vendor deletes it).
+- **Built?** **Live** (on the hosted project today); **Live (manual)** (an owner-run script exists); **Local only — C2** (written, not deployed); **Local only — C3** or **Local only — C6** (written in `supabase/migrations/20261117130000_retention_and_team_tools.sql` or its owner-run scripts, not deployed; the rollout is `qa/retention-and-team-tools-2026-11-17/README.md`); **Not built — C1** and the like (to build, by the item named); **Platform** (the vendor deletes it).
 - **Hold:** **Pauses** means the job checks the legal hold. **Export** means the store cannot be paused, so held records must be copied out before they roll off (section 15).
 
 ---
@@ -46,7 +46,7 @@ This is an internal record (A12). It holds no personal data. It is not legal adv
 
 | Store | Personal data | Period | Clock starts | Deleted by | Built? | Hold |
 |---|---|---|---|---|---|---|
-| `auth.users`, a code request never confirmed | The phone number given, request times | 30 days (AS-R4) | The code request | C3 job | Not built — C3 | — |
+| `auth.users`, a code request never confirmed | The phone number given, request times | 30 days (AS-R4) | The code request | C3 job (`private.purge_unconfirmed_accounts`: no confirmed email or phone, no profile) | Local only — C3 (20261117130000) | Pauses |
 | `auth.users` | Phone, email, password hash, display name in metadata, confirmation and sign-in times, ban state | While the account exists | Account deletion | `cleanup-account` deletes the Auth user | Local only — C2 (source gate off, `supabase/functions/_shared/deletion-release.ts:4`) | Pauses |
 | `auth.users` metadata `registration_details` | Optional date of birth, second phone, city, interests | None: removed for 1.0 (D-9) | At once | A one-off migration clears every stored value; the fields leave the app | Not built — C9, B11 | — |
 | `auth.identities` | Apple and Google ids, email, name, Google picture URL | While the account exists | Account deletion | Removed with the Auth user; Apple tokens revoked first | Local only — C2; revocation not built (B3, C2) | Pauses |
@@ -65,24 +65,26 @@ This is an internal record (A12). It holds no personal data. It is not legal adv
 | `private.beta_access` | Access grant; a revoked grant is the suspension lever since the open beta | While the account exists | Account deletion | Cascade with the Auth user | Local only — C2 | Pauses |
 | `private.lookup_usage` | One row per host: today's lookup count | While the account exists; overwritten daily | Account deletion | Cascade with the Auth user | Live (cascade); deletion C2 | — |
 | `private.moderators` | Moderators' account ids | While the person moderates | Offboarding or account deletion | `supabase/ops/moderators.sql`; cascade | Live (manual) | — |
-| Web-only accounts (made on the link site; the app never used) | The account's number, name, answers and 18+ and Terms record | 12 months with no resbite (AS-R4) | The end of the last resbite the account took part in | C3 job, through the same deletion lifecycle as the app (AS-R3) | Not built — C3, C6 | Pauses |
-| `private.tester_roster` | Old beta testers' emails | Delete once no longer needed (D-8) | 1.0 release | One-off delete in C3, after `supabase/ops/suspend-account.sql` stops touching the roster (`:18-19`) | Not built — C3 | — |
-| `private.phone_rewrites` | Old and new numbers from the Argentine rewrite script | Delete once no longer needed (D-8) | C12's decision | One-off delete in C3 | Not built — C3, C12 (whether the table holds rows is UNVERIFIED) | — |
+| Web-only accounts (made on the link site; the app never used) | The account's number, name, answers and 18+ and Terms record | 12 months with no resbite (AS-R4) | The end of the last resbite the account took part in | C3 job, through the same deletion lifecycle as the app (AS-R3): `private.purge_web_accounts` queues `private.operator_account_deletion` for each account more than 12 months old with no resbite hosted, joined, asked for or answered in the last 12 months | Local only — C3 (20261117130000), C2 (the deletion) | Pauses |
+| `private.tester_roster` | Old beta testers' emails | Delete once no longer needed (D-8) | 1.0 release | One-off delete in C3: the migration first turns each disabled row of an Auth user into a revoked grant, so nobody suspended that way gets back in, then empties the table. `supabase/ops/suspend-account.sql` stays as it is and finds no roster row | Local only — C3 (20261117130000) | — |
+| `private.phone_rewrites` | Old and new numbers from the Argentine rewrite script | Delete once no longer needed (D-8) | C12's decision | One-off `delete` by the owner after C12's decision (rollout R11, `qa/retention-and-team-tools-2026-11-17/README.md`) | Not built — C12, an owner step (whether the table holds rows is read at rollout R2, counts only) | — |
 
 ## 3. Resbites
 
 | Store | Personal data | Period | Clock starts | Deleted by | Built? | Hold |
 |---|---|---|---|---|---|---|
-| `public.plans` | Title, description, times, exact place, area, note to guests, cover path and description | 12 months (D-8) | A one-off's end, or a series' last occurrence | C3 job | Not built — C3 | Pauses |
-| `public.attendees` | Guest rows, answers, who brought whom | As plans (D-8) | As plans | Cascade with the plan; the deletion request removes the person's own rows (`open_beta.sql:269`) | Not built — C3; deletion C2 | Pauses |
-| `public.plan_meeting_details` | Door codes, directions | As plans (D-8) | As plans | Cascade with the plan | Not built — C3 | Pauses |
-| `public.plan_admins` | Co-hosts and who appointed them | As plans (D-8) | As plans | Cascade with the plan | Not built — C3 | Pauses |
-| `private.join_requests` | Requests by link, answer, status, times | As plans (D-8) | As plans | Cascade with the plan; cascade with the Auth user | Not built — C3 | Pauses |
-| `private.plan_links` | Link codes | As plans | As plans | Cascade with the plan | Not built — C3 | — |
-| `public.plan_mutes` | Who muted a series | As plans (D-8) | A series' last occurrence | C3 job, by series (no foreign key to plans) | Not built — C3 | — |
-| `private.series_leaves` | Who left a group | As plans (proposed: not in the D-8 table) | A series' last occurrence | C3 job, by series | Not built — C3 | — |
-| Storage `plan-covers`, current cover | Cover image | With its plan | Plan deleted | C3 job must remove the file too: a database cascade never removes a Storage object | Not built — C3 | Pauses |
-| Storage `plan-covers`, replaced or detached | Old cover images | 7 days unattached (D-8; `qa/b0-retention-proposal.md:12`) | Detached | New C3 cover worker. There is no delete policy today (`supabase/migrations/20261007200000_plan_covers.sql:63-64`) | Not built — C3 | Pauses |
+| `public.plans` | Title, description, times, exact place, area, note to guests, cover path and description | 12 months (D-8) | A one-off's end, or a series' last occurrence | C3 job (`private.purge_plans`): the whole series at once, 12 months after it ends; never while a group still rolls (`private.series_end` is then null) | Local only — C3 (20261117130000) | Pauses |
+| `public.attendees` | Guest rows, answers, who brought whom | As plans (D-8) | As plans | Cascade with the plan; the deletion request removes the person's own rows (`open_beta.sql:269`) | Local only — C3; deletion C2 | Pauses |
+| `public.plan_meeting_details` | Door codes, directions | As plans (D-8) | As plans | Cascade with the plan | Local only — C3 | Pauses |
+| `public.plan_admins` | Co-hosts and who appointed them | As plans (D-8) | As plans | Cascade with the plan | Local only — C3 | Pauses |
+| `private.join_requests` | Requests by link, answer, status, times | As plans (D-8) | As plans | Cascade with the plan; cascade with the Auth user | Local only — C3 | Pauses |
+| `private.plan_links` | Link codes | As plans | As plans | Cascade with the plan | Local only — C3 | Pauses |
+| `private.link_opens` | None: a link and a time, identifying nobody | 12 months (GI2-D9) | The open | C3 job (`private.purge_link_opens`); cascade with the plan | Local only — C3 | — (a row identifies nobody) |
+| `public.plan_mutes` | Who muted a series | As plans (D-8) | A series' last occurrence | C3 job, by series (no foreign key to plans), with the series' plans | Local only — C3 | Pauses |
+| `private.series_leaves` | Who left a group | As plans (proposed: not in the D-8 table) | A series' last occurrence | C3 job, by series, with the series' plans | Local only — C3 | Pauses |
+| Storage `plan-covers`, current cover | Cover image | With its plan, then 7 days | Plan deleted | Once its series is purged, no plan names the file, so the cover worker (below) takes it: a database cascade never removes a Storage object | Local only — C3 | Pauses |
+| Storage `plan-covers`, replaced or detached | Old cover images | 7 days unattached (D-8; `qa/b0-retention-proposal.md:12`) | Detached | The cover half of `cleanup-profile-photos`, after the photos (`private.claim_orphan_plan_covers`): a file no plan names is observed, waits 7 days, is retired (it can't be attached again) and deleted through Storage's API. There is no delete policy (`supabase/migrations/20261007200000_plan_covers.sql:63-64`) | Local only — C3 (source gate off until rollout R5) | Pauses |
+| Storage `plan-covers`, removed by a moderator | Cover image | Deleted at removal; kept only under a legal hold | Removal | `supabase/ops/remove-resbite-content.sql`: off every occurrence at once, the file queued for the worker's next run (within 10 minutes) | Local only — C6 | Pauses |
 
 When a host deletes their account, their future resbites are cancelled with a push to every guest, and the place is cleared on all their resbites (`open_beta.sql:233-242`; D-20). Because the profile is marked as deleting first, the redaction trigger also blanks the title, description, cover and cover description, note to guests, meeting details and area of each of those resbites (`private.redact_deleting_owner_plan`, `supabase/migrations/20261021120000_gi1_event_links.sql:188-203`). A group with co-hosts ends; it is not handed over in 1.0. The blank and cancelled resbites then follow the 12-month period.
 
@@ -90,25 +92,25 @@ When a host deletes their account, their future resbites are cancelled with a pu
 
 | Store | Personal data | Period | Clock starts | Deleted by | Built? | Hold |
 |---|---|---|---|---|---|---|
-| `private.phone_invitations` | A non-user's number and calling code, code hash, who invited, who answered and when, wrong-number counter | Until answered or revoked, or 30 days after the resbite ends, whichever comes first (D-8) | Answer, revocation, or the resbite's end | C3 job | Not built — C3 | Pauses |
-| `private.plan_removals`, number rows | Removed non-user's number per series | 30 days after a one-off ends; 90 days after a series' last occurrence (D-8) | The end | C3 job | Not built — C3 | Pauses |
-| `private.plan_removals`, account rows | Removed user's account id per series | Same as number rows (proposed: the D-8 table names only numbers) | The end | C3 job; the deletion request removes the person's rows (`open_beta.sql:249`) | Not built — C3 | Pauses |
-| Objection suppression list (new table) | Keyed hash of an objecting number; date | Until the person withdraws the objection (D-23) | Withdrawal | By hand, on request | Not built — C3 | — |
+| `private.phone_invitations` | A non-user's number and calling code, code hash, who invited, who answered and when, wrong-number counter | Until answered or revoked, or 30 days after the resbite ends, whichever comes first (D-8), as the code note reads it: a revoked one at the next run; any other, answered or not, 30 days after the resbite ends | Revocation, or the resbite's end | C3 job (`private.purge_phone_invitations`); an objection deletes every invitation to the number at once, but those a hold keeps (`supabase/ops/object-number.sql`) | Local only — C3 (20261117130000) | Pauses |
+| `private.plan_removals`, number rows | Removed non-user's number per series | 30 days after a one-off ends; 90 days after a series' last occurrence (D-8) | The end | C3 job (`private.purge_plan_removals`; never while a group still rolls); an objection deletes the number's rows at once | Local only — C3 | Pauses |
+| `private.plan_removals`, account rows | Removed user's account id per series | Same as number rows (proposed: the D-8 table names only numbers) | The end | C3 job; the deletion request removes the person's rows (`open_beta.sql:249`) | Local only — C3 | Pauses |
+| Objection suppression list (`private.invite_objections`) | Keyed hash of an objecting number (HMAC-SHA256 under the Vault secret `invite_objection_key`, made inside the database and never shown); date. No number, no name, no inviter | Until the person withdraws the objection (D-23) | Withdrawal | By hand, on request: `supabase/ops/withdraw-objection.sql`. Added by `supabase/ops/object-number.sql` | Local only — C3, C6 | — |
 | Contact lookup | — | Not stored: only the daily count above | — | — | Live | — |
 
-**Code note.** `phone_invitations.phone` is `not null` (`supabase/migrations/20261028120000_contact_invitations.sql:15`). To end the number at answer or revocation, C3 deletes the row, or first makes the column nullable. Revoking today keeps the number (`:9-11`), and plans are never deleted, so the cascade never fires.
+**Code note (plan 6, Decision 2; AS-P6-2).** C3 deletes the row; `phone_invitations.phone` stays `not null` (`supabase/migrations/20261028120000_contact_invitations.sql:15`). A revoked invitation goes at the next daily run. An answered invitation stays until 30 days after its resbite ends, like an unanswered one: the personal link lets the person change their answer until the end (`answer_phone_invitation`, `supabase/migrations/20261111130000_circles_of_trust.sql:469-470`), and once answered the number belongs to the person's own account. This is the code reading of "until answered or revoked" (D-8). The solicitor confirms it (D-12).
 
 ## 5. Chat
 
 | Store | Personal data | Period | Clock starts | Deleted by | Built? | Hold |
 |---|---|---|---|---|---|---|
-| `public.messages`, one-off resbites | Messages and announcements, author, time; system lines naming account ids | 90 days (D-8) | The chat closes (48 hours after the end) | C3 job | Not built — C3 | Pauses |
-| `public.messages`, groups | As above | Messages older than 12 months (D-8) | Each message's time | C3 job | Not built — C3 | Pauses |
+| `public.messages`, one-off resbites | Messages and announcements, author, time; system lines naming account ids | 90 days (D-8) | The chat closes (48 hours after the end) | C3 job (`private.purge_chats`) | Local only — C3 (20261117130000) | Pauses |
+| `public.messages`, groups | As above | Messages older than 12 months (D-8) | Each message's time | C3 job (`private.purge_chats`), one message at a time; the chat's count, last line and pin are put right after | Local only — C3 | Pauses |
 | `public.messages`, deleted or removed messages | None left: the text is blanked, the row stays | Until the row's own period ends | — | `delete_message` and `remove_message` blank the text (`supabase/migrations/20261111140000_chat_core.sql:573-607`) | Live | — |
 | `public.messages`, a deleted account's messages | None left: text and author blanked | Until the row's own period ends | Account deletion | The deletion request (`open_beta.sql:265`) | Local only — C2 | Pauses |
-| `public.chats` | No personal content (counts and last message id) | With the series | A series' last occurrence | C3 job | Not built — C3 | — |
-| `public.chat_reads` | Read position | With the series' messages (proposed: not in the D-8 table) | As messages | C3 job; the deletion request (`open_beta.sql:267`) | Not built — C3 | — |
-| `public.chat_mutes` | Who muted a chat | As plans (D-8, "mutes") | A series' last occurrence | C3 job; the deletion request | Not built — C3 | — |
+| `public.chats` | No personal content (counts and last message id) | With the series | A series' last occurrence | C3 job, with the series' plans (`private.purge_plans`) | Local only — C3 | Pauses |
+| `public.chat_reads` | Read position | With the series' messages (proposed: not in the D-8 table) | As messages | C3 job (a one-off's with its messages; a group's with its series); the deletion request (`open_beta.sql:267`) | Local only — C3 | Pauses |
+| `public.chat_mutes` | Who muted a chat | As plans (D-8, "mutes") | A series' last occurrence | C3 job (as `chat_reads`); the deletion request | Local only — C3 | Pauses |
 | Realtime signals | Ids only | Transient | — | Supabase Realtime | Live | — |
 
 ## 6. Connections
@@ -116,31 +118,35 @@ When a host deletes their account, their future resbites are cancelled with a pu
 | Store | Personal data | Period | Clock starts | Deleted by | Built? | Hold |
 |---|---|---|---|---|---|---|
 | `public.connections`, connected | The pair, who asked, where they met, times | While both accounts exist or until removed (D-8) | Removal or deletion | Removing the connection; the deletion request (`open_beta.sql:244`) | Live (removal); deletion C2 | Pauses |
-| `public.connections`, unanswered requests | As above | 90 days (D-8) | The request | C3 job | Not built — C3 | — |
-| `private.connection_refusals` | "Not now" answers and removals, per resbite, with the hidden flag | 12 months (D-8) | The refusal | C3 job; an acceptance clears the pair's refusals; the deletion request (`open_beta.sql:245`) | Not built — C3 | Pauses |
+| `public.connections`, unanswered requests | As above | 90 days (D-8) | The request | C3 job (`private.purge_connection_requests`) | Local only — C3 (20261117130000) | Pauses |
+| `private.connection_refusals` | "Not now" answers and removals, per resbite, with the hidden flag | 12 months (D-8) | The refusal | C3 job (`private.purge_connection_refusals`); an acceptance clears the pair's refusals; the deletion request (`open_beta.sql:245`) | Local only — C3 | Pauses |
 
 ## 7. Safety
 
 | Store | Personal data | Period | Clock starts | Deleted by | Built? | Hold |
 |---|---|---|---|---|---|---|
 | `private.reports`, open | Reporter, reported person or message, reason, details, frozen words and author, review note | Until closed. No limit while open | — | — | — | Pauses |
-| `private.reports`, closed | As above | 180 days (decided, R-Q3) | Closing | C3 job, replacing `supabase/ops/purge-closed-reports.sql` | Live (manual); job not built — C3 | Pauses |
-| `private.reports` filed by a person who deletes their account | As above, with the reporter id cleared | Kept until closed, then 180 days, like any report (AS-R2). The deletion request clears the reporter id instead of deleting the report. Today it deletes them, open or closed (`open_beta.sql:255`) | Closing | C3 job | Not built — C2 (clear the id), C3 | Pauses |
-| `private.suspensions` | Suspended account, report, reason, what changed, time | While suspended, then 12 months after it is lifted (D-8). If the account is deleted, the user id is cleared and the reason and the dates stay, for 12 months after the deletion (AS-R1, with D-19) | The lift, or the account's deletion | C3 job | Not built — C2, C3, C6 (see the code note) | Pauses |
+| `private.reports`, closed | As above | 180 days (decided, R-Q3) | Closing | C3 job (`private.purge_closed_reports`), replacing `supabase/ops/purge-closed-reports.sql` at rollout R7, with its two steps: the report goes 180 days after closing, and before that a closed report forgets whom it was about once that account is gone | Live (manual); job Local only — C3 (20261117130000) | Pauses |
+| `private.reports` filed by a person who deletes their account | As above, with the reporter id cleared | Kept until closed, then 180 days, like any report (AS-R2). The deletion request clears the reporter id instead of deleting the report. Today it deletes them, open or closed (`open_beta.sql:255`) | Closing | C3 job | Local only — C2 (clear the id), C3 | Pauses |
+| `private.suspensions` and `private.suspension_history` | Suspended account, report, reason, what changed, time | While suspended, then 12 months after it is lifted (D-8). If the account is deleted, the user id is cleared and the reason and the dates stay, for 12 months after the deletion (AS-R1, with D-19) | The lift, or the account's deletion | C3 job (`private.purge_suspension_history`, 12 months after `ended_at`) | Local only — C2 (the move at deletion), C3 (the purge), C6 (`supabase/ops/lift-suspension.sql`); see the code note | Pauses |
 | `private.blocks` | Blocker, blocked person, time | Until undone (D-8) | Unblock, or either account's deletion | The blocker; the deletion request (`open_beta.sql:254`) | Live; deletion C2 | — |
 | `private.blocked_terms` | None: a word list | — | — | — | — | — |
-| Evidence preserved for the NCA or the police | Removed content and its context | Only under a legal hold, until the authority says it is no longer needed | Hold lifted | By hand, after the hold is lifted | Not built — C6, A22 | — |
+| `private.legal_holds` | The account id or series id a hold names, the reason code, the case reference, the review date, when set and lifted | While the hold stands. A lifted hold: proposed 24 months after the lift, with the hold register (section 14). No job deletes one yet | The lift | Not yet: an open point (section 17) | Local only — C2 (the table), C6 (`supabase/ops/set-legal-hold.sql`, `lift-legal-hold.sql`, `legal-holds.sql`) | — |
+| Evidence preserved for the NCA or the police | Removed content and its context | Only under a legal hold, until the authority says it is no longer needed | Hold lifted | In the database, every purge and the photo and cover clean-up take it at their next run after the lift (section 15); outside it, by hand, after the hold is lifted | Local only — C6 (the hold scripts); A22 not built | — |
 | Reports, complaints and evidence sent by email or the web form | As sent | 24 months after the case closes (section 14) | Case closed | By hand | Not built — F1, F2, D1 | Pauses |
 
-**Code note on suspensions.** The code does not yet support "12 months after being lifted". The undo, meant for a suspension made in error, deletes the record at once (`supabase/ops/suspend-account.sql:33-38`), and the record cascades away with the Auth user (`supabase/migrations/20261111160000_chat_safety.sql:795`). So: a lift after a successful appeal needs a script that records the lift date instead of deleting the row (C6); an error undo can keep deleting, so a mistake leaves no record; and C2 must keep the record when the account is deleted, clearing the user id and keeping the reason and the dates for 12 months (ruling AS-R1; D-19). Today the row goes with the Auth user. The table is keyed on the user id, and the reason lives only in the linked report, which is purged 180 days after closing, so C2 gives the row its own key and stores the reason in it.
+**Code note on suspensions.** On the hosted project today the code does not support "12 months after being lifted": the undo, meant for a suspension made in error, deletes the record at once (`supabase/ops/suspend-account.sql:33-38`), and the record cascades away with the Auth user (`supabase/migrations/20261111160000_chat_safety.sql:795`). Built locally:
+- **A lift after a successful appeal** (C6, plan 6 Decision 5; AS-P6-5): `supabase/ops/lift-suspension.sql` deletes the `private.suspensions` row and moves it to `private.suspension_history` (when it was made, when it was lifted, how `'lifted'`, the report it came from). A later suspension starts a fresh row. The error undo keeps deleting, so a mistake leaves no record, and `suspend-account.sql` stays as it is.
+- **An account deleted while suspended** (C2; ruling AS-R1, D-19): the deletion moves the row to `private.suspension_history` with the user id cleared, `how` `'account_deleted'` and the deletion time as `ended_at` (`supabase/migrations/20261117110000_account_deletion_release.sql`).
+- **The purge** (C3): `private.purge_suspension_history` deletes a history row 12 months after `ended_at`, unless a hold names its account.
 
 ## 8. Notifications
 
 | Store | Personal data | Period | Clock starts | Deleted by | Built? | Hold |
 |---|---|---|---|---|---|---|
 | `private.device_endpoints` | Expo push token, platform, time | Until sign-out, until Expo reports the token invalid, or account deletion | Any of those | Sign-out; the sender; the deletion request (`open_beta.sql:270`) | Live; deletion C2 | — |
-| `private.notification_outbox` | Recipient, kind, resbite, actor, detail, message id, times | 30 days (D-8). `invited` rows stay while the invitation is pending, because the block rule reads them (DI-09) | Sent | C3 job; the deletion request removes the person's own rows (`open_beta.sql:271`) | Not built — C3 | — |
-| `private.notification_deliveries` | Token copy, state, Expo ticket id | 30 days (D-8) | Sent | Cascade with the outbox row; C3 job | Not built — C3 | — |
+| `private.notification_outbox` | Recipient, kind, resbite, actor, detail, message id, times | 30 days (D-8). `invited` rows stay while the invitation is pending, because the block rule reads them (DI-09) | Sent (or made, when never sent) | C3 job (`private.purge_notifications`); the deletion request removes the person's own rows (`open_beta.sql:271`) | Local only — C3 (20261117130000) | Pauses |
+| `private.notification_deliveries` | Token copy, state, Expo ticket id | 30 days (D-8) | Sent | Cascade with the outbox row; C3 job | Local only — C3 | Pauses |
 | Push content at Expo | Titles and bodies, including chat text | Not stored by Expo ("never stored"); receipts 24 hours | Sent | Expo | Platform | — |
 | Local reminders and calendar entries | Event title and time | On the person's phone (section 13) | — | — | — | — |
 
@@ -150,8 +156,10 @@ When a host deletes their account, their future resbites are cancelled with a pu
 |---|---|---|---|---|---|---|
 | `private.account_deletion_jobs` | Request id, account id, hash of the recovery secret, status, times | 30 days after clean-up completes (D-8) | Clean-up complete | `purge-deletion-receipts` (`supabase/migrations/20260923152943_deletion_receipt_retention.sql`) | Local only — C2 | — |
 | `private.deletion_intent_reservations` | Request id, account id, project ref, hash of the recovery secret | Proposed: with the receipt, 30 days after clean-up. The local code never deletes it | Clean-up complete | C2 must add the purge | Not built — C2 | — |
-| `private.profile_photo_cleanup_jobs` | Account id, photo path, times | Completed jobs: 30 days | Completed | The clean-up function (`supabase/migrations/20260923152816_orphan_profile_photo_cleanup.sql:168-169`) | Local only — C3 | — |
-| `private.profile_photo_retired_paths` | Account id, hash of an old path | While the Auth account exists | Account deletion completes | Account clean-up (`orphan_profile_photo_cleanup.sql:183-184`) | Local only — C2, C3 | — |
+| `private.profile_photo_cleanup_jobs` | Account id, photo path, times | Completed jobs: 30 days | Completed | The clean-up function (`supabase/migrations/20260923152816_orphan_profile_photo_cleanup.sql:168-169`, carried into `20261117130000`) | Local only — C3 | — |
+| `private.profile_photo_retired_paths` | Account id, hash of an old path | While the Auth account exists | Account deletion completes | Account clean-up (`orphan_profile_photo_cleanup.sql:183-184`, carried into `20261117130000`) | Local only — C2, C3 | — |
+| `private.plan_cover_cleanup_jobs` | Owner folder's account id, cover path, times | Completed jobs: 30 days | Completed | The cover prune (`private.prune_plan_cover_cleanup`, at most 100 a run); an owner's jobs also go once the owner's Auth user, profile and every file in the owner's folder are gone | Local only — C3 (20261117130000) | — |
+| `private.plan_cover_retired_paths` | Owner folder's account id, hash of an old cover path | While the owner's Auth account exists | The owner's Auth user, profile and files gone | The cover prune, as above | Local only — C3 (20261117130000) | — |
 
 ## 10. Test mode and leftovers
 
@@ -159,7 +167,7 @@ When a host deletes their account, their future resbites are cancelled with a pu
 |---|---|---|---|---|---|---|
 | `private.test_codes` | Full numbers and their codes | Emptied at switch-off; table dropped after the log review (D-8) | Switch-off | C1 sitting; a later migration drops it | Not built — C1 | — |
 | `private.test_mode_log` | Last two digits, account id, event, time | Dropped after the log review. The review's outcome goes into the breach log, whatever it finds (F5) | Log review done | C1; later migration | Not built — C1, F5 | Export (to the breach review) |
-| `private.invitations` (legacy) | Token hash, intended email | Delete once no longer needed (D-8) | 1.0 release | One-off delete in C3 | Not built — C3 | — |
+| `private.invitations` (legacy) | Token hash, intended email | Delete once no longer needed (D-8) | 1.0 release | One-off delete in C3: the migration empties the table | Local only — C3 (20261117130000) | — |
 | `private.phone_mode` | None: a switch | — | — | — | — | — |
 
 ## 11. Storage: profile photos
@@ -167,8 +175,8 @@ When a host deletes their account, their future resbites are cancelled with a pu
 | Store | Personal data | Period | Clock starts | Deleted by | Built? | Hold |
 |---|---|---|---|---|---|---|
 | `profile-photos`, current photo | Profile image | While the account exists | Account deletion | `cleanup-account` | Local only — C2 | Pauses |
-| `profile-photos`, replaced or removed | Old profile images | 7 days unattached (D-8) | Detached | `cleanup-profile-photos` (gate at `supabase/functions/cleanup-profile-photos/index.ts:9`) | Local only — C3 | Pauses |
-| A photo removed by a moderator | Profile image | Deleted at removal; kept only under a legal hold | Removal | C6 removal script | Not built — C6 | Pauses |
+| `profile-photos`, replaced or removed | Old profile images | 7 days unattached (D-8) | Detached | `cleanup-profile-photos`, carried into `20261117130000` and scheduled every 10 minutes as `cleanup-images` (source gate `PHOTO_CLEANUP_RELEASE_APPROVED` at `supabase/functions/cleanup-profile-photos/index.ts:12`, off until rollout R5) | Local only — C3 | Pauses |
+| A photo removed by a moderator | Profile image | Deleted at removal; kept only under a legal hold | Removal | `supabase/ops/remove-profile-photo.sql`: off the profile at once, the file retired and queued for the worker's next run (within 10 minutes); under a hold the file is kept ("hide and preserve") | Local only — C6 | Pauses |
 
 ## 12. Logs, backups and vendors' own copies
 
@@ -219,16 +227,16 @@ A legal hold stops evidence being destroyed while it may be needed (UGC-15). A22
 - a legal claim is made or reasonably expected;
 - the UK regulator, the Information Commission (it still uses the name ICO, ico.org.uk), opens an enquiry.
 
-**Who sets it.** The owner, with the C6 script, which records the hold in the database **[needs C6]**. The backup moderator may set one in a child sexual abuse or intimate image case (A15, section 18). Each set and lift is logged in the law-enforcement request log, outside the repo **[needs F17]**.
+**Who sets it.** The owner, with `supabase/ops/set-legal-hold.sql`, which records the hold in `private.legal_holds`: one account or one resbite series, a reason code, the case number and a review date three months ahead (local only — C6, `20261117130000`; live after its rollout). `supabase/ops/legal-holds.sql` lists the holds not lifted, read-only, and `supabase/ops/lift-legal-hold.sql` lifts one. The backup moderator may set one in a child sexual abuse or intimate image case (A15, section 18). Each set and lift is logged in the law-enforcement request log, outside the repo **[needs F17]**.
 
 **What it does.**
-- Every C2 and C3 job checks the hold and skips the records it names. The rest of the job runs as normal **[needs C2, C3]**.
+- Every C2 and C3 job checks the hold and skips the records it names. The rest of the job runs as normal (local only — C2, C3). A hold on an account also keeps every series the account hosted, joined or wrote in: its occurrences, guests, chat and covers. Every purge checks it, including the stores marked "—" above (plan 6, Decision 4; AS-P6-4). The photo and cover clean-up and the two removal scripts skip held records too; a removal then hides the photo or cover and keeps the file ("hide and preserve").
 - An account deletion request is still accepted while a hold names the account. Access is blocked at once, and the person's data stops being visible to others. Only the erasure of the held records waits **[needs C2]**.
 - A report filed by a person who deletes their account is kept anyway, with the reporter id cleared (AS-R2); a hold keeps it past its 180 days **[needs C2, C3]**.
 
 **What it cannot pause.** Supabase logs and backups, Vercel logs and vendors' own logs roll off within 7 days or less. When a hold needs something from them, the owner copies only the named records into the access-controlled store A22 names, within the platform's period.
 
-**How it ends.** The hold is reviewed at least every three months and whenever its matter changes, and lifted as soon as it is no longer needed (A15, section 18; A22). While a hold covers a closed report, nobody runs `supabase/ops/purge-closed-reports.sql` by hand, because that script does not check holds. Once lifted, the normal period resumes. If that period has already passed, the records are deleted at the next run.
+**How it ends.** The hold is reviewed at least every three months and whenever its matter changes, with `legal-holds.sql`, and lifted with `lift-legal-hold.sql` as soon as it is no longer needed (A15, section 18; A22). While a hold covers a closed report, nobody runs `supabase/ops/purge-closed-reports.sql` by hand, because that script does not check holds; the C3 job replaces it at rollout R7. Once lifted, the normal period resumes. If that period has already passed, the records are deleted at the next run.
 
 **Telling the person.** The person is told their erasure is delayed, unless telling them would harm an investigation or the law forbids it. A22 decides.
 
@@ -254,8 +262,8 @@ Based on `request_account_deletion` (`supabase/migrations/20261116120000_open_be
 |---|---|---|
 | C1 | Test codes emptied; test-mode tables dropped after the log review; SMS log settings | Test mode on |
 | C2 | Deletion for every account type; receipt purge; reservation purge; the legal hold in deletion; the restore replay; the suspension record kept after deletion with the id cleared (AS-R1); reports kept after their reporter's deletion with the id cleared (AS-R2) | Local only, gated off, entry point unwired (DEL-1) |
-| C3 | Every "Not built — C3" row: numbers, removals, chat, plans, covers, outbox, refusals, requests, link opens, closed reports, suspensions, the suppression list, web-only accounts and unconfirmed code requests (AS-R4), leftovers; all checking the hold | Only the manual closed-report script exists |
-| C6 | Suspend by id; record a lift after appeal; removal scripts; set and lift holds; the owner-run deletion script for banned, web-only and under-18 accounts, with the app's lifecycle (AS-R3) | Not built |
+| C3 | Every "Local only — C3" row, in `supabase/migrations/20261117130000_retention_and_team_tools.sql`: invitations by number, removal records, chats, plans with their series' rows, covers (the cover half of `cleanup-profile-photos`), notices, refusals, unanswered requests, link opens, closed reports, the suspension history, the suppression list (`private.invite_objections`), web-only accounts and unconfirmed code requests (AS-R4), and the roster and legacy invitations emptied once; all checking the hold. The daily job and the worker's schedule are `supabase/ops/schedule-retention.sql`. Not yet: `private.phone_rewrites` (C12's decision, an owner step), and a period and a purge for lifted holds in `private.legal_holds` | Local only, not applied. Live: only the manual closed-report script. Rollout: `qa/retention-and-team-tools-2026-11-17/README.md` |
+| C6 | Built locally, in `supabase/ops/`: suspend by id (`suspend-account-by-id.sql`); record a lift after appeal (`lift-suspension.sql`); the removal scripts (`remove-profile-photo.sql`, `remove-resbite-content.sql`); set, lift and list holds (`set-legal-hold.sql`, `lift-legal-hold.sql`, `legal-holds.sql`); the do-not-invite scripts (`object-number.sql`, `withdraw-objection.sql`); the exports (`export-account.sql`, `export-number.sql`). The owner-run deletion script for banned, web-only and under-18 accounts, with the app's lifecycle (AS-R3), is plan 2's `delete-account.sql` | Local only: each needs `20261117130000` applied |
 | C8, C9 | The versioned Terms record; the optional details erased | Not built |
 | D1, F1, F3, F4, F5, F17 | The inboxes, the contact form and the logs outside the repo | Not built |
 | F7 | Vendors' own log periods confirmed | Not done |
@@ -269,6 +277,7 @@ Roles only. No names.
 |---|---|---|---|
 | 17 November 2026 | 1.0 draft | The owner | First schedule, from the D-8 defaults, for solicitor review |
 | 17 November 2026 | 1.0 draft | The owner | The rulings applied: suspension records outlive deletion with the id cleared (AS-R1); reports outlive their reporter (AS-R2); web-only accounts and unconfirmed code requests (AS-R4); Twilio's message records (AS-D5, placeholder 2) |
+| 17 November 2026 | 1.0 draft | The owner | C3 and C6 built locally (plan 6, `20261117130000`): the "Built?" and "Hold" columns; the invitations code note (AS-P6-2); lifts kept in `private.suspension_history`; rows for link opens, the cover clean-up tables and the hold record; the hold scripts |
 
 ## Sources
 

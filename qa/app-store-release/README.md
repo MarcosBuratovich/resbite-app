@@ -74,13 +74,13 @@ Record each as "set" or "unset". Never paste the command's output into the repo:
 
 - **Sender (live):** `NOTIFICATION_DELIVERY_ENABLED`, `NOTIFICATION_WORKER_SECRET`, `EXPO_ACCESS_TOKEN`.
 - **Deletion (C2):** `ACCOUNT_DELETION_ENABLED`, `ACCOUNT_CLEANUP_SECRET`, `ACCOUNT_RECEIPT_PURGE_ENABLED`, `ACCOUNT_RECEIPT_PURGE_SECRET`, and the Sign in with Apple key for token revocation (names set by C2).
-- **Photo clean-up (C3):** `PROFILE_PHOTO_CLEANUP_ENABLED`, `PROFILE_PHOTO_CLEANUP_SECRET`.
+- **Photo clean-up (C3):** `PROFILE_PHOTO_CLEANUP_ENABLED`, `PROFILE_PHOTO_CLEANUP_SECRET`. The schedule reads two Vault secrets, `profile_photo_cleanup_url` and `profile_photo_cleanup_secret` (the same value as `PROFILE_PHOTO_CLEANUP_SECRET`; `qa/retention-and-team-tools-2026-11-17/README.md`, R5).
 - **SMS (C1):** `SEND_SMS_HOOK_SECRETS`, `TWILIO_ACCOUNT_SID`, `TWILIO_API_KEY_SID`, `TWILIO_API_KEY_SECRET`, `TWILIO_MESSAGING_SERVICE_SID` and `SMS_SWEEP_SECRET`, for `send-sms`. The sweep's schedule reads two Vault secrets, `sms_sweep_url` and `sms_sweep_secret` (`qa/phone-codes-2026-11-17/README.md`, steps 3 and 11).
 - `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are provided by Supabase.
 
 ### Scheduled jobs
 
-`deliver-notifications` (live), `roll-repeating-plans` (step 12), and the deletion and retention jobs (names set by C2 and C3).
+`deliver-notifications` (live), `roll-repeating-plans` (step 12), the deletion jobs (names set by C2), and the retention jobs `retention-purge` (daily at 03:47 UTC) and `cleanup-images` (every 10 minutes), both from `supabase/ops/schedule-retention.sql` (step 14, C3).
 
 ---
 
@@ -150,7 +150,7 @@ Each migration is approved by name and sha256, with snapshots, the advisors, the
 - [ ] **[approval]** **C8, versioned Terms acceptance.** An account without the current version reads "acceptance needed". `answer_phone_invitation` records the version the link site sends.
 - [ ] **[approval]** **C7, safety extension.** The reasons `illegal`, `child_safety` and `intimate_image` are accepted. The blocked-terms check refuses a listed term in a title, description, note to guests, meeting details and display name.
 - [ ] **[approval]** **C9, optional details removed.** `registration_details` is cleared from Auth metadata, and the write path is retired. The current TestFlight build's Account details can then no longer save those four fields; tell the testers.
-- [ ] **[approval]** **C3, retention jobs.** The purge functions and their schedule, including web-only accounts with no resbite in 12 months and code requests never confirmed after 30 days (AS-R4). Each respects the legal hold. Deploy `cleanup-profile-photos` with its two secrets.
+- [ ] **[approval]** **C3, retention jobs.** The purge functions and their schedule, including web-only accounts with no resbite in 12 months and code requests never confirmed after 30 days (AS-R4). Each respects the legal hold. Deploy `cleanup-profile-photos` with its two secrets. The steps, hashes, scripts and rollback are R1 to R7 of `qa/retention-and-team-tools-2026-11-17/README.md` (`20261117130000_retention_and_team_tools.sql`, the dry run, the worker's gate, deploy, secrets and acceptance, then `schedule-retention.sql`).
 
 ### Step 15. Auth email templates and Auth settings (C13, C11, F13)
 
@@ -253,7 +253,7 @@ Run on the step 20 build, installed from TestFlight. Record each result under "A
 - [ ] The three new report reasons send and reach the queue (B7, C7).
 - [ ] After a report, the thanks says "We review reports every day." and shows the support address (B7, AS-R9).
 - [ ] A listed term is refused in a title and in a display name (C7).
-- [ ] The removal scripts work on a test photo, title and cover (C6).
+- [ ] The removal scripts work on a test photo, title and cover (C6): `supabase/ops/remove-profile-photo.sql` and `supabase/ops/remove-resbite-content.sql` (`qa/retention-and-team-tools-2026-11-17/README.md`, R6).
 - [ ] The owner-run deletion script deletes a test account that cannot use the app as the app's deletion does, with the cancellations and the receipt (C6, AS-R3).
 
 **Content and wording** (B4, CON-1, CON-2)

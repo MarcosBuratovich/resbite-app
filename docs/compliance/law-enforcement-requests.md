@@ -170,13 +170,13 @@ A legal hold stops Resbite's own deletion and retention jobs destroying records 
 
 ### 11.2 How to set it
 
-The owner runs the hold script **[needs C6]**, naming:
-- the scope: the account ids and, if needed, the resbite series concerned;
-- the reason code (CSEA, intimate image, threat, police, NCA, Ofcom, coroner, court, claim);
-- the case number from the moderation or request log;
+The owner runs `supabase/ops/set-legal-hold.sql` in the SQL editor (C6, local only until `20261117130000_retention_and_team_tools.sql` is applied; rollout in `qa/retention-and-team-tools-2026-11-17/README.md`), once for each account and each series, naming:
+- the scope: one account id, or one resbite series (a plan's `series_id`), never both. An account's hold also keeps every series the account hosted, joined or wrote in;
+- the reason code: `csea`, `intimate_image`, `threat`, `police`, `nca`, `ofcom`, `coroner`, `court` or `claim`;
+- the case number from the moderation or request log (letters, digits and hyphens, at most 40);
 - the review date, three months ahead.
 
-The backup moderator may set a hold in a CSEA or intimate image case. Ids go into the SQL editor's copy only; the hold register in the log tool (section 11.6) holds the details.
+It records the hold in `private.legal_holds` and prints it. `supabase/ops/legal-holds.sql` lists the holds not lifted, read-only, with those due for review. The backup moderator may set a hold in a CSEA or intimate image case. Ids go into the SQL editor's copy only; the hold register in the log tool (section 11.6) holds the details.
 
 ### 11.3 What it stops at 1.0
 
@@ -195,9 +195,9 @@ The backup moderator may set a hold in a CSEA or intimate image case. Ids go int
 
 ### 11.5 Review and lifting
 
-- Review every hold on its review date (`moderation-standard.md` section 4, step 9).
+- Review every hold on its review date (`moderation-standard.md` section 4, step 9): `supabase/ops/legal-holds.sql` lists the holds not lifted, the earliest review date first, with `review_due` true from that date. Check it against the hold register (section 11.6).
 - Lift it when its reason has ended: the authority confirms it no longer needs the records; the proceedings or claim have ended or the time to bring them has passed; the statutory period has ended (for a CSEA report, see section 6).
-- Lift it with the hold script **[needs C6]**. The normal retention periods then apply again: anything already past its period goes at the next job run, and a deletion request that was waiting completes.
+- Lift it with `supabase/ops/lift-legal-hold.sql`, naming the hold's id from `legal-holds.sql` or the register (C6, local only until `20261117130000` is applied). The normal retention periods then apply again: anything already past its period goes at the next daily run, the photo and cover clean-up takes what it kept, and a deletion request that was waiting completes. Another hold not lifted still keeps what it names. To set one, see section 11.2 (`set-legal-hold.sql`).
 - Delete any exported copies in the case folder when the hold is lifted.
 
 ### 11.6 The hold register
