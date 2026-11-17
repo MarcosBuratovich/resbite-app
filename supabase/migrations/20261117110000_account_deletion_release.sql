@@ -123,3 +123,202 @@ create or replace function private.deletion_pending(p_user uuid) returns boolean
  select exists(select 1 from public.profiles p where p.id=p_user and p.deletion_requested_at is not null)
  or exists(select 1 from private.account_deletion_jobs j where j.user_id=p_user)
 $$;
+
+-- 2. The request lifecycle: one path for every account (D-4), the close and erase steps, the hold (UGC-15), the team's
+-- deletions (AS-R3) and the replay after a restore. Each function is the database's own but the request and the status,
+-- which the delete-account Edge function calls as service_role. The bodies are the open beta's
+-- (20261116120000_open_beta.sql:208-273), split in two, with only the changes named in each comment.
+
+-- The close step (UGC-15), which a held request runs too: the account's future resbites are cancelled and their guests
+-- told. 20261116120000_open_beta.sql:232-239 only (the plan loop's comment, lock and cancellations): the owned plans
+-- locked by id, each active future one cancelled, one version on, with a plan_cancelled notice to each guest. The caller
+-- holds the account's lock and the deletions' lock, and has set the deletion's flag, so no chat line is written.
+create or replace function private.close_account(p_user uuid, p_request uuid) returns void
+language plpgsql security definer set search_path='' as $$
+declare v_plan public.plans;
+begin
+ -- Lock plans in a deterministic order, preserving others' access to cancellation.
+ for v_plan in select * from public.plans where owner_id=p_user order by id for update loop
+  if v_plan.status='active' and v_plan.starts_at>now() then
+   update public.plans set status='cancelled',version=version+1 where id=v_plan.id;
+   insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key)
+    select v_plan.id,a.user_id,'plan_cancelled','deletion:'||p_request||':'||v_plan.id||':'||a.user_id from public.attendees a
+    where a.plan_id=v_plan.id and a.user_id<>p_user on conflict do nothing;
+  end if;
+ end loop;
+end $$;
+
+-- The erase step: everything else, at once when there is no hold, or by the worker once a hold is lifted. The open beta
+-- lines, in this order and with these changes:
+-- - :230-231 (the roster row, the profile), then the owned-plans loop again, now with :240-241 only (the place, the
+--   invitations), then :243-249 and :253-254 (the blocks);
+-- - AS-R2: the reports the account filed lose its id instead of going (:255). reports.reporter_id keeps its on delete
+--   cascade: the id is cleared first;
+-- - AS-R1: after :256-257, the account's suspension moves to the history, without the account: the same report, its
+--   start and the end now, how 'account_deleted';
+-- - D-20, ASR2-6: the ordered chat pass (:263-264) also takes the chat row of every group of a series the account owns,
+--   and those still running stop now, so a deleted host's group closes 48 hours later (private.chat_closes_at). They
+--   are taken in the same pass, in series order, as the rows of the chats it wrote in.
+-- Then :265-271.
+create or replace function private.erase_account(p_user uuid) returns void
+language plpgsql security definer set search_path='' as $$
+declare v_plan public.plans;
+begin
+ delete from private.tester_roster where email=(select lower(email) from auth.users where id=p_user);
+ update public.profiles set deletion_requested_at=now(),display_name='Deleted member',avatar_path=null where id=p_user;
+ for v_plan in select * from public.plans where owner_id=p_user order by id for update loop
+  update public.plans set place_label='Meeting place removed',note='',latitude=null,longitude=null where id=v_plan.id;
+  update private.invitations set revoked_at=coalesce(revoked_at,now()),intended_email=null where plan_id=v_plan.id;
+ end loop;
+ update private.invitations set revoked_at=coalesce(revoked_at,now()),claimed_by=null,intended_email=null where claimed_by=p_user;
+ delete from public.connections where p_user in (user_a,user_b);
+ delete from private.connection_refusals where from_user=p_user or to_user=p_user;
+ -- Circles of trust: nobody was brought by a deleted account, and its removal records go.
+ update public.attendees set brought_by=null where brought_by=p_user;
+ update private.phone_invitations set brought_by=null where brought_by=p_user;
+ delete from private.plan_removals where user_id=p_user;
+ -- Chat safety (CH-P18, G-S11, Decision 7): the account's blocks both ways (locked in one order first), its name on the
+ -- reports it filed (AS-R2), its chat-rules acceptances and its moderator row. Reports about it stay, with their frozen
+ -- words. After the guest rows, and blocks before reports, as the fold takes them, so the two queue instead of
+ -- deadlocking (SR3, SR5).
+ perform 1 from private.blocks where blocker_id=p_user or blocked_id=p_user order by blocker_id, blocked_id for update;
+ delete from private.blocks where blocker_id=p_user or blocked_id=p_user;
+ update private.reports set reporter_id=null where reporter_id=p_user;
+ delete from private.chat_rules_acceptances where user_id=p_user;
+ delete from private.moderators where user_id=p_user;
+ -- AS-R1: the suspension is kept as history, with its report and dates and without the account.
+ insert into private.suspension_history(user_id,report_id,suspended_at,ended_at,how)
+  select null,s.report_id,s.at,now(),'account_deleted' from private.suspensions s where s.user_id=p_user;
+ delete from private.suspensions where user_id=p_user;
+ -- Chat (K-B2, K-N5, Decision 14, H27): the account's messages and announcements lose their words and their author;
+ -- those still sent read deleted, and one a host removed stays removed. Each chat's row is locked first, in one order,
+ -- before the message rows, as delete_message, remove_message and the stats trigger take them, so they never deadlock
+ -- with each other (H28). The pass also takes the chat row of every group of a series the account owns, and those
+ -- still running stop now (D-20, ASR2-6). A deleted announcement unpins (K-S12). A system line is left as it is,
+ -- payload and all (K-S3): the names map shows the person as nobody. Its reads and mutes go.
+ perform 1 from public.chats c where c.series_id in (select m.series_id from public.messages m
+  where m.author_id=p_user and m.kind in ('message','announcement'))
+  or (c.is_group and c.series_id in (select p.series_id from public.plans p where p.owner_id=p_user)) order by c.series_id for update;
+ update public.chats set stopped_at=now()
+  where is_group and stopped_at is null and series_id in (select p.series_id from public.plans p where p.owner_id=p_user);
+ update public.messages set state=case when state='sent' then 'deleted' else state end,body=null,author_id=null
+  where author_id=p_user and kind in ('message','announcement');
+ delete from public.chat_reads where user_id=p_user;
+ delete from public.chat_mutes where user_id=p_user;
+ delete from public.attendees where user_id=p_user;
+ delete from private.device_endpoints where user_id=p_user;
+ delete from private.notification_outbox where recipient_id=p_user;
+end $$;
+
+-- Queue a deletion: the job, the close step, then the erase step, or, under a hold (UGC-15), only the account's
+-- devices and queued notices beside the close step, the job parked as held until the hold is lifted. The caller holds
+-- the account's lock (hashtextextended(p_user::text,47)). Idempotent per request: the same request and hash return
+-- the job, another raises 22023. It answers the true status, held included.
+-- ASR2-5 (GR2): two deletions queue one after the other on one lock, taken after the account's and before any row, so
+-- two hosts who each wrote in the other's Edit-stopped group never deadlock (the cancellation writes the group's stop
+-- time in plan order, before the ordered chat pass).
+create or replace function private.queue_account_deletion(p_user uuid, p_request uuid, p_recovery_hash bytea) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare v_job private.account_deletion_jobs; v_held boolean;
+begin
+ if p_user is null or p_request is null or p_recovery_hash is null then
+  raise exception 'Invalid deletion request' using errcode='22023'; end if;
+ select * into v_job from private.account_deletion_jobs where user_id=p_user;
+ if found then
+  if v_job.request_id<>p_request or v_job.recovery_hash<>p_recovery_hash then
+   raise exception 'Deletion already requested' using errcode='22023'; end if;
+  return jsonb_build_object('requestId',v_job.request_id,'status',v_job.status);
+ end if;
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('account_deletion',0));
+ -- Chat (K-S2): from here to the commit, the chat-line triggers write nothing, so the cancellations and the scrub below
+ -- write no line.
+ perform set_config('resbite.system','deletion',true);
+ v_held := private.account_held(p_user);
+ insert into private.account_deletion_jobs(request_id,user_id,recovery_hash,status)
+  values(p_request,p_user,p_recovery_hash,case when v_held then 'held' else 'queued' end);
+ perform private.close_account(p_user,p_request);
+ if v_held then
+  delete from private.device_endpoints where user_id=p_user;
+  delete from private.notification_outbox where recipient_id=p_user;
+ else
+  perform private.erase_account(p_user);
+ end if;
+ return jsonb_build_object('requestId',p_request,'status',case when v_held then 'held' else 'queued' end);
+end $$;
+
+-- The request (D-4, D-19): the open beta body (:208-225) down to its eligibility check, then the queue above for the
+-- rest, with two changes. The check asks only for a fresh session of this user, a confirmed email or phone, and an
+-- account that isn't anonymous: a suspended account may delete itself, and a banned one (it can't sign in) is deleted
+-- with supabase/ops/delete-account.sql. And held reads queued in every answer, so it never tips anyone off (UGC-15).
+-- An existing request answers first, whatever the session, so a retry after the proof has gone stale returns it
+-- (Review Focus 1).
+create or replace function private.request_account_deletion(p_user uuid,p_session uuid,p_request uuid,p_recovery text)
+returns jsonb language plpgsql security definer set search_path='' as $$
+declare v_job private.account_deletion_jobs; v_result jsonb;
+begin
+ if p_user is null or p_request is null or p_recovery is null or p_recovery !~ '^[a-f0-9]{64}$' then
+ raise exception 'Invalid deletion request' using errcode='22023'; end if;
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(p_user::text,47));
+ select * into v_job from private.account_deletion_jobs where user_id=p_user;
+ if found then
+  if v_job.request_id<>p_request or v_job.recovery_hash<>extensions.digest(p_recovery,'sha256') then
+   raise exception 'Deletion already requested' using errcode='22023'; end if;
+  return jsonb_build_object('requestId',v_job.request_id,'status',case when v_job.status='held' then 'queued' else v_job.status end);
+ end if;
+ -- Edge validates Auth tokens and recent AMR; SQL also requires that the proof's
+ -- session is real, belongs to this user and was freshly created, not refreshed.
+ if not exists(select 1 from auth.sessions where id=p_session and user_id=p_user and created_at>=now()-interval '5 minutes' and created_at<=now()+interval '30 seconds')
+ or not exists(select 1 from auth.users u where u.id=p_user and (u.email_confirmed_at is not null or u.phone_confirmed_at is not null) and not coalesce(u.is_anonymous,false))
+ then raise exception 'Fresh eligible authentication required' using errcode='42501'; end if;
+ v_result := private.queue_account_deletion(p_user,p_request,extensions.digest(p_recovery,'sha256'));
+ return jsonb_build_object('requestId',v_result->'requestId','status',case when v_result->>'status'='held' then 'queued' else v_result->>'status' end);
+end $$;
+create or replace function public.request_account_deletion(p_user uuid,p_session uuid,p_request uuid,p_recovery text)
+returns jsonb language sql security invoker set search_path='' as $$ select private.request_account_deletion(p_user,p_session,p_request,p_recovery) $$;
+
+-- A receipt's status, with the recovery token the app keeps: 20260918001316_account_deletion_lifecycle.sql:85-89, with
+-- held read as queued (UGC-15).
+create or replace function private.account_deletion_status(p_request uuid,p_recovery text) returns jsonb language sql stable security definer set search_path='' as $$
+ select jsonb_build_object('requestId',request_id,'status',case when status='held' then 'queued' else status end) from private.account_deletion_jobs
+ where request_id=p_request and p_recovery ~ '^[a-f0-9]{64}$' and recovery_hash=extensions.digest(p_recovery,'sha256')
+$$;
+create or replace function public.account_deletion_status(p_request uuid,p_recovery text) returns jsonb language sql security invoker set search_path='' as $$ select private.account_deletion_status(p_request,p_recovery) $$;
+
+-- The team's deletion (AS-R3): banned, web-only and under-18 accounts, from supabase/ops/delete-account.sql. The same
+-- lifecycle, with a request id and a recovery secret nobody holds (the team checks the job itself). An account that
+-- already has a job answers it, so running the script twice is safe. It answers the true status.
+create or replace function private.operator_account_deletion(p_user uuid) returns jsonb
+language plpgsql security definer set search_path='' as $$
+declare v_job private.account_deletion_jobs;
+begin
+ if p_user is null then raise exception 'No such account' using errcode='22023'; end if;
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(p_user::text,47));
+ if not exists(select 1 from auth.users u where u.id=p_user) then raise exception 'No such account' using errcode='22023'; end if;
+ select * into v_job from private.account_deletion_jobs where user_id=p_user;
+ if found then return jsonb_build_object('requestId',v_job.request_id,'status',v_job.status); end if;
+ return private.queue_account_deletion(p_user,gen_random_uuid(),extensions.digest(encode(extensions.gen_random_bytes(32),'hex'),'sha256'));
+end $$;
+
+-- The replay after a backup restore (ASR2-10, qa/deletion-restore-procedure.md): a receipt exported from the live
+-- database before the restore, queued again with its original request id and hash, so the person's saved receipt still
+-- resolves. gone: no Auth user (nothing to delete); present: the account has a job already; replayed.
+create or replace function private.replay_account_deletion(p_user uuid, p_request uuid, p_recovery_hash bytea) returns text
+language plpgsql security definer set search_path='' as $$
+begin
+ if p_user is null or p_request is null or p_recovery_hash is null then
+  raise exception 'Invalid deletion request' using errcode='22023'; end if;
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(p_user::text,47));
+ if not exists(select 1 from auth.users u where u.id=p_user) then return 'gone'; end if;
+ if exists(select 1 from private.account_deletion_jobs j where j.user_id=p_user) then return 'present'; end if;
+ perform private.queue_account_deletion(p_user,p_request,p_recovery_hash);
+ return 'replayed';
+end $$;
+
+-- The steps are the database's own. The request and the status are service_role's (the Edge function), which reverses
+-- the GI2 companion's revoke on the public wrapper (20261022120001_gi2_local_delivery_and_deletion.sql:133, D-4).
+revoke all on function private.queue_account_deletion(uuid,uuid,bytea), private.close_account(uuid,uuid), private.erase_account(uuid),
+ private.operator_account_deletion(uuid), private.replay_account_deletion(uuid,uuid,bytea) from public, anon, authenticated, service_role;
+revoke all on function private.request_account_deletion(uuid,uuid,uuid,text), public.request_account_deletion(uuid,uuid,uuid,text),
+ private.account_deletion_status(uuid,text), public.account_deletion_status(uuid,text) from public, anon, authenticated;
+grant execute on function private.request_account_deletion(uuid,uuid,uuid,text), public.request_account_deletion(uuid,uuid,uuid,text),
+ private.account_deletion_status(uuid,text), public.account_deletion_status(uuid,text) to service_role;

@@ -22,8 +22,8 @@ end $$;
 reset role;
 set local role service_role;
 do $$ begin
- begin perform public.request_account_deletion('41000000-0000-4000-8000-000000000001','42000000-0000-4000-8000-000000000001','44000000-0000-4000-8000-000000000001',repeat('a',64)); raise exception 'Retired deletion RPC open to service_role';
- exception when insufficient_privilege then if sqlerrm<>'permission denied for function request_account_deletion' then raise; end if; end;
+ -- D-4: the delete-account Edge function calls the request directly again, as service_role.
+ if not has_function_privilege('service_role','public.request_account_deletion(uuid,uuid,uuid,text)','EXECUTE') then raise exception 'The deletion RPC is closed to service_role'; end if;
  begin perform private.request_account_deletion('41000000-0000-4000-8000-000000000001','42000000-0000-4000-8000-000000000009','44000000-0000-4000-8000-000000000001',repeat('a',64)); raise exception 'Nonexistent proof session accepted'; exception when insufficient_privilege then null; end;
 end $$;
 select private.request_account_deletion('41000000-0000-4000-8000-000000000001','42000000-0000-4000-8000-000000000001','44000000-0000-4000-8000-000000000001',repeat('a',64));
