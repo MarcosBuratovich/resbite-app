@@ -115,11 +115,16 @@ test("the target is the new number when one is being added, as stored digits", (
     assert.deepEqual(smsTarget({ user: { ...unconfirmed, new_phone: blank }, sms: { otp: "111111" } }), { to: "+447700900001", otp: "111111" }, JSON.stringify(blank));
 });
 
-test("a confirmed number wins over a stale new_phone (sign-in codes never go to a number the account never confirmed)", () => {
+// A confirmed number with a different pending one is Auth changing a confirmed number (PUT /auth/v1/user {phone}) or a
+// pending change left behind (a fold after an unfinished Add your number). Texting the old number would confirm a
+// number the account never proved it holds; texting the new one could text a stranger. Neither is texted.
+test("a confirmed number with a different pending number is refused: neither number is texted", () => {
   const confirmed = { phone: "447700900834", phone_confirmed_at: "2026-11-01T00:00:00Z" };
-  assert.deepEqual(smsTarget({ user: { ...confirmed, new_phone: "447700900111" }, sms: { otp: "123456" } }), { to: "+447700900834", otp: "123456" });
-  assert.deepEqual(smsTarget({ user: { ...confirmed, new_phone: "0123" }, sms: { otp: "123456" } }), { to: "+447700900834", otp: "123456" });
-  assert.deepEqual(smsTarget({ user: { ...confirmed, new_phone: "" }, sms: { otp: "123456" } }), { to: "+447700900834", otp: "123456" });
+  for (const pending of ["447700900111", "+44 7700 900111", "0123", "x"])
+    assert.equal(smsTarget({ user: { ...confirmed, new_phone: pending }, sms: { otp: "123456" } }), null, pending);
+  // No pending number, a blank one or the same digits: the confirmed number, as before.
+  for (const same of [undefined, null, "", "  ", "447700900834", "+44 7700 900834"])
+    assert.deepEqual(smsTarget({ user: { ...confirmed, new_phone: same }, sms: { otp: "123456" } }), { to: "+447700900834", otp: "123456" }, JSON.stringify(same));
   assert.deepEqual(smsTarget({ user: { phone: "5491112345678" }, sms: { otp: "123456" } }), { to: "+5491112345678", otp: "123456" });
   for (const bad of [{}, { user: {}, sms: { otp: "123456" } }, { ...EVENT, sms: { otp: "12ab56" } }, { ...EVENT, sms: { otp: "1234567" } }, { user: { phone: "0123" }, sms: { otp: "123456" } }, null, "x"])
     assert.equal(smsTarget(bad), null);
@@ -186,6 +191,22 @@ test("a malformed event: 200 with http_code 400 and no text", async () => {
     assert.deepEqual(await r.json(), { error: { http_code: 400, message: "Invalid code request." } });
     assert.deepEqual(sent, []);
   }
+});
+
+test("a confirmed number being changed: 200 with http_code 400, no text, and its own log word", async () => {
+  const event = {
+    user: { id: EVENT.user.id, phone: "447700900834", phone_confirmed_at: "2026-11-01T00:00:00Z", new_phone: "447700900111" },
+    sms: { otp: "123456" },
+  };
+  const { d, sent, logged } = deps();
+  const body = JSON.stringify(event);
+  const r = await handleSendSms(post(body, signed(body)), d);
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get("content-type"), "application/json");
+  assert.equal(r.headers.get("retry-after"), null);
+  assert.deepEqual(await r.json(), { error: { http_code: 400, message: "Invalid code request." } });
+  assert.deepEqual(sent, []);
+  assert.deepEqual(logged, [{ route: "hook", outcome: "change-pending" }]);
 });
 
 test("a refused number: 200 with http_code 422 and the words", async () => {
