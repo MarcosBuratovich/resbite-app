@@ -5,8 +5,8 @@
 -- off, and after any legal hold set or lifted since the backup has been put right. Paste this into the hosted
 -- project's SQL editor. In the editor's copy only, put the contents of the receipts.json that
 -- supabase/ops/export-deletion-receipts.sql wrote before the restore in place of the empty array [] in the input line
--- below, between its quotes. The whole file as the CLI wrote it ({"boundary": ..., "rows": [...]}) and its rows array
--- alone are both read. Never save the filled-in copy.
+-- below, between its quotes. The whole file as the CLI wrote it ({"boundary": ..., "rows": [...], "warning": ...}) and
+-- its rows array alone are both read. Never save the filled-in copy.
 -- Each receipt is queued again with its original request id and hash (private.replay_account_deletion), so the
 -- person's saved receipt still resolves. The account's future resbites are cancelled and the account is erased at
 -- once, or, under a legal hold, only the close step runs and the job waits for the hold. The cleanup worker removes
