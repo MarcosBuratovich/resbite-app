@@ -2,6 +2,10 @@
 // sign-in with a number that has no account, the Add your number gate with a taken number and its Sign out, an
 // interrupted sign-up, and (plan 4) the Accept your Terms gate. Every Supabase request is answered by the fixture
 // below; any other path fails the run.
+// Add your number and About you each open Delete account (DEL-2). What that screen asks for depends on the build: run
+// once against Expo as usual, and once against Expo started with EXPO_PUBLIC_ACCOUNT_DELETION_ENABLED=true and this
+// script with RESBITE_QA_DELETION_ENABLED=true, which then expects each account's proof card instead of the privacy
+// address.
 // auth.users.phone is digits-only ("447700900834"), so the fixtures store it that way too.
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
@@ -13,6 +17,8 @@ const shots = join(tmpdir(), "resbite-phone");
 await mkdir(shots, { recursive: true });
 const browser = await chromium.launch({ channel: process.env.RESBITE_QA_BROWSER || "chrome", headless: true });
 const base = process.env.RESBITE_QA_URL || "http://localhost:8081";
+// The build was started with EXPO_PUBLIC_ACCOUNT_DELETION_ENABLED=true (see the header).
+const deletionEnabled = process.env.RESBITE_QA_DELETION_ENABLED === "true";
 const STORAGE_KEY = "sb-ewcsgvhuojxdpaspwsrx-auth-token";
 const NUMBER = "+447700900834";
 const DIGITS = "447700900834";
@@ -29,6 +35,8 @@ const COPY = {
   ageHelper: "Resbite is for people aged 18 and over.",
   termsHeading: "Please accept our Terms",
   termsChanged: "Our Terms changed while you were reading. Please read them again.",
+  deleteAccount: "Delete my account",
+  deletionUnavailable: "To delete your account, email privacy@resbite.com.",
 };
 // The Terms of Use version the fixture's server reports as published (the app's TERMS_VERSION too).
 const TERMS = "2026-12";
@@ -218,6 +226,31 @@ const numberField = (page) => page.getByLabel("Mobile number", { exact: true });
 const tick = (page) => page.getByRole("checkbox", { name: COPY.tick, exact: true });
 /** The six cells drawn under the code field: what the person sees. */
 const cells = (page) => codeField(page).evaluate((input) => input.previousElementSibling?.textContent ?? null);
+/**
+ * A gate's Delete my account opens Delete account with the account's own proof (`card`: a line and a button), or the
+ * privacy address in a build without deletion; Back returns to the gate. Nothing is sent: no code, no request.
+ */
+async function opensDeletion(f, gate, card) {
+  const { page } = f;
+  const sent = f.log.length;
+  await expect(button(page, COPY.deleteAccount)).toBeVisible();
+  await button(page, COPY.deleteAccount).click();
+  await expect(page).toHaveURL(/\/delete-account$/);
+  await expect(heading(page, "Delete account")).toBeVisible();
+  if (deletionEnabled) {
+    await expect(page.getByText(card.line, { exact: true })).toBeVisible();
+    await expect(button(page, card.button)).toBeVisible();
+    await expect(page.getByText(COPY.deletionUnavailable, { exact: true })).toHaveCount(0);
+  } else {
+    await expect(page.getByText(COPY.deletionUnavailable, { exact: true })).toBeVisible();
+    await expect(button(page, card.button)).toHaveCount(0);
+  }
+  const outbound = f.log.slice(sent).map((x) => x.path);
+  for (const path of ["/auth/v1/otp", "/auth/v1/verify", "/functions/v1/delete-account"])
+    assert.equal(outbound.includes(path), false, `opening Delete account from ${gate} sends nothing to ${path}`);
+  await button(page, "Back").click();
+  await expect(heading(page, gate)).toBeVisible();
+}
 
 try {
   // 0. The country chooser: Argentina's send form with the 9, and a typed +44 number switching the country.
@@ -432,7 +465,9 @@ try {
     await f.done();
   }
 
-  // 3d. After Apple or Google sign-in the number is still required, with both lines of explanation (B10).
+  // 3d. After Apple or Google sign-in the number is still required, with both lines of explanation (B10). An account
+  // that won't add one can still delete (DEL-2): Delete my account opens Delete account, which confirms an Apple
+  // account with Apple and a Google one with a code emailed to its address.
   for (const provider of ["apple", "google"]) {
     const account = phoneless();
     account.user.app_metadata = { provider, providers: [provider] };
@@ -443,6 +478,16 @@ try {
     await expect(page).toHaveURL(/\/add-phone$/);
     await expect(page.getByText("Your friends find and invite you by your number.", { exact: true })).toBeVisible();
     await expect(page.getByText("We never show your number to other people on Resbite.", { exact: true })).toBeVisible();
+    await expect(button(page, "Sign out")).toBeVisible();
+    await opensDeletion(
+      f,
+      "Add your number",
+      provider === "apple"
+        ? { line: "Type DELETE, then confirm with Apple.", button: "Continue with Apple" }
+        : { line: "We’ll email a code to fixture@example.invalid.", button: "Send code" },
+    );
+    await expect(page).toHaveURL(/\/add-phone$/);
+    assert.equal(f.calls("POST", "/auth/v1/logout").length, 0, "still signed in");
     await f.done();
   }
 
@@ -519,6 +564,10 @@ try {
     await expect(heading(page, "About you")).toBeVisible();
     await expect(page).toHaveURL(/\/about-you$/);
     await noTestCode(page, "a restored About you");
+    // A phone account that stops at About you can still delete, with a code texted to its number (DEL-2).
+    await expect(button(page, "Sign out")).toBeVisible();
+    await opensDeletion(f, "About you", { line: "We’ll text a code to +44 7700 900834.", button: "Send code" });
+    await expect(page).toHaveURL(/\/about-you$/);
     await f.done();
   }
 
@@ -677,7 +726,7 @@ try {
   }
 
   console.log(
-    "PASS: phone sign-up (the country chooser: Argentina sent with the 9, a typed +44 number switching the country; tick, invalid number, +44 number, wrong code, 000000 refused like any wrong code, the sent code → verify → attest_age, About you → name → /account), sign-in with an unknown number → Create an account, Add your number with a taken number then phone_change, Sign out from the taken refusal, a wrong code and a lost verify reply at Add your number, interrupted sign-up restored on About you, no 000000 on any screen, and Accept your Terms at 320/390 px (the gate after Add your number, the tick and one accept_terms with the server's version → About you, a version published meanwhile refused, re-read and accepted, Delete my account and Sign out, a sign-up tick that accepted already so no accept screen, a suspended account on its own screen). All Supabase requests intercepted.",
+    `PASS: phone sign-up (the country chooser: Argentina sent with the 9, a typed +44 number switching the country; tick, invalid number, +44 number, wrong code, 000000 refused like any wrong code, the sent code → verify → attest_age, About you → name → /account), sign-in with an unknown number → Create an account, Add your number with a taken number then phone_change, Delete my account from Add your number (Apple and Google sign-ups) and from About you, ${deletionEnabled ? "each opening its proof card" : "each giving the privacy address in this build"}, Sign out from the taken refusal, a wrong code and a lost verify reply at Add your number, interrupted sign-up restored on About you, no 000000 on any screen, and Accept your Terms at 320/390 px (the gate after Add your number, the tick and one accept_terms with the server's version → About you, a version published meanwhile refused, re-read and accepted, Delete my account and Sign out, a sign-up tick that accepted already so no accept screen, a suspended account on its own screen). All Supabase requests intercepted.`,
   );
 } finally {
   await browser.close();

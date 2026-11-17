@@ -159,7 +159,7 @@ try {
     await button(page, "What happens").click();
     await shot("delete-what-happens", false);
     await button(page, "Close sheet").click();
-    await button(page, "Privacy").click();
+    await button(page, "Back").click();
     await button(page, "Profile").click();
     await expect(heading(page, "Profile")).toBeVisible();
     await page.getByRole("button", { name: "People lists", exact: true }).click();

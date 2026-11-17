@@ -38,6 +38,17 @@ test("AppleButton follows Apple's rules: Continue, black, 44 points, no own colo
   for (const gone of ["backgroundColor", "borderRadius"]) assert.equal(button.includes(gone), false, gone);
 });
 
+test("every gate with Sign out also offers Delete my account, so an account that stops there can still delete (DEL-2)", () => {
+  // An Apple, Google or email sign-up with no number stops at Add your number, and a phone account with no name at
+  // About you: neither can reach Data & privacy, so each gate opens Delete account itself, as Accept your Terms does.
+  for (const path of ["app/add-phone.tsx", "app/about-you.tsx", "app/accept-terms.tsx"]) {
+    const screen = source(path);
+    assert.ok(screen.includes("title={TERMS_COPY.deleteAccount}"), path);
+    assert.ok(screen.includes('router.push("/delete-account")'), path);
+  }
+  assert.equal(source("app/add-phone.tsx").includes("There is no other exit"), false);
+});
+
 test("Add your number explains the number and promises it stays private (B10)", () => {
   assert.equal(PHONE_COPY.addBody, "Your friends find and invite you by your number.");
   assert.equal(PHONE_COPY.addPrivacy, "We never show your number to other people on Resbite.");

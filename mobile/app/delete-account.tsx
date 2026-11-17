@@ -166,7 +166,9 @@ export default function DeleteAccount() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={[s.body, { paddingBottom: 40 }]}
       >
-        <Back label="Privacy" />
+        {/* Opened from Data & privacy, the suspended screen, a gate (Add your number, Accept your Terms, About you) or the
+            welcome screen: a neutral label for all of them. */}
+        <Back />
         <Title>Delete account</Title>
         <StatusCard icon={Trash2} tint={colors.pinkSoft} ink={colors.error}>
           <Copy style={styles.line}>{DELETION_COPY.intro}</Copy>

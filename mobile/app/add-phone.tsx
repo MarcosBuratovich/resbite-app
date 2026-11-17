@@ -1,6 +1,7 @@
 import React, { useRef } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { router } from "expo-router";
 import { LogOut } from "lucide-react-native";
 import { Button, Copy, ErrorNote, TextAction, s } from "../src/design/ui";
 import { Chip, useFocusOnChange } from "../src/design/kit";
@@ -9,10 +10,15 @@ import { PhoneField } from "../src/design/PhoneField";
 import { colors as c } from "../src/design/tokens";
 import { formatPhone } from "../src/domain/phone";
 import { PHONE_COPY } from "../src/domain/phoneCopy";
+import { TERMS_COPY } from "../src/domain/termsCopy";
 import { useApp } from "../src/state/AppState";
 import { usePhoneVerification } from "../src/state/usePhoneVerification";
 
-/** The gate for an account without a verified number: add one, or sign out. There is no other exit. */
+/**
+ * The gate for an account without a verified number: add one, delete the account, or sign out. An Apple, Google or
+ * email sign-up stops here until it adds a number, and can't reach Data & privacy, so Delete my account opens Delete
+ * account from here (DEL-2), as on Accept your Terms.
+ */
 export default function AddPhone() {
   const phone = usePhoneVerification("add");
   const { signOut, signingOut } = useApp();
@@ -85,6 +91,12 @@ export default function AddPhone() {
             </>
           )}
           <View style={styles.chips}>
+            <TextAction
+              destructive
+              title={TERMS_COPY.deleteAccount}
+              disabled={phone.busy}
+              onPress={() => router.push("/delete-account")}
+            />
             <Chip text="Sign out" icon={LogOut} disabled={signingOut} onPress={() => void signOut().catch(() => {})} />
           </View>
         </ScrollView>
@@ -96,5 +108,5 @@ export default function AddPhone() {
 const styles = StyleSheet.create({
   helper: { color: c.muted, fontSize: 14 },
   links: { alignItems: "flex-start", gap: 4 },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  chips: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 },
 });
