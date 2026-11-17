@@ -2,19 +2,20 @@ import React, { useCallback, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Redirect, router, useFocusEffect } from "expo-router";
-import { Hourglass, LogOut, Mail, MailCheck, RefreshCw, ShieldCheck, Ticket, UserRound } from "lucide-react-native";
+import { Hourglass, LogOut, Mail, MailCheck, RefreshCw, ShieldCheck, Ticket, Trash2, UserRound } from "lucide-react-native";
 import { useApp } from "../src/state/AppState";
 import { useAccount } from "../src/state/AccountState";
 import { Button, Copy, ErrorNote, Title, s } from "../src/design/ui";
 import { Chip, StatusCard } from "../src/design/kit";
 import { RequestCard } from "../src/design/GuestSteps";
 import { categoryPalette, colors as c, fonts } from "../src/design/tokens";
-import { accessState, accessTitles, type AccessState } from "../src/domain/accountCopy";
+import { accessState, accessTitles, SUSPENDED_DELETE, suspendedLines, type AccessState } from "../src/domain/accountCopy";
 import { isLinkCode, pendingInviteParams } from "../src/domain/appLinks";
 import { accountGate } from "../src/domain/accountRoute";
 import { nameFromSession } from "../src/domain/guestAccount";
 import { formatPhone, phoneVerified } from "../src/domain/phone";
 import { INVITE_COPY } from "../src/domain/inviteCopy";
+import { supportContact } from "../src/domain/supportContact";
 import { joinRequestGateway, type MyRequest } from "../src/services/joinRequests";
 
 const icons: Record<AccessState, typeof ShieldCheck> = {
@@ -23,6 +24,12 @@ const icons: Record<AccessState, typeof ShieldCheck> = {
   error: RefreshCw,
   pending: Hourglass,
 };
+
+/**
+ * The build's support address (B6), read as data-privacy.tsx reads it: `EXPO_PUBLIC_*` is inlined when the bundle is
+ * built, and only when read with dot notation.
+ */
+const contact = supportContact(process.env.EXPO_PUBLIC_SUPPORT_ADDRESS);
 
 /**
  * The account access check (UX4): one status card per state, today's guidance word for word,
@@ -125,16 +132,12 @@ export default function Account() {
               <Copy style={styles.email}>
                 {session?.user.email || (session?.user.phone ? formatPhone(session.user.phone) : null)}
               </Copy>
-              {status === "access_pending" && (
-                <>
-                  <Copy style={styles.line}>
-                    This account can’t use Resbite at the moment.
+              {status === "access_pending" &&
+                suspendedLines(contact?.address ?? null).map((line) => (
+                  <Copy key={line} style={styles.line}>
+                    {line}
                   </Copy>
-                  <Copy style={styles.line}>
-                    If you think this is a mistake, contact the Resbite team.
-                  </Copy>
-                </>
-              )}
+                ))}
               {status === "unconfirmed" && (
                 <Copy style={styles.line}>
                   Open the confirmation email on this iPhone, or request another
@@ -175,6 +178,15 @@ export default function Account() {
                   icon={UserRound}
                   label="Review optional account details"
                   onPress={() => router.push("/account-details")}
+                />
+              )}
+              {/* B6, DEL-7: a suspended account may delete in the app (D-19). */}
+              {status === "access_pending" && (
+                <Chip
+                  text={SUSPENDED_DELETE}
+                  icon={Trash2}
+                  hint="Opens Delete account."
+                  onPress={() => router.push("/delete-account")}
                 />
               )}
               {signOutChip}

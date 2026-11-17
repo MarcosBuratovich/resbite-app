@@ -81,9 +81,12 @@ export const SAFETY_COPY = {
   copyAddress: "Copy address",
   copied: "Copied",
 
-  /** Data & privacy's line on reports (G-S11, N9, I11): a person as well as a message, the reporter's own, the period. */
+  /**
+   * Data & privacy's line on reports (G-S11, N9, I11): a person as well as a message, the reporter's own, the period.
+   * AS-R2: a deleted reporter's reports stay, without the name, until the team closes them.
+   */
   reportsPrivacy:
-    "If you report a message or a person, the Resbite team reads the report and keeps a copy of what was reported, even if the message or that person’s account is deleted. If you delete your account, the reports you sent are deleted too. A report is deleted 180 days after the team closes it.",
+    "If you report a message or a person, the Resbite team reads the report and keeps a copy of what was reported, even if the message or that person’s account is deleted. If you delete your account, the reports you sent are kept until the team closes them, without your name. A report is deleted 180 days after the team closes it.",
   /**
    * Data & privacy's line on blocks (ruling SR4, owner question R-Q7's default, worded by SR10): a block row stays until
    * undone, and the team can read it (the daily read lists the last 7 days; that is a list, not a limit).

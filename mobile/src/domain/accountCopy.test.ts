@@ -8,6 +8,8 @@ import {
   introSlides,
   permissionChip,
   signupTitles,
+  SUSPENDED_DELETE,
+  suspendedLines,
 } from "./accountCopy.ts";
 import { notificationDelivery, permissionCopy, reminderCopy } from "./notifications.ts";
 
@@ -35,6 +37,20 @@ test("account access check: checking wins, then the status; any other status is 
     error: "Let’s try again",
     pending: "Waiting for access",
   });
+});
+
+test("the suspended screen gives the support address and keeps its first line", () => {
+  assert.deepEqual(suspendedLines("support@resbite.com"), [
+    "This account can’t use Resbite at the moment.",
+    "To ask why, or to appeal, write to support@resbite.com.",
+  ]);
+  // A build without an address keeps today's second line.
+  assert.deepEqual(suspendedLines(null), [
+    "This account can’t use Resbite at the moment.",
+    "If you think this is a mistake, contact the Resbite team.",
+  ]);
+  // B6, DEL-7: the way to Delete account.
+  assert.equal(SUSPENDED_DELETE, "Delete account");
 });
 
 test("notifications: the permission chip shows the permission's title, or checking and failure", () => {

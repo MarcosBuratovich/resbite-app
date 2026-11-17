@@ -8,12 +8,8 @@ import ts from "typescript";
 // The scan reads the strings and JSX text of every non-test source file. Comments are never scanned.
 const root = join(__dirname, "..", "..");
 
-// Plan 2 (B3) rewrites these; remove each when it does.
-const B3_REWRITES: string[] = [
-  "app/delete-account.tsx",
-  "src/services/accountDeletion.ts",
-  "src/services/accountDeletionFlow.ts",
-];
+// Plan 2 (B3) rewrites these; remove each when it does. Plan 2's Task 8 has rewritten all three, so every file is scanned.
+const B3_REWRITES: string[] = [];
 
 const BANNED: RegExp[] = [
   /\bbeta\b/i,

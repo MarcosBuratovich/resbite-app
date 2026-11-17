@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Info, KeyRound, Mail, ShieldCheck, Trash2, TriangleAlert } from "lucide-react-native";
+import { Info, KeyRound, Mail, ShieldCheck, Smartphone, Trash2, TriangleAlert } from "lucide-react-native";
 import { Back, Button, Copy, TextAction, Title, s } from "../src/design/ui";
 import { Chip, FieldCard, InfoSheet, StatusCard } from "../src/design/kit";
 import { AppleMark } from "../src/design/AppleMark";
@@ -15,18 +15,29 @@ import {
   loadDeletionReceipt,
   loadRecentDeletionReceipt,
   sendDeletionCode,
+  sendDeletionPhoneCode,
+  type DeletionCredential,
 } from "../src/services/accountDeletion";
 import {
-  appleOnlyAccount,
   type DeletionReceipt,
   type DeletionStatus,
 } from "../src/services/accountDeletionFlow";
+import {
+  DELETION_COPY,
+  deletionPhone,
+  deletionProof,
+  describeDeletionStatus,
+  type DeletionAccount,
+} from "../src/domain/deletion";
 import { GUEST_COPY } from "../src/domain/guestAccount";
+import { formatPhone } from "../src/domain/phone";
 
 export default function DeleteAccount() {
   const { session, preview, captureSession, finishAccountDeletion } = useApp();
   const [credential, setCredential] = useState("");
   const [usePassword, setUsePassword] = useState(false);
+  // When the deletion text was sent: the phone proof needs one first, and verifyPhoneCode tells expiry by it.
+  const [sentAt, setSentAt] = useState<number | null>(null);
   const [confirmation, setConfirmation] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -56,16 +67,25 @@ export default function DeleteAccount() {
   const accountId = session?.user.id;
   const context = useRef({ accountId, preview });
   context.current = { accountId, preview };
-  const email = session?.user.email;
+  const email = session?.user.email || null;
   const providers: string[] = session?.user.app_metadata.providers ?? [];
-  // GI2-D10: Apple-only accounts (no "email" provider) confirm by signing in with Apple again.
-  const appleAccount = appleOnlyAccount(providers);
+  const account: DeletionAccount = {
+    providers,
+    email,
+    phone: session?.user.phone || null,
+    phoneConfirmed: !!session?.user.phone_confirmed_at,
+  };
+  // ASR2-2: Apple when Apple is linked; else an email code (or password); else a code texted to the confirmed number;
+  // else none, and the person writes to the privacy address.
+  const proof = deletionProof(account);
+  const phone = deletionPhone(account);
+  const appleAccount = proof === "apple";
   // An "email" account may have a password or only ever have used a code (GI2's email code), and no claim says
   // which, so the code comes first and "Use my password instead" switches to the password.
-  const passwordAccount = providers.includes("email");
+  const passwordAccount = proof === "email" && providers.includes("email");
   const passwordMode = passwordAccount && usePassword;
-  const available =
-    accountDeletionEnabled && !preview && !!accountId && !!email;
+  // DEL-2: every account type, so no email is needed here; the proof decides what card 1 asks for.
+  const available = accountDeletionEnabled && !preview && !!accountId;
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -75,6 +95,7 @@ export default function DeleteAccount() {
   useEffect(() => {
     setCredential("");
     setConfirmation("");
+    setSentAt(null);
     setRestoringReceipt(true);
     if (accountId || preview) {
       setStatus(null);
@@ -132,11 +153,13 @@ export default function DeleteAccount() {
     }
   }
   const describe = (value: DeletionStatus) =>
-    value === "complete"
-      ? "Account deletion is complete in the active service. Backup retention and restore handling must be configured separately; this receipt does not certify erasure of backups."
-      : value === "not_found"
-        ? "No accepted request was found. You can verify your identity and retry."
-        : "Your deletion request is accepted. Access is closed while cleanup finishes. You can check its progress here.";
+    describeDeletionStatus(value, !!session);
+  const proofCredential = (): DeletionCredential | null =>
+    proof === "phone"
+      ? { kind: "sms", value: credential, sentAt: sentAt! }
+      : proof === "email"
+        ? { kind: passwordMode ? "password" : "otp", value: credential }
+        : null;
   return (
     <SafeAreaView style={s.page}>
       <ScrollView
@@ -146,10 +169,10 @@ export default function DeleteAccount() {
         <Back label="Privacy" />
         <Title>Delete account</Title>
         <StatusCard icon={Trash2} tint={colors.pinkSoft} ink={colors.error}>
-          <Copy style={styles.line}>Deletion immediately closes access.</Copy>
+          <Copy style={styles.line}>{DELETION_COPY.intro}</Copy>
           <View style={styles.chips}>
             <Chip
-              text="What happens"
+              text={DELETION_COPY.whatHappens}
               icon={Info}
               hint="Opens the full deletion warnings"
               onPress={() => setWarnings(true)}
@@ -161,22 +184,49 @@ export default function DeleteAccount() {
         (!receipt || preview || !accountDeletionEnabled) ? (
           <StatusCard icon={ShieldCheck}>
             <Copy style={styles.line}>
-              {preview
-                ? "You are exploring the design. Preview cannot delete a real account."
-                : "Account deletion is not enabled in this development build. Its server setup and recovery checks must be completed before it can be switched on."}
+              {preview ? DELETION_COPY.preview : DELETION_COPY.unavailable}
             </Copy>
           </StatusCard>
         ) : null}
         {available && !status && (
           <>
-            <NumberedCard number={1} title="Confirm it’s you">
-              <Copy style={{ color: colors.muted }}>{email}</Copy>
-              {appleAccount ? (
-                <Copy>To confirm it’s you, sign in with Apple again.</Copy>
+            <NumberedCard number={1} title={DELETION_COPY.proveHeading}>
+              {proof === null ? (
+                <Copy>{DELETION_COPY.noProof}</Copy>
+              ) : proof === "apple" ? (
+                <Copy>{DELETION_COPY.appleBody}</Copy>
+              ) : proof === "phone" ? (
+                <>
+                  <Copy>{DELETION_COPY.phoneBody(formatPhone(phone!))}</Copy>
+                  <Button
+                    title={DELETION_COPY.sendCode}
+                    secondary
+                    loading={busy}
+                    onPress={() =>
+                      void action(async () => {
+                        const guard = capture();
+                        await sendDeletionPhoneCode(phone!, guard);
+                        if (!mounted.current) return;
+                        setSentAt(Date.now());
+                        setMessage(DELETION_COPY.phoneSent(formatPhone(phone!)));
+                      })
+                    }
+                  />
+                  <FieldCard
+                    label={DELETION_COPY.phoneCodeField}
+                    placeholder={DELETION_COPY.phoneCodeField}
+                    icon={Smartphone}
+                    value={credential}
+                    onChangeText={setCredential}
+                    autoComplete="one-time-code"
+                    keyboardType="number-pad"
+                    editable={!busy}
+                  />
+                </>
               ) : passwordMode ? (
                 <FieldCard
-                  label="Current password"
-                  placeholder="Current password"
+                  label={DELETION_COPY.passwordField}
+                  placeholder={DELETION_COPY.passwordField}
                   icon={KeyRound}
                   value={credential}
                   onChangeText={setCredential}
@@ -186,25 +236,22 @@ export default function DeleteAccount() {
                 />
               ) : (
                 <>
-                  <Copy>
-                    Request an email verification code for this account. A fresh
-                    code is required; refreshing your session is not enough.
-                  </Copy>
+                  <Copy>{DELETION_COPY.emailBody(email!)}</Copy>
                   <Button
-                    title="Send verification code"
+                    title={DELETION_COPY.sendCode}
                     secondary
                     loading={busy}
                     onPress={() =>
                       void action(async () => {
                         const guard = capture();
                         await sendDeletionCode(email!, guard);
-                        setMessage("Check your email for the verification code.");
+                        setMessage(DELETION_COPY.emailSent);
                       })
                     }
                   />
                   <FieldCard
-                    label="Email verification code"
-                    placeholder="Verification code"
+                    label={DELETION_COPY.emailCodeField}
+                    placeholder={DELETION_COPY.emailCodeField}
                     icon={Mail}
                     value={credential}
                     onChangeText={setCredential}
@@ -218,8 +265,8 @@ export default function DeleteAccount() {
                 <TextAction
                   title={
                     passwordMode
-                      ? "Use an email code instead"
-                      : "Use my password instead"
+                      ? DELETION_COPY.useEmailCode
+                      : DELETION_COPY.usePassword
                   }
                   icon={passwordMode ? Mail : KeyRound}
                   disabled={busy}
@@ -230,85 +277,79 @@ export default function DeleteAccount() {
                 />
               )}
             </NumberedCard>
-            <NumberedCard number={2} title="Type DELETE">
-              <FieldCard
-                label="Type DELETE to confirm"
-                icon={TriangleAlert}
-                placeholder="DELETE"
-                value={confirmation}
-                onChangeText={setConfirmation}
-                autoCapitalize="characters"
-                autoCorrect={false}
-                editable={!busy}
-              />
-              <Copy style={{ color: colors.muted }}>
-                This cannot be undone once your request is accepted.
-              </Copy>
-            </NumberedCard>
-            <Button
-              destructive
-              title={
-                appleAccount
-                  ? GUEST_COPY.apple
-                  : receipt
-                    ? "Retry account deletion"
-                    : "Permanently delete account"
-              }
-              mark={appleAccount ? AppleMark : undefined}
-              hint={
-                appleAccount
-                  ? "Signs in with Apple again, then permanently deletes your account."
-                  : undefined
-              }
-              loading={busy}
-              disabled={
-                restoringReceipt ||
-                confirmation !== "DELETE" ||
-                (!appleAccount && !credential)
-              }
-              onPress={() =>
-                void action(async () => {
-                  const guard = capture();
-                  const flow = deletionFlow({
-                    accountId: accountId!,
-                    email: email!,
-                    providers,
-                    preview,
-                    assertCurrent: guard,
-                    credential: appleAccount
-                      ? null
-                      : {
-                          kind: passwordMode ? "password" : "otp",
-                          value: credential,
-                        },
-                    cleanup: async () => {
-                      const saved = await loadDeletionReceipt(accountId!);
-                      if (mounted.current) setReceipt(saved);
-                      await finishAccountDeletion(accountId!);
-                    },
-                  });
-                  const value = await flow.submit(confirmation === "DELETE");
-                  // A closed Apple sheet: nothing was requested and nothing is said.
-                  if (value === null) return;
-                  if (mounted.current) {
-                    setStatus(value);
-                    setMessage(describe(value));
+            {proof !== null && (
+              <>
+                <NumberedCard number={2} title={DELETION_COPY.typeHeading}>
+                  <FieldCard
+                    label={DELETION_COPY.typeField}
+                    icon={TriangleAlert}
+                    placeholder="DELETE"
+                    value={confirmation}
+                    onChangeText={setConfirmation}
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                    editable={!busy}
+                  />
+                  <Copy style={{ color: colors.muted }}>
+                    {DELETION_COPY.cannotUndo}
+                  </Copy>
+                </NumberedCard>
+                <Button
+                  destructive
+                  title={
+                    appleAccount
+                      ? GUEST_COPY.apple
+                      : receipt
+                        ? DELETION_COPY.retry
+                        : DELETION_COPY.delete
                   }
-                })
-              }
-            />
+                  mark={appleAccount ? AppleMark : undefined}
+                  hint={appleAccount ? DELETION_COPY.appleHint : undefined}
+                  loading={busy}
+                  disabled={
+                    restoringReceipt ||
+                    confirmation !== "DELETE" ||
+                    (!appleAccount && !credential) ||
+                    (proof === "phone" && sentAt === null)
+                  }
+                  onPress={() =>
+                    void action(async () => {
+                      const guard = capture();
+                      const flow = deletionFlow({
+                        accountId: accountId!,
+                        proof,
+                        email,
+                        phone,
+                        preview,
+                        assertCurrent: guard,
+                        credential: proofCredential(),
+                        cleanup: async () => {
+                          const saved = await loadDeletionReceipt(accountId!);
+                          if (mounted.current) setReceipt(saved);
+                          await finishAccountDeletion(accountId!);
+                        },
+                      });
+                      const value = await flow.submit(confirmation === "DELETE");
+                      // A closed Apple sheet: nothing was requested and nothing is said.
+                      if (value === null) return;
+                      if (mounted.current) {
+                        setStatus(value);
+                        setMessage(describe(value));
+                      }
+                    })
+                  }
+                />
+              </>
+            )}
           </>
         )}
         {receipt && !session && !preview && accountDeletionEnabled && (
-          <Copy>
-            A saved deletion receipt is available on this device. Check its
-            progress below.
-          </Copy>
+          <Copy>{DELETION_COPY.savedReceipt}</Copy>
         )}
         {message ? <Copy accessibilityRole="alert">{message}</Copy> : null}
         {receipt && accountDeletionEnabled && !preview && (
           <Button
-            title="Check deletion status"
+            title={DELETION_COPY.check}
             disabled={restoringReceipt}
             secondary
             loading={busy}
@@ -336,28 +377,14 @@ export default function DeleteAccount() {
           />
         )}
       </ScrollView>
-      <InfoSheet visible={warnings} title="What happens" onClose={() => setWarnings(false)}>
-        <Copy>
-          Deletion immediately closes access. Your profile, private photo and
-          sign-in account are then removed as cleanup finishes. Invitations
-          are revoked and your participation records are removed.
-        </Copy>
-        <Copy>
-          Future plans you organized are cancelled. Other participants can
-          retain a neutral plan record; your meeting place, note and location
-          are cleared.
-        </Copy>
-        <Copy>
-          Saved groups, invitation records and plan drafts on this device are
-          cleared. Information already copied or shared outside Resbite cannot
-          be recalled. Backup copies are not erased instantly.
-        </Copy>
-        <Copy>
-          Signing out does not delete your account or shared plans. Review
-          what permanent deletion removes and its availability in this build.
-          Backup retention and restore handling must also be verified before
-          deletion is switched on.
-        </Copy>
+      <InfoSheet
+        visible={warnings}
+        title={DELETION_COPY.whatHappens}
+        onClose={() => setWarnings(false)}
+      >
+        {DELETION_COPY.sheet.map((paragraph) => (
+          <Copy key={paragraph}>{paragraph}</Copy>
+        ))}
       </InfoSheet>
     </SafeAreaView>
   );

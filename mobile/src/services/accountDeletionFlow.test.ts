@@ -2,10 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   createAccountDeletionFlow,
+  phoneProofDeps,
   type DeletionReceipt,
   type DeletionDependencies,
   type DeletionStatus,
+  type PhoneProofClient,
 } from "./accountDeletionFlow";
+import { DELETION_COPY } from "../domain/deletion";
 function harness(overrides: Partial<DeletionDependencies> = {}) {
   let saved: DeletionReceipt | null = null;
   const calls: string[] = [];
@@ -14,6 +17,7 @@ function harness(overrides: Partial<DeletionDependencies> = {}) {
     enabled: true,
     preview: false,
     accountId: "account-a",
+    proof: "email",
     assertCurrent: () => {},
     load: async () => saved,
     save: async (receipt) => {
@@ -155,9 +159,9 @@ test("duplicate taps share one operation and failed cleanup remains retryable", 
   await flow.submit(true);
   assert.deepEqual(h.calls, ["save", "status"]);
 });
-test("the flow picks apple mode for an Apple-only account and calls reauthenticateWithApple before requesting", async () => {
-  for (const providers of [undefined, ["email"], ["google"], ["apple", "email"]]) {
-    const other = harness({ providers });
+test("the flow picks apple mode for the Apple proof and calls reauthenticateWithApple before requesting", async () => {
+  for (const proof of ["email", "phone"] as const) {
+    const other = harness({ proof });
     other.d.reauthenticateWithApple = async () => {
       other.calls.push("apple");
       return { ok: true };
@@ -167,7 +171,7 @@ test("the flow picks apple mode for an Apple-only account and calls reauthentica
     assert.equal(await flow.submit(true), "queued");
     assert.deepEqual(other.calls, ["save", "status", "proof", "request", "cleanup"]);
   }
-  const h = harness({ providers: ["apple"] });
+  const h = harness({ proof: "apple" });
   h.d.reauthenticateWithApple = async () => {
     h.calls.push("apple");
     return { ok: true };
@@ -177,12 +181,87 @@ test("the flow picks apple mode for an Apple-only account and calls reauthentica
   assert.equal(await flow.submit(true), "queued");
   assert.deepEqual(h.calls, ["save", "status", "apple", "proof", "request", "cleanup"]);
   // Without the Apple dependency nothing is requested.
-  const missing = harness({ providers: ["apple"] });
-  await assert.rejects(createAccountDeletionFlow(missing.d).submit(true), /Apple/);
+  const missing = harness({ proof: "apple" });
+  await assert.rejects(createAccountDeletionFlow(missing.d).submit(true), new Error(DELETION_COPY.noProof));
   assert.equal(missing.calls.includes("request"), false);
 });
+test("a null proof requests nothing", async () => {
+  const h = harness({ proof: null });
+  await assert.rejects(createAccountDeletionFlow(h.d).submit(true), new Error(DELETION_COPY.noProof));
+  assert.deepEqual(h.calls, []);
+  assert.equal(h.receipt(), null);
+});
+test("the Apple authorisation code reaches the request and is never saved", async () => {
+  const sent: (string | undefined)[] = [];
+  const h = harness({
+    proof: "apple",
+    reauthenticateWithApple: async () => ({ ok: true }),
+    reauthenticate: async () => ({ accountId: "account-a", accessToken: "fresh-token", appleAuthorizationCode: "c.1" }),
+  });
+  h.d.request = async (receipt, proof, appleAuthorizationCode) => {
+    assert.equal(receipt, h.receipt());
+    assert.equal(proof, "fresh-token");
+    sent.push(appleAuthorizationCode);
+    h.accepted();
+    return "queued";
+  };
+  assert.equal(await createAccountDeletionFlow(h.d).submit(true), "queued");
+  assert.deepEqual(sent, ["c.1"]);
+  assert.equal(JSON.stringify(h.receipt()).includes("c.1"), false);
+  // Without a code there is none to pass.
+  const plain = harness();
+  const plainSent: (string | undefined)[] = [];
+  plain.d.request = async (_receipt, _proof, appleAuthorizationCode) => {
+    plainSent.push(appleAuthorizationCode);
+    plain.accepted();
+    return "queued";
+  };
+  assert.equal(await createAccountDeletionFlow(plain.d).submit(true), "queued");
+  assert.deepEqual(plainSent, [undefined]);
+});
+test("phoneProofDeps captures the session only from a successful verification", async () => {
+  const sessions: { accountId: string; accessToken: string }[] = [];
+  const sends: unknown[] = [];
+  const verifies: unknown[] = [];
+  let answer: Awaited<ReturnType<PhoneProofClient["auth"]["verifyOtp"]>> = {
+    data: { session: null, user: null },
+    error: { message: "Token has expired or is invalid", status: 403 },
+  };
+  const client: PhoneProofClient = {
+    auth: {
+      signInWithOtp: async (a) => {
+        sends.push(a);
+        return { error: null };
+      },
+      verifyOtp: async (a) => {
+        verifies.push(a);
+        return answer;
+      },
+    },
+  };
+  const deps = phoneProofDeps(client, (s) => sessions.push(s));
+  assert.deepEqual(Object.keys(deps).sort(), ["now", "signInWithOtp", "updatePhone", "verifyOtp"]);
+  const send = { phone: "+447700900301", options: { shouldCreateUser: false } };
+  assert.deepEqual(await deps.signInWithOtp(send), { error: null });
+  assert.deepEqual(sends, [send]);
+  const verify = { phone: "+447700900301", token: "123456", type: "sms" as const };
+  assert.deepEqual(await deps.verifyOtp(verify), { error: answer.error });
+  assert.deepEqual(sessions, []);
+  // No error, but no session or no user: still nothing to capture.
+  answer = { data: { session: { access_token: "t" }, user: null }, error: null };
+  await deps.verifyOtp(verify);
+  answer = { data: { session: null, user: { id: "u" } }, error: null };
+  await deps.verifyOtp(verify);
+  assert.deepEqual(sessions, []);
+  answer = { data: { session: { access_token: "t" }, user: { id: "u" } }, error: null };
+  assert.deepEqual(await deps.verifyOtp(verify), { error: null });
+  assert.deepEqual(sessions, [{ accountId: "u", accessToken: "t" }]);
+  assert.deepEqual(verifies, [verify, verify, verify, verify]);
+  await assert.rejects(deps.updatePhone("+447700900302"));
+  assert.equal(typeof deps.now(), "number");
+});
 test("a closed Apple sheet ends the flow quietly and keeps the receipt", async () => {
-  const h = harness({ providers: ["apple"] });
+  const h = harness({ proof: "apple" });
   h.d.reauthenticateWithApple = async () => {
     h.calls.push("apple");
     return { ok: false };
@@ -191,7 +270,7 @@ test("a closed Apple sheet ends the flow quietly and keeps the receipt", async (
   assert.deepEqual(h.calls, ["save", "status", "apple"]);
   assert.ok(h.receipt());
   // A failed Apple sign-in surfaces its message and requests nothing.
-  const failed = harness({ providers: ["apple"] });
+  const failed = harness({ proof: "apple" });
   failed.d.reauthenticateWithApple = async () => {
     throw new Error("Check your connection and try again.");
   };

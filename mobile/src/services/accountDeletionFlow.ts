@@ -1,3 +1,6 @@
+import { DELETION_COPY, type DeletionProof } from "../domain/deletion";
+import type { AuthError, PhoneCodeDeps } from "./phoneCode";
+
 /** Durable receipt only: never store passwords or authentication proofs. */
 export type DeletionReceipt = {
   accountId: string;
@@ -5,20 +8,19 @@ export type DeletionReceipt = {
   recoveryToken: string;
 };
 export type DeletionStatus = "not_found" | "queued" | "processing" | "complete";
-/**
- * GI2-D10: an account that signs in with Apple only has no password, and Apple's relay address may
- * not deliver a code, so it confirms by signing in with Apple again. The Edge worker applies the same rule.
- */
-export const appleOnlyAccount = (providers: readonly string[] = []) =>
-  providers.includes("apple") && !providers.includes("email");
-/** How the person proves it is them: a password or an emailed code (`credential`), or Apple. */
+/** How the person proves it is them: a password or a code (`credential`), or Apple. */
 export type DeletionMode = "credential" | "apple";
+/**
+ * The fresh session the proof made. Apple's authorisation code rides along to the request so the Edge function can
+ * revoke Apple's tokens (ASR2-8); like the token, it is never saved.
+ */
+export type DeletionProofSession = { accountId: string; accessToken: string; appleAuthorizationCode?: string };
 export type DeletionDependencies = {
   enabled: boolean;
   preview: boolean;
   accountId: string;
-  /** The account's sign-in providers (`app_metadata.providers`); they choose the mode. */
-  providers?: readonly string[];
+  /** ASR2-2's proof for the account (`deletionProof`); it chooses the mode. `null` can't delete in the app. */
+  proof: DeletionProof | null;
   assertCurrent: () => void;
   load: () => Promise<DeletionReceipt | null>;
   save: (receipt: DeletionReceipt) => Promise<void>;
@@ -29,20 +31,54 @@ export type DeletionDependencies = {
    * with the message to show. `reauthenticate` then returns the session Apple's sign-in made.
    */
   reauthenticateWithApple?: () => Promise<{ ok: boolean }>;
-  reauthenticate: () => Promise<{ accountId: string; accessToken: string }>;
-  request: (receipt: DeletionReceipt, proof: string) => Promise<DeletionStatus>;
+  reauthenticate: () => Promise<DeletionProofSession>;
+  request: (receipt: DeletionReceipt, proof: string, appleAuthorizationCode?: string) => Promise<DeletionStatus>;
   cleanup: () => Promise<void>;
 };
+
+/** The part of a Supabase client the phone proof uses; the deletion screen's isolated client fits it. */
+export type PhoneProofClient = {
+  auth: {
+    signInWithOtp(a: { phone: string; options: { shouldCreateUser: boolean } }): Promise<{ error: AuthError }>;
+    verifyOtp(a: { phone: string; token: string; type: "sms" | "phone_change" }): Promise<{
+      data: { session: { access_token: string } | null; user: { id: string } | null };
+      error: AuthError;
+    }>;
+  };
+};
+
+/**
+ * The phone code's dependencies on an isolated client, for a deletion proof: a verified code signs in on that client
+ * only, and `onSession` receives the session it made. Adding a number is not a proof, so `updatePhone` rejects.
+ */
+export function phoneProofDeps(
+  client: PhoneProofClient,
+  onSession: (session: { accountId: string; accessToken: string }) => void,
+): PhoneCodeDeps {
+  return {
+    signInWithOtp: (a) => client.auth.signInWithOtp(a),
+    updatePhone: () => Promise.reject(new Error("A deletion proof never changes the number.")),
+    verifyOtp: async (a) => {
+      const { data, error } = await client.auth.verifyOtp(a);
+      if (!error && data.session && data.user)
+        onSession({ accountId: data.user.id, accessToken: data.session.access_token });
+      return { error };
+    },
+    now: Date.now,
+  };
+}
+
 export function createAccountDeletionFlow(d: DeletionDependencies) {
-  const mode: DeletionMode = appleOnlyAccount(d.providers) ? "apple" : "credential";
+  const mode: DeletionMode = d.proof === "apple" ? "apple" : "credential";
   let flight: Promise<DeletionStatus | null> | null = null;
   const guard = () => {
-    if (!d.enabled || d.preview)
-      throw new Error("Account deletion is unavailable in this build.");
+    if (!d.enabled || d.preview) throw new Error(DELETION_COPY.unavailable);
     d.assertCurrent();
   };
   /** Resolves `null` when Apple's sheet was closed: nothing was requested and the receipt stays. */
   async function run(confirmed: boolean): Promise<DeletionStatus | null> {
+    // An account with no proof the app can take (ASR2-2) deletes by writing to the privacy address.
+    if (d.proof === null) throw new Error(DELETION_COPY.noProof);
     guard();
     if (!confirmed)
       throw new Error("Confirm permanent account deletion first.");
@@ -62,8 +98,7 @@ export function createAccountDeletionFlow(d: DeletionDependencies) {
     guard();
     if (status === "not_found") {
       if (mode === "apple") {
-        if (!d.reauthenticateWithApple)
-          throw new Error("Sign in with Apple is unavailable in this build.");
+        if (!d.reauthenticateWithApple) throw new Error(DELETION_COPY.noProof);
         const apple = await d.reauthenticateWithApple();
         guard();
         if (!apple.ok) return null;
@@ -73,7 +108,7 @@ export function createAccountDeletionFlow(d: DeletionDependencies) {
       if (proof.accountId !== d.accountId)
         throw new Error("Reauthentication returned a different account.");
       try {
-        status = await d.request(receipt, proof.accessToken);
+        status = await d.request(receipt, proof.accessToken, proof.appleAuthorizationCode);
       } catch {
         guard();
         // A failed request is ambiguous until the receipt has been checked.
