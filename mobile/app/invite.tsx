@@ -59,6 +59,7 @@ export default function Invite() {
     accountGate({
       status: account.status,
       phoneVerified: phoneVerified(account.user),
+      termsNeeded: account.termsNeeded,
       name,
       profileReady: account.profileReady,
     }) === null;

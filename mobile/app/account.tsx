@@ -11,7 +11,7 @@ import { RequestCard } from "../src/design/GuestSteps";
 import { categoryPalette, colors as c, fonts } from "../src/design/tokens";
 import { accessState, accessTitles, type AccessState } from "../src/domain/accountCopy";
 import { isLinkCode, pendingInviteParams } from "../src/domain/appLinks";
-import { accountGate } from "../src/domain/accountRoute";
+import { accountGate, gateHref } from "../src/domain/accountRoute";
 import { nameFromSession } from "../src/domain/guestAccount";
 import { formatPhone, phoneVerified } from "../src/domain/phone";
 import { INVITE_COPY } from "../src/domain/inviteCopy";
@@ -27,10 +27,11 @@ const icons: Record<AccessState, typeof ShieldCheck> = {
 /**
  * The account access check (UX4): one status card per state, today's guidance word for word,
  * and chips for the actions. Before any of it, the phone gate (accountGate): an approved or waiting
- * account without a verified phone goes to Add your number, and one with a phone but no name (and
- * no profile) to About you. Details are no longer asked for here; they stay optional in Account
- * details. Plan 3: while waiting for access, the account's open-link requests are listed under the card
- * (as in My resbites); a failed read leaves the list as it was, without a message.
+ * account without a verified phone goes to Add your number, an approved one yet to accept the current
+ * Terms of Use to Accept your Terms (plan 4), and one with a phone but no name (and no profile) to About
+ * you. Details are no longer asked for here; they stay optional in Account details. Plan 3: while
+ * waiting for access, the account's open-link requests are listed under the card (as in My resbites);
+ * a failed read leaves the list as it was, without a message.
  */
 export default function Account() {
   const {
@@ -44,7 +45,7 @@ export default function Account() {
     inviteRestoreError,
     restoreInvite,
   } = useApp();
-  const { status, user, profileReady, error, refresh } = useAccount();
+  const { status, user, profileReady, termsNeeded, error, refresh } = useAccount();
   const [requests, setRequests] = useState<MyRequest[]>([]);
   const accountId = session?.user.id;
   useFocusEffect(
@@ -68,11 +69,12 @@ export default function Account() {
     ? accountGate({
         status,
         phoneVerified: phoneVerified(user),
+        termsNeeded,
         name: nameFromSession(user, null),
         profileReady,
       })
     : null;
-  if (gate) return <Redirect href={gate === "add-phone" ? "/add-phone" : "/about-you"} />;
+  if (gate) return <Redirect href={gateHref[gate]} />;
   const signOutChip = (
     <Chip
       text="Sign out"
