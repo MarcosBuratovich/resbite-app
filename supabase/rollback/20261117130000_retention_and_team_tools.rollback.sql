@@ -1,17 +1,52 @@
 -- Rollback for 20261117130000_retention_and_team_tools.sql (App Store readiness plan 6, spec C3, C4 and C6). For the
--- hosted project only: the local replay never runs it. Run as one transaction, only with the owner's approval, before
--- plan 2's rollback (20261117110000_account_deletion_release.rollback.sql) if that is undone too:
+-- hosted project only: the local replay never runs it. Run it only with the owner's approval, after checking its
+-- sha256, as one transaction:
 --   begin; \i supabase/rollback/20261117130000_retention_and_team_tools.rollback.sql; commit;
--- It undoes the migration's sections in reverse, under the refusal that comes first: section 5 first, at the top,
--- section 1 last, at the bottom. Each later section's undo goes above the one before it.
--- An object shared with plan 2 (private.legal_holds, private.account_held(uuid), private.suspension_history) or
--- private.series_held(uuid) is dropped only when its comment reads 'resbite 20261117130000': made by this file, not by
--- plan 2's, which runs first and so normally owns all but series_held.
+-- or, as the migration was applied, this file wrapped in begin; and commit; through supabase db query --linked -f. The
+-- migration history is left as it is (never migration repair --status reverted).
+-- Run it before plan 2's rollback (20261117110000_account_deletion_release.rollback.sql) if that is undone too: this
+-- file builds on what plan 2 made (the legal holds, account_held, the suspension history, the photo write guard, the
+-- deletion jobs and operator_account_deletion), and plan 2's rollback refuses while a hold or a history row is left.
+-- Before it:
+--   - unschedule the two jobs supabase/ops/schedule-retention.sql made (its "To undo"): from here on the functions
+--     they call are gone;
+--   - turn the photo worker off (PROFILE_PHOTO_CLEANUP_ENABLED false in cleanup-profile-photos).
+-- It refuses, changing nothing, with 55000, from the two checks at the top, which come before every undo:
+--   - 'Unschedule the retention jobs first' while pg_cron's job table (where pg_cron is installed) holds
+--     'retention-purge' or 'cleanup-images';
+--   - 'The do-not-invite list holds an objection: nothing was undone' while private.invite_objections (section 4)
+--     holds an entry: an objection must not silently stop working. To undo it anyway, export the list and empty it
+--     first, by hand, with the owner's approval.
+-- What it undoes, the migration's sections in reverse: section 5 first, at the top, section 1 last, at the bottom
+-- (each later section's undo goes above the one before it):
+--   5. the cover cleanup (its two tables, the worker functions with their wrappers, the guard with its trigger on
+--      public.plans, the takedown helpers); the photo takedown helpers; the photo cleanup objects this file made (on
+--      hosted: the two tables, the worker functions with their wrappers, the reference guard with its trigger); and
+--      plan 2's photo write guard, back to plan 2's body;
+--   4. invite_contacts, back to its base body with its grants; the do-not-invite list and its five functions. The
+--      list's key (invite_objection_key) stays in Vault;
+--   3. the series purges (chats and plans) and the account purges (web-only and unconfirmed);
+--   2. the daily run (private.run_retention()) and the eight row purges;
+--   1. series_under_hold, series_end and series_held. An object shared with plan 2 (private.legal_holds,
+--      private.account_held(uuid), private.suspension_history) or private.series_held(uuid) is dropped only when its
+--      comment reads 'resbite 20261117130000': made by this file, not by plan 2's, which runs first and so normally
+--      owns all but series_held.
+-- It restores no deleted row: not what any purge deleted (the daily run's records, the Auth users it removed and the
+-- accounts it queued for deletion), and not the tester roster rows and legacy invitations (private.tester_roster,
+-- private.invitations) that the migration emptied once. Each disabled roster row stays the revoked grant it became
+-- (section 3's note).
 
--- First, before any section's undo: the refusal. While the do-not-invite list (section 4) holds an entry, this file
--- refuses and changes nothing: an objection must not silently stop working. To undo it anyway, export the list and
--- empty it first, by hand, with the owner's approval. Each section's undo goes below this.
+-- First, before any section's undo: the two refusals. While retention-purge or cleanup-images is scheduled, a run would
+-- call a function this file drops. While the do-not-invite list holds an entry, an objection would silently stop
+-- working. Each section's undo goes below this.
 do $rollback$ begin
+ if pg_catalog.to_regclass('cron.job') is not null then
+  if exists (select 1 from cron.job where jobname in ('retention-purge', 'cleanup-images')) then
+   raise exception 'Unschedule the retention jobs first'
+    using errcode = '55000',
+     hint = 'Run select cron.unschedule(jobid) from cron.job where jobname in (''retention-purge'', ''cleanup-images''); then run this again.';
+  end if;
+ end if;
  if pg_catalog.to_regclass('private.invite_objections') is not null then
   if exists (select 1 from private.invite_objections) then
    raise exception 'The do-not-invite list holds an objection: nothing was undone'
