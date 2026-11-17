@@ -308,11 +308,12 @@ export default function DeleteAccount() {
                   mark={appleAccount ? AppleMark : undefined}
                   hint={appleAccount ? DELETION_COPY.appleHint : undefined}
                   loading={busy}
+                  // With a saved request, Try again needs no new code: the flow reads its status before any proof.
                   disabled={
                     restoringReceipt ||
                     confirmation !== "DELETE" ||
-                    (!appleAccount && !credential) ||
-                    (proof === "phone" && sentAt === null)
+                    (!appleAccount && !credential && !receipt) ||
+                    (proof === "phone" && sentAt === null && !receipt)
                   }
                   onPress={() =>
                     void action(async () => {
@@ -331,7 +332,16 @@ export default function DeleteAccount() {
                           await finishAccountDeletion(accountId!);
                         },
                       });
-                      const value = await flow.submit(confirmation === "DELETE");
+                      let value: DeletionStatus | null;
+                      try {
+                        value = await flow.submit(confirmation === "DELETE");
+                      } catch (error) {
+                        // The flow saves the request before its first status read, so an unconfirmed reply leaves one
+                        // to check: show Check deletion status and Try again for it, as the message says.
+                        const saved = await loadDeletionReceipt(accountId!).catch(() => null);
+                        if (mounted.current && saved) setReceipt(saved);
+                        throw error;
+                      }
                       // A closed Apple sheet: nothing was requested and nothing is said.
                       if (value === null) return;
                       if (mounted.current) {
