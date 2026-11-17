@@ -10,7 +10,7 @@
 
 This is an internal record. It holds no personal data: people appear only by role ("the owner", "the backup moderator"). It is not legal advice. A UK solicitor reviews it with the public documents before launch (decision D-12). It is written to be complete as it stands, not softened for that review.
 
-**What it describes.** Resbite as it will be at version 1.0. That is after workstreams B, C and D of the gap analysis are built and the F operations are in place, using the gap analysis' recommended default for every owner decision D-3 to D-25. Where a statement is not true yet, it carries **[needs X]**, naming the gap analysis item that makes it true. Section 15 lists them all.
+**What it describes.** Resbite as it will be at version 1.0. That is after workstreams B, C and D of the gap analysis are built and the F operations are in place, using the owner's answers and the rulings of 17 November 2026 (AS-D1 to AS-D8 and AS-R1 to AS-R9 in `knowledge-base/08-decisions.md`) and otherwise the gap analysis' recommended default for every owner decision D-3 to D-25. Where a statement is not true yet, it carries **[needs X]**, naming the gap analysis item that makes it true. Section 15 lists them all.
 
 **References.** "The gap analysis" is `docs/superpowers/specs/2026-11-17-app-store-readiness-design.md`. Row ids (PRV-18, SI-7 …), item ids (A1, B3, C2 …) and decision ids (D-1 … D-25) point into it. The data inventory is `research_notes/App Store readiness/audit-data-inventory.md` (cited as DI §n). Source labels in square brackets, such as [ICO-COD], are listed with their URLs in section 8 of the gap analysis; "(x)" means the page was read only through search-engine extracts. Where the code and the gap analysis disagree, this record follows the code and says so.
 
@@ -19,7 +19,7 @@ This is an internal record. It holds no personal data: people appear only by rol
 ## Placeholders to fill
 
 1. [[OWNER: ICO data protection fee registration number — proposed: pay tier 1 before launch and enter the number here]]
-2. [[OWNER: SMS provider — proposed: Twilio]]
+2. [[OWNER: Twilio's region and transfer safeguard, to confirm when Resbite Ltd's account accepts Twilio's Data Protection Addendum — proposed: the United States, Twilio's main processing location, under the UK–US data bridge (Twilio Inc. states it takes part in the UK Extension to the EU–US Data Privacy Framework; check the live listing), with the UK Addendum to the EU Standard Contractual Clauses in Twilio's addendum as the fallback; Twilio's Ireland region (IE1) also offers messaging]]
 3. [[OWNER: CAPTCHA vendor — proposed: Cloudflare Turnstile or hCaptcha]]
 4. [[OWNER: whether the backup moderator is an employee, an officer, an unpaid helper or a contractor — proposed: an individual under Resbite Ltd's direct authority; a contractor, or a business supplying a moderator, also needs a processor contract]]
 5. [[OWNER: mailbox provider for support@resbite.com and privacy@resbite.com — proposed: a business email service under a signed data processing agreement, with data held in the UK or EU and MFA on]]
@@ -48,7 +48,7 @@ This is an internal record. It holds no personal data: people appear only by rol
 | Regulator | The Information Commission, which took over from the Information Commissioner's Office on 30 September 2026 and still uses the name ICO (ico.org.uk). Called "the ICO" below |
 | Online Safety Act | Resbite Ltd is the provider of a regulated user-to-user service. The owner is the named accountable individual (D-6; A13) |
 | The service | The iPhone app Resbite (`com.resbite.app`), its Supabase backend in London (`eu-west-2`), and the link site `link.resbite.com` on Vercel. Free, with no ads, no tracking and no in-app purchases. For people aged 18 or over only |
-| People acting under the controller's authority (Art 29) | The owner (full access). The backup moderator (least access, written instructions and a confidentiality agreement, A24) **[needs C5, A24, F16]**. Placeholder 4 |
+| People acting under the controller's authority (Art 29) | The owner (full access). The backup moderator, whom the owner names (AS-D6) (least access, written instructions and a confidentiality agreement, A24) **[needs C5, A24, F16]**. Placeholder 4 |
 | Processors | Listed in section 9 and in `vendors.md` |
 
 ## 2. Why this record is kept
@@ -62,7 +62,7 @@ Where processing relies on a DPA 2018 Schedule 1 condition that needs an appropr
 | Id | Activity | Purposes | People | Where |
 |---|---|---|---|---|
 | PA-01 | Accounts and sign-in | Create the account; sign people in by phone code, password, email code, Sign in with Apple or Google; keep them signed in; block suspended accounts | App users; web-only account holders | Supabase Auth, London |
-| PA-02 | Phone verification | Prove the phone number is the person's, by an SMS code **[needs C1]**. A verified number is required on every account | App users; web-only account holders; anyone who asks for a code | Supabase Auth; the SMS provider (placeholder 2) |
+| PA-02 | Phone verification | Prove the phone number is the person's, by an SMS code **[needs C1]**. A verified number is required on every account | App users; web-only account holders; anyone who asks for a code | Supabase Auth; Twilio, through the Send SMS hook (AS-D5; region placeholder 2) |
 | PA-03 | Age, Terms and chat-rules acceptance | Record that the person confirmed they are 18 or over and accepted the current Terms version **[needs B2, C8, D3, D4]**, and the chat rules version | App users; web-only account holders | Supabase, London |
 | PA-04 | Profiles | Show a name and an optional photo to people who share a resbite | App users | Supabase database and Storage, London |
 | PA-05 | Resbites | Plan get-togethers: create, invite, answer, guest lists, co-hosts, meeting details, notes to guests, covers, link join requests, who brought whom, weekly groups and their roll **[roll needs C4]** | Hosts; guests; people who ask to join | Supabase, London |
@@ -71,13 +71,13 @@ Where processing relies on a DPA 2018 Schedule 1 condition that needs an appropr
 | PA-08 | Personal invitations by number | Store a non-user's number for one personal invitation and let them answer at `/i/` | Invited non-users; hosts and guests who invite | Supabase; the link site |
 | PA-09 | Removal records | Stop a person a host removed, declined or revoked from being brought straight back to that series | Removed users and non-users; hosts | Supabase, London |
 | PA-10 | Objection suppression list | Honour a non-user's objection across all hosts, so no host can store their number again **[needs C3, D-23]** | Non-users who object | Supabase, London |
-| PA-11 | Chat | Group messages and announcements per resbite; read positions; mutes | Chat members, including later joiners | Supabase, London; push via Expo and Apple |
+| PA-11 | Chat | Group messages and announcements per resbite; read positions; mutes | Chat members, including later joiners and, in a weekly group, everyone on the current week, pending guests included (AS-R8) | Supabase, London; push via Expo and Apple |
 | PA-12 | Connections | Connect people who met at a resbite; record requests, acceptances, removals and "Not now" refusals | App users | Supabase, London |
 | PA-13 | Notifications and service emails | Push notices (with chat text in previews, disclosed, D-13); Auth emails; the deletion confirmation **[needs B3, C2]**; local reminders on the phone | App users; email account holders | Supabase; Expo (US); Apple Push Notification service; Resend (US) |
 | PA-14 | Safety and moderation | Reporting, review, removal, suspension, blocks, the blocked-terms filter **[extended to other text, needs C7]**, the 48-hour intimate image takedown **[needs B7, C6, C7, A15]**, the under-18 rule **[needs A15]**, reports to the National Crime Agency (NCA) **[needs A15]** | Reporters; reported people; people named or shown in content; affected people who are not users **[web route needs D1]** | Supabase; the support inbox (placeholder 5) |
 | PA-15 | Support, complaints, appeals and data requests | Answer support; handle complaints and appeals; handle access, correction, erasure, objection and portability requests within one month; data protection complaints under DPA 2018 s.164A **[needs F1, F3, F4, A5, A16, D1]** | Users; non-users; third parties with legal complaints | The inboxes (placeholder 5); the log tool (placeholder 6) |
 | PA-16 | Law-enforcement and regulator requests; legal holds | Answer police, NCA and Ofcom requests lawfully; make emergency disclosures; preserve evidence under a legal hold **[needs A22, C2, C6, F17]** | Users concerned; requesting officers (work contact details only) | Supabase; the log tool |
-| PA-17 | Account deletion | Delete an account and its data from inside the app, for every account type, within 30 days; by request for web-only and banned accounts; revoke Sign in with Apple tokens **[needs B3, C2, D8]** | Account holders | Supabase; Apple |
+| PA-17 | Account deletion | Delete an account and its data from inside the app, for every account type, within 30 days; by request for web-only and banned accounts, through the owner-run deletion script that runs the same lifecycle (AS-R3); web-only accounts with no resbite in 12 months deleted by a job (AS-R4); revoke Sign in with Apple tokens **[needs B3, C2, C3, C6, D8]** | Account holders | Supabase; Apple |
 | PA-18 | Security and abuse prevention | Logs, rate limits, CAPTCHA **[needs B16, D10, C11]**, session records, the review of the old test-mode log **[needs C1, F5]** | Users; web visitors | Supabase; Vercel; the CAPTCHA vendor (placeholder 3) |
 | PA-19 | Backups and restore | Recover from loss; replay deletions after a restore **[needs C2, F11]** | Everyone in the database | Supabase, London |
 | PA-20 | Usage records | Count link opens with no identity; record each account's first and last app session, used to show "On Resbite" only for real app users | App users; link openers (anonymous) | Supabase, London |
@@ -91,7 +91,7 @@ No processing is used for marketing, advertising, profiling, tracking or automat
 | Category | Who they are | Activities |
 |---|---|---|
 | App users | Account holders aged 18 or over who use the iPhone app | All but PA-21 |
-| Web-only account holders | Invited people who answered on the link site with a verified number. Folded into the app account if they later add the same number (DI §13) | PA-01 to PA-03, PA-05, PA-06, PA-15, PA-17 |
+| Web-only account holders | Invited people who answered on the link site with a verified number. Folded into the app account if they later add the same number (DI §13). Deleted after 12 months with no resbite (AS-R4) **[needs C3]** | PA-01 to PA-03, PA-05, PA-06, PA-15, PA-17 |
 | Invited non-users | People whose number a host or guest picked, who have no account | PA-07, PA-08, PA-09, PA-10, PA-15 |
 | People whose numbers are looked up | Any person, user or not, whose number a host picks to check | PA-07 |
 | Link holders and web visitors | Anyone who opens an event or personal link | PA-06, PA-18, PA-20 |
@@ -108,7 +108,7 @@ No processing is used for marketing, advertising, profiling, tracking or automat
 | Activity | Personal data | Source | Notes |
 |---|---|---|---|
 | PA-01 | Account id; verified phone number; email address (email, Apple, which may be a private relay address, or Google); password hash (Supabase-managed); Apple user id and first-time name; Google id, email, name and picture URL (received, unused; field list UNVERIFIED); display name in Auth metadata; session records with IP address and user agent (Supabase-managed); confirmation and last sign-in times; ban state; access grant or ban record | The person; Apple; Google; Supabase | The optional date of birth, second phone, city and interests are removed from the app and their stored values erased **[needs B11, C9]** |
-| PA-02 | Phone number; the six-digit code; delivery status | The person; Supabase Auth; the SMS provider | Test mode is off and its stored codes emptied **[needs C1]** |
+| PA-02 | Phone number; the six-digit code; delivery status | The person; Supabase Auth; Twilio | Test mode is off and its stored codes emptied **[needs C1]** |
 | PA-03 | Time, Terms version and method of the 18+ and Terms confirmation, per version **[needs C8]**; chat rules version and time | The person | Written for every account type **[needs B2, C8]** |
 | PA-04 | Display name (1–80 characters); profile photo, resized to 1024 px, re-encoded as JPEG, metadata stripped on the phone | The person | Shown to people on shared resbites |
 | PA-05 | Title, description, categories; start, end, time zone, repeat; exact meeting place (free text, may be a home address); area shown before replying; meeting details (door codes, directions); note to guests; cover photo and its description; guest list with answers and times; who brought whom and their level; co-hosts; join requests; mutes; left-group records | Hosts; guests | Latitude and longitude columns exist but the app never sends them (DI §4) |
@@ -132,7 +132,7 @@ No processing is used for marketing, advertising, profiling, tracking or automat
 
 ## 6. Lawful basis register (A11)
 
-Every purpose has one Art 6 basis, decided before the processing (Art 5(2)). The public notice (A1) states the same bases. "LI-n" points to the three-part test in `legitimate-interests.md`.
+Every purpose has one Art 6 basis, decided before the processing (Art 5(2)). The Privacy Policy (A1) states the same bases. "LI-n" points to the three-part test in `legitimate-interests.md`.
 
 | Id | Purpose | Activities | Art 6 basis | Why | Assessment |
 |---|---|---|---|---|---|
@@ -218,14 +218,14 @@ Candidates for the solicitor, in the order A23 proposes them. A23 (`appropriate-
 
 | Recipient | Type | Activities | What they receive |
 |---|---|---|---|
-| Other users | By design of the service | PA-04, PA-05, PA-11, PA-12 | Hosts, co-hosts and guests who have answered see the guest list with names, photos and answers; in a weekly group, everyone in its chat does too. There is no host setting for this (`private.can_see_guests`, `supabase/migrations/20261111150000_chat_groups.sql:574-580`). Chat members see messages and first names, including people who join later. Connections see each other |
+| Other users | By design of the service | PA-04, PA-05, PA-11, PA-12 | Hosts, co-hosts and guests who have answered see the guest list with names, photos and answers; in a weekly group, everyone in its chat does too. There is no host setting for this (`private.can_see_guests`, `supabase/migrations/20261111150000_chat_groups.sql:574-580`). Chat members see messages and first names, including people who join later; in a weekly group, everyone on the current week's guest list, pending guests included, reads the whole history (AS-R8, disclosed in A1). Connections see each other |
 | Anyone with an event link | By the host's choice | PA-06 | The host's name, title, time, area, going count and cover |
 | Anyone who has a user's number | Side effect of PA-07 | PA-07 | That the number belongs to an app user, within 500 checks a day; blocked people excluded |
 | Supabase | Processor | All in Supabase | Everything in the database, Auth, Storage, Realtime, Edge Functions, logs and backups |
 | Vercel | Processor | PA-06, PA-15 (contact form), PA-18 | Visitor IP, user agent, request paths with codes, cover images passing through, contact-form messages **[form needs D1]**. Placeholder 8 |
 | Expo | Processor | PA-13 | Push tokens, the device token at registration, push titles and bodies |
 | Resend | Processor | PA-13 | Email addresses and the emails' content |
-| SMS provider | Processor | PA-02 | Phone numbers and codes **[needs C1]**. Placeholder 2 |
+| Twilio | Processor | PA-02, PA-13 | Phone numbers, codes and service texts **[needs C1]**. Region: placeholder 2 |
 | CAPTCHA vendor | Processor; for Turnstile, also a controller of signals it uses to improve its detection | PA-18 | Device and network signals **[needs B16, D10]**. Placeholder 3 |
 | Mailbox provider | Processor | PA-14, PA-15 | Everything sent to the inboxes. Placeholder 5 |
 | Log tool | Processor | PA-15, PA-16 | Case logs. Placeholder 6 |
@@ -251,7 +251,7 @@ Full vendor details, contracts and status: `vendors.md`.
 | Expo | United States | UK-US data bridge: Expo states it is self-certified to the Data Privacy Framework including the UK Extension (privacy policy, 10 November 2026) | Not needed under the data bridge; check the live listing (F7) | To confirm (F7). No DPA published |
 | Resend | United States (stores data there) | UK Extension to the Data Privacy Framework, and the UK Addendum to the SCCs (DPA, sections 11.1 and 6.4) | Not needed while the listing is active | To confirm (F7) |
 | Vercel | US company. Functions default to Washington, D.C. (`iad1`); London (`lhr1`) is set **[needs D7]** | SCCs with the UK Addendum (DPA, last updated 17 March 2026, Schedules 3 and 5), for Pro and Enterprise customers | Needed: record it (F7) | To confirm (F7, F8). Placeholder 8 |
-| SMS provider (proposed Twilio) | US company; codes reach UK carriers | Data Privacy Framework with the UK Extension first; otherwise SCCs with the UK Addendum (Twilio DPA, 9 April 2026, Schedule 3) | Only if the framework does not apply | To sign before switch-on (C1). Placeholder 2 |
+| Twilio (chosen, AS-D5) | Placeholder 2: proposed the United States, Twilio's main processing location; Twilio's Ireland region also offers messaging. Codes reach UK carriers | Data Privacy Framework with the UK Extension first; otherwise the UK Addendum to the SCCs (Twilio DPA, 9 April 2026, ss.2.2 and 2.5) | Only if the framework does not apply | To sign before switch-on (C1) |
 | CAPTCHA vendor | US companies (Cloudflare, or Intuition Machines for hCaptcha) | Data Privacy Framework with the UK Extension; Cloudflare's DPA falls back to SCCs with the UK Addendum | Only if the framework does not apply | To choose and sign (D-3). Placeholder 3 |
 | Mailbox provider; log tool | Depends on the choice | Depends on the choice | Depends | Placeholders 5, 6 |
 | Cloudflare (DNS) | US company | Data Privacy Framework with the UK Extension; the Customer DPA (v6.4) falls back to SCCs with the UK Addendum | Not needed under the data bridge; check the live listing | To confirm: the DPA must be accepted for an account held by Resbite Ltd (F7, F8) |
@@ -276,7 +276,9 @@ The full schedule, with triggers, jobs and the legal-hold rule, is `retention-sc
 | Notification outbox and delivery rows | 30 days after sending, except `invited` rows while the invitation is pending **[needs C3]** |
 | Replaced profile photos and covers | 7 days unattached **[needs C3]** |
 | Closed reports | 180 days after closing (decided, R-Q3) **[job needs C3; manual today]** |
-| Suspension records | While suspended, then 12 months after the suspension ends, whether it is lifted or the account is deleted **[needs C2, C3, C6; see the code note in A12]** |
+| Suspension records | While suspended, then 12 months after it is lifted. If the account is deleted, the user id is cleared and the reason and dates kept for 12 months after the deletion (AS-R1) **[needs C2, C3, C6; see the code note in A12]** |
+| Reports filed by a person who deletes their account | Until closed, then 180 days, with the reporter id cleared (AS-R2) **[needs C2, C3; today deleted with the account]** |
+| Web-only accounts | Deleted after 12 months with no resbite; a code request never confirmed, 30 days (AS-R4) **[needs C3]** |
 | Deletion receipts | 30 days after clean-up completes **[needs C2]** |
 | Test-mode codes and log | Emptied at switch-off; tables dropped after the log review **[needs C1]** |
 | Link opens | 12 months **[needs C3]** |
@@ -286,7 +288,7 @@ The full schedule, with triggers, jobs and the legal-hold rule, is `retention-sc
 
 ## 12. How rights are handled
 
-Requests go to privacy@resbite.com, or through "Request a copy of my data" in the app **[needs B14]**. A16 sets the procedure: proportionate identity checks for a phone account, a one-month clock from the "relevant time", extensions by up to two months for complex requests, reasonable and proportionate searches (Arts 12A and 15(1A)), and what to withhold under DPA 2018 Schedule 2 (a reporter's identity; other people's messages) **[needs A16, C6, F3]**. Erasure is self-service in the app for every account type **[needs B3, C2]**, and by request for web-only and banned accounts **[needs D8, A6]**. Objections from non-users go on the suppression list **[needs C3]**. Data protection complaints are acknowledged within 30 days and answered with an outcome (DPA 2018 s.164A) **[needs A5, F4]**. Anyone may complain to the ICO (ico.org.uk).
+Requests go to privacy@resbite.com, or through "Request a copy of my data" in the app **[needs B14]**. A16 sets the procedure: proportionate identity checks for a phone account, a one-month clock from the "relevant time", extensions by up to two months for complex requests, reasonable and proportionate searches (Arts 12A and 15(1A)), and what to withhold under DPA 2018 Schedule 2 (a reporter's identity; other people's messages) **[needs A16, C6, F3]**. Erasure is self-service in the app for every account type **[needs B3, C2]**, and by request for web-only and banned accounts, through the owner-run deletion script (AS-R3) **[needs D8, A6, C6]**. Objections from non-users go on the suppression list **[needs C3]**. Data protection complaints are acknowledged within 30 days and answered with an outcome (DPA 2018 s.164A) **[needs A5, F4]**. Anyone may complain to the ICO (ico.org.uk).
 
 ## 13. Why no data protection officer is required
 
@@ -356,7 +358,7 @@ MFA is required on every account below. An authenticator app or a security key i
 | Apple Developer and App Store Connect | The owner | Required (Apple Account two-factor) |
 | Google Cloud project (OAuth client) | The owner | Required |
 | Resend | The owner | Required |
-| SMS provider console | The owner | Required |
+| Twilio console | The owner | Required |
 | CAPTCHA vendor console | The owner | Required |
 | Cloudflare (DNS) and the domain registrar | The owner | Required; registrar lock on |
 | GitHub | The owner | Required |
@@ -405,13 +407,13 @@ Each is weighed in the DPIA (A9):
 | B4 | The Wellness tab hidden |
 | B7, C7 | The new report reasons; the filter extended to other text |
 | B11, C9 | The optional details removed and their stored values erased |
-| B12, C1, D6 | Test mode off, a real SMS provider, the swap removed, the SMS limit restored |
+| B12, C1, D6 | Test mode off, Twilio sending the codes (AS-D5), the swap removed, the SMS limit restored |
 | B14 | "Request a copy of my data" |
 | B16, D10, C11 | CAPTCHA on the app and the site, then switched on |
 | C3 | Every purge job in section 11, and the suppression list |
 | C4 | The weekly-group roll job |
 | C5, A24 | The backup moderator, with instructions and least access |
-| C6 | Suspend by account id; the removal scripts; the data export; setting and lifting legal holds |
+| C6 | Suspend by account id; the removal scripts; the data export; setting and lifting legal holds; the owner-run deletion script (AS-R3) |
 | D1 | The legal pages and the contact form, and the web report route for non-users |
 | D5 | The `/i/*` firewall rule |
 | D7 | Vercel functions in London |
@@ -429,6 +431,7 @@ Roles only. No names.
 | Date | Version | By | Change |
 |---|---|---|---|
 | 17 November 2026 | 1.0 draft | The owner | First record, for solicitor review |
+| 17 November 2026 | 1.0 draft | The owner | The owner's answers and rulings applied (AS-D5, AS-D6, AS-R1 to AS-R5, AS-R8): Twilio; the named backup; suspension records and reports after deletion; web-only accounts; weekly-group chat history; the name Privacy Policy |
 
 ## Sources
 

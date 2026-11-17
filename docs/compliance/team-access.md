@@ -22,7 +22,7 @@ This is an internal record (gap analysis item A24; rows PRV-17 and UGC-5). It ho
 ## Placeholders to fill
 
 1. [[OWNER: effective date — proposed: the day the backup moderator signs, before any access is given]]
-2. [[OWNER: the backup moderator's identity — recorded only in the signed team access agreement kept outside the repo; the repo records only that a backup is named, and the date — proposed: one named person at the Supabase Developer role with MFA, named before the 1.0 submission]]
+2. [[OWNER: the backup moderator's identity — the owner names one backup (decision AS-D6); recorded only in the signed team access agreement kept outside the repo; the repo records only that a backup is named, and the date — proposed: at the Supabase Developer role with MFA, named before the 1.0 submission]]
 3. [[OWNER: whether the backup moderator is an employee, an officer, an unpaid helper or a contractor — proposed: an individual under Resbite Ltd's direct authority; a contractor, or a business supplying a moderator, also needs a processor contract]]
 4. [[OWNER: tool that holds the moderation, request, complaint, breach and law-enforcement logs — proposed: one access-controlled spreadsheet in the mailbox provider's business workspace, under the same data processing agreement]]
 5. [[OWNER: which delegated authorities in section 3.8 the backup is given — proposed: all four]]
@@ -57,7 +57,7 @@ The owner completes every step, in this order, and records the date of each in t
 | Their own Resbite account, listed in `private.moderators` | An ordinary account | Receive "A new report is waiting." | Their own choice |
 | NCA CSEA Industry Reporting Portal | User | Make a CSEA report without waiting for the owner | Required by the NCA (authenticator app) |
 
-**Not given:** the privacy inbox; the request, breach and law-enforcement logs; Vercel, Expo and EAS, Apple, Google Cloud, Resend, GitHub, the SMS provider, the CAPTCHA vendor, the domain registrar and DNS. Text-message notices wait for the owner.
+**Not given:** the privacy inbox; the request, breach and law-enforcement logs; Vercel, Expo and EAS, Apple, Google Cloud, Resend, GitHub, Twilio (the SMS provider), the CAPTCHA vendor, the domain registrar and DNS. Text-message notices wait for the owner.
 
 ## 3. Written instructions (template)
 
@@ -238,7 +238,7 @@ If access ends because the instructions were broken, the owner first preserves t
 
 ## 8. MFA for everyone with admin access
 
-This document covers the backup moderator. The same MFA rule applies to the owner on every account that reaches personal data or controls the service: Supabase, Vercel, Expo and EAS, Apple Developer and App Store Connect, Google Cloud, Resend, GitHub, the SMS provider, the CAPTCHA vendor, the domain registrar and DNS, the inboxes, the log tool and the NCA's portal. The list, with who holds each, is `records-of-processing.md` section 14.3 **[needs F16]**.
+This document covers the backup moderator. The same MFA rule applies to the owner on every account that reaches personal data or controls the service: Supabase, Vercel, Expo and EAS, Apple Developer and App Store Connect, Google Cloud, Resend, GitHub, Twilio, the CAPTCHA vendor, the domain registrar and DNS, the inboxes, the log tool and the NCA's portal. The list, with who holds each, is `records-of-processing.md` section 14.3 **[needs F16]**.
 
 ## 9. What must be built for this record to work in full
 

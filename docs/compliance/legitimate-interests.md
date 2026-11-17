@@ -10,7 +10,7 @@
 
 This is an internal record (A10). It holds no personal data. It is not legal advice. A UK solicitor reviews it before launch (decision D-12).
 
-**What it describes.** Resbite as it will be at version 1.0, after workstreams B, C and D of the gap analysis are built and the F operations are in place, using the recommended default for every owner decision D-3 to D-25. Where a statement is not true yet, it carries **[needs X]**, naming the item that makes it true. "The gap analysis" is `docs/superpowers/specs/2026-11-17-app-store-readiness-design.md`. Purposes and activity ids (LB-n, PA-n) are those in `records-of-processing.md`. Periods are those in `retention-schedule.md`.
+**What it describes.** Resbite as it will be at version 1.0, after workstreams B, C and D of the gap analysis are built and the F operations are in place, using the owner's answers and the rulings of 17 November 2026 (AS-D1 to AS-D8 and AS-R1 to AS-R9 in `knowledge-base/08-decisions.md`) and otherwise the recommended default for every owner decision D-3 to D-25. Where a statement is not true yet, it carries **[needs X]**, naming the item that makes it true. "The gap analysis" is `docs/superpowers/specs/2026-11-17-app-store-readiness-design.md`. Purposes and activity ids (LB-n, PA-n) are those in `records-of-processing.md`. Periods are those in `retention-schedule.md`.
 
 ## Placeholders to fill
 
@@ -43,8 +43,8 @@ Each ends with the outcome, how an objection under Art 21 is handled, where peop
 | LI-4 | Keep the objection suppression list | Non-users who object | Passes | Until the objection is withdrawn | C3, D3 |
 | LI-5 | Record the 18+, Terms and chat-rules acceptance | All account holders | Passes | While the account exists | B2, C8, D3, D4 |
 | LI-6 | Run the blocked-terms filter | Everyone who writes | Passes | Nothing stored | C7 |
-| LI-7 | Keep moderation evidence | Reporters and reported people | Passes, with an Art 10 condition | Open, then 180 days after closing | C3, B7, C7, C2, A15 |
-| LI-8 | Keep suspension records | Suspended people | Passes | While suspended, then 12 months after it is lifted or the account is deleted | C2, C3, C6 |
+| LI-7 | Keep moderation evidence | Reporters and reported people | Passes, with an Art 10 condition | Open, then 180 days after closing, also when the reporter deletes their account (AS-R2) | C3, B7, C7, C2, A15 |
+| LI-8 | Keep suspension records | Suspended people | Passes | While suspended, then 12 months after it is lifted; after the account is deleted, 12 months with the user id cleared (AS-R1) | C2, C3, C6 |
 | LI-9 | Let the team see blocks | Blocked people | Passes | Until unblocked | — |
 | LI-10 | Keep connection refusals hidden from the asker | People who asked | Passes | 12 months | C3 |
 | LI-11 | Count link opens | Hosts (opens are anonymous) | Passes | 12 months | C3 |
@@ -85,7 +85,7 @@ Each ends with the outcome, how an objection under Art 21 is handled, where peop
 
 **Objections.** A user who objects to being discoverable can block the people concerned, or delete their account. A "don't show me as On Resbite" setting would let users object without blocking; it is a candidate for after 1.0 (open point). A non-user's objection is honoured by LI-4, though the lookup itself keeps nothing to object to.
 
-**Told where.** The privacy notice (A1); Data & privacy (B5, which keeps the accurate line "Resbite checks only the numbers you pick to see who already uses it"); the Contacts purpose string **[needs B8]**.
+**Told where.** The Privacy Policy (A1); Data & privacy (B5, which keeps the accurate line "Resbite checks only the numbers you pick to see who already uses it"); the Contacts purpose string **[needs B8]**.
 
 **Review.** Yearly, and before any change to the limits or the matching.
 
@@ -113,14 +113,14 @@ Each ends with the outcome, how an objection under Art 21 is handled, where peop
 - *Impact.* Low. No marketing, no messages from Resbite, no profile built. Others see only the last two digits on the page. The full number is never shown to anyone but the inviting host, who already has it.
 - *Risk.* A host could invite someone who does not want contact. That person can ignore the link, object (LI-4), or report through the support address or the web form **[needs D1]**.
 - *Children.* A host could invite a child's number. The child cannot answer without confirming they are 18 or over **[needs D3, C8]**, and the number is deleted on schedule. The parent of a child may use the affected-person route (A15).
-- *Invisible processing.* If the invitee never opens the link, they never see the notice. Art 14(5)(b) (disproportionate effort) and the public notice in A1 then apply. The DPIA weighs this as invisible processing (A9). The solicitor should confirm this reading (open point).
+- *Invisible processing.* If the invitee never opens the link, they never see the notice. Art 14(5)(b) (disproportionate effort) and the public Privacy Policy (A1) then apply. The DPIA weighs this as invisible processing (A9). The solicitor should confirm this reading (open point).
 - *Safeguards.* Row security with no grants; the code stored only as a hash; the 500-a-day limit; the suppression list (LI-4); the short period; no Resbite-sent messages.
 
 **Outcome.** Legitimate interests apply, on three conditions: the retention job **[needs C3]**, the notice with its separate objection line **[needs D3, A2]**, and the suppression list **[needs C3, D-23]**. Without them this test fails.
 
 **Objections.** The objection statement sits in its own clearly separated line on `/i/` and in A1 (Art 21(4); PRV-19) **[needs D3, A1]**. An objection deletes every invitation row holding that number, for every host, and adds the number to the suppression list (LI-4). It takes effect at once.
 
-**Told where.** On `/i/` beside the number field **[needs D3]**; in the privacy notice's section for people invited by number (A2).
+**Told where.** On `/i/` beside the number field **[needs D3]**; in the Privacy Policy's section for people invited by number (A2).
 
 **Review.** Yearly, and before any change to who receives the number or how long it is kept.
 
@@ -151,7 +151,7 @@ Each ends with the outcome, how an objection under Art 21 is handled, where peop
 
 **Objections.** A removed person who objects is considered case by case. The record exists to protect others, so an objection is usually outweighed while the series runs.
 
-**Told where.** The privacy notice (A1), in the sections on resbites and on people invited by number.
+**Told where.** The Privacy Policy (A1), in the sections on resbites and on people invited by number.
 
 **Review.** Yearly.
 
@@ -234,7 +234,7 @@ Each ends with the outcome, how an objection under Art 21 is handled, where peop
 
 ## LI-7 · Keep moderation evidence
 
-**What happens.** A report in `private.reports` holds the reporter, the person or message reported, the reason, details up to 500 characters, a frozen copy of the words and their author (so the evidence survives a deleted or edited message), the review note and the action (`supabase/migrations/20261111160000_chat_safety.sql:763-780`). Open reports stay until closed. Closed reports are deleted 180 days after closing (R-Q3), by a job **[needs C3; manual today, `supabase/ops/purge-closed-reports.sql`]**. A report about a person stays, with its frozen words, even if that person deletes their account (`supabase/migrations/20261116120000_open_beta.sql:250-255`). Reports a person filed go when the reporter deletes their account, unless a legal hold applies **[hold needs C2]**. Activity PA-14; purposes LB-12 (legal obligation) and LB-13 (this assessment, for keeping evidence after closing).
+**What happens.** A report in `private.reports` holds the reporter, the person or message reported, the reason, details up to 500 characters, a frozen copy of the words and their author (so the evidence survives a deleted or edited message), the review note and the action (`supabase/migrations/20261111160000_chat_safety.sql:763-780`). Open reports stay until closed. Closed reports are deleted 180 days after closing (R-Q3), by a job **[needs C3; manual today, `supabase/ops/purge-closed-reports.sql`]**. A report about a person stays, with its frozen words, even if that person deletes their account (`supabase/migrations/20261116120000_open_beta.sql:250-255`). A report a person filed also stays until it is closed, then 180 days, if the reporter deletes their account; the reporter id is cleared (ruling AS-R2) **[needs C2; today the deletion request deletes them, `supabase/migrations/20261116120000_open_beta.sql:255`]**. Activity PA-14; purposes LB-12 (legal obligation) and LB-13 (this assessment, for keeping evidence after closing).
 
 **Purpose.** Decide reports fairly and consistently. Handle appeals (OSA s.21). Spot repeat abuse. Answer the police or Ofcom when the law allows. Keep the records Ofcom expects (OSA s.23).
 
@@ -248,6 +248,7 @@ Each ends with the outcome, how an objection under Art 21 is handled, where peop
 - *Risk.* False or malicious reports. Safeguards: every report is reviewed, and it can close with no action; appeals go through support (A5); only the owner and the backup moderator can read reports **[backup needs C5, A24]**; a reported person's access request never reveals the reporter (A16).
 - *Expectations.* Users accept community rules that say reports are kept for 180 days after closing (A1, A3).
 - *Reports about a deleted account.* Keeping them serves the reporter, finishes the review, and lets serious matters reach the authorities. The account id and frozen words stay only until 180 days after closing.
+- *Reports by a deleted account.* Keeping them lets a report about a third party be reviewed and closed after its reporter has gone. Clearing the reporter id means nothing in the report points back to the person who deleted their account.
 - *Children.* Child-safety reports are handled under A15, and preserved under a legal hold where they go to the NCA.
 
 **Art 10.** This processing needs a Schedule 1 condition: placeholder 2 (`records-of-processing.md`, section 7). An appropriate policy document may be needed (A23).
@@ -260,13 +261,13 @@ Each ends with the outcome, how an objection under Art 21 is handled, where peop
 
 **Review.** Yearly with A13.
 
-**Code note (open point).** When a reporter deletes their account, their open reports go too, so a report about a third party can disappear before it is reviewed. Consider keeping open reports with the reporter's id removed until they are closed. This is a C2 decision.
+**Code note.** Today, when a reporter deletes their account, their reports go too (`supabase/migrations/20261116120000_open_beta.sql:255`), so a report about a third party can disappear before it is reviewed. Ruling AS-R2 decides it: the report is kept until it is closed, then for 180 days, with the reporter id cleared. C2 builds it.
 
 ---
 
 ## LI-8 · Keep suspension records
 
-**What happens.** `supabase/ops/suspend-account.sql` revokes the account's grant, records what it changed in `private.suspensions` (account, report, roster and grant changes, time). At 1.0 the Auth ban is added only for a ban, not for every suspension (`moderation-standard.md`, section 8.2; D-19). At 1.0 an account can also be suspended by id **[needs C6]**. The record is kept while the suspension lasts, then 12 months after it ends, whether it is lifted or the account is deleted (D-19) **[needs C2, C3, C6]**. A suspension made in error is undone, and the undo deletes the record. Purpose LB-13.
+**What happens.** `supabase/ops/suspend-account.sql` revokes the account's grant, records what it changed in `private.suspensions` (account, report, roster and grant changes, time). At 1.0 the Auth ban is added only for a ban, not for every suspension (`moderation-standard.md`, section 8.2; D-19). At 1.0 an account can also be suspended by id **[needs C6]**. The record is kept while the suspension lasts, then 12 months after it is lifted. If the account is deleted, the user id is cleared and the reason and the dates are kept for 12 months after the deletion (ruling AS-R1, with D-19) **[needs C2, C3, C6]**. A suspension made in error is undone, and the undo deletes the record. Purpose LB-13.
 
 **Purpose.** Enforce the suspension, undo it exactly, handle appeals, and let moderators see recent history when new reports arrive about the same account.
 
@@ -282,7 +283,7 @@ Each ends with the outcome, how an objection under Art 21 is handled, where peop
 
 **Review.** Yearly.
 
-**Code note (open point).** The code does not yet support the period. The undo deletes the record at once (`supabase/ops/suspend-account.sql:33-38`), and the record cascades away with the Auth user (`chat_safety.sql:794-795`). So: a lift after an appeal needs a step that records the lift date instead of deleting (C6); and C2 must decide whether the record outlives account deletion, which D-19 suggests ("keep … the suspension record for their own periods").
+**Code note (open point).** The code does not yet support the period. The undo deletes the record at once (`supabase/ops/suspend-account.sql:33-38`), and the record cascades away with the Auth user (`chat_safety.sql:794-795`). So: a lift after an appeal needs a step that records the lift date instead of deleting (C6); and C2 keeps the record when the account is deleted, with the user id cleared and the reason and the dates kept (ruling AS-R1).
 
 ---
 
@@ -314,7 +315,7 @@ Each ends with the outcome, how an objection under Art 21 is handled, where peop
 
 **Necessity.** Without a record the asker could ask again at once. The flag keeps the asker's view consistent. Considered and rejected: telling the asker (social harm); allowing endless requests (pressure); keeping refusals indefinitely (excessive). Twelve months was chosen.
 
-**Balancing.** The asker has a record about them that they do not see. The effect is small: one chance per resbite. The refusing person benefits. People are told the general rule in the notice (PRV-21), so nothing about it is hidden in principle.
+**Balancing.** The asker has a record about them that they do not see. The effect is small: one chance per resbite. The refusing person benefits. People are told the general rule in the Privacy Policy (A1; PRV-21), so nothing about it is hidden in principle.
 
 **Outcome.** Legitimate interests apply.
 

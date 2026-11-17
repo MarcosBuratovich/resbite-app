@@ -14,19 +14,20 @@ This is an internal record (A18). It holds no personal data: no account names, e
 
 ## Placeholders to fill
 
-1. [[OWNER: SMS provider — proposed: Twilio]]
+1. [[OWNER: Twilio's region and transfer safeguard, to confirm when Resbite Ltd's account accepts Twilio's Data Protection Addendum — proposed: the United States, Twilio's main processing location, under the UK–US data bridge (Twilio Inc. states it takes part in the UK Extension to the EU–US Data Privacy Framework; check the live listing), with the UK Addendum to the EU Standard Contractual Clauses in Twilio's addendum as the fallback; Twilio's Ireland region (IE1) also offers messaging]]
 2. [[OWNER: CAPTCHA vendor — proposed: Cloudflare Turnstile or hCaptcha]]
 3. [[OWNER: mailbox provider for support@resbite.com and privacy@resbite.com — proposed: a business email service under a signed data processing agreement, with data held in the UK or EU and MFA on]]
 4. [[OWNER: tool that holds the moderation, request, complaint, breach and law-enforcement logs — proposed: one access-controlled spreadsheet in the mailbox provider's business workspace, under the same data processing agreement]]
 5. [[OWNER: domain registrar for resbite.com — proposed: record the current registrar and move the account into Resbite Ltd's name]]
 6. [[OWNER: Vercel plan for the link site, which sets how long its request logs last — proposed: Pro, which keeps request logs for 1 day and is covered by Vercel's data processing agreement]]
 7. [[OWNER: whether the backup moderator is an employee, an officer, an unpaid helper or a contractor — proposed: an individual under Resbite Ltd's direct authority; a contractor, or a business supplying a moderator, also needs a processor contract]]
+8. [[OWNER: how long Twilio keeps message records — proposed: the Send SMS hook deletes each message record through Twilio's API once its delivery status is final, and Twilio says a deleted message's text can stay in its backups for up to 30 days, so state "up to 31 days after sending"; Twilio's Message Redaction setting is offered only with its Editions packages]]
 
 ## How to read this register
 
 **Roles.**
 - **Processor:** acts only on Resbite Ltd's instructions, under a written contract with the UK GDPR Art 28(3) terms (a DPA).
-- **Independent controller:** decides for itself how it uses the data, under its own privacy terms. No Art 28 contract is needed, but it is named in the privacy notice (A1) as a recipient or a source.
+- **Independent controller:** decides for itself how it uses the data, under its own privacy terms. No Art 28 contract is needed, but it is named in the Privacy Policy (A1) as a recipient or a source.
 - **No user data:** a service the team uses that holds no app user's personal data.
 
 **Transfer safeguards** (UK GDPR Chapter V).
@@ -50,7 +51,7 @@ No vendor is **Confirmed** today, because no vendor account is yet recorded as h
 | Apple | Independent controller (inference, UNVERIFIED) | Sign in with Apple data; push device tokens and content; App Store and TestFlight data | Apple's systems | Not applicable as a controller; the Apple Developer Program License Agreement governs | Apple's own | Role to confirm |
 | Google | Independent controller (inference, UNVERIFIED) | Google sign-in: id, email, name, picture URL | Google's systems | Not applicable as a controller | Google's own | Role to confirm |
 | Resend | Processor | Email addresses and Auth emails | United States | Yes: part of the terms (31 December 2025) | UK-US data bridge; SCCs with the UK Addendum as fallback | To confirm |
-| SMS provider (placeholder 1) | Processor | Phone numbers, codes, delivery status | Proposed Twilio: US company | Proposed Twilio: part of the agreement (9 April 2026) | UK-US data bridge first; SCCs with the UK Addendum otherwise | To choose; sign before switch-on **[needs C1]** |
+| Twilio (SMS) | Processor | Phone numbers, codes, delivery status | US company; region placeholder 1 | Yes: part of the agreement (9 April 2026) | UK-US data bridge first; SCCs with the UK Addendum otherwise | To confirm (chosen, AS-D5); sign before switch-on **[needs C1]** |
 | CAPTCHA vendor (placeholder 2) | Processor; also a controller of signals for its own detection (Turnstile) | IP, TLS fingerprint, user agent (Turnstile); device and interaction data (hCaptcha) | US companies | Cloudflare: must be accepted (v6.4); hCaptcha: part of its terms, not public | UK-US data bridge | To choose **[needs B16, D10]** |
 | Mailbox provider (placeholder 3) | Processor | Everything sent to the support and privacy inboxes | To record | To obtain | To record | To choose **[needs F1]** |
 | Log tool (placeholder 4) | Processor | Case logs | To record | To obtain | To record | To choose **[needs F3, F4, F5, F17]** |
@@ -168,26 +169,30 @@ No vendor is **Confirmed** today, because no vendor account is yet recorded as h
 | Data protection test | Not needed while the listing is active; needed if the SCCs are relied on |
 | Account holder today | Not recorded |
 | Access and MFA | The owner **[needs F16]** |
-| Status | **To confirm.** Download the executed DPA, for an account held by Resbite Ltd (F7, F8). Confirm the plan, so the 30-day period in the privacy notice holds. Check the listing |
+| Status | **To confirm.** Download the executed DPA, for an account held by Resbite Ltd (F7, F8). Confirm the plan, so the 30-day period in the Privacy Policy holds. Check the listing |
 
-## SMS provider (placeholder 1; proposed Twilio)
+## Twilio (SMS)
+
+Chosen by the owner (decision AS-D5): Twilio sends the phone sign-in codes through Supabase's Send SMS hook. Test mode and the `000000` swap end in the same sitting (C1).
 
 | Item | Entry |
 |---|---|
-| Used for | Sending phone sign-in codes through the Supabase Send SMS hook, replacing test mode (SI-1) **[needs C1]**. The research recommends Twilio, with Sinch if price wins (`reports/Phone messaging providers.md:85`) |
+| Used for | Sending phone sign-in codes through the Supabase Send SMS hook, replacing test mode (SI-1) **[needs C1]**; the service texts to accounts with no email (suspension notices, identity checks, security warnings) **[needs C1]**. Programmable Messaging, called by the hook; the research recommended Twilio (`reports/Phone messaging providers.md:85`) |
 | Role | Processor |
-| Personal data | Phone numbers; the code message; delivery status |
-| People | Everyone who asks for a phone code, in the app and on the link site |
-| Region (Twilio) | US company; messages reach the person's carrier |
-| DPA (Twilio) | Data Protection Addendum, last updated 9 April 2026, https://www.twilio.com/en-us/legal/data-protection-addendum. It forms part of the agreement; for the SCCs the customer is deemed to have signed by entering the agreement |
-| Sub-processors (Twilio) | https://www.twilio.com/legal/sub-processors. 30 days' notice for infrastructure providers, 10 days for others |
-| Breach notice (Twilio) | Without undue delay after discovery; no fixed hours |
-| End of contract (Twilio) | Stored content deleted 30 days after termination; backups after 60 days |
-| Transfer safeguard (Twilio) | In order: the Data Privacy Framework with the UK Extension; Binding Corporate Rules (described as covering EEA and Swiss transfers); the EU SCCs; the UK Addendum (version B1.0) |
-| Data protection test | Not needed under the framework; needed if the SCCs are relied on |
-| Settings to make | The shortest message-log period, or message-body redaction, that the provider offers; spend and rate limits against SMS pumping (OPS-5) |
+| Personal data | Phone numbers; the message text, which holds the code; delivery status |
+| People | Everyone who asks for a phone code, in the app and on the link site; accounts that get a service text |
+| Region | Placeholder 1. Twilio's privacy notice says its "primary processing facilities are in the U.S." Twilio also runs an Ireland region (IE1, Dublin), which offers Programmable Messaging; regions "operate in isolation", so a feature missing there does not work there. Messages then reach the person's carrier |
+| Contracting entity | To record from the account Resbite Ltd opens (F8). The DPA names Twilio Inc. as the Data Privacy Framework participant |
+| DPA | Data Protection Addendum, last updated 9 April 2026, https://www.twilio.com/en-us/legal/data-protection-addendum. It forms part of the agreement; for the SCCs the customer is deemed to have signed by entering the agreement |
+| Sub-processors | https://www.twilio.com/legal/sub-processors. At least 30 days' notice for infrastructure providers, 10 days for others; objections within the notice period (DPA s.6.3) |
+| Breach notice to us | "Without undue delay" after discovery (DPA s.10.3(a)); no fixed hours |
+| Retention at Twilio | Placeholder 8. Stored content is kept "until Customer elects to delete such Customer Content via the Services", and the customer is "solely responsible for deleting" it (DPA Schedule 1, s.6.1). A message record can be deleted through the API: it leaves the messaging logs and cannot be recovered, but its text "may persist for up to 30 days" in Twilio's database backups. A message's text can instead be blanked by updating its body to an empty string. Twilio's Message Redaction setting hides message bodies and the last four digits of non-Twilio numbers once an outbound message is sent, but it is offered only to Twilio Editions customers and needs Twilio's approval, and Twilio keeps the unredacted data with limited access for compliance (no period stated) |
+| End of contract | Stored content deleted 30 days after termination; backups after 60 days |
+| Transfer safeguard | For UK transfers, in the DPA's order: the Data Privacy Framework with the UK Extension (s.2.2); then the UK Addendum to the EU SCCs, which the DPA calls the UK International Data Transfer Agreement, for transfers that adequacy or the Binding Corporate Rules do not cover (s.2.5). The Binding Corporate Rules (s.2.3) and the EU SCCs (s.2.4) are written for EEA and Swiss transfers. Twilio's privacy notice says Twilio Inc. (and its subsidiary Stytch Inc.) comply with the EU-US Data Privacy Framework and the UK Extension |
+| Data protection test | Not needed under the data bridge while the listing is active; needed if the UK Addendum is relied on. Check the live listing (F7) |
+| Settings to make | Message records deleted, or their text blanked, as placeholder 8 decides; spend and rate limits against SMS pumping (OPS-5); the monthly budget and spend alert in the release runbook, step 11. Twilio lists UK text messages at USD 0.056 a segment, plus any carrier fees (pricing page, November 2026) |
 | Access and MFA | The owner **[needs F16]** |
-| Status | **To choose** (D-3). Sign the DPA and record it here before switching on (C1) |
+| Status | **To confirm.** Chosen (AS-D5). Open the account in Resbite Ltd's name (F8), accept the DPA and record it here before switching on (C1, F7). Set the region (placeholder 1) and the retention (placeholder 8) |
 
 ## CAPTCHA vendor (placeholder 2)
 
@@ -281,7 +286,7 @@ Supabase Auth's CAPTCHA supports Cloudflare Turnstile and hCaptcha (OPS-9). It i
 1. Decide its role. For a processor, get a DPA with the Art 28(3) terms before any personal data flows.
 2. Record where the data goes and the transfer safeguard. Do a data protection test where SCCs or the IDTA are relied on. Check the live Data Privacy Framework listing where the data bridge is relied on.
 3. Hold the account in Resbite Ltd's name, with MFA on (F8, F16).
-4. Add it to the privacy notice (A1), the records of processing, this register and the retention schedule.
+4. Add it to the Privacy Policy (A1), the records of processing, this register and the retention schedule.
 5. For anything in the app: update the App Privacy answers (E3) and the privacy manifest (B13).
 6. For anything on the link site that stores or reads on the visitor's device: assess it under PECR reg 6, and widen the content security policy only for its hosts.
 7. Update the DPIA (A9) if the change raises the risk.
@@ -293,6 +298,7 @@ Roles only. No names.
 | Date | Version | By | Change |
 |---|---|---|---|
 | 17 November 2026 | 1.0 draft | The owner | First register, from the vendors' own pages read on 17 November 2026 |
+| 17 November 2026 | 1.0 draft | The owner | Twilio chosen as the SMS provider (AS-D5). Its DPA, privacy notice, regions, message and redaction pages and UK prices read; the region (placeholder 1) and the message retention (placeholder 8) stay open. A named backup moderator (AS-D6) |
 
 ## Sources
 
@@ -302,7 +308,12 @@ All read on 17 November 2026 unless marked.
 - Vercel, Data Processing Addendum, last updated 17 March 2026: https://vercel.com/legal/dpa ; runtime logs: https://vercel.com/docs/logs/runtime ; function regions: https://vercel.com/docs/functions/configuring-functions/region
 - Expo, privacy policy, last updated 10 November 2026: https://expo.dev/privacy ; Privacy explained: https://expo.dev/privacy-explained ; sub-processors: https://expo.dev/privacy/subprocessors ; push notifications (US hosting, 24-hour receipts, per DI §8): https://docs.expo.dev/push-notifications/sending-notifications/
 - Resend, Data Processing Addendum, last updated 31 December 2025: https://resend.com/legal/dpa ; GDPR page (US storage, per DI §9): https://resend.com/security/gdpr
-- Twilio, Data Protection Addendum, last updated 9 April 2026: https://www.twilio.com/en-us/legal/data-protection-addendum
+- Twilio, Data Protection Addendum, last updated 9 April 2026 (read 17 November 2026; sections 2.1 to 2.5, 6.3, 10.3 and Schedule 1 s.6.1): https://www.twilio.com/en-us/legal/data-protection-addendum
+- Twilio, privacy notice, last updated 9 April 2026 (Data Privacy Framework and UK Extension; primary processing in the US): https://www.twilio.com/en-us/legal/privacy
+- Twilio, Regional product and feature availability, last updated 4 November 2026 (IE1 offers Programmable Messaging): https://www.twilio.com/docs/global-infrastructure/regional-product-and-feature-availability
+- Twilio, Message resource (deleting a message; text kept up to 30 days in backups; redacting the body): https://www.twilio.com/docs/messaging/api/message-resource
+- Twilio, Message Redaction for Programmable Messaging, last updated 20 August 2026 (Editions only; what is redacted and when): https://www.twilio.com/docs/messaging/guides/privacy-message-redaction
+- Twilio, SMS pricing for the United Kingdom, current as of November 2026 (USD 0.056 a segment): https://www.twilio.com/en-us/sms/pricing/gb
 - Cloudflare, Customer DPA, version 6.4, effective 3 April 2026: https://www.cloudflare.com/cloudflare-customer-dpa/ ; Turnstile privacy addendum, last updated 18 June 2025: https://www.cloudflare.com/turnstile-privacy-policy/
 - hCaptcha, privacy policy, last updated 7 October 2025: https://www.hcaptcha.com/privacy
 - GitHub, Data Protection Agreement, version October 2025: https://github.com/customer-terms/github-data-protection-agreement

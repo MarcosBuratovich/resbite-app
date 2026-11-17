@@ -89,6 +89,8 @@ Use this if:
 3. We delete the account in the same way as the app does, within 30 days of confirming it's you.
 4. We email you to confirm when deletion is complete.
 
+If you don't ask, we delete a web-only account ourselves once it has had no resbite for 12 months. If you asked for a code on our website but never confirmed your number, we delete the number within 30 days.
+
 If you used the website on a shared computer, you can also clear Resbite's data from that browser. The website keeps your answer session there only until the resbite starts.
 
 ---
@@ -116,7 +118,7 @@ If you used the website on a shared computer, you can also clear Resbite's data 
 | **Resbites and groups you joined** | You leave them all. People you brought along stay on the guest list. If you co-host someone else's resbite, you stop being a co-host when we finish (see below). |
 | **Connections** | All your connections and connection requests end, in both directions. So do "Not now" answers and removals between you and other people. |
 | **Blocks** | Blocks you made and blocks other people made of you. |
-| **Reports you made** | Deleted. |
+| **Reports you made** | Your account is removed from them. We keep the reports themselves until we have dealt with them (see "What we keep"). |
 | **Other account records** | Your agreement to the chat rules, which chats you've read and muted, your devices registered for notifications, and notifications waiting to be sent to you. |
 | **On your iPhone** | The saved groups, invitation records and unfinished drafts that Resbite kept on the iPhone you used. |
 
@@ -140,6 +142,7 @@ Some records stay for a limited time after your account is deleted. We keep them
 | What | Why we keep it | How long |
 |---|---|---|
 | **Reports other people made about you or your messages**, with a copy of what was reported | To deal with safety concerns, to show what action we took, and to answer regulators | Until we close the report, then 180 days |
+| **Reports you made**, no longer linked to your account | So we can finish dealing with them, and show what action we took | Until we close the report, then 180 days |
 | **Your deletion receipt**: a request number, your account's internal ID, a scrambled form of the recovery code and the request's dates. Not your messages, contacts or photos | So you can check that deletion is complete, and so we can delete your account again if we ever restore a backup | 30 days after deletion is complete |
 | **Backups** | To recover the service after a fault | 7 days |
 | **Our hosting providers' technical logs** | To keep the service running and secure | Up to 7 days |
@@ -149,9 +152,9 @@ Some records stay for a limited time after your account is deleted. We keep them
 | **Records of notifications we sent other people** about something you did | To make sure notifications were delivered | 30 days after sending |
 | **Phone numbers of people you invited who don't use Resbite** | So they can still answer, until the invitation ends | Until they answer or the invitation is cancelled, and no later than 30 days after the resbite ends |
 | **Phone numbers of people removed from your resbites** | So they aren't invited back by mistake | 30 days after a one-off ends, or 90 days after a group's last week |
-| **A record of a suspension**, if your account was suspended: which account, the report it followed, what we changed and when | So we can answer an appeal or a regulator, and recognise the same problem if it comes back | 12 months after the deletion |
+| **A record of a suspension**, if your account was suspended: the reason and the dates, no longer linked to your account | So we can show a regulator what we did and why | 12 months after the deletion |
 
-Records that our email and text-message providers keep about messages they sent you, such as sign-in codes, follow those providers' own retention periods. Our [Privacy Notice](https://link.resbite.com/privacy) lists them.
+Records that our email provider (Resend) and our text-message provider (Twilio) keep about messages they sent you, such as sign-in codes, are deleted on their own schedules. Our [Privacy Policy](https://link.resbite.com/privacy) lists them.
 
 ### Legal holds
 
@@ -161,7 +164,7 @@ Even under a legal hold, your account still closes straight away, and everything
 
 ### If your account was suspended
 
-You can delete your account while it is suspended. We keep the reports that led to the suspension for their usual period (until we close them, then 180 days), and the record of the suspension for 12 months after the deletion.
+You can delete your account while it is suspended. We keep the reports that led to the suspension for their usual period (until we close them, then 180 days), and a record of the suspension's reason and dates, no longer linked to your account, for 12 months after the deletion.
 
 ### What we can't delete
 
@@ -223,7 +226,7 @@ You don't have to delete your account to use your other rights.
 - **Correcting your data:** change your name and photo yourself in **Profile**. To change the phone number or email address you sign in with, email **privacy@resbite.com**.
 - **Objecting, or limiting how we use your data:** email **privacy@resbite.com**.
 
-We answer within one month. Our [Privacy Notice](https://link.resbite.com/privacy) explains all your rights.
+We answer within one month. Our [Privacy Policy](https://link.resbite.com/privacy) explains all your rights.
 
 ---
 
@@ -256,15 +259,19 @@ When we change this page, we publish the new version here with a new version num
 | Sign in with Apple tokens revoked | B3, C2 |
 | "Within 30 days, usually minutes", and the status check | C2, B3 |
 | The deletion receipt purged 30 days after deletion is complete | C2 |
-| Deletion by email for web-only and banned accounts, with a one-time code | D8, F3, F1 (A16), C1 |
+| Deletion by email for web-only and banned accounts, with a one-time code, through the owner-run deletion script that runs the app's lifecycle (AS-R3) | D8, F3, F1 (A16), C1, C6 |
+| Web-only accounts with no resbite in 12 months deleted; unconfirmed code requests deleted after 30 days (AS-R4) | C3 |
+| Reports a deleted person made kept until closed, then 180 days, with the reporter id cleared (AS-R2; today they are deleted, `supabase/migrations/20261116120000_open_beta.sql:255`) | C2, C3 |
 | Profile photo files deleted at clean-up; cover files within 7 days | C2; C3 (a new cover job) |
 | A restored backup has deletions repeated before the service goes back online | C2 (restore procedure, D-4), F11 |
 | Under a legal hold, the account still closes at once and only held records wait | C2, C3, C6 (A22) |
 | What is deleted straight away (the request function, including the host's resbites blanked and cancelled) | C2 puts `request_account_deletion` live; the redaction trigger is already live |
-| The suspension record kept 12 months after the deletion (today it is deleted with the account) | C2, C6 (D-19) |
+| The suspension record kept 12 months after the deletion, with the account id cleared and the reason and dates kept (AS-R1; today it is deleted with the account, `supabase/migrations/20261111160000_chat_safety.sql:794-795`) | C2, C6 (D-19) |
 | Retention of placeholders, past resbites, notification records and other people's numbers | C3 (D-8) |
 | The suspended screen shows Delete account | B6 |
 | "Request a copy of my data" in the app | B14 |
 | Emails and support records kept 24 months | F1, F3, F4 |
 
-Changed in the cross-check of 17 November 2026: the suspension record is now listed as kept, following decision D-19 and the Privacy Notice and Terms; "Other choices about your data" was added, because App Store Connect describes the Privacy Choices URL as a page to access, delete or change data.
+Changed in the cross-check of 17 November 2026: the suspension record is now listed as kept, following decision D-19 and the Privacy Policy and Terms; "Other choices about your data" was added, because App Store Connect describes the Privacy Choices URL as a page to access, delete or change data.
+
+Changed after the owner's answers and rulings of 17 November 2026 (`knowledge-base/08-decisions.md`, AS-D1 to AS-R9): reports a person made are kept without their account until closed and then 180 days (AS-R2); the suspension record keeps only the reason and the dates (AS-R1); web-only accounts with no resbite in 12 months, and unconfirmed code requests after 30 days, are deleted (AS-R4); Twilio is named as the text-message provider (AS-D5); the link reads "Privacy Policy" (AS-R5).

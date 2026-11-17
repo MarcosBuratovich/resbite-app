@@ -11,18 +11,17 @@
 
 This is an internal procedure (gap analysis item A15; rows UGC-5 and UGC-7 to UGC-14). It holds no personal data: people appear only by role ("the owner", "the backup moderator"). A UK solicitor reviews it with the public documents before launch (decision D-12). It is written to be complete and usable as it stands.
 
-**What it describes.** Resbite at version 1.0, after workstreams B, C and D of the gap analysis are built, using the recommended default for every owner decision D-3 to D-25. A step that is not possible yet carries **[needs X]**, naming the gap analysis item that makes it possible. Section 23 lists them.
+**What it describes.** Resbite at version 1.0, after workstreams B, C and D of the gap analysis are built, using the owner's answers and the rulings of 17 November 2026 (AS-D1 to AS-D8 and AS-R1 to AS-R9 in `knowledge-base/08-decisions.md`) and otherwise the recommended default for every owner decision D-3 to D-25. A step that is not possible yet carries **[needs X]**, naming the gap analysis item that makes it possible. Section 23 lists them.
 
 **References.** "The gap analysis" is `docs/superpowers/specs/2026-11-17-app-store-readiness-design.md`. Scripts are in `supabase/ops/`. The release runbook's section "The reports queue" (`qa/chat-release/README.md`) is the step-by-step for the scripts; this standard sets the rules and times, and wins where the two differ. Companion records in this folder: `team-access.md` (A24), `law-enforcement-requests.md` (A22), `data-requests.md` (A16), `breach-response.md` (A17), `records-of-processing.md` (A8), `retention-schedule.md` (A12) and `osa-illegal-content-risk-assessment.md` (A13).
 
 ## Placeholders to fill
 
 1. [[OWNER: effective date — proposed: the day version 1.0 is released on the App Store]]
-2. [[OWNER: the backup moderator's identity — recorded only in the signed team access agreement kept outside the repo; the repo records only that a backup is named, and the date — proposed: one named person at the Supabase Developer role with MFA, named before the 1.0 submission]]
-3. [[OWNER: SMS provider — proposed: Twilio]]
-4. [[OWNER: tool that holds the moderation, request, complaint, breach and law-enforcement logs — proposed: one access-controlled spreadsheet in the mailbox provider's business workspace, under the same data processing agreement]]
-5. [[OWNER: confirm Resbite Ltd is registered on the NCA's CSEA Industry Reporting Portal, and the date — proposed: register before submission; the NCA reviews registrations only Monday to Friday, 07:00 to 17:00]]
-6. [[OWNER: VAT number, or delete if not VAT-registered]] (in the signature of every notice, section 19)
+2. [[OWNER: the backup moderator's identity — the owner names one backup (decision AS-D6); recorded only in the signed team access agreement kept outside the repo; the repo records only that a backup is named, and the date — proposed: at the Supabase Developer role with MFA, named before the 1.0 submission]]
+3. [[OWNER: tool that holds the moderation, request, complaint, breach and law-enforcement logs — proposed: one access-controlled spreadsheet in the mailbox provider's business workspace, under the same data processing agreement]]
+4. [[OWNER: confirm Resbite Ltd is registered on the NCA's CSEA Industry Reporting Portal, and the date — proposed: register before submission; the NCA reviews registrations only Monday to Friday, 07:00 to 17:00]]
+5. [[OWNER: VAT number, or delete if not VAT-registered]] (in the signature of every notice, section 19)
 
 ---
 
@@ -40,7 +39,7 @@ This is an internal procedure (gap analysis item A15; rows UGC-5 and UGC-7 to UG
 | Report in the app (a message or a person) | Users | `private.reports`, with a push to each moderator: "A new report is waiting." |
 | Email to support@resbite.com | Anyone, including people who are not users, removed guests and third parties | The support inbox **[needs F1]** |
 | The contact form on https://link.resbite.com/support | Anyone, including affected people who are not users and people reporting an intimate image of themselves | The support inbox **[needs D1, F1]** |
-| Police, the NCA, Ofcom, a court or a coroner | Authorities | Follow `law-enforcement-requests.md` (A22) |
+| Police, the NCA, Ofcom, a court or a coroner | Authorities, at privacy@resbite.com (ruling AS-R7) | Follow `law-enforcement-requests.md` (A22) |
 
 The blocked-terms filter refuses a chat message or announcement holding a listed term before it is stored (`supabase/ops/blocked-terms.sql`). At 1.0 it also checks titles, descriptions, notes to guests, meeting details and display names **[needs C7]**. The filter is not moderation: nobody reads what it refuses, and it keeps no copy.
 
@@ -51,12 +50,12 @@ The blocked-terms filter refuses a chat message or announcement holding a listed
 | Role | What they do |
 |---|---|
 | **The owner** | Reads the queue every day. Decides and acts. Handles anything the backup escalates. Owns this standard. The named accountable individual (ICU A2). |
-| **The backup moderator** | Reads the queue every day while the owner is away, and acts under this standard and the written instructions in `team-access.md`. Named on a signed A24 before any access **[needs A24, C5]**. |
+| **The backup moderator** | Reads the queue every day while the owner is away, and acts under this standard and the written instructions in `team-access.md`. The owner names them (decision AS-D6), on a signed A24, before any access **[needs A24, C5]**. |
 | **The solicitor** | Advises on legal complaints, court orders, police requests and anything unclear in law. Never receives reported material. |
 
 **Conflicts.** If a report involves you, someone you know personally, or a resbite you are part of, hand it to the other moderator and do not open it.
 
-**No submission without cover.** The house rule R-Q4 keeps the backup release-blocking. The review notes promise action within 24 hours only once a backup is named (UGC-5, CON-4).
+**Two moderators from the start.** The owner names the backup before the 1.0 submission (decision AS-D6), and the house rule R-Q4 keeps that release-blocking. The review notes' promise of action within 24 hours rests on the two of them (UGC-5, CON-4).
 
 ## 3. Time standards
 
@@ -74,6 +73,8 @@ All times are UK time and run every day, weekends and bank holidays included, un
 | Appeal (section 17) | Acknowledge within 2 working days; decide within 10 working days | Arrival of the appeal |
 
 **Why these times.** Apple asks for "timely responses to concerns" ([ARG 1.2]); the 24-hour figure comes only from rejection letters quoted on Apple's forums (UNVERIFIED, gap analysis section 7, question 1). The draft review notes promise 24 hours (`qa/chat-release/app-store-review-notes.md:33`). The Online Safety Act needs swift takedown once we are aware of illegal content (s.10; Ofcom Code measure ICU C2 (x)). The 48-hour intimate image duty is OSA s.20A, inserted by the Crime and Policing Act 2026 s.100; its commencement date is UNVERIFIED, and we apply it from launch (decision D-21). The appeal times match the public complaints and appeals procedure (A5, on the support page) and the Terms (section 11.3); if they ever differ, A5 wins.
+
+**What reporters are told.** The in-app report thanks says "We review reports every day." (ruling AS-R9, for Ofcom Code measure ICU D4) **[needs B7]**. The support inbox's first reply gives the same time (A5).
 
 **A missed standard is an incident.** Record it in the moderation log with the reason, and count it for the yearly review (section 22).
 
@@ -198,7 +199,7 @@ On Resbite, CSEA can appear as a profile photo or cover, as text (grooming, sexu
    - Other messages in the same thread that nobody reported: escalate to the owner (section 7 gaps).
 5. **Suspend and ban** every account responsible: `suspend-account.sql` (or suspend by account id **[needs C6]**), then the Auth ban.
 6. **Report to the NCA the same day** through the CSEA Industry Reporting Portal (CSEA-IRP), signed in as a registered user. Give the information the 2026 Regulations require; the portal marks the mandatory fields. Follow the portal's own instructions on whether and how content is submitted. Never send the material any other way. If the material is a link to another website, also report the address to the Internet Watch Foundation (iwf.org.uk).
-   - Resbite Ltd must be registered before it needs the portal: the owner is the Organisation Administrator and adds the backup as a user. The NCA reviews registrations only in working hours [NCA-REG] (placeholder 5).
+   - Resbite Ltd must be registered before it needs the portal: the owner is the Organisation Administrator and adds the backup as a user. The NCA reviews registrations only in working hours [NCA-REG] (placeholder 4).
    - IP addresses are kept only briefly: `auth.sessions` until sign-out, platform logs for 7 days. Gather what the report needs at once.
 7. **Tell the owner** by phone or message, without describing or attaching the material.
 8. **Do not tell the suspected person why.** Send no reasons notice until the police or the NCA say it is safe. The suspended screen shows the support address. To the reporter, say only that we have acted (template N5).
@@ -219,7 +220,7 @@ On Resbite, CSEA can appear as a profile photo or cover, as text (grooming, sexu
 
 1. Find the image. If the person shown may be under 18, go to section 9 instead.
 2. Take it down with the C6 removal script **[needs C6]**, or `remove-reported-message.sql` for a link.
-3. Suspend the uploader at once (decision D-21; the Terms, section 10.6). The owner then decides whether to add the Auth ban (level 3), for example for a threat to share more images or a repeat.
+3. Suspend the uploader at once (decision D-21, ruling AS-R6; the Terms, section 10.6). The owner then decides whether to add the Auth ban (level 3), for example for a threat to share more images or a repeat.
 4. **Keep or delete?** Delete the file once it is down, unless the person shown wants to report it to the police, or the police ask, or it is CSEA. In those cases hide and preserve it under a legal hold (section 18).
 5. Reply to the person who reported it (template N6), with the outcome and where to get help: the Revenge Porn Helpline, and StopNCII.org for adults.
 6. **Stop it reappearing.** The suspended uploader cannot post again. If the same or a substantially similar image appears from another account, treat that account as ban evasion (section 15) and take the image down within 48 hours of that report. We do not hash-match images for 1.0; the reasons are recorded in A13 (decision D-21) and reviewed yearly.
@@ -247,7 +248,7 @@ Resbite is 18+ only. The Terms say so and say how we enforce it (A3; LAW-37). We
 2. Suspend the account (no Auth ban, so the person can see the support address and delete the account themselves) **[needs B6, C2]**.
 3. Write to the person (template N7) where we can reach them. Ask for no more than is proportionate: a statement that they are 18 or over, with a short explanation of the report. Do not ask for identity documents as a first step.
 4. If they confirm they are 18 or over and nothing contradicts it, lift the suspension (section 8.1), and record why.
-5. If they confirm they are under 18, or do not answer within 14 days, delete the account and its data through the operator deletion route **[needs C2: an owner-run deletion for an account that cannot use the in-app path]**, unless a legal hold applies.
+5. If they confirm they are under 18, or do not answer within 14 days, delete the account and its data with the owner-run deletion script, which runs the same lifecycle as the app, with the cancellations and the receipt (ruling AS-R3) **[needs C6]**, unless a legal hold applies.
 6. Record the case, without the child's details, so A14's yearly review can count under-18 cases.
 
 ## 13. Proscribed organisations and terrorism
@@ -333,7 +334,7 @@ A legal hold stops the account deletion and the purge jobs destroying records th
 
 **When to send.** Send a notice when we suspend an account (N1 or N2), and when we remove content and can reach the poster (N3). Send the full statement of reasons (N4) on request or with an appeal outcome. Do not send one in a CSEA case, or where the police ask us not to (section 9).
 
-**How.** By email from support@resbite.com where the account has a confirmed email. Otherwise by text message to the verified number, through the SMS provider (placeholder 3) **[needs C1]**. If neither is possible, the suspended screen shows the support address **[needs B6]**. The privacy notice says we may text the verified number about a suspension, a request or a security problem (its section 3.1).
+**How.** By email from support@resbite.com where the account has a confirmed email. Otherwise by text message to the verified number, through Twilio (decision AS-D5) **[needs C1]**. If neither is possible, the suspended screen shows the support address **[needs B6]**. The Privacy Policy says we may text the verified number about a suspension, a request or a security problem (its section 3.1).
 
 **Never** name the reporter, quote their words, or say anything that would identify them. Describe the content in neutral terms.
 
@@ -495,7 +496,7 @@ Square brackets mark the parts to fill in. Keep the rest as written.
 - Suspensions, in `private.suspensions`.
 - Legal holds, through the C6 script **[needs C6]**.
 
-**In the moderation log**, outside the repo, in the log tool (placeholder 4). One row per case:
+**In the moderation log**, outside the repo, in the log tool (placeholder 3). One row per case:
 
 | Field | Content |
 |---|---|
@@ -514,9 +515,9 @@ Square brackets mark the parts to fill in. Keep the rest as written.
 
 The log never holds the reported material, a copy of a message beyond the frozen copy already in the report, or a CSEA image or its description.
 
-**Retention.** Closed reports: deleted 180 days after closing (decision R-Q3). Suspension records: while suspended, then 12 months after the suspension ends, whether it is lifted or the account is deleted (D-8 with D-19) **[needs C3; and C2 to keep the record when the account is deleted, see below]**. Moderation log rows: 24 months after the case closes, longer under a legal hold (`retention-schedule.md`).
+**Retention.** Closed reports: deleted 180 days after closing (decision R-Q3). A report whose reporter deletes their account stays until it is closed, then 180 days, with the reporter id cleared (ruling AS-R2): deal with it as usual **[needs C2; today it is deleted with the account, `supabase/migrations/20261116120000_open_beta.sql:255`]**. Suspension records: while suspended, then 12 months after the suspension is lifted (D-8); if the account is deleted, the user id is cleared and the reason and the dates stay for 12 months after the deletion (ruling AS-R1, with D-19) **[needs C3; and C2 to keep the record when the account is deleted, see below]**. Moderation log rows: 24 months after the case closes, longer under a legal hold (`retention-schedule.md`).
 
-**Code and default differ.** Today `private.suspensions` is deleted with the account (`on delete cascade`, `supabase/migrations/20261111160000_chat_safety.sql:794-795`). D-19's default keeps the suspension record for its own period after the person deletes their account. C2 must build that; until then the moderation log row is the only record.
+**Code and ruling differ.** Today `private.suspensions` is deleted with the account (`on delete cascade`, `supabase/migrations/20261111160000_chat_safety.sql:794-795`), and the reason lives only in the linked report. Ruling AS-R1 keeps the record for 12 months after the person deletes their account, with the user id cleared and the reason and the dates kept. C2 must build that; until then the moderation log row is the only record.
 
 **In the repo.** Nothing about any case. Only the yearly figures in section 22, as numbers.
 
@@ -553,16 +554,16 @@ Each year, and before any significant change, the owner reviews this standard an
 | Item | What this standard needs from it |
 |---|---|
 | B6 | The suspended screen shows the support address and Delete account |
-| B7, C7 | The reasons Child safety, Intimate image shared without consent, and Illegal or dangerous; `open-reports.sql` listing them first; the wider blocked-terms check |
+| B7, C7 | The reasons Child safety, Intimate image shared without consent, and Illegal or dangerous; the report thanks giving the review time (AS-R9); `open-reports.sql` listing them first; the wider blocked-terms check |
 | B11, C9 | No date of birth collected or stored |
-| C1 | The SMS provider, for text notices and for contacting a poster under section 16.1 |
-| C2 | Deletion while suspended; the legal hold in deletion; an owner-run deletion for accounts that cannot use the app; keeping the suspension record after deletion |
+| C1 | Twilio, for text notices and for contacting a poster under section 16.1 |
+| C2 | Deletion while suspended; the legal hold in deletion; keeping the suspension record after deletion, with the id cleared (AS-R1); keeping a deleted reporter's reports, with the id cleared (AS-R2) |
 | C3 | Hold-aware retention jobs, including the closed-report purge and the orphan photo clean-up |
 | C5 | The backup added with `moderators.sql` and given dashboard access with MFA |
-| C6 | Suspend by account id; lift a suspension while keeping its record and the lift date; remove a photo, title, description, notes or cover, with "hide and preserve"; set and lift a legal hold. Also wanted: reset a display name; remove an unreported message; cancel a suspended host's resbites; lookups from an emailed description |
+| C6 | The owner-run deletion script for banned, web-only and under-18 accounts, with the app's lifecycle (AS-R3); suspend by account id; lift a suspension while keeping its record and the lift date; remove a photo, title, description, notes or cover, with "hide and preserve"; set and lift a legal hold. Also wanted: reset a display name; remove an unreported message; cancel a suspended host's resbites; lookups from an emailed description |
 | D1 | The /support page and contact form, with the route for affected people and intimate images |
 | F1 | The support inbox, watched daily for safety reports |
-| F2 | The rota with the named backup |
+| F2 | The rota with the backup the owner names (AS-D6) |
 | F10 | Alerts on the push sender, which carries the moderators' "new report" push |
 | A3, A5, A13, A24 | The Terms (rules, 18+, intimate images), the complaints procedure (appeal times), the risk assessment (prevention measures, evasion), the signed instructions |
 

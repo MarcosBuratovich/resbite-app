@@ -94,16 +94,16 @@ That is acceptable. Everyone will accept the Terms, which carry the full rules, 
 | Part | Text |
 |---|---|
 | Tick | **I'm 18 or over and I accept the Terms of Use.** |
-| Line under the tick (not part of what is ticked) | Our Privacy Notice explains how we use your data. |
+| Line under the tick (not part of what is ticked) | Read the Terms of Use. Our Privacy Policy explains how we use your data. |
 | Helper, while not ticked (unchanged) | Resbite is for people aged 18 and over. |
 | VoiceOver hint on the tick | Confirms you're 18 or over and accept the Terms of Use. |
 
-"Terms of Use" and "Privacy Notice" are always links, to `https://link.resbite.com/terms` and `https://link.resbite.com/privacy`.
+"Terms of Use" and "Privacy Policy" in the line under the tick are links, to `https://link.resbite.com/terms` and `https://link.resbite.com/privacy`. The tick's own label holds no link, because VoiceOver cannot reach a link inside a checkbox label (`mobile/src/components/TickRow.tsx`). That is why the line repeats "Read the Terms of Use."
 
 **Why this wording.**
 - **One tick, both facts.** One action records both the age confirmation and the Terms version. Section 2.4 of the Terms describes exactly this.
 - **"Terms of Use"** names the document as it is published. "Terms" alone could mean anything.
-- **The Privacy Notice is information, not an agreement.** Resbite doesn't rely on consent for the account, the chat or moderation. Asking people to "agree to" the Privacy Notice can suggest that it does, and muddles what withdrawing consent would mean. So the Privacy Notice gets its own line, outside the tick.
+- **The Privacy Policy is information, not an agreement.** Resbite doesn't rely on consent for the account, the chat or moderation. Asking people to "agree to" the Privacy Policy can suggest that it does, and muddles what withdrawing consent would mean. So the Privacy Policy gets its own line, outside the tick.
 - **"Accept"** matches the Terms (section 2.4) and the acceptance screen below.
 
 ### If the acceptance screen uses two ticks instead
@@ -112,14 +112,14 @@ That is acceptable. Everyone will accept the Terms, which carry the full rules, 
 |---|---|
 | First tick | I'm 18 or over |
 | Second tick | I accept the Terms of Use |
-| Line under the ticks | Our Privacy Notice explains how we use your data. |
+| Line under the ticks | Our Privacy Policy explains how we use your data. |
 | Helper, while either is not ticked | Resbite is for people aged 18 and over, and you need to accept the Terms of Use to use it. |
 
 Continue stays off until both are ticked. Use the same form in the app and on the link site.
 
 ### Build notes
 
-- **`TermsLine` will mis-link the new wording.** It splits its text on the literal words "Terms" and "Privacy Policy" (`mobile/src/design/TickRow.tsx:60-108`). With the new tick it would link "Terms" and leave "of Use" as plain text, and it would look for "Privacy Policy" inside the tick line. B1 and B2 must change it to link the whole phrases "Terms of Use" and "Privacy Notice", each in its own line.
+- **`TermsLine` will mis-link the new wording.** It splits its text on the literal words "Terms" and "Privacy Policy" (`mobile/src/design/TickRow.tsx:60-108`). With the new tick it would link "Terms" and leave "of Use" as plain text, and it would look for "Privacy Policy" inside the tick line. B1 and B2 must change it to link the whole phrases "Terms of Use" and "Privacy Policy", each in its own line. The name "Privacy Policy" itself stays, as the app, App Store Connect and the published page all use it (ruling AS-R5).
 - **The link site has its own copy** of the tick and the line (`links/assets/personal-flow.mjs:24-26`). Change it in the same way (D3), so the app and the web say the same thing.
 - **The recorded version.** `TERMS_VERSION` is `2026-10` in the app (`mobile/src/domain/guestAccount.ts:4`) and on the link site (`links/server/lib/options.mjs:16`), and names no document. Set both to one new value for version 1.0 of the Terms, in the `YYYY-MM` form the database accepts (`supabase/migrations/20261022120000_gi2_guest_accounts.sql:27`); the value is a placeholder in `docs/legal/README.md` (B2, C8, D4).
 
@@ -138,7 +138,7 @@ This screen comes after Add your number and before About you. It appears for any
 > This is the first full version of our Terms. It sets out our community rules, how we keep Resbite safe, how to complain or appeal, and what happens when you delete your account.
 >
 > [ ] I'm 18 or over and I accept the Terms of Use.
-> Our Privacy Notice explains how we use your data.
+> Our Privacy Policy explains how we use your data.
 >
 > [Continue]
 >
@@ -157,7 +157,7 @@ This screen comes after Add your number and before About you. It appears for any
 > To keep using Resbite, please accept the new version.
 >
 > [ ] I'm 18 or over and I accept the Terms of Use.
-> Our Privacy Notice explains how we use your data.
+> Our Privacy Policy explains how we use your data.
 >
 > [Continue]
 >
@@ -179,5 +179,5 @@ In **About and legal** (B1), add a row **Community rules** that opens `https://l
 | "Delete my account" and "Sign out" on the acceptance screen | B2, with deletion live (B3, C2) |
 | The links to `/terms` and `/privacy`, and the `#community-rules` anchor | B1, D1 |
 | The recommended chat rules text and its new rules version | B1, and the C7 migration that bumps `private.chat_rules_version()` from `2026-11` |
-| "Terms of Use" and "Privacy Notice" linked as whole phrases | B1, B2, D3 (`TermsLine` and `links/assets/personal-flow.mjs`) |
+| "Terms of Use" and "Privacy Policy" linked as whole phrases | B1, B2, D3 (`TermsLine` and `links/assets/personal-flow.mjs`) |
 | A **Community rules** row in About and legal | B1 |

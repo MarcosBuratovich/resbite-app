@@ -11,7 +11,7 @@
 
 This is an internal procedure (gap analysis item A17; row PRV-10). It holds no personal data: people appear only by role. A UK solicitor reviews it with the public documents before launch (decision D-12). It is written to be complete and usable as it stands.
 
-**What it describes.** Resbite at version 1.0, after workstreams B, C and D of the gap analysis are built, using the recommended default for every owner decision D-3 to D-25. A step that is not possible yet carries **[needs X]**. Section 14 lists them.
+**What it describes.** Resbite at version 1.0, after workstreams B, C and D of the gap analysis are built, using the owner's answers and the rulings of 17 November 2026 (AS-D1 to AS-D8 and AS-R1 to AS-R9 in `knowledge-base/08-decisions.md`) and otherwise the recommended default for every owner decision D-3 to D-25. A step that is not possible yet carries **[needs X]**. Section 14 lists them.
 
 **References.** "The gap analysis" is `docs/superpowers/specs/2026-11-17-app-store-readiness-design.md`. Companion records in this folder: `records-of-processing.md` (A8, including the security measures), `vendors.md` (A18), `team-access.md` (A24), `moderation-standard.md` (A15), `law-enforcement-requests.md` (A22).
 
@@ -24,11 +24,10 @@ This is an internal procedure (gap analysis item A17; row PRV-10). It holds no p
 1. [[OWNER: effective date — proposed: the day version 1.0 is released on the App Store]]
 2. [[OWNER: ICO data protection fee registration number — proposed: pay tier 1 before launch and enter the number here]]
 3. [[OWNER: tool that holds the moderation, request, complaint, breach and law-enforcement logs — proposed: one access-controlled spreadsheet in the mailbox provider's business workspace, under the same data processing agreement]]
-4. [[OWNER: SMS provider — proposed: Twilio]]
-5. [[OWNER: CAPTCHA vendor — proposed: Cloudflare Turnstile or hCaptcha]]
-6. [[OWNER: whether the company holds cyber insurance, and the insurer's notification deadline — proposed: record "none" if none]]
-7. [[OWNER: how long to keep breach log entries — proposed: six years after each breach is closed, with entries holding no names, numbers or account ids]]
-8. [[OWNER: VAT number, or delete if not VAT-registered]] (in the signature of the notices, section 12)
+4. [[OWNER: CAPTCHA vendor — proposed: Cloudflare Turnstile or hCaptcha]]
+5. [[OWNER: whether the company holds cyber insurance, and the insurer's notification deadline — proposed: record "none" if none]]
+6. [[OWNER: how long to keep breach log entries — proposed: six years after each breach is closed, with entries holding no names, numbers or account ids]]
+7. [[OWNER: VAT number, or delete if not VAT-registered]] (in the signature of the notices, section 12)
 
 ---
 
@@ -37,7 +36,7 @@ This is an internal procedure (gap analysis item A17; row PRV-10). It holds no p
 A breach of security leading to the accidental or unlawful destruction, loss, alteration, unauthorised disclosure of, or access to, personal data (UK GDPR Art 4(12)). It does not have to be an attack. Examples for Resbite:
 
 - Someone signs in to an account that is not theirs (the phone-code test mode made this possible until it was switched off, section 11).
-- A secret key leaks: the Supabase secret key, a worker secret, the Apple, Expo, Resend, SMS or CAPTCHA keys.
+- A secret key leaks: the Supabase secret key, a worker secret, the Apple, Expo, Resend, Twilio or CAPTCHA keys.
 - A database policy or function bug lets people read what they should not: chats, phone numbers, meeting details, reports, blocks.
 - An export or a reply goes to the wrong email address.
 - A team member's laptop or phone with dashboard access is lost or stolen.
@@ -53,7 +52,7 @@ A breach of security leading to the accidental or unlawful destruction, loss, al
 | **The owner** | Decides. Leads containment, makes the 72-hour decision, reports to the ICO, decides whether to tell people, keeps the log. Approves every hosted step at the time (house rule), and records it afterwards in a `qa/` runbook without personal data. |
 | **The backup moderator** | Reports, and contains only within their own access: for example, signs out of a lost device's sessions and changes their own passwords. If the owner cannot be reached within 24 hours of the report and the 72-hour deadline is at risk, files an initial report with the ICO with what is known, if the signed instructions in `team-access.md` give them that authority. |
 | **The solicitor** | Advises on whether to report, whom to tell and how, and on any police or legal angle. |
-| **Processors** (Supabase, Vercel, Expo, Resend, the SMS provider, the CAPTCHA vendor, the mailbox provider, the log tool) | Must tell us without undue delay after becoming aware of a breach of our data (Art 33(2); their DPAs, `vendors.md`) **[needs F7]**. |
+| **Processors** (Supabase, Vercel, Expo, Resend, Twilio, the CAPTCHA vendor, the mailbox provider, the log tool) | Must tell us without undue delay after becoming aware of a breach of our data (Art 33(2); their DPAs, `vendors.md`) **[needs F7]**. |
 
 ## 3. The first hour
 
@@ -92,8 +91,8 @@ Every hosted change needs the owner's approval at the time. Record what was done
 | Expo access token | `EXPO_ACCESS_TOKEN` (sending pushes) | Expo account |
 | Apple keys | The APNs key (in EAS credentials); the Sign in with Apple `.p8` key for token revocation **[needs C2]** | Apple Developer account |
 | Auth email sending | Resend API key or SMTP password in Supabase Auth | Resend, then Supabase Auth settings |
-| SMS provider credentials | The Send SMS hook **[needs C1]** (placeholder 4) | The provider's console, then the hook |
-| CAPTCHA secret key | Supabase Auth **[needs OPS-9]** (placeholder 5) | The vendor's console, then Supabase Auth |
+| Twilio credentials | The Send SMS hook **[needs C1]** (decision AS-D5) | Twilio's console, then the hook |
+| CAPTCHA secret key | Supabase Auth **[needs OPS-9]** (placeholder 4) | The vendor's console, then Supabase Auth |
 | Google OAuth client secret | Supabase Auth's Google provider | Google Cloud console, then Supabase Auth |
 | Deploy tokens | Vercel, Expo and EAS, GitHub | Each console |
 | Mailbox and log tool passwords | The inboxes; the log tool | Each service |
@@ -164,7 +163,7 @@ Templates B1 to B3 (section 12).
 | The solicitor | Every breach we report, and any we are unsure about |
 | Processors involved | When their service is part of the cause or the fix |
 | The police | When a crime may have been committed: 101, or 999 if anyone is in danger. Fraud and cyber crime also go to the national reporting service. Keep the crime reference in the log |
-| Our insurer | If the company has cover, within its deadline (placeholder 6) |
+| Our insurer | If the company has cover, within its deadline (placeholder 5) |
 | Apple, Google | If a breach involves their sign-in tokens or keys, follow their key-revocation process. There is no general duty to notify them |
 | The NCA | If the breach exposed child sexual abuse material: follow `moderation-standard.md` section 9 |
 
@@ -198,7 +197,7 @@ Kept outside the repo, in the log tool (placeholder 3), access-restricted to the
 | Actions | Follow-up actions, each with a role and a due date |
 | Closed | Date |
 
-Retention: placeholder 7.
+Retention: placeholder 6.
 
 ## 11. The first entry: the phone-code test-mode review (F5)
 

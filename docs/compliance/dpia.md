@@ -12,18 +12,17 @@
 
 ## Placeholders to fill
 
-1. [[OWNER: SMS provider — proposed: Twilio]] (section 2.1; R17 in section 5.10)
-2. [[OWNER: SMS provider's location and transfer safeguard, from its data processing agreement — proposed: United States; the UK–US data bridge if the provider is certified, otherwise the UK Addendum to the EU Standard Contractual Clauses]] (section 2.1)
-3. [[OWNER: CAPTCHA vendor — proposed: Cloudflare Turnstile or hCaptcha]] (section 2.1; R2 in section 5.1)
-4. [[OWNER: the backup moderator's identity — recorded only in the signed team access agreement kept outside the repo; the repo records only that a backup is named, and the date — proposed: one named person at the Supabase Developer role with MFA, named before the 1.0 submission]] (R11 in section 5.6)
-5. [[OWNER: the DPA 2018 Schedule 1 condition for criminal offence data in reports, chosen with the solicitor — proposed: paragraph 12 (regulatory requirements relating to unlawful acts), with paragraph 10 (preventing or detecting unlawful acts) as the alternative, each extended to criminal offence data by paragraph 36; paragraph 18 (safeguarding) for child-safety reports; paragraph 33 (legal claims) for records under a legal hold]] (section 4.1)
-6. [[OWNER: Vercel function region — proposed: London (lhr1)]] (section 2.1)
-7. [[OWNER: summary of the solicitor's advice on this DPIA — proposed: written here after the review, with any advice not followed and the reason]] (section 8)
-8. [[OWNER: sign-off date — proposed: after the solicitor's review and once every "To build" measure is live]] (section 8)
+1. [[OWNER: Twilio's region and transfer safeguard, to confirm when Resbite Ltd's account accepts Twilio's Data Protection Addendum — proposed: the United States, Twilio's main processing location, under the UK–US data bridge (Twilio Inc. states it takes part in the UK Extension to the EU–US Data Privacy Framework; check the live listing), with the UK Addendum to the EU Standard Contractual Clauses in Twilio's addendum as the fallback; Twilio's Ireland region (IE1) also offers messaging]] (section 2.1)
+2. [[OWNER: CAPTCHA vendor — proposed: Cloudflare Turnstile or hCaptcha]] (section 2.1; R2 in section 5.1)
+3. [[OWNER: the backup moderator's identity — the owner names one backup (decision AS-D6); recorded only in the signed team access agreement kept outside the repo; the repo records only that a backup is named, and the date — proposed: at the Supabase Developer role with MFA, named before the 1.0 submission]] (R11 in section 5.6)
+4. [[OWNER: the DPA 2018 Schedule 1 condition for criminal offence data in reports, chosen with the solicitor — proposed: paragraph 12 (regulatory requirements relating to unlawful acts), with paragraph 10 (preventing or detecting unlawful acts) as the alternative, each extended to criminal offence data by paragraph 36; paragraph 18 (safeguarding) for child-safety reports; paragraph 33 (legal claims) for records under a legal hold]] (section 4.1)
+5. [[OWNER: Vercel function region — proposed: London (lhr1)]] (section 2.1)
+6. [[OWNER: summary of the solicitor's advice on this DPIA — proposed: written here after the review, with any advice not followed and the reason]] (section 8)
+7. [[OWNER: sign-off date — proposed: after the solicitor's review and once every "To build" measure is live]] (section 8)
 
 ## How to read this
 
-- **Target state.** This DPIA describes Resbite **as it will be at version 1.0**, after workstreams B, C, D and F of the gap analysis are built, using the gap analysis' recommended default for each owner decision (D-3 to D-25). Each measure carries its status on 17 November 2026: **Live** (built, and on the hosted project where it needs the backend), or **To build** with the workstream id (for example C3). Sign-off is conditional on every "To build" measure being live before submission.
+- **Target state.** This DPIA describes Resbite **as it will be at version 1.0**, after workstreams B, C, D and F of the gap analysis are built, using the owner's answers and the rulings of 17 November 2026 (AS-D1 to AS-D8 and AS-R1 to AS-R9 in `knowledge-base/08-decisions.md`) and otherwise the gap analysis' recommended default for each owner decision (D-3 to D-25). Each measure carries its status on 17 November 2026: **Live** (built, and on the hosted project where it needs the backend), or **To build** with the workstream id (for example C3). Sign-off is conditional on every "To build" measure being live before submission.
 - **Evidence.** Each mechanism was checked in the code on 17 November 2026 (branch `app-store-readiness` at `de8ba6a`, whose code matches `main` at `db8a221`). File paths point to the latest definition. Where the code and the gap analysis disagree, this record follows the code and says so.
 - **Scoring.** We follow the ICO's sample DPIA template (read through search extracts). Likelihood is remote, possible or probable. Severity is minimal, significant or severe. Overall risk comes from this grid:
 
@@ -43,7 +42,7 @@
 - **21 risks** are assessed in section 5. Before measures, 7 are high, 12 medium and 2 low.
 - **After measures, none is high.** Seven stay medium and are accepted with reasons: discoverability by number (R1), earlier chat messages read by later joiners (R7), self-declared age (R9), team access to all content (R11), reused phone numbers (R12), image abuse without automated matching (R15), and a breach of the central database (R19). The rest are low.
 - **No prior consultation with the ICO** (Art 36) is needed, because no residual risk is high. The solicitor is asked to confirm this.
-- **Conditions of sign-off:** every "To build" measure is live; the backup moderator has signed A24 and has MFA on; the Expo and SMS provider contracts are confirmed (F7); the solicitor has reviewed this DPIA and A23.
+- **Conditions of sign-off:** every "To build" measure is live; the backup moderator has signed A24 and has MFA on; the Expo and Twilio contracts are confirmed (F7); the solicitor has reviewed this DPIA and A23.
 
 ---
 
@@ -114,7 +113,7 @@ Two further factors push towards a DPIA: **criminal offence data** in reports (a
 | Anyone with an event link or a personal invitation link | The host's display name, title, time, optional area, cover and going count; a personal page also shows the invited number's calling code and last two digits (`private.invitation_page`, `supabase/migrations/20261031120000_creating_a_resbite.sql:247-264`) |
 | Anyone who has a user's number | That the number belongs to someone "On Resbite" (section 5.1) |
 | The team (the owner and the backup moderator) | Everything in the database, through the Supabase dashboard (section 5.11) |
-| Processors | Supabase (everything), Expo (push tokens and push text), Resend (Auth emails), Vercel (link site requests), the SMS provider [[OWNER: SMS provider — proposed: Twilio]] (numbers and codes), the CAPTCHA vendor [[OWNER: CAPTCHA vendor — proposed: Cloudflare Turnstile or hCaptcha]], the mailbox provider for the inboxes and the log tool, Cloudflare (DNS queries, rarely a visitor's own IP address). Each is recorded in A18 |
+| Processors | Supabase (everything), Expo (push tokens and push text), Resend (Auth emails), Vercel (link site requests), Twilio, the SMS provider (numbers, codes and service texts; decision AS-D5), the CAPTCHA vendor [[OWNER: CAPTCHA vendor — proposed: Cloudflare Turnstile or hCaptcha]], the mailbox provider for the inboxes and the log tool, Cloudflare (DNS queries, rarely a visitor's own IP address). Each is recorded in A18 |
 | Independent controllers | Apple (Sign in with Apple, push delivery), Google (sign-in), WhatsApp or Apple Messages when a host sends an invitation from their own phone (inference that Apple and Google act as controllers: UNVERIFIED, LAW-9) |
 
 **Data flows out of the UK.**
@@ -125,7 +124,7 @@ Two further factors push towards a DPIA: **criminal offence data** in reports (a
 | Auth emails, through Resend | Resend stores data in the US (`qa/auth-readiness.md:74-80`) | Resend's DPA, confirmed in F7 |
 | Supabase support access | Supabase Pte. Ltd, Singapore, with remote access to the London project | Supabase DPA with the UK Addendum [SUPA-DPA] |
 | Link site requests and logs | Vercel's default region is Washington, D.C. (`iad1`); the generated config sets none (`links/generate.mjs:72-103`) | Vercel DPA with the EU SCCs and UK addendum [VERCEL-DPA]; region [[OWNER: Vercel function region — proposed: London (lhr1)]] |
-| Phone numbers and codes, through the SMS provider | [[OWNER: SMS provider's location and transfer safeguard, from its data processing agreement — proposed: United States; the UK–US data bridge if the provider is certified, otherwise the UK Addendum to the EU Standard Contractual Clauses]] | As left |
+| Phone numbers and codes, through Twilio | [[OWNER: Twilio's region and transfer safeguard, to confirm when Resbite Ltd's account accepts Twilio's Data Protection Addendum — proposed: the United States, Twilio's main processing location, under the UK–US data bridge (Twilio Inc. states it takes part in the UK Extension to the EU–US Data Privacy Framework; check the live listing), with the UK Addendum to the EU Standard Contractual Clauses in Twilio's addendum as the fallback; Twilio's Ireland region (IE1) also offers messaging]] | As left |
 
 **Retention.** The defaults in the gap analysis' section 5 table, enforced by the C3 jobs and the C2 deletion (all **To build** except where marked). The full schedule is A12.
 
@@ -138,7 +137,9 @@ Two further factors push towards a DPIA: **criminal offence data** in reports (a
 | Notification outbox and delivery rows | 30 days after sending (`invited` rows while the invitation is pending) |
 | Replaced profile photos and covers | 7 days unattached |
 | Closed reports | 180 days after closing (decided, R-Q3; run by hand today, by a C3 job at 1.0) |
-| Suspension records | While suspended, then 12 months after the suspension ends, whether it is lifted or the account is deleted (see open point in section 7) |
+| Suspension records | While suspended, then 12 months after it is lifted. If the account is deleted, the user id is cleared and the reason and dates kept for 12 months after the deletion (ruling AS-R1; C2) |
+| Reports filed by a person who deletes their account | Until closed, then 180 days, with the reporter id cleared (ruling AS-R2; C2, C3) |
+| Web-only accounts | Deleted after 12 months with no resbite; a code request never confirmed, after 30 days (ruling AS-R4; C3) |
 | Connections | While both accounts exist or until removed; unanswered requests 90 days |
 | Connection refusals | 12 months after the refusal |
 | Objection suppression list | Until the person withdraws the objection |
@@ -203,7 +204,7 @@ We do not use personal data for advertising, analytics, profiling, marketing or 
 | The product stakeholder | Done for the 18+ rule (decision GI2-D3) | The 18+ minimum age |
 | The backup moderator | To do, when A24 is signed (C5) | Their access and duties are set in A24 and A15 |
 | A UK solicitor (D-12) | To do | Reviews this DPIA, A23 and the public documents; summary in section 8 |
-| Processors | To do (F7) | Supabase, Expo, Resend, Vercel, the SMS provider, the CAPTCHA vendor and the mailbox provider confirm their contracts and transfer safeguards |
+| Processors | To do (F7) | Supabase, Expo, Resend, Vercel, Twilio, the CAPTCHA vendor and the mailbox provider confirm their contracts and transfer safeguards |
 | Users and invited non-users | **Not done** | No consultation with users is recorded. Recommended before the first yearly review: ask beta users about push previews, discoverability by number and chat history for later joiners, and record the answers here |
 | The ICO | Not needed | Prior consultation (Art 36) applies only when a high risk remains after measures. None does (section 6) |
 
@@ -259,7 +260,7 @@ The sign-in number is verified by an SMS code (once C1 ends test mode). A frozen
 
 ### 4.5 Transparency
 
-- The Privacy Notice (A1) at https://link.resbite.com/privacy, linked from the app's "About and legal" group, the welcome and sign-in screens, the 18+ tick, the link site footer and the App Store listing (B1, D1, D2; **To build**). It discloses discoverability, chat history, push text through Expo in the US, connections and refusals, non-users' numbers, reports, retention and vendors.
+- The Privacy Policy (A1) at https://link.resbite.com/privacy, linked from the app's "About and legal" group, the welcome and sign-in screens, the 18+ tick, the link site footer and the App Store listing (B1, D1, D2; **To build**). It discloses discoverability, chat history, push text through Expo in the US, connections and refusals, non-users' numbers, reports, retention and vendors.
 - A short notice beside the number field on `/r/` and `/i/`, and on `/i/` a **separate** statement of the right to object (A2, D3, PRV-19; **To build**).
 - An accurate Data & privacy page in the app (B5; **To build**).
 - In the chat itself: "To: people going. People who join later can read this too." (`mobile/src/domain/chatCopy.ts:22`) and "made this a group · everyone invited can read this chat" (`mobile/src/domain/chatRules.ts:294`) (**Live**).
@@ -267,14 +268,14 @@ The sign-in number is verified by an SMS code (once C1 ends test mode). A frozen
 
 ### 4.6 Rights
 
-- Deletion in the app for every account type, completed within 30 days, with a confirmation (B3, C2; **To build**). Suspended accounts can delete too (D-19). Banned and web-only accounts use the privacy inbox route on `/delete-account` (A6, D8).
+- Deletion in the app for every account type, completed within 30 days, with a confirmation (B3, C2; **To build**). Suspended accounts can delete too (D-19). Banned and web-only accounts use the privacy inbox route on `/delete-account` (A6, D8), and the owner runs the deletion script that follows the app's lifecycle (ruling AS-R3, C6). A web-only account with no resbite in 12 months is deleted by a job (ruling AS-R4, C3).
 - Access and portability by request, with a "Request a copy of my data" row (B14) and an export script that gives the person's own messages, never other people's chat or a reporter's identity (C6, A16; **To build**).
 - Objection: a non-user's objection is honoured across all hosts by the suppression list (C3, D-23; **To build**).
 - Complaints to us first (DPA 2018 s.164A), then to the ICO (A5).
 
 ### 4.7 Processors and transfers
 
-Every vendor, its role, region, contract and transfer test is in A18. The open items are Expo's DPA and live Data Privacy Framework listing (UNVERIFIED), the scope of Vercel's DPA for the plan in use (UNVERIFIED), the SMS provider's contract before switch-on, the CAPTCHA vendor's terms, and moving every vendor account into the company's name (F7, F8; **To build**).
+Every vendor, its role, region, contract and transfer test is in A18. The open items are Expo's DPA and live Data Privacy Framework listing (UNVERIFIED), the scope of Vercel's DPA for the plan in use (UNVERIFIED), Twilio's contract, region and message retention before switch-on (A18), the CAPTCHA vendor's terms, and moving every vendor account into the company's name (F7, F8; **To build**).
 
 ### 4.8 Stopping function creep
 
@@ -304,7 +305,7 @@ Each section says what happens (checked in the code), the risks, the measures wi
   - Block, which removes you from that person's lookups and stops their in-app invitations (`supabase/migrations/20261111160000_chat_safety.sql:741`, and the `private.blocks` check in `invite_contacts`). **Live.**
   - Nothing beyond a display name and an optional photo is shown; the number and email are never shown to other users. **Live.**
   - Report, with the support route for people at risk (A15). **Live** (report); **To build** (new reasons B7, C7).
-  - Disclosure in the Privacy Notice and on Data & privacy (A1, B5). **To build.**
+  - Disclosure in the Privacy Policy and on Data & privacy (A1, B5). **To build.**
 - Options weighed: a setting to hide yourself from lookups. Not offered for 1.0, because being findable by number is the core of the app; recorded as an open point (section 7).
 - Residual: possible × minimal-to-significant, rated **medium**. Accepted, because it is the core function, people are told, and block works.
 
@@ -322,7 +323,7 @@ Each section says what happens (checked in the code), the risks, the measures wi
 ### 5.2 Invisible processing of non-users' numbers, and `plan_removals`
 
 **What happens.**
-- **Lookup only.** A picked number that matches nobody is compared and forgotten. Its holder never learns of it. We rely on the public Privacy Notice (Art 14(5)(b)), which is why the ICO treats this as invisible processing.
+- **Lookup only.** A picked number that matches nobody is compared and forgotten. Its holder never learns of it. We rely on the public Privacy Policy (Art 14(5)(b)), which is why the ICO treats this as invisible processing.
 - **Personal invitation.** When a host, or a guest the host lets bring people, invites a number that belongs to no user (or to someone who has never used the app, or who blocked the inviter), the server stores the digits and calling code in `private.phone_invitations`, with only a hash of the link's code, who sent it and when (`supabase/migrations/20261111160000_chat_safety.sql:672-715`). The sender's phone opens WhatsApp or Messages with a neutral text they can edit: "{host} invited you to {title}, {when}. Reply here: {link}" (`mobile/src/domain/contactInvites.ts:190-195`). The holder first hears from us when they open the link. To answer, they must prove the number with an SMS code; the server refuses anyone whose verified number differs (`supabase/migrations/20261111130000_circles_of_trust.sql:470-475`). Wrong-number checks are limited to 10 per invitation per hour (`supabase/migrations/20261028120000_contact_invitations.sql:222-240`).
 - **Removals.** When a host removes, declines or revokes someone, the number (and the account, if any) goes into `private.plan_removals` for the series, so a guest cannot bring them straight back; a host inviting them again clears it (`supabase/migrations/20261111130000_circles_of_trust.sql:38-56,186-190,770-777`).
 - Today neither table has an expiry (`supabase/migrations/20261028120000_contact_invitations.sql:12-25`). C3 adds the jobs.
@@ -331,7 +332,7 @@ Each section says what happens (checked in the code), the risks, the measures wi
 - Impact: unexpected processing by a company they never dealt with; no chance to object before it happens.
 - Before measures: probable × minimal = **medium**.
 - Measures:
-  - A non-user section in the Privacy Notice: the source ("a friend who uses Resbite"), the purpose, the retention and the right to object (A1, A2). **To build** (D1).
+  - A non-user section in the Privacy Policy: the source ("a friend who uses Resbite"), the purpose, the retention and the right to object (A1, A2). **To build** (D1).
   - A short notice beside the number field on `/i/` and `/r/`, and on `/i/` the right to object in its own separate line (D3, PRV-19). **To build.**
   - Short retention, so a number whose holder never opens the link is gone within 30 days of the resbite ending (C3). **To build.**
   - We never contact non-users ourselves; the host sends from their own phone (PERM-4, LAW-23). **Live.**
@@ -371,7 +372,7 @@ Each section says what happens (checked in the code), the risks, the measures wi
 
 **What happens.** Membership of a chat is computed, never stored (`supabase/migrations/20261111150000_chat_groups.sql:194-205`):
 - **One-off resbite:** the hosts and the guests who answered Going or Maybe read and write the whole history. The chat goes read-only 48 hours after the end.
-- **Weekly group:** the hosts and everyone invited to the current occurrence, **whatever they answered**, read and write the whole history. It closes 48 hours after the series stops. Someone who leaves after an occurrence has ended is out of the chat.
+- **Weekly group:** the hosts and everyone invited to the current occurrence, **whatever they answered, pending guests included**, read and write the whole history. Ruling AS-R8 keeps this as built (`supabase/migrations/20261111150000_chat_groups.sql:194-205`) and discloses it; it is still to confirm with the owner. It closes 48 hours after the series stops. Someone who leaves after an occurrence has ended is out of the chat.
 
 People get into a resbite in four ways: a host's invitation; a personal link answered with the matching verified number; the open event link (`/r/`), where every request waits for a host's approval (`supabase/migrations/20261029120000_open_link_approval.sql:1-8`); and a guest bringing someone, which needs no approval but only works when the host has given guests invites (`bring_invites`, default 0, "Nobody", up to 3) (`supabase/migrations/20261111130000_circles_of_trust.sql:15-21`).
 
@@ -383,7 +384,7 @@ People get into a resbite in four ways: a host's invitation; a personal link ans
   - Bringing is off unless the host turns it on, and limited to 3 people per guest and 3 levels. **Live.**
   - The host can reset the event link so the old one stops working (`private.rotate_plan_link`, `supabase/migrations/20261021120000_gi1_event_links.sql:51-58`), and remove a guest. **Live.**
   - The chat says that later joiners can read it, and a group says that everyone invited can read it. **Live.**
-  - Data & privacy and the Privacy Notice say that chat is readable by later joiners and is not end-to-end encrypted (B5, A1). **To build** (rewrite).
+  - Data & privacy and the Privacy Policy say that chat is readable by later joiners and, in a weekly group, by everyone on the current week's guest list, pending guests included, and that it is not end-to-end encrypted (B5, A1; ruling AS-R8). **To build** (rewrite).
   - Report, block, delete your own message; a host can remove a message. **Live.**
   - One-off chats close 48 hours after the end; chat retention of 90 days after closing, or 12 months in a group (C3). **Live** (closing); **To build** (retention).
 - Options weighed: show only messages sent after a person joined. Not built; it would break the shared plan that makes a group chat useful. Recorded for review.
@@ -428,7 +429,7 @@ People get into a resbite in four ways: a host's invitation; a personal link ans
   - Text is cut at 120 graphemes and first names at 30; sensitive fields never go in a push. **Live.**
   - The moderator's push carries no report content. **Live.**
   - Users can mute a chat or a resbite in the app (`public.chat_mutes`, `public.plan_mutes`), and iOS lets them hide previews on the lock screen. **Live.**
-  - Disclosure in the Privacy Notice and Data & privacy (A1, B5). **To build.**
+  - Disclosure in the Privacy Policy and Data & privacy (A1, B5). **To build.**
   - Expo's DPA and Data Privacy Framework listing confirmed and recorded in A18 (F7). **To build.**
   - A "hide message previews" setting after 1.0 (B15). **Later.**
 - Options weighed: generic pushes ("New message"), or payloads encrypted on the server and decrypted on the phone by a notification service extension. Not for 1.0 (D-13).
@@ -453,7 +454,7 @@ Messages are not end-to-end encrypted. Moderation needs only the report queue (`
 - Impact: a serious intrusion into private conversations; exposure of numbers and meeting places.
 - Before measures: possible × severe = **high**.
 - Measures:
-  - Only two people have access: the owner and one named backup moderator [[OWNER: the backup moderator's identity — recorded only in the signed team access agreement kept outside the repo; the repo records only that a backup is named, and the date — proposed: one named person at the Supabase Developer role with MFA, named before the 1.0 submission]] (D-6, C5). **To build.**
+  - Only two people have access: the owner and one named backup moderator [[OWNER: the backup moderator's identity — the owner names one backup (decision AS-D6); recorded only in the signed team access agreement kept outside the repo; the repo records only that a backup is named, and the date — proposed: at the Supabase Developer role with MFA, named before the 1.0 submission]] (D-6, AS-D6, C5). **To build.**
   - Written instructions and a confidentiality agreement (A24): open data only to handle a report, a data request, a legal request or a breach; read the report queue, not whole chats; make no copies; no exports outside the scripts. Signed before access. **To build.**
   - MFA on Supabase and every other admin account (F16). **To build.**
   - An access review every six months and an offboarding checklist (F16). **To build.**
@@ -536,14 +537,14 @@ The remaining chat risks (a breach, no end-to-end encryption) are R19.
 - Residual: remote × significant = **low**.
 
 **R17. Phone verification is bypassed, or the SMS and CAPTCHA vendors mishandle numbers.**
-- What happens today: test mode accepts `000000` for any number (SI-1). At 1.0 a real provider, [[OWNER: SMS provider — proposed: Twilio]], sends the codes through Supabase's Send SMS hook (C1, B12, D6), and CAPTCHA protects the code requests (OPS-9).
+- What happens today: test mode accepts `000000` for any number (SI-1). At 1.0 Twilio sends the codes through Supabase's Send SMS hook (decision AS-D5; C1, B12, D6), and CAPTCHA protects the code requests (OPS-9).
 - Before measures: probable × severe = **high** (today).
 - Measures:
   - Test mode off, the test-code tables emptied and later dropped, every session revoked, the log reviewed and recorded in the breach log (C1, F5). **To build.**
   - The `000000` swap removed from the app and the site (B12, D6). **To build.**
   - SMS rate limits restored; OTP length and expiry confirmed (C1, C11). **To build.**
   - CAPTCHA after the build and the site send its token (B16, D10, F14). **To build.**
-  - The SMS provider's DPA before switch-on and the CAPTCHA vendor's terms; its script assessed under PECR reg 6 (F7, A18). **To build.**
+  - Twilio's DPA before switch-on, with its region and message retention set (A18), and the CAPTCHA vendor's terms; the CAPTCHA script assessed under PECR reg 6 (F7, A18). **To build.**
 - Residual: remote × significant = **low**.
 
 **R18. Data is kept longer than needed, or a person cannot get their account deleted.**
@@ -644,10 +645,10 @@ For the owner:
 2. **A second check for long-dormant accounts** (R12), for example asking for the email or an Apple or Google sign-in when the last session is old. Not in any workstream; accepted for 1.0.
 3. **A narrow moderation tool or the Team plan** (R11), so the backup moderator does not need full content access.
 4. **Storing non-users' numbers as a keyed hash** rather than digits (R4). Possible, but the host's own list shows the numbers they invited.
-5. **Suspension records and deletion.** D-19 lets a suspended person delete their account and keeps the suspension record for its own period. In the code, `private.suspensions` is deleted with the Auth user (`on delete cascade`, `supabase/migrations/20261111160000_chat_safety.sql:794`), so the record goes when cleanup removes the account. The public documents follow D-19's default: the record is kept 12 months after the deletion (A12, section 7). C2 must build that, or the public documents must change.
+5. **Suspension records and deletion.** Decided by ruling AS-R1: the record of an account that deletes itself while suspended is kept for 12 months after the deletion, with the user id cleared and the reason and the dates kept. In the code, `private.suspensions` is deleted with the Auth user (`on delete cascade`, `supabase/migrations/20261111160000_chat_safety.sql:794-795`), so C2 must build it. Likewise, a deleted reporter's reports are kept until closed and then 180 days, with the reporter id cleared (ruling AS-R2; today `supabase/migrations/20261116120000_open_beta.sql:255` deletes them).
 6. **Consult users** (section 3) before the first yearly review.
 
-For the solicitor:
+For the solicitor (gathered with the other documents' questions in `docs/legal/README.md`, "Questions for the solicitor", decision AS-D7):
 7. **The Art 10 condition** for reports (D-22), and whether A23 is needed.
 8. **Special category data in content and reports** (section 2.2): whether a Schedule 1 condition is needed for what users write about themselves or others, beyond the criminal offence condition.
 9. **Art 14(3)(b)**: whether the host's invitation text should carry a short privacy line, since the host's message is the first communication and our notice arrives only when the link is opened (R3).

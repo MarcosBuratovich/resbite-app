@@ -11,7 +11,7 @@
 
 This is an internal procedure (gap analysis item A22; rows UGC-15 and UGC-8). It holds no personal data: people appear only by role. A UK solicitor reviews it with the public documents before launch (decision D-12). It is written to be complete and usable as it stands.
 
-**What it describes.** Resbite at version 1.0, after workstreams B, C and D of the gap analysis are built, using the recommended default for every owner decision D-3 to D-25. A step that is not possible yet carries **[needs X]**. Section 15 lists them.
+**What it describes.** Resbite at version 1.0, after workstreams B, C and D of the gap analysis are built, using the owner's answers and the rulings of 17 November 2026 (AS-D1 to AS-D8 and AS-R1 to AS-R9 in `knowledge-base/08-decisions.md`) and otherwise the recommended default for every owner decision D-3 to D-25. A step that is not possible yet carries **[needs X]**. Section 15 lists them.
 
 **References.** "The gap analysis" is `docs/superpowers/specs/2026-11-17-app-store-readiness-design.md`. Companion records in this folder: `moderation-standard.md` (A15: the CSEA report to the NCA, threats on sight), `data-requests.md` (A16), `breach-response.md` (A17), `records-of-processing.md` (A8: lawful bases LB-20 and the Art 10 condition), `retention-schedule.md` (A12), `team-access.md` (A24).
 
@@ -51,7 +51,7 @@ This is an internal procedure (gap analysis item A22; rows UGC-15 and UGC-8). It
 
 ## 3. Who handles requests
 
-The owner handles every request, with the solicitor's advice where this procedure says so. Requests arrive at privacy@resbite.com, which the support page names as the address for courts, the police and regulators (subject "Legal request"), or anywhere else; whoever receives one forwards it to the owner the same day. The backup moderator may make an emergency disclosure only as section 5 allows.
+The owner handles every request, with the solicitor's advice where this procedure says so. Requests arrive at privacy@resbite.com, which the support page and the Privacy Policy name as the address for courts, the police and regulators (subject "Legal request"; ruling AS-R7), or anywhere else; whoever receives one forwards it to the owner the same day. The backup moderator may make an emergency disclosure only as section 5 allows.
 
 ## 4. Police requests (not an emergency)
 
@@ -90,7 +90,7 @@ Use the export script **[needs C6]** for the person concerned, then cut it down 
 
 ### 4.4 Telling the user
 
-Our privacy notice says we may disclose data to the police where the law allows (A1). Whether to tell the person concerned about a particular disclosure:
+Our Privacy Policy says we may disclose data to the police where the law allows (A1). Whether to tell the person concerned about a particular disclosure:
 - **Do not tell** them where the crime exemption applies because telling would be likely to prejudice the investigation, or where the police or an order ask us not to. Record that decision.
 - **Otherwise** we may tell them, after checking with the officer.
 - If the person later makes a data request, `data-requests.md` section 6.3 applies.

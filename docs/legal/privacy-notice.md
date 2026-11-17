@@ -1,4 +1,4 @@
-# Resbite Privacy Notice
+# Resbite Privacy Policy
 
 **Version 1.0 — draft for solicitor review, not yet published**
 **Effective date:** [[OWNER: effective date — proposed: the day the pages go live on link.resbite.com, after the solicitor's review and before the version 1.0 submission]]
@@ -9,17 +9,16 @@
 > 1. Effective date (header and section 16): [[OWNER: effective date — proposed: the day the pages go live on link.resbite.com, after the solicitor's review and before the version 1.0 submission]]
 > 2. VAT number (section 1): [[OWNER: VAT number, or delete if not VAT-registered]]
 > 3. ICO registration number (section 1): [[OWNER: ICO data protection fee registration number — proposed: pay tier 1 before launch and enter the number here]]
-> 4. SMS provider (sections 3.1, 5.2, 6, 10): [[OWNER: SMS provider — proposed: Twilio]]
-> 5. SMS provider's location and safeguard (sections 5.2, 6): [[OWNER: SMS provider's location and transfer safeguard, from its data processing agreement — proposed: United States; the UK–US data bridge if the provider is certified, otherwise the UK Addendum to the EU Standard Contractual Clauses]]
-> 6. SMS provider's retention (section 7): [[OWNER: how long the SMS provider keeps message records — proposed: the shortest period the provider allows, or message-body redaction, stated in days]]
-> 7. CAPTCHA vendor (sections 3.11, 5.2, 6, 9): [[OWNER: CAPTCHA vendor — proposed: Cloudflare Turnstile or hCaptcha]]
-> 8. CAPTCHA vendor's location and safeguard (sections 5.2, 6): [[OWNER: CAPTCHA vendor's location and transfer safeguard, from its terms — proposed: United States; the UK–US data bridge if the vendor is certified, otherwise the UK Addendum to the EU Standard Contractual Clauses]]
-> 9. Mailbox provider, which also holds our request and complaint records (sections 3.10, 5.2, 6): [[OWNER: mailbox provider for support@resbite.com and privacy@resbite.com — proposed: a business email service under a signed data processing agreement, with data held in the UK or EU and MFA on]]
-> 10. Vercel region (sections 5.2, 6): [[OWNER: Vercel function region — proposed: London (lhr1)]]
-> 11. Vercel plan, which sets its log period (sections 3.11, 7): [[OWNER: Vercel plan for the link site, which sets how long its request logs last — proposed: Pro, which keeps request logs for 1 day and is covered by Vercel's data processing agreement]]
-> 12. Criminal offence data condition (sections 3.9, 4): [[OWNER: the DPA 2018 Schedule 1 condition for criminal offence data in reports, chosen with the solicitor — proposed: paragraph 12 (regulatory requirements relating to unlawful acts), with paragraph 10 (preventing or detecting unlawful acts) as the alternative, each extended to criminal offence data by paragraph 36; paragraph 18 (safeguarding) for child-safety reports; paragraph 33 (legal claims) for records under a legal hold]]
+> 4. Twilio's region and safeguard (sections 5.2, 6): [[OWNER: Twilio's region and transfer safeguard, to confirm when Resbite Ltd's account accepts Twilio's Data Protection Addendum — proposed: the United States, Twilio's main processing location, under the UK–US data bridge (Twilio Inc. states it takes part in the UK Extension to the EU–US Data Privacy Framework; check the live listing), with the UK Addendum to the EU Standard Contractual Clauses in Twilio's addendum as the fallback; Twilio's Ireland region (IE1) also offers messaging]]
+> 5. Twilio's retention (section 7): [[OWNER: how long Twilio keeps message records — proposed: the Send SMS hook deletes each message record through Twilio's API once its delivery status is final, and Twilio says a deleted message's text can stay in its backups for up to 30 days, so state "up to 31 days after sending"; Twilio's Message Redaction setting is offered only with its Editions packages]]
+> 6. CAPTCHA vendor (sections 3.11, 5.2, 6, 9): [[OWNER: CAPTCHA vendor — proposed: Cloudflare Turnstile or hCaptcha]]
+> 7. CAPTCHA vendor's location and safeguard (sections 5.2, 6): [[OWNER: CAPTCHA vendor's location and transfer safeguard, from its terms — proposed: United States; the UK–US data bridge if the vendor is certified, otherwise the UK Addendum to the EU Standard Contractual Clauses]]
+> 8. Mailbox provider, which also holds our request and complaint records (sections 3.10, 5.2, 6): [[OWNER: mailbox provider for support@resbite.com and privacy@resbite.com — proposed: a business email service under a signed data processing agreement, with data held in the UK or EU and MFA on]]
+> 9. Vercel region (sections 5.2, 6): [[OWNER: Vercel function region — proposed: London (lhr1)]]
+> 10. Vercel plan, which sets its log period (sections 3.11, 7): [[OWNER: Vercel plan for the link site, which sets how long its request logs last — proposed: Pro, which keeps request logs for 1 day and is covered by Vercel's data processing agreement]]
+> 11. Criminal offence data condition (sections 3.9, 4): [[OWNER: the DPA 2018 Schedule 1 condition for criminal offence data in reports, chosen with the solicitor — proposed: paragraph 12 (regulatory requirements relating to unlawful acts), with paragraph 10 (preventing or detecting unlawful acts) as the alternative, each extended to criminal offence data by paragraph 36; paragraph 18 (safeguarding) for child-safety reports; paragraph 33 (legal claims) for records under a legal hold]]
 
-This is our privacy notice (sometimes called a privacy policy). It explains what personal data Resbite uses, why, who else is involved, how long we keep it, and the rights you have. It is written for everyone Resbite touches: people who use the app, people who answer an invitation on our website, people who are invited by their phone number but don't use Resbite, and people who contact us.
+This is our Privacy Policy. It explains what personal data Resbite uses, why, who else is involved, how long we keep it, and the rights you have. It is written for everyone Resbite touches: people who use the app, people who answer an invitation on our website, people who are invited by their phone number but don't use Resbite, and people who contact us.
 
 You can find it in the app (on the welcome and sign-in screens, and in **Profile → Data & privacy → About and legal**) and at https://link.resbite.com/privacy.
 
@@ -43,7 +42,7 @@ You can find it in the app (on the welcome and sign-in screens, and in **Profile
 ## Contents
 
 1. Who we are
-2. What this notice covers
+2. What this policy covers
 3. What we collect, and why
 4. Our lawful bases
 5. Who we share it with
@@ -57,7 +56,7 @@ You can find it in the app (on the welcome and sign-in screens, and in **Profile
 13. Automated decisions
 14. Children
 15. Keeping your data safe
-16. Changes to this notice
+16. Changes to this policy
 17. How to contact us
 
 ---
@@ -76,7 +75,7 @@ Resbite is run by **Resbite Ltd**, a private limited company registered in Engla
 | Help, reports and other complaints | support@resbite.com |
 | Contact form | https://link.resbite.com/support |
 
-Resbite Ltd is the **controller** of your personal data. That means we decide why and how it is used, and we are responsible for it. In this notice, "we", "us" and "our" mean Resbite Ltd.
+Resbite Ltd is the **controller** of your personal data. That means we decide why and how it is used, and we are responsible for it. In this policy, "we", "us" and "our" mean Resbite Ltd.
 
 We don't have a public phone number. If you can't use email or the form, write to us at our registered office and mark the envelope "Privacy".
 
@@ -86,9 +85,9 @@ Resbite version 1.0 is offered on the **UK App Store only**.
 
 ---
 
-## 2. What this notice covers
+## 2. What this policy covers
 
-This notice covers:
+This policy covers:
 
 - the Resbite iPhone app;
 - our website **link.resbite.com**, including the invitation pages (addresses that start `link.resbite.com/r/` and `link.resbite.com/i/`) and our legal and support pages;
@@ -120,7 +119,7 @@ Most of what we hold, you give us. Some comes from other people who use Resbite:
 - keep to one account per number;
 - send you a service text if your account has no email address and we need to reach you: for example, to tell you we suspended your account, to check it's you when you ask us for something, or to warn you about a security problem. We never send marketing texts.
 
-Our SMS provider, [[OWNER: SMS provider — proposed: Twilio]], sends the codes and these texts. If you don't give a verified number, you can't use Resbite. We never show your number to other users. People who already have it, such as a friend who invited you by it, of course know it.
+Our SMS provider, Twilio, sends the codes and these texts. If you don't give a verified number, you can't use Resbite. We never show your number to other users. People who already have it, such as a friend who invited you by it, of course know it.
 
 **Other ways to sign in (optional).** You can also sign in with:
 
@@ -148,7 +147,7 @@ We store it privately in London. People who can see you in a resbite, your conne
 
 ### 3.3 Resbites and weekly groups
 
-A resbite is a plan someone hosts. A weekly group is a resbite that repeats, every week or every two weeks. In this notice, each time a weekly group meets is a "week".
+A resbite is a plan someone hosts. A weekly group is a resbite that repeats, every week or every two weeks. In this policy, each time a weekly group meets is a "week".
 
 **What we hold:** the title, description and categories; the time and time zone; whether it repeats; a rough area; the exact meeting place; meeting details (such as a door code or directions); the note to guests; a cover photo and its description; the guest list, with each person's answer and who brought whom; co-hosts; requests to join from an event link; who muted a resbite; who left a weekly group; and the resbite's links.
 
@@ -177,7 +176,7 @@ Every resbite has a chat.
 **Who can read a chat:**
 
 - in a one-off resbite: the hosts and the guests who answered Going or Maybe;
-- in a weekly group: the hosts and everyone on the current week's guest list, whatever their answer;
+- in a weekly group: the hosts and everyone on the current week's guest list, whatever their answer, including guests who haven't answered yet. They can read the group's whole chat history;
 - **people who join later can read the whole chat, including messages sent before they joined.**
 
 **Chat is not end-to-end encrypted.** We store messages on our servers so that the people in the chat can read them. Like everything on our servers, our team can reach them. We don't read chats as a matter of course. We look at a message when someone reports it to us, or when the law requires us to.
@@ -261,15 +260,17 @@ People on our moderation team get a notification that says only "A new report is
 - a copy of the reported words and who wrote them, so we can act even if the message is deleted;
 - our notes, and what we did.
 
-Our moderation team reads reports. It is small: two named people who work under our written instructions and a duty of confidentiality. **We don't tell the person you reported who reported them.**
+If you delete your account, a report you made stays until we close it, and then for 180 days, but we remove your account from it (section 7).
 
-People who don't use Resbite can report something to us, including an intimate image of themselves, by email or with the form at https://link.resbite.com/support. We deal with reports of intimate images shared without consent within 48 hours.
+Our moderation team reads reports every day. It is small: two named people who work under our written instructions and a duty of confidentiality. **We don't tell the person you reported who reported them.**
+
+People who don't use Resbite can report something to us, including an intimate image of themselves, by email or with the form at https://link.resbite.com/support. We deal with reports of intimate images shared without consent within 48 hours, and we suspend the account that shared the image at once.
 
 **Allegations of crimes.** Reports can contain allegations that someone committed a crime, such as harassment or threats. The law calls this criminal offence data. We use it only to deal with the report, keep people safe and meet our legal duties, under [[OWNER: the DPA 2018 Schedule 1 condition for criminal offence data in reports, chosen with the solicitor — proposed: paragraph 12 (regulatory requirements relating to unlawful acts), with paragraph 10 (preventing or detecting unlawful acts) as the alternative, each extended to criminal offence data by paragraph 36; paragraph 18 (safeguarding) for child-safety reports; paragraph 33 (legal claims) for records under a legal hold]] of the Data Protection Act 2018.
 
 **Blocks.** If you block someone, we keep who blocked whom, and when. The person you blocked isn't told. Our team can see blocks, so we can spot people who cause problems.
 
-**Suspensions.** If we suspend an account, we keep a record of which account, the report it followed, what we changed and when. We tell the person how to appeal. Our Terms of Use explain when we suspend accounts.
+**Suspensions.** If we suspend an account, we keep a record of which account, the report it followed, what we changed and when. If a suspended account is deleted, we remove the account from the record and keep only the reason and the dates (section 7). We tell the person how to appeal. Our Terms of Use explain when we suspend accounts.
 
 **When the law requires it** we pass information to the police, the National Crime Agency or Ofcom. Section 5.4 explains.
 
@@ -298,7 +299,7 @@ Our website shows invitation pages for people who don't have the app, and our le
 - **Event links** (`/r/`) show the public details of a resbite (section 3.3). Anyone with the link can ask to join.
 - **Personal invitation links** (`/i/`) are for one invited number. The page shows the last two digits of the number invited.
 
-If you answer, or ask to join, on the website, you give us your mobile number (on a personal link we check it is the number invited, and keep only a count of tries), the code we text you, your name and your answer. **Confirming your number creates a simple Resbite account** that holds them. The hosts see your name and answer, and so do the other guests who have answered. If you later add the same number in the app, we move your answers into your app account and delete the website account.
+If you answer, or ask to join, on the website, you give us your mobile number (on a personal link we check it is the number invited, and keep only a count of tries), the code we text you, your name and your answer. **Confirming your number creates a simple Resbite account** that holds them. The hosts see your name and answer, and so do the other guests who have answered. If you later add the same number in the app, we move your answers into your app account and delete the website account. If a website account has no resbite for 12 months, we delete it. If you ask for a code but never confirm your number, we delete the number within 30 days.
 
 What the website stores in your browser is in section 9.
 
@@ -318,7 +319,7 @@ What the website stores in your browser is in section 9.
 - We don't use your data to train AI, and we don't send it to AI services.
 - We don't ask for sensitive information, such as your health, religion or sexuality. If you choose to share it in a chat or a report, we store and show it only as part of that chat or report.
 
-Resbite is free. If we add paid features in a later version, we'll update this notice before we use any payment information.
+Resbite is free. If we add paid features in a later version, we'll update this policy before we use any payment information.
 
 ---
 
@@ -387,7 +388,7 @@ These companies run parts of Resbite for us. They may use your data only on our 
 | Expo | Sends notifications to Apple's push service | Your push token and what each notification says | United States |
 | Resend | Sends sign-in emails: confirmation, codes and password reset | Your email address and the link or code | United States |
 | Vercel | Hosts link.resbite.com, including the contact form | Your IP address, browser details and the page addresses you visit (which include link codes); what you send in the contact form; cover photos passing through. What you type on the invitation pages goes straight to Supabase, not through Vercel | [[OWNER: Vercel function region — proposed: London (lhr1)]]. Vercel is a US company and may reach data from the United States |
-| [[OWNER: SMS provider — proposed: Twilio]] | Sends sign-in codes, and the service texts in section 3.1 | Your mobile number and the text of the message | [[OWNER: SMS provider's location and transfer safeguard, from its data processing agreement — proposed: United States; the UK–US data bridge if the provider is certified, otherwise the UK Addendum to the EU Standard Contractual Clauses]] |
+| Twilio | Sends sign-in codes, and the service texts in section 3.1 | Your mobile number and the text of the message | [[OWNER: Twilio's region and transfer safeguard, to confirm when Resbite Ltd's account accepts Twilio's Data Protection Addendum — proposed: the United States, Twilio's main processing location, under the UK–US data bridge (Twilio Inc. states it takes part in the UK Extension to the EU–US Data Privacy Framework; check the live listing), with the UK Addendum to the EU Standard Contractual Clauses in Twilio's addendum as the fallback; Twilio's Ireland region (IE1) also offers messaging]] |
 | [[OWNER: CAPTCHA vendor — proposed: Cloudflare Turnstile or hCaptcha]] | The bot check when you ask for a code | Your IP address and technical signals from your phone or browser | [[OWNER: CAPTCHA vendor's location and transfer safeguard, from its terms — proposed: United States; the UK–US data bridge if the vendor is certified, otherwise the UK Addendum to the EU Standard Contractual Clauses]] |
 | [[OWNER: mailbox provider for support@resbite.com and privacy@resbite.com — proposed: a business email service under a signed data processing agreement, with data held in the UK or EU and MFA on]] | Our support and privacy inboxes, and our records of requests and complaints | What you send us, and our replies | As named |
 | Cloudflare | Runs the domain name system (DNS) for resbite.com, which turns our web addresses into server addresses | Usually only the address of your internet provider's DNS service, rarely your own IP address | United States |
@@ -410,6 +411,8 @@ We share information with public authorities only when the law requires it or al
 - **Ofcom**, the online safety regulator, when it uses its legal powers to ask us for information.
 - **Courts**, when a court orders it, or when we need to establish or defend a legal claim.
 
+Authorities send their requests to privacy@resbite.com, with "Legal request" in the subject.
+
 While a request or legal notice is open, we may keep the specific records it covers, even if the account is deleted (section 7).
 
 ### 5.5 Our advisers
@@ -430,7 +433,7 @@ We store your data in London. Some of our providers are outside the UK, or reach
 | Expo | United States | The UK–US data bridge: Expo takes part in the UK Extension to the EU–US Data Privacy Framework |
 | Resend | United States | The UK Addendum to the EU Standard Contractual Clauses, in Resend's data processing agreement. Resend also takes part in the UK Extension to the EU–US Data Privacy Framework (the UK–US data bridge) |
 | Vercel | [[OWNER: Vercel function region — proposed: London (lhr1)]]; Vercel is a US company | The EU Standard Contractual Clauses with the UK Addendum, in Vercel's data processing agreement |
-| [[OWNER: SMS provider — proposed: Twilio]] | [[OWNER: SMS provider's location and transfer safeguard, from its data processing agreement — proposed: United States; the UK–US data bridge if the provider is certified, otherwise the UK Addendum to the EU Standard Contractual Clauses]] | As stated |
+| Twilio | [[OWNER: Twilio's region and transfer safeguard, to confirm when Resbite Ltd's account accepts Twilio's Data Protection Addendum — proposed: the United States, Twilio's main processing location, under the UK–US data bridge (Twilio Inc. states it takes part in the UK Extension to the EU–US Data Privacy Framework; check the live listing), with the UK Addendum to the EU Standard Contractual Clauses in Twilio's addendum as the fallback; Twilio's Ireland region (IE1) also offers messaging]] | As stated |
 | [[OWNER: CAPTCHA vendor — proposed: Cloudflare Turnstile or hCaptcha]] | [[OWNER: CAPTCHA vendor's location and transfer safeguard, from its terms — proposed: United States; the UK–US data bridge if the vendor is certified, otherwise the UK Addendum to the EU Standard Contractual Clauses]] | As stated |
 | [[OWNER: mailbox provider for support@resbite.com and privacy@resbite.com — proposed: a business email service under a signed data processing agreement, with data held in the UK or EU and MFA on]] | As named | As named |
 | Cloudflare | United States | The UK–US data bridge: Cloudflare takes part in the UK Extension to the EU–US Data Privacy Framework. Its data processing agreement also has the UK Addendum to the EU Standard Contractual Clauses as a fallback |
@@ -464,16 +467,17 @@ We keep personal data only as long as we need it. Then we delete it, or remove a
 | Records of notifications we sent (including copies of push tokens) | 30 days after sending. An invitation's record stays while the invitation is waiting for an answer |
 | Notification content at Expo | Deleted once passed to Apple. Delivery receipts: 24 hours |
 | Link-open counts | 12 months |
-| Reports | Until we close them, then 180 days. Reports you made are deleted when you delete your account. Reports about you are not |
-| Suspension records | While the suspension lasts, then 12 months after it ends, whether it is lifted or the account is deleted |
+| Reports | Until we close them, then 180 days. If you delete your account, reports you made are kept for the same period, with your account removed from them. Reports about you are kept too |
+| Suspension records | While the suspension lasts, then 12 months after it is lifted. If the account is deleted, 12 months after the deletion, with the account removed from the record: only the reason and the dates stay |
 | Deletion receipts | 30 days after the deletion is complete |
 | Supabase logs, including sign-in logs | 7 days |
 | Vercel request logs | [[OWNER: Vercel plan for the link site, which sets how long its request logs last — proposed: Pro, which keeps request logs for 1 day and is covered by Vercel's data processing agreement]] |
 | Backups | 7 days |
 | Sign-in emails at Resend | 30 days |
-| Text messages at our SMS provider | [[OWNER: how long the SMS provider keeps message records — proposed: the shortest period the provider allows, or message-body redaction, stated in days]] |
+| Text messages at Twilio, our SMS provider | [[OWNER: how long Twilio keeps message records — proposed: the Send SMS hook deletes each message record through Twilio's API once its delivery status is final, and Twilio says a deleted message's text can stay in its backups for up to 30 days, so state "up to 31 days after sending"; Twilio's Message Redaction setting is offered only with its Editions packages]] |
 | Support emails, contact form messages, data requests, complaints, and requests from the police or regulators | 24 months after we close the case |
-| A website-only account (you answered on the website and never used the app) | Until you ask us to delete it, or until we merge it into your app account |
+| A website-only account (you answered on the website and never used the app) | Until it has had no resbite for 12 months. Sooner if you ask us to delete it, or when we merge it into your app account |
+| A number you gave to get a code, if you never confirmed it | 30 days |
 | Records from our private test before version 1.0 (a list of tester email addresses and old invitation records) | Deleted once no longer needed to run Resbite |
 | What's stored on your phone or in your browser | See section 9 |
 
@@ -495,7 +499,8 @@ Go to **Profile → Data & privacy → Delete account**. You prove it's you with
 - your name and photo. Where you appeared, you are shown as "Deleted member";
 - your places on guest lists and your answers;
 - on every resbite you host, past and future: its title, description, cover photo, note to guests, meeting details, area and meeting place;
-- your connections and "Not now" records, blocks you made and blocks of you, the reports you made, your chat rules record, your push tokens and your notifications;
+- your connections and "Not now" records, blocks you made and blocks of you, your chat rules record, your push tokens and your notifications;
+- your account's link to the reports you made;
 - **the words of your chat messages and announcements.** They show as deleted, with no author;
 - if you signed in with Apple, Resbite's access to your Apple account. We ask Apple to revoke it.
 
@@ -508,7 +513,8 @@ Go to **Profile → Data & privacy → Delete account**. You prove it's you with
 ### What we keep after deletion
 
 - Reports about you, with the copy of what was reported, until we close them and then 180 days. This lets us keep other people safe.
-- If your account was suspended, the suspension record, for 12 months after the deletion (section 7).
+- Reports you made, until we close them and then 180 days, without your account. This lets us finish dealing with them.
+- If your account was suspended, a record of the suspension's reason and dates, without your account, for 12 months after the deletion (section 7).
 - Messages other people sent. They belong to the people who wrote them.
 - A deletion receipt, for 30 days after the deletion is complete.
 - Records under a legal hold (section 7).
@@ -517,7 +523,7 @@ Your data can stay in our backups and logs for up to 7 days after it is deleted.
 
 ### Without the app
 
-- **Website-only accounts.** If you answered on our website and never used the app, email privacy@resbite.com, or use the form at https://link.resbite.com/support. Tell us the number. We'll check that it's yours and delete the account within 30 days.
+- **Website-only accounts.** If you answered on our website and never used the app, email privacy@resbite.com, or use the form at https://link.resbite.com/support. Tell us the number. We'll check that it's yours and delete the account within 30 days. If you don't ask, we delete a website-only account once it has had no resbite for 12 months.
 - **If you can't sign in**, for example because your account was banned, email privacy@resbite.com in the same way.
 
 **Deleting the app doesn't delete your account.** It also may not remove what the app stored in your iPhone's Keychain (section 9).
@@ -561,7 +567,7 @@ The app reads your contacts only when you choose to invite from them, and your p
 - **Your session on an invitation page.** When you confirm your number on an event link or a personal invitation link, the page keeps your session in your browser's local storage: your sign-in tokens, the number you confirmed, and when the resbite starts. There is one entry for each link. It lets you see your answer if you come back. It is removed when the resbite starts, when you tap **Not you? Sign out**, or if it can't be read.
 - **The bot check.** When you ask for a code, [[OWNER: CAPTCHA vendor — proposed: Cloudflare Turnstile or hCaptcha]] may store or read information in your browser, or in the app, to tell people from programs. This is strictly necessary to protect sign-in.
 
-If we ever want to add analytics, we'll either ask you first or meet the law's conditions, and we'll update this notice before we start.
+If we ever want to add analytics, we'll either ask you first or meet the law's conditions, and we'll update this policy before we start.
 
 ---
 
@@ -587,11 +593,11 @@ We don't receive your name. It stays on the host's phone. If a host removed you 
 
 **How the invitation reaches you.** The host sends it from their own phone, through WhatsApp or Messages. We don't send it and we don't see it.
 
-**Who sees your number.** The host who invited you already has it. Other hosts of the resbite, and the invitation page, show only its last two digits. Supabase stores it for us in London (sections 5.2 and 6). If you ask for a code, our SMS provider, [[OWNER: SMS provider — proposed: Twilio]], receives your number to send it. We don't share it with anyone else.
+**Who sees your number.** The host who invited you already has it. Other hosts of the resbite, and the invitation page, show only its last two digits. Supabase stores it for us in London (sections 5.2 and 6). If you ask for a code, our SMS provider, Twilio, receives your number to send it. We don't share it with anyone else.
 
 **How long we keep it.** Until you answer or the invitation is withdrawn, or 30 days after the resbite ends, whichever comes first. On a removal list: 30 days after a one-off resbite ends, or 90 days after a weekly group's last week.
 
-**If you answer.** Confirming your number on the invitation page creates a simple Resbite account with your number, your name and your answer. The rest of this notice then applies to you. You can ask us to delete that account at any time (section 8).
+**If you answer.** Confirming your number on the invitation page creates a simple Resbite account with your number, your name and your answer. The rest of this policy then applies to you. You can ask us to delete that account at any time (section 8).
 
 > ### Your right to object
 >
@@ -704,9 +710,9 @@ If you think someone under 18 is using Resbite, including your own child, report
 
 ---
 
-## 16. Changes to this notice
+## 16. Changes to this policy
 
-We may update this notice, for example when we add a feature or change a provider. The version and date at the top show which one is current. This version takes effect on [[OWNER: effective date — proposed: the day the pages go live on link.resbite.com, after the solicitor's review and before the version 1.0 submission]].
+We may update this policy, for example when we add a feature or change a provider. The version and date at the top show which one is current. This version takes effect on [[OWNER: effective date — proposed: the day the pages go live on link.resbite.com, after the solicitor's review and before the version 1.0 submission]].
 
 If a change matters to you, such as a new kind of data, a new use or a new provider outside the UK, we'll tell you in the app before it takes effect. Earlier versions are available on request from privacy@resbite.com.
 
@@ -717,6 +723,7 @@ If a change matters to you, such as a new kind of data, a new use or a new provi
 | For | Contact |
 |---|---|
 | Your personal data: requests, objections and complaints | privacy@resbite.com |
+| Courts, the police and regulators | privacy@resbite.com, with "Legal request" in the subject |
 | Help, reports, complaints about content, appeals | support@resbite.com |
 | Either, by form | https://link.resbite.com/support |
 | Deleting your account | In the app, or https://link.resbite.com/delete-account |
@@ -726,18 +733,18 @@ If a change matters to you, such as a new kind of data, a new use or a new provi
 
 ## Drafting notes for the reviewer (remove before publishing)
 
-**What this draft describes.** Resbite as it will be at version 1.0, after workstreams B, C and D of the readiness gap analysis (`docs/superpowers/specs/2026-11-17-app-store-readiness-design.md`) are built, using the recommended default for every owner decision D-3 to D-25. It is written to UK GDPR Articles 13, 14 and 21(4), DPA 2018 s.164A, PECR regulation 6 and Apple guidelines 5.1.1(i) and 5.1.2(i). Statements that are only true once something is built:
+**What this draft describes.** Resbite as it will be at version 1.0, after workstreams B, C and D of the readiness gap analysis (`docs/superpowers/specs/2026-11-17-app-store-readiness-design.md`) are built, using the owner's answers and the rulings of 17 November 2026 (AS-D1 to AS-D8 and AS-R1 to AS-R9 in `knowledge-base/08-decisions.md`) and, where they say nothing, the recommended default for every owner decision D-3 to D-25. It is written to UK GDPR Articles 13, 14 and 21(4), DPA 2018 s.164A, PECR regulation 6 and Apple guidelines 5.1.1(i) and 5.1.2(i). Statements that are only true once something is built:
 
 | Section | Statement | Depends on |
 |---|---|---|
 | Intro | Links on the welcome and sign-in screens, and in About and legal | B1 |
-| 3.1, 10 | Codes sent by a real SMS provider; no test mode | C1, B12, D6 |
+| 3.1, 10 | Codes sent by Twilio through the Send SMS hook (AS-D5); no test mode | C1, B12, D6 |
 | 3.1, 5.2 | Service texts to accounts with no email (suspension notices, identity checks, security warnings) | C1, F2, F3, F5 (with A15, A16, A17) |
 | 3.1 | Every account has a Terms record, versioned and asked again on a new version | B2, C8, D4 |
 | 3.1 | Optional date of birth, second phone, city and interests removed and erased | B11, C9 |
 | 3.4 | Blocked-words check on titles, descriptions, notes, meeting details and names | C7 |
 | 3.5, 9 | Contacts read for names and numbers only; no location permission | B8 |
-| 3.9 | The new report reasons; 48-hour intimate-image standard; web reports by non-users | B7, C7, C6, D1, F2 |
+| 3.9 | The new report reasons; 48-hour intimate-image standard, with the uploader suspended at once (AS-R6); web reports by non-users | B7, C7, C6, D1, F2 |
 | 3.9 | Suspended people are told how to appeal | B6, F2, F4 |
 | 14 | Under-18 accounts suspended, then deleted, with a short case record | F2, C6 |
 | 3.9, 15 | Two-person moderation team under written instructions, confidentiality and MFA | C5, F16 (with A24) |
@@ -749,10 +756,12 @@ If a change matters to you, such as a new kind of data, a new use or a new provi
 | 7 | Every retention period enforced by a job | C3 (and C2 for deletion receipts) |
 | 7, 8, 5.4 | Legal holds respected by deletion and purge jobs | C2, C3, C6, F17 |
 | 8 | In-app deletion for every account type, within 30 days, with confirmation; Apple token revocation; suspended accounts can delete | B3, B6, C2 |
-| 7, 8 | A suspension record kept for 12 months after a suspended account is deleted (today it is deleted with the account) | C2 (D-19), C6 |
+| 7, 8 | A suspension record kept for 12 months after a suspended account is deleted, with the account id cleared and the reason and dates kept (AS-R1; today it is deleted with the account, `supabase/migrations/20261111160000_chat_safety.sql:794-795`) | C2 (D-19), C6 |
+| 3.9, 7, 8 | Reports filed by a person who deletes their account kept until closed, then 180 days, with the reporter id cleared (AS-R2; today they are deleted, `supabase/migrations/20261116120000_open_beta.sql:255`) | C2, C3 |
+| 3.12, 7, 8 | Website-only accounts with no resbite in 12 months deleted; unconfirmed code requests deleted after 30 days (AS-R4) | C3 |
 | 8 | A host's past resbites deleted 12 months after they ended; cover files removed within 7 days | C3 |
 | 5.2, 6 | Cloudflare's data processing agreement accepted for the DNS account (it is not automatic) | F7, F8 |
-| 8 | Website-only and banned accounts deleted by request | D8, F3 |
+| 8 | Website-only and banned accounts deleted by request, through the owner-run deletion script that runs the app's lifecycle (AS-R3) | D8, F3, C6 |
 | 10, 11 | Objections honoured with a do-not-invite list checked when anyone invites a number | C3 (D-23), F3 |
 | 11 | "Request a copy of my data" row; export with others' data withheld | B14, C6, F3 |
 | 12 | Complaints acknowledged within 30 days | F4 |
@@ -761,13 +770,13 @@ If a change matters to you, such as a new kind of data, a new use or a new provi
 **Where the code and the gap analysis differ (the draft follows the code).**
 
 - A resbite being created is kept in the Keychain after sign-out and cleared only when it is saved or the account is deleted (`mobile/src/services/createJournal.ts:17`; `mobile/src/services/sessionLifecycle.ts:130-134`). PRV-4 says no draft key exists.
-- A weekly group's chat is open to everyone with a guest row on the current week, whatever their answer, not only Going or Maybe (`supabase/migrations/20261111150000_chat_groups.sql:194-205`).
+- A weekly group's chat is open to everyone with a guest row on the current week, whatever their answer and pending guests included, not only Going or Maybe, and they read its whole history (`supabase/migrations/20261111150000_chat_groups.sql:194-205`). Ruling AS-R8 keeps this as built and section 3.4 discloses it; it is still to confirm with the owner.
 - Non-chat notifications carry the actor's display name, not the first name (`supabase/migrations/20261111140000_chat_core.sql:754`). Only chat notifications cut it to the first name.
 - The event link page (`/r/`) keeps a browser session too, not only the personal page (`links/assets/personal.js:7-9`).
 - There is no host setting for the guest list. Hosts, co-hosts, guests who have answered (any answer) and, in a weekly group, everyone in its chat see it (`private.can_see_guests`, `supabase/migrations/20261111150000_chat_groups.sql:574-580`). Section 3.3 says so.
 - A weekly group can repeat every week or every two weeks (`mobile/src/domain/planCopy.ts:41`; `repeat_weeks`).
 - When a host asks to delete their account, the redaction trigger blanks the title, description, cover, cover description, note to guests, meeting details and area of every resbite they own (`private.redact_deleting_owner_plan`, `supabase/migrations/20261021120000_gi1_event_links.sql:188-203`), and the request clears the place (`supabase/migrations/20261116120000_open_beta.sql:240`). Section 8 says so.
-- On lawful bases, this notice follows `docs/compliance/records-of-processing.md`: showing "On Resbite" and recording app use rest on legitimate interests (LB-04, LI-1), not contract.
+- On lawful bases, this policy follows `docs/compliance/records-of-processing.md`: showing "On Resbite" and recording app use rest on legitimate interests (LB-04, LI-1), not contract.
 - Resend states it keeps email and log data for 30 days on its Free, Pro and Scale plans and uses the UK Addendum for UK transfers (resend.com/security/gdpr, read 17 November 2026). Confirm the plan.
 
-**For the solicitor.** The open legal questions are listed with the hand-over of this draft, chiefly: the Schedule 1 condition (D-22); whether the Article 14 and Article 21(4) information reaches invited people "at the latest at the first communication" when the first message is the host's own; reliance on PECR's strictly necessary exception for the bot check; Apple, Google and Apple's push service as independent controllers; and the regulator's name.
+**For the solicitor.** The open legal questions are listed in `docs/legal/README.md`, "Questions for the solicitor" (decision AS-D7). For this policy, chiefly: the Schedule 1 condition (D-22); whether the Article 14 and Article 21(4) information reaches invited people "at the latest at the first communication" when the first message is the host's own; reliance on PECR's strictly necessary exception for the bot check; Apple, Google and Apple's push service as independent controllers; and the regulator's name.

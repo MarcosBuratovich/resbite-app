@@ -5,7 +5,7 @@
 - **Date:** 17 November 2026.
 - **Next review:** before the 1.0 submission (phase 6, step 24 of the [release runbook](README.md)); then at every release, and at least every six months (next by 17 May 2027).
 - **Purpose:** every App Store Connect field for Resbite's first public release, with the exact answer for 1.0 and the reason for it.
-- **Review:** a draft for the owner. The listing copy, the age rating answers and the App Privacy answers must match the Privacy Notice (A1) and the Terms of Use (A3), which go to a UK solicitor before publishing (decision D-12). Send this pack with them, so the solicitor sees what Apple and the public will be told.
+- **Review:** a draft for the owner. The listing copy, the age rating answers and the App Privacy answers must match the Privacy Policy (A1) and the Terms of Use (A3), which go to a UK solicitor before publishing (decision D-12). Send this pack with them, so the solicitor sees what Apple and the public will be told.
 - **Gap analysis:** `docs/superpowers/specs/2026-11-17-app-store-readiness-design.md`, workstream E (E1 to E12) and rows ASC-1 to ASC-18, SI-2, SI-5, PRV-14, PRV-20.
 - **Public drafts this pack must match:** `docs/legal/privacy-notice.md` (A1), `docs/legal/terms-of-use.md` (A3), `docs/legal/support.md` (A4) and `docs/legal/delete-account.md` (A6), drafted alongside this pack.
 
@@ -20,14 +20,13 @@
 | 3 | [[OWNER: approve the promotional text, description and keywords — proposed: text in section 3]] | Section 3 |
 | 4 | [[OWNER: Marketing URL — proposed: leave it empty for 1.0, or https://www.resbite.com once the F18 check passes]] | Section 4 |
 | 5 | [[OWNER: CAPTCHA vendor — proposed: Cloudflare Turnstile or hCaptcha]] | Sections 6 and 10 |
-| 6 | [[OWNER: SMS provider — proposed: Twilio]] | Section 10 (in the review notes) |
-| 7 | [[OWNER: App Review contact name, email and +44 phone — proposed: the owner, with support@resbite.com as the email, typed only into App Store Connect, never into the repo]] | Section 10 |
-| 8 | [[OWNER: review account email and password — proposed: account R1 of the pack's section 12, typed only into App Store Connect's Sign-In Information, never into the repo]] | Section 10 (account R1 of section 12) |
-| 9 | [[OWNER: deletion-test account email and password — proposed: account R2 of the pack's section 12, typed only into the Notes in App Store Connect, never into the repo]] | Section 10 (account R2 of section 12) |
-| 10 | [[OWNER: three mobile numbers the owner controls, none already on a Resbite account — proposed: one per review account, verified once by text and never written in the repo]] | Section 12 |
-| 11 | [[OWNER: titles of the two seeded resbites — proposed: "Thursday board games" and "Picnic in the park"]] | Section 12 |
-| 12 | [[OWNER: devices and iOS versions tested — proposed: each iPhone model and iOS version from the runbook's device checks, and the iPad used in iPhone compatibility mode]] | Section 10 (in the review notes) |
-| 13 | [[OWNER: the backup moderator's identity — recorded only in the signed team access agreement kept outside the repo; the repo records only that a backup is named, and the date — proposed: one named person at the Supabase Developer role with MFA, named before the 1.0 submission]] | Section 12 |
+| 6 | [[OWNER: App Review contact name, email and +44 phone — proposed: the owner, with support@resbite.com as the email, typed only into App Store Connect, never into the repo]] | Section 10 |
+| 7 | [[OWNER: review account email and password — proposed: account R1 of the pack's section 12, typed only into App Store Connect's Sign-In Information, never into the repo]] | Section 10 (account R1 of section 12) |
+| 8 | [[OWNER: deletion-test account email and password — proposed: account R2 of the pack's section 12, typed only into the Notes in App Store Connect, never into the repo]] | Section 10 (account R2 of section 12) |
+| 9 | [[OWNER: three mobile numbers the owner controls, none already on a Resbite account — proposed: one per review account, verified once by text and never written in the repo]] | Section 12 |
+| 10 | [[OWNER: titles of the two seeded resbites — proposed: "Thursday board games" and "Picnic in the park"]] | Section 12 |
+| 11 | [[OWNER: devices and iOS versions tested — proposed: each iPhone model and iOS version from the runbook's device checks, and the iPad used in iPhone compatibility mode]] | Section 10 (in the review notes) |
+| 12 | [[OWNER: the backup moderator's identity — the owner names one backup (decision AS-D6); recorded only in the signed team access agreement kept outside the repo; the repo records only that a backup is named, and the date — proposed: at the Supabase Developer role with MFA, named before the 1.0 submission]] | Section 12 |
 
 The SKU is not a placeholder: it was fixed when the app record was created for TestFlight, and Apple does not let it change. Copy it into the runbook's release record.
 
@@ -119,7 +118,7 @@ SAFE AND PRIVATE
 Resbite is run by Resbite Ltd, a company registered in England and Wales.
 
 Terms of Use: https://link.resbite.com/terms
-Privacy Notice: https://link.resbite.com/privacy
+Privacy Policy: https://link.resbite.com/privacy
 Support: https://link.resbite.com/support
 ```
 
@@ -251,12 +250,12 @@ App Store Connect → App Privacy. Derived from the data inventory (`research_no
 - If the vendor's code tracks in Apple's sense, do not ship it: no App Tracking Transparency prompt is planned.
 - **Needs B16 and D10.**
 
-**Servers and processors** (Supabase, Expo push, Apple, Google, Resend, the SMS provider, Vercel, Cloudflare for DNS, the mailbox provider) are not third-party code in the app. What they receive is our data and is already counted above. They are named in the Privacy Notice (A1).
+**Servers and processors** (Supabase, Expo push, Apple, Google, Resend, Twilio for text messages, Vercel, Cloudflare for DNS, the mailbox provider) are not third-party code in the app. What they receive is our data and is already counted above. They are named in the Privacy Policy (A1).
 
 **Keep three things in step** (APL-49, F12):
 1. These answers.
 2. The app's privacy manifest, `ios.privacyManifests` in `mobile/app.json` (**B13**): `NSPrivacyTracking` false, no tracking domains, and one collected-data entry per "Yes" row above, each linked, not tracking, purpose App Functionality. The constant names B13 will use are, from Apple's privacy manifest documentation (confirm them in B13): `NSPrivacyCollectedDataTypeName`, `…EmailAddress`, `…PhoneNumber`, `…Contacts`, `…EmailsOrTextMessages`, `…PhotosorVideos`, `…CustomerSupport`, `…OtherUserContent`, `…UserID`, `…DeviceID`, `…ProductInteraction`, `…OtherDataTypes`, with `NSPrivacyCollectedDataTypePurposeAppFunctionality`.
-3. The Privacy Notice (A1).
+3. The Privacy Policy (A1).
 
 A change to any one means a check of the other two, at every release.
 
@@ -297,7 +296,7 @@ On the version page. It is not shown to customers and can be edited at any time.
 | Sign-in required | **Yes** | The app needs an account. |
 | User name and password | [[OWNER: review account email and password — proposed: account R1 of the pack's section 12, typed only into App Store Connect's Sign-In Information, never into the repo]] | The review account (R1) in section 12. Email and password, so no code is asked. Apple: the demo account "must not expire". |
 | Contact: first name, last name, phone, email | [[OWNER: App Review contact name, email and +44 phone — proposed: the owner, with support@resbite.com as the email, typed only into App Store Connect, never into the repo]] | The phone must be in international format with a plus sign. It is for App Review only and is never published. The email can be support@resbite.com if the owner prefers a role address. |
-| Notes | The text block in [app-store-review-notes.md](app-store-review-notes.md), with its placeholders filled in App Store Connect only | Up to 4,000 bytes. Apple asks for "details for additional accounts" in the Notes, so the deletion-test account's sign-in goes there: [[OWNER: deletion-test account email and password — proposed: account R2 of the pack's section 12, typed only into the Notes in App Store Connect, never into the repo]]. The notes also name [[OWNER: SMS provider — proposed: Twilio]] and [[OWNER: CAPTCHA vendor — proposed: Cloudflare Turnstile or hCaptcha]], and need [[OWNER: devices and iOS versions tested — proposed: each iPhone model and iOS version from the runbook's device checks, and the iPad used in iPhone compatibility mode]]. |
+| Notes | The text block in [app-store-review-notes.md](app-store-review-notes.md), with its placeholders filled in App Store Connect only | Up to 4,000 bytes. Apple asks for "details for additional accounts" in the Notes, so the deletion-test account's sign-in goes there: [[OWNER: deletion-test account email and password — proposed: account R2 of the pack's section 12, typed only into the Notes in App Store Connect, never into the repo]]. The notes also name Twilio (decision AS-D5) and [[OWNER: CAPTCHA vendor — proposed: Cloudflare Turnstile or hCaptcha]], and need [[OWNER: devices and iOS versions tested — proposed: each iPhone model and iOS version from the runbook's device checks, and the iPad used in iPhone compatibility mode]]. |
 | Attachment | Optional. A short screen recording, made on the submission build with the review accounts, showing Report, Block and Delete account. | No personal data in it. It can save a round trip with App Review. |
 
 ## 11. Version release
@@ -338,7 +337,7 @@ Fictional personas only (guideline 2.3.9). None is a moderator: a report never n
 - **Emails:** addresses the owner can read, on the operator's domain. They are never written in the repo.
 - **Passwords:** long, unique, kept in the owner's password manager.
 - **Never expires.** Supabase accounts do not expire, and password sign-in works whenever the reviewer starts.
-- **The backup moderator** must be named and on the moderators list before submission (C5): [[OWNER: the backup moderator's identity — recorded only in the signed team access agreement kept outside the repo; the repo records only that a backup is named, and the date — proposed: one named person at the Supabase Developer role with MFA, named before the 1.0 submission]]. The notes promise action within 24 hours with cover when the owner is away.
+- **The backup moderator** must be named and on the moderators list before submission (C5): [[OWNER: the backup moderator's identity — the owner names one backup (decision AS-D6); recorded only in the signed team access agreement kept outside the repo; the repo records only that a backup is named, and the date — proposed: at the Supabase Developer role with MFA, named before the 1.0 submission]]. The notes promise action within 24 hours with cover when the owner is away.
 
 ### 12.3 Seeded resbites, chats and connection
 
@@ -410,7 +409,7 @@ App previews (videos) are optional. None for 1.0.
 
 - [ ] The four URLs load publicly over HTTPS, with no sign-in, and show the published documents (D1).
 - [ ] The description's claims hold on the submission build (section 3.2 table).
-- [ ] The App Privacy answers match the Privacy Notice and the build's privacy manifest (section 6).
+- [ ] The App Privacy answers match the Privacy Policy and the build's privacy manifest (section 6).
 - [ ] The age answers hold on the build: no Wellness tab, no location prompt, no in-app browser (section 5).
 - [ ] The review notes' paths work on the build, and the filled text is under 4,000 bytes ([app-store-review-notes.md](app-store-review-notes.md)).
 - [ ] The trader status is declared (section 9).
@@ -432,16 +431,16 @@ App previews (videos) are optional. None for 1.0.
 
 ## Open points
 
-For the owner unless marked.
+For the owner unless marked. The points for the solicitor are also listed in `docs/legal/README.md`, "Questions for the solicitor" (decision AS-D7).
 
 1. **Social Media: No.** Apple's definition is about feeds and discovery that spread content to many users. Resbite has neither. The gap analysis leaned towards Yes before the definition was read. Either answer leaves the rating at 18+. Choose No unless you want the cautious Yes.
-2. **Shared Location: No (judgement).** A typed meeting place, sometimes a home address, is shared with the people on a resbite. Apple's wording ("sharing of real-world location with another person or group") could be read to cover that. Yes would not change the UK rating. Decide before submission; the solicitor may want a view, since the Privacy Notice describes the meeting place.
+2. **Shared Location: No (judgement).** A typed meeting place, sometimes a home address, is shared with the people on a resbite. Apple's wording ("sharing of real-world location with another person or group") could be read to cover that. Yes would not change the UK rating. Decide before submission; the solicitor may want a view, since the Privacy Policy describes the meeting place.
 3. **Age Assurance and Apple's UK adult checks (ASC-17, D-16).** Ask Apple Developer Support or the solicitor, before submission, whether the UK is a region where developers must use Declared Age Range. If it is, D-16 builds it, and Age Assurance becomes Yes.
 4. **Content Rights.** How App Review treats user content is UNVERIFIED. The pack answers Yes, relying on the Terms' licence.
 5. **Trader status.** "Not a trader" is right only while no EU storefront is chosen. Adding the EU needs a verified, published phone number, and there is none today.
 6. **The review accounts need a hosted step and three numbers.** The app has no email sign-up, so the email accounts are made in the Supabase dashboard (approval needed). Each needs its own mobile number that the owner controls.
 7. **B3 must keep a password proof within reach** for an email account that also has a verified phone. Today the screen asks for an email code first, with "Use my password instead". A reviewer can receive neither an SMS nor an email code.
-8. **Judgement calls on App Privacy:** the push token as Device ID (Yes); server logs as Diagnostics (No); the meeting place as Physical Address (No). The solicitor should see that the Privacy Notice describes all three the same way.
+8. **Judgement calls on App Privacy:** the push token as Device ID (Yes); server logs as Diagnostics (No); the meeting place as Physical Address (No). The solicitor should see that the Privacy Policy describes all three the same way.
 9. **The Privacy Choices page** (`/delete-account`) now says how to ask for a copy of your data or a correction (cross-check, 17 November 2026), matching Apple's description of that URL.
 10. **Mac and Vision Pro availability** off for 1.0, until tested.
 11. **Screenshot size.** Upload the 1206 × 2622 set. The gap analysis' "1320×2868 or 1206×2622" may not be enough on its own.

@@ -5,7 +5,7 @@
 - **Date:** 17 November 2026.
 - **Next review:** on the day of the 1.0 submission (phase 6, step 24 of the [release runbook](README.md)), against the submission build; then rewritten for each later version.
 - **Purpose:** the text for App Store Connect's Notes for App Review on Resbite's first submission (gap analysis A7 and E6).
-- **Review:** a draft for the owner. It is not a public document, but it must say nothing the published Privacy Notice (A1), Terms of Use (A3) and deletion page (A6) contradict. Those go to a UK solicitor before publishing (decision D-12). Check the notes against the final texts.
+- **Review:** a draft for the owner. It is not a public document, but it must say nothing the published Privacy Policy (A1), Terms of Use (A3) and deletion page (A6) contradict. Those go to a UK solicitor before publishing (decision D-12). Check the notes against the final texts.
 
 This replaces, for the first submission, the chat-only draft in [`qa/chat-release/app-store-review-notes.md`](../chat-release/app-store-review-notes.md). That draft opened "Resbite is an invitation-only app" and "This version adds a chat", which are wrong for a first version since the open beta. It said nothing on sign-in, deletion, stored numbers or services (gap analysis ASC-8, CON-4). Its Report and Block section is kept, updated for the 1.0 report reasons.
 
@@ -19,15 +19,14 @@ Fill each one **in App Store Connect only**. Sign-in details never go into this 
 | 2 | [[OWNER: title of the one-off — proposed: "Picnic in the park"]] | The pack, section 12.3 |
 | 3 | [[OWNER: deletion-test account email and password — proposed: account R2 of the pack's section 12, typed only into the Notes in App Store Connect, never into the repo]] | The pack, section 12.2 (R2). Apple asks for additional accounts' details in the Notes. |
 | 4 | [[OWNER: devices and iOS versions tested — proposed: each iPhone model and iOS version from the runbook's device checks, and the iPad used in iPhone compatibility mode]] | The runbook's device checks: each iPhone model and iOS version, and the iPad used in iPhone compatibility mode |
-| 5 | [[OWNER: SMS provider — proposed: Twilio]] | Decision D-3 |
-| 6 | [[OWNER: CAPTCHA vendor — proposed: Cloudflare Turnstile or hCaptcha]] | Decision D-3 |
+| 5 | [[OWNER: CAPTCHA vendor — proposed: Cloudflare Turnstile or hCaptcha]] | Decision D-3 (still open under AS-D5) |
 
 ## How to use it
 
 1. On the submission day, open the submission build with the review account and walk every path the text names. If a label or a path differs, change the text to match the build.
 2. Copy the text block below into App Store Connect → the 1.0 version → App Review Information → Notes.
-3. Fill the six placeholders there.
-4. **Size.** The Notes field holds up to 4,000 bytes. The block below is 3,954 bytes with its placeholders unfilled, and 3,358 bytes with them taken out (recounted in the cross-check of 17 November 2026, after the placeholders were given one standard wording). Apart from the placeholders, it is plain ASCII, so one character is one byte; it uses straight quotes on purpose. Filled with titles of about 20 characters, an email and password of about 60 and a devices line of about 120, it comes to about 3,600 bytes. App Store Connect refuses text over the limit, so a refusal there is the final check. To count the block in this file, from the repository root: `awk '/^```text$/{f=1;next} /^```$/{f=0} f' qa/app-store-release/app-store-review-notes.md | wc -c`.
+3. Fill the five placeholders there.
+4. **Size.** The Notes field holds up to 4,000 bytes. The block below is 3,916 bytes with its placeholders unfilled, and 3,364 bytes with them taken out (recounted on 17 November 2026, after Twilio was named in place of its placeholder). Apart from the placeholders, it is plain ASCII, so one character is one byte; it uses straight quotes on purpose. Filled with titles of about 20 characters, an email and password of about 60 and a devices line of about 120, it comes to about 3,600 bytes. App Store Connect refuses text over the limit, so a refusal there is the final check. To count the block in this file, from the repository root: `awk '/^```text$/{f=1;next} /^```$/{f=0} f' qa/app-store-release/app-store-review-notes.md | wc -c`.
 5. The review account's own sign-in goes in Sign-In Information, not in the Notes.
 
 ## Where each claim comes from
@@ -56,11 +55,11 @@ The notes promise only what 1.0 will have. A claim marked with a build item is t
 | Daily read, a named backup, removal and suspension within 24 hours | `qa/chat-release/README.md`, "The reports queue"; the moderation standard (A15) | C5, F2, A24 (backup); C6 (removing photos, titles and covers) |
 | Delete account for every kind of account; password confirmation | `mobile/app/data-privacy.tsx` (the row) | B3, C2 |
 | Access closes at once; within 30 days, usually minutes; the screen confirms it; "What happens" says what is kept and that a host's future resbites are cancelled and guests told | `mobile/app/delete-account.tsx` ("Deletion immediately closes access."); D-4, D-20 | B3, C2 |
-| About and legal: Privacy Notice, Terms of Use, Support, Licences; links on the first and sign-in screens | — | B1, A25 |
+| About and legal: Privacy Policy, Terms of Use, Support, Licences; links on the first and sign-in screens | — | B1, A25 |
 | The four URLs | — | D1 |
 | support@resbite.com in Data & privacy > Contact and after every report | `mobile/app/data-privacy.tsx:28,138-147`; `mobile/src/design/ReportSheet.tsx:69` | F1, and `EXPO_PUBLIC_SUPPORT_ADDRESS` set before the build |
 | Services: Supabase in London, Expo and Apple push, Apple and Google sign-in, Resend | `docs/implementation-status.md:30`; data inventory §14 | C11 (Apple provider on) |
-| The SMS provider; the CAPTCHA vendor | — | C1; B16, D10 |
+| Twilio (decision AS-D5); the CAPTCHA vendor | — | C1; B16, D10 |
 | link.resbite.com on Vercel | `links/` | D1 |
 | UK storefront only | Decision D-2 | — |
 | Nothing hidden or switched off | Deletion and push on in the build, test mode off (CON-3, guideline 2.5.19) | B3, B4, C1, C2; the EAS variables |
@@ -92,13 +91,13 @@ DELETE ACCOUNT
 Profile > Data & privacy > Delete account, for every kind of account. To try it, sign out and sign in with the second account: [[OWNER: deletion-test account email and password — proposed: account R2 of the pack's section 12, typed only into the Notes in App Store Connect, never into the repo]]. Confirm with its password. Access closes at once; deletion completes within 30 days, usually minutes, and the screen confirms it. "What happens" says what is kept, and that a host's future resbites are cancelled and guests told.
 
 PRIVACY, TERMS, SUPPORT
-Profile > Data & privacy > About and legal links the Privacy Notice, Terms of Use, Support and Licences; so do the first and sign-in screens. https://link.resbite.com/privacy, /terms, /support, /delete-account. Contact: support@resbite.com, also in Data & privacy > Contact and after every report.
+Profile > Data & privacy > About and legal links the Privacy Policy, Terms of Use, Support and Licences; so do the first and sign-in screens. https://link.resbite.com/privacy, /terms, /support, /delete-account. Contact: support@resbite.com, also in Data & privacy > Contact and after every report.
 
 TESTED ON
 [[OWNER: devices and iOS versions tested — proposed: each iPhone model and iOS version from the runbook's device checks, and the iPad used in iPhone compatibility mode]]
 
 SERVICES
-Supabase (data, sign-in, storage; London), Expo and Apple push, Sign in with Apple, Google sign-in, Resend (sign-in email), [[OWNER: SMS provider — proposed: Twilio]] (codes), [[OWNER: CAPTCHA vendor — proposed: Cloudflare Turnstile or hCaptcha]], link.resbite.com on Vercel (web invitations, legal pages).
+Supabase (data, sign-in, storage; London), Expo and Apple push, Sign in with Apple, Google sign-in, Resend (sign-in email), Twilio (codes), [[OWNER: CAPTCHA vendor — proposed: Cloudflare Turnstile or hCaptcha]], link.resbite.com on Vercel (web invitations, legal pages).
 
 REGIONS
 UK storefront only. Nothing is hidden or switched off for review.
@@ -108,7 +107,7 @@ UK storefront only. Nothing is hidden or switched off for review.
 
 1. **The password proof (B3).** "Confirm with its password" holds only if B3 offers a password proof to an email account that also has a verified phone. Today the screen asks for an email code first, with "Use my password instead". A reviewer can receive neither an email code nor an SMS. If B3 keeps that order, add "(tap Use my password instead)" to the notes.
 2. **The About and legal path (B1).** B1 may put the group on Data & privacy or on Profile. Change the path in the notes to match the build.
-3. **The 24-hour promise** stays in the notes only once the backup moderator is named and on the moderators list (C5). Until then the release waits (chat runbook R-Q4; gap analysis UGC-5).
+3. **The 24-hour promise** rests on the backup moderator the owner names (decision AS-D6). The release waits until the backup is named and on the moderators list (C5; chat runbook R-Q4; gap analysis UGC-5).
 4. **The 30-day promise and the confirmation** must match what C2 delivers and what A6 says.
 5. **The contact-number retention line** depends on C3's purge job being live and on the periods the owner adopts (D-8). If the periods change, change the line.
 6. **The chat rules quote** is the live wording (`mobile/src/domain/safetyCopy.ts`). `docs/legal/community-rules-short.md` recommends a longer text that adds illegal content, private details and intimate images. If the owner adopts it, it ships in the build and in a new rules version (C7), and the quote here must change to match. The longer text adds 98 bytes (with a straight apostrophe), which still fits: about 3,700 bytes filled.

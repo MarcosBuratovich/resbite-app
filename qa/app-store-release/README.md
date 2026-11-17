@@ -15,26 +15,27 @@
 
 | # | Placeholder | Step |
 |---|---|---|
-| 1 | [[OWNER: SMS provider — proposed: Twilio]] | 11 |
-| 2 | [[OWNER: SMS monthly budget and spend alert — proposed: about USD 56 a month at 1,000 codes, from the provider research]] | 11 |
-| 3 | [[OWNER: CAPTCHA vendor — proposed: Cloudflare Turnstile or hCaptcha]] | 21 |
-| 4 | [[OWNER: the backup moderator's identity — recorded only in the signed team access agreement kept outside the repo; the repo records only that a backup is named, and the date — proposed: one named person at the Supabase Developer role with MFA, named before the 1.0 submission]] | 12 |
-| 5 | [[OWNER: effective date — proposed: the day the pages go live on link.resbite.com, after the solicitor's review and before the version 1.0 submission]] | 16 |
-| 6 | [[OWNER: the Terms version string for Terms of Use 1.0 — proposed: the year and month the Terms take effect, in the "YYYY-MM" form the database accepts, for example "2026-12"; it must differ from today's "2026-10"]] | 16, 19 |
-| 7 | [[OWNER: VAT number, or delete if not VAT-registered]] | 16 (the site footer check) |
+| 1 | [[OWNER: Twilio monthly budget and spend alert — proposed: about USD 60 a month at 1,000 codes: Twilio lists UK text messages at USD 0.056 a segment (pricing page, November 2026), plus any carrier fees, and a sender number from USD 1.15 a month if an alphanumeric sender name is not used]] | 11 |
+| 2 | [[OWNER: Twilio's region and transfer safeguard, to confirm when Resbite Ltd's account accepts Twilio's Data Protection Addendum — proposed: the United States, Twilio's main processing location, under the UK–US data bridge (Twilio Inc. states it takes part in the UK Extension to the EU–US Data Privacy Framework; check the live listing), with the UK Addendum to the EU Standard Contractual Clauses in Twilio's addendum as the fallback; Twilio's Ireland region (IE1) also offers messaging]] | 11 |
+| 3 | [[OWNER: how long Twilio keeps message records — proposed: the Send SMS hook deletes each message record through Twilio's API once its delivery status is final, and Twilio says a deleted message's text can stay in its backups for up to 30 days, so state "up to 31 days after sending"; Twilio's Message Redaction setting is offered only with its Editions packages]] | 11 |
+| 4 | [[OWNER: CAPTCHA vendor — proposed: Cloudflare Turnstile or hCaptcha]] | 21 |
+| 5 | [[OWNER: the backup moderator's identity — the owner names one backup (decision AS-D6); recorded only in the signed team access agreement kept outside the repo; the repo records only that a backup is named, and the date — proposed: at the Supabase Developer role with MFA, named before the 1.0 submission]] | 12 |
+| 6 | [[OWNER: effective date — proposed: the day the pages go live on link.resbite.com, after the solicitor's review and before the version 1.0 submission]] | 16 |
+| 7 | [[OWNER: the Terms version string for Terms of Use 1.0 — proposed: the year and month the Terms take effect, in the "YYYY-MM" form the database accepts, for example "2026-12"; it must differ from today's "2026-10"]] | 16, 19 |
+| 8 | [[OWNER: VAT number, or delete if not VAT-registered]] | 16 (the site footer check) |
 
 ## Before you start
 
 Phases 0 to 2 of the gap analysis are done when every box below is ticked. Do not start step 11 before.
 
-- [ ] **Decisions recorded** in `knowledge-base/08-decisions.md` (A19): public launch, 18+, UK only, the deletion approach (D-4), deletion while suspended (D-19), a host's groups (D-20), the SMS provider and test mode off (D-3), retention (D-8), the Terms version (D-11) and the Manual release (D-24).
+- [ ] **Decisions recorded** in `knowledge-base/08-decisions.md` (A19): public launch, 18+, UK only, the deletion approach (D-4), deletion while suspended (D-19), a host's groups (D-20), Twilio as the SMS provider and test mode off (D-3, AS-D5), retention (D-8), the Terms version (D-11) and the Manual release (D-24).
 - [ ] **The Apple question asked** (D-16, ASC-17): is the UK a region where developers must use Declared Age Range? Ask Apple Developer Support or the solicitor. Record the answer before step 25.
-- [ ] **Public documents drafted** (A1 to A6, A20, A25) and **reviewed by the solicitor** (D-12). The solicitor's open questions are answered (D-5's contact means, D-22's Article 10 condition, UGC-10's commencement).
+- [ ] **Public documents drafted** (A1 to A6, A20, A25) and **reviewed by the solicitor** (D-12, AS-D7). The questions in `docs/legal/README.md`, "Questions for the solicitor", are answered, among them D-5's contact means, D-22's Article 10 condition and UGC-10's commencement.
 - [ ] **Internal records drafted** (A8 to A18, A22 to A24). A24 is signed before the backup moderator gets any access.
 - [ ] **App changes** B1 to B14 and B16 merged to `main`, with tests passing, including B1's release test that fails without the support address and the URLs.
 - [ ] **Site changes** D1 to D3, D7, D9 and D10 merged.
 - [ ] **Backend files** C2 (with the rewired entry point and the legal hold), C3 and C6 to C9 written, each with a rollback, and tested on a local replay. The C13 template files are changed. The C1 hook path is written.
-- [ ] **The app's Terms version** (`mobile/src/domain/guestAccount.ts`, B2) is bumped to placeholder 6, the same string step 16 sets on Vercel.
+- [ ] **The app's Terms version** (`mobile/src/domain/guestAccount.ts`, B2) is bumped to placeholder 7, the same string step 16 sets on Vercel.
 
 ## House rules
 
@@ -57,7 +58,7 @@ Phases 0 to 2 of the gap analysis are done when every box below is ticked. Do no
 | `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | The hosted publishable key | the Supabase client |
 | `EXPO_PUBLIC_SUPPORT_ADDRESS` | The support inbox (F1): one `@`, a dot after it, no space | `mobile/app/data-privacy.tsx:28`; `mobile/src/design/ReportSheet.tsx:69`; the suspended and taken-number screens (B6) |
 | `EXPO_PUBLIC_TERMS_URL` | The published Terms of Use URL (D1) | `mobile/src/design/TickRow.tsx`; B1's legal links |
-| `EXPO_PUBLIC_PRIVACY_URL` | The published Privacy Notice URL (D1) | as above |
+| `EXPO_PUBLIC_PRIVACY_URL` | The published Privacy Policy URL (D1) | as above |
 | `EXPO_PUBLIC_PUSH_ENABLED` | On (the string `true`) | `mobile/src/services/pushDevice.ts:21` |
 | `EXPO_PUBLIC_INVITATION_ORIGIN` | The link site's origin | `mobile/app/+native-intent.tsx:9` |
 | `EXPO_PUBLIC_ACCOUNT_DELETION_ENABLED` | On (the string `true`), only once C2 is live (step 13) | `mobile/src/services/accountDeletion.ts:11-12` |
@@ -74,7 +75,7 @@ Record each as "set" or "unset". Never paste the command's output into the repo:
 - **Sender (live):** `NOTIFICATION_DELIVERY_ENABLED`, `NOTIFICATION_WORKER_SECRET`, `EXPO_ACCESS_TOKEN`.
 - **Deletion (C2):** `ACCOUNT_DELETION_ENABLED`, `ACCOUNT_CLEANUP_SECRET`, `ACCOUNT_RECEIPT_PURGE_ENABLED`, `ACCOUNT_RECEIPT_PURGE_SECRET`, and the Sign in with Apple key for token revocation (names set by C2).
 - **Photo clean-up (C3):** `PROFILE_PHOTO_CLEANUP_ENABLED`, `PROFILE_PHOTO_CLEANUP_SECRET`.
-- **SMS (C1):** the provider's credentials and the hook's secret (names set by C1).
+- **SMS (C1):** Twilio's credentials and the hook's secret (names set by C1).
 - `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are provided by Supabase.
 
 ### Scheduled jobs
@@ -87,11 +88,12 @@ Record each as "set" or "unset". Never paste the command's output into the repo:
 
 Each sitting has before-and-after snapshots, the advisors, and an entry under "Applied".
 
-### Step 11. SMS provider and test mode off (C1, D6, D5, F14, F5)
+### Step 11. Twilio and test mode off (C1, D6, D5, F14, F5)
 
 This comes first. The current TestFlight build's `000000` swap does nothing once live mode is on, so the sitting can run before the new build.
 
-- [ ] **[approval]** Open the SMS provider account in Resbite Ltd's name (F8): [[OWNER: SMS provider — proposed: Twilio]]. Set tight limits and a spend alert: [[OWNER: SMS monthly budget and spend alert — proposed: about USD 56 a month at 1,000 codes, from the provider research]]. Record the provider's data processing terms in the vendor register (A18, F7) before any number is sent.
+- [ ] **[approval]** Open the Twilio account in Resbite Ltd's name (F8), as the owner decided (AS-D5). Choose the region: [[OWNER: Twilio's region and transfer safeguard, to confirm when Resbite Ltd's account accepts Twilio's Data Protection Addendum — proposed: the United States, Twilio's main processing location, under the UK–US data bridge (Twilio Inc. states it takes part in the UK Extension to the EU–US Data Privacy Framework; check the live listing), with the UK Addendum to the EU Standard Contractual Clauses in Twilio's addendum as the fallback; Twilio's Ireland region (IE1) also offers messaging]]. Set tight limits and a spend alert: [[OWNER: Twilio monthly budget and spend alert — proposed: about USD 60 a month at 1,000 codes: Twilio lists UK text messages at USD 0.056 a segment (pricing page, November 2026), plus any carrier fees, and a sender number from USD 1.15 a month if an alphanumeric sender name is not used]]. Accept Twilio's Data Protection Addendum and record it, with the region, in the vendor register (A18, F7) before any number is sent.
+- [ ] Set how Twilio's message records are deleted, and record it in A12: [[OWNER: how long Twilio keeps message records — proposed: the Send SMS hook deletes each message record through Twilio's API once its delivery status is final, and Twilio says a deleted message's text can stay in its backups for up to 30 days, so state "up to 31 days after sending"; Twilio's Message Redaction setting is offered only with its Editions packages]].
 - [ ] **[approval]** Before snapshot, into this folder.
 - [ ] **[approval]** Deploy the hook path from phase 2: either the Edge Function behind an HTTP Send SMS hook, or the Postgres hook body with `pg_net`. Each file is approved by name and sha256. Then set its secrets, by name.
 - [ ] **[approval]** **The switch-off sitting**, as written in `qa/phone-accounts-2026-10-27/README.md`, step 7:
@@ -115,7 +117,7 @@ This comes first. The current TestFlight build's `000000` swap does nothing once
   - A24 is signed (kept outside the repo).
   - MFA is on for the backup's Supabase account and mailbox (F16).
   - The backup has a Resbite account that may use the app, so the moderator push reaches them.
-  Backup moderator: [[OWNER: the backup moderator's identity — recorded only in the signed team access agreement kept outside the repo; the repo records only that a backup is named, and the date — proposed: one named person at the Supabase Developer role with MFA, named before the 1.0 submission]].
+  Backup moderator: [[OWNER: the backup moderator's identity — the owner names one backup (decision AS-D6); recorded only in the signed team access agreement kept outside the repo; the repo records only that a backup is named, and the date — proposed: at the Supabase Developer role with MFA, named before the 1.0 submission]].
 - [ ] **[approval]** In the SQL editor, run `supabase/ops/moderators.sql` with the owner's and the backup's emails, in the editor's copy only. Grant dashboard access at the lowest role that can run the moderation scripts (on the Pro plan, Developer, which can read all content; A9 records this).
 - [ ] Run the chat runbook's release gate (`ch3-gate.sh`, `qa/chat-release/README.md`, step 5a). It must show `blocked_terms` above 0, `moderators` at least 2, and `moderators_pushed` equal to `moderators`.
 - [ ] Record "a backup moderator is named" and the date, never who. This answers the chat runbook's R-Q4.
@@ -133,7 +135,8 @@ This comes first. The current TestFlight build's `000000` swap does nothing once
   - [ ] an email-and-password account, confirmed with its password (the review accounts need this route; pack, open point 7);
   - [ ] an Apple-only account, confirmed with Apple; its Apple tokens are revoked at Apple;
   - [ ] a Google account;
-  - [ ] a suspended account can still delete (D-19);
+  - [ ] a suspended account can still delete (D-19), and its suspension record stays with the user id cleared and the reason and dates kept (AS-R1);
+  - [ ] an account with an open report it filed: the report stays, with the reporter id cleared (AS-R2);
   - [ ] a host with future resbites: they are cancelled and guests are told (D-20);
   - [ ] under a legal hold, the request is accepted and the held records wait;
   - [ ] two members of one group deleting at once, with no deadlock (`qa/chat-release/README.md:1017`);
@@ -147,7 +150,7 @@ Each migration is approved by name and sha256, with snapshots, the advisors, the
 - [ ] **[approval]** **C8, versioned Terms acceptance.** An account without the current version reads "acceptance needed". `answer_phone_invitation` records the version the link site sends.
 - [ ] **[approval]** **C7, safety extension.** The reasons `illegal`, `child_safety` and `intimate_image` are accepted. The blocked-terms check refuses a listed term in a title, description, note to guests, meeting details and display name.
 - [ ] **[approval]** **C9, optional details removed.** `registration_details` is cleared from Auth metadata, and the write path is retired. The current TestFlight build's Account details can then no longer save those four fields; tell the testers.
-- [ ] **[approval]** **C3, retention jobs.** The purge functions and their schedule. Each respects the legal hold. Deploy `cleanup-profile-photos` with its two secrets.
+- [ ] **[approval]** **C3, retention jobs.** The purge functions and their schedule, including web-only accounts with no resbite in 12 months and code requests never confirmed after 30 days (AS-R4). Each respects the legal hold. Deploy `cleanup-profile-photos` with its two secrets.
 
 ### Step 15. Auth email templates and Auth settings (C13, C11, F13)
 
@@ -169,7 +172,7 @@ Each migration is approved by name and sha256, with snapshots, the advisors, the
 - [ ] The solicitor-reviewed texts are final. Effective date: [[OWNER: effective date — proposed: the day the pages go live on link.resbite.com, after the solicitor's review and before the version 1.0 submission]]. Terms version: [[OWNER: the Terms version string for Terms of Use 1.0 — proposed: the year and month the Terms take effect, in the "YYYY-MM" form the database accepts, for example "2026-12"; it must differ from today's "2026-10"]].
 - [ ] **The inboxes exist first** (step 18, F1). `/support` must never publish an address nobody reads, and its contact form delivers to the support inbox.
 - [ ] **[approval: Vercel]** Deploy D1 to D3, D7 and D9, with the contact form.
-- [ ] **[approval: Vercel]** Set `TERMS_URL`, `PRIVACY_URL` and the bumped `TERMS_VERSION` (placeholder 6, the same string as the app). Record what `APP_STORE_URL` holds now (the repo does not say).
+- [ ] **[approval: Vercel]** Set `TERMS_URL`, `PRIVACY_URL` and the bumped `TERMS_VERSION` (placeholder 7, the same string as the app). Record what `APP_STORE_URL` holds now (the repo does not say).
 - [ ] **Checks:**
   - [ ] `https://link.resbite.com/privacy`, `/terms`, `/support` and `/delete-account` load over HTTPS without sign-in, and show the final texts with their effective date and version.
   - [ ] Every page's footer shows: Resbite Ltd, a private limited company registered in England and Wales, company number 12450334, registered office 86-90 Paul Street, London EC2A 4NE, United Kingdom, [[OWNER: VAT number, or delete if not VAT-registered]], support@resbite.com, privacy@resbite.com, and the legal links.
@@ -192,8 +195,8 @@ Each migration is approved by name and sha256, with snapshots, the advisors, the
 
 - [ ] **[approval]** **Inboxes (F1).** support@resbite.com and privacy@resbite.com, watched every working day. A signature with the company particulars on every reply (DOC-7). The mailbox provider in the vendor register with its data processing terms. Send a test to each and answer it.
 - [ ] **ICO fee (F6).** Confirm that the data protection fee is paid for Resbite Ltd at the right tier (tier 1 is £52), or pay it.
-- [ ] **Processor agreements (F7).** Supabase, Vercel, Expo, Resend, the SMS provider, the CAPTCHA vendor, the mailbox provider and the log tool, each recorded in A18.
-- [ ] **[approval]** **Accounts in Resbite Ltd's name (F8).** Supabase, Vercel, Expo, Apple Developer, Resend, the SMS provider, the Google Cloud project, GitHub, the mailbox and the domain registrar and DNS.
+- [ ] **Processor agreements (F7).** Supabase, Vercel, Expo, Resend, Twilio, the CAPTCHA vendor, the mailbox provider and the log tool, each recorded in A18.
+- [ ] **[approval]** **Accounts in Resbite Ltd's name (F8).** Supabase, Vercel, Expo, Apple Developer, Resend, Twilio, the Google Cloud project, GitHub, the mailbox and the domain registrar and DNS.
 - [ ] **[approval: Apple Developer]** **Organisation membership (F9, ASC-15).** The App Store shows the membership's legal entity as the seller. It must read Resbite Ltd, which needs an organisation membership with a D-U-N-S number. Start this early: how long Apple takes is not on record.
 - [ ] **MFA everywhere (F16).** Supabase, Vercel, Expo, Apple, Google Cloud, Resend, GitHub and both inboxes.
 
@@ -247,8 +250,10 @@ Run on the step 20 build, installed from TestFlight. Record each result under "A
 **Safety**
 - [ ] The chat runbook's step 7, "Chat safety (plan 3)", passes on this build (`qa/chat-release/README.md`).
 - [ ] The three new report reasons send and reach the queue (B7, C7).
+- [ ] After a report, the thanks says "We review reports every day." and shows the support address (B7, AS-R9).
 - [ ] A listed term is refused in a title and in a display name (C7).
 - [ ] The removal scripts work on a test photo, title and cover (C6).
+- [ ] The owner-run deletion script deletes a test account that cannot use the app as the app's deletion does, with the cancellations and the receipt (C6, AS-R3).
 
 **Content and wording** (B4, CON-1, CON-2)
 - [ ] There is no Wellness tab and no "Preview & samples" topic.
@@ -256,9 +261,9 @@ Run on the step 20 build, installed from TestFlight. Record each result under "A
 - [ ] Push is on, so the "This build does not send…" lines never show.
 
 **Legal and contact** (B1, B5, B14, A25)
-- [ ] The About and legal group opens the live Privacy Notice, Terms, Support and company details, and the Licences screen shows the notices.
-- [ ] The welcome and sign-in screens link the Privacy Notice and the Terms. The 18+ tick's links work.
-- [ ] Data & privacy matches the Privacy Notice.
+- [ ] The About and legal group opens the live Privacy Policy, Terms, Support and company details, and the Licences screen shows the notices.
+- [ ] The welcome and sign-in screens link the Privacy Policy and the Terms. The 18+ tick's links work.
+- [ ] Data & privacy matches the Privacy Policy.
 - [ ] "Request a copy of my data" opens a pre-filled email to privacy@resbite.com.
 - [ ] support@resbite.com shows in Data & privacy → Contact, after a report, on the suspended screen and in the taken-number line.
 
@@ -281,7 +286,7 @@ Run on the step 20 build, installed from TestFlight. Record each result under "A
 - [ ] The chat runbook's step 8 query, during a busy test hour: `waiting` under 100, `oldest_wait` under 2 minutes.
 
 **App Privacy** (APL-49)
-- [ ] The pack's App Privacy answers, the build's privacy manifest and the Privacy Notice agree.
+- [ ] The pack's App Privacy answers, the build's privacy manifest and the Privacy Policy agree.
 
 ## Phase 6: App Store Connect
 

@@ -8,14 +8,14 @@
 | **Next review** | Before the 1.0 submission, then no later than 17 November 2027, and before any new table, store or vendor (F15) |
 | **Purpose** | How long Resbite Ltd keeps each kind of personal data, what starts the clock, what deletes it, whether that deletion is built yet, and how a legal hold pauses it. |
 
-This is an internal record (A12). It holds no personal data. It is not legal advice. A UK solicitor reviews it with the public documents before launch (decision D-12). The privacy notice (A1) and the "How to delete your account" page (A6) state the public periods from this schedule.
+This is an internal record (A12). It holds no personal data. It is not legal advice. A UK solicitor reviews it with the public documents before launch (decision D-12). The Privacy Policy (A1) and the "How to delete your account" page (A6) state the public periods from this schedule.
 
-**What it describes.** Resbite as it will be at version 1.0, after workstreams B, C and D of the gap analysis are built, using the recommended defaults of decision D-8 (the retention table in section 5 of `docs/superpowers/specs/2026-11-17-app-store-readiness-design.md`) and of D-3 to D-25. The "Built?" column says what exists today, so the gap is visible. Where the code and the gap analysis disagree, the code is followed and a note says so.
+**What it describes.** Resbite as it will be at version 1.0, after workstreams B, C and D of the gap analysis are built, using the owner's answers and the rulings of 17 November 2026 (AS-D1 to AS-D8 and AS-R1 to AS-R9 in `knowledge-base/08-decisions.md`) and, where they say nothing, the recommended defaults of decision D-8 (the retention table in section 5 of `docs/superpowers/specs/2026-11-17-app-store-readiness-design.md`) and of D-3 to D-25. The "Built?" column says what exists today, so the gap is visible. Where the code and the gap analysis disagree, the code is followed and a note says so.
 
 ## Placeholders to fill
 
 1. [[OWNER: Vercel plan for the link site, which sets how long its request logs last — proposed: Pro, which keeps request logs for 1 day and is covered by Vercel's data processing agreement]]
-2. [[OWNER: how long the SMS provider keeps message records — proposed: the shortest period the provider allows, or message-body redaction, stated in days]]
+2. [[OWNER: how long Twilio keeps message records — proposed: the Send SMS hook deletes each message record through Twilio's API once its delivery status is final, and Twilio says a deleted message's text can stay in its backups for up to 30 days, so state "up to 31 days after sending"; Twilio's Message Redaction setting is offered only with its Editions packages]]
 3. [[OWNER: CAPTCHA vendor — proposed: Cloudflare Turnstile or hCaptcha]]
 4. [[OWNER: mailbox provider for support@resbite.com and privacy@resbite.com — proposed: a business email service under a signed data processing agreement, with data held in the UK or EU and MFA on]]
 5. [[OWNER: tool that holds the moderation, request, complaint, breach and law-enforcement logs — proposed: one access-controlled spreadsheet in the mailbox provider's business workspace, under the same data processing agreement]]
@@ -29,7 +29,7 @@ This is an internal record (A12). It holds no personal data. It is not legal adv
 3. **Jobs run daily.** C3 adds one migration with purge functions and one cron script; C2 adds the deletion worker and the receipt purge. Each run logs only counts, never ids.
 4. **Backups and platform logs roll off in 7 days.** They cannot be edited row by row. So data deleted from the live database can survive up to 7 days in a backup. A restore replays deletions from the receipts before the app reopens **[needs C2, F11]**.
 5. **A legal hold pauses deletion** of the records it names, and nothing else (section 15).
-6. **Account deletion** is started in the app for every account type and completed within 30 days, aiming for minutes (D-4) **[needs B3, C2]**. Web-only and banned accounts ask through privacy@resbite.com or the contact form, and the same 30 days apply **[needs D8, A16]**. A suspended account can delete in the app (D-19). Section 16 lists what deletion removes and what it keeps.
+6. **Account deletion** is started in the app for every account type and completed within 30 days, aiming for minutes (D-4) **[needs B3, C2]**. Web-only and banned accounts ask through privacy@resbite.com or the contact form, and the same 30 days apply; the owner-run deletion script runs the same lifecycle as the app, with the cancellations and the receipt (ruling AS-R3) **[needs D8, A16, C6]**. A web-only account with no resbite in the last 12 months is deleted by the C3 job, and a code request that is never confirmed is kept 30 days (ruling AS-R4) **[needs C3]**. A suspended account can delete in the app (D-19). Section 16 lists what deletion removes and what it keeps.
 7. **Changes** to a period go through the owner, are recorded in `knowledge-base/08-decisions.md` (A19), and are mirrored in A1, A6, the in-app Data & privacy page (B5) and the App Privacy answers (E3).
 
 ## How to read the tables
@@ -46,6 +46,7 @@ This is an internal record (A12). It holds no personal data. It is not legal adv
 
 | Store | Personal data | Period | Clock starts | Deleted by | Built? | Hold |
 |---|---|---|---|---|---|---|
+| `auth.users`, a code request never confirmed | The phone number given, request times | 30 days (AS-R4) | The code request | C3 job | Not built — C3 | — |
 | `auth.users` | Phone, email, password hash, display name in metadata, confirmation and sign-in times, ban state | While the account exists | Account deletion | `cleanup-account` deletes the Auth user | Local only — C2 (source gate off, `supabase/functions/_shared/deletion-release.ts:4`) | Pauses |
 | `auth.users` metadata `registration_details` | Optional date of birth, second phone, city, interests | None: removed for 1.0 (D-9) | At once | A one-off migration clears every stored value; the fields leave the app | Not built — C9, B11 | — |
 | `auth.identities` | Apple and Google ids, email, name, Google picture URL | While the account exists | Account deletion | Removed with the Auth user; Apple tokens revoked first | Local only — C2; revocation not built (B3, C2) | Pauses |
@@ -64,6 +65,7 @@ This is an internal record (A12). It holds no personal data. It is not legal adv
 | `private.beta_access` | Access grant; a revoked grant is the suspension lever since the open beta | While the account exists | Account deletion | Cascade with the Auth user | Local only — C2 | Pauses |
 | `private.lookup_usage` | One row per host: today's lookup count | While the account exists; overwritten daily | Account deletion | Cascade with the Auth user | Live (cascade); deletion C2 | — |
 | `private.moderators` | Moderators' account ids | While the person moderates | Offboarding or account deletion | `supabase/ops/moderators.sql`; cascade | Live (manual) | — |
+| Web-only accounts (made on the link site; the app never used) | The account's number, name, answers and 18+ and Terms record | 12 months with no resbite (AS-R4) | The end of the last resbite the account took part in | C3 job, through the same deletion lifecycle as the app (AS-R3) | Not built — C3, C6 | Pauses |
 | `private.tester_roster` | Old beta testers' emails | Delete once no longer needed (D-8) | 1.0 release | One-off delete in C3, after `supabase/ops/suspend-account.sql` stops touching the roster (`:18-19`) | Not built — C3 | — |
 | `private.phone_rewrites` | Old and new numbers from the Argentine rewrite script | Delete once no longer needed (D-8) | C12's decision | One-off delete in C3 | Not built — C3, C12 (whether the table holds rows is UNVERIFIED) | — |
 
@@ -123,14 +125,14 @@ When a host deletes their account, their future resbites are cancelled with a pu
 |---|---|---|---|---|---|---|
 | `private.reports`, open | Reporter, reported person or message, reason, details, frozen words and author, review note | Until closed. No limit while open | — | — | — | Pauses |
 | `private.reports`, closed | As above | 180 days (decided, R-Q3) | Closing | C3 job, replacing `supabase/ops/purge-closed-reports.sql` | Live (manual); job not built — C3 | Pauses |
-| `private.reports` filed by a person who deletes their account | As above | Deleted at the deletion request, open or closed (`open_beta.sql:255`) | Account deletion | The deletion request | Local only — C2 | Pauses (C2 must check the hold) |
-| `private.suspensions` | Suspended account, report, what changed, time | While suspended, then 12 months after the suspension ends, whether it is lifted or the account is deleted (D-8 with D-19; the deletion case is a proposed reading, for the owner to confirm) | The lift, or the account's deletion | C3 job | Not built — C2, C3, C6 (see the code note) | Pauses |
+| `private.reports` filed by a person who deletes their account | As above, with the reporter id cleared | Kept until closed, then 180 days, like any report (AS-R2). The deletion request clears the reporter id instead of deleting the report. Today it deletes them, open or closed (`open_beta.sql:255`) | Closing | C3 job | Not built — C2 (clear the id), C3 | Pauses |
+| `private.suspensions` | Suspended account, report, reason, what changed, time | While suspended, then 12 months after it is lifted (D-8). If the account is deleted, the user id is cleared and the reason and the dates stay, for 12 months after the deletion (AS-R1, with D-19) | The lift, or the account's deletion | C3 job | Not built — C2, C3, C6 (see the code note) | Pauses |
 | `private.blocks` | Blocker, blocked person, time | Until undone (D-8) | Unblock, or either account's deletion | The blocker; the deletion request (`open_beta.sql:254`) | Live; deletion C2 | — |
 | `private.blocked_terms` | None: a word list | — | — | — | — | — |
 | Evidence preserved for the NCA or the police | Removed content and its context | Only under a legal hold, until the authority says it is no longer needed | Hold lifted | By hand, after the hold is lifted | Not built — C6, A22 | — |
 | Reports, complaints and evidence sent by email or the web form | As sent | 24 months after the case closes (section 14) | Case closed | By hand | Not built — F1, F2, D1 | Pauses |
 
-**Code note on suspensions.** The code does not yet support "12 months after being lifted". The undo, meant for a suspension made in error, deletes the record at once (`supabase/ops/suspend-account.sql:33-38`), and the record cascades away with the Auth user (`supabase/migrations/20261111160000_chat_safety.sql:795`). So: a lift after a successful appeal needs a script that records the lift date instead of deleting the row (C6); an error undo can keep deleting, so a mistake leaves no record; and C2 must decide whether the record survives account deletion, which D-19 asks for ("keep … the suspension record for their own periods").
+**Code note on suspensions.** The code does not yet support "12 months after being lifted". The undo, meant for a suspension made in error, deletes the record at once (`supabase/ops/suspend-account.sql:33-38`), and the record cascades away with the Auth user (`supabase/migrations/20261111160000_chat_safety.sql:795`). So: a lift after a successful appeal needs a script that records the lift date instead of deleting the row (C6); an error undo can keep deleting, so a mistake leaves no record; and C2 must keep the record when the account is deleted, clearing the user id and keeping the reason and the dates for 12 months (ruling AS-R1; D-19). Today the row goes with the Auth user. The table is keyed on the user id, and the reason lives only in the linked report, which is purged 180 days after closing, so C2 gives the row its own key and stores the reason in it.
 
 ## 8. Notifications
 
@@ -178,7 +180,7 @@ When a host deletes their account, their future resbites are cancelled with a pu
 | Vercel function handling the contact form | Message passes through to the support inbox; not stored by the site | Transient | — | Not built — D1 | — |
 | Expo: stored push tokens | Push token | Expo's own period (not published, UNVERIFIED) | Expo | Platform; confirm under F7 | — |
 | Resend: sent-email logs | Address, subject, delivery events | 30 days: Resend states it keeps email and log data for 30 days on its Free, Pro and Scale plans (https://resend.com/security/gdpr, read 17 November 2026). Confirm the plan under F7 | Resend | Platform; confirm under F7 | Export |
-| SMS provider: message logs | Number, code text, delivery status | Set to the shortest period or redaction offered. Placeholder 2 | Provider | Not built — C1, F7 | Export |
+| Twilio: message records | Number, code text, delivery status | Placeholder 2. Twilio keeps them until we delete them; a deleted message's text can stay in its backups for up to 30 days (`vendors.md`, Twilio) | The Send SMS hook, through Twilio's API; then Twilio's backups | Not built — C1, F7 | Export |
 | CAPTCHA vendor: signals | IP, browser and device signals | The vendor's own period (Turnstile's addendum states none). Placeholder 3 | Vendor | Not built — B16, D10, F7 | — |
 | Apple and Google | Their own account data | Their own periods, as independent controllers | — | — | — |
 
@@ -222,7 +224,7 @@ A legal hold stops evidence being destroyed while it may be needed (UGC-15). A22
 **What it does.**
 - Every C2 and C3 job checks the hold and skips the records it names. The rest of the job runs as normal **[needs C2, C3]**.
 - An account deletion request is still accepted while a hold names the account. Access is blocked at once, and the person's data stops being visible to others. Only the erasure of the held records waits **[needs C2]**.
-- A held report filed by a person who deletes their account is kept, with the hold, instead of being deleted with the account **[needs C2]**.
+- A report filed by a person who deletes their account is kept anyway, with the reporter id cleared (AS-R2); a hold keeps it past its 180 days **[needs C2, C3]**.
 
 **What it cannot pause.** Supabase logs and backups, Vercel logs and vendors' own logs roll off within 7 days or less. When a hold needs something from them, the owner copies only the named records into the access-controlled store A22 names, within the platform's period.
 
@@ -236,12 +238,12 @@ Based on `request_account_deletion` (`supabase/migrations/20261116120000_open_be
 
 | At the request (at once) | By the clean-up (within 30 days, aiming for minutes) | Kept, and for how long |
 |---|---|---|
-| Access blocked; every session ended | The Auth user and its identities | Reports others made about the person, with the frozen words: until 180 days after closing |
-| Profile blanked to "Deleted member"; photo detached | Profile photos in Storage | The suspension record: 12 months after the deletion (D-19, section 7) **[needs C2; today it cascades away]** |
+| Access blocked; every session ended | The Auth user and its identities | Reports others made about the person, with the frozen words: until 180 days after closing. Reports the person filed, with their id cleared: the same (AS-R2) **[needs C2; today they are deleted]** |
+| Profile blanked to "Deleted member"; photo detached | Profile photos in Storage | The suspension record, with the user id cleared and the reason and dates kept: 12 months after the deletion (AS-R1, D-19, section 7) **[needs C2; today it cascades away]** |
 | Future resbites the person hosts cancelled, with a push to guests; on all their resbites the place cleared and the title, description, cover, note to guests, meeting details and area blanked (redaction trigger) | The profile row (cascade) | The deletion receipt: 30 days after clean-up |
 | Guest rows, push endpoints, the person's notices | | Blanked messages (no text, no author) and cancelled resbites: until their own periods end |
 | Connections and refusals, both ways | | Backups: up to 7 days, with deletions replayed after any restore |
-| Blocks both ways; reports the person filed (unless held); chat rules records; moderator row | | Anything under a legal hold: until the hold is lifted |
+| Blocks both ways; the reporter id on reports the person filed (AS-R2); chat rules records; moderator row | | Anything under a legal hold: until the hold is lifted |
 | Messages and announcements: text and author blanked; read positions and mutes removed | | |
 | Removal records about the person; "brought by" links cleared | | |
 | Sign in with Apple tokens revoked **[needs B3, C2]** | | |
@@ -251,9 +253,9 @@ Based on `request_account_deletion` (`supabase/migrations/20261116120000_open_be
 | Item | What it adds to this schedule | Today |
 |---|---|---|
 | C1 | Test codes emptied; test-mode tables dropped after the log review; SMS log settings | Test mode on |
-| C2 | Deletion for every account type; receipt purge; reservation purge; the legal hold in deletion; the restore replay; the suspension-record decision | Local only, gated off, entry point unwired (DEL-1) |
-| C3 | Every "Not built — C3" row: numbers, removals, chat, plans, covers, outbox, refusals, requests, link opens, closed reports, suspensions, the suppression list, leftovers; all checking the hold | Only the manual closed-report script exists |
-| C6 | Suspend by id; record a lift after appeal; removal scripts; set and lift holds | Not built |
+| C2 | Deletion for every account type; receipt purge; reservation purge; the legal hold in deletion; the restore replay; the suspension record kept after deletion with the id cleared (AS-R1); reports kept after their reporter's deletion with the id cleared (AS-R2) | Local only, gated off, entry point unwired (DEL-1) |
+| C3 | Every "Not built — C3" row: numbers, removals, chat, plans, covers, outbox, refusals, requests, link opens, closed reports, suspensions, the suppression list, web-only accounts and unconfirmed code requests (AS-R4), leftovers; all checking the hold | Only the manual closed-report script exists |
+| C6 | Suspend by id; record a lift after appeal; removal scripts; set and lift holds; the owner-run deletion script for banned, web-only and under-18 accounts, with the app's lifecycle (AS-R3) | Not built |
 | C8, C9 | The versioned Terms record; the optional details erased | Not built |
 | D1, F1, F3, F4, F5, F17 | The inboxes, the contact form and the logs outside the repo | Not built |
 | F7 | Vendors' own log periods confirmed | Not done |
@@ -266,6 +268,7 @@ Roles only. No names.
 | Date | Version | By | Change |
 |---|---|---|---|
 | 17 November 2026 | 1.0 draft | The owner | First schedule, from the D-8 defaults, for solicitor review |
+| 17 November 2026 | 1.0 draft | The owner | The rulings applied: suspension records outlive deletion with the id cleared (AS-R1); reports outlive their reporter (AS-R2); web-only accounts and unconfirmed code requests (AS-R4); Twilio's message records (AS-D5, placeholder 2) |
 
 ## Sources
 

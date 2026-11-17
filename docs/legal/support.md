@@ -53,7 +53,7 @@ The form on this page goes straight to our support inbox. It asks for:
 
 Please don't send images. If you're telling us about an image, say where it is and we'll find it.
 
-We use what you send only to deal with your message. We keep it for 24 months after we close your case, or longer only if the law requires it. Our [Privacy Notice](https://link.resbite.com/privacy) explains more.
+We use what you send only to deal with your message. We keep it for 24 months after we close your case, or longer only if the law requires it. Our [Privacy Policy](https://link.resbite.com/privacy) explains more.
 
 ### By post
 
@@ -67,7 +67,7 @@ Post is slower, so please use email for anything urgent. If you ask us to, we'll
 
 - **Profile → Data & privacy → Contact** shows our support address. You can copy it or open it in your mail app.
 - After you send a report, the app shows the address too.
-- **Profile → Data & privacy → About and legal** links to this page, our [Privacy Notice](https://link.resbite.com/privacy), our [Terms of Use](https://link.resbite.com/terms) and our company details.
+- **Profile → Data & privacy → About and legal** links to this page, our [Privacy Policy](https://link.resbite.com/privacy), our [Terms of Use](https://link.resbite.com/terms) and our company details.
 
 ### By phone
 
@@ -130,7 +130,7 @@ Pick the reason that fits best:
 - **Not appropriate**
 - **Something else**
 
-Add a note if it helps (up to 500 characters), then tap **Send report**. The app thanks you and shows our address.
+Add a note if it helps (up to 500 characters), then tap **Send report**. The app thanks you, tells you that we review reports every day, and shows our address.
 
 ### What happens next
 
@@ -139,6 +139,7 @@ Add a note if it helps (up to 500 characters), then tap **Send report**. The app
 - We aim to act on every report within 24 hours. An intimate image named in a valid report is removed within 48 hours at the latest.
 - We may remove the message, suspend the account, do both, or decide that no action is needed. A message we remove reads "Message removed by Resbite" in the chat.
 - We keep a copy of what you reported, even if the message or the account is later deleted. We delete a report 180 days after we close it.
+- If you delete your account before we close your report, we still deal with it. We keep it for the same period, without your account.
 - The app doesn't send you the outcome. If you want to know what happened, or you're not happy with how we dealt with your report, write to support@resbite.com. See "Complaints and appeals".
 
 ### Things you can't report directly in the app
@@ -177,7 +178,7 @@ If a nude, sexual or other intimate image of you is on Resbite without your cons
 - **How to tell us:** email support@resbite.com with "Intimate image" in the subject, or choose "An intimate image of me" in the contact form. If you use the app, report the person and choose **Intimate image shared without consent**.
 - **What to tell us:** where the image is, and that it shows you. If you're reporting for the person shown, say so, and tell us that they agree.
 - **Please don't send us the image.** We'll find it from your description.
-- **What we do:** we remove the image as soon as we can, and within 48 hours of your report at the latest. We suspend the account that shared it. If the same image, or one that is substantially the same, appears on Resbite again, we remove it again at once.
+- **What we do:** we remove the image as soon as we can, and within 48 hours of your report at the latest. We suspend the account that shared it at once, and may then ban it. If the same image, or one that is substantially the same, appears on Resbite again, we remove it again at once.
 - **What you hear from us:** we tell you when the image has been removed.
 
 You can also get help from:
@@ -222,7 +223,7 @@ Blocks stay until you undo them. The Resbite team can see who blocked whom, so w
 
 You can delete your account in the app at any time: **Profile → Data & privacy → Delete account**. You'll prove it's you, type DELETE, and confirm.
 
-- If you answered an invitation on our website and never used the app, or you can't sign in because your account was banned, email **privacy@resbite.com** and we'll delete it for you.
+- If you answered an invitation on our website and never used the app, or you can't sign in because your account was banned, email **privacy@resbite.com** and we'll delete it for you. We also delete an account made on our website once it has had no resbite for 12 months.
 - **Deleting the app doesn't delete your account.**
 
 Our page [Delete your account](https://link.resbite.com/delete-account) explains every step for each kind of account, what we delete, what we keep and for how long.
@@ -239,7 +240,7 @@ Write to **privacy@resbite.com**, or use the contact form and choose "Data prote
 - **stop or limit** how we use your data, or **object** to it;
 - **give your data to you in a form you can take elsewhere**.
 
-Some of these rights apply only in certain situations. Our [Privacy Notice](https://link.resbite.com/privacy) explains when.
+Some of these rights apply only in certain situations. Our [Privacy Policy](https://link.resbite.com/privacy) explains when.
 
 Where we rely on a permission you gave on your iPhone, such as notifications or access to your contacts, you can withdraw it at any time in your iPhone's **Settings → Resbite**.
 
@@ -251,7 +252,7 @@ Where we rely on a permission you gave on your iPhone, such as notifications or 
 - We answer within one month. If a request is complicated, or you send several, we may need up to two more months. If so, we tell you why within the first month.
 - We don't usually charge for this.
 
-Our [Privacy Notice](https://link.resbite.com/privacy) explains what we hold, why, who helps us run Resbite, and how long we keep things.
+Our [Privacy Policy](https://link.resbite.com/privacy) explains what we hold, why, who helps us run Resbite, and how long we keep things.
 
 ---
 
@@ -411,11 +412,11 @@ When we change this page, we publish the new version here with a new version num
 |---|---|
 | The support address in Profile → Data & privacy → Contact and after every report | F1 (`EXPO_PUBLIC_SUPPORT_ADDRESS` set in EAS production) |
 | The contact form, its topics and its rate limit | D1, F1 |
-| About and legal in Data & privacy, with links to this page, the Privacy Notice, the Terms and the company details | B1 |
-| Seven report reasons, the first three handled first | B7, C7 |
+| About and legal in Data & privacy, with links to this page, the Privacy Policy, the Terms and the company details | B1 |
+| Seven report reasons, the first three handled first; the report thanks says "We review reports every day." (AS-R9) | B7, C7 |
 | The word filter on titles, descriptions, notes to guests, meeting details and names | C7 |
-| Every report read every day; action within 24 hours; cover when the owner is away | F2, C5 (A15, A24) |
-| Intimate images removed within 48 hours; the uploader suspended; a repost removed again | C6, F2 (A15, D-21) |
+| Every report read every day; action within 24 hours; a named backup moderator covers when the owner is away (AS-D6) | F2, C5 (A15, A24) |
+| Intimate images removed within 48 hours; the uploader suspended at once, and the owner may then ban; a repost removed again | C6, F2 (A15, D-21, AS-R6) |
 | Child sexual abuse content reported to the National Crime Agency; the account banned | F2, C6 (A15; NCA registration) |
 | Under-18 accounts suspended, then deleted | F2, C6, C2 (A15) |
 | The suspended screen shows the support address and Delete account; suspended accounts can delete | B6, B3, C2 (D-19) |
@@ -426,8 +427,11 @@ When we change this page, we publish the new version here with a new version num
 | The reporter's identity never revealed, including in data exports | C6, A16 |
 | Data requests answered within one month, with proportionate identity checks | F3 (A16) |
 | Complaint, appeal, defamation and copyright times; opting out of updates | F4, A15, F1 |
-| Legal requests from courts, police and regulators checked and logged at privacy@resbite.com | F17 (A22) |
+| Legal requests from courts, police and regulators checked and logged at privacy@resbite.com (AS-R7) | F17 (A22) |
 | Emails and support records kept 24 months after the case closes | F1, F3, F4 |
-| Deletion of web-only and banned accounts by email | D8, F3 |
+| Deletion of web-only and banned accounts by email, through the owner-run deletion script (AS-R3); web-only accounts with no resbite in 12 months deleted by the C3 job (AS-R4) | D8, F3, C6, C3 |
+| A report kept after its reporter deletes their account, until closed and then 180 days, with the reporter id cleared (AS-R2; today it is deleted, `supabase/migrations/20261116120000_open_beta.sql:255`) | C2, C3 |
 
 Changed in the cross-check of 17 November 2026: child sexual abuse content now leads to a ban, as in the Terms and the moderation standard; legal requests go to privacy@resbite.com, as `docs/compliance/law-enforcement-requests.md` proposes, because only the owner reads that inbox; the opt-out from updates was added (Ofcom Code measure ICU D6).
+
+Changed after the owner's answers and rulings of 17 November 2026 (`knowledge-base/08-decisions.md`, AS-D1 to AS-R9): the report thanks says we review reports every day (AS-R9); a report outlives its reporter's account (AS-R2); the intimate image uploader is suspended at once and may then be banned (AS-R6); web-only accounts with no resbite in 12 months are deleted (AS-R4); the link reads "Privacy Policy" (AS-R5).

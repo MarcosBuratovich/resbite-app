@@ -11,19 +11,18 @@
 
 This is an internal procedure (gap analysis item A16; rows PRV-8, SI-9, DEL-7, WEB-5). It holds no personal data: people appear only by role. A UK solicitor reviews it with the public documents before launch (decision D-12). It is written to be complete and usable as it stands.
 
-**What it describes.** Resbite at version 1.0, after workstreams B, C and D of the gap analysis are built, using the recommended default for every owner decision D-3 to D-25. A step that is not possible yet carries **[needs X]**, naming the gap analysis item that makes it possible. Section 15 lists them.
+**What it describes.** Resbite at version 1.0, after workstreams B, C and D of the gap analysis are built, using the owner's answers and the rulings of 17 November 2026 (AS-D1 to AS-D8 and AS-R1 to AS-R9 in `knowledge-base/08-decisions.md`) and otherwise the recommended default for every owner decision D-3 to D-25. A step that is not possible yet carries **[needs X]**, naming the gap analysis item that makes it possible. Section 15 lists them.
 
-**References.** "The gap analysis" is `docs/superpowers/specs/2026-11-17-app-store-readiness-design.md`. Table names come from `supabase/migrations/`. Companion records in this folder: `records-of-processing.md` (A8), `retention-schedule.md` (A12), `moderation-standard.md` (A15), `law-enforcement-requests.md` (A22), `breach-response.md` (A17). The public description is in the privacy notice (https://link.resbite.com/privacy, A1) and on https://link.resbite.com/delete-account (A6).
+**References.** "The gap analysis" is `docs/superpowers/specs/2026-11-17-app-store-readiness-design.md`. Table names come from `supabase/migrations/`. Companion records in this folder: `records-of-processing.md` (A8), `retention-schedule.md` (A12), `moderation-standard.md` (A15), `law-enforcement-requests.md` (A22), `breach-response.md` (A17). The public description is in the Privacy Policy (https://link.resbite.com/privacy, A1) and on https://link.resbite.com/delete-account (A6).
 
 **The regulator.** The Information Commission (ICO), ico.org.uk. It took over from the Information Commissioner's Office on 30 September 2026 and still uses the name ICO.
 
 ## Placeholders to fill
 
 1. [[OWNER: effective date — proposed: the day version 1.0 is released on the App Store]]
-2. [[OWNER: SMS provider — proposed: Twilio]]
-3. [[OWNER: mailbox provider for support@resbite.com and privacy@resbite.com — proposed: a business email service under a signed data processing agreement, with data held in the UK or EU and MFA on]]
-4. [[OWNER: tool that holds the moderation, request, complaint, breach and law-enforcement logs — proposed: one access-controlled spreadsheet in the mailbox provider's business workspace, under the same data processing agreement]]
-5. [[OWNER: VAT number, or delete if not VAT-registered]] (in the signature of every reply, section 14)
+2. [[OWNER: mailbox provider for support@resbite.com and privacy@resbite.com — proposed: a business email service under a signed data processing agreement, with data held in the UK or EU and MFA on]]
+3. [[OWNER: tool that holds the moderation, request, complaint, breach and law-enforcement logs — proposed: one access-controlled spreadsheet in the mailbox provider's business workspace, under the same data processing agreement]]
+4. [[OWNER: VAT number, or delete if not VAT-registered]] (in the signature of every reply, section 14)
 
 ---
 
@@ -52,7 +51,7 @@ This is an internal procedure (gap analysis item A16; rows PRV-8, SI-9, DEL-7, W
 | **Extension** | Up to two further months, only if the request is complex or the person has sent several. Tell them within the first month, with the reason (template R4). |
 | **No fee** | Requests are free. A reasonable fee, or a refusal, is possible only for a request that is manifestly unfounded or excessive, or for further copies. The threshold "manifestly unfounded or excessive" remains after the 2025 Act (commentary; check the text). We must be able to show why, and must tell the person they can complain to the ICO or go to court (template R10). |
 | **Searches** | Make reasonable and proportionate searches (Art 15(1A)). Section 5 says where to look. |
-| **The privacy inbox** | Watched every working day, on the mailbox provider in placeholder 3 **[needs F1]**. |
+| **The privacy inbox** | Watched every working day, on the mailbox provider in placeholder 2 **[needs F1]**. |
 
 ## 3. Step by step
 
@@ -90,7 +89,7 @@ This is an internal procedure (gap analysis item A16; rows PRV-8, SI-9, DEL-7, W
 ### 4.3 The phone check
 
 1. Make up a six-digit check code. Do not reuse it.
-2. Send it as a text message to the verified number on the account (or the number the non-user gave), through the SMS provider (placeholder 2) **[needs C1]**:
+2. Send it as a text message to the verified number on the account (or the number the non-user gave), through Twilio (decision AS-D5) **[needs C1]**:
    > Resbite: your code to confirm your data request is [code]. Reply to our email with it. If you did not ask us for your data, ignore this message.
 3. Ask the requester to reply to our email with the code within 7 days (template R2).
 4. A matching code completes the check. Record "phone check passed" and the date, never the code.
@@ -201,7 +200,7 @@ At 1.0 the optional date of birth, second phone, city and interests are no longe
 
 | Source | Include |
 |---|---|
-| Support and privacy emails, and the request, complaint and moderation logs (placeholder 4) | Copies of their correspondence and our case notes about them, applying section 6 (never a reporter's identity) |
+| Support and privacy emails, and the request, complaint and moderation logs (placeholder 3) | Copies of their correspondence and our case notes about them, applying section 6 (never a reporter's identity) |
 | Backups (7 days) | Not searched: they hold the same data and are overwritten within 7 days. Say so |
 | Platform logs: Supabase (7 days), Vercel (hours to a day, plan UNVERIFIED) | Not searched unless the person asks for them and they are still held. Say so |
 | Data on their iPhone (sign-in keys in the keychain, plan drafts) and the link site's browser session | Not held by us; on their device. Say so |
@@ -254,19 +253,20 @@ Every account can delete itself in the app: Profile → Data & privacy → Delet
 
 ### 8.2 By request, for accounts that cannot use the app
 
-- **Who:** web-only accounts; banned accounts, which cannot sign in; anyone who has lost access to the app (https://link.resbite.com/delete-account explains it, A6) **[needs D8]**.
+- **Who:** web-only accounts; banned accounts, which cannot sign in; anyone who has lost access to the app (https://link.resbite.com/delete-account explains it, A6) **[needs D8]**. A web-only account with no resbite in the last 12 months is deleted by the C3 job without a request (ruling AS-R4) **[needs C3]**.
 - **Check** identity (section 4).
 - **Check for a legal hold.**
-- **Run the deletion** for that account: the owner-run route that queues the same deletion as the in-app request, for an account that cannot sign in **[needs C2: not in the gap analysis' C2 or C6 lists as written; open point]**. Never delete the user from the Auth dashboard instead: it skips the cancellation pushes, the photo and cover removal, the Apple token revocation and the receipt. On the hosted schema today it also fails where the account still has guest rows (`public.attendees.user_id` has no `on delete` rule until the deletion release changes it, `supabase/migrations/20260918001316_account_deletion_lifecycle.sql:22-23`, local-only).
+- **Run the deletion** for that account with the owner-run deletion script, which runs the same lifecycle as the in-app request, with the cancellations and the receipt, for banned, web-only and under-18 accounts that cannot use the app (ruling AS-R3) **[needs C6]**. Never delete the user from the Auth dashboard instead: it skips the cancellation pushes, the photo and cover removal, the Apple token revocation and the receipt. On the hosted schema today it also fails where the account still has guest rows (`public.attendees.user_id` has no `on delete` rule until the deletion release changes it, `supabase/migrations/20260918001316_account_deletion_lifecycle.sql:22-23`, local-only).
 - **Confirm** when it is done (template R7). The promise is **within 30 days**; the target is minutes.
 
 ### 8.3 What a deletion removes, and what stays
 
-**Removed** when the deletion is requested (`request_account_deletion`, `supabase/migrations/20261116120000_open_beta.sql:202-276`, carried into C2): the profile becomes "Deleted member" with no photo; future resbites the person hosts are cancelled, with a push to guests; on every resbite they host the meeting place is cleared, and the redaction trigger blanks the title, description, cover, note to guests, meeting details and area (`supabase/migrations/20261021120000_gi1_event_links.sql:188-203`); their guest rows, connections and refusals, blocks both ways, the reports they filed, chat rules acceptances, moderator row, read positions, mutes, push registrations and queued notifications; their messages lose their words and author. Then the clean-up worker removes their photos and covers and the Auth account itself **[needs C2]**. Sign in with Apple tokens are revoked **[needs B3, C2]**.
+**Removed** when the deletion is requested (`request_account_deletion`, `supabase/migrations/20261116120000_open_beta.sql:202-276`, carried into C2): the profile becomes "Deleted member" with no photo; future resbites the person hosts are cancelled, with a push to guests; on every resbite they host the meeting place is cleared, and the redaction trigger blanks the title, description, cover, note to guests, meeting details and area (`supabase/migrations/20261021120000_gi1_event_links.sql:188-203`); their guest rows, connections and refusals, blocks both ways, their id on the reports they filed (the reports stay, ruling AS-R2), chat rules acceptances, moderator row, read positions, mutes, push registrations and queued notifications; their messages lose their words and author. Then the clean-up worker removes their photos and covers and the Auth account itself **[needs C2]**. Sign in with Apple tokens are revoked **[needs B3, C2]**.
 
 **Kept**, and told to the person:
 - Reports about them, with the frozen copy of the reported words, until 180 days after each report is closed. A closed report forgets who it was about once the account is gone.
-- The suspension record, if they were suspended: 12 months after the deletion (D-8 with D-19; `retention-schedule.md` section 7) **[needs C2; today the record is deleted with the account, see `moderation-standard.md` section 20]**.
+- Reports they filed, with their id cleared: until each is closed, then 180 days (ruling AS-R2) **[needs C2; today they are deleted with the account]**.
+- The suspension record, if they were suspended, with their id cleared and the reason and dates kept: 12 months after the deletion (ruling AS-R1, with D-19; `retention-schedule.md` section 7) **[needs C2; today the record is deleted with the account, see `moderation-standard.md` section 20]**.
 - Past resbites other people still see, with a neutral organiser; system lines in chats, which show them as nobody.
 - The deletion receipt: 30 days after clean-up completes **[needs C2]**.
 - Backups and platform logs, until they roll over after 7 days.
@@ -299,7 +299,7 @@ Push notifications and contacts access rest on iOS permissions: the person can t
 
 ### 10.2 People who are not users
 
-A person whose number a host picked can object (Art 21). We tell them this separately on the invitation page and in the privacy notice (PRV-19, A2). On an objection:
+A person whose number a host picked can object (Art 21). We tell them this separately on the invitation page and in the Privacy Policy (PRV-19, A2). On an objection:
 1. Check control of the number (section 4.3).
 2. Add the number to the suppression list, so no host can invite it again **[needs C3, D-23: a keyed hash checked by `invite_contacts`, kept until the person withdraws the objection]**.
 3. Revoke their pending invitations and remove the number from `private.phone_invitations` and `private.plan_removals` **[needs C3 or C6: a script for this; open point]**.
@@ -322,7 +322,7 @@ The owner handles every data request. The backup moderator does not have the pri
 
 ## 13. The request log
 
-Kept outside the repo, in the log tool (placeholder 4). One row per request:
+Kept outside the repo, in the log tool (placeholder 3). One row per request:
 
 | Field | Content |
 |---|---|
@@ -391,7 +391,7 @@ Square brackets mark the parts to fill in.
 >
 > The file includes your account and sign-in details, your profile and photo, your resbites and answers, invitations, your own chat messages, connections, blocks you made, reports you sent, reports about you (without the identity of whoever made them), and notifications.
 >
-> **Why we hold it, who we share it with and how long we keep it** are in our privacy notice: https://link.resbite.com/privacy
+> **Why we hold it, who we share it with and how long we keep it** are in our Privacy Policy: https://link.resbite.com/privacy
 >
 > [**Some information was withheld**, to protect other people's privacy or for a legal reason allowed by the Data Protection Act 2018.]
 >
@@ -453,13 +453,13 @@ Square brackets mark the parts to fill in.
 
 | Item | What this procedure needs from it |
 |---|---|
-| B3, C2 | In-app deletion for every account type, within 30 days, with Apple token revocation and receipts; the legal hold in deletion; deletion while suspended (D-19); **an owner-run deletion for web-only and banned accounts** (open point: not in the C2 or C6 lists as written); keeping the suspension record after deletion |
+| B3, C2 | In-app deletion for every account type, within 30 days, with Apple token revocation and receipts; the legal hold in deletion; deletion while suspended (D-19); keeping the suspension record after deletion, with the id cleared (AS-R1); keeping a deleted reporter's reports, with the id cleared (AS-R2) |
 | B6 | Delete account on the suspended screen |
 | B11, C9 | The optional details removed and erased |
 | B14 | "Request a copy of my data" in the app |
-| C1 | The SMS provider, for the phone check and archive passwords; the test-code tables dropped |
-| C3 | The suspension, outbox and other retention jobs; the objection suppression list |
-| C6 | The export script (own messages only, never a reporter's id, others shown as "another member"); the removal scripts; **a script to honour a non-user's objection** (open point) |
+| C1 | Twilio, for the phone check and archive passwords; the test-code tables dropped |
+| C3 | The suspension, outbox and other retention jobs, including web-only accounts after 12 months without a resbite (AS-R4); the objection suppression list |
+| C6 | The owner-run deletion script for banned, web-only and under-18 accounts (AS-R3); the export script (own messages only, never a reporter's id, others shown as "another member"); the removal scripts; **a script to honour a non-user's objection** (open point) |
 | C8 | Per-version Terms acceptance |
 | D1, D8 | /support with the contact form; /delete-account with the request route |
 | F1, F3 | The inboxes; the request log |

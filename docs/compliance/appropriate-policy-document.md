@@ -16,14 +16,14 @@
 
 1. [[OWNER: the DPA 2018 Schedule 1 condition for criminal offence data in reports, chosen with the solicitor — proposed: paragraph 12 (regulatory requirements relating to unlawful acts), with paragraph 10 (preventing or detecting unlawful acts) as the alternative, each extended to criminal offence data by paragraph 36; paragraph 18 (safeguarding) for child-safety reports; paragraph 33 (legal claims) for records under a legal hold]] (section 3.1)
 2. [[OWNER: the condition, if any, for special category data that appears in reports — proposed: ask the solicitor; paragraph 18 (safeguarding) for child-safety reports]] (section 6)
-3. [[OWNER: the backup moderator's identity — recorded only in the signed team access agreement kept outside the repo; the repo records only that a backup is named, and the date — proposed: one named person at the Supabase Developer role with MFA, named before the 1.0 submission]] (section 4.1)
+3. [[OWNER: the backup moderator's identity — the owner names one backup (decision AS-D6); recorded only in the signed team access agreement kept outside the repo; the repo records only that a backup is named, and the date — proposed: at the Supabase Developer role with MFA, named before the 1.0 submission]] (section 4.1)
 4. [[OWNER: the date this document is adopted — proposed: no later than the 1.0 release, and before relying on the condition]] (section 7)
 
 ## How to read this
 
 - **Structure.** It follows the ICO's appropriate policy document template (read through search extracts, because ico.org.uk refused automated reads): the data, the condition, the procedures for each principle, and retention and erasure. The ICO says the template is a guide and need not be followed exactly.
 - **Law.** UK GDPR Art 10; DPA 2018 s.10(5), s.11(2) and Schedule 1 paragraphs 5, 10, 12, 36 and 38 to 41. legislation.gov.uk refused automated reads on 17 November 2026, so the wording below is from the long-standing text and search extracts. Check it against the live page.
-- **Target state.** This document describes Resbite at version 1.0, after workstreams B, C, D and F are built with the gap analysis' recommended defaults. Each measure carries its status on 17 November 2026: **Live**, or **To build** with the workstream id.
+- **Target state.** This document describes Resbite at version 1.0, after workstreams B, C, D and F are built with the owner's answers and the rulings of 17 November 2026 (AS-D1 to AS-D8 and AS-R1 to AS-R9 in `knowledge-base/08-decisions.md`) and otherwise the gap analysis' recommended defaults. Each measure carries its status on 17 November 2026: **Live**, or **To build** with the workstream id.
 - **The regulator** is the Information Commission, which took over the Information Commissioner's Office's functions on 30 September 2026 and still uses the name ICO (ico.org.uk). This document calls it "the ICO".
 - **No personal data.** Roles only: "the owner", "the backup moderator".
 
@@ -130,7 +130,7 @@ Whether the Data (Use and Access) Act 2025 changed any of these conditions is UN
 ### 4.1 Accountability
 
 - **Who is responsible.** The owner, who is also the named accountable individual for our Online Safety Act duties (decision D-6; Ofcom Code measure ICU A2).
-- **Who handles the data.** Only the owner and one backup moderator [[OWNER: the backup moderator's identity — recorded only in the signed team access agreement kept outside the repo; the repo records only that a backup is named, and the date — proposed: one named person at the Supabase Developer role with MFA, named before the 1.0 submission]], under written instructions and a confidentiality agreement (A24), with MFA (F16). **To build** (C5, A24, F16).
+- **Who handles the data.** Only the owner and one backup moderator [[OWNER: the backup moderator's identity — the owner names one backup (decision AS-D6); recorded only in the signed team access agreement kept outside the repo; the repo records only that a backup is named, and the date — proposed: at the Supabase Developer role with MFA, named before the 1.0 submission]], under written instructions and a confidentiality agreement (A24), with MFA (F16). **To build** (C5, A24, F16).
 - **Processors.** Supabase hosts the reports; the mailbox provider holds support emails; the tool in A18 holds case records and logs. Each has an Art 28 contract recorded in A18 (F7). **To build** (confirm contracts).
 - **Records.** The records of processing (A8) carry the paragraph 41 entries: the condition relied on, how the processing meets Art 6, and whether we keep and delete the data as section 5 says (and if not, why). The DPIA (A9, risk R16), the moderation standard (A15) and the law-enforcement procedure (A22) sit beside this document.
 - **Every action is recorded** on the report: status, action, note and time. **Live.**
@@ -149,9 +149,9 @@ Whether the Data (Use and Access) Act 2025 changed any of these conditions is UN
 - We never tell a reported person who reported them, including in answer to a subject access request (A16, DPA 2018 Schedule 2 protection of other people's data). **To build** (A16, C6).
 
 **Transparent.**
-- The Privacy Notice (A1) says that reports are kept for 180 days after we close them, that they may include allegations of offences, which condition we rely on, and that we may report to the National Crime Agency, the police or Ofcom where the law requires. **To build** (D1).
+- The Privacy Policy (A1) says that reports are kept for 180 days after we close them, that they may include allegations of offences, which condition we rely on, and that we may report to the National Crime Agency, the police or Ofcom where the law requires. **To build** (D1).
 - The Terms (A3) describe our rules, removal, suspension, appeals and the 48-hour intimate image takedown. **To build** (D1).
-- Data & privacy already says: "If you report a message or a person, the Resbite team reads the report and keeps a copy of what was reported, even if the message or that person's account is deleted. If you delete your account, the reports you sent are deleted too. A report is deleted 180 days after the team closes it." (`mobile/src/domain/safetyCopy.ts:85-86`). **Live.**
+- Data & privacy already says: "If you report a message or a person, the Resbite team reads the report and keeps a copy of what was reported, even if the message or that person's account is deleted. If you delete your account, the reports you sent are deleted too. A report is deleted 180 days after the team closes it." (`mobile/src/domain/safetyCopy.ts:85-86`). **Live**, but its second sentence must change with ruling AS-R2: a report you sent is kept until it is closed, then 180 days, without your account (B5). **To build.**
 
 ### 4.3 Purpose limitation (principle (b))
 
@@ -200,9 +200,9 @@ See section 5.
 | Open report | Until the team closes it. The standard is action within 24 hours, and within 48 hours for an intimate image (A15) | Closed, with the decision recorded | `supabase/ops/close-report.sql` | Live (script); To build (standard) |
 | Closed report | 180 days after closing (decision R-Q3) | Deleted | A C3 job (today the owner runs `supabase/ops/purge-closed-reports.sql`) | Live (manual); To build (job) |
 | Who a closed report was about, once that account is gone or being deleted | Until the report is closed, or the next purge run | The reported id and the frozen author are cleared; the words stay until the 180 days end | `close-report.sql`, `purge-closed-reports.sql` | Live |
-| Reports filed by someone who deletes their account | Until their deletion request | Deleted, unless a legal hold names them (`supabase/migrations/20261111160000_chat_safety.sql:1295`) | The deletion request (C2), with the legal hold | To build (C2) |
+| Reports filed by someone who deletes their account | Until the report is closed, then 180 days, like any report (ruling AS-R2). The reporter id is cleared at the deletion request | Deleted | The deletion request clears the id (C2); a C3 job deletes the report. Today the request deletes the report (`supabase/migrations/20261116120000_open_beta.sql:255`) | To build (C2, C3) |
 | Words of a removed message | Blanked at removal | The row stays until chat retention deletes it (90 days after a one-off's chat closes; 12 months in a group) | C3 | Live (blanking); To build (retention) |
-| Suspension record | While suspended, then 12 months after the suspension ends, whether it is lifted or the account is deleted (D-8 with D-19) | Deleted | C3; C2 keeps it past the account's deletion | To build (see section 8, point 4) |
+| Suspension record | While suspended, then 12 months after it is lifted (D-8). If the account is deleted, the user id is cleared and the reason and the dates stay for 12 months after the deletion (ruling AS-R1, with D-19) | Deleted | C3; C2 keeps it past the account's deletion | To build (see section 8, point 4) |
 | Support and privacy inbox messages, and case records, that hold allegations | 24 months after the case closes (D-8 default) | Deleted from the mailbox and the tool | F1, F3, F4 | To build (see section 8, point 5) |
 | National Crime Agency report records and the law-enforcement and regulator request log | 24 months after the case closes, longer under a legal hold | Deleted | A22, F17 | To build |
 | Any record under a legal hold | Until the hold is lifted (A22 sets how a hold is set, reviewed and lifted) | The normal period resumes | C2, C3 and the C6 hold script respect the hold | To build |
@@ -238,15 +238,15 @@ Reports can reveal special category data: a hate-speech report may reveal someon
 
 ## 8. Open points
 
-For the solicitor:
+For the solicitor (also listed in `docs/legal/README.md`, "Questions for the solicitor"):
 1. **Which condition** (D-22), and whether this document is required (section 3).
 2. **Special category data** in reports (section 6).
 3. **Whether the Data (Use and Access) Act 2025 changed** any Schedule 1 condition relevant here (UNVERIFIED).
 
 For the owner:
-4. **Suspension records and deletion.** The D-8 default keeps a suspension record 12 months after it is lifted, and D-19 lets a suspended person delete their account. In the code, `private.suspensions` is deleted with the Auth user (`on delete cascade`, `supabase/migrations/20261111160000_chat_safety.sql:795`), so the record goes when cleanup removes the account. The public documents and A12 follow D-19's default: the record is kept 12 months after the deletion (it also helps with ban evasion, D-25). C2 must build that, or the public documents must change.
+4. **Suspension records and deletion.** Decided by ruling AS-R1: the suspension record of an account that deletes itself while suspended is kept for 12 months after the deletion, with the user id cleared and the reason and the dates kept. In the code, `private.suspensions` is deleted with the Auth user (`on delete cascade`, `supabase/migrations/20261111160000_chat_safety.sql:794-795`), so C2 must build it.
 5. **Two periods for the same kind of allegation.** An in-app report is deleted 180 days after closing, but the same allegation sent to the support inbox is kept 24 months (D-8 default for support records). Consider deleting allegation content in support cases after 180 days too, keeping only a note that the case existed.
-6. **Reports filed by someone who deletes their account** are deleted at once (the code above). That suits the reporter, but it can destroy evidence of an offence. The legal hold covers only cases already flagged. Confirm this is the intended balance.
+6. **Reports filed by someone who deletes their account.** Decided by ruling AS-R2: the report is kept until it is closed, then for 180 days, with the reporter id cleared, so evidence of an offence is not lost with the reporter's account. Today the deletion request deletes them (`supabase/migrations/20261116120000_open_beta.sql:255`); C2 must change that.
 7. **The National Crime Agency's own rules** on keeping a record of a CSEA report may set a different period (UNVERIFIED; check with the NCA onboarding, UGC-8).
 
 ---

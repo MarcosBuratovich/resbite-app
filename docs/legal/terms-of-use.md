@@ -4,7 +4,7 @@
 **Effective date:** [[OWNER: effective date — proposed: the day the pages go live on link.resbite.com, after the solicitor's review and before the version 1.0 submission]]
 **Operator:** Resbite Ltd
 
-> **Drafting status (delete this box before publishing).** This is a draft for review by a UK solicitor (decision D-12 of the App Store readiness gap analysis). It describes Resbite as it will be at version 1.0, once workstreams B, C and D of that analysis are built. It uses the analysis' recommended default for every open owner decision. The open points for the owner and the solicitor are at the end of this file.
+> **Drafting status (delete this box before publishing).** This is a draft for review by a UK solicitor (decision D-12 of the App Store readiness gap analysis). It describes Resbite as it will be at version 1.0, once workstreams B, C and D of that analysis are built. It follows the owner's answers and the rulings of 17 November 2026 (AS-D1 to AS-D8 and AS-R1 to AS-R9 in `knowledge-base/08-decisions.md`), and otherwise the analysis' recommended default for every open owner decision. The open points for the owner and the solicitor are at the end of this file.
 
 ## Placeholders to fill
 
@@ -45,13 +45,13 @@ This summary picks out the points that matter most. It does not replace the full
 | How | Use it for |
 |---|---|
 | **support@resbite.com** | Help, reports about content or people, complaints and appeals |
-| **privacy@resbite.com** | Requests about your personal data, and data protection complaints |
+| **privacy@resbite.com** | Requests about your personal data, and data protection complaints. Requests from courts, the police and regulators |
 | **The contact form at https://link.resbite.com/support** | Anything. You don't need an account. |
 | **Post:** Resbite Ltd, 86-90 Paul Street, London EC2A 4NE, United Kingdom | If you can't use email or the form |
 
 We don't have a public phone number. We read reports about safety every day. We answer other messages on working days.
 
-1.3 In the app, these Terms, our Privacy Notice, our support page and our company details are under **Profile → Data & privacy → About and legal**.
+1.3 In the app, these Terms, our Privacy Policy, our support page and our company details are under **Profile → Data & privacy → About and legal**.
 
 1.4 **Resbite is not an emergency service.** If you or someone else is in danger, call 999.
 
@@ -69,7 +69,7 @@ We don't have a public phone number. We read reports about safety every day. We 
 - **Content** is anything people put on Resbite: messages, announcements, names, photos, titles, descriptions, places, notes, meeting details and reports.
 
 2.3 **Other documents.**
-- Our **Privacy Notice** (https://link.resbite.com/privacy) explains what personal data we use, why, and your rights. It is information for you, not part of this agreement. Please read it.
+- Our **Privacy Policy** (https://link.resbite.com/privacy) explains what personal data we use, why, and your rights. It is information for you, not part of this agreement. Please read it.
 - Our **community rules** are section 9 of these Terms. The chat rules you see in the app are a short version of them.
 - Our **support page** (https://link.resbite.com/support) explains in more detail how to report, complain and appeal, and how quickly we answer.
 - **Apple's licence for the app** also applies if you got the app from the App Store (section 19).
@@ -139,14 +139,14 @@ We don't have a public phone number. We read reports about safety every day. We 
 - Anyone who has a resbite's link can see its title, the host's name, the time, the area, the cover photo and how many people are going.
 - Everyone invited to a resbite can see the exact place, even before they answer.
 - Only people who answer Going or Maybe can see the meeting details.
-- Everyone in a resbite's chat can read the whole chat, including people who join later.
+- Everyone in a resbite's chat can read the whole chat, including people who join later. In a group, everyone invited to the current week is in its chat, including people who haven't answered yet.
 - People who have your number can find out that you use Resbite.
 
 5.4 **How chats work.**
 - Chats are stored on our servers. They are not end-to-end encrypted.
 - We don't read chats as a matter of routine. Our team sees a message when someone reports it. We look at other information we hold only when we need to, for example to look into a report, to keep Resbite secure, or because the law requires it.
 - A one-off resbite's chat closes 48 hours after the resbite ends. You can still read it. A group's chat stays open while the group repeats.
-- We delete old chats after the periods set out in our Privacy Notice.
+- We delete old chats after the periods set out in our Privacy Policy.
 
 5.5 **Ideas are suggestions.** The ideas we show are for inspiration. Check that an activity is safe and suitable for you and your guests.
 
@@ -241,7 +241,7 @@ Don't post or share anything that is illegal in the UK, and don't use Resbite to
 
 - Never share, or threaten to share, a nude, sexual or other intimate image of someone without their consent. This includes images that are faked or made with AI.
 - If an image like this shows you, report it (section 10.4). You don't need an account to do so.
-- We remove it as soon as we can, and within 48 hours of a valid report at the latest. We suspend the account that shared it, and take steps to stop it being shared on Resbite again.
+- We remove it as soon as we can, and within 48 hours of a valid report at the latest. We suspend the account that shared it at once, and may then ban it. We take steps to stop the image being shared on Resbite again.
 
 ### Nudity and sexual content
 
@@ -349,7 +349,7 @@ You help keep Resbite safe by following the community rules, and by reporting an
 - **Your report is private.** The person you report isn't told that they were reported. We never tell them who reported them, unless the law requires us to.
 - **The outcome.** The app doesn't send you the outcome, because we have to protect other people's privacy too. You can ask us what happened.
 - **Limits.** You can send up to 20 reports a day. Don't make reports you know are false.
-- **How long we keep reports.** We keep a copy of what was reported, even if the message or the account is later deleted. We delete a report 180 days after we close it. If you delete your account, the reports you sent are deleted too, unless the law requires us to keep them.
+- **How long we keep reports.** We keep a copy of what was reported, even if the message or the account is later deleted. We delete a report 180 days after we close it. If you delete your account, we keep the reports you sent until we close them, and then for 180 days, but we remove your account from them.
 
 ### 10.5 Blocking
 
@@ -387,6 +387,7 @@ If someone breaks these Terms or the law, we can:
 - We report child sexual exploitation and abuse content to the National Crime Agency, as the law requires.
 - We may share information with the police or other authorities when the law requires or allows it, for example to prevent or detect crime, or when someone's life is at risk. We check every request and share only what is needed.
 - We answer information notices from Ofcom, the UK's online safety regulator.
+- Courts, the police and regulators can send requests to privacy@resbite.com.
 - When there is a legal reason, such as a police request or an open investigation, we may keep information that we would otherwise delete. That includes after you delete your account. We keep it only for as long as the reason lasts.
 
 ---
@@ -443,7 +444,7 @@ Anyone affected can complain, whether or not they have an account.
 - show it and send it to the people you share it with, as section 5.3 describes;
 - use it to keep Resbite safe and to meet our legal duties.
 
-The companies that help us run Resbite can do these things for us, including outside the UK, as our Privacy Notice explains. This licence is worldwide for that reason.
+The companies that help us run Resbite can do these things for us, including outside the UK, as our Privacy Policy explains. This licence is worldwide for that reason.
 
 12.3 **What we won't do.** We don't sell your content. We don't use it for advertising. We won't use it to promote Resbite without asking you first.
 
@@ -473,7 +474,7 @@ The companies that help us run Resbite can do these things for us, including out
 14.1 **How to delete your account.**
 - In the app, go to **Profile → Data & privacy → Delete account**. You confirm it's you with a new code sent to your number, your password, a code sent to your email, or by signing in with Apple again. Then you confirm the deletion.
 - This works for every kind of account, including a suspended one.
-- If you answered an invitation on our website and never used the app, or your account is banned so you can't sign in, write to **privacy@resbite.com** or use the contact form. We'll check it's you and delete it for you.
+- If you answered an invitation on our website and never used the app, or your account is banned so you can't sign in, write to **privacy@resbite.com** or use the contact form. We'll check it's you and delete it for you. If you don't ask, we delete an account made on our website once it has had no resbite for 12 months.
 
 14.2 **How long it takes.** We start straight away and finish within 30 days. Most deletions finish within minutes. We confirm when it's done.
 
@@ -481,13 +482,14 @@ The companies that help us run Resbite can do these things for us, including out
 - You can no longer use the account. Your name shows as "Deleted member", and your photo is removed.
 - You leave every resbite and every chat.
 - The words of your chat messages and announcements are deleted. Other people see "Message deleted".
-- Your connections, your blocks, other people's blocks of you, and the reports you sent are deleted.
+- Your connections, your blocks and other people's blocks of you are deleted. The reports you sent no longer show that you sent them.
 - **If you host,** every future resbite you host is cancelled, and your guests get a notification. Any group you host ends, even if it has co-hosts. On every resbite you host, past and future, we remove the title, description, cover photo, note to guests, meeting details, area and place. Past resbites stay in your guests' history as a blank record, with "Deleted member" as the host, until we delete them 12 months after they ended.
 - If you used Sign in with Apple, we ask Apple to end Resbite's access to your Apple ID.
 
 14.4 **What we keep, and for how long.**
 - Reports other people made about you, with the copy of what they reported: until we close them, then for 180 days.
-- If your account was suspended, a record of the suspension: for 12 months after the deletion.
+- Reports you sent, without your account: until we close them, then for 180 days.
+- If your account was suspended, a record of the suspension's reason and dates, no longer linked to your account: for 12 months after the deletion.
 - A minimal record that your account was deleted: for 30 days after the deletion is complete.
 - Backups: for up to 7 days.
 - Emails and forms you sent us: for 24 months after we close the case.
@@ -495,7 +497,7 @@ The companies that help us run Resbite can do these things for us, including out
 
 We can't delete copies other people made, such as screenshots, or invitation messages you sent by WhatsApp or Messages.
 
-14.5 Deleting the app does not delete your account. Some data the app keeps on your iPhone can stay there after you delete the app. Signing out first clears most of it. Our Privacy Notice explains this.
+14.5 Deleting the app does not delete your account. Some data the app keeps on your iPhone can stay there after you delete the app. Signing out first clears most of it. Our Privacy Policy explains this.
 
 ---
 
@@ -626,14 +628,14 @@ This section applies to the Resbite app you get from Apple's App Store.
 |---|---|---|
 | 3.3, 5.2, 14.1 | Every number verified by a real text-message code; no `000000` test path | C1, B12, D6 |
 | 2.4, 2.5, 16.2 | Acceptance by version on every account (app and web), on a screen that also offers Delete account and Sign out | B2, C8, D3, D4 |
-| 1.3, 2.5, 13.3 | About and legal in the app, with the Terms, Privacy Notice, support, company details and Licences; links on the welcome and sign-in screens | B1, A25 |
+| 1.3, 2.5, 13.3 | About and legal in the app, with the Terms, Privacy Policy, support, company details and Licences; links on the welcome and sign-in screens | B1, A25 |
 | 1.2, 2.3, 10.4, 11.2 | Public pages at /terms, /privacy, /support and /delete-account, a contact form, and a `#community-rules` anchor | D1, D2 |
 | 1.2, 4.2, 4.4 | Support and privacy inboxes watched; the support address shown in the app | F1, B6 |
 | 3.4 | Resbite rated 18+ on the App Store | E4 |
 | 3.3 | Sign in with Apple working on the hosted project | C11 |
 | 4.4 | Number and email changes done on request | F3 (A16) |
-| 10.1, 11.3 | Reports read every day, action within 24 hours, with backup cover | F2, C5 (A15, A24) |
-| 9, 10.1, 10.4 | 48-hour intimate image takedown, with a web route for people without an account, and the uploader suspended | F2, C6, D1, B7, C7 (D-21) |
+| 10.1, 11.3 | Reports read every day, action within 24 hours, with a named backup moderator (AS-D6) | F2, C5 (A15, A24) |
+| 9, 10.1, 10.4, 10.6 | 48-hour intimate image takedown, with a web route for people without an account, and the uploader suspended at once (the owner may then ban) | F2, C6, D1, B7, C7 (D-21, AS-R6) |
 | 9, 10.1, 10.8 | Child sexual abuse content reported to the National Crime Agency; terrorism content reported to Counter Terrorism Policing | F2 (A15) |
 | 10.2 | The filter also checks titles, descriptions, notes to guests, meeting details and display names | C7 |
 | 10.4 | Report reasons Illegal or dangerous, Child safety and Intimate image shared without consent | B7, C7 |
@@ -643,12 +645,17 @@ This section applies to the Resbite app you get from Apple's App Store.
 | 10.4, 10.8, 12.4, 14.4 | A legal hold pauses deletion and purges | C2, C3, C6 |
 | 5.4, 10.4, 12.4, 14.3, 14.4 | Retention periods: reports 180 days after closing, old chats, past resbites 12 months, backups 7 days, support records 24 months | C3, F1, F3, F4 |
 | 14.1, 14.2 | Deletion in the app for every account type, suspended accounts included, finished within 30 days with a confirmation | B3, C2 (D-19) |
-| 14.1 | Banned and web-only accounts deleted on request | D8, F3 |
+| 14.1 | Banned and web-only accounts deleted on request, by the owner-run deletion script that runs the app's lifecycle (AS-R3); web-only accounts with no resbite in 12 months deleted by the C3 job (AS-R4) | D8, F3, C6, C3 |
 | 14.3 | Sign in with Apple tokens revoked at deletion; a host's future resbites cancelled with a push | B3, C2 |
-| 14.4 | The suspension record kept 12 months after a suspended account is deleted (today it is deleted with the account) | C2, C6 (D-19) |
+| 14.4 | The suspension record kept 12 months after a suspended account is deleted, with the account id cleared and the reason and dates kept (AS-R1; today it is deleted with the account, `supabase/migrations/20261111160000_chat_safety.sql:794-795`) | C2, C6 (D-19) |
+| 10.4, 14.3, 14.4 | Reports sent by a person who deletes their account kept until closed, then 180 days, with the reporter id cleared (AS-R2; today they are deleted, `supabase/migrations/20261116120000_open_beta.sql:255`) | C2, C3 |
+| 1.2, 10.8 | Requests from courts, the police and regulators handled at privacy@resbite.com (AS-R7) | F17 (A22) |
+| 5.3 | A group's chat open to everyone invited to the current week, pending guests included, with its whole history (AS-R8, as built: `supabase/migrations/20261111150000_chat_groups.sql:194-205`) | Already true |
 | 15.1 | No ads, no tracking, no in-app purchases | Already true; E3 answers "not used for tracking" |
 
 ## Open points for the owner and the solicitor (delete before publishing)
+
+The questions for the solicitor from every public document are gathered in `docs/legal/README.md`, "Questions for the solicitor" (decision AS-D7). The points below give the detail for these Terms.
 
 1. **Licence agreement in App Store Connect: recommendation is Apple's Standard EULA plus these Terms.**
    - Why: it is the gap analysis' default (ASC-12, E1). A custom EULA must give a telephone number as well as an email address (Apple's minimum terms, item 8), and the owner has no public phone number. It would also be a plain-text copy in App Store Connect to keep in step with the web version.
@@ -662,7 +669,7 @@ This section applies to the Resbite app you get from Apple's App Store.
 7. **Suspension versus ban.** Section 10.6 says a suspended person can still sign in to contact us or delete their account, and a banned person can't. Today the suspend runbook adds an Auth ban by hand to every suspension (`supabase/ops/suspend-account.sql:10-11`). Under D-19 that Auth ban should apply to bans only; the moderation standard (A15) and the runbook need to say so.
 8. **The Terms acceptance screen (B2)** should offer Delete account, so that someone who won't accept a new version can leave without accepting it (section 16.2).
 9. **The recorded version.** `TERMS_VERSION` is `2026-10` in the app (`mobile/src/domain/guestAccount.ts:4`) and on the link site (`links/server/lib/options.mjs:16`). It names no document. When this version is published, set both to one new value in the `YYYY-MM` form, which is the only form the database accepts (`supabase/migrations/20261022120000_gi2_guest_accounts.sql:27`), so the acceptance record (C8) points at this text (B2, D4). `docs/legal/README.md` holds the placeholder for the value. (Cross-check, 17 November 2026: an earlier draft suggested `1.0`, which the database would refuse.)
-10. **The Privacy Notice's name.** All the public documents now call A1 the "Privacy Notice", its own title. App Store Connect's field is still called "Privacy Policy URL" by Apple. B1, B2 and D3 must label the link "Privacy Notice" (the current tick line says "Privacy Policy").
+10. **The Privacy Policy's name.** All the public documents call A1 the "Privacy Policy" (ruling AS-R5). The app's tick and links, and App Store Connect's "Privacy Policy URL" field, already use that name. The source file keeps its name, `docs/legal/privacy-notice.md`.
 11. **The regulator's name.** All the public documents now use one form, following the gap analysis: "the Information Commission (ICO)", which took over from the Information Commissioner's Office on 30 September 2026 and still uses the name ICO (section 11.4). Check on ico.org.uk before publishing.
 12. **The filter's scope.** Section 10.2 describes the filter after C7, covering titles, descriptions, notes to guests, meeting details and display names. Today it covers only chat messages and announcements. The support page describes the same wider scope. If C7 is not built for 1.0, cut the list back to chat here and on the support page.
 13. **Removed content can't be restored.** Removing a message deletes its words (`supabase/ops/remove-reported-message.sql`). Sections 10.7 and 11.3 say so. If the C6 scripts for photos and titles also delete, the same applies.
@@ -672,6 +679,6 @@ This section applies to the Resbite app you get from Apple's App Store.
 17. **Numbers quoted for the public:** 999, police non-emergency 101 and Samaritans 116 123 (section 7). Check them before publishing.
 18. **Content Rights in App Store Connect (E1).** The licence in section 12.2 is what lets the owner answer that Resbite has the rights it needs to show user content. How App Review treats this is UNVERIFIED (APL-43).
 19. **Vendor accounts.** These Terms name Resbite Ltd as the operator. Some vendor accounts are still held under other names (DOC-1, PRV-6). They should move to Resbite Ltd before publishing (F8).
-20. **Child sexual abuse: ban.** Sections 9, 10.1 and 10.6 ban the account, as the moderation standard does (A15, sections 8.1 and 9: suspend, then the Auth ban). The support page now says "ban" too. A ban stops sign-in, so the person can't delete the account and the evidence with it; the legal hold (UGC-15) also covers that risk. Intimate image sharing is a suspension at once, which the owner may turn into a ban (section 10.6; A15 section 10).
+20. **Child sexual abuse: ban.** Sections 9, 10.1 and 10.6 ban the account, as the moderation standard does (A15, sections 8.1 and 9: suspend, then the Auth ban). The support page now says "ban" too. A ban stops sign-in, so the person can't delete the account and the evidence with it; the legal hold (UGC-15) also covers that risk. Intimate image sharing is a suspension at once, which the owner may turn into a ban (section 10.6; A15 section 10; ruling AS-R6).
 21. **A deleted host's past resbites.** Checked against the code on 17 November 2026: the deletion request clears the place (`supabase/migrations/20261116120000_open_beta.sql:240`), and the redaction trigger, which fires because the profile is marked as deleting first, blanks the title, description, cover, cover description, note to guests, meeting details and area (`private.redact_deleting_owner_plan`, `supabase/migrations/20261021120000_gi1_event_links.sql:188-203`). Section 14.3 now says so. The trigger is already on the hosted project; the request function goes live with C2.
 22. **Section 10.1's statement for each kind of priority illegal content** (Ofcom Code measure ICU G1) was added in the cross-check on 17 November 2026, from the times in the moderation standard (A15, section 3). The solicitor should check it against Ofcom's terms-of-service guidance.

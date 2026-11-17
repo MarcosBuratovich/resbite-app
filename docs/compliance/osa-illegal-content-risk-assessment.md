@@ -13,14 +13,13 @@
 ## Placeholders to fill
 
 1. [[OWNER: the role of the individual accountable under ICU A2 — proposed: the owner, as a director of Resbite Ltd; the name is recorded in the company's own governance records, not in this repo]] (sections 5.1, 5.4.1, 7.1)
-2. [[OWNER: the backup moderator's identity — recorded only in the signed team access agreement kept outside the repo; the repo records only that a backup is named, and the date — proposed: one named person at the Supabase Developer role with MFA, named before the 1.0 submission]] (sections 3.6, 5.1, 5.5)
-3. [[OWNER: SMS provider — proposed: Twilio]] (sections 3.6, 5.3, 5.4.4)
-4. [[OWNER: CAPTCHA vendor — proposed: Cloudflare Turnstile or hCaptcha]] (sections 3.6, 5.3)
-5. [[OWNER: sign-off date by the accountable individual, and the date the board of Resbite Ltd noted it — proposed: after the solicitor's review and once every "To build" item in section 1.7 is live, before the 1.0 submission]] (section 7.1)
+2. [[OWNER: the backup moderator's identity — the owner names one backup (decision AS-D6); recorded only in the signed team access agreement kept outside the repo; the repo records only that a backup is named, and the date — proposed: at the Supabase Developer role with MFA, named before the 1.0 submission]] (sections 3.6, 5.1, 5.5)
+3. [[OWNER: CAPTCHA vendor — proposed: Cloudflare Turnstile or hCaptcha]] (sections 3.6, 5.3)
+4. [[OWNER: sign-off date by the accountable individual, and the date the board of Resbite Ltd noted it — proposed: after the solicitor's review and once every "To build" item in section 1.7 is live, before the 1.0 submission]] (section 7.1)
 
 ## How to read this record
 
-- **Target state.** This record describes Resbite **as it will be at version 1.0**, after workstreams B, C, D and F of the gap analysis are built, using the gap analysis' recommended default for every owner decision D-3 to D-25. Where a statement depends on something not yet built, the item id follows in bold, for example **To build (B7)**. Section 1.7 lists every such item. Until they are live this record overstates the controls, and sign-off waits for them.
+- **Target state.** This record describes Resbite **as it will be at version 1.0**, after workstreams B, C, D and F of the gap analysis are built, using the owner's answers and the rulings of 17 November 2026 (AS-D1 to AS-D8 and AS-R1 to AS-R9 in `knowledge-base/08-decisions.md`) and otherwise the gap analysis' recommended default for every owner decision D-3 to D-25. Where a statement depends on something not yet built, the item id follows in bold, for example **To build (B7)**. Section 1.7 lists every such item. Until they are live this record overstates the controls, and sign-off waits for them.
 - **Evidence.** Each mechanism was checked in the code on 17 November 2026 (branch `app-store-readiness` at `de8ba6a`). Hosted facts come from the repo's records only; nobody touched the hosted project for this record. Where the code and the gap analysis disagree, this record follows the code and says so.
 - **Ofcom's documents.** Ofcom's website refused automated reads on 17 November 2026 (HTTP 403). The Codes text in section 5 was read in full from the version laid before Parliament on gov.uk (submitted 16 December 2024, issued 24 February 2025, in force 17 March 2025), plus the later amendments that gov.uk shows. Points taken from Ofcom pages through search-engine extracts are marked **(x)**. Check every measure number against the Codes in force before sign-off.
 - **UNVERIFIED** marks a point not confirmed from a primary source.
@@ -90,12 +89,12 @@ The ratings in section 4 lean on these controls. Sign-off waits until each is li
 
 | Id | What it adds | Used in |
 |---|---|---|
-| C1, B12, D6 | Real SMS codes: every account has a really verified phone; the `000000` test swap gone [[OWNER: SMS provider — proposed: Twilio]] | 3.6, 5.3, 5.4.4 |
+| C1, B12, D6 | Real SMS codes, sent by Twilio (decision AS-D5): every account has a really verified phone; the `000000` test swap gone | 3.6, 5.3, 5.4.4 |
 | B2, C8, D3, D4 | 18+ and Terms acceptance, by version, on every account and on the web route | 3.1, 5.4.6 |
 | B7, C7 | New report reasons: "Illegal or dangerous", "Child safety", "Intimate image shared without consent" | 4.2, 5.1, 5.4 |
 | C7 | The blocked-terms check extended to titles, descriptions, notes to guests, meeting details and display names | 4.2, 5.3 |
 | C6 | Team scripts: suspend by account id; remove a profile photo; remove a resbite's title, description, notes or cover; set and lift a legal hold | 5.1 (C2), 5.4 |
-| C5, F2, A24, F16 | A named backup moderator with written instructions and MFA; a moderation rota (placeholder 2) | 5.1, 5.5, 6 |
+| C5, F2, A24, F16 | A backup moderator, named by the owner (decision AS-D6), with written instructions and MFA; a moderation rota (placeholder 2) | 5.1, 5.5, 6 |
 | A15 | The moderation and takedown standard (`docs/compliance/moderation-standard.md`) | 5.1, 5.4 |
 | A3 | Terms of Use with the community rules, published at `https://link.resbite.com/terms` | 5.1 (G1, G3) |
 | A4, A5, D1, F1, F4 | `/support` with the support and privacy inboxes, a web report and complaint route for people who are not users, a contact form, and the complaints and appeals procedure | 5.1 (D measures), 5.4.7 |
@@ -164,7 +163,7 @@ Resbite helps adults plan small get-togethers with people they know: a host make
 | User profiles | Yes, minimal | A display name (1–80 characters) and an optional profile photo. No bio, no age, no location, no public profile page. Seen only by people who share a resbite with the person | `supabase/migrations/20260917190517_resbite_private_tester_foundation.sql:12-18`; DI §3 |
 | Anonymous or pseudonymous profiles | Partly | The display name is free text, so it may not be a real name. But every account is tied to a verified phone | `mobile/src/domain/accountRoute.ts:11` |
 | User connections | Yes | Two people who **shared a resbite** can connect: one asks, the other accepts. A "Not now" is never shown to the person asking | `supabase/migrations/20261110120000_connections.sql:6-42` |
-| Group messaging | Yes | **One chat per resbite.** On a one-off, the hosts and the people going or maybe going read and write it; it goes read-only 48 hours after the end. On a weekly group, everyone invited to the current week reads and writes it while the series runs. Text only, up to 1,000 characters, at most 30 messages a minute per person | `supabase/migrations/20261111140000_chat_core.sql:31-45,131-160,455,480`; `docs/implementation-status.md` (chat groups entry) |
+| Group messaging | Yes | **One chat per resbite.** On a one-off, the hosts and the people going or maybe going read and write it; it goes read-only 48 hours after the end. On a weekly group, everyone invited to the current week, pending guests included, reads the whole history and writes it while the series runs (ruling AS-R8, disclosed in A1). Text only, up to 1,000 characters, at most 30 messages a minute per person | `supabase/migrations/20261111140000_chat_core.sql:31-45,131-160,455,480`; `docs/implementation-status.md` (chat groups entry) |
 | Direct messaging | In effect only | There is no separate direct message. A resbite with one host and one guest gives a two-person chat, but only after the host invites and the guest says yes | as above |
 | Encrypted messaging | No | Chat is stored on the server, readable by later joiners, not end-to-end encrypted | DI §6 |
 | Posting images | Limited | **No images in chat.** The only images are one profile photo per person and one cover photo per resbite, picked from the photo library, re-encoded as JPEG, metadata stripped, 2 MB at most. Covers can be seen by anyone with the event link (the web image route) | `mobile/src/services/photo.ts:51-90`; `supabase/migrations/20261007200000_plan_covers.sql:41-70`; `links/server/api/image.mjs:55-68` |
@@ -215,7 +214,7 @@ Free, with no ads, no tracking and no in-app purchases (owner, 17 November 2026)
 | A backup moderator and a rota | **To build (C5, F2, A24)** (placeholder 2) |
 | Host approval for open-link joiners; host removal of people and messages; circle limits defaulting to "Nobody" | Live |
 | Links open only after a check that names the link's domain, for example "Open example.com?" | Live (`mobile/app/chat.tsx:1100-1117`) |
-| Real SMS codes on every account | **To build (C1, B12, D6)** [[OWNER: SMS provider — proposed: Twilio]] |
+| Real SMS codes on every account, sent by Twilio | **To build (C1, B12, D6)** |
 | CAPTCHA on code requests | **To build (B16, D10, C11)** [[OWNER: CAPTCHA vendor — proposed: Cloudflare Turnstile or hCaptcha]] |
 | Support and privacy inboxes; web report and complaint route; contact form | **To build (F1, A4, D1)** |
 | Photo metadata stripped; phone numbers never shown to others | Live (`mobile/src/services/photo.ts:51-90`; DI §2) |
@@ -411,7 +410,7 @@ Following the Codes is a safe harbour: a provider that takes the relevant recomm
 | **ICU C2** Swift takedown | Systems to take illegal content down swiftly once aware | Action within 24 hours of a report; intimate images within 48 hours at most. Messages: `remove-reported-message.sql` (Live). Photos, titles, descriptions, notes and covers: **To build (C6)**. Cover by the owner plus the backup moderator **To build (C5, F2)** (placeholder 2) | Partly live |
 | **ICU D1** Enabling complaints | Let every type of relevant complaint be made, by users and affected persons | In the app: report from five surfaces (Live). On the web: `/support` with the support inbox, a contact form and a route for people who are not users **To build (A4, D1, F1)** | Partly live |
 | **ICU D2** Easy to find, access and use | A reporting tool beside each piece of content; other complaints easy to find; only necessary steps; room for supporting detail; accessible, including screen readers | Report sits beside each message and person, with a VoiceOver action and an optional details field (500 characters). A resbite's title and cover are reported by reporting the host from the resbite page; a separate "Report this resbite" is deferred (D-17, section 5.5). `/support` linked from the app's "About and legal" **To build (B1, D1)** | Partly live |
-| **ICU D4** Indicative timeframes | Acknowledge each complaint and give an indicative time for deciding it | The in-app report thanks states the review time, and the support inbox's first reply does the same **To build (B7 copy, F1, A5)** — see section 8, point 4 | To build |
+| **ICU D4** Indicative timeframes | Acknowledge each complaint and give an indicative time for deciding it | The in-app report thanks says "We review reports every day." (ruling AS-R9), and the support inbox's first reply gives the same time **To build (B7 copy, F1, A5)** — see section 8, point 4 | To build |
 | **ICU D6** Opt-out from communications | Let the complainant opt out of further non-ephemeral messages about their complaint | A5 lets a complainant ask for no updates; the team honours it **To build (A5, F4)** | To build |
 | **ICU D7** Complaints about suspected illegal content | Treat the complaint as reason to suspect, review it under C1, and consider it promptly | Every report and every web complaint is reviewed under A15 within the same 24-hour target | Live in part; **To build (A15)** |
 | **ICU D9** Appeals, decided promptly | Decide appeals promptly (services neither large nor multi-risk) | Appeals against removal or suspension go to the support inbox and are decided promptly, with the indicative time stated in A5 and on `/support` **To build (A5, F4)** | To build |
@@ -450,7 +449,7 @@ Following the Codes is a safe harbour: a provider that takes the relevant recomm
 - **Blocked-terms filter** on chat (Live) and other text **To build (C7)**.
 - **Chat rules** accepted before the first message (Live).
 - **Rate limits** on messages, reports and lookups (Live).
-- **Verified phone on every account** **To build (C1)** [[OWNER: SMS provider — proposed: Twilio]], and **CAPTCHA** on code requests after the build that sends its token **To build (B16, D10, C11)** [[OWNER: CAPTCHA vendor — proposed: Cloudflare Turnstile or hCaptcha]]. Both raise the cost of fake and repeat accounts.
+- **Verified phone on every account**, with codes sent by Twilio **To build (C1)**, and **CAPTCHA** on code requests after the build that sends its token **To build (B16, D10, C11)** [[OWNER: CAPTCHA vendor — proposed: Cloudflare Turnstile or hCaptcha]]. Both raise the cost of fake and repeat accounts.
 - **Links checked before opening** (Live).
 - **Block** for every user (Live).
 - **18+ on every account** and an 18+ App Store rating **To build (B2, C8, E4)**.
@@ -478,7 +477,7 @@ A15 holds the steps **To build (A15)**. In short:
 
 - **From launch** we apply the duty in the Crime and Policing Act 2026 (inserting OSA s.20A), whatever its commencement date (decision D-21). The gov.uk factsheet gives no commencement date; it is UNVERIFIED.
 - **Reporting:** a reason "Intimate image shared without consent" in the app **To build (B7, C7)**, and a web route on `/support` for people who are not users, including the person shown or someone acting for them **To build (D1, A4)**.
-- **Takedown:** as soon as reasonably practicable and within **48 hours** of a valid report (made by or for the person shown), the team removes the image, title or text with the C6 scripts and suspends the uploader **To build (C6, A15)**.
+- **Takedown:** as soon as reasonably practicable and within **48 hours** of a valid report (made by or for the person shown), the team removes the image, title or text with the C6 scripts and suspends the uploader at once; the owner may then ban them (ruling AS-R6) **To build (C6, A15)**.
 - **Stopping it coming back:** the uploader is suspended, so cannot upload again. The team checks the uploader's other image slot and the resbites they host, and keeps a short description of the image (never the image) in the case record outside the repo, so a re-upload reported later is recognised.
 - **Why no hash matching for 1.0:** ICU C14 does not apply (section 5.2). Images are limited to one profile photo per person and one cover per resbite, seen by small invited groups or by link holders. There are no images in chat. A hash service (such as StopNCII.org) would add a vendor and image processing out of proportion to this risk. Reviewed yearly, and at once if images are added to chat or the service grows.
 - **Apple:** this also meets Apple's ask that apps "proactively prevent and remove" nonconsensual intimate imagery as far as it applies to a service this narrow (gap analysis UGC-10). Whether App Review accepts this without hash matching is UNVERIFIED.
@@ -486,7 +485,7 @@ A15 holds the steps **To build (A15)**. In short:
 #### 5.4.4 Ban evasion (decision D-25)
 
 - **The risk:** a suspended person can sign up again with another phone number. Nothing stops it today (`research_notes/App Store readiness/audit-user-flows.md`, section 4).
-- **Measure for 1.0:** no technical block. Every account needs a verified phone **To build (C1)** [[OWNER: SMS provider — proposed: Twilio]], so coming back needs a new number and a new SIM. When a returning person is reported, or recognised from a report, the moderator suspends the new account too, and records it as ban evasion (A15).
+- **Measure for 1.0:** no technical block. Every account needs a verified phone, with codes sent by Twilio **To build (C1)**, so coming back needs a new number and a new SIM. When a returning person is reported, or recognised from a report, the moderator suspends the new account too, and records it as ban evasion (A15).
 - **After 1.0:** consider refusing re-registration from the same Apple or Google identity or push token.
 - **Review:** count ban-evasion cases at every review (section 7.3). Two or more in a quarter brings forward the technical measure.
 
@@ -538,7 +537,7 @@ When we chose and put in place these measures, we had particular regard to users
 - Reports are deleted 180 days after closing (decision R-Q3; `supabase/ops/purge-closed-reports.sql`), with a scheduled job **To build (C3)**.
 - ICU H1 checks never sample private chats without consent (section 5.4.2).
 - Phone numbers are never shown to other users, and photo metadata is stripped.
-- Chat text appears in push previews, sent through Expo in the US; this is disclosed in the privacy notice (decision D-13) **To build (A1)**.
+- Chat text appears in push previews, sent through Expo in the US; this is disclosed in the Privacy Policy (decision D-13) **To build (A1)**.
 - Reports hold allegations of offences, which are criminal offence data. The Article 10 condition is a question for the solicitor (decision D-22; `docs/compliance/appropriate-policy-document.md`).
 
 ---
@@ -611,6 +610,7 @@ Also review at once if:
 | Date | Version | Reviewer (role) | What changed |
 |---|---|---|---|
 | 17 November 2026 | 1.0 draft | The owner | First assessment, describing the 1.0 target state. Not signed off |
+| 17 November 2026 | 1.0 draft | The owner | The owner's answers and rulings applied: Twilio (AS-D5); a named backup (AS-D6); the owner-run deletion script (AS-R3); the intimate image uploader suspended at once (AS-R6); weekly-group chat history (AS-R8); the report thanks (AS-R9). Not signed off |
 
 ---
 
@@ -619,12 +619,12 @@ Also review at once if:
 1. **Measure numbers and in-force versions.** Ofcom's site refused automated reads. The measures were read from the Codes laid in December 2024 and the amendments shown on gov.uk. Check every number in section 5 against the consolidated Codes in force before sign-off, especially ICU C15 (from search extracts) and any self-harm and cyberflashing changes.
 2. **Risk-level tables.** Check the levels in section 4 against Ofcom's risk-level tables in the risk assessment guidance v2.0, which could not be read directly.
 3. **The Terms (A3) must carry ICU G1 in full**: separate statements for terrorism, CSEA and other priority illegal content on how long such content may stay up; the swift takedown; the blocked-terms filter as proactive technology (kind, when it runs, how it works); and the complaints process. This record assumes they do.
-4. **ICU D4 needs a copy change not in the gap analysis.** The in-app report thanks today reads "Thanks. The Resbite team will look at it." (`mobile/src/domain/safetyCopy.ts:18`). To meet D4 it should give the review time, for example "We aim to review reports within 24 hours." Proposed as part of B7.
+4. **ICU D4 needs a copy change not in the gap analysis.** The in-app report thanks today reads "Thanks. The Resbite team will look at it." (`mobile/src/domain/safetyCopy.ts:18`). To meet D4 it gives the review time: "We review reports every day." Decided by ruling AS-R9; it joins B7.
 5. **"Communicated privately".** Whether resbite chats count as content communicated privately under Ofcom's guidance (relevant to ICU H1.8) is our judgement, for the solicitor.
 6. **Counting monthly active UK users.** `private.app_sessions` keeps only the first and last session per account, so past monthly counts cannot be rebuilt. A monthly count, taken from the hosted project and recorded as a number, is proposed.
 7. **The NCA.** Confirm the s.66 commencement date and register with the NCA's reporting route before launch (gap analysis UGC-8).
 8. **Ofcom's later decisions.** Check, at sign-off, whether the autumn 2026 additional safety measures statement has been published and whether any new measure applies to all services.
-9. **Team-run deletion.** Removing an account under ICU H1, or deleting an under-18 account, needs the team to erase an account that may not be able to sign in. The gap analysis lists self-service deletion (C2), deletion requests from banned accounts through the privacy inbox (A16, D8) and team scripts (C6), but no item names a team-run erasure path. C2 or C6 should include one.
+9. **Team-run deletion.** Removing an account under ICU H1, or deleting an under-18 account, needs the team to erase an account that may not be able to sign in. Decided by ruling AS-R3: an owner-run deletion script runs the same lifecycle as the app, with the cancellations and the receipt, for banned, web-only and under-18 accounts. It joins C6.
 10. **No "last seen" or read receipts.** Section 4.2 (kind 6) relies on chat read positions being used only for a person's own unread count (`supabase/migrations/20261111140000_chat_core.sql:256,344`). Adding read receipts or presence would be a change under section 7.5.
 
 ---
