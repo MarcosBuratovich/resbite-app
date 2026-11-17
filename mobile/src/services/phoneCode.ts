@@ -8,14 +8,12 @@ export type PhoneCodeDeps = {
   signInWithOtp(a: { phone: string; options: { shouldCreateUser: boolean } }): Promise<{ error: AuthError }>;
   updatePhone(phone: string): Promise<{ error: AuthError }>;
   verifyOtp(a: { phone: string; token: string; type: "sms" | "phone_change" }): Promise<{ error: AuthError }>;
-  exchangeTestCode(phone: string, code: string): Promise<string | null>;
   now(): number;
 };
 export type PhonePurpose = "signup" | "signin" | "add";
 
 const CODE_LIFETIME_MS = 600_000;
 const resendDelayMs = 60_000;
-const TEST_CODE = "000000";
 
 export const PHONE_CODE_COPY = {
   noAccount: "No Resbite account uses this number yet.",
@@ -62,10 +60,9 @@ export async function verifyPhoneCode(
   sentAt: number,
   purpose: PhonePurpose,
 ): Promise<{ ok: true } | { ok: false; message: string; clear: boolean }> {
-  let code = token.replace(/\s/g, "");
+  const code = token.replace(/\s/g, "");
   if (!/^\d{6}$/.test(code)) return { ok: false, message: PHONE_CODE_COPY.mismatch, clear: true };
   try {
-    if (code === TEST_CODE) code = (await d.exchangeTestCode(e164, code)) ?? code;
     const { error } = await d.verifyOtp({ phone: e164, token: code, type: purpose === "add" ? "phone_change" : "sms" });
     if (!error) return { ok: true };
     if (isConnectionFailure(error)) return { ok: false, message: PHONE_CODE_COPY.connection, clear: false };
@@ -82,10 +79,5 @@ export const phoneCodeDeps: PhoneCodeDeps = {
   signInWithOtp: (a) => client().auth.signInWithOtp(a),
   updatePhone: (phone) => client().auth.updateUser({ phone }),
   verifyOtp: (a) => client().auth.verifyOtp(a),
-  exchangeTestCode: async (p_phone, p_code) => {
-    const { data, error } = await client().rpc("exchange_test_code", { p_phone, p_code });
-    if (error) throw new Error(error.message);
-    return (data as string | null) ?? null;
-  },
   now: () => Date.now(),
 };

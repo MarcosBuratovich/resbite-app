@@ -10,7 +10,6 @@ export type FoldClientDeps = {
   signInWithOtp(a: { phone: string; options: { shouldCreateUser: boolean } }): Promise<{ error: AuthError }>;
   /** The isolated client's `verifyOtp`; the foreign session's access token on success. */
   verifyOtp(a: { phone: string; token: string; type: "sms" }): Promise<{ error: AuthError; accessToken?: string | null }>;
-  exchangeTestCode(phone: string, code: string): Promise<string | null>;
   /** The app session's access token, or null when signed out. */
   appAccessToken(): Promise<string | null>;
   /** POSTs to `/functions/v1/fold-phone-account`; resolves with the HTTP status. */
@@ -51,7 +50,6 @@ export const foldLanded = (user: { phone?: string | null } | null | undefined, e
   phoneVerified(user as never) && samePhone(user?.phone, e164);
 
 const CODE_LIFETIME_MS = 600_000;
-const TEST_CODE = "000000";
 const isConnectionFailure = (error: { status?: number }) =>
   error.status === 0 || (error.status !== undefined && error.status >= 500);
 
@@ -79,10 +77,9 @@ export async function foldPhoneAccount(
   token: string,
   sentAt: number,
 ): Promise<FoldResult> {
-  let code = token.replace(/\s/g, "");
+  const code = token.replace(/\s/g, "");
   if (!/^\d{6}$/.test(code)) return { ok: false, message: PHONE_CODE_COPY.mismatch, clear: true };
   try {
-    if (code === TEST_CODE) code = (await d.exchangeTestCode(e164, code)) ?? code;
     const verified = await d.verifyOtp({ phone: e164, token: code, type: "sms" });
     if (verified.error) {
       if (isConnectionFailure(verified.error)) return { ok: false, message: PHONE_CODE_COPY.connection, clear: false };
@@ -140,11 +137,6 @@ export const phoneFoldDeps = (): FoldClientDeps => {
     verifyOtp: async (a) => {
       const { data, error } = await isolated.auth.verifyOtp(a);
       return { error, accessToken: data?.session?.access_token ?? null };
-    },
-    exchangeTestCode: async (p_phone, p_code) => {
-      const { data, error } = await main().rpc("exchange_test_code", { p_phone, p_code });
-      if (error) throw new Error(error.message);
-      return (data as string | null) ?? null;
     },
     appAccessToken: async () => (await main().auth.getSession()).data.session?.access_token ?? null,
     callFold: async ({ appToken, body }) => {

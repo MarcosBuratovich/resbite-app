@@ -87,7 +87,7 @@ Step 1 (the migration) is done. None of the other steps has been run; each is do
    - Local-only checks still read `email_confirmed_at`: notification recipients, deletion requests and intents.
    - Plan 4 (push) and the deletion milestone must widen them before phone-only accounts get notices or can delete.
    - `join_by_link` (GI2, hosted) now accepts a confirmed email or phone and still admits on its own; Plan 3 replaces it with a waiting request.
-7. **Turning test mode off later.** Do this only after a real SMS sender replaces the hook body. While test mode was on, anyone who knew a number could sign into its account with 000000, so switching it off also closes what that left open. In one sitting, with the owner's approval:
+7. **Turning test mode off later.** Superseded on 17 November 2026: run this from `qa/phone-codes-2026-11-17/README.md`, steps 4 to 6. What follows is kept as it was written. Do this only after a real SMS sender replaces the hook body. While test mode was on, anyone who knew a number could sign into its account with 000000, so switching it off also closes what that left open. In one sitting, with the owner's approval:
    1. Switch it off, and empty the stored codes:
 
       ```sql

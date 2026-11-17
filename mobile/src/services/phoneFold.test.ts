@@ -6,12 +6,11 @@ import { PHONE_CODE_COPY } from "./phoneCode";
 
 const phone = "+447700900834";
 
-function harness(o: { status?: number; verify?: { status?: number; message: string } | null; exchange?: string | null; throwCall?: boolean; appToken?: string | null; now?: number } = {}) {
-  const calls = { otp: [] as unknown[], verify: [] as unknown[], exchange: [] as unknown[], fold: [] as unknown[], mainAuth: 0 };
+function harness(o: { status?: number; verify?: { status?: number; message: string } | null; throwCall?: boolean; appToken?: string | null; now?: number } = {}) {
+  const calls = { otp: [] as unknown[], verify: [] as unknown[], fold: [] as unknown[], mainAuth: 0 };
   const d: FoldClientDeps = {
     signInWithOtp: async (a) => (calls.otp.push(a), { error: null }),
     verifyOtp: async (a) => (calls.verify.push(a), { error: o.verify ?? null, accessToken: "foreign" }),
-    exchangeTestCode: async (p, c) => (calls.exchange.push([p, c]), o.exchange ?? null),
     appAccessToken: async () => (o.appToken === undefined ? "app" : o.appToken),
     callFold: async (a) => {
       calls.fold.push(a);
@@ -30,17 +29,15 @@ test("the code goes to the isolated client with shouldCreateUser off", async () 
   assert.equal(h.calls.mainAuth, 0);
 });
 
-test("000000 is swapped for the stored code before the isolated verify", async () => {
-  const h = harness({ exchange: "123456" });
+test("000000 goes to the isolated verify as typed", async () => {
+  const h = harness();
   assert.deepEqual(await foldPhoneAccount(h.d, phone, "000000", 1_000), { ok: true });
-  assert.deepEqual(h.calls.exchange, [[phone, "000000"]]);
-  assert.deepEqual(h.calls.verify, [{ phone, token: "123456", type: "sms" }]);
+  assert.deepEqual(h.calls.verify, [{ phone, token: "000000", type: "sms" }]);
 });
 
 test("the function call carries both tokens", async () => {
   const h = harness();
   await foldPhoneAccount(h.d, phone, "123 456", 1_000);
-  assert.deepEqual(h.calls.exchange, []);
   assert.deepEqual(h.calls.fold, [{ appToken: "app", body: { foreign_token: "foreign", phone } }]);
 });
 
@@ -78,7 +75,7 @@ test("a signed-out app session calls nothing", async () => {
 });
 
 test("the deps expose no way to touch the app's auth session", () => {
-  assert.deepEqual(Object.keys(harness().d).sort(), ["appAccessToken", "callFold", "exchangeTestCode", "now", "signInWithOtp", "verifyOtp"]);
+  assert.deepEqual(Object.keys(harness().d).sort(), ["appAccessToken", "callFold", "now", "signInWithOtp", "verifyOtp"]);
 });
 
 test("a 500 then a retry with the kept token posts again without verifying again", async () => {

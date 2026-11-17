@@ -213,10 +213,10 @@ The C1 switch-off sitting records this entry, whatever it finds (gap analysis F5
 >
 > **Data at risk.** For any account signed in to this way: everything that account could see (its resbites, guest lists, meeting places and details, chats, connections). For any account created this way: the misuse of someone else's number. Also every number that asked for a code, with its latest code, held in `private.test_codes`.
 >
-> **Review**, at the sitting, following `qa/phone-accounts-2026-10-27/README.md` step 7:
-> 1. Test mode off and `private.test_codes` emptied (7.1); every session revoked (7.2).
-> 2. Every `exchanged` row in `private.test_mode_log` checked against the known testers (7.3). The log holds the number's last two digits, the account id and the time. The list of known testers is kept outside the repo.
-> 3. Every Auth identity created while test mode was on checked against the same testers (7.4).
+> **Review**, at the sitting, following `qa/phone-codes-2026-11-17/README.md` steps 5 and 6 and `supabase/ops/phone-test-mode-review.sql` (they supersede `qa/phone-accounts-2026-10-27/README.md` step 7):
+> 1. Test mode off and `private.test_codes` emptied; every session revoked (step 5, `supabase/ops/phone-test-mode-off.sql`).
+> 2. Every `exchanged` row in `private.test_mode_log` checked against the known testers (step 6, the review's `exchanged` part). The log holds the number's last two digits, the account id and the time. The list of known testers is kept outside the repo.
+> 3. Every Auth identity created while test mode was on checked against the same testers (step 6, the review's `identity` part, from 28 October 2026 00:00 UTC).
 >
 > **Decision rule.** If every row and identity belongs to a known tester or a team test account, there was no unauthorised access: record "no breach found", with the counts. If any does not, treat it as a possible breach: the owner became aware at that moment, the 72-hour clock starts, and sections 4 to 7 apply.
 >
