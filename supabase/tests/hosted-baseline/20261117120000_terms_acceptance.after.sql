@@ -1,39 +1,49 @@
 -- Rehearsal for 20261117120000_terms_acceptance (hosted-baseline mode only), after the apply. Removes what .before.sql
 -- made.
--- 1. Each redefined body is the hosted one with only its named line changed, and every grant is unchanged.
-create temporary table ba_edits(signature text, old text, new text);
+-- 1. Each redefined body is the hosted one with only its named lines changed, applied in order (the fold has two: the
+-- hold and deletion refusal after the used-the-app check, and the acceptances after the tick's delete), and every grant
+-- is unchanged. Each old string occurs exactly once in the snapshot.
+create temporary table ba_edits(signature text, step integer, old text, new text);
 insert into ba_edits values
- ('private.account_access_status()',
+ ('private.account_access_status()',1,
   $x$ return jsonb_build_object('account_id',v_uid,'status',v_status);$x$,
   $x$ return jsonb_build_object('account_id',v_uid,'status',v_status,'terms_version',private.terms_version(),'terms_needed',private.terms_needed(v_uid));$x$),
- ('private.attest_age(text)',
+ ('private.attest_age(text)',1,
   $x$  on conflict (user_id) do nothing;$x$,
   $x$  on conflict (user_id) do nothing;
  perform private.note_terms(v_uid,p_terms_version,'sign_up');$x$),
- ('private.join_by_link(text,text,text)',
+ ('private.join_by_link(text,text,text)',1,
   $x$ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_uid::text,47));$x$,
   $x$ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_uid::text,47));
  perform private.note_terms(v_uid,p_terms_version,'invitation');$x$),
- ('private.request_to_join(text,text,text,text)',
+ ('private.request_to_join(text,text,text,text)',1,
   $x$ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_uid::text,47));$x$,
   $x$ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_uid::text,47));
  perform private.note_terms(v_uid,p_terms_version,'invitation');$x$),
- ('private.answer_phone_invitation(text,text,text,text)',
+ ('private.answer_phone_invitation(text,text,text,text)',1,
   $x$ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_uid::text,47));$x$,
   $x$ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_uid::text,47));
  perform private.note_terms(v_uid,p_terms_version,'invitation');$x$),
- ('private.fold_web_account(uuid,uuid)',
+ ('private.fold_web_account(uuid,uuid)',1,
+  $x$ if private.used_app(p_from) then raise exception 'The account has used the app' using errcode='22023'; end if;$x$,
+  $x$ if private.used_app(p_from) then raise exception 'The account has used the app' using errcode='22023'; end if;
+ if private.account_held(p_from) or private.deletion_pending(p_from) then raise exception 'The account cannot be folded' using errcode='22023'; end if;$x$),
+ ('private.fold_web_account(uuid,uuid)',2,
   $x$ delete from private.age_attestations where user_id=p_from;$x$,
   $x$ delete from private.age_attestations where user_id=p_from;
  insert into private.terms_acceptances(user_id,terms_version,accepted_at,how) select p_into,terms_version,accepted_at,how from private.terms_acceptances where user_id=p_from on conflict do nothing;
  delete from private.terms_acceptances where user_id=p_from;$x$);
-do $$ declare r record; begin
- for r in select f.signature, f.definition, f.grants, e.old, e.new from private.ba_rehearsal_functions f join ba_edits e using (signature) loop
-  if (length(r.definition)-length(replace(r.definition,r.old,'')))/length(r.old)<>1 then
-   raise exception '% had % copies of the line to change', r.signature, (length(r.definition)-length(replace(r.definition,r.old,'')))/length(r.old);
-  end if;
-  if pg_catalog.pg_get_functiondef(r.signature::regprocedure) is distinct from replace(r.definition,r.old,r.new) then
-   raise exception '% changed more than its named line', r.signature;
+do $$ declare r record; x record; v_expected text; begin
+ for r in select f.signature, f.definition, f.grants from private.ba_rehearsal_functions f loop
+  v_expected := r.definition;
+  for x in select a.old, a.new from ba_edits a where a.signature=r.signature order by a.step loop
+   if (length(r.definition)-length(replace(r.definition,x.old,'')))/length(x.old)<>1 then
+    raise exception '% had % copies of a line to change', r.signature, (length(r.definition)-length(replace(r.definition,x.old,'')))/length(x.old);
+   end if;
+   v_expected := replace(v_expected,x.old,x.new);
+  end loop;
+  if pg_catalog.pg_get_functiondef(r.signature::regprocedure) is distinct from v_expected then
+   raise exception '% changed more than its named lines', r.signature;
   end if;
   if (select p.proacl::text from pg_catalog.pg_proc p where p.oid=r.signature::regprocedure) is distinct from r.grants then
    raise exception '% lost or gained a grant', r.signature;

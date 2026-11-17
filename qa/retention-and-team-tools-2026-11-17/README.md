@@ -20,9 +20,9 @@
 ## What is built
 
 - **One hosted-compatible migration,** `supabase/migrations/20261117130000_retention_and_team_tools.sql`, in five sections. It needs plan 2's `20261117110000_account_deletion_release.sql` first, on hosted and in the local replay. Every object it makes carries the comment `resbite 20261117130000`, so its rollback drops only its own.
-  1. **The legal hold.** Plan 2 owns `private.legal_holds`, `private.account_held(uuid)` and `private.suspension_history`. This file's guarded DDL finds them in place and makes only `private.series_held(uuid)`, plus `private.series_under_hold(uuid)` (a series is under hold when it is named, or when a held account owns one of its occurrences, has a guest row on one, or wrote in its chat) and `private.series_end(uuid)` (null while a group still rolls).
-  2. **Eight row purges and the daily run.** Invitations by number, removal records, connection refusals, unanswered connection requests, notices, link opens, closed reports (the two steps of `purge-closed-reports.sql`) and the suspension history. `private.run_retention()` runs every purge in a block of its own and answers twelve counts, never ids: `plans`, `chats`, `phone_invitations`, `plan_removals`, `connection_refusals`, `connection_requests`, `notifications`, `link_opens`, `closed_reports`, `suspension_history`, `web_accounts` and `unconfirmed_accounts`. A purge that fails reads `null` and warns with its SQLSTATE; the others still run.
-  3. **Series purges and accounts.** `purge_chats` (a one-off's chat 90 days after it closed; a group's messages one by one after 12 months, with the chat's count, last line and pin put right) and `purge_plans` (a whole series 12 months after it ends, never while a group still rolls). `purge_web_accounts` queues plan 2's `private.operator_account_deletion` for each web-only account with no resbite in 12 months (AS-R4). `purge_unconfirmed_accounts` deletes an Auth user that confirmed nothing after 30 days. **Once, as data steps:** every disabled tester-roster row of an Auth user becomes a revoked grant, then `private.tester_roster` and `private.invitations` are emptied.
+  1. **The legal hold.** Plan 2 owns `private.legal_holds`, `private.account_held(uuid)` and `private.suspension_history`. This file's guarded DDL finds them in place and makes only `private.series_held(uuid)`, plus `private.series_under_hold(uuid)` (a series is under hold when it is named, or when a held account owns one of its occurrences, has a guest row on one, wrote in its chat, was removed from it, left it, asked to join one of its occurrences, or sent, brought or answered an invitation by number to one), `private.account_in_held_series(uuid)` (the same rule from the account's side: whether any series the account is part of in one of those ways is under hold) and `private.series_end(uuid)` (null while a group still rolls).
+  2. **Eight row purges and the daily run.** Invitations by number, removal records, connection refusals, unanswered connection requests, notices, link opens, closed reports (the two steps of `purge-closed-reports.sql`) and the suspension history. `private.run_retention()` runs every purge in a block of its own and answers thirteen counts, never ids: `plans`, `chats`, `phone_invitations`, `plan_removals`, `connection_refusals`, `connection_requests`, `notifications`, `link_opens`, `closed_reports`, `suspension_history`, `pending_phone_changes`, `web_accounts` and `unconfirmed_accounts`. Closed reports are kept while their series is under hold, as every series-scoped purge does. A purge that fails reads `null` and warns with its SQLSTATE; the others still run.
+  3. **Series purges and accounts.** `purge_chats` (a one-off's chat 90 days after it closed; a group's messages one by one after 12 months, with the chat's count, last line and pin put right) and `purge_plans` (a whole series 12 months after it ends, never while a group still rolls). `purge_web_accounts` queues plan 2's `private.operator_account_deletion` for each web-only account with no resbite in 12 months (AS-R4), with or without a profile (the link site makes the account when a person confirms their number, and the profile only with their first answer), but never one that is part of a series under hold. It only tries the deletions' lock and each account's lock: while an in-app deletion holds the deletions' lock it refuses with 55P03, the key reads `null`, and the next day's run takes the accounts, so the run never deadlocks with a deletion. `purge_unconfirmed_accounts` deletes an Auth user that confirmed nothing after 30 days. `purge_pending_phone_changes` clears a number given at Add your number and never confirmed (`auth.users.phone_change`, its code and when it was sent) 30 days after its code was sent, unless the account is held (privacy notice section 7). **Once, as data steps:** every disabled tester-roster row of an Auth user becomes a revoked grant, then `private.tester_roster` and `private.invitations` are emptied.
   4. **The do-not-invite list.** `private.invite_objections` holds each objecting number's keyed hash (HMAC-SHA256 under the Vault secret `invite_objection_key`, made inside the database by the first objection and never shown). `invite_contacts` answers `'unavailable'` for a listed number that would have taken the link path, and stores nothing for it. A Resbite user who holds that number is still invited in the app (LI-4).
   5. **Photos and covers.** The orphan photo clean-up of the local-only `20260923152816_orphan_profile_photo_cleanup.sql`, carried here, with held accounts skipped. Its twin for `plan-covers`: a cover no plan names waits 7 days observed, then goes. A retired cover can't be attached again ("Cover retired; choose a new photo"). And the "remove now" helpers the takedown scripts call.
 - **The worker.** `cleanup-profile-photos` cleans `profile-photos`, then `plan-covers`: one deploy, one secret, one schedule. It answers `held` and keeps the file for a held account. Its source gate `PHOTO_CLEANUP_RELEASE_APPROVED` is still `false`. It flips only at R5, in an owner-approved commit.
@@ -42,8 +42,8 @@
 
 | File | sha256 |
 | --- | --- |
-| `supabase/migrations/20261117130000_retention_and_team_tools.sql` (R3) | `74031567c94daa541f7a8e9ea93c68936f095afe27108fca51a91ad4ea65ed14` |
-| `supabase/rollback/20261117130000_retention_and_team_tools.rollback.sql` (Rollback) | `f24d0afd5be2e89aa71f75c2599fbe3cc1bec75402020ed3233033d7a75d834c` |
+| `supabase/migrations/20261117130000_retention_and_team_tools.sql` (R3) | `edab496127254d25341c747cc04fcd89c6af7ef175f72fb39b32a7b9c086473e` |
+| `supabase/rollback/20261117130000_retention_and_team_tools.rollback.sql` (Rollback) | `59a251b1ff4130663ec780c2710511b0ab8e45b9937184ca23ca3561e3858f25` |
 | `supabase/ops/schedule-retention.sql` (R7) | `9420d45bd1f9ad8f818d577a6964265e14c542e76e54f02622436f58e86f4491` |
 | `supabase/ops/schedule-roll-repeating-plans.sql` (R8; unchanged, `qa/creating-a-resbite-2026-10-31/README.md:30`) | `3a8202877260008723648dc4723b36aedb6d772f809b2552997765773040d74e` |
 | `supabase/ops/suspend-account-by-id.sql` | `61aea0f1e9e1c8a61d4c7da7248599dee61d314554bee533be35e0c8c1722247` |
@@ -53,7 +53,7 @@
 | `supabase/ops/legal-holds.sql` | `aa3fb40f2e29857ccc10dd65bbd8e4993f4d2fd8660d85c8b081bc574e794949` |
 | `supabase/ops/remove-profile-photo.sql` (R6) | `39c751f1bfa82bddb36fe9cd7f22ddaa7e84fa4613ceba8e848db7ceb3dd729a` |
 | `supabase/ops/remove-resbite-content.sql` (R6) | `7049f20df5a09b8b27e9377d517d1e563da57aa58437bd9275b961fe4e63ad99` |
-| `supabase/ops/export-account.sql` | `7c4ef00c11a651534c5a61cf4e736b33d9c087e57ff73ad4abb7b83e60647227` |
+| `supabase/ops/export-account.sql` | `eef24639824c2cecd55225d08d30ddb8570ceb71a3868df37f48fcff619dcf35` |
 | `supabase/ops/export-number.sql` | `f3bba85a58cfe92bbc74446f791b6f65216cc09c7590c32e2d7d8084a6aec10f` |
 | `supabase/ops/object-number.sql` (R10) | `afa44ed775cc7b2a7a3d1cc295cec022f17f7c7d49599b33bffa0f08e970315b` |
 | `supabase/ops/withdraw-objection.sql` | `c8e573cf33b2787802839ec1ae6e6d1225287bbc1a6d7bd24f8011694cd1452b` |
@@ -64,7 +64,7 @@
 | `supabase/templates/email-code.html` (R9) | `80c00c57fe89e045f34eef84cae13178420fa8e6e6cced660e18be3049530f39` |
 | `supabase/templates/recovery.html` (R9) | `dff70afde0b413bc7e057389b4bfe8e1c3d9db466322276dabd544324fe89beb` |
 | `supabase/tests/hosted-baseline/20261117130000_retention_and_team_tools.before.sql` (the rehearsal) | `c625eca418fde224f8ff651862d99504a7f6f3045835573a13f1ff5ff52625e2` |
-| `supabase/tests/hosted-baseline/20261117130000_retention_and_team_tools.after.sql` (the rehearsal) | `99783dc3f2a91959bb30ac8bdb84379f181970ceb97651e7068eea4c94d5da83` |
+| `supabase/tests/hosted-baseline/20261117130000_retention_and_team_tools.after.sql` (the rehearsal) | `8efa2fd23d1c770880b48566fc9db4356bd6dd5f4cd81e03dcd9832ed726d9bc` |
 | `supabase/ops/hosted-fingerprint.sql` (unchanged) | `0778c53f98bc1cbdcee82487651dabc3fa246674a5d0efa1d6502e7746819a00` |
 | `supabase/ops/hosted-counts.sql` (unchanged) | `15fe76aecba6bb5104d8795338c1ecaee9bd07ec9a2a9b7aba728e2bdae8c4a0` |
 
@@ -89,14 +89,18 @@ From `sha256sum` at this record's commit. Recompute before asking for approval (
 
   (`./scripts/test-database.sh` with the same arguments on the Mac.) Once a candidate's line is in `supabase/tests/hosted-baseline/migrations.txt`, leave it out. Without plan 2's file, `.before.sql` refuses with "Pass plan 2's migration as an earlier candidate".
   - `.before.sql` snapshots `invite_contacts` and the photo functions where they exist, with their grants, and the whole catalogue of `public` and `private`. It seeds a disabled roster row with an account, an enabled one with a resbite, one with no account, a legacy invitation and an invitation by number, and checks the state before.
-  - `.after.sql` checks that `invite_contacts` and plan 2's write guard changed in exactly their named lines with their grants kept; that exactly 44 functions and 5 tables are new, each with this file's marker, and that only the 8 worker wrappers and their 8 private bodies are executable by `service_role`, and nothing by `anon`, `authenticated` or `public`; and that the roster and legacy invitations are empty, with the disabled account still kept out. It runs `retention.sql` and `team-scripts.sql`. Then, inside a transaction it rolls back, it checks the rollback refuses while `retention-purge` or `cleanup-images` is scheduled and while the do-not-invite list holds a row, runs it, and compares the whole catalogue with `.before.sql`'s.
+  - `.after.sql` checks that `invite_contacts` and plan 2's write guard changed in exactly their named lines with their grants kept; that exactly 46 functions and 5 tables are new, each with this file's marker, and that only the 8 worker wrappers and their 8 private bodies are executable by `service_role`, and nothing by `anon`, `authenticated` or `public`; and that the roster and legacy invitations are empty, with the disabled account still kept out. It runs `retention.sql` and `team-scripts.sql`. Then, inside a transaction it rolls back, it checks the rollback refuses while `retention-purge` or `cleanup-images` is scheduled and while the do-not-invite list holds a row, runs it, and compares the whole catalogue with `.before.sql`'s.
 - **Full mode,** `./scripts/test-database-docker.sh`: every SQL file, `retention.sql` and `team-scripts.sql` among them, and every concurrency script.
 - **Worker:** `node --import ./mobile/node_modules/tsx/dist/loader.mjs --test supabase/functions/_shared/*.test.ts`. **Templates:** `node --test supabase/templates/templates.test.mjs`. **App:** `cd mobile && npm test && npx tsc --noEmit`.
 - **Results on 17 November 2026,** at `700f172` (Tasks 1 to 11; Task 12 changes documents only), run again for this record:
   - the rehearsal above: exit 0, 36 PASS lines (the six candidates, every `tests.txt` file and the final line);
   - full mode: exit 0, 72 PASS lines (every SQL file, `retention.sql` and `team-scripts.sql` among them, every concurrency line and the final line);
   - the worker suite: 138 of 138; the templates: 9 of 9; the app: `npm test` exit 0 (1,304 tests, none failed) and `npx tsc --noEmit` exit 0.
-- **Not provable locally** (Known gaps, 6): `delete` on `auth.users` and `trigger` on `storage.objects` for the applying role. R2 reads them on hosted, read-only. pg_cron and pg_net are not in the harness, so `schedule-retention.sql` has never run; the rollback's cron guard was tested against a stand-in `cron.job` table.
+- **After the final review's SQL fixes (lane S, 17 November 2026),** on branch `asr-6-retention`: the wider `series_under_hold` and `account_in_held_series`, closed reports kept while their series is under hold, the web-only purge with no profile needed and no account of a held series, its tried locks, `purge_pending_phone_changes`, the fold's refusal (plan 4's file), the uncommented storage trigger (plans 2 and 6) and the export's `phone_change`. Each test was seen to fail before its fix.
+  - the rehearsal above: exit 0, 38 PASS lines (the six candidates, the 31 files of `tests.txt` and the final line);
+  - full mode: exit 0, 73 PASS lines, the new race `retention-deletion-concurrency.sh` among them;
+  - a throwaway cluster with `storage.objects` owned by a NOINHERIT role and the applying role granted every privilege on it: creating the trigger works, `comment on trigger` and `drop trigger` fail with "must be owner of relation objects", and `drop function private.guard_photo_write() cascade` removes the trigger.
+- **Not provable locally** (Known gaps, 6): `delete` and `update` on `auth.users` and `trigger` on `storage.objects` for the applying role. R2 reads them on hosted, read-only. Neither plan comments or drops a trigger on `storage.objects` directly any more: both need that table's owner, which the applying role is not on Supabase. The rollback drops the write guard with `cascade` instead, which needs only the function's owner; that was rehearsed locally with a role that has every privilege on `storage.objects` but does not own it (the final review's account-deletion #1). pg_cron and pg_net are not in the harness, so `schedule-retention.sql` has never run; the rollback's cron guard was tested against a stand-in `cron.job` table.
 
 ## Rollout (owner-run)
 
@@ -130,14 +134,14 @@ supabase db query --linked -f supabase/ops/hosted-fingerprint.sql -o json > "$D/
 supabase db query --linked -f supabase/ops/hosted-counts.sql -o json > "$D/hosted-counts-before.json"
 supabase db query --linked -o json "select policyname, cmd, qual, with_check from pg_policies where schemaname = 'storage' order by policyname" > "$D/hosted-storage-policies-before.json"
 supabase db query --linked "select count(*) as applied, max(version) as latest from supabase_migrations.schema_migrations"
-supabase db query --linked "select has_table_privilege('postgres','auth.users','delete') as may_delete_auth_users, has_table_privilege('postgres','storage.objects','trigger') as may_trigger_storage_objects, pg_catalog.to_regclass('vault.decrypted_secrets') is not null as vault, pg_catalog.to_regclass('private.account_deletion_jobs') is not null as deletion_release_live"
+supabase db query --linked "select has_table_privilege('postgres','auth.users','delete') as may_delete_auth_users, has_table_privilege('postgres','auth.users','update') as may_update_auth_users, has_table_privilege('postgres','storage.objects','trigger') as may_trigger_storage_objects, pg_catalog.to_regclass('vault.decrypted_secrets') is not null as vault, pg_catalog.to_regclass('private.account_deletion_jobs') is not null as deletion_release_live, pg_catalog.to_regclass('auth.one_time_tokens') is not null as one_time_tokens"
 supabase db query --linked "select count(*) filter (where enabled) as roster_enabled, count(*) filter (where not enabled) as roster_disabled, (select count(*) from private.invitations) as legacy_invitations, (select count(*) from private.phone_rewrites) as phone_rewrites from private.tester_roster"
 supabase db query --linked "select tgname from pg_catalog.pg_trigger where tgrelid = 'storage.objects'::regclass and not tgisinternal order by 1"
 supabase db query --linked "select jobname from cron.job order by 1"
 ```
 
 - **The history line** reads `latest` `20261117122000` (plan 4's last), with the count plan 4's "Applied" recorded. Anything later: stop (timestamps must follow the apply order).
-- **All four flags true.** If `may_delete_auth_users` is false, the unconfirmed-account purge will read `null` at every run: record it and decide before R5. Any other flag false: stop.
+- **All five flags true.** If `may_delete_auth_users` is false, the unconfirmed-account purge will read `null` at every run; if `may_update_auth_users` is false, so will the purge of numbers never confirmed (`pending_phone_changes`): record either and decide before R5. Any other flag false: stop. Record `one_time_tokens` too (Known gaps, 8).
 - **The roster line:** record the four counts. R3 empties the roster and the legacy invitations; `phone_rewrites` waits for R11.
 - **The triggers on `storage.objects`:** plan 2's `resbite_photo_write_guard` is listed, among Storage's own. Record the list. The apply finds plan 2's trigger in place and adds none there.
 - **The jobs:** no `retention-purge` and no `cleanup-images`. Record the list.
@@ -155,7 +159,7 @@ set -euo pipefail
 cd "${REPO:-$HOME/dev/resbite-app}"
 D=qa/retention-and-team-tools-2026-11-17
 F=supabase/migrations/20261117130000_retention_and_team_tools.sql
-echo "74031567c94daa541f7a8e9ea93c68936f095afe27108fca51a91ad4ea65ed14  $F" | sha256sum -c -
+echo "edab496127254d25341c747cc04fcd89c6af7ef175f72fb39b32a7b9c086473e  $F" | sha256sum -c -
 GUARD="if pg_catalog.to_regclass('private.account_deletion_jobs') is null then raise exception 'The deletion release is not applied: run its runbook first'; end if;
  if pg_catalog.to_regclass('private.invite_objections') is not null then raise exception 'The retention migration is already applied'; end if;
  if exists (select 1 from supabase_migrations.schema_migrations where version > '20261117130000') then raise exception 'A later migration is applied: timestamps must follow the apply order (roadmap)'; end if;"
@@ -178,7 +182,7 @@ supabase db query --linked "select tgname from pg_catalog.pg_trigger where tgrel
 - **The counts:** `private.tester_roster` and `private.invitations` read 0. `private.beta_access` grows by at most R2's `roster_disabled` (a disabled roster row with no grant becomes a revoked one). The five new tables read 0. Every other table keeps its count, give or take live use.
 - **The storage policies** are unchanged.
 - **Then the advisors,** through the Supabase MCP server, read-only, into `D/hosted-advisors-after.json` (the owner approves the read). No new WARN or ERROR is expected: every new table has row security on with no policy, and no new function is executable by `anon` or `authenticated`. Likely INFO: "RLS enabled, no policy" on the five new tables, and unused-index notices for their indexes. Stop and compare if anything else appears.
-- **Compare the fingerprint** with a local replay of `migrations.txt` plus this file. Expect only this migration's objects added or changed: 44 new functions with their grants, the 5 new tables (`invite_objections`, `profile_photo_retired_paths`, `profile_photo_cleanup_jobs`, `plan_cover_retired_paths`, `plan_cover_cleanup_jobs`) with their indexes, the two triggers above, and two changed bodies with their grants kept (`private.invite_contacts`, plan 2's `private.guard_photo_write`). Nothing removed.
+- **Compare the fingerprint** with a local replay of `migrations.txt` plus this file. Expect only this migration's objects added or changed: 46 new functions with their grants, the 5 new tables (`invite_objections`, `profile_photo_retired_paths`, `profile_photo_cleanup_jobs`, `plan_cover_retired_paths`, `plan_cover_cleanup_jobs`) with their indexes, the two triggers above, and two changed bodies with their grants kept (`private.invite_contacts`, plan 2's `private.guard_photo_write`). Nothing removed.
 - **Then, in a commit:** append `20261117130000_retention_and_team_tools.sql   20261117130000` to `supabase/tests/hosted-baseline/migrations.txt`, and `retention.sql` and `team-scripts.sql` to `tests.txt`. Run `./scripts/test-database-docker.sh --hosted-baseline` with no candidates. Expect all PASS.
 
 ### R4. Dry run of the first purge
@@ -187,7 +191,7 @@ With approval. Run `! bash ~/asr6-dry-run.sh`:
 
 ```bash
 #!/bin/bash
-# The first daily purge, rolled back (retention and team tools, R4). Prints the twelve counts and keeps nothing.
+# The first daily purge, rolled back (retention and team tools, R4). Prints the thirteen counts and keeps nothing.
 set -euo pipefail
 cd "${REPO:-$HOME/dev/resbite-app}"
 mkdir -p /tmp/asr6
@@ -195,8 +199,8 @@ mkdir -p /tmp/asr6
 supabase db query --linked -f /tmp/asr6/dry-run.sql
 ```
 
-- **Read the twelve counts** and check none is unexpectedly large. Compare each with `D/hosted-counts-after.json`: a purge never takes more than its table holds, and on a project this young most should be small or 0.
-- **`web_accounts`** is the number of accounts the first run would queue for deletion (AS-R4), and **`unconfirmed_accounts`** the number of Auth users it would delete. Read both twice.
+- **Read the thirteen counts** and check none is unexpectedly large. Compare each with `D/hosted-counts-after.json`: a purge never takes more than its table holds, and on a project this young most should be small or 0.
+- **`web_accounts`** is the number of accounts the first run would queue for deletion (AS-R4), and **`unconfirmed_accounts`** the number of Auth users it would delete. Read both twice. **`pending_phone_changes`** is the number of accounts whose number given and never confirmed it would clear. `web_accounts` reads `null` with `55P03` if an in-app deletion happened to hold the deletions' lock at that moment: run the dry run again.
 - **A `null`** means that purge failed and the rest ran. Its warning ("resbite retention: <key> failed (<SQLSTATE>)") is in the Postgres logs. `unconfirmed_accounts` reads `null` if R2's `may_delete_auth_users` was false. Decide before R7.
 - **Nothing is kept.** The `rollback` undoes every delete, the queued deletions and their notices. The only trace is one "resbite retention:" log line with the counts.
 - If the CLI's role may not execute `private.run_retention()` (permission denied), paste the three lines into the SQL editor instead, which runs as `postgres`.
@@ -369,7 +373,7 @@ With approval, **before plan 2's rollback**, if that is undone too: this file bu
    cd "${REPO:-$HOME/dev/resbite-app}"
    D=qa/retention-and-team-tools-2026-11-17
    F=supabase/rollback/20261117130000_retention_and_team_tools.rollback.sql
-   echo "f24d0afd5be2e89aa71f75c2599fbe3cc1bec75402020ed3233033d7a75d834c  $F" | sha256sum -c -
+   echo "59a251b1ff4130663ec780c2710511b0ab8e45b9937184ca23ca3561e3858f25  $F" | sha256sum -c -
    mkdir -p /tmp/asr6
    { echo 'begin;'; cat "$F"; echo; echo 'commit;'; } > /tmp/asr6/rollback.sql
    supabase db query --linked -f /tmp/asr6/rollback.sql
@@ -391,8 +395,11 @@ With approval, **before plan 2's rollback**, if that is undone too: this file bu
 3. **An objection at the moment a host invites** can leave one new invitation. Running `object-number.sql` again removes it (its header says so).
 4. **Plan ordering.** `export-account.sql` reads plan 4's `private.terms_acceptances`, and the rehearsal passes every earlier pending candidate (plan 1's `20261117100000`, plan 2's, plan 4's `20261117120000` to `20261117122000`) before this file.
 5. **VAT.** Add a VAT line to the email footer if Resbite Ltd is VAT-registered, as a new template change.
-6. **Hosted privileges** (`delete` on `auth.users`, `trigger` on `storage.objects`) are checked read-only at R2. The local harness cannot prove them.
+6. **Hosted privileges** (`delete` and `update` on `auth.users`, `trigger` on `storage.objects`) are checked read-only at R2. The local harness cannot prove them: it runs every migration as a superuser, who passes every ownership check.
 7. **A lifted hold's row** in `private.legal_holds` (plan 2's table) has no period yet and no purge. `docs/compliance/retention-schedule.md` section 7 proposes 24 months after the lift, with the hold register; a later migration adds the purge once the owner agrees. The row holds an account or series id, a reason code, a case reference and dates.
+8. **A number never confirmed may also sit in `auth.one_time_tokens`.** Recent Supabase Auth versions keep each pending code in `auth.one_time_tokens`, with the number it was sent to in `relates_to` (token type `phone_change_token`), until the code is used or replaced. `purge_pending_phone_changes` clears only the three `auth.users` columns, which the local harness has; it does not touch that table, whose shape and grants on hosted are unverified. R2 records whether the table exists. If it does, a later migration should also delete the account's `phone_change_token` rows in the same purge, or the privacy notice section 7 should say where the number stays.
+9. **A series hold does not pause another person's own deletion (ASR2-4), and that is the owner's decision.** The retention jobs now keep everything a held series holds, the web-only account purge included. But a guest or host of a held series who deletes their own account in the app, or whom the team deletes, is still erased at once: their messages lose their words, the host's resbites lose their title, description and place, and the cleanup worker removes their cover files. Only an account hold pauses that. Option 1 is to make deletion wait for any series hold the account is part of (a `private.deletion_held(uuid)` read by the queue, both claim filters and the storage listing). Option 2 is to keep ASR2-4 and say in `docs/compliance/retention-schedule.md` section 15 and `law-enforcement-requests.md` sections 11.2 and 11.3 that the team must also hold every account whose words or meeting details must be kept. `set-legal-hold.sql`'s comment (lines 12-14) currently promises option 1. The documents are lane C's; the decision is the owner's, with the solicitor (Art 17(3)(e)).
+10. **The harness runs every migration as a superuser**, so an owner-only statement on `storage.objects` or `auth.users` passes locally and fails on hosted. Making `storage.objects` belong to another role in `supabase/tests/local/bootstrap.sql` would not change that (a superuser passes every ownership check whatever the owner); catching it needs the candidates applied as a non-superuser role, a larger change not made here. The rolled-back trigger check in plan 2's runbook (step 1) covers the one owner-sensitive statement left.
 
 ## Sources
 

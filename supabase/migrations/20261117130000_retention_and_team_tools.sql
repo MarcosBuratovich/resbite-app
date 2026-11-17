@@ -3,9 +3,11 @@
 -- docs/compliance/retention-schedule.md is enforced by a daily job that a legal hold pauses, and the team's owner-run
 -- scripts (supabase/ops/) call what is here.
 -- In five sections:
---  1. The legal hold, the lifted-suspension history and the retention helpers (series_under_hold, series_end).
+--  1. The legal hold, the lifted-suspension history and the retention helpers (series_under_hold,
+--     account_in_held_series, series_end).
 --  2. Row purges and private.run_retention(), the daily job.
---  3. Series purges (chats and plans), web-only and unconfirmed accounts, and the one-off leftovers.
+--  3. Series purges (chats and plans), web-only and unconfirmed accounts, numbers never confirmed, and the one-off
+--     leftovers.
 --  4. The do-not-invite list and invite_contacts.
 --  5. Orphan profile photos and replaced covers, with the "remove now" helpers.
 --
@@ -14,7 +16,9 @@
 -- them in place and makes only private.series_held(uuid). An object that may already exist (shared with plan 2, or
 -- carried from the local-only 20260923152816_orphan_profile_photo_cleanup.sql) is made under a to_regclass or
 -- to_regprocedure guard, or with if not exists, so this file runs on the hosted baseline and in the full local replay.
--- Every object this file makes carries the comment 'resbite 20261117130000', so the rollback drops only its own.
+-- Every object this file makes carries the comment 'resbite 20261117130000', so the rollback drops only its own; the
+-- one exception is the trigger on storage.objects (section 5), which the applying role may not comment, and which goes
+-- with its function.
 --
 -- Bases. A redefined function copies the body of its latest definition among the files that run before this one on
 -- hosted, and changes only the lines its comment names:
@@ -89,10 +93,14 @@ revoke all on private.legal_holds, private.suspension_history from public, anon,
 revoke all on function private.account_held(uuid), private.series_held(uuid) from public, anon, authenticated, service_role;
 
 -- Whether a series is under hold (Decision 1, Review Focus 1): a hold not lifted names the series, or names an account
--- that owns one of its occurrences, has a guest row on one, or wrote in its chat. What a held person hosted, joined or
--- wrote in stays whole: every purge and both workers skip it. account_held's rule, read from the holds' side so the few
--- holds not lifted drive the search (each probe is by index: plans by series, attendees by plan and user, messages by
--- author). False for null and for a series that does not exist. The database's own: no role may call it.
+-- that owns one of its occurrences, has a guest row on one, wrote in its chat, was removed from it, left it, asked to
+-- join one of its occurrences, or sent, brought or answered an invitation by number to one. What a held person hosted,
+-- joined, was removed from, asked to join or was invited to stays whole: every purge and both workers skip it (the
+-- final review's retention #0: a guest the host removed has no guest row left, and a chat's system lines name nobody as
+-- author). account_held's rule, read from the holds' side so the few holds not lifted drive the search (each probe is
+-- by index: plans by series, attendees by plan and user, messages by author, removals by series and user, leaves by
+-- their key, requests by their key, invitations by plan). False for null and for a series that does not exist. The
+-- database's own: no role may call it.
 create function private.series_under_hold(p_series uuid) returns boolean language sql stable security definer set search_path = '' as $$
  select private.series_held(p_series) or exists (
   select 1 from private.legal_holds h
@@ -100,10 +108,36 @@ create function private.series_under_hold(p_series uuid) returns boolean languag
    exists (select 1 from public.plans p where p.series_id = p_series and p.owner_id = h.user_id)
    or exists (select 1 from public.plans p join public.attendees a on a.plan_id = p.id
     where p.series_id = p_series and a.user_id = h.user_id)
-   or exists (select 1 from public.messages m where m.series_id = p_series and m.author_id = h.user_id)))
+   or exists (select 1 from public.messages m where m.series_id = p_series and m.author_id = h.user_id)
+   or exists (select 1 from private.plan_removals r where r.series_id = p_series and r.user_id = h.user_id)
+   or exists (select 1 from private.series_leaves l where l.series_id = p_series and l.user_id = h.user_id)
+   or exists (select 1 from public.plans p join private.join_requests j on j.plan_id = p.id
+    where p.series_id = p_series and j.user_id = h.user_id)
+   or exists (select 1 from public.plans p join private.phone_invitations i on i.plan_id = p.id
+    where p.series_id = p_series and h.user_id in (i.user_id, i.invited_by, i.brought_by))))
 $$;
 revoke all on function private.series_under_hold(uuid) from public, anon, authenticated, service_role;
 comment on function private.series_under_hold(uuid) is 'resbite 20261117130000';
+
+-- Whether an account is part of a series under hold, read from the account's side: a series it hosts an occurrence
+-- of, has a guest row on, asked to join, sent, brought or answered an invitation by number to, was removed from, left,
+-- or wrote in, is under hold (series_under_hold). The web-account purge reads it, so that what a held series holds,
+-- its guests included, stays whole. False for null. The database's own: no role may call it.
+create function private.account_in_held_series(p_user uuid) returns boolean language sql stable security definer set search_path = '' as $$
+ select exists (
+  select 1 from (
+   select p.series_id from public.plans p where p.owner_id = p_user
+   union select p.series_id from public.attendees a join public.plans p on p.id = a.plan_id where a.user_id = p_user
+   union select p.series_id from private.join_requests j join public.plans p on p.id = j.plan_id where j.user_id = p_user
+   union select p.series_id from private.phone_invitations i join public.plans p on p.id = i.plan_id
+    where p_user in (i.user_id, i.invited_by, i.brought_by)
+   union select r.series_id from private.plan_removals r where r.user_id = p_user
+   union select l.series_id from private.series_leaves l where l.user_id = p_user
+   union select m.series_id from public.messages m where m.author_id = p_user
+  ) s where private.series_under_hold(s.series_id))
+$$;
+revoke all on function private.account_in_held_series(uuid) from public, anon, authenticated, service_role;
+comment on function private.account_in_held_series(uuid) is 'resbite 20261117130000';
 
 -- When a series ends (Decision 3). Null while the roll can still add an occurrence: its current occurrence keeps a
 -- repeat rule, and the group has not stopped with its chat closed (the roll's own rules,
@@ -255,7 +289,9 @@ comment on function private.purge_link_opens(integer) is 'resbite 20261117130000
 -- section 7). First it deletes each report closed more than report_keep_days() (180) days ago; then, on the other closed reports,
 -- it forgets whom they were about (target_user_id and frozen_author) when that account has no profile any more or is
 -- being deleted. Open reports are never touched. It skips a report whose reporter, target or frozen author is held, or
--- whose series is named by a hold. p_limit bounds both steps together; it answers deleted plus cleared.
+-- whose series is under hold (series_under_hold, as every series-scoped purge: AS-P6-4; the final review's retention
+-- #2), so a report between two other people in a held host's resbite keeps its frozen words while the chat is kept.
+-- p_limit bounds both steps together; it answers deleted plus cleared.
 create function private.purge_closed_reports(p_limit integer default 5000) returns integer
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -267,7 +303,7 @@ begin
   select r.id from private.reports r
   where r.status <> 'open' and r.reviewed_at < v_cutoff
    and not private.account_held(r.reporter_id) and not private.account_held(r.target_user_id)
-   and not private.account_held(r.frozen_author) and not private.series_held(r.series_id)
+   and not private.account_held(r.frozen_author) and not private.series_under_hold(r.series_id)
   limit p_limit for update of r skip locked
  ), removed as (
   delete from private.reports r using candidates c where r.id = c.id returning 1
@@ -280,7 +316,7 @@ begin
     or (r.frozen_author is not null
      and (not exists (select 1 from public.profiles x where x.id = r.frozen_author) or private.deletion_pending(r.frozen_author))))
    and not private.account_held(r.reporter_id) and not private.account_held(r.target_user_id)
-   and not private.account_held(r.frozen_author) and not private.series_held(r.series_id)
+   and not private.account_held(r.frozen_author) and not private.series_under_hold(r.series_id)
   limit p_limit - v_deleted for update of r skip locked
  ), cleared as (
   update private.reports r set target_user_id = null, frozen_author = null from candidates c where r.id = c.id returning 1
@@ -308,10 +344,10 @@ revoke all on function private.purge_suspension_history(integer) from public, an
 comment on function private.purge_suspension_history(integer) is 'resbite 20261117130000';
 
 -- The daily job (schedule-retention.sql). Section 3's series purges run first (plans, then chats), so a series that
--- goes takes its records with it, then this section's eight, then section 3's two account purges. Each purge runs with
--- its own default limit (5000; plans 200 series, web accounts 100) in a block of its own, so one that fails undoes only
--- its own work, warns with its key and SQLSTATE, and reads null; the others still run. It logs the counts and answers
--- them: counts, never ids.
+-- goes takes its records with it, then this section's eight, then section 3's three account purges (the numbers never
+-- confirmed, web-only accounts, unconfirmed accounts). Each purge runs with its own default limit (5000; plans 200
+-- series, web accounts 100) in a block of its own, so one that fails undoes only its own work, warns with its key and
+-- SQLSTATE, and reads null; the others still run. It logs the thirteen counts and answers them: counts, never ids.
 create function private.run_retention() returns jsonb
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -320,7 +356,8 @@ declare
  v_counts jsonb := '{}'::jsonb;
 begin
  foreach v_key in array array['plans','chats','phone_invitations','plan_removals','connection_refusals','connection_requests',
-  'notifications','link_opens','closed_reports','suspension_history','web_accounts','unconfirmed_accounts'] loop
+  'notifications','link_opens','closed_reports','suspension_history','pending_phone_changes','web_accounts',
+  'unconfirmed_accounts'] loop
   begin
    execute pg_catalog.format('select private.%I()', 'purge_' || v_key) into v_count;
    v_counts := v_counts || pg_catalog.jsonb_build_object(v_key, v_count);
@@ -335,7 +372,8 @@ end $$;
 revoke all on function private.run_retention() from public, anon, authenticated, service_role;
 comment on function private.run_retention() is 'resbite 20261117130000';
 
--- 3. Series purges (chats and plans), web-only and unconfirmed accounts, and the one-off leftovers.
+-- 3. Series purges (chats and plans), web-only and unconfirmed accounts, numbers never confirmed, and the one-off
+-- leftovers.
 
 -- A chat (D-8, CH-P15). A one-off's messages, reads and mutes go 90 days after its chat closed (48 hours after its end;
 -- a cancelled one, which closes at once, 48 hours after its end too), and its row reads empty. A group's chat runs as
@@ -443,15 +481,19 @@ end $$;
 revoke all on function private.purge_plans(integer) from public, anon, authenticated, service_role;
 comment on function private.purge_plans(integer) is 'resbite 20261117130000';
 
--- A web-only account no longer in use (AS-R4, Decision 11): it has a profile, a confirmed number and no email, has
--- never signed into the app (used_app), is neither being deleted nor held, was made more than 12 months ago, and in
--- the last 12 months hosted no resbite (made or ended in them), had no guest row on one that ended in them, asked to
--- join none and answered no invitation by number. At most p_limit, in id order. The database's own: no grant.
+-- A web-only account no longer in use (AS-R4, Decision 11): it has a confirmed number and no email, has never signed
+-- into the app (used_app), is neither being deleted nor held, is part of no series under hold (account_in_held_series:
+-- what a held series holds stays whole, its guests included), was made more than 12 months ago, and in the last 12
+-- months hosted no resbite (made or ended in them), had no guest row on one that ended in them, asked to join none and
+-- answered no invitation by number. It needs no profile: the link site makes the account when the person confirms the
+-- number, and the profile only with the first answer, so a person who confirms and leaves goes after 12 months too (the
+-- final review's cross-cutting #3 and retention #1). At most p_limit, in id order. The database's own: no grant.
 create function private.dormant_web_accounts(p_limit integer default 100) returns setof uuid
 language sql stable security definer set search_path = '' as $$
- select u.id from auth.users u join public.profiles pr on pr.id = u.id
+ select u.id from auth.users u
  where u.email is null and u.phone_confirmed_at is not null
   and not private.used_app(u.id) and not private.deletion_pending(u.id) and not private.account_held(u.id)
+  and not private.account_in_held_series(u.id)
   and u.created_at < now() - interval '12 months'
   and not exists (select 1 from public.plans p where p.owner_id = u.id
    and (p.created_at > now() - interval '12 months' or private.plan_end(p.starts_at, p.ends_at) > now() - interval '12 months'))
@@ -470,17 +512,30 @@ comment on function private.dormant_web_accounts(integer) is 'resbite 2026111713
 -- null for the key and warns, and never skips in silence. The deletion sets the deletion's flag (resbite.system) to the
 -- end of the transaction; it is put back after each call, so whatever runs after it in the same transaction writes its
 -- chat lines as before. It answers how many deletions it queued. The database's own: no grant.
+-- The locks (the final review's cross-cutting #7). The daily run reaches this purge holding the chat and plan rows the
+-- series purges locked, until it commits. A deletion in the app takes the account's lock, then the deletions' lock
+-- (ASR2-5), then those rows, so waiting here for either lock could deadlock with it. So, once there is an account to
+-- delete, this only tries the deletions' lock: taken, it refuses with 55P03, the run reads null for the key and warns,
+-- and the next day's run takes the accounts. And it only tries each account's lock: an account busy now (answering an
+-- invitation, say) is left for the next run.
 create function private.purge_web_accounts(p_limit integer default 100) returns integer
 language plpgsql security definer set search_path = '' as $$
 declare
  v_user uuid;
+ v_users uuid[];
  v_flag text := pg_catalog.current_setting('resbite.system', true);
  v_count integer := 0;
 begin
  if pg_catalog.to_regprocedure('private.operator_account_deletion(uuid)') is null then
   raise exception 'Operator deletion missing' using errcode = '55000';
  end if;
- for v_user in select d.id from private.dormant_web_accounts(p_limit) as d(id) loop
+ select coalesce(pg_catalog.array_agg(d.id order by d.id), '{}') into v_users from private.dormant_web_accounts(p_limit) as d(id);
+ if pg_catalog.cardinality(v_users) = 0 then return 0; end if;
+ if not pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended('account_deletion', 0)) then
+  raise exception 'Deletions busy' using errcode = '55P03';
+ end if;
+ foreach v_user in array v_users loop
+  continue when not pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended(v_user::text, 47));
   execute 'select private.operator_account_deletion($1)' using v_user;
   perform pg_catalog.set_config('resbite.system', coalesce(v_flag, ''), true);
   v_count := v_count + 1;
@@ -511,6 +566,32 @@ begin
 end $$;
 revoke all on function private.purge_unconfirmed_accounts(integer) from public, anon, authenticated, service_role;
 comment on function private.purge_unconfirmed_accounts(integer) is 'resbite 20261117130000';
+
+-- A number given at Add your number and never confirmed (privacy notice section 7: 30 days; the final review's
+-- cross-cutting #5). Auth keeps the pending number in auth.users.phone_change, with its code and when it was sent,
+-- until the account confirms it or asks for another; an email, Apple or Google account that gives up keeps it. 30 days
+-- after the code was sent, this clears the three as Auth leaves them when nothing is pending ('', '', null), unless the
+-- account is held; the account and its confirmed number stay. It writes auth.users as purge_unconfirmed_accounts
+-- deletes there: on hosted it needs update on auth.users (rollout R2 reads it), and without it the run reads null for
+-- its key. A row another transaction holds waits for the next run. At most p_limit a call; it answers how many it
+-- cleared. The database's own: no grant.
+create function private.purge_pending_phone_changes(p_limit integer default 5000) returns integer
+language plpgsql security definer set search_path = '' as $$
+declare v_count integer;
+begin
+ with candidates as (
+  select u.id from auth.users u
+  where coalesce(u.phone_change, '') <> '' and u.phone_change_sent_at < now() - interval '30 days'
+   and not private.account_held(u.id)
+  limit p_limit for update of u skip locked
+ ), cleared as (
+  update auth.users u set phone_change = '', phone_change_token = '', phone_change_sent_at = null
+  from candidates c where u.id = c.id returning 1
+ ) select count(*) into v_count from cleared;
+ return v_count;
+end $$;
+revoke all on function private.purge_pending_phone_changes(integer) from public, anon, authenticated, service_role;
+comment on function private.purge_pending_phone_changes(integer) is 'resbite 20261117130000';
 
 -- The one-off leftovers (Decision 10), run once, here, as data steps. Since the open beta the tester roster no longer
 -- decides who may use the app (20261116120000_open_beta.sql:1-4), and the legacy invitations gate nothing. A roster
@@ -828,12 +909,12 @@ end $$;
 -- 5. Orphan profile photos and replaced covers, with the "remove now" helpers.
 
 -- Photos, carried from the local-only 20260923152816_orphan_profile_photo_cleanup.sql (the bases named in the header),
--- which hosted never ran: the two tables made only where absent; the functions create or replace from their bases,
--- with only the lines named below changed; trigger resbite_profile_photo_reference_guard made again; trigger
--- resbite_photo_write_guard made only where absent. The resbite_avatar_read policy is already the hosted one
--- (20260924150135_avatar_revision_compare_and_swap.sql:65-69) and is not touched. Nothing is scheduled here: the worker
--- (cleanup-profile-photos) keeps its source gate, and supabase/ops/schedule-retention.sql runs it. File removal stays
--- HTTP-only: no function here writes or deletes storage.objects.
+-- which hosted never ran: the two tables made only where absent; the functions create or replace from their bases, with
+-- only the lines named below changed; trigger resbite_profile_photo_reference_guard made again; trigger
+-- resbite_photo_write_guard made only where absent, uncommented. The resbite_avatar_read policy is already the hosted
+-- one (20260924150135_avatar_revision_compare_and_swap.sql:65-69) and is not touched. Nothing is scheduled here: the
+-- worker (cleanup-profile-photos) keeps its source gate, and supabase/ops/schedule-retention.sql runs it. File removal
+-- stays HTTP-only: no function here writes or deletes storage.objects.
 do $migration$ begin
  if pg_catalog.to_regclass('private.profile_photo_retired_paths') is null then
   create table if not exists private.profile_photo_retired_paths (
@@ -873,7 +954,10 @@ revoke all on private.profile_photo_retired_paths, private.profile_photo_cleanup
 -- gets them, after its own lines, for every profile-photos write, signed in or not, and keeps plan 2's marker (create
 -- or replace keeps a comment), so this file's rollback restores plan 2's body and plan 2's rollback then drops it.
 -- Where neither file made it, this file makes the same body, with its own marker. The trigger
--- resbite_photo_write_guard is made only where absent.
+-- resbite_photo_write_guard is made only where absent, with no comment: on hosted, commenting (or dropping) a trigger
+-- on storage.objects needs that table's owner, supabase_storage_admin, which the applying role is not (the final
+-- review's account-deletion #1). The function's marker says who made it, and a rollback drops the function with
+-- cascade, which takes the trigger with it and needs only the function's owner.
 do $migration$
 declare v_src text := (select p.prosrc from pg_catalog.pg_proc p where p.oid = pg_catalog.to_regprocedure('private.guard_photo_write()'));
 begin
@@ -897,7 +981,6 @@ begin
  end if;
  if not exists(select 1 from pg_catalog.pg_trigger where tgrelid='storage.objects'::regclass and tgname='resbite_photo_write_guard') then
   create trigger resbite_photo_write_guard before insert or update on storage.objects for each row execute function private.guard_photo_write();
-  comment on trigger resbite_photo_write_guard on storage.objects is 'resbite 20261117130000';
  end if;
 end $migration$;
 revoke all on function private.guard_photo_write() from public, anon, authenticated, service_role;

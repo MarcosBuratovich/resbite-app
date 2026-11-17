@@ -7,8 +7,8 @@
 -- replying (section 6.3). Copy this file to a private folder outside the repo, put the account id below in the copy
 -- only, and run:
 --   supabase db query --linked -o json -f <the copy> > <a private folder outside the repo>/export.json
--- Never save the output, or the edited copy, in the repo: the output is the person's own data (their number, their
--- email, their words). Delete our copy 30 days after sending (section 7).
+-- Never save the output, or the edited copy, in the repo: the output is the person's own data (their number, a number
+-- they gave and have not confirmed yet, their email, their words). Delete our copy 30 days after sending (section 7).
 -- It prints one row of two columns:
 --  - export: the JSON to send, one key per source in section 5. Each list is [] when empty, never null. Each resbite
 --    is named by its title and start, never by an id, and other people by their display name only. It holds no id but
@@ -30,9 +30,10 @@
 -- 6.4), then send it as section 7 says (template R5).
 -- Edit: the account id.
 with input(user_id) as (values ('00000000-0000-0000-0000-000000000000'::uuid)),
- -- The account, and its verified number's key (invitations and removals by number are keyed by it).
+ -- The account, and its verified number's key (invitations and removals by number are keyed by it). phone_change is a
+ -- number given at Add your number and not confirmed yet, which Auth holds with the account ('' when there is none).
  person as (select u.id, u.phone, u.email, u.created_at, u.last_sign_in_at, u.email_confirmed_at, u.phone_confirmed_at,
-   u.banned_until, u.raw_user_meta_data as meta,
+   u.banned_until, nullif(u.phone_change, '') as phone_change, u.raw_user_meta_data as meta,
    case when u.phone_confirmed_at is not null then nullif(private.phone_key(u.phone), '') end as number_key
   from input i left join auth.users u on u.id = i.user_id),
  -- A series by its latest occurrence's title and start.
@@ -41,7 +42,8 @@ with input(user_id) as (values ('00000000-0000-0000-0000-000000000000'::uuid)),
 select jsonb_build_object(
  'account', case when p.id is not null then jsonb_build_object('id', p.id, 'phone', p.phone, 'email', p.email,
    'created_at', p.created_at, 'last_sign_in_at', p.last_sign_in_at, 'email_confirmed_at', p.email_confirmed_at,
-   'phone_confirmed_at', p.phone_confirmed_at, 'banned_until', p.banned_until, 'display_name', p.meta->>'display_name')
+   'phone_confirmed_at', p.phone_confirmed_at, 'banned_until', p.banned_until, 'phone_change', p.phone_change,
+   'display_name', p.meta->>'display_name')
   || case when jsonb_typeof(p.meta) = 'object' and p.meta ? 'registration_details'
    then jsonb_build_object('registration_details', p.meta->'registration_details') else '{}'::jsonb end end,
  'sign_in_methods', coalesce((select jsonb_agg(jsonb_build_object('provider', x.provider, 'created_at', x.created_at,

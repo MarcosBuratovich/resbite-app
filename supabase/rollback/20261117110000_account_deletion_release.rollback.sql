@@ -30,12 +30,15 @@
 --   3. drops private.account_deletion_jobs (its indexes with it);
 --   4. puts back the three September keys with no on delete rule (plans.owner_id, attendees.user_id,
 --      invitations.claimed_by, each to public.profiles) and public.plans.owner_id not null;
---   5. drops the trigger resbite_photo_write_guard on storage.objects and private.guard_photo_write(), then
---      private.account_held(uuid), private.legal_holds and private.suspension_history (the objects shared with plan 6),
---      each only when its comment reads 'resbite 20261117110000': made here, not by another migration;
+--   5. drops private.guard_photo_write() with cascade, which drops its trigger resbite_photo_write_guard on
+--      storage.objects, then private.account_held(uuid), private.legal_holds and private.suspension_history (the
+--      objects shared with plan 6), each only when its comment reads 'resbite 20261117110000': made here, not by
+--      another migration. The trigger carries no comment of its own: the function's marker says this file made both;
 --   6. revokes service_role's use of the private schema, which hosted didn't grant before this file.
--- On hosted, dropping the trigger on storage.objects needs the rights on that table its creation (and its comment)
--- needed, which 20261031120000_creating_a_resbite.sql's storage policies already used.
+-- On hosted, the applying role does not own storage.objects (supabase_storage_admin does), and a plain drop trigger
+-- there needs the table's owner. Dropping the function with cascade needs only the function's owner, which the
+-- applying role is: rehearsed with a role that has every privilege on storage.objects but does not own it (the final
+-- review's account-deletion #1).
 -- Rehearsed in supabase/tests/hosted-baseline/20261117110000_account_deletion_release.after.sql.
 
 do $$ declare t text; v_used boolean; begin
@@ -86,14 +89,11 @@ alter table public.attendees add constraint attendees_user_id_fkey foreign key(u
 alter table private.invitations drop constraint invitations_claimed_by_fkey;
 alter table private.invitations add constraint invitations_claimed_by_fkey foreign key(claimed_by) references public.profiles(id);
 
--- 5. The photo guard and the objects shared with plan 6, each only where this file made it.
+-- 5. The photo guard (its trigger goes with it, by cascade) and the objects shared with plan 6, each only where this
+-- file made it.
 do $$ begin
- if exists(select 1 from pg_catalog.pg_trigger t where t.tgrelid='storage.objects'::regclass and t.tgname='resbite_photo_write_guard'
-   and pg_catalog.obj_description(t.oid,'pg_trigger')='resbite 20261117110000') then
-  drop trigger resbite_photo_write_guard on storage.objects;
- end if;
  if pg_catalog.obj_description(pg_catalog.to_regprocedure('private.guard_photo_write()'),'pg_proc')='resbite 20261117110000' then
-  drop function private.guard_photo_write();
+  drop function private.guard_photo_write() cascade;
  end if;
  if pg_catalog.obj_description(pg_catalog.to_regprocedure('private.account_held(uuid)'),'pg_proc')='resbite 20261117110000' then
   drop function private.account_held(uuid);

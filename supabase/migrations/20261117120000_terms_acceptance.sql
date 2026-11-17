@@ -14,8 +14,9 @@
 -- app's gate asks, once, on builds from this plan on; old builds keep working until replaced.
 --
 -- Hosted-compatible. Each redefined body is the hosted one (the file named above it: the latest in
--- supabase/tests/hosted-baseline/migrations.txt that defines it) with only the line named in its comment changed;
--- grants are unchanged (create or replace keeps them). Rollback:
+-- supabase/tests/hosted-baseline/migrations.txt that defines it) with only the lines named in its comment changed;
+-- grants are unchanged (create or replace keeps them). It needs plan 2's 20261117110000_account_deletion_release.sql
+-- first, on hosted and in the local replay: the fold reads its private.account_held(uuid). Rollback:
 -- supabase/rollback/20261117120000_terms_acceptance.rollback.sql (it loses every record and every published version).
 
 -- 1. The published versions, YYYY-MM as the app's TERMS_VERSION. A version counts from its published_at; the greatest
@@ -321,7 +322,12 @@ end $$;
 
 -- 8. Folding a web account into an app account: the web account's acceptances move to the app account, which keeps
 -- its own for a version it has already accepted (on conflict nothing), and the web account's go, as its tick does.
--- From 20261111160000_chat_safety.sql: two lines added after the tick's delete.
+-- And the fold refuses (22023, which fold-phone-account answers as 409, deleting no Auth user) a web account that a
+-- legal hold names or that is being deleted: the fold would move its records onto an account no hold names, and the
+-- handler then deletes the web account's Auth user, which bypasses the hold (law-enforcement-requests.md section 11.4)
+-- and, for an account being deleted, copies its erased name (the final review's cross-cutting #8). account_held is
+-- plan 2's (20261117110000_account_deletion_release.sql), which runs first.
+-- From 20261111160000_chat_safety.sql: one line added after the used-the-app check, and two after the tick's delete.
 create or replace function private.fold_web_account(p_from uuid, p_into uuid) returns jsonb language plpgsql security definer set search_path = '' as $$
 declare v_moved integer; v_disabled boolean; v_row record;
 begin
@@ -330,6 +336,7 @@ begin
  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(greatest(p_from,p_into)::text,47));
  if not exists(select 1 from auth.users where id=p_into) then raise exception 'Unknown account' using errcode='22023'; end if;
  if private.used_app(p_from) then raise exception 'The account has used the app' using errcode='22023'; end if;
+ if private.account_held(p_from) or private.deletion_pending(p_from) then raise exception 'The account cannot be folded' using errcode='22023'; end if;
  if exists(select 1 from public.plans where owner_id=p_from) then raise exception 'The account organizes events' using errcode='22023'; end if;
  -- Add your number comes before About you, so the account may have no profile yet: it takes the name given on the web.
  insert into public.profiles(id,display_name) select p_into, display_name from public.profiles where id=p_from

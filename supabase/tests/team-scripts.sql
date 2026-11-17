@@ -517,7 +517,7 @@ from (select pg_temp.r7_e('10') as e) x;
 select pg_temp.r7_check(pg_temp.r7_export_keys_ok(e)
  and e->'account' = jsonb_build_object('id',pg_temp.a7('10'),'phone','447700900710','email','r7-10@resbite-test.invalid',
   'created_at',now()-interval '200 days','last_sign_in_at',now()-interval '1 day','email_confirmed_at',now()-interval '100 days',
-  'phone_confirmed_at',now()-interval '200 days','banned_until',null,'display_name','Ivo')
+  'phone_confirmed_at',now()-interval '200 days','banned_until',null,'phone_change',null,'display_name','Ivo')
  and e->'sign_in_methods' = jsonb_build_array(
   jsonb_build_object('provider','phone','created_at',now()-interval '200 days','email',null),
   jsonb_build_object('provider','email','created_at',now()-interval '100 days','email','r7-10@resbite-test.invalid'))
@@ -662,7 +662,10 @@ select pg_temp.r7_check(pg_temp.r7_only_id(j::text,pg_temp.a7('11')) and pg_temp
 from (select pg_temp.r7_e('11') as j, pg_temp.r7_e('12') as k) x;
 
 -- export_empty: Lu, with nothing but an account and a profile, has every list [] (none null), moderator false, and no
--- files. Unedited, the script finds no account: account and profile null, every list [], no files.
+-- files. Lu typed a number at Add your number and never confirmed it: the account shows it (phone_change), as Auth
+-- holds it (the review's cross-cutting #5). Unedited, the script finds no account: account and profile null, every
+-- list [], no files.
+update auth.users set phone_change='447700900791', phone_change_sent_at=now()-interval '2 days' where id=pg_temp.a7('13');
 \set r7_script `sed -e "s/('00000000-0000-0000-0000-000000000000'::uuid)/('a7000000-0000-4000-8000-000000000013'::uuid)/" :'resbite_repo'/supabase/ops/export-account.sql`
 select pg_temp.r7_export_as('13','export-account.sql',:'r7_script');
 \set r7_script `cat :'resbite_repo'/supabase/ops/export-account.sql`
@@ -670,6 +673,7 @@ select pg_temp.r7_export_as('unedited','export-account.sql',:'r7_script');
 select pg_temp.r7_check(pg_temp.r7_export_keys_ok(e)
  and not exists(select 1 from jsonb_each(e) x where x.value = 'null'::jsonb or (jsonb_typeof(x.value) = 'array' and x.value <> '[]'))
  and e->'moderator' = 'false'::jsonb and e->'account'->>'id' = pg_temp.a7('13')::text
+ and e->'account'->>'phone_change' = '447700900791'
  and e->'profile' = jsonb_build_object('display_name','Lu','created_at',now(),'deletion_requested_at',null)
  and pg_temp.r7_f('13') = '{"profile_photos": [], "covers": []}'::jsonb
  and pg_temp.r7_export_keys_ok(u)

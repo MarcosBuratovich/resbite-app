@@ -22,15 +22,17 @@
 --   5. the cover cleanup (its two tables, the worker functions with their wrappers, the guard with its trigger on
 --      public.plans, the takedown helpers); the photo takedown helpers; the photo cleanup objects this file made (on
 --      hosted: the two tables, the worker functions with their wrappers, the reference guard with its trigger); and
---      plan 2's photo write guard, back to plan 2's body;
+--      plan 2's photo write guard, back to plan 2's body (where this file made the guard instead, it goes with its
+--      trigger on storage.objects, by cascade);
 --   4. invite_contacts, back to its base body with its grants; the do-not-invite list and its five functions. The
 --      list's key (invite_objection_key) stays in Vault;
---   3. the series purges (chats and plans) and the account purges (web-only and unconfirmed);
+--   3. the series purges (chats and plans) and the account purges (web-only, unconfirmed, and numbers never
+--      confirmed);
 --   2. the daily run (private.run_retention()) and the eight row purges;
---   1. series_under_hold, series_end and series_held. An object shared with plan 2 (private.legal_holds,
---      private.account_held(uuid), private.suspension_history) or private.series_held(uuid) is dropped only when its
---      comment reads 'resbite 20261117130000': made by this file, not by plan 2's, which runs first and so normally
---      owns all but series_held.
+--   1. series_under_hold, account_in_held_series, series_end and series_held. An object shared with plan 2
+--      (private.legal_holds, private.account_held(uuid), private.suspension_history) or private.series_held(uuid) is
+--      dropped only when its comment reads 'resbite 20261117130000': made by this file, not by plan 2's, which runs
+--      first and so normally owns all but series_held.
 -- It restores no deleted row: not what any purge deleted (the daily run's records, the Auth users it removed and the
 -- accounts it queued for deletion), and not the tester roster rows and legacy invitations (private.tester_roster,
 -- private.invitations) that the migration emptied once. Each disabled roster row stays the revoked grant it became
@@ -62,10 +64,13 @@ end $rollback$;
 -- the photo objects carried from 20260923152816_orphan_profile_photo_cleanup.sql, each by its marker. The write guard
 -- first, while the tables its added lines read are still there: where it carries plan 2's marker (hosted), it goes back
 -- to plan 2's interim body (20261117110000_account_deletion_release.sql:401-407, verbatim), which plan 2's rollback
--- then drops; where it carries this file's, it goes, with the trigger on it; the September body (the local replay) was
--- never changed. Then each function and trigger this file made (hosted) goes; where the September file made them
--- instead (the local replay, which never runs this file), the claim (:81-131) and the prepare (:133-146) go back to
--- their bodies verbatim, and the rest were made again unchanged. Then the two tables, where this file made them.
+-- then drops; where it carries this file's, it goes with cascade, which drops its trigger on storage.objects (the
+-- trigger carries no comment: on hosted, commenting or dropping a trigger there needs that table's owner, which the
+-- applying role is not, while a cascade from the function needs only the function's owner); the September body (the
+-- local replay) was never changed. Then each function and trigger this file made (hosted) goes; where the September
+-- file made them instead (the local replay, which never runs this file), the claim (:81-131) and the prepare (:133-146)
+-- go back to their bodies verbatim, and the rest were made again unchanged. Then the two tables, where this file made
+-- them.
 drop trigger if exists plans_retired_cover_guard on public.plans;
 drop function if exists private.remove_resbite_content(uuid, boolean, boolean, boolean, boolean);
 drop function if exists private.retire_plan_cover_now(text);
@@ -94,12 +99,7 @@ begin
    return new;
   end $fn$;
  elsif pg_catalog.obj_description(pg_catalog.to_regprocedure('private.guard_photo_write()'),'pg_proc')='resbite 20261117130000' then
-  drop trigger if exists resbite_photo_write_guard on storage.objects;
-  drop function private.guard_photo_write();
- end if;
- if exists(select 1 from pg_catalog.pg_trigger t where t.tgrelid='storage.objects'::regclass and t.tgname='resbite_photo_write_guard'
-   and pg_catalog.obj_description(t.oid,'pg_trigger')='resbite 20261117130000') then
-  drop trigger resbite_photo_write_guard on storage.objects;
+  drop function private.guard_photo_write() cascade;
  end if;
  if exists(select 1 from pg_catalog.pg_trigger t where t.tgrelid='public.profiles'::regclass and t.tgname='resbite_profile_photo_reference_guard'
    and pg_catalog.obj_description(t.oid,'pg_trigger')='resbite 20261117130000') then
@@ -350,6 +350,7 @@ drop table if exists private.invite_objections;
 -- tester roster rows and legacy invitations (private.tester_roster, private.invitations) that section 3 emptied once.
 -- Each disabled roster row stays the revoked grant it became, and a suspension that disabled one keeps the grant in
 -- its record, so supabase/ops/suspend-account.sql's undo still works.
+drop function if exists private.purge_pending_phone_changes(integer);
 drop function if exists private.purge_unconfirmed_accounts(integer);
 drop function if exists private.purge_web_accounts(integer);
 drop function if exists private.dormant_web_accounts(integer);
@@ -369,6 +370,7 @@ drop function if exists private.purge_phone_invitations(integer);
 
 -- Section 1: the retention helpers, then the shared objects this file made.
 drop function if exists private.series_end(uuid);
+drop function if exists private.account_in_held_series(uuid);
 drop function if exists private.series_under_hold(uuid);
 do $rollback$ begin
  if pg_catalog.obj_description(pg_catalog.to_regprocedure('private.series_held(uuid)'),'pg_proc')='resbite 20261117130000' then
