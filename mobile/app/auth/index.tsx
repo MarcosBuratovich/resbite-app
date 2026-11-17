@@ -6,7 +6,7 @@ import { Button, Copy, ErrorNote, TextAction, s } from "../../src/design/ui";
 import { Chip, FieldCard, IconButton, InfoSheet, StatusCard, StepScreen, useFocusOnChange } from "../../src/design/kit";
 import { colors as c, fonts } from "../../src/design/tokens";
 import { LegalLinks } from "../../src/design/LegalLinks";
-import { AppleMark } from "../../src/design/AppleMark";
+import { AppleButton } from "../../src/design/AppleButton";
 import { authTitle } from "../../src/domain/accountCopy";
 import { useAuthFlow } from "../../src/state/useAuthFlow";
 import { appleSignInAvailable } from "../../src/services/appleSignIn";
@@ -176,7 +176,7 @@ export default function Auth() {
       )}
       {mode === "login" && (
         <>
-          {appleAvailable && <Chip text="Continue with Apple" icon={AppleMark} onPress={apple} disabled={blocked} />}
+          {appleAvailable && <AppleButton onPress={apple} disabled={blocked} />}
           <Chip text="Continue with Google" onPress={google} disabled={blocked} />
         </>
       )}

@@ -375,6 +375,7 @@ try {
     await expect(heading(page, "Add your number")).toBeVisible();
     await expect(page).toHaveURL(/\/add-phone$/);
     await expect(page.getByText("Your friends find and invite you by your number.", { exact: true })).toBeVisible();
+    await expect(page.getByText("We never show your number to other people on Resbite.", { exact: true })).toBeVisible();
     await noTestCode(page, "Add your number");
     await numberField(page).fill("07700 900111");
     await button(page, "Send code").click();
@@ -404,6 +405,20 @@ try {
     assert.ok(exchange < verify);
     assert.equal(f.state.user.phone, DIGITS);
     assert.equal(f.calls("POST", "/rest/v1/rpc/attest_age").length, 0, "no tick to attest when adding a number");
+    await f.done();
+  }
+
+  // 3d. After Apple or Google sign-in the number is still required, with both lines of explanation (B10).
+  for (const provider of ["apple", "google"]) {
+    const account = phoneless();
+    account.user.app_metadata = { provider, providers: [provider] };
+    const f = await fixture(account),
+      { page } = f;
+    await page.goto(base);
+    await expect(heading(page, "Add your number")).toBeVisible();
+    await expect(page).toHaveURL(/\/add-phone$/);
+    await expect(page.getByText("Your friends find and invite you by your number.", { exact: true })).toBeVisible();
+    await expect(page.getByText("We never show your number to other people on Resbite.", { exact: true })).toBeVisible();
     await f.done();
   }
 

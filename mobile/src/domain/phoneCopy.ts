@@ -28,6 +28,7 @@ export const PHONE_COPY = {
   continue: "Continue",
   addHeading: "Add your number",
   addBody: "Your friends find and invite you by your number.",
+  addPrivacy: "We never show your number to other people on Resbite.",
   /** Also PHONE_CODE_COPY.taken. While folding is off, signing in with the number would make a second account, so the
    * way out is support, not that number (contact invitations F2). */
   taken: "This number already belongs to another Resbite account. Use a different number, or ask the Resbite team for help.",

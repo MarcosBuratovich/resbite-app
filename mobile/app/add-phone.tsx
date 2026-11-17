@@ -56,6 +56,7 @@ export default function AddPhone() {
           ) : (
             <>
               <Copy>{PHONE_COPY.addBody}</Copy>
+              <Copy>{PHONE_COPY.addPrivacy}</Copy>
               <PhoneField
                 value={phone.input}
                 region={phone.region}
