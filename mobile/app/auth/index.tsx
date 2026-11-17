@@ -6,6 +6,7 @@ import { Button, Copy, ErrorNote, TextAction, s } from "../../src/design/ui";
 import { Chip, FieldCard, IconButton, InfoSheet, StatusCard, StepScreen, useFocusOnChange } from "../../src/design/kit";
 import { colors as c, fonts } from "../../src/design/tokens";
 import { RegistrationDetails } from "../../src/design/RegistrationDetails";
+import { LegalLinks } from "../../src/design/LegalLinks";
 import { AppleMark } from "../../src/design/AppleMark";
 import { authTitle } from "../../src/domain/accountCopy";
 import { skipOptionalDetails } from "../../src/domain/registration";
@@ -254,6 +255,7 @@ export default function Auth() {
           </>
         )}
       </View>
+      <LegalLinks align="start" />
       <InfoSheet visible={about} title="About access" onClose={() => setAbout(false)}>
         <Copy>Private Resbite test · access is opened by invitation.</Copy>
       </InfoSheet>

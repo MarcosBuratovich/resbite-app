@@ -9,6 +9,7 @@ import { router, Redirect } from "expo-router";
 import { ArrowUpRight, ShieldCheck } from "lucide-react-native";
 import { Title, Copy, Button, Reveal, TextAction } from "../src/design/ui";
 import { Chip } from "../src/design/kit";
+import { LegalLinks } from "../src/design/LegalLinks";
 import { colors as c, depth, fonts } from "../src/design/tokens";
 import { useApp } from "../src/state/AppState";
 export default function Welcome() {
@@ -70,6 +71,7 @@ export default function Welcome() {
               />
             </View>
           </View>
+          <LegalLinks />
         </Reveal>
         {hasDeletionReceipt && (
           <View style={[styles.center, { paddingTop: 12 }]}>

@@ -6,6 +6,7 @@ import { Chip, StepScreen, useFocusOnChange } from "../../src/design/kit";
 import { AppleMark } from "../../src/design/AppleMark";
 import { CodeField } from "../../src/design/CodeField";
 import { PhoneField } from "../../src/design/PhoneField";
+import { LegalLinks } from "../../src/design/LegalLinks";
 import { TermsLine, TickRow } from "../../src/design/TickRow";
 import { colors as c } from "../../src/design/tokens";
 import { GUEST_COPY } from "../../src/domain/guestAccount";
@@ -129,6 +130,7 @@ export default function PhoneAuth() {
               </View>
             </>
           ) : null}
+          {!signup && !code ? <LegalLinks /> : null}
         </>
       )}
     </StepScreen>
