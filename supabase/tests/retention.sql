@@ -23,8 +23,8 @@
 -- Synthetic identities only: ids a6000000-0000-4000-8000-0000000000NN through pg_temp.a6(text), users 01 to 49 and
 -- plans 51 to 99 (each plan its own series unless it says otherwise), and slice 3's hold twins b1 to b4; emails
 -- r6-NN@resbite-test.invalid; numbers 4477009006NN (an account's NN is its user number; the numbers of people not on
--- Resbite are 81 to 89, slice 1's 94 and 95, and slice 4's 91 to 93; slice 3's numbers given and never confirmed are
--- 96 to 98). One rolled-back block.
+-- Resbite are 81 to 89, slice 1's 94 and 95, slice 3's 99, and slice 4's 91 to 93; slice 3's numbers given and never
+-- confirmed are 96 to 98). One rolled-back block.
 -- Users a6…: 01 Hana, held, then lifted (slice 1), hosts slice 2's resbites; 02 Ola, hosts the one-off 52; 03 Gus, a
 -- guest on 52; 04 Wen, wrote in 52's chat; 05 Rob, hosts the series the series_end checks read, held in slice 2 while
 -- the invitations are purged, then lifted; 06 Ana, 07 Ben; 08 Cal, leaving (deletion asked); 09 Ivo, held through
@@ -36,7 +36,8 @@
 -- days ago), Tom's (29 days ago) and held Uma's (31 days ago). The hold twins, held to the end: 37 Gil, whom Hana
 -- removed from b1; 38 Hob, whose request to join b2 was declined; 39 Ike, who left b3. Web accounts tied to b4 only,
 -- which a hold names, each made 13 months ago: 40 Jen, a guest; 41 Kim, who wrote in its chat; 42 Len, removed from it;
--- 43 Mia, who asked to join it; 44 Ned, who answered an invitation by number to it.
+-- 43 Mia, who asked to join it; 44 Ned, who answered an invitation by number to it; 46 Ora, who left it; 47 Rex, who
+-- brought an invitation by number to it (to 99, not on Resbite).
 -- Slice 4: 25 Kai, on Resbite and in the app, whose number is listed. Slice 5: 26 Ida, hosts covers; 27 Jon, held;
 -- 28 Lea, held after her cover's claim; 29 Max, whose photo is removed; 30 Nia, held, whose photo is removed.
 -- Series a6…: 51 named by a hold (no plan: a hold names a series id); 52 Ola's one-off tomorrow; 53 a one-off that
@@ -625,14 +626,16 @@ insert into private.reports(reporter_id,target_user_id,message_id,series_id,plan
 -- app. b1 is Hana's one-off, made ahead so that she can remove Gil with remove_guest (below, signed in), then moved
 -- back so that it ended 93 days ago (its chat closed 91 days ago), with Ana's message; b2 a one-off that ended 13
 -- months ago, where Hob's request to join was declined; b3 a weekly that stopped and ended 13 months ago, its chat
--- closed, which Ike left; b4 a one-off that ended 13 months ago, which a hold names. The web accounts 40 to 44 are tied
--- to b4 only, each 13 months ago: Jen a guest, Kim wrote in its chat (no guest row), Len was removed from it, Mia asked
--- to join it, Ned answered an invitation by number to it.
+-- closed, which Ike left; b4 a one-off that ended 13 months ago, which a hold names. The web accounts 40 to 44, 46 and
+-- 47 are tied to b4 only, each 13 months ago: Jen a guest, Kim wrote in its chat (no guest row), Len was removed from
+-- it, Mia asked to join it, Ned answered an invitation by number to it, Ora left it (a leave row only), and Rex brought
+-- Hana's invitation by number to 99, who never answered (he is neither its sender nor its answerer).
 insert into auth.users(id,phone,phone_confirmed_at) select pg_temp.a6(n),'4477009006'||n,now() from unnest(array['37','38','39']) n;
 insert into auth.users(id,phone,phone_confirmed_at,created_at)
- select pg_temp.a6(n),'4477009006'||n,now()-interval '13 months',now()-interval '13 months' from unnest(array['40','41','42','43','44']) n;
+ select pg_temp.a6(n),'4477009006'||n,now()-interval '13 months',now()-interval '13 months' from unnest(array['40','41','42','43','44','46','47']) n;
 insert into public.profiles(id,display_name) values (pg_temp.a6('37'),'Gil'),(pg_temp.a6('38'),'Hob'),(pg_temp.a6('39'),'Ike'),
- (pg_temp.a6('40'),'Jen'),(pg_temp.a6('41'),'Kim'),(pg_temp.a6('42'),'Len'),(pg_temp.a6('43'),'Mia'),(pg_temp.a6('44'),'Ned');
+ (pg_temp.a6('40'),'Jen'),(pg_temp.a6('41'),'Kim'),(pg_temp.a6('42'),'Len'),(pg_temp.a6('43'),'Mia'),(pg_temp.a6('44'),'Ned'),
+ (pg_temp.a6('46'),'Ora'),(pg_temp.a6('47'),'Rex');
 insert into private.app_sessions(user_id) select pg_temp.a6(n) from unnest(array['37','38','39']) n;
 insert into public.plans(id,owner_id,title,starts_at,ends_at,time_zone,place_label,categories,repeat_weeks) values
  (pg_temp.a6('b1'),pg_temp.a6('01'),'Ceilidh',now()+interval '1 day',now()+interval '1 day 2 hours','UTC','Barn',array['community'],null),
@@ -645,10 +648,13 @@ insert into public.attendees(plan_id,user_id,response) values
 insert into private.join_requests(plan_id,user_id,response,status,created_at,decided_at) values
  (pg_temp.a6('b2'),pg_temp.a6('38'),'accepted','declined',now()-interval '13 months 1 day',now()-interval '13 months'),
  (pg_temp.a6('b4'),pg_temp.a6('43'),'accepted','waiting',now()-interval '13 months 1 day',null);
-insert into private.series_leaves(series_id,user_id,left_at) values (pg_temp.a6('b3'),pg_temp.a6('39'),now()-interval '13 months');
+insert into private.series_leaves(series_id,user_id,left_at) values (pg_temp.a6('b3'),pg_temp.a6('39'),now()-interval '13 months'),
+ (pg_temp.a6('b4'),pg_temp.a6('46'),now()-interval '13 months');
 insert into private.plan_removals(series_id,user_id,removed_at) values (pg_temp.a6('b4'),pg_temp.a6('42'),now()-interval '13 months');
 insert into private.phone_invitations(plan_id,phone,country,invited_by,user_id,answered_at) values
  (pg_temp.a6('b4'),'447700900644','44',pg_temp.a6('01'),pg_temp.a6('44'),now()-interval '13 months');
+insert into private.phone_invitations(plan_id,phone,country,invited_by,brought_by,created_at) values
+ (pg_temp.a6('b4'),'447700900699','44',pg_temp.a6('01'),pg_temp.a6('47'),now()-interval '13 months 1 day');
 insert into public.messages(series_id,plan_id,author_id,kind,body,created_at) values
  (pg_temp.a6('b1'),pg_temp.a6('b1'),pg_temp.a6('06'),'message','r6-b1-ana',now()),
  (pg_temp.a6('b4'),pg_temp.a6('b4'),pg_temp.a6('41'),'message','r6-b4-kim',now()-interval '13 months');
@@ -720,7 +726,8 @@ end $$;
 
 -- dormant_web_accounts (Decision 11, AS-R4): Pia (10), whose guest row is on a resbite that ended 13 months ago, and
 -- 45, who confirmed a number and never answered, so has no profile. Not the web accounts tied to b4, which a hold
--- names: what a held series holds stays whole, its guests included (the review's retention #1).
+-- names: what a held series holds stays whole, its guests included (the review's retention #1). Ora (46) and Rex (47)
+-- pin account_in_held_series' leave and bringer ties: each is otherwise idle.
 do $$ declare v_n text; v_why text;
 begin
  perform pg_temp.r6_check(pg_temp.a6('10') in (select private.dormant_web_accounts()),
@@ -731,7 +738,8 @@ begin
   ('13','with an email'),('14','held'),('15','made 11 months ago'),('16','asked to join 11 months ago'),
   ('17','answered an invitation 11 months ago'),('18','hosting a resbite that ended 11 months ago'),
   ('40','a guest on b4, which a hold names'),('41','who wrote in b4''s chat'),('42','removed from b4'),
-  ('43','who asked to join b4'),('44','who answered an invitation by number to b4') loop
+  ('43','who asked to join b4'),('44','who answered an invitation by number to b4'),('46','who left b4'),
+  ('47','who brought an invitation by number to b4') loop
   perform pg_temp.r6_check(pg_temp.a6(v_n) not in (select private.dormant_web_accounts()),
    'dormant_web_accounts: '||v_n||', '||v_why||', is dormant');
  end loop;
@@ -783,7 +791,7 @@ begin
  end if;
  perform pg_temp.r6_check(v_ok, 'purge_web_accounts: Pia''s (10) or 45''s deletion was not queued');
 end $$;
-select pg_temp.r6_check(not exists(select 1 from unnest(array['11','12','13','14','15','16','17','18','40','41','42','43','44']) n
+select pg_temp.r6_check(not exists(select 1 from unnest(array['11','12','13','14','15','16','17','18','40','41','42','43','44','46','47']) n
   where private.deletion_pending(pg_temp.a6(n))), 'purge_web_accounts: an account that is not dormant is being deleted');
 select pg_temp.r6_check((select body='r6-b4-kim' and author_id=pg_temp.a6('41') and state='sent' from public.messages where body='r6-b4-kim')
  and exists(select 1 from public.attendees where plan_id=pg_temp.a6('b4') and user_id=pg_temp.a6('40')),
@@ -912,7 +920,7 @@ begin
   'run_retention: with the holds on, a series or an account purge did not take just Xia: '||v::text);
 end $$;
 select pg_temp.r6_check(private.deletion_pending(pg_temp.a6('17')) and not exists(select 1
-  from unnest(array['11','12','13','14','15','16','18','40','41','42','43','44']) n
+  from unnest(array['11','12','13','14','15','16','18','40','41','42','43','44','46','47']) n
   where private.deletion_pending(pg_temp.a6(n))), 'run_retention: not just Xia (17) is being deleted');
 select pg_temp.r6_check(pg_temp.r6_invited('44') and pg_temp.r6_removal('b4','42') and pg_temp.r6_removal('b1','37')
  and pg_temp.r6_msg('r6-b1-ana') is not null and pg_temp.r6_msg('r6-b4-kim') is not null

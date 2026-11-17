@@ -1,8 +1,9 @@
 -- Rehearsal for 20261117120000_terms_acceptance (hosted-baseline mode only), after the apply. Removes what .before.sql
 -- made.
--- 1. Each redefined body is the hosted one with only its named lines changed, applied in order (the fold has two: the
--- hold and deletion refusal after the used-the-app check, and the acceptances after the tick's delete), and every grant
--- is unchanged. Each old string occurs exactly once in the snapshot.
+-- 1. Each redefined body is the hosted one with only its named lines changed, applied in order (the fold has three: the
+-- hold and deletion refusal after the used-the-app check, the clearing of the app account's pending number after the
+-- organizer check, and the acceptances after the tick's delete), and every grant is unchanged. Each old string occurs
+-- exactly once in the snapshot.
 create temporary table ba_edits(signature text, step integer, old text, new text);
 insert into ba_edits values
  ('private.account_access_status()',1,
@@ -29,6 +30,10 @@ insert into ba_edits values
   $x$ if private.used_app(p_from) then raise exception 'The account has used the app' using errcode='22023'; end if;
  if private.account_held(p_from) or private.deletion_pending(p_from) then raise exception 'The account cannot be folded' using errcode='22023'; end if;$x$),
  ('private.fold_web_account(uuid,uuid)',2,
+  $x$ if exists(select 1 from public.plans where owner_id=p_from) then raise exception 'The account organizes events' using errcode='22023'; end if;$x$,
+  $x$ if exists(select 1 from public.plans where owner_id=p_from) then raise exception 'The account organizes events' using errcode='22023'; end if;
+ update auth.users set phone_change='', phone_change_token='', phone_change_sent_at=null where id=p_into and coalesce(phone_change,'')<>'';$x$),
+ ('private.fold_web_account(uuid,uuid)',3,
   $x$ delete from private.age_attestations where user_id=p_from;$x$,
   $x$ delete from private.age_attestations where user_id=p_from;
  insert into private.terms_acceptances(user_id,terms_version,accepted_at,how) select p_into,terms_version,accepted_at,how from private.terms_acceptances where user_id=p_from on conflict do nothing;

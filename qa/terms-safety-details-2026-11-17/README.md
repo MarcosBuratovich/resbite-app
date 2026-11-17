@@ -20,7 +20,8 @@
   - `account_access_status()` also reports `terms_version` (the current published version, or null) and `terms_needed`.
   - `accept_terms(text)` records the accept screen. It refuses `22023 'Terms changed'` for anything but the current version, null included.
   - The sign-up tick (`attest_age`), the three invitation answers (`join_by_link`, `request_to_join`, `answer_phone_invitation`) and the fold (`fold_web_account`) write the record too.
-  - The fold also refuses (`22023 'The account cannot be folded'`, which `fold-phone-account` answers as 409, deleting nothing) a web account that a legal hold names or that is being deleted: otherwise its records would move to an account no hold names and the handler would delete the held Auth user (the final review's cross-cutting #8). It reads plan 2's `private.account_held`, so plan 2's `20261117110000` must be applied first, as the roadmap orders. The rehearsal pins the fold's two named edits.
+  - The fold also refuses (`22023 'The account cannot be folded'`, which `fold-phone-account` answers as 409, deleting nothing) a web account that a legal hold names or that is being deleted: otherwise its records would move to an account no hold names and the handler would delete the held Auth user (the final review's cross-cutting #8). It reads plan 2's `private.account_held`, and `private.deletion_pending` as plan 2 redefines it (reading `private.account_deletion_jobs`), so plan 2's `20261117110000` must be applied first, as the roadmap orders: plpgsql binds names only when the fold runs, so without plan 2 C8 would apply and every fold would then fail with 42883 (no `private.account_held`). Step 2's opening check refuses with "Apply plan 2 first" and changes nothing.
+  - The fold also clears the app account's pending number (`auth.users.phone_change`, `phone_change_token` and `phone_change_sent_at`, set to `''`, `''` and null, only where a number is pending; lane S2). Someone on Add your number who first sent a code to a mistyped number, then typed the number their web account holds, is folded with that change still pending. The handler's later Admin API call sets the web account's number and leaves `phone_change` alone, and the Send SMS hook refuses every code to an account with a confirmed number and a different pending one, so that account could otherwise never get a code by text again. The fold writes `auth.users` from its definer as C9 does at its apply, so C9's apply also proves the privilege on hosted. The rehearsal pins the fold's three named edits.
   - No server function requires acceptance (AS-P4-3): `private.user_eligible` is untouched.
   - `supabase/ops/publish-terms-version.sql` is the owner's publish script (step 7), with the literal `2026-12`. It adds a version only when it is later than every one already there, and prints `published`, `current_version` and `accounts_to_ask`, numbers only.
 - **C7, `20261117121000_safety_extension.sql` (Task 2).**
@@ -41,7 +42,7 @@
 
 | File | sha256 |
 | --- | --- |
-| `supabase/migrations/20261117120000_terms_acceptance.sql` (C8, step 2) | `3fbfc87678e6e1eb0e86f102f2eb6e16067eb00a55b3cb006d69bc0dda6ca436` |
+| `supabase/migrations/20261117120000_terms_acceptance.sql` (C8, step 2) | `f122ff3300a615d5a95d2b69f3de0f334e7e864aea034e0f5000ca2f59cbc86d` |
 | `supabase/migrations/20261117121000_safety_extension.sql` (C7, step 2) | `a2ac35ac4a72b99ebddf83981f888d4c5b2fd8d7d7fd85ee151f50a83c3e702c` |
 | `supabase/migrations/20261117122000_optional_details_removal.sql` (C9, step 2) | `91a32bcba8857d95cecea9ebe26981714c3f530eaefad4fd372d27450445b8a2` |
 | `supabase/ops/publish-terms-version.sql` (step 7, the SQL editor) | `f86832b0ae4a7e15bb4164ca840bdfa04f85915fe9df45b274ac68d85d8dc36e` |
@@ -50,7 +51,7 @@
 | `supabase/rollback/20261117121000_safety_extension.rollback.sql` (Rollback) | `c3134e653ef984b67972af9116de1696a54f51fd3d835b0a2231ef6b0cbfb9f7` |
 | `supabase/rollback/20261117122000_optional_details_removal.rollback.sql` (Rollback) | `50c19f38bb8f27a8e47d042e7a15248c766351f38092acf869b0a8650251b1ec` |
 | `supabase/tests/hosted-baseline/20261117120000_terms_acceptance.before.sql` (the rehearsal) | `e54260a2dbb559c431ea614bd449cccdb2eaf95e37802ccb6650c26409fa66fb` |
-| `supabase/tests/hosted-baseline/20261117120000_terms_acceptance.after.sql` (the rehearsal) | `01db3258aab4af5cc124d91eb28ea69607e577ce76f36fa67ef96994be4ab549` |
+| `supabase/tests/hosted-baseline/20261117120000_terms_acceptance.after.sql` (the rehearsal) | `510b68dd9882687bc8334f58b49cc5e13979b930783611a136518336135d3db8` |
 | `supabase/tests/hosted-baseline/20261117121000_safety_extension.before.sql` (the rehearsal) | `2924481d345d8333a813f841f459310c27e604c6dcb1b8d13042c4fb075f50e9` |
 | `supabase/tests/hosted-baseline/20261117121000_safety_extension.after.sql` (the rehearsal) | `f7c7f5da6876cef4c5ad7b9307794b0cc878d3078504ab87c6a90ac59d897d70` |
 | `supabase/tests/hosted-baseline/20261117122000_optional_details_removal.before.sql` (the rehearsal) | `f5bbe2672961a17fe8f23756d707d6e36689c6f58a571ac7ee3be9f6ffc132e7` |
@@ -96,6 +97,7 @@ At `a20d8a8` (Tasks 1 to 7). Task 8 changes documents only.
   Exit 0, 35 PASS lines: the five candidates, each with its rehearsal pair (before, the file, after, and the rollback inside a transaction it rolls back), the 29 files of `tests.txt` and the final line. C7's rehearsal runs its rollback with one `illegal` report stored, so the run prints that rollback's notice ("1 report(s) give a reason this rollback removes…"): expected.
   - Until step 4 adds the three files to `migrations.txt`, a hosted-baseline run must name them: `tests.txt` already lists their tests.
   - After the final review's SQL fixes (lane S, 17 November 2026; the fold's refusal of a held or deleting web account), with plan 6's candidate too: exit 0, 38 PASS lines. Full mode: exit 0, 73 PASS lines.
+  - After lane S2's (17 November 2026; the fold's clearing of a pending number, with its third named edit in the rehearsal), the same: exit 0, 38 PASS lines, and full mode exit 0, 73 PASS lines.
 - **The app**, `cd mobile && npm run check` (the typecheck, the whole `npm test` chain with the link site's tests, and content validation): exit 0, 1,306 tests, none failed.
 - **Browser checks**, headless Chrome on Expo web and the link site with each script's own fixtures, run by Tasks 5 to 7:
   - PASS: `verify-phone.mjs` (the accept screen at 320 and 390 px, a stale version refused, re-read and asked again, the sign-up path straight to About you, and a suspended account never shown it), `verify-account.mjs` (a kept invitation waits behind Accept your Terms and opens after Continue; no Account details row and no details write), `verify-auth.mjs`, `verify-open-link-app.mjs`, `verify-registration.mjs`, `review-ui.mjs`, `verify-chat.mjs` (the seven reasons in order, "We review reports every day." under the thanks, at 320 px with 200 % text, and the full community rules link), `verify-connections.mjs`; on the link site, `links/verify-personal.mjs` and `links/verify-open-link.mjs`.
@@ -104,6 +106,7 @@ At `a20d8a8` (Tasks 1 to 7). Task 8 changes documents only.
   - `asr4-before.sh`: `27 | 20261117110000`; `attestations` 2; `with_details` 5, `under_18_at_sign_up` 2, `under_18_today` 1; `identities_with_details` 0; `hosted-before.json` 557 rows.
   - `asr4-apply.sh` with a later version (`20261117130000`) in the history: refused with "A later migration is already applied", nothing created. With C8 changed by one line: stopped at its hash, nothing created.
   - `asr4-apply.sh`: the three hashes `OK`, then `30 | 20261117122000`. Run again: stopped at C8 (`relation "terms_versions" already exists`), with the fingerprint and the history unchanged.
+  - `asr4-apply.sh`'s opening check, after lane S2 added plan 2's (17 November 2026): the block taken as above, up to and including that check, run through the same kind of stand-in against a throwaway cluster holding only a history table and an empty `private` schema. "Apply plan 2 first", exit 1, with neither `private.account_held(uuid)` nor `private.account_deletion_jobs`, with the table alone, and with the function alone; `DO`, exit 0, with both; "A later migration is already applied", exit 1, with both and `20261117130000` in the history. The rest of the script is unchanged.
   - `asr4-after.sh`: `2 | 2 | 0` (attestations, legacy rows, published), `with_details` 0, and the three trigger names. The fingerprint changes were exactly step 3's list, plus the two new tables' six constraints and two indexes. Only the two new tables were added to the row counts.
   - Step 4: with the five lines (plan 1's, plan 2's and these three) appended to a scratch copy of `migrations.txt`, `scripts/test-database.sh --hosted-baseline` with no candidate gave 30 PASS lines (the 29 tests and the final line).
   - The publish script: `1 | 2026-12 | 3`, then run again `0 | 2026-12 | 3` (three confirmed, non-anonymous accounts).
@@ -152,7 +155,9 @@ Every step below needs the owner's explicit approval at the time. **Never `supab
    set -euo pipefail
    cd "${REPO:-$HOME/dev/resbite-app}"
    mkdir -p /tmp/asr4
-   supabase db query --linked "do \$\$ begin if exists (select 1 from supabase_migrations.schema_migrations where version > '20261117122000') then raise exception 'A later migration is already applied: timestamps must follow the apply order (roadmap)'; end if; end \$\$;"
+   GUARD="if pg_catalog.to_regprocedure('private.account_held(uuid)') is null or pg_catalog.to_regclass('private.account_deletion_jobs') is null then raise exception 'Apply plan 2 first'; end if;
+    if exists (select 1 from supabase_migrations.schema_migrations where version > '20261117122000') then raise exception 'A later migration is already applied: timestamps must follow the apply order (roadmap)'; end if;"
+   supabase db query --linked "do \$\$ begin $GUARD end \$\$;"
    apply() {
      local v="$1" f="supabase/migrations/$1_$2.sql" h="$3"
      echo "$h  $f" | sha256sum -c -
@@ -160,12 +165,13 @@ Every step below needs the owner's explicit approval at the time. **Never `supab
      supabase db query --linked -f "/tmp/asr4/$v.sql"
      supabase migration repair --status applied "$v" --linked --yes
    }
-   apply 20261117120000 terms_acceptance 3fbfc87678e6e1eb0e86f102f2eb6e16067eb00a55b3cb006d69bc0dda6ca436
+   apply 20261117120000 terms_acceptance f122ff3300a615d5a95d2b69f3de0f334e7e864aea034e0f5000ca2f59cbc86d
    apply 20261117121000 safety_extension a2ac35ac4a72b99ebddf83981f888d4c5b2fd8d7d7fd85ee151f50a83c3e702c
    apply 20261117122000 optional_details_removal 91a32bcba8857d95cecea9ebe26981714c3f530eaefad4fd372d27450445b8a2
    supabase db query --linked "select count(*) as applied, max(version) as latest from supabase_migrations.schema_migrations"
    ```
 
+   - Without plan 2's deletion release (`private.account_held(uuid)` and `private.account_deletion_jobs`), the opening check refuses with "Apply plan 2 first" before anything runs: the fold calls plan 2's `private.account_held`, and would otherwise apply and then fail at every call (42883).
    - A hash mismatch stops before anything runs. An error rolls back that file only and stops before its repair; the earlier files stay applied and recorded. Re-run only the remaining `apply` lines.
    - If an apply succeeded and only its repair failed, run that repair line alone. A second apply of C8 or C7 fails at its first `create table` or `create function` and changes nothing; C9 is re-runnable.
    - History after: three rows more, latest `20261117122000`.
