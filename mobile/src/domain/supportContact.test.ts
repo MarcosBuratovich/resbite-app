@@ -65,7 +65,11 @@ test("Data & privacy reads the build's address with dot notation, the one form i
   };
   walk(join(mobile, "app"));
   walk(join(mobile, "src"));
-  const readers = files.filter((f) => readFileSync(f, "utf8").includes("EXPO_PUBLIC_SUPPORT_ADDRESS"));
+  // releaseChecks.ts reads a plain env object handed to it by the build-time check (scripts/check-release.mjs), never the
+  // bundle's process.env, so the inlining rule does not apply to it.
+  const readers = files.filter(
+    (f) => !f.endsWith("releaseChecks.ts") && readFileSync(f, "utf8").includes("EXPO_PUBLIC_SUPPORT_ADDRESS"),
+  );
   for (const f of readers)
     for (const line of readFileSync(f, "utf8").split("\n"))
       if (line.includes("EXPO_PUBLIC_SUPPORT_ADDRESS") && !/^\s*(\*|\/\/|\/\*)/.test(line))

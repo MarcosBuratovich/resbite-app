@@ -90,7 +90,8 @@ test("the two link overrides are read with dot notation, the one form inlined wh
   walk(join(mobile, "app"));
   walk(join(mobile, "src"));
   let readers = 0;
-  for (const f of files)
+  // releaseChecks.ts reads a plain env object handed to it by the build-time check, never the bundle's process.env.
+  for (const f of files.filter((file) => !file.endsWith("releaseChecks.ts")))
     for (const line of readFileSync(f, "utf8").split("\n"))
       for (const name of ["EXPO_PUBLIC_TERMS_URL", "EXPO_PUBLIC_PRIVACY_URL"])
         if (line.includes(name) && !/^\s*(\*|\/\/|\/\*)/.test(line)) {
