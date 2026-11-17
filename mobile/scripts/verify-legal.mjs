@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 
-// Browser checks for App Store readiness plan 3's screens. Section (l*) per task; Task 1 is l1 to l3, Task 4 is l4.
+// Browser checks for App Store readiness plan 3's screens. Section (l*) per task; Task 1 is l1 to l3, Task 4 is l4, Task 6 is l6.
 const browser = await chromium.launch({
   channel: process.env.RESBITE_QA_BROWSER || "chrome",
   headless: true,
@@ -184,6 +184,75 @@ try {
     await large.close();
   }
   console.log("PASS (l5) About and legal opens the four pages, Licences and shows the company details");
+
+  // (l6) Data & privacy, by preview: Preview the design, the Profile tab, Data & privacy.
+  const TOPICS = [
+    "Your account",
+    "Contacts and invitations",
+    "Resbites and chat",
+    "Connections",
+    "Notifications",
+    "On this device",
+    "Who we work with",
+    "How long we keep it",
+  ];
+  const ABOUT =
+    "This page sums up how Resbite uses your data. Our Privacy Policy has the full details, and you can open it below.";
+  await page.goto(base);
+  await page.getByRole("button", { name: "Preview the design", exact: true }).click();
+  await page.getByRole("tab", { name: "Profile", exact: true }).click();
+  await page.getByRole("button", { name: "Data & privacy", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Privacy", exact: true })).toBeVisible();
+  {
+    const tops = await Promise.all(
+      TOPICS.map(async (name) => {
+        const el = page.getByRole("button", { name, exact: true });
+        await expect(el).toBeVisible();
+        return (await el.boundingBox()).y;
+      }),
+    );
+    assert.deepEqual(tops, [...tops].sort((a, b) => a - b), "the topics come in the agreed order");
+    await expect(page.getByRole("button", { name: "Preview & samples", exact: true })).toHaveCount(0);
+    await expect(page.getByText(/beta/i)).toHaveCount(0);
+    await page.getByRole("button", { name: "About this page", exact: true }).click();
+    await expect(page.getByText(ABOUT, { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Close sheet", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Close sheet", exact: true })).toHaveCount(0);
+    await page.evaluate(() => (window.__opened = []));
+    await page.getByRole("button", { name: "Privacy Policy", exact: true }).click();
+    assert.deepEqual(await opened(), [PRIVACY]);
+    await page.evaluate(() => (window.__opened = []));
+    await page.getByRole("button", { name: "Request a copy of my data", exact: true }).click();
+    assert.deepEqual(await opened(), [
+      "mailto:privacy@resbite.com?subject=Request%20a%20copy%20of%20my%20data&body=Please%20send%20me%20a%20copy%20of%20the%20personal%20data%20Resbite%20holds%20about%20me.",
+    ]);
+    await page.getByRole("button", { name: "About and legal", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "About and legal", exact: true })).toBeVisible();
+  }
+  {
+    const large = await browser.newPage({ viewport: { width: 320, height: 844 }, reducedMotion: "reduce" });
+    large.on("pageerror", (e) => errors.push(e.message));
+    await large.route("**/*.supabase.co/**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: "{}" }));
+    await large.goto(base);
+    await large.getByRole("button", { name: "Preview the design", exact: true }).click();
+    await large.getByRole("tab", { name: "Profile", exact: true }).click();
+    await large.getByRole("button", { name: "Data & privacy", exact: true }).click();
+    await large.addStyleTag({ content: '[dir="auto"] { zoom: 1.4; }' });
+    await expect(large.getByRole("heading", { name: "Privacy", exact: true })).toBeVisible();
+    assert.ok(await large.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "Data & privacy fits at 320 px under Larger Text");
+    const clipped = await large.evaluate(() =>
+      [...document.querySelectorAll("[role=button],[role=link],[role=heading],h1,h2,h3")]
+        .filter((el) => el.getBoundingClientRect().width > 0)
+        .filter((el) => {
+          const b = el.getBoundingClientRect();
+          return b.left < -1 || b.right > window.innerWidth + 1;
+        })
+        .map((el) => el.getAttribute("aria-label") || el.textContent.trim().slice(0, 40)),
+    );
+    assert.deepEqual(clipped, [], "nothing is clipped on Data & privacy at 320 px under Larger Text");
+    await large.close();
+  }
+  console.log("PASS (l6) Data & privacy lists the eight topics, opens the Privacy Policy and the data request, and fits at 320 px under Larger Text");
 
   assert.deepEqual(errors, [], `no page errors: ${errors.join(" | ")}`);
 } finally {

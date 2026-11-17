@@ -138,11 +138,10 @@ try {
     const closed = () => expect(page.getByRole("button", { name: "Close sheet" })).toHaveCount(0);
     await closed();
     // Task 8 (K-N5): the chat's line, hedged as Delete account's What happens is, followed by chat plan 3's lines on what a
-    // report keeps (G-S11) and how long blocks stay (ruling SR4); and the samples line without the sample chat, and without "this build does not send push
-    // notifications".
-    await button(page, "Chat messages").click();
+    // report keeps (G-S11) and how long blocks stay (ruling SR4).
+    await button(page, "Resbites and chat").click();
     const chatLine = page.getByText(
-      "Chat messages are stored on Resbite’s servers so everyone in a resbite’s chat can read them, including people who join later. They are not end-to-end encrypted. Deleting your account removes the text of your messages as cleanup finishes. Review account deletion’s availability in this build under Delete account.",
+      "Chat messages are stored on our servers so everyone in a resbite’s chat can read them, including people who join later. They aren’t end-to-end encrypted.",
       { exact: true },
     );
     const reportsLine = page.getByText(
@@ -155,13 +154,6 @@ try {
     await expect(blocksLine).toBeVisible();
     assert.ok(await inOrder(page, [chatLine, reportsLine, blocksLine]), "the reports line follows chat core's, then the blocks line");
     await shot("privacy-chat", false);
-    await button(page, "Close sheet").click();
-    await closed();
-    await button(page, "Preview & samples").click();
-    await expect(
-      page.getByText("Preview actions stay on this device. Wellness figures are fictional, and there is no wellness tracking.", { exact: true }),
-    ).toBeVisible();
-    await expect(page.getByText(/push notifications|Sample conversations|live messaging/)).toHaveCount(0);
     await button(page, "Close sheet").click();
     await closed();
     await button(page, "Delete account").click();

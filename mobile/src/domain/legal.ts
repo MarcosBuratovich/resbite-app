@@ -111,3 +111,12 @@ export function termsRuns(text: string, urls: Pick<LegalUrls, "terms" | "privacy
   if (plain) runs.push({ text: plain });
   return runs;
 }
+
+/** The "Request a copy of my data" email. The account id is added only when it looks like one (a UUID). */
+export function dataRequestMailto(accountId: string | null | undefined): string {
+  const lines: string[] = [LEGAL_COPY.dataRequestBody];
+  if (typeof accountId === "string" && /^[0-9a-f-]{36}$/i.test(accountId)) {
+    lines.push("", LEGAL_COPY.dataRequestAccount(accountId));
+  }
+  return `mailto:${PRIVACY_ADDRESS}?subject=${encodeURIComponent(LEGAL_COPY.dataRequestSubject)}&body=${encodeURIComponent(lines.join("\n"))}`;
+}

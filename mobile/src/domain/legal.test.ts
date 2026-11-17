@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { COMPANY, LEGAL_COPY, PRIVACY_ADDRESS, httpsUrl, legalUrls, termsRuns } from "./legal";
+import { COMPANY, LEGAL_COPY, PRIVACY_ADDRESS, dataRequestMailto, httpsUrl, legalUrls, termsRuns } from "./legal";
 
 test("httpsUrl trims a good https link and refuses everything else", () => {
   assert.equal(httpsUrl(" https://legal.example.test/terms "), "https://legal.example.test/terms");
@@ -111,4 +111,14 @@ test("the tick line splits with termsRuns and opens links through openExternal",
   const tick = source("src/design/TickRow.tsx");
   assert.ok(tick.includes("termsRuns("));
   assert.equal(tick.includes("Linking.openURL"), false);
+});
+
+test("dataRequestMailto writes to the privacy address and names the account only for a real id", () => {
+  const base =
+    "mailto:privacy@resbite.com?subject=Request%20a%20copy%20of%20my%20data&body=Please%20send%20me%20a%20copy%20of%20the%20personal%20data%20Resbite%20holds%20about%20me.";
+  assert.equal(
+    dataRequestMailto("11111111-1111-4111-8111-111111111111"),
+    `${base}%0A%0AMy%20Resbite%20account%20ID%3A%2011111111-1111-4111-8111-111111111111`,
+  );
+  for (const none of [null, undefined, "not-an-id"]) assert.equal(dataRequestMailto(none), base);
 });
