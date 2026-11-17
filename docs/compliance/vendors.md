@@ -50,7 +50,7 @@ No vendor is **Confirmed** today, because no vendor account is yet recorded as h
 | Expo | Processor (push); no user data (builds) | Push tokens, device tokens, push titles and bodies including chat text | United States | None published | UK-US data bridge (Expo states it is certified) | To confirm |
 | Apple | Independent controller (inference, UNVERIFIED) | Sign in with Apple data; push device tokens and content; App Store and TestFlight data | Apple's systems | Not applicable as a controller; the Apple Developer Program License Agreement governs | Apple's own | Role to confirm |
 | Google | Independent controller (inference, UNVERIFIED) | Google sign-in: id, email, name, picture URL | Google's systems | Not applicable as a controller | Google's own | Role to confirm |
-| Resend | Processor | Email addresses and Auth emails | United States | Yes: part of the terms (31 December 2025) | UK-US data bridge; SCCs with the UK Addendum as fallback | To confirm |
+| Resend | Processor | Email addresses, Auth emails and contact form messages | United States | Yes: part of the terms (31 December 2025) | UK-US data bridge; SCCs with the UK Addendum as fallback | To confirm |
 | Twilio (SMS) | Processor | Phone numbers, codes, delivery status | US company; region placeholder 1 | Yes: part of the agreement (9 April 2026) | UK-US data bridge first; SCCs with the UK Addendum otherwise | To confirm (chosen, AS-D5); sign before switch-on **[needs C1]** |
 | CAPTCHA vendor (placeholder 2) | Processor; also a controller of signals for its own detection (Turnstile) | IP, TLS fingerprint, user agent (Turnstile); device and interaction data (hCaptcha) | US companies | Cloudflare: must be accepted (v6.4); hCaptcha: part of its terms, not public | UK-US data bridge | To choose **[needs B16, D10]** |
 | Mailbox provider (placeholder 3) | Processor | Everything sent to the support and privacy inboxes | To record | To obtain | To record | To choose **[needs F1]** |
@@ -156,7 +156,7 @@ No vendor is **Confirmed** today, because no vendor account is yet recorded as h
 
 | Item | Entry |
 |---|---|
-| Used for | SMTP for Supabase Auth: confirmation, email-code and password-reset emails, from the sending address on `resbite.com` (`qa/auth-readiness.md:74-80`). The deletion confirmation, if C2 sends it by email **[needs C2, B3]**. If D1's contact form sends through Resend, add that use here |
+| Used for | SMTP for Supabase Auth: confirmation, email-code and password-reset emails, from the sending address on `resbite.com` (`qa/auth-readiness.md:74-80`). The deletion confirmation, if C2 sends it by email **[needs C2, B3]**. The link site's contact form (`links/server/api/contact.mjs`, D1), from `noreply@resbite.com` to the support and privacy inboxes, with its own sending-only key, `RESEND_API_KEY` on Vercel |
 | Role | Processor |
 | Personal data | Email addresses; codes and links; email content; delivery events |
 | People | Account holders who use email |

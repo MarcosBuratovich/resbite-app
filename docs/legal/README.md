@@ -75,6 +75,7 @@ A change to the Terms, of any size, also needs a new `TERMS_VERSION`, so that pe
 | 17 November 2026 | Support and contact | 1.0 | First draft, for solicitor review | Not published |
 | 17 November 2026 | Delete your account | 1.0 | First draft, for solicitor review | Not published |
 | 17 November 2026 | Invitation page notice (short) | 1.0 | First draft, for solicitor review | Not published |
+| 17 November 2026 | Privacy Policy; Support and contact | 1.0 (draft) | The contact form sends through Resend; data protection, legal requests and deletion go to the privacy inbox | Not published |
 | 17 November 2026 | Community rules: short version and sign-up wording | 1.0 | First draft, for solicitor review | Not published |
 | 17 November 2026 | This index | 1.0 | First version | — |
 | 17 November 2026 | All of the above | 1.0 (draft) | Cross-check before solicitor review: one name for A1 and the regulator; one effective-date placeholder; what deletion does to a host's resbites, the guest list, suspension records, legal-request address and the ban for child sexual abuse made the same everywhere | Not published |
