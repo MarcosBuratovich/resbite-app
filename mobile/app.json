@@ -10,20 +10,21 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.resbite.app",
-      "associatedDomains": ["applinks:link.resbite.com"],
+      "associatedDomains": [
+        "applinks:link.resbite.com"
+      ],
       "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "LSApplicationQueriesSchemes": ["whatsapp"]
+        "LSApplicationQueriesSchemes": [
+          "whatsapp"
+        ]
       }
     },
     "android": {
       "package": "com.resbite.preview",
       "permissions": [
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.READ_CONTACTS",
-        "android.permission.WRITE_CONTACTS"
+        "android.permission.READ_CONTACTS"
       ]
     },
     "plugins": [
@@ -55,18 +56,9 @@
       "expo-apple-authentication",
       "@react-native-community/datetimepicker",
       [
-        "expo-location",
-        {
-          "locationWhenInUsePermission": "Use your location when choosing where to meet.",
-          "locationAlwaysAndWhenInUsePermission": false,
-          "locationAlwaysPermission": false,
-          "motionUsagePermission": "Resbite doesn’t use motion or fitness data. The location library it relies on requires this description, but the app never asks for this access."
-        }
-      ],
-      [
         "expo-contacts",
         {
-          "contactsPermission": "Choose contacts to invite to your Resbite plans."
+          "contactsPermission": "Choose contacts to invite. Resbite checks only the numbers you pick to see who already uses it."
         }
       ],
       [
