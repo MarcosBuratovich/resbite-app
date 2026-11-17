@@ -327,7 +327,16 @@ end $$;
 -- handler then deletes the web account's Auth user, which bypasses the hold (law-enforcement-requests.md section 11.4)
 -- and, for an account being deleted, copies its erased name (the final review's cross-cutting #8). account_held is
 -- plan 2's (20261117110000_account_deletion_release.sql), which runs first.
--- From 20261111160000_chat_safety.sql: one line added after the used-the-app check, and two after the tick's delete.
+-- And the fold clears the app account's pending number: Auth's phone_change, its code and when it was sent
+-- are set as Auth leaves them when nothing is pending, only where a number is pending. Someone on Add your number who
+-- first sent a code to a mistyped number, then typed the number their web account holds, is folded with that change
+-- still pending; the handler's later Admin API call sets the web account's number and leaves phone_change alone; and
+-- the Send SMS hook texts no code to an account with a confirmed number and a different pending one (sms-hook.ts,
+-- readTarget), so that account would never get a code by text again. It writes auth.users from this definer as
+-- save_registration_details does on hosted (20261027120000_phone_accounts.sql:228, until C9 drops it), before any other
+-- row the fold writes (the Auth row first, as a deletion of the Auth user takes it before the rows that cascade).
+-- From 20261111160000_chat_safety.sql: one line added after the used-the-app check, one after the organizer check,
+-- and two after the tick's delete.
 create or replace function private.fold_web_account(p_from uuid, p_into uuid) returns jsonb language plpgsql security definer set search_path = '' as $$
 declare v_moved integer; v_disabled boolean; v_row record;
 begin
@@ -338,6 +347,7 @@ begin
  if private.used_app(p_from) then raise exception 'The account has used the app' using errcode='22023'; end if;
  if private.account_held(p_from) or private.deletion_pending(p_from) then raise exception 'The account cannot be folded' using errcode='22023'; end if;
  if exists(select 1 from public.plans where owner_id=p_from) then raise exception 'The account organizes events' using errcode='22023'; end if;
+ update auth.users set phone_change='', phone_change_token='', phone_change_sent_at=null where id=p_into and coalesce(phone_change,'')<>'';
  -- Add your number comes before About you, so the account may have no profile yet: it takes the name given on the web.
  insert into public.profiles(id,display_name) select p_into, display_name from public.profiles where id=p_from
   on conflict (id) do nothing;

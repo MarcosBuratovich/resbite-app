@@ -2,12 +2,15 @@
 -- docs/superpowers/plans/2026-11-17-asr-4-terms-safety-details.md, Task 1 and Decisions 1 to 4; spec C8): the Terms
 -- version the owner publishes (supabase/ops/publish-terms-version.sql, run here from its text), one acceptance record
 -- per account and version, account_access_status reporting terms_version and terms_needed, accept_terms, and the
--- sign-up tick, the three invitation answers and the fold writing the record. Nobody is refused anything for a missing
+-- sign-up tick, the three invitation answers and the fold writing the record; the fold refusing a held or leaving web
+-- account, and clearing the app account's pending number. Nobody is refused anything for a missing
 -- acceptance (the grace path, Decision 3). Synthetic identities only (prefix ac); one rolled-back block.
 -- Users ac…: 01 host (phone, profile "Host", tick 2026-10, owner of a future plan with the open link B); 02 phone only;
 -- 03 email only (an Apple or Google account), no tick; 04 phone, invited by number to 01's plan (code A); 05 a web
 -- account (phone, tick, a 2026-12 acceptance by invitation, never used the app, owns nothing); 06 an app account with
--- no acceptance; 07 suspended (a revoked grant); 10 and 11 phone only, no profile.
+-- no acceptance; 07 suspended (a revoked grant); 10 and 11 phone only, no profile. Section 8c's folds: 08 and 12 web
+-- accounts (phone, profile, tick, a 2026-12 acceptance); 09 and 13 app accounts with an email and no number, 09 with a
+-- number given at Add your number and never confirmed (447700900896), 13 with nothing pending.
 begin;
 create function pg_temp.ac(p text) returns uuid language sql immutable as $$ select ('ac000000-0000-4000-8000-0000000000'||p)::uuid $$;
 create function pg_temp.acp(p text) returns uuid language sql immutable as $$ select ('ac100000-0000-4000-8000-0000000000'||p)::uuid $$;
@@ -237,6 +240,40 @@ select private.fold_web_account(pg_temp.ac('05'),pg_temp.ac('06'));
 select pg_temp.ac_check((select (terms_version,how,accepted_at) from private.terms_acceptances where user_id=pg_temp.ac('06'))
  =('2026-12'::text,'invitation'::text,now()-interval '3 days'),'06 after the fold: '||pg_temp.ac_rows(pg_temp.ac('06')));
 select pg_temp.ac_check(pg_temp.ac_rows(pg_temp.ac('05'))='','05 kept a record after the fold: '||pg_temp.ac_rows(pg_temp.ac('05')));
+
+-- 8c. The fold clears the app account's pending number: Auth's phone_change, its code and when it was sent, set as Auth
+-- leaves them when nothing is pending. The handler's later Admin API call sets the web account's number and leaves a
+-- pending change, and the Send SMS hook texts no code to an account with a confirmed number and a different pending
+-- one. 09 sent a code to a mistyped number on Add your number, then typed the number of its web account 08. 13 has
+-- nothing pending, and the fold leaves its Auth row as it was, not even rewritten (its ctid).
+insert into auth.users(id,email,email_confirmed_at,phone,phone_confirmed_at,phone_change,phone_change_token,phone_change_sent_at) values
+ (pg_temp.ac('08'),null,null,'447700900808',now(),'','',null),
+ (pg_temp.ac('09'),'ac-09@resbite-test.invalid',now(),null,null,'447700900896','ac-token-09',now()-interval '10 minutes'),
+ (pg_temp.ac('12'),null,null,'447700900812',now(),'','',null),
+ (pg_temp.ac('13'),'ac-13@resbite-test.invalid',now(),null,null,'','',null);
+insert into public.profiles(id,display_name) values (pg_temp.ac('08'),'Fern'),(pg_temp.ac('12'),'Gale'),(pg_temp.ac('13'),'Ash');
+insert into private.age_attestations(user_id,terms_version) values (pg_temp.ac('08'),'2026-12'),(pg_temp.ac('12'),'2026-12');
+insert into private.terms_acceptances(user_id,terms_version,how) values
+ (pg_temp.ac('08'),'2026-12','invitation'),(pg_temp.ac('12'),'2026-12','invitation');
+insert into private.app_sessions(user_id) values (pg_temp.ac('09')),(pg_temp.ac('13'));
+create temporary table ac_before13 as select u.ctid as at, u::text as row from auth.users u where u.id=pg_temp.ac('13');
+select private.fold_web_account(pg_temp.ac('08'),pg_temp.ac('09'));
+select private.fold_web_account(pg_temp.ac('12'),pg_temp.ac('13'));
+select pg_temp.ac_check((select phone_change='' and phone_change_token='' and phone_change_sent_at is null from auth.users where id=pg_temp.ac('09')),
+ 'The fold left 09''s pending number: '||(select coalesce(phone_change,'null')||' '||coalesce(phone_change_token,'null')||' '
+  ||coalesce(phone_change_sent_at::text,'null') from auth.users where id=pg_temp.ac('09')));
+select pg_temp.ac_check(pg_temp.ac_rows(pg_temp.ac('09'))='2026-12:invitation' and pg_temp.ac_rows(pg_temp.ac('08'))=''
+ and (select display_name from public.profiles where id=pg_temp.ac('09'))='Fern' and not exists(select 1 from public.profiles where id=pg_temp.ac('08'))
+ and exists(select 1 from private.age_attestations where user_id=pg_temp.ac('09') and terms_version='2026-12')
+ and not exists(select 1 from private.age_attestations where user_id=pg_temp.ac('08'))
+ and (select email='ac-09@resbite-test.invalid' and phone is null from auth.users where id=pg_temp.ac('09')),
+ 'The fold into 09 did not move 08''s records, or changed 09''s Auth row beyond its pending number: 09 '||pg_temp.ac_rows(pg_temp.ac('09')));
+select pg_temp.ac_check((select u.ctid=b.at and u::text=b.row from auth.users u, ac_before13 b where u.id=pg_temp.ac('13')),
+ 'The fold wrote 13''s Auth row, which had nothing pending');
+select pg_temp.ac_check(pg_temp.ac_rows(pg_temp.ac('13'))='2026-12:invitation' and pg_temp.ac_rows(pg_temp.ac('12'))=''
+ and (select display_name from public.profiles where id=pg_temp.ac('13'))='Ash' and not exists(select 1 from public.profiles where id=pg_temp.ac('12'))
+ and exists(select 1 from private.age_attestations where user_id=pg_temp.ac('13') and terms_version='2026-12'),
+ 'The fold into 13 did not move 12''s records: 13 '||pg_temp.ac_rows(pg_temp.ac('13')));
 
 -- 9. A deleted account's records go with it.
 delete from auth.users where id=pg_temp.ac('02');

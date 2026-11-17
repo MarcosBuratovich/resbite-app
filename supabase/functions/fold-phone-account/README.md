@@ -4,7 +4,7 @@ Source-gated by `PHONE_FOLD_RELEASE_APPROVED` in `_shared/fold-release.ts` (no e
 
 When an existing account adds a phone number held by a web-only account, the app proves ownership through an isolated auth client and sends that account's access token (the foreign token). POST `{ foreign_token, phone }` with the caller's session token in `Authorization`.
 
-Order: not approved 503 (no calls); invalid caller or foreign token 401; foreign phone unconfirmed or different from `phone` 403; same user 409; caller already has a confirmed phone 409; then `public.fold_web_account(from, into)` (service role only, refuses 22023 if the web account used the app or owns a plan; PostgREST answers that with 400 and `code: "22023"`, and the handler returns 409 with nothing moved or deleted), delete the web account (404 counts as gone), set the caller's phone with `phone_confirm: true`; 200 `{ok:true}`. Any other failure of the fold, and any failure after it, is 500 with no detail.
+Order: not approved 503 (no calls); invalid caller or foreign token 401; foreign phone unconfirmed or different from `phone` 403; same user 409; caller already has a confirmed phone 409; then `public.fold_web_account(from, into)` (service role only, refuses 22023 if the web account used the app, owns a plan, is under a legal hold or has a deletion pending; PostgREST answers that with 400 and `code: "22023"`, and the handler returns 409 with nothing moved or deleted), delete the web account (404 counts as gone), set the caller's phone with `phone_confirm: true`; 200 `{ok:true}`. Any other failure of the fold, and any failure after it, is 500 with no detail.
 
 The handler compares the typed number and the web account's number by the phone key (an Argentine mobile's `549` + ten digits equals `54` + those ten), and sets the app account's phone to the web account's own verified digits. Redeploy it after `20261030130000_phone_key.sql` is applied (same deploy command below).
 
@@ -12,7 +12,7 @@ Deploy with `verify_jwt = false` (the handler verifies both tokens against `/aut
 
 Retry: the fold is idempotent and a deleted user is absent. Once the web account is deleted its foreign token no longer verifies, so a retry after a later failure (setPhone) returns 401; the app should then re-add the number through the ordinary phone flow.
 
-Database function: `public.fold_web_account(p_from, p_into)` is a single `SECURITY DEFINER` function executable only by `service_role`, with no schema grant. It deletes the folded account's live access and 18+ record after copying them, keeps its ban, and moves data but no live access to an account whose roster row is disabled.
+Database function: `public.fold_web_account(p_from, p_into)` is a single `SECURITY DEFINER` function executable only by `service_role`, with no schema grant. It deletes the folded account's live access and 18+ record after copying them, keeps its ban, and moves data but no live access to an account whose roster row is disabled. It also clears the app account's pending number (Auth's `phone_change`, with its code and when it was sent), which the later `setPhone` call would leave and the Send SMS hook would then refuse every code for (`20261117120000_terms_acceptance.sql`).
 
 Deploy command (after the migration `20261028120000_contact_invitations.sql` is applied and the constant is flipped): `supabase functions deploy fold-phone-account --no-verify-jwt`. The setting must be `verify_jwt = false`, because the foreign token is not the caller's session token; check it on the deployed function.
 
