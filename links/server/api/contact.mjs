@@ -16,9 +16,13 @@ const addressOf = (req) => {
   return "unknown";
 };
 
+// The pages send no referrer, so a browser labels its own site's form post "Origin: null": that is accepted when the
+// browser's fetch metadata says same-origin (or says nothing, as older browsers do). Any other site is refused.
 const sameOrigin = (req) => {
+  const site = req.headers?.["sec-fetch-site"];
+  if (typeof site === "string" && site !== "same-origin" && site !== "none") return false;
   const origin = req.headers?.origin;
-  if (origin === undefined) return true;
+  if (origin === undefined || origin === "null") return true;
   try {
     return new URL(origin).host === req.headers.host;
   } catch {

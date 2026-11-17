@@ -121,6 +121,17 @@ test("GET is refused, a post from another site is refused, and the trap pretends
   assert.equal(sent.length, 0);
 });
 
+test("a same-site post that browsers label Origin: null (the pages send no referrer) goes through; a cross-site one does not", async () => {
+  const sent = [], send = async (m) => sent.push(m);
+  const same = respond(); await handler(post(valid, { origin: "null", "sec-fetch-site": "same-origin" }), same, { send, ...fresh() });
+  assert.equal(same.statusCode, 303);
+  const cross = respond(); await handler(post(valid, { origin: "null", "sec-fetch-site": "cross-site" }), cross, { send, ...fresh() });
+  assert.equal(cross.statusCode, 403);
+  const crossNamed = respond(); await handler(post(valid, { "sec-fetch-site": "cross-site" }), crossNamed, { send, ...fresh() });
+  assert.equal(crossNamed.statusCode, 403);
+  assert.equal(sent.length, 1);
+});
+
 test("the sixth message in an hour from one address is refused; another address still gets through", async () => {
   const sent = [], send = async (m) => sent.push(m), limits = fresh(), codes = [];
   for (let i = 0; i < 6; i++) { const res = respond(); await handler(post(valid), res, { send, ...limits }); codes.push(res.statusCode); }

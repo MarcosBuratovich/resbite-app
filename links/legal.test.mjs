@@ -95,3 +95,12 @@ test("a page missing a required anchor is refused", async () => {
   const dir = await legalCopy((name, t) => finish(name === "privacy-notice.md" ? t.replace("## 10. If someone invited you by your number", "## 10. Invited by number") : t));
   await assert.rejects(buildLegalPages({ legalDir: dir, mode: "final" }), /privacy-notice\.md has no "#if-someone-invited-you-by-your-number"/);
 });
+
+// ---- Task 8: the read-only live check
+import { checkSite } from "./check-live.mjs";
+
+test("checkSite reports every failing path", async () => {
+  const failures = await checkSite("https://link.example", async () => new Response("nope", { status: 404 }));
+  for (const path of ["/privacy", "/terms", "/support", "/delete-account", "/support/sent", "/api/contact", "/invite"])
+    assert.ok(failures.some((f) => f.startsWith(`${path}: `)), path);
+});
