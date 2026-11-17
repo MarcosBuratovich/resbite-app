@@ -99,7 +99,7 @@ Object.assign(process.env, {
   PRIVACY_URL: "",
 });
 const dir = await mkdtemp(join(tmpdir(), "resbite-personal-"));
-const out = await generate("https://link.resbite.com", "ABCDE12345", "com.resbite.app", join(dir, "out"));
+const out = await generate("https://link.resbite.com", "ABCDE12345", "com.resbite.app", join(dir, "out"), { legal: "draft" });
 const personal = (await import(pathToFileURL(join(out, "api", "personal.mjs")).href)).default;
 const image = (await import(pathToFileURL(join(out, "api", "image.mjs")).href)).default;
 const TYPES = { ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".png": "image/png" };

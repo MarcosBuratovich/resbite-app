@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import http from "node:http";
 import { createRequire } from "node:module";
-import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { extname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -37,8 +37,7 @@ const dir = await mkdtemp(join(tmpdir(), "resbite-legal-"));
 const legalDir = join(dir, "legal");
 await (await import("node:fs/promises")).mkdir(legalDir);
 for (const name of SOURCES) await writeFile(join(legalDir, name), finish(await readFile(join(here, "../docs/legal", name), "utf8")));
-const out = await generate("https://link.resbite.com", "ABCDE12345", "com.resbite.app", join(dir, "out"));
-for (const name of ["site.css", "legal.css"]) await copyFile(join(here, "assets", name), join(out, name));
+const out = await generate("https://link.resbite.com", "ABCDE12345", "com.resbite.app", join(dir, "out"), { legal: "final", legalDir });
 const built = new Map((await buildLegalPages({ legalDir, mode: "final" })).map((p) => [p.route, p]));
 const { default: contact } = await import(pathToFileURL(join(out, "api", "contact.mjs")).href);
 const { default: personal } = await import(pathToFileURL(join(out, "api", "personal.mjs")).href);
@@ -187,16 +186,11 @@ try {
     await f.done();
   }
 
-  // 4. checkSite against this server. The footer on /invite, /i/ and /r/ and the "private testing" wording belong to
-  // Tasks 6 and 7, which this branch does not have yet: those failures, and only those, are expected until integration.
-  const failures = await checkSite(ORIGIN);
-  const pending = failures.filter((x) => /^(\/invite|\/i\/\w+|\/r\/\w+): (no footer|still says "private testing")$/.test(x));
-  const unexpected = failures.filter((x) => !pending.includes(x));
-  assert.deepEqual(unexpected, [], "checkSite failures");
-  if (pending.length) console.log(`NOTE: checkSite failures awaiting Tasks 6 and 7 (a clean run returns []): ${pending.join("; ")}`);
+  // 4. checkSite against this server returns no failure at all.
+  assert.deepEqual(await checkSite(ORIGIN), [], "checkSite failures");
 
   console.log(
-    `PASS: the four legal pages in headless Chrome at 390 and 320px (one h1, no console or CSP error, no sideways scroll, no request beyond the origin), /terms#community-rules in view; the form (Tab order name, email, topic, details, Send and never the trap field; a filled form lands on /support/sent and hands one message to privacy@resbite.com with the typed reply-to; with validation off a bad address shows the error summary, aria-invalid and keeps the typed name); checkSite on the local site${pending.length ? " (Task 6/7 items pending)" : " returns []"}.`,
+    `PASS: the four legal pages in headless Chrome at 390 and 320px (one h1, no console or CSP error, no sideways scroll, no request beyond the origin), /terms#community-rules in view; the form (Tab order name, email, topic, details, Send and never the trap field; a filled form lands on /support/sent and hands one message to privacy@resbite.com with the typed reply-to; with validation off a bad address shows the error summary, aria-invalid and keeps the typed name); checkSite on the local site returns [].`,
   );
 } finally {
   await browser?.close();
