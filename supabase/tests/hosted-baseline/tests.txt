@@ -25,3 +25,4 @@ chat-safety.sql
 open-beta.sql
 terms-acceptance.sql
 safety-extension.sql
+optional-details-removal.sql
