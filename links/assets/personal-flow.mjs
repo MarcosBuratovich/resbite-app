@@ -171,9 +171,6 @@ export function maskNumber(phone, country) {
   return `+${country} ••• ${digits.slice(-3)}`;
 }
 
-/** Only this code is swapped for the stored one in test mode (the server returns null when test mode is off). */
-export const isTestCode = (code) => code === "000000";
-
 export function initialState() {
   return {
     step: "invite",

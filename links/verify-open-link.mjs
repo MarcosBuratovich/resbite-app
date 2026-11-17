@@ -28,7 +28,7 @@ const HAPPENED = "HappenedHappenedHappen";
 const UNKNOWN = "UnknownUnknownUnknownU";
 const SAM = "447700900834";
 const ABROAD = "14155550100"; // Typed with +1: any number can answer an open link.
-const STORED_CODE = "123456";
+const SENT_CODE = "123456"; // The code the text message carried.
 const PLAN_ID = "66666666-6666-4666-8666-666666666666";
 /** Where the page keeps its session for one link code (plan 2's scheme). */
 const kept = (code) => `resbite.personal.session.${code}`;
@@ -225,10 +225,9 @@ async function fixture({ people = [], seeds = [], width = 390, locale = "en-GB" 
     if (headers.apikey !== KEY) unexpected.push(`${method} ${path} without the publishable key`);
     if (url.origin !== SUPABASE) unexpected.push(`another Supabase host: ${url.origin}`);
     if (method === "POST" && path === "/auth/v1/otp") return reply({});
-    if (method === "POST" && path === "/rest/v1/rpc/exchange_test_code") return reply(body.p_code === "000000" ? STORED_CODE : null);
     if (method === "POST" && path === "/auth/v1/verify") {
-      // Any number: the code is the one stored for whichever number asked for it.
-      if (body.type !== "sms" || body.token !== STORED_CODE || !/^\+\d{7,15}$/.test(body.phone ?? ""))
+      // Any number: the code is the one sent to whichever number asked for it.
+      if (body.type !== "sms" || body.token !== SENT_CODE || !/^\+\d{7,15}$/.test(body.phone ?? ""))
         return reply({ code: 400, error_code: "otp_expired", msg: "Token has expired or is invalid" }, 400);
       return reply(issue(account(body.phone.slice(1))));
     }
@@ -378,8 +377,8 @@ try {
   browser = await chromium.launch({ channel: process.env.RESBITE_QA_BROWSER || "chrome", headless: true });
 
   // 1. The whole path to waiting, with exact request bodies: Answer → the tick → a number from abroad (+1, sent as
-  // typed, no number check) → Change number → a UK number typed the local way (the page's 44) → 000000 exchanged for
-  // the stored code → the name and Going → request_to_join → "Waiting for Marcos" and the get-the-app block.
+  // typed, no number check) → Change number → a UK number typed the local way (the page's 44) → the sent code, verified
+  // as typed → the name and Going → request_to_join → "Waiting for Marcos" and the get-the-app block.
   const f = await fixture(),
     { page } = f;
   {
@@ -434,7 +433,7 @@ try {
     assert.ok(f.log.every((x) => x.auth === null), "no Authorization before signing in");
     await noTestCode(page, "the code step");
     const code = page.getByLabel("6-digit code", { exact: true });
-    await code.fill("000000");
+    await code.fill(SENT_CODE);
     await button(page, "Verify").click();
     // The answer step: the chip names the verified number's last two digits.
     await expect(heading(page, "Picnic in the park")).toBeVisible();
@@ -443,8 +442,7 @@ try {
     await expect(text(page, "Mon 2 Nov, 13:00 – 16:00 · Hyde Park area")).toBeVisible();
     await expect(text(page, COPY.hostSees)).toBeVisible();
     await expect(button(page, COPY.signOut)).toBeVisible();
-    assert.deepEqual(f.calls("/rest/v1/rpc/exchange_test_code").map((x) => x.body), [{ p_phone: `+${SAM}`, p_code: "000000" }]);
-    assert.deepEqual(f.calls("/auth/v1/verify").map((x) => x.body), [{ type: "sms", phone: `+${SAM}`, token: STORED_CODE }]);
+    assert.deepEqual(f.calls("/auth/v1/verify").map((x) => x.body), [{ type: "sms", phone: `+${SAM}`, token: SENT_CODE }]);
     // Looked up right after the code, with the new session: no request yet, so the answer step.
     const lookups = f.calls("/rest/v1/rpc/my_join_request");
     assert.deepEqual(lookups.map((x) => [x.body, x.auth]), [[{ p_code: CODE }, `Bearer ${[...f.state.access.keys()].at(-1)}`]]);
@@ -468,7 +466,7 @@ try {
     assert.equal(f.user(SAM).hasProfile, true, "the first request made the profile");
     assert.deepEqual(
       f.log.map((x) => x.path),
-      ["/auth/v1/otp", "/auth/v1/otp", "/rest/v1/rpc/exchange_test_code", "/auth/v1/verify", "/rest/v1/rpc/my_join_request", "/rest/v1/rpc/request_to_join"],
+      ["/auth/v1/otp", "/auth/v1/otp", "/auth/v1/verify", "/rest/v1/rpc/my_join_request", "/rest/v1/rpc/request_to_join"],
       "the whole conversation with Supabase",
     );
     // Kept under this code only (plan 2's scheme), with the full verified number and the event's end.
@@ -503,13 +501,13 @@ try {
         ],
       }),
       { page } = f;
-    /** Answer → the tick → the number, typed the local way → 000000. */
+    /** Answer → the tick → the number, typed the local way → the sent code. */
     const verifyAs = async (number) => {
       await button(page, "Answer").click();
       await page.getByRole("checkbox", { name: COPY.tick, exact: true }).check();
       await page.getByLabel("Mobile number", { exact: true }).fill(number);
       await button(page, "Send code").click();
-      await page.getByLabel("6-digit code", { exact: true }).fill("000000");
+      await page.getByLabel("6-digit code", { exact: true }).fill(SENT_CODE);
       await button(page, "Verify").click();
     };
     await page.goto(`${ORIGIN}/r/${CODE}`);
@@ -521,7 +519,7 @@ try {
     await focused(page, COPY.waiting);
     assert.deepEqual(
       f.log.map((x) => x.path),
-      ["/auth/v1/otp", "/rest/v1/rpc/exchange_test_code", "/auth/v1/verify", "/rest/v1/rpc/my_join_request"],
+      ["/auth/v1/otp", "/auth/v1/verify", "/rest/v1/rpc/my_join_request"],
       "the whole conversation: the code, then the lookup; no request_to_join",
     );
     const lookup = f.calls("/rest/v1/rpc/my_join_request")[0];
@@ -760,7 +758,7 @@ try {
   }
 
   console.log(
-    "PASS: /r/<code> in headless Chrome, open mode: Answer → the 18+ tick → a +1 number sent as typed and a UK number with the page's 44 (no number check; a country dropdown that starts at the UK, or at the browser's region: es-AR shows Argentina +54, and en, which names none, the United Kingdom +44) → 000000 exchanged then verified → the name and Going → request_to_join with exact bodies → Waiting for Marcos with the get-the-app block; on another browser, right after the code, my_join_request shows a waiting answer (no request_to_join), Not added or already in; a reload restores the waiting answer through my_join_request and changing it sends request_to_join again with no name (one request, the latest answer), as does a request made in the app (pending); Can't go while waiting is the personal page's Can't go screen, on the reply and on a reload; I have Resbite: open the app stays on the first screen; declined shows You weren't added with only Plan your own; a guest or the owner sees You're on this resbite with Open Resbite and Get Resbite; a decline or an approval landing mid-change shows the same screens; a turned-off link refuses the answer; Not you? Sign out ends the kept session; closed links keep GI1's pages and the strict CSP; no 000000 anywhere; no request beyond the page's origin and the intercepted Supabase host; nothing scrolls sideways at 320.",
+    "PASS: /r/<code> in headless Chrome, open mode: Answer → the 18+ tick → a +1 number sent as typed and a UK number with the page's 44 (no number check; a country dropdown that starts at the UK, or at the browser's region: es-AR shows Argentina +54, and en, which names none, the United Kingdom +44) → the sent code verified as typed → the name and Going → request_to_join with exact bodies → Waiting for Marcos with the get-the-app block; on another browser, right after the code, my_join_request shows a waiting answer (no request_to_join), Not added or already in; a reload restores the waiting answer through my_join_request and changing it sends request_to_join again with no name (one request, the latest answer), as does a request made in the app (pending); Can't go while waiting is the personal page's Can't go screen, on the reply and on a reload; I have Resbite: open the app stays on the first screen; declined shows You weren't added with only Plan your own; a guest or the owner sees You're on this resbite with Open Resbite and Get Resbite; a decline or an approval landing mid-change shows the same screens; a turned-off link refuses the answer; Not you? Sign out ends the kept session; closed links keep GI1's pages and the strict CSP; no 000000 anywhere; no request beyond the page's origin and the intercepted Supabase host; nothing scrolls sideways at 320.",
   );
 } finally {
   await browser?.close();

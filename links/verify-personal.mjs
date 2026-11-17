@@ -32,7 +32,7 @@ const LONG_LINK = "LongLongLongLongLongLo";
 const STALE = "StaleStaleStaleStaleSt"; // An invitation whose event has started.
 const INVITED = "447700900834";
 const OTHER = "447700900534"; // Another person's number with the same last two digits.
-const STORED_CODE = "123456";
+const SENT_CODE = "123456"; // The code the text message carried.
 const PLAN_ID = "55555555-5555-4555-8555-555555555555";
 /** Where the page keeps its session for one invitation code. */
 const kept = (code) => `resbite.personal.session.${code}`;
@@ -227,9 +227,8 @@ async function fixture({ seeds = [], width = 390 } = {}) {
       if (state.offline) return route.abort("internetdisconnected");
       return reply({});
     }
-    if (method === "POST" && path === "/rest/v1/rpc/exchange_test_code") return reply(body.p_code === "000000" ? STORED_CODE : null);
     if (method === "POST" && path === "/auth/v1/verify") {
-      if (body.type !== "sms" || body.token !== STORED_CODE || body.phone !== `+${INVITED}`)
+      if (body.type !== "sms" || body.token !== SENT_CODE || body.phone !== `+${INVITED}`)
         return reply({ code: 400, error_code: "otp_expired", msg: "Token has expired or is invalid" }, 400);
       return reply(issue(account(INVITED)));
     }
@@ -313,8 +312,9 @@ const focused = async (page, name) =>
 
 try {
   browser = await chromium.launch({ channel: process.env.RESBITE_QA_BROWSER || "chrome", headless: true });
-  // 1. The whole path: Answer → the tick → a wrong number (no code sent) → the right number → a wrong code → 000000
-  // exchanged for the stored code → the name and Going → direction A with the app store link.
+  // 1. The whole path: Answer → the tick → a wrong number (no code sent) → the right number → a wrong code → 000000,
+  // checked as typed and refused like any wrong code → the sent code → the name and Going → direction A with the app
+  // store link.
   const f = await fixture(),
     { page } = f;
   {
@@ -393,20 +393,21 @@ try {
     await button(page, "Verify").click();
     await expect(text(page, COPY.mismatch)).toBeVisible();
     await expect(code).toHaveValue("");
-    assert.equal(f.calls("/rest/v1/rpc/exchange_test_code").length, 0, "only the test code is exchanged");
-    // 000000: exchanged for the stored code, then verified with it.
+    // 000000 is no test code any more: it is checked as typed and refused like any wrong code.
     await code.fill("000000");
     await button(page, "Verify").click();
+    await expect(text(page, COPY.mismatch)).toBeVisible();
+    await expect(code).toHaveValue("");
+    // The code the text message carried: verified as typed.
+    await code.fill(SENT_CODE);
+    await button(page, "Verify").click();
     await expect(text(page, COPY.verified)).toBeVisible();
-    const exchange = f.calls("/rest/v1/rpc/exchange_test_code");
-    assert.equal(exchange.length, 1);
-    assert.deepEqual(exchange[0].body, { p_phone: "+447700900834", p_code: "000000" });
     const verifies = f.calls("/auth/v1/verify");
     assert.deepEqual(verifies.map((x) => x.body), [
       { type: "sms", phone: "+447700900834", token: "111111" },
-      { type: "sms", phone: "+447700900834", token: STORED_CODE },
+      { type: "sms", phone: "+447700900834", token: "000000" },
+      { type: "sms", phone: "+447700900834", token: SENT_CODE },
     ]);
-    assert.ok(f.log.indexOf(exchange[0]) < f.log.indexOf(verifies[1]), "the exchange comes before the verify");
     // The answer step: the event, the name, the three answers.
     await expect(heading(page, "Picnic in the park")).toBeVisible();
     await focused(page, "Picnic in the park");
@@ -686,7 +687,7 @@ try {
   }
 
   console.log(
-    "PASS: /i/<code> in headless Chrome: Answer → the 18+ tick → a wrong number (checked, no code) → the right number (Argentina chosen, then +44 typed: the dropdown follows the number; sent whole) → the name's label and helper → /otp → a wrong code → 000000 exchanged then verified with the stored code → name and Going → answer_phone_invitation → direction A (benefits, Get Resbite → app store, Not now); a reload restores the answer (refreshing an expired session first) and changing it to Can't go shows the softer screen; cancelled, happened and inactive pages have no form; Not you? Sign out (on the answer and done steps: a local logout with the token, the kept entry cleared, back to the invitation, even when the logout fails); the session is kept per code with the full verified number until the event starts, so another code's, another number's (same last two digits) and a started event's are never restored; the server still refuses a hand-edited other number; too many tries; a lost connection; focus on each step's heading; no 000000 anywhere; no request beyond the page's origin and the intercepted Supabase host; the country on its own labelled row, so the number input keeps at least 70% of its field at 390 and 320px.",
+    "PASS: /i/<code> in headless Chrome: Answer → the 18+ tick → a wrong number (checked, no code) → the right number (Argentina chosen, then +44 typed: the dropdown follows the number; sent whole) → the name's label and helper → /otp → a wrong code → 000000 checked as typed and refused like any wrong code → the sent code verified as typed → name and Going → answer_phone_invitation → direction A (benefits, Get Resbite → app store, Not now); a reload restores the answer (refreshing an expired session first) and changing it to Can't go shows the softer screen; cancelled, happened and inactive pages have no form; Not you? Sign out (on the answer and done steps: a local logout with the token, the kept entry cleared, back to the invitation, even when the logout fails); the session is kept per code with the full verified number until the event starts, so another code's, another number's (same last two digits) and a started event's are never restored; the server still refuses a hand-edited other number; too many tries; a lost connection; focus on each step's heading; no 000000 anywhere; no request beyond the page's origin and the intercepted Supabase host; the country on its own labelled row, so the number input keeps at least 70% of its field at 390 and 320px.",
   );
 } finally {
   await browser?.close();

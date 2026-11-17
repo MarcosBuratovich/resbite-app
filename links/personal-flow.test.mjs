@@ -4,6 +4,7 @@ import test from "node:test";
 // Bare "libphonenumber-js/min" does not resolve from links/ (node_modules lives under mobile/), so the path is explicit.
 import * as lib from "../mobile/node_modules/libphonenumber-js/min/index.js";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   composeNumber,
   phoneKey,
@@ -21,7 +22,6 @@ import {
   verifyError,
   sessionFrom,
   sessionExpired,
-  isTestCode,
   RESEND_DELAY_MS,
   KEPT_PREFIX,
   keptKey,
@@ -38,6 +38,7 @@ import {
   screenForReturn,
   openDoneScreen,
 } from "./assets/personal-flow.mjs";
+import * as flow from "./assets/personal-flow.mjs";
 import { GUEST_COPY } from "../mobile/src/domain/guestAccount.ts";
 import { PHONE_CODE_COPY } from "../mobile/src/services/phoneCode.ts";
 import { PHONE_COPY } from "../mobile/src/domain/phoneCopy.ts";
@@ -347,10 +348,24 @@ test("sessions: read from GoTrue's reply, with the number; expired a minute earl
   assert.equal(sessionExpired(s, 941_000), true);
 });
 
-test("only the test code is exchanged", () => {
-  assert.equal(isTestCode("000000"), true);
-  assert.equal(isTestCode("123456"), false);
-  assert.equal(isTestCode("0000000"), false);
+test("the page has no test-code path", () => {
+  assert.equal("isTestCode" in flow, false);
+  const page = readFileSync(new URL("./assets/personal.js", import.meta.url), "utf8");
+  assert.ok(!page.includes("exchange_test_code"));
+  assert.ok(!page.includes("000000"));
+});
+
+test("the code words match the Auth settings: six digits, ten minutes", () => {
+  assert.equal(PAGE_COPY.numberHint, "We’ll text you a 6-digit code.");
+  assert.equal(PAGE_COPY.confirmBody("Ana"), "Type the number Ana invited. We’ll text it a code.");
+  assert.equal(PAGE_COPY.codeBody("+44 7700 900834"), "We sent a 6-digit code to +44 7700 900834.");
+  assert.equal(verifyError(400, {}, 0, 599_999), "mismatch");
+  assert.equal(verifyError(400, {}, 0, 600_000), "expired");
+});
+
+test("a refusal from the text-message hook reaches the page as written", () => {
+  const words = "We can’t text this number. Check it, or use another number.";
+  assert.equal(sendError(422, { msg: words }), words);
 });
 
 test("Not you? Sign out goes back to the invitation from the answer and done steps, not mid-request", () => {

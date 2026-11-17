@@ -15,7 +15,6 @@ import {
   endingOf,
   errorText,
   initialState,
-  isTestCode,
   keptEntry,
   maskNumber,
   needsName,
@@ -440,13 +439,7 @@ function start(main, answerButton) {
       return;
     }
     const phone = state.phone;
-    let token = state.code;
-    // Test mode: the server swaps the test code for the one it stored, or returns null (then it is checked as typed).
-    if (isTestCode(token)) {
-      const swap = await api("/rest/v1/rpc/exchange_test_code", { p_phone: phone, p_code: token });
-      if (!swap.ok) return dispatch({ type: "fail", error: "connection" });
-      if (typeof swap.body === "string" && swap.body) token = swap.body;
-    }
+    const token = state.code;
     const reply = await api("/auth/v1/verify", { type: "sms", phone, token });
     const signedIn = reply.ok ? sessionFrom(reply.body, Date.now(), phone) : null;
     if (signedIn) {
