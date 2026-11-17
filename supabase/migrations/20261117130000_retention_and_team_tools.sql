@@ -18,7 +18,8 @@
 --
 -- Bases. A redefined function copies the body of its latest definition among the files that run before this one on
 -- hosted, and changes only the lines its comment names:
---  (none yet)
+--  - private.invite_contacts(uuid, jsonb) (section 4): 20261111160000_chat_safety.sql:580-723 (that file's sha256
+--    f8cfb5a62783528636aae2b8c461f150f8ae8f0553219d42b4b991bf66f2a2b2); no pending candidate before this one redefines it.
 --
 -- Rollback (hosted only): supabase/rollback/20261117130000_retention_and_team_tools.rollback.sql.
 
@@ -537,3 +538,282 @@ from grants g join had h on h.user_id = g.user_id
 where s.user_id = g.user_id and s.roster;
 delete from private.tester_roster;
 delete from private.invitations;
+
+-- 4. The do-not-invite list and invite_contacts.
+
+-- The do-not-invite list (D-23, LI-4, docs/compliance/data-requests.md section 10.2): a person who is not a user and
+-- objects is never invited by number again. It holds each number's keyed hash, and nothing else: no number, no name, no
+-- inviter. An entry stays until the person withdraws the objection (supabase/ops/withdraw-objection.sql). No API role
+-- may reach it; the owner-run scripts call the functions below as postgres.
+create table private.invite_objections (
+ key_hash bytea primary key,
+ objected_at timestamptz not null default now()
+);
+alter table private.invite_objections enable row level security;
+revoke all on private.invite_objections from public, anon, authenticated, service_role;
+comment on table private.invite_objections is 'resbite 20261117130000';
+
+-- A number's keyed hash (Decision 6): HMAC-SHA256 of its key (phone_key, so both spellings of an Argentine mobile are
+-- one entry) under the list's secret, which lives in Vault as invite_objection_key and never leaves the database.
+-- Without the secret it refuses with 55000 'Objection key missing'. The database's own: no role may call it.
+create function private.objection_key_hash(p_phone text) returns bytea
+language plpgsql stable security definer set search_path = '' as $$
+declare v_secret text;
+begin
+ select s.decrypted_secret into v_secret from vault.decrypted_secrets s where s.name = 'invite_objection_key';
+ if v_secret is null then
+  raise exception 'Objection key missing' using errcode = '55000';
+ end if;
+ return extensions.hmac(private.phone_key(p_phone), v_secret, 'sha256');
+end $$;
+revoke all on function private.objection_key_hash(text) from public, anon, authenticated, service_role;
+comment on function private.objection_key_hash(text) is 'resbite 20261117130000';
+
+-- The list's secret, made inside the database by the first objection (Decision 6): 32 random bytes, as hex, in Vault.
+-- Never displayed. It answers true when it made the secret, false when one was already there. Two first objections at
+-- once take turns (a transaction lock), so only one secret is made. The database's own: no role may call it.
+create function private.ensure_objection_key() returns boolean
+language plpgsql security definer set search_path = '' as $$
+begin
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('resbite invite_objection_key', 0));
+ if exists (select 1 from vault.decrypted_secrets s where s.name = 'invite_objection_key') then
+  return false;
+ end if;
+ perform vault.create_secret(pg_catalog.encode(extensions.gen_random_bytes(32), 'hex'), 'invite_objection_key',
+  'Keyed hash for the do-not-invite list');
+ return true;
+end $$;
+revoke all on function private.ensure_objection_key() from public, anon, authenticated, service_role;
+comment on function private.ensure_objection_key() is 'resbite 20261117130000';
+
+-- Whether a number is on the list. False at once while the list is empty, without reading Vault, so nothing changes
+-- for inviting until the first objection (Decision 6). The database's own: no role may call it (invite_contacts, a
+-- definer, does).
+create function private.number_objected(p_phone text) returns boolean
+language plpgsql stable security definer set search_path = '' as $$
+declare v_hash bytea;
+begin
+ if not exists (select 1 from private.invite_objections) then
+  return false;
+ end if;
+ v_hash := private.objection_key_hash(p_phone);
+ return exists (select 1 from private.invite_objections o where o.key_hash = v_hash);
+end $$;
+revoke all on function private.number_objected(text) from public, anon, authenticated, service_role;
+comment on function private.number_objected(text) is 'resbite 20261117130000';
+
+-- An objection (supabase/ops/object-number.sql, after the phone check in docs/compliance/data-requests.md section
+-- 4.3). It refuses 22023 'Invalid number' unless the number's key is an international number; makes the list's
+-- secret if there is none; lists the keyed hash (already listed: nothing new); and deletes, for every host, each
+-- invitation by number to it and each removal record of it, but those a legal hold keeps: an invitation on a series
+-- under hold, or one an account under hold sent, brought or answered (the invitations purge's rule, section 2); a
+-- removal on a series under hold, or of an account under hold. It answers {"already_listed", "invitations_deleted",
+-- "removals_deleted", "held_kept"}: counts, never the number. An invitation a host sends while this runs is not seen
+-- by it, so the script says to run it again a minute later. The database's own: no role may call it.
+create function private.record_objection(p_phone text) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+ v_key text := private.phone_key(p_phone);
+ v_listed boolean;
+ v_invitations integer;
+ v_removals integer;
+ v_kept integer;
+begin
+ if v_key !~ '^[1-9][0-9]{6,14}$' then
+  raise exception 'Invalid number' using errcode = '22023';
+ end if;
+ perform private.ensure_objection_key();
+ insert into private.invite_objections(key_hash) values (private.objection_key_hash(v_key)) on conflict do nothing;
+ v_listed := not found;
+ with removed as (
+  delete from private.phone_invitations i using public.plans p
+  where p.id = i.plan_id and i.phone = v_key
+   and not private.account_held(i.invited_by) and not private.account_held(i.brought_by)
+   and not private.account_held(i.user_id) and not private.series_under_hold(p.series_id)
+  returning 1
+ ) select count(*) into v_invitations from removed;
+ with removed as (
+  delete from private.plan_removals r
+  where r.phone = v_key and not private.account_held(r.user_id) and not private.series_under_hold(r.series_id)
+  returning 1
+ ) select count(*) into v_removals from removed;
+ select (select count(*) from private.phone_invitations i join public.plans p on p.id = i.plan_id
+   where i.phone = v_key and (private.account_held(i.invited_by) or private.account_held(i.brought_by)
+    or private.account_held(i.user_id) or private.series_under_hold(p.series_id)))
+  + (select count(*) from private.plan_removals r
+   where r.phone = v_key and (private.account_held(r.user_id) or private.series_under_hold(r.series_id)))
+  into v_kept;
+ return pg_catalog.jsonb_build_object('already_listed', v_listed, 'invitations_deleted', v_invitations,
+  'removals_deleted', v_removals, 'held_kept', v_kept);
+end $$;
+revoke all on function private.record_objection(text) from public, anon, authenticated, service_role;
+comment on function private.record_objection(text) is 'resbite 20261117130000';
+
+-- A withdrawn objection (supabase/ops/withdraw-objection.sql): the number's entry goes, and hosts may invite it by
+-- link again. It answers whether an entry went. On an empty list it answers false without reading Vault. The secret
+-- stays. The database's own: no role may call it.
+create function private.withdraw_objection(p_phone text) returns boolean
+language plpgsql security definer set search_path = '' as $$
+declare v_count integer;
+begin
+ if not exists (select 1 from private.invite_objections) then
+  return false;
+ end if;
+ delete from private.invite_objections o where o.key_hash = private.objection_key_hash(p_phone);
+ get diagnostics v_count = row_count;
+ return v_count > 0;
+end $$;
+revoke all on function private.withdraw_objection(text) from public, anon, authenticated, service_role;
+comment on function private.withdraw_objection(text) is 'resbite 20261117130000';
+
+-- invite_contacts: the chat safety body as built (20261111160000_chat_safety.sql:580-723; nothing later redefines it),
+-- create or replace, its grants and public wrapper kept, every branch as built. One change, in the phone branch's
+-- choice (chat_safety.sql:701-702): a listed number that would have taken the link path answers 'unavailable'
+-- (Decision 7): no invitation by number, no guest row, no notice. 'self', 'already' and 'app' come first and are
+-- unchanged, so a Resbite user who holds that number is still invited in the app (LI-4).
+create or replace function private.invite_contacts(p_plan uuid, p_invites jsonb) returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := private.require_tester(); v_host boolean; v_item jsonb; v_phone text; v_country text; v_code text; v_holder uuid;
+ v_kind text; v_out jsonb := '[]'::jsonb; v_user uuid; v_series uuid; v_brought uuid; v_level smallint := 1; v_may boolean;
+ v_remaining integer := 0; v_new integer := 0; v_key text; v_live private.phone_invitations; v_open boolean; v_on boolean;
+begin
+ v_host := private.is_host(p_plan,v_uid);
+ if v_host then
+  perform private.require_link_owner(p_plan);
+ else
+  -- Only someone on the resbite gets as far as its row's lock.
+  if not exists(select 1 from public.attendees a where a.plan_id=p_plan and a.user_id=v_uid) then
+   raise exception 'Not allowed to bring people here' using errcode='42501';
+  end if;
+  -- The plan's row first, then the allowance.
+  select p.status='active' and private.plan_end(p.starts_at,p.ends_at)>now() into v_open from public.plans p where p.id=p_plan for update;
+  select a.may_bring, a.level+1, a.remaining, a.level is not null into v_may, v_level, v_remaining, v_on
+   from private.bring_allowance(p_plan,v_uid) a;
+  if not coalesce(v_open,false) or not coalesce(v_on,false) then
+   raise exception 'Not allowed to bring people here' using errcode='42501';
+  end if;
+  v_may := coalesce(v_may,false);
+  v_brought := v_uid;
+ end if;
+ select series_id into v_series from public.plans where id=p_plan;
+ perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(v_uid::text,47));
+ if jsonb_typeof(p_invites) is distinct from 'array' or jsonb_array_length(p_invites)>50 then
+  raise exception 'Invalid invitations' using errcode='22023';
+ end if;
+ -- The kind of each item tells the host who is On Resbite, so invitations spend the same daily budget as lookups: the
+ -- numbers only, as an item by user looks nothing up.
+ perform private.charge_lookup(v_uid,(select count(*)::int from jsonb_array_elements(p_invites) e
+  where jsonb_typeof(e.value->'user') is distinct from 'string'));
+ for v_item in select value from jsonb_array_elements(p_invites) loop
+  if jsonb_typeof(v_item->'user')='string' then
+   -- A guest who may not bring sends no in-app invitation.
+   if not v_host and not v_may then raise exception 'Not allowed to bring people here' using errcode='42501'; end if;
+   if v_item->>'user' !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+    raise exception 'Invalid invitation' using errcode='22023';
+   end if;
+   v_user := (v_item->>'user')::uuid;
+   -- The pair's row is held while the invitation is made: a removal at the same moment goes first or waits.
+   perform 1 from public.connections where (user_a,user_b)=(least(v_uid,v_user),greatest(v_uid,v_user)) and state='connected' for share;
+   if not found or not private.user_eligible(v_user) or private.deletion_pending(v_user) then
+    raise exception 'Not a connection' using errcode='42501';
+   end if;
+   -- The person's confirmed number: the links to it are invitations of this person.
+   v_key := (select nullif(private.phone_key(u.phone),'') from auth.users u where u.id=v_user and u.phone_confirmed_at is not null);
+   if v_user=(select owner_id from public.plans where id=p_plan)
+    or exists(select 1 from public.attendees where plan_id=p_plan and user_id=v_user) then
+    v_kind := 'already';
+   else
+    if not v_host then
+     if exists(select 1 from private.plan_removals r where r.series_id=v_series and (r.user_id=v_user or r.phone=v_key))
+      or exists(select 1 from private.join_requests j where j.plan_id=p_plan and j.user_id=v_user and j.status='waiting') then
+      raise exception 'Not allowed to bring people here' using errcode='42501';
+     end if;
+     select * into v_live from private.phone_invitations where plan_id=p_plan and phone=v_key and revoked_at is null;
+    end if;
+    if not v_host and v_live.id is not null and v_live.brought_by is distinct from v_uid then
+     v_kind := 'already';
+    else
+     if not v_host and v_live.id is null then
+      v_new := v_new+1;
+      if v_new>v_remaining then raise exception 'No invites left' using errcode='22023'; end if;
+     end if;
+     v_kind := 'app';
+     insert into public.attendees(plan_id,user_id,brought_by,level) values(p_plan,v_user,v_brought,v_level) on conflict do nothing;
+     insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id)
+      values(p_plan,v_user,'invited','invited:'||p_plan||':'||v_user,v_uid) on conflict do nothing;
+     update private.phone_invitations set revoked_at=now(), code_hash=null
+      where plan_id=p_plan and phone=v_key and revoked_at is null;
+     if v_host then
+      delete from private.plan_removals where series_id=v_series and (user_id=v_user or phone=v_key);
+     end if;
+    end if;
+   end if;
+   v_out := v_out || jsonb_build_array(jsonb_build_object('user',v_user,'kind',v_kind));
+   continue;
+  end if;
+  if jsonb_typeof(v_item) is distinct from 'object' or jsonb_typeof(v_item->'phone') is distinct from 'string'
+   or jsonb_typeof(v_item->'country') is distinct from 'string' or jsonb_typeof(v_item->'code') is distinct from 'string' then
+   raise exception 'Invalid invitation' using errcode='22023';
+  end if;
+  v_phone := private.phone_key(v_item->>'phone');
+  v_country := v_item->>'country';
+  v_code := v_item->>'code';
+  if v_phone !~ '^[1-9][0-9]{6,14}$' or v_country !~ '^[1-9][0-9]{0,2}$' or v_code !~ '^[A-Za-z0-9_-]{22}$' then
+   raise exception 'Invalid invitation' using errcode='22023';
+  end if;
+  select id into v_holder from auth.users where phone = any(private.phone_variants(v_phone)) and phone_confirmed_at is not null
+   order by id = v_uid desc, phone <> v_phone desc limit 1;
+  if v_holder=v_uid or (v_holder is null and v_phone=(select private.phone_key(phone) from auth.users where id=v_uid)) then
+   v_kind := 'self';
+  elsif v_holder is not null and (v_holder=(select owner_id from public.plans where id=p_plan)
+   or exists(select 1 from public.attendees where plan_id=p_plan and user_id=v_holder)) then
+   v_kind := 'already';
+  else
+   if not v_host then
+    if exists(select 1 from private.plan_removals r where r.series_id=v_series and (r.phone=v_phone or r.user_id=v_holder))
+     or exists(select 1 from private.join_requests j where j.plan_id=p_plan and j.user_id=v_holder and j.status='waiting') then
+     raise exception 'Not allowed to bring people here' using errcode='42501';
+    end if;
+    select * into v_live from private.phone_invitations where plan_id=p_plan and phone=v_phone and revoked_at is null;
+   end if;
+   if not v_host and v_live.id is not null and v_live.brought_by is distinct from v_uid then
+    v_kind := 'already';
+   else
+    if not v_host and v_live.id is null then
+     if not v_may then raise exception 'Not allowed to bring people here' using errcode='42501'; end if;
+     v_new := v_new+1;
+     if v_new>v_remaining then raise exception 'No invites left' using errcode='22023'; end if;
+    end if;
+    if v_holder is not null and private.user_eligible(v_holder) and private.used_app(v_holder)
+     and exists(select 1 from public.profiles where id=v_holder)
+     and not exists(select 1 from private.blocks b where b.blocker_id=v_holder and b.blocked_id=v_uid) then
+     v_kind := 'app';
+     insert into public.attendees(plan_id,user_id,brought_by,level) values(p_plan,v_holder,v_brought,v_level) on conflict do nothing;
+     insert into private.notification_outbox(plan_id,recipient_id,kind,dedupe_key,actor_id)
+      values(p_plan,v_holder,'invited','invited:'||p_plan||':'||v_holder,v_uid) on conflict do nothing;
+     update private.phone_invitations set revoked_at=now(), code_hash=null
+      where plan_id=p_plan and phone=v_phone and revoked_at is null;
+    elsif private.number_objected(v_phone) then
+     v_kind := 'unavailable';
+    else
+     v_kind := 'link';
+     insert into private.phone_invitations(plan_id,phone,country,code_hash,invited_by,brought_by,level)
+      values(p_plan,v_phone,v_country,extensions.digest(v_code,'sha256'),v_uid,v_brought,v_level)
+      on conflict (plan_id,phone) do update set country=excluded.country, code_hash=excluded.code_hash, revoked_at=null,
+       user_id=case when private.phone_invitations.revoked_at is null then private.phone_invitations.user_id end,
+       answered_at=case when private.phone_invitations.revoked_at is null then private.phone_invitations.answered_at end,
+       invited_by=case when private.phone_invitations.revoked_at is null then private.phone_invitations.invited_by else excluded.invited_by end,
+       -- A host's link counts from when the host last sent it (CO-R12); a guest's sent again keeps its time.
+       created_at=case when private.phone_invitations.revoked_at is null and not v_host then private.phone_invitations.created_at else excluded.created_at end,
+       brought_by=excluded.brought_by, level=excluded.level;
+    end if;
+    if v_host then
+     delete from private.plan_removals where series_id=v_series and (phone=v_phone or user_id=v_holder);
+    end if;
+   end if;
+  end if;
+  -- A guest who may not bring only sends their own links again.
+  if not v_host and not v_may and v_kind in ('self','already') then raise exception 'Not allowed to bring people here' using errcode='42501'; end if;
+  v_out := v_out || jsonb_build_array(jsonb_build_object('phone',private.phone_digits(v_item->>'phone'),'kind',v_kind));
+ end loop;
+ return v_out;
+end $$;

@@ -8,16 +8,21 @@
 -- a group's messages go at 12 months, with the chat's figures right after; a series goes whole 12 months after it ends,
 -- never while a group still rolls; a web-only account idle for 12 months is queued for deletion, and an Auth user that
 -- confirmed nothing goes at 30 days; a hold keeps each, and the next run after its lift takes it; run_retention answers
--- twelve keys. Later slices add the do-not-invite list and the photo and cover cleanup.
+-- twelve keys. Slice 4 (Task 4): the do-not-invite list is closed to every API role; inviting needs no key while the
+-- list is empty; object-number.sql lists a number by its keyed hash (the key made in Vault by the first objection),
+-- deletes its invitations and removal records but what a hold keeps, and is safe to run twice; a listed number reads
+-- 'unavailable' where it would have taken the link path, and stores nothing, while a Resbite user with it is still
+-- invited in the app; withdraw-objection.sql takes it off. A later slice adds the photo and cover cleanup.
 -- Synthetic identities only: ids a6000000-0000-4000-8000-0000000000NN through pg_temp.a6(text), users 01 to 49 and
 -- plans 51 to 99 (each plan its own series unless it says otherwise); emails r6-NN@resbite-test.invalid; numbers
--- 4477009006NN (an account's NN is its user number; the numbers of people not on Resbite are 81 to 89). One
--- rolled-back block.
+-- 4477009006NN (an account's NN is its user number; the numbers of people not on Resbite are 81 to 89, and slice 4's
+-- 91 to 93). One rolled-back block.
 -- Users a6…: 01 Hana, held, then lifted (slice 1), hosts slice 2's resbites; 02 Ola, hosts the one-off 52; 03 Gus, a
 -- guest on 52; 04 Wen, wrote in 52's chat; 05 Rob, hosts the series the series_end checks read, held in slice 2 while
 -- the invitations are purged, then lifted; 06 Ana, 07 Ben; 08 Cal, leaving (deletion asked); 09 Ivo, held through
 -- slice 2, lifted before the last run. Slice 3: Ben and Gus held, then lifted before the last run; web accounts 10 Pia,
 -- 11 Raj, 12 Sol, 13 Tom, 14 Uma (held), 15 Val, 16 Wes, 17 Xia, 18 Yan; Auth users with no profile 20 to 24 (24 held).
+-- Slice 4: 25 Kai, on Resbite and in the app, whose number is listed.
 -- Series a6…: 51 named by a hold (no plan: a hold names a series id); 52 Ola's one-off tomorrow; 53 a one-off that
 -- ended 2 days ago; 54 a weekly running now; 55 a weekly whose current occurrence (56, repeating from 55) stopped
 -- repeating and ended 3 days ago; 57 a weekly that ended 3 days ago, stopped, its chat closed; 58 a weekly that ended 3
@@ -30,6 +35,7 @@
 -- still rolls (77 is next week's); 78 to 83 resbites that ended 13 or 11 months ago (each says which); 84 a weekly whose
 -- only occurrence ended 13 months ago, still rolling; 85 a weekly whose current occurrence (86, repeating from 85)
 -- stopped repeating and ended 13 months ago.
+-- Slice 4's: 87 Hana's one-off in 4 days; 88 Rob's one-off in 5 days, named by a hold.
 begin;
 -- A check that must hold: raises p_what when p_ok is not true (false or null).
 create function pg_temp.r6_check(p_ok boolean, p_what text) returns void language plpgsql as $$
@@ -764,5 +770,198 @@ select pg_temp.r6_check(not exists(select 1 from public.plans where id=pg_temp.a
  'run_retention: what Ben''s and Gus''s holds kept stays once they are lifted');
 select pg_temp.r6_check((select count(*) from public.plans where series_id=pg_temp.a6('76')) = 2 and pg_temp.r6_removal('76','89')
  and exists(select 1 from public.plans where id=pg_temp.a6('84')), 'run_retention: a running group went');
+
+-- Slice 4 (Task 4): the do-not-invite list.
+
+-- The cast and the records, seeded under the roll's flag. Kai (25) is on Resbite and uses the app. The number 92 has an
+-- invitation on Hana's 87 and one on Rob's 88, which a hold names, and a removal record on Hana's 60.
+select set_config('resbite.system','roll',true);
+insert into auth.users(id,phone,phone_confirmed_at) values (pg_temp.a6('25'),'447700900625',now());
+insert into public.profiles(id,display_name) values (pg_temp.a6('25'),'Kai');
+insert into private.app_sessions(user_id) values (pg_temp.a6('25'));
+insert into public.plans(id,owner_id,title,starts_at,ends_at,time_zone,place_label,categories,repeat_weeks) values
+ (pg_temp.a6('87'),pg_temp.a6('01'),'Lunch',now()+interval '4 days',now()+interval '4 days 2 hours','UTC','Cafe',array['community'],null),
+ (pg_temp.a6('88'),pg_temp.a6('05'),'Hike',now()+interval '5 days',now()+interval '5 days 2 hours','UTC','Hills',array['physical'],null);
+insert into private.legal_holds(series_id,reason,case_ref,review_on) values (pg_temp.a6('88'),'police','LE-2026-088',current_date+90);
+insert into private.phone_invitations(plan_id,phone,country,code_hash,invited_by) values
+ (pg_temp.a6('87'),'447700900692','44',extensions.digest('r6-92-87','sha256'),pg_temp.a6('01')),
+ (pg_temp.a6('88'),'447700900692','44',extensions.digest('r6-92-88','sha256'),pg_temp.a6('05'));
+insert into private.plan_removals(series_id,user_id,phone) values (pg_temp.a6('60'),null,'447700900692');
+select set_config('resbite.system','',true);
+
+-- A host's invitations by number, sent as the app sends them (signed in, as authenticated), each number with a code of
+-- its own: the answer.
+create function pg_temp.r6_invite(p_host text, p_plan text, p_phones text[]) returns jsonb language plpgsql as $$
+declare v jsonb;
+begin
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',pg_temp.a6(p_host),'role','authenticated')::text,true);
+ set local role authenticated;
+ v := public.invite_contacts(pg_temp.a6(p_plan),(select jsonb_agg(jsonb_build_object('phone',x,'country','44',
+  'code',rpad('r6'||x,22,'A')) order by o) from unnest(p_phones) with ordinality u(x,o)));
+ reset role;
+ perform set_config('request.jwt.claims','',true);
+ return v;
+end $$;
+-- An owner-run script's rows, as a JSON array (chat-safety.sql's s3_run).
+create function pg_temp.r6_run(p_sql text) returns jsonb language plpgsql as $$
+declare r record; v jsonb := '[]'::jsonb;
+begin
+ if coalesce(length(btrim(p_sql)),0)=0 then raise exception 'The script text is empty'; end if;
+ for r in execute p_sql loop v := v||jsonb_build_array(to_jsonb(r)); end loop;
+ return v;
+end $$;
+-- Whether number NN is invited to plan PP.
+create function pg_temp.r6_invited_to(p_end text, p_plan text) returns boolean language sql as $$
+ select exists(select 1 from private.phone_invitations i where i.phone='4477009006'||p_end and i.plan_id=pg_temp.a6(p_plan)) $$;
+
+-- objections_locked: no API role may touch the list or call any of the five; row security is on; each function is
+-- security definer with an empty search path, and this file's, as is the list; the keyed hash is plpgsql and stable.
+-- invite_contacts keeps its grants: authenticated only, its wrapper too.
+do $$ declare r text; f text; v pg_catalog.pg_proc;
+begin
+ foreach r in array array['public','anon','authenticated','service_role'] loop
+  perform pg_temp.r6_check(not has_table_privilege(r,'private.invite_objections','select,insert,update,delete,truncate,references,trigger'),
+   'objections_locked: '||r||' may touch the list');
+  foreach f in array array['private.objection_key_hash(text)','private.ensure_objection_key()','private.number_objected(text)',
+   'private.record_objection(text)','private.withdraw_objection(text)'] loop
+   perform pg_temp.r6_check(not has_function_privilege(r,f,'execute'), 'objections_locked: '||r||' may execute '||f);
+  end loop;
+ end loop;
+ perform pg_temp.r6_check((select c.relrowsecurity from pg_catalog.pg_class c where c.oid='private.invite_objections'::regclass),
+  'objections_locked: row security is off on the list');
+ perform pg_temp.r6_check(pg_catalog.obj_description('private.invite_objections'::regclass,'pg_class') = 'resbite 20261117130000',
+  'objections_locked: the list does not carry this file''s marker');
+ foreach f in array array['private.objection_key_hash(text)','private.ensure_objection_key()','private.number_objected(text)',
+  'private.record_objection(text)','private.withdraw_objection(text)'] loop
+  select * into v from pg_catalog.pg_proc p where p.oid = f::regprocedure;
+  perform pg_temp.r6_check(v.prosecdef and v.proconfig = array['search_path=""'],
+   'objections_locked: '||f||' is not security definer with an empty search path');
+  perform pg_temp.r6_check(pg_catalog.obj_description(f::regprocedure,'pg_proc') = 'resbite 20261117130000',
+   'objections_locked: '||f||' does not carry this file''s marker');
+ end loop;
+ select * into v from pg_catalog.pg_proc p where p.oid = 'private.objection_key_hash(text)'::regprocedure;
+ perform pg_temp.r6_check(v.provolatile = 's' and v.prolang = (select l.oid from pg_catalog.pg_language l where l.lanname = 'plpgsql'),
+  'objections_locked: objection_key_hash is not plpgsql and stable');
+ foreach f in array array['public.invite_contacts(uuid,jsonb)','private.invite_contacts(uuid,jsonb)'] loop
+  perform pg_temp.r6_check(has_function_privilege('authenticated',f,'execute') and not has_function_privilege('anon',f,'execute')
+   and not has_function_privilege('service_role',f,'execute') and not has_function_privilege('public',f,'execute'),
+   'objections_locked: '||f||' is not executable by authenticated only');
+ end loop;
+end $$;
+
+-- objection_empty: no key in Vault and nothing on the list. A number is not listed, and inviting it never needs the
+-- key: the host's invitation takes the link path as before. The keyed hash itself refuses without the key.
+delete from vault.secrets where name='invite_objection_key';
+select pg_temp.r6_check(not exists(select 1 from private.invite_objections), 'objection_empty: fixture: the list is not empty');
+select pg_temp.r6_check(private.number_objected('447700900691') is false, 'objection_empty: a number is listed on an empty list');
+do $$ declare v_state text; v_msg text;
+begin
+ begin
+  perform private.objection_key_hash('447700900691');
+ exception when others then
+  get stacked diagnostics v_state = returned_sqlstate, v_msg = message_text;
+ end;
+ perform pg_temp.r6_check(v_state = '55000' and v_msg = 'Objection key missing',
+  'objection_empty: the keyed hash without a key did not refuse with 55000 ''Objection key missing'': '
+  ||coalesce(v_state,'no error')||' '||coalesce(v_msg,''));
+end $$;
+do $$ declare v jsonb := pg_temp.r6_invite('01','87',array['447700900691']);
+begin
+ perform pg_temp.r6_check(v = '[{"phone": "447700900691", "kind": "link"}]'::jsonb, 'objection_empty: the invitation did not read link: '||v::text);
+ perform pg_temp.r6_check(pg_temp.r6_invited_to('91','87'), 'objection_empty: the invitation by link was not stored');
+end $$;
+
+-- object_number: object-number.sql, its literal swapped, lists 92. It deletes the invitation on 87 and the removal on
+-- 60, keeps the one on the held 88, and makes the key: one secret in Vault, one row on the list, and that row is the
+-- number's keyed hash, not the number nor its plain hash.
+\set r6_object `sed -e "s/'447700900000'/'447700900692'/" :'resbite_repo'/supabase/ops/object-number.sql`
+select pg_temp.r6_check(position('''447700900692''' in :'r6_object') > 0, 'object_number: the script''s literal was not swapped');
+select set_config('r6.out',pg_temp.r6_run(:'r6_object')::text,true);
+select pg_temp.r6_check(current_setting('r6.out')::jsonb = '[{"result": {"already_listed": false, "invitations_deleted": 1,
+  "removals_deleted": 1, "held_kept": 1}}]'::jsonb, 'object_number: the first run answered '||current_setting('r6.out'));
+select pg_temp.r6_check((select count(*) from vault.secrets where name='invite_objection_key') = 1
+ and (select count(*) from private.invite_objections) = 1, 'object_number: not one secret and one listed row');
+select pg_temp.r6_check((select o.key_hash <> extensions.digest('447700900692','sha256') and position('447700900692'::bytea in o.key_hash) = 0
+  and o.key_hash = extensions.hmac('447700900692',(select s.secret from vault.secrets s where s.name='invite_objection_key'),'sha256')
+  from private.invite_objections o), 'object_number: the listed row is not the number''s keyed hash, or holds the number');
+select pg_temp.r6_check(not pg_temp.r6_invited_to('92','87') and pg_temp.r6_invited_to('92','88') and not pg_temp.r6_removal('60','92'),
+ 'object_number: the invitation on 87 or the removal on 60 stays, or the one on the held 88 went');
+select pg_temp.r6_check(pg_temp.r6_invited_to('91','87'), 'object_number: another number''s invitation went');
+select pg_temp.r6_check(private.number_objected('+44 7700 900692') and not private.number_objected('447700900693'),
+ 'object_number: the number (as typed) is not listed, or another one is');
+select pg_temp.r6_check(private.ensure_objection_key() is false and (select count(*) from vault.secrets where name='invite_objection_key') = 1,
+ 'object_number: the key was made again');
+-- Run again: already listed, nothing deleted, still one row and one secret.
+select set_config('r6.out',pg_temp.r6_run(:'r6_object')::text,true);
+select pg_temp.r6_check(current_setting('r6.out')::jsonb = '[{"result": {"already_listed": true, "invitations_deleted": 0,
+  "removals_deleted": 0, "held_kept": 1}}]'::jsonb, 'object_number: the second run answered '||current_setting('r6.out'));
+select pg_temp.r6_check((select count(*) from vault.secrets where name='invite_objection_key') = 1
+ and (select count(*) from private.invite_objections) = 1, 'object_number: the second run changed the secret or the list');
+
+-- listed_unavailable: Hana invites 92 and 93 on 87. 92, listed, reads unavailable and is stored nowhere; 93 is invited
+-- by link as before; neither has a guest row or a notice.
+do $$ declare v jsonb := pg_temp.r6_invite('01','87',array['447700900692','447700900693']);
+begin
+ perform pg_temp.r6_check(v = '[{"phone": "447700900692", "kind": "unavailable"}, {"phone": "447700900693", "kind": "link"}]'::jsonb,
+  'listed_unavailable: the answer was '||v::text);
+end $$;
+select pg_temp.r6_check(not pg_temp.r6_invited_to('92','87')
+ and (select count(*) from private.phone_invitations where phone='447700900692') = 1,
+ 'listed_unavailable: an invitation of the listed number was stored');
+select pg_temp.r6_check(pg_temp.r6_invited_to('93','87'), 'listed_unavailable: the other number''s invitation was not stored');
+select pg_temp.r6_check(not exists(select 1 from public.attendees where plan_id=pg_temp.a6('87'))
+ and not exists(select 1 from private.notification_outbox where plan_id=pg_temp.a6('87')),
+ 'listed_unavailable: a guest row or a notice was made on 87');
+
+-- listed_user (LI-4): Kai's number is listed (record_objection, as the script calls it), and Hana invites it: Kai is
+-- on Resbite and in the app, so Kai is invited in the app, with a guest row and a notice.
+select set_config('r6.out',private.record_objection('447700900625')::text,true);
+select pg_temp.r6_check(current_setting('r6.out')::jsonb = '{"already_listed": false, "invitations_deleted": 0,
+  "removals_deleted": 0, "held_kept": 0}'::jsonb and private.number_objected('447700900625'),
+ 'listed_user: Kai''s number was not listed: '||current_setting('r6.out'));
+do $$ declare v jsonb := pg_temp.r6_invite('01','87',array['447700900625']);
+begin
+ perform pg_temp.r6_check(v = '[{"phone": "447700900625", "kind": "app"}]'::jsonb, 'listed_user: the answer was '||v::text);
+end $$;
+select pg_temp.r6_check(exists(select 1 from public.attendees where plan_id=pg_temp.a6('87') and user_id=pg_temp.a6('25') and response='pending')
+ and exists(select 1 from private.notification_outbox where plan_id=pg_temp.a6('87') and recipient_id=pg_temp.a6('25') and kind='invited')
+ and not pg_temp.r6_invited_to('25','87'), 'listed_user: Kai has no guest row or notice on 87, or a link invitation');
+
+-- withdraw_objection: withdraw-objection.sql, its literal swapped, takes 92 off; Hana's next invitation of it takes the
+-- link path again. Run again, it removes nothing. Kai's entry is untouched.
+\set r6_withdraw `sed -e "s/'447700900000'/'447700900692'/" :'resbite_repo'/supabase/ops/withdraw-objection.sql`
+select pg_temp.r6_check(position('''447700900692''' in :'r6_withdraw') > 0, 'withdraw_objection: the script''s literal was not swapped');
+select set_config('r6.out',pg_temp.r6_run(:'r6_withdraw')::text,true);
+select pg_temp.r6_check(current_setting('r6.out')::jsonb = '[{"removed": true}]'::jsonb,
+ 'withdraw_objection: the first run answered '||current_setting('r6.out'));
+select pg_temp.r6_check(not private.number_objected('447700900692') and private.number_objected('447700900625')
+ and (select count(*) from private.invite_objections) = 1, 'withdraw_objection: 92 is still listed, or Kai is not');
+do $$ declare v jsonb := pg_temp.r6_invite('01','87',array['447700900692']);
+begin
+ perform pg_temp.r6_check(v = '[{"phone": "447700900692", "kind": "link"}]'::jsonb, 'withdraw_objection: the answer was '||v::text);
+ perform pg_temp.r6_check(pg_temp.r6_invited_to('92','87'), 'withdraw_objection: the invitation by link was not stored');
+end $$;
+select set_config('r6.out',pg_temp.r6_run(:'r6_withdraw')::text,true);
+select pg_temp.r6_check(current_setting('r6.out')::jsonb = '[{"removed": false}]'::jsonb,
+ 'withdraw_objection: the second run answered '||current_setting('r6.out'));
+-- Once the list is empty, a withdrawal needs no key either.
+select pg_temp.r6_check(private.withdraw_objection('447700900625'), 'withdraw_objection: Kai''s entry was not taken off');
+select pg_temp.r6_check(not exists(select 1 from private.invite_objections), 'withdraw_objection: the list is not empty');
+delete from vault.secrets where name='invite_objection_key';
+select pg_temp.r6_check(private.withdraw_objection('447700900625') is false and private.number_objected('447700900625') is false,
+ 'withdraw_objection: on an empty list with no key, a withdrawal or a check did not answer false');
+
+-- record_objection refuses what is not a number.
+select pg_temp.r6_refused($$select private.record_objection('12')$$,'22023');
+select pg_temp.r6_refused($$select private.record_objection(null)$$,'22023');
+do $$ declare v_msg text;
+begin
+ begin
+  perform private.record_objection('12');
+ exception when others then
+  get stacked diagnostics v_msg = message_text;
+ end;
+ perform pg_temp.r6_check(v_msg = 'Invalid number', 'record_objection: ''12'' was refused with '||coalesce(v_msg,'nothing'));
+end $$;
 
 rollback;

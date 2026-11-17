@@ -1,0 +1,23 @@
+-- Put a number on the do-not-invite list (App Store readiness plan 6:
+-- docs/superpowers/plans/2026-11-17-asr-6-retention-and-team-scripts.md, Task 4; D-23, LI-4).
+--
+-- OWNER-RUN, NOT A MIGRATION. For a person who is not a user and objects to being invited by number
+-- (docs/compliance/data-requests.md section 10.2), and only after the phone check in section 4.3 has passed for that
+-- number. Paste it into the hosted project's SQL editor, put the number below in the editor's copy only (its
+-- international digits, no plus or spaces), and run. Never save the edited copy, and never write the number in the
+-- repo.
+-- In one statement, so one transaction (private.record_objection), it:
+--  - makes the list's key in Vault (invite_objection_key, 32 random bytes, never shown) when this is the first
+--    objection;
+--  - lists the number's keyed hash (the number itself is never stored);
+--  - deletes every invitation by number to it and every removal record of it, for every host, except those a legal
+--    hold keeps.
+-- From then on no host can invite the number by link: Invite people reads "Can’t be invited by link". A person on
+-- Resbite with that number is still invited in the app. It prints one result: already_listed (true when the number
+-- was listed before), invitations_deleted, removals_deleted and held_kept (records a hold keeps; once the hold is
+-- lifted, run this again to delete them). Running it twice is safe.
+-- If a host was inviting at that moment, run it again a minute later: it also deletes what arrived.
+-- Then reply to the person with template R9 (data-requests.md). Do not tell them which host invited them.
+-- Edit: the number.
+with input(phone) as (values ('447700900000'))
+select private.record_objection(i.phone) as result from input i;
