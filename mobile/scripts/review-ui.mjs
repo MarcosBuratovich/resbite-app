@@ -993,9 +993,9 @@ try {
       await expect(page.getByText("Not added", { exact: true })).toBeVisible();
       await visit("account-waiting-requests", "Waiting for access");
       await open("/invite?code=AgeAgeAgeAgeAgeAgeAge6");
-      await expect(page.getByRole("checkbox", { name: "I’m 18 or over", exact: true })).toBeVisible();
+      await expect(page.getByRole("checkbox", { name: "I’m 18 or over and I accept the Terms of Use.", exact: true })).toBeVisible();
       await visit("invite-tick", "You’re invited.");
-      await page.getByRole("checkbox", { name: "I’m 18 or over", exact: true }).click();
+      await page.getByRole("checkbox", { name: "I’m 18 or over and I accept the Terms of Use.", exact: true }).click();
       await expect(button(page, "Continue")).toBeEnabled();
       await visit("invite-tick-ticked", "You’re invited.");
       await page.close();
@@ -1082,7 +1082,7 @@ try {
     const signedOut = await phonePage();
     await open(signedOut, "/auth/phone");
     await signedOut.getByLabel("Mobile number", { exact: true }).fill("07700 900834");
-    await signedOut.getByRole("checkbox", { name: "I’m 18 or over", exact: true }).click();
+    await signedOut.getByRole("checkbox", { name: "I’m 18 or over and I accept the Terms of Use.", exact: true }).click();
     await expect(button(signedOut, "Send code")).toBeEnabled();
     await visit(signedOut, "phone-signup", "Your number");
     await button(signedOut, "Send code").click();

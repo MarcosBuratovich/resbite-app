@@ -34,6 +34,15 @@ test("a note over 280 characters is refused before anything is sent", async () =
   assert.equal(calls, 1);
 });
 
+test("a blocked word in the note is said as such, not as an ended resbite", async () => {
+  const write = createGuestNoteWriter(async () => ({ data: null, error: { code: "22023", message: "Not allowed" } }));
+  await assert.rejects(write("p", "zz"), /includes a word Resbite doesn’t allow/);
+  await assert.rejects(write("p", "zz"), /^Error: That includes a word Resbite doesn’t allow\. Change it and try again\.$/);
+  // Any other 22023 is still the ended resbite.
+  const ended = createGuestNoteWriter(async () => ({ data: null, error: { code: "22023", message: "Plan unavailable" } }));
+  await assert.rejects(ended("p", "zz"), /This resbite has ended or was cancelled, so its note can’t change\.$/);
+});
+
 test("refusals and failures read as friendly errors", async () => {
   const cases: [Parameters<typeof createGuestNoteWriter>[0], RegExp][] = [
     [async () => ({ data: null, error: { code: "42501" } }), /You can’t post a note on this resbite\.$/],

@@ -43,6 +43,7 @@ import { GUEST_COPY } from "../mobile/src/domain/guestAccount.ts";
 import { PHONE_CODE_COPY } from "../mobile/src/services/phoneCode.ts";
 import { PHONE_COPY } from "../mobile/src/domain/phoneCopy.ts";
 import { INVALID_PHONE } from "../mobile/src/domain/phone.ts";
+import { SAFETY_COPY } from "../mobile/src/domain/safetyCopy.ts";
 
 test("composeNumber parses with the chosen country and returns the send form", () => {
   const rows = [
@@ -323,6 +324,12 @@ test("server errors map to the page's words", () => {
   assert.equal(rpcError(403, { code: "42501", message: "Invitation unavailable" }), "unavailable");
   assert.equal(rpcError(401, { code: "PGRST301", message: "JWT expired" }), "signedOut");
   assert.equal(rpcError(400, { code: "22023", message: "Name required" }), "nameRule");
+  // Plan 4 (C7): a name holding a blocked word is said as such, not as an invitation gone; only the exact message.
+  assert.equal(rpcError(400, { code: "22023", message: "Not allowed" }), "nameNotAllowed");
+  assert.equal(errorText("nameNotAllowed", "Ana"), "That name includes a word Resbite doesn’t allow. Try another.");
+  assert.equal(PAGE_COPY.nameNotAllowed, SAFETY_COPY.nameNotAllowed, "the web and the app say the same");
+  assert.equal(rpcError(400, { code: "22023", message: "Not allowed here" }), "unavailable");
+  assert.equal(rpcError(403, { code: "42501", message: "Not allowed" }), "unavailable");
   assert.equal(sendError(0, null), "connection");
   assert.equal(sendError(429, { msg: "Too many requests" }), "wait");
   assert.equal(sendError(422, { msg: "Phone signups are disabled" }), "Phone signups are disabled");

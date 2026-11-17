@@ -295,7 +295,7 @@ try {
     // The server has no 18+ tick for the account: the tick shows on the invite screen, the request waits for
     // Continue, and is sent again with the Terms version.
     await page.goto(`${base}/invite?code=${AGE}`);
-    const tick = page.getByRole("checkbox", { name: "I’m 18 or over", exact: true });
+    const tick = page.getByRole("checkbox", { name: "I’m 18 or over and I accept the Terms of Use.", exact: true });
     await expect(tick).toBeVisible();
     await expect(tick).not.toBeChecked();
     await expect(page.getByText("Resbite is for people aged 18 and over.", { exact: true })).toBeVisible();
@@ -310,12 +310,12 @@ try {
     await expect(tick).toBeChecked();
     await button(page, "Continue").click();
     await expect(heading(page, "Waiting for Stephen")).toBeVisible();
-    assert.deepEqual(state.joins[1], { p_code: AGE, p_name: "Fixture Person", p_response: "pending", p_terms_version: "2026-10" });
+    assert.deepEqual(state.joins[1], { p_code: AGE, p_name: "Fixture Person", p_response: "pending", p_terms_version: "2026-12" });
     assert.equal(state.joins.length, 2);
     await expect.poll(() => pending(page)).toBe(null);
     assert.deepEqual(errors, []);
     await page.close();
-    console.log("PASS: a request refused for a missing 18+ tick (22023 Age confirmation required) shows the inline tick with the code kept and nothing resent; Continue sends it again with p_terms_version 2026-10 and lands on /waiting.");
+    console.log("PASS: a request refused for a missing 18+ tick (22023 Age confirmation required) shows the inline tick with the code kept and nothing resent; Continue sends it again with p_terms_version 2026-12 and lands on /waiting.");
   }
   {
     const { page, errors, state } = await fixture({ signedIn: false });

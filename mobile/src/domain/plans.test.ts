@@ -346,6 +346,19 @@ test("a withdrawn idea says to create the resbite on its own", async () => {
   });
 });
 
+test("a blocked word is said as such and the save is certain", async () => {
+  const write: PlanWrite = { id: plan.id, activityId: null, details };
+  const g = gateway({ create: async () => { throw { code: "22023", message: "Not allowed" }; } });
+  await assert.rejects(writePlan(g, write), (e: unknown) =>
+    e instanceof PlanSaveError && e.message === "That includes a word Resbite doesn’t allow. Change it and try again." && !e.uncertain);
+  // An edit too (the title, the description, or the Meeting details' note), and never the ended-resbite line.
+  assert.deepEqual(await refusal("22023", "Not allowed", 3), {
+    message: "That includes a word Resbite doesn’t allow. Change it and try again.",
+    uncertain: false,
+    reason: undefined,
+  });
+});
+
 test("the save messages speak of the resbite and the host's changes, never a draft", async () => {
   assert.equal(
     (await refusal("22023", "Plan unavailable")).message,

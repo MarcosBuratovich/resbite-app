@@ -69,8 +69,12 @@
 //   gr9 a can't-go line taken back (state deleted) leaves the open screen by the signal; "Sol joined" stays (Decision 6)
 // Report, block and the chat rules (chat plan 3, Task 5). Every scenario's chat reads its people through the resbite's
 // own reads (useEvent: the plan, its guests, the connection states and my_blocks, here [] unless a scenario blocks).
-//   s1  a long-press on Leo's message → Report message: four radios, Send report disabled with the hint "Pick a reason
-//       to send the report."; Spam → report_message { p_id, p_reason: "spam", p_details: null }, then the thanks
+//   s1  a long-press on Leo's message → Report message: seven radios in order (plan 4: Illegal or dangerous, Child
+//       safety, Intimate image shared without consent, then the four of plan 3), Send report disabled with the hint
+//       "Pick a reason to send the report."; Spam → report_message { p_id, p_reason: "spam", p_details: null }, then the
+//       thanks with "We review reports every day." under it (AS-R9)
+//   s1b plan 4: at 320 px under Larger Text with the text at 200 %, the longest reason's text stays inside the sheet,
+//       Send report scrolls into view and sends p_reason "intimate_image", and the review time sits under the thanks
 //   s2  the same answered offline: the sheet stays, the typed details stay, and the error line shows
 //   s3  no Report message on one's own message, nor on a system line
 //   s4  the menu → Report or block → Leo → Block Leo: the confirm's words; block_user { p_user, p_block: true }, then
@@ -80,8 +84,9 @@
 //       bubbles are back (B3); /guests' Unblock stands in while /blocked-people (Task 6) isn't in this build
 //   s5  a host blocking a guest reads the host's confirm, with owner question R-Q6's line
 //   s6  a tap on an author's name → Block → confirm: focus lands on "Blocked" (G-N7)
-//   s7  rules_accepted false: Send opens Chat rules; Cancel sends nothing and keeps the words; I agree calls
-//       accept_chat_rules, then send_message once
+//   s7  rules_accepted false: Send opens Chat rules, with "Read the full community rules" (at least 44 px tall) opening
+//       https://link.resbite.com/terms#community-rules outside the app (plan 4); Cancel sends nothing and keeps the
+//       words; I agree calls accept_chat_rules, then send_message once
 //   s7b send_message refused 'Rules not accepted': "Not sent. Tap to retry.", Chat rules with the held line, no
 //       connection line; I agree sends it once with the same p_client_id
 //   s7c I agree answered offline: the sheet stays with its line and nothing is sent; a second I agree sends (I6)
@@ -2176,6 +2181,16 @@ try {
   const BLOCK_LEO = "Block Leo? You won’t see Leo’s messages, and Leo won’t know. Any connection between you ends, and unblocking won’t bring it back.";
   /** The resbite's own reads have landed: the chat's people are known. */
   const peopleRead = (f) => expect.poll(() => f.calls("my_blocks").length).toBeGreaterThan(0);
+  /** The radios' labels, in order (plan 4 decision 7). */
+  const REASONS = ["Illegal or dangerous", "Child safety", "Intimate image shared without consent", "Harassment", "Spam", "Not appropriate", "Something else"];
+  /** The thanks' second line says when reports are read (AS-R9), under the first. */
+  const reviewTimeUnderThanks = async (page) => {
+    const first = sheet(page).getByText("Thanks. The Resbite team will look at it.", { exact: true });
+    const review = sheet(page).getByText("We review reports every day.", { exact: true });
+    await expect(review).toBeVisible();
+    const [a, b] = [await first.boundingBox(), await review.boundingBox()];
+    assert.ok(a && b && b.y >= a.y + a.height - 1, `the review time is under the thanks (${a?.y}+${a?.height}, ${b?.y})`);
+  };
 
   // (s1) Report message from a long-press, as a guest: radios, a disabled Send report with its hint, then the thanks.
   {
@@ -2191,7 +2206,7 @@ try {
     await report.click();
     await expect(heading(page, "Report message")).toBeVisible();
     await expect(page.getByRole("radiogroup", { name: "What’s wrong?", exact: true })).toBeVisible();
-    await expect(sheet(page).getByRole("radio")).toHaveText(["Harassment", "Spam", "Not appropriate", "Something else"]);
+    await expect(sheet(page).getByRole("radio")).toHaveText(REASONS);
     for (const radio of await sheet(page).getByRole("radio").all()) await expect(radio).not.toBeChecked();
     const send = button(page, "Send report");
     await expect(send).toBeDisabled();
@@ -2202,6 +2217,7 @@ try {
     await expect(send).toBeEnabled();
     await send.click();
     await expect(text(page, "Thanks. The Resbite team will look at it.")).toBeVisible();
+    await reviewTimeUnderThanks(page);
     assert.deepEqual(f.calls("report_message"), [{ p_id: 103, p_reason: "spam", p_details: null }]);
     await expect.poll(() => focusedText(page)).toBe("Thanks. The Resbite team will look at it.");
     // The contact line comes with the thanks only when the build has an address (G-N10; final review M6): run with
@@ -2220,7 +2236,44 @@ try {
     await expect.poll(() => f.calls("send_message").length).toBe(1);
     await f.done();
   }
-  console.log("PASS (s1): a long-press on Leo's message offers Report message (not red): four radios, Send report disabled with the hint until Spam is picked, then report_message { p_id: 103, p_reason: \"spam\", p_details: null } and the thanks, which takes focus; the chat goes on.");
+  console.log("PASS (s1): a long-press on Leo's message offers Report message (not red): seven radios in order, Send report disabled with the hint until Spam is picked, then report_message { p_id: 103, p_reason: \"spam\", p_details: null } and the thanks, which takes focus, with We review reports every day. under it; the chat goes on.");
+
+  // (s1b) Plan 4: the longest reason at 320 px under Larger Text, the text at 200 %: inside the sheet, and Send report
+  // within reach.
+  {
+    const f = await fixture({ guests: PEOPLE, width: 320, height: 640 });
+    const { page } = f;
+    await openChat(page, "&largeText=1");
+    await page.addStyleTag({ content: '[dir="auto"] { zoom: 2; }' });
+    await longPress(leoBubble(page));
+    await button(page, "Report message").click();
+    await expect(heading(page, "Report message")).toBeVisible();
+    await expect(sheet(page).getByRole("radio")).toHaveText(REASONS);
+    const intimate = sheet(page).getByRole("radio", { name: "Intimate image shared without consent", exact: true });
+    const words = intimate.getByText("Intimate image shared without consent", { exact: true });
+    await words.scrollIntoViewIfNeeded();
+    const panel = await sheet(page).first().boundingBox();
+    const box = await words.boundingBox();
+    assert.ok(box && panel, "the radio's text and the sheet are drawn");
+    assert.ok(box.x >= panel.x - 1 && box.x + box.width <= panel.x + panel.width + 1, `the radio's text is inside the sheet (${box.x}+${box.width} in ${panel.x}+${panel.width})`);
+    assert.ok(box.x >= 0 && box.x + box.width <= 321, `the radio's text is inside 320 px (${box.x}+${box.width})`);
+    const fits = await words.evaluate((el) => el.scrollWidth <= el.clientWidth + 1);
+    assert.ok(fits, "the radio's text isn't clipped");
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= 320), "no sideways scrolling");
+    await intimate.click();
+    await expect(intimate).toBeChecked();
+    const send = button(page, "Send report");
+    await send.scrollIntoViewIfNeeded();
+    await expect(send).toBeInViewport();
+    await expect(send).toBeEnabled();
+    await send.click();
+    await expect(text(page, "Thanks. The Resbite team will look at it.")).toBeVisible();
+    await reviewTimeUnderThanks(page);
+    assert.deepEqual(f.calls("report_message"), [{ p_id: 103, p_reason: "intimate_image", p_details: null }]);
+    await f.shot("plan-4-report-320-large-text.png");
+    await f.done();
+  }
+  console.log("PASS (s1b): at 320 px under Larger Text with the text at 200 %, Intimate image shared without consent stays inside the sheet, Send report scrolls into view and sends p_reason intimate_image, and We review reports every day. sits under the thanks.");
 
   // (s2) The same, answered offline: the sheet, the reason and the typed details stay, with the error line.
   {
@@ -2515,6 +2568,16 @@ try {
     await button(page, "Send").click();
     await expect(heading(page, "Chat rules")).toBeVisible();
     await expect(text(page, "Be kind. No harassment, hate, threats or spam. Messages that break these rules are removed, and people who break them can lose their account.")).toBeVisible();
+    // Plan 4: the full rules, in the Terms, open outside the app (react-native-web's Linking.openURL calls window.open).
+    const rulesLink = visible(page.getByRole("link", { name: "Read the full community rules", exact: true }));
+    await expect(rulesLink).toBeVisible();
+    const linkBox = await rulesLink.boundingBox();
+    assert.ok(linkBox && linkBox.height >= 44, `the rules link is at least 44 px tall (${linkBox?.height})`);
+    await page.evaluate(() => (globalThis.__opened = []));
+    await rulesLink.click();
+    await expect.poll(() => page.evaluate(() => globalThis.__opened)).toEqual(["https://link.resbite.com/terms#community-rules"]);
+    await expect(heading(page, "Chat rules")).toBeVisible();
+    assert.equal(f.calls("accept_chat_rules").length, 0, "the link agrees to nothing");
     await button(page, "Cancel").click();
     await expect(heading(page, "Chat rules")).toHaveCount(0);
     await expect(field(page)).toHaveValue("Hi all");
@@ -2531,7 +2594,7 @@ try {
     assert.equal(f.calls("send_message").length, 1);
     await f.done();
   }
-  console.log("PASS (s7): with rules_accepted false, Send opens Chat rules; Cancel sends nothing and keeps Hi all in the field; I agree calls accept_chat_rules, then send_message once.");
+  console.log("PASS (s7): with rules_accepted false, Send opens Chat rules, whose Read the full community rules (at least 44 px) opens https://link.resbite.com/terms#community-rules outside the app; Cancel sends nothing and keeps Hi all in the field; I agree calls accept_chat_rules, then send_message once.");
 
   // (s7b) The summary said agreed, the server refused: the message waits, and the rules sheet says so.
   {

@@ -7,6 +7,7 @@ import {
   type PhotoGateway,
 } from "./profilePhotoStore";
 import { fromBase64, toBase64, MAX_PHOTO_BYTES } from "./photo";
+import { SAFETY_COPY, wordsRefused } from "../domain/safetyCopy";
 export type SavedProfile = { display_name: string; avatar_path: string | null; avatar_revision: number };
 async function photoFile(scope: string) {
   if (!/^[a-zA-Z0-9-]+$/.test(scope)) throw Error("Invalid photo owner.");
@@ -60,6 +61,8 @@ export async function saveProfile(name: string, expectedAccountId: string) {
   const { error } = await withDeadline((signal) =>
     client.rpc("save_profile", { p_name: clean }).abortSignal(signal),
   );
+  // A blocked term in the name (C7): said as such; the typed name stays in the field.
+  if (wordsRefused(error)) throw Error(SAFETY_COPY.nameNotAllowed);
   if (error) throw error;
 }
 export async function capturedProfileClient(expectedAccountId: string) {

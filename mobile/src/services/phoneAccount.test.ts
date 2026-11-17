@@ -91,3 +91,17 @@ test("a newer tick replaces the older one", async () => {
   await flushAttestation(signedUp, s.d);
   assert.deepEqual(s.calls, ["2026-10"]);
 });
+
+test("flush records the server's current version when it knows one, and says what it recorded", async () => {
+  clearAttestation();
+  rememberAttestation("2026-12", "+447700900834");
+  const good = stub(false);
+  assert.equal(await flushAttestation(signedUp, good.d, "2027-01"), "2027-01");
+  assert.deepEqual(good.calls, ["2027-01"]);
+  rememberAttestation("2026-12", "+447700900834");
+  assert.equal(await flushAttestation(signedUp, good.d), "2026-12");
+  rememberAttestation("2026-12", "+447700900834");
+  assert.equal(await flushAttestation(signedUp, stub(true).d, "2027-01"), null);
+  assert.equal(await flushAttestation(someoneElse, good.d, "2027-01"), null);
+  assert.equal(await flushAttestation(signedUp, good.d), "2026-12"); // still pending after the failure
+});

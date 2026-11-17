@@ -290,7 +290,7 @@ function start(main, answerButton) {
     nameField.hidden = !needsName(s);
     if (open) verifiedChip.textContent = C.verified(endingOf(s.phone));
     for (const radio of radios) radio.checked = radio.value === s.choice;
-    setError(answerError, s.step === "answer" ? error : "", nameInput, s.error === "nameRule");
+    setError(answerError, s.step === "answer" ? error : "", nameInput, ["nameRule", "nameNotAllowed"].includes(s.error));
 
     if (open) drawJoin(s);
     else {

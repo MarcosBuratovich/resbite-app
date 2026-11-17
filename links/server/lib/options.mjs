@@ -13,7 +13,7 @@ export function pageOptions(code, env = process.env) {
     appStoreId: env.APP_STORE_ID || "",
     supabaseUrl: env.SUPABASE_URL || "",
     publishableKey: env.SUPABASE_PUBLISHABLE_KEY || "",
-    termsVersion: env.TERMS_VERSION || "2026-10",
+    termsVersion: env.TERMS_VERSION || "2026-12",
     termsUrl: env.TERMS_URL || "",
     privacyUrl: env.PRIVACY_URL || "",
   };

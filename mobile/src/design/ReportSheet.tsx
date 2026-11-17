@@ -38,11 +38,11 @@ function sayOnIos(line: string) {
 }
 
 /**
- * Report (G-N6, Decision 4), drawn inside the sheet it was opened from: what is reported, the four reasons as radios,
+ * Report (G-N6, Decision 4), drawn inside the sheet it was opened from: what is reported, the seven reasons as radios,
  * the optional line of up to 500 characters, and Send report, disabled with its hint until a reason is picked. Sent,
- * the thanks (and the contact line when the build has a support address) take its place, said aloud, and Done closes
- * it; refused or offline, the sheet stays with what was typed and says why (`safetyErrorMessage`). Reporting stops
- * nothing else: the reporter goes on using the chat.
+ * the thanks, when reports are read (and the contact line when the build has a support address) take its place, said
+ * aloud, and Done closes it; refused or offline, the sheet stays with what was typed and says why
+ * (`safetyErrorMessage`). Reporting stops nothing else: the reporter goes on using the chat.
  */
 export function ReportSheet({
   target,

@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import type { ChatNames } from "../services/chat";
 import {
   SAFETY_COPY as S,
@@ -13,6 +14,7 @@ import {
   shownName,
   supportAddress,
   thanksLines,
+  wordsRefused,
   type ReportTarget,
 } from "./safetyCopy";
 
@@ -29,9 +31,19 @@ test("the report sheet's words read exactly", () => {
   assert.equal(S.reportPerson("Leo"), "Report Leo");
   assert.equal(S.reportOrBlock, "Report or block");
   assert.equal(S.why, "What’s wrong?");
-  assert.deepEqual(S.reasons, { harassment: "Harassment", spam: "Spam", inappropriate: "Not appropriate", other: "Something else" });
-  // The radios' order is the reasons' own (Decision 4).
-  assert.deepEqual(Object.keys(S.reasons), ["harassment", "spam", "inappropriate", "other"]);
+  // Plan 4 (B7, UGC-10): the three priority reasons first, then the four of chat plan 3.
+  assert.deepEqual(S.reasons, {
+    illegal: "Illegal or dangerous",
+    child_safety: "Child safety",
+    intimate_image: "Intimate image shared without consent",
+    harassment: "Harassment",
+    spam: "Spam",
+    inappropriate: "Not appropriate",
+    other: "Something else",
+  });
+  // The radios' order is the reasons' own (Decision 4; plan 4 decision 7).
+  assert.deepEqual(Object.keys(S.reasons), ["illegal", "child_safety", "intimate_image", "harassment", "spam", "inappropriate", "other"]);
+  assert.equal(S.reasons.intimate_image, "Intimate image shared without consent");
   assert.equal(S.detailsLabel, "Anything else? (optional)");
   assert.equal(S.sendReport, "Send report");
   assert.equal(S.pickReason, "Pick a reason to send the report.");
@@ -127,12 +139,45 @@ test("supportAddress: trimmed, and null when unset, blank or not an address (G-N
   assert.equal(supportAddress("help@mail.x.example"), "help@mail.x.example");
 });
 
-test("thanksLines: the thanks, and the contact line only with an address (G-N10)", () => {
-  assert.deepEqual(thanksLines(null), ["Thanks. The Resbite team will look at it."]);
+test("thanksLines: the thanks, when reports are read, and the contact line only with an address (G-N10, AS-R9)", () => {
+  assert.equal(S.reviewTime, "We review reports every day.");
+  assert.deepEqual(thanksLines(null), ["Thanks. The Resbite team will look at it.", "We review reports every day."]);
+  assert.equal(thanksLines("help@x.example").length, 3);
   assert.deepEqual(thanksLines("help@x.example"), [
     "Thanks. The Resbite team will look at it.",
+    "We review reports every day.",
     "Questions, or something wrong in a chat? Write to help@x.example.",
   ]);
+});
+
+test("a blocked term outside chat has its own words, for a name and for a resbite's text (plan 4 decision 10)", () => {
+  assert.equal(S.nameNotAllowed, "That name includes a word Resbite doesn’t allow. Try another.");
+  assert.equal(S.textNotAllowed, "That includes a word Resbite doesn’t allow. Change it and try again.");
+  // The chat's own line is unchanged.
+  assert.equal(S.notAllowed, "That message can’t be sent.");
+});
+
+test("wordsRefused: only 22023 with the message Not allowed, exactly", () => {
+  assert.equal(wordsRefused({ code: "22023", message: "Not allowed" }), true);
+  assert.equal(wordsRefused({ code: "22023", message: "Chat closed" }), false);
+  assert.equal(wordsRefused({ code: "22023", message: "Not allowed to bring people here" }), false);
+  assert.equal(wordsRefused({ code: "42501", message: "Not allowed" }), false);
+  assert.equal(wordsRefused({ code: "22023" }), false);
+  assert.equal(wordsRefused(Object.assign(Error("Not allowed"), { code: "22023" })), true);
+  assert.equal(wordsRefused(null), false);
+  assert.equal(wordsRefused(undefined), false);
+  assert.equal(wordsRefused("Not allowed"), false);
+});
+
+test("the chat rules sheet links the full community rules, outside the app (community-rules-short.md sections 1 and 5)", () => {
+  assert.equal(S.rulesLink, "Read the full community rules");
+  const sheet = readFileSync(new URL("../design/ChatRulesSheet.tsx", import.meta.url), "utf8");
+  assert.ok(sheet.includes("SAFETY_COPY.rulesLink") && sheet.includes("LEGAL_URLS.communityRules") && sheet.includes("<ExternalLink"));
+  // Right after the rules themselves.
+  const rules = sheet.indexOf("<Copy>{SAFETY_COPY.rules}</Copy>");
+  const link = sheet.indexOf("<ExternalLink");
+  assert.ok(rules > 0 && link > rules, "the link follows the rules");
+  assert.equal(sheet.slice(rules + "<Copy>{SAFETY_COPY.rules}</Copy>".length, link).trim(), "");
 });
 
 test("showsReportOrBlock: hidden when nobody else is in the chat (G-N7)", () => {

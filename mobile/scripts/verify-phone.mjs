@@ -1,10 +1,16 @@
 // Phone accounts in headless Chrome: sign-up by number and code with the 18+ tick, 000000 refused as a wrong code,
-// sign-in with a number that has no account, the Add your number gate with a taken number and its Sign out, and an
-// interrupted sign-up. Every Supabase request is answered by the fixture below; any other path fails the run.
+// sign-in with a number that has no account, the Add your number gate with a taken number and its Sign out, an
+// interrupted sign-up, and (plan 4) the Accept your Terms gate. Every Supabase request is answered by the fixture
+// below; any other path fails the run.
 // auth.users.phone is digits-only ("447700900834"), so the fixtures store it that way too.
 import assert from "node:assert/strict";
+import { mkdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { button, heading } from "./qa-helpers.mjs";
+const shots = join(tmpdir(), "resbite-phone");
+await mkdir(shots, { recursive: true });
 const browser = await chromium.launch({ channel: process.env.RESBITE_QA_BROWSER || "chrome", headless: true });
 const base = process.env.RESBITE_QA_URL || "http://localhost:8081";
 const STORAGE_KEY = "sb-ewcsgvhuojxdpaspwsrx-auth-token";
@@ -19,7 +25,13 @@ const COPY = {
   noAccount: "No Resbite account uses this number yet.",
   taken:
     "This number already belongs to another Resbite account. Use a different number, or ask the Resbite team for help.",
+  tick: "I’m 18 or over and I accept the Terms of Use.",
+  ageHelper: "Resbite is for people aged 18 and over.",
+  termsHeading: "Please accept our Terms",
+  termsChanged: "Our Terms changed while you were reading. Please read them again.",
 };
+// The Terms of Use version the fixture's server reports as published (the app's TERMS_VERSION too).
+const TERMS = "2026-12";
 const jwt = (sub, exp) =>
   [
     Buffer.from('{"alg":"HS256","typ":"JWT"}').toString("base64url"),
@@ -30,9 +42,12 @@ const now = () => new Date().toISOString();
 
 /**
  * A page on a stubbed Supabase. `user` is the signed-in account (null: signed out). The account changes as the
- * app writes to it: a verified code confirms the phone, a name lands in user_metadata.
+ * app writes to it: a verified code confirms the phone, a name lands in user_metadata. `termsNeeded`: the account
+ * has yet to accept the published Terms version (`state.termsVersion`); accept_terms, like the server, records only
+ * that version and refuses any other with "Terms changed", and the sign-up tick (attest_age) records the version it
+ * carries.
  */
-async function fixture({ user = null, access = "access_pending", profile = null, width = 390 } = {}) {
+async function fixture({ user = null, access = "access_pending", profile = null, width = 390, termsNeeded = false } = {}) {
   // en-GB: deviceRegion() reads the browser locale, and "07700 900834" is a GB number.
   const context = await browser.newContext({
     viewport: { width, height: 844 },
@@ -41,11 +56,18 @@ async function fixture({ user = null, access = "access_pending", profile = null,
     timezoneId: "Europe/London",
   });
   const page = await context.newPage();
-  const state = { user, access, profile, signupId: "33333333-3333-4333-8333-333333333333" };
+  const state = { user, access, profile, termsNeeded, termsVersion: TERMS, signupId: "33333333-3333-4333-8333-333333333333" };
   const log = [],
     errors = [],
     unexpected = [];
   page.on("pageerror", (e) => errors.push(e.message));
+  // Whether the Accept your Terms heading was ever on the page, however briefly.
+  await page.addInitScript((words) => {
+    window.__sawTerms = false;
+    new MutationObserver(() => {
+      if (document.documentElement.textContent.includes(words)) window.__sawTerms = true;
+    }).observe(document, { subtree: true, childList: true, characterData: true });
+  }, COPY.termsHeading);
   page.on("console", (m) => {
     // The 400, 422 and 504 replies below are deliberate; the browser reports each one.
     if (m.type() === "error" && !/Failed to load resource: the server responded with a status of (400|422|504)/.test(m.text()))
@@ -128,9 +150,18 @@ async function fixture({ user = null, access = "access_pending", profile = null,
       state.user = null;
       return route.fulfill({ status: 204, body: "" });
     }
-    if (path === "/rest/v1/rpc/account_access_status") return reply({ account_id: state.user.id, status: state.access });
-    if (path === "/rest/v1/rpc/note_app_session" || path === "/rest/v1/rpc/attest_age")
+    if (path === "/rest/v1/rpc/account_access_status")
+      return reply({ account_id: state.user.id, status: state.access, terms_version: state.termsVersion, terms_needed: state.termsNeeded });
+    if (path === "/rest/v1/rpc/attest_age") {
+      if (body?.p_terms_version === state.termsVersion) state.termsNeeded = false;
       return route.fulfill({ status: 204, body: "" });
+    }
+    if (path === "/rest/v1/rpc/accept_terms") {
+      if (body?.p_terms_version !== state.termsVersion) return reply({ code: "22023", message: "Terms changed" }, 400);
+      state.termsNeeded = false;
+      return route.fulfill({ status: 204, body: "" });
+    }
+    if (path === "/rest/v1/rpc/note_app_session") return route.fulfill({ status: 204, body: "" });
     if (path === "/rest/v1/profiles") return reply(state.profile);
     if (path === "/rest/v1/activities") return reply([]);
     // Waiting for access lists the account's open-link requests: none here.
@@ -148,6 +179,12 @@ async function fixture({ user = null, access = "access_pending", profile = null,
     loseVerify: (next) => (lostVerify = next),
     calls: (method, path) => log.filter((x) => x.method === method && x.path === path),
     index: (predicate) => log.findIndex(predicate),
+    /** The owner publishes a new Terms version: the account has yet to accept it. */
+    publish: (version) => {
+      state.termsVersion = version;
+      state.termsNeeded = true;
+    },
+    sawTerms: () => page.evaluate(() => window.__sawTerms),
     async done() {
       assert.deepEqual(unexpected, [], "every request was one the fixture expects");
       assert.deepEqual(errors, [], "no page or console errors");
@@ -178,7 +215,7 @@ async function noTestCode(page, where) {
 
 const codeField = (page) => page.getByLabel("6-digit code", { exact: true });
 const numberField = (page) => page.getByLabel("Mobile number", { exact: true });
-const tick = (page) => page.getByRole("checkbox", { name: "I’m 18 or over", exact: true });
+const tick = (page) => page.getByRole("checkbox", { name: COPY.tick, exact: true });
 /** The six cells drawn under the code field: what the person sees. */
 const cells = (page) => codeField(page).evaluate((input) => input.previousElementSibling?.textContent ?? null);
 
@@ -279,7 +316,7 @@ try {
     await expect.poll(() => f.calls("POST", "/rest/v1/rpc/attest_age").length).toBe(1);
     const attest = f.index((x) => x.path === "/rest/v1/rpc/attest_age");
     assert.deepEqual([f.log[verify].body.phone, f.log[verify].body.type], [NUMBER, "sms"]);
-    assert.deepEqual(f.log[attest].body, { p_terms_version: "2026-10" });
+    assert.deepEqual(f.log[attest].body, { p_terms_version: TERMS });
     assert.ok(verify < attest, "verify, then attest");
     assert.deepEqual(
       f.calls("POST", "/auth/v1/verify").map((x) => x.body.token),
@@ -485,8 +522,162 @@ try {
     await f.done();
   }
 
+  // 5. Plan 4, Accept your Terms, at 320 and 390 px: an approved account with a verified number and no name that has
+  // yet to accept the published version; a version published while the screen is open; the screen's two ways out;
+  // a sign-up whose tick already accepted it; a suspended account.
+  const unnamed = (width, access = "approved") => ({
+    access,
+    width,
+    termsNeeded: true,
+    user: {
+      id: "55555555-5555-4555-8555-555555555555",
+      aud: "authenticated",
+      role: "authenticated",
+      email: "",
+      phone: DIGITS,
+      phone_confirmed_at: "2026-11-17T09:00:00Z",
+      app_metadata: { provider: "phone", providers: ["phone"] },
+      user_metadata: {},
+      created_at: "2026-11-17T09:00:00Z",
+    },
+  });
+  const accepts = (f) => f.calls("POST", "/rest/v1/rpc/accept_terms").map((x) => x.body);
+  const statusReads = (f) => f.calls("POST", "/rest/v1/rpc/account_access_status").length;
+  const fits = (page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+  for (const width of [320, 390]) {
+    // 5a. The gate, the tick, Continue: one accept_terms with the server's version, then About you.
+    {
+      const f = await fixture(unnamed(width)),
+        { page } = f;
+      await page.goto(`${base}/account`);
+      await expect(heading(page, COPY.termsHeading)).toBeVisible();
+      await expect(page).toHaveURL(/\/accept-terms$/);
+      await expect(
+        page.getByText("To use Resbite, confirm that you’re 18 or over and accept our Terms of Use. They include our community rules.", { exact: true }),
+      ).toBeVisible();
+      await expect(page.getByText(/^This is the first full version of our Terms\./)).toBeVisible();
+      await expect(page.getByRole("link", { name: "Terms of Use", exact: true })).toBeVisible();
+      await expect(page.getByRole("link", { name: "Privacy Policy", exact: true })).toBeVisible();
+      await expect(tick(page)).toBeVisible();
+      await expect(tick(page)).not.toBeChecked();
+      await expect(button(page, "Continue")).toBeDisabled();
+      // Why Continue is off is on screen (and in the button's hint on the iPhone; react-native-web drops hints).
+      await expect(page.getByText(COPY.ageHelper, { exact: true })).toBeVisible();
+      await expect(button(page, "Delete my account")).toBeVisible();
+      await expect(button(page, "Sign out")).toBeVisible();
+      assert.ok(await fits(page), `the accept screen fits ${width} px`);
+      assert.equal(await f.sawTerms(), true, "the watch below (5d, 5e) sees this screen");
+      await page.screenshot({ path: `${shots}/accept-terms-${width}.png`, fullPage: true });
+      await tick(page).click();
+      await expect(tick(page)).toBeChecked();
+      await expect(page.getByText(COPY.ageHelper, { exact: true })).toHaveCount(0);
+      await expect(button(page, "Continue")).toBeEnabled();
+      assert.deepEqual(accepts(f), [], "nothing is sent before Continue");
+      await button(page, "Continue").click();
+      await expect(heading(page, "About you")).toBeVisible();
+      await expect(page).toHaveURL(/\/about-you$/);
+      assert.deepEqual(accepts(f), [{ p_terms_version: TERMS }], "one accept, with the version the server reported");
+      assert.equal(f.state.termsNeeded, false);
+      assert.equal(f.calls("POST", "/rest/v1/rpc/attest_age").length, 0, "no sign-up tick to record");
+      await f.done();
+    }
+
+    // 5b. The owner publishes a new version while the screen is open: the old one is refused with "Terms changed",
+    // the line says so, the box is unticked and the account read again; the second Continue sends the new version.
+    {
+      const f = await fixture(unnamed(width)),
+        { page } = f;
+      await page.goto(`${base}/account`);
+      await expect(heading(page, COPY.termsHeading)).toBeVisible();
+      await tick(page).click();
+      f.publish("2027-01");
+      const before = statusReads(f);
+      await button(page, "Continue").click();
+      await expect(page.getByText(COPY.termsChanged, { exact: true })).toBeVisible();
+      await expect(tick(page)).not.toBeChecked();
+      await expect(button(page, "Continue")).toBeDisabled();
+      await expect.poll(() => statusReads(f)).toBeGreaterThan(before);
+      await expect(heading(page, COPY.termsHeading)).toBeVisible();
+      // The new version is a new text to read: focus goes back to the heading.
+      await expect.poll(() => page.evaluate(() => document.activeElement?.textContent)).toBe(COPY.termsHeading);
+      await expect(page).toHaveURL(/\/accept-terms$/);
+      assert.ok(await fits(page), `the refusal fits ${width} px`);
+      await tick(page).click();
+      await button(page, "Continue").click();
+      await expect(heading(page, "About you")).toBeVisible();
+      assert.deepEqual(accepts(f), [{ p_terms_version: TERMS }, { p_terms_version: "2027-01" }]);
+      await expect(page.getByText(COPY.termsChanged, { exact: true })).toHaveCount(0);
+      await f.done();
+    }
+
+    // 5c. The ways out: Delete my account opens Delete account; back on the screen, Sign out signs out.
+    {
+      const f = await fixture(unnamed(width)),
+        { page } = f;
+      await page.goto(`${base}/account`);
+      await expect(heading(page, COPY.termsHeading)).toBeVisible();
+      await button(page, "Delete my account").click();
+      await expect(page).toHaveURL(/\/delete-account$/);
+      await expect(heading(page, "Delete account")).toBeVisible();
+      await page.goBack();
+      await expect(heading(page, COPY.termsHeading)).toBeVisible();
+      await button(page, "Sign out").click();
+      await expect.poll(() => f.calls("POST", "/auth/v1/logout").length).toBe(1);
+      await expect(heading(page, "Get together")).toBeVisible();
+      await expect.poll(() => page.evaluate((key) => sessionStorage.getItem(key), STORAGE_KEY)).toBe(null);
+      assert.deepEqual(accepts(f), []);
+      await f.done();
+    }
+
+    // 5d. Review Focus 1: a phone sign-up with the tick, the status reporting terms_needed until attest_age records
+    // the version. The tick is recorded with the server's version, the accept screen never shows, About you does.
+    // Approved, as every confirmed new account is since open beta: only an approved account meets the Terms gate
+    // (accountGate), so an access_pending one would pass whatever the app did with the tick. The server reports a
+    // version other than the app's TERMS_VERSION, so recording the app's own version instead would show here too.
+    {
+      const f = await fixture({ width, termsNeeded: true, access: "approved" }),
+        { page } = f;
+      const SERVER_TERMS = "2027-01";
+      assert.notEqual(SERVER_TERMS, TERMS, "the server's version is not the app's");
+      f.state.termsVersion = SERVER_TERMS;
+      await page.goto(`${base}/auth/phone`);
+      await expect(heading(page, "Your number")).toBeVisible();
+      await numberField(page).fill("07700 900834");
+      await tick(page).click();
+      await button(page, "Send code").click();
+      await expect(heading(page, "Enter the code")).toBeVisible();
+      await codeField(page).fill(SENT_CODE);
+      await expect(heading(page, "About you")).toBeVisible();
+      await expect(page).toHaveURL(/\/about-you$/);
+      assert.deepEqual(
+        f.calls("POST", "/rest/v1/rpc/attest_age").map((x) => x.body),
+        [{ p_terms_version: SERVER_TERMS }],
+        "the tick is recorded as the server's version",
+      );
+      assert.deepEqual(accepts(f), [], "the sign-up tick is the acceptance");
+      assert.equal(f.state.termsNeeded, false);
+      assert.ok(f.calls("GET", "/rest/v1/profiles").length > 0, "read as an approved account");
+      assert.equal(await f.sawTerms(), false, "the accept screen never showed");
+      await f.done();
+    }
+
+    // 5e. Review Focus 5: a suspended account (access_pending) yet to accept sees its own screen, never this one.
+    {
+      const account = unnamed(width, "access_pending");
+      account.user.user_metadata = { display_name: "Sam" };
+      const f = await fixture(account),
+        { page } = f;
+      await page.goto(`${base}/account`);
+      await expect(heading(page, "Waiting for access")).toBeVisible();
+      await expect(page).toHaveURL(/\/account$/);
+      assert.equal(await f.sawTerms(), false, "the accept screen never showed");
+      assert.deepEqual(accepts(f), []);
+      await f.done();
+    }
+  }
+
   console.log(
-    "PASS: phone sign-up (the country chooser: Argentina sent with the 9, a typed +44 number switching the country; tick, invalid number, +44 number, wrong code, 000000 refused like any wrong code, the sent code → verify → attest_age, About you → name → /account), sign-in with an unknown number → Create an account, Add your number with a taken number then phone_change, Sign out from the taken refusal, a wrong code and a lost verify reply at Add your number, interrupted sign-up restored on About you, and no 000000 on any screen. All Supabase requests intercepted.",
+    "PASS: phone sign-up (the country chooser: Argentina sent with the 9, a typed +44 number switching the country; tick, invalid number, +44 number, wrong code, 000000 refused like any wrong code, the sent code → verify → attest_age, About you → name → /account), sign-in with an unknown number → Create an account, Add your number with a taken number then phone_change, Sign out from the taken refusal, a wrong code and a lost verify reply at Add your number, interrupted sign-up restored on About you, no 000000 on any screen, and Accept your Terms at 320/390 px (the gate after Add your number, the tick and one accept_terms with the server's version → About you, a version published meanwhile refused, re-read and accepted, Delete my account and Sign out, a sign-up tick that accepted already so no accept screen, a suspended account on its own screen). All Supabase requests intercepted.",
   );
 } finally {
   await browser.close();

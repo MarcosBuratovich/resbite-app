@@ -3,14 +3,17 @@ import { StyleSheet, Text, View } from "react-native";
 import { Button, Copy, ErrorNote, TextAction } from "./ui";
 import { focusHeading } from "./kit";
 import { colors as c, fonts, space } from "./tokens";
+import { ExternalLink } from "./LegalLinks";
 import { CHAT_COPY } from "../domain/chatCopy";
+import { LEGAL_URLS } from "../domain/legal";
 import { SAFETY_COPY } from "../domain/safetyCopy";
 
 /**
  * The chat rules (G-B4(d), challenge I6), drawn inside the sheet that asks: before a first message or announcement, and
  * after a send the server refused for them. "Chat rules", the line saying what waits for them when the sheet follows a
- * refusal (`held`), the rules, the line saying I agree didn't go through (`error`), then I agree and Cancel. I agree is
- * busy while its call runs, so a second tap sends nothing more.
+ * refusal (`held`), the rules, the link to the full rules in the Terms (opened outside the app), the line saying I agree
+ * didn't go through (`error`), then I agree and Cancel. I agree is busy while its call runs, so a second tap sends
+ * nothing more.
  */
 export function ChatRulesSheet({
   onAgree,
@@ -52,6 +55,7 @@ export function ChatRulesSheet({
       </Text>
       {held ? <Copy style={styles.held}>{held}</Copy> : null}
       <Copy>{SAFETY_COPY.rules}</Copy>
+      <ExternalLink title={SAFETY_COPY.rulesLink} url={LEGAL_URLS.communityRules} />
       <ErrorNote message={error ?? null} />
       <Button icon={false} title={SAFETY_COPY.agree} loading={agreeing} disabled={agreeing} onPress={() => void agree()} />
       <View style={styles.centre}>

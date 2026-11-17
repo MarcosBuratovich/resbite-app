@@ -15,9 +15,19 @@ const defaultDeps: PhoneAccountDeps = {
     const { error } = await client().rpc("note_app_session");
     if (error) throw new Error(error.message);
   },
+  // The account read awaits this call (the tick goes before the Terms gate), so it has the same 15s deadline
+  // as that read's other calls; a call cut short keeps the tick for the next refresh.
   attestAge: async (p_terms_version) => {
-    const { error } = await client().rpc("attest_age", { p_terms_version });
-    if (error) throw new Error(error.message);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    try {
+      const { error } = await client()
+        .rpc("attest_age", { p_terms_version })
+        .abortSignal(controller.signal);
+      if (error) throw new Error(error.message);
+    } finally {
+      clearTimeout(timer);
+    }
   },
 };
 
@@ -44,18 +54,24 @@ export function clearAttestation(): void {
 
 /**
  * Records the pending tick for the signed-in account when its phone is the number the tick was given
- * for. Another account leaves it pending; a failure keeps it for the next account refresh.
+ * for, as the server's current Terms version when it knows one (so a new account isn't asked to accept
+ * again), else the version the tick was given with. Resolves with the version recorded, or null when
+ * nothing was: no tick, another account (it stays pending), or a failure (kept for the next refresh).
  */
 export async function flushAttestation(
   user: { phone?: string | null } | null,
   d: PhoneAccountDeps = defaultDeps,
-): Promise<void> {
+  serverVersion: string | null = null,
+): Promise<string | null> {
   const tick = pending;
-  if (tick === null || !samePhone(user?.phone, tick.e164)) return;
+  if (tick === null || !samePhone(user?.phone, tick.e164)) return null;
+  const version = serverVersion ?? tick.termsVersion;
   try {
-    await d.attestAge(tick.termsVersion);
+    await d.attestAge(version);
     if (pending === tick) pending = null;
+    return version;
   } catch {
     // Kept for the next account refresh.
+    return null;
   }
 }

@@ -40,7 +40,7 @@ const COPY = {
   invited: "Marcos invited you",
   confirm: "Confirm it’s you",
   confirmBody: "Type the number Marcos invited. We’ll text it a code.",
-  tick: "I’m 18 or over",
+  tick: "I’m 18 or over and I accept the Terms of Use.",
   ageHelper: "Resbite is for people aged 18 and over.",
   wrongNumber: "That isn’t the number Marcos invited.",
   codeHeading: "Enter the code",

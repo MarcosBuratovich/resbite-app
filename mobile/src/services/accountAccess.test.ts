@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  afterTick,
   decodeAccountAccess,
   readAccountAccess,
   type AccountAccessAdapter,
@@ -17,10 +18,27 @@ function adapter(status: unknown = "approved"): AccountAccessAdapter {
 
 test("server access states are decoded only for the captured account", async () => {
   for (const status of ["approved", "unconfirmed", "access_pending"] as const)
-    assert.equal(await readAccountAccess(options, adapter(status)), status);
+    assert.equal((await readAccountAccess(options, adapter(status))).status, status);
   assert.throws(() => decodeAccountAccess({ account_id: "another", status: "approved" }, accountId));
   for (const value of [null, [], {}, "approved", { account_id: accountId, status: "unknown" }])
     assert.throws(() => decodeAccountAccess(value, accountId));
+});
+
+test("the Terms keys are read only when well formed; a server without them asks nothing", () => {
+  assert.deepEqual(decodeAccountAccess({ account_id: accountId, status: "approved" }, accountId),
+    { status: "approved", termsVersion: null, termsNeeded: false });
+  assert.deepEqual(decodeAccountAccess({ account_id: accountId, status: "approved", terms_version: "2026-12", terms_needed: true }, accountId),
+    { status: "approved", termsVersion: "2026-12", termsNeeded: true });
+  assert.equal(decodeAccountAccess({ account_id: accountId, status: "approved", terms_version: "2026-12", terms_needed: "true" }, accountId).termsNeeded, false);
+  assert.deepEqual(decodeAccountAccess({ account_id: accountId, status: "approved", terms_version: "1.0", terms_needed: true }, accountId),
+    { status: "approved", termsVersion: null, termsNeeded: false });
+});
+
+test("a sign-up tick recorded for the current version closes the gate; any other doesn't", () => {
+  const needed = { status: "approved" as const, termsVersion: "2026-12", termsNeeded: true };
+  assert.equal(afterTick(needed, "2026-12").termsNeeded, false);
+  assert.equal(afterTick(needed, "2026-10").termsNeeded, true);
+  assert.equal(afterTick(needed, null).termsNeeded, true);
 });
 
 test("a signed-out or replaced account cannot read or publish approval", async () => {
