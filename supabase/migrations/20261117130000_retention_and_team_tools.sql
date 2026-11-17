@@ -396,11 +396,13 @@ comment on function private.purge_chats(integer) is 'resbite 20261117130000';
 -- last 12 months. Each series is taken on its own: its plan rows in id order, then
 -- its chat row, as the account deletion and the roll take them (plan, then chat, then message: H28), without waiting
 -- (nowait), so a series another transaction is changing waits for the next run; under those locks it is checked again.
--- At most p_limit series a call; it answers how many series it deleted. The database's own: no grant.
+-- At most p_limit series a call; it answers how many plans it deleted (every occurrence of each series it took). The
+-- database's own: no grant.
 create function private.purge_plans(p_limit integer default 200) returns integer
 language plpgsql security definer set search_path = '' as $$
 declare
  v_series uuid;
+ v_rows integer;
  v_count integer := 0;
 begin
  for v_series in
@@ -417,12 +419,13 @@ begin
    continue when (private.series_end(v_series) + interval '12 months' < now()) is not true
     or private.series_under_hold(v_series);
    delete from public.plans p where p.series_id = v_series;
+   get diagnostics v_rows = row_count;
    delete from public.plan_mutes m where m.series_id = v_series;
    delete from private.series_leaves l where l.series_id = v_series;
    delete from public.chat_reads r where r.series_id = v_series;
    delete from public.chat_mutes u where u.series_id = v_series;
    delete from public.chats c where c.series_id = v_series;
-   v_count := v_count + 1;
+   v_count := v_count + v_rows;
   exception when lock_not_available then
    null;
   end;
@@ -501,17 +504,22 @@ end $$;
 revoke all on function private.purge_unconfirmed_accounts(integer) from public, anon, authenticated, service_role;
 comment on function private.purge_unconfirmed_accounts(integer) is 'resbite 20261117130000';
 
--- The one-off leftovers (Decision 10), run once, here, as data steps. Since the open beta the tester roster and the
--- legacy invitations gate nothing (20261116120000_open_beta.sql:1-4); only a disabled roster row still keeps someone
--- out (private.access_suspended, :24-30). So first each disabled roster row of an Auth user becomes a revoked grant
--- (one made, already revoked, where the account has none; a live one revoked now; a revoked one left as it was), so
--- nobody suspended that way gets back in. A suspension that disabled that row (private.suspensions, roster true) is
--- rewritten as if it had revoked the grant instead: roster false; grant_at the grant's revoked_at where this step
--- made or revoked the grant, else as it was; grant_made true where this step made the grant, else as it was. So the
--- undo at supabase/ops/suspend-account.sql:37-49 still puts back exactly what the suspension changed: it deletes a
--- grant the suspension made, gives back a live grant it revoked, and leaves an earlier ban alone. Then both tables are
--- emptied. access_suspended still reads the empty roster, and suspend-account.sql stays as it is. The rollback
--- restores neither table. private.phone_rewrites waits for the C12 decision (an owner step).
+-- The one-off leftovers (Decision 10), run once, here, as data steps. Since the open beta the tester roster no longer
+-- decides who may use the app (20261116120000_open_beta.sql:1-4), and the legacy invitations gate nothing. A roster
+-- row still counts in two ways. A disabled one keeps someone out (private.access_suspended, :24-30). An enabled one
+-- keeps an old tester on the old paths (private.granted_access, :15-22): join_by_link claims the place without the
+-- 18+ tick, request_to_join does not ask for the tick, and an approval (decide_join_request) records no grant. After
+-- this step old testers take the general path like everyone else: they tick 18+ once, and an approval records a
+-- grant (this follows from emptying the roster, Decision 10). So first each disabled roster row of an Auth user
+-- becomes a revoked grant (one made, already revoked, where the account has none; a live one revoked now; a revoked
+-- one left as it was), so nobody suspended that way gets back in. A suspension that disabled that row
+-- (private.suspensions, roster true) is rewritten as if it had revoked the grant instead: roster false; grant_at the
+-- grant's revoked_at where this step made or revoked the grant, else as it was; grant_made true where this step made
+-- the grant, else as it was. So the undo at supabase/ops/suspend-account.sql:37-49 still puts back exactly what the
+-- suspension changed: it deletes a grant the suspension made, gives back a live grant it revoked, and leaves an
+-- earlier ban alone. Then both tables are emptied. access_suspended still reads the empty roster, and
+-- suspend-account.sql stays as it is. The rollback restores neither table. private.phone_rewrites waits for the C12
+-- decision (an owner step).
 with disabled as (
  select distinct u.id as user_id from private.tester_roster r join auth.users u on r.email = lower(u.email) where not r.enabled
 ), had as (

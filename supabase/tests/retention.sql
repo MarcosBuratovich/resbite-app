@@ -28,7 +28,8 @@
 -- a weekly that began 200 days ago and still rolls (72 is next week's); 96 a series with no plan left.
 -- Slice 3's: 73 to 75 one-offs whose chats closed 91, 89 and 91 days ago; 76 a weekly that began 13 months ago and
 -- still rolls (77 is next week's); 78 to 83 resbites that ended 13 or 11 months ago (each says which); 84 a weekly whose
--- only occurrence ended 13 months ago, still rolling.
+-- only occurrence ended 13 months ago, still rolling; 85 a weekly whose current occurrence (86, repeating from 85)
+-- stopped repeating and ended 13 months ago.
 begin;
 -- A check that must hold: raises p_what when p_ok is not true (false or null).
 create function pg_temp.r6_check(p_ok boolean, p_what text) returns void language plpgsql as $$
@@ -389,6 +390,8 @@ select pg_temp.r6_check(exists(select 1 from private.suspension_history where us
 
 -- run_retention: a purge that fails gives its key null, and the others still run (rolled back to the savepoint).
 savepoint r6_failing;
+-- Its warning is expected: kept out of the run's output (the rollback to the savepoint puts the level back).
+set local client_min_messages = error;
 create or replace function private.purge_link_opens(p_limit integer default 5000) returns integer language plpgsql
 security definer set search_path = '' as $$ begin raise exception 'r6: failing on purpose'; end $$;
 select pg_temp.r6_check((select v->'link_opens' = 'null'::jsonb and jsonb_typeof(v->'suspension_history') = 'number'
@@ -460,7 +463,9 @@ insert into auth.users(id,phone,phone_confirmed_at,is_anonymous,created_at) valu
 -- and which still rolls (77 is next week's). Plans: 78 a one-off that ended 13 months ago, with one of each record the
 -- cascade takes; 79 one that ended 11 months ago; 80 one that ended 13 months ago, with held Gus as a guest; 81 and 82
 -- the web accounts' (13 and 11 months ago); 83 Yan's (11 months ago); 84 a weekly whose only occurrence ended 13 months
--- ago and which the roll has yet to carry (it still rolls: series_end is null).
+-- ago and which the roll has yet to carry (it still rolls: series_end is null); 85 a finished weekly of two
+-- occurrences, Ana a guest on each: 85 ended 13 months and a week ago, and 86, repeating from it, stopped repeating and
+-- ended 13 months ago (repeats_from chains them, so the series can only go in one statement).
 insert into public.plans(id,owner_id,title,starts_at,ends_at,time_zone,place_label,categories,repeat_weeks) values
  (pg_temp.a6('73'),pg_temp.a6('01'),'Quiz',now()-interval '93 days 2 hours',now()-interval '93 days','UTC','Pub',array['community'],null),
  (pg_temp.a6('74'),pg_temp.a6('01'),'Supper',now()-interval '91 days 2 hours',now()-interval '91 days','UTC','Hall',array['community'],null),
@@ -472,14 +477,18 @@ insert into public.plans(id,owner_id,title,starts_at,ends_at,time_zone,place_lab
  (pg_temp.a6('81'),pg_temp.a6('01'),'Talk',now()-interval '13 months 2 hours',now()-interval '13 months','UTC','Library',array['intellectual'],null),
  (pg_temp.a6('82'),pg_temp.a6('01'),'Tour',now()-interval '11 months 2 hours',now()-interval '11 months','UTC','Museum',array['intellectual'],null),
  (pg_temp.a6('83'),pg_temp.a6('18'),'Dance',now()-interval '11 months 2 hours',now()-interval '11 months','UTC','Studio',array['physical'],null),
- (pg_temp.a6('84'),pg_temp.a6('01'),'Choir club',now()-interval '13 months 2 hours',now()-interval '13 months','UTC','Hall',array['creative'],1);
+ (pg_temp.a6('84'),pg_temp.a6('01'),'Choir club',now()-interval '13 months 2 hours',now()-interval '13 months','UTC','Hall',array['creative'],1),
+ (pg_temp.a6('85'),pg_temp.a6('01'),'Run club',now()-interval '13 months 7 days 2 hours',now()-interval '13 months 7 days','UTC','Park',
+  array['physical'],1);
 insert into public.plans(id,owner_id,title,starts_at,ends_at,time_zone,place_label,categories,repeat_weeks,series_id,repeats_from) values
  (pg_temp.a6('77'),pg_temp.a6('01'),'Swim club',now()+interval '3 days',now()+interval '3 days 2 hours','UTC','Pool',array['physical'],1,
-  pg_temp.a6('76'),pg_temp.a6('76'));
+  pg_temp.a6('76'),pg_temp.a6('76')),
+ (pg_temp.a6('86'),pg_temp.a6('01'),'Run club',now()-interval '13 months 2 hours',now()-interval '13 months','UTC','Park',array['physical'],null,
+  pg_temp.a6('85'),pg_temp.a6('85'));
 insert into public.attendees(plan_id,user_id,response) values
  (pg_temp.a6('76'),pg_temp.a6('06'),'accepted'),(pg_temp.a6('77'),pg_temp.a6('06'),'pending'),(pg_temp.a6('78'),pg_temp.a6('06'),'accepted'),
  (pg_temp.a6('79'),pg_temp.a6('06'),'accepted'),(pg_temp.a6('80'),pg_temp.a6('03'),'accepted'),(pg_temp.a6('81'),pg_temp.a6('10'),'accepted'),
- (pg_temp.a6('82'),pg_temp.a6('11'),'accepted');
+ (pg_temp.a6('82'),pg_temp.a6('11'),'accepted'),(pg_temp.a6('85'),pg_temp.a6('06'),'accepted'),(pg_temp.a6('86'),pg_temp.a6('06'),'accepted');
 -- 78's records: meeting details, a co-host, a join request, a link opened once, an invitation by number, a notice, a
 -- mute, a leave; its message, read and chat mute come with the chats below.
 insert into public.plan_meeting_details(plan_id,note) values (pg_temp.a6('78'),'Gate B');
@@ -547,6 +556,11 @@ create function pg_temp.r6_chat(p_series text) returns public.chats language sql
 select pg_temp.r6_check(private.chat_is_group(pg_temp.a6('76')) and private.series_end(pg_temp.a6('76')) is null
  and private.series_end(pg_temp.a6('84')) is null and not private.chat_is_group(pg_temp.a6('73')),
  'series fixtures: 76 or 84 is not a running group, or 73 is a group');
+-- 85 is a finished series of two occurrences: its current occurrence is 86, and it ended 13 months ago.
+select pg_temp.r6_check((select count(*) from public.plans where series_id=pg_temp.a6('85')) = 2
+ and (private.current_occurrence(pg_temp.a6('85'))).id = pg_temp.a6('86')
+ and private.series_end(pg_temp.a6('85')) = (select ends_at from public.plans where id=pg_temp.a6('86')),
+ 'series fixtures: 85 is not a finished series of two occurrences whose current one is 86');
 select pg_temp.r6_check((select c.message_count=4 and c.last_message_id=pg_temp.r6_msg('r6-76-late')
   and c.pinned_message_id=pg_temp.r6_msg('r6-76-pin') from pg_temp.r6_chat('76') c), 'series fixtures: 76''s chat row is not as seeded');
 select pg_temp.r6_check((select c.message_count=3 and c.pinned_message_id=pg_temp.r6_msg('r6-73-pin') from pg_temp.r6_chat('73') c),
@@ -589,6 +603,8 @@ end $$;
 -- purge_web_accounts: without plan 2's operator deletion it refuses with 55000 and the daily run reads null for its key
 -- (the function is hidden in a savepoint when it exists; the brief's own case is the one where it is missing).
 savepoint r6_no_operator;
+-- Its warning is expected: kept out of the run's output (the rollback to the savepoint puts the level back).
+set local client_min_messages = error;
 do $$ begin
  if pg_catalog.to_regprocedure('private.operator_account_deletion(uuid)') is not null then
   alter function private.operator_account_deletion(uuid) rename to r6_operator_hidden;
@@ -642,9 +658,10 @@ select pg_temp.r6_check(exists(select 1 from auth.users where id=pg_temp.a6('23'
 select pg_temp.r6_check(exists(select 1 from auth.users where id=pg_temp.a6('24')), 'unconfirmed: a held one goes');
 
 -- purge_plans: 12 months after the series ends, the whole series and everything on it; never a running group, nor a
--- series under hold. 78 and 81 (whose only guest, Pia, has just been deleted) go.
+-- series under hold. It answers plans, not series: 78 and 81 (whose only guest, Pia, has just been deleted) and both
+-- occurrences of the finished weekly 85 go, four plans in three series.
 create temp table r6_before as select (select count(*) from private.link_opens) as opens;
-select pg_temp.r6_check(private.purge_plans() = 2, 'plans: the run did not answer 2');
+select pg_temp.r6_check(private.purge_plans() = 4, 'plans: the run did not answer 4 (plans, not series)');
 select pg_temp.r6_check(not exists(select 1 from public.plans where series_id in (pg_temp.a6('78'),pg_temp.a6('81'))),
  'plans: a one-off that ended 13 months ago stays');
 select pg_temp.r6_check(not exists(select 1 from public.attendees where plan_id=pg_temp.a6('78'))
@@ -661,6 +678,10 @@ select pg_temp.r6_check(not exists(select 1 from public.plan_mutes where series_
  and not exists(select 1 from public.chat_mutes where series_id=pg_temp.a6('78'))
  and not exists(select 1 from public.chats where series_id=pg_temp.a6('78')),
  'plans: a mute, leave, chat read, chat mute or the chat row of 78 stays');
+select pg_temp.r6_check(not exists(select 1 from public.plans where series_id=pg_temp.a6('85'))
+ and not exists(select 1 from public.attendees where plan_id in (pg_temp.a6('85'),pg_temp.a6('86')))
+ and not exists(select 1 from public.chats where series_id=pg_temp.a6('85')),
+ 'plans: an occurrence, guest or the chat row of the finished weekly 85 (86 repeating from 85) stays');
 select pg_temp.r6_check(exists(select 1 from public.plans where id=pg_temp.a6('79')) and (pg_temp.r6_chat('79')).series_id is not null,
  'plans: a one-off that ended 11 months ago goes');
 select pg_temp.r6_check((select count(*) from public.plans where series_id=pg_temp.a6('76')) = 2
