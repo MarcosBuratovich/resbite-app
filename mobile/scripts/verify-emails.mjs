@@ -21,8 +21,9 @@ try {
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`${name} overflow at ${width}`);
    assert.equal(await page.locator('h1').count(),1);
    const links=await page.locator('a').evaluateAll(elements=>elements.map(x=>x.getAttribute('href')));
-   assert.equal(links.length,name==='email-code'?0:2);
-   assert.ok(links.every(x=>x.startsWith('https://example.invalid/auth/verify?')));
+   assert.equal(links.length,name==='email-code'?1:3);
+   assert.ok(links.every(x=>x.startsWith('https://example.invalid/auth/verify?')||x==='https://link.resbite.com/privacy'));
+   assert.equal(links.filter(x=>x==='https://link.resbite.com/privacy').length,1);
    await page.screenshot({path:`${output}/${name}-${width}.png`,fullPage:true});
    await page.close();
   }

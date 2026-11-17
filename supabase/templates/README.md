@@ -26,3 +26,11 @@ Owner requested deployment of all prepared branded emails. Recovery was saved to
 All three prepared branded templates are now deployed, superseding the earlier local-only status. Other Supabase templates and notification toggles were not changed. No email was sent, no credentials changed, and no deletion or additional tester access was enabled. Live inbox/link/code acceptance remains pending.
 
 GI2 (21 October 2026, local until the owner pastes it at rollout): `confirmation.html` now also shows the six-digit `{{ .Token }}` under its link, because guests sign up with `signInWithOtp`, which sends the **Confirm sign up** template (not **Magic link or OTP**) to a new or unconfirmed address; password sign-ups see the code too, harmlessly.
+
+## App Store readiness, 17 November 2026
+
+- The line "Resbite is currently a private test. Confirming your email does not automatically grant tester access." is gone from `confirmation.html`.
+- All three templates gained a company footer after the "A little time. A real connection." line: Resbite Ltd, company number 12450334, the registered office, `support@resbite.com` and a Privacy Policy link to `https://link.resbite.com/privacy`. There is no VAT line until the VAT placeholder is settled.
+- `confirmation.previous.html`, `email-code.previous.html` and `recovery.previous.html` now hold the September bodies (as deployed before this change), for rollback.
+- The files are pasted into Supabase Auth at rollout step R9, after `/privacy` is live. Subjects are unchanged.
+- `templates.test.mjs` checks the footer, the privacy link, the absence of private-test wording and the placeholders. `node mobile/scripts/verify-emails.mjs` allows the one privacy link.
